@@ -1,0 +1,27 @@
+int hdfsSync(hdfsFS fs, hdfsFile f)
+{
+    // JAVA EQUIVALENT
+    //  FSDataOutputStream.sync
+    //Get the JNIEnv* corresponding to current thread
+    JNIEnv* env = getJNIEnv();
+    if (env == NULL) {
+        errno = EINTERNAL;
+        return -1;
+    }
+    //Parameters
+    jobject jOutputStream = (jobject)(f ? f->file : 0);
+    //Caught exception
+    jthrowable jExc = NULL;
+    //Sanity check
+    if (!f || f->type != OUTPUT) {
+        errno = EBADF;
+        return -1;
+    }
+    if (invokeMethod(env, NULL, &jExc, INSTANCE, jOutputStream,
+                HADOOP_OSTRM, "sync", "()V") != 0) {
+        errno = errnoFromException(jExc, env, "org.apache.hadoop.fs."
+                "FSDataOutputStream::sync");
+        return -1;
+    }
+    return 0;
+}

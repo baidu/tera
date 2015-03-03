@@ -1,0 +1,54 @@
+
+package tera;
+
+enum StoreMedium {
+    DiskStore = 0;
+    FlashStore = 1;
+    MemoryStore = 2;
+}
+
+enum RawKey {
+    Readable = 0;
+    Binary = 1;
+    TTLKv = 2; // Key-value-pair with ttl in key.
+}
+
+message LocalityGroupSchema {
+    optional int32 id = 1;
+    optional string name = 2;
+    optional StoreMedium store_type = 3 [default = DiskStore];
+    optional bool compress_type = 4 [default = false];
+    optional int32 block_size = 5 [default = 4]; // KB
+    optional bool use_bloom_filter = 6;
+    optional bool is_del = 7 [default = false];
+    optional bool use_memtable_on_leveldb = 8 [default = false];
+    optional int32 memtable_ldb_write_buffer_size = 9 [default = 1]; //MB
+    optional int32 memtable_ldb_block_size = 10 [default = 4]; //KB
+}
+
+message ColumnFamilySchema {
+    optional int32 id = 1;
+    optional string name = 2;
+    optional string locality_group = 3;
+    optional int32 owner = 4;
+    repeated int64 acl = 5;
+    optional int32 max_versions = 6 [default = 1];
+    optional int32 min_versions = 7 [default = 1];
+    optional int32 time_to_live = 8 [default = 0]; // 单位:秒(0:不过期, <0:提前过期, >0:延后过期) 
+    optional int64 disk_quota = 9;
+    optional string type = 10;
+}
+
+message TableSchema {
+    optional int32 id = 1;
+    optional string name = 2;
+    optional int32 owner = 3;
+    repeated int32 acl = 4;
+    repeated ColumnFamilySchema column_families = 5;
+    repeated LocalityGroupSchema locality_groups = 6;
+    optional RawKey raw_key = 7 [default = Readable];
+    optional int64 split_size = 8; // MB
+    optional int64 merge_size = 10; // MB
+    optional bool kv_only = 9 [default = false];
+}
+

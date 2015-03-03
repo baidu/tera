@@ -1,0 +1,209 @@
+import "sofa/pbrpc/rpc_option.proto";
+import "status_code.proto";
+import "tabletnode.proto";
+import "table_schema.proto";
+import "table_meta.proto";
+
+package tera;
+
+// Table operation
+
+message CreateTableRequest {
+    required uint64 sequence_id = 1;
+    required string table_name = 2;
+    optional TableSchema schema = 3;
+    repeated bytes delimiters = 6;
+}
+
+message CreateTableResponse {
+    required StatusCode status = 1;
+    required uint64 sequence_id = 2;
+    optional TabletMetaList meta_list = 3;
+}
+
+message DeleteTableRequest {
+    required uint64 sequence_id = 1;
+    required string table_name = 2;
+}
+
+message DeleteTableResponse {
+    required StatusCode status = 1;
+    required uint64 sequence_id = 2;
+}
+
+message DisableTableRequest {
+    required uint64 sequence_id = 1;
+    required string table_name = 2;
+}
+
+message DisableTableResponse {
+    required StatusCode status = 1;
+    required uint64 sequence_id = 2;
+}
+
+message EnableTableRequest {
+    required uint64 sequence_id = 1;
+    required string table_name = 2;
+}
+
+message EnableTableResponse {
+    required StatusCode status = 1;
+    required uint64 sequence_id = 2;
+}
+
+message UpdateTableRequest {
+    required uint64 sequence_id = 1;
+    required string table_name = 2;
+    optional TableSchema schema = 3;
+}
+
+message UpdateTableResponse {
+    required StatusCode status = 1;
+    required uint64 sequence_id = 2;
+}
+
+message CompactTableRequest {
+    required uint64 sequence_id = 1;
+}
+
+message CompactTableResponse {
+    required StatusCode status = 1;
+    required uint64 sequence_id = 2;
+}
+
+message SearchTableRequest {
+    required uint64 sequence_id = 1;
+    required string prefix_table_name = 2;
+    optional string start_table_name = 3;
+    optional bytes start_tablet_key = 4;
+    optional uint32 max_num = 5;
+}
+
+message SearchTableResponse {
+    required StatusCode status = 1;
+    required uint64 sequence_id = 2;
+    optional TabletMetaList meta_list = 3;
+    optional bool is_more = 4;
+}
+
+message ShowTablesRequest {
+    required uint64 sequence_id = 1;
+    optional string start_table_name = 2;
+    optional bytes start_tablet_key = 3;
+    optional uint32 max_table_num = 4;
+    optional uint32 max_tablet_num = 5;
+}
+
+message ShowTablesResponse {
+    required StatusCode status = 1;
+    required uint64 sequence_id = 2;
+    optional TabletMetaList tablet_meta_list = 3;
+    optional TableMetaList table_meta_list = 4;
+    optional bool is_more = 5;
+}
+
+message ShowTabletNodesRequest {
+    required uint64 sequence_id = 1;
+    optional string addr = 2;
+    optional bool is_showall = 3 [default = true];
+}
+
+message ShowTabletNodesResponse {
+    required StatusCode status = 1;
+    required uint64 sequence_id = 2;
+    repeated TabletNodeInfo tabletnode_info = 3;
+    optional TabletMetaList tabletmeta_list = 4;
+}
+
+message MergeTableRequest {
+    required uint64 sequence_id = 1;
+    optional string table_name = 2;
+}
+
+message MergeTableResponse {
+    required StatusCode status = 1;
+    required uint64 sequence_id = 2;
+}
+
+// Tablet node
+
+message RegisterRequest {
+    required uint64 sequence_id = 1;
+    required TabletNodeInfo tabletnode_info = 2;
+}
+
+message RegisterResponse {
+    required StatusCode status = 1;
+    required uint64 sequence_id = 2;
+}
+
+message ReportRequest {
+    required uint64 sequence_id = 1;
+    required TabletNodeInfo tabletnode_info = 2;
+}
+
+message ReportResponse {
+    required StatusCode status = 1;
+    required uint64 sequence_id = 2;
+}
+
+message GetSnapshotRequest {
+    optional uint64 sequence_id = 1;
+    optional string table_name = 2;
+}
+
+message GetSnapshotResponse {
+    optional StatusCode status = 1;
+    optional uint64 sequence_id = 2;
+    optional uint64 snapshot_id = 3;
+}
+
+message DelSnapshotRequest {
+    optional uint64 sequence_id = 1;
+    optional string table_name = 2;
+    optional uint64 snapshot_id = 3;
+}
+
+message DelSnapshotResponse {
+    optional StatusCode status = 1;
+    optional uint64 sequence_id = 2;
+}
+
+// admin
+
+message CmdCtrlRequest {
+    required uint64 sequence_id = 1;
+    required string command = 2;
+    repeated string arg_list = 3;
+}
+
+message CmdCtrlResponse {
+    required uint64 sequence_id = 1;
+    required StatusCode status = 2;
+    optional bool bool_result = 3;
+    optional string str_result = 4;
+}
+
+// RPC interface
+
+service MasterServer {
+    rpc GetSnapshot(GetSnapshotRequest) returns(GetSnapshotResponse);
+    rpc DelSnapshot(DelSnapshotRequest) returns(DelSnapshotResponse);
+    rpc CreateTable(CreateTableRequest) returns(CreateTableResponse);
+    rpc DeleteTable(DeleteTableRequest) returns (DeleteTableResponse);
+    rpc DisableTable(DisableTableRequest) returns (DisableTableResponse);
+    rpc EnableTable(EnableTableRequest) returns (EnableTableResponse);
+    rpc UpdateTable(UpdateTableRequest) returns (UpdateTableResponse);
+    rpc CompactTable(CompactTableRequest) returns (CompactTableResponse);
+    rpc SearchTable(SearchTableRequest) returns(SearchTableResponse);
+
+    rpc ShowTables(ShowTablesRequest) returns(ShowTablesResponse);
+    rpc ShowTabletNodes(ShowTabletNodesRequest) returns(ShowTabletNodesResponse);
+    rpc MergeTable(MergeTableRequest) returns(MergeTableResponse);
+
+    rpc Register(RegisterRequest) returns(RegisterResponse);
+    rpc Report(ReportRequest) returns(ReportResponse);
+    
+    rpc CmdCtrl(CmdCtrlRequest) returns(CmdCtrlResponse);
+}
+option cc_generic_services = true;
