@@ -801,7 +801,7 @@ void ZooKeeperAdapter::SessionEventCallBack(int state) {
             LOG(INFO) << "disconnect from zk server, enable timer: "
                 << m_session_timeout << " ms";
             boost::function<void ()> closure =
-                boost::bind(&ZooKeeperAdapter::OnSessionTimeoutWrapper, this);
+                boost::bind(&ZooKeeperAdapter::SessionTimeoutWrapper, this);
             m_session_timer_id = m_thread_pool.DelayTask(m_session_timeout, closure);
         }
         m_session_id = -1;

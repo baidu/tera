@@ -131,7 +131,7 @@ protected:
                            std::vector<std::string>* child_list,
                            std::vector<std::string>* value_list);
     int GetWrapper(const std::string& path, bool is_watch, std::string* value);
-    void SessionTimeoutWrapper(uint64_t timer_id = 0);
+    void SessionTimeoutWrapper();
 
 private:
     static FILE* m_lib_log_output;
