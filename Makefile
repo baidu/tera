@@ -19,7 +19,12 @@ PROTOC=$(PROTOC_PATH)protoc
 all: tera_main
 
 proto: $(PROTO_FILES)
-	$(PROTOC) --proto_path=./tera/proto/ --proto_path=/usr/local/include --cpp_out=./tera/proto/ $(PROTO_FILES)
+	$(PROTOC) --proto_path=./tera/proto/ --proto_path=/usr/local/include \
+		  --proto_path=./third_party/sofa-pbrpc/output/include/ \
+		  --cpp_out=./tera/proto/ $(PROTO_FILES)
 
 tera_main: $(SRC)
 	echo 'Done'
+
+test:
+	echo "No test now!"
