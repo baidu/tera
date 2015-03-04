@@ -5,7 +5,7 @@
 #ifndef TERA_TABLETNODE_TABLETNODE_CLIENT_SDK_H
 #define TERA_TABLETNODE_TABLETNODE_CLIENT_SDK_H
 
-#include "thirdparty/sofa/pbrpc/pbrpc.h"
+#include <sofa/pbrpc/pbrpc.h>
 
 #include "tera/proto/tabletnode_rpc.pb.h"
 #include "tera/rpc_client_sdk.h"

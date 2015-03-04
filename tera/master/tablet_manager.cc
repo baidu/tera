@@ -9,15 +9,15 @@
 #include <vector>
 #include <limits>
 
+#include <sofa/pbrpc/pbrpc.h>
+
 #include "common/base/string_ext.h"
 #include "common/base/string_format.h"
 #include "common/base/string_number.h"
 #include "common/file/file_path.h"
-#include "sofa/pbrpc/pbrpc.h"
+#include "db/filename.h"
 #include "thirdparty/gflags/gflags.h"
 #include "thirdparty/glog/logging.h"
-
-#include "db/filename.h"
 #include "tera/io/io_utils.h"
 #include "tera/master/master_impl.h"
 #include "tera/proto/kv_helper.h"
@@ -197,7 +197,7 @@ bool Tablet::SetStatusIf(TabletStatus new_status, TabletStatus if_status,
     if (NULL != old_status) {
         *old_status = m_meta.status();
     }
-    if (m_meta.status() == if_status
+    if (m_meta.status() == if_statu
         && CheckStatusSwitch(m_meta.status(), new_status)) {
         m_meta.set_status(new_status);
         return true;
@@ -215,7 +215,7 @@ bool Tablet::SetStatusIf(TabletStatus new_status, TabletStatus if_status,
     if (NULL != old_status) {
         *old_status = m_meta.status();
     }
-    if (m_meta.status() == if_status && m_table->m_status == if_table_status
+    if (m_meta.status() == if_status && m_table->m_status == if_table_statu
         && CheckStatusSwitch(m_meta.status(), new_status)) {
         m_meta.set_status(new_status);
         return true;
@@ -258,7 +258,7 @@ bool Tablet::SetAddrAndStatusIf(const std::string& server_addr,
     if (NULL != old_status) {
         *old_status = m_meta.status();
     }
-    if (m_meta.status() == if_status
+    if (m_meta.status() == if_statu
         && CheckStatusSwitch(m_meta.status(), new_status)) {
         m_meta.set_status(new_status);
         m_meta.set_server_addr(server_addr);
@@ -352,7 +352,7 @@ bool Tablet::CheckStatusSwitch(TabletStatus old_status,
         }
         break;
     case kTableOnLoad:
-        if (new_status == kTableReady           // load success
+        if (new_status == kTableReady           // load succe
             || new_status == kTableOffLine      // tabletnode down
             || new_status == kTableLoadFail) {  // don't know result, wait tabletnode to be killed
             return true;
@@ -390,7 +390,7 @@ bool Tablet::CheckStatusSwitch(TabletStatus old_status,
         }
         break;
     case kTableUnLoading:
-        if (new_status == kTableOffLine           // unload success
+        if (new_status == kTableOffLine           // unload succe
             || new_status == kTableReady          // unload status rollback when merge failed
             || new_status == kTableOnMerge        // unload success, ready to merge phase2
             || new_status == kTableUnLoadFail) {  // don't know result, wait tabletnode to be killed
@@ -1462,7 +1462,7 @@ bool TabletManager::DumpMetaTable(const std::string& meta_tablet_addr,
         mutation->set_type(kPut);
         mutation->set_value(packed_value);
     }
-    // dump tablet records
+    // dump tablet record
     for (size_t i = 0; i < tablets.size(); i++) {
         std::string packed_key;
         std::string packed_value;
@@ -1870,7 +1870,7 @@ void TabletManager::MergeMeta(Table* table, Tablet* tb1, Tablet* tb2,
                      &loaded_tablet);
     m_master_impl->TryLoadTablet(loaded_tablet);
 
-    // delete tb2 in meta ts
+    // delete tb2 in meta t
 
     WriteTabletRequest* request = new WriteTabletRequest;
     WriteTabletResponse* response = new WriteTabletResponse;

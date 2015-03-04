@@ -5,7 +5,7 @@
 #ifndef TERA_TABLETNODE_TABLETNODE_CLIENT_ASYNC_H
 #define TERA_TABLETNODE_TABLETNODE_CLIENT_ASYNC_H
 
-#include "thirdparty/sofa/pbrpc/pbrpc.h"
+#include <sofa/pbrpc/pbrpc.h>
 
 #include "common/base/closure.h"
 

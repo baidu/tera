@@ -8,10 +8,10 @@
 #include <string>
 
 #include <glog/logging.h>
+#include <sofa/pbrpc/pbrpc.h>
 #include "common/base/scoped_ptr.h"
 #include "common/net/ip_address.h"
 #include "common/this_thread.h"
-#include "thirdparty/sofa/pbrpc/pbrpc.h"
 
 #include "tera/proto/status_code.pb.h"
 #include "tera/proto/proto_helper.h"
@@ -86,7 +86,7 @@ protected:
                         return true;
                     }
                 } else {
-                    LOG(ERROR) << "RpcRequest failed: " << tips
+                    LOG(ERROR) << "RpcRequest failed: " << tip
                         << ". Reason: " << rpc_controller.ErrorText()
                         << " (retry = " << retry << ")";
                     ThisThread::Sleep(wait_time);
