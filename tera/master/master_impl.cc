@@ -1505,7 +1505,7 @@ void MasterImpl::TabletNodeRecoveryCallback(std::string addr,
             UnloadClosure* done =
                 NewClosure(this, &MasterImpl::UnloadTabletCallback, unload_tablet,
                            FLAGS_tera_master_impl_retry_times);
-            UnloadTabletAsync(tablet, done);
+            UnloadTabletAsync(unload_tablet, done);
         } else if (tablet->SetStatusIf(kTableReady, kTabletPending)
             || tablet->SetStatusIf(kTableReady, kTableOffLine)) {
             tablet->SetSize(meta.table_size());
@@ -1544,6 +1544,8 @@ void MasterImpl::TabletNodeRecoveryCallback(std::string addr,
         }
     }
     m_tabletnode_manager->UpdateTabletNode(addr, state);
+    NodeState old_state;
+    node->SetState(kReady, &old_state);
 
     delete response;
 
@@ -2581,7 +2583,15 @@ void MasterImpl::QueryTabletNodeCallback(std::string addr, QueryRequest* request
             const std::string& key_end = meta.key_range().key_end();
 
             TabletPtr tablet;
-            if (m_tablet_manager->FindTablet(table_name, key_start, &tablet)
+            if (meta.status() != kTableReady) {
+                VLOG(7) << "non-ready tablet: " << meta.table_name()
+                    << ", path: " << meta.path()
+                    << ", range: [" << DebugString(key_start)
+                    << ", " << DebugString(key_end)
+                    << "], size: " << meta.table_size()
+                    << ", addr: " << meta.server_addr()
+                    << ", status: " << meta.status();
+            } else if (m_tablet_manager->FindTablet(table_name, key_start, &tablet)
                 && tablet->Verify(table_name, key_start, key_end, meta.path(),
                                   meta.server_addr())) {
                 tablet->SetSize(meta.table_size());
@@ -2705,6 +2715,8 @@ void MasterImpl::CollectTabletInfoCallback(std::string addr,
         }
         m_tabletnode_manager->UpdateTabletNode(addr, state);
         node->ResetQueryFailCount();
+        NodeState old_state;
+        node->SetState(kReady, &old_state);
         LOG(INFO) << "query tabletnode [" << addr << "], m_status: "
             << StatusCodeToString(response->tabletnode_info().status_t());
     } else {

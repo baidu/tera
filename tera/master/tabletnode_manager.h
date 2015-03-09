@@ -10,9 +10,10 @@
 #include <string>
 #include <vector>
 
+#include <sofa/pbrpc/smart_ptr/shared_ptr.hpp>
+
 #include "common/mutex.h"
 #include "common/thread_pool.h"
-#include "thirdparty/sofa/pbrpc/smart_ptr/shared_ptr.hpp"
 
 #include "tera/master/tablet_manager.h"
 #include "tera/proto/proto_helper.h"
@@ -22,7 +23,7 @@ namespace master {
 
 enum NodeState {
     kReady = kTabletNodeReady,
-    kOffLine = kTabletNodeOffLine,
+    kOffLine = kTabletNodeOffLine, // before first query succe
     kOnKick = kTabletNodeOnKick,
     kWaitKick = kTabletNodeWaitKick
 };

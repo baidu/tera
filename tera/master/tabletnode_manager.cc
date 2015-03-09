@@ -18,7 +18,7 @@ DECLARE_bool(tera_master_meta_isolate_enabled);
 namespace tera {
 namespace master {
 
-TabletNode::TabletNode() : m_state(kReady),
+TabletNode::TabletNode() : m_state(kOffLine),
     m_report_status(kTabletNodeInit), m_data_size(0), m_load(0),
     m_update_time(0), m_query_fail_count(0), m_onload_count(0),
     m_onsplit_count(0), m_plan_move_in_count(0) {
@@ -26,7 +26,7 @@ TabletNode::TabletNode() : m_state(kReady),
 }
 
 TabletNode::TabletNode(const std::string& addr, const std::string& uuid)
-    : m_addr(addr), m_uuid(uuid), m_state(kReady),
+    : m_addr(addr), m_uuid(uuid), m_state(kOffLine),
       m_report_status(kTabletNodeInit), m_data_size(0), m_load(0),
       m_update_time(0), m_query_fail_count(0), m_onload_count(0),
       m_onsplit_count(0), m_plan_move_in_count(0) {
@@ -516,6 +516,9 @@ bool TabletNodeManager::ShouldMoveData(TabletNodePtr src_node,
                                        const std::string& table_name,
                                        uint64_t move_data_size) {
     if (src_node == dst_node) {
+        return false;
+    }
+    if (dst_node->GetState() != kReady) {
         return false;
     }
     if (!dst_node->MayLoadNow()) {

@@ -288,6 +288,9 @@ void DBImpl::DeleteObsoleteFiles() {
   std::set<uint64_t> live = pending_outputs_;
   versions_->AddLiveFiles(&live);
 
+  // manifest file set, keep latest 3 manifest files for backup
+  std::set<std::string> manifest_set;
+
   Log(options_.info_log, "[%s] try DeleteObsoleteFiles, total live file num: %lld\n",
       dbname_.c_str(), live.size());
 
@@ -306,9 +309,17 @@ void DBImpl::DeleteObsoleteFiles() {
                   (number == versions_->PrevLogNumber()));
           break;
         case kDescriptorFile:
-          // Keep my manifest file, and any newer incarnations'
-          // (in case there is a race that allows other incarnations)
-          keep = (number >= versions_->ManifestFileNumber());
+          manifest_set.insert(filenames[i]);
+          if (manifest_set.size() > 3) {
+              std::set<std::string>::iterator it = manifest_set.begin();
+              ParseFileName(*it, &number, &type);
+              if (number < versions_->ManifestFileNumber()) {
+                // Keep my manifest file, and any newer incarnations'
+                // (in case there is a race that allows other incarnations)
+                filenames[i] = *it;
+                keep = false;
+              }
+          }
           break;
         case kTableFile:
           keep = (live.find(BuildFullFileNumber(dbname_, number)) != live.end());

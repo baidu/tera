@@ -17,7 +17,7 @@
 #include "leveldb/dfs.h"
 #include "leveldb/env.h"
 #include "leveldb/status.h"
-#include "../utils/counter.h"
+#include "../../../utils/counter.h"
 
 namespace leveldb {
 

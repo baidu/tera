@@ -1193,14 +1193,40 @@ Status VersionSet::ReadCurrentFile(uint64_t tablet, std::string* dscname ) {
   std::string current;
   s = ReadFileToString(env_, CurrentFileName(pdbname), &current);
   if (!s.ok()) {
-    return s;
+    Log(options_->info_log, "[%s] current file lost: %s.",
+        dbname_.c_str(), CurrentFileName(pdbname).c_str());
+  } else {
+    if (current.empty() || current[current.size()-1] != '\n') {
+      return Status::Corruption("CURRENT file does not end with newline");
+    }
+    current.resize(current.size() - 1);
+    *dscname = pdbname + "/" + current;
   }
-  if (current.empty() || current[current.size()-1] != '\n') {
-    return Status::Corruption("CURRENT file does not end with newline");
-  }
-  current.resize(current.size() - 1);
 
-  *dscname = pdbname + "/" + current;
+  if (!s.ok() || !env_->FileExists(*dscname)) {
+    // manifest is not ready, now recover the backup manifest
+    std::vector<std::string> files;
+    env_->GetChildren(pdbname, &files);
+    std::set<std::string> manifest_set;
+    for (size_t i = 0; i < files.size(); ++i) {
+      uint64_t number;
+      FileType type;
+      if (ParseFileName(files[i], &number, &type)) {
+        if (type == kDescriptorFile) {
+          manifest_set.insert(files[i]);
+        }
+      }
+    }
+    if (manifest_set.size() < 1) {
+      return Status::Corruption("DB has none available manifest file.");
+    }
+    // select the largest manifest number
+    std::set<std::string>::reverse_iterator it = manifest_set.rbegin();
+    *dscname = pdbname + "/" + *it;
+    Log(options_->info_log, "[%s] use backup manifest: %s.",
+        dbname_.c_str(), dscname->c_str());
+    return Status::OK();
+  }
   return s;
 }
 

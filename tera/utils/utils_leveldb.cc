@@ -16,7 +16,8 @@
 #include "thirdparty/gflags/gflags.h"
 #include "thirdparty/glog/logging.h"
 
- #include "tera/io/timekey_comparator.h"
+#include "tera/io/timekey_comparator.h"
+#include "tera/utils/timer.h"
 
 DECLARE_string(tera_leveldb_env_type);
 DECLARE_string(tera_leveldb_env_dfs_type);
