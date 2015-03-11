@@ -15,4 +15,5 @@ install:
     - wget http://apache.fayea.com/zookeeper/stable/zookeeper-3.4.6.tar.gz
     - tar zxvf zookeeper-3.4.6.tar.gz
     - ( cd zookeeper-3.4.6/src/c && ./configure && make && sudo make install )
+
 script: make proto
