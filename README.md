@@ -1,6 +1,6 @@
 [Tera - 分布式表格系统](http://github.com/BaiduPS/tera)
 ====
-[![Build Status](https://travis-ci.org/BaiduPS/tera.svg)](https://travis-ci.org/BaiduPS/tera)
+[![Build Status](https://travis-ci.org/00k/tera.svg)](https://travis-ci.org/00k/tera)
 
 Copyright 2015, Baidu.com, Inc.
 
