@@ -1,0 +1,135 @@
+package tera;
+
+enum StatusCode {
+    option allow_alias = true;
+    // master
+    kMasterNotInited = 12;
+    kMasterIsBusy = 13;
+    kMasterIsSecondary = 14;
+    kMasterIsReadonly = 15;
+    kMasterOnRestore = 16;
+    kMasterOnWait = 17;
+    kMasterIsRunning = 19;
+
+    // tablet node
+    kTabletNodeNotInited = 22;
+    kTabletNodeIsBusy = 23;
+    kTabletNodeIsIniting = 24;
+    kTabletNodeIsReadonly = 25;
+    kTabletNodeIsRunning = 29;
+    
+    // tablet node manage
+    kTabletNodeReady = 30;
+    kTabletNodeOffLine = 31;
+    kTabletNodeOnKick = 32;
+    kTabletNodeWaitKick = 33;
+
+    // table status
+    kTableOk = 40;
+    kTabletNotInit = 41;
+    kTabletReady = 42;
+    kTabletOnLoad = 43;
+    kTabletOnSplit = 44;
+    kTabletSplited = 51;
+    kTabletOnMerge = 50;
+    kTabletUnLoading = 52;
+    kTabletUnLoading2 = 57;
+    
+    kTableNotFound = 45;
+    kTableCorrupt = 46;
+    kTableNotSupport = 47;
+    kTableInvalidArg = 48;
+
+    // ACL & system
+    kIllegalAccess = 71;
+    kNotPermission = 72;
+    kIOError = 73;
+    
+    //// master rpc ////
+
+    // create&update table
+    kMasterOk = 200;
+    kTableExist = 201;
+    kTableNotExist = 202;
+    kTableIsBusy = 203;
+    kTableMergeError = 204;
+
+    // register
+    kInvalidSequenceId = 304;
+    kInvalidTabletNodeInfo = 305;
+
+    // report
+    kTabletNodeNotRegistered = 306;
+    
+    // cmdctrl
+    kInvalidArgument = 310;
+
+    // snapshot
+    kSnapshotNotExist = 320;
+
+    //// tablet node rpc ////
+
+    // response
+    kTabletNodeOk = 40;
+
+    // key
+    kKeyNotExist = 402;
+    kKeyNotInRange = 403;
+    
+    // meta table
+    kMetaTabletError = 500;
+
+    // RPC
+    kRPCError = 700;
+    kServerError = 701;
+    kClientError = 702;
+    kConnectError = 703;
+    kRPCTimeout = 704;
+
+    // Async Writer
+    kAsyncNotRunning = 801;
+    kAsyncTooBusy = 802;
+    kAsyncFailure = 803;
+    
+    // zk
+    kZKError = 900;
+    
+    kTableStatusEnable = 1000;
+    kTableStatusDisable = 1001;
+    kTableStatusDeleting = 1002;
+}
+
+enum TabletStatus {
+    kTableNotInit = 41;
+    kTableDeleted = 53;
+    kTableOffLine = 57;
+    kTableReady = 42;
+    kTableUnLoad = 49;
+    kTableWaitLoad = 58;
+    kTableOnLoad = 43;
+    kTableLoadFail = 60;
+    kTableWaitSplit = 59;
+    kTableOnSplit = 44;
+    kTableSplited = 51;
+    kTableSplitFail = 61;
+    kTableUnLoading = 52;
+    kTableUnLoadFail = 62;
+    kTableOnMerge = 50;
+    kTabletDeleting = 63;
+    kTabletDisable = 64;
+    kTabletPending = 65;
+    kTabletOnSnapshot = 66;
+    kTabletDelSnapshot = 67;
+}
+
+enum TableStatus {
+    kTableEnable = 1000;
+    kTableDisable = 1001;
+    kTableDeleting = 1002;
+}
+
+enum CompactStatus {
+    kTableNotCompact = 54;
+    kTableOnCompact = 55;
+    kTableCompacted = 56;
+}

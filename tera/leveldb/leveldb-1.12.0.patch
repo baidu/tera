@@ -1,0 +1,101 @@
+Index: db/version_edit.h
+===================================================================
+--- db/version_edit.h	(revision 77084)
++++ db/version_edit.h	(working copy)
+@@ -13,6 +13,7 @@
+ namespace leveldb {
+ 
+ class VersionSet;
++class VersionSetBuilder;
+ 
+ struct FileMetaData {
+   int refs;
+@@ -83,6 +84,7 @@
+ 
+  private:
+   friend class VersionSet;
++  friend class VersionSetBuilder;
+ 
+   typedef std::set< std::pair<int, uint64_t> > DeletedFileSet;
+ 
+Index: db/version_set.cc
+===================================================================
+--- db/version_set.cc	(revision 77084)
++++ db/version_set.cc	(working copy)
+@@ -517,7 +517,7 @@
+ // A helper class so we can efficiently apply a whole sequence
+ // of edits to a particular state without creating intermediate
+ // Versions that contain full copies of the intermediate state.
+-class VersionSet::Builder {
++class VersionSetBuilder {
+  private:
+   // Helper to sort by v->files_[file_number].smallest
+   struct BySmallestKey {
+@@ -546,7 +546,7 @@
+ 
+  public:
+   // Initialize a builder with the files from *base and other info from *vset
+-  Builder(VersionSet* vset, Version* base)
++  VersionSetBuilder(VersionSet* vset, Version* base)
+       : vset_(vset),
+         base_(base) {
+     base_->Ref();
+@@ -557,7 +557,7 @@
+     }
+   }
+ 
+-  ~Builder() {
++  ~VersionSetBuilder() {
+     for (int level = 0; level < config::kNumLevels; level++) {
+       const FileSet* added = levels_[level].added_files;
+       std::vector<FileMetaData*> to_unref;
+@@ -751,7 +751,7 @@
+ 
+   Version* v = new Version(this);
+   {
+-    Builder builder(this, current_);
++    VersionSetBuilder builder(this, current_);
+     builder.Apply(edit);
+     builder.SaveTo(v);
+   }
+@@ -861,7 +861,7 @@
+   uint64_t last_sequence = 0;
+   uint64_t log_number = 0;
+   uint64_t prev_log_number = 0;
+-  Builder builder(this, current_);
++  VersionSetBuilder builder(this, current_);
+ 
+   {
+     LogReporter reporter;
+Index: db/version_set.h
+===================================================================
+--- db/version_set.h	(revision 77084)
++++ db/version_set.h	(working copy)
+@@ -34,6 +34,7 @@
+ class TableCache;
+ class Version;
+ class VersionSet;
++class VersionSetBuilder;
+ class WritableFile;
+ 
+ // Return the smallest index i such that files[i]->largest >= key.
+@@ -110,6 +111,7 @@
+  private:
+   friend class Compaction;
+   friend class VersionSet;
++  friend class VersionSetBuilder;
+ 
+   class LevelFileNumIterator;
+   Iterator* NewConcatenatingIterator(const ReadOptions&, int level) const;
+@@ -254,10 +256,9 @@
+   const char* LevelSummary(LevelSummaryStorage* scratch) const;
+ 
+  private:
+-  class Builder;
+-
+   friend class Compaction;
+   friend class Version;
++  friend class VersionSetBuilder;
+ 
+   void Finalize(Version* v);
+ 

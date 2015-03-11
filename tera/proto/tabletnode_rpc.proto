@@ -1,0 +1,303 @@
+import "sofa/pbrpc/rpc_option.proto";
+import "status_code.proto";
+import "table_schema.proto";
+import "table_meta.proto";
+import "tabletnode.proto";
+
+package tera;
+
+// tablet operation
+
+message SnapshotRequest {
+    optional uint64 sequence_id = 1;
+    optional string table_name = 2;
+    optional KeyRange key_range = 3;
+    optional uint64 snapshot_id = 4;
+}
+
+message SnapshotResponse {
+    optional uint64 sequence_id = 1;
+    optional StatusCode status = 2;
+    optional uint64 snapshot_seq = 3;
+}
+
+message ReleaseSnapshotRequest {
+    optional uint64 sequence_id = 1;
+    optional string table_name = 2;
+    optional KeyRange key_range = 3;
+    optional uint64 snapshot_id = 4;
+}
+
+message ReleaseSnapshotResponse {
+    optional uint64 sequence_id = 1;
+    optional StatusCode status = 2;
+    optional uint64 snapshot_id = 3;
+}
+
+message QueryRequest {
+    required uint64 sequence_id = 1;
+    optional bool is_gc_query = 2;
+}
+
+message QueryResponse {
+    required uint64 sequence_id = 1;
+    required StatusCode status = 2;
+    optional TabletNodeInfo tabletnode_info = 3;
+    optional TabletMetaList tabletmeta_list = 4;
+    repeated InheritedLiveFiles inh_live_files = 5;
+}
+
+message LoadTabletRequest {
+    required uint64 sequence_id = 1;
+    required string tablet_name = 2;
+    optional KeyRange key_range = 3; 
+    optional string path = 4;
+    optional string session_id = 6;
+    optional TableSchema schema = 8;
+    repeated uint64 snapshots_id = 9;
+    repeated uint64 snapshots_sequence = 10;
+    repeated uint64 parent_tablets = 11;
+}
+
+message LoadTabletResponse {
+    required StatusCode status = 1;
+    required uint64 sequence_id = 2;
+}
+
+message UnloadTabletRequest {
+    required uint64 sequence_id = 1;
+    required string tablet_name = 2;
+    required KeyRange key_range = 3;
+}
+
+message UnloadTabletResponse {
+    required uint64 sequence_id = 1;
+    required StatusCode status = 2;
+}
+
+message CompactTabletRequest {
+    required uint64 sequence_id = 1;
+    required string tablet_name = 2;
+    required KeyRange key_range = 3;
+}
+
+message CompactTabletResponse {
+    required uint64 sequence_id = 1;
+    required StatusCode status = 2;
+    optional CompactStatus compact_status = 3;
+    optional int64 compact_size = 4;
+}
+
+enum MutationType {
+    kPut = 0;
+    kDeleteColumn = 1;
+    kDeleteColumns = 2;
+    kDeleteFamily = 3;
+    kDeleteRow = 4;
+    kAdd = 5;
+    kPutIfAbsent = 6;
+    kAppend = 7;
+}
+
+// Put           : family, qualifier, timestamp, value
+// DeleteColumn  : family, qualifier, timestamp
+// DeleteColumns : family, qualifier, ts_start, ts_end
+// DeleteFamily  : family, ts_start, ts_end
+// DeleteRow     : ts_start, ts_end
+message Mutation {
+    required MutationType type = 1;
+    optional string family = 2;
+    optional bytes qualifier = 3;
+    optional int64 timestamp = 4;
+    optional bytes value = 5;
+    optional int64 ts_start = 6;
+    optional int64 ts_end = 7;
+    optional int32 ttl = 8 [default = -1]; // -1 : 表示此key永不过期, 在TS中会存储过期时间为INT64_MAX.
+}
+
+message RowMutationSequence {
+    required bytes row_key = 1;
+    repeated Mutation mutation_sequence = 2;
+}
+
+message WriteTabletRequest {
+    optional uint64 sequence_id = 1;
+    required string tablet_name = 2;    
+    //repeated KeyValuePair pair_list = 3;  // for compatible
+    optional bool is_sync = 4 [default = false];
+    optional bool is_instant = 5 [default = false];
+    repeated RowMutationSequence row_list = 6;
+}
+
+message WriteTabletResponse {
+    required StatusCode status = 1;
+    optional uint64 sequence_id = 2;
+    repeated StatusCode row_status_list = 3;
+}
+
+enum CompType {
+    Regex = 11;
+    SubStr = 12;
+    Prefix = 13;
+    BinComp = 14;
+};
+
+enum Field {
+    ValueFilter = 21;
+    RowFilter = 22;
+    CfFilter = 23;
+    QuFilter = 24;
+};
+
+enum BinCompOp {
+    EQ = 31;
+    NE = 32;
+    LT = 33;
+    LE = 34;
+    GT = 35;
+    GE = 36;
+    UNKNOWN = 39;
+};
+
+message Filter {
+    optional CompType type = 1 [default = BinComp];
+    optional BinCompOp bin_comp_op = 2;
+    optional Field field = 3 [default = ValueFilter];
+    optional bytes content = 4;
+    optional bytes ref_value = 5;
+};
+
+message FilterList {
+    repeated Filter filter = 1;
+};
+
+message TimeRange{
+    required int64 ts_start = 1;
+    required int64 ts_end = 2;
+};
+
+message ColumnFamily {
+    required string family_name = 1;
+    repeated bytes qualifier_list = 2;
+};
+
+message ResultCell {
+    required bytes row_key = 1;
+    optional string family = 2;
+    optional bytes qualifier = 3;
+    optional int64 timestamp = 4;
+    optional bytes value = 5;
+};
+
+
+message ScanTabletRequest {
+    optional uint64 sequence_id = 1;
+    optional string table_name = 2;
+    //optional KeyRange key_range = 3; 
+    optional uint32 max_version = 4;
+    optional uint32 buffer_limit = 5 [default = 102400];
+    optional bytes start = 6;
+    optional bytes end = 7;
+    optional string start_family = 8;
+    optional bytes  start_qualifier = 9;
+    optional int64  start_timestamp = 10;
+    repeated ColumnFamily cf_list = 11;
+    optional FilterList filter_list = 12;
+    optional TimeRange timerange = 13;
+    optional uint64 snapshot_id = 14;
+    optional bool round_down = 15;
+    optional int64 session_id = 16;
+    optional bool part_of_session = 17;
+}
+
+message ScanTabletResponse {
+    required StatusCode status = 1;
+    optional uint64 sequence_id = 2;
+    //repeated KeyValuePair kv_list = 3;
+    optional bool complete = 4;
+    optional RowResult results = 6;
+    optional bytes end = 7;
+    optional uint64 results_id = 8;
+}
+
+message RowReaderInfo {
+    required bytes key = 1;
+    repeated ColumnFamily cf_list = 2;
+    optional TimeRange time_range = 3;
+    optional FilterList filter_list = 4;
+    optional uint32 max_version = 5;
+}
+
+message ReadTabletRequest {
+    optional uint64 sequence_id = 1;
+    required string tablet_name = 2;
+    //repeated bytes key_list = 3; 
+    repeated RowReaderInfo row_info_list = 4;
+    //repeated KeyValuePair key_values = 5;
+    optional uint64 snapshot_id = 6;
+}
+
+message ReadTabletResponse {
+    required StatusCode status = 1;
+    required uint64 sequence_id = 2;
+    optional uint32 success_num = 3;
+    optional BytesList detail = 4;
+}
+
+message SplitTabletRequest {
+    required uint64 sequence_id = 1;
+    required string tablet_name = 2;
+    required KeyRange key_range = 3;
+    optional TabletMeta tablet_meta = 4;
+    repeated uint64 child_tablets = 5;
+}
+
+message SplitTabletResponse {
+    required StatusCode status = 1 [default = kTableMergeError];
+    required uint64 sequence_id = 2;
+}
+
+message MergeTabletRequest {
+    required uint64 sequence_id = 1;
+    required string tablet_path_1 = 2;
+    required string tablet_path_2 = 3;
+    required string tablet_merged_path = 4;
+}
+
+message MergeTabletResponse {
+    required StatusCode status = 1;
+    required uint64 sequence_id = 2;
+}
+
+// RPC interface
+
+service TabletNodeServer {
+    rpc LoadTablet(LoadTabletRequest) returns(LoadTabletResponse);
+    rpc UnloadTablet(UnloadTabletRequest) returns(UnloadTabletResponse);
+    rpc CompactTablet(CompactTabletRequest) returns(CompactTabletResponse);
+
+    rpc ReadTablet(ReadTabletRequest) returns(ReadTabletResponse) {
+        //option (sofa.pbrpc.request_compress_type) = CompressTypeGzip;
+        //option (sofa.pbrpc.response_compress_type) = CompressTypeGzip;
+        //option (sofa.pbrpc.request_compress_type) = CompressTypeSnappy;
+        //option (sofa.pbrpc.response_compress_type) = CompressTypeSnappy;
+        //option (sofa.pbrpc.request_compress_type) = CompressTypeLZ4;
+        //option (sofa.pbrpc.response_compress_type) = CompressTypeLZ4;
+    }
+    rpc WriteTablet(WriteTabletRequest) returns(WriteTabletResponse) {
+        //option (sofa.pbrpc.request_compress_type) = CompressTypeGzip;
+    }
+    rpc ScanTablet(ScanTabletRequest) returns(ScanTabletResponse) {
+        option (sofa.pbrpc.response_compress_type) = CompressTypeLZ4;
+    }
+    rpc Query(QueryRequest) returns(QueryResponse) {
+        //option (sofa.pbrpc.response_compress_type) = CompressTypeGzip;
+    }
+    rpc GetSnapshot(SnapshotRequest) returns(SnapshotResponse);
+    rpc ReleaseSnapshot(ReleaseSnapshotRequest) returns(ReleaseSnapshotResponse);
+
+    rpc SplitTablet(SplitTabletRequest) returns(SplitTabletResponse);
+    rpc MergeTablet(MergeTabletRequest) returns(MergeTabletResponse);
+}
+option cc_generic_services = true;
+

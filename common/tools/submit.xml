@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="ISO-8859-1"?>
+<?xml-stylesheet type="text/xsl" href="submit.xsl"?>
+<configuration>
+	<dir path='nearline'>
+		<check>
+
+			<include>nearline</include>
+
+			<exclude>nearline/doc</exclude>
+
+		</check>
+
+		<readability>
+
+			<reviewer>tandai</reviewer>
+
+			<reviewer>qinan</reviewer>
+
+		</readability>
+
+		<coverage>
+			<standard>
+				<location>nearline</location>
+				<value>80</value>
+			</standard>
+		</coverage>
+	</dir>
+
+</configuration>
