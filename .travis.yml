@@ -12,4 +12,7 @@ install:
     - sudo apt-get install zlib1g-dev
     - git clone https://github.com/koalademo/sofa-pbrpc ./third_party/sofa-pbrpc
     - ( cd third_party/sofa-pbrpc && make proto && make -j4 && make install);
+    - wget http://www.us.apache.org/dist/zookeeper/stable/zookeeper-3.4.6.tar.gz
+    - tar zxvf zookeeper-3.4.6.tar.gz
+    - ( cd zookeeper-3.4.6/src/c && ./configure && make && sudo make install )
 script: make proto
