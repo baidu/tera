@@ -3,6 +3,7 @@ compiler: gcc
 env:
     - PROTOBUF_VERSION=2.6.0
 before_install:
+    mkdir -p thirdparty
     cd thirdparty
 
     sudo apt-get install libboost-dev
