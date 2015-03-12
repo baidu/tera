@@ -3,9 +3,6 @@ compiler: gcc
 env:
     - PROTOBUF_VERSION=2.6.0
 before_install:
-    mkdir -p thirdparty
-    cd thirdparty
-
     sudo apt-get install libboost-dev
 
     wget https://github.com/google/protobuf/releases/download/v2.6.0/protobuf-2.6.0.tar.gz
@@ -41,8 +38,6 @@ before_install:
     wget https://googledrive.com/host/0B6NtGsLhIcf7MWxMMF9JdTN3UVk/gperftools-2.4.tar.gz
     tar zxvf gperftools-2.4.tar.gz
     ( cd gperftools-2.4 && ./configure && make -j4 && sudo make install )
-
-    cd -
 
 install:
     sh build_version.sh
