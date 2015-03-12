@@ -7,7 +7,7 @@
 #include <iostream>
 #include "tera/types.h"
 #include "tera/zk/zk_adapter.h"
-#include "thirdparty/gflags/gflags.h"
+#include "gflags/gflags.h"
 
 DECLARE_string(tera_zk_lib_log_path);
 

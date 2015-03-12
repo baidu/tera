@@ -8,19 +8,20 @@
 #include <boost/bind.hpp>
 
 #include <google/malloc_extension.h>
-#include "thirdparty/gflags/gflags.h"
-#include "thirdparty/glog/logging.h"
+#include "gflags/gflags.h"
+#include "glog/logging.h"
 
 #include "db/filename.h"
 #include "leveldb/status.h"
 #include "tera/io/io_utils.h"
-#include "tera/master/master_client.h"
+#include "tera/io/utils_leveldb.h"
+#include "tera/master_client.h"
 #include "tera/master/master_zk_adapter.h"
 #include "tera/master/workload_scheduler.h"
 #include "tera/proto/kv_helper.h"
 #include "tera/proto/proto_helper.h"
-#include "tera/tabletnode/tabletnode_client.h"
-#include "tera/tabletnode/tabletnode_client_async.h"
+#include "tera/tabletnode_client.h"
+#include "tera/tabletnode_client_async.h"
 #include "tera/utils/string_util.h"
 #include "tera/utils/utils_cmd.h"
 #include "tera/utils/timer.h"
@@ -118,7 +119,7 @@ MasterImpl::MasterImpl()
     tabletnode::TabletNodeClientAsync::SetThreadPool(m_thread_pool.get());
 
     if (FLAGS_tera_leveldb_env_type != "local") {
-        utils::InitDfsEnv();
+        io::InitDfsEnv();
     }
 }
 
@@ -3109,7 +3110,7 @@ void MasterImpl::MergeTabletAsync(TabletPtr tablet_p1, TabletPtr tablet_p2) {
 }
 
 void MasterImpl::MergeTabletAsyncPhase2(TabletPtr tablet_p1, TabletPtr tablet_p2) {
-    leveldb::Env* env = utils::LeveldbEnv();
+    leveldb::Env* env = io::LeveldbEnv();
     std::vector<std::string> children;
     std::string tablet_path = FLAGS_tera_tabletnode_path_prefix + tablet_p1->GetPath();
     env->GetChildren(tablet_path, &children);
@@ -4342,7 +4343,7 @@ void MasterImpl::CollectDeadTabletsFiles() {
 void MasterImpl::CollectSingleDeadTablet(const std::string& tablename, uint64_t tabletnum) {
     std::string tablepath = FLAGS_tera_tabletnode_path_prefix + tablename;
     std::string tablet_path = leveldb::GetTabletPathFromNum(tablepath, tabletnum);
-    leveldb::Env* env = utils::LeveldbEnv();
+    leveldb::Env* env = io::LeveldbEnv();
     std::vector<std::string> children;
     env->GetChildren(tablet_path, &children);
     if (children.size() == 0) {
@@ -4403,7 +4404,7 @@ void MasterImpl::CollectSingleDeadTablet(const std::string& tablename, uint64_t 
 }
 
 void MasterImpl::DeleteObsoleteFiles() {
-    leveldb::Env* env = utils::LeveldbEnv();
+    leveldb::Env* env = io::LeveldbEnv();
     std::map<std::string, GcFileSet>::iterator table_it = m_gc_live_files.begin();
     for (; table_it != m_gc_live_files.end(); ++table_it) {
         std::string tablepath = FLAGS_tera_tabletnode_path_prefix + table_it->first;

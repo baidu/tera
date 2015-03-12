@@ -10,7 +10,7 @@
 #include <errno.h>
 
 #include "common/this_thread.h"
-#include "thirdparty/glog/logging.h"
+#include "glog/logging.h"
 
 namespace tera {
 namespace zk {
@@ -770,7 +770,7 @@ void ZooKeeperAdapter::ChildEventCallBack(std::string path) {
     }
 }
 
-void ZooKeeperAdapter::SessionTimeoutWrapper(uint64_t timer_id) {
+void ZooKeeperAdapter::SessionTimeoutWrapper() {
     this->OnSessionTimeout();
     MutexLock mutex(&m_state_mutex);
     m_session_timer_id = 0;

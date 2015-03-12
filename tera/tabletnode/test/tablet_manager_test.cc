@@ -4,7 +4,7 @@
 
 #include "tera/tabletnode/tablet_manager.h"
 
-#include "thirdparty/gtest/gtest.h"
+#include "gtest/gtest.h"
 
 #include "tera/io/tablet_io.h"
 #include "tera/proto/status_code.pb.h"

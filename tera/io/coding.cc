@@ -4,7 +4,7 @@
 
 #include "tera/io/coding.h"
 
-#include "thirdparty/glog/logging.h"
+#include "glog/logging.h"
 
 namespace tera {
 namespace io {

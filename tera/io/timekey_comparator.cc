@@ -4,7 +4,7 @@
 
 #include "tera/io/timekey_comparator.h"
 
-#include "thirdparty/glog/logging.h"
+#include "glog/logging.h"
 
 #include "tera/io/coding.h"
 #include "tera/types.h"

@@ -4,7 +4,7 @@
 
 #include "common/file/recordio/record_io.h"
 
-#include "thirdparty/glog/logging.h"
+#include "glog/logging.h"
 
 RecordWriter::RecordWriter() {}
 

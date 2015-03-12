@@ -2,7 +2,7 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include "tera/utils/utils_cmd.h"
+#include "tera/io/utils_leveldb.h"
 
 #include <algorithm>
 #include <string>
@@ -13,8 +13,8 @@
 #include "leveldb/comparator.h"
 #include "leveldb/env_dfs.h"
 #include "leveldb/table_utils.h"
-#include "thirdparty/gflags/gflags.h"
-#include "thirdparty/glog/logging.h"
+#include "gflags/gflags.h"
+#include "glog/logging.h"
 
 #include "tera/io/timekey_comparator.h"
 #include "tera/utils/timer.h"
@@ -27,7 +27,7 @@ DECLARE_string(tera_leveldb_env_hdfs2_nameservice_list);
 DECLARE_string(tera_tabletnode_path_prefix);
 
 namespace tera {
-namespace utils {
+namespace io {
 
 void InitDfsEnv() {
     if (FLAGS_tera_leveldb_env_dfs_type == "nfs") {
@@ -204,5 +204,5 @@ bool MergeTablesWithLG(const std::string& table_1,
     return ret;
 }
 
-} // namespace utils
+} // namespace io
 } // namespace leveldb

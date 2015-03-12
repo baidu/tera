@@ -3,7 +3,7 @@
 // found in the LICENSE file.
 
 #include "common/base/stdint.h"
-#include "thirdparty/gflags/gflags.h"
+#include "gflags/gflags.h"
 
 /////////  common /////////
 

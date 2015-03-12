@@ -6,7 +6,7 @@
 
 #include "scan_filter.h"
 
-#include "thirdparty/gtest/gtest.h"
+#include "gtest/gtest.h"
 
 namespace tera {
 

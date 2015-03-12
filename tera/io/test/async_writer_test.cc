@@ -11,9 +11,9 @@
 #include "common/base/string_number.h"
 #include "common/event.h"
 #include "common/this_thread.h"
-#include "thirdparty/gflags/gflags.h"
-#include "thirdparty/glog/logging.h"
-#include "thirdparty/gtest/gtest.h"
+#include "gflags/gflags.h"
+#include "glog/logging.h"
+#include "gtest/gtest.h"
 
 #include "tera/proto/proto_helper.h"
 #include "tera/proto/status_code.pb.h"

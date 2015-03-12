@@ -5,7 +5,7 @@
 #include "tera/sdk/sdk_utils.h"
 
 #include "tera/sdk/scan_impl.h"
-#include "thirdparty/gtest/gtest.h"
+#include "gtest/gtest.h"
 
 namespace tera {
 namespace sdk {

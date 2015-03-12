@@ -9,7 +9,7 @@
 
 #include "common/thread_pool.h"
 
-#include "tera/tabletnode/tabletnode_client.h"
+#include "tera/tabletnode_client.h"
 #include "tera/utils/timer.h"
 #include "tera/sdk/sdk_zk.h"
 

@@ -10,9 +10,9 @@
 #include "common/base/string_format.h"
 #include "common/base/string_number.h"
 #include "common/file/file_path.h"
-#include "thirdparty/gflags/gflags.h"
-#include "thirdparty/glog/logging.h"
-#include "thirdparty/gtest/gtest.h"
+#include "gflags/gflags.h"
+#include "glog/logging.h"
+#include "gtest/gtest.h"
 
 #include "tera/io/tablet_io.h"
 

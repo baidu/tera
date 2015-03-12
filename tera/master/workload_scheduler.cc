@@ -4,7 +4,7 @@
 
 #include "tera/master/workload_scheduler.h"
 
-#include "thirdparty/glog/logging.h"
+#include "glog/logging.h"
 
 #include "tera/master/tablet_manager.h"
 

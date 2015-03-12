@@ -6,7 +6,7 @@
 
 #include "tera/tabletnode/rpc_schedule_policy.h"
 
-#include "thirdparty/glog/logging.h"
+#include "glog/logging.h"
 
 #include "tera/utils/timer.h"
 

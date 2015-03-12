@@ -7,7 +7,7 @@
 
 #include "tera/master/master_client.h"
 
-#include "thirdparty/gmock/gmock.h"
+#include "gmock/gmock.h"
 
 #include "tera/proto/master_rpc.pb.h"
 #include "tera/rpc_client.h"

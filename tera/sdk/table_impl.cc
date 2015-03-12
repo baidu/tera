@@ -16,9 +16,9 @@
 #include "common/base/string_format.h"
 #include "common/file/file_path.h"
 #include "common/file/recordio/record_io.h"
-#include "thirdparty/gflags/gflags.h"
+#include "gflags/gflags.h"
 
-#include "tera/master/master_client.h"
+#include "tera/master_client.h"
 #include "tera/proto/kv_helper.h"
 #include "tera/proto/proto_helper.h"
 #include "tera/sdk/mutate_impl.h"
@@ -27,8 +27,8 @@
 #include "tera/sdk/schema_impl.h"
 #include "tera/sdk/sdk_zk.h"
 #include "tera/sdk/tera.h"
-#include "tera/tabletnode/tabletnode_client.h"
-#include "tera/tabletnode/tabletnode_client_async.h"
+#include "tera/tabletnode_client.h"
+#include "tera/tabletnode_client_async.h"
 #include "tera/utils/string_util.h"
 #include "tera/utils/timer.h"
 

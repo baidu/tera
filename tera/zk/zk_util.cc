@@ -5,10 +5,10 @@
 #include "tera/zk/zk_util.h"
 
 #include <string.h>
-#include <zookeeper.h>
 #include <string>
+#include <zookeeper/zookeeper.h>
 
-#include "thirdparty/glog/logging.h"
+#include "glog/logging.h"
 
 namespace tera {
 namespace zk {

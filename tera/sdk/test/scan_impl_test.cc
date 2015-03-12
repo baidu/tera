@@ -6,7 +6,7 @@
 
 #include "scan_impl.h"
 
-#include "thirdparty/gtest/gtest.h"
+#include "gtest/gtest.h"
 
 using std::string;
 

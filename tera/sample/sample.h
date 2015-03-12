@@ -11,8 +11,8 @@
 #include <iostream>
 #include <string>
 
-#include "thirdparty/gflags/gflags.h"
-#include "thirdparty/glog/logging.h"
+#include "gflags/gflags.h"
+#include "glog/logging.h"
 
 #include "tera/utils/counter.h"
 #include "tera/sdk/tera.h"

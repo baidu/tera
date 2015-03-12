@@ -4,7 +4,9 @@
 //
 // Author: An Qin (qinan@baidu.com)
 
-#include "tera/tabletnode/tabletnode_client.h"
+#include <gflags/gflags.h>
+
+#include "tera/tabletnode_client.h"
 
 DECLARE_string(tera_tabletnode_addr);
 DECLARE_string(tera_tabletnode_port);

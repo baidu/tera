@@ -6,8 +6,8 @@
 
 #include <boost/bind.hpp>
 
-#include "thirdparty/gflags/gflags.h"
-#include "thirdparty/glog/logging.h"
+#include "gflags/gflags.h"
+#include "glog/logging.h"
 
 #include "tera/tabletnode/tabletnode_impl.h"
 #include "tera/utils/counter.h"

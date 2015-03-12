@@ -16,16 +16,16 @@
 #include "common/base/string_number.h"
 #include "common/file/file_path.h"
 #include "db/filename.h"
-#include "thirdparty/gflags/gflags.h"
-#include "thirdparty/glog/logging.h"
+#include "gflags/gflags.h"
+#include "glog/logging.h"
 #include "tera/io/io_utils.h"
+#include "tera/io/utils_leveldb.h"
 #include "tera/master/master_impl.h"
 #include "tera/proto/kv_helper.h"
 #include "tera/proto/proto_helper.h"
-#include "tera/tabletnode/tabletnode_client.h"
-#include "tera/tabletnode/tabletnode_client_async.h"
+#include "tera/tabletnode_client.h"
+#include "tera/tabletnode_client_async.h"
 #include "tera/utils/string_util.h"
-#include "tera/utils/utils_cmd.h"
 #include "tera/types.h"
 
 DECLARE_string(tera_working_dir);
@@ -197,7 +197,7 @@ bool Tablet::SetStatusIf(TabletStatus new_status, TabletStatus if_status,
     if (NULL != old_status) {
         *old_status = m_meta.status();
     }
-    if (m_meta.status() == if_statu
+    if (m_meta.status() == if_status
         && CheckStatusSwitch(m_meta.status(), new_status)) {
         m_meta.set_status(new_status);
         return true;
@@ -215,7 +215,7 @@ bool Tablet::SetStatusIf(TabletStatus new_status, TabletStatus if_status,
     if (NULL != old_status) {
         *old_status = m_meta.status();
     }
-    if (m_meta.status() == if_status && m_table->m_status == if_table_statu
+    if (m_meta.status() == if_status && m_table->m_status == if_table_status
         && CheckStatusSwitch(m_meta.status(), new_status)) {
         m_meta.set_status(new_status);
         return true;
@@ -258,7 +258,7 @@ bool Tablet::SetAddrAndStatusIf(const std::string& server_addr,
     if (NULL != old_status) {
         *old_status = m_meta.status();
     }
-    if (m_meta.status() == if_statu
+    if (m_meta.status() == if_status
         && CheckStatusSwitch(m_meta.status(), new_status)) {
         m_meta.set_status(new_status);
         m_meta.set_server_addr(server_addr);
@@ -716,7 +716,7 @@ bool Table::GetTabletsForGc(std::set<uint64_t>* live_tablets,
     }
 
     std::vector<std::string> children;
-    leveldb::Env* env = utils::LeveldbEnv();
+    leveldb::Env* env = io::LeveldbEnv();
     std::string table_path = FLAGS_tera_tabletnode_path_prefix + m_name;
     env->GetChildren(table_path, &children);
     for (int i = 0; i < children.size(); ++i) {
@@ -1124,7 +1124,7 @@ bool TabletManager::DeleteTablet(const std::string& table_name,
     if (table.m_tablets_list.empty()) {
         // clean up specific table dir in file system
         if (FLAGS_tera_delete_obsolete_tabledir_enabled
-            && !utils::MoveEnvDirToTrash(table.GetTableName())) {
+            && !io::MoveEnvDirToTrash(table.GetTableName())) {
             LOG(ERROR) << "fail to move droped table to trash dir, tablename: " << table.GetTableName();
         }
         //delete &table;

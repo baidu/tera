@@ -5,8 +5,8 @@
 #include "tera/master/master_entry.h"
 
 #include "common/net/ip_address.h"
-#include "thirdparty/gflags/gflags.h"
-#include "thirdparty/glog/logging.h"
+#include "gflags/gflags.h"
+#include "glog/logging.h"
 
 #include "tera/master/master_impl.h"
 #include "tera/master/remote_master.h"

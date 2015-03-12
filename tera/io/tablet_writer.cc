@@ -8,8 +8,8 @@
 
 #include "common/this_thread.h"
 #include "leveldb/lg_coding.h"
-#include "thirdparty/gflags/gflags.h"
-#include "thirdparty/glog/logging.h"
+#include "gflags/gflags.h"
+#include "glog/logging.h"
 
 #include "tera/io/coding.h"
 #include "tera/io/io_utils.h"

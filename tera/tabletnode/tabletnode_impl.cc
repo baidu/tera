@@ -16,18 +16,19 @@
 #include "leveldb/env_flash.h"
 #include "leveldb/slog.h"
 #include "leveldb/table_utils.h"
-#include "thirdparty/gflags/gflags.h"
-#include "thirdparty/glog/logging.h"
+#include "gflags/gflags.h"
+#include "glog/logging.h"
 
 #include "db/filename.h"
 #include "db/table_cache.h"
 #include "tera/io/io_utils.h"
+#include "tera/io/utils_leveldb.h"
 #include "tera/proto/proto_helper.h"
 #include "tera/proto/kv_helper.h"
-#include "tera/tabletnode/tablet_manager.h"
-#include "tera/tabletnode/tabletnode_client.h"
-#include "tera/tabletnode/tabletnode_client_async.h"
+#include "tera/tabletnode_client.h"
+#include "tera/tabletnode_client_async.h"
 #include "tera/tabletnode/tabletnode_zk_adapter.h"
+#include "tera/tabletnode/tablet_manager.h"
 #include "tera/types.h"
 #include "tera/utils/counter.h"
 #include "tera/utils/string_util.h"
@@ -114,7 +115,7 @@ TabletNodeImpl::TabletNodeImpl(const TabletNodeInfo& tabletnode_info,
     }
 
     if (FLAGS_tera_leveldb_env_type != "local") {
-        utils::InitDfsEnv();
+        io::InitDfsEnv();
     }
 
     InitCacheSystem();
@@ -800,7 +801,7 @@ void TabletNodeImpl::MergeTablet(const MergeTabletRequest* request,
     std::string tb2_path = request->tablet_path_2();
     std::string tb_merge = request->tablet_merged_path();
     StatusCode status = kTabletNodeOk;
-    if (!utils::MergeTablesWithLG(tb1_path, tb2_path, tb_merge)) {
+    if (!io::MergeTablesWithLG(tb1_path, tb2_path, tb_merge)) {
         LOG(ERROR) << "fail to merge: " << tb2_path << " to: " << tb1_path;
         status = kTableMergeError;
     }

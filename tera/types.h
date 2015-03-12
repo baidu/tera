@@ -6,8 +6,8 @@
 #define TERA_TYPES_H
 
 #include "common/base/stdint.h"
-#include "thirdparty/glog/logging.h"
-#include "thirdparty/gflags/gflags.h"
+#include "glog/logging.h"
+#include "gflags/gflags.h"
 
 
 namespace tera {

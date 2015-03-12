@@ -6,7 +6,7 @@
 
 #include <limits>
 
-#include "tera/tabletnode/tabletnode_client_async.h"
+#include "tera/tabletnode_client_async.h"
 
 namespace tera {
 

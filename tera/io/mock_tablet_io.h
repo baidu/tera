@@ -7,7 +7,7 @@
 
 #include "tera/io/tablet_io.h"
 
-#include "thirdparty/gmock/gmock.h"
+#include "gmock/gmock.h"
 
 namespace tera {
 namespace io {

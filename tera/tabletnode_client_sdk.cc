@@ -2,7 +2,9 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include "tera/tabletnode/tabletnode_client_sdk.h"
+#include <gflags/gflags.h>
+
+#include "tera/tabletnode_client_sdk.h"
 
 DECLARE_string(tera_tabletnode_addr);
 DECLARE_string(tera_tabletnode_port);

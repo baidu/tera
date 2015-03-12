@@ -5,7 +5,7 @@
 #include "common/net/ip_address.h"
 
 #include <vector>
-#include "thirdparty/glog/logging.h"
+#include "glog/logging.h"
 
 #include "common/base/string_ext.h"
 #include "common/base/string_number.h"

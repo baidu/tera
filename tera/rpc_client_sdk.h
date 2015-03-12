@@ -86,7 +86,7 @@ protected:
                         return true;
                     }
                 } else {
-                    LOG(ERROR) << "RpcRequest failed: " << tip
+                    LOG(ERROR) << "RpcRequest failed: " << tips
                         << ". Reason: " << rpc_controller.ErrorText()
                         << " (retry = " << retry << ")";
                     ThisThread::Sleep(wait_time);

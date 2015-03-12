@@ -8,9 +8,9 @@
 #include "common/base/scoped_ptr.h"
 #include "common/base/string_format.h"
 #include "common/base/string_number.h"
-#include "thirdparty/gflags/gflags.h"
-#include "thirdparty/glog/logging.h"
-#include "thirdparty/gtest/gtest.h"
+#include "gflags/gflags.h"
+#include "glog/logging.h"
+#include "gtest/gtest.h"
 #include "leveldb/table_utils.h"
 #include "leveldb/raw_key_operator.h"
 
