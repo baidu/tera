@@ -48,5 +48,6 @@
     cd -
 
 #script:
+    sh build_version.sh
     make proto
     make -j4
