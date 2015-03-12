@@ -2,7 +2,7 @@ language: cpp
 compiler: gcc
 env:
     - PROTOBUF_VERSION=2.6.0
-before_install:
+install:
     sudo apt-get install libboost-dev
 
     wget https://github.com/google/protobuf/releases/download/v2.6.0/protobuf-2.6.0.tar.gz
@@ -18,8 +18,8 @@ before_install:
     tar zxvf openssl-1.0.2.tar.gz
     ( cd openssl-1.0.2 && ./config && make -j4 && sudo make install )
 
-    git clone https://github.com/koalademo/sofa-pbrpc
-    ( cd sofa-pbrpc && make proto && make -j4 && make install )
+    git clone https://github.com/koalademo/sofa-pbrpc ./thirdparty/sofa-pbrpc
+    ( cd thirdparty/sofa-pbrpc && make proto && make -j4 && make install )
 
     wget http://www.us.apache.org/dist/zookeeper/stable/zookeeper-3.4.6.tar.gz
     tar zxvf zookeeper-3.4.6.tar.gz
@@ -39,7 +39,6 @@ before_install:
     tar zxvf gperftools-2.4.tar.gz
     ( cd gperftools-2.4 && ./configure && make -j4 && sudo make install )
 
-install:
     sh build_version.sh
     make proto
     make -j4
