@@ -7,7 +7,7 @@
 
 #include "common/base/scoped_ptr.h"
 #include "common/mutex.h"
-#include "thirdparty/glog/logging.h"
+#include "glog/logging.h"
 
 #include "tera/proto/master_rpc.pb.h"
 #include "tera/proto/tabletnode_rpc.pb.h"

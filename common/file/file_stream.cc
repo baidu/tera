@@ -10,8 +10,8 @@
 #include <unistd.h>
 
 #include "common/base/string_ext.h"
-#include "thirdparty/gflags/gflags.h"
-#include "thirdparty/glog/logging.h"
+#include "gflags/gflags.h"
+#include "glog/logging.h"
 
 DECLARE_int32(file_op_retry_times);
 

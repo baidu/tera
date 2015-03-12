@@ -11,7 +11,7 @@
 #include "common/thread_pool.h"
 
 #include "tera/io/tablet_io.h"
-#include "tera/master/master_client.h"
+#include "tera/master_client.h"
 #include "tera/proto/master_rpc.pb.h"
 #include "tera/proto/tabletnode.pb.h"
 #include "tera/proto/tabletnode_rpc.pb.h"
@@ -138,8 +138,8 @@ private:
              const std::string& path, const std::string& key_split,
              const TableSchema& schema, int64_t first_size, int64_t second_size,
              const TabletMeta& meta);
-    void UpdateMetaTableCallback(const SplitTabletRequest* request,
-             SplitTabletResponse* response, google::protobuf::Closure* done,
+    void UpdateMetaTableCallback(const SplitTabletRequest* rpc_request,
+             SplitTabletResponse* rpc_response, google::protobuf::Closure* rpc_done,
              WriteTabletRequest* request, WriteTabletResponse* response,
              bool failed, int error_code);
 

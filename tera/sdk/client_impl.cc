@@ -8,16 +8,16 @@
 
 #include "common/file/file_path.h"
 #include "common/mutex.h"
-#include "thirdparty/gflags/gflags.h"
+#include "gflags/gflags.h"
 
-#include "tera/master/master_client.h"
+#include "tera/master_client.h"
 #include "tera/proto/kv_helper.h"
 #include "tera/proto/proto_helper.h"
 #include "tera/proto/table_meta.pb.h"
 #include "tera/sdk/table_impl.h"
 #include "tera/sdk/sdk_utils.h"
 #include "tera/sdk/sdk_zk.h"
-#include "tera/tabletnode/tabletnode_client_async.h"
+#include "tera/tabletnode_client_async.h"
 #include "tera/utils/utils_cmd.h"
 
 DECLARE_string(flagfile);
@@ -742,7 +742,7 @@ static void InitFlags(const std::string& log_prefix) {
     argv[1] = NULL;
 
     // the gflags will get flags from FLAGS_flagfile
-    ::google::ParseCommandLineFlags(&argc, &argv, true);
+    ::gflags::ParseCommandLineFlags(&argc, &argv, true);
     ::google::InitGoogleLogging(log_prefix.c_str());
     utils::SetupLog(log_prefix.c_str());
     delete[] argv;

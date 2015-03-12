@@ -6,7 +6,7 @@
 
 #include "tera/zk/zk_lock.h"
 
-#include "thirdparty/glog/logging.h"
+#include "glog/logging.h"
 
 #include "tera/zk/zk_util.h"
 #include "tera/zk/zk_adapter.h"

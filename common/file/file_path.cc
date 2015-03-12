@@ -7,6 +7,7 @@
 #include <sys/stat.h>
 #include <unistd.h>
 #include <stdio.h>
+#include <string.h>
 #include <sys/types.h>
 #include <pwd.h>
 #include <grp.h>
@@ -15,7 +16,7 @@
 #include "common/base/string_ext.h"
 #include "common/file/file_path.h"
 
-#include "thirdparty/gflags/gflags.h"
+#include "gflags/gflags.h"
 
 DECLARE_int32(file_op_retry_times);
 

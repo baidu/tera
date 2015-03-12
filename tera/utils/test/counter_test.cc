@@ -7,7 +7,7 @@
 
 #include <boost/bind.hpp>
 
-#include "thirdparty/gtest/gtest.h"
+#include "gtest/gtest.h"
 
 #include "common/mutex.h"
 #include "common/thread_pool.h"

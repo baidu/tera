@@ -4,8 +4,8 @@
 
 #include <signal.h>
 
-#include "thirdparty/gflags/gflags.h"
-#include "thirdparty/glog/logging.h"
+#include "gflags/gflags.h"
+#include "glog/logging.h"
 
 #include "version.h"
 #include "common/base/scoped_ptr.h"
@@ -39,7 +39,7 @@ tera::TeraEntry* SwitchTeraEntry() {
 }
 
 int main(int argc, char** argv) {
-    ::google::ParseCommandLineFlags(&argc, &argv, true);
+    ::gflags::ParseCommandLineFlags(&argc, &argv, true);
     ::google::InitGoogleLogging(argv[0]);
     tera::utils::SetupLog(FLAGS_tera_role);
 

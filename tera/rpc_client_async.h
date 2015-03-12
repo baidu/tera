@@ -13,7 +13,7 @@
 #include "common/net/ip_address.h"
 #include "common/this_thread.h"
 #include "common/thread_pool.h"
-#include "thirdparty/sofa/pbrpc/pbrpc.h"
+#include "sofa/pbrpc/pbrpc.h"
 
 #include "tera/proto/status_code.pb.h"
 #include "tera/proto/proto_helper.h"

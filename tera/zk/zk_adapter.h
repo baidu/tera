@@ -9,7 +9,7 @@
 
 #include <map>
 #include <string>
-#include <zookeeper.h>
+#include <zookeeper/zookeeper.h>
 
 #include "common/mutex.h"
 #include "common/thread_pool.h"

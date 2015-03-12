@@ -6,8 +6,8 @@
 
 #include "common/file/file_path.h"
 #include "common/thread_pool.h"
-#include "thirdparty/gflags/gflags.h"
-#include "thirdparty/glog/logging.h"
+#include "gflags/gflags.h"
+#include "glog/logging.h"
 
 #include "tera/io/io_utils.h"
 #include "tera/proto/proto_helper.h"

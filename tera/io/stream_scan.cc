@@ -8,8 +8,8 @@
 
 #include "common/this_thread.h"
 #include "common/thread_pool.h"
-#include "thirdparty/gflags/gflags.h"
-#include "thirdparty/glog/logging.h"
+#include "gflags/gflags.h"
+#include "glog/logging.h"
 
 #include "tera/utils/atomic.h"
 

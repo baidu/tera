@@ -6,6 +6,7 @@
 #define COMMON_BASE_STRING_FORMAT_H
 #pragma once
 
+#include <stdio.h>
 #include <stdarg.h>
 #include <stddef.h>
 #include <string>

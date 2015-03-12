@@ -7,7 +7,7 @@
 #include <time.h>
 
 #include "tera/utils/timer.h"
-#include "thirdparty/gtest/gtest.h"
+#include "gtest/gtest.h"
 
 using namespace leveldb;
 using namespace tera;

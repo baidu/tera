@@ -15,8 +15,8 @@
 #include "leveldb/env_flash.h"
 #include "leveldb/env_inmem.h"
 #include "leveldb/filter_policy.h"
-#include "thirdparty/gflags/gflags.h"
-#include "thirdparty/glog/logging.h"
+#include "gflags/gflags.h"
+#include "glog/logging.h"
 
 #include "tera/utils/timer.h"
 #include "tera/io/coding.h"

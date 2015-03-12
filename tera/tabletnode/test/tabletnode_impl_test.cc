@@ -4,9 +4,9 @@
 
 #include "tera/tabletnode/tabletnode_impl.h"
 
-#include "thirdparty/gflags/gflags.h"
-#include "thirdparty/gmock/gmock.h"
-#include "thirdparty/gtest/gtest.h"
+#include "gflags/gflags.h"
+#include "gmock/gmock.h"
+#include "gtest/gtest.h"
 #include "google/protobuf/stubs/common.h"
 
 #include "tera/master/mock_master_client.h"

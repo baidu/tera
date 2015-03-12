@@ -7,7 +7,7 @@
 
 #include "tera/tabletnode/tablet_manager.h"
 
-#include "thirdparty/gmock/gmock.h"
+#include "gmock/gmock.h"
 
 namespace tera {
 namespace tabletnode {

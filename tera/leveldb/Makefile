@@ -7,7 +7,7 @@
 # to switch between compilation modes.
 
 # OPT ?= -O2 -DNDEBUG       # (A) Production use (optimized mode)
-OPT ?= -g2 -WALL -Wno-sign-compare    # (B) Debug mode, w/ full line-level debugging symbols
+OPT ?= -g2 -Wall -Wno-sign-compare    # (B) Debug mode, w/ full line-level debugging symbols
 # OPT ?= -O2 -g2 -DNDEBUG # (C) Profiling mode: opt, but w/debugging symbols
 #-----------------------------------------------
 
@@ -20,10 +20,10 @@ include build_config.mk
 CFLAGS += -I. -I./include $(PLATFORM_CCFLAGS) $(OPT)
 CXXFLAGS += -I. -I./include $(PLATFORM_CXXFLAGS) $(OPT)
 
-LDFLAGS += $(PLATFORM_LDFLAGS) -lcrypto -ldl
+LDFLAGS += $(PLATFORM_LDFLAGS) -L/usr/local/lib -L/usr/local/ssl/lib -lcrypto -ldl -lsnappy
 LIBS += $(PLATFORM_LIBS)
 
-LIBOBJECTS = $(SOURCES:.cc=.o) libsnappy.a
+LIBOBJECTS = $(SOURCES:.cc=.o)
 MEMENVOBJECTS = $(MEMENV_SOURCES:.cc=.o)
 
 TESTUTIL = ./util/testutil.o

@@ -8,8 +8,8 @@
 
 #include "common/base/string_format.h"
 #include "common/mutex.h"
-#include "thirdparty/gflags/gflags.h"
-#include "thirdparty/glog/logging.h"
+#include "gflags/gflags.h"
+#include "glog/logging.h"
 
 DEFINE_int32(tera_hash_sdk_rpc_max_pending_num, 1024 * 1024, "max num of pending kv");
 DEFINE_int64(tera_hash_sdk_scan_buffer_size, 128 * 1024, "max buffer size of scan in hask sdk");

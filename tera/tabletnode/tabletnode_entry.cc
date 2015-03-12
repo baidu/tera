@@ -12,10 +12,10 @@
 #include "common/net/ip_address.h"
 #include "common/this_thread.h"
 #include "common/thread_attributes.h"
-#include "thirdparty/gflags/gflags.h"
-#include "thirdparty/glog/logging.h"
+#include "gflags/gflags.h"
+#include "glog/logging.h"
 
-#include "tera/master/master_client.h"
+#include "tera/master_client.h"
 #include "tera/proto/tabletnode.pb.h"
 #include "tera/tabletnode/remote_tabletnode.h"
 #include "tera/tabletnode/tabletnode_impl.h"

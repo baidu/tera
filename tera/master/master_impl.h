@@ -14,6 +14,7 @@
 #include "common/base/scoped_ptr.h"
 #include "common/mutex.h"
 #include "common/thread_pool.h"
+#include "gflags/gflags.h"
 
 #include "tera/master/tablet_manager.h"
 #include "tera/master/tabletnode_manager.h"

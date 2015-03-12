@@ -15,7 +15,7 @@
 #include "common/base/closure.h"
 #include "common/mutex.h"
 #include "common/thread_pool.h"
-#include "thirdparty/sofa/pbrpc/smart_ptr/shared_ptr.hpp"
+#include "sofa/pbrpc/smart_ptr/shared_ptr.hpp"
 
 #include "tera/proto/table_meta.pb.h"
 #include "tera/proto/tabletnode_rpc.pb.h"

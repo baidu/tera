@@ -4,7 +4,7 @@
 
 #include "filter_utils.h"
 
-#include "thirdparty/gtest/gtest.h"
+#include "gtest/gtest.h"
 
 namespace tera {
 

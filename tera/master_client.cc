@@ -4,7 +4,9 @@
 
 #include <string>
 
-#include "tera/master/master_client.h"
+#include <gflags/gflags.h>
+
+#include "tera/master_client.h"
 
 
 DECLARE_string(tera_master_addr);

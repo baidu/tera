@@ -4,7 +4,7 @@
 
 #include "tera/tabletnode/rpc_schedule.h"
 
-#include "thirdparty/glog/logging.h"
+#include "glog/logging.h"
 
 namespace tera {
 namespace tabletnode {

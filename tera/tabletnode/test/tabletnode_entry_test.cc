@@ -7,7 +7,7 @@
 #include <gflags/gflags.h>
 #include <glog/logging.h>
 
-#include "thirdparty/gtest/gtest.h"
+#include "gtest/gtest.h"
 
 DECLARE_bool(tera_tabletnode_cpu_affinity_enabled);
 DECLARE_string(tera_tabletnode_cpu_affinity_set);

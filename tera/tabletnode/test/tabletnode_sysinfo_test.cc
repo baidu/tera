@@ -6,7 +6,7 @@
 
 #include "tabletnode_sysinfo.h"
 #include "tera/utils/timer.h"
-#include "thirdparty/gtest/gtest.h"
+#include "gtest/gtest.h"
 
 namespace tera {
 namespace tabletnode {
