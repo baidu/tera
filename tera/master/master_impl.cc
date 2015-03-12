@@ -124,9 +124,7 @@ MasterImpl::MasterImpl()
 
 MasterImpl::~MasterImpl() {
     LOG(INFO) << "dest impl";
-    if (m_stat_table) {
-        delete m_stat_table;
-    }
+    delete m_stat_table;
 }
 
 bool MasterImpl::Init() {

@@ -22,7 +22,11 @@ Tera实现了按行key、列和时间戳全局排序的三维数据模型，并�
 
 使用zookeeper选主与协调
 
-参考[sample.cc](https://github.com/bluebore/tera/blob/master/tera/sample/tera_sample.cc)
+使用Sofa-pbrpc实现跨进程通信
+
+#API使用示例
+参考[wiki](https://github.com/BaiduPS/tera/wiki/%E4%B8%BB%E8%A6%81API%E4%BD%BF%E7%94%A8%E6%96%B9%E6%B3%95)
+
 
 
 

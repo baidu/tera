@@ -47,9 +47,7 @@ MemTableOnLevelDB::~MemTableOnLevelDB() {
         memdb_->Shutdown2();
         delete memdb_;
     }
-    if (memenv_) {
-        delete memenv_;
-    }
+    delete memenv_;
 
 }
 
