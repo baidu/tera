@@ -7,11 +7,11 @@
 #ifndef  COMMON_LOCK_MUTEX_H_
 #define  COMMON_LOCK_MUTEX_H_
 
+#include <pthread.h>
 #include <stdint.h>
 #include <stdlib.h>
-#include <sys/time.h>
 #include <string.h>
-#include <pthread.h>
+#include <sys/time.h>
 #include "timer.h"
 
 namespace common {
@@ -51,7 +51,7 @@ public:
             printf("%s wait lock %.3f ms\n", msg, (lock_time_ -s) / 1000.0);
         }
         #endif
-    } 
+    }
     // Unlock the mutex.
     void Unlock() {
         BeforeUnlock();
@@ -59,10 +59,11 @@ public:
     }
     // Crash if this thread does not hold this mutex.
     void AssertHeld() {
-         if(0 == pthread_equal(owner_, pthread_self())) {
+        if (0 == pthread_equal(owner_, pthread_self())) {
             abort();
-         }
+        }
     }
+
 private:
     void AfterLock(const char* msg, int64_t msg_threshold) {
         #ifdef MUTEX_DEBUG
@@ -83,6 +84,7 @@ private:
         #endif
         owner_ = 0;
     }
+
 private:
     friend class CondVar;
     Mutex(const Mutex&);
@@ -144,6 +146,7 @@ public:
     void Broadcast() {
         PthreadCall("broadcast", pthread_cond_broadcast(&cond_));
     }
+
 private:
     CondVar(const CondVar&);
     void operator=(const CondVar&);
