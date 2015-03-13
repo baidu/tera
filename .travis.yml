@@ -2,7 +2,7 @@ language: cpp
 compiler: gcc
 env:
     - PROTOBUF_VERSION=2.6.0
-before_install:
+install:
     - sudo apt-get install libboost-dev
 
     - wget https://github.com/google/protobuf/releases/download/v2.6.0/protobuf-2.6.0.tar.gz
@@ -14,9 +14,7 @@ before_install:
 
     - sudo apt-get install zlib1g-dev
 
-    - wget http://www.openssl.org/source/openssl-1.0.2.tar.gz
-    - tar zxvf openssl-1.0.2.tar.gz
-    - ( cd openssl-1.0.2 && ./config && make -j4 && sudo make install )
+    - sudo apt-get -y install libssl-dev
 
     - git clone https://github.com/koalademo/sofa-pbrpc ./thirdparty/sofa-pbrpc
     - ( cd thirdparty/sofa-pbrpc && make proto && make -j4 && make install )
@@ -25,13 +23,13 @@ before_install:
     - tar zxvf zookeeper-3.4.6.tar.gz
     - ( cd zookeeper-3.4.6/src/c && ./configure --disable-shared && make -j4 && sudo make install )
 
-    - git clone https://github.com/schuhschuh/gflags
-    - ( cd gflags && cmake && make -j4 && sudo make install )
-
     - git clone https://github.com/google/glog
-    - ( cd glog && git checkout v0.3.3 && ./configure && make -j4 && sudo make install )
+    - ( cd glog && git checkout v0.3.3 && ./configure --disable-shared && make -j4 && sudo make install )
+    
+    - git clone https://github.com/schuhschuh/gflags
+    - ( cd gflags && cmake . && make -j4 && sudo make install )
 
-    - get http://download.savannah.gnu.org/releases/libunwind/libunwind-0.99-beta.tar.gz
+    - wget http://download.savannah.gnu.org/releases/libunwind/libunwind-0.99-beta.tar.gz
     - tar zxvf libunwind-0.99-beta.tar.gz
     - ( cd libunwind-0.99-beta && ./configure CFLAGS=-U_FORTIFY_SOURCE && make -j4 && sudo make install )
 
@@ -39,8 +37,7 @@ before_install:
     - tar zxvf gperftools-2.4.tar.gz
     - ( cd gperftools-2.4 && ./configure && make -j4 && sudo make install )
 
-install:
+script:
     - sh build_version.sh
     - make proto
     - make -j4
-script:

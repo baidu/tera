@@ -20,9 +20,7 @@
 
     sudo apt-get install zlib1g-dev
 
-    wget http://www.openssl.org/source/openssl-1.0.2.tar.gz
-    tar zxvf openssl-1.0.2.tar.gz
-    ( cd openssl-1.0.2 && ./config && make -j4 && sudo make install )
+    sudo apt-get -y install libssl-dev
 
     git clone https://github.com/koalademo/sofa-pbrpc
     ( cd sofa-pbrpc && make proto && make -j4 && make install )
