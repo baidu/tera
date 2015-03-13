@@ -2,7 +2,7 @@ language: cpp
 compiler: gcc
 env:
     - PROTOBUF_VERSION=2.6.0
-before_install:
+install:
     - sudo apt-get install libboost-dev
 
     - wget https://github.com/google/protobuf/releases/download/v2.6.0/protobuf-2.6.0.tar.gz
@@ -37,8 +37,7 @@ before_install:
     - tar zxvf gperftools-2.4.tar.gz
     - ( cd gperftools-2.4 && ./configure && make -j4 && sudo make install )
 
-install:
+script:
     - sh build_version.sh
     - make proto
     - make -j4
-script:
