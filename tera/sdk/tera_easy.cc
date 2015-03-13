@@ -35,9 +35,7 @@ public:
 
     ~TableImpl() {
         Flush();
-        if (_scanner != NULL) {
-            delete _scanner;
-        }
+        delete _scanner;
         delete _table;
         delete _client;
     }
