@@ -24,7 +24,7 @@ before_install:
     - ( cd zookeeper-3.4.6/src/c && ./configure --disable-shared && make -j4 && sudo make install )
 
     - git clone https://github.com/schuhschuh/gflags
-    - ( cd gflags && cmake && make -j4 && sudo make install )
+    - ( cd gflags && cmake . && make -j4 && sudo make install )
 
     - git clone https://github.com/google/glog
     - ( cd glog && git checkout v0.3.3 && ./configure && make -j4 && sudo make install )
