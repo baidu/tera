@@ -29,7 +29,7 @@ before_install:
     - git clone https://github.com/schuhschuh/gflags
     - ( cd gflags && cmake . && make -j4 && sudo make install )
 
-    - get http://download.savannah.gnu.org/releases/libunwind/libunwind-0.99-beta.tar.gz
+    - wget http://download.savannah.gnu.org/releases/libunwind/libunwind-0.99-beta.tar.gz
     - tar zxvf libunwind-0.99-beta.tar.gz
     - ( cd libunwind-0.99-beta && ./configure CFLAGS=-U_FORTIFY_SOURCE && make -j4 && sudo make install )
 
