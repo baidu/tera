@@ -219,6 +219,16 @@ uint64_t BuildFullFileNumber(const std::string& dbname, uint64_t number) {
   }
 }
 
+bool ParseFullFileNumber(uint64_t full_number, uint64_t* tablet, uint64_t* file) {
+  if (tablet) {
+    *tablet = (full_number >> 32 & 0x7FFFFFFF);
+  }
+  if (file) {
+    *file = full_number & 0xffffffff;
+  }
+  return true;
+}
+
 std::string BuildTableFilePath(const std::string& prefix,
                                uint64_t lg, uint64_t number) {
   uint64_t tablet = (number >> 32 & 0x7FFFFFFF);

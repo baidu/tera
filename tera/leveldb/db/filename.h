@@ -105,6 +105,9 @@ std::string BuildTableFilePath(const std::string& prefix,
 bool ParseDbName(const std::string& dbname, std::string* prefix,
                  uint64_t* tablet, uint64_t* lg);
 
+// Parse a full file number to tablet number & file number
+bool ParseFullFileNumber(uint64_t full_number, uint64_t* tablet, uint64_t* file);
+
 // Construct a db_impl name from a cur-db_impl name and a tablet number.
 // E.g. construct "/table1/tablet000003/0" from (/table1/tablet000001/0, 3)
 std::string RealDbName(const std::string& dbname, uint64_t tablet);

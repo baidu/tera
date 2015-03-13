@@ -145,6 +145,24 @@ TEST(FileNameTest, BuildFullFileNumber) {
   ASSERT_EQ(BuildFullFileNumber(dbname, number), 0x8012d6873ADE68B1);
 }
 
+TEST(FileNameTest, ParseFullFileNumber) {
+  uint64_t number, tablet, file;
+
+  number = 0x8000000300000001;
+  ASSERT_TRUE(ParseFullFileNumber(number, &tablet, &file));
+  ASSERT_EQ(tablet, 3);
+  ASSERT_EQ(file, 1);
+
+  number = 0x3;
+  ASSERT_TRUE(ParseFullFileNumber(number, &tablet, &file));
+  ASSERT_EQ(tablet, 0);
+  ASSERT_EQ(file, 3);
+
+  number = 0x3;
+  ASSERT_TRUE(ParseFullFileNumber(number, NULL, &file));
+  ASSERT_EQ(file, 3);
+}
+
 TEST(FileNameTest, BuildTableFilePath) {
   std::string prefix;
   uint64_t lg, number;
