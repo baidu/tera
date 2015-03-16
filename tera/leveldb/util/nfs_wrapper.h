@@ -1,14 +1,12 @@
 // Copyright (C) 2015, Baidu Inc.
-// Author: likang01@@baidu.com
-//
 // Description:  nfs wrapper
 
-#ifndef  TERA_DEPS_NFS_WRAPPER_H
-#define  TERA_DEPS_NFS_WRAPPER_H
+#ifndef  STORAGE_LEVELDB_UTIL_NFS_WRAPPER_H_
+#define  STORAGE_LEVELDB_UTIL_NFS_WRAPPER_H_
 
-#include "version.h"
+#include "nfs_version.h"
 
-#include "nfs.h"
+#include "../include/nfs.h"
 
 namespace nfs {
 struct NFSFILE;
@@ -69,5 +67,5 @@ int Stat(const char* path, struct ::stat* stat);
 }
 #endif
 
-#endif  // TERA_DEPS_NFS_WRAPPER_H
+#endif  // STORAGE_LEVELDB_UTIL_NFS_WRAPPER_H_
 
