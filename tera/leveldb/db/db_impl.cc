@@ -388,21 +388,35 @@ Status DBImpl::Recover(VersionEdit* edit) {
   s = versions_->Recover();
   Log(options_.info_log, "[%s] end VersionSet::Recover last_seq= %llu",
       dbname_.c_str(), versions_->LastSequence());
-  if (s.ok() /* (qinan): log consumption is moved ahead*/) {
-    // Check corruption
-    std::vector<std::string> filenames;
-    s = env_->GetChildren(dbname_, &filenames);
-    if (!s.ok()) {
-      return s;
-    }
-    Log(options_.info_log, "[%s] GetChildren", dbname_.c_str());
+  if (s.ok()) {
+    // check loss of sst files (fs exception)
     std::map<uint64_t, int> expected;
     versions_->AddLiveFiles(&expected);
-    uint64_t number;
-    FileType type;
-    for (size_t i = 0; i < filenames.size(); i++) {
-      if (ParseFileName(filenames[i], &number, &type)) {
-        expected.erase(BuildFullFileNumber(dbname_, number));
+
+    // collect all tablets
+    std::set<uint64_t> tablets;
+    std::map<uint64_t, int>::iterator it_exp = expected.begin();
+    for (; it_exp != expected.end(); ++it_exp) {
+      uint64_t tablet;
+      ParseFullFileNumber(it_exp->first, &tablet, NULL);
+      tablets.insert(tablet);
+    }
+
+    std::set<uint64_t>::iterator it_tablet = tablets.begin();
+    for (; it_tablet != tablets.end(); ++it_tablet) {
+      std::string path = RealDbName(dbname_, *it_tablet);
+      Log(options_.info_log, "[%s] GetChildren", path.c_str());
+      std::vector<std::string> filenames;
+      s = env_->GetChildren(path, &filenames);
+      if (!s.ok()) {
+        return s;
+      }
+      uint64_t number;
+      FileType type;
+      for (size_t i = 0; i < filenames.size(); i++) {
+        if (ParseFileName(filenames[i], &number, &type) && (type == kTableFile)) {
+          expected.erase(BuildFullFileNumber(path, number));
+        }
       }
     }
     if (!expected.empty()) {
