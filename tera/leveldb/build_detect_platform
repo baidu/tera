@@ -137,7 +137,7 @@ case "$TARGET_OS" in
 esac
 
 # use external compression support
-COMMON_FLAGS="$COMMON_FLAGS -DUSE_COMPRESS_EXT"
+COMMON_FLAGS="$COMMON_FLAGS"
 
 # We want to make a list of all cc files within util, db, table, and helpers
 # except for the test and benchmark files. By default, find will output a list

@@ -1,5 +1,5 @@
-#ifndef _NEARLINE_VERSION_H_
-#define _NEARLINE_VERSION_H_
+#ifndef STORAGE_LEVELDB_UTIL_NFS_VERSION_H_
+#define STORAGE_LEVELDB_UTIL_NFS_VERSION_H_
 
 #ifdef __cplusplus
    extern  "C" {
@@ -17,4 +17,4 @@ const char* PrintNfsVersion();
    }
 #endif
 
-#endif // _NEARLINE_VERSION_H_
+#endif // STORAGE_LEVELDB_UTIL_NFS_VERSION_H_
