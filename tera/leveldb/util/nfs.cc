@@ -8,10 +8,10 @@
 #include <stdlib.h>
 
 #include "nfs.h"
+#include "nfs_wrapper.h"
 #include "util/mutexlock.h"
 #include "util/string_ext.h"
 #include "../utils/counter.h"
-#include "../../deps/nfs_wrapper.h"
 
 namespace leveldb {
 
