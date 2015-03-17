@@ -8,3 +8,4 @@ Tera基于leveldb实现数据持久化存储，在原版leveldb的基础上开�
 * Split&Merge，支持将一个leveldb分裂成两个或将两个leveldb合并成为一个，分裂合并只修改元数据，所以非常高效；
 * ThreadPool，支持多个线程进行后台compact；
 * MemTableOnLevelDB，支持LSM-tree版本的内存表，替代了跳表实现，解决表格展开为kv时，内存表性能不足的问题。
+* AsyncWriter，支持在log写入阻塞的情况下，切换新的文件写入，降低写延时。
