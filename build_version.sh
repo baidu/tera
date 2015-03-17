@@ -40,7 +40,7 @@ gen_info_print_template ()
 TEMPLATE_HEADER_FILE=template_header.tmp
 TEMPLATE_FOOT_FILE=template_foot.tmp
 GIT_INFO_FILE=git_info.tmp
-VERSION_CPP_FILE=version.cc
+VERSION_CPP_FILE=src/version.cc
 
 # generate template file
 git remote -v | sed 's/$/&\\n\\/g' > $GIT_INFO_FILE
