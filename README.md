@@ -21,12 +21,9 @@ Tera是一个高性能、可伸缩的数据库系统，被设计用来管理搜�
 系统主要由Tabletserver、Master和ClientSDK三部分构成。其中Tabletserver是核心服务器，承载着所有的数据管理与访问；Master是系统的仲裁者，负责表格的创建、schema更新与负载均衡；ClientSDK包含供管理员使用的命令行工具teracli和给用户使用的SDK。
 
 #系统依赖
-使用分布式文件系统（HDFS、NFS等）持久化数据与元信息
-
-使用zookeeper选主与协调
-
-使用Sofa-pbrpc实现跨进程通信
+ * 使用分布式文件系统（HDFS、NFS等）持久化数据与元信息
+ * 使用zookeeper选主与协调
+ * 使用Sofa-pbrpc实现跨进程通信
 
 #使用示例
 参考[wiki](https://github.com/BaiduPS/tera/wiki/%E4%B8%BB%E8%A6%81API%E4%BD%BF%E7%94%A8%E6%96%B9%E6%B3%95)
-
