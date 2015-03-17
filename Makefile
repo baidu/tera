@@ -23,10 +23,11 @@ TABLETNODE_SRC = $(wildcard src/tabletnode/*.cc)
 IO_SRC = $(wildcard src/io/*.cc)
 SDK_SRC = $(wildcard src/sdk/*.cc)
 PROTO_SRC = $(wildcard src/proto/*.cc)
-OTHER_SRC = $(wildcard src/zk/*.cc) $(wildcard src/utils/*.cc) src/tera_flags.cc
+OTHER_SRC = $(wildcard src/zk/*.cc) $(wildcard src/utils/*.cc) src/tera_flags.cc \
+            src/version.cc
 COMMON_SRC = $(wildcard src/common/base/*.cc) $(wildcard src/common/net/*.cc) \
              $(wildcard src/common/file/*.cc) $(wildcard src/common/file/recordio/*.cc)
-SERVER_SRC = src/tera_main src/tera_entry.cc
+SERVER_SRC = src/tera_main.cc src/tera_entry.cc
 CLIENT_SRC = src/teracli_main.cc
 
 MASTER_OBJ = $(MASTER_SRC:.cc=.o)
