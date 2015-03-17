@@ -1,5 +1,4 @@
 ####Tera基于leveldb实现数据持久化存储，在原版leveldb的基础上开发了以下组件
------
 ######DBTable
     支持按列存储优化(Localitygroup)，通过封装多个DBImpl，并使用WAL&MVCC保证行级原子性读写
 ######DFSEnv
