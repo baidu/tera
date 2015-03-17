@@ -143,7 +143,7 @@ COMMON_FLAGS="$COMMON_FLAGS"
 # except for the test and benchmark files. By default, find will output a list
 # of all files matching either rule, so we need to append -print to make the
 # prune take effect.
-DIRS="$PREFIX/db $PREFIX/util $PREFIX/table $PREFIX/helpers/memenv $PREFIX/compress"
+DIRS="$PREFIX/db $PREFIX/util $PREFIX/table $PREFIX/helpers/memenv"
 
 set -f # temporarily disable globbing so that our patterns aren't expanded
 PRUNE_TEST="-name *test*.cc -prune"

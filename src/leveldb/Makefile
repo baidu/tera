@@ -103,14 +103,14 @@ $(LIBRARY): $(LIBOBJECTS) $(MEMENVOBJECTS) $(TESTUTIL)
 db_bench: db/db_bench.o $(LIBOBJECTS) $(TESTUTIL) 
 	$(CXX) db/db_bench.o $(LIBOBJECTS) $(TESTUTIL) -o $@ $(LIBS) $(LDFLAGS)
 
-db_bench_sqlite3: doc/bench/db_bench_sqlite3.o $(LIBOBJECTS) $(TESTUTIL)
-	$(CXX) doc/bench/db_bench_sqlite3.o $(LIBOBJECTS) $(TESTUTIL) -o $@ -lsqlite3 $(LIBS) $(LDFLAGS)
+db_bench_sqlite3: bench/db_bench_sqlite3.o $(LIBOBJECTS) $(TESTUTIL)
+	$(CXX) bench/db_bench_sqlite3.o $(LIBOBJECTS) $(TESTUTIL) -o $@ -lsqlite3 $(LIBS) $(LDFLAGS)
 
-db_bench_tree_db: doc/bench/db_bench_tree_db.o $(LIBOBJECTS) $(TESTUTIL)
-	$(CXX) doc/bench/db_bench_tree_db.o $(LIBOBJECTS) $(TESTUTIL) -o $@ -lkyotocabinet $(LIBS) $(LDFLAGS)
+db_bench_tree_db: bench/db_bench_tree_db.o $(LIBOBJECTS) $(TESTUTIL)
+	$(CXX) bench/db_bench_tree_db.o $(LIBOBJECTS) $(TESTUTIL) -o $@ -lkyotocabinet $(LIBS) $(LDFLAGS)
 
-tera_bench: doc/bench/tera_bench.o $(LIBOBJECTS) $(TESTUTIL)
-	$(CXX) doc/bench/tera_bench.o $(LIBOBJECTS) $(TESTUTIL) -o $@ $(LIBS) $(LDFLAGS)
+tera_bench: bench/tera_bench.o $(LIBOBJECTS) $(TESTUTIL)
+	$(CXX) bench/tera_bench.o $(LIBOBJECTS) $(TESTUTIL) -o $@ $(LIBS) $(LDFLAGS)
 
 leveldbutil: db/leveldb_main.o $(LIBOBJECTS)
 	$(CXX) db/leveldb_main.o $(LIBOBJECTS) $(TESTUTIL) -o $@ $(LIBS) $(LDFLAGS)

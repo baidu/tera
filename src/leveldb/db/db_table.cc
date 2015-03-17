@@ -1084,7 +1084,7 @@ void DBTable::GarbageClean() {
     }
 
     if (found && min_last_seq > 0) {
-        Log(options_.info_log, "[%s] delete obsolete file, seq_no below: %d",
+        Log(options_.info_log, "[%s] delete obsolete file, seq_no below: %lu",
             dbname_.c_str(), min_last_seq);
         DeleteObsoleteFiles(min_last_seq);
     }
