@@ -18,8 +18,8 @@ Tera是一个高性能、可伸缩的数据库系统，被设计用来管理搜�
  * 高效随机读写
 
 #数据模型
-Tera使用了bigtable的数据模型，可以将一张表格理解为这样一种数据结构：
-map<RowKey, map<ColummnFamily:Qualifier， map<Timestamp, Value> > >
+Tera使用了bigtable的数据模型，可以将一张表格理解为这样一种数据结构：<br>
+map\<RowKey, map\<ColummnFamily:Qualifier， map\<Timestamp, Value> > >
 其中RowKey、ColumnFamily、Qualifier和Value是任意字符串（建议ColumnFamliy是可打印字符串），Timestamp是一个64位整形。
 Tera将表格按RowKey全局排序，并横向切分成多个Tablet，每个Tablet负责服务RowKey的一个区间。
 
