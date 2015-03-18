@@ -17,6 +17,12 @@ Tera是一个高性能、可伸缩的数据库系统，被设计用来管理搜�
  * 支持表格快照
  * 高效随机读写
 
+#数据模型
+Tera使用了bigtable的数据模型，可以将一张表格理解为这样一种数据结构：
+map<RowKey, map<ColummnFamily:Qualifier， map<Timestamp, Value> > >
+其中RowKey、ColumnFamily、Qualifier和Value是任意字符串（建议ColumnFamliy是可打印字符串），Timestamp是一个64位整形。
+Tera将表格按RowKey全局排序，并横向切分成多个Tablet，每个Tablet负责服务RowKey的一个区间。
+
 #系统架构
 系统主要由Tabletserver、Master和ClientSDK三部分构成。其中Tabletserver是核心服务器，承载着所有的数据管理与访问；Master是系统的仲裁者，负责表格的创建、schema更新与负载均衡；ClientSDK包含供管理员使用的命令行工具teracli和给用户使用的SDK。
 
