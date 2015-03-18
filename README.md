@@ -17,8 +17,10 @@ Tera是一个高性能、可伸缩的数据库系统，被设计用来管理搜�
  * 支持表格快照
  * 高效随机读写
 
-#系统结构
+#系统架构
 系统主要由Tabletserver、Master和ClientSDK三部分构成。其中Tabletserver是核心服务器，承载着所有的数据管理与访问；Master是系统的仲裁者，负责表格的创建、schema更新与负载均衡；ClientSDK包含供管理员使用的命令行工具teracli和给用户使用的SDK。
+
+![架构图](https://github.com/BaiduPS/tera/blob/master/arch.png?raw=true)
 
 #系统依赖
  * 使用分布式文件系统（HDFS、NFS等）持久化数据与元信息
