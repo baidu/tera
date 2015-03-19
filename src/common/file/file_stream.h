@@ -2,8 +2,8 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#ifndef COMMON_FILE_FILE_STREAM_H
-#define COMMON_FILE_FILE_STREAM_H
+#ifndef TERA_COMMON_FILE_FILE_STREAM_H_
+#define TERA_COMMON_FILE_FILE_STREAM_H_
 
 #include <string>
 #include <fstream>
@@ -47,5 +47,4 @@ private:
     FILE* m_fp;
 };
 
-
-#endif // COMMON_FILE_FILE_STREAM_H
+#endif // TERA_COMMON_FILE_FILE_STREAM_H_

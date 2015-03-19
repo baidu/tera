@@ -2,8 +2,8 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#ifndef COMMON_BASE_BYTE_ORDER_H
-#define COMMON_BASE_BYTE_ORDER_H
+#ifndef TERA_COMMON_BASE_BYTE_ORDER_H_
+#define TERA_COMMON_BASE_BYTE_ORDER_H_
 
 // GLOBAL_NOLINT(runtime/int)
 
@@ -353,5 +353,4 @@ public:
     }
 };
 
-#endif // COMMON_BASE_BYTE_ORDER_H
-
+#endif // TERA_COMMON_BASE_BYTE_ORDER_H_

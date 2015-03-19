@@ -2,12 +2,12 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#ifndef TTLKV_COMPACT_STRATEGY_H_
-#define TTLKV_COMPACT_STRATEGY_H_
+#ifndef TERA_IO_TTLKV_COMPACT_STRATEGY_H_
+#define TERA_IO_TTLKV_COMPACT_STRATEGY_H_
 
 #include "leveldb/compact_strategy.h"
-#include "proto/table_schema.pb.h"
 #include "leveldb/raw_key_operator.h"
+#include "proto/table_schema.pb.h"
 
 namespace tera {
 namespace io {
@@ -50,4 +50,4 @@ private:
 } // namespace io
 } // namespace tera
 
-#endif /* TTLKV_COMPACT_STRATEGY_H_ */
+#endif // TERA_IO_TTLKV_COMPACT_STRATEGY_H_

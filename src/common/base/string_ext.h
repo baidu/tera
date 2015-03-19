@@ -2,8 +2,8 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#ifndef BVS_COMMON_STRING_EXT_H
-#define BVS_COMMON_STRING_EXT_H
+#ifndef TERA_COMMON_STRING_EXT_H_
+#define TERA_COMMON_STRING_EXT_H_
 
 #include <string>
 #include <vector>
@@ -33,4 +33,4 @@ bool StringStartWith(const std::string& str,
 
 char* StringAsArray(std::string* str);
 
-#endif // BVS_COMMON_STRING_EXT_H
+#endif // TERA_COMMON_STRING_EXT_H_

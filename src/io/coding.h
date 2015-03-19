@@ -2,8 +2,8 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#ifndef TERA_IO_CODING_H
-#define TERA_IO_CODING_H
+#ifndef TERA_IO_CODING_H_
+#define TERA_IO_CODING_H_
 
 #include <stdint.h>
 #include "leveldb/slice.h"
@@ -110,4 +110,4 @@ UserKeyType ExtractKeyType(const leveldb::Slice& key_slice);
 } // namespace io
 } // namespace tera
 
-#endif // TERA_IO_CODING_H
+#endif // TERA_IO_CODING_H_

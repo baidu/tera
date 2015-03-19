@@ -2,8 +2,8 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#ifndef TERA_MASTER_MASTER_IMPL_H
-#define TERA_MASTER_MASTER_IMPL_H
+#ifndef TERA_MASTER_MASTER_IMPL_H_
+#define TERA_MASTER_MASTER_IMPL_H_
 
 #include <stdint.h>
 #include <semaphore.h>
@@ -502,4 +502,4 @@ private:
 } // namespace master
 } // namespace tera
 
-#endif // TERA_MASTER_MASTER_IMPL_H
+#endif // TERA_MASTER_MASTER_IMPL_H_

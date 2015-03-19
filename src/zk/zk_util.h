@@ -2,8 +2,8 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#ifndef  TERA_ZK_ZK_UTIL_H
-#define  TERA_ZK_ZK_UTIL_H
+#ifndef  TERA_ZK_ZK_UTIL_H_
+#define  TERA_ZK_ZK_UTIL_H_
 
 #include <stdint.h>
 
@@ -66,6 +66,4 @@ public:
 } // namespace zk
 } // namespace tera
 
-#endif  //TERA_ZK_ZK_UTIL_H
-
-/* vim: set expandtab ts=4 sw=4 sts=4 tw=100: */
+#endif  // TERA_ZK_ZK_UTIL_H_

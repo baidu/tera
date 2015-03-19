@@ -4,8 +4,8 @@
 //
 // Author: An Qin (qinan@baidu.com)
 
-#ifndef TERA_IO_STREAM_SCAN_H
-#define TERA_IO_STREAM_SCAN_H
+#ifndef TERA_IO_STREAM_SCAN_H_
+#define TERA_IO_STREAM_SCAN_H_
 
 #include <map>
 #include <queue>
@@ -13,8 +13,8 @@
 #include "common/event.h"
 #include "common/mutex.h"
 
-#include "proto/tabletnode_rpc.pb.h"
 #include "proto/table_meta.pb.h"
+#include "proto/tabletnode_rpc.pb.h"
 
 namespace tera {
 namespace io {

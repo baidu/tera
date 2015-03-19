@@ -4,8 +4,8 @@
 //
 // Author: yanshiguang02@baidu.com
 
-#ifndef  COMMON_LOCK_MUTEX_H_
-#define  COMMON_LOCK_MUTEX_H_
+#ifndef  TERA_COMMON_MUTEX_H_
+#define  TERA_COMMON_MUTEX_H_
 
 #include <pthread.h>
 #include <stdint.h>
@@ -78,7 +78,8 @@ private:
     void BeforeUnlock() {
         #ifdef MUTEX_DEBUG
         if (msg_ && timer::get_micros() - lock_time_ > msg_threshold_) {
-            printf("%s locked %.3f ms\n", msg_, (timer::get_micros() - lock_time_) / 1000.0);
+            printf("%s locked %.3f ms\n",
+                    msg_, (timer::get_micros() - lock_time_) / 1000.0);
         }
         msg_ = NULL;
         #endif
@@ -153,12 +154,10 @@ private:
     Mutex* mu_;
     pthread_cond_t cond_;
 };
-}
+}  // namespace common
 
 using common::Mutex;
 using common::MutexLock;
 using common::CondVar;
 
-#endif  // COMMON_LOCK_MUTEX_H_
-
-/* vim: set expandtab ts=4 sw=4 sts=4 tw=100: */
+#endif  // TERA_COMMON_MUTEX_H_

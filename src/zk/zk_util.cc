@@ -6,9 +6,9 @@
 
 #include <string.h>
 #include <string>
-#include <zookeeper/zookeeper.h>
 
-#include "glog/logging.h"
+#include <glog/logging.h>
+#include <zookeeper/zookeeper.h>
 
 namespace tera {
 namespace zk {
@@ -177,5 +177,3 @@ bool ZooKeeperUtil::IsValidPath(const std::string& path) {
 
 } // namespace zk
 } // namespace tera
-
-/* vim: set expandtab ts=4 sw=4 sts=4 tw=100: */

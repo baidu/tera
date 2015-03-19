@@ -3,20 +3,20 @@
 // found in the LICENSE file.
 
 #include <dirent.h>
-#include <stdlib.h>
-#include <sys/stat.h>
-#include <unistd.h>
-#include <stdio.h>
-#include <string.h>
-#include <sys/types.h>
-#include <pwd.h>
 #include <grp.h>
-
+#include <pwd.h>
 #include <stdint.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <sys/stat.h>
+#include <sys/types.h>
+#include <unistd.h>
+
+#include <gflags/gflags.h>
+
 #include "common/base/string_ext.h"
 #include "common/file/file_path.h"
-
-#include "gflags/gflags.h"
 
 DECLARE_int32(file_op_retry_times);
 
@@ -116,12 +116,12 @@ std::string UidToName(uid_t uid) {
 }
 
 std::string GidToName(gid_t gid) {
-   struct group *temp = NULL;
-   if (NULL == (temp=getgrgid(gid))){
-       return "";
-   } else {
-       return temp->gr_name;
-   }
+    struct group *temp = NULL;
+    if (NULL == (temp = getgrgid(gid))) {
+        return "";
+    } else {
+        return temp->gr_name;
+    }
 }
 
 
@@ -156,8 +156,7 @@ bool IsDir(const std::string& path) {
     }
 
     struct stat st;
-    if((stat(path.c_str(),&st) == 0)
-       && (st.st_mode & S_IFDIR != 0)) {
+    if ((stat(path.c_str(), &st) == 0) && (st.st_mode & S_IFDIR != 0)) {
         return true;
     }
     return false;

@@ -4,14 +4,14 @@
 //
 // Author: yanshiguang02@baidu.com
 
-#ifndef  COMMON_THIS_THREAD_H_
-#define  COMMON_THIS_THREAD_H_
+#ifndef  TERA_COMMON_THIS_THREAD_H_
+#define  TERA_COMMON_THIS_THREAD_H_
 
-#include <unistd.h>
+#include <pthread.h>
 #include <stdint.h>
-#include <time.h>
 #include <syscall.h>
-#include <pthread.h>  
+#include <time.h>
+#include <unistd.h>
 
 namespace common {
 
@@ -38,6 +38,4 @@ public:
 
 using common::ThisThread;
 
-#endif  // COMMON_THIS_THREAD_H_
-
-/* vim: set expandtab ts=4 sw=4 sts=4 tw=100: */
+#endif  // TERA_COMMON_THIS_THREAD_H_

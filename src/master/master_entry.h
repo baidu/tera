@@ -2,8 +2,8 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#ifndef TERA_MASTER_MASTER_ENTRY_H
-#define TERA_MASTER_MASTER_ENTRY_H
+#ifndef TERA_MASTER_MASTER_ENTRY_H_
+#define TERA_MASTER_MASTER_ENTRY_H_
 
 #include <sofa/pbrpc/pbrpc.h>
 
@@ -29,7 +29,7 @@ private:
 
 private:
     scoped_ptr<MasterImpl> m_master_impl;
-    //scoped_ptr<RemoteMaster> m_remote_master;
+    // scoped_ptr<RemoteMaster> m_remote_master;
     RemoteMaster* m_remote_master;
     sofa::pbrpc::RpcServerOptions m_rpc_options;
     sofa::pbrpc::RpcServer m_rpc_server;
@@ -38,4 +38,4 @@ private:
 } // namespace master
 } // namespace tera
 
-#endif // TERA_MASTER_MASTER_ENTRY_H
+#endif // TERA_MASTER_MASTER_ENTRY_H_

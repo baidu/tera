@@ -2,8 +2,8 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#ifndef COMMON_BASE_PREPROCESS_H
-#define COMMON_BASE_PREPROCESS_H
+#ifndef TERA_COMMON_BASE_PREPROCESS_H_
+#define TERA_COMMON_BASE_PREPROCESS_H_
 
 #include "common/base/static_assert.h"
 
@@ -42,5 +42,4 @@
 # define PP_DISALLOW_IN_HEADER_FILE()
 #endif
 
-#endif // COMMON_BASE_PREPROCESS_H
-
+#endif // TERA_COMMON_BASE_PREPROCESS_H_

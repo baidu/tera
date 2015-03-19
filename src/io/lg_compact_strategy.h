@@ -2,6 +2,9 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#ifndef TERA_IO_LG_COMPACT_STRATEGY_H_
+#define TERA_IO_LG_COMPACT_STRATEGY_H_
+
 #include "leveldb/compact_strategy.h"
 
 #include "proto/table_schema.pb.h"
@@ -60,3 +63,4 @@ private:
 } // namespace io
 } // namespace tera
 
+#endif  // TERA_IO_LG_COMPACT_STRATEGY_H_

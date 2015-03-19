@@ -4,8 +4,8 @@
 //
 // Author: likang01(com@baidu.com)
 
-#ifndef  TERA_ZK_ZK_ADAPTER_H
-#define  TERA_ZK_ZK_ADAPTER_H
+#ifndef  TERA_ZK_ZK_ADAPTER_H_
+#define  TERA_ZK_ZK_ADAPTER_H_
 
 #include <map>
 #include <string>
@@ -31,7 +31,7 @@ namespace zk {
  * CHILD_WATCH will be valid while node is present
  */
 
-//typedef void (*LOCK_CALLBACK)(const char * path, int err, void * param);
+// typedef void (*LOCK_CALLBACK)(const char * path, int err, void * param);
 struct ZooKeeperWatch;
 class ZooKeeperAdapter {
 public:
@@ -187,6 +187,4 @@ private:
 } // namespace zk
 } // namespace tera
 
-#endif  //TERA_ZK_ZK_ADAPTER_H
-
-/* vim: set expandtab ts=4 sw=4 sts=4 tw=100: */
+#endif  // TERA_ZK_ZK_ADAPTER_H_

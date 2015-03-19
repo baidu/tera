@@ -2,11 +2,11 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#ifndef TERA_IO_TIMEKEY_COMARATOR_H
-#define TERA_IO_TIMEKEY_COMARATOR_H
+#ifndef TERA_IO_TIMEKEY_COMARATOR_H_
+#define TERA_IO_TIMEKEY_COMARATOR_H_
 
-#include "leveldb/slice.h"
 #include "leveldb/comparator.h"
+#include "leveldb/slice.h"
 
 namespace tera {
 namespace io {
@@ -34,4 +34,4 @@ const TimekeyComparator* NewTimekeyComparator(const leveldb::Comparator* compara
 } // namespace io
 } // namespace tera
 
-#endif // TERA_IO_TIMEKEY_COMARATOR_H
+#endif // TERA_IO_TIMEKEY_COMARATOR_H_

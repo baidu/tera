@@ -2,8 +2,8 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#ifndef COMMON_FILE_RECORDIO_RECORD_IO_H
-#define COMMON_FILE_RECORDIO_RECORD_IO_H
+#ifndef TERA_COMMON_FILE_RECORDIO_RECORD_IO_H_
+#define TERA_COMMON_FILE_RECORDIO_RECORD_IO_H_
 
 #include <string>
 
@@ -56,4 +56,4 @@ private:
     uint32_t m_data_size;
 };
 
-#endif // COMMON_FILE_RECORDIO_RECORD_IO_H
+#endif // TERA_COMMON_FILE_RECORDIO_RECORD_IO_H_

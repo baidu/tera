@@ -4,22 +4,15 @@
 
 #include "common/base/string_number.h"
 
+#include <assert.h>
 #include <errno.h>
 #include <math.h>
 
+#include <cstdio>
+#include <cstdlib>
 #include <iterator>
 #include <limits>
 #include <string>
-
-// #include "common/base/array_size.h"
-// #include "common/base/compatible/stdio.h"
-// #include "common/base/compatible/stdlib.h"
-// #include "common/base/static_assert.h"
-// #include "common/base/type_traits.h"
-// #include "common/encoding/ascii.h"
-#include <cstdio>
-#include <cstdlib>
-#include <assert.h>
 
 // GLOBAL_NOLINT(runtime/int)
 

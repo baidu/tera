@@ -4,8 +4,8 @@
 //
 // Author: yanshiguang02@baidu.com
 
-#ifndef  COMMON_EVENT_H_
-#define  COMMON_EVENT_H_
+#ifndef  TERA_COMMON_EVENT_H_
+#define  TERA_COMMON_EVENT_H_
 
 #include "mutex.h"
 
@@ -39,6 +39,7 @@ public:
         signaled_ = true;
         cv_.Signal();
     }
+
 private:
     Mutex mutex_;
     CondVar cv_;
@@ -49,6 +50,4 @@ private:
 
 using common::AutoResetEvent;
 
-#endif  // common_EVENT_H_
-
-/* vim: set expandtab ts=4 sw=4 sts=4 tw=100: */
+#endif  // TERA_COMMON_EVENT_H_

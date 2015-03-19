@@ -2,15 +2,15 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#ifndef TERA_TABLETNODE_TABLET_WRITER_H
-#define TERA_TABLETNODE_TABLET_WRITER_H
+#ifndef TERA_TABLETNODE_TABLET_WRITER_H_
+#define TERA_TABLETNODE_TABLET_WRITER_H_
 
 #include "common/event.h"
 #include "common/mutex.h"
 #include "common/thread.h"
 
-#include "proto/tabletnode_rpc.pb.h"
 #include "proto/status_code.pb.h"
+#include "proto/tabletnode_rpc.pb.h"
 #include "utils/counter.h"
 #include "utils/rpc_timer_list.h"
 
@@ -54,9 +54,9 @@ public:
                                      bool kv_only);
     /// 把一个request打到一个leveldbbatch里去, request是原子的, batch也是, so ..
     bool BatchRequest(const WriteTabletRequest& request,
-                             const std::vector<int32_t>& index_list,
-                             leveldb::WriteBatch* batch,
-                             bool kv_only);
+                      const std::vector<int32_t>& index_list,
+                      leveldb::WriteBatch* batch,
+                      bool kv_only);
     void Start();
     void Stop();
 
@@ -67,6 +67,7 @@ private:
     bool FinishTask(const WriteTask& task, StatusCode status);
     /// 将buffer刷到磁盘(leveldb), 并sync
     void FlushToDiskBatch(WriteTaskBuffer* task_buffer);
+
 private:
     TabletIO* m_tablet;
 
@@ -90,6 +91,4 @@ private:
 } // namespace tabletnode
 } // namespace tera
 
-#endif // TERA_TABLETNODE_TABLET_WRITER_H
-
-/* vim: set expandtab ts=4 sw=4 sts=4 tw=100: */
+#endif // TERA_TABLETNODE_TABLET_WRITER_H_

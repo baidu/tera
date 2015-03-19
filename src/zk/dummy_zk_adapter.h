@@ -2,8 +2,8 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#ifndef TERA_ZK_DUMMY_ZK_ADAPTER_H
-#define TERA_ZK_DUMMY_ZK_ADAPTER_H
+#ifndef TERA_ZK_DUMMY_ZK_ADAPTER_H_
+#define TERA_ZK_DUMMY_ZK_ADAPTER_H_
 
 #include "zk/zk_adapter.h"
 
@@ -29,4 +29,4 @@ protected:
 } // namespace zk
 } // namespace tera
 
-#endif // TERA_ZK_DUMMY_ZK_ADAPTER_H
+#endif // TERA_ZK_DUMMY_ZK_ADAPTER_H_

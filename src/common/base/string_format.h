@@ -2,15 +2,13 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#ifndef COMMON_BASE_STRING_FORMAT_H
-#define COMMON_BASE_STRING_FORMAT_H
-#pragma once
+#ifndef TERA_COMMON_BASE_STRING_FORMAT_H_
+#define TERA_COMMON_BASE_STRING_FORMAT_H_
 
-#include <stdio.h>
 #include <stdarg.h>
 #include <stddef.h>
+#include <stdio.h>
 #include <string>
-
 
 size_t StringFormatAppendVA(std::string* dst, const char* format, va_list ap);
 
@@ -20,5 +18,4 @@ size_t StringFormatTo(std::string* dst, const char* format, ...);
 
 std::string StringFormat(const char* format, ...);
 
-
-#endif // COMMON_BASE_STRING_FORMAT_H
+#endif // TERA_COMMON_BASE_STRING_FORMAT_H_

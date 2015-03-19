@@ -3,10 +3,8 @@
 // found in the LICENSE file.
 
 #include "db/dbformat.h"
-
 #include "io/atomic_merge_strategy.h"
 #include "io/default_compact_strategy.h"
-
 #include "leveldb/slice.h"
 
 namespace tera {
@@ -107,7 +105,7 @@ bool DefaultCompactStrategy::Drop(const leveldb::Slice& tera_key, uint64_t n) {
         }
     }
 
-    if (IsAtomicOP(type) && m_has_put) { //drop ADDs which is later than Put
+    if (IsAtomicOP(type) && m_has_put) { // drop ADDs which is later than Put
         return true;
     }
     return false;
@@ -119,9 +117,10 @@ bool DefaultCompactStrategy::ScanMergedValue(leveldb::Iterator* it, std::string*
     return has_merge;
 }
 
-bool DefaultCompactStrategy::MergeAtomicOPs(leveldb::Iterator* it, std::string* merged_value,
-                                           std::string* merged_key) {
-    bool merge_put_flag = false; //don't merge the last PUT if we have
+bool DefaultCompactStrategy::MergeAtomicOPs(leveldb::Iterator* it,
+                                            std::string* merged_value,
+                                            std::string* merged_key) {
+    bool merge_put_flag = false; // don't merge the last PUT if we have
     return InternalMergeProcess(it, merged_value, merged_key, merge_put_flag, true);
 }
 
@@ -159,7 +158,7 @@ bool DefaultCompactStrategy::InternalMergeProcess(leveldb::Iterator* it, std::st
                 LOG(WARNING) << "invalid internal key for tera: " << itkey.ToString();
                 break;
             }
-        }else{
+        } else {
             if (!m_raw_key_operator->ExtractTeraKey(itkey, &key, &col, &qual, &ts, &type)) {
                 LOG(WARNING) << "invalid tera key: " << itkey.ToString();
                 break;
@@ -167,7 +166,7 @@ bool DefaultCompactStrategy::InternalMergeProcess(leveldb::Iterator* it, std::st
         }
 
         if (m_last_qual != qual || m_last_col != col || m_last_key != key) {
-            break; //out of the current cell
+            break; // out of the current cell
         }
 
         if (!IsAtomicOP(type) && type != leveldb::TKT_VALUE) {

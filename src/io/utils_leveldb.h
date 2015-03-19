@@ -2,8 +2,8 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#ifndef TERA_UTILS_UTILS_LEVELDB_H
-#define TERA_UTILS_UTILS_LEVELDB_H
+#ifndef TERA_IO_UTILS_LEVELDB_H_
+#define TERA_IO_UTILS_LEVELDB_H_
 
 #include <map>
 #include <string>
@@ -39,4 +39,4 @@ bool DeleteEnvDir(const std::string& subdir);
 } // namespace io
 } // namespace tera
 
-#endif // TERA_UTILS_UTILS_CMD_H
+#endif // TERA_IO_UTILS_LEVELDB_H

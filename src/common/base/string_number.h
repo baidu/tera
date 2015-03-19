@@ -2,8 +2,8 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#ifndef COMMON_BASE_STRING_STRING_NUMBER_H
-#define COMMON_BASE_STRING_STRING_NUMBER_H
+#ifndef TERA_COMMON_BASE_STRING_NUMBER_H_
+#define TERA_COMMON_BASE_STRING_NUMBER_H_
 
 #include <float.h>
 #include <stdlib.h>
@@ -11,21 +11,8 @@
 
 #include <string>
 
-// #include "common/base/deprecate.h"
-// #include "common/base/static_assert.h"
 #include <stdint.h>
-// #include "common/base/type_traits.h"
 #include "common/base/ascii.h"
-
-// GLOBAL_NOLINT(runtime/int)
-
-// windows header defined these macros, kill them!
-#ifdef max
-#undef max
-#endif
-#ifdef min
-#undef min
-#endif
 
 // namespace common {
 
@@ -225,4 +212,4 @@ std::string FormatBinaryMeasure(int64_t n, const char* unit = "");
 
 // } // namespace common
 
-#endif // COMMON_BASE_STRING_STRING_NUMBER_H
+#endif // TERA_COMMON_BASE_STRING_STRING_NUMBER_H_

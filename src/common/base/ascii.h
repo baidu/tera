@@ -2,8 +2,8 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#ifndef COMMON_ENCODING_ASCII_H
-#define COMMON_ENCODING_ASCII_H
+#ifndef TERA_COMMON_ENCODING_ASCII_H_
+#define TERA_COMMON_ENCODING_ASCII_H_
 
 #include <limits.h>
 #include <stdint.h>
@@ -19,6 +19,7 @@ struct Ascii
 private:
     Ascii();
     ~Ascii();
+
 private:
     /// 字符类型的掩码
     enum CharTypeMask
@@ -34,6 +35,7 @@ private:
         kPrint = 1 << 8,
         kGraph = 1 << 9,
     };
+
 public:
     /** 判断是不是有效的 ASCII 码 */
     static bool IsValid(char c)

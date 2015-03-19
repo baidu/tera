@@ -2,8 +2,8 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#ifndef COMMON_THREAD_THREAD_ATTRIBUTES_H
-#define COMMON_THREAD_THREAD_ATTRIBUTES_H
+#ifndef TERA_COMMON_THREAD_ATTRIBUTES_H_
+#define TERA_COMMON_THREAD_ATTRIBUTES_H_
 
 #define __USE_GNU
 
@@ -60,10 +60,11 @@ public:
         mask_ = last_mask_;
         return SetCpuAffinity();
     }
+
 private:
     int32_t cpu_num_;
     cpu_set_t mask_;
     cpu_set_t last_mask_;
 };
 
-#endif // COMMON_THREAD_THREAD_ATTRIBUTES_H
+#endif // TERA_COMMON_THREAD_THREAD_ATTRIBUTES_H_

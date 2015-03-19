@@ -2,11 +2,10 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#ifndef COMMON_FILE_FILE_DEF_H
-#define COMMON_FILE_FILE_DEF_H
+#ifndef TERA_COMMON_FILE_FILE_DEF_H_
+#define TERA_COMMON_FILE_FILE_DEF_H
 
 #include <stdint.h>
-
 
 enum FileOpenMode {
     FILE_READ = 0x01,
@@ -25,4 +24,4 @@ enum FileErrorCode {
     kFileErrNotExit
 };
 
-#endif // COMMON_FILE_FILE_DEF_H
+#endif // TERA_COMMON_FILE_FILE_DEF_H_

@@ -2,8 +2,8 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#ifndef TERA_MASTER_REMOTE_MASTER_H
-#define TERA_MASTER_REMOTE_MASTER_H
+#ifndef TERA_MASTER_REMOTE_MASTER_H_
+#define TERA_MASTER_REMOTE_MASTER_H_
 
 #include "common/base/scoped_ptr.h"
 #include "common/thread_pool.h"
@@ -158,4 +158,4 @@ private:
 } // namespace master
 } // namespace tera
 
-#endif // TERA_MASTER_REMOTE_MASTER_H
+#endif // TERA_MASTER_REMOTE_MASTER_H_
