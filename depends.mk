@@ -33,13 +33,14 @@ GPERFTOOLS_LIBDIR = $(GPERFTOOLS_PREFIX)/lib
 # Note: No need to modify things below.
 ################################################################
 
-DEPS_INCPATH = -I$(BOOST_INCDIR) -I$(SOFA_PBRPC_INCDIR) -I$(PROTOBUF_INCDIR) \
+DEPS_INCPATH = -I$(SOFA_PBRPC_INCDIR) -I$(PROTOBUF_INCDIR) \
                -I$(SNAPPY_INCDIR) -I$(ZOOKEEPER_INCDIR) \
                -I$(GFLAGS_INCDIR) -I$(GLOG_INCDIR) \
-               -I$(GPERFTOOLS_INCDIR) -I$(BOOST_INCDIR)
+               -I$(GPERFTOOLS_INCDIR) -I$(BOOST_INCDIR) \
+               -I/usr/local/include
 DEPS_LDPATH = -L$(SOFA_PBRPC_LIBDIR) -L$(PROTOBUF_LIBDIR) \
               -L$(SNAPPY_LIBDIR) -L$(ZOOKEEPER_LIBDIR) \
               -L$(GFLAGS_LIBDIR) -L$(GLOG_LIBDIR) \
-              -L$(GPERFTOOLS_LIBDIR)
+              -L$(GPERFTOOLS_LIBDIR) -L/usr/local/lib
 DEPS_LDFLAGS = -lsofa-pbrpc -lprotobuf -lsnappy -lzookeeper_mt \
                -lgflags -lglog -ltcmalloc -lunwind
