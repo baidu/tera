@@ -74,6 +74,19 @@ tar zxf gperftools-2.2.1.tar.gz
 cd -
 
 ########################################
+# config depengs.mk
+########################################
+
+sed -i 's/SOFA_PBRPC_PREFIX=/SOFA_PBRPC_PREFIX=.\/thirdparty/' depends.mk
+sed -i 's/PROTOBUF_PREFIX=/PROTOBUF_PREFIX=.\/thirdparty/' depends.mk
+sed -i 's/SNAPPY_PREFIX=/SNAPPY_PREFIX=.\/thirdparty/' depends.mk
+sed -i 's/ZOOKEEPER_PREFIX=/ZOOKEEPER_PREFIX=.\/thirdparty/' depends.mk
+sed -i 's/GFLAGS_PREFIX=/GFLAGS_PREFIX=.\/thirdparty/' depends.mk
+sed -i 's/GLOG_PREFIX=/GLOG_PREFIX=.\/thirdparty/' depends.mk
+sed -i 's/GPERFTOOLS_PREFIX=/GPERFTOOLS_PREFIX=.\/thirdparty/' depends.mk
+sed -i 's/BOOST_INCDIR=/BOOST_INCDIR=.\/thirdparty\/boost_1_57_0/' depends.mk
+
+########################################
 # build tera
 ########################################
 
