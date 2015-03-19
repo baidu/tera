@@ -1,3 +1,5 @@
+include depends.mk
+
 # OPT ?= -O2 -DNDEBUG       # (A) Production use (optimized mode)
 OPT ?= -g2 -Wall -Wno-sign-compare    # (B) Debug mode, w/ full line-level debugging symbols
 # OPT ?= -O2 -g2 -DNDEBUG # (C) Profiling mode: opt, but w/debugging symbols
@@ -8,15 +10,11 @@ CXX=g++
 SHARED_CFLAGS=-fPIC
 SHARED_LDFLAGS=-shared -Wl,-soname -Wl,
 
-INCPATH += -I./src -I./include -I./src/leveldb/include -I./src/leveldb \
-           -I/usr/local/include -I./thirdparty/sofa-pbrpc/output/include
-LDPATH += -L/usr/local/lib -L/usr/local/ssl/lib -L./thirdparty/sofa-pbrpc/output/lib \
-	  -L./src/leveldb
+INCPATH += -I./src -I./include -I./src/leveldb/include -I./src/leveldb $(DEPS_INCPATH)
+LDPATH += -L./src/leveldb $(DEPS_LDPATH)
 CFLAGS += $(OPT) $(INCPATH)
 CXXFLAGS += $(OPT) $(INCPATH)
-LDFLAGS += $(LDPATH) -lleveldb -lsofa-pbrpc -lprotobuf -lsnappy -ltcmalloc \
-	   -lzookeeper_mt -lgflags -lglog -lpthread -lrt -lz -ldl -lcrypto -lssl
-
+LDFLAGS += $(LDPATH) -lleveldb $(DEPS_LDFLAGS) -lpthread -lrt -lz -ldl
 
 MASTER_SRC = $(wildcard src/master/*.cc)
 TABLETNODE_SRC = $(wildcard src/tabletnode/*.cc)
@@ -81,12 +79,12 @@ teracli: $(CLIENT_OBJ) $(LIBRARY)
 	$(CXX) -o $@ $(CLIENT_OBJ) $(LIBRARY) $(LDFLAGS)
  
 proto: $(PROTO_FILES)
-	$(PROTOC) --proto_path=./src/proto/ --proto_path=/usr/local/include \
-		  --proto_path=./thirdparty/sofa-pbrpc/output/include/ \
+	$(PROTOC) --proto_path=./src/proto/ --proto_path=$(PROTOBUF_INCDIR) \
+		  --proto_path=$(SOFA_PBRPC_INCDIR) \
 		  --cpp_out=./src/proto/ $(PROTO_FILES)
 
 src/leveldb/libleveldb.a:
-	$(MAKE) -C src/leveldb
+	$(MAKE) -C src/leveldb libleveldb.a
 
 .cc.o:
 	$(CXX) $(CXXFLAGS) -c $< -o $@
