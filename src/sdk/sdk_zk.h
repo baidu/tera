@@ -2,8 +2,8 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#ifndef  TERA_SDK_ZK_H_
-#define  TERA_SDK_ZK_H_
+#ifndef  TERA_SDK_SDK_ZK_H_
+#define  TERA_SDK_SDK_ZK_H_
 
 #include <pthread.h>
 #include <string>
@@ -34,9 +34,7 @@ private:
     static pthread_once_t _zk_init_once;
 };
 
-}
-}
+}  // namespace sdk
+}  // namespace tera
 
-#endif  //__SDK_ZK_H_
-
-/* vim: set expandtab ts=4 sw=4 sts=4 tw=100: */
+#endif  // TERA_SDK_SDK_ZK_H_

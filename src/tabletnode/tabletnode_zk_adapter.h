@@ -2,8 +2,8 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#ifndef  TERA_TABLETNODE_TABLETNODE_ZK_ADAPTER_H
-#define  TERA_TABLETNODE_TABLETNODE_ZK_ADAPTER_H
+#ifndef  TERA_TABLETNODE_TABLETNODE_ZK_ADAPTER_H_
+#define  TERA_TABLETNODE_TABLETNODE_ZK_ADAPTER_H_
 
 #include <string>
 #include <vector>
@@ -57,6 +57,4 @@ private:
 } // namespace tabletnode
 } // namespace tera
 
-#endif // TERA_TABLETNODE_TABLETNODE_ZK_ADAPTER_H
-
-/* vim: set expandtab ts=4 sw=4 sts=4 tw=100: */
+#endif // TERA_TABLETNODE_TABLETNODE_ZK_ADAPTER_H_

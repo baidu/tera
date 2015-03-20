@@ -10,7 +10,6 @@
 #include <iomanip>
 #include <iostream>
 #include <sstream>
-
 #include "common/base/string_number.h"
 
 namespace tera {
@@ -26,14 +25,14 @@ TPrinter::TPrinter(int cols) : _cols(cols) {
 
 TPrinter::~TPrinter() {}
 
-bool TPrinter::AddRow(std::vector<string>& cols) {
+bool TPrinter::AddRow(const std::vector<string>& cols) {
     if (cols.size() != _cols) {
         std::cerr << "arg num error: " << cols.size() << " vs " << _cols << std::endl;
         return false;
     }
     Line line;
     for (int i = 0; i < cols.size(); ++i) {
-        string& item = cols[i];
+        string item = cols[i];
         if (item.size() > kMaxColWidth) {
             item = item.substr(0, kMaxColWidth);
         }
@@ -65,7 +64,7 @@ bool TPrinter::AddRow(int argc, ...) {
     return AddRow(v);
 }
 
-bool TPrinter::AddRow(std::vector<int64_t>& cols) {
+bool TPrinter::AddRow(const std::vector<int64_t>& cols) {
     if (cols.size() != _cols) {
         std::cerr << "arg num error: " << cols.size() << " vs " << _cols << std::endl;
         return false;
@@ -152,8 +151,7 @@ void TPrinter::Reset(int cols) {
     Reset();
 }
 
-string TPrinter::RemoveSubString(const string& input,
-                                  const string& substr) {
+string TPrinter::RemoveSubString(const string& input, const string& substr) {
     string ret;
     string::size_type p = 0;
     string tmp = input;

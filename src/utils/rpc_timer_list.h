@@ -2,11 +2,10 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#ifndef  TERA_UTILS_RPC_TIMER_LIST_H
-#define  TERA_UTILS_RPC_TIMER_LIST_H
+#ifndef  TERA_UTILS_RPC_TIMER_LIST_H_
+#define  TERA_UTILS_RPC_TIMER_LIST_H_
 
 #include "common/mutex.h"
-
 #include "types.h"
 
 namespace google {
@@ -28,7 +27,7 @@ struct RpcTimer {
     int64_t time;
 
     RpcTimer(int64_t t)
-      : prev(NULL), next(NULL), time(t) {}
+        : prev(NULL), next(NULL), time(t) {}
     virtual ~RpcTimer() {}
 };
 
@@ -40,7 +39,7 @@ struct SpecRpcTimer : public RpcTimer {
 
     SpecRpcTimer(const REQ* req, RESP* resp,
                  google::protobuf::Closure* d, int64_t t)
-      : RpcTimer(t), request(req), response(resp), done(d) {}
+        : RpcTimer(t), request(req), response(resp), done(d) {}
     virtual ~SpecRpcTimer() {}
 };
 
@@ -70,8 +69,6 @@ private:
     static RpcTimerList* s_instance;
 };
 
-} // namespace tera
+}  // namespace tera
 
-#endif  //TERA_UTILS_RPC_TIMER_LIST_H
-
-/* vim: set expandtab ts=4 sw=4 sts=4 tw=100: */
+#endif  // TERA_UTILS_RPC_TIMER_LIST_H_

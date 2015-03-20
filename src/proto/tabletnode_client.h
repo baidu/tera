@@ -2,8 +2,8 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#ifndef TERA_TABLETNODE_TABLETNODE_CLIENT_H
-#define TERA_TABLETNODE_TABLETNODE_CLIENT_H
+#ifndef TERA_TABLETNODE_TABLETNODE_CLIENT_H_
+#define TERA_TABLETNODE_TABLETNODE_CLIENT_H_
 
 #include "proto/rpc_client.h"
 #include "proto/tabletnode_rpc.pb.h"
@@ -52,4 +52,4 @@ private:
 } // namespace tabletnode
 } // namespace tera
 
-#endif // TERA_TABLETNODE_TABLETNODE_CLIENT_H
+#endif // TERA_TABLETNODE_TABLETNODE_CLIENT_H_

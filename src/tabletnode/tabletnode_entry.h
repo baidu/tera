@@ -4,13 +4,12 @@
 //
 // Author: An Qin (qinan@baidu.com)
 
-#ifndef TERA_TABLETNODE_TABLETNODE_ENTRY_H
-#define TERA_TABLETNODE_TABLETNODE_ENTRY_H
+#ifndef TERA_TABLETNODE_TABLETNODE_ENTRY_H_
+#define TERA_TABLETNODE_TABLETNODE_ENTRY_H_
 
 #include <sofa/pbrpc/pbrpc.h>
 
 #include "common/base/scoped_ptr.h"
-
 #include "tera_entry.h"
 
 namespace tera {
@@ -45,4 +44,4 @@ private:
 } // namespace tabletnode
 } // namespace tera
 
-#endif // TERA_TABLETNODE_TABLETNODE_ENTRY_H
+#endif // TERA_TABLETNODE_TABLETNODE_ENTRY_H_

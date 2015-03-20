@@ -66,8 +66,8 @@ extern const int64_t kOldestTimestamp;
 /// ACL
 struct ACL {
     int32_t owner;  ///< 所属用户id
-    int32_t role;   ///<
-    int64_t acl;    ///<
+    int32_t role;
+    int64_t acl;
 };
 
 class ColumnFamilyDescriptor {
@@ -124,7 +124,7 @@ public:
     virtual void SetUseBloomfilter(bool use_bloomfilter) = 0;
     virtual bool UseBloomfilter() const = 0;
     /// Memtable On Leveldb (disable/enable)
-    virtual bool UseMemtableOnLeveldb() const = 0 ;
+    virtual bool UseMemtableOnLeveldb() const = 0;
     virtual void SetUseMemtableOnLeveldb(bool use_mem_ldb) = 0;
     /// Memtable-LDB WriteBuffer Size
     virtual int32_t MemtableLdbWriteBufferSize() const = 0;
@@ -306,7 +306,7 @@ public:
                      const std::string& value) = 0;
     /// 带TTL的修改一个列
     virtual void Put(const std::string& family, const std::string& qualifier,
-             const std::string& value, int32_t ttl) = 0;
+                     const std::string& value, int32_t ttl) = 0;
     // 原子加一个Cell
     virtual void Add(const std::string& family, const std::string& qualifier,
                      const int64_t delta) = 0;
@@ -533,8 +533,8 @@ public:
                                ErrorCode* err) = 0;
     /// 计数器++操作
     virtual int64_t IncrementColumnValue(const std::string& row, const std::string& family,
-                              const std::string& qualifier, int64_t amount,
-                              ErrorCode* err) = 0;
+                                         const std::string& qualifier, int64_t amount,
+                                         ErrorCode* err) = 0;
     /// 设置表格写操作默认超时
     virtual void SetWriteTimeout(int64_t timeout_ms) = 0;
     virtual void SetReadTimeout(int64_t timeout_ms) = 0;

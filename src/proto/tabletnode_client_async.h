@@ -2,8 +2,8 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#ifndef TERA_TABLETNODE_TABLETNODE_CLIENT_ASYNC_H
-#define TERA_TABLETNODE_TABLETNODE_CLIENT_ASYNC_H
+#ifndef TERA_TABLETNODE_TABLETNODE_CLIENT_ASYNC_H_
+#define TERA_TABLETNODE_TABLETNODE_CLIENT_ASYNC_H_
 
 #include <gflags/gflags.h>
 #include <sofa/pbrpc/pbrpc.h>
@@ -86,4 +86,4 @@ private:
 } // namespace sdk
 } // namespace tera
 
-#endif // TERA_TABLETNODE_TABLETNODE_CLIENT_ASYNC_H
+#endif // TERA_TABLETNODE_TABLETNODE_CLIENT_ASYNC_H_

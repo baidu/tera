@@ -2,17 +2,16 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#ifndef  TERA_SDK_SCAN_IMPL_H
-#define  TERA_SDK_SCAN_IMPL_H
+#ifndef  TERA_SDK_SCAN_IMPL_H_
+#define  TERA_SDK_SCAN_IMPL_H_
 
-#include <string>
-#include <vector>
 #include <list>
 #include <queue>
+#include <string>
+#include <vector>
 
 #include "common/event.h"
 #include "common/thread.h"
-
 #include "proto/tabletnode_rpc.pb.h"
 #include "sdk/sdk_task.h"
 #include "sdk/tera.h"
@@ -77,7 +76,7 @@ public:
 
 public:
     void GetRpcHandle(ScanTabletRequest** request,
-                              ScanTabletResponse** response);
+                      ScanTabletResponse** response);
     void ReleaseRpcHandle(ScanTabletRequest* request,
                           ScanTabletResponse* response);
     void OnFinish(ScanTabletRequest* request,
@@ -130,7 +129,7 @@ public:
 
 public:
     void GetRpcHandle(ScanTabletRequest** request,
-                              ScanTabletResponse** response);
+                      ScanTabletResponse** response);
     void ReleaseRpcHandle(ScanTabletRequest* request,
                           ScanTabletResponse* response);
     void OnFinish(ScanTabletRequest* request,
@@ -257,4 +256,4 @@ private:
 
 } // namespace tera
 
-#endif  //TERA_SDK_SCAN_IMPL_H
+#endif  // TERA_SDK_SCAN_IMPL_H_

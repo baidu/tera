@@ -2,8 +2,8 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#ifndef TERA_PROTO_PROTO_HELPER_H
-#define TERA_PROTO_PROTO_HELPER_H
+#ifndef TERA_PROTO_PROTO_HELPER_H_
+#define TERA_PROTO_PROTO_HELPER_H_
 
 #include <string>
 
@@ -23,4 +23,4 @@ std::string StatusCodeToString(int32_t status);
 std::string StatusCodeToString(TabletNodeStatus status);
 } // namespace tera
 
-#endif // TERA_PROTO_PROTO_HELPER_H
+#endif // TERA_PROTO_PROTO_HELPER_H_

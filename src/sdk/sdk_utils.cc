@@ -120,7 +120,7 @@ void ShowTableMeta(const TableMeta& meta) {
     std::cout << std::endl;
 }
 
-void ShowTableDescriptor(TableDescriptor& table_desc) {
+void ShowTableDescriptor(const TableDescriptor& table_desc) {
     TableSchema schema;
     TableDescToSchema(table_desc, &schema);
     ShowTableSchema(schema);

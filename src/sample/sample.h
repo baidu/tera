@@ -4,25 +4,29 @@
 //
 // Author likang01(com@baidu.com)
 
-#ifndef  TERA_SAMPLE_SAMPLE_H
-#define  TERA_SAMPLE_SAMPLE_H
+#ifndef  TERA_SAMPLE_SAMPLE_H_
+#define  TERA_SAMPLE_SAMPLE_H_
 
 #include <pthread.h>
 #include <iostream>
 #include <string>
 
-#include "gflags/gflags.h"
-#include "glog/logging.h"
+#include <gflags/gflags.h>
+#include <glog/logging.h>
 
-#include "utils/counter.h"
 #include "sdk/tera.h"
+#include "utils/counter.h"
 
 class IAdapter {
 public:
-    IAdapter(tera::Table* table) : m_table(table),
-      m_max_outflow(-1), m_max_rate(-1),
-      m_last_send_size(0), m_last_send_time(0) {}
+    IAdapter(tera::Table* table)
+        : m_table(table),
+          m_max_outflow(-1),
+          m_max_rate(-1),
+          m_last_send_size(0),
+          m_last_send_time(0) {}
     virtual ~IAdapter() {}
+
     virtual void CheckStatus(int64_t* total_count, int64_t* total_size,
                              int64_t* finish_count, int64_t* finish_size,
                              int64_t* success_count, int64_t* success_size) {
@@ -84,7 +88,8 @@ protected:
     void CheckLimit() {
         if (m_max_outflow > 0) {
             int64_t sleep_micros =
-                (int64_t)(m_last_send_time + (double)m_last_send_size * 1000000.0 / m_max_outflow - Now());
+                (int64_t)(m_last_send_time +
+                        (double)m_last_send_size * 1000000.0 / m_max_outflow - Now());
             if (sleep_micros > 0) {
                 usleep(sleep_micros);
             }
@@ -214,6 +219,4 @@ void add_md5sum(const std::string& rowkey, const std::string& family,
 bool verify_md5sum(const std::string& rowkey, const std::string& family,
                    const std::string& qualifier, const std::string& value);
 
-#endif  //TERA_SAMPLE_SAMPLE_H
-
-/* vim: set expandtab ts=4 sw=4 sts=4 tw=100: */
+#endif  // TERA_SAMPLE_SAMPLE_H_

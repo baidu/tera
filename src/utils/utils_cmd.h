@@ -2,8 +2,8 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#ifndef TERA_UTILS_UTILS_CMD_H
-#define TERA_UTILS_UTILS_CMD_H
+#ifndef TERA_UTILS_UTILS_CMD_H_
+#define TERA_UTILS_UTILS_CMD_H_
 
 #include <map>
 #include <string>
@@ -33,4 +33,4 @@ void SetupLog(const std::string& program_name);
 } // namespace utils
 } // namespace tera
 
-#endif // TERA_UTILS_UTILS_CMD_H
+#endif // TERA_UTILS_UTILS_CMD_H_

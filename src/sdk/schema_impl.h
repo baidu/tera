@@ -2,8 +2,8 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#ifndef  TERA_SCHEMA_IMPL_H_
-#define  TERA_SCHEMA_IMPL_H_
+#ifndef  TERA_SDK_SCHEMA_IMPL_H_
+#define  TERA_SDK_SCHEMA_IMPL_H_
 
 #include <string>
 
@@ -173,6 +173,7 @@ public:
     int32_t SnapshotNum() const;
     /// ÊÇ·ñÎªkv±í
     bool IsKv() const;
+
 private:
     typedef std::map<std::string, LGDescImpl*> LGMap;
     typedef std::map<std::string, CFDescImpl*> CFMap;
@@ -194,6 +195,4 @@ private:
 
 } // namespace tera
 
-#endif  //TERA_SCHEMA_IMPL_H_
-
-/* vim: set expandtab ts=4 sw=4 sts=4 tw=100: */
+#endif  // TERA_SDK_SCHEMA_IMPL_H_

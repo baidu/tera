@@ -2,13 +2,12 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#ifndef TERA_TYPES_H
-#define TERA_TYPES_H
+#ifndef TERA_TYPES_H_
+#define TERA_TYPES_H_
 
+#include <gflags/gflags.h>
+#include <glog/logging.h>
 #include "common/base/stdint.h"
-#include "glog/logging.h"
-#include "gflags/gflags.h"
-
 
 namespace tera {
 
@@ -35,4 +34,4 @@ const int64_t kOldestTs = INT64_MIN;
 
 } // namespace tera
 
-#endif // TERA_TYPES_H
+#endif // TERA_TYPES_H_

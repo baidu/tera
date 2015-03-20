@@ -5,14 +5,14 @@
 #       automatically config this for you.
 ################################################################
 
-SOFA_PBRPC_PREFIX=
-PROTOBUF_PREFIX=
-SNAPPY_PREFIX=
-ZOOKEEPER_PREFIX=
-GFLAGS_PREFIX=
-GLOG_PREFIX=
-GPERFTOOLS_PREFIX=
-BOOST_INCDIR=
+SOFA_PBRPC_PREFIX=./thirdparty
+PROTOBUF_PREFIX=./thirdparty
+SNAPPY_PREFIX=./thirdparty
+ZOOKEEPER_PREFIX=./thirdparty
+GFLAGS_PREFIX=./thirdparty
+GLOG_PREFIX=./thirdparty
+GPERFTOOLS_PREFIX=./thirdparty
+BOOST_INCDIR=./thirdparty/boost_1_57_0
 
 SOFA_PBRPC_INCDIR = $(SOFA_PBRPC_PREFIX)/include
 PROTOBUF_INCDIR = $(PROTOBUF_PREFIX)/include

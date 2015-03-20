@@ -2,8 +2,9 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#ifndef _TERA_VERSION_H_
-#define _TERA_VERSION_H_
+#ifndef TERA_VERSION_H_
+#define TERA_VERSION_H_
+
 extern const char kSvnInfo[];
 extern const char kBuildType[];
 extern const char kBuildTime[];
@@ -11,4 +12,5 @@ extern const char kBuilderName[];
 extern const char kHostName[];
 extern const char kCompiler[];
 void PrintSystemVersion();
-#endif // _TERA_VERSION_H_
+
+#endif // TERA_VERSION_H_
