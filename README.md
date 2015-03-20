@@ -33,6 +33,8 @@ map\<RowKey, map\<ColummnFamily:Qualifier, map\<Timestamp, Value> > > <br>
  * 使用zookeeper选主与协调
  * 使用Sofa-pbrpc实现跨进程通信
 
+#系统构建
+参考[BUILD](https://github.com/BaiduPS/tera/blob/master/BUILD)
 #使用示例
 参考[wiki](https://github.com/BaiduPS/tera/wiki/%E4%B8%BB%E8%A6%81API%E4%BD%BF%E7%94%A8%E6%96%B9%E6%B3%95)
 
