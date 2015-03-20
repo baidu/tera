@@ -59,7 +59,7 @@ bool ScanDescriptor::IsAsync() const {
     return _impl->IsAsync();
 }
 
-ScanDescImpl* ScanDescriptor::GetImpl() const{
+ScanDescImpl* ScanDescriptor::GetImpl() const {
     return _impl;
 }
 

@@ -6,29 +6,28 @@
 
 #include <set>
 #include <vector>
+
 #include <boost/bind.hpp>
-
 #include <google/malloc_extension.h>
+#include <gflags/gflags.h>
+#include <glog/logging.h>
 
+#include "db/filename.h"
+#include "db/table_cache.h"
+#include "io/io_utils.h"
+#include "io/utils_leveldb.h"
 #include "leveldb/cache.h"
 #include "leveldb/env_cache.h"
 #include "leveldb/env_dfs.h"
 #include "leveldb/env_flash.h"
 #include "leveldb/slog.h"
 #include "leveldb/table_utils.h"
-#include "gflags/gflags.h"
-#include "glog/logging.h"
-
-#include "db/filename.h"
-#include "db/table_cache.h"
-#include "io/io_utils.h"
-#include "io/utils_leveldb.h"
-#include "proto/proto_helper.h"
 #include "proto/kv_helper.h"
+#include "proto/proto_helper.h"
 #include "proto/tabletnode_client.h"
 #include "proto/tabletnode_client_async.h"
-#include "tabletnode/tabletnode_zk_adapter.h"
 #include "tabletnode/tablet_manager.h"
+#include "tabletnode/tabletnode_zk_adapter.h"
 #include "types.h"
 #include "utils/counter.h"
 #include "utils/string_util.h"
@@ -1029,8 +1028,9 @@ void TabletNodeImpl::GarbageCollect() {
             std::vector<std::string> cached_tablets;
             leveldb::Env::Default()->ListDir(flash_dir + "/" + table_dirs[i],
                     &cached_tablets);
-            if (cached_tablets.size() == 0) {  
-                VLOG(6) << "[gc] this directory is empty, delete it: " << flash_dir + "/" + table_dirs[i];
+            if (cached_tablets.size() == 0) {
+                VLOG(6) << "[gc] this directory is empty, delete it: "
+                    << flash_dir + "/" + table_dirs[i];
                 leveldb::Env::Default()->DeleteDir(flash_dir + "/" + table_dirs[i]);
                 continue;
             }
@@ -1054,7 +1054,8 @@ void TabletNodeImpl::GarbageCollect() {
                     std::vector<std::string> files;
                     leveldb::Env::Default()->ListDir(inactive_tablet_dir + "/" + lgs[lg], &files);
                     if (files.size() == 0) {
-                        VLOG(6) << "[gc] this directory is empty, delete it: " << inactive_tablet_dir + "/" + lgs[lg];
+                        VLOG(6) << "[gc] this directory is empty, delete it: "
+                            << inactive_tablet_dir + "/" + lgs[lg];
                         leveldb::Env::Default()->DeleteDir(inactive_tablet_dir + "/" + lgs[lg]);
                         continue;
                     }

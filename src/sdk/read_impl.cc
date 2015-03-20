@@ -131,7 +131,7 @@ int64_t RowReaderImpl::Timestamp() {
     }
 }
 
-const std::string& RowReaderImpl::RowName(){
+const std::string& RowReaderImpl::RowName() {
     return _row_key;
 }
 
@@ -169,7 +169,7 @@ std::string RowReaderImpl::Qualifier() {
 }
 
 void RowReaderImpl::ToMap(Map* rowmap) {
-    for (int32_t i = 0; i < _result.key_values_size(); ++i){
+    for (int32_t i = 0; i < _result.key_values_size(); ++i) {
 
         std::string column;
         if (_result.key_values(i).has_column_family()) {
@@ -182,7 +182,7 @@ void RowReaderImpl::ToMap(Map* rowmap) {
         }
         std::map<int64_t, std::string>& value_map = (*rowmap)[column];
         int64_t timestamp = 0L;
-        if (_result.key_values(i).has_timestamp()){
+        if (_result.key_values(i).has_timestamp()) {
             timestamp = _result.key_values(i).timestamp();
         }
         value_map[timestamp] = _result.key_values(i).value();

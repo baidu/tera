@@ -2,43 +2,39 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 //
-// Author: Xu Peilin (xupeilin@baidu.com)
-
-#include "sdk/tera.h"
-#include "sdk/table_impl.h"
-#include "sdk/client_impl.h"
 
 #include <stdlib.h>
 #include <unistd.h>
 
 #include <fstream>
 #include <iostream>
-#include <sstream>
 #include <limits>
+#include <sstream>
+
+#include <gflags/gflags.h>
+#include <glog/logging.h>
 
 #include "common/base/string_ext.h"
 #include "common/base/string_number.h"
 #include "common/file/file_path.h"
-#include "gflags/gflags.h"
-#include "glog/logging.h"
-#include "version.h"
-
 #include "io/coding.h"
 #include "proto/kv_helper.h"
 #include "proto/proto_helper.h"
 #include "proto/tabletnode.pb.h"
 #include "proto/tabletnode_client.h"
+#include "sdk/client_impl.h"
 #include "sdk/sdk_utils.h"
 #include "sdk/sdk_zk.h"
+#include "sdk/table_impl.h"
+#include "sdk/tera.h"
 #include "utils/string_util.h"
 #include "utils/tprinter.h"
 #include "utils/utils_cmd.h"
+#include "version.h"
 
 DECLARE_string(flagfile);
 DECLARE_string(log_dir);
-
 DECLARE_string(tera_master_meta_table_name);
-
 DECLARE_string(tera_zk_addr_list);
 DECLARE_string(tera_zk_root_path);
 
@@ -84,7 +80,7 @@ void Usage(const std::string& prg_name) {
                 property: splitsize | compress | ttl | ...                  \n\
                 value:    value of property                                 \n\
                 e.g. \"table:splitsize=9,lg0:compress=none,cf3:ttl=0\"      \n\
-                e.g. \"lg0:use_memtable_on_leveldb=true                     \n\                                       \n\
+                e.g. \"lg0:use_memtable_on_leveldb=true                     \n\
                                                                             \n\
        drop     <tablename>                                                 \n\
                                                                             \n\
@@ -339,7 +335,7 @@ int32_t UpdatePartOp(Client* client, int32_t argc, char** argv, ErrorCode* err) 
         LOG(ERROR) << "can't get the TableDescriptor of table: " << tablename;
         return -1;
     }
-    std::string schema =argv[3];
+    std::string schema = argv[3];
 
     bool is_update_lg_cf = false;
 
@@ -1466,72 +1462,6 @@ int32_t GetRandomNumKey(int32_t key_size,std::string *p_key){
     return 0;
 }
 
-// for performance testing
-int32_t BatchPutRandomForKVOp(Client* client, int32_t argc, char** argv, ErrorCode* err) {
-    if (argc != 7) {
-        LOG(ERROR) << "args number error: " << argc << ", need 7.";
-        Usage(argv[0]);
-        return 1;
-    }
-    std::string tablename = argv[2];
-    std::string file_name = argv[3];
-    int32_t key_size = std::atoi(argv[4]);
-    int32_t value_size = std::atoi(argv[5]);
-    int32_t max_num = std::atoi(argv[6]);
-    std::ifstream fin(file_name.c_str());
-    std::string rowkey;
-    std::string value;
-    Table* table = NULL;
-    TableInfo table_info;
-    if (!client->List(tablename, &table_info, NULL, err)) {
-        LOG(ERROR) << "fail to get meta data from tera.";
-        return -1;
-    }
-    TableDescriptor* table_desc = table_info.table_desc;
-
-    size_t lg_num = table_desc->LocalityGroupNum();
-    size_t cf_num = table_desc->ColumnFamilyNum();
-    if ((table = client->OpenTable(tablename, err)) == NULL) {
-        LOG(ERROR) << "fail to open table";
-        return -1;
-    }
-    char *p_value=(char *)malloc(value_size+1);
-
-    g_start_time = time(NULL);
-    for (int32_t i=0;i<max_num;i++) {
-        (void)GetRandomNumKey(key_size,&rowkey);
-        if (fin.eof()) {
-            fin.seekg(0,std::ios::beg);
-        }
-        p_value[value_size]='\0';
-        fin.read(p_value,value_size);
-        value=p_value;
-        RowMutation* mutation = table->NewRowMutation(rowkey);
-        for (size_t cf_no = 0; cf_no < cf_num; ++cf_no) {
-            const ColumnFamilyDescriptor* cf_desc = table_desc->ColumnFamily(cf_no);
-
-            if ((cf_num==1) && (lg_num==1)) {
-                mutation->Put(value);
-            }
-            else {
-                mutation->Put(cf_desc->Name(), "0", value);
-            }
-        }
-        mutation->SetCallBack(BatchPutCallBack);
-        table->ApplyMutation(mutation);
-    }
-    while (!table->IsPutFinished()) {
-        // waiting async put finishing
-        usleep(100000);
-    }
-    g_end_time = time(NULL);
-    g_used_time = g_end_time-g_start_time;
-    free(p_value);
-    LOG(INFO) << "Write done,write_key_num=" << g_key_num << " used_time=" << g_used_time <<std::endl;
-    delete table;
-    return 0;
-}
-
 int32_t SnapshotOp(Client* client, int32_t argc, char** argv, ErrorCode* err) {
     if (argc < 4) {
       Usage(argv[0]);
@@ -1997,8 +1927,6 @@ int main(int argc, char* argv[]) {
         PrintSystemVersion();
     } else if (cmd == "snapshot") {
         ret = SnapshotOp(client, argc, argv, &error_code);
-    } else if (cmd == "batchput_random_kv") {
-        ret = BatchPutRandomForKVOp(client, argc, argv, &error_code);
     } else {
         Usage(argv[0]);
     }

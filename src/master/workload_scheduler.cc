@@ -5,7 +5,6 @@
 #include "master/workload_scheduler.h"
 
 #include "glog/logging.h"
-
 #include "master/tablet_manager.h"
 
 namespace tera {

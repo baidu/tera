@@ -45,7 +45,7 @@ ResultStreamAsyncImpl::ResultStreamAsyncImpl(TableImpl* table, ScanDescImpl* sca
     _last_response.set_end(scan_desc_impl->GetEndRowKey());
 
     _cache_max_size = ((FLAGS_tera_sdk_scan_async_cache_size << 20)
-                     + _scan_desc_impl->GetBufferSize() - 1) / _scan_desc_impl->GetBufferSize();
+            + _scan_desc_impl->GetBufferSize() - 1) / _scan_desc_impl->GetBufferSize();
     VLOG(6) << "scan: cache max slot: " << _cache_max_size
         << ", cache size: " << FLAGS_tera_sdk_scan_async_cache_size << " MB"
         << ", trans buf size: " << _scan_desc_impl->GetBufferSize() << " bytes";
@@ -508,8 +508,8 @@ void ScanDescImpl::AddColumnFamily(const string& cf) {
 
 void ScanDescImpl::AddColumn(const string& cf, const string& qualifier) {
     for (uint32_t i = 0; i < _cf_list.size(); ++i) {
-        if (_cf_list[i]->family_name() == cf){
-            if (qualifier != ""){
+        if (_cf_list[i]->family_name() == cf) {
+            if (qualifier != "") {
                 _cf_list[i]->add_qualifier_list(qualifier);
             }
             return;

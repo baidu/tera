@@ -4,10 +4,10 @@
 
 #include "master/master_entry.h"
 
-#include "common/net/ip_address.h"
-#include "gflags/gflags.h"
-#include "glog/logging.h"
+#include <gflags/gflags.h>
+#include <glog/logging.h>
 
+#include "common/net/ip_address.h"
 #include "master/master_impl.h"
 #include "master/remote_master.h"
 #include "utils/utils_cmd.h"

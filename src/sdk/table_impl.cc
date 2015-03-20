@@ -56,7 +56,7 @@ namespace tera {
 TableImpl::TableImpl(const std::string& table_name,
             const std::string& zk_root_path,
             const std::string& zk_addr_list,
-            common::ThreadPool* thread_pool) 
+            common::ThreadPool* thread_pool)
     : _name(table_name),
       _last_sequence_id(0),
       _timeout(FLAGS_tera_sdk_sync_wait_timeout),
@@ -131,8 +131,8 @@ bool TableImpl::Put(const std::string& row_key, const std::string& family,
 }
 
 bool TableImpl::Put(const std::string& row_key, const std::string& family,
-                 const std::string& qualifier, const std::string& value,
-                 int32_t ttl, ErrorCode* err) {
+                    const std::string& qualifier, const std::string& value,
+                    int32_t ttl, ErrorCode* err) {
     RowMutation* row_mu = NewRowMutation(row_key);
     row_mu->Put(family, qualifier, value, ttl);
     ApplyMutation(row_mu);
@@ -141,8 +141,8 @@ bool TableImpl::Put(const std::string& row_key, const std::string& family,
 }
 
 bool TableImpl::Put(const std::string& row_key, const std::string& family,
-                 const std::string& qualifier, const std::string& value,
-                 int64_t timestamp, int32_t ttl, ErrorCode* err) {
+                    const std::string& qualifier, const std::string& value,
+                    int64_t timestamp, int32_t ttl, ErrorCode* err) {
     RowMutation* row_mu = NewRowMutation(row_key);
     row_mu->Put(family, qualifier, timestamp, value, ttl);
     ApplyMutation(row_mu);
@@ -558,7 +558,7 @@ void TableImpl::CommitMutation(const std::string& server_addr,
     request->set_sequence_id(_last_sequence_id++);
     request->set_tablet_name(_name);
     request->set_is_sync(FLAGS_tera_sdk_write_sync);
-    //KeyValuePair* pair = request->mutable_pair_list()->Add();
+    // KeyValuePair* pair = request->mutable_pair_list()->Add();
     for (uint32_t i = 0; i < mu_list->size(); ++i) {
         RowMutationImpl* row_mutation = (*mu_list)[i];
         RowMutationSequence* mu_seq = request->add_row_list();
@@ -567,7 +567,7 @@ void TableImpl::CommitMutation(const std::string& server_addr,
             const RowMutation::Mutation& mu = row_mutation->GetMutation(j);
             tera::Mutation* mutation = mu_seq->add_mutation_sequence();
             SerializeMutation(mu, mutation);
-            //mutation->CopyFrom(row_mutation->Mutation(j));
+            // mutation->CopyFrom(row_mutation->Mutation(j));
         }
     }
 
@@ -727,7 +727,8 @@ void TableImpl::ReadRows(const std::vector<RowReaderImpl*>& row_reader_list,
         std::vector<RowReaderImpl*>* ts_row_readers = it->second;
         ts_row_readers->push_back(row_reader);
     }
-    int64_t sync_wait_abs_time = (sync_min_timeout > 0) ? GetTimeStampInMs() + sync_min_timeout : -1;
+    int64_t sync_wait_abs_time =
+        (sync_min_timeout > 0) ? GetTimeStampInMs() + sync_min_timeout : -1;
 
     TsReaderMap::iterator it = ts_reader_list.begin();
     for (; it != ts_reader_list.end(); ++it) {
@@ -798,7 +799,6 @@ void TableImpl::CommitReaderBuffer(std::string server_addr) {
         _reader_buffers.erase(it);
     }
     CommitReaders(server_addr, commit_reader_list);
-
 }
 
 void TableImpl::CommitReaders(const std::string server_addr,
@@ -813,18 +813,17 @@ void TableImpl::CommitReaders(const std::string server_addr,
         RowReaderInfo* row_reader_info = request->add_row_info_list();
         request->set_snapshot_id(row_reader->GetSnapshot());
         row_reader->ToProtoBuf(row_reader_info);
-        //row_reader_info->CopyFrom(row_reader->GetRowReaderInfo());
+        // row_reader_info->CopyFrom(row_reader->GetRowReaderInfo());
     }
     Closure<void, ReadTabletRequest*, ReadTabletResponse*, bool, int>* done =
         NewClosure(this, &TableImpl::ReaderCallBack, reader_list);
     tabletnode_client_async.ReadTablet(request, response, done);
-
 }
 
 void TableImpl::ReaderCallBack(std::vector<RowReaderImpl*>* reader_list,
                                ReadTabletRequest* request,
                                ReadTabletResponse* response,
-                               bool failed,int error_code) {
+                               bool failed, int error_code) {
     if (failed) {
         if (error_code == sofa::pbrpc::RPC_ERROR_SERVER_SHUTDOWN ||
             error_code == sofa::pbrpc::RPC_ERROR_SERVER_UNREACHABLE ||
@@ -962,7 +961,7 @@ void TableImpl::ProcessTaskPendingForMeta(const std::string& row, SdkTask* task)
                     reader_list->push_back(reader);
                     int64_t retry_interval = static_cast<int64_t>(
                             pow(FLAGS_tera_sdk_delay_send_internal, reader->RetryTimes()) * 1000);
-                    boost::function<void ()> retry_closure = 
+                    boost::function<void ()> retry_closure =
                         boost::bind(&TableImpl::RetryReadRows, this, reader_list);
                     _thread_pool->DelayTask(retry_interval, retry_closure);
                 }
@@ -1058,8 +1057,8 @@ bool TableImpl::GetTabletAddrOrScheduleUpdateMeta(const std::string& row,
             node->status = DELAY_UPDATE;
             boost::function<void ()> delay_closure =
                 boost::bind(&TableImpl::DelayUpdateMeta, this,
-                           node->meta.key_range().key_start(),
-                           node->meta.key_range().key_end());
+                            node->meta.key_range().key_start(),
+                            node->meta.key_range().key_end());
             _thread_pool->DelayTask(update_interval, delay_closure);
         }
         return false;
@@ -1070,7 +1069,7 @@ bool TableImpl::GetTabletAddrOrScheduleUpdateMeta(const std::string& row,
 }
 
 TableImpl::TabletMetaNode* TableImpl::GetTabletMetaNodeForKey(const std::string& key) {
-    //CHECK(_meta_mutex.IsLocked());
+    // CHECK(_meta_mutex.IsLocked());
     if (_tablet_meta_list.size() == 0) {
         VLOG(10) << "the meta list is empty";
         return NULL;
@@ -1107,7 +1106,7 @@ void TableImpl::DelayUpdateMeta(std::string start_key, std::string end_key) {
 }
 
 void TableImpl::UpdateMetaAsync() {
-    //CHECK(_meta_mutex.IsLocked());
+    // CHECK(_meta_mutex.IsLocked());
     if (_meta_updating_count >= FLAGS_tera_sdk_update_meta_concurrency) {
         return;
     }
@@ -1151,14 +1150,14 @@ void TableImpl::ScanMetaTable(const std::string& key_start,
 }
 
 void TableImpl::ScanMetaTableAsyncInLock(std::string key_start, std::string key_end,
-                                   bool zk_access) {
+                                         bool zk_access) {
     MutexLock lock(&_meta_mutex);
     ScanMetaTableAsync(key_start, key_end, zk_access);
 }
 
 void TableImpl::ScanMetaTableAsync(std::string key_start, std::string key_end,
                                    bool zk_access) {
-    //CHECK(_meta_mutex.IsLocked());
+    // CHECK(_meta_mutex.IsLocked());
 
     std::string meta_addr = _cluster->RootTableAddr(zk_access);
     if (meta_addr.empty() && !zk_access) {
@@ -1258,7 +1257,7 @@ void TableImpl::ScanMetaTableCallBack(std::string key_start,
         || !return_end.empty() && (key_end.empty()|| return_end < key_end)) {
         LOG(ERROR) << "scan meta table [" << key_start << ", " << key_end
             << "] return [" << return_start << ", " << return_end << "]";
-        //TODO(lk): process omitted tablets
+        // TODO(lk): process omitted tablets
     }
 
     std::string end = request->end();
@@ -1343,7 +1342,7 @@ void TableImpl::GiveupUpdateTabletMeta(const std::string& key_start,
 }
 
 void TableImpl::UpdateTabletMetaList(const TabletMeta& new_meta) {
-    //CHECK(_meta_mutex.IsLocked());
+    // CHECK(_meta_mutex.IsLocked());
     const std::string& new_start = new_meta.key_range().key_start();
     const std::string& new_end = new_meta.key_range().key_end();
     std::map<std::string, TabletMetaNode>::iterator it =
@@ -1573,7 +1572,7 @@ void TableImpl::ReadTableMetaCallBack(ErrorCode* ret_err,
                                       int32_t retry_times,
                                       ReadTabletRequest* request,
                                       ReadTabletResponse* response,
-                                      bool failed,int error_code) {
+                                      bool failed, int error_code) {
     if (failed) {
         if (error_code == sofa::pbrpc::RPC_ERROR_SERVER_SHUTDOWN ||
             error_code == sofa::pbrpc::RPC_ERROR_SERVER_UNREACHABLE ||
@@ -1813,34 +1812,34 @@ void TableImpl::EnableCookieUpdateTimer() {
 
 // copy from leveldb/util/hash.h
 static uint32_t Hash(const char* data, size_t n, uint32_t seed) {
-  // Similar to murmur hash
-  const uint32_t m = 0xc6a4a793;
-  const uint32_t r = 24;
-  const char* limit = data + n;
-  uint32_t h = seed ^ (n * m);
+    // Similar to murmur hash
+    const uint32_t m = 0xc6a4a793;
+    const uint32_t r = 24;
+    const char* limit = data + n;
+    uint32_t h = seed ^ (n * m);
 
-  // Pick up four bytes at a time
-  while (data + 4 <= limit) {
-    uint32_t w = *(uint32_t*)data;
-    data += 4;
-    h += w;
-    h *= m;
-    h ^= (h >> 16);
-  }
+    // Pick up four bytes at a time
+    while (data + 4 <= limit) {
+        uint32_t w = *(uint32_t*)data;
+        data += 4;
+        h += w;
+        h *= m;
+        h ^= (h >> 16);
+    }
 
-  // Pick up remaining bytes
-  switch (limit - data) {
+    // Pick up remaining bytes
+    switch (limit - data) {
     case 3:
-      h += data[2] << 16;
+        h += data[2] << 16;
     case 2:
-      h += data[1] << 8;
+        h += data[1] << 8;
     case 1:
-      h += data[0];
-      h *= m;
-      h ^= (h >> r);
-      break;
-  }
-  return h;
+        h += data[0];
+        h *= m;
+        h ^= (h >> r);
+    break;
+    }
+    return h;
 }
 
 std::string TableImpl::GetCookieFileName(const std::string& tablename,

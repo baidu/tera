@@ -28,7 +28,7 @@ ErrorCode::ErrorCodeType ErrorCode::GetType() const {
 
 const char* strerr(ErrorCode error_code) {
     const char* ret = "Unknown error";
-    switch(error_code.GetType()) {
+    switch (error_code.GetType()) {
     case ErrorCode::kOK:
         ret = "OK";
         break;

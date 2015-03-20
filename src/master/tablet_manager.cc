@@ -5,10 +5,12 @@
 #include "master/tablet_manager.h"
 
 #include <fstream>
+#include <limits>
 #include <string>
 #include <vector>
-#include <limits>
 
+#include <gflags/gflags.h>
+#include <glog/logging.h>
 #include <sofa/pbrpc/pbrpc.h>
 
 #include "common/base/string_ext.h"
@@ -16,8 +18,6 @@
 #include "common/base/string_number.h"
 #include "common/file/file_path.h"
 #include "db/filename.h"
-#include "gflags/gflags.h"
-#include "glog/logging.h"
 #include "io/io_utils.h"
 #include "io/utils_leveldb.h"
 #include "master/master_impl.h"
@@ -25,8 +25,8 @@
 #include "proto/proto_helper.h"
 #include "proto/tabletnode_client.h"
 #include "proto/tabletnode_client_async.h"
-#include "utils/string_util.h"
 #include "types.h"
+#include "utils/string_util.h"
 
 DECLARE_string(tera_working_dir);
 DECLARE_string(tera_master_meta_table_path);
@@ -180,15 +180,15 @@ void Tablet::SetExpectServerAddr(const std::string& server_addr) {
 }
 
 bool Tablet::SetStatus(TabletStatus new_status, TabletStatus* old_status) {
-  MutexLock lock(&m_mutex);
-  if (NULL != old_status) {
-      *old_status = m_meta.status();
-  }
-  if (CheckStatusSwitch(m_meta.status(), new_status)) {
-      m_meta.set_status(new_status);
-      return true;
-  }
-  return false;
+    MutexLock lock(&m_mutex);
+    if (NULL != old_status) {
+        *old_status = m_meta.status();
+    }
+    if (CheckStatusSwitch(m_meta.status(), new_status)) {
+        m_meta.set_status(new_status);
+        return true;
+    }
+    return false;
 }
 
 bool Tablet::SetStatusIf(TabletStatus new_status, TabletStatus if_status,
@@ -576,7 +576,7 @@ bool Table::FindMergePair(Tablet** t1, Tablet** t2,
     VLOG(5) << "FindMergePair()";
     std::vector<std::pair<std::string, int64_t> > tablet_list;
     int32_t min_size_loc = -1;
-    int64_t min_size = std::numeric_limits<long int>::max();
+    int64_t min_size = std::numeric_limits<int64_t>::max();
 
     TabletList::iterator it;
     int32_t cur_loc = 0;
@@ -998,13 +998,12 @@ int64_t TabletManager::SearchTable(std::vector<TabletPtr>* tablet_meta_list,
 }
 
 bool TabletManager::ShowTable(std::vector<TablePtr>* table_meta_list,
-                                 std::vector<TabletPtr>* tablet_meta_list,
-                                 const std::string& start_table_name,
-                                 const std::string& start_tablet_key,
-                                 uint32_t max_table_found,
-                                 uint32_t max_tablet_found,
-                                 bool* is_more,
-                                 StatusCode* ret_status) {
+                              std::vector<TabletPtr>* tablet_meta_list,
+                              const std::string& start_table_name,
+                              const std::string& start_tablet_key,
+                              uint32_t max_table_found,
+                              uint32_t max_tablet_found,
+                              bool* is_more, StatusCode* ret_status) {
     // lock table list
     m_mutex.Lock();
 
@@ -1081,7 +1080,7 @@ bool TabletManager::DeleteTable(const std::string& table_name,
 //        table.m_tablets_list.erase(it2);
 //    }
 
-    //delete &table;
+    // delete &table;
     m_all_tables.erase(it);
     return true;
 }
@@ -1123,11 +1122,12 @@ bool TabletManager::DeleteTablet(const std::string& table_name,
 
     if (table.m_tablets_list.empty()) {
         // clean up specific table dir in file system
-        if (FLAGS_tera_delete_obsolete_tabledir_enabled
-            && !io::MoveEnvDirToTrash(table.GetTableName())) {
-            LOG(ERROR) << "fail to move droped table to trash dir, tablename: " << table.GetTableName();
+        if (FLAGS_tera_delete_obsolete_tabledir_enabled &&
+            !io::MoveEnvDirToTrash(table.GetTableName())) {
+            LOG(ERROR) << "fail to move droped table to trash dir, tablename: "
+                << table.GetTableName();
         }
-        //delete &table;
+        // delete &table;
         m_all_tables.erase(it);
     }
     return true;
@@ -2066,7 +2066,7 @@ void TabletManager::MergeTablet() {
 }
 
 void TabletManager::EnableMergeTabletTimer(int32_t expand_factor) {
-    assert (m_merge_tablet_timer_id == kInvalidTimerId);
+    assert(m_merge_tablet_timer_id == kInvalidTimerId);
     boost::function<void ()> closure =
         boost::bind(&TabletManager::MergeTablet, this);
     int64_t timeout_period =
