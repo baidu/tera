@@ -7,13 +7,14 @@
 #include <stdio.h>
 #include <stdlib.h>
 
+#include <gflags/gflags.h>
+#include <glog/logging.h>
+
 #include "common/base/scoped_ptr.h"
 #include "common/base/string_ext.h"
 #include "common/base/string_format.h"
 #include "common/base/string_number.h"
 #include "common/file/file_path.h"
-#include "gflags/gflags.h"
-#include "glog/logging.h"
 
 #include "types.h"
 
@@ -24,7 +25,7 @@ namespace utils {
 
 std::string GetBinaryLocationDir() {
     char exec_full_path[1024] = {'\0'};
-    readlink ("/proc/self/exe", exec_full_path, 1024);
+    readlink("/proc/self/exe", exec_full_path, 1024);
     VLOG(5) << "current binary location: " << exec_full_path;
 
     std::string full_dir;

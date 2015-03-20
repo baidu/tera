@@ -41,9 +41,6 @@ public:
         m_timestamp = timestamp;
         m_value = value;
     }
-
-private:
-
 };
 
 class DeleteColumnMutaion : public Mutation {
@@ -131,7 +128,7 @@ void RowMutation::Put(const std::string& family, const std::string& qualifier,
 
 /// 修改一个列的特定版本
 void RowMutation::Put(const std::string& family, const std::string& qualifier,
-         int64_t timestamp, const std::string& value) {
+                     int64_t timestamp, const std::string& value) {
     _impl->Put(family, qualifier, timestamp, value);
 }
 
@@ -178,7 +175,7 @@ void RowMutation::DeleteFamily(const std::string& family) {
 
 /// 删除一个列族的所有列的指定范围版本
 void RowMutation::DeleteFamily(const std::string& family, int64_t ts_end,
-                  int64_t ts_start) {
+                               int64_t ts_start) {
     _impl->DeleteFamily(family, ts_end, ts_start);
 }
 
@@ -254,5 +251,3 @@ RowMutationImpl* RowMutation::GetImpl() {
 #endif
 
 } // namespace tera
-
-/* vim: set expandtab ts=4 sw=4 sts=4 tw=100: */

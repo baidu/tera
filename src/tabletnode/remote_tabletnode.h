@@ -2,8 +2,8 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#ifndef TERA_TABLETNODE_REMOTE_TABLETNODE_H
-#define TERA_TABLETNODE_REMOTE_TABLETNODE_H
+#ifndef TERA_TABLETNODE_REMOTE_TABLETNODE_H_
+#define TERA_TABLETNODE_REMOTE_TABLETNODE_H_
 
 #include "common/base/scoped_ptr.h"
 #include "common/thread_pool.h"
@@ -73,9 +73,9 @@ public:
                      google::protobuf::Closure* done);
 
     void CompactTablet(google::protobuf::RpcController* controller,
-                     const CompactTabletRequest* request,
-                     CompactTabletResponse* response,
-                     google::protobuf::Closure* done);
+                       const CompactTabletRequest* request,
+                       CompactTabletResponse* response,
+                       google::protobuf::Closure* done);
 
 private:
     void DoLoadTablet(google::protobuf::RpcController* controller,
@@ -148,4 +148,4 @@ private:
 } // namespace tabletnode
 } // namespace tera
 
-#endif // TERA_TABLETNODE_REMOTE_TABLETNODE_H
+#endif // TERA_TABLETNODE_REMOTE_TABLETNODE_H_

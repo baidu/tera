@@ -32,18 +32,18 @@ void MasterClient::ResetMasterClient(const std::string& server_addr) {
 
 bool MasterClient::GetSnapshot(const GetSnapshotRequest* request,
                                GetSnapshotResponse* response) {
-  return SendMessageWithRetry(&MasterServer::Stub::GetSnapshot,
-                              request, response,
-                              (google::protobuf::Closure*)NULL,
-                              "GetSnapshot");
+    return SendMessageWithRetry(&MasterServer::Stub::GetSnapshot,
+                                request, response,
+                                (google::protobuf::Closure*)NULL,
+                                "GetSnapshot");
 }
 
 bool MasterClient::DelSnapshot(const DelSnapshotRequest* request,
                                DelSnapshotResponse* response) {
-  return SendMessageWithRetry(&MasterServer::Stub::DelSnapshot,
-                              request, response,
-                              (google::protobuf::Closure*)NULL,
-                              "DelSnapshot");
+    return SendMessageWithRetry(&MasterServer::Stub::DelSnapshot,
+                                request, response,
+                                (google::protobuf::Closure*)NULL,
+                                "DelSnapshot");
 }
 
 bool MasterClient::CreateTable(const CreateTableRequest* request,

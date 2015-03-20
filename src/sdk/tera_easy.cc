@@ -8,13 +8,13 @@
 
 #include <iostream>
 #include <boost/bind.hpp>
+#include <gflags/gflags.h>
+#include <glog/logging.h>
 
-#include "tera.h"
 #include "common/thread_pool.h"
+#include "tera.h"
 #include "utils/atomic.h"
 #include "utils/counter.h"
-#include "gflags/gflags.h"
-#include "glog/logging.h"
 
 DEFINE_int32(tera_easy_ttl, 90 * 24 * 3600, "ttl(s) of key-value writed by tera_easy");
 DEFINE_int32(tera_sdk_rpc_max_pending_num, 1024 * 1024, "max num of pending kv");
@@ -54,8 +54,8 @@ public:
     bool Write(const Key& key, const Record& record) {
         CHECK(_s_pending_num.Get() >= 0) << "pending num < 0: " << _s_pending_num.Get();
         CHECK(_s_pending_size.Get() >= 0) << "pending size < 0: " << _s_pending_size.Get();
-        while (_s_pending_num.Get() > FLAGS_tera_sdk_rpc_max_pending_num
-               || _s_pending_size.Get() > FLAGS_tera_sdk_rpc_max_pending_buffer_size * 1024 * 1024) {
+        while (_s_pending_num.Get() > FLAGS_tera_sdk_rpc_max_pending_num ||
+               _s_pending_size.Get() > FLAGS_tera_sdk_rpc_max_pending_buffer_size * 1024 * 1024) {
             usleep(1000000);
         }
 
@@ -149,7 +149,7 @@ private:
     bool SerializeColumn(const Column& column, std::string* buf) {
         Column::const_iterator it = column.begin();
         AppendFix32(column.size(), buf);
-        for (;it != column.end(); ++it) {
+        for (; it != column.end(); ++it) {
             AppendFix32(it->first, buf);
             AppendFix32(it->second.size(), buf);
             buf->append(it->second);
@@ -160,7 +160,7 @@ private:
     int32_t DeSerializeColumn(const char* buf, Column* column) {
         int num = GetFix32(buf);
         int offset = sizeof(num);
-        for (int i=0; i<num; i++) {
+        for (int i = 0; i < num; i++) {
             int ts = GetFix32(buf + offset);
             offset += 4;
             int len = GetFix32(buf + offset);
@@ -185,7 +185,7 @@ private:
     int32_t DeSerializeRecord(const std::string& buf, Record* record) {
         int num = GetFix32(buf.data());
         int offset = sizeof(num);
-        for (int i=0; i<num; i++) {
+        for (int i = 0; i < num; i++) {
             Key key;
             Column column;
             int len = GetFix32(buf.data()+offset);

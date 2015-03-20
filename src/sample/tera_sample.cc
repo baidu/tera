@@ -70,7 +70,7 @@ int ModifyTable(tera::Table* table) {
     row->Put("anchor", "www.hao123.com/", "百度");
     row->Put("html", "", time(NULL), "<html>Test content</html>");
     // 删除一个column过去24小时内的所有版本
-    //row->DeleteColumns("title", "abc", time(NULL), time(NULL) - 86400);
+    // row->DeleteColumns("title", "abc", time(NULL), time(NULL) - 86400);
     // 删除一个column24小时之前的所有版本
     row->DeleteColumns("title", "abd", time(NULL) - 86400);
     // 删除一个column的所有版本
@@ -113,8 +113,9 @@ int ScanTable(tera::Table* table) {
 
     tera::ResultStream* scanner = table->Scan(scan_desc, &error_code);
     for (scanner->LookUp("com.baidu."); !scanner->Done(); scanner->Next()) {
-        printf("Row: %s\%s\%ld\%s\n", scanner->RowName().c_str(), scanner->ColumnName().c_str(),
-            scanner->Timestamp(), scanner->Value().c_str());
+        printf("Row: %s\%s\%ld\%s\n",
+                scanner->RowName().c_str(), scanner->ColumnName().c_str(),
+                scanner->Timestamp(), scanner->Value().c_str());
     }
     delete scanner;
     return 0;
@@ -122,17 +123,18 @@ int ScanTable(tera::Table* table) {
 
 bool finish = false;
 
-void ReadRowCallBack(tera::RowReader* row_reader){
-    while(!row_reader->Done()){
-        printf("Row: %s\%s\%ld\%s\n", row_reader->RowName().c_str(), row_reader->ColumnName().c_str(),
-               row_reader->Timestamp(), row_reader->Value().c_str());
+void ReadRowCallBack(tera::RowReader* row_reader) {
+    while (!row_reader->Done()) {
+        printf("Row: %s\%s\%ld\%s\n",
+                row_reader->RowName().c_str(), row_reader->ColumnName().c_str(),
+                row_reader->Timestamp(), row_reader->Value().c_str());
         row_reader->Next();
     }
-	delete row_reader;
+    delete row_reader;
     finish = true;
 }
 
-int ReadRowFromTable(tera::Table* table){
+int ReadRowFromTable(tera::Table* table) {
     tera::ErrorCode error_code;
     tera::RowReader* row_reader = table->NewRowReader("com.baidu.www/");
     row_reader->AddColumnFamily("html");
@@ -143,7 +145,7 @@ int ReadRowFromTable(tera::Table* table){
     // Async Read one row
     table->Get(row_reader);
 
-    while (!finish){
+    while (!finish) {
         sleep(1);
     }
 
@@ -162,15 +164,17 @@ int ReadRowFromTable(tera::Table* table){
     rows_reader.push_back(row_reader2);
     table->Get(rows_reader);
 
-    while(!row_reader1->Done()){
-        printf("Row: %s\%s\%ld\%s\n", row_reader1->RowName().c_str(), row_reader1->ColumnName().c_str(),
-               row_reader1->Timestamp(), row_reader1->Value().c_str());
+    while (!row_reader1->Done()) {
+        printf("Row: %s\%s\%ld\%s\n",
+                row_reader1->RowName().c_str(), row_reader1->ColumnName().c_str(),
+                row_reader1->Timestamp(), row_reader1->Value().c_str());
         row_reader1->Next();
     }
     delete row_reader1;
-    while(!row_reader2->Done()){
-        printf("Row: %s\%s\%ld\%s\n", row_reader2->RowName().c_str(), row_reader2->ColumnName().c_str(),
-               row_reader2->Timestamp(), row_reader2->Value().c_str());
+    while (!row_reader2->Done()) {
+        printf("Row: %s\%s\%ld\%s\n",
+                row_reader2->RowName().c_str(), row_reader2->ColumnName().c_str(),
+                row_reader2->Timestamp(), row_reader2->Value().c_str());
         row_reader2->Next();
     }
     delete row_reader2;

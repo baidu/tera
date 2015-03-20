@@ -2,8 +2,8 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#ifndef  TERA_TERA_ENTRY_H
-#define  TERA_TERA_ENTRY_H
+#ifndef  TERA_TERA_ENTRY_H_
+#define  TERA_TERA_ENTRY_H_
 
 #include "common/mutex.h"
 
@@ -33,4 +33,4 @@ private:
 
 }  // namespace tera
 
-#endif  // TERA_TERA_ENTRY_H
+#endif  // TERA_TERA_ENTRY_H_

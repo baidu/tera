@@ -4,11 +4,11 @@
 //
 // Author: Xu Peilin (xupeilin@baidu.com)
 
-#ifndef  TERA_SDK_UTILS_H_
-#define  TERA_SDK_UTILS_H_
+#ifndef  TERA_SDK_SDK_UTILS_H_
+#define  TERA_SDK_SDK_UTILS_H_
 
-#include "sdk/tera.h"
 #include "proto/table_meta.pb.h"
+#include "sdk/tera.h"
 
 using std::string;
 
@@ -18,7 +18,7 @@ void ShowTableSchema(const TableSchema& schema);
 
 void ShowTableMeta(const TableMeta& meta);
 
-void ShowTableDescriptor(TableDescriptor& table_desc);
+void ShowTableDescriptor(const TableDescriptor& table_desc);
 
 void TableDescToSchema(const TableDescriptor& desc, TableSchema* schema);
 
@@ -37,7 +37,8 @@ bool ParseSchemaSetTableDescriptor(const string& schema, TableDescriptor* desc, 
 
 bool ParseSchema(const string& schema, TableDescriptor* table_desc);
 
-bool ParseKvSchema(const string& schema, TableDescriptor* table_desc, LocalityGroupDescriptor* lg_desc, ColumnFamilyDescriptor* cf_desc = NULL);
+bool ParseKvSchema(const string& schema, TableDescriptor* table_desc,
+                   LocalityGroupDescriptor* lg_desc, ColumnFamilyDescriptor* cf_desc = NULL);
 
 bool ParseScanSchema(const string& schema, ScanDescriptor* desc);
 
@@ -51,7 +52,8 @@ bool SetLgProperties(const PropertyList& props, LocalityGroupDescriptor* desc);
 
 bool SetTableProperties(const PropertyList& props, TableDescriptor* desc);
 
-bool ParseCfSchema(const string& schema, TableDescriptor* table_desc, LocalityGroupDescriptor* lg_desc);
+bool ParseCfSchema(const string& schema, TableDescriptor* table_desc,
+                   LocalityGroupDescriptor* lg_desc);
 
 bool ParseLgSchema(const string& schema, TableDescriptor* table_desc);
 
@@ -68,4 +70,4 @@ bool ParsePrefixPropertyValue(const string& pair, string& prefix, string& proper
 string PrefixType(const std::string& property);
 
 } // namespace tera
-#endif // TERA_SDK_UTILS_H_
+#endif // TERA_SDK_SDK_UTILS_H_

@@ -8,13 +8,13 @@
 #include <boost/bind.hpp>
 
 #include <google/malloc_extension.h>
-#include "gflags/gflags.h"
-#include "glog/logging.h"
+#include <gflags/gflags.h>
+#include <glog/logging.h>
 
 #include "db/filename.h"
-#include "leveldb/status.h"
 #include "io/io_utils.h"
 #include "io/utils_leveldb.h"
+#include "leveldb/status.h"
 #include "master/master_zk_adapter.h"
 #include "master/workload_scheduler.h"
 #include "proto/kv_helper.h"
@@ -23,8 +23,8 @@
 #include "proto/tabletnode_client.h"
 #include "proto/tabletnode_client_async.h"
 #include "utils/string_util.h"
-#include "utils/utils_cmd.h"
 #include "utils/timer.h"
+#include "utils/utils_cmd.h"
 
 DECLARE_string(tera_master_port);
 DECLARE_bool(tera_master_meta_recovery_enabled);
@@ -44,7 +44,6 @@ DECLARE_int32(tera_master_query_tabletnode_period);
 DECLARE_string(tera_master_meta_table_name);
 DECLARE_string(tera_master_meta_table_path);
 DECLARE_int32(tera_master_meta_retry_times);
-//DECLARE_int32(tera_master_meta_retry_period);
 
 DECLARE_bool(tera_zk_enabled);
 
@@ -277,7 +276,6 @@ bool MasterImpl::RestoreMetaTablet(const std::vector<TabletMeta>& tablet_list,
 
         while (!m_tablet_manager->ClearMetaTable(*meta_tablet_addr)
                || !m_tablet_manager->DumpMetaTable(*meta_tablet_addr)) {
-            //UnloadMetaTablet(*meta_tablet_addr);
             TryKickTabletNode(*meta_tablet_addr);
             if (!LoadMetaTablet(meta_tablet_addr)) {
                 return false;
@@ -289,7 +287,6 @@ bool MasterImpl::RestoreMetaTablet(const std::vector<TabletMeta>& tablet_list,
 
     StatusCode status = kTabletNodeOk;
     while (!m_tablet_manager->LoadMetaTable(*meta_tablet_addr, &status)) {
-        //UnloadMetaTablet(*meta_tablet_addr);
         TryKickTabletNode(*meta_tablet_addr);
         if (!LoadMetaTablet(meta_tablet_addr)) {
             return false;
@@ -415,7 +412,7 @@ bool MasterImpl::LoadMetaTablet(std::string* server_addr) {
         }
         LOG(ERROR) << "fail to load meta tablet on node: " << *server_addr;
         TryKickTabletNode(*server_addr);
-        //ThisThread::Sleep(FLAGS_tera_master_common_retry_period);
+        // ThisThread::Sleep(FLAGS_tera_master_common_retry_period);
     }
     LOG(ERROR) << "no live node to load meta tablet";
     return false;
@@ -458,8 +455,8 @@ void MasterImpl::CreateTable(const CreateTableRequest* request,
 
     size_t tablet_num = request->delimiters_size() + 1;
     bool delivalid = true;
-    for (size_t i=1; i<tablet_num-1; i++) {
-        ///TODO: Use user defined comparator
+    for (size_t i = 1; i < tablet_num - 1; i++) {
+        // TODO: Use user defined comparator
         if (request->delimiters(i) <= request->delimiters(i-1)) {
             delivalid = false;
             break;
@@ -487,8 +484,8 @@ void MasterImpl::CreateTable(const CreateTableRequest* request,
 
     for (size_t i = 1; i <= tablet_num; i++) {
         std::string path = leveldb::GetTabletPathFromNum(request->table_name(), i);
-        const std::string& start_key = (i==1) ? "" : request->delimiters(i-2);
-        const std::string& end_key = (i==tablet_num) ? "" : request->delimiters(i-1);
+        const std::string& start_key = (i == 1) ? "" : request->delimiters(i-2);
+        const std::string& end_key = (i == tablet_num) ? "" : request->delimiters(i-1);
 
         if (!m_tablet_manager->AddTablet(table_name, start_key, end_key, path,
                                          "", request->schema(), kTableNotInit,
@@ -497,7 +494,7 @@ void MasterImpl::CreateTable(const CreateTableRequest* request,
             LOG(ERROR) << "Add table fail: " << table_name;
             break;
         }
-        add_num ++;
+        add_num++;
     }
 
     if (add_num != tablet_num) {
@@ -1150,7 +1147,7 @@ void MasterImpl::QueryTabletNode() {
 }
 
 void MasterImpl::EnableQueryTabletNodeTimer() {
-    assert (m_query_tabletnode_timer_id == kInvalidTimerId);
+    assert(m_query_tabletnode_timer_id == kInvalidTimerId);
     boost::function<void ()> closure =
         boost::bind(&MasterImpl::QueryTabletNode, this);
     m_query_tabletnode_timer_id = m_thread_pool->DelayTask(
@@ -1165,7 +1162,7 @@ void MasterImpl::DisableQueryTabletNodeTimer() {
 }
 
 void MasterImpl::EnableLoadBalanceTimer() {
-    assert (m_load_balance_timer_id == kInvalidTimerId);
+    assert(m_load_balance_timer_id == kInvalidTimerId);
     boost::function<void ()> closure =
         boost::bind(&MasterImpl::LoadBalance, this);
     m_load_balance_timer_id = m_thread_pool->DelayTask(
@@ -1343,7 +1340,7 @@ void MasterImpl::ReleaseCacheWrapper() {
 }
 
 void MasterImpl::EnableReleaseCacheTimer() {
-    assert (m_release_cache_timer_id == kInvalidTimerId);
+    assert(m_release_cache_timer_id == kInvalidTimerId);
     boost::function<void ()> closure =
         boost::bind(&MasterImpl::ReleaseCacheWrapper, this);
     int64_t timeout_period = 1000 *
@@ -2060,7 +2057,7 @@ bool MasterImpl::UnloadTabletSync(const std::string& table_name,
 
 void MasterImpl::UnloadTabletAsync(TabletPtr tablet, UnloadClosure* done) {
     tabletnode::TabletNodeClientAsync node_client(tablet->GetServerAddr(),
-                                          FLAGS_tera_master_unload_rpc_timeout);
+            FLAGS_tera_master_unload_rpc_timeout);
     UnloadTabletRequest* request = new UnloadTabletRequest;
     UnloadTabletResponse* response = new UnloadTabletResponse;
     request->set_sequence_id(m_this_sequence_id.Inc());
@@ -2379,7 +2376,7 @@ void MasterImpl::GetSnapshotAsync(TabletPtr tablet, int32_t timeout,
     request->mutable_key_range()->set_key_end(tablet->GetKeyEnd());
 
     LOG(INFO) << "GetSnapshotAsync id: " << request->sequence_id() << ", "
-             << "server: " << addr;
+        << "server: " << addr;
     node_client.GetSnapshot(request, response, done);
 }
 
@@ -2491,16 +2488,15 @@ void MasterImpl::ReleaseSnpashot(TabletPtr tablet, uint64_t snapshot) {
     request->mutable_key_range()->set_key_end(tablet->GetKeyEnd());
 
     DelSnapshotClosure* done =
-      NewClosure(this, &MasterImpl::ReleaseSnapshotCallback);
-    LOG(INFO) << "ClearSnapshot id: " << request->sequence_id() << ", "
-             << "server: " << addr;
+        NewClosure(this, &MasterImpl::ReleaseSnapshotCallback);
+    LOG(INFO) << "ClearSnapshot id: " << request->sequence_id()
+        << ", server: " << addr;
     node_client.ReleaseSnapshot(request, response, done);
 }
 
 void MasterImpl::ReleaseSnapshotCallback(ReleaseSnapshotRequest* request,
-                                     ReleaseSnapshotResponse* response,
-                                     bool failed,
-                                     int error_code) {
+                                         ReleaseSnapshotResponse* response,
+                                         bool failed, int error_code) {
     /// 删掉删不掉无所谓, 不计较~
 }
 
@@ -2511,7 +2507,7 @@ void MasterImpl::ClearUnusedSnapshots(TabletPtr tablet, const TabletMeta& meta) 
 #if 0
     std::map<uint64_t, int> snapshot_map;
     for (uint32_t i = 0; i < snapshots.size(); ++i) {
-        snapshot_map[snapshots[i]] ++;
+        snapshot_map[snapshots[i]]++;
     }
     for (int32_t i = 0; i < meta.snapshot_list_size(); i++) {
         uint64_t seq = meta.snapshot_list(i);
@@ -2522,7 +2518,7 @@ void MasterImpl::ClearUnusedSnapshots(TabletPtr tablet, const TabletMeta& meta) 
 #endif
     std::sort(snapshots.begin(), snapshots.end());
     for (int i = 0, j = 0; j < meta.snapshot_list_size(); ++j) {
-        uint64_t seq = meta.snapshot_list(j) ;
+        uint64_t seq = meta.snapshot_list(j);
         if (i >= snapshots.size() || snapshots[i] != seq) {
             ReleaseSnpashot(tablet, seq);
             continue;
@@ -2765,7 +2761,7 @@ void MasterImpl::SplitTabletAsync(TabletPtr tablet) {
     const std::string& key_end = tablet->GetKeyEnd();
 
     tabletnode::TabletNodeClientAsync node_client(server_addr,
-                                          FLAGS_tera_master_split_rpc_timeout);
+            FLAGS_tera_master_split_rpc_timeout);
 
     SplitTabletRequest* request = new SplitTabletRequest;
     SplitTabletResponse* response = new SplitTabletResponse;
@@ -3482,7 +3478,7 @@ void MasterImpl::AddMetaCallback(TablePtr table,
                 << StatusCodeToString(status) << ", " << tablets[0] << "...";
         }
         if (retry_times <= 0) {
-            for(size_t i=0; i< tablets.size(); i++) {
+            for(size_t i = 0; i < tablets.size(); i++) {
                 tablets[i]->SetStatus(kTableDeleted);
                 m_tablet_manager->DeleteTablet(tablets[i]->GetTableName(),
                     tablets[i]->GetKeyStart());
@@ -3952,7 +3948,7 @@ void MasterImpl::RepairMetaTableAsync(TabletPtr tablet,
     request->set_is_sync(true);
     request->set_is_instant(true);
     // first, erase all invalid record
-    for(int32_t i = 0; i < scan_resp->results().key_values_size(); i++) {
+    for (int32_t i = 0; i < scan_resp->results().key_values_size(); i++) {
         const KeyValuePair& record = scan_resp->results().key_values(i);
         RowMutationSequence* mu_seq = request->add_row_list();
         mu_seq->set_row_key(record.key());
@@ -4247,9 +4243,9 @@ void MasterImpl::DumpStatToTable(const TabletNode& stat) {
 
 void MasterImpl::EnableTabletNodeGcTimer() {
     LOG(INFO) << "[gc] EnableTabletNodeGcTimer";
-    assert (m_gc_timer_id == kInvalidTimerId);
+    assert(m_gc_timer_id == kInvalidTimerId);
     boost::function<void ()> closure =
-       boost::bind(&MasterImpl::TabletNodeGarbageClean, this);
+        boost::bind(&MasterImpl::TabletNodeGarbageClean, this);
     m_gc_timer_id = m_thread_pool->DelayTask(
         FLAGS_tera_master_gc_period, closure);
 }
@@ -4337,7 +4333,6 @@ void MasterImpl::CollectDeadTabletsFiles() {
             CollectSingleDeadTablet(table_it->first, *tablet_it);
         }
     }
-
 }
 
 void MasterImpl::CollectSingleDeadTablet(const std::string& tablename, uint64_t tabletnum) {
@@ -4427,7 +4422,7 @@ void MasterImpl::ProcessQueryCallbackForGc(QueryResponse* response) {
         gc_table_set.insert(live.table_name());
     }
 
-    for (int i = 0; i< response->tabletmeta_list().meta_size(); ++i) {
+    for (int i = 0; i < response->tabletmeta_list().meta_size(); ++i) {
         const TabletMeta& meta = response->tabletmeta_list().meta(i);
         VLOG(10) << "[gc] try erase live tablet: " << meta.path()
             << ", tablename: " << meta.table_name();

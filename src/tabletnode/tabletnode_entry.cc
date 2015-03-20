@@ -95,8 +95,8 @@ bool TabletNodeEntry::Run() {
     ++timer_ticks;
 
     // Heartbeat
-    const int64_t tera_heartbeat_period =  FLAGS_tera_heartbeat_period?
-                                         FLAGS_tera_heartbeat_period : 1;
+    const int64_t tera_heartbeat_period =
+        FLAGS_tera_heartbeat_period ? FLAGS_tera_heartbeat_period : 1;
     if ((timer_ticks % tera_heartbeat_period == 0) && !FLAGS_tera_zk_enabled) {
         m_tabletnode_impl->Report();
     }

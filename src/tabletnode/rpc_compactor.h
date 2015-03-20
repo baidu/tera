@@ -2,13 +2,13 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#ifndef TERA_TABLETNODE_RPC_COMPACTOR_H
-#define TERA_TABLETNODE_RPC_COMPACTOR_H
+#ifndef TERA_TABLETNODE_RPC_COMPACTOR_H_
+#define TERA_TABLETNODE_RPC_COMPACTOR_H_
+
+#include <glog/logging.h>
 
 #include "common/base/scoped_ptr.h"
 #include "common/mutex.h"
-#include "glog/logging.h"
-
 #include "proto/master_rpc.pb.h"
 #include "proto/tabletnode_rpc.pb.h"
 
@@ -83,4 +83,4 @@ private:
 } // namespace tabletnode
 } // namespace tera
 
-#endif // TERA_TABLETNODE_RPC_COMPACTOR_H
+#endif // TERA_TABLETNODE_RPC_COMPACTOR_H_

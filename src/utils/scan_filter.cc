@@ -2,8 +2,9 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include <glog/logging.h>
 #include "scan_filter.h"
+
+#include <glog/logging.h>
 
 namespace tera {
 ScanFilter::ScanFilter(const FilterList& filter_list)

@@ -2,8 +2,8 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#ifndef  TERA_PROTO_KV_HELPER_H
-#define  TERA_PROTO_KV_HELPER_H
+#ifndef  TERA_PROTO_KV_HELPER_H_
+#define  TERA_PROTO_KV_HELPER_H_
 
 #include <string>
 
@@ -46,6 +46,4 @@ std::string NextKey(const std::string& key);
 
 } // namespace tera
 
-#endif  //TERA_PROTO_KV_HELPER_H
-
-/* vim: set expandtab ts=4 sw=4 sts=4 tw=100: */
+#endif  // TERA_PROTO_KV_HELPER_H_

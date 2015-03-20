@@ -2,19 +2,19 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#ifndef TERA_RPC_CLIENT_H
-#define TERA_RPC_CLIENT_H
+#ifndef TERA_RPC_CLIENT_H_
+#define TERA_RPC_CLIENT_H_
 
 #include <string>
 
 #include <glog/logging.h>
 #include <sofa/pbrpc/pbrpc.h>
+
 #include "common/base/scoped_ptr.h"
 #include "common/net/ip_address.h"
 #include "common/this_thread.h"
-
-#include "proto/status_code.pb.h"
 #include "proto/proto_helper.h"
+#include "proto/status_code.pb.h"
 
 namespace tera {
 
@@ -123,4 +123,4 @@ private:
 
 } // namespace tera
 
-#endif // TERA_RPC_CLIENT_H
+#endif // TERA_RPC_CLIENT_H_

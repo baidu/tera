@@ -2,8 +2,8 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#ifndef  TERA_TABLE_IMPL_H_
-#define  TERA_TABLE_IMPL_H_
+#ifndef  TERA_SDK_TABLE_IMPL_H_
+#define  TERA_SDK_TABLE_IMPL_H_
 
 #include "common/mutex.h"
 #include "common/thread_pool.h"
@@ -45,9 +45,9 @@ public:
     mutable Mutex _finish_mutex;
     common::CondVar _finish_cond;
     uint32_t _unfinished_count;
-    
+
     SyncMutationBatch(const std::vector<RowMutation*>& row_list)
-      : _finish_cond(&_finish_mutex) {
+        : _finish_cond(&_finish_mutex) {
         for (uint32_t i = 0; i < row_list.size(); i++) {
             RowMutation* mutation = row_list[i];
             if (!mutation->IsAsync()) {
@@ -82,7 +82,7 @@ public:
 class TableImpl : public Table {
     friend class MutationCommitBuffer;
 public:
-    TableImpl(const std::string& table_name, 
+    TableImpl(const std::string& table_name,
               const std::string& zk_root_path,
               const std::string& zk_addr_list,
               ThreadPool* thread_pool);
@@ -164,7 +164,7 @@ public:
     virtual bool GetDescriptor(TableDescriptor* desc, ErrorCode* err);
 
     virtual void SetMaxMutationPendingNum(uint64_t max_pending_num) {
-        _max_commit_pending_num= max_pending_num;
+        _max_commit_pending_num = max_pending_num;
     }
     virtual void SetMaxReaderPendingNum(uint64_t max_pending_num) {
         _max_reader_pending_num = max_pending_num;
@@ -271,7 +271,7 @@ private:
 
     void ScanMetaTableAsync(std::string key_start, std::string key_end, bool zk_access);
 
-    void ScanMetaTableAsyncInLock(std::string key_start, std::string key_end, 
+    void ScanMetaTableAsyncInLock(std::string key_start, std::string key_end,
                                   bool zk_access);
 
     void ScanMetaTableCallBack(std::string key_start,
@@ -293,7 +293,7 @@ private:
     void ReadTableMetaCallBack(ErrorCode* ret_err, int32_t retry_times,
                                ReadTabletRequest* request,
                                ReadTabletResponse* response,
-                               bool failed,int error_code);
+                               bool failed, int error_code);
     bool RestoreCookie();
     void EnableCookieUpdateTimer();
     void DumpCookie();
@@ -359,7 +359,7 @@ private:
 
     ThreadPool* _thread_pool;
     /// _cluster could cache the master_addr & root_table_addr.
-    /// if there is no _cluster, 
+    /// if there is no _cluster,
     ///    we have to access zookeeper whenever we need master_addr or root_table_addr.
     /// if there is _cluster,
     ///    we save master_addr & root_table_addr in _cluster, access zookeeper only once.
@@ -368,4 +368,4 @@ private:
 
 } // namespace tera
 
-#endif  //TERA_TABLE_IMPL_H_
+#endif  // TERA_SDK_TABLE_IMPL_H_

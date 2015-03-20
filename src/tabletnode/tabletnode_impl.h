@@ -2,8 +2,8 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#ifndef TERA_TABLETNODE_TABLETNODE_IMPL_H
-#define TERA_TABLETNODE_TABLETNODE_IMPL_H
+#ifndef TERA_TABLETNODE_TABLETNODE_IMPL_H_
+#define TERA_TABLETNODE_TABLETNODE_IMPL_H_
 
 #include <string>
 
@@ -176,8 +176,7 @@ private:
     leveldb::TableCache* m_ldb_table_cache;
 };
 
-
 } // namespace tabletnode
 } // namespace tera
 
-#endif // TERA_TABLETNODE_TABLETNODE_IMPL_H
+#endif // TERA_TABLETNODE_TABLETNODE_IMPL_H_

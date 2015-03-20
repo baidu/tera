@@ -42,7 +42,7 @@ void RowMutationImpl::Add(const std::string& family, const std::string& qualifie
     mutation.type = RowMutation::kAdd;
     mutation.family = family;
     mutation.qualifier = qualifier;
-    mutation.timestamp = get_micros();//为了避免retry引起的重复加，所以自带时间戳
+    mutation.timestamp = get_micros(); // 为了避免retry引起的重复加，所以自带时间戳
     io::EncodeBigEndian(delta_buf, delta);
     mutation.value.assign(delta_buf, sizeof(delta_buf));
 }
@@ -107,7 +107,7 @@ void RowMutationImpl::Put(const std::string& family, const std::string& qualifie
 
 /// 带TTL的修改一个列的特定版本
 void RowMutationImpl::Put(const std::string& family, const std::string& qualifier,
-                 int64_t timestamp, const std::string& value, int32_t ttl) {
+                          int64_t timestamp, const std::string& value, int32_t ttl) {
     RowMutation::Mutation& mutation = AddMutation();
     mutation.type = RowMutation::kPut;
     mutation.family = family;

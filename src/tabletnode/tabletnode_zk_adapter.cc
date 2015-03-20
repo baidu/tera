@@ -143,7 +143,9 @@ bool TabletNodeZkAdapter::WatchSelfNode(bool* is_exist, int* zk_errno) {
     return CheckAndWatchExist(m_serve_node_path, is_exist, zk_errno);
 }
 
-bool TabletNodeZkAdapter::WatchRootNode(bool* is_exist, std::string* root_tablet_addr, int* zk_errno) {
+bool TabletNodeZkAdapter::WatchRootNode(bool* is_exist,
+                                        std::string* root_tablet_addr,
+                                        int* zk_errno) {
     if (!CheckAndWatchExist(kRootTabletNodePath, is_exist, zk_errno)) {
         return false;
     }
@@ -269,7 +271,7 @@ void TabletNodeZkAdapter::OnNodeDeleted(const std::string& path) {
 }
 
 void TabletNodeZkAdapter::OnWatchFailed(const std::string& path,
-                                             int watch_type, int err) {
+                                        int watch_type, int err) {
     LOG(ERROR) << "watch " << path << " fail!";
     _Exit(EXIT_FAILURE);
 }

@@ -40,5 +40,3 @@ std::string DebugString(const std::string& src) {
 
     return dst.substr(0, j);
 }
-
-/* vim: set expandtab ts=4 sw=4 sts=4 tw=100: */

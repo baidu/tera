@@ -2,8 +2,8 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#ifndef TERA_TABLETNODE_MOCK_ZK_ADAPTER_H
-#define TERA_TABLETNODE_MOCK_ZK_ADAPTER_H
+#ifndef TERA_TABLETNODE_MOCK_ZK_ADAPTER_H_
+#define TERA_TABLETNODE_MOCK_ZK_ADAPTER_H_
 
 #include "zk/dump_zk_adapter.h"
 
@@ -34,4 +34,4 @@ public:
 } // namespace tabletnode
 } // namespace tera
 
-#endif // TERA_TABLETNODE_MOCK_ZK_ADAPTER_H
+#endif // TERA_TABLETNODE_MOCK_ZK_ADAPTER_H_

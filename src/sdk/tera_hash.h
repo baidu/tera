@@ -2,8 +2,8 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#ifndef TERA_SDK_TERA_HASH_H
-#define TERA_SDK_TERA_HASH_H
+#ifndef TERA_SDK_TERA_HASH_H_
+#define TERA_SDK_TERA_HASH_H_
 
 #include <map>
 
@@ -42,7 +42,7 @@ struct HashScanDesc {
 };
 
 struct UserContext {
-    void (*callback) (void*, bool);
+    void (*callback)(void*, bool);
     void* param;
 
     UserContext() : callback(NULL), param(NULL) {}
@@ -128,4 +128,4 @@ private:
 
 } // namespace tera
 
-#endif // TERA_SDK_TERA_HASH_H
+#endif // TERA_SDK_TERA_HASH_H_

@@ -2,21 +2,21 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#ifndef TERA_RPC_CLIENT_ASYNC_H
-#define TERA_RPC_CLIENT_ASYNC_H
+#ifndef TERA_RPC_CLIENT_ASYNC_H_
+#define TERA_RPC_CLIENT_ASYNC_H_
 
 #include <string>
-#include <boost/bind.hpp>
 
+#include <boost/bind.hpp>
 #include <glog/logging.h>
+#include <sofa/pbrpc/pbrpc.h>
+
 #include "common/base/scoped_ptr.h"
 #include "common/net/ip_address.h"
 #include "common/this_thread.h"
 #include "common/thread_pool.h"
-#include "sofa/pbrpc/pbrpc.h"
-
-#include "proto/status_code.pb.h"
 #include "proto/proto_helper.h"
+#include "proto/status_code.pb.h"
 
 namespace tera {
 
@@ -119,8 +119,7 @@ protected:
         RpcClientAsyncBase::ResetClient(server_addr);
         m_server_client.reset(new ServerType(m_rpc_channel));
         m_server_addr = server_addr;
-        //VLOG(5) << "reset connected address to: " << server_addr;
-
+        // VLOG(5) << "reset connected address to: " << server_addr;
     }
 
     template <class Request, class Response, class Callback>
@@ -162,7 +161,7 @@ protected:
         bool failed = rpc_controller->Failed();
         int error = rpc_controller->ErrorCode();
         if (failed) {
-            //LOG(ERROR) << "RpcRequest failed: " << param->tip
+            // LOG(ERROR) << "RpcRequest failed: " << param->tip
             //    << ". Reason: " << rpc_controller->ErrorText();
         }
         delete rpc_controller;
@@ -195,4 +194,4 @@ private:
 
 } // namespace tera
 
-#endif // TERA_RPC_CLIENT_ASYNC_H
+#endif // TERA_RPC_CLIENT_ASYNC_H_

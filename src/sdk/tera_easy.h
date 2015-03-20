@@ -4,8 +4,8 @@
 //
 // Author: yanshiguang02@baidu.com
 
-#ifndef  TERA_EASY_H_
-#define  TERA_EASY_H_
+#ifndef  TERA_TERA_EASY_H_
+#define  TERA_TERA_EASY_H_
 
 #include <stdint.h>
 
@@ -48,4 +48,4 @@ private:
 Table* OpenTable(const std::string& table_name, const std::string& conf_path = "");
 }
 
-#endif  // TERA_EASY_H_
+#endif  // TERA_TERA_EASY_H_

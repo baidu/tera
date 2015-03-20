@@ -120,7 +120,7 @@ void ShowTableMeta(const TableMeta& meta) {
     std::cout << std::endl;
 }
 
-void ShowTableDescriptor(TableDescriptor& table_desc) {
+void ShowTableDescriptor(const TableDescriptor& table_desc) {
     TableSchema schema;
     TableDescToSchema(table_desc, &schema);
     ShowTableSchema(schema);
@@ -151,7 +151,7 @@ void TableDescToSchema(const TableDescriptor& desc, TableSchema* schema) {
         lg->set_block_size(lgdesc->BlockSize());
         lg->set_compress_type(lgdesc->Compress() != kNoneCompress);
         lg->set_name(lgdesc->Name());
-        //printf("add lg %s\n", lgdesc->Name().c_str());
+        // printf("add lg %s\n", lgdesc->Name().c_str());
         switch (lgdesc->Store()) {
             case kInMemory:
                 lg->set_store_type(MemoryStore);
@@ -265,7 +265,7 @@ bool CheckName(const string& name) {
             return false;
         }
     }
-    if (name[0] <='9' && name[0] >= '0') {
+    if (name[0] <= '9' && name[0] >= '0') {
         LOG(ERROR) << "name do not allow starting with digits: " << name[0];
         return false;
     }
@@ -360,7 +360,7 @@ bool SetCfProperties(const PropertyList& props, ColumnFamilyDescriptor* desc) {
         const Property& prop = props[i];
         if (prop.first == "ttl") {
             int32_t ttl = atoi(prop.second.c_str());
-            if (ttl < 0){
+            if (ttl < 0) {
                 LOG(ERROR) << "illegal value: " << prop.second
                     << " for property: " << prop.first;
                 return false;
@@ -368,7 +368,7 @@ bool SetCfProperties(const PropertyList& props, ColumnFamilyDescriptor* desc) {
             desc->SetTimeToLive(ttl);
         } else if (prop.first == "maxversions") {
             int32_t versions = atol(prop.second.c_str());
-            if (versions <= 0){
+            if (versions <= 0) {
                 LOG(ERROR) << "illegal value: " << prop.second
                     << " for property: " << prop.first;
                 return false;
@@ -376,7 +376,7 @@ bool SetCfProperties(const PropertyList& props, ColumnFamilyDescriptor* desc) {
             desc->SetMaxVersions(versions);
         } else if (prop.first == "minversions") {
             int32_t versions = atol(prop.second.c_str());
-            if (versions <= 0){
+            if (versions <= 0) {
                 LOG(ERROR) << "illegal value: " << prop.second
                     << " for property: " << prop.first;
                 return false;
@@ -384,7 +384,7 @@ bool SetCfProperties(const PropertyList& props, ColumnFamilyDescriptor* desc) {
             desc->SetMinVersions(versions);
         } else if (prop.first == "diskquota") {
             int64_t quota = atol(prop.second.c_str());
-            if (quota <= 0){
+            if (quota <= 0) {
                 LOG(ERROR) << "illegal value: " << prop.second
                     << " for property: " << prop.first;
                 return false;
@@ -425,7 +425,7 @@ bool SetLgProperties(const PropertyList& props, LocalityGroupDescriptor* desc) {
             }
         } else if (prop.first == "blocksize") {
             int blocksize = atoi(prop.second.c_str());
-            if (blocksize <= 0){
+            if (blocksize <= 0) {
                 LOG(ERROR) << "illegal value: " << prop.second
                     << " for property: " << prop.first;
                 return false;
@@ -630,22 +630,23 @@ bool ParsePrefixPropertyValue(const string& pair, string& prefix, string& proper
 }
 
 string PrefixType(const std::string& property) {
-    string lg_prop[] = {"compress", "storage", "blocksize","use_memtable_on_leveldb",
-                        "memtable_ldb_write_buffer_size", "memtable_ldb_block_size"};
+    string lg_prop[] = {
+        "compress", "storage", "blocksize", "use_memtable_on_leveldb",
+        "memtable_ldb_write_buffer_size", "memtable_ldb_block_size"};
     string cf_prop[] = {"ttl", "maxversions", "minversions", "diskquota"};
 
     std::set<string> lgset(lg_prop, lg_prop + sizeof(lg_prop) / sizeof(lg_prop[0]));
     std::set<string> cfset(cf_prop, cf_prop + sizeof(cf_prop) / sizeof(cf_prop[0]));
-    if (lgset.find(property) != lgset.end()){
+    if (lgset.find(property) != lgset.end()) {
         return string("lg");
-    } else if (cfset.find(property) != cfset.end()){
+    } else if (cfset.find(property) != cfset.end()) {
         return string("cf");
     }
     return string("unknown");
 }
 
 bool HasInvalidCharInSchema(const string& schema) {
-    for (size_t i = 0; i < schema.length(); i++){
+    for (size_t i = 0; i < schema.length(); i++) {
         char ch = schema[i];
         if (isalnum(ch) || ch == '_' || ch == ':' || ch == '=' || ch == ',') {
             continue;
@@ -672,7 +673,7 @@ bool CheckTableDescrptor(TableDescriptor* table_desc) {
  *   "table:splitsize=100,lg0:storage=disk,lg1:blocksize=5,cf6:ttl=0"
  */
 bool ParseSchemaSetTableDescriptor(const string& schema, TableDescriptor* table_desc,
-                                   bool* is_update_lg_cf){
+                                   bool* is_update_lg_cf) {
     if (table_desc == NULL) {
         LOG(ERROR) << "parameter `table_desc' is NULL";
         return false;
@@ -709,11 +710,11 @@ bool ParseSchemaSetTableDescriptor(const string& schema, TableDescriptor* table_
                 LOG(ERROR) << "oops, can't reset <rawkey>";
                 return false;
             }
-            if (!SetTableProperties(props, table_desc)){
+            if (!SetTableProperties(props, table_desc)) {
                 LOG(ERROR) << "SetTableProperties() failed";
                 return false;
             }
-        } else if (PrefixType(property) == "lg"){
+        } else if (PrefixType(property) == "lg") {
             *is_update_lg_cf = true;
             LocalityGroupDescriptor* lg_desc =
                 const_cast<LocalityGroupDescriptor*>(table_desc->LocalityGroup(prefix));
@@ -722,7 +723,7 @@ bool ParseSchemaSetTableDescriptor(const string& schema, TableDescriptor* table_
                 return false;
             }
             SetLgProperties(props, lg_desc);
-        } else if (PrefixType(property) == "cf"){
+        } else if (PrefixType(property) == "cf") {
             *is_update_lg_cf = true;
             ColumnFamilyDescriptor* cf_desc =
                 const_cast<ColumnFamilyDescriptor*>(table_desc->ColumnFamily(prefix));
@@ -731,7 +732,7 @@ bool ParseSchemaSetTableDescriptor(const string& schema, TableDescriptor* table_
                 return false;
             }
             SetCfProperties(props, cf_desc);
-        } else{
+        } else {
             LOG(ERROR) << "illegal schema: " << parts[i];
             return false;
         }
@@ -776,7 +777,8 @@ bool ParseSchema(const string& schema, TableDescriptor* table_desc) {
     return true;
 }
 
-bool ParseKvSchema(const string& schema, TableDescriptor* table_desc, LocalityGroupDescriptor* lg_desc, ColumnFamilyDescriptor* cf_desc) {
+bool ParseKvSchema(const string& schema, TableDescriptor* table_desc,
+                   LocalityGroupDescriptor* lg_desc, ColumnFamilyDescriptor* cf_desc) {
     PropertyList lg_props;
     if (!ParseProperty(schema, NULL, &lg_props)) {
         return false;

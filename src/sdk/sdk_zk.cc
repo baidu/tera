@@ -5,9 +5,10 @@
 #include "sdk/sdk_zk.h"
 
 #include <iostream>
+#include <gflags/gflags.h>
+
 #include "types.h"
 #include "zk/zk_adapter.h"
-#include "gflags/gflags.h"
 
 DECLARE_string(tera_zk_lib_log_path);
 
@@ -15,11 +16,10 @@ namespace tera {
 namespace sdk {
 
 pthread_once_t ClusterFinder::_zk_init_once = PTHREAD_ONCE_INIT;
-    
-ClusterFinder::ClusterFinder(std::string zk_root_path, const std::string& zk_addr_list) 
+
+ClusterFinder::ClusterFinder(std::string zk_root_path, const std::string& zk_addr_list)
     : _zk_root_path(zk_root_path),
       _zk_addr_list(zk_addr_list) {
-
 }
 
 void ClusterFinder::InitZkLogOnce() {
@@ -38,7 +38,7 @@ bool ClusterFinder::ReadZkNode(const std::string path, std::string* value) {
             << tera::zk::ZkErrnoToString(zk_errno) << std::endl;
         return false;
     }
-    
+
     if (!zk_adapter.ReadNode(path, value, &zk_errno)) {
         std::cout<< "ReadZkNode fail: "<< zk::ZkErrnoToString(zk_errno) << std::endl;
         return false;
@@ -64,6 +64,5 @@ std::string ClusterFinder::RootTableAddr(bool update) {
     return _root_table_addr;
 }
 
-}
-}
-/* vim: set expandtab ts=4 sw=4 sts=4 tw=100: */
+}  // namespace sdk
+}  // namespace tera

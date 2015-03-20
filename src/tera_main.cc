@@ -4,16 +4,15 @@
 
 #include <signal.h>
 
-#include "gflags/gflags.h"
-#include "glog/logging.h"
+#include <gflags/gflags.h>
+#include <glog/logging.h>
 
-#include "version.h"
 #include "common/base/scoped_ptr.h"
-
 #include "master/master_entry.h"
 #include "tabletnode/tabletnode_entry.h"
 #include "tera_entry.h"
 #include "utils/utils_cmd.h"
+#include "version.h"
 
 DECLARE_string(tera_role);
 

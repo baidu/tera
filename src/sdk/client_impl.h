@@ -5,13 +5,11 @@
 #ifndef TERA_SDK_CLIENT_IMPL_
 #define TERA_SDK_CLIENT_IMPL_
 
-#include "sdk/tera.h"
-
 #include "common/thread_pool.h"
-
 #include "proto/tabletnode_client.h"
-#include "utils/timer.h"
 #include "sdk/sdk_zk.h"
+#include "sdk/tera.h"
+#include "utils/timer.h"
 
 using std::string;
 
@@ -29,7 +27,6 @@ struct TSInfo {
 
 class ClientImpl : public Client {
 public:
-
     ClientImpl(const std::string& user_identity,
                const std::string& user_passcode,
                const std::string& zk_addr_list,
@@ -134,4 +131,4 @@ private:
 };
 
 } // namespace tera
-#endif //TERA_SDK_CLIENT_IMPL_
+#endif // TERA_SDK_CLIENT_IMPL_

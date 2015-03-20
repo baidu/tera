@@ -6,10 +6,10 @@
 
 #include <iostream>
 
-#include "common/file/file_path.h"
-#include "common/mutex.h"
 #include "gflags/gflags.h"
 
+#include "common/file/file_path.h"
+#include "common/mutex.h"
 #include "proto/kv_helper.h"
 #include "proto/master_client.h"
 #include "proto/proto_helper.h"
@@ -484,7 +484,7 @@ bool ClientImpl::List(const string& table_name, TableInfo* table_info,
                       std::vector<TabletInfo>* tablet_list, ErrorCode* err) {
     std::vector<TableInfo> table_list;
     bool ret = ListInternal(&table_list, tablet_list, table_name, "", 1,
-                 FLAGS_tera_sdk_show_max_num, err);
+                            FLAGS_tera_sdk_show_max_num, err);
     if (table_list.size() > 0
         && table_list[0].table_desc->TableName() == table_name) {
         *table_info = table_list[0];

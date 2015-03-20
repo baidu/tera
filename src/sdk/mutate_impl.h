@@ -2,19 +2,18 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#ifndef  TERA_MUTATE_IMPL_H_
-#define  TERA_MUTATE_IMPL_H_
+#ifndef  TERA_SDK_MUTATE_IMPL_H_
+#define  TERA_SDK_MUTATE_IMPL_H_
 
 #include <string>
 #include <vector>
 
 #include "common/mutex.h"
-#include "utils/timer.h"
-
 #include "proto/tabletnode_rpc.pb.h"
 #include "sdk/sdk_task.h"
 #include "sdk/tera.h"
 #include "types.h"
+#include "utils/timer.h"
 
 namespace tera {
 
@@ -178,6 +177,4 @@ void SerializeMutation(const RowMutation::Mutation& src, tera::Mutation* dst);
 
 } // namespace tera
 
-#endif  //TERA_MUTATE_IMPL_H_
-
-/* vim: set expandtab ts=4 sw=4 sts=4 tw=100: */
+#endif  // TERA_SDK_MUTATE_IMPL_H_

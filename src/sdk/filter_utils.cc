@@ -4,13 +4,13 @@
 
 #include "filter_utils.h"
 
-#include <sstream>
+#include <stdint.h>
 #include <limits>
+#include <sstream>
+
 #include <glog/logging.h>
 
-#include <stdint.h>
 #include "common/base/string_ext.h"
-
 #include "io/coding.h"
 #include "sdk/sdk_utils.h"
 

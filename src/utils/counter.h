@@ -2,8 +2,8 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#ifndef  __COUNTER_H_
-#define  __COUNTER_H_
+#ifndef  TERA_UTILS_COUNTER_H_
+#define  TERA_UTILS_COUNTER_H_
 
 #include <stdio.h>
 
@@ -13,7 +13,6 @@
 namespace tera {
 
 class Counter {
-    volatile int64_t val_;
 public:
     Counter() : val_(0) {}
     int64_t Add(int64_t v) {
@@ -26,7 +25,7 @@ public:
         return atomic_add64(&val_, 1) + 1;
     }
     int64_t Dec() {
-        return atomic_add64(&val_,-1) - 1;
+        return atomic_add64(&val_, -1) - 1;
     }
     int64_t Get() {
         return val_;
@@ -37,21 +36,24 @@ public:
     int64_t Clear() {
         return atomic_swap64(&val_, 0);
     }
+
+private:
+    volatile int64_t val_;
 };
 
 class AutoCounter {
 public:
     AutoCounter(Counter* counter, const char* msg1, const char* msg2 = NULL)
-      : counter_(counter),
-        msg1_(msg1),
-        msg2_(msg2) {
+        : counter_(counter),
+          msg1_(msg1),
+          msg2_(msg2) {
         start_ = get_micros();
         counter_->Inc();
     }
     ~AutoCounter() {
-        long end = get_micros();
+        int64_t end = get_micros();
         if (end - start_ > 5000000) {
-            long t = (end - start_) / 1000000;
+            int64_t t = (end - start_) / 1000000;
             if (!msg2_) {
                 fprintf(stderr, "%s [AutoCounter] %s hang for %ld s\n",
                     get_curtime_str().data(), msg1_, t);
@@ -62,14 +64,13 @@ public:
         }
         counter_->Dec();
     }
+
 private:
     Counter* counter_;
-    long start_;
+    int64_t start_;
     const char* msg1_;
     const char* msg2_;
 };
 }
 
-#endif  //__COUNTER_H_
-
-/* vim: set expandtab ts=4 sw=4 sts=4 tw=100: */
+#endif  // TERA_UTILS_COUNTER_H_

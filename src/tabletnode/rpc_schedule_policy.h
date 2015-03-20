@@ -4,8 +4,8 @@
 //
 // Author: Li Kang (com@baidu.com)
 
-#ifndef TERA_TABLETNODE_RPC_SCHEDULE_POLICY_H
-#define TERA_TABLETNODE_RPC_SCHEDULE_POLICY_H
+#ifndef TERA_TABLETNODE_RPC_SCHEDULE_POLICY_H_
+#define TERA_TABLETNODE_RPC_SCHEDULE_POLICY_H_
 
 #include <map>
 #include <string>
@@ -27,8 +27,8 @@ public:
     typedef std::string TableName;
     typedef std::map<TableName, ScheduleEntity*> ScheduleEntityList;
 
-    SchedulePolicy() {};
-    virtual ~SchedulePolicy() {};
+    SchedulePolicy() {}
+    virtual ~SchedulePolicy() {}
 
     virtual ScheduleEntity* NewScheEntity(void* user_ptr = NULL) = 0;
 
@@ -48,8 +48,11 @@ struct FairScheduleEntity : public ScheduleEntity {
     uint64_t running_count;
 
     FairScheduleEntity(void* user_ptr)
-      : ScheduleEntity(user_ptr), pickable(false), last_update_time(0),
-        elapse_time(0), running_count(0) {}
+        : ScheduleEntity(user_ptr),
+          pickable(false),
+          last_update_time(0),
+          elapse_time(0),
+          running_count(0) {}
 };
 
 class FairSchedulePolicy : public SchedulePolicy {
@@ -77,6 +80,4 @@ private:
 } // namespace tabletnode
 } // namespace tera
 
-#endif  //TERA_TABLETNODE_RPC_SCHEDULE_POLICY_H
-
-/* vim: set expandtab ts=4 sw=4 sts=4 tw=100: */
+#endif  // TERA_TABLETNODE_RPC_SCHEDULE_POLICY_H_

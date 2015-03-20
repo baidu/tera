@@ -24,7 +24,7 @@ ScheduleEntity* FairSchedulePolicy::NewScheEntity(void* user_ptr) {
 
 SchedulePolicy::ScheduleEntityList::iterator FairSchedulePolicy::Pick(
                                              ScheduleEntityList* entity_list) {
-  ScheduleEntityList::iterator pick = entity_list->end();
+    ScheduleEntityList::iterator pick = entity_list->end();
     int64_t min_elapse_time = INT64_MAX;
 
     ScheduleEntityList::iterator it = entity_list->begin();

@@ -4,8 +4,8 @@
 //
 // Author: Xu Peilin(xupeilin@baidu.com)
 
-#ifndef TERA_TABLETNODE_TABLETNODE_SYSINFO_H
-#define TERA_TABLETNODE_TABLETNODE_SYSINFO_H
+#ifndef TERA_TABLETNODE_TABLETNODE_SYSINFO_H_
+#define TERA_TABLETNODE_TABLETNODE_SYSINFO_H_
 
 #include <map>
 #include <string>
@@ -25,7 +25,7 @@ public:
     ~TabletNodeSysInfo();
 
     void CollectTabletNodeInfo(TabletManager* tablet_manager,
-                           const std::string& server_addr);
+                               const std::string& server_addr);
 
     void CollectHardwareInfo();
 
@@ -62,4 +62,4 @@ private:
 } // namespace tabletnode
 } // namespace tera
 
-#endif // TERA_TABLETNODE_TABLETNODE_SYSINFO_H
+#endif // TERA_TABLETNODE_TABLETNODE_SYSINFO_H_

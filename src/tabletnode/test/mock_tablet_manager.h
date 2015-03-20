@@ -2,8 +2,8 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#ifndef TERA_TABLETNODE_MOCK_TABLET_MANAGER_H
-#define TERA_TABLETNODE_MOCK_TABLET_MANAGER_H
+#ifndef TERA_TABLETNODE_MOCK_TABLET_MANAGER_H_
+#define TERA_TABLETNODE_MOCK_TABLET_MANAGER_H_
 
 #include "tabletnode/tablet_manager.h"
 
@@ -46,4 +46,4 @@ public:
 }  // namespace tabletnode
 }  // namespace tera
 
-#endif // TERA_TABLETNODE_MOCK_TABLET_MANAGER_H
+#endif // TERA_TABLETNODE_MOCK_TABLET_MANAGER_H_
