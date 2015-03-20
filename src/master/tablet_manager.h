@@ -2,8 +2,8 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#ifndef TERA_MASTER_TABLET_MANAGER_H
-#define TERA_MASTER_TABLET_MANAGER_H
+#ifndef TERA_MASTER_TABLET_MANAGER_H_
+#define TERA_MASTER_TABLET_MANAGER_H_
 
 #include <stdint.h>
 #include <map>
@@ -25,25 +25,25 @@ namespace tera {
 namespace master {
 
 
-//kTableOk = 40;
-//kTableNotInit = 41;
-//kTableReady = 42;
-//kTableOnLoad = 43;
-//kTableOnSplit = 44;
-//kTableUnLoad = 49;
-//kTableOnMerge = 50;
-//kTableSplited = 51;
-//kTableUnLoading = 52;
-//kTableDeleted = 53;
-//kTableNotCompact = 54;
-//kTableOnCompact = 55;
-//kTableCompacted = 56;
-//kTableOffLine = 57;
-//kTableWaitLoad = 58;
-//kTableWaitSplit = 59;
-//kTableLoadFail = 60;
-//kTableSplitFail = 61;
-//kTableUnLoadFail = 62;
+// kTableOk = 40;
+// kTableNotInit = 41;
+// kTableReady = 42;
+// kTableOnLoad = 43;
+// kTableOnSplit = 44;
+// kTableUnLoad = 49;
+// kTableOnMerge = 50;
+// kTableSplited = 51;
+// kTableUnLoading = 52;
+// kTableDeleted = 53;
+// kTableNotCompact = 54;
+// kTableOnCompact = 55;
+// kTableCompacted = 56;
+// kTableOffLine = 57;
+// kTableWaitLoad = 58;
+// kTableWaitSplit = 59;
+// kTableLoadFail = 60;
+// kTableSplitFail = 61;
+// kTableUnLoadFail = 62;
 
 class MasterImpl;
 class Table;
@@ -53,6 +53,7 @@ class Tablet {
     friend class TabletManager;
     friend class Table;
     friend std::ostream& operator << (std::ostream& o, const Tablet& tablet);
+
 public:
     Tablet();
     explicit Tablet(const TabletMeta& meta);
@@ -134,6 +135,7 @@ class Table {
     friend class Tablet;
     friend class TabletManager;
     friend std::ostream& operator << (std::ostream& o, const Table& tablet);
+
 public:
     Table(const std::string& table_name);
     bool FindMergePair(Tablet** t1, Tablet** t2,
@@ -254,7 +256,6 @@ public:
     bool PickMergeTablet(TabletPtr& tablet, TabletPtr* tablet2);
 
 private:
-
     void PackTabletMeta(TabletMeta* meta, const std::string& table_name,
                         const std::string& key_start = "",
                         const std::string& key_end = "",
@@ -333,4 +334,4 @@ private:
 } // namespace master
 } // namespace tera
 
-#endif // TERA_MASTER_TABLET_MANAGER_H
+#endif // TERA_MASTER_TABLET_MANAGER_H_

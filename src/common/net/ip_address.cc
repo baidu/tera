@@ -5,7 +5,7 @@
 #include "common/net/ip_address.h"
 
 #include <vector>
-#include "glog/logging.h"
+#include <glog/logging.h>
 
 #include "common/base/string_ext.h"
 #include "common/base/string_number.h"
@@ -85,4 +85,3 @@ bool IpAddress::Assign(const std::string& ip, uint16_t port) {
     m_valid_address = true;
     return m_valid_address;
 }
-

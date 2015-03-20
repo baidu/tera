@@ -2,6 +2,9 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#ifndef TERA_IO_DEFAULT_COMPACT_STRATEGY_H_
+#define TERA_IO_DEFAULT_COMPACT_STRATEGY_H_
+
 #include "leveldb/compact_strategy.h"
 
 #include "io/io_utils.h"
@@ -26,7 +29,7 @@ public:
     virtual bool ScanMergedValue(leveldb::Iterator* it, std::string* merged_value);
 
     virtual bool MergeAtomicOPs(leveldb::Iterator* it, std::string* merged_value,
-                               std::string* merged_key);
+                                std::string* merged_key);
 
 private:
     bool DropByColumnFamily(const std::string& column_family,
@@ -70,3 +73,4 @@ private:
 } // namespace io
 } // namespace tera
 
+#endif // TERA_IO_DEFAULT_COMPACT_STRATEGY_H_

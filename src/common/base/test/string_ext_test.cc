@@ -10,8 +10,7 @@ int main(int argc, char* argv[])
 
     vector<string> vt;
     strtool::split(",o h,,,nice,,,,,,,", vt);
-    for (size_t i = 0; i < vt.size(); ++ i)
-    {
+    for (size_t i = 0; i < vt.size(); ++i) {
         cout <<"out:" << vt[i] <<"\n";
     }
 

@@ -2,8 +2,8 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#ifndef COMMON_FILE_FILE_PATH_H
-#define COMMON_FILE_FILE_PATH_H
+#ifndef TERA_COMMON_FILE_FILE_PATH_H_
+#define TERA_COMMON_FILE_FILE_PATH_H_
 
 #include <string>
 #include <vector>
@@ -36,4 +36,4 @@ bool RemoveLocalFile(const std::string& path);
 bool MoveLocalFile(const std::string& src_file,
                    const std::string& dst_file);
 
-#endif // COMMON_FILE_FILE_PATH_H
+#endif // TERA_COMMON_FILE_FILE_PATH_H_

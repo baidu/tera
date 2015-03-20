@@ -2,12 +2,11 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#ifndef TERA_IO_IO_UTILS_H
-#define TERA_IO_IO_UTILS_H
+#ifndef TERA_IO_IO_UTILS_H_
+#define TERA_IO_IO_UTILS_H_
 
-#include "leveldb/status.h"
 #include "leveldb/raw_key_operator.h"
-
+#include "leveldb/status.h"
 #include "io/tablet_io.h"
 #include "proto/status_code.pb.h"
 #include "proto/table_schema.pb.h"
@@ -32,4 +31,4 @@ const leveldb::RawKeyOperator* GetRawKeyOperatorFromSchema(TableSchema& schema);
 
 } // namespace tera
 
-#endif // TERA_IO_IO_UTILS_H
+#endif // TERA_IO_IO_UTILS_H_

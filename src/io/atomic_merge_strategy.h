@@ -2,8 +2,8 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#ifndef  ATOMIC_MERGE_STRATEGY_H
-#define  ATOMIC_MERGE_STRATEGY_H
+#ifndef  TERA_IO_ATOMIC_MERGE_STRATEGY_H_
+#define  TERA_IO_ATOMIC_MERGE_STRATEGY_H_
 
 #include "leveldb/raw_key_operator.h"
 #include "leveldb/slice.h"
@@ -13,7 +13,7 @@ namespace io {
 
 bool IsAtomicOP(leveldb::TeraKeyType keyType);
 
-class AtomicMergeStrategy{
+class AtomicMergeStrategy {
 public:
     AtomicMergeStrategy();
 
@@ -33,12 +33,11 @@ private:
     std::string* m_merged_key;
     std::string* m_merged_value;
     leveldb::TeraKeyType m_latest_key_type;
-    int64_t m_counter; //for ADD
-    std::string m_append_buffer; //for Append
+    int64_t m_counter; // for ADD
+    std::string m_append_buffer; // for Append
 };
 
-} //namespace io
-} //namespace tera
+} // namespace io
+} // namespace tera
 
-#endif  //ATOMIC_MERGE_STRATEGY_H
-
+#endif  // TERA_IO_ATOMIC_MERGE_STRATEGY_H_

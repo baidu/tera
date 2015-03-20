@@ -5,15 +5,14 @@
 #include "io/tablet_writer.h"
 
 #include <boost/bind.hpp>
+#include <gflags/gflags.h>
+#include <glog/logging.h>
 
 #include "common/this_thread.h"
-#include "leveldb/lg_coding.h"
-#include "gflags/gflags.h"
-#include "glog/logging.h"
-
 #include "io/coding.h"
 #include "io/io_utils.h"
 #include "io/tablet_io.h"
+#include "leveldb/lg_coding.h"
 #include "proto/proto_helper.h"
 #include "utils/counter.h"
 #include "utils/timer.h"
@@ -254,7 +253,7 @@ bool TabletWriter::BatchRequest(const WriteTabletRequest& request,
                 const Mutation& mu = row_mu.mutation_sequence().Get(t);
                 std::string tera_key;
                 leveldb::TeraKeyType type = leveldb::TKT_VALUE;
-                switch(mu.type()) {
+                switch (mu.type()) {
                     case kDeleteRow:
                         type = leveldb::TKT_DEL;
                         break;
@@ -358,7 +357,7 @@ void TabletWriter::FlushToDiskBatch(WriteTaskBuffer* task_buffer) {
     StatusCode status = kTableOk;
     m_tablet->WriteBatch(&batch, true, &status);
     batch.Clear();
-    for(size_t i = 0; i < task_num; i++) {
+    for (size_t i = 0; i < task_num; i++) {
         FinishTask((*task_buffer)[i], status);
     }
     VLOG(7) << "finish a batch: " << task_num;
@@ -366,5 +365,3 @@ void TabletWriter::FlushToDiskBatch(WriteTaskBuffer* task_buffer) {
 
 } // namespace tabletnode
 } // namespace tera
-
-/* vim: set expandtab ts=4 sw=4 sts=4 tw=100: */

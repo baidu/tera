@@ -2,8 +2,8 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#ifndef COMMON_NET_IP_ADDRESS_H
-#define COMMON_NET_IP_ADDRESS_H
+#ifndef TERA_COMMON_NET_IP_ADDRESS_H_
+#define TERA_COMMON_NET_IP_ADDRESS_H_
 
 #include <string>
 
@@ -38,4 +38,4 @@ private:
     bool m_valid_address;
 };
 
-#endif // COMMON_NET_IP_ADDRESS_H
+#endif // TERA_COMMON_NET_IP_ADDRESS_H_

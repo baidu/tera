@@ -7,16 +7,16 @@
 #include <algorithm>
 #include <string>
 
+#include <gflags/gflags.h>"
+#include <glog/logging.h>
+
 #include "common/base/string_ext.h"
 #include "common/base/string_number.h"
 #include "common/file/file_path.h"
+#include "io/timekey_comparator.h"
 #include "leveldb/comparator.h"
 #include "leveldb/env_dfs.h"
 #include "leveldb/table_utils.h"
-#include "gflags/gflags.h"
-#include "glog/logging.h"
-
-#include "io/timekey_comparator.h"
 #include "utils/timer.h"
 
 DECLARE_string(tera_leveldb_env_type);

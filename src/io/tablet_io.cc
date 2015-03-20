@@ -5,8 +5,17 @@
 #include "io/tablet_io.h"
 
 #include <stdint.h>
+#include <gflags/gflags.h>
+#include <glog/logging.h>
 
 #include "common/this_thread.h"
+#include "io/coding.h"
+#include "io/default_compact_strategy.h"
+#include "io/io_utils.h"
+#include "io/lg_compact_strategy.h"
+#include "io/tablet_writer.h"
+#include "io/timekey_comparator.h"
+#include "io/ttlkv_compact_strategy.h"
 #include "leveldb/cache.h"
 #include "leveldb/compact_strategy.h"
 #include "leveldb/env.h"
@@ -15,17 +24,6 @@
 #include "leveldb/env_flash.h"
 #include "leveldb/env_inmem.h"
 #include "leveldb/filter_policy.h"
-#include "gflags/gflags.h"
-#include "glog/logging.h"
-
-#include "utils/timer.h"
-#include "io/coding.h"
-#include "io/default_compact_strategy.h"
-#include "io/ttlkv_compact_strategy.h"
-#include "io/io_utils.h"
-#include "io/lg_compact_strategy.h"
-#include "io/tablet_writer.h"
-#include "io/timekey_comparator.h"
 #include "types.h"
 #include "utils/counter.h"
 #include "utils/scan_filter.h"
@@ -166,10 +164,12 @@ bool TabletIO::Load(const TableSchema& schema,
     // any type of table should have at least 1lg+1cf.
     m_table_schema.CopyFrom(schema);
     if (m_table_schema.locality_groups_size() == 0) {
-        m_table_schema.add_locality_groups(); // only prepare for kv-only mode, no need to set fields of it.
+        // only prepare for kv-only mode, no need to set fields of it.
+        m_table_schema.add_locality_groups();
     }
     if (m_table_schema.column_families_size() == 0) {
-        m_table_schema.add_column_families(); // only prepare for kv-only mode, no need to set fields of it.
+        // only prepare for kv-only mode, no need to set fields of it.
+        m_table_schema.add_column_families();
         m_kv_only = true;
     } else {
         m_kv_only = m_table_schema.kv_only();
@@ -209,15 +209,15 @@ bool TabletIO::Load(const TableSchema& schema,
             FLAGS_tera_tablet_memtable_ldb_write_buffer_size * 1024 * 1024;
     m_ldb_options.memtable_ldb_block_size = FLAGS_tera_tablet_memtable_ldb_block_size * 1024;
     if (FLAGS_tera_tablet_use_memtable_on_leveldb) {
-      LOG(INFO) << "enable mem-ldb for this tablet-server:"
-                << " buffer_size:" << m_ldb_options.memtable_ldb_write_buffer_size
-                << ", block_size:"  << m_ldb_options.memtable_ldb_block_size;
+        LOG(INFO) << "enable mem-ldb for this tablet-server:"
+            << " buffer_size:" << m_ldb_options.memtable_ldb_write_buffer_size
+            << ", block_size:"  << m_ldb_options.memtable_ldb_block_size;
     }
 
     if (m_kv_only && m_table_schema.raw_key() == TTLKv) {
-      m_ldb_options.filter_policy = leveldb::NewTTLKvBloomFilterPolicy(10);
+        m_ldb_options.filter_policy = leveldb::NewTTLKvBloomFilterPolicy(10);
     } else {
-      m_ldb_options.filter_policy = leveldb::NewBloomFilterPolicy(10);
+        m_ldb_options.filter_policy = leveldb::NewBloomFilterPolicy(10);
     }
     m_ldb_options.block_cache = block_cache;
     m_ldb_options.table_cache = table_cache;
@@ -725,15 +725,15 @@ inline bool TabletIO::LowLevelScan(const std::string& start_tera_key,
             last_qual.assign(qual.data(), qual.size());
             version_num = 1;
             has_merged = compact_strategy->ScanMergedValue(it, &merged_value);
-            VLOG(10)<<"has_merged:" <<has_merged;
+            VLOG(10) << "has_merged:" << has_merged;
             if (has_merged) {
                 value = merged_value;
                 key = last_key;
                 col = last_col;
                 qual = last_qual;
-                VLOG(10)<<"ll-scan: merge: " << std::string(key.data())<<":"
-                        <<std::string(col.data())<<":"
-                        <<std::string(qual.data());
+                VLOG(10) << "ll-scan: merge: " << std::string(key.data())
+                    << ":" << std::string(col.data())
+                    << ":" << std::string(qual.data());
             }
         }
 
@@ -783,10 +783,8 @@ inline bool TabletIO::LowLevelScan(const std::string& start_tera_key,
     return true;
 }
 
-//
 bool TabletIO::ReadCells(const RowReaderInfo& row_reader, RowResult* value_list,
                          uint64_t snapshot_id, StatusCode* status) {
-    //LOG(ERROR) << "ReadCells snapshot " << snapshot_id << "-" << id_to_snapshot_num_[snapshot_id] << " | good";
     {
         MutexLock lock(&m_mutex);
         if (m_status != kReady && m_status != kOnSplit
@@ -923,7 +921,6 @@ bool TabletIO::Write(const WriteTabletRequest* request,
         }
         m_db_ref_count++;
     }
-    //VLOG(4) << "try to write " << request->pair_list().pair_size() << " records";
     m_async_writer->Write(request, response, done, index_list,
                           done_counter, timer);
     {
@@ -1084,8 +1081,6 @@ bool TabletIO::Scan(const ScanOption& option, KeyValueList* kv_list,
     if (end.empty() || (!m_end_key.empty() && end > m_end_key)) {
         end = m_end_key;
     }
-    //int64_t start_time = option.key_range().key_start().timestamp();
-    //int64_t end_time = option.key_range().key_end().timestamp();
 
     bool noexist_end = false;
     if (end.empty()) {
@@ -1135,8 +1130,6 @@ bool TabletIO::Scan(const ScanOption& option, KeyValueList* kv_list,
         leveldb::Slice value = it->value();
         *complete = (!noexist_end && m_key_operator->Compare(key, end) >= 0);
         if (*complete || (option.size_limit() > 0 && pack_size > option.size_limit())) {
-            //LOG(ERROR) << "break scan " << noexist_end << " key:" << key.ToString()
-            //    << " end:" << " limit:" << option.size_limit();
             break;
         } else {
             if (!(strategy && strategy->ScanDrop(key, 0))) {
@@ -1221,7 +1214,7 @@ void TabletIO::SetupScanRowOptions(const ScanTabletRequest* request,
         scan_options->ts_end = request->timerange().ts_end();
     }
     if (request->has_buffer_limit()) {
-        scan_options->max_size= request->buffer_limit();
+        scan_options->max_size = request->buffer_limit();
     }
 
     scan_options->snapshot_id = request->snapshot_id();
@@ -1291,12 +1284,12 @@ void TabletIO::SetupOptionsForLG() {
         if (lg_schema.use_memtable_on_leveldb()) {
             lg_info->use_memtable_on_leveldb = true;
             lg_info->memtable_ldb_write_buffer_size =
-                       lg_schema.memtable_ldb_write_buffer_size() * 1024 * 1024;
+                lg_schema.memtable_ldb_write_buffer_size() * 1024 * 1024;
             lg_info->memtable_ldb_block_size =
-                       lg_schema.memtable_ldb_block_size() * 1024;
+                lg_schema.memtable_ldb_block_size() * 1024;
             LOG(INFO) << "enable mem-ldb for LG:" << lg_schema.name().c_str()
-                      << ", buffer_size:" << lg_info->memtable_ldb_write_buffer_size
-                      << ", block_size:"  << lg_info->memtable_ldb_block_size;
+                << ", buffer_size:" << lg_info->memtable_ldb_write_buffer_size
+                << ", block_size:"  << lg_info->memtable_ldb_block_size;
         }
         exist_lg_list->insert(lg_i);
         (*lg_info_list)[lg_i] = lg_info;

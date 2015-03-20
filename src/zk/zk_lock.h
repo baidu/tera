@@ -4,13 +4,12 @@
 //
 // Author: likang01(com@baidu.com)
 
-#ifndef  TERA_ZK_ZK_LOCK_H
-#define  TERA_ZK_ZK_LOCK_H
+#ifndef  TERA_ZK_ZK_LOCK_H_
+#define  TERA_ZK_ZK_LOCK_H_
 
 #include <stdint.h>
-
-#include <string>
 #include <queue>
+#include <string>
 
 namespace tera {
 namespace zk {
@@ -78,6 +77,4 @@ private:
 } // namespace zk
 } // namespace tera
 
-#endif  //TERA_ZK_ZK_LOCK_H
-
-/* vim: set expandtab ts=4 sw=4 sts=4 tw=100: */
+#endif  // TERA_ZK_ZK_LOCK_H_

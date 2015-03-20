@@ -8,7 +8,7 @@
 namespace tera {
 namespace io {
 
-bool IsAtomicOP(leveldb::TeraKeyType keyType){
+bool IsAtomicOP(leveldb::TeraKeyType keyType) {
     if (keyType == leveldb::TKT_ADD ||
         keyType == leveldb::TKT_PUT_IFABSENT ||
         keyType == leveldb::TKT_APPEND) {
@@ -17,10 +17,10 @@ bool IsAtomicOP(leveldb::TeraKeyType keyType){
     return false;
 }
 
-AtomicMergeStrategy::AtomicMergeStrategy() : m_merged_key(NULL),
-                                           m_merged_value(NULL),
-                                           m_counter(0) {
-
+AtomicMergeStrategy::AtomicMergeStrategy()
+    : m_merged_key(NULL),
+      m_merged_value(NULL),
+      m_counter(0) {
 }
 
 void AtomicMergeStrategy::Init(std::string* merged_key,
@@ -48,7 +48,7 @@ void AtomicMergeStrategy::Init(std::string* merged_key,
             m_append_buffer.assign(latest_value.data(), latest_value.size());
             break;
         default:
-            assert(0); //invalid status
+            assert(0); // invalid status
             break;
     }
 }
@@ -69,11 +69,11 @@ void AtomicMergeStrategy::MergeStep(const leveldb::Slice& key,
             break;
         case leveldb::TKT_APPEND:
             if (key_type == leveldb::TKT_APPEND || key_type == leveldb::TKT_VALUE) {
-                m_append_buffer.insert(0,std::string(value.data(),value.size()));
+                m_append_buffer.insert(0, std::string(value.data(), value.size()));
             }
             break;
         default:
-            assert(0); //invalid status
+            assert(0); // invalid status
             break;
     }
 }
@@ -86,18 +86,17 @@ bool AtomicMergeStrategy::Finish() {
             m_merged_value->assign(buf, sizeof(buf));
             break;
         case leveldb::TKT_PUT_IFABSENT:
-            //do nothing
+            // do nothing
             break;
         case leveldb::TKT_APPEND:
             *m_merged_value = m_append_buffer;
             break;
         default:
-            assert(0); //invalid status
+            assert(0); // invalid status
             break;
     }
     return true;
 }
 
-} //namespace io
-} //namespace tera
-
+} // namespace io
+} // namespace tera

@@ -4,8 +4,8 @@
 //
 // Author: An Qin (qinan@baidu.com)
 
-#ifndef COMMON_BASE_STDINT_H
-#define COMMON_BASE_STDINT_H
+#ifndef TERA_COMMON_BASE_STDINT_H_
+#define TERA_COMMON_BASE_STDINT_H_
 
 #ifndef __STDC_LIMIT_MACROS
 #define __STDC_LIMIT_MACROS
@@ -142,4 +142,4 @@
 # endif
 #endif
 
-#endif // COMMON_BASE_STDINT_H
+#endif // TERA_COMMON_BASE_STDINT_H_

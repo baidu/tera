@@ -6,10 +6,10 @@
 
 #include "zk/zk_lock.h"
 
-#include "glog/logging.h"
+#include <glog/logging.h>
 
-#include "zk/zk_util.h"
 #include "zk/zk_adapter.h"
+#include "zk/zk_util.h"
 
 namespace tera {
 namespace zk {
@@ -118,7 +118,7 @@ bool ZooKeeperLock::BeginLock(int* zk_errno) {
         return true;
     }
 
-    //std::sort(m_node_list.begin(), m_node_list.end());
+    // std::sort(m_node_list.begin(), m_node_list.end());
 
     do {
         m_watch_path = m_lock_path + "/" + m_node_list.top().name;
@@ -268,5 +268,3 @@ void LockCompletion::Signal(int err) {
 
 } // namespace zk
 } // namespace tera
-
-/* vim: set expandtab ts=4 sw=4 sts=4 tw=100: */

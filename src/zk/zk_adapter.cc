@@ -6,11 +6,12 @@
 
 #include "zk/zk_adapter.h"
 
-#include <boost/bind.hpp>
 #include <errno.h>
 
+#include <boost/bind.hpp>
+#include <glog/logging.h>
+
 #include "common/this_thread.h"
-#include "glog/logging.h"
 
 namespace tera {
 namespace zk {
@@ -752,7 +753,7 @@ void ZooKeeperAdapter::ChildEventCallBack(std::string path) {
         m_state_mutex.Unlock();
         OnChildrenChanged(path, child_list, value_list);
         m_state_mutex.Lock();
-    } else if (ZE_NOT_EXIST == ret){
+    } else if (ZE_NOT_EXIST == ret) {
         watch->watch_child = false;
         watch->watch_value = false;
         pthread_mutex_unlock(&watch->mutex);
@@ -1290,5 +1291,3 @@ int ZooKeeperAdapter::GetChildrenWrapper(const std::string& path, bool is_watch,
 
 } // namespace zk
 } // namespace tera
-
-/* vim: set expandtab ts=4 sw=4 sts=4 tw=100: */

@@ -2,8 +2,8 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#ifndef TERA_MASTER_SCHEDULER_H
-#define TERA_MASTER_SCHEDULER_H
+#ifndef TERA_MASTER_SCHEDULER_H_
+#define TERA_MASTER_SCHEDULER_H_
 
 #include <map>
 #include <string>
@@ -36,4 +36,4 @@ public:
 } // namespace master
 } // namespace tera
 
-#endif // TERA_MASTER_SCHEDULER_H
+#endif // TERA_MASTER_SCHEDULER_H_

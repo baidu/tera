@@ -2,8 +2,8 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#ifndef TERA_IO_MOCK_TABLET_IO_H
-#define TERA_IO_MOCK_TABLET_IO_H
+#ifndef TERA_IO_MOCK_TABLET_IO_H_
+#define TERA_IO_MOCK_TABLET_IO_H_
 
 #include "io/tablet_io.h"
 
@@ -79,4 +79,4 @@ public:
 }  // namespace io
 }  // namespace tera
 
-#endif // TERA_IO_MOCK_TABLET_IO_H
+#endif // TERA_IO_MOCK_TABLET_IO_H_

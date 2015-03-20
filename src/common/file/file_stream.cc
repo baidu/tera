@@ -9,9 +9,10 @@
 #include <sys/types.h>
 #include <unistd.h>
 
+#include <gflags/gflags.h>
+#include <glog/logging.h>
+
 #include "common/base/string_ext.h"
-#include "gflags/gflags.h"
-#include "glog/logging.h"
 
 DECLARE_int32(file_op_retry_times);
 
@@ -243,5 +244,3 @@ std::string FileStream::FileOpenModeToString(uint32_t flag) {
     }
     return mode;
 }
-
-
