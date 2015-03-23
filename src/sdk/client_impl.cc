@@ -742,7 +742,7 @@ static void InitFlags(const std::string& log_prefix) {
     argv[1] = NULL;
 
     // the gflags will get flags from FLAGS_flagfile
-    ::gflags::ParseCommandLineFlags(&argc, &argv, true);
+    ::google::ParseCommandLineFlags(&argc, &argv, true);
     ::google::InitGoogleLogging(log_prefix.c_str());
     utils::SetupLog(log_prefix.c_str());
     delete[] argv;
