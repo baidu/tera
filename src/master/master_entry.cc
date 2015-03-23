@@ -12,7 +12,6 @@
 #include "master/remote_master.h"
 #include "utils/utils_cmd.h"
 
-DECLARE_string(tera_master_addr);
 DECLARE_string(tera_master_port);
 
 namespace tera {
@@ -27,8 +26,7 @@ MasterEntry::~MasterEntry() {}
 
 bool MasterEntry::StartServer() {
     IpAddress master_addr(utils::GetLocalHostAddr(), FLAGS_tera_master_port);
-    FLAGS_tera_master_addr = master_addr.ToString();
-    LOG(INFO) << "Start master RPC server at: " << FLAGS_tera_master_addr;
+    LOG(INFO) << "Start master RPC server at: " << master_addr.ToString();
 
     m_master_impl.reset(new MasterImpl());
     m_remote_master = new RemoteMaster(m_master_impl.get());
@@ -38,7 +36,7 @@ bool MasterEntry::StartServer() {
     }
 
     m_rpc_server.RegisterService(m_remote_master);
-    if (!m_rpc_server.Start(FLAGS_tera_master_addr)) {
+    if (!m_rpc_server.Start(master_addr.ToString())) {
         LOG(ERROR) << "start RPC server error";
         return false;
     }

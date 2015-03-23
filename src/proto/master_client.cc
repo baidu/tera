@@ -9,7 +9,6 @@
 #include "proto/master_client.h"
 
 
-DECLARE_string(tera_master_addr);
 DECLARE_string(tera_master_port);
 DECLARE_int32(tera_master_connect_retry_times);
 DECLARE_int32(tera_master_connect_retry_period);
@@ -19,8 +18,7 @@ namespace tera {
 namespace master {
 
 MasterClient::MasterClient()
-    : RpcClient<MasterServer::Stub>(FLAGS_tera_master_addr + ":" + FLAGS_tera_master_port,
-                                    FLAGS_tera_master_connect_retry_period,
+    : RpcClient<MasterServer::Stub>("", FLAGS_tera_master_connect_retry_period,
                                     FLAGS_tera_master_connect_timeout_period,
                                     FLAGS_tera_master_connect_retry_times) {}
 
