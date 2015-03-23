@@ -177,18 +177,27 @@ bool ZooKeeperAdapter::Create(const std::string& path, const std::string& value,
     size_t root_path_len = m_root_path.size();
     size_t path_len = path.size();
     char * ret_path_buf = NULL;
-    size_t ret_path_len = 0;
+    size_t ret_path_size = 0;
     if (ret_path != NULL) {
-        ret_path_len = root_path_len + path_len + 11;
-        ret_path_buf = new char[ret_path_len];
+        ret_path_size = root_path_len + path_len + 11;
+        ret_path_buf = new char[ret_path_size];
     }
 
     int ret = zoo_create(m_handle, path.c_str(), value.c_str(), value_len,
                          &ZOO_OPEN_ACL_UNSAFE, flag, ret_path_buf,
-                         ret_path_len);
+                         ret_path_size);
     if (ZOK == ret) {
         if (NULL != ret_path) {
-            *ret_path = ret_path_buf + root_path_len;
+            size_t ret_path_len = strlen(ret_path_buf);
+            if (((flag & ZOO_SEQUENCE == 1) &&
+                ret_path_len == root_path_len + path_len + 10) ||
+                ((flag & ZOO_SEQUENCE == 0) &&
+                ret_path_len == root_path_len + path_len)) {
+                // compatible to zk 3.3.x
+                *ret_path = ret_path_buf + root_path_len;
+            } else {
+                *ret_path = ret_path_buf;
+            }
         }
         LOG(INFO) << "zoo_create success";
     } else {
