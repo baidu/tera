@@ -45,11 +45,6 @@ wget http://www.us.apache.org/dist/zookeeper/stable/zookeeper-3.4.6.tar.gz
 tar zxf zookeeper-3.4.6.tar.gz
 ( cd zookeeper-3.4.6/src/c && eval ${DEPS_BUILD} )
 
-# glog
-wget --no-check-certificate -O glog-0.3.3.tar.gz https://github.com/google/glog/archive/v0.3.3.tar.gz
-tar zxf glog-0.3.3.tar.gz
-( cd glog-0.3.3 && eval ${DEPS_BUILD} )
-
 # cmake for gflags
 wget --no-check-certificate -O CMake-3.2.1.tar.gz https://github.com/Kitware/CMake/archive/v3.2.1.tar.gz
 tar zxf CMake-3.2.1.tar.gz
@@ -58,7 +53,13 @@ tar zxf CMake-3.2.1.tar.gz
 # gflags
 wget --no-check-certificate -O gflags-2.1.1.tar.gz https://github.com/schuhschuh/gflags/archive/v2.1.1.tar.gz
 tar zxf gflags-2.1.1.tar.gz
-(cd gflags-2.1.1 && cmake -DCMAKE_INSTALL_PREFIX=${DEPS_PREFIX} && make -j4 && make install )
+( cd gflags-2.1.1 && cmake -DCMAKE_INSTALL_PREFIX=${DEPS_PREFIX} -DGFLAGS_NAMESPACE=google \
+  && make -j4 && make install )
+
+# glog
+wget --no-check-certificate -O glog-0.3.3.tar.gz https://github.com/google/glog/archive/v0.3.3.tar.gz
+tar zxf glog-0.3.3.tar.gz
+( cd glog-0.3.3 && eval ${DEPS_BUILD} )
 
 # libunwind for gperftools
 wget http://download.savannah.gnu.org/releases/libunwind/libunwind-0.99-beta.tar.gz
