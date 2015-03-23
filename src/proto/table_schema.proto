@@ -34,7 +34,7 @@ message ColumnFamilySchema {
     repeated int64 acl = 5;
     optional int32 max_versions = 6 [default = 1];
     optional int32 min_versions = 7 [default = 1];
-    optional int32 time_to_live = 8 [default = 0]; // µ¥Î»:Ãë(0:²»¹ıÆÚ, <0:ÌáÇ°¹ıÆÚ, >0:ÑÓºó¹ıÆÚ) 
+    optional int32 time_to_live = 8 [default = 0]; // å•ä½:ç§’(0:ä¸è¿‡æœŸ, <0:æå‰è¿‡æœŸ, >0:å»¶åè¿‡æœŸ) 
     optional int64 disk_quota = 9;
     optional string type = 10;
 }

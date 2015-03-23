@@ -25,13 +25,13 @@ const char* KvCompactStrategy::Name() const {
 
 bool KvCompactStrategy::Drop(const leveldb::Slice& tera_key, uint64_t n) {
     // If expire timestamp + schema's TTL <= time(NULL), Then Drop.
-    // Desc: µ±Ç°TTLµÄÓïÒåÀí½âÎª£º¼ÙÉèÓÃ»§Ö¸¶¨ÁËkeyÔÚ03:10·Ö¹ýÆÚ£¬
-    // Í¬Ê±SchemaµÄTTLÎª+300(ÑÓºó5·ÖÖÓ), ÄÇÃ´Õâ¸ökey½«ÔÚ03:15·Ö¹ýÆÚ.
+    // Desc: å½“å‰TTLçš„è¯­ä¹‰ç†è§£ä¸ºï¼šå‡è®¾ç”¨æˆ·æŒ‡å®šäº†keyåœ¨03:10åˆ†è¿‡æœŸï¼Œ
+    // åŒæ—¶Schemaçš„TTLä¸º+300(å»¶åŽ5åˆ†é’Ÿ), é‚£ä¹ˆè¿™ä¸ªkeyå°†åœ¨03:15åˆ†è¿‡æœŸ.
     //
-    // ÕâÖÖÓïÒåÏÂ, Èç¹ûÏ£ÍûÒ»¸ökeyÌáÇ°¹ýÆÚ, Ö»ÐèÒªÐÞ¸ÄschemaÈÃTTLÎª¸ºÖµ
-    // ÀýÈç-300(ÌáÇ°5·ÖÖÓ), ÄÇÃ´Õâ¸ökey½«ÔÚ03:05·Ö¹ýÆÚ.
+    // è¿™ç§è¯­ä¹‰ä¸‹, å¦‚æžœå¸Œæœ›ä¸€ä¸ªkeyæå‰è¿‡æœŸ, åªéœ€è¦ä¿®æ”¹schemaè®©TTLä¸ºè´Ÿå€¼
+    // ä¾‹å¦‚-300(æå‰5åˆ†é’Ÿ), é‚£ä¹ˆè¿™ä¸ªkeyå°†åœ¨03:05åˆ†è¿‡æœŸ.
     //
-    // ²»¹ý, ¶ÔÓÚÓÃ»§Ôø¾­²åÈëµÄÓÀ²»¹ýÆÚµÄkey, ÎÞÂÛÔõÃ´µ÷ÕûschemaµÄTTL¶¼²»»á²úÉúÈÎºÎ×÷ÓÃ¡£
+    // ä¸è¿‡, å¯¹äºŽç”¨æˆ·æ›¾ç»æ’å…¥çš„æ°¸ä¸è¿‡æœŸçš„key, æ— è®ºæ€Žä¹ˆè°ƒæ•´schemaçš„TTLéƒ½ä¸ä¼šäº§ç”Ÿä»»ä½•ä½œç”¨ã€‚
 
     leveldb::Slice row_key;
     int64_t expire_timestamp;
@@ -42,7 +42,7 @@ bool KvCompactStrategy::Drop(const leveldb::Slice& tera_key, uint64_t n) {
 
     int64_t final_expire_timestamp = expire_timestamp
             + schema_.column_families(0).time_to_live();
-    if (final_expire_timestamp <= 0 /*ÉÏÒç,ÓÀ²»¹ýÆÚ*/
+    if (final_expire_timestamp <= 0 /*ä¸Šæº¢,æ°¸ä¸è¿‡æœŸ*/
     || final_expire_timestamp > now) {
         VLOG(11) << "[KvCompactStrategy-Not-Drop] row_key:[" << row_key.ToString()
             << "] expire_timestamp:[" << expire_timestamp

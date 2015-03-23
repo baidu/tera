@@ -7,11 +7,11 @@
  * @author yanshiguang02@baidu.com
  * @date 2014/02/05 19:55:54
  * @brief Sample of Tera API
- *  Ã¿¸ö±í¶¼ÓĞ¸öÄ¬ÈÏµÄLocalityGroup "default" ÒªÃ´±»ÓÃ»§ÏÔÊ¾´´½¨, ÒªÃ´±»ÏµÍ³´´½¨
- *  Ã¿¸ö±í¶¼ÓĞ¸öÄ³ÈËµÄColumnFamily ""
- *      ÒªÃ´±»ÓÃ»§ÏÔÊ¾´´½¨, ÒªÃ´±»ÏµÍ³´´½¨, Ä¬ÈÏÊôÓÚlg default
- *      ²»°üº¬ÁĞºÍ°æ±¾
- *  ÕâÃ´´´½¨±í:
+ *  æ¯ä¸ªè¡¨éƒ½æœ‰ä¸ªé»˜è®¤çš„LocalityGroup "default" è¦ä¹ˆè¢«ç”¨æˆ·æ˜¾ç¤ºåˆ›å»º, è¦ä¹ˆè¢«ç³»ç»Ÿåˆ›å»º
+ *  æ¯ä¸ªè¡¨éƒ½æœ‰ä¸ªæŸäººçš„ColumnFamily ""
+ *      è¦ä¹ˆè¢«ç”¨æˆ·æ˜¾ç¤ºåˆ›å»º, è¦ä¹ˆè¢«ç³»ç»Ÿåˆ›å»º, é»˜è®¤å±äºlg default
+ *      ä¸åŒ…å«åˆ—å’Œç‰ˆæœ¬
+ *  è¿™ä¹ˆåˆ›å»ºè¡¨:
  *  create table {{localitygrop:{{"lg1":{"block_size":5}},{"lg2":{"store_type":"disk"}}},{"columnfamily":{"cf1":{}}}}}
  **/
 
@@ -21,12 +21,12 @@
 
 #include "sdk/tera.h"
 
-/// ´´½¨Ò»¸ö±í¸ñ
+/// åˆ›å»ºä¸€ä¸ªè¡¨æ ¼
 int CreateTable(tera::Client* client) {
-    // ´´½¨Ò»¸ö±í¸ñµÄÃèÊö
+    // åˆ›å»ºä¸€ä¸ªè¡¨æ ¼çš„æè¿°
     tera::TableDescriptor table_desc("webdb");
 
-    // ´´½¨LocalityGroup
+    // åˆ›å»ºLocalityGroup
     tera::LocalityGroupDescriptor* lgd0 = table_desc.AddLocalityGroup("lg0");
     lgd0->SetBlockSize(128*1024);
     lgd0->SetCompress(tera::kSnappyCompress);
@@ -35,7 +35,7 @@ int CreateTable(tera::Client* client) {
     lgd1->SetBlockSize(32*1024);
     lgd1->SetCompress(tera::kSnappyCompress);
 
-    // ´´½¨ColumnFamily
+    // åˆ›å»ºColumnFamily
     tera::ColumnFamilyDescriptor* cfd1 = table_desc.AddColumnFamily("html", "lg0");
     cfd1->SetMaxVersions(5);
     cfd1->SetMinVersions(3);
@@ -55,37 +55,37 @@ int CreateTable(tera::Client* client) {
     return 0;
 }
 
-/// ĞŞ¸ÄÒ»¸ö±íµÄÄÚÈİ
+/// ä¿®æ”¹ä¸€ä¸ªè¡¨çš„å†…å®¹
 int ModifyTable(tera::Table* table) {
     tera::ErrorCode error_code;
 
-    // ĞŞ¸ÄĞèÒªÏÈ´´½¨Ò»¸ö RowMutation
+    // ä¿®æ”¹éœ€è¦å…ˆåˆ›å»ºä¸€ä¸ª RowMutation
 
     tera::RowMutation* row = table->NewRowMutation("com.baidu.www/");
-    // Ğ´Ò»¸öcolumn
+    // å†™ä¸€ä¸ªcolumn
     row->Put("title", "abc", "Baidu.com");
     row->Put("title", "abd", "Baidu.com");
     row->Put("title", "abe", "Baidu.com");
     row->Put("title", "abf", "Baidu.com");
-    row->Put("anchor", "www.hao123.com/", "°Ù¶È");
+    row->Put("anchor", "www.hao123.com/", "ç™¾åº¦");
     row->Put("html", "", time(NULL), "<html>Test content</html>");
-    // É¾³ıÒ»¸öcolumn¹ıÈ¥24Ğ¡Ê±ÄÚµÄËùÓĞ°æ±¾
+    // åˆ é™¤ä¸€ä¸ªcolumnè¿‡å»24å°æ—¶å†…çš„æ‰€æœ‰ç‰ˆæœ¬
     // row->DeleteColumns("title", "abc", time(NULL), time(NULL) - 86400);
-    // É¾³ıÒ»¸öcolumn24Ğ¡Ê±Ö®Ç°µÄËùÓĞ°æ±¾
+    // åˆ é™¤ä¸€ä¸ªcolumn24å°æ—¶ä¹‹å‰çš„æ‰€æœ‰ç‰ˆæœ¬
     row->DeleteColumns("title", "abd", time(NULL) - 86400);
-    // É¾³ıÒ»¸öcolumnµÄËùÓĞ°æ±¾
+    // åˆ é™¤ä¸€ä¸ªcolumnçš„æ‰€æœ‰ç‰ˆæœ¬
     row->DeleteColumns("title", "abe");
-    // É¾³ıÒ»¸öcolumnfamilyµÄËùÓĞÁĞ
+    // åˆ é™¤ä¸€ä¸ªcolumnfamilyçš„æ‰€æœ‰åˆ—
     row->DeleteFamily("links");
 
-    // Ìá½»ĞŞ¸Ä
+    // æäº¤ä¿®æ”¹
     table->ApplyMutation(row);
     printf("Write to table : %s\n", tera::strerr(row->GetError()));
     delete row;
 
-    // ÅúÁ¿Ìá½»ĞŞ¸Ä
+    // æ‰¹é‡æäº¤ä¿®æ”¹
     tera::RowMutation* row2 = table->NewRowMutation("com.baidu.tieba/");
-    // É¾³ıÒ»ĞĞµÄËùÓĞcolumn family
+    // åˆ é™¤ä¸€è¡Œçš„æ‰€æœ‰column family
     row2->DeleteRow();
     std::vector<tera::RowMutation*> mutation_list;
     mutation_list.push_back(row2);
@@ -96,19 +96,19 @@ int ModifyTable(tera::Table* table) {
     return 0;
 }
 
-/// É¨ÃèÒ»¸ö±í
+/// æ‰«æä¸€ä¸ªè¡¨
 int ScanTable(tera::Table* table) {
     tera::ErrorCode error_code;
 
-    // ´´½¨Ò»¸öscan±íÊö
+    // åˆ›å»ºä¸€ä¸ªscanè¡¨è¿°
     tera::ScanDescriptor scan_desc("com.baidu.");
-    // Ö»É¨Ãè°Ù¶ÈÖ÷Óò
+    // åªæ‰«æç™¾åº¦ä¸»åŸŸ
     scan_desc.SetEnd("com.baidu.~");
-    // ÉèÖÃÉ¨ÃèµÄcolumn family
+    // è®¾ç½®æ‰«æçš„column family
     scan_desc.AddColumnFamily("anchor");
-    // ÉèÖÃ×î¶à·µ»ØµÄ°æ±¾
+    // è®¾ç½®æœ€å¤šè¿”å›çš„ç‰ˆæœ¬
     scan_desc.SetMaxVersions(3);
-    // ÉèÖÃÉ¨ÃèµÄÊ±¼ä·¶Î§
+    // è®¾ç½®æ‰«æçš„æ—¶é—´èŒƒå›´
     scan_desc.SetTimeRange(time(NULL), time(NULL) - 3600);
 
     tera::ResultStream* scanner = table->Scan(scan_desc, &error_code);
@@ -181,7 +181,7 @@ int ReadRowFromTable(tera::Table* table) {
     return 0;
 }
 
-/// ÈıÎ¬±í¸ñ
+/// ä¸‰ç»´è¡¨æ ¼
 int ShowBigTable(tera::Client* client) {
     tera::ErrorCode error_code;
     // Create
@@ -202,10 +202,10 @@ int ShowBigTable(tera::Client* client) {
     return 0;
 }
 
-/// ¶şÎ¬±í¸ñ
+/// äºŒç»´è¡¨æ ¼
 int ShowSampleTable(tera::Client* client) {
     tera::ErrorCode error_code;
-    // ´´½¨±í¸ñ,²¢¹Ø±Õ¶à°æ±¾
+    // åˆ›å»ºè¡¨æ ¼,å¹¶å…³é—­å¤šç‰ˆæœ¬
     tera::TableDescriptor desc("sample_table");
     tera::ColumnFamilyDescriptor* cfd = desc.AddColumnFamily("weight");
     cfd->SetMaxVersions(0);
@@ -226,7 +226,7 @@ int ShowSampleTable(tera::Client* client) {
 }
 
 
-/// °Ñ±í¸ñ×÷ÎªÒ»¸ökvÊ¹ÓÃ
+/// æŠŠè¡¨æ ¼ä½œä¸ºä¸€ä¸ªkvä½¿ç”¨
 int ShowKv(tera::Client* client) {
     tera::ErrorCode error_code;
     // Create
@@ -246,10 +246,10 @@ int ShowKv(tera::Client* client) {
     return 0;
 };
 
-/// ÑİÊ¾³ÌĞò
+/// æ¼”ç¤ºç¨‹åº
 int main(int argc, char* argv[]) {
     tera::ErrorCode error_code;
-    // ¸ù¾İÅäÖÃ´´½¨Ò»¸öclient
+    // æ ¹æ®é…ç½®åˆ›å»ºä¸€ä¸ªclient
     tera::Client* client = tera::Client::NewClient("./tera.flag", "tera_sample", &error_code);
     if (client == NULL) {
         printf("Create tera client fail: %s\n", tera::strerr(error_code));
@@ -257,7 +257,7 @@ int main(int argc, char* argv[]) {
     }
 
     //CreateTable(client);
-    // ÑİÊ¾ÈıÖÖÊ¹ÓÃ·½Ê½
+    // æ¼”ç¤ºä¸‰ç§ä½¿ç”¨æ–¹å¼
     ShowBigTable(client);
     //ShowSampleTable(client);
     //ShowKv(client);

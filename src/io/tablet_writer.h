@@ -48,11 +48,11 @@ public:
                google::protobuf::Closure* done,
                const std::vector<int32_t>* index_list,
                Counter* done_counter, WriteRpcTimer* timer = NULL);
-    /// ³õÂÔ¼ÆËãÒ»¸örequestµÄÊı¾İ´óĞ¡
+    /// åˆç•¥è®¡ç®—ä¸€ä¸ªrequestçš„æ•°æ®å¤§å°
     static uint64_t CountRequestSize(const WriteTabletRequest& request,
                                      const std::vector<int32_t>& index_list,
                                      bool kv_only);
-    /// °ÑÒ»¸örequest´òµ½Ò»¸öleveldbbatchÀïÈ¥, requestÊÇÔ­×ÓµÄ, batchÒ²ÊÇ, so ..
+    /// æŠŠä¸€ä¸ªrequestæ‰“åˆ°ä¸€ä¸ªleveldbbatché‡Œå», requestæ˜¯åŸå­çš„, batchä¹Ÿæ˜¯, so ..
     bool BatchRequest(const WriteTabletRequest& request,
                       const std::vector<int32_t>& index_list,
                       leveldb::WriteBatch* batch,
@@ -63,9 +63,9 @@ public:
 private:
     void DoWork();
     bool SwapActiveBuffer(bool force);
-    /// ÈÎÎñÍê³É, Ö´ĞĞ»Øµ÷
+    /// ä»»åŠ¡å®Œæˆ, æ‰§è¡Œå›è°ƒ
     bool FinishTask(const WriteTask& task, StatusCode status);
-    /// ½«bufferË¢µ½´ÅÅÌ(leveldb), ²¢sync
+    /// å°†bufferåˆ·åˆ°ç£ç›˜(leveldb), å¹¶sync
     void FlushToDiskBatch(WriteTaskBuffer* task_buffer);
 
 private:
@@ -73,19 +73,19 @@ private:
 
     mutable Mutex m_task_mutex;
     mutable Mutex m_status_mutex;
-    AutoResetEvent m_write_event;       ///< ÓĞÊı¾İ¿ÉĞ´
-    AutoResetEvent m_worker_done_event; ///< workerÍË³ö
+    AutoResetEvent m_write_event;       ///< æœ‰æ•°æ®å¯å†™
+    AutoResetEvent m_worker_done_event; ///< workeré€€å‡º
 
     bool m_stopped;
     common::Thread m_thread;
 
-    WriteTaskBuffer* m_active_buffer;   ///< Ç°Ì¨buffer,½ÓÊÕĞ´ÇëÇó
-    WriteTaskBuffer* m_sealed_buffer;   ///< ºóÌ¨buffer,µÈ´ıË¢µ½´ÅÅÌ
+    WriteTaskBuffer* m_active_buffer;   ///< å‰å°buffer,æ¥æ”¶å†™è¯·æ±‚
+    WriteTaskBuffer* m_sealed_buffer;   ///< åå°buffer,ç­‰å¾…åˆ·åˆ°ç£ç›˜
     int64_t m_sync_timestamp;
 
-    bool m_active_buffer_instant;      ///< active_buffer°üº¬instantÇëÇó
-    uint64_t m_active_buffer_size;      ///< active_bufferµÄÊı¾İ´óĞ¡
-    bool m_tablet_busy;                 ///< tablet´¦ÓÚÃ¦Âµ×´Ì¬
+    bool m_active_buffer_instant;      ///< active_bufferåŒ…å«instantè¯·æ±‚
+    uint64_t m_active_buffer_size;      ///< active_bufferçš„æ•°æ®å¤§å°
+    bool m_tablet_busy;                 ///< tabletå¤„äºå¿™ç¢ŒçŠ¶æ€
 };
 
 } // namespace tabletnode

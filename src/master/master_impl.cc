@@ -2277,7 +2277,7 @@ void MasterImpl::DelSnapshotCallback(TablePtr table,
                 << StatusCodeToString(status) << ", " << tablets[0] << "...";
         }
         if (retry_times <= 0) {
-            /// Ğ´metaÊ§°Ü»áµ¼ÖÂÄÚ´æÓëmeta²»Ò»ÖÂ, Ã»´¦Àí
+            /// å†™metaå¤±è´¥ä¼šå¯¼è‡´å†…å­˜ä¸metaä¸ä¸€è‡´, æ²¡å¤„ç†
             abort();
             rpc_response->set_status(kMetaTabletError);
             rpc_done->Run();
@@ -2497,7 +2497,7 @@ void MasterImpl::ReleaseSnpashot(TabletPtr tablet, uint64_t snapshot) {
 void MasterImpl::ReleaseSnapshotCallback(ReleaseSnapshotRequest* request,
                                          ReleaseSnapshotResponse* response,
                                          bool failed, int error_code) {
-    /// É¾µôÉ¾²»µôÎŞËùÎ½, ²»¼Æ½Ï~
+    /// åˆ æ‰åˆ ä¸æ‰æ— æ‰€è°“, ä¸è®¡è¾ƒ~
 }
 
 void MasterImpl::ClearUnusedSnapshots(TabletPtr tablet, const TabletMeta& meta) {
