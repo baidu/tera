@@ -12,6 +12,7 @@
   * tablet合并过程
   * Master在什么情况下会调度tablet的分裂和合并
   * Localitygroup怎么实现一致性的
+  * 三维数据模型是怎么映射到key-value模型的
   * tera都依赖哪些系统，借助这些系统实现了什么功能。
   * Tera和HBase的异同，有哪些优势和不足
 
