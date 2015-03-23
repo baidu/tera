@@ -14,7 +14,7 @@
 
 namespace tera {
 
-/// ²Ù×÷´íÎóÂë
+/// æ“ä½œé”™è¯¯ç 
 class ErrorCode {
 public:
     enum ErrorCodeType {
@@ -39,7 +39,7 @@ private:
     std::string _reason;
 };
 
-/// ½«tera´íÎóÂğ×ª»¯Îª¿É¶Á×Ö·û´®
+/// å°†teraé”™è¯¯å—è½¬åŒ–ä¸ºå¯è¯»å­—ç¬¦ä¸²
 const char* strerr(ErrorCode error_code);
 
 enum CompressType {
@@ -53,7 +53,7 @@ enum StoreType {
     kInMemory = 2,
 };
 
-/// RawKeyÆ´×°Ä£Ê½£¬kReadableĞÔÄÜ½Ï¸ß£¬µ«keyÖĞ²»ÔÊĞí'\0'£¬kBinaryĞÔÄÜµÍÒ»Ğ©£¬ÔÊĞíËùÓĞ×Ö·û
+/// RawKeyæ‹¼è£…æ¨¡å¼ï¼ŒkReadableæ€§èƒ½è¾ƒé«˜ï¼Œä½†keyä¸­ä¸å…è®¸'\0'ï¼ŒkBinaryæ€§èƒ½ä½ä¸€äº›ï¼Œå…è®¸æ‰€æœ‰å­—ç¬¦
 enum RawKeyType {
     kReadable = 0,
     kBinary = 1,
@@ -65,7 +65,7 @@ extern const int64_t kOldestTimestamp;
 
 /// ACL
 struct ACL {
-    int32_t owner;  ///< ËùÊôÓÃ»§id
+    int32_t owner;  ///< æ‰€å±ç”¨æˆ·id
     int32_t role;
     int64_t acl;
 };
@@ -76,18 +76,18 @@ public:
     virtual ~ColumnFamilyDescriptor() {}
     virtual int32_t Id() const = 0;
     virtual const std::string& Name() const = 0;
-    /// ÊôÓÚÄÄ¸ölg, ²»¿É¸ü¸Ä
+    /// å±äºå“ªä¸ªlg, ä¸å¯æ›´æ”¹
     virtual const std::string& LocalityGroup() const = 0;
-    /// ÀúÊ·°æ±¾±£ÁôÊ±¼ä, ²»ÉèÖÃÊ±Îª0£¬ ±íÊ¾ÎŞÏŞ´óÓÀ¾Ã±£´æ
+    /// å†å²ç‰ˆæœ¬ä¿ç•™æ—¶é—´, ä¸è®¾ç½®æ—¶ä¸º0ï¼Œ è¡¨ç¤ºæ— é™å¤§æ°¸ä¹…ä¿å­˜
     virtual void SetTimeToLive(int32_t ttl) = 0;
     virtual int32_t TimeToLive() const = 0;
-    /// ÔÚTTLÄÚ,×î¶à´æ´¢µÄ°æ±¾Êı, Ä¬ÈÏ3, ÉèÎª0Ê±, ¹Ø±Õ¶à°æ±¾
+    /// åœ¨TTLå†…,æœ€å¤šå­˜å‚¨çš„ç‰ˆæœ¬æ•°, é»˜è®¤3, è®¾ä¸º0æ—¶, å…³é—­å¤šç‰ˆæœ¬
     virtual void SetMaxVersions(int32_t max_versions) = 0;
     virtual int32_t MaxVersions() const = 0;
-    /// ×îÉÙ´æ´¢µÄ°æ±¾Êı,¼´Ê¹³¬³öTTL,Ò²ÖÁÉÙ±£Áômin_versions¸ö°æ±¾
+    /// æœ€å°‘å­˜å‚¨çš„ç‰ˆæœ¬æ•°,å³ä½¿è¶…å‡ºTTL,ä¹Ÿè‡³å°‘ä¿ç•™min_versionsä¸ªç‰ˆæœ¬
     virtual void SetMinVersions(int32_t min_versions) = 0;
     virtual int32_t MinVersions() const = 0;
-    /// ´æ´¢ÏŞ¶î, MBytes
+    /// å­˜å‚¨é™é¢, MBytes
     virtual void SetDiskQuota(int64_t quota) = 0;
     virtual int64_t DiskQuota() const = 0;
     /// ACL
@@ -102,7 +102,7 @@ private:
     void operator=(const ColumnFamilyDescriptor&);
 };
 
-/// ¾Ö²¿ĞÔÈº×éÃèÊö
+/// å±€éƒ¨æ€§ç¾¤ç»„æè¿°
 class LocalityGroupDescriptor {
 public:
     LocalityGroupDescriptor() {}
@@ -142,34 +142,34 @@ class TableDescImpl;
 
 class TableDescriptor {
 public:
-    /// ±í¸ñÃû×Ö½öÔÊĞíÊ¹ÓÃ×ÖÄ¸¡¢Êı×ÖºÍÏÂ»®Ïß¹¹Ôì,³¤¶È²»³¬¹ı256£»Ä¬ÈÏÊÇ·Çkv±í
+    /// è¡¨æ ¼åå­—ä»…å…è®¸ä½¿ç”¨å­—æ¯ã€æ•°å­—å’Œä¸‹åˆ’çº¿æ„é€ ,é•¿åº¦ä¸è¶…è¿‡256ï¼›é»˜è®¤æ˜¯ékvè¡¨
     TableDescriptor(const std::string& tb_name, bool is_kv = false);
 
     ~TableDescriptor();
 
     std::string TableName() const;
 
-    /// Ôö¼ÓÒ»¸ölocalitygroup, Ãû×Ö½öÔÊĞíÊ¹ÓÃ×ÖÄ¸¡¢Êı×ÖºÍÏÂ»®Ïß¹¹Ôì,³¤¶È²»³¬¹ı256
+    /// å¢åŠ ä¸€ä¸ªlocalitygroup, åå­—ä»…å…è®¸ä½¿ç”¨å­—æ¯ã€æ•°å­—å’Œä¸‹åˆ’çº¿æ„é€ ,é•¿åº¦ä¸è¶…è¿‡256
     LocalityGroupDescriptor* AddLocalityGroup(const std::string& lg_name);
     LocalityGroupDescriptor* DefaultLocalityGroup();
-    /// É¾³ıÒ»¸ölocalitygroup, µ±»¹ÓĞcfÊôÓÚÕâ¸ölgÊ±, »áÉ¾³ıÊ§°Ü.
+    /// åˆ é™¤ä¸€ä¸ªlocalitygroup, å½“è¿˜æœ‰cfå±äºè¿™ä¸ªlgæ—¶, ä¼šåˆ é™¤å¤±è´¥.
     bool RemoveLocalityGroup(const std::string& lg_name);
-    /// »ñÈ¡id¶ÔÓ¦µÄlocalitygroup
+    /// è·å–idå¯¹åº”çš„localitygroup
     const LocalityGroupDescriptor* LocalityGroup(int32_t id) const;
     const LocalityGroupDescriptor* LocalityGroup(const std::string& lg_name) const;
-    /// LGÊıÁ¿
+    /// LGæ•°é‡
     int32_t LocalityGroupNum() const;
 
-    /// Ôö¼ÓÒ»¸öcolumnfamily, Ãû×Ö½öÔÊĞíÊ¹ÓÃ×ÖÄ¸¡¢Êı×ÖºÍÏÂ»®Ïß¹¹Ôì,³¤¶È²»³¬¹ı256
+    /// å¢åŠ ä¸€ä¸ªcolumnfamily, åå­—ä»…å…è®¸ä½¿ç”¨å­—æ¯ã€æ•°å­—å’Œä¸‹åˆ’çº¿æ„é€ ,é•¿åº¦ä¸è¶…è¿‡256
     ColumnFamilyDescriptor* AddColumnFamily(const std::string& cf_name,
                                             const std::string& lg_name = "lg0");
-    /// É¾³ıÒ»¸öcolumnfamily
+    /// åˆ é™¤ä¸€ä¸ªcolumnfamily
     void RemoveColumnFamily(const std::string& cf_name);
-    /// »ñÈ¡id¶ÔÓ¦µÄCF
+    /// è·å–idå¯¹åº”çš„CF
     const ColumnFamilyDescriptor* ColumnFamily(int32_t id) const;
     const ColumnFamilyDescriptor* ColumnFamily(const std::string& cf_name) const;
     ColumnFamilyDescriptor* DefaultColumnFamily();
-    /// CFÊıÁ¿
+    /// CFæ•°é‡
     int32_t ColumnFamilyNum() const;
 
     /// Raw Key Mode
@@ -182,13 +182,13 @@ public:
     void SetMergeSize(int64_t size);
     int64_t MergeSize() const;
 
-    /// ²åÈësnapshot
+    /// æ’å…¥snapshot
     int32_t AddSnapshot(uint64_t snapshot);
-    /// »ñÈ¡snapshot
+    /// è·å–snapshot
     uint64_t Snapshot(int32_t id) const;
-    /// SnapshotÊıÁ¿
+    /// Snapshotæ•°é‡
     int32_t SnapshotNum() const;
-    /// ÊÇ·ñÎªkv±í
+    /// æ˜¯å¦ä¸ºkvè¡¨
     void SetKvOnly();
     bool IsKv() const;
 
@@ -198,23 +198,23 @@ private:
     TableDescImpl* _impl;
 };
 
-/// ´Ó±í¸ñÀï¶ÁÈ¡µÄ½á¹ûÁ÷
+/// ä»è¡¨æ ¼é‡Œè¯»å–çš„ç»“æœæµ
 class ResultStream {
 public:
     virtual bool LookUp(const std::string& row_key) = 0;
-    /// ÊÇ·ñµ½´ï½áÊø±ê¼Ç
+    /// æ˜¯å¦åˆ°è¾¾ç»“æŸæ ‡è®°
     virtual bool Done() = 0;
-    /// µü´úÏÂÒ»¸öcell
+    /// è¿­ä»£ä¸‹ä¸€ä¸ªcell
     virtual void Next() = 0;
     /// RowKey
     virtual std::string RowName() const = 0;
-    /// Column(¸ñÊ½Îªcf:qualifier)
+    /// Column(æ ¼å¼ä¸ºcf:qualifier)
     virtual std::string ColumnName() const = 0;
     /// Column family
     virtual std::string Family() const = 0;
     /// Qualifier
     virtual std::string Qualifier() const = 0;
-    /// Cell¶ÔÓ¦µÄÊ±¼ä´Á
+    /// Cellå¯¹åº”çš„æ—¶é—´æˆ³
     virtual int64_t Timestamp() const = 0;
     /// Value
     virtual std::string Value() const = 0;
@@ -229,35 +229,35 @@ private:
 class ScanDescImpl;
 class ScanDescriptor {
 public:
-    /// Í¨¹ıÆğÊ¼ĞĞ¹¹Ôì
+    /// é€šè¿‡èµ·å§‹è¡Œæ„é€ 
     ScanDescriptor(const std::string& rowkey);
     ~ScanDescriptor();
-    /// ÉèÖÃscanµÄ½áÊøĞĞ(²»°üº¬ÔÚ·µ»Ø½á¹ûÄÚ), ·Ç±ØÒª
+    /// è®¾ç½®scançš„ç»“æŸè¡Œ(ä¸åŒ…å«åœ¨è¿”å›ç»“æœå†…), éå¿…è¦
     void SetEnd(const std::string& rowkey);
-    /// ÉèÖÃÒª¶ÁÈ¡µÄcf, ¿ÉÒÔÌí¼Ó¶à¸ö
+    /// è®¾ç½®è¦è¯»å–çš„cf, å¯ä»¥æ·»åŠ å¤šä¸ª
     void AddColumnFamily(const std::string& cf);
-    /// ÉèÖÃÒª¶ÁÈ¡µÄcolumn(cf:qualifier)
+    /// è®¾ç½®è¦è¯»å–çš„column(cf:qualifier)
     void AddColumn(const std::string& cf, const std::string& qualifier);
-    /// ÉèÖÃ×î¶à·µ»ØµÄ°æ±¾Êı
+    /// è®¾ç½®æœ€å¤šè¿”å›çš„ç‰ˆæœ¬æ•°
     void SetMaxVersions(int32_t versions);
-    /// ÉèÖÃ·µ»Ø°æ±¾µÄÊ±¼ä·¶Î§
+    /// è®¾ç½®è¿”å›ç‰ˆæœ¬çš„æ—¶é—´èŒƒå›´
     void SetTimeRange(int64_t ts_end, int64_t ts_start);
-    /// ÉèÖÃ¹ıÂË±í´ïÊ½£¨½öÖ§³ÖAND£©
+    /// è®¾ç½®è¿‡æ»¤è¡¨è¾¾å¼ï¼ˆä»…æ”¯æŒANDï¼‰
     bool SetFilterString(const std::string& filter_string);
     typedef bool (*ValueConverter)(const std::string& in,
                                    const std::string& type,
                                    std::string* out);
-    /// ÉèÖÃ×Ô¶¨ÒåÀàĞÍ×ª»»º¯Êı£¨¶¨Òå´øÀàĞÍ¹ıÂËÊ±Ê¹ÓÃ£©
+    /// è®¾ç½®è‡ªå®šä¹‰ç±»å‹è½¬æ¢å‡½æ•°ï¼ˆå®šä¹‰å¸¦ç±»å‹è¿‡æ»¤æ—¶ä½¿ç”¨ï¼‰
     void SetValueConverter(ValueConverter converter);
 
     void SetSnapshot(uint64_t snapshot_id);
-    /// ÉèÖÃÔ¤¶ÁµÄbuffer´óĞ¡, Ä¬ÈÏ64K
+    /// è®¾ç½®é¢„è¯»çš„bufferå¤§å°, é»˜è®¤64K
     void SetBufferSize(int64_t buf_size);
 
-    /// ÉèÖÃasync, È±Ê¡true
+    /// è®¾ç½®async, ç¼ºçœtrue
     void SetAsync(bool async);
 
-    /// ÅĞ¶Ïµ±Ç°scanÊÇ·ñÊÇasync
+    /// åˆ¤æ–­å½“å‰scanæ˜¯å¦æ˜¯async
     bool IsAsync() const;
 
     ScanDescImpl* GetImpl() const;
@@ -272,7 +272,7 @@ class RowLock {
 };
 
 class Table;
-/// ĞŞ¸Ä²Ù×÷
+/// ä¿®æ”¹æ“ä½œ
 class RowMutation {
 public:
     enum Type {
@@ -301,85 +301,85 @@ public:
 
     virtual void Reset(const std::string& row_key) = 0;
 
-    /// ĞŞ¸ÄÖ¸¶¨ÁĞ
+    /// ä¿®æ”¹æŒ‡å®šåˆ—
     virtual void Put(const std::string& family, const std::string& qualifier,
                      const std::string& value) = 0;
-    /// ´øTTLµÄĞŞ¸ÄÒ»¸öÁĞ
+    /// å¸¦TTLçš„ä¿®æ”¹ä¸€ä¸ªåˆ—
     virtual void Put(const std::string& family, const std::string& qualifier,
                      const std::string& value, int32_t ttl) = 0;
-    // Ô­×Ó¼ÓÒ»¸öCell
+    // åŸå­åŠ ä¸€ä¸ªCell
     virtual void Add(const std::string& family, const std::string& qualifier,
                      const int64_t delta) = 0;
 
-    // Ô­×Ó²Ù×÷£ºÈç¹û²»´æÔÚ²ÅÄÜPut³É¹¦
+    // åŸå­æ“ä½œï¼šå¦‚æœä¸å­˜åœ¨æ‰èƒ½PutæˆåŠŸ
     virtual void PutIfAbsent(const std::string& family,
                              const std::string& qualifier,
                              const std::string& value) = 0;
 
-    /// Ô­×Ó²Ù×÷£º×·¼ÓÄÚÈİµ½Ò»¸öCell
+    /// åŸå­æ“ä½œï¼šè¿½åŠ å†…å®¹åˆ°ä¸€ä¸ªCell
     virtual void Append(const std::string& family, const std::string& qualifier,
                         const std::string& value) = 0;
 
-    /// ĞŞ¸ÄÒ»¸öÁĞµÄÌØ¶¨°æ±¾
+    /// ä¿®æ”¹ä¸€ä¸ªåˆ—çš„ç‰¹å®šç‰ˆæœ¬
     virtual void Put(const std::string& family, const std::string& qualifier,
                      int64_t timestamp, const std::string& value) = 0;
-    /// ´øTTLµÄĞŞ¸ÄÒ»¸öÁĞµÄÌØ¶¨°æ±¾
+    /// å¸¦TTLçš„ä¿®æ”¹ä¸€ä¸ªåˆ—çš„ç‰¹å®šç‰ˆæœ¬
     virtual void Put(const std::string& family, const std::string& qualifier,
                      int64_t timestamp, const std::string& value, int32_t ttl) = 0;
-    /// ĞŞ¸ÄÄ¬ÈÏÁĞ
+    /// ä¿®æ”¹é»˜è®¤åˆ—
     virtual void Put(const std::string& value) = 0;
 
-    /// ´øTTLµÄĞŞ¸ÄÄ¬ÈÏÁĞ
+    /// å¸¦TTLçš„ä¿®æ”¹é»˜è®¤åˆ—
     virtual void Put(const std::string& value, int32_t ttl) = 0;
 
-    /// ĞŞ¸ÄÄ¬ÈÏÁĞµÄÌØ¶¨°æ±¾
+    /// ä¿®æ”¹é»˜è®¤åˆ—çš„ç‰¹å®šç‰ˆæœ¬
     virtual void Put(int64_t timestamp, const std::string& value) = 0;
 
-    /// É¾³ıÒ»¸öÁĞµÄ×îĞÂ°æ±¾
+    /// åˆ é™¤ä¸€ä¸ªåˆ—çš„æœ€æ–°ç‰ˆæœ¬
     virtual void DeleteColumn(const std::string& family,
                               const std::string& qualifier) = 0;
-    /// É¾³ıÒ»¸öÁĞµÄÖ¸¶¨°æ±¾
+    /// åˆ é™¤ä¸€ä¸ªåˆ—çš„æŒ‡å®šç‰ˆæœ¬
     virtual void DeleteColumn(const std::string& family,
                               const std::string& qualifier,
                               int64_t timestamp) = 0;
-    /// É¾³ıÒ»¸öÁĞµÄÈ«²¿°æ±¾
+    /// åˆ é™¤ä¸€ä¸ªåˆ—çš„å…¨éƒ¨ç‰ˆæœ¬
     virtual void DeleteColumns(const std::string& family,
                                const std::string& qualifier) = 0;
-    /// É¾³ıÒ»¸öÁĞµÄÖ¸¶¨·¶Î§°æ±¾
+    /// åˆ é™¤ä¸€ä¸ªåˆ—çš„æŒ‡å®šèŒƒå›´ç‰ˆæœ¬
     virtual void DeleteColumns(const std::string& family,
                                const std::string& qualifier,
                                int64_t timestamp) = 0;
-    /// É¾³ıÒ»¸öÁĞ×åµÄËùÓĞÁĞµÄÈ«²¿°æ±¾
+    /// åˆ é™¤ä¸€ä¸ªåˆ—æ—çš„æ‰€æœ‰åˆ—çš„å…¨éƒ¨ç‰ˆæœ¬
     virtual void DeleteFamily(const std::string& family) = 0;
-    /// É¾³ıÒ»¸öÁĞ×åµÄËùÓĞÁĞµÄÖ¸¶¨·¶Î§°æ±¾
+    /// åˆ é™¤ä¸€ä¸ªåˆ—æ—çš„æ‰€æœ‰åˆ—çš„æŒ‡å®šèŒƒå›´ç‰ˆæœ¬
     virtual void DeleteFamily(const std::string& family, int64_t timestamp) = 0;
-    /// É¾³ıÕûĞĞµÄÈ«²¿Êı¾İ
+    /// åˆ é™¤æ•´è¡Œçš„å…¨éƒ¨æ•°æ®
     virtual void DeleteRow() = 0;
-    /// É¾³ıÕûĞĞµÄÖ¸¶¨·¶Î§°æ±¾
+    /// åˆ é™¤æ•´è¡Œçš„æŒ‡å®šèŒƒå›´ç‰ˆæœ¬
     virtual void DeleteRow(int64_t timestamp) = 0;
 
-    /// ĞŞ¸ÄËø×¡µÄĞĞ, ±ØĞëÌá¹©ĞĞËø
+    /// ä¿®æ”¹é”ä½çš„è¡Œ, å¿…é¡»æä¾›è¡Œé”
     virtual void SetLock(RowLock* rowlock) = 0;
-    /// ÉèÖÃ³¬Ê±Ê±¼ä(Ö»Ó°Ïìµ±Ç°²Ù×÷,²»Ó°ÏìTable::SetWriteTimeoutÉèÖÃµÄÄ¬ÈÏĞ´³¬Ê±)
+    /// è®¾ç½®è¶…æ—¶æ—¶é—´(åªå½±å“å½“å‰æ“ä½œ,ä¸å½±å“Table::SetWriteTimeoutè®¾ç½®çš„é»˜è®¤å†™è¶…æ—¶)
     virtual void SetTimeOut(int64_t timeout_ms) = 0;
-    /// ·µ»Ø³¬Ê±Ê±¼ä
+    /// è¿”å›è¶…æ—¶æ—¶é—´
     virtual int64_t TimeOut() = 0;
-    /// ÉèÖÃÒì²½»Øµ÷, ²Ù×÷»áÒì²½·µ»Ø
+    /// è®¾ç½®å¼‚æ­¥å›è°ƒ, æ“ä½œä¼šå¼‚æ­¥è¿”å›
     typedef void (*Callback)(RowMutation* param);
     virtual void SetCallBack(Callback callback) = 0;
-    // ·µ»ØÒì²½»Øµ÷º¯Êı
+    // è¿”å›å¼‚æ­¥å›è°ƒå‡½æ•°
     virtual Callback GetCallBack() = 0;
-    /// ÉèÖÃÓÃ»§ÉÏÏÂÎÄ£¬¿ÉÔÚ»Øµ÷º¯ÊıÖĞ»ñÈ¡
+    /// è®¾ç½®ç”¨æˆ·ä¸Šä¸‹æ–‡ï¼Œå¯åœ¨å›è°ƒå‡½æ•°ä¸­è·å–
     virtual void SetContext(void* context) = 0;
-    /// »ñµÃÓÃ»§ÉÏÏÂÎÄ
+    /// è·å¾—ç”¨æˆ·ä¸Šä¸‹æ–‡
     virtual void* GetContext() = 0;
-    /// »ñµÃ½á¹û´íÎóÂë
+    /// è·å¾—ç»“æœé”™è¯¯ç 
     virtual const ErrorCode& GetError() = 0;
-    /// ÊÇ·ñÒì²½²Ù×÷
+    /// æ˜¯å¦å¼‚æ­¥æ“ä½œ
     virtual bool IsAsync() = 0;
-    /// Òì²½²Ù×÷ÊÇ·ñÍê³É
+    /// å¼‚æ­¥æ“ä½œæ˜¯å¦å®Œæˆ
     virtual bool IsFinished() const = 0;
-    /// mutationÊıÁ¿
+    /// mutationæ•°é‡
     virtual uint32_t MutationNum() = 0;
     virtual uint32_t Size() = 0;
     virtual uint32_t RetryTimes() = 0;
@@ -391,25 +391,25 @@ private:
 };
 
 class RowReaderImpl;
-/// ¶ÁÈ¡²Ù×÷
+/// è¯»å–æ“ä½œ
 class RowReader {
 public:
-    /// ±£´æÓÃ»§¶ÁÈ¡ÁĞµÄÇëÇó£¬¸ñÊ½Îªmap<family, set<qualifier> >£¬Èômap´óĞ¡Îª0£¬±íÊ¾¶ÁÈ¡ÕûĞĞ
+    /// ä¿å­˜ç”¨æˆ·è¯»å–åˆ—çš„è¯·æ±‚ï¼Œæ ¼å¼ä¸ºmap<family, set<qualifier> >ï¼Œè‹¥mapå¤§å°ä¸º0ï¼Œè¡¨ç¤ºè¯»å–æ•´è¡Œ
     typedef std::map<std::string, std::set<std::string> >ReadColumnList;
 
     RowReader();
     virtual ~RowReader();
-    /// ·µ»Ørow key
+    /// è¿”å›row key
     virtual const std::string& RowName() = 0;
-    /// ÉèÖÃ¶ÁÈ¡ÌØ¶¨°æ±¾
+    /// è®¾ç½®è¯»å–ç‰¹å®šç‰ˆæœ¬
     virtual void SetTimestamp(int64_t ts) = 0;
-    /// ·µ»Ø¶ÁÈ¡Ê±¼ä´Á
+    /// è¿”å›è¯»å–æ—¶é—´æˆ³
     virtual int64_t GetTimestamp() = 0;
-    /// ÉèÖÃ¿ìÕÕid
+    /// è®¾ç½®å¿«ç…§id
     virtual void SetSnapshot(uint64_t snapshot_id) = 0;
-    /// È¡³ö¿ìÕÕid
+    /// å–å‡ºå¿«ç…§id
     virtual uint64_t GetSnapshot() = 0;
-    /// ¶ÁÈ¡Õû¸öfamily
+    /// è¯»å–æ•´ä¸ªfamily
     virtual void AddColumnFamily(const std::string& family) = 0;
     virtual void AddColumn(const std::string& cf_name,
                            const std::string& qualifier) = 0;
@@ -417,24 +417,24 @@ public:
     virtual void SetTimeRange(int64_t ts_start, int64_t ts_end) = 0;
     virtual void SetMaxVersions(uint32_t max_version) = 0;
     virtual void SetTimeOut(int64_t timeout_ms) = 0;
-    /// ÉèÖÃÒì²½»Øµ÷, ²Ù×÷»áÒì²½·µ»Ø
+    /// è®¾ç½®å¼‚æ­¥å›è°ƒ, æ“ä½œä¼šå¼‚æ­¥è¿”å›
     typedef void (*Callback)(RowReader* param);
     virtual void SetCallBack(Callback callback) = 0;
-    /// ÉèÖÃÓÃ»§ÉÏÏÂÎÄ£¬¿ÉÔÚ»Øµ÷º¯ÊıÖĞ»ñÈ¡
+    /// è®¾ç½®ç”¨æˆ·ä¸Šä¸‹æ–‡ï¼Œå¯åœ¨å›è°ƒå‡½æ•°ä¸­è·å–
     virtual void SetContext(void* context) = 0;
     virtual void* GetContext() = 0;
-    /// ÉèÖÃÒì²½·µ»Ø
+    /// è®¾ç½®å¼‚æ­¥è¿”å›
     virtual void SetAsync() = 0;
-    /// Òì²½²Ù×÷ÊÇ·ñÍê³É
+    /// å¼‚æ­¥æ“ä½œæ˜¯å¦å®Œæˆ
     virtual bool IsFinished() const = 0;
 
-    /// »ñµÃ½á¹û´íÎóÂë
+    /// è·å¾—ç»“æœé”™è¯¯ç 
     virtual ErrorCode GetError() = 0;
-    /// ÊÇ·ñµ½´ï½áÊø±ê¼Ç
+    /// æ˜¯å¦åˆ°è¾¾ç»“æŸæ ‡è®°
     virtual bool Done() = 0;
-    /// µü´úÏÂÒ»¸öcell
+    /// è¿­ä»£ä¸‹ä¸€ä¸ªcell
     virtual void Next() = 0;
-    /// ¶ÁÈ¡µÄ½á¹û
+    /// è¯»å–çš„ç»“æœ
     virtual std::string Value() = 0;
     virtual std::string Family() = 0;
     virtual std::string ColumnName() = 0;
@@ -443,7 +443,7 @@ public:
 
     virtual uint32_t GetReadColumnNum() = 0;
     virtual const ReadColumnList& GetReadColumnList() = 0;
-    /// ½«½á¹û×ª´æµ½Ò»¸östd::mapÖĞ, ¸ñÊ½Îª: map<column, map<timestamp, value>>
+    /// å°†ç»“æœè½¬å­˜åˆ°ä¸€ä¸ªstd::mapä¸­, æ ¼å¼ä¸º: map<column, map<timestamp, value>>
     typedef std::map< std::string, std::map<int64_t, std::string> > Map;
     virtual void ToMap(Map* rowmap) = 0;
 
@@ -457,63 +457,63 @@ struct TableInfo {
     std::string status;
 };
 
-/// tablet·Ö²¼ĞÅÏ¢
+/// tabletåˆ†å¸ƒä¿¡æ¯
 struct TabletInfo {
-    std::string table_name;     ///< ±íÃû
-    std::string path;           ///< Â·¾¶
-    std::string server_addr;    ///< tabletserverµØÖ·, ip:port¸ñÊ½
-    std::string start_key;      ///< ÆğÊ¼rowkey(°üº¬)
-    std::string end_key;        ///< ÖÕÖ¹rowkey(²»°üº¬)
-    int64_t data_size;          ///< Êı¾İÁ¿, Îª¹À¼ÆÖµ
+    std::string table_name;     ///< è¡¨å
+    std::string path;           ///< è·¯å¾„
+    std::string server_addr;    ///< tabletserveråœ°å€, ip:portæ ¼å¼
+    std::string start_key;      ///< èµ·å§‹rowkey(åŒ…å«)
+    std::string end_key;        ///< ç»ˆæ­¢rowkey(ä¸åŒ…å«)
+    int64_t data_size;          ///< æ•°æ®é‡, ä¸ºä¼°è®¡å€¼
     std::string status;
 };
 
-/// ±í½Ó¿Ú
+/// è¡¨æ¥å£
 class Table {
 public:
     Table() {}
     virtual ~Table() {}
-    /// ·µ»ØÒ»¸öĞÂµÄRowMutation
+    /// è¿”å›ä¸€ä¸ªæ–°çš„RowMutation
     virtual RowMutation* NewRowMutation(const std::string& row_key) = 0;
-    /// ·µ»ØÒ»¸öĞÂµÄRowReader
+    /// è¿”å›ä¸€ä¸ªæ–°çš„RowReader
     virtual RowReader* NewRowReader(const std::string& row_key) = 0;
-    /// Ìá½»Ò»¸öĞŞ¸Ä²Ù×÷, Í¬²½²Ù×÷·µ»ØÊÇ·ñ³É¹¦, Òì²½²Ù×÷ÓÀÔ¶·µ»Øtrue
+    /// æäº¤ä¸€ä¸ªä¿®æ”¹æ“ä½œ, åŒæ­¥æ“ä½œè¿”å›æ˜¯å¦æˆåŠŸ, å¼‚æ­¥æ“ä½œæ°¸è¿œè¿”å›true
     virtual void ApplyMutation(RowMutation* row_mu) = 0;
-    /// Ìá½»Ò»ÅúĞŞ¸Ä²Ù×÷, ¶àĞĞÖ®¼ä²»±£Ö¤Ô­×ÓĞÔ, Í¨¹ıRowMutationµÄGetError»ñÈ¡¸÷×ÔµÄ·µ»ØÂë
+    /// æäº¤ä¸€æ‰¹ä¿®æ”¹æ“ä½œ, å¤šè¡Œä¹‹é—´ä¸ä¿è¯åŸå­æ€§, é€šè¿‡RowMutationçš„GetErrorè·å–å„è‡ªçš„è¿”å›ç 
     virtual void ApplyMutation(const std::vector<RowMutation*>& row_mu_list) = 0;
-    /// ĞŞ¸ÄÖ¸¶¨ÁĞ, µ±×÷Îªkv»ò¶şÎ¬±í¸ñÊ¹ÓÃÊ±µÄ±ã½İ½Ó¿Ú
+    /// ä¿®æ”¹æŒ‡å®šåˆ—, å½“ä½œä¸ºkvæˆ–äºŒç»´è¡¨æ ¼ä½¿ç”¨æ—¶çš„ä¾¿æ·æ¥å£
     virtual bool Put(const std::string& row_key, const std::string& family,
                      const std::string& qualifier, const std::string& value,
                      ErrorCode* err) = 0;
-    /// ´øTTLĞŞ¸ÄÖ¸¶¨ÁĞ, µ±×÷Îªkv»ò¶şÎ¬±í¸ñÊ¹ÓÃÊ±µÄ±ã½İ½Ó¿Ú
+    /// å¸¦TTLä¿®æ”¹æŒ‡å®šåˆ—, å½“ä½œä¸ºkvæˆ–äºŒç»´è¡¨æ ¼ä½¿ç”¨æ—¶çš„ä¾¿æ·æ¥å£
     virtual bool Put(const std::string& row_key, const std::string& family,
                      const std::string& qualifier, const std::string& value,
                      int32_t ttl, ErrorCode* err) = 0;
-    /// ´øTTLĞŞ¸ÄÖ¸¶¨ÁĞµÄÖ¸¶¨°æ±¾, µ±×÷Îªkv»ò¶şÎ¬±í¸ñÊ¹ÓÃÊ±µÄ±ã½İ½Ó¿Ú
+    /// å¸¦TTLä¿®æ”¹æŒ‡å®šåˆ—çš„æŒ‡å®šç‰ˆæœ¬, å½“ä½œä¸ºkvæˆ–äºŒç»´è¡¨æ ¼ä½¿ç”¨æ—¶çš„ä¾¿æ·æ¥å£
     virtual bool Put(const std::string& row_key, const std::string& family,
                      const std::string& qualifier, const std::string& value,
                      int64_t timestamp, int32_t ttl, ErrorCode* err) = 0;
-    /// Ô­×Ó¼ÓÒ»¸öCell
+    /// åŸå­åŠ ä¸€ä¸ªCell
     virtual bool Add(const std::string& row_key, const std::string& family,
                      const std::string& qualifier, int64_t delta,
                      ErrorCode* err) = 0;
 
-    /// Ô­×Ó²Ù×÷£ºÈç¹û²»´æÔÚ²ÅÄÜPut³É¹¦
+    /// åŸå­æ“ä½œï¼šå¦‚æœä¸å­˜åœ¨æ‰èƒ½PutæˆåŠŸ
     virtual bool PutIfAbsent(const std::string& row_key,
                              const std::string& family,
                              const std::string& qualifier,
                              const std::string& value,
                              ErrorCode* err) = 0;
 
-    /// Ô­×Ó²Ù×÷£º×·¼ÓÄÚÈİµ½Ò»¸öCell
+    /// åŸå­æ“ä½œï¼šè¿½åŠ å†…å®¹åˆ°ä¸€ä¸ªCell
     virtual bool Append(const std::string& row_key, const std::string& family,
                         const std::string& qualifier, const std::string& value,
                         ErrorCode* err) = 0;
-    /// ¶ÁÈ¡Ò»¸öÖ¸¶¨ĞĞ
+    /// è¯»å–ä¸€ä¸ªæŒ‡å®šè¡Œ
     virtual void Get(RowReader* row_reader) = 0;
-    /// ¶ÁÈ¡¶àĞĞ
+    /// è¯»å–å¤šè¡Œ
     virtual void Get(const std::vector<RowReader*>& row_readers) = 0;
-    /// ¶ÁÈ¡Ö¸¶¨cell, µ±×÷Îªkv»ò¶şÎ¬±í¸ñÊ¹ÓÃÊ±µÄ±ã½İ½Ó¿Ú
+    /// è¯»å–æŒ‡å®šcell, å½“ä½œä¸ºkvæˆ–äºŒç»´è¡¨æ ¼ä½¿ç”¨æ—¶çš„ä¾¿æ·æ¥å£
     virtual bool Get(const std::string& row_key, const std::string& family,
                      const std::string& qualifier, std::string* value,
                      ErrorCode* err) = 0;
@@ -521,35 +521,35 @@ public:
     virtual bool IsPutFinished() = 0;
     virtual bool IsGetFinished() = 0;
 
-    /// Scan, Á÷Ê½¶ÁÈ¡, ·µ»ØÒ»¸öÊı¾İÁ÷, Ê§°Ü·µ»ØNULL
+    /// Scan, æµå¼è¯»å–, è¿”å›ä¸€ä¸ªæ•°æ®æµ, å¤±è´¥è¿”å›NULL
     virtual ResultStream* Scan(const ScanDescriptor& desc, ErrorCode* err) = 0;
 
     virtual const std::string GetName() = 0;
 
     virtual bool Flush() = 0;
-    /// Ìõ¼şĞŞ¸Ä, Ö¸¶¨CellµÄÖµÎªvalueÊ±, ²ÅÖ´ĞĞrow_mu
+    /// æ¡ä»¶ä¿®æ”¹, æŒ‡å®šCellçš„å€¼ä¸ºvalueæ—¶, æ‰æ‰§è¡Œrow_mu
     virtual bool CheckAndApply(const std::string& rowkey, const std::string& cf_c,
                                const std::string& value, const RowMutation& row_mu,
                                ErrorCode* err) = 0;
-    /// ¼ÆÊıÆ÷++²Ù×÷
+    /// è®¡æ•°å™¨++æ“ä½œ
     virtual int64_t IncrementColumnValue(const std::string& row, const std::string& family,
                                          const std::string& qualifier, int64_t amount,
                                          ErrorCode* err) = 0;
-    /// ÉèÖÃ±í¸ñĞ´²Ù×÷Ä¬ÈÏ³¬Ê±
+    /// è®¾ç½®è¡¨æ ¼å†™æ“ä½œé»˜è®¤è¶…æ—¶
     virtual void SetWriteTimeout(int64_t timeout_ms) = 0;
     virtual void SetReadTimeout(int64_t timeout_ms) = 0;
 
-    /// ´´½¨ĞĞËø
+    /// åˆ›å»ºè¡Œé”
     virtual bool LockRow(const std::string& rowkey, RowLock* lock, ErrorCode* err) = 0;
 
-    /// »ñÈ¡±í¸ñµÄ×îĞ¡×î´ókey
+    /// è·å–è¡¨æ ¼çš„æœ€å°æœ€å¤§key
     virtual bool GetStartEndKeys(std::string* start_key, std::string* end_key,
                                  ErrorCode* err) = 0;
 
-    /// »ñÈ¡±í¸ñ·Ö²¼ĞÅÏ¢
+    /// è·å–è¡¨æ ¼åˆ†å¸ƒä¿¡æ¯
     virtual bool GetTabletLocation(std::vector<TabletInfo>* tablets,
                                    ErrorCode* err) = 0;
-    /// »ñÈ¡±í¸ñÃèÊö·û
+    /// è·å–è¡¨æ ¼æè¿°ç¬¦
     virtual bool GetDescriptor(TableDescriptor* desc, ErrorCode* err) = 0;
 
     virtual void SetMaxMutationPendingNum(uint64_t max_pending_num) = 0;
@@ -571,26 +571,26 @@ public:
 
     static Client* NewClient();
 
-    /// ´´½¨±í¸ñ
+    /// åˆ›å»ºè¡¨æ ¼
     virtual bool CreateTable(const TableDescriptor& desc, ErrorCode* err) = 0;
     virtual bool CreateTable(const TableDescriptor& desc,
                              const std::vector<std::string>& tablet_delim,
                              ErrorCode* err) = 0;
-    /// ¸üĞÂ±í¸ñSchema
+    /// æ›´æ–°è¡¨æ ¼Schema
     virtual bool UpdateTable(const TableDescriptor& desc, ErrorCode* err) = 0;
-    /// É¾³ı±í¸ñ
+    /// åˆ é™¤è¡¨æ ¼
     virtual bool DeleteTable(std::string name, ErrorCode* err) = 0;
-    /// Í£Ö¹±í¸ñ·şÎñ
+    /// åœæ­¢è¡¨æ ¼æœåŠ¡
     virtual bool DisableTable(std::string name, ErrorCode* err) = 0;
-    /// »Ö¸´±í¸ñ·şÎñ
+    /// æ¢å¤è¡¨æ ¼æœåŠ¡
     virtual bool EnableTable(std::string name, ErrorCode* err) = 0;
-    /// ´ò¿ª±í¸ñ, Ê§°Ü·µ»ØNULL
+    /// æ‰“å¼€è¡¨æ ¼, å¤±è´¥è¿”å›NULL
     virtual Table* OpenTable(const std::string& table_name, ErrorCode* err) = 0;
-    /// »ñÈ¡±í¸ñ·Ö²¼ĞÅÏ¢
+    /// è·å–è¡¨æ ¼åˆ†å¸ƒä¿¡æ¯
     virtual bool GetTabletLocation(const std::string& table_name,
                                    std::vector<TabletInfo>* tablets,
                                    ErrorCode* err) = 0;
-    /// »ñÈ¡±í¸ñSchema
+    /// è·å–è¡¨æ ¼Schema
     virtual TableDescriptor* GetTableDescriptor(const std::string& table_name,
                                                 ErrorCode* err) = 0;
 

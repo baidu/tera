@@ -141,7 +141,7 @@ int32_t NFile::Flush() {
   tera::AutoCounter ac(&dfs_flush_hang_counter, "Flush", name_.c_str());
   dfs_flush_counter.Inc();
   int32_t retval = 0;
-  // hdfsFlush有什么意义么, 我没想明白~
+  // hdfsFlush鏈変粈涔堟剰涔変箞, 鎴戞病鎯虫槑鐧絶
   // retval = hdfsFlush(fs_, file_);
   return retval;
 }

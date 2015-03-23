@@ -442,7 +442,7 @@ Status DBTable::Write(const WriteOptions& options, WriteBatch* my_batch) {
             assert(lg_updates[i] != NULL);
             Status lg_s = lg_list_[i]->Write(WriteOptions(), lg_updates[i]);
             if (!lg_s.ok()) {
-                // ÕâÖÖÇé¿öÏÂÄÚ´æ´¦ÓÚ²»Ò»ÖÂ×´Ì¬
+                // è¿™ç§æƒ…å†µä¸‹å†…å­˜å¤„äºä¸ä¸€è‡´çŠ¶æ€
                 Log(options_.info_log, "[%s] [Fatal] Write to lg%d fail", i);
                 s = lg_s;
                 fatal_error_ = lg_s;

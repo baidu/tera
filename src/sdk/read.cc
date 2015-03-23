@@ -12,17 +12,17 @@ RowReader::RowReader() {}
 RowReader::~RowReader() {}
 
 #if 0
-/// ¶ÁÈ¡²Ù×÷
+/// è¯»å–æ“ä½œ
 RowReader::RowReader(Table* table, const std::string& row_key) {
     _impl = new RowReaderImpl(this, table, row_key);
 }
 
-/// ÉèÖÃ¶ÁÈ¡ÌØ¶¨°æ±¾
+/// è®¾ç½®è¯»å–ç‰¹å®šç‰ˆæœ¬
 void RowReader::SetTimestamp(int64_t ts) {
     _impl->SetTimestamp(ts);
 }
 
-/// ÉèÖÃ³¬Ê±Ê±¼ä(Ö»Ó°Ïìµ±Ç°²Ù×÷,²»Ó°ÏìTable::SetReadTimeoutÉèÖÃµÄÄ¬ÈÏ¶Á³¬Ê±)
+/// è®¾ç½®è¶…æ—¶æ—¶é—´(åªå½±å“å½“å‰æ“ä½œ,ä¸å½±å“Table::SetReadTimeoutè®¾ç½®çš„é»˜è®¤è¯»è¶…æ—¶)
 void RowReader::SetTimeOut(int64_t timeout_ms) {
     _impl->SetTimeOut(timeout_ms);
 }
@@ -31,32 +31,32 @@ void RowReader::SetCallBack(Callback callback) {
     _impl->SetCallBack(callback);
 }
 
-/// ÉèÖÃÒì²½·µ»Ø
+/// è®¾ç½®å¼‚æ­¥è¿”å›ž
 void RowReader::SetAsync() {
     _impl->SetAsync();
 }
 
-/// Òì²½²Ù×÷ÊÇ·ñÍê³É
+/// å¼‚æ­¥æ“ä½œæ˜¯å¦å®Œæˆ
 bool RowReader::IsFinished() const {
     return _impl->IsFinished();
 }
 
-/// »ñµÃ½á¹û´íÎóÂë
+/// èŽ·å¾—ç»“æžœé”™è¯¯ç 
 ErrorCode RowReader::GetError() {
     return _impl->GetError();
 }
 
-/// ÊÇ·ñµ½´ï½áÊø±ê¼Ç
+/// æ˜¯å¦åˆ°è¾¾ç»“æŸæ ‡è®°
 bool RowReader::Done() {
     return _impl->Done();
 }
 
-/// µü´úÏÂÒ»¸öcell
+/// è¿­ä»£ä¸‹ä¸€ä¸ªcell
 void RowReader::Next() {
     _impl->Next();
 }
 
-/// ¶ÁÈ¡µÄ½á¹û
+/// è¯»å–çš„ç»“æžœ
 std::string RowReader::Value() {
     return _impl->Value();
 }

@@ -33,18 +33,18 @@ std::string TableDescriptor::TableName() const {
     return _impl->TableName();
 }
 
-/// Ôö¼ÓÒ»¸ölocalitygroup, Ãû×Ö½öÔÊĞíÊ¹ÓÃ×ÖÄ¸¡¢Êı×ÖºÍÏÂ»®Ïß¹¹Ôì,³¤¶È²»³¬¹ı256
+/// å¢åŠ ä¸€ä¸ªlocalitygroup, åå­—ä»…å…è®¸ä½¿ç”¨å­—æ¯ã€æ•°å­—å’Œä¸‹åˆ’çº¿æ„é€ ,é•¿åº¦ä¸è¶…è¿‡256
 LocalityGroupDescriptor* TableDescriptor::AddLocalityGroup(const std::string& lg_name) {
     return _impl->AddLocalityGroup(lg_name);
 }
 LocalityGroupDescriptor* TableDescriptor::DefaultLocalityGroup() {
     return _impl->DefaultLocalityGroup();
 }
-/// É¾³ıÒ»¸ölocalitygroup,
+/// åˆ é™¤ä¸€ä¸ªlocalitygroup,
 bool TableDescriptor::RemoveLocalityGroup(const std::string& lg_name) {
     return _impl->RemoveLocalityGroup(lg_name);
 }
-/// »ñÈ¡localitygroup
+/// è·å–localitygroup
 const LocalityGroupDescriptor* TableDescriptor::LocalityGroup(int32_t id) const {
     return _impl->LocalityGroup(id);
 }
@@ -52,12 +52,12 @@ const LocalityGroupDescriptor* TableDescriptor::LocalityGroup(const std::string&
     return _impl->LocalityGroup(name);
 }
 
-/// LGÊıÁ¿
+/// LGæ•°é‡
 int32_t TableDescriptor::LocalityGroupNum() const {
     return _impl->LocalityGroupNum();
 }
 
-/// Ôö¼ÓÒ»¸öcolumnfamily, Ãû×Ö½öÔÊĞíÊ¹ÓÃ×ÖÄ¸¡¢Êı×ÖºÍÏÂ»®Ïß¹¹Ôì,³¤¶È²»³¬¹ı256
+/// å¢åŠ ä¸€ä¸ªcolumnfamily, åå­—ä»…å…è®¸ä½¿ç”¨å­—æ¯ã€æ•°å­—å’Œä¸‹åˆ’çº¿æ„é€ ,é•¿åº¦ä¸è¶…è¿‡256
 ColumnFamilyDescriptor* TableDescriptor::AddColumnFamily(const std::string& cf_name,
             const std::string& lg_name) {
     return _impl->AddColumnFamily(cf_name, lg_name);
@@ -65,11 +65,11 @@ ColumnFamilyDescriptor* TableDescriptor::AddColumnFamily(const std::string& cf_n
 ColumnFamilyDescriptor* TableDescriptor::DefaultColumnFamily() {
     return _impl->DefaultColumnFamily();
 }
-/// É¾³ıÒ»¸öcolumnfamily
+/// åˆ é™¤ä¸€ä¸ªcolumnfamily
 void TableDescriptor::RemoveColumnFamily(const std::string& cf_name) {
     return _impl->RemoveColumnFamily(cf_name);
 }
-/// »ñÈ¡ËùÓĞµÄcolmnfamily
+/// è·å–æ‰€æœ‰çš„colmnfamily
 const ColumnFamilyDescriptor* TableDescriptor::ColumnFamily(int32_t id) const {
     return _impl->ColumnFamily(id);
 }
@@ -78,7 +78,7 @@ const ColumnFamilyDescriptor* TableDescriptor::ColumnFamily(const std::string& c
     return _impl->ColumnFamily(cf_name);
 }
 
-/// CFÊıÁ¿
+/// CFæ•°é‡
 int32_t TableDescriptor::ColumnFamilyNum() const {
     return _impl->ColumnFamilyNum();
 }
@@ -114,11 +114,11 @@ int32_t TableDescriptor::AddSnapshot(uint64_t snapshot) {
 uint64_t TableDescriptor::Snapshot(int32_t id) const {
     return _impl->Snapshot(id);
 }
-/// SnapshotÊıÁ¿
+/// Snapshotæ•°é‡
 int32_t TableDescriptor::SnapshotNum() const {
     return _impl->SnapshotNum();
 }
-/// ÊÇ·ñÎªkv±í
+/// æ˜¯å¦ä¸ºkvè¡¨
 void TableDescriptor::SetKvOnly() {
     _impl->SetKvOnly();
 }

@@ -15,7 +15,7 @@ namespace tera {
 const std::string TableDescImpl::DEFAULT_LG_NAME = "lg0";
 const std::string TableDescImpl::DEFAULT_CF_NAME = "";
 
-/// ÁĞ×åÃû×Ö½öÔÊĞíÊ¹ÓÃ×ÖÄ¸¡¢Êı×ÖºÍÏÂ»®Ïß¹¹Ôì, ³¤¶È²»³¬¹ı256
+/// åˆ—æ—åå­—ä»…å…è®¸ä½¿ç”¨å­—æ¯ã€æ•°å­—å’Œä¸‹åˆ’çº¿æ„é€ , é•¿åº¦ä¸è¶…è¿‡256
 CFDescImpl::CFDescImpl(const std::string& cf_name,
                        int32_t id,
                        const std::string& lg_name)
@@ -41,7 +41,7 @@ const std::string& CFDescImpl::LocalityGroup() const {
     return _lg_name;
 }
 
-/// ÀúÊ·°æ±¾±£ÁôÊ±¼ä, ²»ÉèÖÃÊ±Îª-1£¬ ±íÊ¾ÎŞÏŞ´óÓÀ¾Ã±£´æ
+/// å†å²ç‰ˆæœ¬ä¿ç•™æ—¶é—´, ä¸è®¾ç½®æ—¶ä¸º-1ï¼Œ è¡¨ç¤ºæ— é™å¤§æ°¸ä¹…ä¿å­˜
 void CFDescImpl::SetTimeToLive(int32_t ttl) {
     _ttl = ttl;
 }
@@ -50,7 +50,7 @@ int32_t CFDescImpl::TimeToLive() const {
     return _ttl;
 }
 
-/// ÔÚTTLÄÚ,×î¶à´æ´¢µÄ°æ±¾Êı
+/// åœ¨TTLå†…,æœ€å¤šå­˜å‚¨çš„ç‰ˆæœ¬æ•°
 void CFDescImpl::SetMaxVersions(int32_t max_versions) {
     _max_versions = max_versions;
 }
@@ -59,7 +59,7 @@ int32_t CFDescImpl::MaxVersions() const {
     return _max_versions;
 }
 
-/// ×îÉÙ´æ´¢µÄ°æ±¾Êı,¼´Ê¹³¬³öTTL,Ò²ÖÁÉÙ±£Áômin_versions¸ö°æ±¾
+/// æœ€å°‘å­˜å‚¨çš„ç‰ˆæœ¬æ•°,å³ä½¿è¶…å‡ºTTL,ä¹Ÿè‡³å°‘ä¿ç•™min_versionsä¸ªç‰ˆæœ¬
 void CFDescImpl::SetMinVersions(int32_t min_versions) {
     _min_versions = min_versions;
 }
@@ -68,7 +68,7 @@ int32_t CFDescImpl::MinVersions() const {
     return _min_versions;
 }
 
-/// ´æ´¢ÏŞ¶î, MBytes
+/// å­˜å‚¨é™é¢, MBytes
 void CFDescImpl::SetDiskQuota(int64_t quota) {
     _disk_quota = quota;
 }
@@ -93,7 +93,7 @@ const std::string& CFDescImpl::Type() const {
     return _type;
 }
 
-/// ¾Ö²¿ĞÔÈº×éÃû×Ö½öÔÊĞíÊ¹ÓÃ×ÖÄ¸¡¢Êı×ÖºÍÏÂ»®Ïß¹¹Ôì,³¤¶È²»³¬¹ı256
+/// å±€éƒ¨æ€§ç¾¤ç»„åå­—ä»…å…è®¸ä½¿ç”¨å­—æ¯ã€æ•°å­—å’Œä¸‹åˆ’çº¿æ„é€ ,é•¿åº¦ä¸è¶…è¿‡256
 LGDescImpl::LGDescImpl(const std::string& lg_name, int32_t id)
     : _id(id),
       _name(lg_name),
@@ -174,7 +174,7 @@ void LGDescImpl::SetMemtableLdbBlockSize(int32_t block_size) {
     _memtable_ldb_block_size = block_size;
 }
 
-/// ±í¸ñÃû×Ö½öÔÊĞíÊ¹ÓÃ×ÖÄ¸¡¢Êı×ÖºÍÏÂ»®Ïß¹¹Ôì,³¤¶È²»³¬¹ı256
+/// è¡¨æ ¼åå­—ä»…å…è®¸ä½¿ç”¨å­—æ¯ã€æ•°å­—å’Œä¸‹åˆ’çº¿æ„é€ ,é•¿åº¦ä¸è¶…è¿‡256
 TableDescImpl::TableDescImpl(const std::string& tb_name, bool is_kv)
     : _name(tb_name),
       _kv_only(is_kv),
@@ -228,12 +228,12 @@ std::string TableDescImpl::TableName() const{
     return _name;
 }
 
-/// ÉèÖÃÎªkv±í£¨ÎŞÁĞ£©£¬½¨±íÍê³ÉºóÎŞ·¨¸Ä±ä
+/// è®¾ç½®ä¸ºkvè¡¨ï¼ˆæ— åˆ—ï¼‰ï¼Œå»ºè¡¨å®Œæˆåæ— æ³•æ”¹å˜
 void TableDescImpl::SetKvOnly() {
     _kv_only = true;
 }
 
-/// Ôö¼ÓÒ»¸ölocalitygroup
+/// å¢åŠ ä¸€ä¸ªlocalitygroup
 LocalityGroupDescriptor* TableDescImpl::AddLocalityGroup(const std::string& lg_name) {
     if (_kv_only && _lg_map.size() > 1) {
         VLOG(5) << "kv table not support AddLocalityGroup";
@@ -257,7 +257,7 @@ LocalityGroupDescriptor* TableDescImpl::DefaultLocalityGroup() {
     return _lg_map.begin()->second;
 }
 
-/// É¾³ıÒ»¸ölocalitygroup
+/// åˆ é™¤ä¸€ä¸ªlocalitygroup
 bool TableDescImpl::RemoveLocalityGroup(const std::string& lg_name) {
     if (_lg_map.size() == 1 && _lg_map.begin()->first == lg_name) {
         return false;
@@ -279,7 +279,7 @@ bool TableDescImpl::RemoveLocalityGroup(const std::string& lg_name) {
     return true;
 }
 
-/// »ñÈ¡localitygroup
+/// è·å–localitygroup
 const LocalityGroupDescriptor* TableDescImpl::LocalityGroup(int32_t id) const {
     if (id < static_cast<int32_t>(_lgs.size())) {
         return _lgs[id];
@@ -296,12 +296,12 @@ const LocalityGroupDescriptor* TableDescImpl::LocalityGroup(const std::string& l
     }
 }
 
-/// »ñÈ¡localitygroupÊıÁ¿
+/// è·å–localitygroupæ•°é‡
 int32_t TableDescImpl::LocalityGroupNum() const {
     return _lgs.size();
 }
 
-/// Ôö¼ÓÒ»¸öcolumnfamily
+/// å¢åŠ ä¸€ä¸ªcolumnfamily
 ColumnFamilyDescriptor* TableDescImpl::AddColumnFamily(const std::string& cf_name,
                                         const std::string& lg_name) {
     LGMap::iterator it = _lg_map.find(lg_name);
@@ -324,7 +324,7 @@ ColumnFamilyDescriptor* TableDescImpl::DefaultColumnFamily() {
     return _cf_map.begin()->second;
 }
 
-/// É¾³ıÒ»¸öcolumnfamily
+/// åˆ é™¤ä¸€ä¸ªcolumnfamily
 void TableDescImpl::RemoveColumnFamily(const std::string& cf_name) {
     if (_cf_map.size() == 1 && _cf_map.begin()->first == cf_name) {
         return;
@@ -340,7 +340,7 @@ void TableDescImpl::RemoveColumnFamily(const std::string& cf_name) {
     delete cf;
 }
 
-/// »ñÈ¡ËùÓĞµÄcolmnfamily
+/// è·å–æ‰€æœ‰çš„colmnfamily
 const ColumnFamilyDescriptor* TableDescImpl::ColumnFamily(int32_t id) const {
     if (id < static_cast<int32_t>(_cfs.size())) {
         return _cfs[id];
@@ -385,20 +385,20 @@ int64_t TableDescImpl::MergeSize() const {
     return _merge_size;
 }
 
-/// ²åÈësnapshot
+/// æ’å…¥snapshot
 int32_t TableDescImpl::AddSnapshot(uint64_t snapshot) {
     _snapshots.push_back(snapshot);
     return _snapshots.size();
 }
-/// »ñÈ¡snapshot
+/// è·å–snapshot
 uint64_t TableDescImpl::Snapshot(int32_t id) const {
     return _snapshots[id];
 }
-/// SnapshotÊıÁ¿
+/// Snapshotæ•°é‡
 int32_t TableDescImpl::SnapshotNum() const {
     return _snapshots.size();
 }
-/// ÊÇ·ñÎªkv±í
+/// æ˜¯å¦ä¸ºkvè¡¨
 bool TableDescImpl::IsKv() const {
     return _kv_only;
 }

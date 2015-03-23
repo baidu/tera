@@ -63,7 +63,7 @@ bool TabletNodeEntry::StartServer() {
         return false;
     }
 
-    // ×¢²á¸ørpcserver, rpcserver»á¸ºÔðdelete
+    // æ³¨å†Œç»™rpcserver, rpcserverä¼šè´Ÿè´£delete
     m_rpc_server.RegisterService(m_remote_tabletnode);
     if (!m_rpc_server.Start(tabletnode_addr.ToString())) {
         LOG(ERROR) << "start RPC server error";
@@ -80,7 +80,7 @@ bool TabletNodeEntry::StartServer() {
 
 void TabletNodeEntry::ShutdownServer() {
     LOG(INFO) << "shut down server";
-    // StopServerÒª±£Ö¤µ÷ÓÃºó, ²»»áÔÙµ÷ÓÃserveiceµÄÈÎºÎ·½·¨.
+    // StopServerè¦ä¿è¯è°ƒç”¨åŽ, ä¸ä¼šå†è°ƒç”¨serveiceçš„ä»»ä½•æ–¹æ³•.
     m_rpc_server.Stop();
     m_tabletnode_impl->Exit();
     m_tabletnode_impl.reset();
