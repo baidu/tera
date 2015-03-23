@@ -59,7 +59,6 @@ DEFINE_int64(tera_io_scan_stream_task_pending_time, 180, "the max pending time (
 
 /////////  master /////////
 
-DEFINE_string(tera_master_addr, "127.0.0.1", "the master address of tera system");
 DEFINE_string(tera_master_port, "10000", "the master port of tera system");
 DEFINE_int64(tera_heartbeat_timeout_period_factor, 120, "the timeout period factor when lose heartbeat");
 DEFINE_int32(tera_master_connect_retry_times, 5, "the max retry times when connect to master");
@@ -133,7 +132,6 @@ DEFINE_int32(tera_master_gc_period, 60000, "the period (in ms) for master gc");
 
 ///////// tablet node  /////////
 
-DEFINE_string(tera_tabletnode_addr, "127.0.0.1", "the tablet node address of tera system");
 DEFINE_string(tera_tabletnode_port, "20000", "the tablet node port of tera system");
 DEFINE_int32(tera_tabletnode_write_thread_num, 10, "the write thread number of tablet node server");
 DEFINE_int32(tera_tabletnode_read_thread_num, 40, "the read thread number of tablet node server");

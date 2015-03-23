@@ -24,7 +24,6 @@
 #include "utils/timer.h"
 #include "utils/utils_cmd.h"
 
-DECLARE_string(tera_tabletnode_addr);
 DECLARE_string(tera_tabletnode_port);
 DECLARE_int64(tera_heartbeat_period);
 DECLARE_int32(tera_garbage_collect_period);
@@ -50,8 +49,7 @@ bool TabletNodeEntry::StartServer() {
     SetProcessorAffinity();
 
     IpAddress tabletnode_addr(utils::GetLocalHostAddr(), FLAGS_tera_tabletnode_port);
-    FLAGS_tera_tabletnode_addr = tabletnode_addr.GetIp();
-    LOG(INFO) << "Start RPC server at: " << FLAGS_tera_tabletnode_addr;
+    LOG(INFO) << "Start RPC server at: " << tabletnode_addr.ToString();
 
     TabletNodeInfo tabletnode_info;
     tabletnode_info.set_addr(tabletnode_addr.ToString());
@@ -67,7 +65,7 @@ bool TabletNodeEntry::StartServer() {
 
     // 注册给rpcserver, rpcserver会负责delete
     m_rpc_server.RegisterService(m_remote_tabletnode);
-    if (!m_rpc_server.Start(FLAGS_tera_tabletnode_addr)) {
+    if (!m_rpc_server.Start(tabletnode_addr.ToString())) {
         LOG(ERROR) << "start RPC server error";
         return false;
     }
