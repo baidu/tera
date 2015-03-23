@@ -43,8 +43,8 @@ Status BuildTable(const std::string& dbname,
       compact_strategy = options.compact_strategy_factory->NewInstance();
     }
 
-    // meta->smallestå’Œmeta->largestçš„èŒƒå›´å¯ä»¥å‘ä¸¤ä¾§ä¼¸é•¿,ä½†å¦‚æœæ¯”å®é™…èŒƒå›´å°å°±æ˜¯bug.
-    // è¿™é‡Œæš‚ä¸”æ ¹æ®dropç»“æœæ”¶çª„largestè€Œä¸æ”¶çª„smallest,ä¿è¯è¶³å¤Ÿç®€å•å¯é .
+    // meta->smallestºÍmeta->largestµÄ·¶Î§¿ÉÒÔÏòÁ½²àÉì³¤,µ«Èç¹û±ÈÊµ¼Ê·¶Î§Ğ¡¾ÍÊÇbug.
+    // ÕâÀïÔİÇÒ¸ù¾İdrop½á¹ûÊÕÕ­largest¶ø²»ÊÕÕ­smallest,±£Ö¤×ã¹»¼òµ¥¿É¿¿.
     TableBuilder* builder = new TableBuilder(options, file);
     meta->smallest.DecodeFrom(iter->key());
     for (;iter->Valid();) {
@@ -56,8 +56,8 @@ Status BuildTable(const std::string& dbname,
       const uint64_t tag = DecodeFixed64(entry + key.size() - 8);
       const uint64_t sequence_id = tag >> 8;
       bool has_atom_merged = false;
-      // type==kTypeValue, ä¸”drop==trueçš„è®°å½•å¯ä»¥è¢«ä¸¢å¼ƒ,
-      // å…¶ä»–è®°å½•å‡æ­£å¸¸è¿›å…¥Memtable compact SSTæµç¨‹.
+      // type==kTypeValue, ÇÒdrop==trueµÄ¼ÇÂ¼¿ÉÒÔ±»¶ªÆú,
+      // ÆäËû¼ÇÂ¼¾ùÕı³£½øÈëMemtable compact SSTÁ÷³Ì.
       if (static_cast<ValueType>(tag & 0xff) == kTypeValue && compact_strategy) {
         bool drop = compact_strategy->Drop(raw_key, sequence_id);
         if (drop) {
@@ -77,8 +77,8 @@ Status BuildTable(const std::string& dbname,
             }
         }
       }
-      // æç«¯æƒ…å†µä¸‹, æ•´ä¸ªMemtableå…¨éƒ¨è¢«Drop(ä¸strategyå®ç°ç›¸å…³), é‚£ä¹ˆå°±ä¸éœ€è¦ç”Ÿæˆ
-      // SSTäº†, ä¹Ÿä¸éœ€è¦ä¿®æ”¹manifest, å½“ä½œä»€ä¹ˆä¹Ÿæ²¡å‘ç”Ÿè¿‡.
+      // ¼«¶ËÇé¿öÏÂ, Õû¸öMemtableÈ«²¿±»Drop(ÓëstrategyÊµÏÖÏà¹Ø), ÄÇÃ´¾Í²»ĞèÒªÉú³É
+      // SSTÁË, Ò²²»ĞèÒªĞŞ¸Ämanifest, µ±×÷Ê²Ã´Ò²Ã»·¢Éú¹ı.
       if (!has_atom_merged) {
           meta->largest.DecodeFrom(key);
           builder->Add(key, iter->value());
@@ -100,4 +100,43 @@ Status BuildTable(const std::string& dbname,
         assert(meta->file_size > 0);
         *saved_size = builder->SavedSize();
       }
-      // SSTæ¶“
+    } else {
+      builder->Abandon();
+    }
+    delete builder;
+
+    // Finish and check for file errors
+    if (s.ok()) {
+      s = file->Sync();
+    }
+    if (s.ok()) {
+      s = file->Close();
+    }
+    delete file;
+    file = NULL;
+
+    if (s.ok() && meta->file_size) {
+      // Verify that the table is usable
+      Iterator* it = table_cache->NewIterator(ReadOptions(&options),
+                                              dbname,
+                                              meta->number,
+                                              meta->file_size);
+      s = it->status();
+      delete it;
+    }
+  }
+
+  // Check for input iterator errors
+  if (!iter->status().ok()) {
+    s = iter->status();
+  }
+
+  if (s.ok() && meta->file_size > 0) {
+    // Keep it
+  } else {
+    env->DeleteFile(fname);
+  }
+  return s;
+}
+
+}  // namespace leveldb
