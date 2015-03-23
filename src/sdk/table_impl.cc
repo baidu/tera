@@ -473,14 +473,14 @@ void TableImpl::ApplyMutation(const std::vector<RowMutationImpl*>& mu_list,
         MuFlushPair& mu_flush_pair = it->second;
         ApplyMutation(it->first, mu_flush_pair.first, mu_flush_pair.second);
     }
-    // ´ÓÏÖÔÚ¿ªÊ¼£¬ËùÓĞÒì²½µÄrow_mutation¶¼²»¿ÉÒÔÔÙ²Ù×÷ÁË£¬ÒòÎªËæÊ±»á±»ÓÃ»§ÊÍ·Å
+    // ä»ç°åœ¨å¼€å§‹ï¼Œæ‰€æœ‰å¼‚æ­¥çš„row_mutationéƒ½ä¸å¯ä»¥å†æ“ä½œäº†ï¼Œå› ä¸ºéšæ—¶ä¼šè¢«ç”¨æˆ·é‡Šæ”¾
 
-    // ²»ÊÇÓÃ»§µ÷ÓÃµÄ£¬Á¢¼´·µ»Ø
+    // ä¸æ˜¯ç”¨æˆ·è°ƒç”¨çš„ï¼Œç«‹å³è¿”å›
     if (!called_by_user) {
         return;
     }
 
-    // µÈ´ıÍ¬²½²Ù×÷·µ»Ø»ò³¬Ê±
+    // ç­‰å¾…åŒæ­¥æ“ä½œè¿”å›æˆ–è¶…æ—¶
     for (uint32_t i = 0; i < sync_mu_list.size(); i++) {
         while (_cur_commit_pending_counter.Get() > _max_commit_pending_num) {
             usleep(100000);
@@ -735,14 +735,14 @@ void TableImpl::ReadRows(const std::vector<RowReaderImpl*>& row_reader_list,
         std::vector<RowReaderImpl*>* reader_list = it->second;
         ReadRows(it->first, reader_list);
     }
-    // ´ÓÏÖÔÚ¿ªÊ¼£¬ËùÓĞÒì²½µÄrow_mutation¶¼²»¿ÉÒÔÔÙ²Ù×÷ÁË£¬ÒòÎªËæÊ±»á±»ÓÃ»§ÊÍ·Å
+    // ä»ç°åœ¨å¼€å§‹ï¼Œæ‰€æœ‰å¼‚æ­¥çš„row_mutationéƒ½ä¸å¯ä»¥å†æ“ä½œäº†ï¼Œå› ä¸ºéšæ—¶ä¼šè¢«ç”¨æˆ·é‡Šæ”¾
 
-    // ²»ÊÇÓÃ»§µ÷ÓÃµÄ£¬Á¢¼´·µ»Ø
+    // ä¸æ˜¯ç”¨æˆ·è°ƒç”¨çš„ï¼Œç«‹å³è¿”å›
     if (!called_by_user) {
         return;
     }
 
-    // µÈ´ıÍ¬²½²Ù×÷·µ»Ø»ò³¬Ê±
+    // ç­‰å¾…åŒæ­¥æ“ä½œè¿”å›æˆ–è¶…æ—¶
     for (uint32_t i = 0; i < sync_reader_list.size(); i++) {
         while (_cur_reader_pending_counter.Get() > _max_reader_pending_num) {
             usleep(100000);

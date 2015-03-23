@@ -23,7 +23,7 @@ RowMutationImpl::RowMutationImpl(TableImpl* table, const std::string& row_key)
 RowMutationImpl::~RowMutationImpl() {
 }
 
-/// ÖØÖÃ£¬¸´ÓÃÇ°±ØĞëµ÷ÓÃ
+/// é‡ç½®ï¼Œå¤ç”¨å‰å¿…é¡»è°ƒç”¨
 void RowMutationImpl::Reset(const std::string& row_key) {
     _row_key = row_key;
     _mu_seq.clear();
@@ -34,7 +34,7 @@ void RowMutationImpl::Reset(const std::string& row_key) {
     _error_code.SetFailed(ErrorCode::kOK);
 }
 
-// Ô­×Ó¼ÓÒ»¸öCell
+// åŸå­åŠ ä¸€ä¸ªCell
 void RowMutationImpl::Add(const std::string& family, const std::string& qualifier,
                           const int64_t delta) {
     char delta_buf[sizeof(int64_t)];
@@ -42,12 +42,12 @@ void RowMutationImpl::Add(const std::string& family, const std::string& qualifie
     mutation.type = RowMutation::kAdd;
     mutation.family = family;
     mutation.qualifier = qualifier;
-    mutation.timestamp = get_micros(); // ÎªÁË±ÜÃâretryÒıÆğµÄÖØ¸´¼Ó£¬ËùÒÔ×Ô´øÊ±¼ä´Á
+    mutation.timestamp = get_micros(); // ä¸ºäº†é¿å…retryå¼•èµ·çš„é‡å¤åŠ ï¼Œæ‰€ä»¥è‡ªå¸¦æ—¶é—´æˆ³
     io::EncodeBigEndian(delta_buf, delta);
     mutation.value.assign(delta_buf, sizeof(delta_buf));
 }
 
-// Ô­×Ó²Ù×÷£ºÈç¹û²»´æÔÚ²ÅÄÜPut³É¹¦
+// åŸå­æ“ä½œï¼šå¦‚æœä¸å­˜åœ¨æ‰èƒ½PutæˆåŠŸ
 void RowMutationImpl::PutIfAbsent(const std::string& family, const std::string& qualifier,
                                   const std::string& value) {
     RowMutation::Mutation& mutation = AddMutation();
@@ -68,13 +68,13 @@ void RowMutationImpl::Append(const std::string& family, const std::string& quali
     mutation.value = value;
 }
 
-/// ĞŞ¸ÄÒ»¸öÁĞ
+/// ä¿®æ”¹ä¸€ä¸ªåˆ—
 void RowMutationImpl::Put(const std::string& family, const std::string& qualifier,
                           const std::string& value) {
     Put(family, qualifier, kLatestTimestamp, value);
 }
 
-/// ´øTTLĞŞ¸ÄÒ»¸öÁĞ
+/// å¸¦TTLä¿®æ”¹ä¸€ä¸ªåˆ—
 void RowMutationImpl::Put(const std::string& family, const std::string& qualifier,
                           const std::string& value, int32_t ttl) {
     RowMutation::Mutation& mutation = AddMutation();
@@ -86,7 +86,7 @@ void RowMutationImpl::Put(const std::string& family, const std::string& qualifie
     mutation.ttl = ttl;
 }
 
-/// ĞŞ¸ÄÒ»¸öÁĞµÄÌØ¶¨°æ±¾
+/// ä¿®æ”¹ä¸€ä¸ªåˆ—çš„ç‰¹å®šç‰ˆæœ¬
 void RowMutationImpl::Put(const std::string& family, const std::string& qualifier,
                           int64_t timestamp, const std::string& value) {
     RowMutation::Mutation& mutation = AddMutation();
@@ -105,7 +105,7 @@ void RowMutationImpl::Put(const std::string& family, const std::string& qualifie
     */
 }
 
-/// ´øTTLµÄĞŞ¸ÄÒ»¸öÁĞµÄÌØ¶¨°æ±¾
+/// å¸¦TTLçš„ä¿®æ”¹ä¸€ä¸ªåˆ—çš„ç‰¹å®šç‰ˆæœ¬
 void RowMutationImpl::Put(const std::string& family, const std::string& qualifier,
                           int64_t timestamp, const std::string& value, int32_t ttl) {
     RowMutation::Mutation& mutation = AddMutation();
@@ -117,28 +117,28 @@ void RowMutationImpl::Put(const std::string& family, const std::string& qualifie
     mutation.ttl = ttl;
 }
 
-/// ĞŞ¸ÄÄ¬ÈÏÁĞ
+/// ä¿®æ”¹é»˜è®¤åˆ—
 void RowMutationImpl::Put(const std::string& value) {
     Put("", "", kLatestTimestamp, value);
 }
 
-/// ´øTTLµÄĞŞ¸ÄÄ¬ÈÏÁĞ
+/// å¸¦TTLçš„ä¿®æ”¹é»˜è®¤åˆ—
 void RowMutationImpl::Put(const std::string& value, int32_t ttl) {
     Put("", "", kLatestTimestamp, value, ttl);
 }
 
-/// ĞŞ¸ÄÄ¬ÈÏÁĞµÄÌØ¶¨°æ±¾
+/// ä¿®æ”¹é»˜è®¤åˆ—çš„ç‰¹å®šç‰ˆæœ¬
 void RowMutationImpl::Put(int64_t timestamp, const std::string& value) {
     Put("", "", timestamp, value);
 }
 
-/// É¾³ıÒ»¸öÁĞµÄ×îĞÂ°æ±¾
+/// åˆ é™¤ä¸€ä¸ªåˆ—çš„æœ€æ–°ç‰ˆæœ¬
 void RowMutationImpl::DeleteColumn(const std::string& family,
                                    const std::string& qualifier) {
     DeleteColumn(family, qualifier, kLatestTimestamp);
 }
 
-/// É¾³ıÒ»¸öÁĞµÄÖ¸¶¨°æ±¾
+/// åˆ é™¤ä¸€ä¸ªåˆ—çš„æŒ‡å®šç‰ˆæœ¬
 void RowMutationImpl::DeleteColumn(const std::string& family,
                                    const std::string& qualifier,
                                    int64_t timestamp) {
@@ -156,13 +156,13 @@ void RowMutationImpl::DeleteColumn(const std::string& family,
     */
 }
 
-/// É¾³ıÒ»¸öÁĞµÄÈ«²¿°æ±¾
+/// åˆ é™¤ä¸€ä¸ªåˆ—çš„å…¨éƒ¨ç‰ˆæœ¬
 void RowMutationImpl::DeleteColumns(const std::string& family,
                                     const std::string& qualifier) {
     DeleteColumns(family, qualifier, kLatestTimestamp);
 }
 
-/// É¾³ıÒ»¸öÁĞµÄÖ¸¶¨·¶Î§°æ±¾
+/// åˆ é™¤ä¸€ä¸ªåˆ—çš„æŒ‡å®šèŒƒå›´ç‰ˆæœ¬
 void RowMutationImpl::DeleteColumns(const std::string& family,
                                     const std::string& qualifier,
                                     int64_t timestamp) {
@@ -181,12 +181,12 @@ void RowMutationImpl::DeleteColumns(const std::string& family,
     */
 }
 
-/// É¾³ıÒ»¸öÁĞ×åµÄËùÓĞÁĞµÄÈ«²¿°æ±¾
+/// åˆ é™¤ä¸€ä¸ªåˆ—æ—çš„æ‰€æœ‰åˆ—çš„å…¨éƒ¨ç‰ˆæœ¬
 void RowMutationImpl::DeleteFamily(const std::string& family) {
     DeleteFamily(family, kLatestTimestamp);
 }
 
-/// É¾³ıÒ»¸öÁĞ×åµÄËùÓĞÁĞµÄÖ¸¶¨·¶Î§°æ±¾
+/// åˆ é™¤ä¸€ä¸ªåˆ—æ—çš„æ‰€æœ‰åˆ—çš„æŒ‡å®šèŒƒå›´ç‰ˆæœ¬
 void RowMutationImpl::DeleteFamily(const std::string& family,
                                    int64_t timestamp) {
     RowMutation::Mutation& mutation = AddMutation();
@@ -201,12 +201,12 @@ void RowMutationImpl::DeleteFamily(const std::string& family,
     */
 }
 
-/// É¾³ıÕûĞĞµÄÈ«²¿Êı¾İ
+/// åˆ é™¤æ•´è¡Œçš„å…¨éƒ¨æ•°æ®
 void RowMutationImpl::DeleteRow() {
     DeleteRow(kLatestTimestamp);
 }
 
-/// É¾³ıÕûĞĞµÄÖ¸¶¨·¶Î§°æ±¾
+/// åˆ é™¤æ•´è¡Œçš„æŒ‡å®šèŒƒå›´ç‰ˆæœ¬
 void RowMutationImpl::DeleteRow(int64_t timestamp) {
     RowMutation::Mutation& mutation = AddMutation();
     mutation.type = RowMutation::kDeleteRow;
@@ -218,11 +218,11 @@ void RowMutationImpl::DeleteRow(int64_t timestamp) {
     */
 }
 
-/// ĞŞ¸ÄËø×¡µÄĞĞ, ±ØĞëÌá¹©ĞĞËø
+/// ä¿®æ”¹é”ä½çš„è¡Œ, å¿…é¡»æä¾›è¡Œé”
 void RowMutationImpl::SetLock(RowLock* rowlock) {
 }
 
-/// ÉèÖÃ³¬Ê±Ê±¼ä(Ö»Ó°Ïìµ±Ç°²Ù×÷,²»Ó°ÏìTable::SetWriteTimeoutÉèÖÃµÄÄ¬ÈÏĞ´³¬Ê±)
+/// è®¾ç½®è¶…æ—¶æ—¶é—´(åªå½±å“å½“å‰æ“ä½œ,ä¸å½±å“Table::SetWriteTimeoutè®¾ç½®çš„é»˜è®¤å†™è¶…æ—¶)
 void RowMutationImpl::SetTimeOut(int64_t timeout_ms) {
     _timeout_ms = timeout_ms;
 }
@@ -231,53 +231,53 @@ int64_t RowMutationImpl::TimeOut() {
     return _timeout_ms;
 }
 
-/// ÉèÖÃÒì²½»Øµ÷, ²Ù×÷»áÒì²½·µ»Ø
+/// è®¾ç½®å¼‚æ­¥å›è°ƒ, æ“ä½œä¼šå¼‚æ­¥è¿”å›
 void RowMutationImpl::SetCallBack(RowMutation::Callback callback) {
     _callback = callback;
 }
 
-/// »ñµÃ»Øµ÷º¯Êı
+/// è·å¾—å›è°ƒå‡½æ•°
 RowMutation::Callback RowMutationImpl::GetCallBack() {
     return _callback;
 }
 
-/// ÉèÖÃÓÃ»§ÉÏÏÂÎÄ£¬¿ÉÔÚ»Øµ÷º¯ÊıÖĞ»ñÈ¡
+/// è®¾ç½®ç”¨æˆ·ä¸Šä¸‹æ–‡ï¼Œå¯åœ¨å›è°ƒå‡½æ•°ä¸­è·å–
 void RowMutationImpl::SetContext(void* context) {
     _user_context = context;
 }
 
-/// »ñµÃÓÃ»§ÉÏÏÂÎÄ
+/// è·å¾—ç”¨æˆ·ä¸Šä¸‹æ–‡
 void* RowMutationImpl::GetContext() {
     return _user_context;
 }
 
-/// »ñµÃ½á¹û´íÎóÂë
+/// è·å¾—ç»“æœé”™è¯¯ç 
 const ErrorCode& RowMutationImpl::GetError() {
     return _error_code;
 }
 
-/// ÊÇ·ñÒì²½²Ù×÷
+/// æ˜¯å¦å¼‚æ­¥æ“ä½œ
 bool RowMutationImpl::IsAsync() {
     return (_callback != NULL);
 }
 
-/// Òì²½²Ù×÷ÊÇ·ñÍê³É
+/// å¼‚æ­¥æ“ä½œæ˜¯å¦å®Œæˆ
 bool RowMutationImpl::IsFinished() const {
     MutexLock lock(&_finish_mutex);
     return _finish;
 }
 
-/// ·µ»Ørow_key
+/// è¿”å›row_key
 const std::string& RowMutationImpl::RowKey() {
     return _row_key;
 }
 
-/// mutationÊıÁ¿
+/// mutationæ•°é‡
 uint32_t RowMutationImpl::MutationNum() {
     return _mu_seq.size();
 }
 
-/// mutation×Ü´óĞ¡
+/// mutationæ€»å¤§å°
 uint32_t RowMutationImpl::Size() {
     uint32_t total_size = 0;
     for (int i = 0; i < _mu_seq.size(); ++i) {
@@ -291,28 +291,28 @@ uint32_t RowMutationImpl::Size() {
     return total_size;
 }
 
-/// ·µ»Ømutation
+/// è¿”å›mutation
 const RowMutation::Mutation& RowMutationImpl::GetMutation(uint32_t index) {
     return _mu_seq[index];
 }
 
-/// ÖØÊÔ´ÎÊı
+/// é‡è¯•æ¬¡æ•°
 uint32_t RowMutationImpl::RetryTimes() {
     return _retry_times;
 }
 
-/// ÖØÊÔ¼ÆÊı¼ÓÒ»
+/// é‡è¯•è®¡æ•°åŠ ä¸€
 void RowMutationImpl::IncRetryTimes() {
     _retry_times++;
 }
 
-/// ÉèÖÃ´íÎóÂë
+/// è®¾ç½®é”™è¯¯ç 
 void RowMutationImpl::SetError(ErrorCode::ErrorCodeType err,
                                const std::string& reason) {
     _error_code.SetFailed(err, reason);
 }
 
-/// µÈ´ı½áÊø
+/// ç­‰å¾…ç»“æŸ
 bool RowMutationImpl::Wait(int64_t abs_time_ms) {
     int64_t timeout = -1;
     if (abs_time_ms > 0) {

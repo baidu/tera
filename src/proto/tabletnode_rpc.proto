@@ -112,7 +112,7 @@ message Mutation {
     optional bytes value = 5;
     optional int64 ts_start = 6;
     optional int64 ts_end = 7;
-    optional int32 ttl = 8 [default = -1]; // -1 : 表示此key永不过期, 在TS中会存储过期时间为INT64_MAX.
+    optional int32 ttl = 8 [default = -1]; // -1 : 琛ㄧず姝ey姘镐笉杩囨湡, 鍦═S涓細瀛樺偍杩囨湡鏃堕棿涓篒NT64_MAX.
 }
 
 message RowMutationSequence {

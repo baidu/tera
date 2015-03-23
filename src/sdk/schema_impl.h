@@ -12,10 +12,10 @@
 
 namespace tera {
 
-/// ÁĞ×åÃèÊö
+/// åˆ—æ—æè¿°
 class CFDescImpl : public ColumnFamilyDescriptor {
 public:
-    /// ÁĞ×åÃû×Ö½öÔÊĞíÊ¹ÓÃ×ÖÄ¸¡¢Êı×ÖºÍÏÂ»®Ïß¹¹Ôì, ³¤¶È²»³¬¹ı256
+    /// åˆ—æ—åå­—ä»…å…è®¸ä½¿ç”¨å­—æ¯ã€æ•°å­—å’Œä¸‹åˆ’çº¿æ„é€ , é•¿åº¦ä¸è¶…è¿‡256
     CFDescImpl(const std::string& cf_name, int32_t id, const std::string& lg_name);
     /// id
     int32_t Id() const;
@@ -23,22 +23,22 @@ public:
 
     const std::string& LocalityGroup() const;
 
-    /// ÀúÊ·°æ±¾±£ÁôÊ±¼ä, ²»ÉèÖÃÊ±Îª0£¬ ±íÊ¾ÎŞÏŞ´óÓÀ¾Ã±£´æ
+    /// å†å²ç‰ˆæœ¬ä¿ç•™æ—¶é—´, ä¸è®¾ç½®æ—¶ä¸º0ï¼Œ è¡¨ç¤ºæ— é™å¤§æ°¸ä¹…ä¿å­˜
     void SetTimeToLive(int32_t ttl);
 
     int32_t TimeToLive() const;
 
-    /// ÔÚTTLÄÚ,×î¶à´æ´¢µÄ°æ±¾Êı
+    /// åœ¨TTLå†…,æœ€å¤šå­˜å‚¨çš„ç‰ˆæœ¬æ•°
     void SetMaxVersions(int32_t max_versions);
 
     int32_t MaxVersions() const;
 
-    /// ×îÉÙ´æ´¢µÄ°æ±¾Êı,¼´Ê¹³¬³öTTL,Ò²ÖÁÉÙ±£Áômin_versions¸ö°æ±¾
+    /// æœ€å°‘å­˜å‚¨çš„ç‰ˆæœ¬æ•°,å³ä½¿è¶…å‡ºTTL,ä¹Ÿè‡³å°‘ä¿ç•™min_versionsä¸ªç‰ˆæœ¬
     void SetMinVersions(int32_t min_versions);
 
     int32_t MinVersions() const;
 
-    /// ´æ´¢ÏŞ¶î, MBytes
+    /// å­˜å‚¨é™é¢, MBytes
     void SetDiskQuota(int64_t quota);
 
     int64_t DiskQuota() const;
@@ -65,10 +65,10 @@ private:
     std::string _type;
 };
 
-/// ¾Ö²¿ĞÔÈº×éÃèÊö
+/// å±€éƒ¨æ€§ç¾¤ç»„æè¿°
 class LGDescImpl : public LocalityGroupDescriptor {
 public:
-    /// ¾Ö²¿ĞÔÈº×éÃû×Ö½öÔÊĞíÊ¹ÓÃ×ÖÄ¸¡¢Êı×ÖºÍÏÂ»®Ïß¹¹Ôì,³¤¶È²»³¬¹ı256
+    /// å±€éƒ¨æ€§ç¾¤ç»„åå­—ä»…å…è®¸ä½¿ç”¨å­—æ¯ã€æ•°å­—å’Œä¸‹åˆ’çº¿æ„é€ ,é•¿åº¦ä¸è¶…è¿‡256
     LGDescImpl(const std::string& lg_name, int32_t id);
 
     /// Id read only
@@ -124,33 +124,33 @@ private:
     int32_t         _memtable_ldb_block_size;
 };
 
-/// ±íÃèÊö·û.
+/// è¡¨æè¿°ç¬¦.
 class TableDescImpl {
 public:
-    /// ±í¸ñÃû×Ö½öÔÊĞíÊ¹ÓÃ×ÖÄ¸¡¢Êı×ÖºÍÏÂ»®Ïß¹¹Ôì,³¤¶È²»³¬¹ı256
+    /// è¡¨æ ¼åå­—ä»…å…è®¸ä½¿ç”¨å­—æ¯ã€æ•°å­—å’Œä¸‹åˆ’çº¿æ„é€ ,é•¿åº¦ä¸è¶…è¿‡256
     TableDescImpl(const std::string& tb_name, bool is_kv);
     ~TableDescImpl();
     std::string TableName() const;
-    /// ÉèÖÃÎªkv±í£¨ÎŞÁĞ£©£¬½¨±íÍê³ÉºóÎŞ·¨¸Ä±ä
+    /// è®¾ç½®ä¸ºkvè¡¨ï¼ˆæ— åˆ—ï¼‰ï¼Œå»ºè¡¨å®Œæˆåæ— æ³•æ”¹å˜
     void SetKvOnly();
-    /// Ôö¼ÓÒ»¸ölocalitygroup
+    /// å¢åŠ ä¸€ä¸ªlocalitygroup
     LocalityGroupDescriptor* AddLocalityGroup(const std::string& lg_name);
-    /// »ñÈ¡Ä¬ÈÏlocalitygroup£¬½öÓÃÓÚkv±í
+    /// è·å–é»˜è®¤localitygroupï¼Œä»…ç”¨äºkvè¡¨
     LocalityGroupDescriptor* DefaultLocalityGroup();
-    /// É¾³ıÒ»¸ölocalitygroup
+    /// åˆ é™¤ä¸€ä¸ªlocalitygroup
     bool RemoveLocalityGroup(const std::string& lg_name);
-    /// »ñÈ¡localitygroup
+    /// è·å–localitygroup
     const LocalityGroupDescriptor* LocalityGroup(int32_t id) const;
     const LocalityGroupDescriptor* LocalityGroup(const std::string& lg_name) const;
-    /// »ñÈ¡localitygroupÊıÁ¿
+    /// è·å–localitygroupæ•°é‡
     int32_t LocalityGroupNum() const;
-    /// Ôö¼ÓÒ»¸öcolumnfamily
+    /// å¢åŠ ä¸€ä¸ªcolumnfamily
     ColumnFamilyDescriptor* AddColumnFamily(const std::string& cf_name,
                                             const std::string& lg_name);
     ColumnFamilyDescriptor* DefaultColumnFamily();
-    /// É¾³ıÒ»¸öcolumnfamily
+    /// åˆ é™¤ä¸€ä¸ªcolumnfamily
     void RemoveColumnFamily(const std::string& cf_name);
-    /// »ñÈ¡ËùÓĞµÄcolmnfamily
+    /// è·å–æ‰€æœ‰çš„colmnfamily
     const ColumnFamilyDescriptor* ColumnFamily(int32_t id) const;
     const ColumnFamilyDescriptor* ColumnFamily(const std::string& cf_name) const;
     int32_t ColumnFamilyNum() const;
@@ -165,13 +165,13 @@ public:
     void SetMergeSize(int64_t size);
     int64_t MergeSize() const;
 
-    /// ²åÈësnapshot
+    /// æ’å…¥snapshot
     int32_t AddSnapshot(uint64_t snapshot);
-    /// »ñÈ¡snapshot
+    /// è·å–snapshot
     uint64_t Snapshot(int32_t id) const;
-    /// SnapshotÊıÁ¿
+    /// Snapshotæ•°é‡
     int32_t SnapshotNum() const;
-    /// ÊÇ·ñÎªkv±í
+    /// æ˜¯å¦ä¸ºkvè¡¨
     bool IsKv() const;
 
 private:

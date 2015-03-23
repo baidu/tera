@@ -23,51 +23,51 @@ class RowReaderImpl : public RowReader, public SdkTask {
 public:
     RowReaderImpl(Table* table, const std::string& row_key);
     ~RowReaderImpl();
-    /// ÉèÖÃ¶ÁÈ¡ÌØ¶¨°æ±¾
+    /// è®¾ç½®è¯»å–ç‰¹å®šç‰ˆæœ¬
     void SetTimestamp(int64_t ts);
-    /// ·µ»Ø¶ÁÈ¡Ê±¼ä´Á
+    /// è¿”å›è¯»å–æ—¶é—´æˆ³
     int64_t GetTimestamp();
 
     void SetSnapshot(uint64_t snapshot_id) { _snapshot_id = snapshot_id; }
 
     uint64_t GetSnapshot() { return _snapshot_id; }
 
-    /// ÉèÖÃ¶ÁÈ¡CF
+    /// è®¾ç½®è¯»å–CF
     void AddColumnFamily(const std::string& cf_name);
-    /// ÉèÖÃ¶ÁÈ¡Column(CF:Qualifier)
+    /// è®¾ç½®è¯»å–Column(CF:Qualifier)
     void AddColumn(const std::string& cf_name, const std::string& qualifier);
-    /// ÉèÖÃ¶ÁÈ¡time_range
+    /// è®¾ç½®è¯»å–time_range
     void SetTimeRange(int64_t ts_start, int64_t ts_end);
-    /// ·µ»Øtime_range
+    /// è¿”å›time_range
     void GetTimeRange(int64_t* ts_start, int64_t* ts_end = NULL);
-    /// ÉèÖÃ¶ÁÈ¡max_version
+    /// è®¾ç½®è¯»å–max_version
     void SetMaxVersions(uint32_t max_version);
-    /// ·µ»Ømax_version
+    /// è¿”å›max_version
     uint32_t GetMaxVersions();
-    /// ÉèÖÃ³¬Ê±Ê±¼ä(Ö»Ó°Ïìµ±Ç°²Ù×÷,²»Ó°ÏìTable::SetReadTimeoutÉèÖÃµÄÄ¬ÈÏ¶Á³¬Ê±)
+    /// è®¾ç½®è¶…æ—¶æ—¶é—´(åªå½±å“å½“å‰æ“ä½œ,ä¸å½±å“Table::SetReadTimeoutè®¾ç½®çš„é»˜è®¤è¯»è¶…æ—¶)
     void SetTimeOut(int64_t timeout_ms);
-    /// ÉèÖÃÒì²½»Øµ÷, ²Ù×÷»áÒì²½·µ»Ø
+    /// è®¾ç½®å¼‚æ­¥å›è°ƒ, æ“ä½œä¼šå¼‚æ­¥è¿”å›
     void SetCallBack(RowReader::Callback callback);
-    /// ÉèÖÃÓÃ»§ÉÏÏÂÎÄ£¬¿ÉÔÚ»Øµ÷º¯ÊıÖĞ»ñÈ¡
+    /// è®¾ç½®ç”¨æˆ·ä¸Šä¸‹æ–‡ï¼Œå¯åœ¨å›è°ƒå‡½æ•°ä¸­è·å–
     void SetContext(void* context);
     void* GetContext();
-    /// ÉèÖÃÒì²½·µ»Ø
+    /// è®¾ç½®å¼‚æ­¥è¿”å›
     void SetAsync();
-    /// Òì²½²Ù×÷ÊÇ·ñÍê³É
+    /// å¼‚æ­¥æ“ä½œæ˜¯å¦å®Œæˆ
     bool IsFinished() const;
-    /// »ñÈ¡¶Á³¬Ê±Ê±¼ä
+    /// è·å–è¯»è¶…æ—¶æ—¶é—´
     int64_t TimeOut();
-    /// ÉèÖÃ´íÎóÂğ
+    /// è®¾ç½®é”™è¯¯å—
     void SetError(ErrorCode::ErrorCodeType err , const std::string& reason = "");
-    /// »ñµÃ½á¹û´íÎóÂë
+    /// è·å¾—ç»“æœé”™è¯¯ç 
     ErrorCode GetError();
-    /// ÊÇ·ñµ½´ï½áÊø±ê¼Ç
+    /// æ˜¯å¦åˆ°è¾¾ç»“æŸæ ‡è®°
     bool Done();
-    /// µü´úÏÂÒ»¸öcell
+    /// è¿­ä»£ä¸‹ä¸€ä¸ªcell
     void Next();
     /// Row
     const std::string& RowName();
-    /// ¶ÁÈ¡µÄ½á¹û
+    /// è¯»å–çš„ç»“æœ
     std::string Value();
     /// Timestamp
     int64_t Timestamp();
@@ -77,7 +77,7 @@ public:
     std::string Family();
     /// Qualifier
     std::string Qualifier();
-    /// ½«½á¹û×ª´æµ½Ò»¸östd::mapÖĞ, ¸ñÊ½Îª: map<column, map<timestamp, value>>
+    /// å°†ç»“æœè½¬å­˜åˆ°ä¸€ä¸ªstd::mapä¸­, æ ¼å¼ä¸º: map<column, map<timestamp, value>>
     typedef std::map< std::string, std::map<int64_t, std::string> > Map;
     void ToMap(Map* rowmap);
 
@@ -90,13 +90,13 @@ public:
     bool IsAsync();
 
     bool Wait(int64_t abs_time_ms = 0);
-    /// Ö´ĞĞÒì²½»Øµ÷
+    /// æ‰§è¡Œå¼‚æ­¥å›è°ƒ
     void RunCallback();
-    /// GetÊıÁ¿
+    /// Getæ•°é‡
     uint32_t GetReadColumnNum();
-    /// ·µ»ØGetÒıÓÃ
+    /// è¿”å›Getå¼•ç”¨
     const ReadColumnList& GetReadColumnList();
-    /// ĞòÁĞ»¯
+    /// åºåˆ—åŒ–
     void ToProtoBuf(RowReaderInfo* info);
 
 private:

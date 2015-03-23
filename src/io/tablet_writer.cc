@@ -170,7 +170,7 @@ void TabletWriter::DoWork() {
 
     while (!m_stopped) {
         int64_t sleep_duration = m_sync_timestamp + sync_interval - GetTimeStampInMs();
-        // Èç¹ûÃ»Êı¾İ, µÈ
+        // å¦‚æœæ²¡æ•°æ®, ç­‰
         if (!SwapActiveBuffer(sleep_duration <= 0)) {
             if (sleep_duration <= 0) {
                 m_sync_timestamp = GetTimeStampInMs();
@@ -179,7 +179,7 @@ void TabletWriter::DoWork() {
             }
             continue;
         }
-        // ·ñÔò flush
+        // å¦åˆ™ flush
         VLOG(7) << "write data, sleep_duration: " << sleep_duration;
         FlushToDiskBatch(m_sealed_buffer);
         m_sealed_buffer->clear();
