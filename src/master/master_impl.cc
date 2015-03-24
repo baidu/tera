@@ -26,7 +26,7 @@
 #include "utils/timer.h"
 #include "utils/utils_cmd.h"
 
-DECLARE_string(tera_master_port);
+DECLARE_string(tera_port);
 DECLARE_bool(tera_master_meta_recovery_enabled);
 DECLARE_string(tera_master_meta_recovery_file);
 
@@ -110,7 +110,7 @@ MasterImpl::MasterImpl()
     if (FLAGS_tera_master_cache_check_enabled) {
         EnableReleaseCacheTimer();
     }
-    m_local_addr = utils::GetLocalHostName() + ":" + FLAGS_tera_master_port;
+    m_local_addr = utils::GetLocalHostName() + ":" + FLAGS_tera_port;
     tabletnode::TabletNodeClientAsync::SetRpcOption(
         FLAGS_tera_master_rpc_limit_enabled ? FLAGS_tera_master_rpc_limit_max_inflow : -1,
         FLAGS_tera_master_rpc_limit_enabled ? FLAGS_tera_master_rpc_limit_max_outflow : -1,

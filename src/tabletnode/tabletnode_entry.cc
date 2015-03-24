@@ -24,7 +24,7 @@
 #include "utils/timer.h"
 #include "utils/utils_cmd.h"
 
-DECLARE_string(tera_tabletnode_port);
+DECLARE_string(tera_port);
 DECLARE_int64(tera_heartbeat_period);
 DECLARE_int32(tera_garbage_collect_period);
 DECLARE_bool(tera_zk_enabled);
@@ -48,7 +48,7 @@ bool TabletNodeEntry::StartServer() {
     // set which core could work on this TS
     SetProcessorAffinity();
 
-    IpAddress tabletnode_addr(utils::GetLocalHostAddr(), FLAGS_tera_tabletnode_port);
+    IpAddress tabletnode_addr(utils::GetLocalHostAddr(), FLAGS_tera_port);
     LOG(INFO) << "Start RPC server at: " << tabletnode_addr.ToString();
 
     TabletNodeInfo tabletnode_info;

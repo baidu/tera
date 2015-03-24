@@ -34,7 +34,7 @@
 #include "utils/timer.h"
 #include "utils/utils_cmd.h"
 
-DECLARE_string(tera_tabletnode_port);
+DECLARE_string(tera_port);
 DECLARE_int64(tera_heartbeat_period);
 DECLARE_int64(tera_heartbeat_retry_period_factor);
 DECLARE_int32(tera_heartbeat_retry_times);
@@ -91,7 +91,7 @@ TabletNodeImpl::TabletNodeImpl(const TabletNodeInfo& tabletnode_info,
       m_sysinfo(tabletnode_info),
       m_release_cache_timer_id(kInvalidTimerId),
       m_thread_pool(new ThreadPool(FLAGS_tera_tabletnode_impl_thread_max_num)) {
-    m_local_addr = utils::GetLocalHostName() + ":" + FLAGS_tera_tabletnode_port;
+    m_local_addr = utils::GetLocalHostName() + ":" + FLAGS_tera_port;
     tabletnode::TabletNodeClientAsync::SetRpcOption(
         FLAGS_tera_tabletnode_rpc_limit_enabled ? FLAGS_tera_tabletnode_rpc_limit_max_inflow : -1,
         FLAGS_tera_tabletnode_rpc_limit_enabled ? FLAGS_tera_tabletnode_rpc_limit_max_outflow : -1,

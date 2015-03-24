@@ -71,7 +71,9 @@ protected:
             rpc_controller->SetTimeout(rpc_timeout);
             if (retry == 0 || PollAndResetServerAddr()) {
 
-                CHECK_NOTNULL(m_server_client.get());
+                if (m_server_client.get() == NULL) {
+                    exit(-1);
+                }
                 (m_server_client.get()->*func)(rpc_controller.get(),
                                                request, response, closure);
 

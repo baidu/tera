@@ -8,6 +8,7 @@
 /////////  common /////////
 
 DEFINE_string(tera_role, "", "the role of tera running binary, should be one of (master | tabletnode)");
+DEFINE_string(tera_port, "10001", "port of tera_main used");
 
 DEFINE_string(tera_user_identity, "", "the identity of tera user");
 DEFINE_string(tera_user_passcode, "", "the passcode of tera user");
@@ -25,6 +26,7 @@ DEFINE_int32(tera_zk_timeout, 10000, "zookeeper session timeout");
 DEFINE_int64(tera_zk_retry_period, 3000, "zookeeper operation retry period (in ms)");
 DEFINE_int32(tera_zk_retry_max_times, 10, "zookeeper operation max retry times");
 DEFINE_string(tera_zk_lib_log_path, "./zk.log", "zookeeper library log output file");
+DEFINE_string(tera_log_prefix, "", "prefix of log file (INFO, WARNING)");
 
 /////////  io  /////////
 
@@ -59,7 +61,6 @@ DEFINE_int64(tera_io_scan_stream_task_pending_time, 180, "the max pending time (
 
 /////////  master /////////
 
-DEFINE_string(tera_master_port, "10000", "the master port of tera system");
 DEFINE_int64(tera_heartbeat_timeout_period_factor, 120, "the timeout period factor when lose heartbeat");
 DEFINE_int32(tera_master_connect_retry_times, 5, "the max retry times when connect to master");
 DEFINE_int32(tera_master_connect_retry_period, 1000, "the retry period (in ms) between two master connection");
@@ -120,7 +121,7 @@ DEFINE_int32(tera_master_rpc_max_pending_buffer_size, 2, "max pending buffer siz
 DEFINE_int32(tera_master_rpc_work_thread_num, 8, "thread num of master rpc client");
 
 DEFINE_int32(tera_max_pre_assign_tablet_num, 100000, "max num of pre-assign tablets per table");
-DEFINE_bool(tera_delete_obsolete_tabledir_enabled, false, "delete table dir or not when deleting table");
+DEFINE_bool(tera_delete_obsolete_tabledir_enabled, true, "move table dir to trash when dropping table");
 
 DEFINE_bool(tera_master_stat_table_enabled, true, "whether dump system status to stat_table");
 DEFINE_string(tera_master_stat_table_name, "stat_table", "a specific table for system status dumping");
@@ -132,7 +133,6 @@ DEFINE_int32(tera_master_gc_period, 60000, "the period (in ms) for master gc");
 
 ///////// tablet node  /////////
 
-DEFINE_string(tera_tabletnode_port, "20000", "the tablet node port of tera system");
 DEFINE_int32(tera_tabletnode_write_thread_num, 10, "the write thread number of tablet node server");
 DEFINE_int32(tera_tabletnode_read_thread_num, 40, "the read thread number of tablet node server");
 DEFINE_int32(tera_tabletnode_manual_compact_thread_num, 2, "the manual compact thread number of tablet node server");
@@ -189,7 +189,7 @@ DEFINE_int32(tera_tabletnode_tcm_cache_release_period, 180, "the period (in sec)
 DEFINE_string(tera_sdk_impl_type, "tera", "the activated type of SDK impl");
 DEFINE_int32(tera_sdk_retry_times, 10, "the max retry times during sdk operation fail");
 DEFINE_int32(tera_sdk_retry_period, 500, "the retry period (in ms) between two operations");
-DEFINE_string(tera_sdk_conf_file, "", "the path of default flag file");
+DEFINE_string(tera_sdk_conf_file, "../conf/tera.flag", "the path of default flag file");
 DEFINE_int32(tera_sdk_show_max_num, 20000, "the max fetch meta number for each rpc connection");
 DEFINE_int32(tera_sdk_async_pending_limit, 2000, "the max number for pending task in async writer");
 DEFINE_int32(tera_sdk_async_sync_task_threshold, 1000, "the sync task threshold to do sync operation");

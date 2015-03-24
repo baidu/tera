@@ -1858,7 +1858,7 @@ int main(int argc, char* argv[]) {
 
     int ret = 0;
     ErrorCode error_code;
-    Client* client = Client::NewClient("./tera.flag");
+    Client* client = Client::NewClient();
 
     if (client == NULL) {
         LOG(ERROR) << "client instance not exist";
