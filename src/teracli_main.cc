@@ -970,13 +970,13 @@ int32_t ShowAllTables(Client* client, bool is_x, bool show_all, ErrorCode* err) 
         int32_t lread = 0;
         int32_t read = 0;
         int32_t rmax = 0;
-        int32_t rspeed = 0;
+        int64_t rspeed = 0;
         int32_t write = 0;
         int32_t wmax = 0;
-        int32_t wspeed = 0;
+        int64_t wspeed = 0;
         int32_t scan = 0;
         int32_t smax = 0;
-        int32_t sspeed = 0;
+        int64_t sspeed = 0;
         for (size_t i = 0; i < tablet_list.meta_size(); ++i) {
             if (tablet_list.meta(i).table_name() == tablename) {
                 size += tablet_list.meta(i).table_size();
