@@ -44,4 +44,5 @@ before_script:
     - sed -i 's/^BOOST_INCDIR=.*/BOOST_INCDIR=\/usr\/local\/include/' depends.mk
 
 script:
+    - make proto
     - make -j4
