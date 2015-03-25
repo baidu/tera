@@ -43,8 +43,6 @@ SERVER_OBJ := $(SERVER_SRC:.cc=.o)
 CLIENT_OBJ := $(CLIENT_SRC:.cc=.o)
 LEVELDB_LIB := src/leveldb/libleveldb.a
 
-PROTOC = protoc
-
 PROGRAM = tera_main teracli
 LIBRARY = libtera.a
 
