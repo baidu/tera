@@ -41,6 +41,8 @@ OTHER_OBJ := $(OTHER_SRC:.cc=.o)
 COMMON_OBJ := $(COMMON_SRC:.cc=.o)
 SERVER_OBJ := $(SERVER_SRC:.cc=.o)
 CLIENT_OBJ := $(CLIENT_SRC:.cc=.o)
+ALL_OBJ := $(MASTER_OBJ) $(TABLETNODE_OBJ) $(IO_OBJ) $(SDK_OBJ) $(PROTO_OBJ) \
+           $(OTHER_OBJ) $(COMMON_OBJ) $(SERVER_OBJ) $(CLIENT_OBJ)
 LEVELDB_LIB := src/leveldb/libleveldb.a
 
 PROTOC = protoc
@@ -85,11 +87,8 @@ teracli: $(CLIENT_OBJ) $(LIBRARY)
 src/leveldb/libleveldb.a:
 	$(MAKE) -C src/leveldb libleveldb.a
 
-%.o: %.cc $(PROTO_OUT_H)
+$(ALL_OBJ): %.o: %.cc $(PROTO_OUT_H)
 	$(CXX) $(CXXFLAGS) -c $< -o $@
-
-%.o: %.c $(PROTO_OUT_H)
-	$(CC) $(CFLAGS) -c $< -o $@
 
 .PHONY: proto
 proto: $(PROTO_OUT_CC) $(PROTO_OUT_H)

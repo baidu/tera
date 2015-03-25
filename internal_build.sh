@@ -14,8 +14,8 @@ DEPS_CONFIG="--prefix=${DEPS_PREFIX} --disable-shared"
 export PATH=${DEPS_PREFIX}/bin:$PATH
 mkdir -p ${DEPS_SOURCE} ${DEPS_PREFIX}
 
-git clone http://gitlab.baidu.com/baidups/third.git ${DEPS_SOURCE}
-git clone http://gitlab.baidu.com/baidups/sofa-pbrpc.git ${DEPS_SOURCE}/sofa-pbrpc
+git clone --depth=1 http://gitlab.baidu.com/baidups/third.git ${DEPS_SOURCE}
+git clone --depth=1 http://gitlab.baidu.com/baidups/sofa-pbrpc.git ${DEPS_SOURCE}/sofa-pbrpc
 
 cd ${DEPS_SOURCE}
 
