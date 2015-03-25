@@ -9,7 +9,6 @@
 #include "proto/master_client.h"
 
 
-DECLARE_string(tera_port);
 DECLARE_int32(tera_master_connect_retry_times);
 DECLARE_int32(tera_master_connect_retry_period);
 DECLARE_int32(tera_master_connect_timeout_period);

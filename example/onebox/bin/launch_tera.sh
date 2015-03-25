@@ -12,7 +12,7 @@ fi
 ${CURRENT_DIR}/tera_main \
     --flagfile=${CURRENT_DIR}/../conf/tera.flag \
     --tera_role=master \
-    --tera_port=${PORT} \
+    --tera_master_port=${PORT} \
     --tera_log_prefix=master &> ${CURRENT_DIR}/../log/master.stderr </dev/null &
 
 # backup tabletnode log & launch tera tabletnodes
@@ -30,7 +30,7 @@ for ((i=1; i<=$TABLETNODE_NUM; i++)); do
     ${CURRENT_DIR}/tera_main \
         --flagfile=${CURRENT_DIR}/../conf/tera.flag \
         --tera_role=tabletnode \
-        --tera_port=$((PORT+i)) \
+        --tera_tabletnode_port=$((PORT+i)) \
         --tera_leveldb_log_path=${LEVELDB_LOG_FILE} \
         --tera_tabletnode_cache_paths=../cache/tabletnode.$i \
         --tera_log_prefix=tabletnode.$i \
