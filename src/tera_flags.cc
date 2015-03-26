@@ -190,7 +190,7 @@ DEFINE_int32(tera_tabletnode_tcm_cache_release_period, 180, "the period (in sec)
 DEFINE_string(tera_sdk_impl_type, "tera", "the activated type of SDK impl");
 DEFINE_int32(tera_sdk_retry_times, 10, "the max retry times during sdk operation fail");
 DEFINE_int32(tera_sdk_retry_period, 500, "the retry period (in ms) between two operations");
-DEFINE_string(tera_sdk_conf_file, "../conf/tera.flag", "the path of default flag file");
+DEFINE_string(tera_sdk_conf_file, "", "the path of default flag file");
 DEFINE_int32(tera_sdk_show_max_num, 20000, "the max fetch meta number for each rpc connection");
 DEFINE_int32(tera_sdk_async_pending_limit, 2000, "the max number for pending task in async writer");
 DEFINE_int32(tera_sdk_async_sync_task_threshold, 1000, "the sync task threshold to do sync operation");

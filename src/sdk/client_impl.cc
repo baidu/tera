@@ -700,23 +700,22 @@ bool ClientImpl::ParseTabletEntry(const TabletMeta& meta, std::vector<TabletInfo
 }
 
 static void InitFlags(const std::string& confpath, const std::string& log_prefix) {
-    if (!confpath.empty()) {
+    // search conf file, priority:
+    //   user-specified > ./tera.flag > ../conf/tera.flag > env-var
+    if (!confpath.empty() && IsExist(confpath)) {
         FLAGS_flagfile = confpath;
-    } else if (!FLAGS_tera_sdk_conf_file.empty()) {
+    } else if (!FLAGS_tera_sdk_conf_file.empty() && IsExist(confpath)) {
         FLAGS_flagfile = FLAGS_tera_sdk_conf_file;
+    } else if (IsExist("./tera.flag")) {
+        FLAGS_flagfile = "./tera.flag";
+    } else if (IsExist("../conf/tera.flag")) {
+        FLAGS_flagfile = "../conf/tera.flag";
+    } else if (IsExist(utils::GetValueFromeEnv("TERA_CONF"))) {
+        FLAGS_flagfile = utils::GetValueFromeEnv("TERA_CONF");
     } else {
-        std::string found_path = utils::GetValueFromeEnv("tera_CONF");
-
-        if (!found_path.empty() && IsExist(found_path)) {
-            VLOG(10) << "config file is not defined, use default one: "
-                << found_path;
-            FLAGS_flagfile = found_path;
-        } else if (IsExist("./tera.flag")) {
-            LOG(ERROR) << "config file is not defined, use default one: ./tera.flag";
-            FLAGS_flagfile = "./tera.flag";
-        }
+        LOG(ERROR) << "config file not found";
+        exit(-1);
     }
-
 
     // init user identity & role
     std::string cur_identity = utils::GetValueFromeEnv("USER");
