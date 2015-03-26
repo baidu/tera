@@ -1,15 +1,13 @@
-teracli客户端使用手册
+teracli命令行工具使用手册
 ---
 
-## 表格创建 (create)
+<!--## 表格创建 (create)-->
 
 ## 表格schema更新-全量更新 (update)
 
 `create   <tablename> <schema>`
 
-1. schema的语法必须和create表格时一致。
-
-1. tera会用新的schema覆盖原有schema.
+1. schema的语法必须和create表格时一致。tera会用新的schema覆盖原有schema.
 
 1. tablename不要超过256个字符，合法字符包括：数字、大小写字母、下划线`_`、连字符`-`，
 首字符不能为数字。
