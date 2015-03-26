@@ -3,6 +3,8 @@
 
 后续整理的文档可以放在这个目录下，也可以放在对应代码目录下，但都在这留个链接方便索引。
 
+[系统设计](https://github.com/BaiduPS/tera/blob/master/doc/tera_design.md)
+
 [系统构建](https://github.com/BaiduPS/tera/blob/master/BUILD)
 
 [使用示例](https://github.com/BaiduPS/tera/wiki/%E4%B8%BB%E8%A6%81API%E4%BD%BF%E7%94%A8%E6%96%B9%E6%B3%95)
