@@ -336,6 +336,10 @@ void MasterImpl::RestoreUserTablet(const std::vector<TabletMeta>& report_meta_li
             VLOG(6) << "READY Tablet, " << tablet;
             continue;
         }
+        // meta table may be manipulated by other threads during restore
+        if (tablet->GetTableName() == FLAGS_tera_master_meta_table_name) {
+            continue;
+        }
         CHECK(tablet->GetStatus() == kTableNotInit);
         tablet->SetStatus(kTableOffLine);
         VLOG(6) << "OFFLINE Tablet, " << tablet;
