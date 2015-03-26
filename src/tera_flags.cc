@@ -25,6 +25,7 @@ DEFINE_int32(tera_zk_timeout, 10000, "zookeeper session timeout");
 DEFINE_int64(tera_zk_retry_period, 3000, "zookeeper operation retry period (in ms)");
 DEFINE_int32(tera_zk_retry_max_times, 10, "zookeeper operation max retry times");
 DEFINE_string(tera_zk_lib_log_path, "./zk.log", "zookeeper library log output file");
+DEFINE_string(tera_log_prefix, "", "prefix of log file (INFO, WARNING)");
 
 /////////  io  /////////
 
@@ -120,7 +121,7 @@ DEFINE_int32(tera_master_rpc_max_pending_buffer_size, 2, "max pending buffer siz
 DEFINE_int32(tera_master_rpc_work_thread_num, 8, "thread num of master rpc client");
 
 DEFINE_int32(tera_max_pre_assign_tablet_num, 100000, "max num of pre-assign tablets per table");
-DEFINE_bool(tera_delete_obsolete_tabledir_enabled, false, "delete table dir or not when deleting table");
+DEFINE_bool(tera_delete_obsolete_tabledir_enabled, true, "move table dir to trash when dropping table");
 
 DEFINE_bool(tera_master_stat_table_enabled, true, "whether dump system status to stat_table");
 DEFINE_string(tera_master_stat_table_name, "stat_table", "a specific table for system status dumping");

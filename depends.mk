@@ -30,6 +30,8 @@ GFLAGS_LIBDIR = $(GFLAGS_PREFIX)/lib
 GLOG_LIBDIR = $(GLOG_PREFIX)/lib
 GPERFTOOLS_LIBDIR = $(GPERFTOOLS_PREFIX)/lib
 
+PROTOC = $(PROTOBUF_PREFIX)/bin/protoc
+
 ################################################################
 # Note: No need to modify things below.
 ################################################################

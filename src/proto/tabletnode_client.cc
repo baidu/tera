@@ -8,7 +8,6 @@
 
 #include "proto/tabletnode_client.h"
 
-DECLARE_string(tera_tabletnode_port);
 DECLARE_int32(tera_tabletnode_connect_retry_times);
 DECLARE_int32(tera_tabletnode_connect_retry_period);
 DECLARE_int32(tera_tabletnode_connect_timeout_period);

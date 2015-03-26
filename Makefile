@@ -45,8 +45,6 @@ ALL_OBJ := $(MASTER_OBJ) $(TABLETNODE_OBJ) $(IO_OBJ) $(SDK_OBJ) $(PROTO_OBJ) \
            $(OTHER_OBJ) $(COMMON_OBJ) $(SERVER_OBJ) $(CLIENT_OBJ)
 LEVELDB_LIB := src/leveldb/libleveldb.a
 
-PROTOC = protoc
-
 PROGRAM = tera_main teracli
 LIBRARY = libtera.a
 

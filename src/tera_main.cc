@@ -15,6 +15,7 @@
 #include "version.h"
 
 DECLARE_string(tera_role);
+DECLARE_string(tera_log_prefix);
 
 bool g_quit = false;
 
@@ -40,7 +41,11 @@ tera::TeraEntry* SwitchTeraEntry() {
 int main(int argc, char** argv) {
     ::google::ParseCommandLineFlags(&argc, &argv, true);
     ::google::InitGoogleLogging(argv[0]);
-    tera::utils::SetupLog(FLAGS_tera_role);
+    if (!FLAGS_tera_log_prefix.empty()) {
+        tera::utils::SetupLog(FLAGS_tera_log_prefix);
+    } else {
+        tera::utils::SetupLog(FLAGS_tera_role);
+    }
 
     if (argc > 1) {
         std::string ext_cmd = argv[1];
