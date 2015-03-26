@@ -5,14 +5,16 @@ teracli命令行工具使用手册
 
 ## 表格schema更新-全量更新 (update)
 
-`create   <tablename> <schema>`
+`update  <tablename> <tableschema>`
 
-1. schema的语法必须和create表格时一致。tera会用新的schema覆盖原有schema.
+1. schema的语法必须和create表格时一致。
+tera会用新的schema覆盖原有schema.
+更新schema前需要先disable表格。
 
 1. tablename不要超过256个字符，合法字符包括：数字、大小写字母、下划线`_`、连字符`-`，
 首字符不能为数字。
 
-1. schema字符串请用引号括起来，避免`#`等特殊符号被shell解释。
+1. tableschema字符串请用引号括起来，避免`#`等特殊符号被shell解释。
 
 ## 表格schema更新-增量更新 (update-part)
 
