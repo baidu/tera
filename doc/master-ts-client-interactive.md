@@ -35,6 +35,6 @@ master找到meta表(meta表持久化存储的位置是约定好的，大家都�
 master启动时会在zk上的master锁中记下自己的位置[ip:port].
 
 ## master如何获知ts的信息？
-参考master的启动，可以获知master初始化时各个ts的状态以及位置[ip:port]，
+参考master的启动，可以获知master初始化时各个ts的状态(例如位置[ip:port])，
 
-通过定期扫描特定目录（ts启动时会通过zk在该目录下创建文件锁），获知ts的加入或退出。
+通过zk获知ts的加入或退出。
