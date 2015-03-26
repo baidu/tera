@@ -13,4 +13,6 @@
 
 [LevelDB](https://github.com/BaiduPS/tera/blob/master/src/leveldb/README.md)
 
-[命令行工具使用手册](https://github.com/taocp/tera/blob/master/doc/teracli.md)
+[命令行工具使用手册](https://github.com/BaiduPS/tera/blob/master/doc/teracli.md)
+
+[tera实现之master、ts、client的交互](https://github.com/BaiduPS/tera/blob/master/doc/master-ts-client-interactive.md)
