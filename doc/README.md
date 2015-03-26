@@ -10,3 +10,5 @@
 [源码目录结构](https://github.com/BaiduPS/tera/blob/master/src/README.md)
 
 [LevelDB](https://github.com/BaiduPS/tera/blob/master/src/leveldb/README.md)
+
+[命令行工具使用手册](https://github.com/taocp/tera/blob/master/doc/teracli.md)
