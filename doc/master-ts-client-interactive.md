@@ -9,8 +9,7 @@
 ## meta表的加载
 1. meta表持久化存储在dfs中约定好的目录下；
 1. master启动时先从zk获取master锁，再扫描zk上的文件获取ts状态，与众ts通信获知在服务状态的tablet.
-
-从meta表目录下找到meta表(meta表持久化存储的位置是约定好的，大家都知道的)，
+1. 从meta表目录下找到meta表(meta表持久化存储的位置是约定好的，大家都知道的)，
 选择某个ts加载meta表，然后将载有meta表的ts位置[ip:port]记录在zk下约定好的文件中。
 
 ## client如何获取meta表？
