@@ -3079,9 +3079,15 @@ bool MasterImpl::TryMergeTablet(TabletPtr tablet) {
         return false;
     }
 
+    if (tablet->IsBusy()) {
+        LOG(INFO) << "[merge] skip merge, tablet is busy: " << tablet->GetPath();
+        return false;
+    }
+
     TabletPtr tablet2;
     if (!m_tablet_manager->PickMergeTablet(tablet, &tablet2) ||
-        tablet2->GetStatus() != kTableReady) {
+        tablet2->GetStatus() != kTableReady ||
+        tablet2->IsBusy()) {
         VLOG(20) << "[merge] merge failed, none proper tablet";
         return false;
     }
@@ -4346,7 +4352,7 @@ void MasterImpl::CollectSingleDeadTablet(const std::string& tablename, uint64_t 
     std::vector<std::string> children;
     env->GetChildren(tablet_path, &children);
     if (children.size() == 0) {
-        LOG(INFO) << "[gc] this tablet is empty, delete it: " << tablet_path;
+        LOG(INFO) << "[gc] delete empty tablet dir: " << tablet_path;
         env->DeleteDir(tablet_path);
         return;
     }
@@ -4355,7 +4361,7 @@ void MasterImpl::CollectSingleDeadTablet(const std::string& tablename, uint64_t 
         leveldb::FileType type = leveldb::kUnknown;
         uint64_t number = 0;
         if (ParseFileName(children[lg], &number, &type)) {
-            VLOG(10) << "[gc] delete obsolete file: " << lg_path;
+            LOG(INFO) << "[gc] delete log file: " << lg_path;
             env->DeleteFile(lg_path);
             continue;
         }
@@ -4363,14 +4369,14 @@ void MasterImpl::CollectSingleDeadTablet(const std::string& tablename, uint64_t 
         leveldb::Slice rest(children[lg]);
         uint64_t lg_num = 0;
         if (!leveldb::ConsumeDecimalNumber(&rest, &lg_num)) {
-            LOG(INFO) << "[gc] this is not a lg dir, skip it: " << lg_path;
+            LOG(INFO) << "[gc] skip unknown dir: " << lg_path;
             continue;
         }
 
         std::vector<std::string> files;
         env->GetChildren(lg_path, &files);
         if (files.size() == 0) {
-            LOG(INFO) << "[gc] this dir is empty, delete it: " << lg_path;
+            LOG(INFO) << "[gc] delete empty lg dir: " << lg_path;
             env->DeleteDir(lg_path);
             continue;
         }
@@ -4381,7 +4387,7 @@ void MasterImpl::CollectSingleDeadTablet(const std::string& tablename, uint64_t 
             if (!ParseFileName(files[f], &number, &type) ||
                 type != leveldb::kTableFile) {
                 // only keep sst, delete rest files
-                VLOG(10) << "[gc] delete obsolete file: " << file_path;
+                LOG(INFO) << "[gc] delete obsolete file: " << file_path;
                 env->DeleteFile(file_path);
                 continue;
             }
@@ -4412,8 +4418,8 @@ void MasterImpl::DeleteObsoleteFiles() {
             std::set<uint64_t>::iterator it = file_set[lg].begin();
             for (; it != file_set[lg].end(); ++it) {
                 std::string file_path = leveldb::BuildTableFilePath(tablepath, lg, *it);
+                LOG(INFO) << "[gc] delete trash table file: " << file_path;
                 env->DeleteFile(file_path);
-                VLOG(10) << "[gc] delete obsolete file: " << file_path;
             }
         }
     }

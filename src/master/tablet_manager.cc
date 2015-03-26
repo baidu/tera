@@ -144,6 +144,11 @@ TablePtr Tablet::GetTable() {
     return m_table;
 }
 
+bool Tablet::IsBusy() {
+    MutexLock lock(&m_mutex);
+    return m_counter.is_on_busy();
+}
+
 std::string Tablet::DebugString() {
     MutexLock lock(&m_mutex);
     return m_meta.DebugString();

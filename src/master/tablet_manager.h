@@ -75,6 +75,7 @@ public:
     std::string GetServerId();
     std::string GetExpectServerAddr();
     TablePtr GetTable();
+    bool IsBusy();
     std::string DebugString();
 
 
