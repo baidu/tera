@@ -7,9 +7,10 @@
 #include <algorithm>
 #include <boost/bind.hpp>
 
-#include <google/malloc_extension.h>
 #include <gflags/gflags.h>
 #include <glog/logging.h>
+#include <gperftools/malloc_extension.h>
+
 
 #include "db/filename.h"
 #include "io/io_utils.h"
