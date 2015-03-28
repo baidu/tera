@@ -136,7 +136,7 @@ DEFINE_int32(tera_master_gc_period, 60000, "the period (in ms) for master gc");
 DEFINE_string(tera_tabletnode_port, "20000", "the tablet node port of tera system");
 DEFINE_int32(tera_tabletnode_write_thread_num, 10, "the write thread number of tablet node server");
 DEFINE_int32(tera_tabletnode_read_thread_num, 40, "the read thread number of tablet node server");
-DEFINE_int32(tera_tabletnode_scan_thread_num, 40, "the scan thread number of tablet node server");
+DEFINE_int32(tera_tabletnode_scan_thread_num, 5, "the scan thread number of tablet node server");
 DEFINE_int32(tera_tabletnode_manual_compact_thread_num, 2, "the manual compact thread number of tablet node server");
 DEFINE_int32(tera_tabletnode_impl_thread_min_num, 1, "the min thread number for tablet node impl operations");
 DEFINE_int32(tera_tabletnode_impl_thread_max_num, 10, "the max thread number for tablet node impl operations");
