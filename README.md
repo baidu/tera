@@ -26,7 +26,7 @@ map\<RowKey, map\<ColummnFamily:Qualifier, map\<Timestamp, Value> > > <br>
 系统主要由Tabletserver、Master和ClientSDK三部分构成。其中Tabletserver是核心服务器，承载着所有的数据管理与访问；Master是系统的仲裁者，负责表格的创建、schema更新与负载均衡；ClientSDK包含供管理员使用的命令行工具teracli和给用户使用的SDK。
 表格被按RowKey全局排序，并横向切分成多个Tablet，每个Tablet负责服务RowKey的一个区间，表格又被纵向且分为多个LocalityGroup，一个Tablet的多个Localitygroup在物理上单独存储，可以选择不同的存储介质，以优化访问效率。
 
-![架构图](https://github.com/BaiduPS/tera/blob/master/arch.png?raw=true)
+![架构图](https://github.com/BaiduPS/tera/blob/master/resources/images/arch.png?raw=true)
 
 #系统依赖
  * 使用分布式文件系统（HDFS、NFS等）持久化数据与元信息
