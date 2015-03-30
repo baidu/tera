@@ -1,62 +1,76 @@
-ÎªÁË×î¿ìËÙ¶ÈÌåÑéTera, TeraÌá¹©Ò»¸öOneBox·½Ê½²¼Êğ£¬ÀûÓÃ±¾µØ´æ´¢´úÌæDFS£¬µ¥»ú¶à½ø³ÌÔËĞĞmaster¡¢tabletnode¡£´ËÄ£Ê½ÏÂ¿ÉÕı³£Ê¹ÓÃteraµÄÈ«²¿¹¦ÄÜ£¬°üÀ¨£¨²»ÏŞÓÚ£©£º
-* ±í¸ñĞÂ½¨¡¢ÔØÈë¡¢Ğ¶ÔØ¡¢schemaĞŞ¸Ä¡¢É¾³ıµÈ
-* Êı¾İĞ´Èë¡¢É¾³ı¡¢Ëæ»ú¶Á¡¢Ë³Ğò¶ÁµÈ¡¢¶à°æ±¾¿ØÖÆµÈ
-* Êı¾İ·ÖÆ¬·ÖÁÑ¡¢ºÏ²¢¡¢¸ºÔØ¾ùºâµÈ
+é€šè¿‡OneBoxä½“éªŒTera
+=====
 
-## ÌåÑéÖ®Ç°£º
-ÒªÏÈÍê³ÉÈçÏÂÁ½Ïî¹¤×÷£º
-* **Tera±àÒëÍ¨¹ı**£¨ÒÔÉú³Étera_main, teracliÁ½¸ö¶ş½øÖÆÎÄ¼şÎª×¼£©
-* **ÓµÓĞÒ»¸özookeeper»·¾³**£¨µ¥»ú¼´¿É£©
+ä¸ºäº†æœ€å¿«é€Ÿåº¦ä½“éªŒTera, Teraæä¾›ä¸€ä¸ªOneBoxæ–¹å¼å¸ƒç½²ï¼Œåˆ©ç”¨æœ¬åœ°å­˜å‚¨ä»£æ›¿DFSï¼Œå•æœºå¤šè¿›ç¨‹è¿è¡Œmasterã€tabletnodeã€‚æ­¤æ¨¡å¼ä¸‹å¯æ­£å¸¸ä½¿ç”¨teraçš„å…¨éƒ¨åŠŸèƒ½ï¼ŒåŒ…æ‹¬ï¼ˆä¸é™äºï¼‰ï¼š
+* è¡¨æ ¼æ–°å»ºã€è½½å…¥ã€å¸è½½ã€schemaä¿®æ”¹ã€åˆ é™¤ç­‰
+* æ•°æ®å†™å…¥ã€åˆ é™¤ã€éšæœºè¯»ã€é¡ºåºè¯»ç­‰ã€å¤šç‰ˆæœ¬æ§åˆ¶ç­‰
+* æ•°æ®åˆ†ç‰‡åˆ†è£‚ã€åˆå¹¶ã€è´Ÿè½½å‡è¡¡ç­‰
 
-## ×¼±¸¹¤×÷
-1. ÔÚzkÉÏ´´½¨Ò»¸öTera¸ù½Úµã£¬ÆäÏÂÔö¼Ó4¸ö×Ó½Úµã£º**root_table£¬master-lock£¬ts£¬kick**£¬³É¹¦ºóÈçÏÂÍ¼ËùÊ¾£º
-2. ½«±àÒëÉú³ÉµÄtera_main, teracliÁ½¸ö¶ş½øÖÆÎÄ¼ş·ÅÈëexample/onebox/binÏÂ£¬´ËÄ¿Â¼ÏÂÓ¦ÓĞÈçÏÂÎÄ¼ş£º
-3. ĞŞ¸ÄÅäÖÃÎÄ¼şexample/onebox/conf/tera.flag£¬½«ÉÏÎÄ½¨Á¢µÄzk½ÚµãĞÅÏ¢ÌîÈë¶ÔÓ¦Ïî£¬ÆäÓàÏî¿ÉÔİÊ±²»±ä¡£
+## ä½“éªŒä¹‹å‰ï¼š
+è¦å…ˆå®Œæˆå¦‚ä¸‹ä¸¤é¡¹å·¥ä½œï¼š
+* **Teraç¼–è¯‘é€šè¿‡**ï¼ˆä»¥ç”Ÿæˆtera_main, teracliä¸¤ä¸ªäºŒè¿›åˆ¶æ–‡ä»¶ä¸ºå‡†ï¼‰
+* **æ‹¥æœ‰ä¸€ä¸ªzookeeperç¯å¢ƒ**ï¼ˆå•æœºå³å¯ï¼‰
 
-## Æô¶¯¡¢Í£Ö¹Tera
-* Ö´ĞĞexample/onebox/bin/launch_tera.sh¼´¿ÉÆô¶¯Tera£¬¿ÉÍ¨¹ıconfigÖĞÑ¡ÏîÅäÖÃtabletnode¸öÊı¡£
-* Ö´ĞĞexample/onebox/bin/kill_tera.sh¼´¿ÉÍ£Ö¹Tera
+## å‡†å¤‡å·¥ä½œ
+1. åœ¨zkä¸Šåˆ›å»ºä¸€ä¸ªTeraæ ¹èŠ‚ç‚¹ï¼Œå…¶ä¸‹å¢åŠ 4ä¸ªå­èŠ‚ç‚¹ï¼š**root_tableï¼Œmaster-lockï¼Œtsï¼Œkick**ï¼š
 
-## ÌåÑé¿ªÊ¼£¡
-### ³¢ÊÔÍ¨¹ıteracliÀ´³õ²½ÌåÑéTera
-Èç¹ûÆô¶¯Õı³££¬³¢ÊÔÖ´ĞĞ:
+![zk_node](https://github.com/BaiduPS/tera/blob/master/resources/images/onebox_zk_node.png)
+
+2. å°†ç¼–è¯‘ç”Ÿæˆçš„tera_main, teracliä¸¤ä¸ªäºŒè¿›åˆ¶æ–‡ä»¶æ”¾å…¥example/onebox/bin.
+3. ä¿®æ”¹é…ç½®æ–‡ä»¶example/onebox/conf/tera.flagï¼Œå°†ä¸Šæ–‡å»ºç«‹çš„zkèŠ‚ç‚¹ä¿¡æ¯å¡«å…¥å¯¹åº”é¡¹ï¼Œå…¶ä½™é¡¹å¯æš‚æ—¶ä¸å˜ã€‚
+
+## å¯åŠ¨ã€åœæ­¢Tera
+* æ‰§è¡Œexample/onebox/bin/launch_tera.shå³å¯å¯åŠ¨Teraï¼Œå¯é€šè¿‡configä¸­é€‰é¡¹é…ç½®tabletnodeä¸ªæ•°ã€‚
+* æ‰§è¡Œexample/onebox/bin/kill_tera.shå³å¯åœæ­¢Tera
+
+## ä½“éªŒå¼€å§‹ï¼
+### å°è¯•é€šè¿‡teracliæ¥åˆæ­¥ä½“éªŒTera
+å¦‚æœå¯åŠ¨æ­£å¸¸ï¼Œå°è¯•æ‰§è¡Œ:
 
 `./teracli show`
 
-Èç³öÏÖÏÂÍ¼£¬¼´±íÊ¾Æô¶¯³É¹¦
+![onebox_show](https://github.com/BaiduPS/tera/blob/master/resources/images/onebox_show.png)
 
-### ÁĞ¾ÙĞ©³£ÓÃÃüÁî
-²é¿´¸üÏêÏ¸µÄ±í¸ñĞÅÏ¢£º
+### åˆ—ä¸¾äº›å¸¸ç”¨å‘½ä»¤
+æŸ¥çœ‹æ›´è¯¦ç»†çš„è¡¨æ ¼ä¿¡æ¯ï¼š
 
 `./teracli showx`
 
-²é¿´µ±Ç°ÓĞÄÄĞ©´æ»îµÄtabletnode:
+![onebox_showx](https://github.com/BaiduPS/tera/blob/master/resources/images/onebox_showx.png)
+
+æŸ¥çœ‹å½“å‰æœ‰å“ªäº›å­˜æ´»çš„tabletnode:
 
 `./teracli showts`
 
-²é¿´¸üÏêÏ¸µÄtabletnodeĞÅÏ¢£º
+![onebox_showts](https://github.com/BaiduPS/tera/blob/master/resources/images/onebox_showts.png)
+
+æŸ¥çœ‹æ›´è¯¦ç»†çš„tabletnodeä¿¡æ¯ï¼š
 
 `./teracli showtsx`
 
-ĞÂ½¨Ò»¸ö±í¸ñhello:
+![onebox_showtsx](https://github.com/BaiduPS/tera/blob/master/resources/images/onebox_showtsx.png)
+
+æ–°å»ºä¸€ä¸ªè¡¨æ ¼hello:
 
 `./teracli create hello`
 
-Ğ´ÈëÒ»ÌõÊı¾İ£º
+![onebox_create_table](https://github.com/BaiduPS/tera/blob/master/resources/images/onebox_create_table.png)
+
+å†™å…¥ä¸€æ¡æ•°æ®ï¼š
 
 `./teracli put hello row_first ":" value`
 
-¶Á³öÒ»ÌõÊı¾İ£º
+è¯»å‡ºä¸€æ¡æ•°æ®ï¼š
 
 `./teracli get hello row_first ":"`
 
-Ğ¶ÔØ±í¸ñ£º
+å¸è½½è¡¨æ ¼ï¼š
 
 `./teracli disable hello`
 
-É¾³ı±í¸ñ£º
+åˆ é™¤è¡¨æ ¼ï¼š
 
 `./teracli drop hello`
 
-## Ğ´ÔÚ×îºó
-Tera oneboxÄ£Ê½¿ÉÒÔÌåÑé¼¸ºõËùÓĞµÄ¹¦ÄÜÌØĞÔ£¬Ï£ÍûÍ¨¹ıÉÏÃæµÄ½éÉÜ¿ÉÒÔÈÃ´ó¼Ò¶ÔTeraÓĞÒ»¸ö³õ²½µÄÈÏÊ¶¡£
+## å†™åœ¨æœ€å
+Tera oneboxæ¨¡å¼å¯ä»¥ä½“éªŒå‡ ä¹æ‰€æœ‰çš„åŠŸèƒ½ç‰¹æ€§ï¼Œå¸Œæœ›é€šè¿‡ä¸Šé¢çš„ä»‹ç»å¯ä»¥è®©å¤§å®¶å¯¹Teraæœ‰ä¸€ä¸ªåˆæ­¥çš„è®¤è¯†ã€‚
