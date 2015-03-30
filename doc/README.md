@@ -7,6 +7,8 @@
 
 [系统构建](https://github.com/BaiduPS/tera/blob/master/BUILD)
 
+[通过OneBox体验Tera](https://github.com/BaiduPS/tera/doc/OneBox.md)
+
 [使用示例](https://github.com/BaiduPS/tera/wiki/%E4%B8%BB%E8%A6%81API%E4%BD%BF%E7%94%A8%E6%96%B9%E6%B3%95)
 
 [源码目录结构](https://github.com/BaiduPS/tera/blob/master/src/README.md)
