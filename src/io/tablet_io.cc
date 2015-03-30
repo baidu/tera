@@ -12,7 +12,6 @@
 #include "io/coding.h"
 #include "io/default_compact_strategy.h"
 #include "io/io_utils.h"
-#include "io/lg_compact_strategy.h"
 #include "io/tablet_writer.h"
 #include "io/timekey_comparator.h"
 #include "io/ttlkv_compact_strategy.h"
