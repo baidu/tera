@@ -25,8 +25,8 @@ rm -rf ${DEPS_PREFIX}/boost_1_57_0
 mv boost_1_57_0 ${DEPS_PREFIX}
 
 # protobuf
-tar zxf protobuf-2.6.0.tar.gz
-cd protobuf-2.6.0
+tar zxf protobuf-2.6.1.tar.gz
+cd protobuf-2.6.1
 ./configure ${DEPS_CONFIG}
 make -j4
 make install
@@ -49,7 +49,6 @@ echo "BOOST_HEADER_DIR=${DEPS_PREFIX}/boost_1_57_0" >> depends.mk
 echo "PROTOBUF_DIR=${DEPS_PREFIX}" >> depends.mk
 echo "SNAPPY_DIR=${DEPS_PREFIX}" >> depends.mk
 echo "PREFIX=${DEPS_PREFIX}" >> depends.mk
-make proto
 make -j4
 make install
 cd -
