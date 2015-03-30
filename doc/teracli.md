@@ -18,7 +18,7 @@ teracli命令行工具使用手册
 
 span | 属性名 | 意义 | 有效取值 | 其它说明
 ---  | ---    | ---  | ---      | ---
-table | rawkey | rawkey的拼装模式 | readable：性能较高，但不允许包含`\0`。binary：性能稍差，允许所有字符 | 
+table | rawkey | rawkey的拼装模式 | readable：性能较高，但不允许包含`\0`。binary：性能差一些，允许所有字符 | 
 table | splitsize | 某个tablet增大到此阈值时分裂为2个子tablets| >=0，等于0时关闭split | 
 table | mergesize | 某个tablet减小到此阈值时和相邻的1个tablet合并 | >=0，等于0时关闭merge | splitsize至少要为mergesize的5倍
 lg    | storage   | 存储类型 | "disk" / "flash" / "memory" | 
