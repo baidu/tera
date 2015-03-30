@@ -16,23 +16,25 @@ teracli命令行工具使用手册
         {tableprops}#lg1{lgprops}:cf1{cfprops},cf2..|lg2...
         (all properties are optional)`
 
-span | 属性名 | 意义 | 有效取值 | 其它说明
----  | ---    | ---  | ---      | ---
-table | rawkey | rawkey的拼装模式 | readable：性能较高，但不允许包含`\0`。binary：性能差一些，允许所有字符 | 
-table | splitsize | 某个tablet增大到此阈值时分裂为2个子tablets| >=0，等于0时关闭split | 
-table | mergesize | 某个tablet减小到此阈值时和相邻的1个tablet合并 | >=0，等于0时关闭merge | splitsize至少要为mergesize的5倍
-lg    | storage   | 存储类型 | "disk" / "flash" / "memory" | 
-lg    | compress  | 压缩算法 | "snappy" / "none"
-lg    | blocksize | LevelDB中block的大小       | >0 | 
-lg    | use_memtable_on_leveldb | ? | "true" / "false" | 
-lg    | memtable_ldb_write_buffer_size | ? | >0 |
-lg    | memtable_ldb_block_size | ? | >0 |
-lg    | sst_size  | 第一层sst文件大小 | >0 | 
-cf    | maxversions | 保存的最大版本数  | >0 | 
-cf    | minversions | 保存的最小版本数 | >0 |
-cf    | diskquota   | 存储限额  | >0 |
-cf    | ttl | 数据有效时间 | >=0，等于0时此数据永远有效 |
+span | 属性名 | 意义 | 有效取值 | 单位 | 默认值 | 其它说明
+---  | ---    | ---  | ---      | ---  | ---    | ---
+table | rawkey | rawkey的拼装模式 | "readable"：性能较高，但不允许包含`\0`。"binary"：性能差一些，允许所有字符。 | - | "readable" | 
+table | splitsize | 某个tablet增大到此阈值时分裂为2个子tablets| >=0，等于0时关闭split | MB | 512 | 
+table | mergesize | 某个tablet减小到此阈值时和相邻的1个tablet合并 | >=0，等于0时关闭merge | MB | 0 | splitsize至少要为mergesize的5倍
+lg    | storage   | 存储类型 | "disk" / "flash" / "memory" | - | "disk" | 
+lg    | compress  | 压缩算法 | "snappy" / "none" | - | "snappy" | 
+lg    | blocksize | LevelDB中block的大小       | >0 | KB | 4 | 
+lg    | use_memtable_on_leveldb | 是否启用内存compact | "true" / "false" | - | false | 
+lg    | sst_size  | 第一层sst文件大小 | >0 | Bytes | 8,000,000 | 
+cf    | maxversions | 保存的最大版本数  | >0 | - | 1 | 
+cf    | minversions | 保存的最小版本数 | >0 | - | 1 |
+cf    | ttl | 数据有效时间 | >=0，等于0时此数据永远有效 | second | 0 | 小于0表示提前过期；和minversions冲突时以minversions为准
 
+<!--
+lg    | memtable_ldb_write_buffer_size | 内存compact开启后，写buffer的大小 | >0 | MB | 1 | 一般不用暴露给用户
+lg    | memtable_ldb_block_size |  内存compact开启后，压缩块的大小 | >0 | KB | 4 | 一般不用暴露给用户
+cf    | diskquota   | 存储限额  | >0 | MB | 0 | 暂未使用
+-->
 
 例如：
 
