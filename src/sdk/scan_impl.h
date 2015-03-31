@@ -26,7 +26,7 @@ class TableImpl;
 class ResultStreamImpl : public ResultStream {
 public:
     ResultStreamImpl(TableImpl* table, ScanDescImpl* scan_desc_impl);
-    ~ResultStreamImpl();
+    virtual ~ResultStreamImpl();
 
     bool LookUp(const std::string& row_key) = 0;
     bool Done() = 0;
@@ -61,7 +61,7 @@ private:
 class ResultStreamAsyncImpl : public ResultStreamImpl {
 public:
     ResultStreamAsyncImpl(TableImpl* table, ScanDescImpl* scan_desc_impl);
-    ~ResultStreamAsyncImpl();
+    virtual ~ResultStreamAsyncImpl();
 
     bool LookUp(const std::string& row_key);
     bool Done();
@@ -114,7 +114,7 @@ private:
 class ResultStreamSyncImpl : public ResultStreamImpl {
 public:
     ResultStreamSyncImpl(TableImpl* table, ScanDescImpl* scan_desc_impl);
-    ~ResultStreamSyncImpl();
+    virtual ~ResultStreamSyncImpl();
 
     bool LookUp(const std::string& row_key);
     bool Done();

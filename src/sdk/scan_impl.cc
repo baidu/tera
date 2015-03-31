@@ -417,11 +417,11 @@ void ResultStreamSyncImpl::GetRpcHandle(ScanTabletRequest** request,
 void ResultStreamSyncImpl::ReleaseRpcHandle(ScanTabletRequest* request,
                                             ScanTabletResponse* response) {
     delete request;
+    Signal();
 }
 
 void ResultStreamSyncImpl::OnFinish(ScanTabletRequest* request,
                                     ScanTabletResponse* response) {
-    Signal();
 }
 
 void ResultStreamSyncImpl::Wait() {
