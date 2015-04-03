@@ -24,134 +24,134 @@ public:
     RowMutationImpl(TableImpl* table, const std::string& row_key);
     ~RowMutationImpl();
 
-    /// ÖØÖÃ
+    /// é‡ç½®
     void Reset(const std::string& row_key);
 
-    /// ĞŞ¸ÄÒ»¸öÁĞ
+    /// ä¿®æ”¹ä¸€ä¸ªåˆ—
     void Put(const std::string& family, const std::string& qualifier,
              const std::string& value);
-    /// ´øTTLµÄĞŞ¸ÄÒ»¸öÁĞ
+    /// å¸¦TTLçš„ä¿®æ”¹ä¸€ä¸ªåˆ—
     void Put(const std::string& family, const std::string& qualifier,
              const std::string& value, int32_t ttl);
 
-    /// ĞŞ¸ÄÒ»¸öÁĞµÄÌØ¶¨°æ±¾
+    /// ä¿®æ”¹ä¸€ä¸ªåˆ—çš„ç‰¹å®šç‰ˆæœ¬
     void Put(const std::string& family, const std::string& qualifier,
              int64_t timestamp, const std::string& value);
 
-    /// ´øTTLµÄĞŞ¸ÄÒ»¸öÁĞµÄÌØ¶¨°æ±¾
+    /// å¸¦TTLçš„ä¿®æ”¹ä¸€ä¸ªåˆ—çš„ç‰¹å®šç‰ˆæœ¬
     virtual void Put(const std::string& family, const std::string& qualifier,
                      int64_t timestamp, const std::string& value, int32_t ttl);
 
-    /// ĞŞ¸ÄÄ¬ÈÏÁĞ
+    /// ä¿®æ”¹é»˜è®¤åˆ—
     void Put(const std::string& value);
 
-    /// ´øTTLµÄĞŞ¸ÄÄ¬ÈÏÁĞ
+    /// å¸¦TTLçš„ä¿®æ”¹é»˜è®¤åˆ—
     virtual void Put(const std::string& value, int32_t ttl);
 
-    /// ĞŞ¸ÄÄ¬ÈÏÁĞµÄÌØ¶¨°æ±¾
+    /// ä¿®æ”¹é»˜è®¤åˆ—çš„ç‰¹å®šç‰ˆæœ¬
     void Put(int64_t timestamp, const std::string& value);
 
-    /// Ô­×Ó¼ÓÒ»¸öCell
+    /// åŸå­åŠ ä¸€ä¸ªCell
     void Add(const std::string& family, const std::string& qualifier, const int64_t delta);
 
-    //  Ô­×Ó²Ù×÷£ºÈç¹û²»´æÔÚ²ÅÄÜPut³É¹¦
+    //  åŸå­æ“ä½œï¼šå¦‚æœä¸å­˜åœ¨æ‰èƒ½PutæˆåŠŸ
     void PutIfAbsent(const std::string& family, const std::string& qualifier,
                      const std::string& value);
 
-    /// Ô­×Ó²Ù×÷£º×·¼ÓÄÚÈİµ½Ò»¸öCell
+    /// åŸå­æ“ä½œï¼šè¿½åŠ å†…å®¹åˆ°ä¸€ä¸ªCell
     void Append(const std::string& family, const std::string& qualifier,
                 const std::string& value);
 
-    /// É¾³ıÒ»¸öÁĞµÄ×îĞÂ°æ±¾
+    /// åˆ é™¤ä¸€ä¸ªåˆ—çš„æœ€æ–°ç‰ˆæœ¬
     void DeleteColumn(const std::string& family, const std::string& qualifier);
 
-    /// É¾³ıÒ»¸öÁĞµÄÖ¸¶¨°æ±¾
+    /// åˆ é™¤ä¸€ä¸ªåˆ—çš„æŒ‡å®šç‰ˆæœ¬
     void DeleteColumn(const std::string& family, const std::string& qualifier,
                       int64_t timestamp);
 
-    /// É¾³ıÒ»¸öÁĞµÄÈ«²¿°æ±¾
+    /// åˆ é™¤ä¸€ä¸ªåˆ—çš„å…¨éƒ¨ç‰ˆæœ¬
     void DeleteColumns(const std::string& family, const std::string& qualifier);
-    /// É¾³ıÒ»¸öÁĞµÄÖ¸¶¨·¶Î§°æ±¾
+    /// åˆ é™¤ä¸€ä¸ªåˆ—çš„æŒ‡å®šèŒƒå›´ç‰ˆæœ¬
     void DeleteColumns(const std::string& family, const std::string& qualifier,
                        int64_t timestamp);
 
-    /// É¾³ıÒ»¸öÁĞ×åµÄËùÓĞÁĞµÄÈ«²¿°æ±¾
+    /// åˆ é™¤ä¸€ä¸ªåˆ—æ—çš„æ‰€æœ‰åˆ—çš„å…¨éƒ¨ç‰ˆæœ¬
     void DeleteFamily(const std::string& family);
 
-    /// É¾³ıÒ»¸öÁĞ×åµÄËùÓĞÁĞµÄÖ¸¶¨·¶Î§°æ±¾
+    /// åˆ é™¤ä¸€ä¸ªåˆ—æ—çš„æ‰€æœ‰åˆ—çš„æŒ‡å®šèŒƒå›´ç‰ˆæœ¬
     void DeleteFamily(const std::string& family, int64_t timestamp);
 
-    /// É¾³ıÕûĞĞµÄÈ«²¿Êı¾İ
+    /// åˆ é™¤æ•´è¡Œçš„å…¨éƒ¨æ•°æ®
     void DeleteRow();
 
-    /// É¾³ıÕûĞĞµÄÖ¸¶¨·¶Î§°æ±¾
+    /// åˆ é™¤æ•´è¡Œçš„æŒ‡å®šèŒƒå›´ç‰ˆæœ¬
     void DeleteRow(int64_t timestamp);
 
-    /// ĞŞ¸ÄËø×¡µÄĞĞ, ±ØĞëÌá¹©ĞĞËø
+    /// ä¿®æ”¹é”ä½çš„è¡Œ, å¿…é¡»æä¾›è¡Œé”
     void SetLock(RowLock* rowlock);
 
-    /// ÉèÖÃ³¬Ê±Ê±¼ä(Ö»Ó°Ïìµ±Ç°²Ù×÷,²»Ó°ÏìTable::SetWriteTimeoutÉèÖÃµÄÄ¬ÈÏĞ´³¬Ê±)
+    /// è®¾ç½®è¶…æ—¶æ—¶é—´(åªå½±å“å½“å‰æ“ä½œ,ä¸å½±å“Table::SetWriteTimeoutè®¾ç½®çš„é»˜è®¤å†™è¶…æ—¶)
     void SetTimeOut(int64_t timeout_ms);
 
     int64_t TimeOut();
 
-    /// ÉèÖÃÒì²½»Øµ÷, ²Ù×÷»áÒì²½·µ»Ø
+    /// è®¾ç½®å¼‚æ­¥å›è°ƒ, æ“ä½œä¼šå¼‚æ­¥è¿”å›
     void SetCallBack(RowMutation::Callback callback);
 
     RowMutation::Callback GetCallBack();
 
-    /// ÉèÖÃÓÃ»§ÉÏÏÂÎÄ£¬¿ÉÔÚ»Øµ÷º¯ÊıÖĞ»ñÈ¡
+    /// è®¾ç½®ç”¨æˆ·ä¸Šä¸‹æ–‡ï¼Œå¯åœ¨å›è°ƒå‡½æ•°ä¸­è·å–
     void SetContext(void* context);
 
     void* GetContext();
 
-    /// »ñµÃ½á¹û´íÎóÂë
+    /// è·å¾—ç»“æœé”™è¯¯ç 
     const ErrorCode& GetError();
 
-    /// ÉèÖÃÒì²½·µ»Ø
+    /// è®¾ç½®å¼‚æ­¥è¿”å›
     bool IsAsync();
 
-    /// Òì²½²Ù×÷ÊÇ·ñÍê³É
+    /// å¼‚æ­¥æ“ä½œæ˜¯å¦å®Œæˆ
     bool IsFinished() const;
 
-    /// ·µ»Ørow_key
+    /// è¿”å›row_key
     const std::string& RowKey();
 
-    /// mutationÊıÁ¿
+    /// mutationæ•°é‡
     uint32_t MutationNum();
 
-    /// mutation×Ü´óĞ¡
+    /// mutationæ€»å¤§å°
     uint32_t Size();
 
-    /// ·µ»Ømutation
+    /// è¿”å›mutation
     const RowMutation::Mutation& GetMutation(uint32_t index);
 
-    /// ÖØÊÔ´ÎÊı
+    /// é‡è¯•æ¬¡æ•°
     uint32_t RetryTimes();
 
 public:
-    /// ÒÔÏÂ½Ó¿Ú½öÄÚ²¿Ê¹ÓÃ£¬²»¿ª·Å¸øÓÃ»§
+    /// ä»¥ä¸‹æ¥å£ä»…å†…éƒ¨ä½¿ç”¨ï¼Œä¸å¼€æ”¾ç»™ç”¨æˆ·
 
-    /// ÖØÊÔ¼ÆÊı¼ÓÒ»
+    /// é‡è¯•è®¡æ•°åŠ ä¸€
     void IncRetryTimes();
 
-    /// ÉèÖÃ´íÎóÂë
+    /// è®¾ç½®é”™è¯¯ç 
     void SetError(ErrorCode::ErrorCodeType err , const std::string& reason = "");
 
-    /// µÈ´ı½áÊø»ò³¬Ê±£¬abs_time_msÊÇ¾ø¶ÔÊ±¼ä
+    /// ç­‰å¾…ç»“æŸæˆ–è¶…æ—¶ï¼Œabs_time_msæ˜¯ç»å¯¹æ—¶é—´
     bool Wait(int64_t abs_time_ms = 0);
 
-    /// Ö´ĞĞÒì²½»Øµ÷
+    /// æ‰§è¡Œå¼‚æ­¥å›è°ƒ
     void RunCallback();
 
-    /// Ôö¼ÓÒıÓÃ
+    /// å¢åŠ å¼•ç”¨
     void Ref();
 
-    /// ÊÍ·ÅÒıÓÃ
+    /// é‡Šæ”¾å¼•ç”¨
     void Unref();
 
 protected:
-    /// Ôö¼ÓÒ»¸ö²Ù×÷
+    /// å¢åŠ ä¸€ä¸ªæ“ä½œ
     RowMutation::Mutation& AddMutation();
 
 private:

@@ -25,6 +25,7 @@ DEFINE_int32(tera_zk_timeout, 10000, "zookeeper session timeout");
 DEFINE_int64(tera_zk_retry_period, 3000, "zookeeper operation retry period (in ms)");
 DEFINE_int32(tera_zk_retry_max_times, 10, "zookeeper operation max retry times");
 DEFINE_string(tera_zk_lib_log_path, "./zk.log", "zookeeper library log output file");
+DEFINE_string(tera_log_prefix, "", "prefix of log file (INFO, WARNING)");
 
 /////////  io  /////////
 
@@ -59,7 +60,6 @@ DEFINE_int64(tera_io_scan_stream_task_pending_time, 180, "the max pending time (
 
 /////////  master /////////
 
-DEFINE_string(tera_master_addr, "127.0.0.1", "the master address of tera system");
 DEFINE_string(tera_master_port, "10000", "the master port of tera system");
 DEFINE_int64(tera_heartbeat_timeout_period_factor, 120, "the timeout period factor when lose heartbeat");
 DEFINE_int32(tera_master_connect_retry_times, 5, "the max retry times when connect to master");
@@ -121,7 +121,7 @@ DEFINE_int32(tera_master_rpc_max_pending_buffer_size, 2, "max pending buffer siz
 DEFINE_int32(tera_master_rpc_work_thread_num, 8, "thread num of master rpc client");
 
 DEFINE_int32(tera_max_pre_assign_tablet_num, 100000, "max num of pre-assign tablets per table");
-DEFINE_bool(tera_delete_obsolete_tabledir_enabled, false, "delete table dir or not when deleting table");
+DEFINE_bool(tera_delete_obsolete_tabledir_enabled, true, "move table dir to trash when dropping table");
 
 DEFINE_bool(tera_master_stat_table_enabled, true, "whether dump system status to stat_table");
 DEFINE_string(tera_master_stat_table_name, "stat_table", "a specific table for system status dumping");
@@ -133,10 +133,10 @@ DEFINE_int32(tera_master_gc_period, 60000, "the period (in ms) for master gc");
 
 ///////// tablet node  /////////
 
-DEFINE_string(tera_tabletnode_addr, "127.0.0.1", "the tablet node address of tera system");
 DEFINE_string(tera_tabletnode_port, "20000", "the tablet node port of tera system");
 DEFINE_int32(tera_tabletnode_write_thread_num, 10, "the write thread number of tablet node server");
 DEFINE_int32(tera_tabletnode_read_thread_num, 40, "the read thread number of tablet node server");
+DEFINE_int32(tera_tabletnode_scan_thread_num, 5, "the scan thread number of tablet node server");
 DEFINE_int32(tera_tabletnode_manual_compact_thread_num, 2, "the manual compact thread number of tablet node server");
 DEFINE_int32(tera_tabletnode_impl_thread_min_num, 1, "the min thread number for tablet node impl operations");
 DEFINE_int32(tera_tabletnode_impl_thread_max_num, 10, "the max thread number for tablet node impl operations");

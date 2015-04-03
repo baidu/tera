@@ -16,29 +16,29 @@
 // GLOBAL_NOLINT(whitespace/blank_line)
 
 // ///////////////////////////////////////////
-// Closure: x->Run(), Closure ¿ÉÔ¤Éè 0-10 ¸ö²ÎÊı
-// Closure: x->Run(arg1), Closure ¿ÉÔ¤Éè 0-10 ¸ö²ÎÊı
-// Closure: x->Run(arg1, arg2), Closure ¿ÉÔ¤Éè 0-10 ¸ö²ÎÊı
-// Closure: x->Run(arg1, arg2, arg3), Closure ¿ÉÔ¤Éè 0-10 ¸ö²ÎÊı
-// Closure: x->Run(arg1, arg2, arg3, arg4), Closure ¿ÉÔ¤Éè 0-10 ¸ö²ÎÊı
-// Closure: x->Run(arg1, arg2, arg3, arg4, arg5), Closure ¿ÉÔ¤Éè 0-10 ¸ö²ÎÊı
-// Closure: x->Run(arg1, arg2, arg3, arg4, arg5, arg6), Closure ¿ÉÔ¤Éè 0-10 ¸ö²ÎÊı
-// Closure: x->Run(arg1, arg2, arg3, arg4, arg5, arg6, arg7), Closure ¿ÉÔ¤Éè 0-10 ¸ö²ÎÊı
-// Closure: x->Run(arg1, arg2, arg3, arg4, arg5, arg6, arg7, arg8), Closure ¿ÉÔ¤Éè 0-10 ¸ö²ÎÊı
-// Closure: x->Run(arg1, arg2, arg3, arg4, arg5, arg6, arg7, arg8, arg9), Closure ¿ÉÔ¤Éè 0-10 ¸ö²ÎÊı
-// Closure: x->Run(arg1, arg2, arg3, arg4, arg5, arg6, arg7, arg8, arg9, arg10), Closure ¿ÉÔ¤Éè 0-10 ¸ö²ÎÊı
+// Closure: x->Run(), Closure å¯é¢„è®¾ 0-10 ä¸ªå‚æ•°
+// Closure: x->Run(arg1), Closure å¯é¢„è®¾ 0-10 ä¸ªå‚æ•°
+// Closure: x->Run(arg1, arg2), Closure å¯é¢„è®¾ 0-10 ä¸ªå‚æ•°
+// Closure: x->Run(arg1, arg2, arg3), Closure å¯é¢„è®¾ 0-10 ä¸ªå‚æ•°
+// Closure: x->Run(arg1, arg2, arg3, arg4), Closure å¯é¢„è®¾ 0-10 ä¸ªå‚æ•°
+// Closure: x->Run(arg1, arg2, arg3, arg4, arg5), Closure å¯é¢„è®¾ 0-10 ä¸ªå‚æ•°
+// Closure: x->Run(arg1, arg2, arg3, arg4, arg5, arg6), Closure å¯é¢„è®¾ 0-10 ä¸ªå‚æ•°
+// Closure: x->Run(arg1, arg2, arg3, arg4, arg5, arg6, arg7), Closure å¯é¢„è®¾ 0-10 ä¸ªå‚æ•°
+// Closure: x->Run(arg1, arg2, arg3, arg4, arg5, arg6, arg7, arg8), Closure å¯é¢„è®¾ 0-10 ä¸ªå‚æ•°
+// Closure: x->Run(arg1, arg2, arg3, arg4, arg5, arg6, arg7, arg8, arg9), Closure å¯é¢„è®¾ 0-10 ä¸ªå‚æ•°
+// Closure: x->Run(arg1, arg2, arg3, arg4, arg5, arg6, arg7, arg8, arg9, arg10), Closure å¯é¢„è®¾ 0-10 ä¸ªå‚æ•°
 //
-// Closure: R = x->Run(), Closure ¿ÉÔ¤Éè 0-10 ¸ö²ÎÊı
-// Closure: R = x->Run(arg1), Closure ¿ÉÔ¤Éè 0-10 ¸ö²ÎÊı
-// Closure: R = x->Run(arg1, arg2), Closure ¿ÉÔ¤Éè 0-10 ¸ö²ÎÊı
-// Closure: R = x->Run(arg1, arg2, arg3), Closure ¿ÉÔ¤Éè 0-10 ¸ö²ÎÊı
-// Closure: R = x->Run(arg1, arg2, arg3, arg4), Closure ¿ÉÔ¤Éè 0-10 ¸ö²ÎÊı
-// Closure: R = x->Run(arg1, arg2, arg3, arg4, arg5), Closure ¿ÉÔ¤Éè 0-10 ¸ö²ÎÊı
-// Closure: R = x->Run(arg1, arg2, arg3, arg4, arg5, arg6), Closure ¿ÉÔ¤Éè 0-10 ¸ö²ÎÊı
-// Closure: R = x->Run(arg1, arg2, arg3, arg4, arg5, arg6, arg7), Closure ¿ÉÔ¤Éè 0-10 ¸ö²ÎÊı
-// Closure: R = x->Run(arg1, arg2, arg3, arg4, arg5, arg6, arg7, arg8), Closure ¿ÉÔ¤Éè 0-10 ¸ö²ÎÊı
-// Closure: R = x->Run(arg1, arg2, arg3, arg4, arg5, arg6, arg7, arg8, arg9), Closure ¿ÉÔ¤Éè 0-10 ¸ö²ÎÊı
-// Closure: R = x->Run(arg1, arg2, arg3, arg4, arg5, arg6, arg7, arg8, arg9, arg10), Closure ¿ÉÔ¤Éè 0-10 ¸ö²ÎÊı
+// Closure: R = x->Run(), Closure å¯é¢„è®¾ 0-10 ä¸ªå‚æ•°
+// Closure: R = x->Run(arg1), Closure å¯é¢„è®¾ 0-10 ä¸ªå‚æ•°
+// Closure: R = x->Run(arg1, arg2), Closure å¯é¢„è®¾ 0-10 ä¸ªå‚æ•°
+// Closure: R = x->Run(arg1, arg2, arg3), Closure å¯é¢„è®¾ 0-10 ä¸ªå‚æ•°
+// Closure: R = x->Run(arg1, arg2, arg3, arg4), Closure å¯é¢„è®¾ 0-10 ä¸ªå‚æ•°
+// Closure: R = x->Run(arg1, arg2, arg3, arg4, arg5), Closure å¯é¢„è®¾ 0-10 ä¸ªå‚æ•°
+// Closure: R = x->Run(arg1, arg2, arg3, arg4, arg5, arg6), Closure å¯é¢„è®¾ 0-10 ä¸ªå‚æ•°
+// Closure: R = x->Run(arg1, arg2, arg3, arg4, arg5, arg6, arg7), Closure å¯é¢„è®¾ 0-10 ä¸ªå‚æ•°
+// Closure: R = x->Run(arg1, arg2, arg3, arg4, arg5, arg6, arg7, arg8), Closure å¯é¢„è®¾ 0-10 ä¸ªå‚æ•°
+// Closure: R = x->Run(arg1, arg2, arg3, arg4, arg5, arg6, arg7, arg8, arg9), Closure å¯é¢„è®¾ 0-10 ä¸ªå‚æ•°
+// Closure: R = x->Run(arg1, arg2, arg3, arg4, arg5, arg6, arg7, arg8, arg9, arg10), Closure å¯é¢„è®¾ 0-10 ä¸ªå‚æ•°
 //
 //////////////////////////////////////
 

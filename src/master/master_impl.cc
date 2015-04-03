@@ -7,9 +7,10 @@
 #include <algorithm>
 #include <boost/bind.hpp>
 
-#include <google/malloc_extension.h>
 #include <gflags/gflags.h>
 #include <glog/logging.h>
+#include <gperftools/malloc_extension.h>
+
 
 #include "db/filename.h"
 #include "io/io_utils.h"
@@ -334,6 +335,10 @@ void MasterImpl::RestoreUserTablet(const std::vector<TabletMeta>& report_meta_li
         const std::string& server_addr = tablet->GetServerAddr();
         if (tablet->GetStatus() == kTableReady) {
             VLOG(6) << "READY Tablet, " << tablet;
+            continue;
+        }
+        // meta table may be manipulated by other threads during restore
+        if (tablet->GetTableName() == FLAGS_tera_master_meta_table_name) {
             continue;
         }
         CHECK(tablet->GetStatus() == kTableNotInit);
@@ -2277,7 +2282,7 @@ void MasterImpl::DelSnapshotCallback(TablePtr table,
                 << StatusCodeToString(status) << ", " << tablets[0] << "...";
         }
         if (retry_times <= 0) {
-            /// Ð´metaÊ§°Ü»áµ¼ÖÂÄÚ´æÓëmeta²»Ò»ÖÂ, Ã»´¦Àí
+            /// å†™metaå¤±è´¥ä¼šå¯¼è‡´å†…å­˜ä¸Žmetaä¸ä¸€è‡´, æ²¡å¤„ç†
             abort();
             rpc_response->set_status(kMetaTabletError);
             rpc_done->Run();
@@ -2497,7 +2502,7 @@ void MasterImpl::ReleaseSnpashot(TabletPtr tablet, uint64_t snapshot) {
 void MasterImpl::ReleaseSnapshotCallback(ReleaseSnapshotRequest* request,
                                          ReleaseSnapshotResponse* response,
                                          bool failed, int error_code) {
-    /// É¾µôÉ¾²»µôÎÞËùÎ½, ²»¼Æ½Ï~
+    /// åˆ æŽ‰åˆ ä¸æŽ‰æ— æ‰€è°“, ä¸è®¡è¾ƒ~
 }
 
 void MasterImpl::ClearUnusedSnapshots(TabletPtr tablet, const TabletMeta& meta) {
@@ -3075,9 +3080,15 @@ bool MasterImpl::TryMergeTablet(TabletPtr tablet) {
         return false;
     }
 
+    if (tablet->IsBusy()) {
+        LOG(INFO) << "[merge] skip merge, tablet is busy: " << tablet->GetPath();
+        return false;
+    }
+
     TabletPtr tablet2;
     if (!m_tablet_manager->PickMergeTablet(tablet, &tablet2) ||
-        tablet2->GetStatus() != kTableReady) {
+        tablet2->GetStatus() != kTableReady ||
+        tablet2->IsBusy()) {
         VLOG(20) << "[merge] merge failed, none proper tablet";
         return false;
     }
@@ -4342,7 +4353,7 @@ void MasterImpl::CollectSingleDeadTablet(const std::string& tablename, uint64_t 
     std::vector<std::string> children;
     env->GetChildren(tablet_path, &children);
     if (children.size() == 0) {
-        LOG(INFO) << "[gc] this tablet is empty, delete it: " << tablet_path;
+        LOG(INFO) << "[gc] delete empty tablet dir: " << tablet_path;
         env->DeleteDir(tablet_path);
         return;
     }
@@ -4351,7 +4362,7 @@ void MasterImpl::CollectSingleDeadTablet(const std::string& tablename, uint64_t 
         leveldb::FileType type = leveldb::kUnknown;
         uint64_t number = 0;
         if (ParseFileName(children[lg], &number, &type)) {
-            VLOG(10) << "[gc] delete obsolete file: " << lg_path;
+            LOG(INFO) << "[gc] delete log file: " << lg_path;
             env->DeleteFile(lg_path);
             continue;
         }
@@ -4359,14 +4370,14 @@ void MasterImpl::CollectSingleDeadTablet(const std::string& tablename, uint64_t 
         leveldb::Slice rest(children[lg]);
         uint64_t lg_num = 0;
         if (!leveldb::ConsumeDecimalNumber(&rest, &lg_num)) {
-            LOG(INFO) << "[gc] this is not a lg dir, skip it: " << lg_path;
+            LOG(INFO) << "[gc] skip unknown dir: " << lg_path;
             continue;
         }
 
         std::vector<std::string> files;
         env->GetChildren(lg_path, &files);
         if (files.size() == 0) {
-            LOG(INFO) << "[gc] this dir is empty, delete it: " << lg_path;
+            LOG(INFO) << "[gc] delete empty lg dir: " << lg_path;
             env->DeleteDir(lg_path);
             continue;
         }
@@ -4377,7 +4388,7 @@ void MasterImpl::CollectSingleDeadTablet(const std::string& tablename, uint64_t 
             if (!ParseFileName(files[f], &number, &type) ||
                 type != leveldb::kTableFile) {
                 // only keep sst, delete rest files
-                VLOG(10) << "[gc] delete obsolete file: " << file_path;
+                LOG(INFO) << "[gc] delete obsolete file: " << file_path;
                 env->DeleteFile(file_path);
                 continue;
             }
@@ -4408,8 +4419,8 @@ void MasterImpl::DeleteObsoleteFiles() {
             std::set<uint64_t>::iterator it = file_set[lg].begin();
             for (; it != file_set[lg].end(); ++it) {
                 std::string file_path = leveldb::BuildTableFilePath(tablepath, lg, *it);
+                LOG(INFO) << "[gc] delete trash table file: " << file_path;
                 env->DeleteFile(file_path);
-                VLOG(10) << "[gc] delete obsolete file: " << file_path;
             }
         }
     }

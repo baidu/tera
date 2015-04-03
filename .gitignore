@@ -1,0 +1,10 @@
+*.o
+*.a
+
+#protobuf auto-gen code
+src/proto/*.pb.*
+
+#version.cc is auto generated
+src/version.cc
+
+depends.mk

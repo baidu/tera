@@ -121,7 +121,7 @@ public:
                              const std::string& value,
                              ErrorCode* err);
 
-    /// 原子操作：追加内容到一个Cell
+    /// 鍘熷瓙鎿嶄綔锛氳拷鍔犲唴瀹瑰埌涓�涓狢ell
     virtual bool Append(const std::string& row_key, const std::string& family,
                         const std::string& qualifier, const std::string& value,
                         ErrorCode* err);

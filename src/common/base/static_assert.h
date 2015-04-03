@@ -21,11 +21,11 @@ template <> struct static_assertion_failure<true> {
 
 template<int x> struct static_assert_test {};
 
-/// ±àÒëÆÚ¼äµÄ¾²Ì¬¶ÏÑÔ
-/// @param e ³£Á¿±í´ïÊ½
-/// ÓÃÓÚ±àÒëÆÚ¼ä¼ì²é´íÎóµÄ³¡ºÏ£¬Ê¾Àı£º
+/// ç¼–è¯‘æœŸé—´çš„é™æ€æ–­è¨€
+/// @param e å¸¸é‡è¡¨è¾¾å¼
+/// ç”¨äºç¼–è¯‘æœŸé—´æ£€æŸ¥é”™è¯¯çš„åœºåˆï¼Œç¤ºä¾‹ï¼š
 /// @code
-/// STATIC_ASSERT(sizeof(Foo) == 48, "Foo µÄ´óĞ¡±ØĞëÎª 48");
+/// STATIC_ASSERT(sizeof(Foo) == 48, "Foo çš„å¤§å°å¿…é¡»ä¸º 48");
 /// @endcode
 #define STATIC_ASSERT(e, ...) \
 typedef static_assert_test< \

@@ -6,7 +6,7 @@
 
 namespace tera {
 
-/// ¶ÁÈ¡²Ù×÷
+/// è¯»å–æ“ä½œ
 RowReaderImpl::RowReaderImpl(Table* table, const std::string& row_key)
     : SdkTask(SdkTask::READ),
       _row_key(row_key),
@@ -26,7 +26,7 @@ RowReaderImpl::RowReaderImpl(Table* table, const std::string& row_key)
 RowReaderImpl::~RowReaderImpl() {
 }
 
-/// ÉèÖÃ¶ÁÈ¡ÌØ¶¨°æ±¾
+/// è®¾ç½®è¯»å–ç‰¹å®šç‰ˆæœ¬
 void RowReaderImpl::SetTimestamp(int64_t ts) {
     SetTimeRange(ts, ts);
 }
@@ -68,7 +68,7 @@ uint32_t RowReaderImpl::GetMaxVersions() {
 }
 
 
-/// ÉèÖÃ³¬Ê±Ê±¼ä(Ö»Ó°Ïìµ±Ç°²Ù×÷,²»Ó°ÏìTable::SetReadTimeoutÉèÖÃµÄÄ¬ÈÏ¶Á³¬Ê±)
+/// è®¾ç½®è¶…æ—¶æ—¶é—´(åªå½±å“å½“å‰æ“ä½œ,ä¸å½±å“Table::SetReadTimeoutè®¾ç½®çš„é»˜è®¤è¯»è¶…æ—¶)
 void RowReaderImpl::SetTimeOut(int64_t timeout_ms) {
     _timeout_ms = timeout_ms;
 }
@@ -77,7 +77,7 @@ void RowReaderImpl::SetCallBack(RowReader::Callback callback) {
     _callback = callback;
 }
 
-/// ÉèÖÃÓÃ»§ÉÏÏÂÎÄ£¬¿ÉÔÚ»Øµ÷º¯ÊıÖĞ»ñÈ¡
+/// è®¾ç½®ç”¨æˆ·ä¸Šä¸‹æ–‡ï¼Œå¯åœ¨å›è°ƒå‡½æ•°ä¸­è·å–
 void RowReaderImpl::SetContext(void* context) {
     _user_context = context;
 }
@@ -85,22 +85,22 @@ void RowReaderImpl::SetContext(void* context) {
 void* RowReaderImpl::GetContext() {
     return _user_context;
 }
-/// ÉèÖÃÒì²½·µ»Ø
+/// è®¾ç½®å¼‚æ­¥è¿”å›
 void RowReaderImpl::SetAsync() {
 }
 
-/// Òì²½²Ù×÷ÊÇ·ñÍê³É
+/// å¼‚æ­¥æ“ä½œæ˜¯å¦å®Œæˆ
 bool RowReaderImpl::IsFinished() const {
     MutexLock lock(&_finish_mutex);
     return _finish;
 }
 
-/// »ñµÃ½á¹û´íÎóÂë
+/// è·å¾—ç»“æœé”™è¯¯ç 
 ErrorCode RowReaderImpl::GetError() {
     return _error_code;
 }
 
-/// ÊÇ·ñµ½´ï½áÊø±ê¼Ç
+/// æ˜¯å¦åˆ°è¾¾ç»“æŸæ ‡è®°
 bool RowReaderImpl::Done() {
     if (_result_pos < _result.key_values_size()) {
          return false;
@@ -108,12 +108,12 @@ bool RowReaderImpl::Done() {
     return true;
 }
 
-/// µü´úÏÂÒ»¸öcell
+/// è¿­ä»£ä¸‹ä¸€ä¸ªcell
 void RowReaderImpl::Next() {
     _result_pos++;
 }
 
-/// ¶ÁÈ¡µÄ½á¹û
+/// è¯»å–çš„ç»“æœ
 std::string RowReaderImpl::Value() {
     if (_result.key_values(_result_pos).has_value()) {
         return _result.key_values(_result_pos).value();
@@ -194,12 +194,12 @@ void RowReaderImpl::SetResult(const RowResult& result) {
 }
 
 
-/// ÖØÊÔ¼ÆÊı¼ÓÒ»
+/// é‡è¯•è®¡æ•°åŠ ä¸€
 void RowReaderImpl::IncRetryTimes() {
     _retry_times++;
 }
 
-/// ÉèÖÃ´íÎóÂë
+/// è®¾ç½®é”™è¯¯ç 
 void RowReaderImpl::SetError(ErrorCode::ErrorCodeType err,
                              const std::string& reason) {
     _error_code.SetFailed(err, reason);
@@ -250,17 +250,17 @@ bool RowReaderImpl::Wait(int64_t abs_time_ms) {
     return _finish;
 }
 
-/// GetÊıÁ¿
+/// Getæ•°é‡
 uint32_t RowReaderImpl::GetReadColumnNum() {
     return _family_map.size();
 }
 
-/// ·µ»ØGet
+/// è¿”å›Get
 const RowReader::ReadColumnList& RowReaderImpl::GetReadColumnList() {
     return _family_map;
 }
 
-/// ĞòÁĞ»¯
+/// åºåˆ—åŒ–
 void RowReaderImpl::ToProtoBuf(RowReaderInfo* info) {
     info->set_key(_row_key);
     info->set_max_version(_max_version);

@@ -12,7 +12,6 @@
 #include "io/coding.h"
 #include "io/default_compact_strategy.h"
 #include "io/io_utils.h"
-#include "io/lg_compact_strategy.h"
 #include "io/tablet_writer.h"
 #include "io/timekey_comparator.h"
 #include "io/ttlkv_compact_strategy.h"
@@ -1096,8 +1095,8 @@ bool TabletIO::Scan(const ScanOption& option, KeyValueList* kv_list,
             return false;
         }
     }
-    // TTL-KV : m_key_operator::Compare会解RawKey([row_key | expire_timestamp])
-    // 因此传递给Leveldb的Key一定要保证以expire_timestamp结尾.
+    // TTL-KV : m_key_operator::Compare浼氳ВRawKey([row_key | expire_timestamp])
+    // 鍥犳浼犻�掔粰Leveldb鐨凨ey涓�瀹氳淇濊瘉浠xpire_timestamp缁撳熬.
     leveldb::CompactStrategy* strategy = NULL;
     if (m_table_schema.raw_key() == TTLKv) {
         if (!start.empty()) {

@@ -10,10 +10,10 @@
 
 // namespace common {
 
-/// ×¨Îª ASCII ÌØ¶¨µÄº¯Êı£¬Èç¹ûÉæ¼°µ½ locale£¬ÇëÊ¹ÓÃ±ê×¼ C µÄ ctype.h
-/// Àï¶¨ÒåµÄº¯Êı¡£
+/// ä¸“ä¸º ASCII ç‰¹å®šçš„å‡½æ•°ï¼Œå¦‚æœæ¶‰åŠåˆ° localeï¼Œè¯·ä½¿ç”¨æ ‡å‡† C çš„ ctype.h
+/// é‡Œå®šä¹‰çš„å‡½æ•°ã€‚
 
-// ÓÃ struct À´ÓÃ×öÇ¿µÄ namespace£¬½ûÖ¹Ê¹ÓÃÕß using¡£
+// ç”¨ struct æ¥ç”¨åšå¼ºçš„ namespaceï¼Œç¦æ­¢ä½¿ç”¨è€… usingã€‚
 struct Ascii
 {
 private:
@@ -21,7 +21,7 @@ private:
     ~Ascii();
 
 private:
-    /// ×Ö·ûÀàĞÍµÄÑÚÂë
+    /// å­—ç¬¦ç±»å‹çš„æ©ç 
     enum CharTypeMask
     {
         kUpper = 1 << 0,
@@ -37,7 +37,7 @@ private:
     };
 
 public:
-    /** ÅĞ¶ÏÊÇ²»ÊÇÓĞĞ§µÄ ASCII Âë */
+    /** åˆ¤æ–­æ˜¯ä¸æ˜¯æœ‰æ•ˆçš„ ASCII ç  */
     static bool IsValid(char c)
     {
         return (c & 0x80) == 0;
@@ -53,61 +53,61 @@ public:
         return CharIncludeAnyTypeMask(c, kUpper);
     }
 
-    /** ÅĞ¶ÏÊÇ·ñÎª×ÖÄ¸ */
+    /** åˆ¤æ–­æ˜¯å¦ä¸ºå­—æ¯ */
     static bool IsAlpha(char c)
     {
         return CharIncludeAnyTypeMask(c, kUpper | kLower);
     }
 
-    /** ÅĞ¶ÏÊÇ·ñÎªÊı×Ö */
+    /** åˆ¤æ–­æ˜¯å¦ä¸ºæ•°å­— */
     static bool IsDigit(char c)
     {
         return CharIncludeAnyTypeMask(c, kDigit);
     }
 
-    /** ÅĞ¶ÏÊÇ·ñÎªÓ¢ÎÄ»òÊı×Ö  */
+    /** åˆ¤æ–­æ˜¯å¦ä¸ºè‹±æ–‡æˆ–æ•°å­—  */
     static bool IsAlphaNumber(char c)
     {
         return CharIncludeAnyTypeMask(c, kUpper | kLower | kDigit);
     }
 
-    /** ÅĞ¶ÏÊÇ·ñÎª¿Õ°××Ö·û¡£¿Õ¸ñ,'\t', ' ' Ëã×÷¿Õ°××Ö·û*/
+    /** åˆ¤æ–­æ˜¯å¦ä¸ºç©ºç™½å­—ç¬¦ã€‚ç©ºæ ¼,'\t', ' ' ç®—ä½œç©ºç™½å­—ç¬¦*/
     static bool IsBlank(char c)
     {
         return CharIncludeAnyTypeMask(c, kBlank);
     }
 
-    /** ÅĞ¶ÏÊÇ·ñÎª¼ä¸ô×Ö·û¡£*/
+    /** åˆ¤æ–­æ˜¯å¦ä¸ºé—´éš”å­—ç¬¦ã€‚*/
     static inline bool IsSpace(char c)
     {
         return CharIncludeAnyTypeMask(c, kSpace);
     }
 
-    /** ÅĞ¶ÏÊÇ·ñÎª¿ØÖÆ×Ö·û¡£*/
+    /** åˆ¤æ–­æ˜¯å¦ä¸ºæ§åˆ¶å­—ç¬¦ã€‚*/
     static bool IsControl(char c)
     {
         return CharIncludeAnyTypeMask(c, kControl);
     }
 
-    /** ÅĞ¶ÏÊÇ·ñÎª±êµã·ûºÅ×Ö·û¡£*/
+    /** åˆ¤æ–­æ˜¯å¦ä¸ºæ ‡ç‚¹ç¬¦å·å­—ç¬¦ã€‚*/
     static inline bool IsPunct(char c)
     {
         return CharIncludeAnyTypeMask(c, kPunct);
     }
 
-    /** ÅĞ¶ÏÊÇ·ñÎªÊ®Áù½øÖÆÊı×Ö×Ö·û¡£*/
+    /** åˆ¤æ–­æ˜¯å¦ä¸ºåå…­è¿›åˆ¶æ•°å­—å­—ç¬¦ã€‚*/
     static inline bool IsHexDigit(char c)
     {
         return CharIncludeAnyTypeMask(c, kHexDigit);
     }
 
-    /** ÅĞ¶ÏÊÇ·ñÎª¿É¼û×Ö·û¡£*/
+    /** åˆ¤æ–­æ˜¯å¦ä¸ºå¯è§å­—ç¬¦ã€‚*/
     static inline bool IsGraph(char c)
     {
         return CharIncludeAnyTypeMask(c, kGraph);
     }
 
-    /** ÅĞ¶ÏÊÇ·ñÎª¿É´òÓ¡×Ö·û¡£*/
+    /** åˆ¤æ–­æ˜¯å¦ä¸ºå¯æ‰“å°å­—ç¬¦ã€‚*/
     static inline bool IsPrint(char c)
     {
         return CharIncludeAnyTypeMask(c, kPrint);
@@ -132,7 +132,7 @@ private:
     static inline int GetCharTypeMask(char c)
     {
 #if 0
-        // // ´Ë±íÓÉÒÔÏÂ´úÂëÉú³É:
+        // // æ­¤è¡¨ç”±ä»¥ä¸‹ä»£ç ç”Ÿæˆ:
         // #include <ctype.h>
         // #include <stdio.h>
 
@@ -155,7 +155,7 @@ private:
         //     }
         // }
 
-        // ±àÒëºóÒÔÏÂÃæµÄÃüÁîÔËĞĞ£º
+        // ç¼–è¯‘åä»¥ä¸‹é¢çš„å‘½ä»¤è¿è¡Œï¼š
         // $ LC_ALL=C ./a.out
 #endif
         static const uint16_t table[UCHAR_MAX + 1] =
@@ -288,7 +288,7 @@ private:
             /* 0x7d(}) */ kPunct | kGraph | kPrint | 0,
             /* 0x7e(~) */ kPunct | kGraph | kPrint | 0,
             /* 0x7f( ) */ kControl | 0,
-            // ÒÔÏÂÈ«Îª 0
+            // ä»¥ä¸‹å…¨ä¸º 0
         };
         return table[static_cast<unsigned char>(c)];
     }

@@ -1,56 +1,76 @@
+Teraæž„å»ºæ‰‹å†Œ
+============
 
-ÈçºÎ¹¹½¨Tera£¿
+æœ¬æ–‡ä»¶æŒ‡å¯¼ä½ ä»ŽTeraæºä»£ç æž„å»ºå‡ºTeraçš„SDKå¤´æ–‡ä»¶ã€SDKåº“æ–‡ä»¶ã€æœåŠ¡ç«¯
+å¯æ‰§è¡Œç¨‹åºã€ä»¥åŠå…¶å®ƒå·¥å…·ã€‚
 
-*****************************************************************
+ç³»ç»Ÿè¦æ±‚
+========
 
-TeraµÄ¹¹½¨ÊÇºÜ¼òµ¥µÄ¡£Ä¿Ç°£¬ÓÐÁ½ÖÖ·½Ê½¹©ÄãÑ¡Ôñ£¬Çø±ðÔÚÓÚ±àÒëÒÀÀµ
-µÄ¹ÜÀí£ºÈç¹ûÄãÏ£Íû×ÔÐÐ¹ÜÀíTeraµÄÒÀÀµÈí¼þ£¬ÇëÑ¡Ôñ·½Ê½A£¬Èç¹ûÄãÏëÇá
-ËÉÒ»µã£¬ÇëÑ¡Ôñ·½Ê½B¡£
+æ“ä½œç³»ç»Ÿ
+* Linuxç³»ç»Ÿ
+ç¬¬ä¸‰æ–¹è½¯ä»¶
+* sofa-pbrpc (1.0.0 or newer)
+  https://github.com/BaiduPS/sofa-pbrpc/
+* Protocol Buffers (2.4.1 or newer)
+  https://developers.google.com/protocol-buffers/
+* snappy (1.1.1 or newer)
+  https://code.google.com/p/snappy/
+* zookeeper (3.3.3 or newer)
+  https://zookeeper.apache.org/
+* gflags (2.1.1 or newer)
+  https://github.com/gflags/gflags/
+* glog (0.3.3 or newer)
+  https://github.com/google/glog/
+* gperftools (2.2.1 only)
+  https://code.google.com/p/gperftools/
+* boost (1.53.0 or newer)
+  http://www.boost.org/
 
-*****************************************************************
-**                         ¹¹½¨·½Ê½A                           **
-*****************************************************************
+æ­¤å¤–ï¼Œåœ¨64ä½ç³»ç»Ÿä¸­ï¼Œgperftoolså¯èƒ½ä¾èµ–ä»¥ä¸‹è½¯ä»¶ï¼Œè¯·å‚è§gperftools
+çš„å®‰è£…è¯´æ˜Žã€‚
+* libunwind (0.99 only)
+  http://www.nongnu.org/libunwind/
+  
+ç¼–è¯‘æ­¥éª¤
+========
 
-Ê×ÏÈ£¬È·ÈÏÄãµÄÏµÍ³ÉÏÒÑ¾­°²×°ÁËÒÔÏÂTeraµÄÒÀÀµÈí¼þ£º
-* protobuf
-* snappy
-* sofa-pbrpc
-* zookeeper
-* glog
-* gflags
-* gperftools»òtcmalloc
-Èç¹ûÃ»ÓÐ£¬ÏÈ°²×°ËüÃÇ¡£×î·½±ãµÄ·½·¨ÊÇÊ¹ÓÃÄãµÄÏµÍ³ÉÏµÄÈí¼þ°ü¹ÜÀíÆ÷£¬
-ÀýÈçapt-get¡¢yumµÈµÈ£»»òÕßÍ¨¹ýÔ´Âë±àÒë¡£Ô´ÂëµÄÏÂÔØµØÖ·¿ÉÒÔ²Î¿¼
-build.sh¡£
+1. ç¼–è¾‘depends.mk
+1.1. åœ¨ä»¥ä¸‹å˜é‡çš„=å³è¾¹å¡«ä¸Šå¯¹åº”è½¯ä»¶çš„å®‰è£…è·¯å¾„
+  SOFA_PBRPC_PREFIX=
+  PROTOBUF_PREFIX=
+  SNAPPY_PREFIX=
+  ZOOKEEPER_PREFIX=
+  GFLAGS_PREFIX=
+  GLOG_PREFIX=.
+  GPERFTOOLS_PREFIX=
+ä»¥"SNAPPY_PREFIX="ä¸ºä¾‹ï¼Œå‡è®¾snappyå®‰è£…åœ¨/usr/localï¼Œé‚£ä¹ˆè¿™ä¸€è¡Œ
+åº”è¯¥æ”¹ä¸ºï¼š
+  SNAPPY_PREFIX=/usr/local
 
-µ±ÄãÒÑ¾­°²×°ºÃÉÏÊöËùÓÐÈí¼þ£¬ÇëÊ¹ÓÃ±à¼­Æ÷´ò¿ªdepends.mk£¬Äã»á·¢ÏÖ
-depends.mkÀïÃæÓÐÈýÀà±äÁ¿£¬*_INCDIRÊÇÈí¼þµÄÍ·ÎÄ¼þÄ¿Â¼£¬*_LIBDIRÊÇ
-Èí¼þµÄÁ¬½Ó¿âÄ¿Â¼£¬¶ø*_PREFIXÊÇÈí¼þµÄ°²×°Ä¿Â¼£¬Ò»°ãÀ´ËµÍ·ÎÄ¼þÄ¿Â¼
-ºÍÁ¬½Ó¿âÄ¿Â¼¾ÍÎ»ÓÚ°²×°Ä¿Â¼Ö®ÏÂ¡£Èç¹ûÈí¼þÊÇÍ¨¹ýÈí¼þ°ü¹ÜÀíÆ÷°²×°µÄ£¬
-Ëü»á±»°²×°ÔÚÏµÍ³µÄÄ¬ÈÏ°²×°Ä¿Â¼ÏÂ£¬Èç/usr»ò/usr/local£»Èç¹ûÊÇÍ¨¹ý
-±àÒëÔ´Âë°²×°µÄ£¬²¢ÇÒÃ»ÓÐ¼ÓÉÏ--prefix²ÎÊý£¬ËüÍ¬Ñù»á±»°²×°ÔÚÄ¬ÈÏÄ¿
-Â¼ÏÂ£»Èç¹ûÖ¸¶¨ÁË--prefix£¬ÄÇÃ´Õâ¸ö²ÎÊý¾ÍÊÇ°²×°Ä¿Â¼¡£Çë°Ñ¸÷¸öÈí¼þ
-µÄ°²×°Ä¿Â¼ÌîÐ´ÔÚÏàÓ¦µÄ*_PREFIX=Ö®ºó¡£*_INCDIRºÍ*_LIBDIR½öÔÚÈí¼þ
-µÄÍ·ÎÄ¼þºÍÁ¬½Ó¿â²»ÔÚÒ»ÆðÊ±²ÅÐèÒªÐÞ¸Ä¡£
+1.2. åœ¨"BOOST_INCDIR="å³è¾¹å¡«ä¸Šboostæºä»£ç çš„å­˜æ”¾è·¯å¾„
+ä¾‹å¦‚ï¼Œboostæºä»£ç æ”¾åœ¨/usr/src/boost_1_57_0ï¼Œé‚£ä¹ˆè¿™ä¸€è¡Œåº”è¯¥æ”¹ä¸ºï¼š
+  BOOST_INCDIR=/usr/src/boost_1_57_0
 
-±à¼­Íêdepends.mkÖ®ºó£¬±£´æËü£¬Ö´ÐÐÏÂÃæÈý¸öÃüÁî£º
-  sh build_version.sh
-  make proto
+1.3. å…¶å®ƒå˜é‡ä»…åœ¨ç‰¹æ®Šæƒ…å†µä¸‹éœ€è¦ä¿®æ”¹
+ä¸€èˆ¬æƒ…å†µä¸‹è½¯ä»¶çš„å¤´æ–‡ä»¶å’Œåº“æ–‡ä»¶åˆ†åˆ«ä½äºŽå®‰è£…ç›®å½•ä¸‹çš„includeå’Œlibï¼Œ
+ä»…åœ¨ä¸æ˜¯è¿™ç§æƒ…å†µæ—¶æ‰éœ€è¦å•ç‹¬ä¿®æ”¹ç›¸åº”çš„*_INCDIRæˆ–*_LIBDIRå˜é‡ã€‚
+
+2. æ‰§è¡Œä»¥ä¸‹å‘½ä»¤
   make -j4
-Èç¹ûÈý¸öÃüÁîÈ«²¿Ö´ÐÐ³É¹¦ÁË£¬ÄÇÃ´¹§Ï²Äã£¬tera¹¹½¨Íê³ÉÁË¡£·ñÔòµÄ»°£¬
-Çë¼ì²éÒÀÀµÈí¼þµÄ°æ±¾£¬ÊÇ·ñºÍ½¨ÒéµÄ°æ±¾²»Í¬£¬¹ý¾É»ò¹ýÐÂµÄ°æ±¾¶¼ÓÐ
-¿ÉÄÜµ¼ÖÂ±àÒëÊ§°Ü¡£
 
-*****************************************************************
-**                         ¹¹½¨·½Ê½B                           **
-*****************************************************************
+ä¸€é”®æž„å»º
+========
 
-Ê¹ÓÃÕâÖÖ·½Ê½£¬Äã½«ÎÞÐè¹ØÐÄ±àÒëÒÀÀµ£¬µ«ÊÇÖ»ÄÜÔÚ½ÓÈë»¥ÁªÍøµÄÇé¿öÏÂ
-½øÐÐ¡£Ö´ÐÐÏÂÃæÕâ¸öÃüÁî£º
+ä¸ºäº†æ–¹ä¾¿å¿«é€Ÿè¯•ç”¨ï¼Œæˆ‘ä»¬æä¾›äº†ä¸€é”®æž„å»ºåŠŸèƒ½ï¼Œæ‰§è¡Œä¸‹é¢è¿™ä¸ªå‘½ä»¤ï¼š
   sh build.sh
-¾­¹ýÂþ³¤µÄµÈ´ý£¬tera¾Í¹¹½¨Íê³ÉÁË¡£
-µ«ÊÇÄãÈÔÓÐ¿ÉÄÜÊ§°Ü¡£Ò»Ð©Èí¼þµÄÏÂÔØµØÖ·¿ÉÄÜÒÑ¾­Ê§Ð§£¨¿ÉÄÜÐÔºÜµÍ£¬
-ÎÒÃÇ»á¾­³£¼ì²éµÄ£©£»Ò»Ð©Èí¼þµÄÏÂÔØµØÖ·ÄãÒ²ÐíÎÞ·¨Á¬Í¨£¬¿ÉÒÔ»»¸öÍø
-Âç»·¾³ÊÔÊÔ£¬»òÊÇÊ¹ÓÃ´úÀí·þÎñÆ÷¡£
+å®ƒä¼šè‡ªåŠ¨ä¸‹è½½æ‰€æœ‰ç¬¬ä¸‰æ–¹è½¯ä»¶ï¼Œå®‰è£…åœ¨thirdpartyç›®å½•ä¸‹ï¼Œå¹¶ä»¥é™æ€è¿žæŽ¥
+æ–¹å¼ç”ŸæˆTeraçš„å¯æ‰§è¡Œç¨‹åºã€‚
 
+æž„å»ºç»“æžœ
+========
 
+å¦‚æžœæž„å»ºæˆåŠŸï¼Œæž„å»ºç»“æžœå°†ä½äºŽbuildç›®å½•ä¸‹ï¼Œç›®å½•ç»“æž„å¦‚ä¸‹ï¼š
+* include: SDKå¤´æ–‡ä»¶
+* lib: SDKåº“æ–‡ä»¶
+* bin: å¯æ‰§è¡Œç¨‹åºï¼ŒåŒ…æ‹¬æœåŠ¡ç«¯ç¨‹åºå’Œå…¶å®ƒå·¥å…·

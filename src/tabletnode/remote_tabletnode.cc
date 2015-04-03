@@ -15,6 +15,7 @@
 
 DECLARE_int32(tera_tabletnode_write_thread_num);
 DECLARE_int32(tera_tabletnode_read_thread_num);
+DECLARE_int32(tera_tabletnode_scan_thread_num);
 DECLARE_int32(tera_tabletnode_manual_compact_thread_num);
 DECLARE_int32(tera_request_pending_limit);
 DECLARE_int32(tera_scan_request_pending_limit);
@@ -66,8 +67,10 @@ RemoteTabletNode::RemoteTabletNode(TabletNodeImpl* tabletnode_impl)
     : m_tabletnode_impl(tabletnode_impl),
       m_write_thread_pool(new ThreadPool(FLAGS_tera_tabletnode_write_thread_num)),
       m_read_thread_pool(new ThreadPool(FLAGS_tera_tabletnode_read_thread_num)),
+      m_scan_thread_pool(new ThreadPool(FLAGS_tera_tabletnode_scan_thread_num)),
       m_compact_thread_pool(new ThreadPool(FLAGS_tera_tabletnode_manual_compact_thread_num)),
-      m_rpc_schedule(new RpcSchedule(new FairSchedulePolicy)) {}
+      m_read_rpc_schedule(new RpcSchedule(new FairSchedulePolicy)),
+      m_scan_rpc_schedule(new RpcSchedule(new FairSchedulePolicy)) {}
 
 RemoteTabletNode::~RemoteTabletNode() {}
 
@@ -114,8 +117,9 @@ void RemoteTabletNode::ReadTablet(google::protobuf::RpcController* controller,
 
         ReadRpc* rpc = new ReadRpc(controller, request, response, done,
                                    timer, start_micros);
-        m_rpc_schedule->EnqueueRpc(request->tablet_name(), rpc);
-        m_read_thread_pool->AddTask(boost::bind(&RemoteTabletNode::DoScheduleRpc, this));
+        m_read_rpc_schedule->EnqueueRpc(request->tablet_name(), rpc);
+        m_read_thread_pool->AddTask(boost::bind(&RemoteTabletNode::DoScheduleRpc, this,
+                                                m_read_rpc_schedule.get()));
     }
 }
 
@@ -189,8 +193,9 @@ void RemoteTabletNode::ScanTablet(google::protobuf::RpcController* controller,
     } else {
         scan_pending_counter.Inc();
         ScanRpc* rpc = new ScanRpc(controller, request, response, done);
-        m_rpc_schedule->EnqueueRpc(request->table_name(), rpc);
-        m_read_thread_pool->AddTask(boost::bind(&RemoteTabletNode::DoScheduleRpc, this));
+        m_scan_rpc_schedule->EnqueueRpc(request->table_name(), rpc);
+        m_scan_thread_pool->AddTask(boost::bind(&RemoteTabletNode::DoScheduleRpc,
+                                                this, m_scan_rpc_schedule.get()));
     }
 }
 
@@ -343,9 +348,9 @@ void RemoteTabletNode::DoCompactTablet(google::protobuf::RpcController* controll
     LOG(INFO) << "finish RPC (CompactTablet) id: " << id;
 }
 
-void RemoteTabletNode::DoScheduleRpc() {
+void RemoteTabletNode::DoScheduleRpc(RpcSchedule* rpc_schedule) {
     RpcTask* rpc = NULL;
-    bool status = m_rpc_schedule->DequeueRpc(&rpc);
+    bool status = rpc_schedule->DequeueRpc(&rpc);
     CHECK(status);
     std::string table_name;
 
@@ -368,7 +373,7 @@ void RemoteTabletNode::DoScheduleRpc() {
     }
 
     delete rpc;
-    status = m_rpc_schedule->FinishRpc(table_name);
+    status = rpc_schedule->FinishRpc(table_name);
     CHECK(status);
 }
 

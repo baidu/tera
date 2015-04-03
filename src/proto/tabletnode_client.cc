@@ -8,8 +8,6 @@
 
 #include "proto/tabletnode_client.h"
 
-DECLARE_string(tera_tabletnode_addr);
-DECLARE_string(tera_tabletnode_port);
 DECLARE_int32(tera_tabletnode_connect_retry_times);
 DECLARE_int32(tera_tabletnode_connect_retry_period);
 DECLARE_int32(tera_tabletnode_connect_timeout_period);
@@ -20,16 +18,14 @@ namespace tabletnode {
 
 TabletNodeClient::TabletNodeClient()
     : RpcClient<TabletNodeServer::Stub>(
-                FLAGS_tera_tabletnode_addr + ":" + FLAGS_tera_tabletnode_port,
-                FLAGS_tera_tabletnode_connect_retry_period,
+                "", FLAGS_tera_tabletnode_connect_retry_period,
                 FLAGS_tera_tabletnode_connect_timeout_period,
                 FLAGS_tera_tabletnode_connect_retry_times) {}
 
 TabletNodeClient::TabletNodeClient(int32_t wait_time, int32_t rpc_timeout,
                                    int32_t retry_times)
     : RpcClient<TabletNodeServer::Stub>(
-            FLAGS_tera_tabletnode_addr + ":" + FLAGS_tera_tabletnode_port,
-            wait_time, rpc_timeout, retry_times) {}
+            "", wait_time, rpc_timeout, retry_times) {}
 
 
 TabletNodeClient::~TabletNodeClient() {}

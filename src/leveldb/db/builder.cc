@@ -100,7 +100,6 @@ Status BuildTable(const std::string& dbname,
         assert(meta->file_size > 0);
         *saved_size = builder->SavedSize();
       }
-      // SST中没有entry,那么保持file_size=0以便上层处理
     } else {
       builder->Abandon();
     }

@@ -144,6 +144,11 @@ TablePtr Tablet::GetTable() {
     return m_table;
 }
 
+bool Tablet::IsBusy() {
+    MutexLock lock(&m_mutex);
+    return m_counter.is_on_busy();
+}
+
 std::string Tablet::DebugString() {
     MutexLock lock(&m_mutex);
     return m_meta.DebugString();
@@ -720,6 +725,10 @@ bool Table::GetTabletsForGc(std::set<uint64_t>* live_tablets,
     std::string table_path = FLAGS_tera_tabletnode_path_prefix + m_name;
     env->GetChildren(table_path, &children);
     for (int i = 0; i < children.size(); ++i) {
+        if (children[i].size() < 5) {
+            // skip directory . and ..
+            continue;
+        }
         std::string path = table_path + "/" + children[i];
         uint64_t tabletnum = leveldb::GetTabletNumFromPath(path);
         if (live_tablets->find(tabletnum) == live_tablets->end()) {

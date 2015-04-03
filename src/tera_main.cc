@@ -15,6 +15,7 @@
 #include "version.h"
 
 DECLARE_string(tera_role);
+DECLARE_string(tera_log_prefix);
 
 bool g_quit = false;
 
@@ -38,9 +39,13 @@ tera::TeraEntry* SwitchTeraEntry() {
 }
 
 int main(int argc, char** argv) {
-    ::gflags::ParseCommandLineFlags(&argc, &argv, true);
+    ::google::ParseCommandLineFlags(&argc, &argv, true);
     ::google::InitGoogleLogging(argv[0]);
-    tera::utils::SetupLog(FLAGS_tera_role);
+    if (!FLAGS_tera_log_prefix.empty()) {
+        tera::utils::SetupLog(FLAGS_tera_log_prefix);
+    } else {
+        tera::utils::SetupLog(FLAGS_tera_role);
+    }
 
     if (argc > 1) {
         std::string ext_cmd = argv[1];
@@ -67,10 +72,10 @@ int main(int argc, char** argv) {
             LOG(ERROR) << "Server run error ,and then exit now ";
             break;
         }
-        // jvm»áÇÀ×¢Õâ¸ö, Ê±¿Ì×¼±¸×ÅÇÀ»ØÀ´
+        // jvmä¼šæŠ¢æ³¨è¿™ä¸ª, æ—¶åˆ»å‡†å¤‡ç€æŠ¢å›žæ¥
         signal(SIGINT, SignalIntHandler);
         signal(SIGTERM, SignalIntHandler);
-        // signal(SIGSEGV, SIG_DFL); // Èç¹ûÕâ¸ö±»¸Ä»ØSIG_DFL, jvm»ácore, ²»ÖªµÀÎªÉ¶...
+        // signal(SIGSEGV, SIG_DFL); // å¦‚æžœè¿™ä¸ªè¢«æ”¹å›žSIG_DFL, jvmä¼šcore, ä¸çŸ¥é“ä¸ºå•¥...
     }
 
     if (!entry->Shutdown()) {

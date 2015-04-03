@@ -135,14 +135,16 @@ private:
                          CompactTabletResponse* response,
                          google::protobuf::Closure* done);
 
-    void DoScheduleRpc();
+    void DoScheduleRpc(RpcSchedule* rpc_schedule);
 
 private:
     TabletNodeImpl* m_tabletnode_impl;
     scoped_ptr<ThreadPool> m_write_thread_pool;
     scoped_ptr<ThreadPool> m_read_thread_pool;
+    scoped_ptr<ThreadPool> m_scan_thread_pool;
     scoped_ptr<ThreadPool> m_compact_thread_pool;
-    scoped_ptr<RpcSchedule> m_rpc_schedule;
+    scoped_ptr<RpcSchedule> m_read_rpc_schedule;
+    scoped_ptr<RpcSchedule> m_scan_rpc_schedule;
 };
 
 } // namespace tabletnode
