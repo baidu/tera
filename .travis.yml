@@ -21,7 +21,7 @@ install:
 
     - wget https://github.com/gflags/gflags/archive/v2.1.2.tar.gz
     - tar xf v2.1.2.tar.gz
-    - ( cd gflags && cmake -DGFLAGS_NAMESPACE=google && make -j4 && sudo make install )
+    - ( cd gflags-2.1.2 && cmake -DGFLAGS_NAMESPACE=google && make -j4 && sudo make install )
 
     - git clone https://github.com/google/glog
     - ( cd glog && git checkout v0.3.3 && ./configure --disable-shared && make -j4 && sudo make install )
