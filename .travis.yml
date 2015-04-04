@@ -19,7 +19,8 @@ install:
     - tar zxvf zookeeper-3.4.6.tar.gz
     - ( cd zookeeper-3.4.6/src/c && ./configure --disable-shared && make -j4 && sudo make install )
 
-    - git clone https://github.com/schuhschuh/gflags
+    - wget https://github.com/gflags/gflags/archive/v2.1.2.tar.gz
+    - tar xf v2.1.2.tar.gz
     - ( cd gflags && cmake -DGFLAGS_NAMESPACE=google && make -j4 && sudo make install )
 
     - git clone https://github.com/google/glog
