@@ -166,8 +166,6 @@ void TableDescToSchema(const TableDescriptor& desc, TableSchema* schema) {
         lg->set_use_memtable_on_leveldb(lgdesc->UseMemtableOnLeveldb());
         if (lgdesc->MemtableLdbBlockSize() > 0) {
             lg->set_memtable_ldb_write_buffer_size(lgdesc->MemtableLdbWriteBufferSize());
-        }
-        if (lgdesc->MemtableLdbBlockSize() > 0) {
             lg->set_memtable_ldb_block_size(lgdesc->MemtableLdbBlockSize());
         }
         lg->set_id(lgdesc->Id());
@@ -230,6 +228,10 @@ void TableSchemaToDesc(const TableSchema& schema, TableDescriptor* desc) {
         }
         lgd->SetCompress(lg.compress_type() ? kSnappyCompress : kNoneCompress);
         lgd->SetUseBloomfilter(lg.use_bloom_filter());
+
+        lgd->SetUseMemtableOnLeveldb(lg.use_memtable_on_leveldb());
+        lgd->SetMemtableLdbWriteBufferSize(lg.memtable_ldb_write_buffer_size());
+        lgd->SetMemtableLdbBlockSize(lg.memtable_ldb_block_size());
     }
     int32_t cf_num = schema.column_families_size();
     for (int32_t i = 0; i < cf_num; i++) {
@@ -448,7 +450,7 @@ bool SetLgProperties(const PropertyList& props, LocalityGroupDescriptor* desc) {
                            << " for property: " << prop.first;
                 return false;
             }
-            desc->SetMemtableLdbWriterBufferSize(buffer_size);
+            desc->SetMemtableLdbWriteBufferSize(buffer_size);
         } else if (prop.first == "memtable_ldb_block_size") {
             int32_t block_size = atoi(prop.second.c_str()); //KB
             if (block_size <= 0) {

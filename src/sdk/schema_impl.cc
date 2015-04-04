@@ -162,7 +162,7 @@ int32_t LGDescImpl::MemtableLdbWriteBufferSize() const {
     return _memtable_ldb_write_buffer_size;
 }
 
-void LGDescImpl::SetMemtableLdbWriterBufferSize(int32_t buffer_size) {
+void LGDescImpl::SetMemtableLdbWriteBufferSize(int32_t buffer_size) {
     _memtable_ldb_write_buffer_size = buffer_size;
 }
 
