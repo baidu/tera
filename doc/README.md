@@ -18,3 +18,14 @@
 [命令行工具使用手册](https://github.com/BaiduPS/tera/blob/master/doc/teracli.md)
 
 [tera实现之master、ts、client的交互](https://github.com/BaiduPS/tera/blob/master/doc/master-ts-client-interactive.md)
+
+## TodoList
+1. Master的设计与实现（职责、功能、每个功能怎么实现的、为什么这么实现、还有哪些遗留问题）
+2. Tabletserver设计与实现
+3. SDK的结构化文档（可折叠，可搜索，类是windows的帮助）
+4. 性能数据，不同场景下的测试数，平静分析
+5. 数据模型的详细介绍
+  * cf的使用建议  
+  * 各种删除的语义  
+  * 多版本保留机制
+6. 监控系统的安装和使用
