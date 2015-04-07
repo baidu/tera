@@ -98,7 +98,7 @@ bool TabletNodeZkAdapter::Register(std::string* session_id, int* zk_errno) {
         return false;
     }
     char session_id_str[32];
-    sprintf(session_id_str, "%016llx", session_id_int);
+    sprintf(session_id_str, "%016lx", session_id_int);
 
     // create serve node
     std::string node_path = kTsListPath + "/" + session_id_str + "#";

@@ -261,7 +261,7 @@ void TabletNodeSysInfo::CollectHardwareInfo() {
         if (f == NULL) {
             return;
         }
-        fscanf(f, "%*ld %ld", &mem);
+        fscanf(f, "%*d %ld", &mem);
         mem = mem * 4 * 1024;
         fclose(f);
         m_info.set_mem_used(mem);
@@ -281,7 +281,7 @@ void TabletNodeSysInfo::CollectHardwareInfo() {
         fseek(f, 327, SEEK_SET);
         for (int i = 0; i < 10; i++) {
             while (':' != fgetc(f));
-            fscanf(f, "%ld%*ld%*ld%*ld%*ld%*ld%*ld%*ld%ld", &net_rx, &net_tx);
+            fscanf(f, "%ld%*d%*d%*d%*d%*d%*d%*d%ld", &net_rx, &net_tx);
             if (net_rx > 0 && net_tx > 0) {
                 break;
             }

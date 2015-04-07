@@ -128,7 +128,7 @@ public:
     virtual void SetUseMemtableOnLeveldb(bool use_mem_ldb) = 0;
     /// Memtable-LDB WriteBuffer Size
     virtual int32_t MemtableLdbWriteBufferSize() const = 0;
-    virtual void SetMemtableLdbWriterBufferSize(int32_t buffer_size) = 0;
+    virtual void SetMemtableLdbWriteBufferSize(int32_t buffer_size) = 0;
     /// Memtable-LDB Block Size
     virtual int32_t MemtableLdbBlockSize() const = 0;
     virtual void SetMemtableLdbBlockSize(int32_t block_size) = 0;
