@@ -228,7 +228,6 @@ void TableSchemaToDesc(const TableSchema& schema, TableDescriptor* desc) {
         }
         lgd->SetCompress(lg.compress_type() ? kSnappyCompress : kNoneCompress);
         lgd->SetUseBloomfilter(lg.use_bloom_filter());
-
         lgd->SetUseMemtableOnLeveldb(lg.use_memtable_on_leveldb());
         lgd->SetMemtableLdbWriteBufferSize(lg.memtable_ldb_write_buffer_size());
         lgd->SetMemtableLdbBlockSize(lg.memtable_ldb_block_size());
