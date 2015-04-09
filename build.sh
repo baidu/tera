@@ -96,14 +96,14 @@ make -j4
 make install
 cd -
 
-## libunwind for gperftools
-# wget http://download.savannah.gnu.org/releases/libunwind/libunwind-0.99-beta.tar.gz
-# tar zxf libunwind-0.99-beta.tar.gz
-# cd libunwind-0.99-beta
-# ./configure ${DEPS_CONFIG}
-# make -j4
-# make install
-# cd -
+# libunwind for gperftools
+wget http://download.savannah.gnu.org/releases/libunwind/libunwind-0.99-beta.tar.gz
+tar zxf libunwind-0.99-beta.tar.gz
+cd libunwind-0.99-beta
+./configure ${DEPS_CONFIG}
+make -j4
+make install
+cd -
 
 # gperftools (tcmalloc)
 # wget --no-check-certificate https://googledrive.com/host/0B6NtGsLhIcf7MWxMMF9JdTN3UVk/gperftools-2.2.1.tar.gz
