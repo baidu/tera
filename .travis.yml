@@ -1,13 +1,11 @@
 language: cpp
 compiler: gcc
-env:
-    - PROTOBUF_VERSION=2.6.1
 install:
     - sudo apt-get install libboost-dev
 
     - wget https://github.com/google/protobuf/releases/download/v2.6.1/protobuf-2.6.1.tar.gz
     - tar xf protobuf-2.6.1.tar.gz
-    - ( cd protobuf-$PROTOBUF_VERSION && ./configure && make -j4 && sudo make install && sudo ldconfig )
+    - ( cd protobuf-2.6.1 && ./configure && make -j4 && sudo make install && sudo ldconfig )
 
     - git clone https://github.com/google/snappy
     - ( cd snappy && sh ./autogen.sh && ./configure && make -j4 && sudo make install )

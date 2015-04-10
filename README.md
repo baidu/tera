@@ -2,7 +2,7 @@
 ====
 [![Build Status](https://travis-ci.org/BaiduPS/tera.svg)](https://travis-ci.org/BaiduPS/tera)
 
-Copyright 2015, Baidu.com, Inc.
+Copyright 2015, Baidu, Inc.
 
 #Overview
 Tera是一个高性能、可伸缩的数据库系统，被设计用来管理搜索引擎万亿量级的超链与网页信息。为实现数据的实时分析与高效访问，我们使用按行键、列名和时间戳全局排序的三维数据模型组织数据，使用多级Cache系统，充分利用新一代服务器硬件大内存、SSD盘和万兆网卡的性能优势，做到模型灵活的同时，实现了高吞吐与水平扩展。
