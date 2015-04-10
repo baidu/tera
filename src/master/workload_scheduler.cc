@@ -111,7 +111,7 @@ bool WorkloadScheduler::FindBestNode(const std::vector<TabletNodePtr>& node_list
 }
 
 struct TableSizeLess {
-    bool operator() (TabletNodePtr i, TabletNodePtr j) {
+    bool operator() (const TabletNodePtr& i, const TabletNodePtr& j) {
         uint64_t i_table_size = i->GetTableSize(table_name);
         uint64_t j_table_size = j->GetTableSize(table_name);
         uint64_t i_size = i->GetSize();
@@ -131,7 +131,7 @@ struct TableSizeLess {
 };
 
 struct TableSizeGreater {
-    bool operator() (TabletNodePtr i, TabletNodePtr j) {
+    bool operator() (const TabletNodePtr& i, const TabletNodePtr& j) {
         uint64_t i_table_size = i->GetTableSize(table_name);
         uint64_t j_table_size = j->GetTableSize(table_name);
         uint64_t i_size = i->GetSize();
