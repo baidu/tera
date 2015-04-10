@@ -1,0 +1,18 @@
+# common
+--log_dir=../log
+--v=6
+--logbufsecs=0
+
+# master
+--tera_master_port=1100
+--tera_master_split_tablet_size=2048
+
+# tablet node
+--tera_tabletnode_port=2200
+--tera_tabletnode_path_prefix=${dfs_prefix}
+--tera_tabletnode_cache_paths=${local_path}
+
+# zk 
+--tera_zk_addr_list=${zk_addr}
+--tera_zk_root_path=${zk_root}
+--tera_zk_timeout=10000

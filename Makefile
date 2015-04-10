@@ -14,7 +14,7 @@ INCPATH += -I./src -I./include -I./src/leveldb/include -I./src/leveldb $(DEPS_IN
 LDPATH += -L./src/leveldb $(DEPS_LDPATH)
 CFLAGS += $(OPT) $(INCPATH)
 CXXFLAGS += $(OPT) $(INCPATH)
-LDFLAGS += $(LDPATH) -rdynamic -lleveldb $(DEPS_LDFLAGS) -lpthread -lrt -lz -ldl
+LDFLAGS += -rdynamic $(LDPATH) -lleveldb $(DEPS_LDFLAGS) -lpthread -lrt -lz -ldl
 
 PROTO_FILES := $(wildcard src/proto/*.proto)
 PROTO_OUT_CC := $(PROTO_FILES:.proto=.pb.cc)
@@ -51,10 +51,11 @@ LIBRARY = libtera.a
 .PHONY: all clean cleanall test
 
 all: $(PROGRAM) $(LIBRARY)
-	mkdir -p build/include build/lib build/bin
+	mkdir -p build/include build/lib build/bin build/log
 	cp $(PROGRAM) build/bin
 	cp $(LIBRARY) build/lib
 	cp src/sdk/tera.h build/include
+	cp -r conf build
 	echo 'Done'
 
 test:

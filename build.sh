@@ -47,8 +47,9 @@ make install
 cd -
 
 # sofa-pbrpc
-git clone https://github.com/BaiduPS/sofa-pbrpc
-cd sofa-pbrpc
+wget --no-check-certificate -O sofa-pbrpc-1.0.0.tar.gz https://github.com/BaiduPS/sofa-pbrpc/archive/v1.0.0.tar.gz
+tar xvf sofa-pbrpc-1.0.0.tar.gz
+cd sofa-pbrpc-1.0.0
 sed -i '/BOOST_HEADER_DIR=/ d' depends.mk
 sed -i '/PROTOBUF_DIR=/ d' depends.mk
 sed -i '/SNAPPY_DIR=/ d' depends.mk

@@ -105,7 +105,7 @@ public:
     /// Memtable-LDB WriteBuffer Size
     int32_t MemtableLdbWriteBufferSize() const;
 
-    void SetMemtableLdbWriterBufferSize(int32_t buffer_size);
+    void SetMemtableLdbWriteBufferSize(int32_t buffer_size);
 
     /// Memtable-LDB Block Size
     int32_t MemtableLdbBlockSize() const;
