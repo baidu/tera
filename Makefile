@@ -14,7 +14,7 @@ INCPATH += -I./src -I./include -I./src/leveldb/include -I./src/leveldb $(DEPS_IN
 LDPATH += -L./src/leveldb $(DEPS_LDPATH)
 CFLAGS += $(OPT) $(INCPATH)
 CXXFLAGS += $(OPT) $(INCPATH)
-LDFLAGS += $(LDPATH) -lleveldb $(DEPS_LDFLAGS) -lpthread -lrt -lz -ldl
+LDFLAGS += $(LDPATH) -rdynamic -lleveldb $(DEPS_LDFLAGS) -lpthread -lrt -lz -ldl
 
 PROTO_FILES := $(wildcard src/proto/*.proto)
 PROTO_OUT_CC := $(PROTO_FILES:.proto=.pb.cc)

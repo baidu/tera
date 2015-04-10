@@ -17,13 +17,15 @@ mkdir -p ${DEPS_SOURCE} ${DEPS_PREFIX}
 cd ${DEPS_SOURCE}
 
 # boost
-wget http://softlayer-sng.dl.sourceforge.net/project/boost/boost/1.57.0/boost_1_57_0.tar.gz
+# wget http://softlayer-sng.dl.sourceforge.net/project/boost/boost/1.57.0/boost_1_57_0.tar.gz
+git clone --depth=1 https://github.com/00k/boost
+mv boost/boost_1_57_0.tar.gz .
 tar zxf boost_1_57_0.tar.gz
 rm -rf ${DEPS_PREFIX}/boost_1_57_0
 mv boost_1_57_0 ${DEPS_PREFIX}
 
 # protobuf
-#wget --no-check-certificate https://github.com/google/protobuf/releases/download/v2.6.1/protobuf-2.6.1.tar.gz
+# wget --no-check-certificate https://github.com/google/protobuf/releases/download/v2.6.1/protobuf-2.6.1.tar.gz
 git clone --depth=1 https://github.com/00k/protobuf
 mv protobuf/protobuf-2.6.1.tar.gz .
 tar zxf protobuf-2.6.1.tar.gz
@@ -34,7 +36,7 @@ make install
 cd -
 
 # snappy
-#wget --no-check-certificate https://snappy.googlecode.com/files/snappy-1.1.1.tar.gz
+# wget --no-check-certificate https://snappy.googlecode.com/files/snappy-1.1.1.tar.gz
 git clone --depth=1 https://github.com/00k/snappy
 mv snappy/snappy-1.1.1.tar.gz .
 tar zxf snappy-1.1.1.tar.gz
@@ -104,7 +106,7 @@ make install
 cd -
 
 # gperftools (tcmalloc)
-#wget --no-check-certificate https://googledrive.com/host/0B6NtGsLhIcf7MWxMMF9JdTN3UVk/gperftools-2.2.1.tar.gz
+# wget --no-check-certificate https://googledrive.com/host/0B6NtGsLhIcf7MWxMMF9JdTN3UVk/gperftools-2.2.1.tar.gz
 git clone --depth=1 https://github.com/00k/gperftools
 mv gperftools/gperftools-2.2.1.tar.gz .
 tar zxf gperftools-2.2.1.tar.gz
