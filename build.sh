@@ -57,6 +57,8 @@ echo "BOOST_HEADER_DIR=${DEPS_PREFIX}/boost_1_57_0" >> depends.mk
 echo "PROTOBUF_DIR=${DEPS_PREFIX}" >> depends.mk
 echo "SNAPPY_DIR=${DEPS_PREFIX}" >> depends.mk
 echo "PREFIX=${DEPS_PREFIX}" >> depends.mk
+PROTOBUF_DIR=${DEPS_PREFIX}
+sh src/compile_proto.sh
 make -j4
 make install
 cd -
