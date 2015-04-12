@@ -17,9 +17,7 @@ mkdir -p ${DEPS_SOURCE} ${DEPS_PREFIX}
 cd ${DEPS_SOURCE}
 
 # boost
-# wget http://softlayer-sng.dl.sourceforge.net/project/boost/boost/1.57.0/boost_1_57_0.tar.gz
-git clone --depth=1 https://github.com/00k/boost
-mv boost/boost_1_57_0.tar.gz .
+wget http://softlayer-sng.dl.sourceforge.net/project/boost/boost/1.57.0/boost_1_57_0.tar.gz
 tar zxf boost_1_57_0.tar.gz
 rm -rf ${DEPS_PREFIX}/boost_1_57_0
 mv boost_1_57_0 ${DEPS_PREFIX}
@@ -48,7 +46,7 @@ cd -
 
 # sofa-pbrpc
 wget --no-check-certificate -O sofa-pbrpc-1.0.0.tar.gz https://github.com/BaiduPS/sofa-pbrpc/archive/v1.0.0.tar.gz
-tar xvf sofa-pbrpc-1.0.0.tar.gz
+tar zxf sofa-pbrpc-1.0.0.tar.gz
 cd sofa-pbrpc-1.0.0
 sed -i '/BOOST_HEADER_DIR=/ d' depends.mk
 sed -i '/PROTOBUF_DIR=/ d' depends.mk
@@ -62,7 +60,7 @@ PROTOBUF_DIR=${DEPS_PREFIX} sh compile_proto.sh
 cd ..
 make -j4
 make install
-cd -
+cd ..
 
 # zookeeper
 wget http://www.us.apache.org/dist/zookeeper/stable/zookeeper-3.4.6.tar.gz
