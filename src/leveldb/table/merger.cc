@@ -8,6 +8,9 @@
 
 #include "table/merger.h"
 
+#include <algorithm>
+#include <vector>
+
 #include "leveldb/comparator.h"
 #include "leveldb/iterator.h"
 #include "table/iterator_wrapper.h"
@@ -15,21 +18,106 @@
 namespace leveldb {
 
 namespace {
+
+class IterWrapper {
+ public:
+  IterWrapper(): iter_(NULL), valid_(false) { }
+  explicit IterWrapper(Iterator* iter): iter_(NULL) {
+    Set(iter);
+  }
+  ~IterWrapper() {}
+  Iterator* iter() const { return iter_; }
+
+  void Set(Iterator* iter) {
+    delete iter_;
+    iter_ = iter;
+    if (iter_ == NULL) {
+      valid_ = false;
+    } else {
+      Update();
+    }
+  }
+
+  // Iterator interface methods
+  bool Valid() const        { return valid_; }
+  Slice key() const         { assert(Valid()); return key_; }
+  Slice value() const       { assert(Valid()); return iter_->value(); }
+  // Methods below require iter() != NULL
+  Status status() const     { assert(iter_); return iter_->status(); }
+  void Next()               { assert(iter_); iter_->Next();        Update(); }
+  void Prev()               { assert(iter_); iter_->Prev();        Update(); }
+  void Seek(const Slice& k) { assert(iter_); iter_->Seek(k);       Update(); }
+  void SeekToFirst()        { assert(iter_); iter_->SeekToFirst(); Update(); }
+  void SeekToLast()         { assert(iter_); iter_->SeekToLast();  Update(); }
+
+ private:
+  void Update() {
+    valid_ = iter_->Valid();
+    if (valid_) {
+      key_ = iter_->key();
+    }
+  }
+
+  Iterator* iter_;
+  bool valid_;
+  Slice key_;
+};
+struct Greater {
+  bool operator() (IterWrapper& it1, IterWrapper& it2) {
+    if (!it1.Valid()) {
+      // iterator 1 is not valid, regard it as the bigger one
+      return true;
+    }
+    if (!it2.Valid()) {
+      // iterator 2 is not valid, regard it as the bigger one
+      return false;
+    }
+    return (comp->Compare(it1.key(), it2.key()) > 0);
+  }
+
+  Greater(const Comparator* comparator)
+      : comp(comparator) {}
+
+  const Comparator* comp;
+};
+
+struct Lesser {
+  bool operator() (IterWrapper& it1, IterWrapper& it2) {
+    if (!it1.Valid()) {
+      // always regard it as the lesser one
+      return true;
+    }
+    if (!it2.Valid()) {
+      // always regard it as the lesser one
+      return false;
+    }
+    return (comp->Compare(it1.key(), it2.key()) < 0);
+  }
+
+  Lesser (const Comparator* comparator)
+      : comp(comparator) {}
+
+  const Comparator* comp;
+};
+
 class MergingIterator : public Iterator {
  public:
   MergingIterator(const Comparator* comparator, Iterator** children, int n)
       : comparator_(comparator),
-        children_(new IteratorWrapper[n]),
-        n_(n),
         current_(NULL),
+        greater_(Greater(comparator)),
+        lesser_(Lesser(comparator)),
         direction_(kForward) {
+    children_.resize(n);
     for (int i = 0; i < n; i++) {
       children_[i].Set(children[i]);
     }
   }
 
   virtual ~MergingIterator() {
-    delete[] children_;
+    for (int i = 0; i < children_.size(); i++) {
+      delete children_[i].iter();
+    }
   }
 
   virtual bool Valid() const {
@@ -37,25 +125,31 @@ class MergingIterator : public Iterator {
   }
 
   virtual void SeekToFirst() {
-    for (int i = 0; i < n_; i++) {
+    for (int i = 0; i < children_.size(); i++) {
       children_[i].SeekToFirst();
     }
+    // make children as a min-heap
+    make_heap(children_.begin(), children_.end(), greater_);
     FindSmallest();
     direction_ = kForward;
   }
 
   virtual void SeekToLast() {
-    for (int i = 0; i < n_; i++) {
+    for (int i = 0; i < children_.size(); i++) {
       children_[i].SeekToLast();
     }
+    // make children as a max-heap
+    make_heap(children_.begin(), children_.end(), lesser_);
     FindLargest();
     direction_ = kReverse;
   }
 
   virtual void Seek(const Slice& target) {
-    for (int i = 0; i < n_; i++) {
+    for (int i = 0; i < children_.size(); i++) {
       children_[i].Seek(target);
     }
+    // make children as a min-heap
+    make_heap(children_.begin(), children_.end(), greater_);
     FindSmallest();
     direction_ = kForward;
   }
@@ -69,8 +163,8 @@ class MergingIterator : public Iterator {
     // the smallest child and key() == current_->key().  Otherwise,
     // we explicitly position the non-current_ children.
     if (direction_ != kForward) {
-      for (int i = 0; i < n_; i++) {
-        IteratorWrapper* child = &children_[i];
+      for (int i = 0; i < children_.size(); i++) {
+        IterWrapper* child = &children_[i];
         if (child != current_) {
           child->Seek(key());
           if (child->Valid() &&
@@ -79,10 +173,16 @@ class MergingIterator : public Iterator {
           }
         }
       }
+
+      // make children as a min-heap and pop the smallest one
+      make_heap(children_.begin(), children_.end(), greater_);
+      std::pop_heap(children_.begin(), children_.end(), greater_);
+      current_ = &children_.back();
       direction_ = kForward;
     }
 
     current_->Next();
+    std::push_heap(children_.begin(), children_.end(), greater_);
     FindSmallest();
   }
 
@@ -95,8 +195,8 @@ class MergingIterator : public Iterator {
     // the largest child and key() == current_->key().  Otherwise,
     // we explicitly position the non-current_ children.
     if (direction_ != kReverse) {
-      for (int i = 0; i < n_; i++) {
-        IteratorWrapper* child = &children_[i];
+      for (int i = 0; i < children_.size(); i++) {
+        IterWrapper* child = &children_[i];
         if (child != current_) {
           child->Seek(key());
           if (child->Valid()) {
@@ -108,10 +208,16 @@ class MergingIterator : public Iterator {
           }
         }
       }
+
+      // make children as a max-heap and pop the largest one
+      make_heap(children_.begin(), children_.end(), lesser_);
+      std::pop_heap(children_.begin(), children_.end(), lesser_);
+      current_ = &children_.back();
       direction_ = kReverse;
     }
 
     current_->Prev();
+    std::push_heap(children_.begin(), children_.end(), lesser_);
     FindLargest();
   }
 
@@ -127,7 +233,7 @@ class MergingIterator : public Iterator {
 
   virtual Status status() const {
     Status status;
-    for (int i = 0; i < n_; i++) {
+    for (int i = 0; i < children_.size(); i++) {
       status = children_[i].status();
       if (!status.ok()) {
         break;
@@ -144,9 +250,10 @@ class MergingIterator : public Iterator {
   // For now we use a simple array since we expect a very small number
   // of children in leveldb.
   const Comparator* comparator_;
-  IteratorWrapper* children_;
-  int n_;
-  IteratorWrapper* current_;
+  std::vector<IterWrapper> children_;
+  IterWrapper* current_;
+  const Greater greater_;
+  const Lesser lesser_;
 
   // Which direction is the iterator moving?
   enum Direction {
@@ -157,33 +264,19 @@ class MergingIterator : public Iterator {
 };
 
 void MergingIterator::FindSmallest() {
-  IteratorWrapper* smallest = NULL;
-  for (int i = 0; i < n_; i++) {
-    IteratorWrapper* child = &children_[i];
-    if (child->Valid()) {
-      if (smallest == NULL) {
-        smallest = child;
-      } else if (comparator_->Compare(child->key(), smallest->key()) < 0) {
-        smallest = child;
-      }
-    }
+  std::pop_heap(children_.begin(), children_.end(), greater_);
+  current_ = &children_.back();
+  if (!current_->Valid()) {
+    current_ = NULL;
   }
-  current_ = smallest;
 }
 
 void MergingIterator::FindLargest() {
-  IteratorWrapper* largest = NULL;
-  for (int i = n_-1; i >= 0; i--) {
-    IteratorWrapper* child = &children_[i];
-    if (child->Valid()) {
-      if (largest == NULL) {
-        largest = child;
-      } else if (comparator_->Compare(child->key(), largest->key()) > 0) {
-        largest = child;
-      }
-    }
+  std::pop_heap(children_.begin(), children_.end(), lesser_);
+  current_ = &children_.back();
+  if (!current_->Valid()) {
+    current_ = NULL;
   }
-  current_ = largest;
 }
 }  // namespace
 
