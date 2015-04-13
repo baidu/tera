@@ -8,9 +8,9 @@
 #include <vector>
 
 #include <boost/bind.hpp>
-#include <google/malloc_extension.h>
 #include <gflags/gflags.h>
 #include <glog/logging.h>
+#include <gperftools/malloc_extension.h>
 
 #include "db/filename.h"
 #include "db/table_cache.h"
@@ -88,8 +88,8 @@ TabletNodeImpl::TabletNodeImpl(const TabletNodeInfo& tabletnode_info,
       m_master_client(master_client),
       m_tablet_manager(tablet_manager),
       m_zk_adapter(NULL),
-      m_sysinfo(tabletnode_info),
       m_release_cache_timer_id(kInvalidTimerId),
+      m_sysinfo(tabletnode_info),
       m_thread_pool(new ThreadPool(FLAGS_tera_tabletnode_impl_thread_max_num)) {
     m_local_addr = utils::GetLocalHostName() + ":" + FLAGS_tera_tabletnode_port;
     tabletnode::TabletNodeClientAsync::SetRpcOption(

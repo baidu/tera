@@ -7,7 +7,7 @@
 #include <algorithm>
 #include <string>
 
-#include <gflags/gflags.h>"
+#include <gflags/gflags.h>
 #include <glog/logging.h>
 
 #include "common/base/string_ext.h"
@@ -97,10 +97,6 @@ bool MergeTables(const std::string& mf, const std::string& mf1,
                  const std::string& mf2,
                  std::map<uint64_t, uint64_t>* mf2_file_maps,
                  leveldb::Env* db_env) {
-    char* files[2];
-    files[0] = const_cast<char*>(mf1.c_str());
-    files[1] = const_cast<char*>(mf2.c_str());
-
     leveldb::Env* env = db_env;
     if (!env) {
         env = LeveldbEnv();

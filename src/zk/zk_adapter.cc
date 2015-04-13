@@ -128,7 +128,6 @@ void ZooKeeperAdapter::Finalize() {
         m_locks.clear();
         m_watchers.clear();
         m_state = ZS_DISCONN;
-        bool is_running;
         m_thread_pool.CancelTask(m_session_timer_id);
         m_session_timer_id = 0;
         LOG(INFO) << "zookeeper_session_timeout_timer has gone, safe to finalize.";
@@ -189,9 +188,9 @@ bool ZooKeeperAdapter::Create(const std::string& path, const std::string& value,
     if (ZOK == ret) {
         if (NULL != ret_path) {
             size_t ret_path_len = strlen(ret_path_buf);
-            if (((flag & ZOO_SEQUENCE == 1) &&
+            if (((flag & ZOO_SEQUENCE) == 1 &&
                 ret_path_len == root_path_len + path_len + 10) ||
-                ((flag & ZOO_SEQUENCE == 0) &&
+                ((flag & ZOO_SEQUENCE) == 0 &&
                 ret_path_len == root_path_len + path_len)) {
                 // compatible to zk 3.3.x
                 *ret_path = ret_path_buf + root_path_len;

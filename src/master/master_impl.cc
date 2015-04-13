@@ -879,25 +879,6 @@ void MasterImpl::ShowTabletNodes(const ShowTabletNodesRequest* request,
     }
 }
 
-void MasterImpl::MergeTable(const MergeTableRequest* request,
-                            MergeTableResponse* response) {
-    response->set_sequence_id(request->sequence_id());
-    MasterStatus master_status = GetMasterStatus();
-    if (master_status != kIsRunning) {
-        LOG(ERROR) << "master is not ready, m_status = "
-            << StatusCodeToString(master_status);
-        response->set_status(static_cast<StatusCode>(master_status));
-        return;
-    }
-
-    StatusCode status = kMasterOk;
-    if (!m_tablet_manager->TryMergeTablet(request->table_name(), &status)) {
-        LOG(ERROR) << "fail to execute merge operation for: "
-            << request->table_name();
-    }
-    response->set_status(status);
-}
-
 void MasterImpl::CmdCtrl(const CmdCtrlRequest* request,
                          CmdCtrlResponse* response) {
     std::string cmd_line;

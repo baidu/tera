@@ -1,5 +1,3 @@
-import "status_code.proto";
-import "table_meta.proto";
 package tera;
 
 enum TabletNodeStatus {

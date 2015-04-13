@@ -75,11 +75,6 @@ public:
                          ShowTabletNodesResponse* response,
                          google::protobuf::Closure* done);
 
-    void MergeTable(google::protobuf::RpcController* controller,
-                    const MergeTableRequest* request,
-                    MergeTableResponse* response,
-                    google::protobuf::Closure* done);
-
     void CmdCtrl(google::protobuf::RpcController* controller,
                  const CmdCtrlRequest* request,
                  CmdCtrlResponse* response,
@@ -138,11 +133,6 @@ private:
                            const ShowTabletNodesRequest* request,
                            ShowTabletNodesResponse* response,
                            google::protobuf::Closure* done);
-
-    void DoMergeTable(google::protobuf::RpcController* controller,
-                      const MergeTableRequest* request,
-                      MergeTableResponse* response,
-                      google::protobuf::Closure* done);
 
     void DoCmdCtrl(google::protobuf::RpcController* controller,
                    const CmdCtrlRequest* request,

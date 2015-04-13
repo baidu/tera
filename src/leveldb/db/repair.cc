@@ -61,8 +61,8 @@ class Repairer {
         options_(SanitizeOptions(dbname, &icmp_, &ipolicy_, options)),
         owns_info_log_(options_.info_log != options.info_log),
         owns_block_cache_(options_.block_cache != options.block_cache),
-        table_cache_(options_.table_cache),
         owns_table_cache_(options_.table_cache == NULL),
+        table_cache_(options_.table_cache),
         next_file_number_(1), mem_(NULL), max_sequence_(0) {
     // TableCache can be small since we expect each table to be opened once.
     if (owns_table_cache_) {
@@ -613,7 +613,8 @@ private:
             uint64_t batch_count = WriteBatchInternal::Count(&batch);
             if (batch_seq <= last_sequence_) {
                 Log(options_.info_log, "[%s] duplicate record, ignore %llu ~ %llu",
-                    dbname_.c_str(), batch_seq, batch_seq + batch_count - 1);
+                    dbname_.c_str(), static_cast<unsigned long long>(batch_seq),
+                    static_cast<unsigned long long>(batch_seq + batch_count - 1));
                 continue;
             }
 

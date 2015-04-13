@@ -23,9 +23,9 @@ static Slice GetLengthPrefixedSlice(const char* data) {
 }
 
 MemTable::MemTable(const InternalKeyComparator& cmp, CompactStrategyFactory* compact_strategy_factory)
-    : comparator_(cmp),
+    : last_seq_(0),
+      comparator_(cmp),
       refs_(0),
-      last_seq_(0),
       table_(comparator_, &arena_),
       empty_(true),
       compact_strategy_factory_(compact_strategy_factory) {

@@ -89,8 +89,8 @@ Status CopyToLocal(const std::string& local_fname, Env* env,
         uint64_t time_used = env->NowMicros() - time_s;
         //if (time_used > 200000) {
         if (true) {
-            fprintf(stderr, "copy %s to local used %lu ms\n",
-                fname.c_str(), (env->NowMicros() - time_s)/1000);
+            fprintf(stderr, "copy %s to local used %llu ms\n",
+                fname.c_str(), static_cast<unsigned long long>(time_used) / 1000);
         }
         return s;
     }

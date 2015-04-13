@@ -264,7 +264,7 @@ bool DefaultCompactStrategy::ScanDrop(const leveldb::Slice& tera_key, uint64_t n
     } else if (m_last_type == leveldb::TKT_DEL_QUALIFIER) {
         // skip latest deleted version
         m_last_type = type;
-        if (type = leveldb::TKT_VALUE) {
+        if (type == leveldb::TKT_VALUE) {
             m_version_num++;
         }
         return true;

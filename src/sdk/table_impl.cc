@@ -1254,7 +1254,7 @@ void TableImpl::ScanMetaTableCallBack(std::string key_start,
         << scan_result.key_values_size() << " records";
     if (scan_result.key_values_size() == 0
         || return_start > key_start
-        || !return_end.empty() && (key_end.empty()|| return_end < key_end)) {
+        || (!return_end.empty() && (key_end.empty() || return_end < key_end))) {
         LOG(ERROR) << "scan meta table [" << key_start << ", " << key_end
             << "] return [" << return_start << ", " << return_end << "]";
         // TODO(lk): process omitted tablets
@@ -1364,7 +1364,7 @@ void TableImpl::UpdateTabletMetaList(const TabletMeta& new_meta) {
                 //* |---old---|                                   *
                 //*             |------new------|                 *
                 //*************************************************
-            } else if (new_end.empty() || !old_end.empty() && old_end <= new_end) {
+            } else if (new_end.empty() || (!old_end.empty() && old_end <= new_end)) {
                 //*************************************************
                 //*         |---old---|                           *
                 //*             |------new------|                 *
@@ -1386,7 +1386,7 @@ void TableImpl::UpdateTabletMetaList(const TabletMeta& new_meta) {
                 old_node.meta.mutable_key_range()->set_key_end(new_start);
             }
         } else if (new_end.empty() || old_start < new_end) {
-            if (new_end.empty() || !old_end.empty() && old_end <= new_end) {
+            if (new_end.empty() || (!old_end.empty() && old_end <= new_end)) {
                 //*************************************************
                 //*                |---old---|                    *
                 //*             |------new------|                 *

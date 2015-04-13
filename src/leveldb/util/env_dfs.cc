@@ -438,7 +438,6 @@ Status DfsEnv::NewLogger(const std::string& fname, Logger** result)
 
 static bool inited = false;
 static port::Mutex mutex;
-static pthread_once_t once = PTHREAD_ONCE_INIT;
 static Env* dfs_env;
 
 void InitHdfsEnv()

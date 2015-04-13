@@ -115,14 +115,6 @@ bool MasterClient::ShowTabletNodes(const ShowTabletNodesRequest* request,
                                 "ShowTabletNodes");
 }
 
-bool MasterClient::MergeTable(const MergeTableRequest* request,
-                              MergeTableResponse* response) {
-    return SendMessageWithRetry(&MasterServer::Stub::MergeTable,
-                                request, response,
-                                (google::protobuf::Closure*)NULL,
-                                "MergeTable");
-}
-
 bool MasterClient::Register(const RegisterRequest* request,
                             RegisterResponse* response) {
     return SendMessageWithRetry(&MasterServer::Stub::Register,
