@@ -156,7 +156,7 @@ bool IsDir(const std::string& path) {
     }
 
     struct stat st;
-    if ((stat(path.c_str(), &st) == 0) && (st.st_mode & S_IFDIR != 0)) {
+    if (stat(path.c_str(), &st) == 0 && (st.st_mode & S_IFDIR) != 0) {
         return true;
     }
     return false;

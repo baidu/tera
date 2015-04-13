@@ -75,7 +75,7 @@ class MemTable {
   bool Empty() {
     return empty_;
   }
-  bool SetNonEmpty() {
+  void SetNonEmpty() {
     empty_ = false;
   }
 

@@ -136,16 +136,6 @@ void RemoteMaster::ShowTabletNodes(google::protobuf::RpcController* controller,
     m_thread_pool->AddTask(callback);
 }
 
-void RemoteMaster::MergeTable(google::protobuf::RpcController* controller,
-                              const MergeTableRequest* request,
-                              MergeTableResponse* response,
-                              google::protobuf::Closure* done) {
-    boost::function<void ()> callback =
-        boost::bind(&RemoteMaster::DoMergeTable, this, controller,
-                    request, response, done);
-    m_thread_pool->AddTask(callback);
-}
-
 void RemoteMaster::CmdCtrl(google::protobuf::RpcController* controller,
                            const CmdCtrlRequest* request,
                            CmdCtrlResponse* response,
@@ -255,16 +245,6 @@ void RemoteMaster::DoShowTabletNodes(google::protobuf::RpcController* controller
     LOG(INFO) << "accept RPC (ShowTabletNodes)";
     m_master_impl->ShowTabletNodes(request, response, done);
     LOG(INFO) << "finish RPC (ShowTabletNodes)";
-}
-
-void RemoteMaster::DoMergeTable(google::protobuf::RpcController* controller,
-                                const MergeTableRequest* request,
-                                MergeTableResponse* response,
-                                google::protobuf::Closure* done) {
-    LOG(INFO) << "accept RPC (MergeTable)";
-    m_master_impl->MergeTable(request, response);
-    LOG(INFO) << "finish RPC (MergeTable)";
-    done->Run();
 }
 
 void RemoteMaster::DoCmdCtrl(google::protobuf::RpcController* controller,

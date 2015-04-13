@@ -35,7 +35,7 @@ bool ZooKeeperLock::BeginLock(int* zk_errno) {
         return false;
     }
     char guid[17];
-    sprintf(guid, "%016llx", session_id);
+    sprintf(guid, "%016llx", static_cast<unsigned long long>(session_id));
     LOG(INFO) << "lock GUID = " << guid;
 
     // get all lock nodes

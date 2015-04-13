@@ -33,9 +33,6 @@ DECLARE_string(tera_master_meta_table_path);
 DECLARE_string(tera_master_meta_table_name);
 DECLARE_bool(tera_zk_enabled);
 
-DECLARE_bool(tera_master_merge_enabled);
-DECLARE_int64(tera_master_merge_size_threshold);
-DECLARE_int64(tera_master_merge_timer_period);
 DECLARE_int32(tera_master_impl_retry_times);
 DECLARE_int32(tera_tabletnode_connect_retry_period);
 
@@ -575,111 +572,6 @@ bool Table::NeedDelete() {
     return false;
 }
 
-bool Table::FindMergePair(Tablet** t1, Tablet** t2,
-                          int32_t* merged_num,
-                          StatusCode* status) {
-    VLOG(5) << "FindMergePair()";
-    std::vector<std::pair<std::string, int64_t> > tablet_list;
-    int32_t min_size_loc = -1;
-    int64_t min_size = std::numeric_limits<int64_t>::max();
-
-    TabletList::iterator it;
-    int32_t cur_loc = 0;
-    for (it = m_tablets_list.begin(); it != m_tablets_list.end(); ++it) {
-        const Tablet* tablet = it->second.get();
-        MutexLock lock(&tablet->m_mutex);
-        VLOG(9) << "tablet [" << tablet->m_meta.path() << "] = "
-            << tablet->m_meta.table_size()
-            << ", status: " << StatusCodeToString(tablet->m_meta.status())
-            << ", compacted: " << StatusCodeToString(tablet->m_meta.compact_status());
-        if (tablet->m_meta.table_size() < min_size
-            && tablet->m_meta.status() == kTableReady) {
-            min_size = tablet->m_meta.table_size();
-            min_size_loc = cur_loc;
-        } else if (tablet->m_meta.status() == kTableOnMerge) {
-            LOG(WARNING) << "exist another tablet on merge, skip";
-            SetStatusCode(kTableOnMerge, status);
-            return false;
-        }
-        std::string path_name;
-        SplitStringPath(tablet->m_meta.path(), NULL, &path_name);
-        std::vector<std::string> items;
-        SplitString(path_name, "_", &items);
-        int32_t cur_merged_num = 0;
-        if (items.size() > 1 && merged_num
-            && StringToNumber(items[0], &cur_merged_num, 10)) {
-            if (cur_merged_num > *merged_num) {
-                *merged_num = cur_merged_num;
-            }
-        }
-        tablet_list.push_back(
-            std::make_pair(it->first, tablet->m_meta.table_size()));
-        ++cur_loc;
-    }
-
-    VLOG(9) << "min_size_loc = " << min_size_loc
-        << ", min_size = " << min_size;
-
-    int32_t start_i = 0;
-    int32_t end_i = 0;
-    if (min_size_loc < 0 || cur_loc <= 1
-        || min_size >= (FLAGS_tera_master_merge_size_threshold << 20)) {
-        return false;
-    } else if (min_size_loc == 0) {
-        start_i = min_size_loc;
-        end_i = min_size_loc + 1;
-    } else if (min_size_loc == cur_loc - 1) {
-        start_i = min_size_loc - 1;
-        end_i = min_size_loc;
-    } else if (tablet_list[min_size_loc - 1].second) {
-        int64_t left_offset = 0;
-        int64_t right_offset = 0;
-        if (tablet_list[min_size_loc - 1].second > tablet_list[min_size_loc].second) {
-            left_offset =
-                tablet_list[min_size_loc - 1].second - tablet_list[min_size_loc].second;
-        } else {
-            left_offset =
-                tablet_list[min_size_loc].second - tablet_list[min_size_loc - 1].second;
-        }
-
-        if (tablet_list[min_size_loc + 1].second > tablet_list[min_size_loc].second) {
-            right_offset =
-                tablet_list[min_size_loc + 1].second - tablet_list[min_size_loc].second;
-        } else {
-            right_offset =
-                tablet_list[min_size_loc].second - tablet_list[min_size_loc + 1].second;
-        }
-        if (left_offset > right_offset) {
-            start_i = min_size_loc;
-            end_i = min_size_loc + 1;
-        } else {
-            start_i = min_size_loc - 1;
-            end_i = min_size_loc;
-        }
-    }
-    Tablet* tablet_start = m_tablets_list[tablet_list[start_i].first].get();
-    Tablet* tablet_end = m_tablets_list[tablet_list[end_i].first].get();
-
-    MutexLock lock_start(&tablet_start->m_mutex);
-    MutexLock lock_end(&tablet_end->m_mutex);
-    if (tablet_start->m_meta.status() != kTableReady
-        || tablet_end->m_meta.status() != kTableReady) {
-        return false;
-    } else if (tablet_start->m_meta.compact_status() != kTableCompacted
-               || tablet_end->m_meta.compact_status() != kTableCompacted) {
-        *t1 = tablet_start;
-        *t2 = tablet_end;
-        SetStatusCode(kTableNotCompact, status);
-        return false;
-    }
-    tablet_start->m_meta.set_status(kTableOnMerge);
-    tablet_end->m_meta.set_status(kTableOnMerge);
-    *t1 = tablet_start;
-    *t2 = tablet_end;
-
-    return true;
-}
-
 void Table::ToMetaTableKeyValue(std::string* packed_key,
                                 std::string* packed_value) {
     MutexLock lock(&m_mutex);
@@ -747,24 +639,16 @@ TabletManager::TabletManager(Counter* sequence_id,
                              MasterImpl* master_impl,
                              ThreadPool* thread_pool)
     : m_this_sequence_id(sequence_id),
-      m_master_impl(master_impl),
-      m_thread_pool(thread_pool),
-      m_merge_tablet_timer_id(kInvalidTimerId) {}
+      m_master_impl(master_impl) {}
 
 TabletManager::~TabletManager() {
     ClearTableList();
 }
 
 void TabletManager::Init() {
-    if (FLAGS_tera_master_merge_enabled) {
-        EnableMergeTabletTimer();
-    }
 }
 
 void TabletManager::Stop() {
-    if (FLAGS_tera_master_merge_enabled) {
-        DisableMergeTabletTimer();
-    }
 }
 
 bool TabletManager::AddTable(const std::string& table_name,
@@ -1024,11 +908,9 @@ bool TabletManager::ShowTable(std::vector<TablePtr>* table_meta_list,
         return false;
     }
 
-    bool tablet_is_more;
     uint32_t table_found_num = 0;
     uint32_t tablet_found_num = 0;
     for (; it != m_all_tables.end(); ++it) {
-        tablet_is_more = false;
         TablePtr table = it->second;
         Table::TabletList::iterator it2;
 
@@ -1653,346 +1535,6 @@ bool TabletManager::PickMergeTablet(TabletPtr& tablet, TabletPtr* tablet2) {
     return true;
 }
 
-bool TabletManager::TryMergeTablet(const std::string& table_on_merge,
-                                   StatusCode* status) {
-    std::string next_table;
-    Table* table = NULL;
-    std::string table_name;
-    if (!table_on_merge.empty()) {
-        m_last_check_table = table_on_merge;
-    }
-//     LOG(INFO) << "TryMergeTablet() for: " << m_last_check_table;
-
-    m_mutex.Lock();
-    TableList::iterator it;
-    if (m_last_check_table.empty()) {
-        it = m_all_tables.begin();
-    } else {
-        it = m_all_tables.find(m_last_check_table);
-    }
-    if (it == m_all_tables.end()) {
-        m_last_check_table = next_table;
-        m_mutex.Unlock();
-        return true;
-    }
-    table = it->second.get();
-    table_name = it->first;
-    it++;
-    if (it != m_all_tables.end()) {
-        next_table = it->first;
-    }
-
-    table->m_mutex.Lock();
-    m_mutex.Unlock();
-
-    StatusCode ret_status = kMasterOk;
-    Tablet* tb1 = NULL;
-    Tablet* tb2 = NULL;
-    int32_t cur_merged_no = 0;
-    if (!table->FindMergePair(&tb1, &tb2, &cur_merged_no,
-                              &ret_status)) {
-        table->m_mutex.Unlock();
-        VLOG(5) << "fail to find the paper merge pair, status: "
-            << StatusCodeToString(ret_status);
-        if (ret_status == kTableNotCompact
-            || ret_status == kTableOnCompact) {
-            TryMajorCompact(tb1);
-            TryMajorCompact(tb2);
-        } else {
-            SetStatusCode(ret_status, status);
-        }
-        m_last_check_table = next_table;
-        return false;
-    }
-    table->m_mutex.Unlock();
-
-    VLOG(5) << "begin merge: " << tb1->m_meta.path() << " & "
-        << tb2->m_meta.path();
-
-    tabletnode::TabletNodeClientAsync node_client(tb1->m_meta.server_addr());
-    UnloadTabletRequest* request = new UnloadTabletRequest;
-    UnloadTabletResponse* response = new UnloadTabletResponse;
-    request->set_sequence_id(m_this_sequence_id->Inc());
-    request->set_tablet_name(tb1->m_meta.table_name());
-    request->mutable_key_range()->CopyFrom(tb1->m_meta.key_range());
-
-    Closure<void, UnloadTabletRequest*, UnloadTabletResponse*, bool, int>* done =
-        NewClosure(this, &TabletManager::UnloadMergeTabletCallback, tb1,
-                   tb2, table, cur_merged_no, 1,
-                   FLAGS_tera_master_impl_retry_times);
-    node_client.UnloadTablet(request, response, done);
-
-    m_last_check_table = next_table;
-    return true;
-}
-
-void TabletManager::UnloadMergeTabletCallback(Tablet* tb1, Tablet* tb2,
-                                              Table* table, int32_t cur_merged_no,
-                                              int32_t merge_step, int32_t retry,
-                                              UnloadTabletRequest* request,
-                                              UnloadTabletResponse* response,
-                                              bool failed, int error_code) {
-    VLOG(5) << "UnloadMergeTabletCallback(): " << tb1->m_meta.path()
-            << " & tb2->m_meta.path()" << ": step = " << merge_step;
-
-    if (failed || (response->status() != kTabletNodeOk
-        && response->status() != kKeyNotInRange
-        && response->status() != kKeyNotInRange)) {
-        std::string cur_path;
-        if (merge_step == 1) {
-            cur_path = tb1->m_meta.path();
-        } else {
-            cur_path = tb2->m_meta.path();
-        }
-        LOG(ERROR) << "fail to unload tablet: " << cur_path
-            << ", status: " << StatusCodeToString(response->status())
-            << ", retry: " << retry;
-        if (retry <= 0 || !RpcChannelHealth(error_code)) {
-            MergeRollback(table, tb1, tb2, merge_step);
-            delete request;
-            delete response;
-        } else {
-            int64_t wait_time = FLAGS_tera_tabletnode_connect_retry_period
-                * (FLAGS_tera_master_impl_retry_times - retry);
-            ThisThread::Sleep(wait_time);
-            std::string server_addr;
-            if (merge_step == 1) {
-                server_addr = tb1->m_meta.server_addr();
-            } else {
-                server_addr = tb2->m_meta.server_addr();
-            }
-            VLOG(9) << "retry after " << wait_time << " (ms), request: " << request->DebugString();
-            tabletnode::TabletNodeClientAsync node_client(server_addr);
-            Closure<void, UnloadTabletRequest*, UnloadTabletResponse*, bool, int>* done =
-                NewClosure(this, &TabletManager::UnloadMergeTabletCallback, tb1,
-                           tb2, table, cur_merged_no, merge_step, retry - 1);
-            node_client.UnloadTablet(request, response, done);
-        }
-        return;
-    }
-    merge_step++;
-    delete request;
-    delete response;
-
-    if (merge_step == 2) {
-        tabletnode::TabletNodeClientAsync node_client(tb2->m_meta.server_addr());
-        UnloadTabletRequest* new_request = new UnloadTabletRequest;
-        UnloadTabletResponse* new_response = new UnloadTabletResponse;
-        new_request->set_sequence_id(m_this_sequence_id->Inc());
-        new_request->set_tablet_name(tb2->m_meta.table_name());
-        new_request->mutable_key_range()->CopyFrom(tb2->m_meta.key_range());
-
-        Closure<void, UnloadTabletRequest*, UnloadTabletResponse*, bool, int>* done =
-            NewClosure(this, &TabletManager::UnloadMergeTabletCallback, tb1,
-                       tb2, table, cur_merged_no, merge_step,
-                       FLAGS_tera_master_impl_retry_times);
-        node_client.UnloadTablet(new_request, new_response, done);
-    } else if (merge_step == 3) {
-        std::string merged_path = GetMergePath(table->m_name, cur_merged_no + 1);
-        tabletnode::TabletNodeClientAsync node_client(tb1->m_meta.server_addr());
-        MergeTabletRequest* new_request = new MergeTabletRequest;
-        MergeTabletResponse* new_response = new MergeTabletResponse;
-        new_request->set_sequence_id(m_this_sequence_id->Inc());
-        new_request->set_tablet_path_1(tb1->m_meta.path());
-        new_request->set_tablet_path_2(tb2->m_meta.path());
-        new_request->set_tablet_merged_path(merged_path);
-
-        Closure<void, MergeTabletRequest*, MergeTabletResponse*, bool, int>* done =
-            NewClosure(this, &TabletManager::MergeTabletCallback, tb1,
-                       tb2, table, merged_path, FLAGS_tera_master_impl_retry_times);
-        node_client.MergeTablet(new_request, new_response, done);
-    }
-}
-
-void TabletManager::MergeTabletCallback(Tablet* tb1, Tablet* tb2,
-                                        Table* table, std::string merged_path,
-                                        int32_t retry,
-                                        MergeTabletRequest* request,
-                                        MergeTabletResponse* response,
-                                        bool failed, int error_code) {
-    VLOG(5) << "MergeTabletCallback()";
-
-    if (failed || response->status() != kTabletNodeOk) {
-        LOG(ERROR) << "fail to merge tablet: " << tb1->m_meta.path()
-            << " & " << tb2->m_meta.path()
-            << ", status: " << StatusCodeToString(response->status())
-            << ", rpc_code: " << error_code << ", retry: " << retry;
-        if (retry <= 0 || !RpcChannelHealth(error_code)) {
-            MergeRollback(table, tb1, tb2, 3);
-            delete request;
-            delete response;
-        } else {
-            int64_t wait_time = FLAGS_tera_tabletnode_connect_retry_period
-                * (FLAGS_tera_master_impl_retry_times - retry);
-            ThisThread::Sleep(wait_time);
-            tabletnode::TabletNodeClientAsync node_client(tb1->m_meta.server_addr());
-            Closure<void, MergeTabletRequest*, MergeTabletResponse*, bool, int>* done =
-                NewClosure(this, &TabletManager::MergeTabletCallback, tb1,
-                           tb2, table, merged_path, retry - 1);
-            node_client.MergeTablet(request, response, done);
-        }
-        return;
-    }
-    delete request;
-    delete response;
-
-    MergeMeta(table, tb1, tb2, merged_path);
-}
-
-void TabletManager::MergeMeta(Table* table, Tablet* tb1, Tablet* tb2,
-                              std::string merged_path) {
-    VLOG(5) << "MergeMeta(): " << tb1->m_meta.path()
-            << " & " << tb2->m_meta.path() << ": merged_path: " << merged_path;
-
-    tb1->m_mutex.Lock();
-    tb2->m_mutex.Lock();
-
-    tb1->m_meta.set_status(kTableOffLine);
-    tb1->m_meta.mutable_key_range()->set_key_end(tb2->m_meta.key_range().key_end());
-    tb1->m_meta.set_path(merged_path);
-    tb1->m_meta.set_compact_status(kTableNotCompact);
-
-    tb2->m_meta.set_status(kTableDeleted);
-    std::string packed_key;
-    MakeMetaTableKeyValue(tb2->m_meta, &packed_key, NULL);
-
-    tb1->m_mutex.Unlock();
-    tb2->m_mutex.Unlock();
-
-    CHECK_NOTNULL(table);
-    table->m_mutex.Lock();
-    const std::string& tb2_key_start = tb2->m_meta.key_range().key_start();
-    int32_t removed_num =
-        table->m_tablets_list.erase(tb2_key_start);
-    if (removed_num > 0) {
-//         delete tb2;
-    } else {
-        LOG(ERROR) << "fail to remove tablet meta: " << table->m_name
-            << "[" << tb2_key_start << "]";
-    }
-    table->m_mutex.Unlock();
-
-    // load tb1
-    TabletPtr loaded_tablet;
-    this->FindTablet(tb1->m_meta.table_name(),
-                     tb1->m_meta.key_range().key_start(),
-                     &loaded_tablet);
-    m_master_impl->TryLoadTablet(loaded_tablet);
-
-    // delete tb2 in meta t
-
-    WriteTabletRequest* request = new WriteTabletRequest;
-    WriteTabletResponse* response = new WriteTabletResponse;
-    request->set_sequence_id(m_this_sequence_id->Inc());
-    request->set_tablet_name(FLAGS_tera_master_meta_table_name);
-    request->set_is_sync(true);
-    request->set_is_instant(true);
-    RowMutationSequence* mu_seq = request->add_row_list();
-    mu_seq->set_row_key(packed_key);
-    Mutation* mutation = mu_seq->add_mutation_sequence();
-    mutation->set_type(kDeleteRow);
-
-    std::string meta_addr;
-    GetMetaTabletAddr(&meta_addr);
-    tabletnode::TabletNodeClientAsync node_client(meta_addr);
-
-    Closure<void, WriteTabletRequest*, WriteTabletResponse*, bool, int>* done =
-        NewClosure(this, &TabletManager::UpdateMergeMetaTsCallback,
-                   packed_key, FLAGS_tera_master_impl_retry_times);
-    node_client.WriteTablet(request, response, done);
-
-    VLOG(5) << "merge success";
-}
-
-void TabletManager::MergeRollback(Table* table, Tablet* tb1,
-                                  Tablet* tb2, int32_t step) {
-    VLOG(5) << "MergeRollback(): " << table->m_name << ": step = " << step;
-    if (step == 1) {
-        tb1->m_mutex.Lock();
-        tb1->m_meta.set_status(kTableReady);
-        tb1->m_mutex.Unlock();
-        tb2->m_mutex.Lock();
-        tb2->m_meta.set_status(kTableReady);
-        tb2->m_mutex.Unlock();
-    } else if (step == 2) {
-        tb1->m_mutex.Lock();
-        tb1->m_meta.set_status(kTableUnLoad);
-        tb1->m_mutex.Unlock();
-
-        TabletPtr tb1_tablet;
-        this->FindTablet(tb1->m_meta.table_name(),
-                         tb1->m_meta.key_range().key_start(),
-                         &tb1_tablet);
-        m_master_impl->TryLoadTablet(tb1_tablet);
-
-        tb2->m_mutex.Lock();
-        tb2->m_meta.set_status(kTableReady);
-        tb2->m_mutex.Unlock();
-    } else if (step == 3) {
-        tb1->m_mutex.Lock();
-        tb1->m_meta.set_status(kTableUnLoad);
-        tb1->m_mutex.Unlock();
-
-        TabletPtr tb1_tablet;
-        this->FindTablet(tb1->m_meta.table_name(),
-                         tb1->m_meta.key_range().key_start(),
-                         &tb1_tablet);
-        m_master_impl->TryLoadTablet(tb1_tablet);
-
-        tb2->m_mutex.Lock();
-        tb2->m_meta.set_status(kTableUnLoad);
-        tb2->m_mutex.Unlock();
-
-        TabletPtr tb2_tablet;
-        this->FindTablet(tb2->m_meta.table_name(),
-                         tb2->m_meta.key_range().key_start(),
-                         &tb2_tablet);
-        m_master_impl->TryLoadTablet(tb1_tablet);
-    }
-
-    // TODO: need rollback sst file on tablet server
-}
-
-void TabletManager::UpdateMergeMetaTsCallback(std::string packed_key, int32_t retry,
-                                              WriteTabletRequest* request,
-                                              WriteTabletResponse* response,
-                                              bool failed, int error_code) {
-    VLOG(5) << "UpdateMergeMetaTsCallback()";
-    StatusCode status = response->status();
-    if (!failed && status == kTabletNodeOk && response->row_status_list_size() > 0) {
-        status = response->row_status_list(0);
-    }
-    if (failed || status != kTabletNodeOk) {
-        LOG(ERROR) << "fail to delete tb2 during merge"
-            << ", status: " << StatusCodeToString(status)
-            << ", retry: " << retry;
-        if (retry <= 0 || !RpcChannelHealth(error_code)) {
-            delete request;
-            delete response;
-        } else {
-            int64_t wait_time = FLAGS_tera_tabletnode_connect_retry_period
-                * (FLAGS_tera_master_impl_retry_times - retry);
-            ThisThread::Sleep(wait_time);
-            std::string meta_addr;
-            GetMetaTabletAddr(&meta_addr);
-            tabletnode::TabletNodeClientAsync node_client(meta_addr);
-
-            Closure<void, WriteTabletRequest*, WriteTabletResponse*, bool, int>* done =
-                NewClosure(this, &TabletManager::UpdateMergeMetaTsCallback,
-                           packed_key, retry - 1);
-            node_client.WriteTablet(request, response, done);
-        }
-        return;
-    }
-    delete request;
-    delete response;
-}
-
-std::string TabletManager::GetMergePath(const std::string& table_name,
-                                        int32_t no) {
-    return table_name + "/" + StringFormat("%d", no) + "_tablet";
-}
-
 bool TabletManager::RpcChannelHealth(int32_t err_code) {
     return err_code != sofa::pbrpc::RPC_ERROR_CONNECTION_CLOSED
         && err_code != sofa::pbrpc::RPC_ERROR_SERVER_SHUTDOWN
@@ -2062,32 +1604,6 @@ void TabletManager::MajorCompactCallback(Tablet* tb, int32_t retry,
     MutexLock lock(&tb->m_mutex);
     tb->m_meta.set_compact_status(kTableCompacted);
     VLOG(5) << "compact success: " << tb->m_meta.path();
-}
-
-void TabletManager::MergeTablet() {
-    MutexLock locker(&m_merge_mutex);
-
-    VLOG(5) << "MergeTablet timer";
-    TryMergeTablet();
-
-    m_merge_tablet_timer_id = kInvalidTimerId;
-    EnableMergeTabletTimer();
-}
-
-void TabletManager::EnableMergeTabletTimer(int32_t expand_factor) {
-    assert(m_merge_tablet_timer_id == kInvalidTimerId);
-    boost::function<void ()> closure =
-        boost::bind(&TabletManager::MergeTablet, this);
-    int64_t timeout_period =
-        FLAGS_tera_master_merge_timer_period * expand_factor * 1000;
-    m_merge_tablet_timer_id = m_thread_pool->DelayTask(timeout_period, closure);
-}
-
-void TabletManager::DisableMergeTabletTimer() {
-    if (m_merge_tablet_timer_id != kInvalidTimerId) {
-        m_thread_pool->CancelTask(m_merge_tablet_timer_id);
-        m_merge_tablet_timer_id = kInvalidTimerId;
-    }
 }
 
 double TabletManager::OfflineTabletRatio() {

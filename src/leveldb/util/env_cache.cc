@@ -73,7 +73,6 @@ public:
         if (handle == NULL) {
             return Status::IOError("not loaded in mem-cache");
         }
-        char* buf = (char*)cache_->Value(handle);
         Slice block_slice = UnpackSlice((char*)cache_->Value(handle));
         if (n > block_slice.size()) {
             n = block_slice.size();
@@ -511,6 +510,7 @@ private:
                 return IOError(cache_file, errno);
             }
         }
+        return Status::OK();
     }
 
     Status ReadBlockLocal(uint32_t block_no, uint32_t n, Slice* result, char* scratch) {
@@ -783,16 +783,15 @@ public:
     }
 
     Status Append(const Slice& data) {
-        uint32_t cur_blocks_num = blocks_no_;
         Status s = AppendToRemote(data);
 #if 0 // append() not fill cache
         if (s.ok()) {
-            s = AppendToLocal(data, cur_blocks_num);
+            s = AppendToLocal(data, blocks_no_);
             if (!s.ok()) {
                 LDB_SLOG(WARNING, "fail to append to disk-cache. status: %s",
                      s.ToString().c_str());
             }
-            s = AppendToMem(data, cur_blocks_num);
+            s = AppendToMem(data, blocks_no_);
             if (!s.ok()) {
                 LDB_SLOG(WARNING, "fail to append to mem-cache. status: %s",
                      s.ToString().c_str());
