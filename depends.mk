@@ -45,4 +45,4 @@ DEPS_LDPATH = -L$(SOFA_PBRPC_LIBDIR) -L$(PROTOBUF_LIBDIR) \
               -L$(GFLAGS_LIBDIR) -L$(GLOG_LIBDIR) \
               -L$(GPERFTOOLS_LIBDIR)
 DEPS_LDFLAGS = -lsofa-pbrpc -lprotobuf -lsnappy -lzookeeper_mt \
-               -lgflags -lglog -ltcmalloc
+               -lgflags -lglog -ltcmalloc_minimal
