@@ -37,7 +37,7 @@ bool StreamScan::PushTask(uint64_t sequence_id, ScanTabletResponse* response,
                           google::protobuf::Closure* done) {
     // TODO: sequece id is used to combine re-try rpc
     MutexLock lock(&m_mutex);
-    if (m_task_queue.size() >= FLAGS_tera_io_scan_stream_task_max_num) {
+    if (m_task_queue.size() >= static_cast<uint64_t>(FLAGS_tera_io_scan_stream_task_max_num)) {
         return false;
     }
     Task* task = new Task(response, done);

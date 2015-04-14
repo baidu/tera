@@ -508,7 +508,7 @@ bool TabletIO::AddInheritedLiveFiles(std::vector<std::set<uint64_t> >* live) {
     if (live->size() == 0) {
         live->resize(m_table_schema.locality_groups_size());
     } else {
-        CHECK(live->size() == m_table_schema.locality_groups_size());
+        CHECK(live->size() == static_cast<uint64_t>(m_table_schema.locality_groups_size()));
     }
     m_db->AddInheritedLiveFiles(live);
     {

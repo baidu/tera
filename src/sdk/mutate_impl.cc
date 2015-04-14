@@ -280,7 +280,7 @@ uint32_t RowMutationImpl::MutationNum() {
 /// mutation总大小
 uint32_t RowMutationImpl::Size() {
     uint32_t total_size = 0;
-    for (int i = 0; i < _mu_seq.size(); ++i) {
+    for (size_t i = 0; i < _mu_seq.size(); ++i) {
         total_size +=
             + _row_key.size()
             + _mu_seq[i].family.size()

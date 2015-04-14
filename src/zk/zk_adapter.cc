@@ -16,7 +16,7 @@
 namespace tera {
 namespace zk {
 
-const uint32_t kMaxNodeDataLen = 10240;
+const int32_t kMaxNodeDataLen = 10240;
 
 FILE* ZooKeeperAdapter::m_lib_log_output = NULL;
 

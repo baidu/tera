@@ -99,7 +99,7 @@ bool DefaultCompactStrategy::Drop(const leveldb::Slice& tera_key, uint64_t n) {
 
     if (type == leveldb::TKT_VALUE) {
         m_has_put = true;
-        if (++m_version_num > m_schema.column_families(cf_id).max_versions()) {
+        if (++m_version_num > static_cast<uint32_t>(m_schema.column_families(cf_id).max_versions())) {
             // drop out-of-range version
             return true;
         }
@@ -286,7 +286,7 @@ bool DefaultCompactStrategy::ScanDrop(const leveldb::Slice& tera_key, uint64_t n
 
     CHECK(cf_id >= 0) << "illegel column family";
     if (type == leveldb::TKT_VALUE &&
-            ++m_version_num > m_schema.column_families(cf_id).max_versions()) {
+            ++m_version_num > static_cast<uint32_t>(m_schema.column_families(cf_id).max_versions())) {
         // drop out-of-range version
         return true;
     }

@@ -584,7 +584,7 @@ void Table::ToMeta(TableMeta* meta) {
     meta->set_table_name(m_name);
     meta->set_status(m_status);
     meta->mutable_schema()->CopyFrom(m_schema);
-    for (int32_t i = 0; i < m_snapshot_list.size(); i++) {
+    for (size_t i = 0; i < m_snapshot_list.size(); i++) {
         meta->add_snapshot_list(m_snapshot_list[i]);
     }
 }
@@ -616,7 +616,7 @@ bool Table::GetTabletsForGc(std::set<uint64_t>* live_tablets,
     leveldb::Env* env = io::LeveldbEnv();
     std::string table_path = FLAGS_tera_tabletnode_path_prefix + m_name;
     env->GetChildren(table_path, &children);
-    for (int i = 0; i < children.size(); ++i) {
+    for (size_t i = 0; i < children.size(); ++i) {
         if (children[i].size() < 5) {
             // skip directory . and ..
             continue;
@@ -675,7 +675,7 @@ bool TabletManager::AddTable(const std::string& table_name,
     m_mutex.Unlock();
     (*table)->m_schema.CopyFrom(meta.schema());
     (*table)->m_status = meta.status();
-    for (uint32_t i = 0; i < meta.snapshot_list_size(); ++i) {
+    for (int32_t i = 0; i < meta.snapshot_list_size(); ++i) {
         (*table)->m_snapshot_list.push_back(meta.snapshot_list(i));
         LOG(INFO) << table_name << " add snapshot " << meta.snapshot_list(i);
     }

@@ -43,7 +43,7 @@ public:
 
 private:
     static const int kMaxColWidth = 50;
-    int _cols;
+    size_t _cols;
     std::vector<int> _col_width;
     Table _table;
 };

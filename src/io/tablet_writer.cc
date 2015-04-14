@@ -345,10 +345,10 @@ bool TabletWriter::FinishTask(const WriteTask& task, StatusCode status) {
 }
 
 void TabletWriter::FlushToDiskBatch(WriteTaskBuffer* task_buffer) {
-    int32_t task_num = task_buffer->size();
+    size_t task_num = task_buffer->size();
     leveldb::WriteBatch batch;
 
-    for (int32_t i = 0; i < task_num; ++i) {
+    for (size_t i = 0; i < task_num; ++i) {
         const WriteTask& task = (*task_buffer)[i];
         const std::vector<int32_t>* index_list = task.index_list;
         BatchRequest(*(task.request), *index_list, &batch, m_tablet->KvOnly());
