@@ -7,8 +7,12 @@
 #include <pthread.h>
 
 #include "coding.h"
+#include "../utils/counter.h"
 
 namespace leveldb {
+
+// performance test
+tera::Counter rawkey_compare_counter;
 
 static inline void AppendTsAndType(std::string* tera_key,
                                    int64_t timestamp,
@@ -160,6 +164,8 @@ public:
     }
 
     virtual int Compare(const Slice& key1, const Slice& key2) const {
+        // for performance optimiztion
+        // rawkey_compare_counter.Inc();
         uint32_t len1, len2, rlen1, rlen2, clen1, clen2, qlen1, qlen2;
         int ret;
         const char* data1 = key1.data();
