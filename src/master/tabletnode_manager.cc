@@ -122,7 +122,7 @@ void TabletNode::BeginLoad() {
     m_recent_load_time_list.push_back(get_micros());
     uint32_t list_size = m_recent_load_time_list.size();
     if (list_size > static_cast<uint32_t>(FLAGS_tera_master_max_load_concurrency)) {
-        CHECK_EQ(list_size - 1, FLAGS_tera_master_max_load_concurrency);
+        CHECK_EQ(list_size - 1, static_cast<uint32_t>(FLAGS_tera_master_max_load_concurrency));
         m_recent_load_time_list.pop_front();
     }
 }

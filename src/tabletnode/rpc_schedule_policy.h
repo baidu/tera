@@ -45,7 +45,7 @@ struct FairScheduleEntity : public ScheduleEntity {
     bool pickable;
     int64_t last_update_time;
     int64_t elapse_time;
-    uint64_t running_count;
+    int64_t running_count;
 
     FairScheduleEntity(void* user_ptr)
         : ScheduleEntity(user_ptr),
