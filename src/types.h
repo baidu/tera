@@ -15,7 +15,7 @@ typedef int32_t TabletNodeId;
 
 const int32_t kInvalidId = -1;
 const uint64_t kSequenceIDStart = 0;
-const uint64_t kInvalidTimerId = 0;
+const int64_t kInvalidTimerId = 0;
 const uint32_t kUnknownId = -1U;
 const uint32_t kInvalidSessionId = -1U;
 const std::string kUnknownAddr = "255.255.255.255:0000";

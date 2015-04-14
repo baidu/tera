@@ -83,7 +83,7 @@ void PutVarint32(std::string* dst, uint32_t v) {
 }
 
 char* EncodeVarint64(char* dst, uint64_t v) {
-  static const int B = 128;
+  static const uint32_t B = 128;
   unsigned char* ptr = reinterpret_cast<unsigned char*>(dst);
   while (v >= B) {
     *(ptr++) = (v & (B-1)) | B;
