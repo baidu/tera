@@ -115,7 +115,7 @@ class MergingIterator : public Iterator {
   }
 
   virtual ~MergingIterator() {
-    for (int i = 0; i < children_.size(); i++) {
+    for (size_t i = 0; i < children_.size(); i++) {
       delete children_[i].iter();
     }
   }
@@ -125,7 +125,7 @@ class MergingIterator : public Iterator {
   }
 
   virtual void SeekToFirst() {
-    for (int i = 0; i < children_.size(); i++) {
+    for (size_t i = 0; i < children_.size(); i++) {
       children_[i].SeekToFirst();
     }
     // make children as a min-heap
@@ -135,7 +135,7 @@ class MergingIterator : public Iterator {
   }
 
   virtual void SeekToLast() {
-    for (int i = 0; i < children_.size(); i++) {
+    for (size_t i = 0; i < children_.size(); i++) {
       children_[i].SeekToLast();
     }
     // make children as a max-heap
@@ -145,7 +145,7 @@ class MergingIterator : public Iterator {
   }
 
   virtual void Seek(const Slice& target) {
-    for (int i = 0; i < children_.size(); i++) {
+    for (size_t i = 0; i < children_.size(); i++) {
       children_[i].Seek(target);
     }
     // make children as a min-heap
@@ -163,7 +163,7 @@ class MergingIterator : public Iterator {
     // the smallest child and key() == current_->key().  Otherwise,
     // we explicitly position the non-current_ children.
     if (direction_ != kForward) {
-      for (int i = 0; i < children_.size(); i++) {
+      for (size_t i = 0; i < children_.size(); i++) {
         IterWrapper* child = &children_[i];
         if (child != current_) {
           child->Seek(key());
@@ -195,7 +195,7 @@ class MergingIterator : public Iterator {
     // the largest child and key() == current_->key().  Otherwise,
     // we explicitly position the non-current_ children.
     if (direction_ != kReverse) {
-      for (int i = 0; i < children_.size(); i++) {
+      for (size_t i = 0; i < children_.size(); i++) {
         IterWrapper* child = &children_[i];
         if (child != current_) {
           child->Seek(key());
@@ -233,7 +233,7 @@ class MergingIterator : public Iterator {
 
   virtual Status status() const {
     Status status;
-    for (int i = 0; i < children_.size(); i++) {
+    for (size_t i = 0; i < children_.size(); i++) {
       status = children_[i].status();
       if (!status.ok()) {
         break;

@@ -277,8 +277,8 @@ void TabletNodeImpl::LoadTablet(const LoadTabletRequest* request,
     // to recover snapshots
     assert(request->snapshots_id_size() == request->snapshots_sequence_size());
     std::map<uint64_t, uint64_t> snapshots;
-    int num_of_snapshots = request->snapshots_id_size();
-    for (uint32_t i = 0; i < num_of_snapshots; ++i) {
+    int32_t num_of_snapshots = request->snapshots_id_size();
+    for (int32_t i = 0; i < num_of_snapshots; ++i) {
         snapshots[request->snapshots_id(i)] = request->snapshots_sequence(i);
     }
 
@@ -993,7 +993,7 @@ void TabletNodeImpl::GarbageCollect() {
     std::vector<InheritedLiveFiles> table_files;
     GetInheritedLiveFiles(table_files);
     std::set<std::string> inherited_files;
-    for (int t = 0; t < table_files.size(); ++t) {
+    for (size_t t = 0; t < table_files.size(); ++t) {
         const InheritedLiveFiles& live = table_files[t];
         int lg_num = live.lg_live_files_size();
         for (int lg = 0; lg < lg_num; ++lg) {
@@ -1171,7 +1171,7 @@ void TabletNodeImpl::GetInheritedLiveFiles(std::vector<InheritedLiveFiles>& inhe
         }
         InheritedLiveFiles table;
         table.set_table_name(live_it->first);
-        for (int i = 0; i < live_it->second.size(); ++i) {
+        for (size_t i = 0; i < live_it->second.size(); ++i) {
             VLOG(10) << "[gc] add inherited file, lg " << i
                 << ", " << (live_it->second)[i].size() << " files total";
             LgInheritedLiveFiles* lg_files = table.add_lg_live_files();

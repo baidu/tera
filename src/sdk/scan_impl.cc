@@ -132,12 +132,12 @@ void ResultStreamAsyncImpl::DoScanCallback(int64_t session_id, ScanTabletRespons
             << _session_id << "), rebuild ...";
         need_rebuild_stream = true;
         stream_broken = true;
-    } else if (_cur_data_id > response->results_id()) {
+    } else if (static_cast<uint64_t>(_cur_data_id) > response->results_id()) {
         LOG(WARNING) << "invalid response [cur data id: " << _cur_data_id
             << ", record id: " << response->results_id()
             << "], skip";
     } else {
-        while (_cur_data_id != response->results_id()) {
+        while (static_cast<uint64_t>(_cur_data_id) != response->results_id()) {
             VLOG(15) << "id: " << _cur_data_id
                 << ", result id: " << response->results_id()
                 << ", waiting ...";
@@ -149,7 +149,7 @@ void ResultStreamAsyncImpl::DoScanCallback(int64_t session_id, ScanTabletRespons
             << ", size: " << response->results().key_values_size()
             << ", next id: " << _cur_data_id;
         if (response->has_results() && response->results().key_values_size() > 0) {
-            while (_queue_size == _cache_max_size) {
+            while (static_cast<uint64_t>(_queue_size) == _cache_max_size) {
                 _scan_pop_event.Wait();
             }
             {
@@ -475,7 +475,7 @@ ScanDescImpl::ScanDescImpl(const ScanDescImpl& impl)
     } else {
         _timer_range = NULL;
     }
-    for (uint32_t i = 0; i < impl.GetSizeofColumnFamilyList(); ++i) {
+    for (int32_t i = 0; i < impl.GetSizeofColumnFamilyList(); ++i) {
         _cf_list.push_back(new tera::ColumnFamily(*(impl.GetColumnFamily(i))));
     }
 }
@@ -588,7 +588,7 @@ int32_t ScanDescImpl::GetSizeofColumnFamilyList() const {
 }
 
 const tera::ColumnFamily* ScanDescImpl::GetColumnFamily(int32_t num) const {
-    if (num >= _cf_list.size()) {
+    if (static_cast<uint64_t>(num) >= _cf_list.size()) {
         return NULL;
     }
     return _cf_list[num];
@@ -731,7 +731,7 @@ bool ScanDescImpl::ParseValueCompareFilter(const string& filter_str,
 }
 
 bool ScanDescImpl::GetCfType(const std::string& cf_name, std::string* type) {
-    for (size_t i = 0; i < _table_schema.column_families_size(); ++i) {
+    for (int32_t i = 0; i < _table_schema.column_families_size(); ++i) {
         const ColumnFamilySchema& cf_schema = _table_schema.column_families(i);
         if (cf_schema.name() == cf_name) {
             *type = cf_schema.type();

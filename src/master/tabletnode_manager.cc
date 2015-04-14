@@ -88,7 +88,7 @@ void TabletNode::DoneMoveIn() {
 
 bool TabletNode::MayLoadNow() {
     MutexLock lock(&m_mutex);
-    if (m_recent_load_time_list.size() < FLAGS_tera_master_max_load_concurrency) {
+    if (m_recent_load_time_list.size() < static_cast<uint32_t>(FLAGS_tera_master_max_load_concurrency)) {
         return true;
     }
     if (m_recent_load_time_list.front() + FLAGS_tera_master_load_interval * 1000000
@@ -171,7 +171,7 @@ bool TabletNode::FinishSplit(TabletPtr tablet) {
 
 bool TabletNode::SplitNextWaitTablet(TabletPtr* tablet) {
     MutexLock lock(&m_mutex);
-    if (m_onsplit_count >= FLAGS_tera_master_max_split_concurrency) {
+    if (m_onsplit_count >= static_cast<uint32_t>(FLAGS_tera_master_max_split_concurrency)) {
         return false;
     }
     std::list<TabletPtr>::iterator it = m_wait_split_list.begin();
