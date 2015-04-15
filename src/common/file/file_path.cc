@@ -80,7 +80,7 @@ bool CreateDirWithRetry(const std::string& dir_path) {
     if (dir_path[0] == '/') {
         path.append("/");
     }
-    for (int d = 0; d < path_sections.size() && is_success; ++d) {
+    for (size_t d = 0; d < path_sections.size() && is_success; ++d) {
         if (path_sections[d] == ".") {
             continue;
         }
@@ -156,7 +156,7 @@ bool IsDir(const std::string& path) {
     }
 
     struct stat st;
-    if ((stat(path.c_str(), &st) == 0) && (st.st_mode & S_IFDIR != 0)) {
+    if (stat(path.c_str(), &st) == 0 && (st.st_mode & S_IFDIR) != 0) {
         return true;
     }
     return false;

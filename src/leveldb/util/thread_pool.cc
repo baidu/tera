@@ -95,7 +95,6 @@ void ThreadPool::ReSchedule(int64_t id, double priority, int64_t wait_time_milli
   
   bg_item.exe_time = exe_time;
   bg_item.priority = priority;
-  int64_t earlest = time_queue_.top().exe_time;
   PutInQueue(bg_item, exe_time);
 }
 

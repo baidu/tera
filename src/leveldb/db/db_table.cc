@@ -302,7 +302,8 @@ Status DBTable::Init() {
         dbname_.c_str(), options_.compact_strategy_factory->Name(),
         options_.flush_triggered_log_num);
 
-    Log(options_.info_log, "[%s] Init() done, last_seq=%llu ", dbname_.c_str(), last_sequence_);
+    Log(options_.info_log, "[%s] Init() done, last_seq=%llu", dbname_.c_str(),
+        static_cast<unsigned long long>(last_sequence_));
 
     return s;
 }
@@ -443,7 +444,8 @@ Status DBTable::Write(const WriteOptions& options, WriteBatch* my_batch) {
             Status lg_s = lg_list_[i]->Write(WriteOptions(), lg_updates[i]);
             if (!lg_s.ok()) {
                 // 这种情况下内存处于不一致状态
-                Log(options_.info_log, "[%s] [Fatal] Write to lg%d fail", i);
+                Log(options_.info_log, "[%s] [Fatal] Write to lg%u fail",
+                    dbname_.c_str(), i);
                 s = lg_s;
                 fatal_error_ = lg_s;
                 break;
@@ -822,7 +824,8 @@ Status DBTable::DeleteLogFile(const std::vector<uint64_t>& log_numbers) {
     for (uint32_t i = 0; i < log_numbers.size() && s.ok(); ++i) {
         uint64_t log_number = log_numbers[i];
         Log(options_.info_log, "[%s] Delete type=%s #%llu",
-            dbname_.c_str(), FileTypeToString(kLogFile), log_number);
+            dbname_.c_str(), FileTypeToString(kLogFile),
+            static_cast<unsigned long long>(log_number));
         std::string fname = LogHexFileName(dbname_, log_number);
         s = env_->DeleteFile(fname);
         // The last log file must be deleted before write a new log
@@ -833,7 +836,8 @@ Status DBTable::DeleteLogFile(const std::vector<uint64_t>& log_numbers) {
         }
         if (!s.ok()) {
             Log(options_.info_log, "[%s] fail to delete logfile %llu: %s",
-                dbname_.c_str(), log_number, s.ToString().data());
+                dbname_.c_str(), static_cast<unsigned long long>(log_number),
+                s.ToString().data());
         }
     }
     return s;
@@ -843,8 +847,9 @@ void DBTable::DeleteObsoleteFiles(uint64_t seq_no) {
     std::vector<std::string> filenames;
     env_->GetChildren(dbname_, &filenames);
     std::sort(filenames.begin(), filenames.end());
-    Log(options_.info_log, "[%s] will delete obsolete file num: %d [seq < %llu]",
-        dbname_.c_str(), filenames.size(), (unsigned long long) seq_no);
+    Log(options_.info_log, "[%s] will delete obsolete file num: %u [seq < %llu]",
+        dbname_.c_str(), static_cast<uint32_t>(filenames.size()),
+        static_cast<unsigned long long>(seq_no));
     uint64_t number;
     FileType type;
     std::string last_file;
@@ -855,9 +860,9 @@ void DBTable::DeleteObsoleteFiles(uint64_t seq_no) {
             deleted = true;
         }
         if (deleted) {
-            Log(options_.info_log, "[%s] Delete type=%s #%lld",
+            Log(options_.info_log, "[%s] Delete type=%s #%llu",
                 dbname_.c_str(), FileTypeToString(type),
-                static_cast<unsigned long long>(number), i);
+                static_cast<unsigned long long>(number));
             if (!last_file.empty()) {
 //                 ArchiveFile(dbname_ + "/" + last_file);
                 env_->DeleteFile(dbname_ + "/" + last_file);

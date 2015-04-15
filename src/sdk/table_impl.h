@@ -332,8 +332,8 @@ private:
     std::map<std::string, ReaderBuffer> _reader_buffers;
     Counter _cur_commit_pending_counter;
     Counter _cur_reader_pending_counter;
-    uint64_t _max_commit_pending_num;
-    uint64_t _max_reader_pending_num;
+    int64_t _max_commit_pending_num;
+    int64_t _max_reader_pending_num;
 
     // meta management
     mutable Mutex _meta_mutex;

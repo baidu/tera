@@ -361,7 +361,7 @@ bool HashClient::CreateTable(const std::map<std::string, std::string>& cf_list,
     }
 
     std::vector<std::string> delimiters;
-    for (uint32_t i = 0; i < _hash_method->GetBulkNum(); ++i) {
+    for (int32_t i = 0; i < _hash_method->GetBulkNum(); ++i) {
         delimiters.push_back(StringFormat("%08llu", i));
     }
 

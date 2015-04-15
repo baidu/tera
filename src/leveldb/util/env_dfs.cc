@@ -331,8 +331,9 @@ Status DfsEnv::GetChildren(const std::string& path,
         std::vector<std::string>* result)
 {
     if (0 != hdfs_->Exists(path)) {
-        fprintf(stderr, "GetChildren call with path not exists.\n");
-        abort();
+        fprintf(stderr, "GetChildren call with path not exists: %s\n",
+                path.data());
+        return Status::IOError("Path not exist", path);
     } else if (0 != hdfs_->ListDirectory(path, result)) {
         abort();
     }
@@ -438,7 +439,6 @@ Status DfsEnv::NewLogger(const std::string& fname, Logger** result)
 
 static bool inited = false;
 static port::Mutex mutex;
-static pthread_once_t once = PTHREAD_ONCE_INIT;
 static Env* dfs_env;
 
 void InitHdfsEnv()

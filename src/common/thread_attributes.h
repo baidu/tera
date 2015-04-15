@@ -5,7 +5,9 @@
 #ifndef TERA_COMMON_THREAD_ATTRIBUTES_H_
 #define TERA_COMMON_THREAD_ATTRIBUTES_H_
 
+#ifndef __USE_GNU
 #define __USE_GNU
+#endif
 
 #include <sched.h>
 

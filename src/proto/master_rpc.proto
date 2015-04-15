@@ -115,16 +115,6 @@ message ShowTabletNodesResponse {
     optional TabletMetaList tabletmeta_list = 4;
 }
 
-message MergeTableRequest {
-    required uint64 sequence_id = 1;
-    optional string table_name = 2;
-}
-
-message MergeTableResponse {
-    required StatusCode status = 1;
-    required uint64 sequence_id = 2;
-}
-
 // Tablet node
 
 message RegisterRequest {
@@ -199,11 +189,10 @@ service MasterServer {
 
     rpc ShowTables(ShowTablesRequest) returns(ShowTablesResponse);
     rpc ShowTabletNodes(ShowTabletNodesRequest) returns(ShowTabletNodesResponse);
-    rpc MergeTable(MergeTableRequest) returns(MergeTableResponse);
 
     rpc Register(RegisterRequest) returns(RegisterResponse);
     rpc Report(ReportRequest) returns(ReportResponse);
-    
+
     rpc CmdCtrl(CmdCtrlRequest) returns(CmdCtrlResponse);
 }
 option cc_generic_services = true;

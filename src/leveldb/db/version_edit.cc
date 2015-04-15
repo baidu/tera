@@ -116,7 +116,7 @@ static bool GetInternalKey(Slice* input, InternalKey* dst) {
 static bool GetLevel(Slice* input, int* level) {
   uint32_t v;
   if (GetVarint32(input, &v) &&
-      v < config::kNumLevels) {
+      v < static_cast<uint32_t>(config::kNumLevels)) {
     *level = v;
     return true;
   } else {
@@ -275,7 +275,6 @@ Status VersionEdit::DecodeFilterFrom(const Slice& src,
 
   // Temporary storage for parsing
   int level;
-  uint64_t number;
   FileMetaData f;
   Slice str;
   InternalKey key;
@@ -314,7 +313,7 @@ Status VersionEdit::DecodeFilterFrom(const Slice& src,
       case kPrevLogNumber:
         if (GetVarint64(&input, &prev_log_number)) {
           if (prev_log_number > prev_log_number_) {
-              prev_log_number_ = prev_log_number_;
+              prev_log_number_ = prev_log_number;
               has_prev_log_number_ = true;
           }
         } else {
@@ -323,7 +322,7 @@ Status VersionEdit::DecodeFilterFrom(const Slice& src,
         break;
 
       case kNextFileNumber:
-        if (GetVarint64(&input, &next_file_number_)) {
+        if (GetVarint64(&input, &next_file_number)) {
           if (next_file_number > next_file_number_) {
             next_file_number_ = next_file_number;
             has_next_file_number_ = true;
@@ -334,8 +333,8 @@ Status VersionEdit::DecodeFilterFrom(const Slice& src,
         break;
 
       case kLastSequence:
-        if (GetVarint64(&input, &last_sequence_)) {
-          if (last_sequence_ > last_sequence) {
+        if (GetVarint64(&input, &last_sequence)) {
+          if (last_sequence > last_sequence_) {
             last_sequence_ = last_sequence;
             has_last_sequence_ = true;
           }

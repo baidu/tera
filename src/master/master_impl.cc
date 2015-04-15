@@ -458,9 +458,9 @@ void MasterImpl::CreateTable(const CreateTableRequest* request,
         }
     }
 
-    size_t tablet_num = request->delimiters_size() + 1;
+    int32_t tablet_num = request->delimiters_size() + 1;
     bool delivalid = true;
-    for (size_t i = 1; i < tablet_num - 1; i++) {
+    for (int32_t i = 1; i < tablet_num - 1; i++) {
         // TODO: Use user defined comparator
         if (request->delimiters(i) <= request->delimiters(i-1)) {
             delivalid = false;
@@ -484,10 +484,10 @@ void MasterImpl::CreateTable(const CreateTableRequest* request,
     std::vector<TabletPtr> tablets;
     const std::string& table_name = request->table_name();
     StatusCode status = kMasterOk;
-    size_t add_num = 0;
+    int32_t add_num = 0;
     tablets.resize(tablet_num);
 
-    for (size_t i = 1; i <= tablet_num; i++) {
+    for (int32_t i = 1; i <= tablet_num; i++) {
         std::string path = leveldb::GetTabletPathFromNum(request->table_name(), i);
         const std::string& start_key = (i == 1) ? "" : request->delimiters(i-2);
         const std::string& end_key = (i == tablet_num) ? "" : request->delimiters(i-1);
@@ -866,7 +866,7 @@ void MasterImpl::ShowTabletNodes(const ShowTabletNodesRequest* request,
         response->add_tabletnode_info()->CopyFrom(tabletnode->GetInfo());
         std::vector<TabletPtr> tablet_list;
         m_tablet_manager->FindTablet(request->addr(), &tablet_list);
-        for (int i = 0; i < tablet_list.size(); ++i) {
+        for (size_t i = 0; i < tablet_list.size(); ++i) {
             TabletMeta* meta = response->mutable_tabletmeta_list()->add_meta();
             TabletCounter* counter = response->mutable_tabletmeta_list()->add_counter();
             tablet_list[i]->ToMeta(meta);
@@ -877,25 +877,6 @@ void MasterImpl::ShowTabletNodes(const ShowTabletNodesRequest* request,
         done->Run();
         return;
     }
-}
-
-void MasterImpl::MergeTable(const MergeTableRequest* request,
-                            MergeTableResponse* response) {
-    response->set_sequence_id(request->sequence_id());
-    MasterStatus master_status = GetMasterStatus();
-    if (master_status != kIsRunning) {
-        LOG(ERROR) << "master is not ready, m_status = "
-            << StatusCodeToString(master_status);
-        response->set_status(static_cast<StatusCode>(master_status));
-        return;
-    }
-
-    StatusCode status = kMasterOk;
-    if (!m_tablet_manager->TryMergeTablet(request->table_name(), &status)) {
-        LOG(ERROR) << "fail to execute merge operation for: "
-            << request->table_name();
-    }
-    response->set_status(status);
 }
 
 void MasterImpl::CmdCtrl(const CmdCtrlRequest* request,
@@ -1925,7 +1906,7 @@ void MasterImpl::LoadTabletAsync(TabletPtr tablet, LoadClosure* done, uint64_t) 
     tablet->ToMeta(&meta);
     CHECK(meta.parent_tablets_size() <= 2)
         << "too many parents tablets: " << meta.parent_tablets_size();
-    for (uint32_t i = 0; i < meta.parent_tablets_size(); ++i) {
+    for (int32_t i = 0; i < meta.parent_tablets_size(); ++i) {
         request->add_parent_tablets(meta.parent_tablets(i));
     }
 
@@ -2522,7 +2503,8 @@ void MasterImpl::ClearUnusedSnapshots(TabletPtr tablet, const TabletMeta& meta) 
     }
 #endif
     std::sort(snapshots.begin(), snapshots.end());
-    for (int i = 0, j = 0; j < meta.snapshot_list_size(); ++j) {
+    size_t i = 0;
+    for (int j = 0; j < meta.snapshot_list_size(); ++j) {
         uint64_t seq = meta.snapshot_list(j);
         if (i >= snapshots.size() || snapshots[i] != seq) {
             ReleaseSnpashot(tablet, seq);
@@ -3123,7 +3105,7 @@ void MasterImpl::MergeTabletAsyncPhase2(TabletPtr tablet_p1, TabletPtr tablet_p2
     env->GetChildren(tablet_path, &children);
     tablet_path = FLAGS_tera_tabletnode_path_prefix + tablet_p2->GetPath();
     env->GetChildren(tablet_path, &children);
-    for (int i = 0; i < children.size(); ++i) {
+    for (size_t i = 0; i < children.size(); ++i) {
         leveldb::FileType type = leveldb::kUnknown;
         uint64_t number = 0;
         if (ParseFileName(children[i], &number, &type) &&
@@ -4284,7 +4266,7 @@ void MasterImpl::DoTabletNodeGarbageClean() {
     std::vector<TablePtr> tables;
 
     m_tablet_manager->ShowTable(&tables, NULL);
-    for (int i = 0; i < tables.size(); ++i) {
+    for (size_t i = 0; i < tables.size(); ++i) {
         if (tables[i]->GetStatus() != kTableEnable ||
             tables[i]->GetTableName() == FLAGS_tera_master_meta_table_name) {
             // table not ready and skip metatable
@@ -4357,7 +4339,7 @@ void MasterImpl::CollectSingleDeadTablet(const std::string& tablename, uint64_t 
         env->DeleteDir(tablet_path);
         return;
     }
-    for (int lg = 0; lg < children.size(); ++lg) {
+    for (size_t lg = 0; lg < children.size(); ++lg) {
         std::string lg_path = tablet_path + "/" + children[lg];
         leveldb::FileType type = leveldb::kUnknown;
         uint64_t number = 0;
@@ -4381,7 +4363,7 @@ void MasterImpl::CollectSingleDeadTablet(const std::string& tablename, uint64_t 
             env->DeleteDir(lg_path);
             continue;
         }
-        for (int f = 0; f < files.size(); ++f) {
+        for (size_t f = 0; f < files.size(); ++f) {
             std::string file_path = lg_path + "/" + files[f];
             type = leveldb::kUnknown;
             number = 0;
@@ -4415,7 +4397,7 @@ void MasterImpl::DeleteObsoleteFiles() {
     for (; table_it != m_gc_live_files.end(); ++table_it) {
         std::string tablepath = FLAGS_tera_tabletnode_path_prefix + table_it->first;
         GcFileSet& file_set = table_it->second;
-        for (int lg = 0; lg < file_set.size(); ++lg) {
+        for (size_t lg = 0; lg < file_set.size(); ++lg) {
             std::set<uint64_t>::iterator it = file_set[lg].begin();
             for (; it != file_set[lg].end(); ++it) {
                 std::string file_path = leveldb::BuildTableFilePath(tablepath, lg, *it);
@@ -4455,7 +4437,8 @@ void MasterImpl::ProcessQueryCallbackForGc(QueryResponse* response) {
         }
         GcFileSet& file_set = m_gc_live_files[live.table_name()];
         int lg_num = live.lg_live_files_size();
-        CHECK(lg_num == file_set.size()) << "lg_num should eq " << file_set.size();
+        CHECK(static_cast<size_t>(lg_num) == file_set.size())
+            << "lg_num should eq " << file_set.size();
         for (int lg = 0; lg < lg_num; ++lg) {
             const LgInheritedLiveFiles& lg_live_files = live.lg_live_files(lg);
             for (int f = 0; f < lg_live_files.file_number_size(); ++f) {

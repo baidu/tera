@@ -526,7 +526,7 @@ bool ClientImpl::IsTableEmpty(const string& table_name, ErrorCode* err) {
     if (table_list.size() > 0
         && table_list[0].table_desc->TableName() == table_name) {
         if (tablet_list.size() == 0
-            || tablet_list.size() == 1 && tablet_list[0].data_size <= 0) {
+            || (tablet_list.size() == 1 && tablet_list[0].data_size <= 0)) {
             return true;
         }
         return false;
@@ -728,7 +728,7 @@ static void InitFlags(const std::string& confpath, const std::string& log_prefix
 
     int argc = 1;
     char** argv = new char*[2];
-    argv[0] = "dummy";
+    argv[0] = (char*)"dummy";
     argv[1] = NULL;
 
     // the gflags will get flags from FLAGS_flagfile

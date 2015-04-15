@@ -53,9 +53,6 @@ public:
     virtual bool ShowTabletNodes(const ShowTabletNodesRequest* request,
                                  ShowTabletNodesResponse* response);
 
-    virtual bool MergeTable(const MergeTableRequest* request,
-                            MergeTableResponse* response);
-
     virtual bool Register(const RegisterRequest* request,
                           RegisterResponse* response);
 

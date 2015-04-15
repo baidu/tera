@@ -24,7 +24,7 @@ DEFINE_string(tera_zk_root_path, "/tera", "zookeeper root path");
 DEFINE_int32(tera_zk_timeout, 10000, "zookeeper session timeout");
 DEFINE_int64(tera_zk_retry_period, 3000, "zookeeper operation retry period (in ms)");
 DEFINE_int32(tera_zk_retry_max_times, 10, "zookeeper operation max retry times");
-DEFINE_string(tera_zk_lib_log_path, "./zk.log", "zookeeper library log output file");
+DEFINE_string(tera_zk_lib_log_path, "../log/zk.log", "zookeeper library log output file");
 DEFINE_string(tera_log_prefix, "", "prefix of log file (INFO, WARNING)");
 
 /////////  io  /////////
@@ -45,8 +45,8 @@ DEFINE_string(tera_leveldb_env_type, "dfs", "the default type for leveldb IO env
 DEFINE_string(tera_leveldb_env_dfs_type, "hdfs", "the default type for leveldb IO dfs environment, [hdfs | nfs]");
 DEFINE_string(tera_leveldb_env_hdfs2_nameservice_list, "default", "the nameservice list of hdfs2");
 DEFINE_string(tera_leveldb_env_nfs_mountpoint, "/disk/tera", "the mountpoint of nfs");
-DEFINE_string(tera_leveldb_env_nfs_conf_path, "./nfs.conf", "the config file path of nfs");
-DEFINE_string(tera_leveldb_log_path, "./leveldb.log", "the default path for leveldb logger");
+DEFINE_string(tera_leveldb_env_nfs_conf_path, "../conf/nfs.conf", "the config file path of nfs");
+DEFINE_string(tera_leveldb_log_path, "../log/leveldb.log", "the default path for leveldb logger");
 DEFINE_int32(tera_io_retry_period, 100, "the retry interval period (in ms) when operate file");
 DEFINE_int32(tera_io_retry_max_times, 20, "the max retry times when meets trouble");
 DEFINE_int32(tera_leveldb_env_local_seek_latency, 50000, "the random access latency (in ns) of local storage device");
@@ -145,7 +145,7 @@ DEFINE_int32(tera_tabletnode_compact_thread_num, 10, "the max thread number for 
 DEFINE_int32(tera_tabletnode_connect_retry_times, 5, "the max retry times when connect to tablet node");
 DEFINE_int32(tera_tabletnode_connect_retry_period, 1000, "the retry period (in ms) between retry two tablet node connection");
 DEFINE_int32(tera_tabletnode_connect_timeout_period, 180000, "the timeout period (in ms) for each tablet node connection");
-DEFINE_string(tera_tabletnode_path_prefix, "./data/", "the path prefix for table storage");
+DEFINE_string(tera_tabletnode_path_prefix, "../data/", "the path prefix for table storage");
 DEFINE_int32(tera_tabletnode_block_cache_size, 100, "the cache size of tablet (in MB)");
 DEFINE_int32(tera_tabletnode_table_cache_size, 10000, "the table cache size, means the max num of files keeping open in this tabletnode.");
 
@@ -176,7 +176,7 @@ DEFINE_bool(tera_tabletnode_hang_detect_enabled, false, "enable detect read/writ
 DEFINE_int32(tera_tabletnode_hang_detect_threshold, 60000, "read/write hang detect threshold (in ms)");
 
 DEFINE_bool(tera_tabletnode_cache_enabled, false, "enable three-level cache mechasism");
-DEFINE_string(tera_tabletnode_cache_paths, "./tera_cache_path/", "paths for cached data storage. Mutiple definition like: \"./path1/;./path2/\"");
+DEFINE_string(tera_tabletnode_cache_paths, "../data/cache/", "paths for cached data storage. Mutiple definition like: \"./path1/;./path2/\"");
 DEFINE_int32(tera_tabletnode_cache_block_size, 8192, "the block size of cache system");
 DEFINE_string(tera_tabletnode_cache_name, "tera.cache", "prefix name for cache name");
 DEFINE_int32(tera_tabletnode_cache_mem_size, 2048, "the maximal size (in KB) of mem cache");

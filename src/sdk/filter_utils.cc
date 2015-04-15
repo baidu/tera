@@ -23,7 +23,7 @@ bool CheckFilterString(const string& filter_str) {
 
 string RemoveInvisibleChar(const string& schema) {
     string ret;
-    for (int i = 0; i < schema.size(); ++i) {
+    for (size_t i = 0; i < schema.size(); ++i) {
         if (schema[i] != '\n' && schema[i] != '\t' && schema[i] != ' ') {
             ret.append(1, schema[i]);
         }

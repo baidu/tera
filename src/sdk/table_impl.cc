@@ -308,7 +308,7 @@ void TableImpl::CommitScan(ScanTask* scan_task,
         FilterList* filter_list = request->mutable_filter_list();
         filter_list->CopyFrom(impl->GetFilterList());
     }
-    for (uint32_t i = 0; i < impl->GetSizeofColumnFamilyList(); ++i) {
+    for (int32_t i = 0; i < impl->GetSizeofColumnFamilyList(); ++i) {
         tera::ColumnFamily* column_family = request->add_cf_list();
         column_family->CopyFrom(*(impl->GetColumnFamily(i)));
     }
@@ -351,7 +351,7 @@ void TableImpl::ScanCallBack(ScanTask* scan_task,
     scan_task->SetInternalError(err);
     if (err == kTabletNodeOk
         || err == kSnapshotNotExist
-        || scan_task->RetryTimes() >= FLAGS_tera_sdk_retry_times) {
+        || scan_task->RetryTimes() >= static_cast<uint32_t>(FLAGS_tera_sdk_retry_times)) {
         if (err == kKeyNotInRange || err == kConnectError) {
             ScheduleUpdateMeta(stream->GetScanDesc()->GetStartRowKey(),
                                scan_task->GetMetaTimeStamp());
@@ -617,7 +617,7 @@ void TableImpl::MutateCallBack(std::vector<RowMutationImpl*>* mu_list,
             // only for flow control
             _cur_commit_pending_counter.Sub(row_mutation->MutationNum());
             row_mutation->RunCallback();
-        } else if (row_mutation->RetryTimes() >= FLAGS_tera_sdk_retry_times) {
+        } else if (row_mutation->RetryTimes() >= static_cast<uint32_t>(FLAGS_tera_sdk_retry_times)) {
             if (err == kKeyNotInRange || err == kConnectError) {
                 ScheduleUpdateMeta(row_mutation->RowKey(),
                                    row_mutation->GetMetaTimeStamp());
@@ -873,7 +873,7 @@ void TableImpl::ReaderCallBack(std::vector<RowReaderImpl*>* reader_list,
             row_reader->RunCallback();
             // only for flow control
             _cur_reader_pending_counter.Dec();
-        } else if (row_reader->RetryTimes() >= FLAGS_tera_sdk_retry_times) {
+        } else if (row_reader->RetryTimes() >= static_cast<uint32_t>(FLAGS_tera_sdk_retry_times)) {
             if (err == kKeyNotInRange || err == kConnectError) {
                 ScheduleUpdateMeta(row_reader->RowName(),
                                    row_reader->GetMetaTimeStamp());
@@ -946,7 +946,7 @@ void TableImpl::ProcessTaskPendingForMeta(const std::string& row, SdkTask* task)
             case SdkTask::READ: {
                 RowReaderImpl* reader = (RowReaderImpl*)task;
                 reader->IncRetryTimes();
-                if (reader->RetryTimes() >= FLAGS_tera_sdk_retry_times) {
+                if (reader->RetryTimes() >= static_cast<uint32_t>(FLAGS_tera_sdk_retry_times)) {
                     VLOG(7) << "ProcessTaskPendingForMeta-RowReader key:[" << row << "] "
                             << " Reach the limit of retry times, error: meta not feteched.";
                     _cur_reader_pending_counter.Dec();
@@ -969,7 +969,7 @@ void TableImpl::ProcessTaskPendingForMeta(const std::string& row, SdkTask* task)
         case SdkTask::MUTATION: {
             RowMutationImpl* mutation = (RowMutationImpl*)task;
             mutation->IncRetryTimes();
-            if (mutation->RetryTimes() >= FLAGS_tera_sdk_retry_times) {
+            if (mutation->RetryTimes() >= static_cast<uint32_t>(FLAGS_tera_sdk_retry_times)) {
                 VLOG(7) << "ProcessTaskPendingForMeta-RowMutation key:[" << row << "] "
                         << " Reach the limit of retry times, error: meta not feteched.";
                 _cur_commit_pending_counter.Sub(mutation->MutationNum());
@@ -992,7 +992,7 @@ void TableImpl::ProcessTaskPendingForMeta(const std::string& row, SdkTask* task)
         case SdkTask::SCAN: {
             ScanTask* scan_task = (ScanTask*)task;
             scan_task->IncRetryTimes();
-            if (scan_task->RetryTimes() >= FLAGS_tera_sdk_retry_times) {
+            if (scan_task->RetryTimes() >= static_cast<uint32_t>(FLAGS_tera_sdk_retry_times)) {
                 VLOG(7) << "ProcessTaskPendingForMeta-Scan key:[" << row << "] "
                         << " Reach the limit of retry times, error: meta not feteched.";
                 scan_task->response->set_status(kRPCError);
@@ -1107,7 +1107,7 @@ void TableImpl::DelayUpdateMeta(std::string start_key, std::string end_key) {
 
 void TableImpl::UpdateMetaAsync() {
     // CHECK(_meta_mutex.IsLocked());
-    if (_meta_updating_count >= FLAGS_tera_sdk_update_meta_concurrency) {
+    if (_meta_updating_count >= static_cast<uint32_t>(FLAGS_tera_sdk_update_meta_concurrency)) {
         return;
     }
     bool need_update = false;
@@ -1254,7 +1254,7 @@ void TableImpl::ScanMetaTableCallBack(std::string key_start,
         << scan_result.key_values_size() << " records";
     if (scan_result.key_values_size() == 0
         || return_start > key_start
-        || !return_end.empty() && (key_end.empty()|| return_end < key_end)) {
+        || (!return_end.empty() && (key_end.empty() || return_end < key_end))) {
         LOG(ERROR) << "scan meta table [" << key_start << ", " << key_end
             << "] return [" << return_start << ", " << return_end << "]";
         // TODO(lk): process omitted tablets
@@ -1290,7 +1290,7 @@ void TableImpl::GiveupUpdateTabletMeta(const std::string& key_start,
                 case SdkTask::READ: {
                     RowReaderImpl* reader = (RowReaderImpl*) task;
                     reader->IncRetryTimes();
-                    if (reader->RetryTimes() >= FLAGS_tera_sdk_retry_times) {
+                    if (reader->RetryTimes() >= static_cast<uint32_t>(FLAGS_tera_sdk_retry_times)) {
                         itask = task_list.erase(itask);
                         _cur_reader_pending_counter.Dec();
                         reader->SetError(ErrorCode::kSystem,
@@ -1302,7 +1302,7 @@ void TableImpl::GiveupUpdateTabletMeta(const std::string& key_start,
                 case SdkTask::MUTATION: {
                     RowMutationImpl* mutation = (RowMutationImpl*) task;
                     mutation->IncRetryTimes();
-                    if (mutation->RetryTimes() >= FLAGS_tera_sdk_retry_times) {
+                    if (mutation->RetryTimes() >= static_cast<uint32_t>(FLAGS_tera_sdk_retry_times)) {
                         itask = task_list.erase(itask);
                         _cur_commit_pending_counter.Sub(
                                 mutation->MutationNum());
@@ -1315,7 +1315,7 @@ void TableImpl::GiveupUpdateTabletMeta(const std::string& key_start,
                 case SdkTask::SCAN: {
                     ScanTask* scan_task = (ScanTask*) task;
                     scan_task->IncRetryTimes();
-                    if (scan_task->RetryTimes() >= FLAGS_tera_sdk_retry_times) {
+                    if (scan_task->RetryTimes() >= static_cast<uint32_t>(FLAGS_tera_sdk_retry_times)) {
                         itask = task_list.erase(itask);
                         ResultStreamImpl* stream = scan_task->stream;
                         scan_task->response->set_status(kRPCError);
@@ -1364,7 +1364,7 @@ void TableImpl::UpdateTabletMetaList(const TabletMeta& new_meta) {
                 //* |---old---|                                   *
                 //*             |------new------|                 *
                 //*************************************************
-            } else if (new_end.empty() || !old_end.empty() && old_end <= new_end) {
+            } else if (new_end.empty() || (!old_end.empty() && old_end <= new_end)) {
                 //*************************************************
                 //*         |---old---|                           *
                 //*             |------new------|                 *
@@ -1386,7 +1386,7 @@ void TableImpl::UpdateTabletMetaList(const TabletMeta& new_meta) {
                 old_node.meta.mutable_key_range()->set_key_end(new_start);
             }
         } else if (new_end.empty() || old_start < new_end) {
-            if (new_end.empty() || !old_end.empty() && old_end <= new_end) {
+            if (new_end.empty() || (!old_end.empty() && old_end <= new_end)) {
                 //*************************************************
                 //*                |---old---|                    *
                 //*             |------new------|                 *
