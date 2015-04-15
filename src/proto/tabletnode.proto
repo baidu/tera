@@ -41,12 +41,18 @@ message TabletNodeInfo {
     optional uint32 dfs_io_w = 25;
     optional uint32 local_io_r = 26;
     optional uint32 local_io_w = 27;
- 
+
     optional string status_m = 31;
     optional uint32 tablet_onload = 32;
     optional uint32 tablet_onsplit = 33;
- 
+
     repeated ExtraTsInfo extra_info = 40;
+
+    optional uint32 read_pending = 41;
+    optional uint32 write_pending = 42;
+    optional uint32 scan_pending = 43;
+
+    optional uint32 scan_pending = 44;
 }
 
 message LgInheritedLiveFiles {
