@@ -114,7 +114,7 @@ void ShowTableMeta(const TableMeta& meta) {
     const TableSchema& schema = meta.schema();
     ShowTableSchema(schema);
     std::cout << "Snapshot:" << std::endl;
-    for (uint32_t i = 0; i < meta.snapshot_list_size(); ++i) {
+    for (int32_t i = 0; i < meta.snapshot_list_size(); ++i) {
         std::cout << " " << meta.snapshot_list(i) << std::endl;
     }
     std::cout << std::endl;
@@ -866,9 +866,9 @@ bool BuildSchema(TableDescriptor* table_desc, string* schema) {
     }
 
     schema->clear();
-    int lg_num = table_desc->LocalityGroupNum();
-    int cf_num = table_desc->ColumnFamilyNum();
-    for (size_t lg_no = 0; lg_no < lg_num; ++lg_no) {
+    int32_t lg_num = table_desc->LocalityGroupNum();
+    int32_t cf_num = table_desc->ColumnFamilyNum();
+    for (int32_t lg_no = 0; lg_no < lg_num; ++lg_no) {
         const LocalityGroupDescriptor* lg_desc = table_desc->LocalityGroup(lg_no);
         string lg_name = lg_desc->Name();
         if (lg_no > 0) {
@@ -877,7 +877,7 @@ bool BuildSchema(TableDescriptor* table_desc, string* schema) {
         schema->append(lg_name);
         schema->append(":");
         int cf_cnt = 0;
-        for (size_t cf_no = 0; cf_no < cf_num; ++cf_no) {
+        for (int32_t cf_no = 0; cf_no < cf_num; ++cf_no) {
             const ColumnFamilyDescriptor* cf_desc = table_desc->ColumnFamily(cf_no);
             if (cf_desc->LocalityGroup() == lg_name && cf_desc->Name() != "") {
                 if (cf_cnt++ > 0) {

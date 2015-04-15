@@ -332,7 +332,6 @@ bool MergeBoth(Env* env, Comparator* cmp,
 //     log::Writer writer(final_file);
 
     uint64_t last_seq = 0;
-    uint64_t last_log = 0;
     uint64_t last_file_no = 0;
     InternalKeyComparator key_cmp(BytewiseComparator());
     Options options;
@@ -345,12 +344,12 @@ bool MergeBoth(Env* env, Comparator* cmp,
         return false;
     }
 
-    last_log = version_set.LogNumber();
     last_seq = version_set.LastSequence();
     last_file_no = version_set.NewFileNumber();
     if (s.ok()) {
-        fprintf(stderr, "current last seq: %ld, file_num: %ld\n",
-                last_seq, last_file_no);
+        fprintf(stderr, "current last seq: %llu, file_num: %llu\n",
+                static_cast<unsigned long long>(last_seq),
+                static_cast<unsigned long long>(last_file_no));
     }
     if (!BuildVersion(env, &version_set, fn2, &last_seq, &last_file_no,
                       file_num_map)) {
@@ -650,6 +649,7 @@ bool RollbackBackupNotSst(Env* env, const std::string& dir_path) {
                                 dir_path + "/" + org_file);
         }
     }
+    return true;
 }
 
 bool MoveMergedSst(Env* env, const std::string& from_path,

@@ -884,7 +884,7 @@ int32_t ShowTabletList(const TabletMetaList& tablet_list, bool is_server_addr, b
                            "scan", "sspeed", "startkey");
         }
 
-        for (size_t i = 0; i < tablet_list.meta_size(); ++i) {
+        for (int32_t i = 0; i < tablet_list.meta_size(); ++i) {
             const TabletMeta& meta = tablet_list.meta(i);
             row.clear();
             row.push_back(NumberToString(i));
@@ -919,7 +919,7 @@ int32_t ShowTabletList(const TabletMetaList& tablet_list, bool is_server_addr, b
         printer.AddRow(cols,
                        " ", "server_addr", "path", "status",
                        "size", "startkey", "endkey");
-        for (size_t i = 0; i < tablet_list.meta_size(); ++i) {
+        for (int32_t i = 0; i < tablet_list.meta_size(); ++i) {
             const TabletMeta& meta = tablet_list.meta(i);
             row.clear();
             row.push_back(NumberToString(i));
@@ -960,24 +960,24 @@ int32_t ShowAllTables(Client* client, bool is_x, bool show_all, ErrorCode* err) 
         printer.Reset(cols);
         printer.AddRow(cols, " ", "tablename", "status", "size", "tablet", "busy");
     }
-    for (size_t table_no = 0; table_no < table_list.meta_size(); ++table_no) {
+    for (int32_t table_no = 0; table_no < table_list.meta_size(); ++table_no) {
         std::string tablename = table_list.meta(table_no).table_name();
         TableStatus status = table_list.meta(table_no).status();
         int64_t size = 0;
-        int32_t tablet = 0;
-        int32_t busy = 0;
-        int32_t notready = 0;
-        int32_t lread = 0;
-        int32_t read = 0;
-        int32_t rmax = 0;
-        int64_t rspeed = 0;
-        int32_t write = 0;
-        int32_t wmax = 0;
-        int64_t wspeed = 0;
-        int32_t scan = 0;
-        int32_t smax = 0;
-        int64_t sspeed = 0;
-        for (size_t i = 0; i < tablet_list.meta_size(); ++i) {
+        uint32_t tablet = 0;
+        uint32_t busy = 0;
+        uint32_t notready = 0;
+        uint32_t lread = 0;
+        uint32_t read = 0;
+        uint32_t rmax = 0;
+        uint64_t rspeed = 0;
+        uint32_t write = 0;
+        uint32_t wmax = 0;
+        uint64_t wspeed = 0;
+        uint32_t scan = 0;
+        uint32_t smax = 0;
+        uint64_t sspeed = 0;
+        for (int32_t i = 0; i < tablet_list.meta_size(); ++i) {
             if (tablet_list.meta(i).table_name() == tablename) {
                 size += tablet_list.meta(i).table_size();
                 tablet++;

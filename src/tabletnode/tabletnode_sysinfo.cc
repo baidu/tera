@@ -20,6 +20,8 @@ DEFINE_int32(tera_tabletnode_sysinfo_mem_collect_interval, 10, "interval of mem 
 DEFINE_int32(tera_tabletnode_sysinfo_net_collect_interval, 5, "interval of net checking(s)");
 
 namespace leveldb {
+extern tera::Counter rawkey_compare_counter;
+
 extern tera::Counter dfs_read_size_counter;
 extern tera::Counter dfs_write_size_counter;
 extern tera::Counter posix_read_size_counter;

@@ -54,7 +54,7 @@ struct TabletNode {
     // The start time of recent load operation.
     // Used to tell if node load too many tablets within short time.
     // Keep FLAGS_tera_master_max_load_concurrency items at maximum.
-    std::list<uint64_t> m_recent_load_time_list;
+    std::list<int64_t> m_recent_load_time_list;
 
     TabletNode();
     TabletNode(const std::string& addr, const std::string& uuid);

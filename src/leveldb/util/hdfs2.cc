@@ -129,7 +129,6 @@ int32_t H2File::Write(const char* buf, int32_t len) {
 int32_t H2File::Flush() {
   tera::AutoCounter ac(&dfs_flush_hang_counter, "Flush", name_.c_str());
   dfs_flush_counter.Inc();
-  int32_t retval = 0;
   return (*hdfsFlush)((hdfsFS)fs_, (hdfsFile)file_);
 }
 int32_t H2File::Sync() {

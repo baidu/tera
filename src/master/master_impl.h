@@ -113,9 +113,6 @@ public:
                          ShowTabletNodesResponse* response,
                          google::protobuf::Closure* done);
 
-    void MergeTable(const MergeTableRequest* request,
-                    MergeTableResponse* response);
-
     void CmdCtrl(const CmdCtrlRequest* request,
                  CmdCtrlResponse* response);
 
@@ -198,10 +195,6 @@ private:
                           const std::string& server_addr, StatusCode* status);
     void UnloadTabletAsync(std::string table_name, std::string key_start,
                            std::string server_addr, int32_t retry);
-    bool MergeTabletSync(const std::string& tb1_path,
-                         const std::string& tb2_path,
-                         const std::string& merged_path,
-                         StatusCode* status);
 
     void RetryLoadTablet(TabletPtr tablet, int32_t retry_times);
     void RetryUnloadTablet(TabletPtr tablet, int32_t retry_times);

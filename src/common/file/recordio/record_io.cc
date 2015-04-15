@@ -124,6 +124,11 @@ int RecordReader::Next() {
             LOG(ERROR) << "Read data error.";
             return -1;
         }
+    } else {
+        LOG(ERROR) << "m_data_size of current record is invalid: "
+                   << m_data_size << " bigger than "
+                   << (m_file_size - ret);
+        return -1;
     }
 
     return 1;

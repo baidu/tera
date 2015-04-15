@@ -291,8 +291,8 @@ void DBImpl::DeleteObsoleteFiles() {
   // manifest file set, keep latest 3 manifest files for backup
   std::set<std::string> manifest_set;
 
-  Log(options_.info_log, "[%s] try DeleteObsoleteFiles, total live file num: %lld\n",
-      dbname_.c_str(), live.size());
+  Log(options_.info_log, "[%s] try DeleteObsoleteFiles, total live file num: %llu\n",
+      dbname_.c_str(), static_cast<unsigned long long>(live.size()));
 
   std::vector<std::string> filenames;
   mutex_.Unlock();
@@ -333,6 +333,9 @@ void DBImpl::DeleteObsoleteFiles() {
         case kDBLockFile:
         case kInfoLogFile:
           keep = true;
+          break;
+        case kUnknown:
+        default:
           break;
       }
 
@@ -384,10 +387,10 @@ Status DBImpl::Recover(VersionEdit* edit) {
   }
 
   Log(options_.info_log, "[%s] start VersionSet::Recover, last_seq= %llu",
-      dbname_.c_str(), versions_->LastSequence());
+      dbname_.c_str(), static_cast<unsigned long long>(versions_->LastSequence()));
   s = versions_->Recover();
   Log(options_.info_log, "[%s] end VersionSet::Recover last_seq= %llu",
-      dbname_.c_str(), versions_->LastSequence());
+      dbname_.c_str(), static_cast<unsigned long long>(versions_->LastSequence()));
   if (s.ok()) {
     // check loss of sst files (fs exception)
     std::map<uint64_t, int> expected;
@@ -860,10 +863,10 @@ Status DBImpl::BackgroundCompaction() {
     c->edit()->AddFile(c->level() + 1, *f);
     status = versions_->LogAndApply(c->edit(), &mutex_);
     VersionSet::LevelSummaryStorage tmp;
-    Log(options_.info_log, "[%s] Moved #%08d, %08d to level-%d %lld bytes %s: %s\n",
+    Log(options_.info_log, "[%s] Moved #%08u, %08u to level-%d %lld bytes %s: %s\n",
         dbname_.c_str(),
-        f->number >> 32 & 0x7fffffff,  //tablet number
-        f->number,                     //sst number
+        static_cast<uint32_t>(f->number >> 32 & 0x7fffffff),  //tablet number
+        static_cast<uint32_t>(f->number & 0xffffffff),        //sst number
         c->level() + 1,
         static_cast<unsigned long long>(f->file_size),
         status.ToString().c_str(),

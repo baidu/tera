@@ -21,7 +21,8 @@ MemTableOnLevelDB::MemTableOnLevelDB(const InternalKeyComparator& comparator,
                                      size_t block_size)
                                      : MemTable(comparator, compact_strategy_factory) {
     char memdb_name[1024] = { '\0' };
-    snprintf(memdb_name, sizeof(memdb_name), "/%d/%llu", getpid(), uint64_t(this));
+    snprintf(memdb_name, sizeof(memdb_name), "/%d/%llu", getpid(),
+             (unsigned long long)this);
     leveldb::Options opts;
     opts.env = memenv_ = leveldb::NewMemEnv(GetBaseEnv());
     opts.compression = leveldb::kSnappyCompression;

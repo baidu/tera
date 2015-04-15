@@ -185,8 +185,8 @@ class Version::LevelFileNumIterator : public Iterator {
                        const std::string& dbname)
       : icmp_(icmp),
         flist_(flist),
-        index_(flist->size()),
-        dbname_(dbname) {        // Marks as invalid
+        dbname_(dbname),
+        index_(flist->size()) {        // Marks as invalid
   }
   virtual bool Valid() const {
     return index_ < flist_->size();
@@ -553,8 +553,8 @@ uint64_t Version::GetScopeSize(const Slice* smallest_user_key,
             //     << ", small: [" << file->smallest.user_key().ToString()
             //     << "], largest: [" << file->largest.user_key().ToString()
             //     << "], size: " << file->file_size << std::endl;
-            if (BeforeFile(user_cmp, largest_user_key, files[i])
-                || AfterFile(user_cmp, smallest_user_key, files[i])) {
+            if (BeforeFile(user_cmp, largest_user_key, file)
+                || AfterFile(user_cmp, smallest_user_key, file)) {
                 continue;
             }
             total_size += files[i]->file_size;
@@ -632,8 +632,8 @@ void Version::MissFilesInLocal(const Slice* smallest_user_key,
             //     << ", small: [" << file->smallest.user_key().ToString()
             //     << "], largest: [" << file->largest.user_key().ToString()
             //     << "], size: " << file->file_size << std::endl;
-            if (BeforeFile(user_cmp, largest_user_key, files[i])
-                || AfterFile(user_cmp, smallest_user_key, files[i])) {
+            if (BeforeFile(user_cmp, largest_user_key, file)
+                || AfterFile(user_cmp, smallest_user_key, file)) {
                 continue;
             }
             char buf[100] = {'\0'};
@@ -671,8 +671,8 @@ void Version::MissFilesInLocal(const Slice* smallest_user_key,
             //     << ", small: [" << file->smallest.user_key().ToString()
             //     << "], largest: [" << file->largest.user_key().ToString()
             //     << "], size: " << file->file_size << std::endl;
-            if (BeforeFile(user_cmp, largest_user_key, files[i])
-                || AfterFile(user_cmp, smallest_user_key, files[i])) {
+            if (BeforeFile(user_cmp, largest_user_key, file)
+                || AfterFile(user_cmp, smallest_user_key, file)) {
                 continue;
             }
             char buf[100] = {'\0'};
@@ -1002,6 +1002,8 @@ VersionSet::VersionSet(const std::string& dbname,
       options_(options),
       table_cache_(table_cache),
       icmp_(*cmp),
+      db_key_start_(options->key_start, kMaxSequenceNumber, kValueTypeForSeek),
+      db_key_end_(options->key_end, kMaxSequenceNumber, kValueTypeForSeek),
       next_file_number_(2),
       manifest_file_number_(0),  // Filled by Recover()
       force_switch_manifest_(false),
@@ -1012,8 +1014,6 @@ VersionSet::VersionSet(const std::string& dbname,
       descriptor_file_(NULL),
       descriptor_log_(NULL),
       dummy_versions_(this),
-      db_key_start_(options->key_start, kMaxSequenceNumber, kValueTypeForSeek),
-      db_key_end_(options->key_end, kMaxSequenceNumber, kValueTypeForSeek),
       current_(NULL) {
   last_switch_manifest_ = env_->NowMicros();
   AppendVersion(new Version(this));
@@ -1024,10 +1024,10 @@ VersionSet::~VersionSet() {
   for (int level = 0; level < config::kNumLevels; level++) {
     const std::vector<FileMetaData*>& files = current_->files_[level];
     for (size_t i = 0; i < files.size(); i++) {
-      Log(options_->info_log, "[%s] finish : %08d %08d, level: %d, s: %d %s, l: %d %s\n",
+      Log(options_->info_log, "[%s] finish : %08u %08u, level: %d, s: %d %s, l: %d %s\n",
           dbname_.c_str(),
-          (files[i]->number >> 32 & 0x7fffffff),
-          files[i]->number, level,
+          static_cast<uint32_t>(files[i]->number >> 32 & 0x7fffffff),
+          static_cast<uint32_t>(files[i]->number & 0xffffffff), level,
           files[i]->smallest_fake, files[i]->smallest.user_key().ToString().data(),
           files[i]->largest_fake, files[i]->largest.user_key().ToString().data());
     }
@@ -1151,7 +1151,7 @@ Status VersionSet::LogAndApply(VersionEdit* edit, port::Mutex* mu) {
       s = SetCurrentFile(env_, dbname_, manifest_file_number_);
       if (s.ok()) {
           Log(options_->info_log, "[%s] set CURRENT to %llu\n",
-              dbname_.c_str(), manifest_file_number_);
+              dbname_.c_str(), static_cast<unsigned long long>(manifest_file_number_));
       }
       // No need to double-check MANIFEST in case of error since it
       // will be discarded below.
@@ -1180,6 +1180,21 @@ Status VersionSet::LogAndApply(VersionEdit* edit, port::Mutex* mu) {
   }
 
   return s;
+}
+
+static bool IsDbExist(Env* env, const std::string& dbname) {
+    std::vector<std::string> files;
+    env->GetChildren(dbname, &files);
+    for (size_t i = 0; i < files.size(); ++i) {
+      uint64_t number;
+      FileType type;
+      if (ParseFileName(files[i], &number, &type)) {
+        if (type == kDescriptorFile) {
+            return true;
+        }
+      }
+    }
+    return false;
 }
 
 Status VersionSet::ReadCurrentFile(uint64_t tablet, std::string* dscname ) {
@@ -1244,7 +1259,9 @@ Status VersionSet::Recover() {
   Status s;
   size_t parent_size = options_->parent_tablets.size();
   std::string current;
-  if (parent_size  == 0 || env_->FileExists(CurrentFileName(dbname_))) {
+  if (parent_size  == 0 ||
+      env_->FileExists(CurrentFileName(dbname_)) ||
+      IsDbExist(env_, dbname_)) {
     Log(options_->info_log, "[%s] recover old or create new db.", dbname_.c_str());
     dscname.resize(1);
     s = ReadCurrentFile(0, &dscname[0]);
@@ -1252,16 +1269,17 @@ Status VersionSet::Recover() {
       return s;
     }
   } else if (parent_size == 1) {
-    Log(options_->info_log, "[%s] generated by splitting, parent tablet: %d",
-        dbname_.c_str(), options_->parent_tablets[0]);
+    Log(options_->info_log, "[%s] generated by splitting, parent tablet: %llu",
+        dbname_.c_str(), static_cast<unsigned long long>(options_->parent_tablets[0]));
     dscname.resize(1);
     s = ReadCurrentFile(options_->parent_tablets[0], &dscname[0]);
     if (!s.ok()) {
       return s;
     }
   } else if (parent_size == 2) {
-    Log(options_->info_log, "[%s] generated by merging, parent tablet: %d, %d",
-        dbname_.c_str(), options_->parent_tablets[0], options_->parent_tablets[1]);
+    Log(options_->info_log, "[%s] generated by merging, parent tablet: %llu, %llu",
+        dbname_.c_str(), static_cast<unsigned long long>(options_->parent_tablets[0]),
+        static_cast<unsigned long long>(options_->parent_tablets[1]));
     dscname.resize(2);
     // read first tablet CURRENT
     s = ReadCurrentFile(options_->parent_tablets[0], &dscname[0]);
@@ -1396,10 +1414,10 @@ Status VersionSet::Recover() {
   for (int level = 0; level < config::kNumLevels; level++) {
     const std::vector<FileMetaData*>& files = current_->files_[level];
     for (size_t i = 0; i < files.size(); i++) {
-      Log(options_->info_log, "[%s] recover: %08d %08d, level: %d, s: %d %s, l: %d %s\n",
+      Log(options_->info_log, "[%s] recover: %08u %08u, level: %d, s: %d %s, l: %d %s\n",
           dbname_.c_str(),
-          (files[i]->number >> 32 & 0x7fffffff),
-          files[i]->number, level,
+          static_cast<uint32_t>(files[i]->number >> 32 & 0x7fffffff),
+          static_cast<uint32_t>(files[i]->number & 0xffffffff), level,
           files[i]->smallest_fake, files[i]->smallest.user_key().ToString().data(),
           files[i]->largest_fake, files[i]->largest.user_key().ToString().data());
     }

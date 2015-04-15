@@ -1,8 +1,8 @@
 include depends.mk
 
 # OPT ?= -O2 -DNDEBUG       # (A) Production use (optimized mode)
-OPT ?= -g2 -Wall -Wno-sign-compare    # (B) Debug mode, w/ full line-level debugging symbols
-# OPT ?= -O2 -g2 -DNDEBUG # (C) Profiling mode: opt, but w/debugging symbols
+OPT ?= -g2 -Wall -Werror         # (B) Debug mode, w/ full line-level debugging symbols
+# OPT ?= -O2 -g2 -DNDEBUG   # (C) Profiling mode: opt, but w/debugging symbols
 
 CC = cc
 CXX = g++
@@ -14,7 +14,7 @@ INCPATH += -I./src -I./include -I./src/leveldb/include -I./src/leveldb $(DEPS_IN
 LDPATH += -L./src/leveldb $(DEPS_LDPATH)
 CFLAGS += $(OPT) $(INCPATH)
 CXXFLAGS += $(OPT) $(INCPATH)
-LDFLAGS += $(LDPATH) -lleveldb $(DEPS_LDFLAGS) -lpthread -lrt -lz -ldl
+LDFLAGS += -rdynamic $(LDPATH) -lleveldb $(DEPS_LDFLAGS) -lpthread -lrt -lz -ldl
 
 PROTO_FILES := $(wildcard src/proto/*.proto)
 PROTO_OUT_CC := $(PROTO_FILES:.proto=.pb.cc)
@@ -51,10 +51,11 @@ LIBRARY = libtera.a
 .PHONY: all clean cleanall test
 
 all: $(PROGRAM) $(LIBRARY)
-	mkdir -p build/include build/lib build/bin
+	mkdir -p build/include build/lib build/bin build/log
 	cp $(PROGRAM) build/bin
 	cp $(LIBRARY) build/lib
 	cp src/sdk/tera.h build/include
+	cp -r conf build
 	echo 'Done'
 
 test:

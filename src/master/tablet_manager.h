@@ -139,9 +139,6 @@ class Table {
 
 public:
     Table(const std::string& table_name);
-    bool FindMergePair(Tablet** t1, Tablet** t2,
-                       int32_t* merged_num = NULL,
-                       StatusCode* status = NULL);
     bool FindTablet(const std::string& key_start, TabletPtr* tablet);
     void FindTablet(const std::string& server_addr,
                    std::vector<TabletPtr>* tablet_meta_list);
@@ -247,9 +244,6 @@ public:
 
     bool GetMetaTabletAddr(std::string* addr);
 
-    bool TryMergeTablet(const std::string& table_on_merge = "",
-                        StatusCode* status = NULL);
-
     void ClearTableList();
 
     double OfflineTabletRatio();
@@ -278,31 +272,6 @@ private:
     bool DeleteMetaTabletRecord(const TabletMeta& meta,
                                 StatusCode* ret_status = NULL);
 
-    // for merge
-    void MergeTablet();
-    void EnableMergeTabletTimer(int32_t expand_factor = 1);
-    void DisableMergeTabletTimer();
-    void UnloadMergeTabletCallback(Tablet* tb1, Tablet* tb2,
-                                   Table* table, int32_t cur_merged_no,
-                                   int32_t merge_step, int32_t retry,
-                                   UnloadTabletRequest* request,
-                                   UnloadTabletResponse* response,
-                                   bool failed, int error_code);
-    void MergeTabletCallback(Tablet* tb1, Tablet* tb2,
-                             Table* table, std::string merged_path,
-                             int32_t retry,
-                             MergeTabletRequest* request,
-                             MergeTabletResponse* response,
-                             bool failed, int error_code);
-    void UpdateMergeMetaTsCallback(std::string packed_key, int32_t retry,
-                                   WriteTabletRequest* request,
-                                   WriteTabletResponse* response,
-                                   bool failed, int error_code);
-    void MergeRollback(Table* table, Tablet* tb1,
-                       Tablet* tb2, int32_t step);
-    std::string GetMergePath(const std::string& table_name, int32_t no);
-    void MergeMeta(Table* table, Tablet* tb1,
-                   Tablet* tb2, std::string merged_path);
     bool RpcChannelHealth(int32_t err_code);
     void TryMajorCompact(Tablet* tablet);
     void MajorCompactCallback(Tablet* tb, int32_t retry,
@@ -324,12 +293,6 @@ private:
     mutable Mutex m_mutex;
     Counter* m_this_sequence_id;
     MasterImpl* m_master_impl;
-
-    // for merge
-    Mutex m_merge_mutex;
-    ThreadPool* m_thread_pool;
-    std::string m_last_check_table;
-    uint64_t m_merge_tablet_timer_id;
 };
 
 } // namespace master

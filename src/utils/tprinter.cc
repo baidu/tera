@@ -31,12 +31,12 @@ bool TPrinter::AddRow(const std::vector<string>& cols) {
         return false;
     }
     Line line;
-    for (int i = 0; i < cols.size(); ++i) {
+    for (size_t i = 0; i < cols.size(); ++i) {
         string item = cols[i];
         if (item.size() > kMaxColWidth) {
             item = item.substr(0, kMaxColWidth);
         }
-        if (item.size() > _col_width[i]) {
+        if (item.size() > static_cast<uint32_t>(_col_width[i])) {
             _col_width[i] = item.size();
         }
         if (item.size() == 0) {
@@ -49,7 +49,7 @@ bool TPrinter::AddRow(const std::vector<string>& cols) {
 }
 
 bool TPrinter::AddRow(int argc, ...) {
-    if (argc != _cols) {
+    if (static_cast<uint32_t>(argc) != _cols) {
         std::cerr << "arg num error: " << argc << " vs " << _cols << std::endl;
         return false;
     }
@@ -70,7 +70,7 @@ bool TPrinter::AddRow(const std::vector<int64_t>& cols) {
         return false;
     }
     std::vector<string> v;
-    for (int i = 0; i < cols.size(); ++i) {
+    for (size_t i = 0; i < cols.size(); ++i) {
         v.push_back(NumberToString(cols[i]));
     }
     return AddRow(v);
@@ -81,7 +81,7 @@ void TPrinter::Print(bool has_head) {
         return;
     }
     int line_len = 0;
-    for (int i = 0; i < _cols; ++i) {
+    for (size_t i = 0; i < _cols; ++i) {
         line_len += 2 + _col_width[i];
         std::cout << "  " << std::setfill(' ')
             << std::setw(_col_width[i])
@@ -96,8 +96,8 @@ void TPrinter::Print(bool has_head) {
         std::cout << std::endl;
     }
 
-    for (int i = 1; i < _table.size(); ++i) {
-        for (int j = 0; j < _cols; ++j) {
+    for (size_t i = 1; i < _table.size(); ++i) {
+        for (size_t j = 0; j < _cols; ++j) {
             std::cout << "  " << std::setfill(' ')
                 << std::setw(_col_width[j])
                 << std::setiosflags(std::ios::left)
@@ -113,7 +113,7 @@ string TPrinter::ToString(bool has_head) {
         return "";
     }
     int line_len = 0;
-    for (int i = 0; i < _cols; ++i) {
+    for (size_t i = 0; i < _cols; ++i) {
         line_len += 2 + _col_width[i];
         ostr << "  " << std::setfill(' ')
             << std::setw(_col_width[i])
@@ -128,8 +128,8 @@ string TPrinter::ToString(bool has_head) {
         ostr << std::endl;
     }
 
-    for (int i = 1; i < _table.size(); ++i) {
-        for (int j = 0; j < _cols; ++j) {
+    for (size_t i = 1; i < _table.size(); ++i) {
+        for (size_t j = 0; j < _cols; ++j) {
             ostr << "  " << std::setfill(' ')
                 << std::setw(_col_width[j])
                 << std::setiosflags(std::ios::left)

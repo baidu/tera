@@ -49,7 +49,7 @@ bool RpcSchedule::DequeueRpc(RpcTask** rpc) {
 
     ScheduleEntity* entity = (ScheduleEntity*)it->second;
     TaskQueue* task_queue = (TaskQueue*)entity->user_ptr;
-    CHECK_GT(task_queue->size(), 0);
+    CHECK_GT(task_queue->size(), 0U);
 
     *rpc = task_queue->front();
     task_queue->pop();
