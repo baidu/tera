@@ -6,15 +6,14 @@
 
 #include "tabletnode_sysinfo.h"
 
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
 #include <sys/time.h>
 #include <unistd.h>
 
+#include <cstdlib>
 #include <iomanip>
 #include <iostream>
 #include <sstream>
+#include <string>
 
 #include "common/base/string_number.h"
 #include "proto/proto_helper.h"
@@ -262,13 +261,12 @@ void TabletNodeSysInfo::CollectTabletNodeInfo(TabletManager* tablet_manager,
 
 // return the number of ticks(jiffies) that this process
 // has been scheduled in user and kernel mode.
-static long long process_cpu_tick() {
+static long long ProcessCpuTick() {
     const int PATH_MAX_LEN = 64;
     char path[PATH_MAX_LEN];
     sprintf(path, "/proc/%d/stat", getpid());
     FILE *fp = fopen(path, "r");
     if (fp == NULL) {
-        LOG(ERROR) << "[HardWare System Info] open " << path << " failed.";
         return 0;
     }
     long long utime, stime;
@@ -279,13 +277,12 @@ static long long process_cpu_tick() {
 }
 
 // return number of cpu(cores)
-static int get_cpu_count() {
+static int GetCpuCount() {
 #ifdef _SC_NPROCESSORS_ONLN
     return sysconf(_SC_NPROCESSORS_ONLN);
 #endif
     FILE *fp = fopen("/proc/stat", "r");
     if (fp == NULL) {
-        // LOG
         return 1;
     }
     const int LINE_MAX_LEN = 256; // enough in here
@@ -319,15 +316,15 @@ static int get_cpu_count() {
 //   e.g. this function would return 19.12613, 42.0 or other number.
 //
 // NOTE: the first time call this function would get a "wrong" %CPU.
-static float get_cpu_usage(int is_irix_on) {
+static float GetCpuUsage(int is_irix_on) {
 #ifndef _SC_CLK_TCK
     return 0.0f; // system is too old, even older than POSIX.1(1995)
 #endif
     static int cpu_count = 1; // assume cpu count is not variable when process is running
-    static unsigned long Hertz = 0;
-    if (Hertz == 0) {
-        Hertz = sysconf(_SC_CLK_TCK);
-        cpu_count = get_cpu_count();
+    static unsigned long hertz = 0;
+    if (hertz == 0) {
+        hertz = sysconf(_SC_CLK_TCK);
+        cpu_count = GetCpuCount();
     }
 
     static struct timeval oldtimev;
@@ -340,9 +337,9 @@ static float get_cpu_usage(int is_irix_on) {
 
     float frame_etscale;
     if (is_irix_on) {
-        frame_etscale = 100.0f / ((float)Hertz * et);
+        frame_etscale = 100.0f / ((float)hertz * et);
     } else {
-        frame_etscale = 100.0f / ((float)Hertz * et * cpu_count);
+        frame_etscale = 100.0f / ((float)hertz * et * cpu_count);
     }
 
     static unsigned long oldtick;
@@ -415,7 +412,7 @@ void TabletNodeSysInfo::CollectHardwareInfo() {
     interval = cur_ts - m_cpu_check_ts;
     if (interval / 1000000 > FLAGS_tera_tabletnode_sysinfo_cpu_collect_interval) {
         m_cpu_check_ts = cur_ts;
-        float cpu_usage = get_cpu_usage(0);
+        float cpu_usage = GetCpuUsage(0);
         m_info.set_cpu_usage(cpu_usage);
         VLOG(15) << "[HardWare System Info] %CPU: "<< cpu_usage;
         return;
