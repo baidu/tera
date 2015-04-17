@@ -344,7 +344,7 @@ static float GetCpuUsage(int is_irix_on) {
 
     static unsigned long oldtick;
     unsigned long newtick;
-    newtick = process_cpu_tick();
+    newtick = ProcessCpuTick();
     float u = (newtick - (float)oldtick) * frame_etscale;
     oldtick = newtick;
 
