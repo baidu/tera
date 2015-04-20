@@ -6,9 +6,14 @@
 
 #include "tabletnode_sysinfo.h"
 
+#include <sys/time.h>
+#include <unistd.h>
+
+#include <cstdlib>
 #include <iomanip>
 #include <iostream>
 #include <sstream>
+#include <string>
 
 #include "common/base/string_number.h"
 #include "proto/proto_helper.h"
@@ -18,6 +23,7 @@
 
 DEFINE_int32(tera_tabletnode_sysinfo_mem_collect_interval, 10, "interval of mem checking(s)");
 DEFINE_int32(tera_tabletnode_sysinfo_net_collect_interval, 5, "interval of net checking(s)");
+DEFINE_int32(tera_tabletnode_sysinfo_cpu_collect_interval, 5, "interval of cpu checking(s)");
 
 namespace leveldb {
 extern tera::Counter rawkey_compare_counter;
@@ -93,6 +99,7 @@ TabletNodeSysInfo::TabletNodeSysInfo()
       m_io_check_ts(0),
       m_net_tx_total(0),
       m_net_rx_total(0),
+      m_cpu_check_ts(0),
       m_tablet_check_ts(0) {
 }
 
@@ -102,6 +109,7 @@ TabletNodeSysInfo::TabletNodeSysInfo(const TabletNodeInfo& info)
       m_net_check_ts(0),
       m_net_tx_total(0),
       m_net_rx_total(0),
+      m_cpu_check_ts(0),
       m_tablet_check_ts(0) {
 }
 
@@ -210,6 +218,10 @@ void TabletNodeSysInfo::CollectTabletNodeInfo(TabletManager* tablet_manager,
     tmp = leveldb::posix_write_size_counter.Clear() * 1000000 / interval;
     m_info.set_local_io_w(tmp);
 
+    m_info.set_read_pending(read_pending_counter.Get());
+    m_info.set_write_pending(write_pending_counter.Get());
+    m_info.set_scan_pending(scan_pending_counter.Get());
+
     // collect extra infos
     m_info.clear_extra_info();
     ExtraTsInfo* einfo = m_info.add_extra_info();
@@ -245,6 +257,98 @@ void TabletNodeSysInfo::CollectTabletNodeInfo(TabletManager* tablet_manager,
     tmp = compact_pending_counter.Get();
     einfo->set_name("compact_pending");
     einfo->set_value(tmp);
+}
+
+// return the number of ticks(jiffies) that this process
+// has been scheduled in user and kernel mode.
+static long long ProcessCpuTick() {
+    const int PATH_MAX_LEN = 64;
+    char path[PATH_MAX_LEN];
+    sprintf(path, "/proc/%d/stat", getpid());
+    FILE *fp = fopen(path, "r");
+    if (fp == NULL) {
+        return 0;
+    }
+    long long utime, stime;
+    fscanf(fp, "%*s %*s %*s %*s %*s %*s %*s %*s %*s %*s %*s %*s %*s %lld %lld",
+        &utime, &stime);
+    fclose(fp);
+    return utime + stime;
+}
+
+// return number of cpu(cores)
+static int GetCpuCount() {
+#ifdef _SC_NPROCESSORS_ONLN
+    return sysconf(_SC_NPROCESSORS_ONLN);
+#endif
+    FILE *fp = fopen("/proc/stat", "r");
+    if (fp == NULL) {
+        return 1;
+    }
+    const int LINE_MAX_LEN = 256; // enough in here
+    char *aline = (char*)malloc(LINE_MAX_LEN);
+    if (aline == NULL) {
+        LOG(ERROR) << "[HardWare System Info] malloc failed.";
+        return 1;
+    }
+    const int HEADER_MAX_LEN = 10;
+    char header[HEADER_MAX_LEN];
+    int i=0;
+    size_t len=0;
+    getline(&aline, &len, fp); // drop the first line
+    while (getline(&aline, &len, fp)) {
+        i++;
+        sscanf(aline, "%s", header);
+        if (!strncmp(header, "intr", HEADER_MAX_LEN)) {
+            break;
+        }
+    }
+    fclose(fp);
+    free(aline);
+    return i-1 > 0 ? i-1 : 1;
+}
+
+// irix_on == 1 --> irix mode on
+// irix_on == 0 --> irix mode off
+//
+// return this process's the percentage of CPU usage ( %CPU ).
+// the number of digits after decimal point is UNCERTAIN.
+//   e.g. this function would return 19.12613, 42.0 or other number.
+//
+// NOTE: the first time call this function would get a "wrong" %CPU.
+static float GetCpuUsage(int is_irix_on) {
+    static int cpu_count = 1; // assume cpu count is not variable when process is running
+    static unsigned long hertz = 0;
+    if (hertz == 0) {
+        hertz = sysconf(_SC_CLK_TCK);
+        cpu_count = GetCpuCount();
+    }
+
+    static struct timeval oldtimev;
+    struct timeval timev;
+    gettimeofday(&timev, NULL);
+    float et = (timev.tv_sec - oldtimev.tv_sec)
+        + (float)(timev.tv_usec - oldtimev.tv_usec) / 1000000.0;
+    oldtimev.tv_sec = timev.tv_sec;
+    oldtimev.tv_usec = timev.tv_usec;
+
+    float frame_etscale;
+    if (is_irix_on) {
+        frame_etscale = 100.0f / ((float)hertz * et);
+    } else {
+        frame_etscale = 100.0f / ((float)hertz * et * cpu_count);
+    }
+
+    static unsigned long oldtick;
+    unsigned long newtick;
+    newtick = ProcessCpuTick();
+    float u = (newtick - (float)oldtick) * frame_etscale;
+    oldtick = newtick;
+
+    if (u > 99.9f) {
+        u = 99.9;
+    }
+    return u;
 }
 
 void TabletNodeSysInfo::CollectHardwareInfo() {
@@ -301,6 +405,15 @@ void TabletNodeSysInfo::CollectHardwareInfo() {
         VLOG(15) << "[HardWare System Info] Network RX/TX: " << net_rx << " / " << net_tx;
         return;
     }
+
+    interval = cur_ts - m_cpu_check_ts;
+    if (interval / 1000000 > FLAGS_tera_tabletnode_sysinfo_cpu_collect_interval) {
+        m_cpu_check_ts = cur_ts;
+        float cpu_usage = GetCpuUsage(0);
+        m_info.set_cpu_usage(cpu_usage);
+        VLOG(15) << "[HardWare System Info] %CPU: "<< cpu_usage;
+        return;
+    }
 }
 
 void TabletNodeSysInfo::GetTabletNodeInfo(TabletNodeInfo* info) {
@@ -331,14 +444,21 @@ void TabletNodeSysInfo::DumpLog() {
         << " wspeed " << utils::ConvertByteToString(m_info.write_size())
         << " scan " << m_info.scan_rows()
         << " sspeed " << utils::ConvertByteToString(m_info.scan_size())
-        << " snappy " << snappy_ratio;
+        << " snappy " << snappy_ratio
+        << " rawcomp " << leveldb::rawkey_compare_counter.Clear();
 
-    // net and io info
-    LOG(INFO) << "[IO]"
+    // hardware info
+    LOG(INFO) << "[HardWare Info] "
+        << " mem_used " << m_info.mem_used() << " "
+        << utils::ConvertByteToString(m_info.mem_used())
         << " net_tx " << m_info.net_tx() << " "
         << utils::ConvertByteToString(m_info.net_tx())
         << " net_rx " << m_info.net_rx() << " "
         << utils::ConvertByteToString(m_info.net_rx())
+        << " cpu_usage " << m_info.cpu_usage() << "%";
+
+    // net and io info
+    LOG(INFO) << "[IO]"
         << " dfs_r " << m_info.dfs_io_r() << " "
         << utils::ConvertByteToString(m_info.dfs_io_r())
         << " dfs_w " << m_info.dfs_io_w() << " "

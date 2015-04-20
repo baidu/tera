@@ -55,6 +55,7 @@ private:
     int64_t m_io_check_ts;
     int64_t m_net_tx_total;
     int64_t m_net_rx_total;
+    int64_t m_cpu_check_ts;
 
     int64_t m_tablet_check_ts;
     mutable Mutex m_mutex;
