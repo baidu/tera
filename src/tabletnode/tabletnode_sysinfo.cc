@@ -317,9 +317,6 @@ static int GetCpuCount() {
 //
 // NOTE: the first time call this function would get a "wrong" %CPU.
 static float GetCpuUsage(int is_irix_on) {
-#ifndef _SC_CLK_TCK
-    return 0.0f; // system is too old, even older than POSIX.1(1995)
-#endif
     static int cpu_count = 1; // assume cpu count is not variable when process is running
     static unsigned long hertz = 0;
     if (hertz == 0) {
@@ -450,12 +447,18 @@ void TabletNodeSysInfo::DumpLog() {
         << " snappy " << snappy_ratio
         << " rawcomp " << leveldb::rawkey_compare_counter.Clear();
 
-    // net and io info
-    LOG(INFO) << "[IO]"
+    // hardware info
+    LOG(INFO) << "[HardWare Info] "
+        << " mem_used " << m_info.mem_used() << " "
+        << utils::ConvertByteToString(m_info.mem_used())
         << " net_tx " << m_info.net_tx() << " "
         << utils::ConvertByteToString(m_info.net_tx())
         << " net_rx " << m_info.net_rx() << " "
         << utils::ConvertByteToString(m_info.net_rx())
+        << " cpu_usage " << m_info.cpu_usage() << "%";
+
+    // net and io info
+    LOG(INFO) << "[IO]"
         << " dfs_r " << m_info.dfs_io_r() << " "
         << utils::ConvertByteToString(m_info.dfs_io_r())
         << " dfs_w " << m_info.dfs_io_w() << " "
