@@ -307,7 +307,8 @@ void MasterImpl::RestoreUserTablet(const std::vector<TabletMeta>& report_meta_li
             UnloadClosure* done =
                 NewClosure(this, &MasterImpl::UnloadTabletCallback,
                            unknown_tablet, FLAGS_tera_master_impl_retry_times);
-            UnloadTabletAsync(unknown_tablet, done);
+            //UnloadTabletAsync(unknown_tablet, done);
+            TryUnloadTablet(unknown_tablet, done);
         } else {
             tablet->SetStatus(kTableReady);
             tablet->SetSize(size);
@@ -608,7 +609,8 @@ void MasterImpl::DisableTable(const DisableTableRequest* request,
             UnloadClosure* done =
                 NewClosure(this, &MasterImpl::UnloadTabletCallback, tablet,
                            FLAGS_tera_master_impl_retry_times);
-            UnloadTabletAsync(tablet, done);
+            TryUnloadTablet(tablet, done);
+            //UnloadTabletAsync(tablet, done);
         } else if (tablet->SetStatusIf(kTabletDisable, kTableOffLine, kTableDisable)) {
             WriteClosure* closure =
                 NewClosure(this, &MasterImpl::UpdateTabletRecordCallback, tablet,
@@ -1245,6 +1247,8 @@ void MasterImpl::TabletNodeLoadBalance(const std::string& tabletnode_addr,
         if (tablet->GetSchema().has_merge_size() && tablet->GetSchema().merge_size() > 0) {
             merge_size = tablet->GetSchema().merge_size();
         }
+        LOG(INFO) << "split_size: " << split_size
+            << "merge_size: " << merge_size;
         if (tablet->GetDataSize() < 0) {
             // tablet size is error, skip it
             continue;
@@ -1253,7 +1257,7 @@ void MasterImpl::TabletNodeLoadBalance(const std::string& tabletnode_addr,
             any_tablet_split = true;
             continue;
         } else if (tablet->GetDataSize() < (merge_size << 20)) {
-            TryMergeTablet(tablet);
+            // TryMergeTablet(tablet);
             continue;
         }
         if (tablet->GetStatus() == kTableReady) {
@@ -1476,7 +1480,8 @@ void MasterImpl::TabletNodeRecoveryCallback(std::string addr,
             UnloadClosure* done =
                 NewClosure(this, &MasterImpl::UnloadTabletCallback, unload_tablet,
                            FLAGS_tera_master_impl_retry_times);
-            UnloadTabletAsync(unload_tablet, done);
+            //UnloadTabletAsync(unload_tablet, done);
+            TryUnloadTablet(unload_tablet, done);
         } else if (tablet->SetStatusIf(kTableReady, kTabletPending)
             || tablet->SetStatusIf(kTableReady, kTableOffLine)) {
             tablet->SetSize(meta.table_size());
@@ -1943,7 +1948,8 @@ void MasterImpl::LoadTabletCallback(TabletPtr tablet, int32_t retry,
             ResumeMetaOperation();
             return;
         }
-        ProcessReadyTablet(tablet);
+        // TODO ???
+        // ProcessReadyTablet(tablet);
 
         // load next
         node->FinishLoad(tablet);
@@ -1979,7 +1985,8 @@ void MasterImpl::LoadTabletCallback(TabletPtr tablet, int32_t retry,
             UnloadClosure* done =
                 NewClosure(this, &MasterImpl::UnloadTabletCallback, tablet,
                            FLAGS_tera_master_impl_retry_times);
-            UnloadTabletAsync(tablet, done);
+            //UnloadTabletAsync(tablet, done);
+            TryUnloadTablet(tablet, done);
             return;
         }
         if (retry > FLAGS_tera_master_impl_retry_times && retry % 10 == 0) {
@@ -1990,7 +1997,8 @@ void MasterImpl::LoadTabletCallback(TabletPtr tablet, int32_t retry,
         UnloadClosure* done =
             NewClosure(this, &MasterImpl::UnloadTabletCallback, tablet,
                        FLAGS_tera_master_impl_retry_times);
-        UnloadTabletAsync(tablet, done);
+        TryUnloadTablet(tablet, done);
+        //UnloadTabletAsync(tablet, done);
         return;
     }
 
@@ -2048,6 +2056,7 @@ void MasterImpl::UnloadTabletCallback(TabletPtr tablet, int32_t retry,
                                       UnloadTabletRequest* request,
                                       UnloadTabletResponse* response,
                                       bool failed, int error_code) {
+    LOG(INFO) << "enter callback of " << tablet->GetPath();
     CHECK(tablet->GetStatus() == kTableUnLoading
           || tablet->GetStatus() == kTableOnLoad
           || tablet->GetStatus() == kTableOnSplit);
@@ -2089,11 +2098,25 @@ void MasterImpl::UnloadTabletCallback(TabletPtr tablet, int32_t retry,
 
     // success
     if (!failed && (status == kTabletNodeOk || status == kKeyNotInRange)) {
-        LOG(INFO) << "unload tablet success, " << tablet;
+        LOG(INFO) << "unload tablet success, " << tablet << "at: " << server_addr;
+
+        // unload next
+        node->FinishUnload(tablet);
+        TabletPtr next_tablet;
+        LOG(INFO) << "enter UnloadNextWaitTablet";
+        while (node->UnloadNextWaitTablet(&next_tablet)) {
+            UnloadClosure* done =
+                NewClosure(this, &MasterImpl::UnloadTabletCallback, next_tablet,
+                           FLAGS_tera_master_impl_retry_times);
+            UnloadTabletAsync(next_tablet, done);
+            //node->FinishUnload(next_tablet);// TODO need?
+        }
+        LOG(INFO) << "leave UnloadNextWaitTablet";
+
         if (tablet->SetStatusIf(kTableOffLine, kTableUnLoading)) {
             ProcessOffLineTablet(tablet);
             // unload success, try load
-            TryLoadTablet(tablet);
+            // TryLoadTablet(tablet);
         } else if (tablet->SetStatusIf(kTableOffLine, kTableOnLoad)) {
             ProcessOffLineTablet(tablet);
             // load fail but unload success, try reload
@@ -2139,6 +2162,18 @@ void MasterImpl::UnloadTabletCallback(TabletPtr tablet, int32_t retry,
         }
         return;
     }
+
+    LOG(INFO) << "enter UnloadNextWaitTablet2";
+    // unload next
+    TabletPtr next_tablet;
+    while (node->UnloadNextWaitTablet(&next_tablet)) {
+        UnloadClosure* done =
+            NewClosure(this, &MasterImpl::UnloadTabletCallback, next_tablet,
+                       FLAGS_tera_master_impl_retry_times);
+        UnloadTabletAsync(next_tablet, done);
+        //node->FinishUnload(next_tablet);// TODO need?
+    }
+    LOG(INFO) << "leave UnloadNextWaitTablet2";
 
     // fail
     if (failed) {
@@ -2784,7 +2819,8 @@ void MasterImpl::SplitTabletCallback(TabletPtr tablet,
         UnloadClosure* done =
             NewClosure(this, &MasterImpl::UnloadTabletCallback, tablet,
                        FLAGS_tera_master_impl_retry_times);
-        UnloadTabletAsync(tablet, done);
+        TryUnloadTablet(tablet, done);
+        //UnloadTabletAsync(tablet, done);
         return;
     }
 
@@ -2831,6 +2867,29 @@ void MasterImpl::SplitTabletCallback(TabletPtr tablet,
         ScanMetaTableAsync(tablet->GetTableName(), tablet->GetKeyStart(),
                            tablet->GetKeyEnd(), done);
     }
+}
+
+void MasterImpl::TryUnloadTablet(TabletPtr tablet, UnloadClosure* done){
+    if (!tablet->IsBound()) {
+        return;
+    }
+    std::string server_addr = tablet->GetServerAddr();
+    LOG(INFO) << "TryUnload: " << tablet->GetPath() << "at: " << server_addr;
+    TabletNodePtr node;
+    if (server_addr.empty()
+        || !m_tabletnode_manager->FindTabletNode(server_addr, &node)) {
+        LOG(ERROR) << "[unload] invalid tablet to unload";
+        return;
+    }
+    if (!node->TryUnload(tablet)) {
+        LOG(INFO) << "[unload] delay unload table " << tablet->GetPath()
+            << ", too many tablets are unloading on server: "
+            << server_addr;
+        return;
+    }
+    UnloadTabletAsync(tablet, done);
+    LOG(INFO) << "[unload] request has sent : " << tablet->GetPath()
+        << ", on server : " << node->GetAddr();
 }
 
 void MasterImpl::TryLoadTablet(TabletPtr tablet, std::string server_addr) {
@@ -3008,7 +3067,8 @@ void MasterImpl::RetryUnloadTablet(TabletPtr tablet, int32_t retry_times) {
 
     UnloadClosure* done =
         NewClosure(this, &MasterImpl::UnloadTabletCallback, tablet, retry_times);
-    UnloadTabletAsync(tablet, done);
+    TryUnloadTablet(tablet, done);
+    //UnloadTabletAsync(tablet, done);
 }
 
 bool MasterImpl::TrySplitTablet(TabletPtr tablet) {
@@ -3078,6 +3138,8 @@ void MasterImpl::MergeTabletAsync(TabletPtr tablet_p1, TabletPtr tablet_p2) {
             NewClosure(this, &MasterImpl::MergeTabletUnloadCallback, tablet_p1, tablet_p2, mu);
         UnloadClosure* done2 =
             NewClosure(this, &MasterImpl::MergeTabletUnloadCallback, tablet_p2, tablet_p1, mu);
+        //TryUnloadTablet(tablet_p1, done1);
+        //TryUnloadTablet(tablet_p2, done2);
         UnloadTabletAsync(tablet_p1, done1);
         UnloadTabletAsync(tablet_p2, done2);
     } else {
@@ -4114,7 +4176,8 @@ void MasterImpl::TryMoveTablet(TabletPtr tablet, const std::string& server_addr)
         UnloadClosure* done =
             NewClosure(this, &MasterImpl::UnloadTabletCallback, tablet,
                        FLAGS_tera_master_impl_retry_times);
-        UnloadTabletAsync(tablet, done);
+        TryUnloadTablet(tablet, done);
+        //UnloadTabletAsync(tablet, done);
     }
 }
 
@@ -4138,7 +4201,8 @@ void MasterImpl::ProcessReadyTablet(TabletPtr tablet) {
         UnloadClosure* done =
             NewClosure(this, &MasterImpl::UnloadTabletCallback, tablet,
                        FLAGS_tera_master_impl_retry_times);
-        UnloadTabletAsync(tablet, done);
+        TryUnloadTablet(tablet, done);
+        //UnloadTabletAsync(tablet, done);
     }
 }
 
