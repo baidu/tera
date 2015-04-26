@@ -126,7 +126,6 @@ public:
     void DisableQueryTabletNodeTimer();
 
     bool GetMetaTabletAddr(std::string* addr);
-    void TryLoadTablet(TabletPtr tablet, std::string addr = "");
 
 private:
     typedef Closure<void, SnapshotRequest*, SnapshotResponse*, bool, int> SnapshotClosure;
@@ -198,7 +197,9 @@ private:
 
     void RetryLoadTablet(TabletPtr tablet, int32_t retry_times);
     void RetryUnloadTablet(TabletPtr tablet, int32_t retry_times);
+    void TryLoadTablet(TabletPtr tablet, std::string addr = "");
     bool TrySplitTablet(TabletPtr tablet);
+    void TryUnloadTablet(TabletPtr tablet, UnloadClosure* done);
     bool TryMergeTablet(TabletPtr tablet);
     void TryMoveTablet(TabletPtr tablet, const std::string& server_addr = "");
 
