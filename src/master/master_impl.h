@@ -200,6 +200,7 @@ private:
     void TryLoadTablet(TabletPtr tablet, std::string addr = "");
     bool TrySplitTablet(TabletPtr tablet);
     void TryUnloadTablet(TabletPtr tablet, UnloadClosure* done);
+    void TryUnload4MergeTablet(TabletPtr tablet, UnloadClosure* done);
     bool TryMergeTablet(TabletPtr tablet);
     void TryMoveTablet(TabletPtr tablet, const std::string& server_addr = "");
 
@@ -299,7 +300,7 @@ private:
                              SplitTabletResponse* response, bool failed,
                              int error_code);
 
-    void MergeTabletAsync(TabletPtr tablet_p1, TabletPtr tablet_p2);
+    void MergeTabletAsync(TabletPtr tablet_p1, TabletPtr tablet_p2, Mutex *mu);
     void MergeTabletAsyncPhase2(TabletPtr tablet_p1, TabletPtr tablet_p2);
     void MergeTabletUnloadCallback(TabletPtr tablet, TabletPtr tablet2, Mutex* mutex,
                                            UnloadTabletRequest* request,
@@ -491,6 +492,9 @@ private:
     std::set<std::string> m_gc_tabletnodes;
     int64_t m_gc_timer_id;
     bool m_gc_query_enable;
+
+    std::map<TabletPtr, TabletPtr> m_unload4merge_pair;
+    std::map<std::pair<TabletPtr, TabletPtr>, Mutex*> m_unload4merge_mutex;
 };
 
 } // namespace master
