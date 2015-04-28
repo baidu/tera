@@ -1212,22 +1212,6 @@ void MasterImpl::LoadBalance() {
 
     m_load_balance_timer_id = kInvalidTimerId;
     EnableLoadBalanceTimer();
-
-    /* (jinxiao)
-    // try unload
-    std::vector<TabletNodePtr>::iterator node_it = all_node_list.begin();
-    for (; node_it != all_node_list.end(); ++node_it) {
-        TabletPtr next_tablet;
-        LOG(INFO) << "[LoadBalance] enter UnloadNextWaitTablet";
-        while ((*node_it)->UnloadNextWaitTablet(&next_tablet)) {
-            UnloadClosure* done =
-                NewClosure(this, &MasterImpl::UnloadTabletCallback, next_tablet,
-                           FLAGS_tera_master_impl_retry_times);
-            UnloadTabletAsync(next_tablet, done);
-        }
-        LOG(INFO) << "[LoadBalance] leave UnloadNextWaitTablet";
-    }  
-    */
 }
 
 void MasterImpl::TabletNodeLoadBalance(const std::string& tabletnode_addr,
@@ -3162,8 +3146,6 @@ void MasterImpl::MergeTabletAsync(TabletPtr tablet_p1, TabletPtr tablet_p2, Mute
             NewClosure(this, &MasterImpl::MergeTabletUnloadCallback, tablet_p2, tablet_p1, mu);
         TryUnload4MergeTablet(tablet_p1, done1);
         TryUnload4MergeTablet(tablet_p2, done2);
-        //UnloadTabletAsync(tablet_p1, done1);
-        //UnloadTabletAsync(tablet_p2, done2);
     } else {
         LOG(WARNING) << "[merge] tablet not ready, merge failed and rollback.";
         tablet_p1->SetStatusIf(kTableReady, kTableUnLoading);
