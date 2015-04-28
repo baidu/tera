@@ -76,6 +76,7 @@ struct TabletNode {
     //std::list<TabletPtr> m_wait_unload_list;
     Spatula m_load_spatula;
     Spatula m_unload_spatula;
+    Spatula m_unload4merge_spatula;
     Spatula m_split_spatula;
 
     // The start time of recent load operation.
@@ -113,6 +114,11 @@ struct TabletNode {
     void BeginUnload();
     bool FinishUnload(TabletPtr tablet);
     bool UnloadNextWaitTablet(TabletPtr* tablet);
+
+    bool TryUnload4Merge(TabletPtr tablet);
+    void BeginUnload4Merge();
+    bool FinishUnload4Merge(TabletPtr tablet);
+    bool TabletNode::Unload4MergeNextWaitTablet(TabletPtr* tablet);
 
     NodeState GetState();
     bool SetState(NodeState new_state, NodeState* old_state);
