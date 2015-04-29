@@ -30,9 +30,8 @@ Spatula::Spatula() :
 
 Spatula::~Spatula() {
     if (!m_wait_list.empty()) {
-        LOG(INFO) << "~spatula";
         Print();
-        LOG(FATAL) << "fatal";
+        LOG(FATAL) << "destruct a non empty spatula!";
     }
 }
 
@@ -86,16 +85,14 @@ uint32_t Spatula::PushCount() {
 
 TabletNode::TabletNode() : m_state(kOffLine),
     m_report_status(kTabletNodeInit), m_data_size(0), m_load(0),
-    m_update_time(0), m_query_fail_count(0), m_plan_move_in_count(0),
-    m_load_spatula(), m_unload_spatula(), m_unload4merge_spatula(), m_split_spatula() {
+    m_update_time(0), m_query_fail_count(0), m_plan_move_in_count(0) {
     m_info.set_addr("");
 }
 
 TabletNode::TabletNode(const std::string& addr, const std::string& uuid)
     : m_addr(addr), m_uuid(uuid), m_state(kOffLine),
       m_report_status(kTabletNodeInit), m_data_size(0), m_load(0),
-      m_update_time(0), m_query_fail_count(0), m_plan_move_in_count(0),
-      m_load_spatula(), m_unload_spatula(), m_unload4merge_spatula(), m_split_spatula() {
+      m_update_time(0), m_query_fail_count(0), m_plan_move_in_count(0) {
     m_info.set_addr(addr);
 }
 

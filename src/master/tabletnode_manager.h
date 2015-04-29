@@ -36,12 +36,12 @@ public:
     ~Spatula();
     bool IsWaitListEmpty();
     void Push(TabletPtr tablet);
-    TabletPtr Spatula::Pop();
-    uint32_t Spatula::GetDoingCount() const;
-    void Spatula::DoingCountPlusOne();
-    void Spatula::DoingCountMinusOne();
+    TabletPtr Pop();
+    uint32_t GetDoingCount() const;
+    void DoingCountPlusOne();
+    void DoingCountMinusOne();
     // print all item in wait list, for debug
-    void Spatula::Print();
+    void Print();
     uint32_t PushCount();
     uint32_t PopCount();
 
@@ -118,7 +118,7 @@ struct TabletNode {
     bool TryUnload4Merge(TabletPtr tablet);
     void BeginUnload4Merge();
     bool FinishUnload4Merge(TabletPtr tablet);
-    bool TabletNode::Unload4MergeNextWaitTablet(TabletPtr* tablet);
+    bool Unload4MergeNextWaitTablet(TabletPtr* tablet);
 
     NodeState GetState();
     bool SetState(NodeState new_state, NodeState* old_state);
