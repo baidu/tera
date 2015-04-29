@@ -1597,9 +1597,8 @@ int32_t CompactOp(int32_t argc, char** argv) {
     request.set_tablet_name(argv[2]);
     request.mutable_key_range()->set_key_start(argv[3]);
     request.mutable_key_range()->set_key_end(argv[4]);
-    tabletnode::TabletNodeClient client(0, 0, 1); // do not retry
+    tabletnode::TabletNodeClient client(argv[5]); // do not retry
 
-    client.ResetTabletNodeClient(argv[5]);
     if (!client.CompactTablet(&request, &response)) {
         std::cerr << "rpc fail to connect [" << client.GetConnectAddr()
             << "] to compact table" << std::endl;
@@ -1680,8 +1679,7 @@ int32_t Meta2Op(Client *client, int32_t argc, char** argv) {
     request.set_table_name(FLAGS_tera_master_meta_table_name);
     request.set_start("");
     request.set_end("");
-    tera::tabletnode::TabletNodeClient meta_node_client;
-    meta_node_client.ResetTabletNodeClient(meta_tablet_addr);
+    tera::tabletnode::TabletNodeClient meta_node_client(meta_tablet_addr);
     while (meta_node_client.ScanTablet(&request, &response)) {
         if (response.status() != tera::kTabletNodeOk) {
             std::cerr << "fail to load meta table: "
