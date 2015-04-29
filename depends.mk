@@ -5,14 +5,14 @@
 #       automatically config this for you.
 ################################################################
 
-SOFA_PBRPC_PREFIX=
-PROTOBUF_PREFIX=
-SNAPPY_PREFIX=
-ZOOKEEPER_PREFIX=
-GFLAGS_PREFIX=
-GLOG_PREFIX=
-GPERFTOOLS_PREFIX=
-BOOST_INCDIR=
+SOFA_PBRPC_PREFIX=$(HOME)/jx-tera-github/tera/thirdparty
+PROTOBUF_PREFIX=$(HOME)/jx-tera-github/tera/thirdparty
+SNAPPY_PREFIX=$(HOME)/jx-tera-github/tera/thirdparty
+ZOOKEEPER_PREFIX=$(HOME)/jx-tera-github/tera/thirdparty
+GFLAGS_PREFIX=$(HOME)/jx-tera-github/tera/thirdparty
+GLOG_PREFIX=$(HOME)/jx-tera-github/tera/thirdparty
+GPERFTOOLS_PREFIX=$(HOME)/jx-tera-github/tera/thirdparty
+BOOST_INCDIR=$(HOME)/jx-tera-github/tera/thirdparty
 
 SOFA_PBRPC_INCDIR = $(SOFA_PBRPC_PREFIX)/include
 PROTOBUF_INCDIR = $(PROTOBUF_PREFIX)/include
