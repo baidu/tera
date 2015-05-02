@@ -87,6 +87,7 @@ Options InitOptionsLG(const Options& options, uint32_t lg_id) {
     opt.use_memtable_on_leveldb = lg_info->use_memtable_on_leveldb;
     opt.memtable_ldb_write_buffer_size = lg_info->memtable_ldb_write_buffer_size;
     opt.memtable_ldb_block_size = lg_info->memtable_ldb_block_size;
+    opt.sst_size = lg_info->sst_size;
     return opt;
 }
 

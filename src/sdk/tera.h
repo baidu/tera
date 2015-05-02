@@ -133,6 +133,10 @@ public:
     virtual int32_t MemtableLdbBlockSize() const = 0;
     virtual void SetMemtableLdbBlockSize(int32_t block_size) = 0;
 
+    /// sst file size, in Bytes
+    virtual int32_t SstSize() const = 0;
+    virtual void SetSstSize(int32_t sst_size) = 0;
+
 private:
     LocalityGroupDescriptor(const LocalityGroupDescriptor&);
     void operator=(const LocalityGroupDescriptor&);

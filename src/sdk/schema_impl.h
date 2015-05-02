@@ -112,6 +112,10 @@ public:
 
     void SetMemtableLdbBlockSize(int32_t block_size);
 
+    /// sst file size, in Bytes
+    int32_t SstSize() const;
+    void SetSstSize(int32_t sst_size);
+
 private:
     int32_t         _id;
     std::string     _name;
@@ -122,6 +126,7 @@ private:
     bool            _use_memtable_on_leveldb;
     int32_t         _memtable_ldb_write_buffer_size;
     int32_t         _memtable_ldb_block_size;
+    int32_t         _sst_size; // in bytes
 };
 
 /// 表描述符.
