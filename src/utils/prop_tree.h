@@ -1,7 +1,6 @@
-// Copyright (C) 2015, Baidu Inc.
-// Author: Xu Peilin (xupeilin@baidu.com)
-//
-// Description:
+// Copyright (c) 2015, Baidu.com, Inc. All Rights Reserved
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
 
 #ifndef TERA_UTILS_PROP_TREE_H
 #define TERA_UTILS_PROP_TREE_H

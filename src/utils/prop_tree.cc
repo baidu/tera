@@ -1,19 +1,22 @@
-// Copyright (C) 2015, Baidu Inc.
-// Author: Xu Peilin (xupeilin@baidu.com)
-//
-// Description:
+// Copyright (c) 2015, Baidu.com, Inc. All Rights Reserved
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
 
 #include "prop_tree.h"
-#include <sstream>
+
+#include <stdlib.h>
+
 #include <iostream>
+#include <limits>
+#include <sstream>
 
 namespace tera {
 
 // these chars are not belong to symbols
 bool IsIdentifierChar(const char c) {
-    return (c <= '9' && c >= '0' ||
-            c <= 'z' && c >= 'a' ||
-            c <= 'Z' && c >= 'A' ||
+    return ((c <= '9' && c >= '0') ||
+            (c <= 'z' && c >= 'a') ||
+            (c <= 'Z' && c >= 'A') ||
             c == '.' ||
             c == '_' ||
             c == '-');
@@ -82,7 +85,10 @@ bool Tokenizer::Next() {
     return true;
 }
 
-PropTree::PropTree() : root_(NULL), max_depth_(0), min_depth_(INT_MAX) {
+PropTree::PropTree()
+    : root_(NULL),
+      max_depth_(0),
+      min_depth_(std::numeric_limits<int>::max()) {
 }
 
 PropTree::~PropTree() {
@@ -92,7 +98,7 @@ PropTree::~PropTree() {
 void PropTree::Reset() {
     delete root_;
     max_depth_ = 0;
-    min_depth_ = INT_MAX;
+    min_depth_ = std::numeric_limits<int>::max();
     state_.clear();
 }
 
