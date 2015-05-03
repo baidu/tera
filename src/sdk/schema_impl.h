@@ -135,6 +135,7 @@ public:
     /// 表格名字仅允许使用字母、数字和下划线构造,长度不超过256
     TableDescImpl(const std::string& tb_name, bool is_kv);
     ~TableDescImpl();
+    void SetTableName(const std::string& name);
     std::string TableName() const;
     /// 设置为kv表（无列），建表完成后无法改变
     void SetKvOnly();

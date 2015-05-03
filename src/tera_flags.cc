@@ -40,6 +40,7 @@ DEFINE_int32(tera_tablet_flush_log_num, 100000, "the max log number before flush
 DEFINE_bool(tera_tablet_use_memtable_on_leveldb, false, "enable memtable based on in-memory leveldb");
 DEFINE_int64(tera_tablet_memtable_ldb_write_buffer_size, 1, "the buffer size(in MB) for memtable on leveldb");
 DEFINE_int64(tera_tablet_memtable_ldb_block_size, 4, "the block size (in KB) for memtable on leveldb");
+DEFINE_int64(tera_tablet_ldb_sst_size, 8, "the sstable file size (in MB) on leveldb");
 
 DEFINE_string(tera_leveldb_env_type, "dfs", "the default type for leveldb IO environment, should be [local | dfs]");
 DEFINE_string(tera_leveldb_env_dfs_type, "hdfs", "the default type for leveldb IO dfs environment, [hdfs | nfs]");

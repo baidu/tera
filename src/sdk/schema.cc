@@ -29,6 +29,10 @@ TableDescriptor& TableDescriptor::operator=(const TableDescriptor& desc) {
 }
 */
 
+void TableDescriptor::SetTableName(const std::string& name) {
+    return _impl->SetTableName(name);
+}
+
 std::string TableDescriptor::TableName() const {
     return _impl->TableName();
 }
