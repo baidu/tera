@@ -75,7 +75,8 @@ void ShowTableSchema(const TableSchema& schema) {
                       << ",memtable_ldb_block_size="
                       << lg_schema.memtable_ldb_block_size();
         }
-        std::cout << "}:";
+        // sst_size store in Bytes, but show it in MB.
+        std::cout << ",sst_size=" << (lg_schema.sst_size()>>20) << "}:";
         int cf_cnt = 0;
         for (size_t cf_no = 0; cf_no < cf_num; ++cf_no) {
             const ColumnFamilySchema& cf_schema = schema.column_families(cf_no);
@@ -168,6 +169,7 @@ void TableDescToSchema(const TableDescriptor& desc, TableSchema* schema) {
             lg->set_memtable_ldb_write_buffer_size(lgdesc->MemtableLdbWriteBufferSize());
             lg->set_memtable_ldb_block_size(lgdesc->MemtableLdbBlockSize());
         }
+        lg->set_sst_size(lgdesc->SstSize());
         lg->set_id(lgdesc->Id());
     }
     // add cf
@@ -231,6 +233,7 @@ void TableSchemaToDesc(const TableSchema& schema, TableDescriptor* desc) {
         lgd->SetUseMemtableOnLeveldb(lg.use_memtable_on_leveldb());
         lgd->SetMemtableLdbWriteBufferSize(lg.memtable_ldb_write_buffer_size());
         lgd->SetMemtableLdbBlockSize(lg.memtable_ldb_block_size());
+        lgd->SetSstSize(lg.sst_size());
     }
     int32_t cf_num = schema.column_families_size();
     for (int32_t i = 0; i < cf_num; i++) {
@@ -458,6 +461,16 @@ bool SetLgProperties(const PropertyList& props, LocalityGroupDescriptor* desc) {
                 return false;
             }
             desc->SetMemtableLdbBlockSize(block_size);
+        } else if (prop.first == "sst_size") {
+            const int32_t SST_SIZE_MAX = 1024; // MB
+            int32_t sst_size = atoi(prop.second.c_str());
+            if ( (sst_size <= 0) || (sst_size > SST_SIZE_MAX)) {
+                LOG(ERROR) << "illegal value: " << prop.second
+                    << " for property: " << prop.first
+                    << ". ( 0 < sst_size <= " << SST_SIZE_MAX << " MB )";
+                return false;
+            }
+            desc->SetSstSize(sst_size<<20); // display in MB, store in Bytes.
         } else {
             LOG(ERROR) << "illegal lg property: " << prop.first;
             return false;
@@ -633,7 +646,7 @@ bool ParsePrefixPropertyValue(const string& pair, string& prefix, string& proper
 string PrefixType(const std::string& property) {
     string lg_prop[] = {
         "compress", "storage", "blocksize", "use_memtable_on_leveldb",
-        "memtable_ldb_write_buffer_size", "memtable_ldb_block_size"};
+        "memtable_ldb_write_buffer_size", "memtable_ldb_block_size", "sst_size"};
     string cf_prop[] = {"ttl", "maxversions", "minversions", "diskquota"};
 
     std::set<string> lgset(lg_prop, lg_prop + sizeof(lg_prop) / sizeof(lg_prop[0]));
