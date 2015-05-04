@@ -15,6 +15,9 @@
 #include "glog/logging.h"
 
 #include "sdk/filter_utils.h"
+DECLARE_int64(tera_tablet_write_block_size);
+DECLARE_int64(tera_tablet_ldb_sst_size);
+DECLARE_int64(tera_master_merge_tablet_size);
 
 namespace tera {
 
@@ -50,65 +53,90 @@ string TableProp2Str(RawKey type) {
     }
 }
 
-void ShowTableSchema(const TableSchema& schema) {
+void ShowTableSchema(const TableSchema& schema, bool is_x) {
+    std::stringstream ss;
     if (schema.kv_only()) {
-        std::cout << std::endl << schema.name() << " (kv): " << std::endl;
-    } else {
-        std::cout << std::endl << schema.name() << " : " << std::endl;
+        const LocalityGroupSchema& lg_schema = schema.locality_groups(0);
+        ss << "\n  " << schema.name() << " <";
+        if (is_x || schema.raw_key() != Readable) {
+            ss << "rawkey=" << TableProp2Str(schema.raw_key()) << ",";
+        }
+        ss << "splitsize=" << schema.split_size() << ",";
+        if (is_x || schema.merge_size() != FLAGS_tera_master_merge_tablet_size) {
+            ss << "mergesize=" << schema.merge_size() << ",";
+        }
+        if (is_x || lg_schema.store_type() != DiskStore) {
+            ss << "storage=" << LgProp2Str(lg_schema.store_type()) << ",";
+        }
+        if (is_x || lg_schema.block_size() != FLAGS_tera_tablet_write_block_size) {
+            ss << "blocksize=" << lg_schema.block_size() << ",";
+        }
+        ss << "\b>\n" << "  (kv mode)\n";
+        std::cout << ss.str() << std::endl;
+        return;
     }
-    std::cout << "  {rawkey=" << TableProp2Str(schema.raw_key())
-        << ", splitsize=" << schema.split_size()
-        << ", mergesize=" << schema.merge_size() << "}#" << std::endl;
+
+    ss << "\n  " << schema.name() << " <";
+    if (is_x || schema.raw_key() != Readable) {
+        ss << "rawkey=" << TableProp2Str(schema.raw_key()) << ",";
+    }
+    ss << "splitsize=" << schema.split_size() << ",";
+    if (is_x || schema.merge_size() != FLAGS_tera_master_merge_tablet_size) {
+        ss << "mergesize=" << schema.merge_size() << ",";
+    }
+    ss << "\b> {" << std::endl;
 
     size_t lg_num = schema.locality_groups_size();
     size_t cf_num = schema.column_families_size();
     for (size_t lg_no = 0; lg_no < lg_num; ++lg_no) {
         const LocalityGroupSchema& lg_schema = schema.locality_groups(lg_no);
-        std::cout << "      " << lg_schema.name()
-            << " {storage=" << LgProp2Str(lg_schema.store_type())
-            << ",compress=" << LgProp2Str(lg_schema.compress_type())
-            << ",blocksize=" << lg_schema.block_size()
-            << ",use_memtable_on_leveldb=" << lg_schema.use_memtable_on_leveldb();
-        if (lg_schema.use_memtable_on_leveldb()) {
-            std::cout << ",memtable_ldb_write_buffer_size="
-                      << lg_schema.memtable_ldb_write_buffer_size()
-                      << ",memtable_ldb_block_size="
-                      << lg_schema.memtable_ldb_block_size();
+        ss << "      " << lg_schema.name() << " <";
+        ss << "storage=" << LgProp2Str(lg_schema.store_type()) << ",";
+        if (is_x || lg_schema.block_size() != FLAGS_tera_tablet_write_block_size) {
+            ss << "blocksize=" << lg_schema.block_size() << ",";
         }
-        // sst_size store in Bytes, but show it in MB.
-        std::cout << ",sst_size=" << (lg_schema.sst_size()>>20) << "}:";
-        int cf_cnt = 0;
+        if (is_x || lg_schema.sst_size() != FLAGS_tera_tablet_ldb_sst_size) {
+            ss << "sst_size=" << (lg_schema.sst_size() >> 20) << ",";
+        }
+        if (lg_schema.use_memtable_on_leveldb()) {
+            ss << "use_memtable_on_leveldb="
+                << lg_schema.use_memtable_on_leveldb()
+                << ",memtable_ldb_write_buffer_size="
+                << lg_schema.memtable_ldb_write_buffer_size()
+                << ",memtable_ldb_block_size="
+                << lg_schema.memtable_ldb_block_size() << ",";
+        }
+        ss << "\b> {" << std::endl;
         for (size_t cf_no = 0; cf_no < cf_num; ++cf_no) {
             const ColumnFamilySchema& cf_schema = schema.column_families(cf_no);
             if (cf_schema.locality_group() != lg_schema.name()) {
                 continue;
             }
-            cf_cnt++;
-            if (cf_cnt > 1) {
-                std::cout << ",\n";
-            } else {
-                std::cout << "\n";
+            ss << "          " << cf_schema.name();
+            std::stringstream cf_ss;
+            cf_ss << " <";
+            if (is_x || cf_schema.max_versions() != 1) {
+                cf_ss << "maxversions=" << cf_schema.max_versions() << ",";
             }
-            std::cout << "          ";
-            if (cf_schema.name() == "") {
-                std::cout << "  ";
-            } else {
-                std::cout << cf_schema.name();
+            if (is_x || cf_schema.min_versions() != 1) {
+                cf_ss << "minversions=" << cf_schema.min_versions() << ",";
             }
-
-            if (cf_schema.type() != "") {
-                std::cout << "<" << cf_schema.type() << ">";
+            if (is_x || cf_schema.time_to_live() != 0) {
+                cf_ss << "ttl=" << cf_schema.time_to_live() << ",";
             }
-            std::cout << " {maxversions=" << cf_schema.max_versions()
-                << ",minversions=" << cf_schema.min_versions()
-                << ",ttl=" << cf_schema.time_to_live()
-                << "}";
+            if (is_x || cf_schema.type() != "") {
+                cf_ss << "type=" << cf_schema.type() << ",";
+            }
+            cf_ss << "\b>";
+            if (cf_ss.str().size() > 5) {
+                ss << cf_ss.str();
+            }
+            ss << "," << std::endl;
         }
-        if (lg_no < lg_num - 1) {
-            std::cout << "|" << std::endl;
-        }
+        ss << "      }," << std::endl;
     }
-    std::cout << std::endl << std::endl;
+    ss << "  }" << std::endl;
+    std::cout << ss.str() << std::endl;
 }
 
 void ShowTableMeta(const TableMeta& meta) {
@@ -121,10 +149,10 @@ void ShowTableMeta(const TableMeta& meta) {
     std::cout << std::endl;
 }
 
-void ShowTableDescriptor(const TableDescriptor& table_desc) {
+void ShowTableDescriptor(TableDescriptor& table_desc, bool is_x) {
     TableSchema schema;
     TableDescToSchema(table_desc, &schema);
-    ShowTableSchema(schema);
+    ShowTableSchema(schema, is_x);
 }
 
 void TableDescToSchema(const TableDescriptor& desc, TableSchema* schema) {
@@ -251,114 +279,6 @@ void TableSchemaToDesc(const TableSchema& schema, TableDescriptor* desc) {
     }
 }
 
-bool CheckName(const string& name) {
-    if (name.size() == 0) {
-        return true;
-    }
-    if (name.length() >= 256) {
-        LOG(ERROR) << name << " has too many chars: " << name.length();
-        return false;
-    }
-    for (size_t i = 0; i < name.length(); ++i) {
-        if (!(name[i] <= '9' && name[i] >= '0')
-            && !(name[i] <= 'z' && name[i] >= 'a')
-            && !(name[i] <= 'Z' && name[i] >= 'A')
-            && !(name[i] == '_')
-            && !(name[i] == '-')) {
-            LOG(ERROR) << name << " has illegal chars \"" << name[i] << "\"";
-            return false;
-        }
-    }
-    if (name[0] <= '9' && name[0] >= '0') {
-        LOG(ERROR) << "name do not allow starting with digits: " << name[0];
-        return false;
-    }
-    return true;
-}
-
-bool ParseCfNameType(const string& in, string* name, string* type) {
-    int len = in.size();
-    string name_t, type_t;
-    if (name == NULL) {
-        name = &name_t;
-    }
-    if (type == NULL) {
-        type = &type_t;
-    }
-    if (len < 3 || in[len-1] != '>') {
-        if (CheckName(in)) {
-            *name = in;
-            *type = "";
-            return true;
-        } else {
-            LOG(ERROR) << "illegal cf name: " << in;
-            return false;
-        }
-    }
-
-    string::size_type pos = in.find('<');
-    if (pos == string::npos) {
-        LOG(ERROR) << "illegal cf name, need '<': " << in;
-        return false;
-    }
-    *name = in.substr(0, pos);
-    if (!CheckName(*name)) {
-        LOG(ERROR) << "illegal cf name, need '<': " << in;
-        return false;
-    }
-    *type = in.substr(pos + 1, len - pos - 2);
-    return true;
-}
-
-// property syntax: name{prop1=value1[,prop=value]}
-// name or property may be empty
-// e.g. "lg0{disk,blocksize=4K}", "{disk}", "lg0"
-bool ParseProperty(const string& schema, string* name, PropertyList* prop_list) {
-    string::size_type pos_s = schema.find('{');
-    string::size_type pos_e = schema.find('}');
-    if (pos_s == string::npos && pos_e == string::npos) {
-        // deal with non-property
-        if (name) {
-            *name = schema;
-        }
-        prop_list->clear();
-        return true;
-    }
-    if (pos_s == string::npos || pos_e == string::npos) {
-        LOG(ERROR) << "property should be included by \"{}\": " << schema;
-        return false;
-    }
-    string tmp_name = schema.substr(0, pos_s);
-    if (!CheckName(tmp_name)) {
-        return false;
-    }
-    if (name) {
-        *name = tmp_name;
-    }
-    if (prop_list == NULL) {
-        return true;
-    }
-    string prop_str = schema.substr(pos_s + 1, pos_e - pos_s -1);
-    std::vector<string> props;
-    SplitString(prop_str, ",", &props);
-    prop_list->clear();
-    for (size_t i = 0; i < props.size(); ++i) {
-        std::vector<string> p;
-        SplitString(props[i], "=", &p);
-        if (p.size() == 1) {
-            prop_list->push_back(std::make_pair(p[0], ""));
-        } else if (p.size() == 2) {
-            prop_list->push_back(std::make_pair(p[0], p[1]));
-        } else {
-            return false;
-        }
-        if (!CheckName((*prop_list)[i].first)) {
-            return false;
-        }
-    }
-    return true;
-}
-
 bool SetCfProperties(const PropertyList& props, ColumnFamilyDescriptor* desc) {
     for (size_t i = 0; i < props.size(); ++i) {
         const Property& prop = props[i];
@@ -462,15 +382,13 @@ bool SetLgProperties(const PropertyList& props, LocalityGroupDescriptor* desc) {
             }
             desc->SetMemtableLdbBlockSize(block_size);
         } else if (prop.first == "sst_size") {
-            const int32_t SST_SIZE_MAX = 1024; // MB
             int32_t sst_size = atoi(prop.second.c_str());
-            if ( (sst_size <= 0) || (sst_size > SST_SIZE_MAX)) {
+            if (sst_size <= 0) {
                 LOG(ERROR) << "illegal value: " << prop.second
-                    << " for property: " << prop.first
-                    << ". ( 0 < sst_size <= " << SST_SIZE_MAX << " MB )";
+                           << " for property: " << prop.first;
                 return false;
             }
-            desc->SetSstSize(sst_size<<20); // display in MB, store in Bytes.
+            desc->SetSstSize(sst_size);
         } else {
             LOG(ERROR) << "illegal lg property: " << prop.first;
             return false;
@@ -487,6 +405,8 @@ bool SetTableProperties(const PropertyList& props, TableDescriptor* desc) {
                 desc->SetRawKey(kReadable);
             } else if (prop.second == "binary") {
                 desc->SetRawKey(kBinary);
+            } else if (prop.second == "ttlkv") {
+                desc->SetRawKey(kTTLKv);
             } else {
                 LOG(ERROR) << "illegal value: " << prop.second
                     << " for property: " << prop.first;
@@ -515,116 +435,124 @@ bool SetTableProperties(const PropertyList& props, TableDescriptor* desc) {
     }
     return true;
 }
-
-bool ParseCfSchema(const string& schema,
-                   TableDescriptor* table_desc,
-                   LocalityGroupDescriptor* lg_desc) {
-    string name_type, cf_name, cf_type;
-    PropertyList cf_props;
-    if (!ParseProperty(schema, &name_type, &cf_props)) {
-        return false;
-    }
-    if (!ParseCfNameType(name_type, &cf_name, &cf_type)) {
-        return false;
-    }
-
-    ColumnFamilyDescriptor* cf_desc;
-    cf_desc = table_desc->AddColumnFamily(cf_name, lg_desc->Name());
-    if (cf_desc == NULL) {
-        LOG(ERROR) << "fail to add column family: " << cf_name;
-        return false;
-    }
-    cf_desc->SetType(cf_type);
-
-    if (!SetCfProperties(cf_props, cf_desc)) {
-        LOG(ERROR) << "fail to set cf properties: " << cf_name;
-        return false;
-    }
-    return true;
-}
-
-bool CommaInBracket(const string& full, string::size_type pos) {
-    string::size_type l_pos = 0;
-    string::size_type r_pos = string::npos;
-
-    l_pos = full.find_last_of("{", pos);
-    r_pos = full.find_first_of("}", pos);
-    if (l_pos == string::npos || r_pos == string::npos) {
-        return false;
-    }
-    if (r_pos > full.find_first_of("}", l_pos)) {
-        return false;
-    }
-    if (l_pos < full.find_last_of("{", r_pos)) {
-        return false;
-    }
-    return true;
-}
-
-void SplitCfSchema(const string& full, std::vector<string>* result) {
-    const string delim = ",";
-    result->clear();
-    if (full.empty()) {
-        return;
-    }
-
-    string tmp;
-    string::size_type pos_begin = full.find_first_not_of(delim);
-    string::size_type comma_pos = pos_begin;
-
-    while (pos_begin != string::npos) {
-        do {
-            comma_pos = full.find(delim, comma_pos + 1);
-        } while (CommaInBracket(full, comma_pos));
-
-        if (comma_pos != string::npos) {
-            tmp = full.substr(pos_begin, comma_pos - pos_begin);
-            pos_begin = comma_pos + delim.length();
-        } else {
-            tmp = full.substr(pos_begin);
-            pos_begin = comma_pos;
-        }
-
-        if (!tmp.empty()) {
-            result->push_back(tmp);
-            tmp.clear();
-        }
-    }
-}
-
-bool ParseLgSchema(const string& schema, TableDescriptor* table_desc) {
-    std::vector<string> parts;
-    SplitString(schema, ":", &parts);
-    if (parts.size() != 2) {
-        LOG(ERROR) << "lg syntax error: " << schema;
-        return false;
-    }
-
-    string lg_name;
-    PropertyList lg_props;
-    if (!ParseProperty(parts[0], &lg_name, &lg_props)) {
-        return false;
-    }
-
-    LocalityGroupDescriptor* lg_desc;
-    lg_desc = table_desc->AddLocalityGroup(lg_name);
-    if (lg_desc == NULL) {
-        LOG(ERROR) << "fail to add locality group: " << lg_name;
-        return false;
-    }
-
-    if (!SetLgProperties(lg_props, lg_desc)) {
-        LOG(ERROR) << "fail to set lg properties: " << lg_name;
-        return false;
-    }
-
-    std::vector<string> cfs;
-    SplitCfSchema(parts[1], &cfs);
-    CHECK(cfs.size() > 0);
-    for (size_t i = 0; i < cfs.size(); ++i) {
-        if (!ParseCfSchema(cfs[i], table_desc, lg_desc)) {
+bool SetCfProperties(const string& name, const string& value,
+                     ColumnFamilyDescriptor* desc) {
+    if (name == "ttl") {
+        int32_t ttl = atoi(value.c_str());
+        if (ttl < 0){
             return false;
         }
+        desc->SetTimeToLive(ttl);
+    } else if (name == "maxversions") {
+        int32_t versions = atol(value.c_str());
+        if (versions <= 0){
+            return false;
+        }
+        desc->SetMaxVersions(versions);
+    } else if (name == "minversions") {
+        int32_t versions = atol(value.c_str());
+        if (versions <= 0){
+            return false;
+        }
+        desc->SetMinVersions(versions);
+    } else if (name == "diskquota") {
+        int64_t quota = atol(value.c_str());
+        if (quota <= 0){
+            return false;
+        }
+        desc->SetDiskQuota(quota);
+    } else if (name == "type") {
+        desc->SetType(value);
+    }else {
+        return false;
+    }
+    return true;
+}
+
+bool SetLgProperties(const string& name, const string& value,
+                     LocalityGroupDescriptor* desc) {
+    if (name == "compress") {
+        if (value == "none") {
+            desc->SetCompress(kNoneCompress);
+        } else if (value == "snappy") {
+            desc->SetCompress(kSnappyCompress);
+        } else {
+            return false;
+        }
+    } else if (name == "storage") {
+        if (value == "disk") {
+            desc->SetStore(kInDisk);
+        } else if (value == "flash") {
+            desc->SetStore(kInFlash);
+        } else if (value == "memory") {
+            desc->SetStore(kInMemory);
+        } else {
+            return false;
+        }
+    } else if (name == "blocksize") {
+        int blocksize = atoi(value.c_str());
+        if (blocksize <= 0){
+            return false;
+        }
+        desc->SetBlockSize(blocksize);
+    } else if (name == "use_memtable_on_leveldb") {
+        if (value == "true") {
+            desc->SetUseMemtableOnLeveldb(true);
+        } else if (value == "false") {
+            desc->SetUseMemtableOnLeveldb(false);
+        } else {
+            return false;
+        }
+    } else if (name == "memtable_ldb_write_buffer_size") {
+        int32_t buffer_size = atoi(value.c_str()); //MB
+        if (buffer_size <= 0) {
+            return false;
+        }
+        desc->SetMemtableLdbWriteBufferSize(buffer_size);
+    } else if (name == "memtable_ldb_block_size") {
+        int32_t block_size = atoi(value.c_str()); //KB
+        if (block_size <= 0) {
+            return false;
+        }
+        desc->SetMemtableLdbBlockSize(block_size);
+    } else if (name == "sst_size") {
+        int32_t sst_size = atoi(value.c_str());
+        if (sst_size <= 0) {
+            return false;
+        }
+        desc->SetSstSize(sst_size);
+    } else {
+        return false;
+    }
+    return true;
+}
+
+bool SetTableProperties(const string& name, const string& value,
+                        TableDescriptor* desc) {
+    if (name == "rawkey") {
+        if (value == "readable") {
+            desc->SetRawKey(kReadable);
+        } else if (value == "binary") {
+            desc->SetRawKey(kBinary);
+        } else if (value == "ttlkv") {
+            desc->SetRawKey(kTTLKv);
+        } else {
+            return false;
+        }
+    } else if (name == "splitsize") {
+        int splitsize = atoi(value.c_str());
+        if (splitsize < 0) { // splitsize == 0 : split closed
+            return false;
+        }
+        desc->SetSplitSize(splitsize);
+    } else if (name == "mergesize") {
+        int mergesize = atoi(value.c_str());
+        if (mergesize < 0) { // mergesize == 0 : merge closed
+            return false;
+        }
+        desc->SetMergeSize(mergesize);
+    } else {
+        return false;
     }
     return true;
 }
@@ -757,76 +685,151 @@ bool ParseSchemaSetTableDescriptor(const string& schema, TableDescriptor* table_
     return true;
 }
 
-bool ParseSchema(const string& schema, TableDescriptor* table_desc) {
-    std::vector<string> parts;
-    string schema_in = RemoveInvisibleChar(schema);
-    SplitString(schema_in, "#", &parts);
-    string lg_props;
-
-    if (parts.size() == 2) {
-        PropertyList props;
-        if (!ParseProperty(parts[0], NULL, &props)) {
+bool FillTableDescriptor(PropTree& schema_tree, TableDescriptor* table_desc) {
+    PropTree::Node* table_node = schema_tree.GetRootNode();
+    if (schema_tree.MaxDepth() == 1) {
+        // kv mode, only have 1 locality group
+        // e.g. table1<splitsize=1024, storage=flash>
+        table_desc->SetKvOnly();
+        LocalityGroupDescriptor* lg_desc;
+        lg_desc = table_desc->AddLocalityGroup("kv");
+        if (lg_desc == NULL) {
+            LOG(ERROR) << "fail to add locality group: " << lg_desc->Name();
             return false;
         }
-        if (!SetTableProperties(props, table_desc)) {
+        for (std::map<string, string>::iterator i = table_node->properties_.begin();
+             i != table_node->properties_.end(); ++i) {
+            if (!SetTableProperties(i->first, i->second, table_desc) &&
+                !SetLgProperties(i->first, i->second, lg_desc)) {
+                LOG(ERROR) << "illegal value: " << i->second
+                    << " for table property: " << i->first;
+                return false;
+            }
+        }
+    } else if (schema_tree.MaxDepth() == 2) {
+        // simple table mode, have 1 default lg
+        // e.g. table1{cf1, cf2, cf3}
+        LocalityGroupDescriptor* lg_desc;
+        lg_desc = table_desc->AddLocalityGroup("lg0");
+        if (lg_desc == NULL) {
+            LOG(ERROR) << "fail to add locality group: " << lg_desc->Name();
             return false;
         }
-        lg_props = parts[1];
+        // add all column families and properties
+        for (size_t i = 0; i < table_node->children_.size(); ++i) {
+            PropTree::Node* cf_node = table_node->children_[i];
+            ColumnFamilyDescriptor* cf_desc;
+            cf_desc = table_desc->AddColumnFamily(cf_node->name_, lg_desc->Name());
+            if (cf_desc == NULL) {
+                LOG(ERROR) << "fail to add column family: " << cf_desc->Name();
+                return false;
+            }
+            for (std::map<string, string>::iterator it = cf_node->properties_.begin();
+                 it != cf_node->properties_.end(); ++it) {
+                if (!SetCfProperties(it->first, it->second, cf_desc)) {
+                    LOG(ERROR) << "illegal value: " << it->second
+                        << " for cf property: " << it->first;
+                    return false;
+                }
+            }
+        }
+        // set table properties
+        for (std::map<string, string>::iterator i = table_node->properties_.begin();
+             i != table_node->properties_.end(); ++i) {
+            if (!SetTableProperties(i->first, i->second, table_desc)) {
+                LOG(ERROR) << "illegal value: " << i->second
+                    << " for table property: " << i->first;
+                return false;
+            }
+        }
+    } else if (schema_tree.MaxDepth() == 3) {
+        // full mode, all elements are user-defined
+        // e.g. table1<mergesize=100>{
+        //          lg0<storage=memory>{
+        //              cf1<maxversions=3>,
+        //              cf2<ttl=100>
+        //          },
+        //          lg1{cf3}
+        //      }
+        for (size_t i = 0; i < table_node->children_.size(); ++i) {
+            PropTree::Node* lg_node = table_node->children_[i];
+            LocalityGroupDescriptor* lg_desc;
+            lg_desc = table_desc->AddLocalityGroup(lg_node->name_);
+            if (lg_desc == NULL) {
+                LOG(ERROR) << "fail to add locality group: " << lg_desc->Name();
+                return false;
+            }
+            // add all column families and properties
+            for (size_t j = 0; j < lg_node->children_.size(); ++j) {
+                PropTree::Node* cf_node = lg_node->children_[j];
+                ColumnFamilyDescriptor* cf_desc;
+                cf_desc = table_desc->AddColumnFamily(cf_node->name_, lg_desc->Name());
+                if (cf_desc == NULL) {
+                    LOG(ERROR) << "fail to add column family: " << cf_desc->Name();
+                    return false;
+                }
+                for (std::map<string, string>::iterator it = cf_node->properties_.begin();
+                     it != cf_node->properties_.end(); ++it) {
+                    if (!SetCfProperties(it->first, it->second, cf_desc)) {
+                        LOG(ERROR) << "illegal value: " << it->second
+                            << " for cf property: " << it->first;
+                        return false;
+                    }
+                }
+            }
+            // set locality group properties
+            for (std::map<string, string>::iterator it_lg = lg_node->properties_.begin();
+                 it_lg != lg_node->properties_.end(); ++it_lg) {
+                if (!SetLgProperties(it_lg->first, it_lg->second, lg_desc)) {
+                    LOG(ERROR) << "illegal value: " << it_lg->second
+                        << " for lg property: " << it_lg->first;
+                    return false;
+                }
+            }
+        }
+        // set table properties
+        for (std::map<string, string>::iterator i = table_node->properties_.begin();
+             i != table_node->properties_.end(); ++i) {
+            if (!SetTableProperties(i->first, i->second, table_desc)) {
+                LOG(ERROR) << "illegal value: " << i->second
+                    << " for table property: " << i->first;
+                return false;
+            }
+        }
     } else {
-        lg_props = parts[0];
-    }
-
-    std::vector<string> lgs;
-    SplitString(lg_props, "|", &lgs);
-
-    for (size_t i = 0; i < lgs.size(); ++i) {
-        if (!ParseLgSchema(lgs[i], table_desc)) {
-            return false;
-        }
-    }
-
-    if (!CheckTableDescrptor(table_desc)) {
-        return false;
+        LOG(FATAL) << "never here.";
     }
     return true;
 }
 
-bool ParseKvSchema(const string& schema, TableDescriptor* table_desc,
-                   LocalityGroupDescriptor* lg_desc, ColumnFamilyDescriptor* cf_desc) {
-    PropertyList lg_props;
-    if (!ParseProperty(schema, NULL, &lg_props)) {
+bool ParseSchema(const string& schema, TableDescriptor* table_desc) {
+    PropTree schema_tree;
+    if (!schema_tree.ParseFromString(schema)) {
+        LOG(ERROR) << schema_tree.State();
+        LOG(ERROR) << schema;
         return false;
     }
 
-    PropertyList cf_props;
-    for (PropertyList::iterator iter = lg_props.begin(); iter != lg_props.end(); ) {
-        Property& prop = *iter;
-        if (prop.first == "ttl") {
-            cf_props.push_back(prop);
-            lg_props.erase(iter);
-        } else {
-            ++iter;
-        }
-    }
+    VLOG(10) << "table to create: " << schema_tree.FormatString();
 
-    if (!SetLgProperties(lg_props, lg_desc)) {
+    if (table_desc->TableName() != "" &&
+        table_desc->TableName() != schema_tree.GetRootNode()->name_) {
+        LOG(ERROR) << "table name error: " << table_desc->TableName()
+            << ":" << schema_tree.GetRootNode()->name_;
+        return false;
+    }
+    table_desc->SetTableName(schema_tree.GetRootNode()->name_);
+    if (schema_tree.MaxDepth() != schema_tree.MinDepth() ||
+        schema_tree.MaxDepth() == 0 || schema_tree.MaxDepth() > 3) {
+        LOG(ERROR) << "schema error: " << schema_tree.FormatString();
         return false;
     }
 
-    // CF Descriptor for KV table.
-    if (cf_desc && cf_props.size()) {
-        if (!SetCfProperties(cf_props, cf_desc)) {
-            return false;
-        }
-        table_desc->SetRawKey(kTTLKv); // TTL in schema
-    } else {
-        table_desc->SetRawKey(kReadable); // No-TTL in schema
+    if (FillTableDescriptor(schema_tree, table_desc) &&
+        CheckTableDescrptor(table_desc)) {
+        return true;
     }
-
-    if (!CheckTableDescrptor(table_desc)) {
-        return false;
-    }
-    return true;
+    return false;
 }
 
 bool ParseScanSchema(const string& schema, ScanDescriptor* desc) {

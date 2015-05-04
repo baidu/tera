@@ -260,7 +260,13 @@ Status DBTable::Init() {
     if (s.ok()) {
         for (uint32_t i = 0; i < logfiles.size(); ++i) {
             s = RecoverLogFile(logfiles[i], &lg_edits);
+            if (!s.ok()) {
+                Log(options_.info_log, "[%s] Fail to RecoverLogFile %ld",
+                    dbname_.c_str(), logfiles[i]);
+            }
         }
+    } else {
+        Log(options_.info_log, "[%s] Fail to GatherLogFile", dbname_.c_str());
     }
 
     Log(options_.info_log, "[%s] start RecoverLogToLevel0Table", dbname_.c_str());
@@ -277,7 +283,13 @@ Status DBTable::Init() {
             if (s.ok()) {
                 impl->DeleteObsoleteFiles();
                 impl->MaybeScheduleCompaction();
+            } else {
+                Log(options_.info_log, "[%s] Fail to modify manifest of lg %d",
+                    dbname_.c_str(),
+                    i);
             }
+        } else {
+            Log(options_.info_log, "[%s] Fail to dump log to level 0", dbname_.c_str());
         }
         delete lg_edits[i];
     }

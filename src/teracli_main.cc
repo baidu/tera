@@ -58,22 +58,22 @@ void Usage(const std::string& prg_name) {
     std::cout << "\nSYNOPSIS\n";
     std::cout << "       " << prg_name << "  OPERATION  [OPTION...] \n\n";
     std::cout << "DESCRIPTION \n\
-       create   <tablename> <schema> [<delimiter_file>]                     \n\
-                schema syntax:                                              \n\
-                    {tableprops}#lg1{lgprops}:cf1{cfprops},cf2..|lg2...     \n\
-                    (all properties are optional)                           \n\
+       create   <schema> [<delimiter_file>]                                 \n\
+              - schema syntax (all properties are optional):                \n\
+                    tablename <rawkey=binary,splitsize=1024,...> {          \n\
+                        lg1 <storage=flash,...> {                           \n\
+                            cf1 <maxversion=3>,                             \n\
+                            cf2...},                                        \n\
+                        lg2...                                              \n\
+                    }                                                       \n\
+              - kv mode schema:                                             \n\
+                    tablename <splitsize=1024, storage=memory, ...>         \n\
+              - simple mode schema:                                         \n\
+                    tablename{cf1, cf2, cf3, ...}                           \n\
                                                                             \n\
-       createbyfile   <tablename> <schema_file> [<delimiter_file>]          \n\
+       createbyfile   <schema_file> [<delimiter_file>]                      \n\
                                                                             \n\
-       createkv <tablename> [<property>] [<delimiter_file>]                 \n\
-                create a kv table, property syntax:                         \n\
-                    {storage=flash|disk,ttl=0(second),blocksize=...}        \n\
-                    (property are optional)                                 \n\
-                                                                            \n\
-       update/updatebyfile   <tablename> <tableschema>                      \n\
-                update table schema, disable table first                    \n\
-                                                                            \n\
-       update-part <tablename> <part-schema>                                \n\
+       update <tablename> <part-schema>                                     \n\
             part-schema syntax:                                             \n\
                 \"prefix1:property1=value1, prefix2:property2=value2, ...\" \n\
                 prefix:   \"table\" | lg-name | cf-name                     \n\
@@ -82,11 +82,7 @@ void Usage(const std::string& prg_name) {
                 e.g. \"table:splitsize=9,lg0:compress=none,cf3:ttl=0\"      \n\
                 e.g. \"lg0:use_memtable_on_leveldb=true                     \n\
                                                                             \n\
-       drop     <tablename>                                                 \n\
-                                                                            \n\
-       enable   <tablename>                                                 \n\
-                                                                            \n\
-       disable  <tablename>                                                 \n\
+       enable/disable/drop  <tablename>                                     \n\
                                                                             \n\
        put      <tablename> <rowkey> [<columnfamily:qualifier>] <value>     \n\
                                                                             \n\
@@ -96,14 +92,13 @@ void Usage(const std::string& prg_name) {
                                                                             \n\
        get      <tablename> <rowkey> [<columnfamily:qualifier>]             \n\
                                                                             \n\
-       scan     <tablename> <startkey> <endkey> [<\"cf1|cf2\">]             \n\
-                scan table from startkey to endkey (1 qulifier version)     \n\
+       scan[allv] <tablename> <startkey> <endkey> [<\"cf1|cf2\">]           \n\
+                scan table from startkey to endkey.                         \n\
+                (return all qulifier version when using suffix \"allv\")    \n\
                                                                             \n\
-       scanallv <tablename> <startkey> <endkey> [<\"cf1|cf2\">]             \n\
-                scan table from startkey to endkey (all qulifier versions)  \n\
-                                                                            \n\
-       delete   <tablename> <rowkey> [<columnfamily:qualifier>]             \n\
+       delete[1v] <tablename> <rowkey> [<columnfamily:qualifier>]           \n\
                 delete row/columnfamily/qualifiers.                         \n\
+                (only delete latest version when using suffix \"1v\")       \n\
                                                                             \n\
        put_counter <tablename> <rowkey> [<columnfamily:qualifier>] <integer>\n\
                                                                             \n\
@@ -113,72 +108,50 @@ void Usage(const std::string& prg_name) {
                 add 'delta'(int64_t) to specified cell                      \n\
        append   <tablename> <rowkey> [<columnfamily:qualifier>] <value>     \n\
                                                                             \n\
-       delete1v <tablename> <rowkey> <columnfamily:qualifier>               \n\
-                delete the latest qualifier version.                        \n\
-                                                                            \n\
        batchput <tablename> <input file>                                    \n\
                                                                             \n\
        batchget <tablename> <input file>                                    \n\
                                                                             \n\
-       show/showx [<tablename>]                                             \n\
-                show table list or details of a table.                      \n\
+       show[x]  [<tablename>]                                               \n\
+                show table list or tablets info.                            \n\
+                (show more detail when using suffix \"x\")                  \n\
                                                                             \n\
-       showts/showtsx [<tabletnode addr>]                                   \n\
-                show all tabletnodes info or single tabletnode info detail. \n\
+       showschema[x] <tablename>                                            \n\
+                show table schema (show more detail when using suffix \"x\")\n\
                                                                             \n\
-       showall                                                              \n\
-                show all tables and all tablets (maybe very large)          \n\
-                                                                            \n\
-       snapshot <tablename> [create | del snapshot_id]                      \n\
+       showts[x] [<tabletnode addr>]                                        \n\
+                show all tabletnodes or single tabletnode info.             \n\
+                (show more detail when using suffix \"x\")                  \n\
                                                                             \n\
        version\n\n";
 }
 
 int32_t CreateOp(Client* client, int32_t argc, char** argv, ErrorCode* err) {
-    if (argc < 3) {
+    if (argc < 2) {
         Usage(argv[0]);
         return -1;
     }
 
-    std::string tablename = argv[2];
-    if (!CheckName(tablename)) {
-        LOG(ERROR) << "tablename illegal: " << tablename;
+    TableDescriptor table_desc;
+    std::vector<std::string> delimiters;
+    std::string schema = argv[2];
+    if (!ParseSchema(schema, &table_desc)) {
+        LOG(ERROR) << "fail to parse input table schema.";
         return -1;
     }
-
-    TableDescriptor table_desc(tablename);
-    std::vector<std::string> delimiters;
-    if (argc == 3) {
-        // default schema, no delimiter
-    } else if (argc == 4) {
-        // table schema vaild
-        std::string schema = argv[3];
-        std::ifstream fin(argv[3]);
-        if (fin.good()) {
-            std::string str;
-            while (fin >> str) {
-                delimiters.push_back(str);
-            }
-        } else if (!ParseSchema(schema, &table_desc)) {
-            LOG(ERROR) << "fail to parse input table schema.";
-            return -1;
-        }
-    } else if (argc == 5) {
-        std::string schema = argv[3];
-        if (!ParseSchema(schema, &table_desc)) {
-            LOG(ERROR) << "fail to parse input table schema.";
-            return -1;
-        }
-        std::ifstream fin(argv[4]);
+    if (argc == 4) {
+        // have tablet delimiters
+        std::string delim_file = argv[3];
+        std::ifstream fin(delim_file.c_str());
         if (fin.fail()) {
-            LOG(ERROR) << "fail to read delimiter file.";
+            LOG(ERROR) << "fail to read delimiter file: " << delim_file;
             return -1;
         }
         std::string str;
         while (fin >> str) {
             delimiters.push_back(str);
         }
-    } else {
+    } else if (argc > 4) {
         LOG(ERROR) << "too many args: " << argc;
         return -1;
     }
@@ -192,22 +165,14 @@ int32_t CreateOp(Client* client, int32_t argc, char** argv, ErrorCode* err) {
 }
 
 int32_t CreateByFileOp(Client* client, int32_t argc, char** argv, ErrorCode* err) {
-    if (argc < 4) {
+    if (argc < 3) {
         Usage(argv[0]);
         return -1;
     }
 
-    std::string tablename = argv[2];
-    if (!CheckName(tablename)) {
-        LOG(ERROR) << "tablename illegal: " << tablename;
-        return -1;
-    }
-
-    TableDescriptor table_desc(tablename);
-    std::vector<std::string> delimiters;
+    std::ifstream fin(argv[2]);
     std::string schema;
-
-    std::ifstream fin(argv[3]);
+    std::vector<std::string> delimiters;
     if (fin.good()) {
         std::string str;
         while (fin >> str) {
@@ -215,12 +180,14 @@ int32_t CreateByFileOp(Client* client, int32_t argc, char** argv, ErrorCode* err
         }
     }
 
+    TableDescriptor table_desc;
     if (!ParseSchema(schema, &table_desc)) {
         LOG(ERROR) << "fail to parse input table schema.";
         return -1;
     }
-    if (argc == 5) {
-        std::ifstream fin(argv[4]);
+
+    if (argc == 4) {
+        std::ifstream fin(argv[3]);
         if (fin.fail()) {
             LOG(ERROR) << "fail to read delimiter file.";
             return -1;
@@ -239,71 +206,9 @@ int32_t CreateByFileOp(Client* client, int32_t argc, char** argv, ErrorCode* err
     return 0;
 }
 
-int32_t CreateKvOp(Client* client, int32_t argc, char** argv, ErrorCode* err) {
-    if (argc < 3) {
-        Usage(argv[0]);
-        return -1;
-    }
-
-    std::string tablename = argv[2];
-    if (!CheckName(tablename)) {
-        LOG(ERROR) << "tablename illegal: " << tablename;
-        return -1;
-    }
-
-    TableDescriptor table_desc(tablename, true);
-    ColumnFamilyDescriptor* cf_desc = table_desc.DefaultColumnFamily();
-
-    std::vector<std::string> delimiters;
-    if (argc == 3) {
-        // default schema, no delimiter
-    } else if (argc == 4) {
-        // table schema vaild
-        std::string lg_schema = argv[3];
-        LocalityGroupDescriptor* lg_desc = table_desc.DefaultLocalityGroup();
-        std::ifstream fin(argv[3]);
-        if (fin.good()) {
-            std::string str;
-            while (fin >> str) {
-                delimiters.push_back(str);
-            }
-        } else if (!ParseKvSchema(lg_schema, &table_desc, lg_desc, cf_desc)) {
-            LOG(ERROR) << "fail to parse input kv-table schema.";
-            return -1;
-        } else {
-        }
-    } else if (argc == 5) {
-        std::string lg_schema = argv[3];
-        LocalityGroupDescriptor* lg_desc = table_desc.DefaultLocalityGroup();
-        if (!ParseKvSchema(lg_schema, &table_desc, lg_desc, cf_desc)) {
-            LOG(ERROR) << "fail to parse input kv-table schema.";
-            return -1;
-        }
-        std::ifstream fin(argv[4]);
-        if (fin.fail()) {
-            LOG(ERROR) << "fail to read delimiter file.";
-            return -1;
-        }
-        std::string str;
-        while (fin >> str) {
-            delimiters.push_back(str);
-        }
-    } else {
-        LOG(ERROR) << "too many args: " << argc;
-        return -1;
-    }
-    if (!client->CreateTable(table_desc, delimiters, err)) {
-        LOG(ERROR) << "fail to create kv-table, "
-            << strerr(*err);
-        return -1;
-    }
-    ShowTableDescriptor(table_desc);
-    return 0;
-}
-
 /*
  * usage:
- * ./teracli update-part table-name "table:splitsize=100,lg0:storage=flash,cf1:ttl=0"
+ * ./teracli update table-name "table:splitsize=100,lg0:storage=flash,cf1:ttl=0"
  *
  * schema(argv[3]):
  * "prefix:property=value,..."
@@ -312,7 +217,7 @@ int32_t CreateKvOp(Client* client, int32_t argc, char** argv, ErrorCode* err) {
  *           (lg)    compress | storage | blocksize
  *           (cf)    ttl | maxversions | minversions | diskquota
  */
-int32_t UpdatePartOp(Client* client, int32_t argc, char** argv, ErrorCode* err) {
+int32_t UpdateOp(Client* client, int32_t argc, char** argv, ErrorCode* err) {
 /*
  * 1. get the table's TableDescriptor
  * 2. modify it according to user's schema
@@ -325,10 +230,6 @@ int32_t UpdatePartOp(Client* client, int32_t argc, char** argv, ErrorCode* err) 
     }
 
     std::string tablename = argv[2];
-    if (!CheckName(tablename)) {
-        LOG(ERROR) << "tablename illegal: " << tablename;
-        return -1;
-    }
 
     TableDescriptor* table_desc = client->GetTableDescriptor(tablename, err);
     if (!table_desc) {
@@ -355,51 +256,6 @@ int32_t UpdatePartOp(Client* client, int32_t argc, char** argv, ErrorCode* err) 
         return -1;
     }
     ShowTableDescriptor(*table_desc);
-    return 0;
-}
-
-int32_t UpdateOp(Client* client, int32_t argc, char** argv, ErrorCode* err) {
-    if (argc != 4) {
-        Usage(argv[0]);
-        return -1;
-    }
-
-    std::string tablename = argv[2];
-    if (!CheckName(tablename)) {
-        LOG(ERROR) << "tablename illegal: " << tablename;
-        return -1;
-    }
-
-    std::string cmd = argv[1];
-    TableDescriptor table_desc(tablename);
-    std::string schema;
-
-    if (cmd == "updatebyfile") {
-        std::ifstream fin(argv[3]);
-        if (fin.good()) {
-            std::string str;
-            while (fin >> str) {
-                schema.append(str);
-            }
-        } else {
-            LOG(ERROR) << "fail to open schema file.";
-            return -1;
-        }
-    } else {
-        schema = argv[3];
-    }
-
-    if (!ParseSchema(schema, &table_desc)) {
-        LOG(ERROR) << "fail to parse input table schema.";
-        return -1;
-    }
-
-    if (!client->UpdateTable(table_desc, err)) {
-        LOG(ERROR) << "fail to update table, "
-            << strerr(*err);
-        return -1;
-    }
-    ShowTableDescriptor(table_desc);
     return 0;
 }
 
@@ -1053,9 +909,7 @@ int32_t ShowSingleTable(Client* client, const string& table_name,
         return -1;
     }
 
-    ShowTableMeta(table_meta);
-
-    std::cout << "tablets info:" << std::endl;
+    std::cout << std::endl;
     ShowTabletList(tablet_list, true, is_x);
     std::cout << std::endl;
     return 0;
@@ -1239,6 +1093,28 @@ int32_t ShowOp(Client* client, int32_t argc, char** argv, ErrorCode* err) {
         LOG(ERROR) << "error: arg num: " << argc;
     }
     return ret_val;
+}
+
+int32_t ShowSchemaOp(Client* client, int32_t argc, char** argv, ErrorCode* err) {
+    if (argc < 3) {
+        LOG(ERROR) << "args number error: " << argc << ", need >2.";
+        Usage(argv[0]);
+        return -1;
+    }
+
+    std::string cmd = argv[1];
+    std::string table_name = argv[2];
+    TableMeta table_meta;
+    TabletMetaList tablet_list;
+
+    tera::ClientImpl* client_impl = static_cast<tera::ClientImpl*>(client);
+    if (!client_impl->ShowTablesInfo(table_name, &table_meta, &tablet_list, err)) {
+        LOG(ERROR) << "table not exist: " << table_name;
+        return -1;
+    }
+
+    ShowTableSchema(table_meta.schema(), cmd == "showschemax");
+    return 0;
 }
 
 void BatchPutCallBack(RowMutation* mutation) {
@@ -1469,10 +1345,6 @@ int32_t SnapshotOp(Client* client, int32_t argc, char** argv, ErrorCode* err) {
     }
 
     std::string tablename = argv[2];
-    if (!CheckName(tablename)) {
-      LOG(ERROR) << "tablename illegal: " << tablename;
-      return -1;
-    }
     uint64_t snapshot = 0;
     if (argc == 5 && strcmp(argv[3], "del") == 0) {
         std::stringstream is;
@@ -1868,12 +1740,8 @@ int main(int argc, char* argv[]) {
         ret = CreateOp(client, argc, argv, &error_code);
     } else if (cmd == "createbyfile") {
         ret = CreateByFileOp(client, argc, argv, &error_code);
-    } else if (cmd == "createkv") {
-        ret = CreateKvOp(client, argc, argv, &error_code);
     } else if (cmd == "update") {
         ret = UpdateOp(client, argc, argv, &error_code);
-    } else if (cmd == "update-part"){
-        ret = UpdatePartOp(client, argc, argv, &error_code);
     } else if (cmd == "drop") {
         ret = DropOp(client, argc, argv, &error_code);
     } else if (cmd == "enable") {
@@ -1882,6 +1750,8 @@ int main(int argc, char* argv[]) {
         ret = DisableOp(client, argc, argv, &error_code);
     } else if (cmd == "show" || cmd == "showx" || cmd == "showall") {
         ret = ShowOp(client, argc, argv, &error_code);
+    } else if (cmd == "showschema" || cmd == "showschemax") {
+        ret = ShowSchemaOp(client, argc, argv, &error_code);
     } else if (cmd == "showts" || cmd == "showtsx") {
         ret = ShowTabletNodesOp(client, argc, argv, &error_code);
     } else if (cmd == "put") {
