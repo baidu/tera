@@ -102,7 +102,8 @@ LGDescImpl::LGDescImpl(const std::string& lg_name, int32_t id)
       _block_size(FLAGS_tera_tablet_write_block_size),
       _use_memtable_on_leveldb(false),
       _memtable_ldb_write_buffer_size(0),
-      _memtable_ldb_block_size(0){
+      _memtable_ldb_block_size(0),
+      _sst_size(8000000){
 }
 
 /// Id read only
@@ -172,6 +173,14 @@ int32_t LGDescImpl::MemtableLdbBlockSize() const {
 
 void LGDescImpl::SetMemtableLdbBlockSize(int32_t block_size) {
     _memtable_ldb_block_size = block_size;
+}
+
+int32_t LGDescImpl::SstSize() const {
+    return _sst_size;
+}
+
+void LGDescImpl::SetSstSize(int32_t sst_size) {
+    _sst_size = sst_size;
 }
 
 /// 表格名字仅允许使用字母、数字和下划线构造,长度不超过256
