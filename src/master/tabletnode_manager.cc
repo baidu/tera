@@ -85,14 +85,16 @@ uint32_t Spatula::PushCount() {
 
 TabletNode::TabletNode() : m_state(kOffLine),
     m_report_status(kTabletNodeInit), m_data_size(0), m_load(0),
-    m_update_time(0), m_query_fail_count(0), m_plan_move_in_count(0) {
+    m_update_time(0), m_query_fail_count(0), m_plan_move_in_count(0),
+    m_load_spatula2(FLAGS_tera_master_max_load_concurrency) {
     m_info.set_addr("");
 }
 
 TabletNode::TabletNode(const std::string& addr, const std::string& uuid)
     : m_addr(addr), m_uuid(uuid), m_state(kOffLine),
       m_report_status(kTabletNodeInit), m_data_size(0), m_load(0),
-      m_update_time(0), m_query_fail_count(0), m_plan_move_in_count(0) {
+      m_update_time(0), m_query_fail_count(0), m_plan_move_in_count(0),
+      m_load_spatula2(FLAGS_tera_master_max_load_concurrency) {
     m_info.set_addr(addr);
 }
 
@@ -187,11 +189,14 @@ bool TabletNode::TryUnload(TabletPtr tablet) {
         return true;
     }
     m_unload_spatula.Push(tablet);
-    LOG(INFO) << "[unload] Push done, the push-count: " << m_unload_spatula.PushCount();
+    LOG(INFO) << "[unload] Push done, the push-count: " << m_unload_spatula.PushCount()
+              << ", doing count:" << m_unload_spatula.GetDoingCount()
+              << ", waitlist: " << (m_unload_spatula.IsWaitListEmpty() ? "empty":"not empty");
     m_unload_spatula.Print();
     return false;
 }
 
+/*
 bool TabletNode::TryLoad(TabletPtr tablet) {
     MutexLock lock(&m_mutex);
     m_data_size += tablet->GetDataSize();
@@ -221,6 +226,26 @@ void TabletNode::BeginLoad() {
     }
 }
 
+bool TabletNode::FinishLoad(TabletPtr tablet) {
+    MutexLock lock(&m_mutex);
+    m_load_spatula.DoingCountMinusOne();
+    return true;
+}
+
+bool TabletNode::LoadNextWaitTablet(TabletPtr* tablet) {
+    MutexLock lock(&m_mutex);
+    if (m_load_spatula.GetDoingCount() >= static_cast<uint32_t>(FLAGS_tera_master_max_load_concurrency)) {
+        return false;
+    }
+    if (m_load_spatula.IsWaitListEmpty()) {
+        return false;
+    }
+    *tablet = m_load_spatula.Pop();
+    BeginLoad();
+    return true;
+}
+*/
+
 bool TabletNode::FinishUnload4Merge(TabletPtr tablet) {
     MutexLock lock(&m_mutex);
     m_unload4merge_spatula.DoingCountMinusOne();
@@ -236,12 +261,6 @@ bool TabletNode::FinishUnload(TabletPtr tablet) {
 bool TabletNode::FinishSplit(TabletPtr tablet) {
     MutexLock lock(&m_mutex);
     m_split_spatula.DoingCountMinusOne();
-    return true;
-}
-
-bool TabletNode::FinishLoad(TabletPtr tablet) {
-    MutexLock lock(&m_mutex);
-    m_load_spatula.DoingCountMinusOne();
     return true;
 }
 
@@ -278,19 +297,6 @@ bool TabletNode::UnloadNextWaitTablet(TabletPtr* tablet) {
     LOG(INFO) << "[unload] pop() : " << (*tablet)->GetPath() 
         << ", the pop-count: " << m_unload_spatula.PopCount();
     m_unload_spatula.DoingCountPlusOne();
-    return true;
-}
-
-bool TabletNode::LoadNextWaitTablet(TabletPtr* tablet) {
-    MutexLock lock(&m_mutex);
-    if (m_load_spatula.GetDoingCount() >= static_cast<uint32_t>(FLAGS_tera_master_max_load_concurrency)) {
-        return false;
-    }
-    if (m_load_spatula.IsWaitListEmpty()) {
-        return false;
-    }
-    *tablet = m_load_spatula.Pop();
-    BeginLoad();
     return true;
 }
 
@@ -442,7 +448,8 @@ void TabletNodeManager::UpdateTabletNode(const std::string& addr,
     node->m_table_size = state.m_table_size;
 
     node->m_info.set_status_m(NodeStateToString(node->m_state));
-    node->m_info.set_tablet_onload(node->m_load_spatula.GetDoingCount());
+    //node->m_info.set_tablet_onload(node->m_load_spatula.GetDoingCount());
+    // TODO running count?
     node->m_info.set_tablet_onsplit(node->m_split_spatula.GetDoingCount());
     VLOG(15) << "update tabletnode : " << addr;
 }

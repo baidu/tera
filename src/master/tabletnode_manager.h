@@ -16,6 +16,7 @@
 #include "common/thread_pool.h"
 
 #include "master/tablet_manager.h"
+#include "master/task_spatula.h"
 #include "proto/proto_helper.h"
 
 namespace tera {
@@ -67,14 +68,11 @@ struct TabletNode {
     std::map<std::string, uint64_t> m_table_size;
 
     uint32_t m_query_fail_count;
-    //uint32_t m_onload_count;
-    //uint32_t m_onsplit_count;
-    //uint32_t m_onunload_count;
     uint32_t m_plan_move_in_count;
-    //std::list<TabletPtr> m_wait_load_list;
-    //std::list<TabletPtr> m_wait_split_list;
-    //std::list<TabletPtr> m_wait_unload_list;
-    Spatula m_load_spatula;
+    
+    //Spatula m_load_spatula;
+    TaskSpatula m_load_spatula2;
+
     Spatula m_unload_spatula;
     Spatula m_unload4merge_spatula;
     Spatula m_split_spatula;
@@ -101,10 +99,10 @@ struct TabletNode {
     // To tell if node load too many tablets within short time.
     bool MayLoadNow();
 
-    bool TryLoad(TabletPtr tablet);
-    void BeginLoad();
-    bool FinishLoad(TabletPtr tablet);
-    bool LoadNextWaitTablet(TabletPtr* tablet);
+    //bool TryLoad(TabletPtr tablet);
+    //void BeginLoad();
+    //bool FinishLoad(TabletPtr tablet);
+    //bool LoadNextWaitTablet(TabletPtr* tablet);
 
     bool TrySplit(TabletPtr tablet);
     bool FinishSplit(TabletPtr tablet);
