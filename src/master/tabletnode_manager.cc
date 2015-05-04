@@ -226,9 +226,63 @@ void TabletNode::BeginLoad() {
     }
 }
 
+bool TabletNode::FinishUnload4Merge(TabletPtr tablet) {
+    MutexLock lock(&m_mutex);
+    m_unload4merge_spatula.DoingCountMinusOne();
+    return true;
+}
+
+bool TabletNode::FinishUnload(TabletPtr tablet) {
+    MutexLock lock(&m_mutex);
+    m_unload_spatula.DoingCountMinusOne();
+    return true;
+}
+
+bool TabletNode::FinishSplit(TabletPtr tablet) {
+    MutexLock lock(&m_mutex);
+    m_split_spatula.DoingCountMinusOne();
+    return true;
+}
+
 bool TabletNode::FinishLoad(TabletPtr tablet) {
     MutexLock lock(&m_mutex);
     m_load_spatula.DoingCountMinusOne();
+    return true;
+}
+
+bool TabletNode::Unload4MergeNextWaitTablet(TabletPtr* tablet) {
+    MutexLock lock(&m_mutex);
+    if (m_unload4merge_spatula.GetDoingCount() 
+        >= static_cast<uint32_t>(FLAGS_tera_master_max_unload_concurrency)) {
+        LOG(INFO) << "[unload4merge] up to top";
+        return false;
+    }
+    if (m_unload4merge_spatula.IsWaitListEmpty()) {
+        LOG(INFO) << "[unload4merge] wait list is empty";
+        return false;
+    }
+    *tablet = m_unload4merge_spatula.Pop();
+    LOG(INFO) << "[unload4merge] pop() : " << (*tablet)->GetPath() 
+        << ", the pop-count: " << m_unload4merge_spatula.PopCount();
+    m_unload4merge_spatula.DoingCountPlusOne();
+    return true;
+}
+
+bool TabletNode::UnloadNextWaitTablet(TabletPtr* tablet) {
+    MutexLock lock(&m_mutex);
+    if (m_unload_spatula.GetDoingCount() 
+        >= static_cast<uint32_t>(FLAGS_tera_master_max_unload_concurrency)) {
+        LOG(INFO) << "[unload] up to top";
+        return false;
+    }
+    if (m_unload_spatula.IsWaitListEmpty()) {
+        LOG(INFO) << "[unload] wait list is empty";
+        return false;
+    }
+    *tablet = m_unload_spatula.Pop();
+    LOG(INFO) << "[unload] pop() : " << (*tablet)->GetPath() 
+        << ", the pop-count: " << m_unload_spatula.PopCount();
+    m_unload_spatula.DoingCountPlusOne();
     return true;
 }
 
