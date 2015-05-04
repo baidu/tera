@@ -84,6 +84,7 @@ extern tera::Counter ssd_write_size_counter;
 }
 
 tera::Counter rand_read_delay;
+tera::Counter row_read_delay;
 tera::Counter range_error_counter;
 tera::Counter read_pending_counter;
 tera::Counter write_pending_counter;
@@ -228,9 +229,18 @@ void TabletNodeSysInfo::CollectTabletNodeInfo(TabletManager* tablet_manager,
     if (read_rows == 0) {
         tmp = 0;
     } else {
-        tmp = rand_read_delay.Clear() / m_info.read_rows();
+        tmp = rand_read_delay.Clear() / read_rows;
     }
     einfo->set_name("rand_read_delay");
+    einfo->set_value(tmp / 1000);
+
+    einfo = m_info.add_extra_info();
+    if (read_rows == 0) {
+        tmp = 0;
+    } else {
+        tmp = row_read_delay.Clear() / read_rows;
+    }
+    einfo->set_name("row_read_delay");
     einfo->set_value(tmp / 1000);
 
     einfo = m_info.add_extra_info();

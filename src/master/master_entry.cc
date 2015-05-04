@@ -13,6 +13,8 @@
 #include "utils/utils_cmd.h"
 
 DECLARE_string(tera_master_port);
+DECLARE_int32(tera_master_rpc_server_max_inflow);
+DECLARE_int32(tera_master_rpc_server_max_outflow);
 
 namespace tera {
 namespace master {
@@ -20,7 +22,12 @@ namespace master {
 MasterEntry::MasterEntry()
     : m_master_impl(NULL),
       m_remote_master(NULL),
-      m_rpc_server(m_rpc_options) {}
+      m_rpc_server(NULL) {
+    sofa::pbrpc::RpcServerOptions rpc_options;
+    rpc_options.max_throughput_in = FLAGS_tera_master_rpc_server_max_inflow;
+    rpc_options.max_throughput_out = FLAGS_tera_master_rpc_server_max_outflow;
+    m_rpc_server.reset(new sofa::pbrpc::RpcServer(rpc_options));
+}
 
 MasterEntry::~MasterEntry() {}
 
@@ -35,8 +42,8 @@ bool MasterEntry::StartServer() {
         return false;
     }
 
-    m_rpc_server.RegisterService(m_remote_master);
-    if (!m_rpc_server.Start(master_addr.ToString())) {
+    m_rpc_server->RegisterService(m_remote_master);
+    if (!m_rpc_server->Start(master_addr.ToString())) {
         LOG(ERROR) << "start RPC server error";
         return false;
     }
@@ -46,7 +53,7 @@ bool MasterEntry::StartServer() {
 }
 
 void MasterEntry::ShutdownServer() {
-    m_rpc_server.Stop();
+    m_rpc_server->Stop();
     m_master_impl.reset();
 }
 

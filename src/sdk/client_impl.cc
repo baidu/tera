@@ -14,7 +14,7 @@
 #include "proto/master_client.h"
 #include "proto/proto_helper.h"
 #include "proto/table_meta.pb.h"
-#include "proto/tabletnode_client_async.h"
+#include "proto/tabletnode_client.h"
 #include "sdk/table_impl.h"
 #include "sdk/sdk_utils.h"
 #include "sdk/sdk_zk.h"
@@ -51,8 +51,8 @@ ClientImpl::ClientImpl(const std::string& user_identity,
       _user_passcode(user_passcode),
       _zk_addr_list(zk_addr_list),
       _zk_root_path(zk_root_path) {
-    tabletnode::TabletNodeClientAsync::SetThreadPool(&_thread_pool);
-    tabletnode::TabletNodeClientAsync::SetRpcOption(
+    tabletnode::TabletNodeClient::SetThreadPool(&_thread_pool);
+    tabletnode::TabletNodeClient::SetRpcOption(
         FLAGS_tera_sdk_rpc_limit_enabled ? FLAGS_tera_sdk_rpc_limit_max_inflow : -1,
         FLAGS_tera_sdk_rpc_limit_enabled ? FLAGS_tera_sdk_rpc_limit_max_outflow : -1,
         FLAGS_tera_sdk_rpc_max_pending_buffer_size, FLAGS_tera_sdk_rpc_work_thread_num);
@@ -71,8 +71,7 @@ bool ClientImpl::CreateTable(const TableDescriptor& desc, ErrorCode* err) {
 bool ClientImpl::CreateTable(const TableDescriptor& desc,
                              const std::vector<string>& tablet_delim,
                              ErrorCode* err) {
-    master::MasterClient master_client;
-    master_client.ResetMasterClient(_cluster->MasterAddr());
+    master::MasterClient master_client(_cluster->MasterAddr());
 
     CreateTableRequest request;
     CreateTableResponse response;
@@ -122,8 +121,7 @@ bool ClientImpl::UpdateTable(const TableDescriptor& desc, ErrorCode* err) {
         return false;
     }
 
-    master::MasterClient master_client;
-    master_client.ResetMasterClient(_cluster->MasterAddr());
+    master::MasterClient master_client(_cluster->MasterAddr());
 
     UpdateTableRequest request;
     UpdateTableResponse response;
@@ -163,8 +161,7 @@ bool ClientImpl::UpdateTable(const TableDescriptor& desc, ErrorCode* err) {
 }
 
 bool ClientImpl::DeleteTable(string name, ErrorCode* err) {
-    master::MasterClient master_client;
-    master_client.ResetMasterClient(_cluster->MasterAddr());
+    master::MasterClient master_client(_cluster->MasterAddr());
 
     DeleteTableRequest request;
     DeleteTableResponse response;
@@ -199,8 +196,7 @@ bool ClientImpl::DeleteTable(string name, ErrorCode* err) {
 }
 
 bool ClientImpl::DisableTable(string name, ErrorCode* err) {
-    master::MasterClient master_client;
-    master_client.ResetMasterClient(_cluster->MasterAddr());
+    master::MasterClient master_client(_cluster->MasterAddr());
 
     DisableTableRequest request;
     DisableTableResponse response;
@@ -231,8 +227,7 @@ bool ClientImpl::DisableTable(string name, ErrorCode* err) {
 }
 
 bool ClientImpl::EnableTable(string name, ErrorCode* err) {
-    master::MasterClient master_client;
-    master_client.ResetMasterClient(_cluster->MasterAddr());
+    master::MasterClient master_client(_cluster->MasterAddr());
 
     EnableTableRequest request;
     EnableTableResponse response;
@@ -362,8 +357,7 @@ bool ClientImpl::ShowTablesInfo(const string& name,
     }
     tablet_list->Clear();
 
-    master::MasterClient master_client;
-    master_client.ResetMasterClient(_cluster->MasterAddr());
+    master::MasterClient master_client(_cluster->MasterAddr());
 
     ShowTablesRequest request;
     ShowTablesResponse response;
@@ -396,8 +390,7 @@ bool ClientImpl::ShowTablesInfo(TableMetaList* table_list,
     table_list->Clear();
     tablet_list->Clear();
 
-    master::MasterClient master_client;
-    master_client.ResetMasterClient(_cluster->MasterAddr());
+    master::MasterClient master_client(_cluster->MasterAddr());
 
     ShowTablesRequest request;
     ShowTablesResponse response;
@@ -427,8 +420,7 @@ bool ClientImpl::ShowTabletNodesInfo(const string& addr,
     info->Clear();
     tablet_list->Clear();
 
-    master::MasterClient master_client;
-    master_client.ResetMasterClient(_cluster->MasterAddr());
+    master::MasterClient master_client(_cluster->MasterAddr());
 
     ShowTabletNodesRequest request;
     ShowTabletNodesResponse response;
@@ -457,8 +449,7 @@ bool ClientImpl::ShowTabletNodesInfo(std::vector<TabletNodeInfo>* infos,
     }
     infos->clear();
 
-    master::MasterClient master_client;
-    master_client.ResetMasterClient(_cluster->MasterAddr());
+    master::MasterClient master_client(_cluster->MasterAddr());
 
     ShowTabletNodesRequest request;
     ShowTabletNodesResponse response;
@@ -536,8 +527,7 @@ bool ClientImpl::IsTableEmpty(const string& table_name, ErrorCode* err) {
 }
 
 bool ClientImpl::GetSnapshot(const string& name, uint64_t* snapshot, ErrorCode* err) {
-    master::MasterClient master_client;
-    master_client.ResetMasterClient(_cluster->MasterAddr());
+    master::MasterClient master_client(_cluster->MasterAddr());
 
     GetSnapshotRequest request;
     GetSnapshotResponse response;
@@ -557,8 +547,7 @@ bool ClientImpl::GetSnapshot(const string& name, uint64_t* snapshot, ErrorCode* 
 }
 
 bool ClientImpl::DelSnapshot(const string& name, uint64_t snapshot, ErrorCode* err) {
-    master::MasterClient master_client;
-    master_client.ResetMasterClient(_cluster->MasterAddr());
+    master::MasterClient master_client(_cluster->MasterAddr());
 
     DelSnapshotRequest request;
     DelSnapshotResponse response;
@@ -582,8 +571,7 @@ bool ClientImpl::CmdCtrl(const string& command,
                          bool* bool_result,
                          string* str_result,
                          ErrorCode* err) {
-    master::MasterClient master_client;
-    master_client.ResetMasterClient(_cluster->MasterAddr());
+    master::MasterClient master_client(_cluster->MasterAddr());
 
     CmdCtrlRequest request;
     CmdCtrlResponse response;
@@ -616,8 +604,7 @@ bool ClientImpl::ListInternal(std::vector<TableInfo>* table_list,
                               uint32_t max_table_found,
                               uint32_t max_tablet_found,
                               ErrorCode* err) {
-    master::MasterClient master_client;
-    master_client.ResetMasterClient(_cluster->MasterAddr());
+    master::MasterClient master_client(_cluster->MasterAddr());
 
     uint64_t sequence_id = 0;
     ShowTablesRequest request;

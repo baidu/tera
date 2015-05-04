@@ -25,7 +25,6 @@
 #include "proto/kv_helper.h"
 #include "proto/proto_helper.h"
 #include "proto/tabletnode_client.h"
-#include "proto/tabletnode_client_async.h"
 #include "tabletnode/tablet_manager.h"
 #include "tabletnode/tabletnode_zk_adapter.h"
 #include "types.h"
@@ -82,21 +81,15 @@ namespace tera {
 namespace tabletnode {
 
 TabletNodeImpl::TabletNodeImpl(const TabletNodeInfo& tabletnode_info,
-                               master::MasterClient* master_client,
                                TabletManager* tablet_manager)
     : m_status(kNotInited),
-      m_master_client(master_client),
       m_tablet_manager(tablet_manager),
       m_zk_adapter(NULL),
       m_release_cache_timer_id(kInvalidTimerId),
       m_sysinfo(tabletnode_info),
       m_thread_pool(new ThreadPool(FLAGS_tera_tabletnode_impl_thread_max_num)) {
     m_local_addr = utils::GetLocalHostName() + ":" + FLAGS_tera_tabletnode_port;
-    tabletnode::TabletNodeClientAsync::SetRpcOption(
-        FLAGS_tera_tabletnode_rpc_limit_enabled ? FLAGS_tera_tabletnode_rpc_limit_max_inflow : -1,
-        FLAGS_tera_tabletnode_rpc_limit_enabled ? FLAGS_tera_tabletnode_rpc_limit_max_outflow : -1,
-        FLAGS_tera_tabletnode_rpc_max_pending_buffer_size, FLAGS_tera_tabletnode_rpc_work_thread_num);
-    TabletNodeClientAsync::SetThreadPool(m_thread_pool.get());
+    TabletNodeClient::SetThreadPool(m_thread_pool.get());
 
     leveldb::Env::Default()->SetBackgroundThreads(FLAGS_tera_tabletnode_compact_thread_num);
     leveldb::Env::Default()->RenameFile(FLAGS_tera_leveldb_log_path,
@@ -189,68 +182,6 @@ bool TabletNodeImpl::Exit() {
         delete tablet_meta;
     }
     return true;
-}
-
-bool TabletNodeImpl::Register() {
-    RegisterRequest request;
-    RegisterResponse response;
-
-    m_this_sequence_id = kSequenceIDStart;
-    request.set_sequence_id(m_this_sequence_id);
-    TabletNodeInfo* ts_info = request.mutable_tabletnode_info();
-    m_sysinfo.GetTabletNodeInfo(ts_info);
-
-    if (!m_master_client->Register(&request, &response)) {
-        LOG(ERROR) << "Rpc failed: register, status = "
-            << StatusCodeToString(response.status());
-        return false;
-    }
-    if (response.status() == kMasterOk) {
-        LOG(INFO) << "register success: " << response.ShortDebugString();
-        m_sysinfo.SetStatus(kTabletNodeRegistered);
-        ++m_this_sequence_id;
-        return true;
-    }
-
-    LOG(INFO) << "register fail: " << response.ShortDebugString();
-    return false;
-}
-
-bool TabletNodeImpl::Report() {
-    ReportRequest request;
-    request.set_sequence_id(m_this_sequence_id);
-    TabletNodeInfo* ts_info = request.mutable_tabletnode_info();
-    m_sysinfo.GetTabletNodeInfo(ts_info);
-
-    int32_t retry = 0;
-    while (retry < FLAGS_tera_heartbeat_retry_times) {
-        ReportResponse response;
-        if (!m_master_client->Report(&request, &response)) {
-            LOG(ERROR) << "Rpc failed: report, status = "
-                << StatusCodeToString(response.status());
-        } else if (response.status() == kMasterOk) {
-            LOG(INFO) << "report success, response: "
-                << response.DebugString();
-            if (response.sequence_id() != m_this_sequence_id) {
-                LOG(WARNING) << "report is lost";
-                m_this_sequence_id = response.sequence_id() + 1;
-            } else {
-                ++m_this_sequence_id;
-            }
-            return true;
-        } else if (response.status() == kTabletNodeNotRegistered) {
-            if (!Register()) {
-                return false;
-            }
-            return true;
-        } else {
-            LOG(ERROR) << "report failed: " << response.DebugString();
-            ThisThread::Sleep(retry * FLAGS_tera_heartbeat_period *
-                              FLAGS_tera_heartbeat_retry_period_factor);
-        }
-        ++retry;
-    }
-    return false;
 }
 
 void TabletNodeImpl::LoadTablet(const LoadTabletRequest* request,
@@ -925,7 +856,7 @@ void TabletNodeImpl::UpdateMetaTableAsync(const SplitTabletRequest* rpc_request,
         << "], value_size: " << meta_value.size();
 
     // then write 1st half
-    TabletNodeClientAsync meta_tablet_client(m_root_tablet_addr);
+    TabletNodeClient meta_tablet_client(m_root_tablet_addr);
 
     tablet_meta.set_path(leveldb::GetChildTabletPath(path, rpc_request->child_tablets(1)));
     tablet_meta.set_table_size(first_size);
