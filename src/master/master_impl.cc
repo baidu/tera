@@ -1849,7 +1849,7 @@ bool MasterImpl::LoadTabletSync(const TabletMeta& meta,
     }
 
     tabletnode::TabletNodeClient node_client(meta.server_addr(),
-                                                  FLAGS_tera_master_load_rpc_timeout);
+                                             FLAGS_tera_master_load_rpc_timeout);
 
     LoadTabletRequest request;
     LoadTabletResponse response;

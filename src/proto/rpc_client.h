@@ -158,7 +158,7 @@ protected:
         // sync call
         if (closure == NULL) {
             sync_call_event.Wait();
-            return sync_call_failed;
+            return (!sync_call_failed);
         }
 
         // async call
