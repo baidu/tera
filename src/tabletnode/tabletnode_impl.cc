@@ -141,10 +141,15 @@ bool TabletNodeImpl::Init() {
         return true;
     }
 
-    m_zk_adapter.reset(new TabletNodeZkAdapter(this, m_local_addr));
+    if (FLAGS_tera_zk_enabled) {
+        m_zk_adapter.reset(new TabletNodeZkAdapter(this, m_local_addr));
+    } else {
+        LOG(INFO) << "fake zk mode!";
+        m_zk_adapter.reset(new FakeTabletNodeZkAdapter(this, m_local_addr));
+    }
 
     SetTabletNodeStatus(kIsIniting);
-    m_thread_pool->AddTask(boost::bind(&TabletNodeZkAdapter::Init, m_zk_adapter.get()));
+//    m_thread_pool->AddTask(boost::bind(&TabletNodeZkAdapterBase::Init, m_zk_adapter.get()));
     return true;
 }
 

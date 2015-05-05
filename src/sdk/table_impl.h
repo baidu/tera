@@ -15,8 +15,6 @@
 #include "sdk/tera.h"
 #include "utils/counter.h"
 
-class TimerManager;
-
 namespace tera {
 
 namespace master {

@@ -23,7 +23,7 @@ namespace tera {
 namespace tabletnode {
 
 class TabletManager;
-class TabletNodeZkAdapter;
+class TabletNodeZkAdapterBase;
 
 class TabletNodeImpl {
 public:
@@ -158,7 +158,7 @@ private:
 
     master::MasterClient* m_master_client;
     scoped_ptr<TabletManager> m_tablet_manager;
-    scoped_ptr<TabletNodeZkAdapter> m_zk_adapter;
+    scoped_ptr<TabletNodeZkAdapterBase> m_zk_adapter;
 
     uint64_t m_this_sequence_id;
     std::string m_local_addr;

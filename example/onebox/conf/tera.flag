@@ -1,4 +1,5 @@
 # 将下面两项修改为对应zk地址及tera根节点路径
+--tera_zk_enabled=false
 --tera_zk_addr_list=localhost:2181
 --tera_zk_root_path=/tera
 

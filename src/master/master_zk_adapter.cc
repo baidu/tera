@@ -517,7 +517,63 @@ void MasterZkAdapter::OnSessionTimeout() {
     _Exit(EXIT_FAILURE);
 }
 
+FakeMasterZkAdapter::FakeMasterZkAdapter(MasterImpl * master_impl,
+                                 const std::string& server_addr)
+    : m_master_impl(master_impl), m_server_addr(server_addr) {
+    exit(-1);
+}
+
+FakeMasterZkAdapter::~FakeMasterZkAdapter() {
+}
+
+bool FakeMasterZkAdapter::Init(std::string* root_tablet_addr,
+                               std::map<std::string, std::string>* tabletnode_list,
+                               bool* safe_mode) {
+    return true;
+}
+
+bool FakeMasterZkAdapter::KickTabletServer(const std::string& ts_host,
+                                           const std::string& ts_zk_id) {
+    return true;
+}
+
+bool FakeMasterZkAdapter::MarkSafeMode() {
+    return true;
+}
+
+bool FakeMasterZkAdapter::UnmarkSafeMode() {
+    return true;
+}
+
+bool FakeMasterZkAdapter::UpdateRootTabletNode(const std::string& root_tablet_addr) {
+    return true;
+}
+
+void FakeMasterZkAdapter::OnChildrenChanged(const std::string& path,
+                                            const std::vector<std::string>& name_list,
+                                            const std::vector<std::string>& data_list) {
+
+}
+
+void FakeMasterZkAdapter::OnNodeValueChanged(const std::string& path,
+                                             const std::string& value) {
+
+}
+
+void FakeMasterZkAdapter::OnNodeCreated(const std::string& path) {
+}
+
+void FakeMasterZkAdapter::OnNodeDeleted(const std::string& path) {
+
+}
+
+void FakeMasterZkAdapter::OnWatchFailed(const std::string& path,
+                                        int watch_type,
+                                        int err) {
+}
+
+void FakeMasterZkAdapter::OnSessionTimeout() {
+}
+
 } // namespace master
 } // namespace tera
-
-/* vim: set expandtab ts=4 sw=4 sts=4 tw=100: */

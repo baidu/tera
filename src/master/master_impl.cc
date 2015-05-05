@@ -129,7 +129,12 @@ MasterImpl::~MasterImpl() {
 }
 
 bool MasterImpl::Init() {
-    m_zk_adapter.reset(new MasterZkAdapter(this, m_local_addr));
+    if (FLAGS_tera_zk_enabled) {
+        m_zk_adapter.reset(new MasterZkAdapter(this, m_local_addr));
+    } else {
+        LOG(INFO) << "fake zk mode!";
+        m_zk_adapter.reset(new FakeMasterZkAdapter(this, m_local_addr));
+    }
 
     SetMasterStatus(kIsSecondary);
     DisableQueryTabletNodeTimer();
