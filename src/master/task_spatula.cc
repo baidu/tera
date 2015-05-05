@@ -16,13 +16,13 @@ TaskSpatula::~TaskSpatula() {
     assert(m_queue.size() == 0); // TODO copy from ts-a to ts-b, clear m_queue of a
 }
 
-void TaskSpatula::EnQueueTask(concurrency_task_t atask) {
+void TaskSpatula::EnQueueTask(const ConcurrencyTask& atask) {
     MutexLock lock(&m_mutex);
     m_queue.push(atask);
     m_pending_count++;
 }
 
-bool TaskSpatula::DeQueueTask(concurrency_task_t *atask) {
+bool TaskSpatula::DeQueueTask(ConcurrencyTask* atask) {
     MutexLock lock(&m_mutex);
     assert(atask != NULL);
     if(m_queue.size() <= 0) {
@@ -42,7 +42,7 @@ void TaskSpatula::FinishTask() {
 
 void TaskSpatula::TryDrain() {
     boost::function<void ()> dummy_func = boost::bind(&TaskSpatula::TryDrain, this);
-    concurrency_task_t atask("dummy data", dummy_func);
+    ConcurrencyTask atask(0, dummy_func);
     while(m_running_count < m_max_concurrency
           && DeQueueTask(&atask)) {
         atask.async_call();
@@ -51,14 +51,10 @@ void TaskSpatula::TryDrain() {
             m_running_count++;
         }
     }
+}
 
-    /*  for debug
-    if (m_running_count < m_max_concurrency) {
-        LOG(INFO) << "[task spatula] queue is empty";
-    } else {
-        LOG(INFO) << "[task spatula] m_running_count : " << m_running_count; 
-    } 
-    */
+int32_t TaskSpatula::GetRunningCount() {
+    return m_running_count;
 }
 
 } // namespace master

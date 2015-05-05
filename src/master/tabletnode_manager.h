@@ -70,12 +70,9 @@ struct TabletNode {
     uint32_t m_query_fail_count;
     uint32_t m_plan_move_in_count;
     
-    //Spatula m_load_spatula;
-    TaskSpatula m_load_spatula2;
-
-    Spatula m_unload_spatula;
-    Spatula m_unload4merge_spatula;
-    Spatula m_split_spatula;
+    TaskSpatula m_load_spatula;
+    TaskSpatula m_unload_spatula;
+    TaskSpatula m_split_spatula;
 
     // The start time of recent load operation.
     // Used to tell if node load too many tablets within short time.
@@ -98,25 +95,6 @@ struct TabletNode {
 
     // To tell if node load too many tablets within short time.
     bool MayLoadNow();
-
-    //bool TryLoad(TabletPtr tablet);
-    //void BeginLoad();
-    //bool FinishLoad(TabletPtr tablet);
-    //bool LoadNextWaitTablet(TabletPtr* tablet);
-
-    bool TrySplit(TabletPtr tablet);
-    bool FinishSplit(TabletPtr tablet);
-    bool SplitNextWaitTablet(TabletPtr* tablet);
-
-    bool TryUnload(TabletPtr tablet);
-    void BeginUnload();
-    bool FinishUnload(TabletPtr tablet);
-    bool UnloadNextWaitTablet(TabletPtr* tablet);
-
-    bool TryUnload4Merge(TabletPtr tablet);
-    void BeginUnload4Merge();
-    bool FinishUnload4Merge(TabletPtr tablet);
-    bool Unload4MergeNextWaitTablet(TabletPtr* tablet);
 
     NodeState GetState();
     bool SetState(NodeState new_state, NodeState* old_state);

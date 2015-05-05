@@ -5,13 +5,13 @@
 #ifndef TERA_MASTER_MASTER_IMPL_H_
 #define TERA_MASTER_MASTER_IMPL_H_
 
-#include <stdint.h>
 #include <semaphore.h>
+#include <stdint.h>
 #include <string>
 #include <vector>
 
-#include "common/event.h"
 #include "common/base/scoped_ptr.h"
+#include "common/event.h"
 #include "common/mutex.h"
 #include "common/thread_pool.h"
 #include "gflags/gflags.h"
@@ -29,18 +29,18 @@ namespace tera {
 
 class LoadTabletRequest;
 class LoadTabletResponse;
-class UnloadTabletRequest;
-class UnloadTabletResponse;
-class SplitTabletRequest;
-class SplitTabletResponse;
 class MergeTabletRequest;
 class MergeTabletResponse;
 class QueryRequest;
 class QueryResponse;
-class WriteTabletRequest;
-class WriteTabletResponse;
 class ScanTabletRequest;
 class ScanTabletResponse;
+class SplitTabletRequest;
+class SplitTabletResponse;
+class UnloadTabletRequest;
+class UnloadTabletResponse;
+class WriteTabletRequest;
+class WriteTabletResponse;
 
 namespace master {
 
@@ -60,6 +60,21 @@ public:
         kIsRunning = kMasterIsRunning,
         kOnRestore = kMasterOnRestore,
         kOnWait = kMasterOnWait
+    };
+
+    // great number comes great priority
+    enum ConcurrencyTaskPriority {
+        // unload
+        kTaskUnloadForDisable = 5,
+        kTaskUnload = 10,
+        kTaskUnloadForMerge = 15,
+        kTaskUnloadForBalance = 20,
+
+        // load
+        kTaskLoad = 10,
+
+        // split
+        kTaskSplit = 10
     };
 
     MasterImpl();
@@ -300,7 +315,7 @@ private:
                              SplitTabletResponse* response, bool failed,
                              int error_code);
 
-    void MergeTabletAsync(TabletPtr tablet_p1, TabletPtr tablet_p2, Mutex *mu);
+    void MergeTabletAsync(TabletPtr tablet_p1, TabletPtr tablet_p2);
     void MergeTabletAsyncPhase2(TabletPtr tablet_p1, TabletPtr tablet_p2);
     void MergeTabletUnloadCallback(TabletPtr tablet, TabletPtr tablet2, Mutex* mutex,
                                            UnloadTabletRequest* request,
