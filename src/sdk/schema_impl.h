@@ -112,6 +112,10 @@ public:
 
     void SetMemtableLdbBlockSize(int32_t block_size);
 
+    /// sst file size, in Bytes
+    int32_t SstSize() const;
+    void SetSstSize(int32_t sst_size);
+
 private:
     int32_t         _id;
     std::string     _name;
@@ -122,6 +126,7 @@ private:
     bool            _use_memtable_on_leveldb;
     int32_t         _memtable_ldb_write_buffer_size;
     int32_t         _memtable_ldb_block_size;
+    int32_t         _sst_size; // in bytes
 };
 
 /// 表描述符.
@@ -130,6 +135,7 @@ public:
     /// 表格名字仅允许使用字母、数字和下划线构造,长度不超过256
     TableDescImpl(const std::string& tb_name, bool is_kv);
     ~TableDescImpl();
+    void SetTableName(const std::string& name);
     std::string TableName() const;
     /// 设置为kv表（无列），建表完成后无法改变
     void SetKvOnly();

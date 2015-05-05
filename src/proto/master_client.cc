@@ -16,138 +16,123 @@ DECLARE_int32(tera_master_connect_timeout_period);
 namespace tera {
 namespace master {
 
-MasterClient::MasterClient()
-    : RpcClient<MasterServer::Stub>("", FLAGS_tera_master_connect_retry_period,
-                                    FLAGS_tera_master_connect_timeout_period,
-                                    FLAGS_tera_master_connect_retry_times) {}
+MasterClient::MasterClient(const std::string& server_addr,
+                           int32_t rpc_timeout)
+    : RpcClient<MasterServer::Stub>(server_addr),
+      m_rpc_timeout(rpc_timeout) {}
 
 MasterClient::~MasterClient() {}
-
-void MasterClient::ResetMasterClient(const std::string& server_addr) {
-    ResetClient(server_addr);
-}
 
 bool MasterClient::GetSnapshot(const GetSnapshotRequest* request,
                                GetSnapshotResponse* response) {
     return SendMessageWithRetry(&MasterServer::Stub::GetSnapshot,
                                 request, response,
-                                (google::protobuf::Closure*)NULL,
-                                "GetSnapshot");
+                                (Closure<void, GetSnapshotRequest*, GetSnapshotResponse*, bool, int>*)NULL,
+                                "GetSnapshot", m_rpc_timeout);
 }
 
 bool MasterClient::DelSnapshot(const DelSnapshotRequest* request,
                                DelSnapshotResponse* response) {
     return SendMessageWithRetry(&MasterServer::Stub::DelSnapshot,
                                 request, response,
-                                (google::protobuf::Closure*)NULL,
-                                "DelSnapshot");
+                                (Closure<void, DelSnapshotRequest*, DelSnapshotResponse*, bool, int>*)NULL,
+                                "DelSnapshot", m_rpc_timeout);
 }
 
 bool MasterClient::CreateTable(const CreateTableRequest* request,
                                CreateTableResponse* response) {
     return SendMessageWithRetry(&MasterServer::Stub::CreateTable,
                                 request, response,
-                                (google::protobuf::Closure*)NULL,
-                                "CreateTable");
+                                (Closure<void, CreateTableRequest*, CreateTableResponse*, bool, int>*)NULL,
+                                "CreateTable", m_rpc_timeout);
 }
 
 bool MasterClient::DeleteTable(const DeleteTableRequest* request,
                                DeleteTableResponse* response) {
     return SendMessageWithRetry(&MasterServer::Stub::DeleteTable,
                                 request, response,
-                                (google::protobuf::Closure*)NULL,
-                                "DeleteTable");
+                                (Closure<void, DeleteTableRequest*, DeleteTableResponse*, bool, int>*)NULL,
+                                "DeleteTable", m_rpc_timeout);
 }
 
 bool MasterClient::DisableTable(const DisableTableRequest* request,
                                 DisableTableResponse* response) {
     return SendMessageWithRetry(&MasterServer::Stub::DisableTable,
                                 request, response,
-                                (google::protobuf::Closure*)NULL,
-                                "DisableTable");
+                                (Closure<void, DisableTableRequest*, DisableTableResponse*, bool, int>*)NULL,
+                                "DisableTable", m_rpc_timeout);
 }
 
 bool MasterClient::EnableTable(const EnableTableRequest* request,
                                EnableTableResponse* response) {
     return SendMessageWithRetry(&MasterServer::Stub::EnableTable,
                                 request, response,
-                                (google::protobuf::Closure*)NULL,
-                                "EnableTable");
+                                (Closure<void, EnableTableRequest*, EnableTableResponse*, bool, int>*)NULL,
+                                "EnableTable", m_rpc_timeout);
 }
 
 bool MasterClient::UpdateTable(const UpdateTableRequest* request,
                                UpdateTableResponse* response) {
     return SendMessageWithRetry(&MasterServer::Stub::UpdateTable,
                                 request, response,
-                                (google::protobuf::Closure*)NULL,
-                                "UpdateTable");
+                                (Closure<void, UpdateTableRequest*, UpdateTableResponse*, bool, int>*)NULL,
+                                "UpdateTable", m_rpc_timeout);
 }
 
 bool MasterClient::SearchTable(const SearchTableRequest* request,
                                SearchTableResponse* response) {
     return SendMessageWithRetry(&MasterServer::Stub::SearchTable,
                                 request, response,
-                                (google::protobuf::Closure*)NULL,
-                                "SearchTable");
+                                (Closure<void, SearchTableRequest*, SearchTableResponse*, bool, int>*)NULL,
+                                "SearchTable", m_rpc_timeout);
 }
 
 bool MasterClient::CompactTable(const CompactTableRequest* request,
                                 CompactTableResponse* response) {
     return SendMessageWithRetry(&MasterServer::Stub::CompactTable,
                                 request, response,
-                                (google::protobuf::Closure*)NULL,
-                                "CompactTable");
+                                (Closure<void, CompactTableRequest*, CompactTableResponse*, bool, int>*)NULL,
+                                "CompactTable", m_rpc_timeout);
 }
 
 bool MasterClient::ShowTables(const ShowTablesRequest* request,
                               ShowTablesResponse* response) {
     return SendMessageWithRetry(&MasterServer::Stub::ShowTables,
                                 request, response,
-                                (google::protobuf::Closure*)NULL,
-                                "ShowTables");
+                                (Closure<void, ShowTablesRequest*, ShowTablesResponse*, bool, int>*)NULL,
+                                "ShowTables", m_rpc_timeout);
 }
 
 bool MasterClient::ShowTabletNodes(const ShowTabletNodesRequest* request,
                                    ShowTabletNodesResponse* response) {
     return SendMessageWithRetry(&MasterServer::Stub::ShowTabletNodes,
                                 request, response,
-                                (google::protobuf::Closure*)NULL,
-                                "ShowTabletNodes");
+                                (Closure<void, ShowTabletNodesRequest*, ShowTabletNodesResponse*, bool, int>*)NULL,
+                                "ShowTabletNodes", m_rpc_timeout);
 }
 
 bool MasterClient::Register(const RegisterRequest* request,
                             RegisterResponse* response) {
     return SendMessageWithRetry(&MasterServer::Stub::Register,
                                 request, response,
-                                (google::protobuf::Closure*)NULL,
-                                "Register");
+                                (Closure<void, RegisterRequest*, RegisterResponse*, bool, int>*)NULL,
+                                "Register", m_rpc_timeout);
 }
 
 bool MasterClient::Report(const ReportRequest* request,
                           ReportResponse* response) {
     return SendMessageWithRetry(&MasterServer::Stub::Report,
                                 request, response,
-                                (google::protobuf::Closure*)NULL,
-                                "Report");
+                                (Closure<void, ReportRequest*, ReportResponse*, bool, int>*)NULL,
+                                "Report", m_rpc_timeout);
 }
 
 bool MasterClient::CmdCtrl(const CmdCtrlRequest* request,
                            CmdCtrlResponse* response) {
     return SendMessageWithRetry(&MasterServer::Stub::CmdCtrl,
                                 request, response,
-                                (google::protobuf::Closure*)NULL,
-                                "CmdCtrl");
-}
-
-bool MasterClient::PollAndResetServerAddr() {
-    // connect ZK to update master addr
-    return true;
-}
-
-bool MasterClient::IsRetryStatus(const StatusCode& status) {
-    return (status == kMasterNotInited
-            || status == kMasterIsBusy
-            || status == kMasterIsSecondary);
+                                (Closure<void, CmdCtrlRequest*, CmdCtrlResponse*, bool, int>*)NULL,
+                                "CmdCtrl", m_rpc_timeout);
 }
 
 } // namespace master

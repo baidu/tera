@@ -71,6 +71,8 @@ struct LG_info {
 
   size_t memtable_ldb_block_size;
 
+  int32_t sst_size;
+
   // Other LG properties
   // ...
 
@@ -81,7 +83,8 @@ struct LG_info {
         block_size(kDefaultBlockSize),
         use_memtable_on_leveldb(false),
         memtable_ldb_write_buffer_size(1 << 20),
-        memtable_ldb_block_size(kDefaultBlockSize) {}
+        memtable_ldb_block_size(kDefaultBlockSize),
+        sst_size(8000000) {}
 };
 
 // Options to control the behavior of a database (passed to DB::Open)
@@ -265,6 +268,9 @@ struct Options {
   size_t memtable_ldb_block_size;
 
   bool drop_base_level_del_in_compaction;
+
+  // sst file size, in bytes
+  int32_t sst_size;
 
   // Create an Options object with default values for all fields.
   Options();

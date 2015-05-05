@@ -3,18 +3,48 @@ teracli命令行工具使用手册
 
 ## 表格创建 (create)
 
-`create   <tablename> <tableschema>`
+### 命令格式
 
-1. tablename不要超过256个字符，合法字符包括：数字、大小写字母、下划线`_`、连字符`-`，
-首字符不能为数字。
+    ./teracli  create        <table-schema>  [<tablet-delimiter-file>]
+    ./teracli  createbyfile  <schema-file>   [<tablet-delimiter-file>]
 
-1. tableschema字符串请用引号括起来，避免`#`等特殊符号被shell解释。
+其中，table-schema是一个描述表格结构的字符串,语法详见[PropTree](https://github.com/BaiduPS/tera/blob/master/doc/prop_tree.md)
 
-1. tableschema详解
+Tera支持在建立表格时预分配若干tablet，tablet分隔的key写在tablet-delimiter-file中，按“\n”分隔。
+
+如果表格schema比较复杂，可以将其写入文件中，通过createbyfile命令进行创建。
+
+### 创建表格模式存储
+
+表格结构中包含表名、locality groups定义、column families定义，一个典型的表格定义如下（可写入文件）：
     
-`schema syntax:
-        {tableprops}#lg1{lgprops}:cf1{cfprops},cf2..|lg2...
-        (all properties are optional)`
+    # 二进制编码的key, tablet分裂阈值为4096M，合并阈值为512M
+    # 三个lg，分别配置为内存、flash、磁盘存储
+    table_hello <rawkey=binary, splitsize=4096, mergesize=512> {
+        lg_index <storage=memory, compress=snappy, blocksize=4> {
+            update_flag <maxversions=1>
+        },
+        lg_props <storage=flash, blocksize=32> {
+            level,
+            weight
+        },
+        lg_raw <storage=disk, blocksize=128> {
+            data <maxversions=10>
+        }
+    }
+    
+如果只希望简单的使用tera，对性能没有很高要求，那么schema只需指定表名和所需列名即可（如需要，所有的属性也是可配的）：
+
+    table_hello {cf0, cf1, cf2}
+    
+### 创建key-value模式存储
+
+tera支持高性能的key-value存储，其schema只需指定表名即可，若需要指定存储介质等属性，可选择性填加：
+
+    kv_hello                                                # 简单key-value
+    kv_hello <storage=flash, splitsize=2048, mergesize=128> # 配置若干属性
+
+### 各级属性及含义
 
 span | 属性名 | 意义 | 有效取值 | 单位 | 默认值 | 其它说明
 ---  | ---    | ---  | ---      | ---  | ---    | ---
@@ -36,17 +66,6 @@ lg    | memtable_ldb_block_size |  内存compact开启后，压缩块的大小 |
 cf    | diskquota   | 存储限额  | >0 | MB | 0 | 暂未使用
 -->
 
-例如：
-
-创建一个名为`books`的表格，设置2个lg，一个名为`lg0`，包含1个cf；另一个lg名为`lg1`，包含2个cf:
-
-`% ./teracli create books "#lg0:cf|lg1:cf0,cf1"`
-
-如果需要，可以给table、lg或者cf添加需要的属性：
-
-`% ./teracli create books "{splitsize=1024,mergesize=128}#lg0{storage=disk,compress=snappy}:cf{maxversions=3}|lg1:cf0{minversions=5},cf1"`
-
-
 ## 表格schema更新-全量更新 (update)
 
 `update  <tablename> <tableschema>`
@@ -55,7 +74,7 @@ cf    | diskquota   | 存储限额  | >0 | MB | 0 | 暂未使用
 tera会用新的schema覆盖原有schema.
 更新schema前需要先disable表格。
 
-1. tablename和tableschema的约束和`ctreate`一致。
+1. tablename和tableschema的约束和`create`一致。
 
 ## 表格schema更新-增量更新 (update-part)
 

@@ -36,9 +36,7 @@ public:
 private:
     scoped_ptr<TabletNodeImpl> m_tabletnode_impl;
     RemoteTabletNode* m_remote_tabletnode;
-    scoped_ptr<master::MasterClient> m_master_client;
-    sofa::pbrpc::RpcServerOptions m_rpc_options;
-    sofa::pbrpc::RpcServer m_rpc_server;
+    scoped_ptr<sofa::pbrpc::RpcServer> m_rpc_server;
 };
 
 } // namespace tabletnode

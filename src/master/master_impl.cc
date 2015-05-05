@@ -22,7 +22,6 @@
 #include "proto/master_client.h"
 #include "proto/proto_helper.h"
 #include "proto/tabletnode_client.h"
-#include "proto/tabletnode_client_async.h"
 #include "utils/string_util.h"
 #include "utils/timer.h"
 #include "utils/utils_cmd.h"
@@ -67,12 +66,6 @@ DECLARE_int32(tera_master_tabletnode_timeout);
 DECLARE_bool(tera_master_move_tablet_enabled);
 DECLARE_int32(tera_master_load_slow_retry_times);
 
-DECLARE_bool(tera_master_rpc_limit_enabled);
-DECLARE_int32(tera_master_rpc_limit_max_inflow);
-DECLARE_int32(tera_master_rpc_limit_max_outflow);
-DECLARE_int32(tera_master_rpc_max_pending_buffer_size);
-DECLARE_int32(tera_master_rpc_work_thread_num);
-
 DECLARE_int32(tera_max_pre_assign_tablet_num);
 DECLARE_int64(tera_tablet_write_block_size);
 
@@ -112,11 +105,7 @@ MasterImpl::MasterImpl()
         EnableReleaseCacheTimer();
     }
     m_local_addr = utils::GetLocalHostName() + ":" + FLAGS_tera_master_port;
-    tabletnode::TabletNodeClientAsync::SetRpcOption(
-        FLAGS_tera_master_rpc_limit_enabled ? FLAGS_tera_master_rpc_limit_max_inflow : -1,
-        FLAGS_tera_master_rpc_limit_enabled ? FLAGS_tera_master_rpc_limit_max_outflow : -1,
-        FLAGS_tera_master_rpc_max_pending_buffer_size, FLAGS_tera_master_rpc_work_thread_num);
-    tabletnode::TabletNodeClientAsync::SetThreadPool(m_thread_pool.get());
+    tabletnode::TabletNodeClient::SetThreadPool(m_thread_pool.get());
 
     if (FLAGS_tera_leveldb_env_type != "local") {
         io::InitDfsEnv();
@@ -1859,8 +1848,8 @@ bool MasterImpl::LoadTabletSync(const TabletMeta& meta,
         return false;
     }
 
-    tabletnode::TabletNodeClient node_client;
-    node_client.ResetTabletNodeClient(meta.server_addr());
+    tabletnode::TabletNodeClient node_client(meta.server_addr(),
+                                             FLAGS_tera_master_load_rpc_timeout);
 
     LoadTabletRequest request;
     LoadTabletResponse response;
@@ -1880,7 +1869,7 @@ bool MasterImpl::LoadTabletSync(const TabletMeta& meta,
 }
 
 void MasterImpl::LoadTabletAsync(TabletPtr tablet, LoadClosure* done, uint64_t) {
-    tabletnode::TabletNodeClientAsync node_client(tablet->GetServerAddr(),
+    tabletnode::TabletNodeClient node_client(tablet->GetServerAddr(),
                                             FLAGS_tera_master_load_rpc_timeout);
     LoadTabletRequest* request = new LoadTabletRequest;
     LoadTabletResponse* response = new LoadTabletResponse;
@@ -2019,8 +2008,8 @@ bool MasterImpl::UnloadTabletSync(const std::string& table_name,
                                   StatusCode* status) {
     VLOG(5) << "UnloadTabletSync() for " << table_name << " ["
         << DebugString(key_start) << ", " << DebugString(key_end) << "]";
-    tabletnode::TabletNodeClient node_client;
-    node_client.ResetTabletNodeClient(server_addr);
+    tabletnode::TabletNodeClient node_client(server_addr,
+                                                  FLAGS_tera_master_unload_rpc_timeout);
 
     UnloadTabletRequest request;
     UnloadTabletResponse response;
@@ -2042,7 +2031,7 @@ bool MasterImpl::UnloadTabletSync(const std::string& table_name,
 }
 
 void MasterImpl::UnloadTabletAsync(TabletPtr tablet, UnloadClosure* done) {
-    tabletnode::TabletNodeClientAsync node_client(tablet->GetServerAddr(),
+    tabletnode::TabletNodeClient node_client(tablet->GetServerAddr(),
             FLAGS_tera_master_unload_rpc_timeout);
     UnloadTabletRequest* request = new UnloadTabletRequest;
     UnloadTabletResponse* response = new UnloadTabletResponse;
@@ -2351,7 +2340,7 @@ void MasterImpl::GetSnapshotAsync(TabletPtr tablet, int32_t timeout,
                                   SnapshotClosure* done) {
 
     std::string addr = tablet->GetServerAddr();
-    tabletnode::TabletNodeClientAsync node_client(addr, timeout);
+    tabletnode::TabletNodeClient node_client(addr, timeout);
 
     SnapshotRequest* request = new SnapshotRequest;
     SnapshotResponse* response = new SnapshotResponse;
@@ -2463,7 +2452,7 @@ void MasterImpl::AddSnapshotCallback(TablePtr table,
 
 void MasterImpl::ReleaseSnpashot(TabletPtr tablet, uint64_t snapshot) {
     std::string addr = tablet->GetServerAddr();
-    tabletnode::TabletNodeClientAsync node_client(addr, 3000);
+    tabletnode::TabletNodeClient node_client(addr, 3000);
 
     ReleaseSnapshotRequest* request = new ReleaseSnapshotRequest;
     ReleaseSnapshotResponse* response = new ReleaseSnapshotResponse;
@@ -2516,7 +2505,7 @@ void MasterImpl::ClearUnusedSnapshots(TabletPtr tablet, const TabletMeta& meta) 
 
 void MasterImpl::QueryTabletNodeAsync(std::string addr, int32_t timeout,
                                       bool is_gc, QueryClosure* done) {
-    tabletnode::TabletNodeClientAsync node_client(addr, timeout);
+    tabletnode::TabletNodeClient node_client(addr, timeout);
 
     QueryRequest* request = new QueryRequest;
     QueryResponse* response = new QueryResponse;
@@ -2747,7 +2736,7 @@ void MasterImpl::SplitTabletAsync(TabletPtr tablet) {
     const std::string& key_start = tablet->GetKeyStart();
     const std::string& key_end = tablet->GetKeyEnd();
 
-    tabletnode::TabletNodeClientAsync node_client(server_addr,
+    tabletnode::TabletNodeClient node_client(server_addr,
             FLAGS_tera_master_split_rpc_timeout);
 
     SplitTabletRequest* request = new SplitTabletRequest;
@@ -3186,7 +3175,7 @@ void MasterImpl::MergeTabletAsyncPhase2(TabletPtr tablet_p1, TabletPtr tablet_p2
     WriteClosure* done =
         NewClosure(this, &MasterImpl::MergeTabletWriteMetaCallback, new_meta,
                    tablet_p1, tablet_p2, FLAGS_tera_master_meta_retry_times);
-    tabletnode::TabletNodeClientAsync meta_node_client(meta_addr);
+    tabletnode::TabletNodeClient meta_node_client(meta_addr);
     meta_node_client.WriteTablet(request, response, done);
 }
 
@@ -3314,7 +3303,7 @@ void MasterImpl::MergeTabletWriteMetaCallback(TabletMeta new_meta,
                 WriteClosure* done =
                     NewClosure(this, &MasterImpl::MergeTabletWriteMetaCallback, new_meta,
                                tablet_p1, tablet_p2, retry_times - 1);
-                tabletnode::TabletNodeClientAsync meta_node_client(meta_addr);
+                tabletnode::TabletNodeClient meta_node_client(meta_addr);
                 meta_node_client.WriteTablet(request, response, done);
                 return;
             } else {
@@ -3440,7 +3429,7 @@ void MasterImpl::BatchWriteMetaTableAsync(TablePtr table,
         LOG(INFO) << "WriteMetaTableAsync id: " << request->sequence_id()
             << ", " << table;
     }
-    tabletnode::TabletNodeClientAsync meta_node_client(meta_addr);
+    tabletnode::TabletNodeClient meta_node_client(meta_addr);
     meta_node_client.WriteTablet(request, response, done);
 }
 
@@ -3806,7 +3795,7 @@ void MasterImpl::ScanMetaTableAsync(const std::string& table_name,
     LOG(INFO) << "ScanMetaTableAsync id: " << request->sequence_id() << ", "
         << "table: " << table_name << ", range: ["
         << DebugString(tablet_key_start) << ", " << DebugString(tablet_key_end);
-    tabletnode::TabletNodeClientAsync meta_node_client(meta_addr);
+    tabletnode::TabletNodeClient meta_node_client(meta_addr);
     meta_node_client.ScanTablet(request, response, done);
 }
 
@@ -3961,7 +3950,7 @@ void MasterImpl::RepairMetaTableAsync(TabletPtr tablet,
 
     LOG(INFO) << "RepairMetaTableAsync id: " << request->sequence_id() << ", "
         << tablet;
-    tabletnode::TabletNodeClientAsync meta_node_client(meta_addr);
+    tabletnode::TabletNodeClient meta_node_client(meta_addr);
     meta_node_client.WriteTablet(request, response, done);
 }
 
@@ -4154,8 +4143,7 @@ void MasterImpl::ProcessReadyTablet(TabletPtr tablet) {
 }
 
 bool MasterImpl::CreateStatTable() {
-    master::MasterClient master_client;
-    master_client.ResetMasterClient(m_local_addr);
+    master::MasterClient master_client(m_local_addr);
 
     CreateTableRequest request;
     CreateTableResponse response;

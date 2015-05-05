@@ -9,59 +9,41 @@
 
 #include "proto/table_meta.pb.h"
 #include "sdk/tera.h"
+#include "utils/prop_tree.h"
 
 using std::string;
 
 namespace tera {
 
-void ShowTableSchema(const TableSchema& schema);
+void ShowTableSchema(const TableSchema& schema, bool is_x = false);
 
 void ShowTableMeta(const TableMeta& meta);
 
-void ShowTableDescriptor(const TableDescriptor& table_desc);
+void ShowTableDescriptor(TableDescriptor& table_desc, bool is_x = false);
 
 void TableDescToSchema(const TableDescriptor& desc, TableSchema* schema);
 
 void TableSchemaToDesc(const TableSchema& schema, TableDescriptor* desc);
 
-// length<256 && only-allow-chars-digits-'_' && not-allow-starting-with-digits
-bool CheckName(const string& name);
-
-// extract cf name and type from schema string
-// e.g. schema string: cf_link<int>
-//      cf name      : cf_link
-//      cf type      : int
-bool ParseCfNameType(const string& in, string* name, string* type);
-
 bool ParseSchemaSetTableDescriptor(const string& schema, TableDescriptor* desc, bool* update_lg_cf);
 
-bool ParseSchema(const string& schema, TableDescriptor* table_desc);
+bool SetCfProperties(const string& name, const string& value,
+                     ColumnFamilyDescriptor* desc);
+bool SetLgProperties(const string& name, const string& value,
+                     LocalityGroupDescriptor* desc);
+bool SetTableProperties(const string& name, const string& value,
+                        TableDescriptor* desc);
 
-bool ParseKvSchema(const string& schema, TableDescriptor* table_desc,
-                   LocalityGroupDescriptor* lg_desc, ColumnFamilyDescriptor* cf_desc = NULL);
+bool FillTableDescriptor(PropTree& schema_tree, TableDescriptor* desc);
+
+bool ParseSchema(const string& schema, TableDescriptor* table_desc);
 
 bool ParseScanSchema(const string& schema, ScanDescriptor* desc);
 
 typedef std::pair<string, string> Property;
 typedef std::vector<Property> PropertyList;
-bool ParseProperty(const string& schema, string* name, PropertyList* prop_list);
-
-bool SetCfProperties(const PropertyList& props, ColumnFamilyDescriptor* desc);
-
-bool SetLgProperties(const PropertyList& props, LocalityGroupDescriptor* desc);
-
-bool SetTableProperties(const PropertyList& props, TableDescriptor* desc);
-
-bool ParseCfSchema(const string& schema, TableDescriptor* table_desc,
-                   LocalityGroupDescriptor* lg_desc);
-
-bool ParseLgSchema(const string& schema, TableDescriptor* table_desc);
 
 bool BuildSchema(TableDescriptor* table_desc, string* schema);
-
-bool CommaInBracket(const string& full, string::size_type pos);
-
-void SplitCfSchema(const string& full, std::vector<string>* result);
 
 bool HasInvalidCharInSchema(const string& schema);
 

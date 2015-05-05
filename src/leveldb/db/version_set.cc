@@ -27,16 +27,18 @@
 
 namespace leveldb {
 
-static const int kTargetFileSize = 8000000; // 2 * 1048576;
-
 // Maximum bytes of overlaps in grandparent (i.e., level+2) before we
 // stop building a single file in a level->level+1 compaction.
-static const int64_t kMaxGrandParentOverlapBytes = 10 * kTargetFileSize;
+static int64_t MaxGrandParentOverlapBytes(int target_file_size) {
+    return 10 * target_file_size;
+}
 
 // Maximum number of bytes in all compacted files.  We avoid expanding
 // the lower level file set of a compaction if it would make the
 // total compaction cover more than this many bytes.
-static const int64_t kExpandedCompactionByteSizeLimit = 25 * kTargetFileSize;
+static int64_t ExpandedCompactionByteSizeLimit(int target_file_size) {
+    return 25 * target_file_size;
+}
 
 static double MaxBytesForLevel(int level) {
   // Note: the result for level zero is not really used since we set
@@ -49,13 +51,13 @@ static double MaxBytesForLevel(int level) {
   return result;
 }
 
-static uint64_t MaxFileSizeForLevel(int level) {
+static uint64_t MaxFileSizeForLevel(int level, int target_file_size) {
   if (level == 2) {
-    return 2 * kTargetFileSize;
+    return 2 * target_file_size;
   } else if(level > 2) {
-    return 8 * kTargetFileSize;
+    return 8 * target_file_size;
   }
-  return kTargetFileSize;  // We could vary per level to reduce number of files?
+  return target_file_size;  // We could vary per level to reduce number of files?
 }
 
 static int64_t TotalFileSize(const std::vector<FileMetaData*>& files) {
@@ -486,7 +488,7 @@ int Version::PickLevelForMemTableOutput(
       }
       GetOverlappingInputs(level + 2, &start, &limit, &overlaps);
       const int64_t sum = TotalFileSize(overlaps);
-      if (sum > kMaxGrandParentOverlapBytes) {
+      if (sum > MaxGrandParentOverlapBytes(vset_->options_->sst_size)) {
         break;
       }
       level++;
@@ -690,6 +692,8 @@ void Version::MissFilesInLocal(const Slice* smallest_user_key,
         Compaction* c = new Compaction(level);
         c->input_version_ = this;
         c->input_version_->Ref();
+        c->max_output_file_size_ = 
+            MaxFileSizeForLevel(level + 1, vset_->options_->sst_size);
         c->inputs_[0] = inputs;
         vset_->SetupOtherInputs(c);
         compact_inputs->push_back(c);
@@ -1742,6 +1746,8 @@ Compaction* VersionSet::PickCompaction() {
 
   c->input_version_ = current_;
   c->input_version_->Ref();
+  c->max_output_file_size_ =
+      MaxFileSizeForLevel(level + 1, current_->vset_->options_->sst_size);
 
   // Files in level 0 may overlap each other, so pick up all overlapping ones
   if (level == 0) {
@@ -1779,7 +1785,8 @@ void VersionSet::SetupOtherInputs(Compaction* c) {
     const int64_t inputs1_size = TotalFileSize(c->inputs_[1]);
     const int64_t expanded0_size = TotalFileSize(expanded0);
     if (expanded0.size() > c->inputs_[0].size() &&
-        inputs1_size + expanded0_size < kExpandedCompactionByteSizeLimit) {
+        inputs1_size + expanded0_size <
+        ExpandedCompactionByteSizeLimit(options_->sst_size)) {
       InternalKey new_start, new_limit;
       GetRange(expanded0, &new_start, &new_limit);
       std::vector<FileMetaData*> expanded1;
@@ -1843,7 +1850,8 @@ Compaction* VersionSet::CompactRange(
   // and we must not pick one file and drop another older file if the
   // two files overlap.
   if (level > 0) {
-    const uint64_t limit = MaxFileSizeForLevel(level);
+    const uint64_t limit = 
+      MaxFileSizeForLevel(level, current_->vset_->options_->sst_size);
     uint64_t total = 0;
     for (size_t i = 0; i < inputs.size(); i++) {
       uint64_t s = inputs[i]->file_size;
@@ -1858,6 +1866,8 @@ Compaction* VersionSet::CompactRange(
   Compaction* c = new Compaction(level);
   c->input_version_ = current_;
   c->input_version_->Ref();
+  c->max_output_file_size_ = 
+    MaxFileSizeForLevel(level + 1, current_->vset_->options_->sst_size);
   c->inputs_[0] = inputs;
   SetupOtherInputs(c);
   return c;
@@ -1865,7 +1875,7 @@ Compaction* VersionSet::CompactRange(
 
 Compaction::Compaction(int level)
     : level_(level),
-      max_output_file_size_(MaxFileSizeForLevel(level + 1)),
+      max_output_file_size_(0),
       input_version_(NULL),
       grandparent_index_(0),
       seen_key_(false),
@@ -1887,7 +1897,8 @@ bool Compaction::IsTrivialMove() const {
   // a very expensive merge later on.
   return (num_input_files(0) == 1 &&
           num_input_files(1) == 0 &&
-          TotalFileSize(grandparents_) <= kMaxGrandParentOverlapBytes);
+          (TotalFileSize(grandparents_) <=
+          MaxGrandParentOverlapBytes(max_output_file_size_)));
 }
 
 void Compaction::AddInputDeletions(VersionEdit* edit) {
@@ -1932,7 +1943,7 @@ bool Compaction::ShouldStopBefore(const Slice& internal_key) {
   }
   seen_key_ = true;
 
-  if (overlapped_bytes_ > kMaxGrandParentOverlapBytes) {
+  if (overlapped_bytes_ > MaxGrandParentOverlapBytes(max_output_file_size_)) {
     // Too much overlap for current output; start new output
     overlapped_bytes_ = 0;
     return true;

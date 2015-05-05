@@ -133,6 +133,10 @@ public:
     virtual int32_t MemtableLdbBlockSize() const = 0;
     virtual void SetMemtableLdbBlockSize(int32_t block_size) = 0;
 
+    /// sst file size, in Bytes
+    virtual int32_t SstSize() const = 0;
+    virtual void SetSstSize(int32_t sst_size) = 0;
+
 private:
     LocalityGroupDescriptor(const LocalityGroupDescriptor&);
     void operator=(const LocalityGroupDescriptor&);
@@ -143,10 +147,11 @@ class TableDescImpl;
 class TableDescriptor {
 public:
     /// 表格名字仅允许使用字母、数字和下划线构造,长度不超过256；默认是非kv表
-    TableDescriptor(const std::string& tb_name, bool is_kv = false);
+    TableDescriptor(const std::string& tb_name = "", bool is_kv = false);
 
     ~TableDescriptor();
 
+    void SetTableName(const std::string& name);
     std::string TableName() const;
 
     /// 增加一个localitygroup, 名字仅允许使用字母、数字和下划线构造,长度不超过256

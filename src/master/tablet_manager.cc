@@ -24,7 +24,6 @@
 #include "proto/kv_helper.h"
 #include "proto/proto_helper.h"
 #include "proto/tabletnode_client.h"
-#include "proto/tabletnode_client_async.h"
 #include "types.h"
 #include "utils/string_util.h"
 
@@ -1156,8 +1155,7 @@ bool TabletManager::LoadMetaTable(const std::string& meta_tablet_addr,
     request.set_table_name(FLAGS_tera_master_meta_table_name);
     request.set_start("");
     request.set_end("");
-    tabletnode::TabletNodeClient meta_node_client;
-    meta_node_client.ResetTabletNodeClient(meta_tablet_addr);
+    tabletnode::TabletNodeClient meta_node_client(meta_tablet_addr);
     while (meta_node_client.ScanTablet(&request, &response)) {
         if (response.status() != kTabletNodeOk) {
             SetStatusCode(response.status(), ret_status);
@@ -1267,8 +1265,7 @@ bool TabletManager::ClearMetaTable(const std::string& meta_tablet_addr,
     scan_request.set_start("");
     scan_request.set_end("");
 
-    tabletnode::TabletNodeClient meta_node_client;
-    meta_node_client.ResetTabletNodeClient(meta_tablet_addr);
+    tabletnode::TabletNodeClient meta_node_client(meta_tablet_addr);
 
     bool scan_success = false;
     while (meta_node_client.ScanTablet(&scan_request, &scan_response)) {
@@ -1365,8 +1362,7 @@ bool TabletManager::DumpMetaTable(const std::string& meta_tablet_addr,
         mutation->set_value(packed_value);
     }
 
-    tabletnode::TabletNodeClient meta_node_client;
-    meta_node_client.ResetTabletNodeClient(meta_tablet_addr);
+    tabletnode::TabletNodeClient meta_node_client(meta_tablet_addr);
 
     if (!meta_node_client.WriteTablet(&request, &response)) {
         SetStatusCode(kRPCError, ret_status);
@@ -1557,7 +1553,7 @@ void TabletManager::TryMajorCompact(Tablet* tablet) {
     request->set_tablet_name(tablet->m_meta.table_name());
     request->mutable_key_range()->CopyFrom(tablet->m_meta.key_range());
 
-    tabletnode::TabletNodeClientAsync node_client(tablet->m_meta.server_addr());
+    tabletnode::TabletNodeClient node_client(tablet->m_meta.server_addr());
     Closure<void, CompactTabletRequest*, CompactTabletResponse*, bool, int>* done =
         NewClosure(this, &TabletManager::MajorCompactCallback, tablet,
                    FLAGS_tera_master_impl_retry_times);
@@ -1591,7 +1587,7 @@ void TabletManager::MajorCompactCallback(Tablet* tb, int32_t retry,
             int64_t wait_time = FLAGS_tera_tabletnode_connect_retry_period
                 * (FLAGS_tera_master_impl_retry_times - retry);
             ThisThread::Sleep(wait_time);
-            tabletnode::TabletNodeClientAsync node_client(tb->m_meta.server_addr());
+            tabletnode::TabletNodeClient node_client(tb->m_meta.server_addr());
             Closure<void, CompactTabletRequest*, CompactTabletResponse*, bool, int>* done =
                 NewClosure(this, &TabletManager::MajorCompactCallback, tb, retry - 1);
             node_client.CompactTablet(request, response, done);

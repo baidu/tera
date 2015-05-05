@@ -31,8 +31,7 @@ private:
     scoped_ptr<MasterImpl> m_master_impl;
     // scoped_ptr<RemoteMaster> m_remote_master;
     RemoteMaster* m_remote_master;
-    sofa::pbrpc::RpcServerOptions m_rpc_options;
-    sofa::pbrpc::RpcServer m_rpc_server;
+    scoped_ptr<sofa::pbrpc::RpcServer> m_rpc_server;
 };
 
 } // namespace master

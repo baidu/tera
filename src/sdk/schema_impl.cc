@@ -7,6 +7,7 @@
 #include <glog/logging.h>
 
 DECLARE_int64(tera_tablet_write_block_size);
+DECLARE_int64(tera_tablet_ldb_sst_size);
 DECLARE_int64(tera_master_split_tablet_size);
 DECLARE_int64(tera_master_merge_tablet_size);
 
@@ -102,7 +103,8 @@ LGDescImpl::LGDescImpl(const std::string& lg_name, int32_t id)
       _block_size(FLAGS_tera_tablet_write_block_size),
       _use_memtable_on_leveldb(false),
       _memtable_ldb_write_buffer_size(0),
-      _memtable_ldb_block_size(0){
+      _memtable_ldb_block_size(0),
+      _sst_size(FLAGS_tera_tablet_ldb_sst_size << 20){
 }
 
 /// Id read only
@@ -174,6 +176,14 @@ void LGDescImpl::SetMemtableLdbBlockSize(int32_t block_size) {
     _memtable_ldb_block_size = block_size;
 }
 
+int32_t LGDescImpl::SstSize() const {
+    return _sst_size;
+}
+
+void LGDescImpl::SetSstSize(int32_t sst_size) {
+    _sst_size = sst_size;
+}
+
 /// 表格名字仅允许使用字母、数字和下划线构造,长度不超过256
 TableDescImpl::TableDescImpl(const std::string& tb_name, bool is_kv)
     : _name(tb_name),
@@ -183,8 +193,6 @@ TableDescImpl::TableDescImpl(const std::string& tb_name, bool is_kv)
       _raw_key_type(kReadable),
       _split_size(FLAGS_tera_master_split_tablet_size),
       _merge_size(FLAGS_tera_master_merge_tablet_size) {
-    AddLocalityGroup(DEFAULT_LG_NAME);
-    AddColumnFamily(DEFAULT_CF_NAME, DEFAULT_LG_NAME);
 }
 
 /*
@@ -222,6 +230,10 @@ TableDescImpl::~TableDescImpl() {
     for (int32_t i = 0; i < cf_num; i++) {
         delete _cfs[i];
     }
+}
+
+void TableDescImpl::SetTableName(const std::string& name) {
+    _name = name;
 }
 
 std::string TableDescImpl::TableName() const{
@@ -403,5 +415,3 @@ bool TableDescImpl::IsKv() const {
     return _kv_only;
 }
 } // namespace tera
-
-/* vim: set expandtab ts=4 sw=4 sts=4 tw=100: */

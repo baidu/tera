@@ -45,6 +45,7 @@
 namespace leveldb {
 
 const int kNumNonTableCacheFiles = 10;
+const double kVeryHighScore = 1000.0;
 
 // Information kept for every waiting writer
 struct DBImpl::Writer {
@@ -170,6 +171,9 @@ Status DBImpl::Shutdown1() {
   shutting_down_.Release_Store(this);  // Any non-NULL value is ok
 
   Log(options_.info_log, "[%s] wait bg compact finish", dbname_.c_str());
+  if (bg_compaction_scheduled_) {
+    env_->ReSchedule(bg_schedule_id_, kVeryHighScore);
+  }
   while (bg_compaction_scheduled_) {
     bg_cv_.Wait();
   }

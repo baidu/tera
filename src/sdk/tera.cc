@@ -6,8 +6,6 @@
 
 #include <limits>
 
-#include "proto/tabletnode_client_async.h"
-
 namespace tera {
 
 ErrorCode::ErrorCode() : _err(kOK) {

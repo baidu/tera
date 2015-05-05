@@ -7,18 +7,21 @@
 
 #include <string>
 
+#include "common/base/closure.h"
+
 #include "proto/master_rpc.pb.h"
 #include "proto/rpc_client.h"
+
+DECLARE_int32(tera_rpc_timeout_period);
 
 namespace tera {
 namespace master {
 
 class MasterClient : public RpcClient<MasterServer::Stub> {
 public:
-    MasterClient();
+    MasterClient(const std::string& server_addr = "",
+                 int32_t rpc_timeout = FLAGS_tera_rpc_timeout_period);
     virtual ~MasterClient();
-
-    virtual void ResetMasterClient(const std::string& server_addr);
 
     virtual bool GetSnapshot(const GetSnapshotRequest* request,
                              GetSnapshotResponse* response);
@@ -63,8 +66,7 @@ public:
                          CmdCtrlResponse* response);
 
 private:
-    bool PollAndResetServerAddr();
-    bool IsRetryStatus(const StatusCode& status);
+    int32_t m_rpc_timeout;
 };
 
 } // namespace

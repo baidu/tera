@@ -60,6 +60,8 @@ DECLARE_bool(tera_tablet_use_memtable_on_leveldb);
 DECLARE_int64(tera_tablet_memtable_ldb_write_buffer_size);
 DECLARE_int64(tera_tablet_memtable_ldb_block_size);
 
+extern tera::Counter row_read_delay;
+
 namespace tera {
 namespace io {
 
@@ -794,6 +796,8 @@ bool TabletIO::ReadCells(const RowReaderInfo& row_reader, RowResult* value_list,
         m_db_ref_count++;
     }
 
+    int64_t read_ms = get_micros();
+
     if (m_kv_only) {
         std::string key(row_reader.key());
         std::string value;
@@ -802,6 +806,7 @@ bool TabletIO::ReadCells(const RowReaderInfo& row_reader, RowResult* value_list,
         }
         if (!Read(key, &value, snapshot_id, status)) {
             m_counter.read_rows.Inc();
+            row_read_delay.Add(get_micros() - read_ms);
             {
                 MutexLock lock(&m_mutex);
                 m_db_ref_count--;
@@ -813,6 +818,7 @@ bool TabletIO::ReadCells(const RowReaderInfo& row_reader, RowResult* value_list,
         result->set_value(value);
         m_counter.read_rows.Inc();
         m_counter.read_size.Add(result->ByteSize());
+        row_read_delay.Add(get_micros() - read_ms);
         {
             MutexLock lock(&m_mutex);
             m_db_ref_count--;
@@ -854,6 +860,7 @@ bool TabletIO::ReadCells(const RowReaderInfo& row_reader, RowResult* value_list,
                       value_list, &read_row_count, &read_bytes,
                       &is_complete, status)) {
         m_counter.read_rows.Inc();
+        row_read_delay.Add(get_micros() - read_ms);
         {
             MutexLock lock(&m_mutex);
             m_db_ref_count--;
@@ -862,6 +869,7 @@ bool TabletIO::ReadCells(const RowReaderInfo& row_reader, RowResult* value_list,
     }
     m_counter.read_rows.Inc();
     m_counter.read_size.Add(value_list->ByteSize());
+    row_read_delay.Add(get_micros() - read_ms);
     {
         MutexLock lock(&m_mutex);
         m_db_ref_count--;
@@ -1290,6 +1298,9 @@ void TabletIO::SetupOptionsForLG() {
                 << ", buffer_size:" << lg_info->memtable_ldb_write_buffer_size
                 << ", block_size:"  << lg_info->memtable_ldb_block_size;
         }
+        LOG(INFO) << ", sst_size: " << lg_schema.sst_size() << " Bytes.";
+        lg_info->sst_size = lg_schema.sst_size();
+        m_ldb_options.sst_size = lg_schema.sst_size();
         exist_lg_list->insert(lg_i);
         (*lg_info_list)[lg_i] = lg_info;
     }
