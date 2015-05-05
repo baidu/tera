@@ -149,7 +149,7 @@ bool TabletNodeImpl::Init() {
     }
 
     SetTabletNodeStatus(kIsIniting);
-//    m_thread_pool->AddTask(boost::bind(&TabletNodeZkAdapterBase::Init, m_zk_adapter.get()));
+    m_thread_pool->AddTask(boost::bind(&TabletNodeZkAdapterBase::Init, m_zk_adapter.get()));
     return true;
 }
 
