@@ -24,6 +24,7 @@ message LocalityGroupSchema {
     optional bool use_memtable_on_leveldb = 8 [default = false];
     optional int32 memtable_ldb_write_buffer_size = 9 [default = 1]; //MB
     optional int32 memtable_ldb_block_size = 10 [default = 4]; //KB
+    optional int32 sst_size = 11 [default = 8000000]; // Bytes
 }
 
 message ColumnFamilySchema {

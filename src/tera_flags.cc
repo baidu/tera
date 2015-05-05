@@ -12,7 +12,6 @@ DEFINE_string(tera_role, "", "the role of tera running binary, should be one of 
 DEFINE_string(tera_user_identity, "", "the identity of tera user");
 DEFINE_string(tera_user_passcode, "", "the passcode of tera user");
 
-DEFINE_int64(tera_heartbeat_period, 1, "the heartbeat period when send heartbeat");
 DEFINE_int64(tera_heartbeat_retry_period_factor, 1, "the heartbeat period factor when retry send heartbeat");
 DEFINE_int32(tera_heartbeat_retry_times, 5, "the max retry times when fail to send report request");
 
@@ -41,6 +40,7 @@ DEFINE_int32(tera_tablet_flush_log_num, 100000, "the max log number before flush
 DEFINE_bool(tera_tablet_use_memtable_on_leveldb, false, "enable memtable based on in-memory leveldb");
 DEFINE_int64(tera_tablet_memtable_ldb_write_buffer_size, 1, "the buffer size(in MB) for memtable on leveldb");
 DEFINE_int64(tera_tablet_memtable_ldb_block_size, 4, "the block size (in KB) for memtable on leveldb");
+DEFINE_int64(tera_tablet_ldb_sst_size, 8, "the sstable file size (in MB) on leveldb");
 
 DEFINE_string(tera_leveldb_env_type, "dfs", "the default type for leveldb IO environment, should be [local | dfs]");
 DEFINE_string(tera_leveldb_env_dfs_type, "hdfs", "the default type for leveldb IO dfs environment, [hdfs | nfs]");
@@ -58,6 +58,10 @@ DEFINE_string(tera_leveldb_compact_strategy, "default", "the default strategy to
 
 DEFINE_int64(tera_io_scan_stream_task_max_num, 5000, "the max number of concurrent rpc task");
 DEFINE_int64(tera_io_scan_stream_task_pending_time, 180, "the max pending time (in sec) for timeout and interator cleaning");
+
+DEFINE_int32(tera_rpc_client_max_inflow, -1, "the max input flow (in MB/s) for rpc-client, -1 means no limit");
+DEFINE_int32(tera_rpc_client_max_outflow, -1, "the max input flow (in MB/s) for rpc-client, -1 means no limit");
+DEFINE_int32(tera_rpc_timeout_period, 60000, "the timeout period (in ms) for rpc");
 
 /////////  master /////////
 
@@ -115,11 +119,8 @@ DEFINE_int32(tera_master_collect_info_timeout, 3000, "the timeout period (in ms)
 DEFINE_int32(tera_master_collect_info_retry_period, 3000, "the retry period (in ms) for collect tabletnode info");
 DEFINE_int32(tera_master_collect_info_retry_times, 10, "the max retry times for collect tabletnode info");
 
-DEFINE_bool(tera_master_rpc_limit_enabled, false, "enable the rpc traffic limit in master");
-DEFINE_int32(tera_master_rpc_limit_max_inflow, 10, "the max bandwidth (in MB/s) for master rpc traffic limitation on input flow");
-DEFINE_int32(tera_master_rpc_limit_max_outflow, 10, "the max bandwidth (in MB/s) for master rpc traffic limitation on output flow");
-DEFINE_int32(tera_master_rpc_max_pending_buffer_size, 2, "max pending buffer size (in MB) for master rpc");
-DEFINE_int32(tera_master_rpc_work_thread_num, 8, "thread num of master rpc client");
+DEFINE_int32(tera_master_rpc_server_max_inflow, -1, "the max input flow (in MB/s) for master rpc-server, -1 means no limit");
+DEFINE_int32(tera_master_rpc_server_max_outflow, -1, "the max input flow (in MB/s) for master rpc-server, -1 means no limit");
 
 DEFINE_int32(tera_max_pre_assign_tablet_num, 100000, "max num of pre-assign tablets per table");
 DEFINE_bool(tera_delete_obsolete_tabledir_enabled, true, "move table dir to trash when dropping table");
@@ -149,6 +150,7 @@ DEFINE_int32(tera_tabletnode_connect_timeout_period, 180000, "the timeout period
 DEFINE_string(tera_tabletnode_path_prefix, "../data/", "the path prefix for table storage");
 DEFINE_int32(tera_tabletnode_block_cache_size, 100, "the cache size of tablet (in MB)");
 DEFINE_int32(tera_tabletnode_table_cache_size, 10000, "the table cache size, means the max num of files keeping open in this tabletnode.");
+DEFINE_int32(tera_tabletnode_scan_pack_max_size, 10240, "the max size(KB) of the package for scan rpc");
 
 DEFINE_int32(tera_asyncwriter_pending_limit, 10000, "the max pending data size (KB) in async writer");
 DEFINE_bool(tera_enable_level0_limit, true, "enable level0 limit");
@@ -163,13 +165,8 @@ DEFINE_int32(tera_garbage_collect_period, 1800, "garbage collect period in s");
 DEFINE_int32(tera_tabletnode_write_meta_rpc_timeout, 60000, "the timeout period (in ms) for tabletnode write meta");
 DEFINE_int32(tera_tabletnode_retry_period, 100, "the retry interval period (in ms) when operate tablet");
 
-DEFINE_int32(tera_tabletnode_rpc_timeout_period, 300000, "the timeout period (in ms) for tabletnode rpc");
-DEFINE_bool(tera_tabletnode_rpc_limit_enabled, false, "enable the rpc traffic limit in tabletnode");
-DEFINE_int32(tera_tabletnode_rpc_limit_max_inflow, 10, "the max bandwidth (in MB/s) for tabletnode rpc traffic limitation on input flow");
-DEFINE_int32(tera_tabletnode_rpc_limit_max_outflow, 10, "the max bandwidth (in MB/s) for tabletnode rpc traffic limitation on output flow");
-DEFINE_int32(tera_tabletnode_rpc_max_pending_buffer_size, 2, "max pending buffer size (in MB) for tabletnode rpc");
-DEFINE_int32(tera_tabletnode_rpc_work_thread_num, 8, "thread num of tabletnode rpc client");
-DEFINE_int32(tera_tabletnode_scan_pack_max_size, 10240, "the max size(KB) of the package for scan rpc");
+DEFINE_int32(tera_tabletnode_rpc_server_max_inflow, -1, "the max input flow (in MB/s) for tabletnode rpc-server, -1 means no limit");
+DEFINE_int32(tera_tabletnode_rpc_server_max_outflow, -1, "the max output flow (in MB/s) for tabletnode rpc-server, -1 means no limit");
 
 DEFINE_bool(tera_tabletnode_cpu_affinity_enabled, false, "enable cpu affinity or not");
 DEFINE_string(tera_tabletnode_cpu_affinity_set, "1,2", "the cpu set of cpu affinity setting");

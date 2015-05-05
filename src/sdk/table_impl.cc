@@ -19,10 +19,8 @@
 #include "gflags/gflags.h"
 
 #include "proto/kv_helper.h"
-#include "proto/master_client.h"
 #include "proto/proto_helper.h"
 #include "proto/tabletnode_client.h"
-#include "proto/tabletnode_client_async.h"
 #include "sdk/mutate_impl.h"
 #include "sdk/read_impl.h"
 #include "sdk/scan_impl.h"
@@ -71,8 +69,6 @@ TableImpl::TableImpl(const std::string& table_name,
       _zk_root_path(zk_root_path),
       _zk_addr_list(zk_addr_list),
       _thread_pool(thread_pool) {
-    _tabletnode_client = new tabletnode::TabletNodeClient();
-    _master_client = new master::MasterClient();
     _cluster = new sdk::ClusterFinder(zk_root_path, zk_addr_list);
 }
 
@@ -81,8 +77,6 @@ TableImpl::~TableImpl() {
         DoDumpCookie();
     }
 
-    delete _tabletnode_client;
-    delete _master_client;
     delete _cluster;
 }
 
@@ -273,7 +267,7 @@ void TableImpl::ScanTabletAsync(ScanTask* scan_task, int) {
 
 void TableImpl::CommitScan(ScanTask* scan_task,
                            const std::string& server_addr) {
-    tabletnode::TabletNodeClientAsync tabletnode_client(server_addr);
+    tabletnode::TabletNodeClient tabletnode_client(server_addr);
     ResultStreamImpl* stream = scan_task->stream;
     ScanTabletRequest* request = scan_task->request;
     ScanTabletResponse* response = scan_task->response;
@@ -552,7 +546,7 @@ void TableImpl::CommitMutationBuffer(std::string server_addr) {
 
 void TableImpl::CommitMutation(const std::string& server_addr,
                                std::vector<RowMutationImpl*>* mu_list) {
-    tabletnode::TabletNodeClientAsync tabletnode_client_async(server_addr);
+    tabletnode::TabletNodeClient tabletnode_client_async(server_addr);
     WriteTabletRequest* request = new WriteTabletRequest;
     WriteTabletResponse* response = new WriteTabletResponse;
     request->set_sequence_id(_last_sequence_id++);
@@ -803,7 +797,7 @@ void TableImpl::CommitReaderBuffer(std::string server_addr) {
 
 void TableImpl::CommitReaders(const std::string server_addr,
                               std::vector<RowReaderImpl*>* reader_list) {
-    tabletnode::TabletNodeClientAsync tabletnode_client_async(server_addr);
+    tabletnode::TabletNodeClient tabletnode_client_async(server_addr);
     ReadTabletRequest* request = new ReadTabletRequest;
     ReadTabletResponse* response = new ReadTabletResponse;
     request->set_sequence_id(_last_sequence_id++);
@@ -1174,7 +1168,7 @@ void TableImpl::ScanMetaTableAsync(std::string key_start, std::string key_end,
     }
 
     VLOG(6) << "root: " << meta_addr;
-    tabletnode::TabletNodeClientAsync tabletnode_client_async(meta_addr);
+    tabletnode::TabletNodeClient tabletnode_client_async(meta_addr);
     ScanTabletRequest* request = new ScanTabletRequest;
     ScanTabletResponse* response = new ScanTabletResponse;
     request->set_sequence_id(_last_sequence_id++);
@@ -1555,7 +1549,7 @@ void TableImpl::ReadTableMetaAsync(ErrorCode* ret_err, int32_t retry_times,
         return;
     }
 
-    tabletnode::TabletNodeClientAsync tabletnode_client_async(meta_server);
+    tabletnode::TabletNodeClient tabletnode_client_async(meta_server);
     ReadTabletRequest* request = new ReadTabletRequest;
     ReadTabletResponse* response = new ReadTabletResponse;
     request->set_sequence_id(_last_sequence_id++);

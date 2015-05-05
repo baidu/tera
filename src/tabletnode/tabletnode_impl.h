@@ -11,7 +11,6 @@
 #include "common/thread_pool.h"
 
 #include "io/tablet_io.h"
-#include "proto/master_client.h"
 #include "proto/master_rpc.pb.h"
 #include "proto/tabletnode.pb.h"
 #include "proto/tabletnode_rpc.pb.h"
@@ -36,17 +35,12 @@ public:
     };
 
     TabletNodeImpl(const TabletNodeInfo& tabletnode_info,
-                   master::MasterClient* master_client,
                    TabletManager* tablet_manager = NULL);
     ~TabletNodeImpl();
 
     bool Init();
 
     bool Exit();
-
-    bool Register();
-
-    bool Report();
 
     void GarbageCollect();
 
@@ -156,7 +150,6 @@ private:
     TabletNodeStatus m_status;
     Mutex m_mutex;
 
-    master::MasterClient* m_master_client;
     scoped_ptr<TabletManager> m_tablet_manager;
     scoped_ptr<TabletNodeZkAdapterBase> m_zk_adapter;
 

@@ -87,6 +87,7 @@ Options InitOptionsLG(const Options& options, uint32_t lg_id) {
     opt.use_memtable_on_leveldb = lg_info->use_memtable_on_leveldb;
     opt.memtable_ldb_write_buffer_size = lg_info->memtable_ldb_write_buffer_size;
     opt.memtable_ldb_block_size = lg_info->memtable_ldb_block_size;
+    opt.sst_size = lg_info->sst_size;
     return opt;
 }
 
@@ -259,7 +260,13 @@ Status DBTable::Init() {
     if (s.ok()) {
         for (uint32_t i = 0; i < logfiles.size(); ++i) {
             s = RecoverLogFile(logfiles[i], &lg_edits);
+            if (!s.ok()) {
+                Log(options_.info_log, "[%s] Fail to RecoverLogFile %ld",
+                    dbname_.c_str(), logfiles[i]);
+            }
         }
+    } else {
+        Log(options_.info_log, "[%s] Fail to GatherLogFile", dbname_.c_str());
     }
 
     Log(options_.info_log, "[%s] start RecoverLogToLevel0Table", dbname_.c_str());
@@ -276,7 +283,13 @@ Status DBTable::Init() {
             if (s.ok()) {
                 impl->DeleteObsoleteFiles();
                 impl->MaybeScheduleCompaction();
+            } else {
+                Log(options_.info_log, "[%s] Fail to modify manifest of lg %d",
+                    dbname_.c_str(),
+                    i);
             }
+        } else {
+            Log(options_.info_log, "[%s] Fail to dump log to level 0", dbname_.c_str());
         }
         delete lg_edits[i];
     }
