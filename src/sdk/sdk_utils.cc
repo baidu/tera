@@ -413,15 +413,19 @@ bool SetTableProperties(const PropertyList& props, TableDescriptor* desc) {
                 return false;
             }
         } else if (prop.first == "splitsize") {
-            int splitsize = atoi(prop.second.c_str());
+            int64_t splitsize = atoi(prop.second.c_str());
             if (splitsize < 0) { // splitsize == 0 : split closed
                 LOG(ERROR) << "illegal value: " << prop.second
                     << " for property: " << prop.first;
                 return false;
             }
             desc->SetSplitSize(splitsize);
+            int64_t mergesize = desc->MergeSize();
+            if (mergesize > 0) {
+                desc->SetMergeSize(splitsize/5); // TODO (jinxiao) a better way?
+            }
         } else if (prop.first == "mergesize") {
-            int mergesize = atoi(prop.second.c_str());
+            int64_t mergesize = atoi(prop.second.c_str());
             if (mergesize < 0) { // mergesize == 0 : merge closed
                 LOG(ERROR) << "illegal value: " << prop.second
                     << " for property: " << prop.first;

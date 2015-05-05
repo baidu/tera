@@ -5,13 +5,13 @@
 #ifndef TERA_MASTER_MASTER_IMPL_H_
 #define TERA_MASTER_MASTER_IMPL_H_
 
-#include <stdint.h>
 #include <semaphore.h>
+#include <stdint.h>
 #include <string>
 #include <vector>
 
-#include "common/event.h"
 #include "common/base/scoped_ptr.h"
+#include "common/event.h"
 #include "common/mutex.h"
 #include "common/thread_pool.h"
 #include "gflags/gflags.h"
@@ -29,18 +29,18 @@ namespace tera {
 
 class LoadTabletRequest;
 class LoadTabletResponse;
-class UnloadTabletRequest;
-class UnloadTabletResponse;
-class SplitTabletRequest;
-class SplitTabletResponse;
 class MergeTabletRequest;
 class MergeTabletResponse;
 class QueryRequest;
 class QueryResponse;
-class WriteTabletRequest;
-class WriteTabletResponse;
 class ScanTabletRequest;
 class ScanTabletResponse;
+class SplitTabletRequest;
+class SplitTabletResponse;
+class UnloadTabletRequest;
+class UnloadTabletResponse;
+class WriteTabletRequest;
+class WriteTabletResponse;
 
 namespace master {
 
@@ -60,6 +60,21 @@ public:
         kIsRunning = kMasterIsRunning,
         kOnRestore = kMasterOnRestore,
         kOnWait = kMasterOnWait
+    };
+
+    // great number comes great priority
+    enum ConcurrencyTaskPriority {
+        // unload
+        kTaskUnloadForDisable = 5,
+        kTaskUnload = 10,
+        kTaskUnloadForMerge = 15,
+        kTaskUnloadForBalance = 20,
+
+        // load
+        kTaskLoad = 10,
+
+        // split
+        kTaskSplit = 10
     };
 
     MasterImpl();
@@ -126,7 +141,6 @@ public:
     void DisableQueryTabletNodeTimer();
 
     bool GetMetaTabletAddr(std::string* addr);
-    void TryLoadTablet(TabletPtr tablet, std::string addr = "");
 
 private:
     typedef Closure<void, SnapshotRequest*, SnapshotResponse*, bool, int> SnapshotClosure;
@@ -198,7 +212,10 @@ private:
 
     void RetryLoadTablet(TabletPtr tablet, int32_t retry_times);
     void RetryUnloadTablet(TabletPtr tablet, int32_t retry_times);
+    void TryLoadTablet(TabletPtr tablet, std::string addr = "");
     bool TrySplitTablet(TabletPtr tablet);
+    void TryUnloadTablet(TabletPtr tablet, UnloadClosure* done);
+    void TryUnload4MergeTablet(TabletPtr tablet, UnloadClosure* done);
     bool TryMergeTablet(TabletPtr tablet);
     void TryMoveTablet(TabletPtr tablet, const std::string& server_addr = "");
 
@@ -490,6 +507,9 @@ private:
     std::set<std::string> m_gc_tabletnodes;
     int64_t m_gc_timer_id;
     bool m_gc_query_enable;
+
+    std::map<TabletPtr, TabletPtr> m_unload4merge_pair;
+    std::map<std::pair<TabletPtr, TabletPtr>, Mutex*> m_unload4merge_mutex;
 };
 
 } // namespace master

@@ -98,6 +98,7 @@ DEFINE_int64(tera_master_merge_timer_period, 180, "the actived time (in sec) for
 
 DEFINE_int32(tera_master_max_split_concurrency, 1, "the max concurrency of tabletnode for split tablet");
 DEFINE_int32(tera_master_max_load_concurrency, 5, "the max concurrency of tabletnode for load tablet");
+DEFINE_int32(tera_master_max_unload_concurrency, 30, "the max concurrency of tabletnode for unload tablet");
 DEFINE_int32(tera_master_load_interval, 300, "the delay interval (in sec) for load tablet");
 DEFINE_int32(tera_master_load_balance_period, 10000, "the period (in ms) for load balance policy execute");
 DEFINE_bool(tera_master_load_balance_table_grained, true, "whether the load balance policy only consider the specified table");

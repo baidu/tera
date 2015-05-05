@@ -360,7 +360,7 @@ void RemoteTabletNode::DoScheduleRpc(RpcSchedule* rpc_schedule) {
         table_name = read_rpc->request->tablet_name();
         DoReadTablet(read_rpc->controller, read_rpc->start_micros,
                      read_rpc->request, read_rpc->response,
-                     read_rpc->done,read_rpc->timer);
+                     read_rpc->done, read_rpc->timer);
     } break;
     case RPC_SCAN: {
         ScanRpc* scan_rpc = (ScanRpc*)rpc;

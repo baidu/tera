@@ -44,6 +44,7 @@ message TabletNodeInfo {
 
     optional string status_m = 31;
     optional uint32 tablet_onload = 32;
+    optional uint32 tablet_onunload = 45;
     optional uint32 tablet_onsplit = 33;
 
     repeated ExtraTsInfo extra_info = 40;
