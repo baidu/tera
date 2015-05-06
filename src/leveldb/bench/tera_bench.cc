@@ -66,26 +66,14 @@ class RandomGenerator {
   }
 
   Slice Generate(int len) {
-    if (pos_ + len > data_.size()) {
+    if (pos_ + len > static_cast<int>(data_.size())) {
       pos_ = 0;
-      assert(len < data_.size());
+      assert(len < static_cast<int>(data_.size()));
     }
     pos_ += len;
     return Slice(data_.data() + pos_ - len, len);
   }
 };
-
-static Slice TrimSpace(Slice s) {
-  int start = 0;
-  while (start < s.size() && isspace(s[start])) {
-    start++;
-  }
-  int limit = s.size();
-  while (limit > start && isspace(s[limit-1])) {
-    limit--;
-  }
-  return Slice(s.data() + start, limit - start);
-}
 
 }  // namespace
 
