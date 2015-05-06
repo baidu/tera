@@ -6,6 +6,8 @@
 #define  TERA_LEVELDB_DFS_H_
 
 #include <stdint.h>
+#include <string>
+#include <vector>
 
 namespace leveldb {
 
@@ -61,12 +63,26 @@ public:
     virtual int32_t Copy(const std::string& from, const std::string& to) = 0;
     /// Returns 0 on success.
     virtual int32_t ListDirectory(const std::string& path, std::vector<std::string>* result) = 0;
-    /// Return DfsFile handler on success, NULL on error.
+    /// Returns DfsFile handler on success, NULL on error.
     virtual DfsFile* OpenFile(const std::string& filename, int32_t flags) = 0;
+    /// Returns Dfs handler on success, NULL on error.
+    static Dfs* NewDfs(const std::string& so_path, const std::string& conf); 
 private:
     Dfs(const Dfs&);
     void operator=(const Dfs&);
 };
+
+/// Dfs creator type.
+/// Impliment a dfs wrapper like this:
+/// class MyDfs : public Dfs {
+///     ...
+/// };
+///
+/// extern "C" {
+/// Dfs* NewDfs(const char* conf) {
+///     return new MyDfs(conf);
+/// }
+typedef Dfs* (*DfsCreator)(const char*);
 
 } // namespace leveldb
 #endif  //TERA_LEVELDB_DFS_H_
