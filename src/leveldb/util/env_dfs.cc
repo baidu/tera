@@ -446,7 +446,7 @@ void InitDfsEnv(const std::string& so_path, const std::string& conf) {
     if (inited) {
         return;
     }
-    Dfs* dfs = Dfs::NewDfs(so_path, conf.c_str());
+    Dfs* dfs = Dfs::NewDfs(so_path, conf);
     if (dfs == NULL) {
         abort();
     }
