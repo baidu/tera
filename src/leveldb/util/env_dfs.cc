@@ -441,6 +441,16 @@ static bool inited = false;
 static port::Mutex mutex;
 static Env* dfs_env;
 
+void InitDFS(const std::string& so_path, const std::string& conf) {
+    MutexLock l(&mutex);
+    if (inited) {
+        return;
+    }
+    Dfs* dfs = Dfs::NewDfs(so_path, conf.c_str());
+    dfs_env = new DfsEnv(dfs);
+    inited = true;
+}
+
 void InitHdfsEnv()
 {
     MutexLock l(&mutex);
