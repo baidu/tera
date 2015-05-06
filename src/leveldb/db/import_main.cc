@@ -45,7 +45,7 @@ bool SaveKVToDB(void* arg, const char* buffer, ssize_t size) {
 //
 bool SaveSeqKVToDB(void* arg, const char* buffer, ssize_t size) {
     DB* db = reinterpret_cast<DB*>(arg);
-    if (size <= sizeof(int64_t) * 2) {
+    if (size <= static_cast<ssize_t>(sizeof(int64_t)) * 2) {
         return false;
     }
     Slice input(buffer, size);
