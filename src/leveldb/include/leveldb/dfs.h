@@ -85,7 +85,7 @@ typedef Dfs* (*DfsCreator)(const char*);
 ///
 /// extern "C" {
 /// Dfs* NewDfs(const char* conf) {
-///     Dfs* dfs= new MyDfs;
+///     Dfs* dfs= new MyDfs();
 ///     ...
 ///     return dfs;
 /// }
