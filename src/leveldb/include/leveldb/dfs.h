@@ -75,7 +75,7 @@ private:
 /// Dfs creator type.
 typedef Dfs* (*DfsCreator)(const char*);
 
-/// Impliment a dfs wrapper like this:
+/// Implement your own dfs like this:
 /// class MyDfsFile : public DfsFile {
 ///     ...
 /// };
@@ -85,7 +85,9 @@ typedef Dfs* (*DfsCreator)(const char*);
 ///
 /// extern "C" {
 /// Dfs* NewDfs(const char* conf) {
-///     return new MyDfs(conf);
+///     Dfs* dfs= new MyDfs;
+///     ...
+///     return dfs;
 /// }
 /// }
 
