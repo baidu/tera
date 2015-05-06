@@ -73,7 +73,12 @@ private:
 };
 
 /// Dfs creator type.
+typedef Dfs* (*DfsCreator)(const char*);
+
 /// Impliment a dfs wrapper like this:
+/// class MyDfsFile : public DfsFile {
+///     ...
+/// };
 /// class MyDfs : public Dfs {
 ///     ...
 /// };
@@ -82,7 +87,7 @@ private:
 /// Dfs* NewDfs(const char* conf) {
 ///     return new MyDfs(conf);
 /// }
-typedef Dfs* (*DfsCreator)(const char*);
+/// }
 
 } // namespace leveldb
 #endif  //TERA_LEVELDB_DFS_H_
