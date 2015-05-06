@@ -40,8 +40,8 @@ void TaskSpatula::FinishTask() {
     m_running_count--;
 }
 
-void TaskSpatula::TryDrain() {
-    boost::function<void ()> dummy_func = boost::bind(&TaskSpatula::TryDrain, this);
+void TaskSpatula::TryDraining() {
+    boost::function<void ()> dummy_func = boost::bind(&TaskSpatula::TryDraining, this);
     ConcurrencyTask atask(0, dummy_func);
     while(m_running_count < m_max_concurrency
           && DeQueueTask(&atask)) {

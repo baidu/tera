@@ -224,7 +224,7 @@ void TabletNodeManager::UpdateTabletNode(const std::string& addr,
 
     node->m_info.set_status_m(NodeStateToString(node->m_state));
     node->m_info.set_tablet_onload(node->m_load_spatula.GetRunningCount());
-    node->m_info.set_tablet_onunload(node->m_unload_spatula.GetRunningCount());
+    node->m_info.set_tablet_unloading(node->m_unload_spatula.GetRunningCount());
     node->m_info.set_tablet_onsplit(node->m_split_spatula.GetRunningCount());
     VLOG(15) << "update tabletnode : " << addr;
 }

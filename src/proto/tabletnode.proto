@@ -54,7 +54,7 @@ message TabletNodeInfo {
 
     optional float cpu_usage = 44;
 
-    optional uint32 tablet_onunload = 45;
+    optional uint32 tablet_unloading = 45;
 }
 
 message LgInheritedLiveFiles {

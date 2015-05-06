@@ -26,8 +26,8 @@ struct ConcurrencyTask {
     ConcurrencyTask(int p, boost::function<void ()>& call)
         : priority(p), async_call(call) {}
 
-    friend bool operator< (ConcurrencyTask t1, ConcurrencyTask t2) {
-        return t1.priority < t2.priority;
+    bool operator< (const ConcurrencyTask& t) const {
+        return priority < t.priority;
     }
 };
 
@@ -44,7 +44,7 @@ public:
     // 1) reachs the threshold (running count >= concurrency_max), 
     //    concurrency_max is the parameter of constructor
     // 2) concurrency control queue has no item anymore
-    void TryDrain();
+    void TryDraining();
 
     // the function minus (count of running task) one
     // users must call this function when a async task done!
