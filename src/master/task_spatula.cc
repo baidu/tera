@@ -6,6 +6,8 @@
 
 #include "task_spatula.h"
 
+#include <glog/logging.h>
+
 namespace tera {
 namespace master {
 
@@ -13,7 +15,6 @@ TaskSpatula::TaskSpatula(int32_t max)
     :m_pending_count(0), m_running_count(0), m_max_concurrency(max) {}
 
 TaskSpatula::~TaskSpatula() {
-    assert(m_queue.size() == 0); // TODO copy from ts-a to ts-b, clear m_queue of a
 }
 
 void TaskSpatula::EnQueueTask(const ConcurrencyTask& atask) {
@@ -40,17 +41,22 @@ void TaskSpatula::FinishTask() {
     m_running_count--;
 }
 
-void TaskSpatula::TryDrain() {
-    boost::function<void ()> dummy_func = boost::bind(&TaskSpatula::TryDrain, this);
+int32_t TaskSpatula::TryDraining() {
+    boost::function<void ()> dummy_func = boost::bind(&TaskSpatula::TryDraining, this);
     ConcurrencyTask atask(0, dummy_func);
+    int done = 0;
+    LOG(INFO) << "running: " << m_running_count
+        << "max: " << m_max_concurrency;
     while(m_running_count < m_max_concurrency
           && DeQueueTask(&atask)) {
         atask.async_call();
+        done++;
         {
             MutexLock lock(&m_mutex);
             m_running_count++;
         }
     }
+    return done;
 }
 
 int32_t TaskSpatula::GetRunningCount() {

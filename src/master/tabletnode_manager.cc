@@ -69,6 +69,20 @@ uint64_t TabletNode::GetSize() {
     return m_data_size;
 }
 
+void TabletNode::DeleteTabletSize(const TabletPtr tablet) {
+    m_data_size -= tablet->GetDataSize();
+}
+
+void TabletNode::AddTabletSize(const TabletPtr tablet) {
+    MutexLock lock(&m_mutex);
+    m_data_size += tablet->GetDataSize();
+    if (m_table_size.find(tablet->GetTableName()) != m_table_size.end()) {
+        m_table_size[tablet->GetTableName()] += tablet->GetDataSize();
+    } else {
+        m_table_size[tablet->GetTableName()] = tablet->GetDataSize();
+    }
+}
+
 uint32_t TabletNode::GetPlanToMoveInCount() {
     MutexLock lock(&m_mutex);
     VLOG(7) << "GetPlanToMoveInCount: " << m_addr << " " << m_plan_move_in_count;
@@ -224,7 +238,7 @@ void TabletNodeManager::UpdateTabletNode(const std::string& addr,
 
     node->m_info.set_status_m(NodeStateToString(node->m_state));
     node->m_info.set_tablet_onload(node->m_load_spatula.GetRunningCount());
-    node->m_info.set_tablet_onunload(node->m_unload_spatula.GetRunningCount());
+    node->m_info.set_tablet_unloading(node->m_unload_spatula.GetRunningCount());
     node->m_info.set_tablet_onsplit(node->m_split_spatula.GetRunningCount());
     VLOG(15) << "update tabletnode : " << addr;
 }
