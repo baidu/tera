@@ -4,6 +4,7 @@
 
 #include "master/master_zk_adapter.h"
 
+#include "common/file/file_path.h"
 #include "types.h"
 #include "zk/zk_util.h"
 
