@@ -147,7 +147,7 @@ private:
     struct RecordWriter;
     WriteBatch* GroupWriteBatch(RecordWriter** last_writer);
 
-    Status RecoverLogFile(uint64_t log_number,
+    Status RecoverLogFile(uint64_t log_number, uint64_t recover_limit,
                           std::vector<VersionEdit*>* edit_list);
     void MaybeIgnoreError(Status* s) const;
     Status GatherLogFile(uint64_t begin_num,
