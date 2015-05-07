@@ -807,14 +807,12 @@ Status DBTable::RecoverLogFile(uint64_t log_number, uint64_t recover_limit,
                 if (last_seq <= lg_list_[i]->GetLastSequence()) {
                     continue;
                 }
+                uint64_t first = WriteBatchInternal::Sequence(lg_updates[i]);
+                uint64_t last = first + WriteBatchInternal::Count(lg_updates[i]) - 1;
+                // Log(options_.info_log, "[%s] recover log batch first= %lu, last= %lu\n",
+                //     dbname_.c_str(), first, last);
 
-                //Log(options_.info_log, "[%s] before RecoverInsertMem, last_seq= %lu",
-                //    dbname_.c_str(), lg_list_[i]->GetLastSequence());
                 Status lg_s = lg_list_[i]->RecoverInsertMem(lg_updates[i], (*edit_list)[i]);
-
-                //Log(options_.info_log, "[%s] after RecoverInsertMem, last_seq= %lu",
-                //    dbname_.c_str(), lg_list_[i]->GetLastSequence());
-
                 if (!lg_s.ok()) {
                     Log(options_.info_log, "[%s] recover log fail batch first= %lu, last= %lu\n",
                         dbname_.c_str(), first, last);
