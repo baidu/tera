@@ -9,6 +9,7 @@
 
 DECLARE_string(tera_zk_addr_list);
 DECLARE_string(tera_zk_root_path);
+DECLARE_string(tera_fake_zk_path_prefix);
 DECLARE_int32(tera_zk_timeout);
 DECLARE_int64(tera_zk_retry_period);
 DECLARE_int32(tera_zk_retry_max_times);
@@ -520,7 +521,7 @@ void MasterZkAdapter::OnSessionTimeout() {
 FakeMasterZkAdapter::FakeMasterZkAdapter(MasterImpl * master_impl,
                                  const std::string& server_addr)
     : m_master_impl(master_impl), m_server_addr(server_addr) {
-    exit(-1);
+    m_fake_path = FLAGS_tera_fake_zk_path_prefix + "/";
 }
 
 FakeMasterZkAdapter::~FakeMasterZkAdapter() {
@@ -529,6 +530,34 @@ FakeMasterZkAdapter::~FakeMasterZkAdapter() {
 bool FakeMasterZkAdapter::Init(std::string* root_tablet_addr,
                                std::map<std::string, std::string>* tabletnode_list,
                                bool* safe_mode) {
+    std::string master_lock = m_fake_path + kMasterLockPath;
+    std::string ts_list_path = m_fake_path + kTsListPath;
+    std::string kick_path = m_fake_path + kKickPath;
+    std::string root_path = m_fake_path + kRootTabletNodePath;
+
+    // setup master-lock
+    if (!IsEmpty(master_lock)) {
+        LOG(FATAL) << "fake zk error: " << master_lock;
+    }
+    if (!zk::FakeZkUtil::WriteNode(master_lock + "/0", m_server_addr)) {
+        LOG(FATAL) << "fake zk error: " << master_lock + "/0, "
+            << m_server_addr;
+    }
+
+    // get all ts
+    std::vector<std::string> allts;
+    if (!zk::FakeZkUtil::ListNodes(ts_list_path, &allts) && allts.size() == 0) {
+        LOG(FATAL) << "fake zk error: " << ts_list_path;
+    }
+    for (size_t i = 0; i < allts.size(); ++i) {
+        std::string value;
+        std::string node_path = ts_list_path + "/" + allts[i];
+        if (!zk::FakeZkUtil::ReadNode(node_path, &value)) {
+            LOG(FATAL) << "fake zk error: " << allts[i];
+        }
+        (*tabletnode_list)[value] = allts[i];
+    }
+
     return true;
 }
 
@@ -546,6 +575,12 @@ bool FakeMasterZkAdapter::UnmarkSafeMode() {
 }
 
 bool FakeMasterZkAdapter::UpdateRootTabletNode(const std::string& root_tablet_addr) {
+    std::string root_table = m_fake_path + kRootTabletNodePath;
+    if (!zk::FakeZkUtil::WriteNode(root_table, root_tablet_addr)) {
+        LOG(FATAL) << "fake zk error: " << root_table
+            << ", " << root_tablet_addr;
+    }
+    LOG(INFO) << "update fake root_table_addr: " << root_tablet_addr;
     return true;
 }
 

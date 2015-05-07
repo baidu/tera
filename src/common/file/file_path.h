@@ -31,6 +31,9 @@ bool IsExist(const std::string& path);
 
 bool IsDir(const std::string& path);
 
+// return true when path is a dir and empty, or return false
+bool IsEmpty(const std::string& path);
+
 bool RemoveLocalFile(const std::string& path);
 
 bool MoveLocalFile(const std::string& src_file,

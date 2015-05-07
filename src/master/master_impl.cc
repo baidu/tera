@@ -409,7 +409,8 @@ bool MasterImpl::LoadMetaTablet(std::string* server_addr) {
             LOG(INFO) << "load meta tablet on node: " << *server_addr;
             return true;
         }
-        LOG(ERROR) << "fail to load meta tablet on node: " << *server_addr;
+        LOG(ERROR) << "fail to load meta tablet on node: " << *server_addr
+            << ", status: " << StatusCodeToString(status);
         TryKickTabletNode(*server_addr);
         // ThisThread::Sleep(FLAGS_tera_master_common_retry_period);
     }

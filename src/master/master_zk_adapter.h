@@ -121,6 +121,7 @@ private:
     mutable Mutex m_mutex;
     MasterImpl * m_master_impl;
     std::string m_server_addr;
+    std::string m_fake_path;
 };
 
 } // namespace master

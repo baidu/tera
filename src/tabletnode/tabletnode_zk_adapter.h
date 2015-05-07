@@ -18,14 +18,16 @@ class TabletNodeZkAdapterBase : public zk::ZooKeeperAdapter {
 public:
     virtual ~TabletNodeZkAdapterBase() {};
     virtual void Init() = 0;
+    virtual bool GetRootTableAddr(std::string* root_table_addr) = 0;
 };
 
 class TabletNodeZkAdapter : public TabletNodeZkAdapterBase {
 public:
     TabletNodeZkAdapter(TabletNodeImpl* tabletnode_impl,
-                        const std::string & server_port);
+                        const std::string & server_addr);
     virtual ~TabletNodeZkAdapter();
     virtual void Init();
+    virtual bool GetRootTableAddr(std::string* root_table_addr);
 
 private:
     bool Register(std::string* session_id, int* zk_code);
@@ -65,11 +67,13 @@ private:
 class FakeTabletNodeZkAdapter : public TabletNodeZkAdapterBase {
 public:
     FakeTabletNodeZkAdapter(TabletNodeImpl* tabletnode_impl,
-                            const std::string& server_port) {}
+                            const std::string& server_addr);
     virtual ~FakeTabletNodeZkAdapter() {}
-    virtual void Init() {}
+    virtual void Init();
+    virtual bool GetRootTableAddr(std::string* root_table_addr);
 
 private:
+    bool Register(std::string* session_id, int* zk_code = NULL);
     virtual void OnChildrenChanged(const std::string& path,
                                    const std::vector<std::string>& name_list,
                                    const std::vector<std::string>& data_list) {}
@@ -81,10 +85,12 @@ private:
     virtual void OnSessionTimeout() {}
 
 private:
+    mutable Mutex m_mutex;
     TabletNodeImpl * m_tabletnode_impl;
     std::string m_server_addr;
     std::string m_serve_node_path;
     std::string m_kick_node_path;
+    std::string m_fake_path;
 };
 } // namespace tabletnode
 } // namespace tera

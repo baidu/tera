@@ -129,11 +129,6 @@ TabletNodeImpl::~TabletNodeImpl() {
 }
 
 bool TabletNodeImpl::Init() {
-    if (!FLAGS_tera_zk_enabled) {
-        SetTabletNodeStatus(kIsRunning);
-        return true;
-    }
-
     if (FLAGS_tera_zk_enabled) {
         m_zk_adapter.reset(new TabletNodeZkAdapter(this, m_local_addr));
     } else {
@@ -861,6 +856,10 @@ void TabletNodeImpl::UpdateMetaTableAsync(const SplitTabletRequest* rpc_request,
         << "], value_size: " << meta_value.size();
 
     // then write 1st half
+    // update root_tablet_addr in fake zk mode
+    if (!FLAGS_tera_zk_enabled) {
+        m_zk_adapter->GetRootTableAddr(&m_root_tablet_addr);
+    }
     TabletNodeClient meta_tablet_client(m_root_tablet_addr);
 
     tablet_meta.set_path(leveldb::GetChildTabletPath(path, rpc_request->child_tablets(1)));
