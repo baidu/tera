@@ -256,10 +256,16 @@ Status DBTable::Init() {
     Log(options_.info_log, "[%s] start GatherLogFile", dbname_.c_str());
     // recover log files
     std::vector<uint64_t> logfiles;
-    s = GatherLogFile(min_log_sequence, &logfiles);
+    s = GatherLogFile(min_log_sequence + 1, &logfiles);
     if (s.ok()) {
         for (uint32_t i = 0; i < logfiles.size(); ++i) {
-            s = RecoverLogFile(logfiles[i], &lg_edits);
+            // If two log files have overlap sequence id, ignore records
+            // from old log.
+            uint64_t recover_limit = kMaxSequenceNumber;
+            if (i < logfiles.size() - 1) {
+                recover_limit = logfiles[i + 1];
+            }
+            s = RecoverLogFile(logfiles[i], recover_limit, &lg_edits);
             if (!s.ok()) {
                 Log(options_.info_log, "[%s] Fail to RecoverLogFile %ld",
                     dbname_.c_str(), logfiles[i]);
@@ -706,16 +712,17 @@ Status DBTable::GatherLogFile(uint64_t begin_num,
         }
     }
     std::sort(logfiles->begin(), logfiles->end());
-    Log(options_.info_log, "[%s] last_seq= %lu, first log_num= %lu, last_num=%lu\n",
-        dbname_.c_str(), begin_num, logfiles->size()? (*logfiles)[0]:0, last_number);
-    if (last_number > 0 && last_number < begin_num) {
+    uint64_t first_log_num = logfiles->size() ? (*logfiles)[0] : 0;
+    Log(options_.info_log, "[%s] begin_seq= %lu, first log num= %lu, last num=%lu\n",
+        dbname_.c_str(), begin_num, first_log_num, last_number);
+    if (last_number > 0 && first_log_num > begin_num) {
         logfiles->push_back(last_number);
     }
     std::sort(logfiles->begin(), logfiles->end());
     return s;
 }
 
-Status DBTable::RecoverLogFile(uint64_t log_number,
+Status DBTable::RecoverLogFile(uint64_t log_number, uint64_t recover_limit,
                                std::vector<VersionEdit*>* edit_list) {
     struct LogReporter : public log::Reader::Reporter {
         Env* env;
@@ -749,8 +756,8 @@ Status DBTable::RecoverLogFile(uint64_t log_number,
     reporter.status = (options_.paranoid_checks ? &status : NULL);
     log::Reader reader(file, &reporter, true/*checksum*/,
                      0/*initial_offset*/);
-    Log(options_.info_log, "[%s] Recovering log #%lx",
-        dbname_.c_str(), log_number);
+    Log(options_.info_log, "[%s] Recovering log #%lx, sequence limit %lu",
+        dbname_.c_str(), log_number, recover_limit);
 
     // Read all the records and add to a memtable
     std::string scratch;
@@ -763,12 +770,18 @@ Status DBTable::RecoverLogFile(uint64_t log_number,
             continue;
         }
         WriteBatchInternal::SetContents(&batch, record);
-        uint64_t last_seq = WriteBatchInternal::Sequence(&batch) - 1;
-        uint64_t batch_seq = last_seq + WriteBatchInternal::Count(&batch);
+        uint64_t first_seq = WriteBatchInternal::Sequence(&batch);
+        uint64_t last_seq = first_seq + WriteBatchInternal::Count(&batch) - 1;
         //Log(options_.info_log, "[%s] batch_seq= %lu, last_seq= %lu, count=%d",
         //    dbname_.c_str(), batch_seq, last_sequence_, WriteBatchInternal::Count(&batch));
-        if (batch_seq > last_sequence_) {
-            last_sequence_ = batch_seq;
+        if (last_seq >= recover_limit) {
+            Log(options_.info_log, "[%s] exceed limit %lu, ignore %lu ~ %lu",
+                        dbname_.c_str(), recover_limit, first_seq, last_seq);
+            continue;
+        }
+
+        if (last_seq > last_sequence_) {
+            last_sequence_ = last_seq;
         }
 
         std::vector<WriteBatch*> lg_updates;
@@ -791,18 +804,18 @@ Status DBTable::RecoverLogFile(uint64_t log_number,
                 if (lg_updates[i] == NULL) {
                     continue;
                 }
-                if (batch_seq <= lg_list_[i]->GetLastSequence()) {
+                if (last_seq <= lg_list_[i]->GetLastSequence()) {
                     continue;
                 }
+                uint64_t first = WriteBatchInternal::Sequence(lg_updates[i]);
+                uint64_t last = first + WriteBatchInternal::Count(lg_updates[i]) - 1;
+                // Log(options_.info_log, "[%s] recover log batch first= %lu, last= %lu\n",
+                //     dbname_.c_str(), first, last);
 
-                //Log(options_.info_log, "[%s] before RecoverInsertMem, last_seq= %lu",
-                //    dbname_.c_str(), lg_list_[i]->GetLastSequence());
                 Status lg_s = lg_list_[i]->RecoverInsertMem(lg_updates[i], (*edit_list)[i]);
-
-                //Log(options_.info_log, "[%s] after RecoverInsertMem, last_seq= %lu",
-                //    dbname_.c_str(), lg_list_[i]->GetLastSequence());
-
                 if (!lg_s.ok()) {
+                    Log(options_.info_log, "[%s] recover log fail batch first= %lu, last= %lu\n",
+                        dbname_.c_str(), first, last);
                     status = lg_s;
                 }
             }

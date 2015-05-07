@@ -25,6 +25,8 @@ DECLARE_string(tera_leveldb_env_nfs_mountpoint);
 DECLARE_string(tera_leveldb_env_nfs_conf_path);
 DECLARE_string(tera_leveldb_env_hdfs2_nameservice_list);
 DECLARE_string(tera_tabletnode_path_prefix);
+DECLARE_string(tera_dfs_so_path);
+DECLARE_string(tera_dfs_conf);
 
 namespace tera {
 namespace io {
@@ -42,9 +44,13 @@ void InitDfsEnv() {
     } else if (FLAGS_tera_leveldb_env_dfs_type == "hdfs2") {
         LOG(INFO) << "init hdfs2 system";
         leveldb::InitHdfs2Env(FLAGS_tera_leveldb_env_hdfs2_nameservice_list);
-    } else {
+    } else if (FLAGS_tera_leveldb_env_dfs_type == "hdfs") {
         LOG(INFO) << "init hdfs system";
         leveldb::InitHdfsEnv();
+    } else {
+        LOG(INFO) << "Init dfs system: " << FLAGS_tera_dfs_so_path << "("
+                  << FLAGS_tera_dfs_conf << ")";
+        leveldb::InitDfsEnv(FLAGS_tera_dfs_so_path, FLAGS_tera_dfs_conf);
     }
 }
 

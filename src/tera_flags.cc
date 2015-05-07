@@ -42,6 +42,8 @@ DEFINE_int64(tera_tablet_memtable_ldb_write_buffer_size, 1, "the buffer size(in 
 DEFINE_int64(tera_tablet_memtable_ldb_block_size, 4, "the block size (in KB) for memtable on leveldb");
 DEFINE_int64(tera_tablet_ldb_sst_size, 8, "the sstable file size (in MB) on leveldb");
 
+DEFINE_string(tera_dfs_so_path, "", "the dfs implementation path");
+DEFINE_string(tera_dfs_conf, "", "the dfs configuration file path");
 DEFINE_string(tera_leveldb_env_type, "dfs", "the default type for leveldb IO environment, should be [local | dfs]");
 DEFINE_string(tera_leveldb_env_dfs_type, "hdfs", "the default type for leveldb IO dfs environment, [hdfs | nfs]");
 DEFINE_string(tera_leveldb_env_hdfs2_nameservice_list, "default", "the nameservice list of hdfs2");
