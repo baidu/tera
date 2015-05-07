@@ -279,162 +279,6 @@ void TableSchemaToDesc(const TableSchema& schema, TableDescriptor* desc) {
     }
 }
 
-bool SetCfProperties(const PropertyList& props, ColumnFamilyDescriptor* desc) {
-    for (size_t i = 0; i < props.size(); ++i) {
-        const Property& prop = props[i];
-        if (prop.first == "ttl") {
-            int32_t ttl = atoi(prop.second.c_str());
-            if (ttl < 0) {
-                LOG(ERROR) << "illegal value: " << prop.second
-                    << " for property: " << prop.first;
-                return false;
-            }
-            desc->SetTimeToLive(ttl);
-        } else if (prop.first == "maxversions") {
-            int32_t versions = atol(prop.second.c_str());
-            if (versions <= 0) {
-                LOG(ERROR) << "illegal value: " << prop.second
-                    << " for property: " << prop.first;
-                return false;
-            }
-            desc->SetMaxVersions(versions);
-        } else if (prop.first == "minversions") {
-            int32_t versions = atol(prop.second.c_str());
-            if (versions <= 0) {
-                LOG(ERROR) << "illegal value: " << prop.second
-                    << " for property: " << prop.first;
-                return false;
-            }
-            desc->SetMinVersions(versions);
-        } else if (prop.first == "diskquota") {
-            int64_t quota = atol(prop.second.c_str());
-            if (quota <= 0) {
-                LOG(ERROR) << "illegal value: " << prop.second
-                    << " for property: " << prop.first;
-                return false;
-            }
-            desc->SetDiskQuota(quota);
-        } else {
-            LOG(ERROR) << "illegal cf props: " << prop.first;
-            return false;
-        }
-    }
-    return true;
-}
-
-bool SetLgProperties(const PropertyList& props, LocalityGroupDescriptor* desc) {
-    for (size_t i = 0; i < props.size(); ++i) {
-        const Property& prop = props[i];
-        if (prop.first == "compress") {
-            if (prop.second == "none") {
-                desc->SetCompress(kNoneCompress);
-            } else if (prop.second == "snappy") {
-                desc->SetCompress(kSnappyCompress);
-            } else {
-                LOG(ERROR) << "illegal value: " << prop.second
-                    << " for property: " << prop.first;
-                return false;
-            }
-        } else if (prop.first == "storage") {
-            if (prop.second == "disk") {
-                desc->SetStore(kInDisk);
-            } else if (prop.second == "flash") {
-                desc->SetStore(kInFlash);
-            } else if (prop.second == "memory") {
-                desc->SetStore(kInMemory);
-            } else {
-                LOG(ERROR) << "illegal value: " << prop.second
-                    << " for property: " << prop.first;
-                return false;
-            }
-        } else if (prop.first == "blocksize") {
-            int blocksize = atoi(prop.second.c_str());
-            if (blocksize <= 0) {
-                LOG(ERROR) << "illegal value: " << prop.second
-                    << " for property: " << prop.first;
-                return false;
-            }
-            desc->SetBlockSize(blocksize);
-        } else if (prop.first == "use_memtable_on_leveldb") {
-            if (prop.second == "true") {
-                desc->SetUseMemtableOnLeveldb(true);
-            } else if (prop.second == "false") {
-                desc->SetUseMemtableOnLeveldb(false);
-            } else {
-                LOG(ERROR) << "illegal value: " << prop.second
-                           << " for property: " << prop.first;
-                return false;
-            }
-        } else if (prop.first == "memtable_ldb_write_buffer_size") {
-            int32_t buffer_size = atoi(prop.second.c_str()); //MB
-            if (buffer_size <= 0) {
-                LOG(ERROR) << "illegal value: " << prop.second
-                           << " for property: " << prop.first;
-                return false;
-            }
-            desc->SetMemtableLdbWriteBufferSize(buffer_size);
-        } else if (prop.first == "memtable_ldb_block_size") {
-            int32_t block_size = atoi(prop.second.c_str()); //KB
-            if (block_size <= 0) {
-                LOG(ERROR) << "illegal value: " << prop.second
-                           << " for property: " << prop.first;
-                return false;
-            }
-            desc->SetMemtableLdbBlockSize(block_size);
-        } else if (prop.first == "sst_size") {
-            int32_t sst_size = atoi(prop.second.c_str());
-            if (sst_size <= 0) {
-                LOG(ERROR) << "illegal value: " << prop.second
-                           << " for property: " << prop.first;
-                return false;
-            }
-            desc->SetSstSize(sst_size);
-        } else {
-            LOG(ERROR) << "illegal lg property: " << prop.first;
-            return false;
-        }
-    }
-    return true;
-}
-
-bool SetTableProperties(const PropertyList& props, TableDescriptor* desc) {
-    for (size_t i = 0; i < props.size(); ++i) {
-        const Property& prop = props[i];
-        if (prop.first == "rawkey") {
-            if (prop.second == "readable") {
-                desc->SetRawKey(kReadable);
-            } else if (prop.second == "binary") {
-                desc->SetRawKey(kBinary);
-            } else if (prop.second == "ttlkv") {
-                desc->SetRawKey(kTTLKv);
-            } else {
-                LOG(ERROR) << "illegal value: " << prop.second
-                    << " for property: " << prop.first;
-                return false;
-            }
-        } else if (prop.first == "splitsize") {
-            int splitsize = atoi(prop.second.c_str());
-            if (splitsize < 0) { // splitsize == 0 : split closed
-                LOG(ERROR) << "illegal value: " << prop.second
-                    << " for property: " << prop.first;
-                return false;
-            }
-            desc->SetSplitSize(splitsize);
-        } else if (prop.first == "mergesize") {
-            int mergesize = atoi(prop.second.c_str());
-            if (mergesize < 0) { // mergesize == 0 : merge closed
-                LOG(ERROR) << "illegal value: " << prop.second
-                    << " for property: " << prop.first;
-                return false;
-            }
-            desc->SetMergeSize(mergesize);
-        } else {
-            LOG(ERROR) << "illegal table property: " << prop.first;
-            return false;
-        }
-    }
-    return true;
-}
 bool SetCfProperties(const string& name, const string& value,
                      ColumnFamilyDescriptor* desc) {
     if (name == "ttl") {
@@ -516,11 +360,12 @@ bool SetLgProperties(const string& name, const string& value,
         }
         desc->SetMemtableLdbBlockSize(block_size);
     } else if (name == "sst_size") {
+        const int32_t SST_SIZE_MAX = 1024; // MB
         int32_t sst_size = atoi(value.c_str());
-        if (sst_size <= 0) {
+        if ( (sst_size <= 0) || (sst_size > SST_SIZE_MAX) ) {
             return false;
         }
-        desc->SetSstSize(sst_size);
+        desc->SetSstSize(sst_size<<20); // display in MB, store in Bytes.
     } else {
         return false;
     }
@@ -557,47 +402,6 @@ bool SetTableProperties(const string& name, const string& value,
     return true;
 }
 
-//   prefix:property=value
-bool ParsePrefixPropertyValue(const string& pair, string& prefix, string& property, string& value) {
-    string::size_type i = pair.find(":");
-    string::size_type k = pair.find("=");
-    if (i == string::npos || k == string::npos ||
-        i == 0 || i + 1 >= k || k == pair.length() - 1) {
-        return false;
-    }
-    prefix = pair.substr(0, i);
-    property = pair.substr(i + 1, k - i - 1);
-    value = pair.substr(k + 1, pair.length() - 1);
-    return true;
-}
-
-string PrefixType(const std::string& property) {
-    string lg_prop[] = {
-        "compress", "storage", "blocksize", "use_memtable_on_leveldb",
-        "memtable_ldb_write_buffer_size", "memtable_ldb_block_size", "sst_size"};
-    string cf_prop[] = {"ttl", "maxversions", "minversions", "diskquota"};
-
-    std::set<string> lgset(lg_prop, lg_prop + sizeof(lg_prop) / sizeof(lg_prop[0]));
-    std::set<string> cfset(cf_prop, cf_prop + sizeof(cf_prop) / sizeof(cf_prop[0]));
-    if (lgset.find(property) != lgset.end()) {
-        return string("lg");
-    } else if (cfset.find(property) != cfset.end()) {
-        return string("cf");
-    }
-    return string("unknown");
-}
-
-bool HasInvalidCharInSchema(const string& schema) {
-    for (size_t i = 0; i < schema.length(); i++) {
-        char ch = schema[i];
-        if (isalnum(ch) || ch == '_' || ch == ':' || ch == '=' || ch == ',') {
-            continue;
-        }
-        return true; // has invalid char
-    }
-    return false;
-}
-
 bool CheckTableDescrptor(TableDescriptor* table_desc) {
     if (table_desc->SplitSize() < table_desc->MergeSize() * 5) {
         LOG(ERROR) << "splitsize should be 5 times larger than mergesize"
@@ -608,81 +412,158 @@ bool CheckTableDescrptor(TableDescriptor* table_desc) {
     return true;
 }
 
-/*
- * parses `schema', sets TableDescriptor and notes whether to update lg or cf.
- *
- * an example of schema:
- *   "table:splitsize=100,lg0:storage=disk,lg1:blocksize=5,cf6:ttl=0"
- */
-bool ParseSchemaSetTableDescriptor(const string& schema, TableDescriptor* table_desc,
-                                   bool* is_update_lg_cf) {
-    if (table_desc == NULL) {
-        LOG(ERROR) << "parameter `table_desc' is NULL";
+bool UpdateCfProperties(PropTree::Node* table_node, TableDescriptor* table_desc) {
+    if (table_node == NULL || table_desc == NULL) {
         return false;
     }
-    std::vector<string> parts;
-    string schema_in = RemoveInvisibleChar(schema);
-    if (HasInvalidCharInSchema(schema)) {
-        LOG(ERROR) << "illegal char(s) in schema: " << schema;
-        return false;
-    }
-    SplitString(schema_in, ",", &parts);
-    if (parts.size() == 0) {
-        LOG(ERROR) << "illegal schema: " << schema;
-        return false;
-    }
-
-    for (size_t i = 0; i < parts.size(); i++) {
-        string prefix;// "table" | lg name | cf name
-        string property; // splitsize/compress/ttl ...
-        string value;
-        if (!ParsePrefixPropertyValue(parts[i], prefix, property, value)) {
-            LOG(ERROR) << "ParsePrefixPropertyValue:illegal schema: " << parts[i];
+    for (size_t i = 0; i < table_node->children_.size(); ++i) {
+        PropTree::Node* lg_node = table_node->children_[i];
+        LocalityGroupDescriptor* lg_desc;
+        lg_desc = const_cast<LocalityGroupDescriptor*>
+            (table_desc->LocalityGroup(lg_node->name_));
+        if (lg_desc == NULL) {
+            LOG(ERROR) << "[update] fail to get locality group: " << lg_node->name_;
             return false;
         }
-        if (prefix == "" || property == "" || value == "") {
-            LOG(ERROR) << "illegal schema: " << parts[i];
-            return false;
+        // add all column families and properties
+        for (size_t j = 0; j < lg_node->children_.size(); ++j) {
+            PropTree::Node* cf_node = lg_node->children_[j];
+            ColumnFamilyDescriptor* cf_desc;
+            cf_desc = const_cast<ColumnFamilyDescriptor*>
+                (table_desc->ColumnFamily(cf_node->name_));
+            for (std::map<string, string>::iterator it = cf_node->properties_.begin();
+                 it != cf_node->properties_.end(); ++it) {
+                if ((cf_desc == NULL) && (it->first == "op") && (it->second == "add")) {
+                    cf_desc = table_desc->AddColumnFamily(cf_node->name_, lg_desc->Name());
+                    if(cf_desc == NULL) {
+                        LOG(ERROR) << "[update] fail to add column family";
+                        return false;
+                    }
+                    LOG(INFO) << "[update] add cf: " << cf_node->name_;
+                    continue;
+                } else if ((it->first == "op") && (it->second == "del")) {
+                    // del cf
+                    table_desc->RemoveColumnFamily(cf_node->name_);
+                    LOG(INFO) << "[update] try to del cf: " << cf_node->name_;
+                    continue;
+                } 
+                if (!SetCfProperties(it->first, it->second, cf_desc)) {
+                    LOG(ERROR) << "[update] illegal value: " << it->second
+                        << " for cf property: " << it->first;
+                    return false;
+                }
+            }
         }
-        Property apair(property, value);
-        PropertyList props;
-        props.push_back(apair);
-        if (prefix == "table") {
-            if (property == "rawkey") {
-                LOG(ERROR) << "oops, can't reset <rawkey>";
-                return false;
-            }
-            if (!SetTableProperties(props, table_desc)) {
-                LOG(ERROR) << "SetTableProperties() failed";
-                return false;
-            }
-        } else if (PrefixType(property) == "lg") {
-            *is_update_lg_cf = true;
-            LocalityGroupDescriptor* lg_desc =
-                const_cast<LocalityGroupDescriptor*>(table_desc->LocalityGroup(prefix));
-            if (lg_desc == NULL) {
-                LOG(ERROR) << "illegal schema: " << parts[i];
-                return false;
-            }
-            SetLgProperties(props, lg_desc);
-        } else if (PrefixType(property) == "cf") {
-            *is_update_lg_cf = true;
-            ColumnFamilyDescriptor* cf_desc =
-                const_cast<ColumnFamilyDescriptor*>(table_desc->ColumnFamily(prefix));
-            if (cf_desc == NULL) {
-                LOG(ERROR) << "illegal schema: " << parts[i];
-                return false;
-            }
-            SetCfProperties(props, cf_desc);
-        } else {
-            LOG(ERROR) << "illegal schema: " << parts[i];
-            return false;
-        }
-    }
-    if (!CheckTableDescrptor(table_desc)) {
-        return false;
     }
     return true;
+}
+
+bool UpdateLgProperties(PropTree::Node* table_node, TableDescriptor* table_desc) {
+    if (table_node == NULL || table_desc == NULL) {
+        return false;
+    }
+    for (size_t i = 0; i < table_node->children_.size(); ++i) {
+        PropTree::Node* lg_node = table_node->children_[i];
+        LocalityGroupDescriptor* lg_desc;
+        lg_desc = const_cast<LocalityGroupDescriptor*>
+            (table_desc->LocalityGroup(lg_node->name_));
+        if (lg_desc == NULL) {
+            LOG(ERROR) << "[update] fail to get locality group: " << lg_node->name_;
+            return false;
+        }
+        // set locality group properties
+        for (std::map<string, string>::iterator it_lg = lg_node->properties_.begin();
+             it_lg != lg_node->properties_.end(); ++it_lg) {
+            if (!SetLgProperties(it_lg->first, it_lg->second, lg_desc)) {
+                LOG(ERROR) << "[update] illegal value: " << it_lg->second
+                    << " for lg property: " << it_lg->first;
+                return false;
+            }
+        }
+    }
+    return true;
+}
+
+bool UpdateTableProperties(PropTree::Node* table_node, TableDescriptor* table_desc) {
+    if (table_node == NULL || table_desc == NULL) {
+        return false;
+    }
+    for (std::map<string, string>::iterator i = table_node->properties_.begin();
+         i != table_node->properties_.end(); ++i) {
+        if (i->first == "rawkey") {
+            LOG(ERROR) << "[update] can't reset rawkey!";
+            return false;
+        }
+        if (!SetTableProperties(i->first, i->second, table_desc)) {
+            LOG(ERROR) << "[update] illegal value: " << i->second
+                << " for table property: " << i->first;
+            return false;
+        }
+    }
+    return true;
+}
+
+bool UpdateKvTableProperties(PropTree::Node* table_node, 
+                             TableDescriptor* table_desc, bool* is_update_lg_cf) {
+    if (table_node == NULL || table_desc == NULL) {
+        return false;
+    }
+    LocalityGroupDescriptor* lg_desc = 
+        const_cast<LocalityGroupDescriptor*>(table_desc->LocalityGroup("kv"));
+    if (lg_desc == NULL) {
+        LOG(ERROR) << "[update] fail to get locality group: kv";
+        return false;
+    }
+    for (std::map<string, string>::iterator i = table_node->properties_.begin();
+         i != table_node->properties_.end(); ++i) {
+        if (i->first == "rawkey") {
+            LOG(ERROR) << "[update] can't reset rawkey!";
+            return false;
+        }
+        if (SetLgProperties(i->first, i->second, lg_desc)) {
+            *is_update_lg_cf = true;
+        } else if (!SetTableProperties(i->first, i->second, table_desc)) {
+            LOG(ERROR) << "[update] illegal value: " << i->second
+                << " for table property: " << i->first;
+            return false;
+        }
+    }
+    return true;
+}
+
+bool UpdateTableDescriptor(PropTree& schema_tree, 
+                           TableDescriptor* table_desc, bool* is_update_lg_cf) {
+    PropTree::Node* table_node = schema_tree.GetRootNode();
+    if (table_node == NULL || table_desc == NULL) {
+        return false;
+    }
+    bool is_update_ok = false;
+    if (table_desc->IsKv()) {
+        if (schema_tree.MaxDepth() != 1) {
+            LOG(ERROR) << "invalid schema for kv table: " << table_node->name_;
+            return false;
+        }
+        is_update_ok = UpdateKvTableProperties(table_node, table_desc, is_update_lg_cf);
+    } else if (schema_tree.MaxDepth() == 1) {
+        // updates table properties, no updates for lg & cf properties
+        is_update_ok = UpdateTableProperties(table_node, table_desc);
+    } else if (schema_tree.MaxDepth() == 2) {
+        *is_update_lg_cf = true;
+        is_update_ok = UpdateLgProperties(table_node, table_desc) &&
+               UpdateTableProperties(table_node, table_desc);
+    } else if (schema_tree.MaxDepth() == 3) {
+        *is_update_lg_cf = true;
+        is_update_ok =  UpdateCfProperties(table_node, table_desc) &&
+                        UpdateLgProperties(table_node, table_desc) &&
+                        UpdateTableProperties(table_node, table_desc);
+    } else {
+        LOG(ERROR) << "invalid schema";
+        return false;
+    }
+    if (is_update_ok) {
+        return CheckTableDescrptor(table_desc);
+    }
+    return false;
 }
 
 bool FillTableDescriptor(PropTree& schema_tree, TableDescriptor* table_desc) {
@@ -694,7 +575,7 @@ bool FillTableDescriptor(PropTree& schema_tree, TableDescriptor* table_desc) {
         LocalityGroupDescriptor* lg_desc;
         lg_desc = table_desc->AddLocalityGroup("kv");
         if (lg_desc == NULL) {
-            LOG(ERROR) << "fail to add locality group: " << lg_desc->Name();
+            LOG(ERROR) << "fail to add locality group: kv";
             return false;
         }
         for (std::map<string, string>::iterator i = table_node->properties_.begin();
@@ -712,7 +593,7 @@ bool FillTableDescriptor(PropTree& schema_tree, TableDescriptor* table_desc) {
         LocalityGroupDescriptor* lg_desc;
         lg_desc = table_desc->AddLocalityGroup("lg0");
         if (lg_desc == NULL) {
-            LOG(ERROR) << "fail to add locality group: " << lg_desc->Name();
+            LOG(ERROR) << "fail to add locality group: lg0";
             return false;
         }
         // add all column families and properties
@@ -721,7 +602,7 @@ bool FillTableDescriptor(PropTree& schema_tree, TableDescriptor* table_desc) {
             ColumnFamilyDescriptor* cf_desc;
             cf_desc = table_desc->AddColumnFamily(cf_node->name_, lg_desc->Name());
             if (cf_desc == NULL) {
-                LOG(ERROR) << "fail to add column family: " << cf_desc->Name();
+                LOG(ERROR) << "fail to add column family: " << cf_node->name_;
                 return false;
             }
             for (std::map<string, string>::iterator it = cf_node->properties_.begin();
@@ -756,7 +637,7 @@ bool FillTableDescriptor(PropTree& schema_tree, TableDescriptor* table_desc) {
             LocalityGroupDescriptor* lg_desc;
             lg_desc = table_desc->AddLocalityGroup(lg_node->name_);
             if (lg_desc == NULL) {
-                LOG(ERROR) << "fail to add locality group: " << lg_desc->Name();
+                LOG(ERROR) << "fail to add locality group: " << lg_node->name_;
                 return false;
             }
             // add all column families and properties
@@ -765,7 +646,7 @@ bool FillTableDescriptor(PropTree& schema_tree, TableDescriptor* table_desc) {
                 ColumnFamilyDescriptor* cf_desc;
                 cf_desc = table_desc->AddColumnFamily(cf_node->name_, lg_desc->Name());
                 if (cf_desc == NULL) {
-                    LOG(ERROR) << "fail to add column family: " << cf_desc->Name();
+                    LOG(ERROR) << "fail to add column family: " << cf_node->name_;
                     return false;
                 }
                 for (std::map<string, string>::iterator it = cf_node->properties_.begin();
