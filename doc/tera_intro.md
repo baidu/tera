@@ -30,14 +30,14 @@ Tera的数据模型和传统的关系型数据库有可比性，但是又有很�
 数据模型里面还有一个概念是locality group，局部性群组（LG）。不同的列簇可以属于不同的局部性群组，局部性群组是数据物理存储介质类型的最小逻辑单位，不同的LG可以存储在不同的物理介质上。 LG对table进行纵向的分割，使列能够按照不同的用途存储在不同介质上。
 下面是一个具体的数据模型的例子。
  
- ![webtable_datamodel](https://github.com/BaiduPS/tera/blob/master/resources/images/webtable_datamodel.png)
+ ![webtable_datamodel](https://github.com/yoyzhou/tera/blob/master/resources/images/webtable_datamodel.png)
 
 如上图中，如果sign和density属于列簇cf1，anchor和weight属于列簇cf2，那么图中com.sina.www的density列t7时刻的kv模型实现就是:（com.sina.www cf1: density t7）-> “0:0 1:0”。
 可以相比较前面的关系数据库，Tera里面的key相当于主键，但不是单纯的一列作为主键，而是一个复合主键，包含了关系数据库里面讲的主键row之外，还有column列和时间戳也包含了，这就导致了进行查询的时候要进行key的解析的过程。
 
 ####2.2 Tera的总体架构
  
- ![tara_arch](https://github.com/BaiduPS/tera/blob/master/resources/images/tara_arch.png)
+ ![tara_arch](https://github.com/yoyzhou/tera/blob/master/resources/images/tara_arch.png)
 
 Tera包含三个功能模块和一个监控子系统：
 * Tabletserver 是核心服务器，负责Tablets管理和提供数据读写服务，是系统的数据节点，承载几乎所有客户端访问压力；
@@ -50,7 +50,7 @@ Tera包含三个功能模块和一个监控子系统：
 ####3.1 Master
 Master最重要的功能就是表格管理、tabletnode管理和负载均衡管理这三个方面。
  
- ![tera_master_imp](https://github.com/BaiduPS/tera/blob/master/resources/images/tera_master_impl.png)
+ ![tera_master_imp](https://github.com/yoyzhou/tera/blob/master/resources/images/tera_master_impl.png)
 
 #####3.1.1 表格管理
 上面我们已经介绍了Tera的数据模型，也就是tera中Table的逻辑模型，也讲到tera保证数据按照主键（key）全局有序。下面介绍tera中table是如何管理的。
@@ -72,7 +72,7 @@ tablet\_manager通过MergeTabletTimer定期（180s）对teblet信息进行扫描
 Tablet server是tera的核心服务器，负责tablets管理和提供数据读写服务。Tablet Server最重要的功能就是通过TabletIO提供数据读写服务。
 
  
- ![tera_ts_impl](https://github.com/BaiduPS/tera/blob/master/resources/images/tera_ts_impl.png)
+ ![tera_ts_impl](https://github.com/yoyzhou/tera/blob/master/resources/images/tera_ts_impl.png)
 tablet server在架构实现上和master是差不多的，他们都是TeraEntry，但是角色不同，master负责表格信息管理和负载均衡的角色，而tabletnode充当的是提供数据读写服务的功能，几乎所有的数据读写服务都是通过tabletnode提供的。
 #####3.2.1 tablet_manager实现
 Tablet Server通过tablet\_manager管理TabletIO，tablet\_manager拥有m\_tablet\_list成员变量，m\_tablet\_list是TabletRange（tablename，startkey，endkey的三元组）对象到TabletIO的hash表，每一个TabletIO就是一个leveldb实例。 
