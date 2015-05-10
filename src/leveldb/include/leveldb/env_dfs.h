@@ -67,7 +67,8 @@ private:
     Dfs* hdfs_;
 };
 
-/// init env
+/// Init dfs env
+void InitDfsEnv(const std::string& so_path, const std::string& conf);
 void InitHdfsEnv();
 void InitHdfs2Env(const std::string& namenode_list);
 void InitNfsEnv(const std::string& mountpoint,
