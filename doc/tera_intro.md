@@ -204,5 +204,3 @@ Major compaction
 
 ###5 参考资料
 [Bigtable: A Distributed Storage System for Structured Data](http://static.googleusercontent.com/media/research.google.com/en//archive/bigtable-osdi06.pdf)
-
-[LevelDb日知录 - LevelDb实现原理](http://www.cnblogs.com/haippy/archive/2011/12/04/2276064.html)
