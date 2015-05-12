@@ -688,8 +688,10 @@ inline bool TabletIO::LowLevelScan(const std::string& start_tera_key,
         }
 
         const std::set<std::string>& cf_set = scan_options.iter_cf_set;
-        if (cf_set.size() > 0 && cf_set.find(col.ToString()) == cf_set.end()) {
-            // donot need this column
+        if (cf_set.size() > 0 &&
+            cf_set.find(col.ToString()) == cf_set.end() &&
+            type != leveldb::TKT_DEL) {
+            // donot need this column, skip row deleting tag
             it->Next();
             continue;
         }

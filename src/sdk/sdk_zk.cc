@@ -11,6 +11,8 @@
 #include "zk/zk_adapter.h"
 
 DECLARE_string(tera_zk_lib_log_path);
+DECLARE_string(tera_fake_zk_path_prefix);
+DECLARE_bool(tera_zk_enabled);
 
 namespace tera {
 namespace sdk {
@@ -47,6 +49,15 @@ bool ClusterFinder::ReadZkNode(const std::string path, std::string* value) {
 }
 
 std::string ClusterFinder::MasterAddr(bool update) {
+    if (!FLAGS_tera_zk_enabled) {
+        // use local file system as a fake zk
+        std::string master_node =
+            FLAGS_tera_fake_zk_path_prefix + kMasterLockPath + "/0";
+        if (!zk::FakeZkUtil::ReadNode(master_node, &_master_addr)) {
+            LOG(FATAL) << "fail to read fake master node: " << master_node;
+        }
+        return _master_addr;
+    }
     if (update || _master_addr == "") {
         if (!ReadZkNode(kMasterNodePath, &_master_addr)) {
             _master_addr = "";
@@ -56,6 +67,14 @@ std::string ClusterFinder::MasterAddr(bool update) {
 }
 
 std::string ClusterFinder::RootTableAddr(bool update) {
+    if (!FLAGS_tera_zk_enabled) {
+        // use local file system as a fake zk
+        std::string root_node = FLAGS_tera_fake_zk_path_prefix + kRootTabletNodePath;
+        if (!zk::FakeZkUtil::ReadNode(root_node, &_root_table_addr)) {
+            LOG(FATAL) << "fail to read fake master node: " << root_node;
+        }
+        return _root_table_addr;
+    }
     if (update || _root_table_addr == "") {
         if (!ReadZkNode(kRootTabletNodePath, &_root_table_addr)) {
             _root_table_addr = "";
