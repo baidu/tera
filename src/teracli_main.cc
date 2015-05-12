@@ -661,7 +661,7 @@ int32_t ScanOp(Client* client, int32_t argc, char** argv, ErrorCode* err) {
     ResultStream* result_stream;
     ScanDescriptor desc(start_rowkey);
     desc.SetEnd(end_rowkey);
-    desc.SetBufferSize((FLAGS_tera_client_scan_package_size << 10));
+    desc.SetBufferSize(FLAGS_tera_client_scan_package_size << 10);
     desc.SetAsync(FLAGS_tera_client_scan_async_enabled);
 
     if (argc == 5) {
@@ -689,7 +689,7 @@ int32_t ScanOp(Client* client, int32_t argc, char** argv, ErrorCode* err) {
         return -1;
     }
     g_start_time = time(NULL);
-    while (!result_stream->Done()) {
+    while (!result_stream->Done(err)) {
         int32_t len = result_stream->RowName().size()
             + result_stream->ColumnName().size()
             + sizeof(result_stream->Timestamp())
@@ -710,6 +710,10 @@ int32_t ScanOp(Client* client, int32_t argc, char** argv, ErrorCode* err) {
             g_cur_batch_num = 0;
             g_last_time = time_cur;
         }
+    }
+    if (err->GetType() != ErrorCode::kOK) {
+        LOG(ERROR) << "fail to finish scan: " << err->GetReason();
+        return -1;
     }
     g_end_time = time(NULL);
     g_used_time = g_end_time - g_start_time;

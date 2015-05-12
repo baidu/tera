@@ -29,7 +29,7 @@ public:
     virtual ~ResultStreamImpl();
 
     bool LookUp(const std::string& row_key) = 0;
-    bool Done() = 0;
+    bool Done(ErrorCode* err) = 0;
     void Next() = 0;
 
     std::string RowName() const = 0;
@@ -64,7 +64,7 @@ public:
     virtual ~ResultStreamAsyncImpl();
 
     bool LookUp(const std::string& row_key);
-    bool Done();
+    bool Done(ErrorCode* err);
     void Next();
 
     std::string RowName() const;
@@ -117,7 +117,7 @@ public:
     virtual ~ResultStreamSyncImpl();
 
     bool LookUp(const std::string& row_key);
-    bool Done();
+    bool Done(ErrorCode* err);
     void Next();
 
     std::string RowName() const;

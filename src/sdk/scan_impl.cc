@@ -10,6 +10,7 @@
 #include "common/base/closure.h"
 #include "common/base/string_ext.h"
 
+#include "proto/proto_helper.h"
 #include "sdk/table_impl.h"
 #include "sdk/filter_utils.h"
 #include "utils/atomic.h"
@@ -68,12 +69,18 @@ bool ResultStreamAsyncImpl::LookUp(const string& row_key) {
     return true;
 }
 
-bool ResultStreamAsyncImpl::Done() {
+bool ResultStreamAsyncImpl::Done(ErrorCode* err) {
     if (_stopped && _queue_size == 0) {
+        if (err) {
+            err->SetFailed(ErrorCode::kOK);
+        }
         return true;
     }
     while (!_stopped && _queue_size == 0) {
         _scan_push_event.Wait();
+    }
+    if (err) {
+        err->SetFailed(ErrorCode::kOK);
     }
     return false;
 }
@@ -324,11 +331,15 @@ bool ResultStreamSyncImpl::LookUp(const string& row_key) {
     return true;
 }
 
-bool ResultStreamSyncImpl::Done() {
+bool ResultStreamSyncImpl::Done(ErrorCode* err) {
     while (1) {
         const string& scan_end_key = _scan_desc_impl->GetEndRowKey();
         /// scan failed
         if (_response->status() != kTabletNodeOk) {
+            if (err) {
+                err->SetFailed(ErrorCode::kSystem,
+                               StatusCodeToString(_response->status()));
+            }
             return true;
         }
         if (_result_pos < _response->results().key_values_size()) {
@@ -337,6 +348,9 @@ bool ResultStreamSyncImpl::Done() {
         const string& tablet_end_key = _response->end();
         if (_response->complete() &&
             (tablet_end_key == "" || (scan_end_key != "" && tablet_end_key >= scan_end_key))) {
+            if (err) {
+                err->SetFailed(ErrorCode::kOK);
+            }
             return true;
         }
 
