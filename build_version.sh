@@ -44,6 +44,7 @@ VERSION_CPP_FILE=src/version.cc
 
 # generate template file
 git remote -v | sed 's/$/&\\n\\/g' > $GIT_INFO_FILE
+git log | head -n 3 | sed 's/$/&\\n\\/g' >> $GIT_INFO_FILE
 gen_info_template_header > $TEMPLATE_HEADER_FILE
 gen_info_template_foot > $TEMPLATE_FOOT_FILE
 gen_info_print_template >> $TEMPLATE_FOOT_FILE
