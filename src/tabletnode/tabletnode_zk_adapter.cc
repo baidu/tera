@@ -10,6 +10,8 @@
 
 DECLARE_string(tera_zk_addr_list);
 DECLARE_string(tera_zk_root_path);
+DECLARE_string(tera_fake_zk_path_prefix);
+DECLARE_string(tera_tabletnode_port);
 DECLARE_int32(tera_zk_timeout);
 DECLARE_int64(tera_zk_retry_period);
 
@@ -90,6 +92,10 @@ void TabletNodeZkAdapter::Init() {
     // enter running state
     m_tabletnode_impl->SetSessionId(session_id);
     m_tabletnode_impl->SetTabletNodeStatus(TabletNodeImpl::kIsRunning);
+}
+
+bool TabletNodeZkAdapter::GetRootTableAddr(std::string* root_table_addr) {
+    return true;
 }
 
 bool TabletNodeZkAdapter::Register(std::string* session_id, int* zk_errno) {
@@ -283,7 +289,42 @@ void TabletNodeZkAdapter::OnSessionTimeout() {
     _Exit(EXIT_FAILURE);
 }
 
+FakeTabletNodeZkAdapter::FakeTabletNodeZkAdapter(TabletNodeImpl* tabletnode_impl,
+                                                 const std::string& server_addr)
+    : m_tabletnode_impl(tabletnode_impl), m_server_addr(server_addr) {
+    m_fake_path = FLAGS_tera_fake_zk_path_prefix + "/";
+}
+
+void FakeTabletNodeZkAdapter::Init() {
+    std::string session_id;
+    if (!Register(&session_id)) {
+        LOG(FATAL) << "fail to create fake serve-node.";
+    }
+    LOG(INFO) << "create fake serve-node success: " << session_id;
+    m_tabletnode_impl->SetSessionId(session_id);
+    m_tabletnode_impl->SetTabletNodeStatus(TabletNodeImpl::kIsRunning);
+}
+
+bool FakeTabletNodeZkAdapter::Register(std::string* session_id, int* zk_code) {
+    MutexLock locker(&m_mutex);
+    *session_id = FLAGS_tera_tabletnode_port + "#007";
+    std::string node_name = m_fake_path + kTsListPath + "/" + *session_id;
+
+    if (!zk::FakeZkUtil::WriteNode(node_name, m_server_addr)) {
+        LOG(FATAL) << "fake zk error: " << node_name
+            << ", " << m_server_addr;
+    }
+    return true;
+}
+
+bool FakeTabletNodeZkAdapter::GetRootTableAddr(std::string* root_table_addr) {
+    MutexLock locker(&m_mutex);
+    std::string root_table = m_fake_path + kRootTabletNodePath;
+    if (!zk::FakeZkUtil::ReadNode(root_table, root_table_addr)) {
+        LOG(FATAL) << "fake zk error: " << root_table
+            << ", " << *root_table_addr;
+    }
+    return true;
+}
 } // namespace tabletnode
 } // namespace tera
-
-/* vim: set expandtab ts=4 sw=4 sts=4 tw=100: */

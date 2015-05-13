@@ -208,7 +208,7 @@ class ResultStream {
 public:
     virtual bool LookUp(const std::string& row_key) = 0;
     /// 是否到达结束标记
-    virtual bool Done() = 0;
+    virtual bool Done(ErrorCode* err = NULL) = 0;
     /// 迭代下一个cell
     virtual void Next() = 0;
     /// RowKey
