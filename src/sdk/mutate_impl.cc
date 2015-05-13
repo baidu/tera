@@ -17,7 +17,7 @@ RowMutationImpl::RowMutationImpl(TableImpl* table, const std::string& row_key)
       _timeout_ms(0),
       _retry_times(0),
       _finish(false),
-      _finish_cond(&_mutex) {
+      _finish_cond(&_finish_mutex) {
 }
 
 RowMutationImpl::~RowMutationImpl() {
