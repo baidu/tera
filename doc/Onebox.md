@@ -74,8 +74,6 @@
 
 `./teracli showschema hello_table`
 
-![onebox_showschema](https://github.com/BaiduPS/tera/blob/master/resources/images/onebox_showschema.png)
-
 写入一条数据：
 
 `./teracli put hello_kv row_first value`
