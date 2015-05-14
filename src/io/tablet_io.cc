@@ -247,14 +247,6 @@ bool TabletIO::Load(const TableSchema& schema,
         m_ldb_options.snapshots_sequence.push_back(it->second);
     }
     leveldb::Status db_status = leveldb::DB::Open(m_ldb_options, m_tablet_path, &m_db);
-    if (!db_status.ok()) {
-        LOG(ERROR) << "fail to open table: " << m_tablet_path
-            << ", " << db_status.ToString() << ", repair it";
-        db_status = leveldb::RepairDB(m_tablet_path, m_ldb_options);
-        if (db_status.ok()) {
-            db_status = leveldb::DB::Open(m_ldb_options, m_tablet_path, &m_db);
-        }
-    }
 
     if (!db_status.ok()) {
         LOG(ERROR) << "fail to open table: " << m_tablet_path
