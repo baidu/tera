@@ -1,4 +1,4 @@
-// Copyright (c) 2015, Baidu.com, Inc. All Rights Reserved
+// Copyright (c) 2014, Baidu.com, Inc. All Rights Reserved
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -8,10 +8,11 @@
 #include <stdlib.h>
 
 #include "nfs.h"
-#include "nfs_wrapper.h"
+#include "util/hash.h"
 #include "util/mutexlock.h"
 #include "util/string_ext.h"
 #include "../utils/counter.h"
+#include "nfs_wrapper.h"
 
 namespace leveldb {
 
@@ -72,10 +73,16 @@ static int (*nfsFsync)(nfs::NFSFILE* stream);
 static int64_t (*nfsTell)(nfs::NFSFILE* stream);
 static int (*nfsSeek)(nfs::NFSFILE* stream, uint64_t offset);
 
+static void (*nfsSetAssignNamespaceIdFunc)(nfs::AssignNamespaceIdFunc func);
+
 void* ResolveSymbol(void* dl, const char* sym) {
   dlerror();
   void* sym_ptr = dlsym(dl, sym);
   const char* error = dlerror();
+  if (strcmp(sym,"SetAssignNamespaceIdFunc") == 0 && error != NULL) {
+      fprintf(stderr, "libnfs.so does not support federation\n");
+      return NULL;
+  }
   if (error != NULL) {
     fprintf(stderr, "resolve symbol %s from libnfs.so error: %s\n",
             sym, error);
@@ -115,6 +122,7 @@ void Nfs::LoadSymbol() {
   *(void**)(&nfsFsync) = ResolveSymbol(dl, "Fsync");
   *(void**)(&nfsTell) = ResolveSymbol(dl, "Tell");
   *(void**)(&nfsSeek) = ResolveSymbol(dl, "Seek");
+  *(void**)(&nfsSetAssignNamespaceIdFunc) = ResolveSymbol(dl, "SetAssignNamespaceIdFunc");
 }
 
 NFile::NFile(nfs::NFSFILE* file, const std::string& name)
@@ -141,7 +149,7 @@ int32_t NFile::Flush() {
   tera::AutoCounter ac(&dfs_flush_hang_counter, "Flush", name_.c_str());
   dfs_flush_counter.Inc();
   int32_t retval = 0;
-  // hdfsFlush鏈変粈涔堟剰涔変箞, 鎴戞病鎯虫槑鐧絶
+  // hdfsFlush有什么意义么, 我没想明白~
   // retval = hdfsFlush(fs_, file_);
   return retval;
 }
@@ -213,6 +221,26 @@ bool Nfs::dl_init_ = false;
 port::Mutex Nfs::mu_;
 static Nfs* instance = NULL;
 
+int Nfs::CalcNamespaceId(const char* c_path, int max_namespaces) {
+    if (!c_path) {
+      fprintf(stderr, "null path for Nfs::CalcNamespaceId\n");
+      return -1;
+    }
+    std::string path(c_path);
+    size_t pos = path.rfind("tablet");
+    if (pos == std::string::npos) {
+        return 0;
+    }
+    size_t pos2 = path.find('/', pos);
+    if (pos2 == std::string::npos) {
+        pos2 = path.size();
+    }
+    std::string hash_path = path.substr(pos, pos2 - pos);
+    uint32_t index = Hash(hash_path.c_str(), hash_path.size(),
+                          1984) % max_namespaces;
+    return index;
+}
+
 void Nfs::Init(const std::string& mountpoint, const std::string& conf_path)
 {
   MutexLock l(&mu_);
@@ -221,6 +249,9 @@ void Nfs::Init(const std::string& mountpoint, const std::string& conf_path)
     dl_init_ = true;
   }
   (*nfsSetComlogLevel)(2);
+  if (nfsSetAssignNamespaceIdFunc) {
+      nfsSetAssignNamespaceIdFunc(&CalcNamespaceId);
+  }
   if (0 != (*nfsInit)(mountpoint.c_str(), conf_path.c_str())) {
     char err[256];
     strerror_r((*nfsGetErrno)(), err, 256);

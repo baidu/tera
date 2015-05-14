@@ -1,8 +1,9 @@
-// Copyright (C) 2015, Baidu Inc.
-// Description:  nfs wrapper
+// Copyright (c) 2015, Baidu.com, Inc. All Rights Reserved
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
 
-#ifndef  STORAGE_LEVELDB_UTIL_NFS_WRAPPER_H_
-#define  STORAGE_LEVELDB_UTIL_NFS_WRAPPER_H_
+#ifndef  TERA_DEPS_NFS_WRAPPER_H
+#define  TERA_DEPS_NFS_WRAPPER_H
 
 #include "nfs_version.h"
 
@@ -63,9 +64,11 @@ int Rename(const char* oldpath, const char* newpath);
 
 int Stat(const char* path, struct ::stat* stat);
 
+void SetAssignNamespaceIdFunc(nfs::AssignNamespaceIdFunc func);
+
 #ifdef __cplusplus
 }
 #endif
 
-#endif  // STORAGE_LEVELDB_UTIL_NFS_WRAPPER_H_
+#endif  // TERA_DEPS_NFS_WRAPPER_H
 
