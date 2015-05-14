@@ -844,6 +844,7 @@ bool TabletIO::ReadCells(const RowReaderInfo& row_reader, RowResult* value_list,
         for (int32_t j = 0; j < column_family.qualifier_list_size(); ++j) {
             qualifier_list.insert(column_family.qualifier_list(j));
         }
+        scan_options.iter_cf_set.insert(column_family_name);
     }
     if (row_reader.has_max_version()) {
         scan_options.max_versions = row_reader.max_version();
