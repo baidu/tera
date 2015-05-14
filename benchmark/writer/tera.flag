@@ -1,0 +1,19 @@
+
+# common
+--log_dir=.
+--v=0
+--logbufsecs=0
+--max_log_size=2048
+
+# zk
+--tera_zk_enabled=true
+--tera_zk_addr_list=${ZK_ADDR_LIST}
+--tera_zk_root_path=${ZK_ROOT_PATH}
+--tera_zk_timeout=10000
+
+# client
+--tera_sdk_delay_send_internal=1
+--tera_sdk_rpc_max_pending_buffer_size=5000
+--tera_sdk_retry_times=3600
+--tera_sdk_batch_size=100
+--tera_tabletnode_rpc_timeout_period=1800000
