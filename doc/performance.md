@@ -19,8 +19,8 @@ KERNEL: 2.6.32
 SCHEMA: <rawkey=readable, splitsize=1000000000, mergesize=0> {
           lg0 <storage=flash,compress=none,blocksize=4> {
             cf0 <maxversions=1,minversions=1,ttl=0>
-          }
-          lg0 <storage=flash,compress=none,blocksize=4> {
+          },
+          lg1 <storage=flash,compress=none,blocksize=4> {
             cf1 <maxversions=1,minversions=1,ttl=0>
           }
         }
