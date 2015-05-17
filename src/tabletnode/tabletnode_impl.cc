@@ -921,6 +921,7 @@ void TabletNodeImpl::GarbageCollect() {
     if (FLAGS_tera_tabletnode_cache_enabled) {
         return;
     }
+    const int GC_LOG_LEVEL = 15;
     int64_t start_ms = get_micros();
     LOG(INFO) << "[gc] start...";
 
@@ -938,7 +939,7 @@ void TabletNodeImpl::GarbageCollect() {
                     live.table_name(), lg, lg_live_files.file_number(f));
                 inherited_files.insert(file_path);
                 // file_path : table-name/tablet-xxx/lg-num/xxx.sst
-                VLOG(6) << "[gc] inherited live file: " << file_path;
+                VLOG(GC_LOG_LEVEL) << "[gc] inherited live file: " << file_path;
             }
         }
     }
@@ -949,7 +950,7 @@ void TabletNodeImpl::GarbageCollect() {
     m_tablet_manager->GetAllTabletMeta(&tablet_meta_list);
     std::vector<TabletMeta*>::iterator it = tablet_meta_list.begin();
     for (; it != tablet_meta_list.end(); ++it) {
-        VLOG(6) << "[gc] Active Tablet: " << (*it)->path();
+        VLOG(GC_LOG_LEVEL) << "[gc] Active Tablet: " << (*it)->path();
         active_tablets.insert((*it)->path());
         delete (*it);
     }
@@ -964,24 +965,24 @@ void TabletNodeImpl::GarbageCollect() {
             leveldb::Env::Default()->ListDir(flash_dir + "/" + table_dirs[i],
                     &cached_tablets);
             if (cached_tablets.size() == 0) {
-                VLOG(6) << "[gc] this directory is empty, delete it: "
+                VLOG(GC_LOG_LEVEL) << "[gc] this directory is empty, delete it: "
                     << flash_dir + "/" + table_dirs[i];
                 leveldb::Env::Default()->DeleteDir(flash_dir + "/" + table_dirs[i]);
                 continue;
             }
             for (size_t j = 0; j < cached_tablets.size(); ++j) {
                 std::string tablet_dir = table_dirs[i] + "/" + cached_tablets[j];
-                VLOG(6) << "[gc] Cached Tablet: " << tablet_dir;
+                VLOG(GC_LOG_LEVEL) << "[gc] Cached Tablet: " << tablet_dir;
                 if (active_tablets.find(tablet_dir) != active_tablets.end()) {
                     // active tablets
                     continue;
                 }
                 std::string inactive_tablet_dir = flash_dir + "/" + tablet_dir;
-                VLOG(6) << "[gc] inactive_tablet directory:" << inactive_tablet_dir;
+                VLOG(GC_LOG_LEVEL) << "[gc] inactive_tablet directory:" << inactive_tablet_dir;
                 std::vector<std::string> lgs;
                 leveldb::Env::Default()->ListDir(inactive_tablet_dir, &lgs);
                 if (lgs.size() == 0) {
-                    VLOG(6) << "[gc] this directory is empty, delete it: " << inactive_tablet_dir;
+                    VLOG(GC_LOG_LEVEL) << "[gc] this directory is empty, delete it: " << inactive_tablet_dir;
                     leveldb::Env::Default()->DeleteDir(inactive_tablet_dir);
                     continue;
                 }
@@ -989,7 +990,7 @@ void TabletNodeImpl::GarbageCollect() {
                     std::vector<std::string> files;
                     leveldb::Env::Default()->ListDir(inactive_tablet_dir + "/" + lgs[lg], &files);
                     if (files.size() == 0) {
-                        VLOG(6) << "[gc] this directory is empty, delete it: "
+                        VLOG(GC_LOG_LEVEL) << "[gc] this directory is empty, delete it: "
                             << inactive_tablet_dir + "/" + lgs[lg];
                         leveldb::Env::Default()->DeleteDir(inactive_tablet_dir + "/" + lgs[lg]);
                         continue;
@@ -998,11 +999,11 @@ void TabletNodeImpl::GarbageCollect() {
                         std::string file = files[f];
                         std::string pathname = inactive_tablet_dir + "/" + lgs[lg] + "/" + file;
                         if (inherited_files.find(tablet_dir + "/" + lgs[lg] + "/" + file) == inherited_files.end()) {
-                            VLOG(6) << "[gc] delete sst file: " << pathname;
+                            VLOG(GC_LOG_LEVEL) << "[gc] delete sst file: " << pathname;
                             leveldb::Env::Default()->DeleteFile(pathname);
 
                         } else {
-                            VLOG(6) << "[gc] skip inherited file: " << pathname;
+                            VLOG(GC_LOG_LEVEL) << "[gc] skip inherited file: " << pathname;
                         }
                     } // sst file
                 } // lg

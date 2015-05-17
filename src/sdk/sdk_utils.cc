@@ -95,7 +95,7 @@ void ShowTableSchema(const TableSchema& schema, bool is_x) {
         if (is_x || lg_schema.block_size() != FLAGS_tera_tablet_write_block_size) {
             ss << "blocksize=" << lg_schema.block_size() << ",";
         }
-        if (is_x || lg_schema.sst_size() != FLAGS_tera_tablet_ldb_sst_size) {
+        if (is_x) {
             ss << "sst_size=" << (lg_schema.sst_size() >> 20) << ",";
         }
         if (lg_schema.use_memtable_on_leveldb()) {
@@ -124,8 +124,12 @@ void ShowTableSchema(const TableSchema& schema, bool is_x) {
             if (is_x || cf_schema.time_to_live() != 0) {
                 cf_ss << "ttl=" << cf_schema.time_to_live() << ",";
             }
-            if (is_x || cf_schema.type() != "") {
-                cf_ss << "type=" << cf_schema.type() << ",";
+            if (is_x || (cf_schema.type() != "bytes" && cf_schema.type() != "")) {
+                if (cf_schema.type() != "") {
+                    cf_ss << "type=" << cf_schema.type() << ",";
+                } else {
+                    cf_ss << "type=bytes" << ",";
+                }
             }
             cf_ss << "\b>";
             if (cf_ss.str().size() > 5) {
@@ -446,7 +450,7 @@ bool UpdateCfProperties(PropTree::Node* table_node, TableDescriptor* table_desc)
                     table_desc->RemoveColumnFamily(cf_node->name_);
                     LOG(INFO) << "[update] try to del cf: " << cf_node->name_;
                     continue;
-                } 
+                }
                 if (!SetCfProperties(it->first, it->second, cf_desc)) {
                     LOG(ERROR) << "[update] illegal value: " << it->second
                         << " for cf property: " << it->first;
@@ -503,12 +507,12 @@ bool UpdateTableProperties(PropTree::Node* table_node, TableDescriptor* table_de
     return true;
 }
 
-bool UpdateKvTableProperties(PropTree::Node* table_node, 
+bool UpdateKvTableProperties(PropTree::Node* table_node,
                              TableDescriptor* table_desc, bool* is_update_lg_cf) {
     if (table_node == NULL || table_desc == NULL) {
         return false;
     }
-    LocalityGroupDescriptor* lg_desc = 
+    LocalityGroupDescriptor* lg_desc =
         const_cast<LocalityGroupDescriptor*>(table_desc->LocalityGroup("kv"));
     if (lg_desc == NULL) {
         LOG(ERROR) << "[update] fail to get locality group: kv";
@@ -531,7 +535,7 @@ bool UpdateKvTableProperties(PropTree::Node* table_node,
     return true;
 }
 
-bool UpdateTableDescriptor(PropTree& schema_tree, 
+bool UpdateTableDescriptor(PropTree& schema_tree,
                            TableDescriptor* table_desc, bool* is_update_lg_cf) {
     PropTree::Node* table_node = schema_tree.GetRootNode();
     if (table_node == NULL || table_desc == NULL) {
