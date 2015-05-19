@@ -1252,26 +1252,30 @@ Iterator* DBImpl::NewInternalIterator(const ReadOptions& options,
   mutex_.Lock();
   *latest_snapshot = GetLastSequence(false);
 
+  MemTable* mem = mem_;
+  MemTable* imm = imm_;
+  Version* current = versions_->current();
+  mem->Ref();
+  if (imm != NULL) imm->Ref();
+  current->Ref();
+  mutex_.Unlock();
+
   // Collect together all needed child iterators
   std::vector<Iterator*> list;
-  list.push_back(mem_->NewIterator());
-  mem_->Ref();
-  if (imm_ != NULL) {
-    list.push_back(imm_->NewIterator());
-    imm_->Ref();
+  list.push_back(mem->NewIterator());
+  if (imm != NULL) {
+    list.push_back(imm->NewIterator());
   }
-  versions_->current()->AddIterators(options, &list);
+  current->AddIterators(options, &list);
   Iterator* internal_iter =
       NewMergingIterator(&internal_comparator_, &list[0], list.size());
-  versions_->current()->Ref();
 
   cleanup->mu = &mutex_;
-  cleanup->mem = mem_;
-  cleanup->imm = imm_;
-  cleanup->version = versions_->current();
+  cleanup->mem = mem;
+  cleanup->imm = imm;
+  cleanup->version = current;
   internal_iter->RegisterCleanup(CleanupIteratorState, cleanup, NULL);
 
-  mutex_.Unlock();
   return internal_iter;
 }
 

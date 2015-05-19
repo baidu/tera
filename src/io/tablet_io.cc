@@ -247,14 +247,6 @@ bool TabletIO::Load(const TableSchema& schema,
         m_ldb_options.snapshots_sequence.push_back(it->second);
     }
     leveldb::Status db_status = leveldb::DB::Open(m_ldb_options, m_tablet_path, &m_db);
-    if (!db_status.ok()) {
-        LOG(ERROR) << "fail to open table: " << m_tablet_path
-            << ", " << db_status.ToString() << ", repair it";
-        db_status = leveldb::RepairDB(m_tablet_path, m_ldb_options);
-        if (db_status.ok()) {
-            db_status = leveldb::DB::Open(m_ldb_options, m_tablet_path, &m_db);
-        }
-    }
 
     if (!db_status.ok()) {
         LOG(ERROR) << "fail to open table: " << m_tablet_path
@@ -688,8 +680,10 @@ inline bool TabletIO::LowLevelScan(const std::string& start_tera_key,
         }
 
         const std::set<std::string>& cf_set = scan_options.iter_cf_set;
-        if (cf_set.size() > 0 && cf_set.find(col.ToString()) == cf_set.end()) {
-            // donot need this column
+        if (cf_set.size() > 0 &&
+            cf_set.find(col.ToString()) == cf_set.end() &&
+            type != leveldb::TKT_DEL) {
+            // donot need this column, skip row deleting tag
             it->Next();
             continue;
         }
@@ -842,6 +836,7 @@ bool TabletIO::ReadCells(const RowReaderInfo& row_reader, RowResult* value_list,
         for (int32_t j = 0; j < column_family.qualifier_list_size(); ++j) {
             qualifier_list.insert(column_family.qualifier_list(j));
         }
+        scan_options.iter_cf_set.insert(column_family_name);
     }
     if (row_reader.has_max_version()) {
         scan_options.max_versions = row_reader.max_version();

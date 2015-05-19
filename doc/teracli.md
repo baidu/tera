@@ -39,7 +39,7 @@ Tera支持在建立表格时预分配若干tablet，tablet分隔的key写在tabl
     
 ### 创建key-value模式存储
 
-tera支持高性能的key-value存储，其schema只需指定表名即可，若需要指定存储介质等属性，可选择性填加：
+tera支持高性能的key-value存储，其schema只需指定表名即可，若需要指定存储介质等属性，可选择性添加：
 
     kv_hello                                                # 简单key-value
     kv_hello <storage=flash, splitsize=2048, mergesize=128> # 配置若干属性
@@ -66,36 +66,60 @@ lg    | memtable_ldb_block_size |  内存compact开启后，压缩块的大小 |
 cf    | diskquota   | 存储限额  | >0 | MB | 0 | 暂未使用
 -->
 
-## 表格schema更新-全量更新 (update)
+## 表格schema更新 (update)
 
-`update  <tablename> <tableschema>`
+`update <tableschema>`
 
-1. schema的语法必须和create表格时一致。
-tera会用新的schema覆盖原有schema.
-更新schema前需要先disable表格。
+更新时使用schema语法和建表时的语法基本一致，
+不同主要在于更新时只需指定要更新的属性，不需要改动的属性无需列出。
 
-1. tablename和tableschema的约束和`create`一致。
+### 更新table模式schema
 
-## 表格schema更新-增量更新 (update-part)
+1. 更新lg或者cf属性时，需要disable表格
 
-适用于只需更新少数几个属性的场景，
-建表时未指定的属性值，也可以用`update-part`在建表完成后设定。
+1. table的rawkey属性不能被修改
 
-`update-part <tablename> <part-schema>`
+#### 示例
 
-part-schema 语法:
+更新table级别的属性（不更新lg、cf属性）：
+    
+```bash
+./teracli update "oops<mergesize=512>" 
+./teracli update "oops<splitsize=1024,mergesize=128>" 
+```
 
-    "prefix1:property1=value1, prefix2:property2=value2, ..."
+更新lg属性（不更新cf属性）：
+    
+```bash
+./teracli update "oops{lg0<sst_size=9>}"
 
-prefix: 如果更新的是表格的属性，则取值"table"；如果更新的是lg属性，则取值为lg名字，cf与lg同理。
+#也可以同时修改table属性
+./teracli update "oops<splitsize=512>{lg0<sst_size=9>}"
+```
 
-property: 待更新属性名，例如： splitsize | compress | ttl | ...
+更新cf属性：
 
-value:    待更新属性的新值。
+```bash
+./teracli update "oops{lg0{cf0<ttl=999>}}"
 
-每次可以更新一个或者多个属性，它们之间用逗号分隔。
+#也可以同时修改table或者lg属性
+./teracli update "oops<splitsize=512>{lg0<sst_size=9>{cf0<ttl=999>}}"
+```
 
-例1： "table:splitsize=9, lg0:compress=none, cf3:ttl=0"
+增加、删除cf：
 
-例2： "lg0:use_memtable_on_leveldb=true"
+```bash
+# 在lg0下增加cf1，并设置属性ttl值为123. 
+# op意为操作，op=add需要放在cf属性的最前面
+./teracli update "oops{lg0{cf1<op=add,ttl=123>}}"
 
+# 从lg0中删除cf1
+./teracli update "oops{lg0{cf1<op=del>}}"
+```
+
+### 更新kv模式schema
+
+```bash
+# 更新部分属性时需要disable表格，程序会在运行时给出提示
+./teracli update "kvtable<splitsize=1024>"
+```

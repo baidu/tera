@@ -44,7 +44,7 @@ class WriteTabletResponse;
 
 namespace master {
 
-class MasterZkAdapter;
+class MasterZkAdapterBase;
 class MetaTable;
 class Scheduler;
 class TabletManager;
@@ -472,7 +472,7 @@ private:
     scoped_ptr<TabletManager> m_tablet_manager;
     scoped_ptr<TabletNodeManager> m_tabletnode_manager;
     scoped_ptr<Scheduler> m_scheduler;
-    scoped_ptr<MasterZkAdapter> m_zk_adapter;
+    scoped_ptr<MasterZkAdapterBase> m_zk_adapter;
 
     Mutex m_mutex;
     int64_t m_release_cache_timer_id;

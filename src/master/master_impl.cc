@@ -119,7 +119,12 @@ MasterImpl::~MasterImpl() {
 }
 
 bool MasterImpl::Init() {
-    m_zk_adapter.reset(new MasterZkAdapter(this, m_local_addr));
+    if (FLAGS_tera_zk_enabled) {
+        m_zk_adapter.reset(new MasterZkAdapter(this, m_local_addr));
+    } else {
+        LOG(INFO) << "fake zk mode!";
+        m_zk_adapter.reset(new FakeMasterZkAdapter(this, m_local_addr));
+    }
 
     SetMasterStatus(kIsSecondary);
     DisableQueryTabletNodeTimer();
@@ -405,7 +410,8 @@ bool MasterImpl::LoadMetaTablet(std::string* server_addr) {
             LOG(INFO) << "load meta tablet on node: " << *server_addr;
             return true;
         }
-        LOG(ERROR) << "fail to load meta tablet on node: " << *server_addr;
+        LOG(ERROR) << "fail to load meta tablet on node: " << *server_addr
+            << ", status: " << StatusCodeToString(status);
         TryKickTabletNode(*server_addr);
         // ThisThread::Sleep(FLAGS_tera_master_common_retry_period);
     }

@@ -10,6 +10,9 @@
 #include <glog/logging.h>
 #include <zookeeper/zookeeper.h>
 
+#include "common/file/file_path.h"
+#include "common/file/file_stream.h"
+
 namespace tera {
 namespace zk {
 
@@ -170,6 +173,40 @@ int32_t ZooKeeperUtil::GetSequenceNo(const std::string& name) {
 bool ZooKeeperUtil::IsValidPath(const std::string& path) {
     if (path.empty() || path[0] != '/'
         || (path.size() > 1 && *path.rbegin() == '/')) {
+        return false;
+    }
+    return true;
+}
+
+bool FakeZkUtil::WriteNode(const std::string& name, const std::string& value) {
+    FileStream node_file;
+    if (!node_file.Open(name, FILE_WRITE)) {
+        return false;
+    }
+    if (node_file.Write(value.c_str(), value.size()) != (int32_t)value.size()) {
+        return false;
+    }
+    node_file.Close();
+    return true;
+}
+
+bool FakeZkUtil::ReadNode(const std::string& name, std::string* value) {
+    FileStream node_file;
+    if (!node_file.Open(name, FILE_READ)) {
+        LOG(ERROR) << "fail to open node file: " << name;
+        return false;
+    }
+    if (node_file.ReadLine(value) < 0) {
+        LOG(ERROR) << "fail to read node file: " << name;
+        return false;
+    }
+    node_file.Close();
+    return true;
+}
+
+bool FakeZkUtil::ListNodes(const std::string& path,
+                          std::vector<std::string>* values) {
+    if (!ListCurrentDir(path, values)) {
         return false;
     }
     return true;

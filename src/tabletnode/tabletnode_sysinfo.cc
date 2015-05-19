@@ -322,10 +322,8 @@ static int GetCpuCount() {
 // irix_on == 0 --> irix mode off
 //
 // return this process's the percentage of CPU usage ( %CPU ).
-// the number of digits after decimal point is UNCERTAIN.
-//   e.g. this function would return 19.12613, 42.0 or other number.
 //
-// NOTE: the first time call this function would get a "wrong" %CPU.
+// NOTE: the first time call this function would get 0 as result.
 static float GetCpuUsage(int is_irix_on) {
     static int cpu_count = 1; // assume cpu count is not variable when process is running
     static unsigned long hertz = 0;
@@ -355,9 +353,16 @@ static float GetCpuUsage(int is_irix_on) {
     float u = (newtick - (float)oldtick) * frame_etscale;
     oldtick = newtick;
 
-    if (u > 99.9f) {
-        u = 99.9;
+    const float MAX_CPU_USAGE = 99.9f;
+    if (u > MAX_CPU_USAGE ) {
+        u = MAX_CPU_USAGE;
     }
+
+    // rounding cpu usage to 1 decimal places
+    const int USAGE_STR_MAX_LEN = 5;
+    char usage_str[USAGE_STR_MAX_LEN];
+    sprintf(usage_str, "%.1f\n", u);
+    sscanf(usage_str, "%f", &u);
     return u;
 }
 

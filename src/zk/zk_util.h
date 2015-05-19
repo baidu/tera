@@ -8,6 +8,7 @@
 #include <stdint.h>
 
 #include <string>
+#include <vector>
 
 namespace tera {
 namespace zk {
@@ -53,14 +54,20 @@ enum ZooKeeperWatchType {
     ZT_WATCH_CHILD = 4
 };
 
-class ZooKeeperUtil
-{
+class ZooKeeperUtil {
 public:
     static bool IsChild(const char * child, const char * parent);
     static bool GetParentPath(const std::string& path, std::string* parent);
     static const char * GetNodeName(const char * path);
     static int32_t GetSequenceNo(const std::string& name);
     static bool IsValidPath(const std::string& path);
+};
+
+class FakeZkUtil {
+public:
+    static bool WriteNode(const std::string& name, const std::string& value);
+    static bool ReadNode(const std::string& name, std::string* value);
+    static bool ListNodes(const std::string& path, std::vector<std::string>* values);
 };
 
 } // namespace zk

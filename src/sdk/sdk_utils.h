@@ -25,8 +25,6 @@ void TableDescToSchema(const TableDescriptor& desc, TableSchema* schema);
 
 void TableSchemaToDesc(const TableSchema& schema, TableDescriptor* desc);
 
-bool ParseSchemaSetTableDescriptor(const string& schema, TableDescriptor* desc, bool* update_lg_cf);
-
 bool SetCfProperties(const string& name, const string& value,
                      ColumnFamilyDescriptor* desc);
 bool SetLgProperties(const string& name, const string& value,
@@ -35,6 +33,7 @@ bool SetTableProperties(const string& name, const string& value,
                         TableDescriptor* desc);
 
 bool FillTableDescriptor(PropTree& schema_tree, TableDescriptor* desc);
+bool UpdateTableDescriptor(PropTree& schema_tree, TableDescriptor* table_desc, bool* is_update_lg_cf);
 
 bool ParseSchema(const string& schema, TableDescriptor* table_desc);
 
@@ -44,12 +43,5 @@ typedef std::pair<string, string> Property;
 typedef std::vector<Property> PropertyList;
 
 bool BuildSchema(TableDescriptor* table_desc, string* schema);
-
-bool HasInvalidCharInSchema(const string& schema);
-
-bool ParsePrefixPropertyValue(const string& pair, string& prefix, string& property, string& value);
-
-string PrefixType(const std::string& property);
-
 } // namespace tera
 #endif // TERA_SDK_SDK_UTILS_H_

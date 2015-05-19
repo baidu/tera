@@ -25,8 +25,9 @@ TABLETNODE_SRC := $(wildcard src/tabletnode/*.cc)
 IO_SRC := $(wildcard src/io/*.cc)
 SDK_SRC := $(wildcard src/sdk/*.cc)
 PROTO_SRC := $(filter-out %.pb.cc, $(wildcard src/proto/*.cc)) $(PROTO_OUT_CC)
-OTHER_SRC := $(wildcard src/zk/*.cc) $(wildcard src/utils/*.cc) src/tera_flags.cc \
-            src/version.cc
+VERSION_SRC := src/version.cc
+OTHER_SRC := $(wildcard src/zk/*.cc) $(wildcard src/utils/*.cc) $(VERSION_SRC) \
+	         src/tera_flags.cc
 COMMON_SRC := $(wildcard src/common/base/*.cc) $(wildcard src/common/net/*.cc) \
               $(wildcard src/common/file/*.cc) $(wildcard src/common/file/recordio/*.cc)
 SERVER_SRC := src/tera_main.cc src/tera_entry.cc
@@ -72,7 +73,7 @@ cleanall:
 	$(MAKE) clean
 	rm -rf build
 
-tera_main: version $(SERVER_OBJ) $(LEVELDB_LIB) $(MASTER_OBJ) $(TABLETNODE_OBJ) \
+tera_main: $(SERVER_OBJ) $(LEVELDB_LIB) $(MASTER_OBJ) $(TABLETNODE_OBJ) \
            $(IO_OBJ) $(SDK_OBJ) $(PROTO_OBJ) $(OTHER_OBJ) $(COMMON_OBJ)
 	$(CXX) -o $@ $(SERVER_OBJ) $(MASTER_OBJ) $(TABLETNODE_OBJ) $(IO_OBJ) $(SDK_OBJ) \
 	$(PROTO_OBJ) $(OTHER_OBJ) $(COMMON_OBJ) $(LDFLAGS)
@@ -89,6 +90,9 @@ src/leveldb/libleveldb.a:
 $(ALL_OBJ): %.o: %.cc $(PROTO_OUT_H)
 	$(CXX) $(CXXFLAGS) -c $< -o $@
 
+$(VERSION_SRC): build_version.sh
+	sh build_version.sh
+
 .PHONY: proto
 proto: $(PROTO_OUT_CC) $(PROTO_OUT_H)
  
@@ -96,8 +100,3 @@ proto: $(PROTO_OUT_CC) $(PROTO_OUT_H)
 	$(PROTOC) --proto_path=./src/proto/ --proto_path=$(PROTOBUF_INCDIR) \
                   --proto_path=$(SOFA_PBRPC_INCDIR) \
                   --cpp_out=./src/proto/ $< 
-
-.PHONY: version
-src/version.cc version:
-	sh build_version.sh
-

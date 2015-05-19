@@ -14,20 +14,34 @@
 namespace tera {
 namespace master {
 
-class MasterZkAdapter: public zk::ZooKeeperAdapter {
+class MasterZkAdapterBase : public zk::ZooKeeperAdapter {
 public:
-    MasterZkAdapter(MasterImpl * master_impl,
+    virtual ~MasterZkAdapterBase() {};
+    virtual bool Init(std::string* root_tablet_addr,
+                      std::map<std::string, std::string>* tabletnode_list,
+                      bool* safe_mode) = 0;
+
+    virtual bool KickTabletServer(const std::string& ts_host,
+                                  const std::string& ts_zk_id) = 0;
+    virtual bool MarkSafeMode() = 0;
+    virtual bool UnmarkSafeMode() = 0;
+    virtual bool UpdateRootTabletNode(const std::string& root_tablet_addr) = 0;
+};
+
+class MasterZkAdapter : public MasterZkAdapterBase {
+public:
+    MasterZkAdapter(MasterImpl* master_impl,
                     const std::string & server_addr);
     virtual ~MasterZkAdapter();
-    bool Init(std::string* root_tablet_addr,
+    virtual bool Init(std::string* root_tablet_addr,
               std::map<std::string, std::string>* tabletnode_list,
               bool* safe_mode);
 
-    bool KickTabletServer(const std::string& ts_host,
+    virtual bool KickTabletServer(const std::string& ts_host,
                           const std::string& ts_zk_id);
-    bool MarkSafeMode();
-    bool UnmarkSafeMode();
-    bool UpdateRootTabletNode(const std::string& root_tablet_addr);
+    virtual bool MarkSafeMode();
+    virtual bool UnmarkSafeMode();
+    virtual bool UpdateRootTabletNode(const std::string& root_tablet_addr);
 
 protected:
     bool Setup();
@@ -66,9 +80,48 @@ protected:
 
 private:
     mutable Mutex m_mutex;
-    TimerManager* m_timer_manager;
     MasterImpl * m_master_impl;
     std::string m_server_addr;
+};
+
+/*
+ * This is not zookeeper!
+ * Just used on onebox for tasting tera briefly.
+ * This is implemented through local file system.
+ * Not support watching.
+ */
+class FakeMasterZkAdapter: public MasterZkAdapterBase {
+public:
+    FakeMasterZkAdapter(MasterImpl * master_impl,
+                        const std::string & server_addr);
+    virtual ~FakeMasterZkAdapter();
+    virtual bool Init(std::string* root_tablet_addr,
+                      std::map<std::string, std::string>* tabletnode_list,
+                      bool* safe_mode);
+
+    virtual bool KickTabletServer(const std::string& ts_host,
+                                  const std::string& ts_zk_id);
+    virtual bool MarkSafeMode();
+    virtual bool UnmarkSafeMode();
+    virtual bool UpdateRootTabletNode(const std::string& root_tablet_addr);
+
+private:
+    virtual void OnChildrenChanged(const std::string& path,
+                                   const std::vector<std::string>& name_list,
+                                   const std::vector<std::string>& data_list);
+    virtual void OnNodeValueChanged(const std::string& path,
+                                    const std::string& value);
+    virtual void OnNodeCreated(const std::string& path);
+    virtual void OnNodeDeleted(const std::string& path);
+    virtual void OnWatchFailed(const std::string& path, int watch_type,
+                               int err);
+    virtual void OnSessionTimeout();
+
+private:
+    mutable Mutex m_mutex;
+    MasterImpl * m_master_impl;
+    std::string m_server_addr;
+    std::string m_fake_path;
 };
 
 } // namespace master
