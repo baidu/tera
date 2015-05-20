@@ -67,8 +67,11 @@ struct TabletNode {
     uint64_t GetTableSize(const std::string& table_name);
     uint64_t GetSize();
 
-    void AddTabletSize(const TabletPtr tablet);
-    void DeleteTabletSize(const TabletPtr tablet);
+    // for adjusting tabletnode data size & m_recent_load_time_list
+    void AddTablet(const TabletPtr tablet);
+
+    // for adjusting tabletnode data size
+    void DeleteTablet(const TabletPtr tablet);
 
     uint32_t GetPlanToMoveInCount();
     void PlanToMoveIn();

@@ -6,33 +6,54 @@
 
 #include "task_spatula.h"
 
+#include <unistd.h>
+
 #include <glog/logging.h>
+
+DECLARE_int32(tera_master_tabletnode_timeout);
+DECLARE_string(tera_master_meta_table_name);
 
 namespace tera {
 namespace master {
 
 TaskSpatula::TaskSpatula(int32_t max)
-    :m_pending_count(0), m_running_count(0), m_max_concurrency(max) {}
+    :m_running_count(0), m_max_concurrency(max) {}
 
 TaskSpatula::~TaskSpatula() {
+    MutexLock lock(&m_mutex);
+    for (std::set<TabletPtr>::iterator it = m_tablets.begin();
+         it != m_tablets.end(); ++it) {
+        TabletPtr tablet = *it;
+        LOG(INFO) << "[spatula] " << tablet->GetPath();
+        if (FLAGS_tera_master_tabletnode_timeout > 0
+            && tablet->GetTableName() != FLAGS_tera_master_meta_table_name) {
+            if (tablet->SetStatusIf(kTabletPending, kTableOnLoad)) { // tablets in onload queue
+                LOG(INFO) << "onload to pending";
+            }
+            else if (tablet->SetStatusIf(kTabletPending, kTableOnSplit)) { // tablets in onsplit queue
+                LOG(INFO) << "onsplit to pending";
+            }
+            else if (tablet->SetStatusIf(kTableOffLine, kTableUnLoading)) { // tablets in unloading queue
+                LOG(INFO) << "unloading to offline";
+                //ProcessOffLineTablet(tablet);// master will do this
+            } else {
+                CHECK(0) << tablet;
+            }
+        } else if (tablet->SetStatusIf(kTableOffLine, kTableOnLoad)
+                   || tablet->SetStatusIf(kTableOffLine, kTableOnSplit)
+                   || tablet->SetStatusIf(kTableOffLine, kTableUnLoading)) {
+            //ProcessOffLineTablet(tablet);
+            LOG(INFO) << "switch to offline";
+        } else {
+            CHECK(0) << tablet;
+        }
+    }
 }
 
 void TaskSpatula::EnQueueTask(const ConcurrencyTask& atask) {
     MutexLock lock(&m_mutex);
     m_queue.push(atask);
-    m_pending_count++;
-}
-
-bool TaskSpatula::DeQueueTask(ConcurrencyTask* atask) {
-    MutexLock lock(&m_mutex);
-    assert(atask != NULL);
-    if(m_queue.size() <= 0) {
-        return false;
-    }
-    *atask = m_queue.top();
-    m_queue.pop();
-    m_pending_count--;
-    return true;
+    AddTablet(atask.tablet);
 }
 
 void TaskSpatula::FinishTask() {
@@ -42,25 +63,51 @@ void TaskSpatula::FinishTask() {
 }
 
 int32_t TaskSpatula::TryDraining() {
+    MutexLock lock(&m_mutex);
+    TabletPtr dummy_tablet;
     boost::function<void ()> dummy_func = boost::bind(&TaskSpatula::TryDraining, this);
-    ConcurrencyTask atask(0, dummy_func);
+    ConcurrencyTask atask(0, dummy_tablet, dummy_func);
     int done = 0;
-    LOG(INFO) << "running: " << m_running_count
-        << "max: " << m_max_concurrency;
     while(m_running_count < m_max_concurrency
           && DeQueueTask(&atask)) {
         atask.async_call();
         done++;
-        {
-            MutexLock lock(&m_mutex);
-            m_running_count++;
-        }
+        m_running_count++;
     }
     return done;
 }
 
+bool TaskSpatula::DeQueueTask(ConcurrencyTask* atask) {
+    assert(atask != NULL);
+    if(m_queue.size() <= 0) {
+        return false;
+    }
+    *atask = m_queue.top();
+    m_queue.pop();
+    DeleteTablet(atask->tablet);
+    return true;
+}
+
 int32_t TaskSpatula::GetRunningCount() {
     return m_running_count;
+}
+
+// no lock
+void TaskSpatula::AddTablet(TabletPtr tablet) {
+    if (m_tablets.find(tablet) != m_tablets.end()) {
+        LOG(ERROR) << "[spatula] already exsit " << tablet->GetPath();
+    } else {
+        m_tablets.insert(tablet);
+    }
+}
+
+// no lock
+void TaskSpatula::DeleteTablet(TabletPtr tablet) {
+    if (m_tablets.find(tablet) == m_tablets.end()) {
+        LOG(ERROR) << "[spatula] not exsit " << tablet->GetPath();
+    } else {
+        m_tablets.erase(tablet);
+    }
 }
 
 } // namespace master

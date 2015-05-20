@@ -38,8 +38,7 @@ TabletNode::TabletNode(const std::string& addr, const std::string& uuid)
     m_info.set_addr(addr);
 }
 
-TabletNode::~TabletNode() {
-}
+TabletNode::~TabletNode() {}
 
 TabletNodeInfo TabletNode::GetInfo() {
     MutexLock lock(&m_mutex);
@@ -67,20 +66,6 @@ uint64_t TabletNode::GetTableSize(const std::string& table_name) {
 uint64_t TabletNode::GetSize() {
     MutexLock lock(&m_mutex);
     return m_data_size;
-}
-
-void TabletNode::DeleteTabletSize(const TabletPtr tablet) {
-    m_data_size -= tablet->GetDataSize();
-}
-
-void TabletNode::AddTabletSize(const TabletPtr tablet) {
-    MutexLock lock(&m_mutex);
-    m_data_size += tablet->GetDataSize();
-    if (m_table_size.find(tablet->GetTableName()) != m_table_size.end()) {
-        m_table_size[tablet->GetTableName()] += tablet->GetDataSize();
-    } else {
-        m_table_size[tablet->GetTableName()] = tablet->GetDataSize();
-    }
 }
 
 uint32_t TabletNode::GetPlanToMoveInCount() {
@@ -116,6 +101,33 @@ bool TabletNode::MayLoadNow() {
         return true;
     }
     return false;
+}
+
+void TabletNode::DeleteTablet(const TabletPtr tablet) {
+    MutexLock lock(&m_mutex);
+    if (m_table_size.find(tablet->GetTableName()) != m_table_size.end()) {
+        m_data_size -= tablet->GetDataSize();
+        m_table_size[tablet->GetTableName()] -= tablet->GetDataSize();
+    } else {
+        LOG(ERROR) << "invalid tablet: " << tablet;
+    }
+}
+
+void TabletNode::AddTablet(const TabletPtr tablet) {
+    MutexLock lock(&m_mutex);
+    m_data_size += tablet->GetDataSize();
+    if (m_table_size.find(tablet->GetTableName()) != m_table_size.end()) {
+        m_table_size[tablet->GetTableName()] += tablet->GetDataSize();
+    } else {
+        m_table_size[tablet->GetTableName()] = tablet->GetDataSize();
+    }
+
+    m_recent_load_time_list.push_back(get_micros());
+    uint32_t list_size = m_recent_load_time_list.size();
+    if (list_size > static_cast<uint32_t>(FLAGS_tera_master_max_load_concurrency)) {
+        CHECK_EQ(list_size - 1, static_cast<uint32_t>(FLAGS_tera_master_max_load_concurrency));
+        m_recent_load_time_list.pop_front();
+    }
 }
 
 NodeState TabletNode::GetState() {

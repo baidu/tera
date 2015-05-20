@@ -354,8 +354,9 @@ bool Tablet::CheckStatusSwitch(TabletStatus old_status,
         break;
     case kTableOnLoad:
         if (new_status == kTableReady           // load succe
-            || new_status == kTableOffLine      // tabletnode down
-            || new_status == kTableLoadFail) {  // don't know result, wait tabletnode to be killed
+            || new_status == kTableOffLine      // tabletnode down || concurrency control onload queue
+            || new_status == kTableLoadFail     // don't know result, wait tabletnode to be killed
+            || new_status == kTabletPending) {  // concurrency control onload queue
             return true;
         }
         break;
@@ -366,8 +367,9 @@ bool Tablet::CheckStatusSwitch(TabletStatus old_status,
         break;
     case kTableOnSplit:
         if (new_status == kTableReady             // request rejected
-            || new_status == kTableOffLine        // split fail
-            || new_status == kTableSplitFail) {   // don't know result, wait tabletnode to be killed
+            || new_status == kTableOffLine        // split fail || concurrency control onload queue
+            || new_status == kTableSplitFail      // don't know result, wait tabletnode to be killed
+            || new_status == kTabletPending) {    // concurrency control onsplit queue
             return true;
         }
         break;
@@ -391,7 +393,7 @@ bool Tablet::CheckStatusSwitch(TabletStatus old_status,
         }
         break;
     case kTableUnLoading:
-        if (new_status == kTableOffLine           // unload succe
+        if (new_status == kTableOffLine           // unload succe || concurrency control unloading queue
             || new_status == kTableReady          // unload status rollback when merge failed
             || new_status == kTableOnMerge        // unload success, ready to merge phase2
             || new_status == kTableUnLoadFail) {  // don't know result, wait tabletnode to be killed

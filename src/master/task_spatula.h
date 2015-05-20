@@ -13,6 +13,7 @@
 #include <queue>
 
 #include "common/mutex.h"
+#include "master/tablet_manager.h"
 
 namespace tera {
 namespace master {
@@ -21,10 +22,11 @@ namespace master {
 struct ConcurrencyTask {
     // great number comes great priority
     int32_t priority;
+    TabletPtr tablet;
     boost::function<void ()> async_call;
 
-    ConcurrencyTask(int p, boost::function<void ()>& call)
-        : priority(p), async_call(call) {}
+    ConcurrencyTask(int p, TabletPtr t, boost::function<void ()>& call)
+        : priority(p), tablet(t), async_call(call) {}
 
     bool operator< (const ConcurrencyTask& t) const {
         return priority < t.priority;
@@ -62,11 +64,15 @@ private:
     // otherwise, returns true.
     bool DeQueueTask(ConcurrencyTask* task);
 
+    void AddTablet(TabletPtr tablet);
+    void DeleteTablet(TabletPtr tablet);
+
     mutable Mutex m_mutex;
     std::priority_queue<ConcurrencyTask> m_queue; // concurrency control queue
-    int32_t m_pending_count; // count of task in concurrency control queue
     int32_t m_running_count; // count of task is running
     int32_t m_max_concurrency;
+
+    std::set<TabletPtr> m_tablets;
 };
 
 } // namespace master
