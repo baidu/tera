@@ -163,7 +163,7 @@ JNIEXPORT void NativeFlushCommits (JNIEnv *env, jobject jobj,
     }
 
     while (!table->IsPutFinished()) {
-        LOG_EVERY_N(INFO, 10) << "wainting for flush finished ..";
+        LOG(INFO) << "wainting for flush finished ..";
         usleep(100000);
     }
 }

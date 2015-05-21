@@ -5,8 +5,9 @@
 #ifndef TERA_COMMON_FILE_FILE_PATH_H_
 #define TERA_COMMON_FILE_FILE_PATH_H_
 
-#include <string>
-#include <vector>
+#include<unistd.h>
+#include<string>
+#include<vector>
 
 void SplitStringPath(const std::string& full_path,
                      std::string* dir_part,
