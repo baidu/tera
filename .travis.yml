@@ -5,17 +5,17 @@ install:
 
     - wget https://github.com/google/protobuf/releases/download/v2.6.1/protobuf-2.6.1.tar.gz
     - tar xf protobuf-2.6.1.tar.gz
-    - ( cd protobuf-2.6.1 && ./configure && make -j4 && sudo make install && sudo ldconfig )
+    - ( cd protobuf-2.6.1 && ./configure --with-pic && make -j4 && sudo make install && sudo ldconfig )
 
     - git clone https://github.com/google/snappy
-    - ( cd snappy && sh ./autogen.sh && ./configure && make -j4 && sudo make install )
+    - ( cd snappy && sh ./autogen.sh && ./configure --with-pic && make -j4 && sudo make install )
 
     - git clone https://github.com/BaiduPS/sofa-pbrpc
     - ( cd sofa-pbrpc && make -j4 && make install )
 
     - wget http://www.us.apache.org/dist/zookeeper/stable/zookeeper-3.4.6.tar.gz
     - tar zxvf zookeeper-3.4.6.tar.gz
-    - ( cd zookeeper-3.4.6/src/c && ./configure --disable-shared && make -j4 && sudo make install )
+    - ( cd zookeeper-3.4.6/src/c && ./configure --disable-shared --with-pic && make -j4 && sudo make install )
 
     - wget https://github.com/gflags/gflags/archive/v2.1.2.tar.gz
     - tar xf v2.1.2.tar.gz
