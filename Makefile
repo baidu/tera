@@ -10,7 +10,8 @@ CXX = g++
 SHARED_CFLAGS = -fPIC
 SHARED_LDFLAGS = -shared -Wl,-soname -Wl,
 
-INCPATH += -I./src -I./include -I./src/leveldb/include -I./src/leveldb $(DEPS_INCPATH)
+INCPATH += -I./src -I./include -I./src/leveldb/include -I./src/leveldb \
+		   -I./src/sdk/java/native-src $(DEPS_INCPATH) 
 LDPATH += -L./src/leveldb $(DEPS_LDPATH)
 CFLAGS += $(OPT) $(INCPATH)
 CXXFLAGS += $(OPT) $(INCPATH)
