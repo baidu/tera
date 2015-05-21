@@ -5,32 +5,32 @@ install:
 
     - wget https://github.com/google/protobuf/releases/download/v2.6.1/protobuf-2.6.1.tar.gz
     - tar xf protobuf-2.6.1.tar.gz
-    - ( cd protobuf-2.6.1 && ./configure && make -j4 && sudo make install && sudo ldconfig )
+    - ( cd protobuf-2.6.1 && ./configure --with-pic && make -j4 && sudo make install && sudo ldconfig )
 
     - git clone https://github.com/google/snappy
-    - ( cd snappy && sh ./autogen.sh && ./configure && make -j4 && sudo make install )
+    - ( cd snappy && sh ./autogen.sh && ./configure --with-pic && make -j4 && sudo make install )
 
     - git clone https://github.com/BaiduPS/sofa-pbrpc
     - ( cd sofa-pbrpc && make -j4 && make install )
 
     - wget http://www.us.apache.org/dist/zookeeper/stable/zookeeper-3.4.6.tar.gz
     - tar zxvf zookeeper-3.4.6.tar.gz
-    - ( cd zookeeper-3.4.6/src/c && ./configure --disable-shared && make -j4 && sudo make install )
+    - ( cd zookeeper-3.4.6/src/c && ./configure --disable-shared --with-pic && make -j4 && sudo make install )
 
     - wget https://github.com/gflags/gflags/archive/v2.1.2.tar.gz
     - tar xf v2.1.2.tar.gz
-    - ( cd gflags-2.1.2 && cmake -DGFLAGS_NAMESPACE=google && make -j4 && sudo make install )
+    - ( cd gflags-2.1.2 && cmake -DGFLAGS_NAMESPACE=google -DCMAKE_CXX_FLAGS=-fPIC && make -j4 && sudo make install )
 
     - git clone https://github.com/google/glog
-    - ( cd glog && git checkout v0.3.3 && ./configure --disable-shared && make -j4 && sudo make install )
+    - ( cd glog && git checkout v0.3.3 && ./configure --disable-shared --with-pic && make -j4 && sudo make install )
     
     - wget http://download.savannah.gnu.org/releases/libunwind/libunwind-0.99-beta.tar.gz
     - tar zxvf libunwind-0.99-beta.tar.gz
-    - ( cd libunwind-0.99-beta && ./configure CFLAGS=-U_FORTIFY_SOURCE && make -j4 && sudo make install )
+    - ( cd libunwind-0.99-beta && ./configure CFLAGS=-U_FORTIFY_SOURCE --with-pic && make -j4 && sudo make install )
 
     - wget https://googledrive.com/host/0B6NtGsLhIcf7MWxMMF9JdTN3UVk/gperftools-2.2.1.tar.gz
     - tar zxvf gperftools-2.2.1.tar.gz
-    - ( cd gperftools-2.2.1 && ./configure && make -j4 && sudo make install )
+    - ( cd gperftools-2.2.1 && ./configure --with-pic && make -j4 && sudo make install )
 
 before_script:
     - sed -i 's/^SOFA_PBRPC_PREFIX=.*/SOFA_PBRPC_PREFIX=.\/sofa-pbrpc\/output/' depends.mk
