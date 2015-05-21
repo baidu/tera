@@ -51,10 +51,10 @@ int64_t Now();
 class Marker {
 public:
     Marker(uint32_t max_latency)
-        : m_operation_count(0),
+        : m_latency_limit(max_latency),
+          m_operation_count(0),
           m_total_latency(0),
-          m_min_latency(0),
-          m_latency_limit(max_latency) {
+          m_min_latency(0) {
         m_latency_vector = new uint64_t[max_latency + 1];
         memset(m_latency_vector, 0, (max_latency + 1) * sizeof(uint64_t));
         for (int i = 0; i < 11; i++) {
@@ -74,6 +74,7 @@ public:
         MutexLock lock(&m_mutex);
         m_latency_vector[latency]++;
         m_operation_count++;
+        m_total_latency += latency;
         if (m_operation_count == 1) {
             m_min_latency = latency;
         }
@@ -172,16 +173,15 @@ private:
     }
 
 private:
+    const uint32_t m_latency_limit;
+
     uint64_t m_operation_count;
     uint64_t m_total_latency;
     uint32_t m_min_latency;
-    uint32_t m_latency_limit;
     uint64_t* m_latency_vector;
 
     uint32_t m_ten_percentile_latency[11]; // 0, 10, 20, ..., 90, 100
     uint64_t m_ten_percentile_latency_count_sum[11];
-    uint32_t m_95_percentile_latency;
-    uint32_t m_99_percentile_latency;
 
     mutable Mutex m_mutex;
 };

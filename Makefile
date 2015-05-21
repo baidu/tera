@@ -1,7 +1,7 @@
 include depends.mk
 
 # OPT ?= -O2 -DNDEBUG       # (A) Production use (optimized mode)
-OPT ?= -g2 -Wall -Werror         # (B) Debug mode, w/ full line-level debugging symbols
+OPT ?= -g2 -Wall -Werror        # (B) Debug mode, w/ full line-level debugging symbols
 # OPT ?= -O2 -g2 -DNDEBUG   # (C) Profiling mode: opt, but w/debugging symbols
 
 CC = cc
@@ -10,7 +10,8 @@ CXX = g++
 SHARED_CFLAGS = -fPIC
 SHARED_LDFLAGS = -shared -Wl,-soname -Wl,
 
-INCPATH += -I./src -I./include -I./src/leveldb/include -I./src/leveldb $(DEPS_INCPATH)
+INCPATH += -I./src -I./include -I./src/leveldb/include -I./src/leveldb \
+		   -I./src/sdk/java/native-src $(DEPS_INCPATH) 
 LDPATH += -L./src/leveldb $(DEPS_LDPATH)
 CFLAGS += $(OPT) $(SHARED_CFLAGS) $(INCPATH)
 CXXFLAGS += $(OPT) $(SHARED_CFLAGS) $(INCPATH)
@@ -25,6 +26,7 @@ TABLETNODE_SRC := $(wildcard src/tabletnode/*.cc)
 IO_SRC := $(wildcard src/io/*.cc)
 SDK_SRC := $(wildcard src/sdk/*.cc)
 PROTO_SRC := $(filter-out %.pb.cc, $(wildcard src/proto/*.cc)) $(PROTO_OUT_CC)
+JNI_TERA_SRC := $(wildcard src/sdk/java/native-src/*.cc)
 VERSION_SRC := src/version.cc
 OTHER_SRC := $(wildcard src/zk/*.cc) $(wildcard src/utils/*.cc) $(VERSION_SRC) \
 	     src/tera_flags.cc
@@ -39,25 +41,28 @@ TABLETNODE_OBJ := $(TABLETNODE_SRC:.cc=.o)
 IO_OBJ := $(IO_SRC:.cc=.o)
 SDK_OBJ := $(SDK_SRC:.cc=.o)
 PROTO_OBJ := $(PROTO_SRC:.cc=.o)
+JNI_TERA_OBJ := $(JNI_TERA_SRC:.cc=.o)
 OTHER_OBJ := $(OTHER_SRC:.cc=.o)
 COMMON_OBJ := $(COMMON_SRC:.cc=.o)
 SERVER_OBJ := $(SERVER_SRC:.cc=.o)
 CLIENT_OBJ := $(CLIENT_SRC:.cc=.o)
 MARK_OBJ := $(MARK_SRC:.cc=.o)
 ALL_OBJ := $(MASTER_OBJ) $(TABLETNODE_OBJ) $(IO_OBJ) $(SDK_OBJ) $(PROTO_OBJ) \
-           $(OTHER_OBJ) $(COMMON_OBJ) $(SERVER_OBJ) $(CLIENT_OBJ) $(MARK_OBJ)
+           $(JNI_TERA_OBJ) $(OTHER_OBJ) $(COMMON_OBJ) $(SERVER_OBJ) $(CLIENT_OBJ) \
+           $(MARK_OBJ)
 LEVELDB_LIB := src/leveldb/libleveldb.a
 
 PROGRAM = tera_main teracli
 LIBRARY = libtera.a
+JNILIBRARY = libjni_tera.so
 BENCHMARK = tera_mark
 
 .PHONY: all clean cleanall test
 
-all: $(PROGRAM) $(LIBRARY) $(BENCHMARK)
+all: $(PROGRAM) $(LIBRARY) $(JNILIBRARY) $(BENCHMARK)
 	mkdir -p build/include build/lib build/bin build/log build/benchmark
 	cp $(PROGRAM) build/bin
-	cp $(LIBRARY) build/lib
+	cp $(LIBRARY) $(JNILIBRARY) build/lib
 	cp $(BENCHMARK) build/benchmark
 	cp src/sdk/tera.h build/include
 	cp -r conf build
@@ -68,8 +73,8 @@ test:
 	
 clean:
 	rm -rf $(MASTER_OBJ) $(TABLETNODE_OBJ) $(IO_OBJ) $(SDK_OBJ) $(PROTO_OBJ) \
-	$(OTHER_OBJ) $(COMMON_OBJ) $(SERVER_OBJ) $(CLIENT_OBJ) $(PROTO_OUT_CC) \
-	$(PROTO_OUT_H)
+	$(JNI_TERA_OBJ) $(OTHER_OBJ) $(COMMON_OBJ) $(SERVER_OBJ) $(CLIENT_OBJ) \
+	$(PROTO_OUT_CC) $(PROTO_OUT_H)
 	$(MAKE) clean -C src/leveldb
 	rm -rf $(PROGRAM) $(LIBRARY)
 
@@ -91,6 +96,9 @@ teracli: $(CLIENT_OBJ) $(LIBRARY)
 tera_mark: $(MARK_OBJ) $(LIBRARY)
 	$(CXX) -o $@ $(MARK_OBJ) $(LIBRARY) $(LDFLAGS)
  
+libjni_tera.so: $(JNI_TERA_OBJ) $(LIBRARY) 
+	$(CXX) -shared $(JNI_TERA_OBJ) -Xlinker "-(" $(LIBRARY) $(LDFLAGS) -Xlinker "-)" -o $@ 
+
 src/leveldb/libleveldb.a:
 	$(MAKE) -C src/leveldb libleveldb.a
 

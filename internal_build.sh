@@ -9,7 +9,7 @@ set -e -u -E # this script will exit if any sub-command fails
 WORK_DIR=`pwd`
 DEPS_SOURCE=`pwd`/thirdsrc
 DEPS_PREFIX=`pwd`/thirdparty
-DEPS_CONFIG="--prefix=${DEPS_PREFIX} --disable-shared"
+DEPS_CONFIG="--prefix=${DEPS_PREFIX} --disable-shared --with-pic"
 
 export PATH=${DEPS_PREFIX}/bin:$PATH
 mkdir -p ${DEPS_SOURCE} ${DEPS_PREFIX}
@@ -72,7 +72,7 @@ cd -
 # gflags
 tar zxf gflags-2.1.1.tar.gz
 cd gflags-2.1.1
-cmake -DCMAKE_INSTALL_PREFIX=${DEPS_PREFIX} -DGFLAGS_NAMESPACE=google
+cmake -DCMAKE_INSTALL_PREFIX=${DEPS_PREFIX} -DGFLAGS_NAMESPACE=google -DCMAKE_CXX_FLAGS=-fPIC
 make -j4
 make install
 cd -
@@ -89,8 +89,8 @@ cd -
 tar zxf libunwind-0.99-beta.tar.gz
 cd libunwind-0.99-beta
 ./configure ${DEPS_CONFIG}
-make -j4
-make install
+make CFLAGS=-fPIC -j4
+make CFLAGS=-fPIC install
 cd -
 
 # gperftools (tcmalloc)
