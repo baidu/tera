@@ -7,6 +7,7 @@
 #include "jni_tera_common.h"
 
 #include "common/file/file_path.h"
+#include "gflags/gflags.h"
 #include "glog/logging.h"
 
 #include "utils/utils_cmd.h"
