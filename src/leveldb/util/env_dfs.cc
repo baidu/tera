@@ -264,7 +264,7 @@ public:
 };
 
 DfsEnv::DfsEnv(Dfs* dfs)
-  : EnvWrapper(Env::Default()), hdfs_(dfs) {
+  : EnvWrapper(Env::Default()), dfs_(dfs) {
 }
 
 DfsEnv::~DfsEnv()
@@ -274,7 +274,7 @@ DfsEnv::~DfsEnv()
 // SequentialFile
 Status DfsEnv::NewSequentialFile(const std::string& fname, SequentialFile** result)
 {
-    DfsReadableFile* f = new DfsReadableFile(hdfs_, fname);
+    DfsReadableFile* f = new DfsReadableFile(dfs_, fname);
     if (!f->isValid()) {
         delete f;
         *result = NULL;
@@ -287,7 +287,7 @@ Status DfsEnv::NewSequentialFile(const std::string& fname, SequentialFile** resu
 // random read file
 Status DfsEnv::NewRandomAccessFile(const std::string& fname, RandomAccessFile** result)
 {
-    DfsReadableFile* f = new DfsReadableFile(hdfs_, fname);
+    DfsReadableFile* f = new DfsReadableFile(dfs_, fname);
     if (f == NULL || !f->isValid()) {
         delete f;
         *result = NULL;
@@ -302,7 +302,7 @@ Status DfsEnv::NewWritableFile(const std::string& fname,
         WritableFile** result)
 {
     Status s;
-    DfsWritableFile* f = new DfsWritableFile(hdfs_, fname);
+    DfsWritableFile* f = new DfsWritableFile(dfs_, fname);
     if (f == NULL || !f->isValid()) {
         delete f;
         *result = NULL;
@@ -315,12 +315,12 @@ Status DfsEnv::NewWritableFile(const std::string& fname,
 // FileExists
 bool DfsEnv::FileExists(const std::string& fname)
 {
-    return (0 == hdfs_->Exists(fname));
+    return (0 == dfs_->Exists(fname));
 }
 
 Status DfsEnv::CopyFile(const std::string& from, const std::string& to) {
     std::cerr << "HdfsEnv: " << from << " --> " << to << std::endl;
-    if (from != to && hdfs_->Copy(from, to) != 0) {
+    if (from != to && dfs_->Copy(from, to) != 0) {
         return Status::IOError("HDFS Copy", from);
     }
     return Status::OK();
@@ -330,11 +330,11 @@ Status DfsEnv::CopyFile(const std::string& from, const std::string& to) {
 Status DfsEnv::GetChildren(const std::string& path,
         std::vector<std::string>* result)
 {
-    if (0 != hdfs_->Exists(path)) {
+    if (0 != dfs_->Exists(path)) {
         fprintf(stderr, "GetChildren call with path not exists: %s\n",
                 path.data());
         return Status::IOError("Path not exist", path);
-    } else if (0 != hdfs_->ListDirectory(path, result)) {
+    } else if (0 != dfs_->ListDirectory(path, result)) {
         abort();
     }
     return Status::OK();
@@ -347,7 +347,7 @@ bool DfsEnv::CheckDelete(const std::string& fname, std::vector<std::string>* fla
     assert(r);
     std::string prefix = file + "_del_";
     std::vector<std::string> files;
-    hdfs_->ListDirectory(path, &files);
+    dfs_->ListDirectory(path, &files);
     size_t max_len = 0;
     size_t value = 0;
     for (size_t i = 0; i < files.size(); i++) {
@@ -372,7 +372,7 @@ bool DfsEnv::CheckDelete(const std::string& fname, std::vector<std::string>* fla
 
 Status DfsEnv::DeleteFile(const std::string& fname)
 {
-    if (hdfs_->Delete(fname) == 0) {
+    if (dfs_->Delete(fname) == 0) {
         return Status::OK();
     }
     return IOError(fname, errno);
@@ -380,7 +380,7 @@ Status DfsEnv::DeleteFile(const std::string& fname)
 
 Status DfsEnv::CreateDir(const std::string& name)
 {
-    if (hdfs_->CreateDirectory(name) == 0) {
+    if (dfs_->CreateDirectory(name) == 0) {
         return Status::OK();
     }
     return IOError(name, errno);
@@ -388,7 +388,7 @@ Status DfsEnv::CreateDir(const std::string& name)
 
 Status DfsEnv::DeleteDir(const std::string& name)
 {
-    if (hdfs_->DeleteDirectory(name) == 0) {
+    if (dfs_->DeleteDirectory(name) == 0) {
         return Status::OK();
     }
     return IOError(name, errno);
@@ -396,14 +396,14 @@ Status DfsEnv::DeleteDir(const std::string& name)
 
 Status DfsEnv::ListDir(const std::string& name,
         std::vector<std::string>* result) {
-    hdfs_->ListDirectory(name, result);
+    dfs_->ListDirectory(name, result);
     return Status::OK();
 }
 
 Status DfsEnv::GetFileSize(const std::string& fname, uint64_t* size)
 {
     *size = 0L;
-    if (0 != hdfs_->GetFileSize(fname, size)) {
+    if (0 != dfs_->GetFileSize(fname, size)) {
         return IOError(fname, errno);
     } else {
         return Status::OK();
@@ -414,7 +414,7 @@ Status DfsEnv::GetFileSize(const std::string& fname, uint64_t* size)
 Status DfsEnv::RenameFile(const std::string& src, const std::string& target)
 {
     DeleteFile(target);
-    if (hdfs_->Rename(src, target) == 0) {
+    if (dfs_->Rename(src, target) == 0) {
 
     }
     Status result;
@@ -507,4 +507,3 @@ Env* EnvDfs()
 }
 
 }  // namespace leveldb
-

@@ -61,8 +61,10 @@ public:
 
     virtual Status UnlockFile(FileLock* lock);
 
+    virtual Env* CacheEnv() { return mem_env_; }
+
 private:
-    Env* hdfs_env_;
+    Env* dfs_env_;
     Env* mem_env_;
 };
 
@@ -73,5 +75,3 @@ Env* NewInMemoryEnv();
 }  // namespace leveldb
 
 #endif  //__LEVEL_ENV_INMEM_H_
-
-/* vim: set ts=4 sw=4 sts=4 tw=100: */

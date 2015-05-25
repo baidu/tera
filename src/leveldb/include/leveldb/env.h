@@ -96,8 +96,7 @@ class Env {
   // Delete the specified directory.
   virtual Status DeleteDir(const std::string& dirname) = 0;
 
-  // tera-specific
-  // NOTE: ListDir() is heavy opeartion
+  // Deprecated, use GetChildren
   virtual Status ListDir(const std::string& path,
                          std::vector<std::string>* result) = 0;
 
@@ -135,6 +134,9 @@ class Env {
   // REQUIRES: lock was returned by a successful LockFile() call
   // REQUIRES: lock has not already been unlocked.
   virtual Status UnlockFile(FileLock* lock) = 0;
+
+  // Return the cache env, e.g. MemEnv in InMemoryEnv, PosixEnv in FlashEnv
+  virtual Env* CacheEnv() = 0;
 
   // Arrange to run "(*function)(arg)" once in a background thread.
   // Return a schedule id
@@ -354,6 +356,7 @@ class EnvWrapper : public Env {
   int64_t Schedule(void (*f)(void*), void* a, double prio, int64_t wait_time_millisec = 0) {
     return target_->Schedule(f, a, prio, wait_time_millisec);
   }
+  Env* CacheEnv() { return target_->CacheEnv(); };
   void ReSchedule(int64_t id, double prio, int64_t millisec = 0) {
     return target_->ReSchedule(id, prio, millisec);
   }

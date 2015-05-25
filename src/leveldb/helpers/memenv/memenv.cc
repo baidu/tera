@@ -362,6 +362,8 @@ class InMemoryEnv : public EnvWrapper {
     return Status::OK();
   }
 
+  virtual Env* CacheEnv() { return this; }
+
   virtual Status GetTestDirectory(std::string* path) {
     *path = "/test";
     return Status::OK();
