@@ -247,14 +247,6 @@ bool TabletIO::Load(const TableSchema& schema,
         m_ldb_options.snapshots_sequence.push_back(it->second);
     }
     leveldb::Status db_status = leveldb::DB::Open(m_ldb_options, m_tablet_path, &m_db);
-    if (!db_status.ok()) {
-        LOG(ERROR) << "fail to open table: " << m_tablet_path
-            << ", " << db_status.ToString() << ", repair it";
-        db_status = leveldb::RepairDB(m_tablet_path, m_ldb_options);
-        if (db_status.ok()) {
-            db_status = leveldb::DB::Open(m_ldb_options, m_tablet_path, &m_db);
-        }
-    }
 
     if (!db_status.ok()) {
         LOG(ERROR) << "fail to open table: " << m_tablet_path
@@ -844,6 +836,7 @@ bool TabletIO::ReadCells(const RowReaderInfo& row_reader, RowResult* value_list,
         for (int32_t j = 0; j < column_family.qualifier_list_size(); ++j) {
             qualifier_list.insert(column_family.qualifier_list(j));
         }
+        scan_options.iter_cf_set.insert(column_family_name);
     }
     if (row_reader.has_max_version()) {
         scan_options.max_versions = row_reader.max_version();

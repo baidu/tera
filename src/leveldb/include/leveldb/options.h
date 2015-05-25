@@ -24,6 +24,7 @@ namespace leveldb {
 static const uint64_t kMaxSequenceNumber = ((0x1ull << 56) - 1);
 
 static const size_t kDefaultBlockSize = 4096;
+static const size_t kDefaultSstSize = 8 * 1024 * 1024; // 8 MB
 class Cache;
 class TableCache;
 class CompactStrategyFactory;
@@ -84,7 +85,7 @@ struct LG_info {
         use_memtable_on_leveldb(false),
         memtable_ldb_write_buffer_size(1 << 20),
         memtable_ldb_block_size(kDefaultBlockSize),
-        sst_size(8000000) {}
+        sst_size(kDefaultSstSize) {}
 };
 
 // Options to control the behavior of a database (passed to DB::Open)
