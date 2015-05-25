@@ -184,8 +184,8 @@ public:
 
 InMemoryEnv::InMemoryEnv() : EnvWrapper(Env::Default())
 {
-    hdfs_env_ = EnvDfs();
-    mem_env_ = NewMemEnv(hdfs_env_);
+    dfs_env_ = EnvDfs();
+    mem_env_ = NewMemEnv(dfs_env_);
 }
 
 InMemoryEnv::~InMemoryEnv()
@@ -196,7 +196,7 @@ InMemoryEnv::~InMemoryEnv()
 // SequentialFile
 Status InMemoryEnv::NewSequentialFile(const std::string& fname, SequentialFile** result)
 {
-    InMemorySequentialFile* f = new InMemorySequentialFile(mem_env_, hdfs_env_, fname);
+    InMemorySequentialFile* f = new InMemorySequentialFile(mem_env_, dfs_env_, fname);
     if (!f->isValid()) {
         delete f;
         *result = NULL;
@@ -210,7 +210,7 @@ Status InMemoryEnv::NewSequentialFile(const std::string& fname, SequentialFile**
 Status InMemoryEnv::NewRandomAccessFile(const std::string& fname,
         RandomAccessFile** result)
 {
-    InMemoryRandomAccessFile* f = new InMemoryRandomAccessFile(mem_env_, hdfs_env_, fname);
+    InMemoryRandomAccessFile* f = new InMemoryRandomAccessFile(mem_env_, dfs_env_, fname);
     if (f == NULL || !f->isValid()) {
         *result = NULL;
         return IOError(fname, errno);
@@ -224,7 +224,7 @@ Status InMemoryEnv::NewWritableFile(const std::string& fname,
         WritableFile** result)
 {
     Status s;
-    InMemoryWritableFile* f = new InMemoryWritableFile(mem_env_, hdfs_env_, fname);
+    InMemoryWritableFile* f = new InMemoryWritableFile(mem_env_, dfs_env_, fname);
     if (f == NULL || !f->isValid()) {
         *result = NULL;
         return IOError(fname, errno);
@@ -236,50 +236,50 @@ Status InMemoryEnv::NewWritableFile(const std::string& fname,
 // FileExists
 bool InMemoryEnv::FileExists(const std::string& fname)
 {
-    return hdfs_env_->FileExists(fname);
+    return dfs_env_->FileExists(fname);
 }
 
 //
 Status InMemoryEnv::GetChildren(const std::string& path,
         std::vector<std::string>* result)
 {
-    return hdfs_env_->GetChildren(path, result);
+    return dfs_env_->GetChildren(path, result);
 }
 
 Status InMemoryEnv::DeleteFile(const std::string& fname)
 {
     mem_env_->DeleteFile(fname);
-    return hdfs_env_->DeleteFile(fname);
+    return dfs_env_->DeleteFile(fname);
 }
 
 Status InMemoryEnv::CreateDir(const std::string& name)
 {
     mem_env_->CreateDir(name);
-    return hdfs_env_->CreateDir(name);
+    return dfs_env_->CreateDir(name);
 };
 
 Status InMemoryEnv::DeleteDir(const std::string& name)
 {
     mem_env_->DeleteDir(name);
-    return hdfs_env_->DeleteDir(name);
+    return dfs_env_->DeleteDir(name);
 };
 
 Status InMemoryEnv::ListDir(const std::string& name,
         std::vector<std::string>* result)
 {
-    return hdfs_env_->ListDir(name, result);
+    return dfs_env_->ListDir(name, result);
 }
 
 Status InMemoryEnv::GetFileSize(const std::string& fname, uint64_t* size)
 {
-    return hdfs_env_->GetFileSize(fname, size);
+    return dfs_env_->GetFileSize(fname, size);
 }
 
 ///
 Status InMemoryEnv::RenameFile(const std::string& src, const std::string& target)
 {
     mem_env_->RenameFile(src, target);
-    return hdfs_env_->RenameFile(src, target);
+    return dfs_env_->RenameFile(src, target);
 }
 
 Status InMemoryEnv::LockFile(const std::string& fname, FileLock** lock)

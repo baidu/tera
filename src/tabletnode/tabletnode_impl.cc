@@ -20,6 +20,7 @@
 #include "leveldb/env_cache.h"
 #include "leveldb/env_dfs.h"
 #include "leveldb/env_flash.h"
+#include "leveldb/env_inmem.h"
 #include "leveldb/slog.h"
 #include "leveldb/table_utils.h"
 #include "proto/kv_helper.h"
@@ -77,6 +78,8 @@ DECLARE_string(tera_leveldb_env_type);
 extern tera::Counter range_error_counter;
 extern tera::Counter rand_read_delay;
 
+static const int GC_LOG_LEVEL = 15;
+
 namespace tera {
 namespace tabletnode {
 
@@ -124,7 +127,7 @@ TabletNodeImpl::TabletNodeImpl(const TabletNodeInfo& tabletnode_info,
 
 TabletNodeImpl::~TabletNodeImpl() {
     if (FLAGS_tera_tabletnode_cache_enabled) {
-        leveldb::CacheEnv::RemoveCachePaths();
+        leveldb::ThreeLevelCacheEnv::RemoveCachePaths();
     }
 }
 
@@ -150,12 +153,12 @@ void TabletNodeImpl::InitCacheSystem() {
 
     LOG(INFO) << "activate new cache system";
     // new cache mechanism
-    leveldb::CacheEnv::SetCachePaths(FLAGS_tera_tabletnode_cache_paths);
-    leveldb::CacheEnv::s_mem_cache_size_in_KB_ = FLAGS_tera_tabletnode_cache_mem_size;
-    leveldb::CacheEnv::s_disk_cache_size_in_MB_ = FLAGS_tera_tabletnode_cache_disk_size;
-    leveldb::CacheEnv::s_block_size_ = FLAGS_tera_tabletnode_cache_block_size;
-    leveldb::CacheEnv::s_disk_cache_file_num_ = FLAGS_tera_tabletnode_cache_disk_filenum;
-    leveldb::CacheEnv::s_disk_cache_file_name_ = FLAGS_tera_tabletnode_cache_name;
+    leveldb::ThreeLevelCacheEnv::SetCachePaths(FLAGS_tera_tabletnode_cache_paths);
+    leveldb::ThreeLevelCacheEnv::s_mem_cache_size_in_KB_ = FLAGS_tera_tabletnode_cache_mem_size;
+    leveldb::ThreeLevelCacheEnv::s_disk_cache_size_in_MB_ = FLAGS_tera_tabletnode_cache_disk_size;
+    leveldb::ThreeLevelCacheEnv::s_block_size_ = FLAGS_tera_tabletnode_cache_block_size;
+    leveldb::ThreeLevelCacheEnv::s_disk_cache_file_num_ = FLAGS_tera_tabletnode_cache_disk_filenum;
+    leveldb::ThreeLevelCacheEnv::s_disk_cache_file_name_ = FLAGS_tera_tabletnode_cache_name;
 
     if (FLAGS_tera_tabletnode_cache_log_level < 3) {
         LEVELDB_SET_LOG_LEVEL(WARNING);
@@ -921,7 +924,6 @@ void TabletNodeImpl::GarbageCollect() {
     if (FLAGS_tera_tabletnode_cache_enabled) {
         return;
     }
-    const int GC_LOG_LEVEL = 15;
     int64_t start_ms = get_micros();
     LOG(INFO) << "[gc] start...";
 
@@ -955,62 +957,77 @@ void TabletNodeImpl::GarbageCollect() {
         delete (*it);
     }
 
-    std::vector<std::string> table_dirs;
+    // collect flash directories
     const std::vector<std::string>& flash_paths = leveldb::FlashEnv::GetFlashPaths();
     for (size_t d = 0; d < flash_paths.size(); ++d) {
         std::string flash_dir = flash_paths[d] + FLAGS_tera_tabletnode_path_prefix;
-        leveldb::Env::Default()->ListDir(flash_dir, &table_dirs);
-        for (size_t i = 0; i < table_dirs.size(); ++i) {
-            std::vector<std::string> cached_tablets;
-            leveldb::Env::Default()->ListDir(flash_dir + "/" + table_dirs[i],
-                    &cached_tablets);
-            if (cached_tablets.size() == 0) {
-                VLOG(GC_LOG_LEVEL) << "[gc] this directory is empty, delete it: "
-                    << flash_dir + "/" + table_dirs[i];
-                leveldb::Env::Default()->DeleteDir(flash_dir + "/" + table_dirs[i]);
+        GarbageCollectInPath(flash_dir, leveldb::Env::Default(),
+                             inherited_files, active_tablets);
+    }
+
+    // collect memory env
+    leveldb::Env* mem_env = leveldb::EnvInMemory()->CacheEnv();
+    GarbageCollectInPath(FLAGS_tera_tabletnode_path_prefix, mem_env,
+                         inherited_files, active_tablets);
+
+    LOG(INFO) << "[gc] finished, time used: " << get_micros() - start_ms << " us.";
+}
+
+void TabletNodeImpl::GarbageCollectInPath(const std::string& path, leveldb::Env* env,
+                                          const std::set<std::string>& inherited_files,
+                                          const std::set<std::string> active_tablets) {
+    std::vector<std::string> table_dirs;
+    env->GetChildren(path, &table_dirs);
+    for (size_t i = 0; i < table_dirs.size(); ++i) {
+        std::vector<std::string> cached_tablets;
+        env->GetChildren(path + "/" + table_dirs[i],
+                &cached_tablets);
+        if (cached_tablets.size() == 0) {
+            VLOG(GC_LOG_LEVEL) << "[gc] this directory is empty, delete it: "
+                << path + "/" + table_dirs[i];
+            env->DeleteDir(path + "/" + table_dirs[i]);
+            continue;
+        }
+        for (size_t j = 0; j < cached_tablets.size(); ++j) {
+            std::string tablet_dir = table_dirs[i] + "/" + cached_tablets[j];
+            VLOG(GC_LOG_LEVEL) << "[gc] Cached Tablet: " << tablet_dir;
+            if (active_tablets.find(tablet_dir) != active_tablets.end()) {
+                // active tablets
                 continue;
             }
-            for (size_t j = 0; j < cached_tablets.size(); ++j) {
-                std::string tablet_dir = table_dirs[i] + "/" + cached_tablets[j];
-                VLOG(GC_LOG_LEVEL) << "[gc] Cached Tablet: " << tablet_dir;
-                if (active_tablets.find(tablet_dir) != active_tablets.end()) {
-                    // active tablets
+            std::string inactive_tablet_dir = path + "/" + tablet_dir;
+            VLOG(GC_LOG_LEVEL) << "[gc] inactive_tablet directory:" << inactive_tablet_dir;
+            std::vector<std::string> lgs;
+            env->GetChildren(inactive_tablet_dir, &lgs);
+            if (lgs.size() == 0) {
+                VLOG(GC_LOG_LEVEL) << "[gc] this directory is empty, delete it: " << inactive_tablet_dir;
+                env->DeleteDir(inactive_tablet_dir);
+                continue;
+            }
+            for (size_t lg = 0; lg < lgs.size(); ++lg) {
+                std::vector<std::string> files;
+                env->GetChildren(inactive_tablet_dir + "/" + lgs[lg], &files);
+                if (files.size() == 0) {
+                    VLOG(GC_LOG_LEVEL) << "[gc] this directory is empty, delete it: "
+                        << inactive_tablet_dir + "/" + lgs[lg];
+                    env->DeleteDir(inactive_tablet_dir + "/" + lgs[lg]);
                     continue;
                 }
-                std::string inactive_tablet_dir = flash_dir + "/" + tablet_dir;
-                VLOG(GC_LOG_LEVEL) << "[gc] inactive_tablet directory:" << inactive_tablet_dir;
-                std::vector<std::string> lgs;
-                leveldb::Env::Default()->ListDir(inactive_tablet_dir, &lgs);
-                if (lgs.size() == 0) {
-                    VLOG(GC_LOG_LEVEL) << "[gc] this directory is empty, delete it: " << inactive_tablet_dir;
-                    leveldb::Env::Default()->DeleteDir(inactive_tablet_dir);
-                    continue;
-                }
-                for (size_t lg = 0; lg < lgs.size(); ++lg) {
-                    std::vector<std::string> files;
-                    leveldb::Env::Default()->ListDir(inactive_tablet_dir + "/" + lgs[lg], &files);
-                    if (files.size() == 0) {
-                        VLOG(GC_LOG_LEVEL) << "[gc] this directory is empty, delete it: "
-                            << inactive_tablet_dir + "/" + lgs[lg];
-                        leveldb::Env::Default()->DeleteDir(inactive_tablet_dir + "/" + lgs[lg]);
-                        continue;
-                    }
-                    for (size_t f = 0; f < files.size(); ++f) {
-                        std::string file = files[f];
-                        std::string pathname = inactive_tablet_dir + "/" + lgs[lg] + "/" + file;
-                        if (inherited_files.find(tablet_dir + "/" + lgs[lg] + "/" + file) == inherited_files.end()) {
-                            VLOG(GC_LOG_LEVEL) << "[gc] delete sst file: " << pathname;
-                            leveldb::Env::Default()->DeleteFile(pathname);
+                for (size_t f = 0; f < files.size(); ++f) {
+                    std::string file = files[f];
+                    std::string pathname = inactive_tablet_dir + "/" + lgs[lg] + "/" + file;
+                    if (inherited_files.find(tablet_dir + "/" + lgs[lg] + "/" + file) == inherited_files.end()) {
+                        VLOG(GC_LOG_LEVEL) << "[gc] delete sst file: " << pathname;
+                        env->DeleteFile(pathname);
 
-                        } else {
-                            VLOG(GC_LOG_LEVEL) << "[gc] skip inherited file: " << pathname;
-                        }
-                    } // sst file
-                } // lg
-            } // tablet
-        } // table
-    } // flash_path
-    LOG(INFO) << "[gc] finished, time used: " << get_micros() - start_ms << " us.";
+                    } else {
+                        VLOG(GC_LOG_LEVEL) << "[gc] skip inherited file: " << pathname;
+                    }
+                } // sst file
+            } // lg
+        } // tablet
+    } // table
+
 }
 
 void TabletNodeImpl::SetSessionId(const std::string& session_id) {
