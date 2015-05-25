@@ -59,12 +59,14 @@ public:
 
     virtual Status NewLogger(const std::string& fname, Logger** result);
 
+    virtual Env* CacheEnv() { return this; }
+
     static uint64_t gettid() {
         pid_t tid = syscall(SYS_gettid);
         return tid;
     }
 private:
-    Dfs* hdfs_;
+    Dfs* dfs_;
 };
 
 /// Init dfs env
@@ -81,5 +83,3 @@ Env* NewDfsEnv(Dfs*);
 }  // namespace leveldb
 
 #endif  // TERA_LEVELDB_ENV_DFS_H_
-
-/* vim: set expandtab ts=4 sw=4 sts=4 tw=100: */

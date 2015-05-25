@@ -145,6 +145,9 @@ private:
 
     void GetInheritedLiveFiles(std::vector<InheritedLiveFiles>& inherited);
 
+    void GarbageCollectInPath(const std::string& path, leveldb::Env* env,
+                              const std::set<std::string>& inherited_files,
+                              const std::set<std::string> active_tablets);
 private:
     mutable Mutex m_status_mutex;
     TabletNodeStatus m_status;

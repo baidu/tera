@@ -10,10 +10,10 @@
 
 namespace leveldb {
 
-class CacheEnv : public EnvWrapper {
+class ThreeLevelCacheEnv : public EnvWrapper {
 public:
-    CacheEnv();
-    ~CacheEnv();
+    ThreeLevelCacheEnv();
+    ~ThreeLevelCacheEnv();
 
     virtual Status NewSequentialFile(const std::string& fname,
             SequentialFile** result);
@@ -58,6 +58,8 @@ public:
         return cache_paths_;
     }
 
+    virtual Env* CacheEnv() { return posix_env_; }
+
     // reset operation is for testing
     static void ResetMemCache();
     static void ResetDiskCache();
@@ -70,14 +72,14 @@ public:
     static std::string s_disk_cache_file_name_;
 
 private:
-    Env* hdfs_env_;
+    Env* dfs_env_;
     Env* posix_env_;
 
     static std::vector<std::string> cache_paths_;
 };
 
-Env* EnvCache();
-Env* NewCacheEnv();
+Env* EnvThreeLevelCache();
+Env* NewThreeLevelCacheEnv();
 
 }  // namespace leveldb
 

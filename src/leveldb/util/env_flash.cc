@@ -302,7 +302,7 @@ std::vector<std::string> FlashEnv::flash_paths_(1, "./flash");
 
 FlashEnv::FlashEnv() : EnvWrapper(Env::Default())
 {
-    hdfs_env_ = EnvDfs();
+    dfs_env_ = EnvDfs();
     posix_env_ = Env::Default();
 }
 
@@ -313,7 +313,7 @@ FlashEnv::~FlashEnv()
 // SequentialFile
 Status FlashEnv::NewSequentialFile(const std::string& fname, SequentialFile** result)
 {
-    FlashSequentialFile* f = new FlashSequentialFile(posix_env_, hdfs_env_, fname);
+    FlashSequentialFile* f = new FlashSequentialFile(posix_env_, dfs_env_, fname);
     if (!f->isValid()) {
         delete f;
         *result = NULL;
@@ -327,7 +327,7 @@ Status FlashEnv::NewSequentialFile(const std::string& fname, SequentialFile** re
 Status FlashEnv::NewRandomAccessFile(const std::string& fname,
         uint64_t fsize, RandomAccessFile** result)
 {
-    FlashRandomAccessFile* f = new FlashRandomAccessFile(posix_env_, hdfs_env_,
+    FlashRandomAccessFile* f = new FlashRandomAccessFile(posix_env_, dfs_env_,
                                                          fname, fsize);
     if (f == NULL || !f->isValid()) {
         *result = NULL;
@@ -348,7 +348,7 @@ Status FlashEnv::NewWritableFile(const std::string& fname,
         WritableFile** result)
 {
     Status s;
-    FlashWritableFile* f = new FlashWritableFile(posix_env_, hdfs_env_, fname);
+    FlashWritableFile* f = new FlashWritableFile(posix_env_, dfs_env_, fname);
     if (f == NULL || !f->isValid()) {
         *result = NULL;
         return IOError(fname, errno);
@@ -360,20 +360,20 @@ Status FlashEnv::NewWritableFile(const std::string& fname,
 // FileExists
 bool FlashEnv::FileExists(const std::string& fname)
 {
-    return hdfs_env_->FileExists(fname);
+    return dfs_env_->FileExists(fname);
 }
 
 //
 Status FlashEnv::GetChildren(const std::string& path,
         std::vector<std::string>* result)
 {
-    return hdfs_env_->GetChildren(path, result);
+    return dfs_env_->GetChildren(path, result);
 }
 
 Status FlashEnv::DeleteFile(const std::string& fname)
 {
     posix_env_->DeleteFile(FlashEnv::FlashPath(fname) + fname);
-    return hdfs_env_->DeleteFile(fname);
+    return dfs_env_->DeleteFile(fname);
 }
 
 Status FlashEnv::CreateDir(const std::string& name)
@@ -385,31 +385,31 @@ Status FlashEnv::CreateDir(const std::string& name)
         }
     }
     posix_env_->CreateDir(local_name);
-    return hdfs_env_->CreateDir(name);
+    return dfs_env_->CreateDir(name);
 };
 
 Status FlashEnv::DeleteDir(const std::string& name)
 {
     posix_env_->DeleteDir(FlashEnv::FlashPath(name) + name);
-    return hdfs_env_->DeleteDir(name);
+    return dfs_env_->DeleteDir(name);
 };
 
 Status FlashEnv::ListDir(const std::string& name,
         std::vector<std::string>* result)
 {
-    return hdfs_env_->ListDir(name, result);
+    return dfs_env_->ListDir(name, result);
 }
 
 Status FlashEnv::GetFileSize(const std::string& fname, uint64_t* size)
 {
-    return hdfs_env_->GetFileSize(fname, size);
+    return dfs_env_->GetFileSize(fname, size);
 }
 
 ///
 Status FlashEnv::RenameFile(const std::string& src, const std::string& target)
 {
     posix_env_->RenameFile(FlashEnv::FlashPath(src) + src, FlashEnv::FlashPath(target) + target);
-    return hdfs_env_->RenameFile(src, target);
+    return dfs_env_->RenameFile(src, target);
 }
 
 Status FlashEnv::LockFile(const std::string& fname, FileLock** lock)
