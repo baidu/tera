@@ -1270,7 +1270,7 @@ void TabletIO::SetupOptionsForLG() {
                     m_ldb_options.env = lg_info->env = leveldb::EnvFlash();
                 } else {
                     LOG(INFO) << "activate block-level Cache store";
-                    m_ldb_options.env = lg_info->env = leveldb::EnvCache();
+                    m_ldb_options.env = lg_info->env = leveldb::EnvThreeLevelCache();
                 }
                 m_ldb_options.seek_latency = FLAGS_tera_leveldb_env_local_seek_latency;
             } else {
