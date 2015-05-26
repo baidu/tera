@@ -243,7 +243,7 @@ struct Options {
   // default: 40MB
   uint64_t flush_triggered_log_size;
 
-  // Create new manifest to avoid hdfs failure
+  // Create new manifest to avoid dfs failure
   // default: 3600(seconds)
   uint64_t manifest_switch_interval;
 
