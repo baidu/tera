@@ -77,7 +77,7 @@ void InitNfsEnv(const std::string& mountpoint,
                 const std::string& conf_path);
 /// default dfs env
 Env* EnvDfs();
-/// new hdfs env
+/// new dfs env
 Env* NewDfsEnv(Dfs*);
 
 }  // namespace leveldb

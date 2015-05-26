@@ -35,13 +35,13 @@ static Status IOError(const std::string& context, int err_number)
 
 class InMemorySequentialFile: public SequentialFile {
 private:
-    SequentialFile* hdfs_file_;
+    SequentialFile* dfs_file_;
     SequentialFile* mem_file_;
 public:
-    InMemorySequentialFile(Env* mem_env, Env* hdfs_env, const std::string& fname)
-        :hdfs_file_(NULL), mem_file_(NULL)
+    InMemorySequentialFile(Env* mem_env, Env* dfs_env, const std::string& fname)
+        :dfs_file_(NULL), mem_file_(NULL)
     {
-        Status s = hdfs_env->NewSequentialFile(fname, &hdfs_file_);
+        Status s = dfs_env->NewSequentialFile(fname, &dfs_file_);
         if (!s.ok()) {
             throw IOError(fname, -1);
         }
@@ -53,7 +53,7 @@ public:
     }
 
     virtual ~InMemorySequentialFile() {
-        delete hdfs_file_;
+        delete dfs_file_;
         delete mem_file_;
     }
 
@@ -61,18 +61,18 @@ public:
         if (mem_file_) {
             return mem_file_->Read(n, result, scratch);
         }
-        return hdfs_file_->Read(n, result, scratch);
+        return dfs_file_->Read(n, result, scratch);
     }
 
     virtual Status Skip(uint64_t n) {
         if (mem_file_) {
             return mem_file_->Skip(n);
         }
-        return hdfs_file_->Skip(n);
+        return dfs_file_->Skip(n);
     }
 
     bool isValid() {
-        return (hdfs_file_ || mem_file_);
+        return (dfs_file_ || mem_file_);
     }
 
 };
@@ -80,23 +80,23 @@ public:
 // A file abstraction for randomly reading the contents of a file.
 class InMemoryRandomAccessFile :public RandomAccessFile{
 private:
-    RandomAccessFile* hdfs_file_;
+    RandomAccessFile* dfs_file_;
     RandomAccessFile* mem_file_;
 public:
-    InMemoryRandomAccessFile(Env* mem_env, Env* hdfs_env, const std::string& fname)
-        :hdfs_file_(NULL), mem_file_(NULL) {
+    InMemoryRandomAccessFile(Env* mem_env, Env* dfs_env, const std::string& fname)
+        :dfs_file_(NULL), mem_file_(NULL) {
         Status s = mem_env->NewRandomAccessFile(fname, &mem_file_);
         if (s.ok()) {
             return;
         }
         mem_file_ = NULL;
-        s = hdfs_env->NewRandomAccessFile(fname, &hdfs_file_);
+        s = dfs_env->NewRandomAccessFile(fname, &dfs_file_);
         if (!s.ok()) {
             throw IOError(fname, -1);
         }
     }
     ~InMemoryRandomAccessFile() {
-        delete hdfs_file_;
+        delete dfs_file_;
         delete mem_file_;
     }
     Status Read(uint64_t offset, size_t n, Slice* result,
@@ -104,22 +104,22 @@ public:
         if (mem_file_) {
             return mem_file_->Read(offset, n, result, scratch);
         }
-        return hdfs_file_->Read(offset, n, result, scratch);
+        return dfs_file_->Read(offset, n, result, scratch);
     }
     bool isValid() {
-        return (hdfs_file_ || mem_file_);
+        return (dfs_file_ || mem_file_);
     }
 };
 
 // WritableFile
 class InMemoryWritableFile: public WritableFile {
 private:
-    WritableFile* hdfs_file_;
+    WritableFile* dfs_file_;
     WritableFile* mem_file_;
 public:
-    InMemoryWritableFile(Env* mem_env, Env* hdfs_env, const std::string& fname)
-        :hdfs_file_(NULL), mem_file_(NULL) {
-        Status s = hdfs_env->NewWritableFile(fname, &hdfs_file_);
+    InMemoryWritableFile(Env* mem_env, Env* dfs_env, const std::string& fname)
+        :dfs_file_(NULL), mem_file_(NULL) {
+        Status s = dfs_env->NewWritableFile(fname, &dfs_file_);
         if (!s.ok()) {
             throw IOError(fname, -1);
         }
@@ -130,11 +130,11 @@ public:
         assert(s.ok());
     }
     virtual ~InMemoryWritableFile() {
-        delete hdfs_file_;
+        delete dfs_file_;
         delete mem_file_;
     }
     virtual Status Append(const Slice& data) {
-        Status s = hdfs_file_->Append(data);
+        Status s = dfs_file_->Append(data);
         if (!s.ok()) {
             return s;
         }
@@ -146,11 +146,11 @@ public:
     }
 
     bool isValid() {
-        return (hdfs_file_ || mem_file_);
+        return (dfs_file_ || mem_file_);
     }
 
     virtual Status Flush() {
-        Status s = hdfs_file_->Flush();
+        Status s = dfs_file_->Flush();
         if (!s.ok()) {
             return s;
         }
@@ -162,7 +162,7 @@ public:
     }
 
     virtual Status Sync() {
-        Status s = hdfs_file_->Sync();
+        Status s = dfs_file_->Sync();
         if (!s.ok()) {
             return s;
         }
@@ -178,7 +178,7 @@ public:
             Status s = mem_file_->Close();
             assert(s.ok());
         }
-        return hdfs_file_->Close();
+        return dfs_file_->Close();
     }
 };
 
