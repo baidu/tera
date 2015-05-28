@@ -40,7 +40,7 @@ DECLARE_string(tera_zk_root_path);
 
 DEFINE_int32(tera_client_batch_put_num, 1000, "num of each batch in batch put mode");
 DEFINE_int32(tera_client_scan_package_size, 1024, "the package size (in KB) of each scan request");
-DEFINE_bool(tera_client_scan_async_enabled, true, "enable the streaming scan mode");
+DEFINE_bool(tera_client_scan_async_enabled, false, "enable the streaming scan mode");
 
 volatile int32_t g_start_time = 0;
 volatile int32_t g_end_time = 0;

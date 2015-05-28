@@ -7,25 +7,31 @@
 * 数据分片分裂、合并、负载均衡等
 
 ## 体验之前：
-要先完成如下两项工作：
 * **Tera编译通过**（以生成tera_main, teracli两个二进制文件为准）
-* **拥有一个zookeeper环境**（单机即可）
+* 注：由于Tera通过zookeeper进行寻址，onebox模式下，只能在单机访问Tera
 
 ## 准备工作
-1. 在zk上创建一个Tera根节点，其下增加4个子节点：**root_table，master-lock，ts，kick**：
-
-![zk_node](https://github.com/BaiduPS/tera/blob/master/resources/images/onebox_zk_node.png)
-
-2. 将编译生成的tera_main, teracli两个二进制文件放入example/onebox/bin.
-3. 修改配置文件example/onebox/conf/tera.flag，将上文建立的zk节点信息填入对应项，其余项可暂时不变。
+1. 将编译生成的tera_main, teracli两个二进制文件放入example/onebox/bin.
+1. 其余配置可暂时不变。
 
 ## 启动、停止Tera
 * 执行example/onebox/bin/launch_tera.sh即可启动Tera，可通过config中选项配置tabletnode个数。
+  
+`[tera@example/onebox/bin]$ sh launch_tera.sh`
+
+`launching tabletnode 1...`
+
+`launching tabletnode 2...`
+
+`launching tabletnode 3...`
+
+`launching master...`
+
 * 执行example/onebox/bin/kill_tera.sh即可停止Tera
 
 ## 体验开始！
 ### 尝试通过teracli来初步体验Tera
-如果启动正常，尝试执行:
+如果启动正常，尝试在example/onebox/bin下执行:
 
 `./teracli show`
 
@@ -50,19 +56,35 @@
 
 ![onebox_showtsx](https://github.com/BaiduPS/tera/blob/master/resources/images/onebox_showtsx.png)
 
-新建一个表格hello:
+新建一个kv存储：hello_kv:
 
-`./teracli create hello`
+`./teracli create hello_kv`
+
+![onebox_create_kv](https://github.com/BaiduPS/tera/blob/master/resources/images/onebox_create_kv.png)
+
+新建一个表格：hello_table:
+
+`./teracli create "hello_table{cf1, cf2, cf3}"`
 
 ![onebox_create_table](https://github.com/BaiduPS/tera/blob/master/resources/images/onebox_create_table.png)
 
+获得表格schema:
+
+`./teracli showschema hello_kv`
+
+`./teracli showschema hello_table`
+
 写入一条数据：
 
-`./teracli put hello row_first ":" value`
+`./teracli put hello_kv row_first value`
+
+`./teracli put hello_table row_first "cf1:qu" value`
 
 读出一条数据：
 
-`./teracli get hello row_first ":"`
+`./teracli get hello row_first`
+
+`./teracli get hello_table row_first "cf1:qu"`
 
 卸载表格：
 
