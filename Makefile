@@ -62,7 +62,7 @@ all: $(PROGRAM) $(LIBRARY) $(JNILIBRARY) $(BENCHMARK)
 	mkdir -p build/include build/lib build/bin build/log build/benchmark
 	cp $(PROGRAM) build/bin
 	cp $(LIBRARY) $(JNILIBRARY) build/lib
-	cp -r benchmark/*.sh benchmark/ycsb4tera/* $(BENCHMARK) build/benchmark
+	cp -r benchmark/*.sh $(BENCHMARK) build/benchmark
 	cp src/sdk/tera.h build/include
 	cp -r conf build
 	echo 'Done'
