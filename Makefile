@@ -12,10 +12,9 @@ SHARED_LDFLAGS = -shared -Wl,-soname -Wl,
 
 INCPATH += -I./src -I./include -I./src/leveldb/include -I./src/leveldb \
 		   -I./src/sdk/java/native-src $(DEPS_INCPATH) 
-LDPATH += -L./src/leveldb $(DEPS_LDPATH)
 CFLAGS += $(OPT) $(SHARED_CFLAGS) $(INCPATH)
 CXXFLAGS += $(OPT) $(SHARED_CFLAGS) $(INCPATH)
-LDFLAGS += -rdynamic $(LDPATH) -lleveldb $(DEPS_LDFLAGS) -lpthread -lrt -lz -ldl
+LDFLAGS += -rdynamic $(DEPS_LDPATH) $(DEPS_LDFLAGS) -lpthread -lrt -lz -ldl
 
 PROTO_FILES := $(wildcard src/proto/*.proto)
 PROTO_OUT_CC := $(PROTO_FILES:.proto=.pb.cc)
@@ -63,7 +62,7 @@ all: $(PROGRAM) $(LIBRARY) $(JNILIBRARY) $(BENCHMARK)
 	mkdir -p build/include build/lib build/bin build/log build/benchmark
 	cp $(PROGRAM) build/bin
 	cp $(LIBRARY) $(JNILIBRARY) build/lib
-	cp $(BENCHMARK) build/benchmark
+	cp -r benchmark/*.sh benchmark/ycsb4tera/* $(BENCHMARK) build/benchmark
 	cp src/sdk/tera.h build/include
 	cp -r conf build
 	echo 'Done'
@@ -72,11 +71,9 @@ test:
 	echo "No test now!"
 	
 clean:
-	rm -rf $(MASTER_OBJ) $(TABLETNODE_OBJ) $(IO_OBJ) $(SDK_OBJ) $(PROTO_OBJ) \
-	$(JNI_TERA_OBJ) $(OTHER_OBJ) $(COMMON_OBJ) $(SERVER_OBJ) $(CLIENT_OBJ) \
-	$(PROTO_OUT_CC) $(PROTO_OUT_H)
+	rm -rf $(ALL_OBJ) $(PROTO_OUT_CC) $(PROTO_OUT_H)
 	$(MAKE) clean -C src/leveldb
-	rm -rf $(PROGRAM) $(LIBRARY)
+	rm -rf $(PROGRAM) $(LIBRARY) $(JNILIBRARY) $(BENCHMARK)
 
 cleanall:
 	$(MAKE) clean
@@ -85,7 +82,7 @@ cleanall:
 tera_main: $(SERVER_OBJ) $(LEVELDB_LIB) $(MASTER_OBJ) $(TABLETNODE_OBJ) \
            $(IO_OBJ) $(SDK_OBJ) $(PROTO_OBJ) $(OTHER_OBJ) $(COMMON_OBJ)
 	$(CXX) -o $@ $(SERVER_OBJ) $(MASTER_OBJ) $(TABLETNODE_OBJ) $(IO_OBJ) $(SDK_OBJ) \
-	$(PROTO_OBJ) $(OTHER_OBJ) $(COMMON_OBJ) $(LDFLAGS)
+	$(PROTO_OBJ) $(OTHER_OBJ) $(COMMON_OBJ) $(LEVELDB_LIB) $(LDFLAGS)
 
 libtera.a: $(SDK_OBJ) $(PROTO_OBJ) $(OTHER_OBJ) $(COMMON_OBJ)
 	$(AR) -rs $@ $(SDK_OBJ) $(PROTO_OBJ) $(OTHER_OBJ) $(COMMON_OBJ)
@@ -93,8 +90,8 @@ libtera.a: $(SDK_OBJ) $(PROTO_OBJ) $(OTHER_OBJ) $(COMMON_OBJ)
 teracli: $(CLIENT_OBJ) $(LIBRARY)
 	$(CXX) -o $@ $(CLIENT_OBJ) $(LIBRARY) $(LDFLAGS)
 
-tera_mark: $(MARK_OBJ) $(LIBRARY)
-	$(CXX) -o $@ $(MARK_OBJ) $(LIBRARY) $(LDFLAGS)
+tera_mark: $(MARK_OBJ) $(LIBRARY) $(LEVELDB_LIB)
+	$(CXX) -o $@ $(MARK_OBJ) $(LIBRARY) $(LEVELDB_LIB) $(LDFLAGS)
  
 libjni_tera.so: $(JNI_TERA_OBJ) $(LIBRARY) 
 	$(CXX) -shared $(JNI_TERA_OBJ) -Xlinker "-(" $(LIBRARY) $(LDFLAGS) -Xlinker "-)" -o $@ 
