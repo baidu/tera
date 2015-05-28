@@ -173,7 +173,7 @@ public:
         }
         fprintf(stderr, "local file exists, but open for RandomAccess fail: %s\n",
             local_fname.c_str());
-        unlink(local_fname.c_str());
+        Env::Default()->DeleteFile(local_fname);
         dfs_env->NewRandomAccessFile(fname, &dfs_file_);
     }
     ~FlashRandomAccessFile() {
@@ -215,7 +215,7 @@ public:
             return;
         }
         local_fname_ = FlashEnv::FlashPath(fname) + fname;
-        for(size_t i=1 ;i<local_fname_.size(); i++) {
+        for(size_t i = 1; i < local_fname_.size(); i++) {
             if (local_fname_.at(i) == '/') {
                 posix_env->CreateDir(local_fname_.substr(0,i));
             }
@@ -233,7 +233,7 @@ public:
     void DeleteLocal() {
         delete flash_file_;
         flash_file_ = NULL;
-        unlink(local_fname_.c_str());
+        Env::Default()->DeleteFile(local_fname_);
     }
     virtual Status Append(const Slice& data) {
         Status s = dfs_file_->Append(data);
