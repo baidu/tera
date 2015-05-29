@@ -23,14 +23,14 @@
 
 namespace leveldb {
 
-uint32_t CacheEnv::s_mem_cache_size_in_KB_(256);
-uint32_t CacheEnv::s_disk_cache_size_in_MB_(1);
-uint32_t CacheEnv::s_block_size_(8 * 1024);
-uint32_t CacheEnv::s_disk_cache_file_num_(1);
-std::string CacheEnv::s_disk_cache_file_name_("tera.cache");
+uint32_t ThreeLevelCacheEnv::s_mem_cache_size_in_KB_(256);
+uint32_t ThreeLevelCacheEnv::s_disk_cache_size_in_MB_(1);
+uint32_t ThreeLevelCacheEnv::s_block_size_(8 * 1024);
+uint32_t ThreeLevelCacheEnv::s_disk_cache_file_num_(1);
+std::string ThreeLevelCacheEnv::s_disk_cache_file_name_("tera.cache");
 
 const char* paths[] = {"./cache_dir_1/", "./cache_dir_2/"};
-std::vector<std::string> CacheEnv::cache_paths_(paths, paths + 2);
+std::vector<std::string> ThreeLevelCacheEnv::cache_paths_(paths, paths + 2);
 
 static Status IOError(const std::string& context, int err_number) {
     return Status::IOError(context, strerror(err_number));
@@ -213,7 +213,7 @@ public:
     }
 
     void Reset() {
-        ResetCache((CacheEnv::s_mem_cache_size_in_KB_ << 10));
+        ResetCache((ThreeLevelCacheEnv::s_mem_cache_size_in_KB_ << 10));
     }
 
 private:
@@ -551,7 +551,7 @@ private:
 
     std::string CacheName(const std::string& fname, uint32_t cache_no) {
         std::string cache_name = fname + "." + Uint64ToString(cache_no);
-        const std::vector<std::string>& paths = CacheEnv::GetCachePaths();
+        const std::vector<std::string>& paths = ThreeLevelCacheEnv::GetCachePaths();
         return paths[cache_no % paths.size()] + cache_name;
     }
 
@@ -582,23 +582,23 @@ class DiskCacheReader {
 public:
     DiskCacheReader(const std::string& fname_hdfs, Env* hdfs_env,
                     LRU_MemCache* mem_cache = NULL, LRU_DiskCache* disk_cache = NULL)
-        : hdfs_env_(hdfs_env), hdfs_file_(NULL), fname_hdfs_(fname_hdfs),
+        : dfs_env_(hdfs_env), hdfs_file_(NULL), fname_hdfs_(fname_hdfs),
           size_(0), mem_cache_(mem_cache), disk_cache_(disk_cache),
           mem_cache_created_own_(false), disk_cache_created_own_(false),
-          block_size_(CacheEnv::s_block_size_) {
+          block_size_(ThreeLevelCacheEnv::s_block_size_) {
         if (!mem_cache_) {
             mem_cache_ = new LRU_MemCache(block_size_);
             mem_cache_created_own_ = true;
         }
         if (!disk_cache_) {
             disk_cache_ = new LRU_DiskCache(
-                CacheEnv::CachePath(fname_hdfs) + fname_hdfs + ".cache",
+                ThreeLevelCacheEnv::CachePath(fname_hdfs) + fname_hdfs + ".cache",
                 block_size_, 10);
             disk_cache_created_own_ = true;
         }
         Status s = OpenFile();
         if (size_ > 0) {
-            s = hdfs_env_->NewRandomAccessFile(fname_hdfs_, &hdfs_file_);
+            s = dfs_env_->NewRandomAccessFile(fname_hdfs_, &hdfs_file_);
         }
         assert(s.ok());
     }
@@ -662,8 +662,8 @@ public:
 
 private:
     Status OpenFile() {
-        if (hdfs_env_->FileExists(fname_hdfs_)) {
-            Status s = hdfs_env_->GetFileSize(fname_hdfs_, &size_);
+        if (dfs_env_->FileExists(fname_hdfs_)) {
+            Status s = dfs_env_->GetFileSize(fname_hdfs_, &size_);
             if (!s.ok()) {
                 return Status::IOError("hdfs GetFileSize fail: ", fname_hdfs_);
             }
@@ -738,7 +738,7 @@ private:
     void operator=(const DiskCacheReader&);
 
 private:
-    Env* hdfs_env_;
+    Env* dfs_env_;
     RandomAccessFile* hdfs_file_;
     std::string fname_hdfs_;
     uint64_t size_;
@@ -754,22 +754,22 @@ class DiskCacheWriter {
 public:
     DiskCacheWriter(const std::string& fname_hdfs, Env* hdfs_env,
                     LRU_MemCache* mem_cache = NULL, LRU_DiskCache* disk_cache = NULL)
-        : hdfs_env_(hdfs_env), hdfs_file_(NULL), fname_hdfs_(fname_hdfs),
+        : dfs_env_(hdfs_env), hdfs_file_(NULL), fname_hdfs_(fname_hdfs),
           size_(0), blocks_no_(0), mem_cache_(mem_cache), disk_cache_(disk_cache),
           mem_cache_created_own_(false), disk_cache_created_own_(false),
-          block_size_(CacheEnv::s_block_size_) {
+          block_size_(ThreeLevelCacheEnv::s_block_size_) {
         if (!mem_cache_) {
             mem_cache_ = new LRU_MemCache(block_size_);
             mem_cache_created_own_ = true;
         }
         if (!disk_cache_) {
             disk_cache_ = new LRU_DiskCache(
-                CacheEnv::CachePath(fname_hdfs) + fname_hdfs + ".cache",
+                ThreeLevelCacheEnv::CachePath(fname_hdfs) + fname_hdfs + ".cache",
                 block_size_, 10);
             disk_cache_created_own_ = true;
         }
         Status s = OpenFile();
-        s = hdfs_env_->NewWritableFile(fname_hdfs_, &hdfs_file_);
+        s = dfs_env_->NewWritableFile(fname_hdfs_, &hdfs_file_);
         assert(s.ok());
     }
 
@@ -820,8 +820,8 @@ public:
 
 private:
     Status OpenFile() {
-        if (hdfs_env_->FileExists(fname_hdfs_)) {
-            Status s = hdfs_env_->GetFileSize(fname_hdfs_, &size_);
+        if (dfs_env_->FileExists(fname_hdfs_)) {
+            Status s = dfs_env_->GetFileSize(fname_hdfs_, &size_);
             if (!s.ok()) {
                 return Status::IOError("hdfs GetFileSize fail: ", fname_hdfs_);
             }
@@ -853,7 +853,7 @@ private:
     void operator=(const DiskCacheWriter&);
 
 private:
-    Env* hdfs_env_;
+    Env* dfs_env_;
     WritableFile* hdfs_file_;
     std::string fname_hdfs_;
     uint64_t size_;
@@ -955,16 +955,16 @@ public:
     }
 };
 
-CacheEnv::CacheEnv() : EnvWrapper(Env::Default()) {
-    hdfs_env_ = EnvDfs();
+ThreeLevelCacheEnv::ThreeLevelCacheEnv() : EnvWrapper(Env::Default()) {
+    dfs_env_ = EnvDfs();
     posix_env_ = Env::Default();
 }
 
-CacheEnv::~CacheEnv() {}
+ThreeLevelCacheEnv::~ThreeLevelCacheEnv() {}
 
-Status CacheEnv::NewSequentialFile(const std::string& fname,
+Status ThreeLevelCacheEnv::NewSequentialFile(const std::string& fname,
                                    SequentialFile** result) {
-    CacheSequentialFile* f = new CacheSequentialFile(hdfs_env_, fname);
+    CacheSequentialFile* f = new CacheSequentialFile(dfs_env_, fname);
     if (!f->isValid()) {
         delete f;
         *result = NULL;
@@ -974,9 +974,9 @@ Status CacheEnv::NewSequentialFile(const std::string& fname,
     return Status::OK();
 }
 
-Status CacheEnv::NewRandomAccessFile(const std::string& fname,
+Status ThreeLevelCacheEnv::NewRandomAccessFile(const std::string& fname,
                                      RandomAccessFile** result) {
-    CacheRandomAccessFile* f = new CacheRandomAccessFile(hdfs_env_, fname);
+    CacheRandomAccessFile* f = new CacheRandomAccessFile(dfs_env_, fname);
     if (f == NULL || !f->isValid()) {
         *result = NULL;
         return IOError(fname, errno);
@@ -985,9 +985,9 @@ Status CacheEnv::NewRandomAccessFile(const std::string& fname,
     return Status::OK();
 }
 
-Status CacheEnv::NewWritableFile(const std::string& fname,
+Status ThreeLevelCacheEnv::NewWritableFile(const std::string& fname,
                                  WritableFile** result) {
-    CacheWritableFile* f = new CacheWritableFile(hdfs_env_, fname);
+    CacheWritableFile* f = new CacheWritableFile(dfs_env_, fname);
     if (f == NULL || !f->isValid()) {
         *result = NULL;
         return IOError(fname, errno);
@@ -996,54 +996,54 @@ Status CacheEnv::NewWritableFile(const std::string& fname,
     return Status::OK();
 }
 
-bool CacheEnv::FileExists(const std::string& fname) {
-    return hdfs_env_->FileExists(fname);
+bool ThreeLevelCacheEnv::FileExists(const std::string& fname) {
+    return dfs_env_->FileExists(fname);
 }
 
-Status CacheEnv::GetChildren(const std::string& path,
+Status ThreeLevelCacheEnv::GetChildren(const std::string& path,
                              std::vector<std::string>* result) {
-    return hdfs_env_->GetChildren(path, result);
+    return dfs_env_->GetChildren(path, result);
 }
 
-Status CacheEnv::DeleteFile(const std::string& fname) {
+Status ThreeLevelCacheEnv::DeleteFile(const std::string& fname) {
     // TODO(anqin): cache need to be removed too
-    return hdfs_env_->DeleteFile(fname);
+    return dfs_env_->DeleteFile(fname);
 }
 
-Status CacheEnv::CreateDir(const std::string& name) {
-    return hdfs_env_->CreateDir(name);
+Status ThreeLevelCacheEnv::CreateDir(const std::string& name) {
+    return dfs_env_->CreateDir(name);
 }
 
-Status CacheEnv::DeleteDir(const std::string& name) {
-    posix_env_->DeleteDirRecursive(CacheEnv::CachePath(name) + name);
-    return hdfs_env_->DeleteDir(name);
+Status ThreeLevelCacheEnv::DeleteDir(const std::string& name) {
+    posix_env_->DeleteDirRecursive(ThreeLevelCacheEnv::CachePath(name) + name);
+    return dfs_env_->DeleteDir(name);
 }
 
-Status CacheEnv::ListDir(const std::string& name,
+Status ThreeLevelCacheEnv::ListDir(const std::string& name,
                          std::vector<std::string>* result) {
-    return hdfs_env_->ListDir(name, result);
+    return dfs_env_->ListDir(name, result);
 }
 
-Status CacheEnv::GetFileSize(const std::string& fname, uint64_t* size) {
-    return hdfs_env_->GetFileSize(fname, size);
+Status ThreeLevelCacheEnv::GetFileSize(const std::string& fname, uint64_t* size) {
+    return dfs_env_->GetFileSize(fname, size);
 }
 
-Status CacheEnv::RenameFile(const std::string& src,
+Status ThreeLevelCacheEnv::RenameFile(const std::string& src,
                             const std::string& target) {
     // TODO(anqin): need to removed the dirty cache
-    return hdfs_env_->RenameFile(src, target);
+    return dfs_env_->RenameFile(src, target);
 }
 
-Status CacheEnv::LockFile(const std::string& fname, FileLock** lock) {
+Status ThreeLevelCacheEnv::LockFile(const std::string& fname, FileLock** lock) {
     *lock = NULL;
     return Status::OK();
 }
 
-Status CacheEnv::UnlockFile(FileLock* lock) {
+Status ThreeLevelCacheEnv::UnlockFile(FileLock* lock) {
     return Status::OK();
 }
 
-void CacheEnv::SetCachePaths(const std::string& paths) {
+void ThreeLevelCacheEnv::SetCachePaths(const std::string& paths) {
     LDB_SLOG(DEBUG, "set flash path: %s", paths.c_str());
     std::vector<std::string> path_list;
     SplitString(paths, ";", &path_list);
@@ -1055,14 +1055,14 @@ void CacheEnv::SetCachePaths(const std::string& paths) {
     }
 }
 
-void CacheEnv::RemoveCachePaths() {
+void ThreeLevelCacheEnv::RemoveCachePaths() {
     Env* posix_env = Env::Default();
     for (uint32_t i = 0; i < cache_paths_.size(); ++i) {
         posix_env->DeleteDirRecursive(cache_paths_[i]);
     }
 }
 
-const std::string& CacheEnv::CachePath(const std::string& fname) {
+const std::string& ThreeLevelCacheEnv::CachePath(const std::string& fname) {
     if (cache_paths_.size() == 1) {
         return cache_paths_[0];
     }
@@ -1070,11 +1070,11 @@ const std::string& CacheEnv::CachePath(const std::string& fname) {
     return cache_paths_[hash % cache_paths_.size()];
 }
 
-void CacheEnv::ResetMemCache() {
+void ThreeLevelCacheEnv::ResetMemCache() {
     g_mem_cache->Reset();
 }
 
-void CacheEnv::ResetDiskCache() {
+void ThreeLevelCacheEnv::ResetDiskCache() {
     g_disk_cache->Reset();
 }
 
@@ -1084,31 +1084,31 @@ static Env* cache_env;
 static Cache* g_disk_cache_meta;
 
 static void InitGlobalCache() {
-    g_mem_cache = new LRU_MemCache(CacheEnv::s_block_size_,
-                                   NewLRUCache(CacheEnv::s_mem_cache_size_in_KB_ << 10));
+    g_mem_cache = new LRU_MemCache(ThreeLevelCacheEnv::s_block_size_,
+                                   NewLRUCache(ThreeLevelCacheEnv::s_mem_cache_size_in_KB_ << 10));
 
-    uint32_t blocks_num = ((((uint64_t)CacheEnv::s_disk_cache_size_in_MB_) << 20)
-        + CacheEnv::s_block_size_ - 1) / CacheEnv::s_block_size_;
+    uint32_t blocks_num = ((((uint64_t)ThreeLevelCacheEnv::s_disk_cache_size_in_MB_) << 20)
+        + ThreeLevelCacheEnv::s_block_size_ - 1) / ThreeLevelCacheEnv::s_block_size_;
     // meta value size is sizeof(uint32_t) * 3
     g_disk_cache_meta = NewLRUCache(blocks_num * sizeof(uint32_t) * 3);
-    g_disk_cache = new LRU_DiskCache(CacheEnv::s_disk_cache_file_name_,
-        CacheEnv::s_block_size_, CacheEnv::s_disk_cache_size_in_MB_,
-        CacheEnv::s_disk_cache_file_num_, g_disk_cache_meta);
+    g_disk_cache = new LRU_DiskCache(ThreeLevelCacheEnv::s_disk_cache_file_name_,
+        ThreeLevelCacheEnv::s_block_size_, ThreeLevelCacheEnv::s_disk_cache_size_in_MB_,
+        ThreeLevelCacheEnv::s_disk_cache_file_num_, g_disk_cache_meta);
 }
 
-static void InitCacheEnv()
+static void InitThreeLevelCacheEnv()
 {
     InitGlobalCache();
-    cache_env = new CacheEnv();
+    cache_env = new ThreeLevelCacheEnv();
 }
 
-Env* EnvCache() {
-    pthread_once(&once, InitCacheEnv);
+Env* EnvThreeLevelCache() {
+    pthread_once(&once, InitThreeLevelCacheEnv);
     return cache_env;
 }
 
-Env* NewCacheEnv() {
-    return new CacheEnv();
+Env* NewThreeLevelCacheEnv() {
+    return new ThreeLevelCacheEnv();
 }
 
 }  // namespace leveldb

@@ -35,25 +35,16 @@ static Status IOError(const std::string& context, int err_number)
 
 class InMemorySequentialFile: public SequentialFile {
 private:
-    SequentialFile* hdfs_file_;
+    SequentialFile* dfs_file_;
     SequentialFile* mem_file_;
 public:
-    InMemorySequentialFile(Env* mem_env, Env* hdfs_env, const std::string& fname)
-        :hdfs_file_(NULL), mem_file_(NULL)
-    {
-        Status s = hdfs_env->NewSequentialFile(fname, &hdfs_file_);
-        if (!s.ok()) {
-            throw IOError(fname, -1);
-        }
-        return;
-        s = mem_env->NewSequentialFile(fname, &mem_file_);
-        if (s.ok()) {
-            return;
-        }
+    InMemorySequentialFile(Env* mem_env, Env* dfs_env, const std::string& fname)
+        :dfs_file_(NULL), mem_file_(NULL) {
+        dfs_env->NewSequentialFile(fname, &dfs_file_);
     }
 
     virtual ~InMemorySequentialFile() {
-        delete hdfs_file_;
+        delete dfs_file_;
         delete mem_file_;
     }
 
@@ -61,18 +52,18 @@ public:
         if (mem_file_) {
             return mem_file_->Read(n, result, scratch);
         }
-        return hdfs_file_->Read(n, result, scratch);
+        return dfs_file_->Read(n, result, scratch);
     }
 
     virtual Status Skip(uint64_t n) {
         if (mem_file_) {
             return mem_file_->Skip(n);
         }
-        return hdfs_file_->Skip(n);
+        return dfs_file_->Skip(n);
     }
 
     bool isValid() {
-        return (hdfs_file_ || mem_file_);
+        return (dfs_file_ || mem_file_);
     }
 
 };
@@ -80,23 +71,23 @@ public:
 // A file abstraction for randomly reading the contents of a file.
 class InMemoryRandomAccessFile :public RandomAccessFile{
 private:
-    RandomAccessFile* hdfs_file_;
+    RandomAccessFile* dfs_file_;
     RandomAccessFile* mem_file_;
 public:
-    InMemoryRandomAccessFile(Env* mem_env, Env* hdfs_env, const std::string& fname)
-        :hdfs_file_(NULL), mem_file_(NULL) {
+    InMemoryRandomAccessFile(Env* mem_env, Env* dfs_env, const std::string& fname)
+        :dfs_file_(NULL), mem_file_(NULL) {
         Status s = mem_env->NewRandomAccessFile(fname, &mem_file_);
         if (s.ok()) {
             return;
         }
         mem_file_ = NULL;
-        s = hdfs_env->NewRandomAccessFile(fname, &hdfs_file_);
+        s = dfs_env->NewRandomAccessFile(fname, &dfs_file_);
         if (!s.ok()) {
-            throw IOError(fname, -1);
+            return;
         }
     }
     ~InMemoryRandomAccessFile() {
-        delete hdfs_file_;
+        delete dfs_file_;
         delete mem_file_;
     }
     Status Read(uint64_t offset, size_t n, Slice* result,
@@ -104,24 +95,24 @@ public:
         if (mem_file_) {
             return mem_file_->Read(offset, n, result, scratch);
         }
-        return hdfs_file_->Read(offset, n, result, scratch);
+        return dfs_file_->Read(offset, n, result, scratch);
     }
     bool isValid() {
-        return (hdfs_file_ || mem_file_);
+        return (dfs_file_ || mem_file_);
     }
 };
 
 // WritableFile
 class InMemoryWritableFile: public WritableFile {
 private:
-    WritableFile* hdfs_file_;
+    WritableFile* dfs_file_;
     WritableFile* mem_file_;
 public:
-    InMemoryWritableFile(Env* mem_env, Env* hdfs_env, const std::string& fname)
-        :hdfs_file_(NULL), mem_file_(NULL) {
-        Status s = hdfs_env->NewWritableFile(fname, &hdfs_file_);
+    InMemoryWritableFile(Env* mem_env, Env* dfs_env, const std::string& fname)
+        :dfs_file_(NULL), mem_file_(NULL) {
+        Status s = dfs_env->NewWritableFile(fname, &dfs_file_);
         if (!s.ok()) {
-            throw IOError(fname, -1);
+            return;
         }
         if (fname.rfind(".sst") != fname.size()-4) {
             return;
@@ -130,11 +121,11 @@ public:
         assert(s.ok());
     }
     virtual ~InMemoryWritableFile() {
-        delete hdfs_file_;
+        delete dfs_file_;
         delete mem_file_;
     }
     virtual Status Append(const Slice& data) {
-        Status s = hdfs_file_->Append(data);
+        Status s = dfs_file_->Append(data);
         if (!s.ok()) {
             return s;
         }
@@ -146,11 +137,11 @@ public:
     }
 
     bool isValid() {
-        return (hdfs_file_ || mem_file_);
+        return (dfs_file_ || mem_file_);
     }
 
     virtual Status Flush() {
-        Status s = hdfs_file_->Flush();
+        Status s = dfs_file_->Flush();
         if (!s.ok()) {
             return s;
         }
@@ -162,7 +153,7 @@ public:
     }
 
     virtual Status Sync() {
-        Status s = hdfs_file_->Sync();
+        Status s = dfs_file_->Sync();
         if (!s.ok()) {
             return s;
         }
@@ -178,14 +169,14 @@ public:
             Status s = mem_file_->Close();
             assert(s.ok());
         }
-        return hdfs_file_->Close();
+        return dfs_file_->Close();
     }
 };
 
 InMemoryEnv::InMemoryEnv() : EnvWrapper(Env::Default())
 {
-    hdfs_env_ = EnvDfs();
-    mem_env_ = NewMemEnv(hdfs_env_);
+    dfs_env_ = EnvDfs();
+    mem_env_ = NewMemEnv(dfs_env_);
 }
 
 InMemoryEnv::~InMemoryEnv()
@@ -196,7 +187,7 @@ InMemoryEnv::~InMemoryEnv()
 // SequentialFile
 Status InMemoryEnv::NewSequentialFile(const std::string& fname, SequentialFile** result)
 {
-    InMemorySequentialFile* f = new InMemorySequentialFile(mem_env_, hdfs_env_, fname);
+    InMemorySequentialFile* f = new InMemorySequentialFile(mem_env_, dfs_env_, fname);
     if (!f->isValid()) {
         delete f;
         *result = NULL;
@@ -210,7 +201,7 @@ Status InMemoryEnv::NewSequentialFile(const std::string& fname, SequentialFile**
 Status InMemoryEnv::NewRandomAccessFile(const std::string& fname,
         RandomAccessFile** result)
 {
-    InMemoryRandomAccessFile* f = new InMemoryRandomAccessFile(mem_env_, hdfs_env_, fname);
+    InMemoryRandomAccessFile* f = new InMemoryRandomAccessFile(mem_env_, dfs_env_, fname);
     if (f == NULL || !f->isValid()) {
         *result = NULL;
         return IOError(fname, errno);
@@ -224,7 +215,7 @@ Status InMemoryEnv::NewWritableFile(const std::string& fname,
         WritableFile** result)
 {
     Status s;
-    InMemoryWritableFile* f = new InMemoryWritableFile(mem_env_, hdfs_env_, fname);
+    InMemoryWritableFile* f = new InMemoryWritableFile(mem_env_, dfs_env_, fname);
     if (f == NULL || !f->isValid()) {
         *result = NULL;
         return IOError(fname, errno);
@@ -236,50 +227,50 @@ Status InMemoryEnv::NewWritableFile(const std::string& fname,
 // FileExists
 bool InMemoryEnv::FileExists(const std::string& fname)
 {
-    return hdfs_env_->FileExists(fname);
+    return dfs_env_->FileExists(fname);
 }
 
 //
 Status InMemoryEnv::GetChildren(const std::string& path,
         std::vector<std::string>* result)
 {
-    return hdfs_env_->GetChildren(path, result);
+    return dfs_env_->GetChildren(path, result);
 }
 
 Status InMemoryEnv::DeleteFile(const std::string& fname)
 {
     mem_env_->DeleteFile(fname);
-    return hdfs_env_->DeleteFile(fname);
+    return dfs_env_->DeleteFile(fname);
 }
 
 Status InMemoryEnv::CreateDir(const std::string& name)
 {
     mem_env_->CreateDir(name);
-    return hdfs_env_->CreateDir(name);
+    return dfs_env_->CreateDir(name);
 };
 
 Status InMemoryEnv::DeleteDir(const std::string& name)
 {
     mem_env_->DeleteDir(name);
-    return hdfs_env_->DeleteDir(name);
+    return dfs_env_->DeleteDir(name);
 };
 
 Status InMemoryEnv::ListDir(const std::string& name,
         std::vector<std::string>* result)
 {
-    return hdfs_env_->ListDir(name, result);
+    return dfs_env_->ListDir(name, result);
 }
 
 Status InMemoryEnv::GetFileSize(const std::string& fname, uint64_t* size)
 {
-    return hdfs_env_->GetFileSize(fname, size);
+    return dfs_env_->GetFileSize(fname, size);
 }
 
 ///
 Status InMemoryEnv::RenameFile(const std::string& src, const std::string& target)
 {
     mem_env_->RenameFile(src, target);
-    return hdfs_env_->RenameFile(src, target);
+    return dfs_env_->RenameFile(src, target);
 }
 
 Status InMemoryEnv::LockFile(const std::string& fname, FileLock** lock)
