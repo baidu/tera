@@ -19,6 +19,7 @@ namespace zk {
 const int32_t kMaxNodeDataLen = 10240;
 
 FILE* ZooKeeperAdapter::m_lib_log_output = NULL;
+Mutex ZooKeeperAdapter::m_lib_log_mutex;
 
 struct ZooKeeperWatch {
     pthread_mutex_t mutex;
@@ -1136,6 +1137,7 @@ bool ZooKeeperAdapter::GetSessionId(int64_t* session_id, int* zk_errno) {
 }
 
 bool ZooKeeperAdapter::SetLibraryLogOutput(const std::string& file) {
+    MutexLock mutex(&m_lib_log_mutex);
     FILE* new_log = fopen(file.c_str(), "a");
     if (NULL == new_log) {
         LOG(WARNING) << "fail to open file ["<< file << "]: " << strerror(errno);
