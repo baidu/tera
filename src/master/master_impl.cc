@@ -2792,6 +2792,7 @@ void MasterImpl::SplitTabletCallback(TabletPtr tablet,
     const std::string& server_addr = tablet->GetServerAddr();
 
     // tablet server no down & no restart
+    LOG(INFO) << "[split] SplitTabletCallback : " << tablet;
     TabletNodePtr node;
     if (m_tabletnode_manager->FindTabletNode(server_addr, &node)
         && node->m_uuid == tablet->GetServerId()) {
@@ -2856,7 +2857,11 @@ void MasterImpl::TryUnloadTablet(TabletPtr tablet, UnloadClosure* done, int32_t 
     TabletNodePtr node;
     if (server_addr.empty()
         || !m_tabletnode_manager->FindTabletNode(server_addr, &node)) {
-        LOG(ERROR) << "[unload] invalid tablet to unload : " << tablet;
+        LOG(WARNING) << kSms << "abort unload on " << tablet->GetServerAddr()
+            << " server_addr: " << server_addr << tablet;
+        tablet->SetStatus(kTableOffLine);
+        ProcessOffLineTablet(tablet);
+        TryLoadTablet(tablet, kTaskLoad);
         return;
     }
     tablet->SetServerId(node->m_uuid);
