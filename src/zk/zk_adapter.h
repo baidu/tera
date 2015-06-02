@@ -135,6 +135,7 @@ protected:
 
 private:
     static FILE* m_lib_log_output;
+    static Mutex m_lib_log_mutex;
 
     // protected by m_state_mutex
     Mutex m_state_mutex;

@@ -61,6 +61,8 @@ public:
 
     virtual Status UnlockFile(FileLock* lock);
 
+    virtual Env* CacheEnv() { return posix_env_; }
+
     /// flash path for local flash cache
     static void SetFlashPath(const std::string& path);
     static const std::string& FlashPath(const std::string& fname);
@@ -69,7 +71,7 @@ public:
     }
 
 private:
-    Env* hdfs_env_;
+    Env* dfs_env_;
     Env* posix_env_;
     static std::vector<std::string> flash_paths_;
 };
@@ -80,7 +82,4 @@ Env* EnvFlash();
 Env* NewFlashEnv();
 }  // namespace leveldb
 
-
 #endif  //__LEVELDB_ENV_FLASH_H_
-
-/* vim: set ts=4 sw=4 sts=4 tw=100: */

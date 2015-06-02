@@ -769,6 +769,8 @@ class PosixEnv : public Env {
     return result;
   }
 
+  virtual Env* CacheEnv() { return this; }
+
   virtual int64_t Schedule(void (*function)(void*), void* arg, double prio,
                            int64_t wait_time_millisec);
 
