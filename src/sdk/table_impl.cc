@@ -4,15 +4,15 @@
 
 #include "sdk/table_impl.h"
 
-#include <boost/bind.hpp>
-#include <fstream>
-
 #include <errno.h>
 #include <fcntl.h>
 #include <math.h>
 #include <sys/file.h>
 #include <sys/stat.h>
 #include <sys/types.h>
+
+#include <boost/bind.hpp>
+#include <fstream>
 
 #include "common/base/string_format.h"
 #include "common/file/file_path.h"
@@ -1639,8 +1639,6 @@ void TableImpl::ReadTableMetaCallBack(ErrorCode* ret_err,
     delete response;
 }
 
-const long HASH_LEN = 8; // stores hash as a string in hash_str[HASH_LEN]
-
 // copy from leveldb/util/hash.h
 static uint32_t Hash(const char* data, size_t n, uint32_t seed) {
     // Similar to murmur hash
@@ -1673,36 +1671,44 @@ static uint32_t Hash(const char* data, size_t n, uint32_t seed) {
     return h;
 }
 
-static bool CalculateMagicNumberOfData(std::fstream& outfile, long len, char *hash_str) {
-    const long MAX_LEN = 10 * 1024 * 1024; // 10 MB
-    if(len > MAX_LEN || len <= 0) {
-    	LOG(ERROR) << "[SDK COOKIE] invalid len : " << len;
-    	return false;
+// stores hash as a string, not including the terminating '\0' character 
+// `HASH_LEN' is the length of this string
+const static long HASH_LEN = 8;
+
+static bool CalculateChecksumOfData(std::fstream& outfile, long size, char *hash_str) {
+    // 100 MB, (100 * 1024 * 1024) / 250 = 419,430
+    // cookie文件中，每个tablet的缓存大小约为100~200 Bytes，不妨计为250 Bytes，
+    // 那么，100MB可以支持约40万个tablets
+    const long MAX_SIZE = 100 * 1024 * 1024;
+
+    if(size > MAX_SIZE || size <= 0) {
+        LOG(INFO) << "[SDK COOKIE] invalid size : " << size;
+        return false;
     }
     if(hash_str == NULL) {
-    	LOG(ERROR) << "[SDK COOKIE] input argument `hash_str' is NULL";
-    	return false;
+        LOG(INFO) << "[SDK COOKIE] input argument `hash_str' is NULL";
+        return false;
     }
-    char* data = new char[len];
+    char* data = new char[size];
     CHECK(data);
-    outfile.read(data, len);
+    outfile.read(data, size);
     if(outfile.fail()) {
-    	LOG(ERROR) << "[SDK COOKIE] fail to read cookie file";
-    	delete data;
-    	return false;
+        LOG(INFO) << "[SDK COOKIE] fail to read cookie file";
+        delete data;
+        return false;
     }
-    uint32_t hash = Hash(data, len, 0);
+    uint32_t hash = Hash(data, size, 0);
     sprintf(hash_str, "%08x", hash);
     delete data;
     return true;
 }
 
-static bool CheckCookieMagicNumber(const std::string& cookie_file) {
+static bool IsCookieChecksumRight(const std::string& cookie_file) {
     std::fstream outfile(cookie_file.c_str(), std::ios_base::in | std::ios_base::out);
     int errno_saved = errno;
     if(outfile.fail()) {
-        LOG(ERROR) << "[SDK COOKIE] fail to open " << cookie_file.c_str() 
-    		<< " " << strerror(errno_saved);
+        LOG(INFO) << "[SDK COOKIE] fail to open " << cookie_file.c_str() 
+            << " " << strerror(errno_saved);
         return false;
     }
 
@@ -1710,27 +1716,27 @@ static bool CheckCookieMagicNumber(const std::string& cookie_file) {
     outfile.seekp(0, std::ios_base::end);
     long file_size = outfile.tellp();
     if(file_size < HASH_LEN) {
-    	LOG(ERROR) << "[SDK COOKIE] fail to get file size: " << file_size;
-    	return false;
+        LOG(INFO) << "[SDK COOKIE] invalid file size: " << file_size;
+        return false;
     }
 
-    // calculates magic number according to cookie file content
+    // calculates checksum according to cookie file content
     char hash_str[HASH_LEN] = {'\0'};
     outfile.seekp(0, std::ios_base::beg);
-    if(!CalculateMagicNumberOfData(outfile, file_size - HASH_LEN, hash_str)) {
-    	return false;
+    if(!CalculateChecksumOfData(outfile, file_size - HASH_LEN, hash_str)) {
+        return false;
     }
-    LOG(INFO) << "magic number rebuild: " << hash_str;
+    LOG(INFO) << "[SDK COOKIE] checksum rebuild: " << hash_str;
 
-    // gets magic number in cookie file
+    // gets checksum in cookie file
     char hash_str_saved[HASH_LEN] = {'\0'};
     outfile.read(hash_str_saved, HASH_LEN);
     if(outfile.fail()) {
-    	int errno_saved = errno;
-    	LOG(ERROR) << "[SDK COOKIE] fail to get magic number: " << strerror(errno_saved);
-    	return false;
+        int errno_saved = errno;
+        LOG(INFO) << "[SDK COOKIE] fail to get checksum: " << strerror(errno_saved);
+        return false;
     }
-    LOG(INFO) << "magic number in file: " << hash_str_saved;
+    LOG(INFO) << "[SDK COOKIE] checksum in file: " << hash_str_saved;
 
     outfile.close();
     return strncmp(hash_str, hash_str_saved, HASH_LEN) == 0;
@@ -1740,7 +1746,7 @@ bool TableImpl::RestoreCookie() {
     const std::string& cookie_dir = FLAGS_tera_sdk_cookie_path;
     if (!IsExist(cookie_dir)) {
         if (!CreateDirWithRetry(cookie_dir)) {
-            LOG(ERROR) << "[SDK COOKIE] fail to create cookie dir: " << cookie_dir;
+            LOG(INFO) << "[SDK COOKIE] fail to create cookie dir: " << cookie_dir;
             return false;
         } else {
             return true;
@@ -1751,33 +1757,33 @@ bool TableImpl::RestoreCookie() {
         // cookie file is not exist
         return true;
     }
-    if(!CheckCookieMagicNumber(cookie_file)) {
+    if(!IsCookieChecksumRight(cookie_file)) {
         if(unlink(cookie_file.c_str()) == -1) {
             int errno_saved = errno;
-            LOG(ERROR) << "[SDK COOKIE] fail to delete broken cookie file: " << cookie_file
-    			<< ". reason: " << strerror(errno_saved);
+            LOG(INFO) << "[SDK COOKIE] fail to delete broken cookie file: " << cookie_file
+                << ". reason: " << strerror(errno_saved);
         } else {
-    		LOG(INFO) << "[SDK COOKIE] delete broken cookie file" << cookie_file;
-    	}
-    	return true;
+            LOG(INFO) << "[SDK COOKIE] delete broken cookie file" << cookie_file;
+        }
+        return true;
     }
 
     FileStream fs;
     if (!fs.Open(cookie_file, FILE_READ)) {
-        LOG(ERROR) << "[SDK COOKIE] fail to open " << cookie_file;
+        LOG(INFO) << "[SDK COOKIE] fail to open " << cookie_file;
         return true;
     }
     SdkCookie cookie;
     RecordReader record_reader;
     record_reader.Reset(&fs);
     if (!record_reader.ReadNextMessage(&cookie)) {
-        LOG(ERROR) << "[SDK COOKIE] fail to parse sdk cookie, file: " << cookie_file;
+        LOG(INFO) << "[SDK COOKIE] fail to parse sdk cookie, file: " << cookie_file;
         return true;
     }
     fs.Close();
 
     if (cookie.table_name() != _name) {
-        LOG(ERROR) << "[SDK COOKIE] cookie name error: " << cookie.table_name()
+        LOG(INFO) << "[SDK COOKIE] cookie name error: " << cookie.table_name()
             << ", should be: " << _name;
         return true;
     }
@@ -1830,7 +1836,7 @@ void TableImpl::DeleteLegacyCookieLockFile(const std::string& lock_file, int tim
         int errno_saved = -1;
         if (unlink(lock_file.c_str()) == -1) {
             errno_saved = errno;
-            LOG(ERROR) << "[SDK COOKIE] fail to delete cookie-lock-file: " << lock_file
+            LOG(INFO) << "[SDK COOKIE] fail to delete cookie-lock-file: " << lock_file
                        << ". reason: " << strerror(errno_saved);
         }
     }
@@ -1843,17 +1849,17 @@ void TableImpl::CloseAndRemoveCookieLockFile(int lock_fd, const std::string& coo
     close(lock_fd);
     if (unlink(cookie_lock_file.c_str()) == -1) {
         int errno_saved = errno;
-        LOG(ERROR) << "[SDK COOKIE] fail to delete cookie-lock-file: " << cookie_lock_file
+        LOG(INFO) << "[SDK COOKIE] fail to delete cookie-lock-file: " << cookie_lock_file
                    << ". reason: " << strerror(errno_saved);
     }
 }
 
-static bool AppendMagicNumberToCookie(const std::string& cookie_file) {
+static bool AppendChecksumToCookie(const std::string& cookie_file) {
     std::fstream outfile(cookie_file.c_str(), std::ios_base::in | std::ios_base::out);
     int errno_saved = errno;
     if(outfile.fail()) {
-        LOG(ERROR) << "[SDK COOKIE] fail to open " << cookie_file.c_str() 
-    		<< " " << strerror(errno_saved);
+        LOG(INFO) << "[SDK COOKIE] fail to open " << cookie_file.c_str() 
+            << " " << strerror(errno_saved);
         return false;
     }
 
@@ -1861,27 +1867,41 @@ static bool AppendMagicNumberToCookie(const std::string& cookie_file) {
     outfile.seekp(0, std::ios_base::end);
     long file_size = outfile.tellp();
     if(file_size < HASH_LEN) {
-    	LOG(ERROR) << "[SDK COOKIE] invalid file size: " << file_size;
-    	return false;
+        LOG(INFO) << "[SDK COOKIE] invalid file size: " << file_size;
+        return false;
     }
     
-    // calculates magic number according to cookie file content
+    // calculates checksum according to cookie file content
     outfile.seekp(0, std::ios_base::beg);
     char hash_str[HASH_LEN] = {'\0'};
-    if(!CalculateMagicNumberOfData(outfile, file_size, hash_str)) {
-    	return false;
+    if(!CalculateChecksumOfData(outfile, file_size, hash_str)) {
+        return false;
     }
-    LOG(INFO) << "[SDK COOKIE] file magic number: " << hash_str;
+    LOG(INFO) << "[SDK COOKIE] file checksum: " << hash_str;
 
-    // append magic number to the end of cookie file
+    // append checksum to the end of cookie file
     outfile.seekp(0, std::ios_base::end);
     outfile.write(hash_str, HASH_LEN);
     if(outfile.fail()) {
-    	LOG(ERROR) << "[SDK COOKIE] fail to append magic number";
-    	return false;
+        LOG(INFO) << "[SDK COOKIE] fail to append checksum";
+        return false;
     }
     outfile.close();
     return true;
+}
+
+static bool AddOtherUserWritePermission(const std::string& cookie_file) {
+    struct stat st;
+    int ret = stat(cookie_file.c_str(), &st);
+    if(ret != 0) {
+        return false;
+    }
+    if((st.st_mode & S_IWOTH) == S_IWOTH) {
+        // other user has write permission already
+        return true;
+    }
+    return chmod(cookie_file.c_str(), 
+             S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP | S_IROTH | S_IWOTH) == 0;
 }
 
 void TableImpl::DoDumpCookie() {
@@ -1919,22 +1939,27 @@ void TableImpl::DoDumpCookie() {
 
     FileStream fs;
     if (!fs.Open(cookie_file, FILE_WRITE)) {
-        LOG(ERROR) << "[SDK COOKIE] fail to open " << cookie_file;
+        LOG(INFO) << "[SDK COOKIE] fail to open " << cookie_file;
         CloseAndRemoveCookieLockFile(lock_fd, cookie_lock_file);
         return;
     }
     RecordWriter record_writer;
     record_writer.Reset(&fs);
     if (!record_writer.WriteMessage(cookie)) {
-        LOG(ERROR) << "[SDK COOKIE] fail to write cookie file " << cookie_file;
+        LOG(INFO) << "[SDK COOKIE] fail to write cookie file " << cookie_file;
         fs.Close();
         CloseAndRemoveCookieLockFile(lock_fd, cookie_lock_file);
         return;
     }
     fs.Close();
 
-    if(!AppendMagicNumberToCookie(cookie_file)) {
-        LOG(ERROR) << "[SDK COOKIE] fail to append magic number to cookie file " << cookie_file;
+    if(!AppendChecksumToCookie(cookie_file)) {
+        LOG(INFO) << "[SDK COOKIE] fail to append checksum to cookie file " << cookie_file;
+        CloseAndRemoveCookieLockFile(lock_fd, cookie_lock_file);
+        return;
+    }
+    if(!AddOtherUserWritePermission(cookie_file)) {
+        LOG(INFO) << "[SDK COOKIE] fail to chmod cookie file " << cookie_file;
         CloseAndRemoveCookieLockFile(lock_fd, cookie_lock_file);
         return;
     }
