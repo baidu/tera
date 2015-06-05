@@ -10,14 +10,14 @@
 #include <sys/file.h>
 #include <sys/stat.h>
 #include <sys/types.h>
+#include <fstream>
 
 #include <boost/bind.hpp>
-#include <fstream>
+#include <gflags/gflags.h>
 
 #include "common/base/string_format.h"
 #include "common/file/file_path.h"
 #include "common/file/recordio/record_io.h"
-#include "gflags/gflags.h"
 
 #include "proto/kv_helper.h"
 #include "proto/proto_helper.h"
@@ -519,10 +519,14 @@ void TableImpl::ApplyMutation(const std::string& server_addr,
                                      mu_list->begin(), mu_list->end());
     if (commit_buffer->_row_list->size() >= _commit_size) {
         std::vector<RowMutationImpl*>* commit_mu_list = commit_buffer->_row_list;
-        _thread_pool->CancelTask(commit_buffer->_timer_id);
-        _commit_buffers.erase(server_addr);
+        uint64_t timer_id = commit_buffer->_timer_id;
         _commit_buffer_mutex.Unlock();
-        CommitMutation(server_addr, commit_mu_list);
+        if (_thread_pool->CancelTask(timer_id)) {
+            _commit_buffer_mutex.Lock();
+            _commit_buffers.erase(server_addr);
+            _commit_buffer_mutex.Unlock();
+            CommitMutation(server_addr, commit_mu_list);
+        }
         _commit_buffer_mutex.Lock();
     }
 
@@ -770,10 +774,14 @@ void TableImpl::ReadRows(const std::string& server_addr,
                                         reader_list->begin(), reader_list->end());
     if (reader_buffer->_reader_list->size() >= _commit_size) {
         std::vector<RowReaderImpl*>* commit_reader_list = reader_buffer->_reader_list;
-        _thread_pool->CancelTask(reader_buffer->_timer_id);
-        _reader_buffers.erase(server_addr);
+        uint64_t timer_id = reader_buffer->_timer_id;
         _reader_buffer_mutex.Unlock();
-        CommitReaders(server_addr, commit_reader_list);
+        if (_thread_pool->CancelTask(timer_id)) {
+            _reader_buffer_mutex.Lock();
+            _reader_buffers.erase(server_addr);
+            _reader_buffer_mutex.Unlock();
+            CommitReaders(server_addr, commit_reader_list);
+        }
         _reader_buffer_mutex.Lock();
     }
 
