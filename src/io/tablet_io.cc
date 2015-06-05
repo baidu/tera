@@ -55,6 +55,7 @@ DECLARE_bool(tera_tabletnode_cache_enabled);
 DECLARE_int32(tera_leveldb_env_local_seek_latency);
 DECLARE_int32(tera_leveldb_env_dfs_seek_latency);
 DECLARE_int32(tera_leveldb_max_open_files);
+DECLARE_int32(tera_leveldb_block_cache_size);
 
 DECLARE_bool(tera_tablet_use_memtable_on_leveldb);
 DECLARE_int64(tera_tablet_memtable_ldb_write_buffer_size);
@@ -1264,7 +1265,8 @@ void TabletIO::SetupOptionsForLG() {
             if (store == MemoryStore) {
                 m_ldb_options.env = lg_info->env = leveldb::EnvInMemory();
                 m_ldb_options.seek_latency = 0;
-                m_ldb_options.block_cache = leveldb::NewLRUCache(1UL << 48);
+                m_ldb_options.block_cache =
+                    leveldb::NewLRUCache(FLAGS_tera_leveldb_block_cache_size * 1024 * 1024);
                 m_mem_store_activated = true;
             } else if (store == FlashStore) {
                 if (!FLAGS_tera_tabletnode_cache_enabled) {
