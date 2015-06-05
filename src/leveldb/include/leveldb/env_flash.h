@@ -77,9 +77,9 @@ private:
 };
 
 /// default mem env
-Env* EnvFlash();
+Env* EnvFlash(Logger* logger);
 /// new mem env
-Env* NewFlashEnv();
+Env* NewFlashEnv(Logger* logger);
 }  // namespace leveldb
 
 #endif  //__LEVELDB_ENV_FLASH_H_

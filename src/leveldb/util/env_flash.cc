@@ -33,6 +33,7 @@ tera::Counter ssd_read_size_counter;
 tera::Counter ssd_write_counter;
 tera::Counter ssd_write_size_counter;
 
+static Logger* logger;
 // Log error message
 static Status IOError(const std::string& context, int err_number)
 {
@@ -50,11 +51,11 @@ Status CopyToLocal(const std::string& local_fname, Env* env,
     if (s.ok() && fsize == local_size) {
         return s;
     }
-    fprintf(stderr, "local file mismatch, expect %lu, actual %lu, delete %s\n",
+    Log(logger, "local file mismatch, expect %lu, actual %lu, delete %s\n",
             fsize, local_size, local_fname.c_str());
     Env::Default()->DeleteFile(local_fname);
 
-    fprintf(stderr, "open %s\n", fname.c_str());
+    Log(logger, "open %s\n", fname.c_str());
     SequentialFile* dfs_file = NULL;
     s = env->NewSequentialFile(fname, &dfs_file);
     if (!s.ok()) {
@@ -67,7 +68,7 @@ Status CopyToLocal(const std::string& local_fname, Env* env,
         }
     }
 
-    fprintf(stderr, "open %s\n", local_fname.c_str());
+    Log(logger, "open %s\n", local_fname.c_str());
     WritableFile* local_file = NULL;
     s = Env::Default()->NewWritableFile(local_fname, &local_file);
     if (!s.ok()) {
@@ -89,7 +90,7 @@ Status CopyToLocal(const std::string& local_fname, Env* env,
         uint64_t time_used = env->NowMicros() - time_s;
         //if (time_used > 200000) {
         if (true) {
-            fprintf(stderr, "copy %s to local used %llu ms\n",
+            Log(logger, "copy %s to local used %llu ms\n",
                 fname.c_str(), static_cast<unsigned long long>(time_used) / 1000);
         }
         return s;
@@ -160,7 +161,7 @@ public:
         // copy from dfs with seq read
         Status copy_status = CopyToLocal(local_fname, dfs_env, fname, fsize);
         if (!copy_status.ok()) {
-            fprintf(stderr, "copy to local fail [%s]: %s\n",
+            Log(logger, "copy to local fail [%s]: %s\n",
                 copy_status.ToString().c_str(), local_fname.c_str());
             // no flash file, use dfs file
             dfs_env->NewRandomAccessFile(fname, &dfs_file_);
@@ -171,9 +172,9 @@ public:
         if (s.ok()) {
             return;
         }
-        fprintf(stderr, "local file exists, but open for RandomAccess fail: %s\n",
+        Log(logger, "local file exists, but open for RandomAccess fail: %s\n",
             local_fname.c_str());
-        unlink(local_fname.c_str());
+        Env::Default()->DeleteFile(local_fname);
         dfs_env->NewRandomAccessFile(fname, &dfs_file_);
     }
     ~FlashRandomAccessFile() {
@@ -211,18 +212,18 @@ public:
             return;
         }
         if (fname.rfind(".sst") != fname.size()-4) {
-            // fprintf(stderr, "[EnvFlash] Don't cache %s\n", fname.c_str());
+            // Log(logger, "[EnvFlash] Don't cache %s\n", fname.c_str());
             return;
         }
         local_fname_ = FlashEnv::FlashPath(fname) + fname;
-        for(size_t i=1 ;i<local_fname_.size(); i++) {
+        for(size_t i = 1; i < local_fname_.size(); i++) {
             if (local_fname_.at(i) == '/') {
                 posix_env->CreateDir(local_fname_.substr(0,i));
             }
         }
         s = posix_env->NewWritableFile(local_fname_, &flash_file_);
         if (!s.ok()) {
-            fprintf(stderr, "Open local flash file for write fail: %s\n",
+            Log(logger, "Open local flash file for write fail: %s\n",
                     local_fname_.c_str());
         }
     }
@@ -233,7 +234,7 @@ public:
     void DeleteLocal() {
         delete flash_file_;
         flash_file_ = NULL;
-        unlink(local_fname_.c_str());
+        Env::Default()->DeleteFile(local_fname_);
     }
     virtual Status Append(const Slice& data) {
         Status s = dfs_file_->Append(data);
@@ -455,14 +456,20 @@ static void InitFlashEnv()
     flash_env = new FlashEnv();
 }
 
-Env* EnvFlash()
+Env* EnvFlash(Logger* l)
 {
     pthread_once(&once, InitFlashEnv);
+    if (l) {
+        logger = l;
+    }
     return flash_env;
 }
 
-Env* NewFlashEnv()
+Env* NewFlashEnv(Logger* l)
 {
+    if (l) {
+        logger = l;
+    }
     return new FlashEnv();
 }
 

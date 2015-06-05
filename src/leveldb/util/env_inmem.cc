@@ -39,17 +39,8 @@ private:
     SequentialFile* mem_file_;
 public:
     InMemorySequentialFile(Env* mem_env, Env* dfs_env, const std::string& fname)
-        :dfs_file_(NULL), mem_file_(NULL)
-    {
-        Status s = dfs_env->NewSequentialFile(fname, &dfs_file_);
-        if (!s.ok()) {
-            throw IOError(fname, -1);
-        }
-        return;
-        s = mem_env->NewSequentialFile(fname, &mem_file_);
-        if (s.ok()) {
-            return;
-        }
+        :dfs_file_(NULL), mem_file_(NULL) {
+        dfs_env->NewSequentialFile(fname, &dfs_file_);
     }
 
     virtual ~InMemorySequentialFile() {
@@ -92,7 +83,7 @@ public:
         mem_file_ = NULL;
         s = dfs_env->NewRandomAccessFile(fname, &dfs_file_);
         if (!s.ok()) {
-            throw IOError(fname, -1);
+            return;
         }
     }
     ~InMemoryRandomAccessFile() {
@@ -121,7 +112,7 @@ public:
         :dfs_file_(NULL), mem_file_(NULL) {
         Status s = dfs_env->NewWritableFile(fname, &dfs_file_);
         if (!s.ok()) {
-            throw IOError(fname, -1);
+            return;
         }
         if (fname.rfind(".sst") != fname.size()-4) {
             return;
