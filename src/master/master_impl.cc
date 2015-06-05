@@ -1485,7 +1485,7 @@ void MasterImpl::TabletNodeRecoveryCallback(std::string addr,
             UnloadTabletAsync(unload_tablet, done);
         } else if (tablet->SetStatusIf(kTableReady, kTabletPending)
             || tablet->SetStatusIf(kTableReady, kTableOffLine)) {
-            tablet->SetSize(meta.table_size());
+            tablet->SetSize(meta);
             tablet->SetCompactStatus(meta.compact_status());
             ProcessReadyTablet(tablet);
             VLOG(6) << "[query] " << tablet;
@@ -2571,7 +2571,7 @@ void MasterImpl::QueryTabletNodeCallback(std::string addr, QueryRequest* request
             } else if (m_tablet_manager->FindTablet(table_name, key_start, &tablet)
                 && tablet->Verify(table_name, key_start, key_end, meta.path(),
                                   meta.server_addr())) {
-                tablet->SetSize(meta.table_size());
+                tablet->SetSize(meta);
                 tablet->SetCounter(counter);
                 tablet->SetCompactStatus(meta.compact_status());
                 ClearUnusedSnapshots(tablet, meta);

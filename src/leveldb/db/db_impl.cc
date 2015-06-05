@@ -614,21 +614,8 @@ bool DBImpl::FindSplitKey(const std::string& start_key,
 }
 
 uint64_t DBImpl::GetScopeSize(const std::string& start_key,
-                              const std::string& end_key) {
-    return GetScopeSizeOld(start_key, end_key);
-    std::string end_user_key = end_key;
-    if (end_user_key == "") {
-        end_user_key.assign(std::string(8, -1));
-    }
-    leveldb::Range range(start_key, end_user_key);
-    uint64_t size = 0;
-    GetApproximateSizes(&range, 1, &size);
-//     Log(options_.info_log, "[%s] data_size= %lu", dbname_.c_str(), size);
-    return size;
-}
-
-uint64_t DBImpl::GetScopeSizeOld(const std::string& start_key,
-                                 const std::string& end_key) {
+                              const std::string& end_key,
+                              std::vector<uint64_t>* lgsize) {
     Slice start_slice(start_key);
     Slice end_slice(end_key);
     MutexLock l(&mutex_);

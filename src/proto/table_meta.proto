@@ -78,6 +78,7 @@ message TabletMeta {
     optional StoreMedium store_medium = 9 [default = DiskStore]; // for Compatible
     repeated uint64 snapshot_list = 11;
     repeated uint64 parent_tablets = 12;
+    repeated int64 lg_size = 13;
 }
 
 message TableMetaList {

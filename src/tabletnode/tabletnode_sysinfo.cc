@@ -171,7 +171,13 @@ void TabletNodeSysInfo::CollectTabletNodeInfo(TabletManager* tablet_manager,
         tablet_meta->set_path(tablet_io->GetTablePath());
         tablet_meta->mutable_key_range()->set_key_start(tablet_io->GetStartKey());
         tablet_meta->mutable_key_range()->set_key_end(tablet_io->GetEndKey());
-        tablet_meta->set_table_size(tablet_io->GetDataSize());
+
+        std::vector<uint64_t> lgsize;
+        int64_t tablet_size = tablet_io->GetDataSize(&lgsize);
+        tablet_meta->set_table_size(tablet_size);
+        for (size_t i = 0; i < lgsize.size(); ++i) {
+            tablet_meta->add_lg_size(lgsize[i]);
+        }
         tablet_meta->set_compact_status(tablet_io->GetCompactStatus());
         total_size += tablet_meta->table_size();
 
