@@ -47,6 +47,7 @@ Options::Options()
       memtable_ldb_write_buffer_size(1 << 20),
       memtable_ldb_block_size(kDefaultBlockSize),
       drop_base_level_del_in_compaction(true),
+      filesystem_error_sensitive(true),
       sst_size(kDefaultSstSize) {
 }
 

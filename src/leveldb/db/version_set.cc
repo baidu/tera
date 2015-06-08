@@ -692,7 +692,7 @@ void Version::MissFilesInLocal(const Slice* smallest_user_key,
         Compaction* c = new Compaction(level);
         c->input_version_ = this;
         c->input_version_->Ref();
-        c->max_output_file_size_ = 
+        c->max_output_file_size_ =
             MaxFileSizeForLevel(level + 1, vset_->options_->sst_size);
         c->inputs_[0] = inputs;
         vset_->SetupOtherInputs(c);
@@ -1203,6 +1203,7 @@ static bool IsDbExist(Env* env, const std::string& dbname) {
 
 Status VersionSet::ReadCurrentFile(uint64_t tablet, std::string* dscname ) {
   Status s;
+  dscname->clear();
   std::string pdbname;
   if (tablet > 0) {
     pdbname = RealDbName(dbname_, tablet);
@@ -1212,12 +1213,13 @@ Status VersionSet::ReadCurrentFile(uint64_t tablet, std::string* dscname ) {
   std::string current;
   s = ReadFileToString(env_, CurrentFileName(pdbname), &current);
   if (!s.ok()) {
-    Log(options_->info_log, "[%s] current file lost: %s.",
+    Log(options_->info_log, "[%s][fs error] CURRENT file lost: %s.",
         dbname_.c_str(), CurrentFileName(pdbname).c_str());
+  } else if (current.empty() || current[current.size()-1] != '\n') {
+    Log(options_->info_log,
+        "[%s][fs error] CURRENT file does not end with newline, %s",
+        dbname_.c_str(), current.c_str());
   } else {
-    if (current.empty() || current[current.size()-1] != '\n') {
-      return Status::Corruption("CURRENT file does not end with newline");
-    }
     current.resize(current.size() - 1);
     *dscname = pdbname + "/" + current;
   }
@@ -1850,7 +1852,7 @@ Compaction* VersionSet::CompactRange(
   // and we must not pick one file and drop another older file if the
   // two files overlap.
   if (level > 0) {
-    const uint64_t limit = 
+    const uint64_t limit =
       MaxFileSizeForLevel(level, current_->vset_->options_->sst_size);
     uint64_t total = 0;
     for (size_t i = 0; i < inputs.size(); i++) {
@@ -1866,7 +1868,7 @@ Compaction* VersionSet::CompactRange(
   Compaction* c = new Compaction(level);
   c->input_version_ = current_;
   c->input_version_->Ref();
-  c->max_output_file_size_ = 
+  c->max_output_file_size_ =
     MaxFileSizeForLevel(level + 1, current_->vset_->options_->sst_size);
   c->inputs_[0] = inputs;
   SetupOtherInputs(c);
