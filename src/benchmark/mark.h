@@ -24,6 +24,7 @@ DECLARE_int64(pend_size);
 DECLARE_int64(pend_count);
 DECLARE_int64(max_outflow);
 DECLARE_int64(max_rate);
+DECLARE_int64(batch_count);
 
 enum MODE {
     WRITE = 1,
@@ -318,6 +319,7 @@ public:
                std::map<std::string, std::set<std::string> >& column,
                uint64_t timestamp,
                std::string& value);
+    void CommitSyncWrite();
     void WriteCallback(tera::RowMutation* row_mu,
                        size_t req_size,
                        int64_t req_time);
@@ -325,6 +327,7 @@ public:
     void Read(const std::string& row,
               const std::map<std::string, std::set<std::string> >& column,
               uint64_t largest_ts, uint64_t smallest_ts);
+    void CommitSyncRead();
     void ReadCallback(tera::RowReader* reader,
                       size_t req_size,
                       int64_t req_time);
@@ -357,6 +360,10 @@ private:
     Statistic m_write_marker;
     Statistic m_read_marker;
     Statistic m_scan_marker;
+
+    std::vector<tera::RowMutation*> m_sync_mutations;
+    std::vector<tera::RowReader*> m_sync_readers;
+    std::vector<size_t> m_sync_req_sizes;
 };
 
 void add_checksum(const std::string& rowkey, const std::string& family,
