@@ -54,8 +54,8 @@ DEFINE_int32(tera_io_retry_period, 100, "the retry interval period (in ms) when 
 DEFINE_int32(tera_io_retry_max_times, 20, "the max retry times when meets trouble");
 DEFINE_int32(tera_leveldb_env_local_seek_latency, 50000, "the random access latency (in ns) of local storage device");
 DEFINE_int32(tera_leveldb_env_dfs_seek_latency, 10000000, "the random access latency (in ns) of dfs storage device");
-DEFINE_int32(tera_leveldb_max_open_files, 100, "the max open file number in leveldb table_cache");
-DEFINE_int32(tera_leveldb_block_cache_size, 20, "block cache size for leveldb which do not use share block cache");
+DEFINE_int32(tera_memenv_table_cache_size, 100, "the max open file number in leveldb table_cache");
+DEFINE_int32(tera_memenv_block_cache_size, 20, "block cache size for leveldb which do not use share block cache");
 
 DEFINE_string(tera_leveldb_compact_strategy, "default", "the default strategy to drive consum compaction, should be [default|LG|dummy]");
 
