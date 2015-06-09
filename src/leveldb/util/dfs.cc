@@ -14,16 +14,17 @@ namespace leveldb {
 
 Dfs* Dfs::NewDfs(const std::string& so_path, const std::string& conf) {
     dlerror();
-    void* handle = dlopen(so_path.c_str(), RTLD_NOW);
+    fprintf(stderr, "Open %s\n", so_path.c_str());
+    void* handle = dlopen(so_path.c_str(), RTLD_LAZY | RTLD_LOCAL | RTLD_DEEPBIND);
+    const char* err = dlerror();
     if (handle == NULL) {
-        fprintf(stderr, "Open %s fail\n", so_path.c_str());
+        fprintf(stderr, "Open %s fail: %s\n", so_path.c_str(), err);
         return NULL;
     }
 
-    dlerror();
 
     DfsCreator creator = (DfsCreator)dlsym(handle, "NewDfs");
-    const char* err = dlerror();
+    err = dlerror();
     if (err != NULL) {
         fprintf(stderr, "Load NewDfs from %s fail: %s\n", so_path.c_str(), err);
         return NULL;

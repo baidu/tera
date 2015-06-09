@@ -713,8 +713,8 @@ Status DBTable::GatherLogFile(uint64_t begin_num,
     }
     std::sort(logfiles->begin(), logfiles->end());
     uint64_t first_log_num = logfiles->size() ? (*logfiles)[0] : 0;
-    Log(options_.info_log, "[%s] begin_seq= %lu, first log num= %lu, last num=%lu\n",
-        dbname_.c_str(), begin_num, first_log_num, last_number);
+    Log(options_.info_log, "[%s] begin_seq= %lu, first log num= %lu, last num=%lu, log_num=%lu\n",
+        dbname_.c_str(), begin_num, first_log_num, last_number, logfiles->size());
     if (last_number > 0 && first_log_num > begin_num) {
         logfiles->push_back(last_number);
     }

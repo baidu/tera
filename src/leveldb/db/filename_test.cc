@@ -28,7 +28,6 @@ TEST(FileNameTest, Parse) {
     uint64_t number;
     FileType type;
   } cases[] = {
-    { "H0000000000000001.log",            1,   kLogFile },
     { "100.log",            100,   kLogFile },
     { "0.log",              0,     kLogFile },
     { "0.sst",              0,     kTableFile },
