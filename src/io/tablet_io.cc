@@ -54,7 +54,8 @@ DECLARE_int32(tera_tabletnode_scan_pack_max_size);
 DECLARE_bool(tera_tabletnode_cache_enabled);
 DECLARE_int32(tera_leveldb_env_local_seek_latency);
 DECLARE_int32(tera_leveldb_env_dfs_seek_latency);
-DECLARE_int32(tera_leveldb_max_open_files);
+DECLARE_int32(tera_memenv_table_cache_size);
+DECLARE_int32(tera_memenv_block_cache_size);
 
 DECLARE_bool(tera_tablet_use_memtable_on_leveldb);
 DECLARE_int64(tera_tablet_memtable_ldb_write_buffer_size);
@@ -203,7 +204,7 @@ bool TabletIO::Load(const TableSchema& schema,
     m_ldb_options.log_async_mode = FLAGS_tera_log_async_mode;
     m_ldb_options.create_if_missing = true;
     m_ldb_options.info_log = logger;
-    m_ldb_options.max_open_files = FLAGS_tera_leveldb_max_open_files;
+    m_ldb_options.max_open_files = FLAGS_tera_memenv_table_cache_size;
 
     m_ldb_options.use_memtable_on_leveldb = FLAGS_tera_tablet_use_memtable_on_leveldb;
     m_ldb_options.memtable_ldb_write_buffer_size =
@@ -349,7 +350,7 @@ bool TabletIO::Split(std::string* split_key, StatusCode* status) {
         m_db_ref_count++;
     }
 
-    int64_t table_size = GetDataSize(status);
+    int64_t table_size = GetDataSize(NULL, status);
     if (table_size <= 0) {
         SetStatusCode(kTableNotSupport, status);
         MutexLock lock(&m_mutex);
@@ -537,7 +538,8 @@ bool TabletIO::SnapshotIDToSeq(uint64_t snapshot_id, uint64_t* snapshot_sequence
     return true;
 }
 
-int64_t TabletIO::GetDataSize(StatusCode* status) {
+int64_t TabletIO::GetDataSize(std::vector<uint64_t>* lgsize,
+                              StatusCode* status) {
     {
         MutexLock lock(&m_mutex);
         if (m_status != kReady && m_status != kOnSplit
@@ -548,7 +550,7 @@ int64_t TabletIO::GetDataSize(StatusCode* status) {
         m_db_ref_count++;
     }
 
-    int64_t scope_size = m_db->GetScopeSize(m_raw_start_key, m_raw_end_key);
+    int64_t scope_size = m_db->GetScopeSize(m_raw_start_key, m_raw_end_key, lgsize);
     // VLOG(6) << "GetDataSize(" << m_tablet_path << ") : " << scope_size;
     {
         MutexLock lock(&m_mutex);
@@ -1263,11 +1265,13 @@ void TabletIO::SetupOptionsForLG() {
             if (store == MemoryStore) {
                 m_ldb_options.env = lg_info->env = leveldb::EnvInMemory();
                 m_ldb_options.seek_latency = 0;
-                m_ldb_options.block_cache = leveldb::NewLRUCache(1UL << 48);
+                m_ldb_options.block_cache =
+                    leveldb::NewLRUCache(FLAGS_tera_memenv_block_cache_size * 1024 * 1024);
                 m_mem_store_activated = true;
             } else if (store == FlashStore) {
                 if (!FLAGS_tera_tabletnode_cache_enabled) {
-                    m_ldb_options.env = lg_info->env = leveldb::EnvFlash();
+                    m_ldb_options.env = lg_info->env =
+                        leveldb::EnvFlash(m_ldb_options.info_log);
                 } else {
                     LOG(INFO) << "activate block-level Cache store";
                     m_ldb_options.env = lg_info->env = leveldb::EnvThreeLevelCache();

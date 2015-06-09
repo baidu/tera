@@ -129,7 +129,8 @@ public:
                               std::string* split_key);
 
     virtual uint64_t GetScopeSize(const std::string& start_key,
-                                  const std::string& end_key);
+                                  const std::string& end_key,
+                                  std::vector<uint64_t>* lgsize);
 
     virtual bool MinorCompact();
     virtual void CompactMissFiles(const Slice* begin, const Slice* end);

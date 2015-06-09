@@ -938,11 +938,19 @@ bool DBTable::FindSplitKey(const std::string& start_key,
 }
 
 uint64_t DBTable::GetScopeSize(const std::string& start_key,
-                               const std::string& end_key) {
+                               const std::string& end_key,
+                               std::vector<uint64_t>* lgsize) {
     uint64_t size = 0;
+    if (lgsize != NULL) {
+        lgsize->clear();
+    }
     std::set<uint32_t>::iterator it = options_.exist_lg_list->begin();
     for (; it != options_.exist_lg_list->end(); ++it) {
-        size += lg_list_[*it]->GetScopeSize(start_key, end_key);
+        uint64_t lsize = lg_list_[*it]->GetScopeSize(start_key, end_key);
+        size += lsize;
+        if (lgsize != NULL) {
+            lgsize->push_back(lsize);
+        }
     }
     return size;
 }

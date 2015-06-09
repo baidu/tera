@@ -84,19 +84,35 @@ void Adapter::Write(const std::string& row,
     m_write_marker.CheckPending();
     m_write_marker.CheckLimit();
     m_write_marker.OnReceive(req_size);
+    m_pending_num.Inc();
 
-    int64_t req_time = Now();
     if (type == ASYNC) {
+        int64_t req_time = Now();
         Context* ctx = new Context(this, req_size, req_time);
         row_mu->SetCallBack(sdk_write_callback);
         row_mu->SetContext(ctx);
+        m_table->ApplyMutation(row_mu);
+    } else {
+        m_sync_mutations.push_back(row_mu);
+        m_sync_req_sizes.push_back(req_size);
+        if (m_sync_mutations.size() >= static_cast<unsigned long long>(FLAGS_batch_count)) {
+            CommitSyncWrite();
+        }
     }
+}
 
-    m_pending_num.Inc();
-    m_table->ApplyMutation(row_mu);
-    if (type == SYNC) {
-        WriteCallback(row_mu, req_size, req_time);
+void Adapter::CommitSyncWrite() {
+    if (m_sync_mutations.size() == 0) {
+        return;
     }
+    CHECK_EQ(m_sync_mutations.size(), m_sync_req_sizes.size());
+    int64_t req_time = Now();
+    m_table->ApplyMutation(m_sync_mutations);
+    for (size_t i = 0; i < m_sync_mutations.size(); i++) {
+        WriteCallback(m_sync_mutations[i], m_sync_req_sizes[i], req_time);
+    }
+    m_sync_mutations.clear();
+    m_sync_req_sizes.clear();
 }
 
 void Adapter::WriteCallback(tera::RowMutation* row_mu, size_t req_size,
@@ -158,19 +174,35 @@ void Adapter::Read(const std::string& row,
     m_read_marker.CheckPending();
     m_read_marker.CheckLimit();
     m_read_marker.OnReceive(req_size);
+    m_pending_num.Inc();
 
-    int64_t req_time = Now();
     if (type == ASYNC) {
+        int64_t req_time = Now();
         Context* ctx = new Context(this, req_size, req_time);
         reader->SetCallBack(sdk_read_callback);
         reader->SetContext(ctx);
+        m_table->Get(reader);
+    } else {
+        m_sync_readers.push_back(reader);
+        m_sync_req_sizes.push_back(req_size);
+        if (m_sync_readers.size() >= static_cast<unsigned long long>(FLAGS_batch_count)) {
+            CommitSyncRead();
+        }
     }
+}
 
-    m_pending_num.Inc();
-    m_table->Get(reader);
-    if (type == SYNC) {
-        ReadCallback(reader, req_size, req_time);
+void Adapter::CommitSyncRead() {
+    if (m_sync_readers.size() == 0) {
+        return;
     }
+    CHECK_EQ(m_sync_readers.size(), m_sync_req_sizes.size());
+    int64_t req_time = Now();
+    m_table->Get(m_sync_readers);
+    for (size_t i = 0; i < m_sync_readers.size(); i++) {
+        ReadCallback(m_sync_readers[i], m_sync_req_sizes[i], req_time);
+    }
+    m_sync_readers.clear();
+    m_sync_req_sizes.clear();
 }
 
 void Adapter::ReadCallback(tera::RowReader* reader, size_t req_size,
@@ -302,46 +334,5 @@ bool verify_checksum(const std::string& rowkey, const std::string& family,
     crc = leveldb::crc32c::Extend(crc, value.data(), value.size() - sizeof(uint32_t));
     return crc == *(uint32_t*)(value.data() + value.size() - sizeof(uint32_t));
 }
-
-/*
-void add_md5sum(const std::string& rowkey, const std::string& family,
-                const std::string& qualifier, std::string* value) {
-    if (value == NULL) {
-        return;
-    }
-    MD5_CTX md5_ctx;
-    MD5_Init(&md5_ctx);
-    unsigned char md5_out[MD5_DIGEST_LENGTH] = {'\0'};
-    MD5_Update(&md5_ctx, rowkey.data(), rowkey.size());
-    MD5_Update(&md5_ctx, family.data(), family.size());
-    MD5_Update(&md5_ctx, qualifier.data(), qualifier.size());
-    MD5_Update(&md5_ctx, value->data(), value->size());
-
-    MD5_Final(md5_out, &md5_ctx);
-    value->append((char*)md5_out, MD5_DIGEST_LENGTH);
-}
-
-void remove_md5sum(std::string* value) {
-    value->resize(value->size() - MD5_DIGEST_LENGTH);
-}
-
-bool verify_md5sum(const std::string& rowkey, const std::string& family,
-                   const std::string& qualifier, const std::string& value) {
-    if (value.size() <= MD5_DIGEST_LENGTH) {
-        return false;
-    }
-    MD5_CTX md5_ctx;
-    MD5_Init(&md5_ctx);
-    unsigned char md5_out[MD5_DIGEST_LENGTH] = {'\0'};
-    MD5_Update(&md5_ctx, rowkey.data(), rowkey.size());
-    MD5_Update(&md5_ctx, family.data(), family.size());
-    MD5_Update(&md5_ctx, qualifier.data(), qualifier.size());
-    MD5_Update(&md5_ctx, value.data(), value.size() - MD5_DIGEST_LENGTH);
-    MD5_Final(md5_out, &md5_ctx);
-    return (0 == strncmp((char*)md5_out,
-                         value.data() + value.size() - MD5_DIGEST_LENGTH,
-                         MD5_DIGEST_LENGTH));
-}
-*/
 
 /* vim: set expandtab ts=4 sw=4 sts=4 tw=100: */

@@ -453,6 +453,15 @@ void MasterImpl::CreateTable(const CreateTableRequest* request,
         }
     }
 
+    // try clean env, if there is a dir same as table_name, delete it first
+    if (!io::MoveEnvDirToTrash(request->table_name())) {
+        LOG(ERROR) << "Fail to create table: " << request->table_name()
+            << ", cannot move old table dir to trash";
+        response->set_status(kTableExist);
+        done->Run();
+        return;
+    }
+
     int32_t tablet_num = request->delimiters_size() + 1;
     bool delivalid = true;
     for (int32_t i = 1; i < tablet_num - 1; i++) {
@@ -1485,7 +1494,7 @@ void MasterImpl::TabletNodeRecoveryCallback(std::string addr,
             UnloadTabletAsync(unload_tablet, done);
         } else if (tablet->SetStatusIf(kTableReady, kTabletPending)
             || tablet->SetStatusIf(kTableReady, kTableOffLine)) {
-            tablet->SetSize(meta.table_size());
+            tablet->SetSize(meta);
             tablet->SetCompactStatus(meta.compact_status());
             ProcessReadyTablet(tablet);
             VLOG(6) << "[query] " << tablet;
@@ -2571,7 +2580,7 @@ void MasterImpl::QueryTabletNodeCallback(std::string addr, QueryRequest* request
             } else if (m_tablet_manager->FindTablet(table_name, key_start, &tablet)
                 && tablet->Verify(table_name, key_start, key_end, meta.path(),
                                   meta.server_addr())) {
-                tablet->SetSize(meta.table_size());
+                tablet->SetSize(meta);
                 tablet->SetCounter(counter);
                 tablet->SetCompactStatus(meta.compact_status());
                 ClearUnusedSnapshots(tablet, meta);

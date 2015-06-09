@@ -745,7 +745,18 @@ int32_t ShowTabletList(const TabletMetaList& tablet_list, bool is_server_addr, b
             }
             row.push_back(meta.path());
             row.push_back(StatusCodeToString(meta.status()));
-            row.push_back(utils::ConvertByteToString(meta.table_size()));
+
+            std::string size_str =
+                utils::ConvertByteToString(meta.table_size()) +
+                "[";
+            for (int l = 0; l < meta.lg_size_size(); ++l) {
+                size_str += utils::ConvertByteToString(meta.lg_size(l));
+                if (l < meta.lg_size_size() - 1) {
+                    size_str += " ";
+                }
+            }
+            size_str += "]";
+            row.push_back(size_str);
 
             if (tablet_list.counter_size() > 0) {
                 const TabletCounter& counter = tablet_list.counter(i);
