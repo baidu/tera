@@ -31,6 +31,7 @@ DEFINE_bool(verify, true, "md5 verify(writer&read)");
 DEFINE_int64(max_outflow, -1, "max_outflow");
 DEFINE_int64(max_rate, -1, "max_rate");
 DEFINE_bool(scan_streaming, false, "enable streaming scan");
+DEFINE_int64(batch_count, 1, "batch_count(sync)");
 
 int mode = 0;
 int type = 0;
@@ -533,6 +534,7 @@ int main(int argc, char** argv) {
     uint64_t smallest_ts = 0;
     std::string value;
 
+    int last_opt = NONE;
     bool finish = false;
     while (true) {
         switch (mode) {
@@ -558,20 +560,35 @@ int main(int argc, char** argv) {
         }
 
         if (finish) {
+            if (type == SYNC) {
+                if (mode == WRITE || mode == MIX) {
+                    adapter->CommitSyncWrite();
+                }
+                if (mode == READ || mode == MIX) {
+                    adapter->CommitSyncRead();
+                }
+            }
             break;
         }
 
         switch (opt) {
         case PUT:
+            if (type == SYNC && mode == MIX && last_opt == GET) {
+                adapter->CommitSyncRead();
+            }
             adapter->Write(row, column, largest_ts, value);
             break;
         case GET:
+            if (type == SYNC && mode == MIX && last_opt == PUT) {
+                adapter->CommitSyncWrite();
+            }
             adapter->Read(row, column, largest_ts, smallest_ts);
             break;
         default:
             abort();
             break;
         }
+        last_opt = opt;
 
         opt = NONE;
         row.clear();
