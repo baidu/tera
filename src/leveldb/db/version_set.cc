@@ -1224,6 +1224,10 @@ Status VersionSet::ReadCurrentFile(uint64_t tablet, std::string* dscname ) {
     *dscname = pdbname + "/" + current;
   }
 
+  if (dscname->empty() && options_->filesystem_error_sensitive) {
+      return Status::Corruption("[fs error] DB has none available manifest file.");
+  }
+
   if (!s.ok() || !env_->FileExists(*dscname)) {
     // manifest is not ready, now recover the backup manifest
     std::vector<std::string> files;
@@ -1238,13 +1242,13 @@ Status VersionSet::ReadCurrentFile(uint64_t tablet, std::string* dscname ) {
         }
       }
     }
-    if (manifest_set.size() < 1) {
-      return Status::Corruption("DB has none available manifest file.");
-    }
+    // there is a MANIFEST file at least
+    assert(manifest_set.size() > 0);
+
     // select the largest manifest number
     std::set<std::string>::reverse_iterator it = manifest_set.rbegin();
     *dscname = pdbname + "/" + *it;
-    Log(options_->info_log, "[%s] use backup manifest: %s.",
+    Log(options_->info_log, "[%s][fs error] use backup manifest: %s.",
         dbname_.c_str(), dscname->c_str());
     return Status::OK();
   }

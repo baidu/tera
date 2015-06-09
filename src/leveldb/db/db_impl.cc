@@ -430,9 +430,15 @@ Status DBImpl::Recover(VersionEdit* edit) {
       std::map<uint64_t, int>::iterator it = expected.begin();
       for (; it != expected.end(); ++it) {
         if (!env_->FileExists(TableFileName(dbname_, it->first))) {
-          Log(options_.info_log, "[%s] file system lost files: %d.sst, delete it from versionset.",
+          Log(options_.info_log, "[%s][fs error] lost file: %d.sst.",
               dbname_.c_str(), static_cast<int>(it->first));
-          edit->DeleteFile(it->second, it->first);
+          if (!options_.filesystem_error_sensitive) {
+            Log(options_.info_log, "[%s][fs error] delete %d.sst from versionset.",
+                dbname_.c_str(), static_cast<int>(it->first));
+            edit->DeleteFile(it->second, it->first);
+          } else {
+            return Status::Corruption("[fs error] file lost, recover failed.");
+          }
         }
       }
     }

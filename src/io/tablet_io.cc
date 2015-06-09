@@ -60,6 +60,7 @@ DECLARE_int32(tera_memenv_block_cache_size);
 DECLARE_bool(tera_tablet_use_memtable_on_leveldb);
 DECLARE_int64(tera_tablet_memtable_ldb_write_buffer_size);
 DECLARE_int64(tera_tablet_memtable_ldb_block_size);
+DECLARE_bool(tera_is_filesystem_error_sensitive);
 
 extern tera::Counter row_read_delay;
 
@@ -206,6 +207,7 @@ bool TabletIO::Load(const TableSchema& schema,
     m_ldb_options.info_log = logger;
     m_ldb_options.max_open_files = FLAGS_tera_memenv_table_cache_size;
 
+    m_ldb_options.filesystem_error_sensitive = FLAGS_tera_is_filesystem_error_sensitive;
     m_ldb_options.use_memtable_on_leveldb = FLAGS_tera_tablet_use_memtable_on_leveldb;
     m_ldb_options.memtable_ldb_write_buffer_size =
             FLAGS_tera_tablet_memtable_ldb_write_buffer_size * 1024 * 1024;
