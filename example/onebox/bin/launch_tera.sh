@@ -7,6 +7,13 @@ sh kill_tera.sh
 
 # copy tera_main and teracli
 BINARY_PATH="${CURRENT_DIR}/../../../"
+while getopts b: arg
+do
+  case $arg in
+    b) BINARY_PATH=${OPTARG}
+    esac
+done
+
 if [ ! -x "tera_main" ]; then
   if [ ! -x ${BINARY_PATH}/tera_main ]; then
     echo "cannot find tera_main under ${BINARY_PATH}"
