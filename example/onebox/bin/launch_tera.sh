@@ -5,6 +5,24 @@ source ${CURRENT_DIR}/config
 # make sure tera is killed
 sh kill_tera.sh
 
+# copy tera_main and teracli
+BINARY_PATH="${CURRENT_DIR}/../../../"
+if [ ! -x "tera_main" ]; then
+  if [ ! -x ${BINARY_PATH}/tera_main ]; then
+    echo "cannot find tera_main under ${BINARY_PATH}"
+    exit 1
+  fi
+  cp ${BINARY_PATH}/tera_main .
+fi
+
+if [ ! -x "teracli" ]; then
+  if [ ! -x ${BINARY_PATH}/teracli ]; then
+    echo "cannot find teracli under ${BINARY_PATH}"
+    exit 1
+  fi
+  cp ${BINARY_PATH}/teracli .
+fi
+
 FAKE_ZK_PATH_PREFIX="${CURRENT_DIR}/../fakezk"
 TIME=`date +%Y-%m-%d-%H:%M:%S`
 
@@ -15,6 +33,10 @@ mkdir -p ${FAKE_ZK_PATH_PREFIX}/ts
 mkdir -p ${FAKE_ZK_PATH_PREFIX}/kick
 
 # backup tabletnode log & launch tera tabletnodes
+if [ ! -x ${CURRENT_DIR}/../log ];then
+  mkdir ${CURRENT_DIR}/../log
+fi
+
 for ((i=1; i<=$TABLETNODE_NUM; i++)); do
     echo "launching tabletnode $i..."
     TABLETNODE_LOG_FILE=${CURRENT_DIR}/../log/tabletnode.$i.stderr
