@@ -270,6 +270,12 @@ struct Options {
 
   bool drop_base_level_del_in_compaction;
 
+  // if true: do not allow fs error, stop serving when error occured.
+  // if false: auto-process fs error,
+  //        e.g. skipping lost file, use backup MANIFEST, etc.
+  //        caution: this may cause data error.
+  bool filesystem_error_sensitive;
+
   // sst file size, in bytes
   int32_t sst_size;
 
