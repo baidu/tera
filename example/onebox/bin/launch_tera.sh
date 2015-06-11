@@ -5,31 +5,6 @@ source ${CURRENT_DIR}/config
 # make sure tera is killed
 sh kill_tera.sh
 
-# copy tera_main and teracli
-BINARY_PATH="${CURRENT_DIR}/../../../"
-while getopts b: arg
-do
-  case $arg in
-    b) BINARY_PATH=${OPTARG}
-    esac
-done
-
-if [ ! -x "tera_main" ]; then
-  if [ ! -x ${BINARY_PATH}/tera_main ]; then
-    echo "cannot find tera_main under ${BINARY_PATH}"
-    exit 1
-  fi
-  cp ${BINARY_PATH}/tera_main .
-fi
-
-if [ ! -x "teracli" ]; then
-  if [ ! -x ${BINARY_PATH}/teracli ]; then
-    echo "cannot find teracli under ${BINARY_PATH}"
-    exit 1
-  fi
-  cp ${BINARY_PATH}/teracli .
-fi
-
 FAKE_ZK_PATH_PREFIX="${CURRENT_DIR}/../fakezk"
 TIME=`date +%Y-%m-%d-%H:%M:%S`
 
