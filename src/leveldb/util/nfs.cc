@@ -115,6 +115,7 @@ void Nfs::LoadSymbol() {
   *(void**)(&nfsFsync) = ResolveSymbol(dl, "Fsync");
   *(void**)(&nfsTell) = ResolveSymbol(dl, "Tell");
   *(void**)(&nfsSeek) = ResolveSymbol(dl, "Seek");
+  delete dl;
 }
 
 NFile::NFile(nfs::NFSFILE* file, const std::string& name)

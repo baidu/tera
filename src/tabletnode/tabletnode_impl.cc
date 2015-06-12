@@ -493,7 +493,6 @@ void TabletNodeImpl::WriteTablet(const WriteTabletRequest* request,
             delete index_list;
             if (done_counter->Add(index_num) == row_num) {
                 done->Run();
-                delete done_counter;
                 if (NULL != timer) {
                     RpcTimerList::Instance()->Erase(timer);
                     delete timer;
@@ -503,6 +502,7 @@ void TabletNodeImpl::WriteTablet(const WriteTabletRequest* request,
             tablet_io->DecRef();
         }
     }
+    delete done_counter;
 }
 
 void TabletNodeImpl::GetSnapshot(const SnapshotRequest* request,

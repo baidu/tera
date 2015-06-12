@@ -103,9 +103,12 @@ bool Hdfs2::LoadSymbol() {
   const char* error = dlerror();
   if (error != NULL) {
     fprintf(stderr, "resolve symbol from libhdfs.so error: %s\n", error);
+    delete error;
+    delete dl;
     return false;
   }
-
+  delete error;
+  delete dl;
   return true;
 }
 

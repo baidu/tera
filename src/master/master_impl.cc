@@ -1435,7 +1435,6 @@ void MasterImpl::TabletNodeRecoveryCallback(std::string addr,
                                             QueryRequest* request,
                                             QueryResponse* response,
                                             bool failed, int error_code) {
-    delete request;
     TabletNodePtr node;
     if (!m_tabletnode_manager->FindTabletNode(addr, &node)) {
         LOG(WARNING) << "fail to query: server down, id: "
@@ -2347,6 +2346,7 @@ void MasterImpl::GetSnapshot(const GetSnapshotRequest* request,
             << ", all tables kTabletNodeOffLine";
         response->set_status(kTabletNodeOffLine);
         done->Run();
+        delete task;
         return;
     }
 }
@@ -4409,6 +4409,7 @@ void MasterImpl::DeleteObsoleteFiles() {
             }
         }
     }
+    delete env;
 }
 
 void MasterImpl::ProcessQueryCallbackForGc(QueryResponse* response) {
