@@ -605,7 +605,7 @@ bool Version::FindSplitKey(const Slice* smallest_user_key,
                 step_level = level;
             }
         }
-        if (split_size == -1) {
+        if (step_level == -1) {
             return false;
         }
         split_size += files_[step_level][now_pos[step_level]]->file_size;

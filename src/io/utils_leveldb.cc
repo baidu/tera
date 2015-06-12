@@ -211,7 +211,7 @@ bool MergeTablesWithLG(const std::string& table_1,
         delete env;
         return false;
     }
-    delete env
+    delete env;
     return ret;
 }
 

@@ -332,7 +332,7 @@ Status FlashEnv::NewRandomAccessFile(const std::string& fname,
                                                          fname, fsize);
     if (f == NULL || !f->isValid()) {
         *result = NULL;
-        delete f
+        delete f;
         return IOError(fname, errno);
     }
     *result = f;
