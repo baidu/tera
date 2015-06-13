@@ -109,6 +109,8 @@ public:
     DfsReadableFile(Dfs* fs, const std::string& fname)
         : fs_(fs), filename_(fname), file_(NULL),
           now_pos(-1) {
+        tera::AutoCounter ac(&dfs_open_hang_counter, "OpenFile", filename_.c_str());
+        dfs_open_counter.Inc();
         file_ = fs->OpenFile(filename_, RDONLY);
         // assert(hfile_ != NULL);
         if (file_ == NULL) {
@@ -119,6 +121,8 @@ public:
 
     virtual ~DfsReadableFile() {
         if (file_) {
+            tera::AutoCounter ac(&dfs_close_hang_counter, "CloseFile", filename_.c_str());
+            dfs_close_counter.Inc();
             file_->CloseFile();
         }
         delete file_;
@@ -132,7 +136,11 @@ public:
     virtual Status Read(size_t n, Slice* result, char* scratch) {
         now_pos = -1;
         Status s;
+        int64_t t = tera::get_micros();
+        tera::AutoCounter ac(&dfs_read_hang_counter, "Read", filename_.c_str());
         int32_t bytes_read = file_->Read(scratch, (int32_t)n);
+        dfs_read_delay_counter.Add(tera::get_micros() - t);
+        dfs_read_counter.Inc();
         *result = Slice(scratch, (bytes_read < 0) ? 0 : bytes_read);
         if (bytes_read < static_cast<int32_t>(n)) {
             if (feof()) {
@@ -147,7 +155,11 @@ public:
 
     virtual Status Read(uint64_t offset, size_t n, Slice* result, char* scratch) const {
         Status s;
+        int64_t t = tera::get_micros();
+        tera::AutoCounter ac(&dfs_read_hang_counter, "Read", filename_.c_str());
         int32_t bytes_read = file_->Pread(offset, scratch, n);
+        dfs_read_delay_counter.Add(tera::get_micros() - t);
+        dfs_read_counter.Inc();
         *result = Slice(scratch, (bytes_read < 0) ? 0 : bytes_read);
         if (bytes_read < 0) {
             s = IOError(filename_, errno);
@@ -157,12 +169,20 @@ public:
     }
 
     virtual Status Skip(uint64_t n) {
-        int64_t current = file_->Tell();
+        int64_t current = 0;
+        {
+            tera::AutoCounter ac(&dfs_tell_hang_counter, "Skip", filename_.c_str());
+            dfs_tell_counter.Inc();
+            current = file_->Tell();
+        }
         if (current < 0) {
             return IOError(filename_, errno);
         }
         // seek to new offset
         int64_t newoffset = current + n;
+        
+        tera::AutoCounter ac(&dfs_other_hang_counter, "Seek", filename_.c_str());
+        dfs_other_counter.Inc();
         int val = file_->Seek(newoffset);
         if (val < 0) {
             return IOError(filename_, errno);
@@ -173,6 +193,8 @@ public:
 private:
     // at the end of file ?
     bool feof() {
+        tera::AutoCounter ac(&dfs_tell_hang_counter, "feof", filename_.c_str());
+        dfs_tell_counter.Inc();
         if (file_ && file_->Tell() == fileSize()) {
             return true;
         }
@@ -180,6 +202,8 @@ private:
     }
     // file size
     int64_t fileSize() {
+        tera::AutoCounter ac(&dfs_info_hang_counter, "GetFileSize", filename_.c_str());
+        dfs_info_counter.Inc();
         uint64_t size = 0;
         fs_->GetFileSize(filename_, &size);
         return size;
@@ -196,6 +220,8 @@ public:
     DfsWritableFile(Dfs* fs, const std::string& fname)
         : fs_(fs), filename_(fname) , file_(NULL) {
         fs_->Delete(filename_);
+        tera::AutoCounter ac(&dfs_open_hang_counter, "OpenFile", filename_.c_str());
+        dfs_open_counter.Inc();
         file_ = fs_->OpenFile(filename_, WRONLY);
         if (file_ == NULL) {
             fprintf(stderr, "[env_dfs]: open file for write fail: %s\n", fname.c_str());
@@ -203,6 +229,8 @@ public:
     }
     virtual ~DfsWritableFile() {
         if (file_ != NULL) {
+            tera::AutoCounter ac(&dfs_close_hang_counter, "CloseFile", filename_.c_str());
+            dfs_close_counter.Inc();
             file_->CloseFile();
         }
         delete file_;
@@ -219,7 +247,13 @@ public:
     virtual Status Append(const Slice& data) {
         const char* src = data.data();
         size_t left = data.size();
+
+        int64_t s = tera::get_micros();
+        tera::AutoCounter ac(&dfs_write_hang_counter, "Write", filename_.c_str());
         int32_t ret = file_->Write(src, left);
+        dfs_write_delay_counter.Add(tera::get_micros() - s);
+        dfs_write_counter.Inc();
+
         if (ret != static_cast<int32_t>(left)) {
             return IOError(filename_, errno);
         }
@@ -228,6 +262,8 @@ public:
     }
 
     virtual Status Flush() {
+        //tera::AutoCounter ac(&dfs_flush_hang_counter, "Flush", filename_.c_str());
+        //dfs_flush_counter.Inc();
         // dfs flush efficiency is too low, close it
         //if (file_->Flush() != 0) {
         //    return IOError(filename_, errno);
@@ -236,7 +272,10 @@ public:
     }
 
     virtual Status Sync() {
+        tera::AutoCounter ac(&dfs_sync_hang_counter, "Sync", filename_.c_str());
+        dfs_sync_counter.Inc();
         Status s;
+        tera::Counter dfs_sync_counter;
         uint64_t n = EnvDfs()->NowMicros();
         if (file_->Sync() == -1) {
             fprintf(stderr, "hdfs sync fail: %s\n", filename_.c_str());
@@ -315,10 +354,14 @@ Status DfsEnv::NewWritableFile(const std::string& fname,
 // FileExists
 bool DfsEnv::FileExists(const std::string& fname)
 {
+    tera::AutoCounter ac(&dfs_exists_hang_counter, "Exists", fname.c_str());
+    dfs_exists_counter.Inc();
     return (0 == dfs_->Exists(fname));
 }
 
 Status DfsEnv::CopyFile(const std::string& from, const std::string& to) {
+    tera::AutoCounter ac(&dfs_other_hang_counter, "Copy", from.c_str());
+    dfs_other_counter.Inc();
     std::cerr << "HdfsEnv: " << from << " --> " << to << std::endl;
     if (from != to && dfs_->Copy(from, to) != 0) {
         return Status::IOError("HDFS Copy", from);
@@ -327,14 +370,21 @@ Status DfsEnv::CopyFile(const std::string& from, const std::string& to) {
 }
 
 
-Status DfsEnv::GetChildren(const std::string& path,
-        std::vector<std::string>* result)
+Status DfsEnv::GetChildren(const std::string& path, std::vector<std::string>* result)
 {
-    if (0 != dfs_->Exists(path)) {
-        fprintf(stderr, "GetChildren call with path not exists: %s\n",
-                path.data());
-        return Status::IOError("Path not exist", path);
-    } else if (0 != dfs_->ListDirectory(path, result)) {
+    {
+        tera::AutoCounter ac(&dfs_exists_hang_counter, "Exists", path.c_str());
+        dfs_exists_counter.Inc();
+        if (0 != dfs_->Exists(path)) {
+            fprintf(stderr, "GetChildren call with path not exists: %s\n",
+                    path.data());
+            return Status::IOError("Path not exist", path);
+        }
+    }
+
+    tera::AutoCounter ac(&dfs_list_hang_counter, "ListDirectory", path.c_str());
+    dfs_list_counter.Inc();
+    if (0 != dfs_->ListDirectory(path, result)) {
         abort();
     }
     return Status::OK();
@@ -372,6 +422,8 @@ bool DfsEnv::CheckDelete(const std::string& fname, std::vector<std::string>* fla
 
 Status DfsEnv::DeleteFile(const std::string& fname)
 {
+    tera::AutoCounter ac(&dfs_delete_hang_counter, "DeleteFile", fname.c_str());
+    dfs_delete_counter.Inc();
     if (dfs_->Delete(fname) == 0) {
         return Status::OK();
     }
@@ -379,7 +431,9 @@ Status DfsEnv::DeleteFile(const std::string& fname)
 };
 
 Status DfsEnv::CreateDir(const std::string& name)
-{
+{  
+    tera::AutoCounter ac(&dfs_other_hang_counter, "CreateDirectory", name.c_str());
+    dfs_other_counter.Inc();
     if (dfs_->CreateDirectory(name) == 0) {
         return Status::OK();
     }
@@ -388,6 +442,8 @@ Status DfsEnv::CreateDir(const std::string& name)
 
 Status DfsEnv::DeleteDir(const std::string& name)
 {
+    tera::AutoCounter ac(&dfs_delete_hang_counter, "DeleteDirectory", name.c_str());
+    dfs_delete_counter.Inc();
     if (dfs_->DeleteDirectory(name) == 0) {
         return Status::OK();
     }
@@ -396,12 +452,16 @@ Status DfsEnv::DeleteDir(const std::string& name)
 
 Status DfsEnv::ListDir(const std::string& name,
         std::vector<std::string>* result) {
+    tera::AutoCounter ac(&dfs_list_hang_counter, "ListDir", name.c_str());
+    dfs_list_counter.Inc();
     dfs_->ListDirectory(name, result);
     return Status::OK();
 }
 
 Status DfsEnv::GetFileSize(const std::string& fname, uint64_t* size)
 {
+    tera::AutoCounter ac(&dfs_info_hang_counter, "GetFileSize", fname.c_str());
+    dfs_info_counter.Inc();
     *size = 0L;
     if (0 != dfs_->GetFileSize(fname, size)) {
         return IOError(fname, errno);
@@ -414,6 +474,8 @@ Status DfsEnv::GetFileSize(const std::string& fname, uint64_t* size)
 Status DfsEnv::RenameFile(const std::string& src, const std::string& target)
 {
     DeleteFile(target);
+    tera::AutoCounter ac(&dfs_other_hang_counter, "RenameFile", src.c_str());
+    dfs_other_counter.Inc();
     if (dfs_->Rename(src, target) == 0) {
 
     }
