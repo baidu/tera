@@ -1089,7 +1089,8 @@ void MasterImpl::QueryTabletNode() {
         CreateStatTable();
         ErrorCode err;
         const std::string& tablename = FLAGS_tera_master_stat_table_name;
-        m_stat_table = new TableImpl(tablename,
+        TableOptions options;
+        m_stat_table = new TableImpl(tablename, options,
                                      FLAGS_tera_zk_root_path,
                                      FLAGS_tera_zk_addr_list,
                                      m_thread_pool.get());

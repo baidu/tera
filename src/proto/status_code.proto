@@ -97,6 +97,10 @@ enum StatusCode {
     kTableStatusEnable = 1000;
     kTableStatusDisable = 1001;
     kTableStatusDeleting = 1002;
+
+    // exclude sequential write
+    kSequenceTooSmall = 1100;
+    kSequenceTooLarge = 1101;
 }
 
 enum TabletStatus {

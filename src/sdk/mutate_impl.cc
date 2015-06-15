@@ -17,7 +17,8 @@ RowMutationImpl::RowMutationImpl(TableImpl* table, const std::string& row_key)
       _timeout_ms(0),
       _retry_times(0),
       _finish(false),
-      _finish_cond(&_finish_mutex) {
+      _finish_cond(&_finish_mutex),
+      _sequence(0) {
 }
 
 RowMutationImpl::~RowMutationImpl() {
@@ -358,6 +359,14 @@ void RowMutationImpl::Unref() {
     if (_refs == 0) {
         delete this;
     }
+}
+
+void RowMutationImpl::SetSequenceId(uint64_t sequence) {
+    _sequence = sequence;
+}
+
+uint64_t RowMutationImpl::SequenceId() {
+    return _sequence;
 }
 
 RowMutation::Mutation& RowMutationImpl::AddMutation() {
