@@ -54,6 +54,7 @@ bool DefaultCompactStrategy::Drop(const leveldb::Slice& tera_key, uint64_t n) {
         m_del_row_ts = m_del_col_ts = m_del_qual_ts = -1;
         m_version_num = 0;
         m_has_put = false;
+        // no break in switch: need to set multiple variables
         switch (type) {
             case leveldb::TKT_DEL:
                 m_del_row_ts = ts;
@@ -73,6 +74,7 @@ bool DefaultCompactStrategy::Drop(const leveldb::Slice& tera_key, uint64_t n) {
         m_del_col_ts = m_del_qual_ts = -1;
         m_version_num = 0;
         m_has_put = false;
+        // no break in switch: need to set multiple variables
         switch (type) {
             case leveldb::TKT_DEL_COLUMN:
                 m_del_col_ts = ts;
@@ -215,6 +217,7 @@ bool DefaultCompactStrategy::ScanDrop(const leveldb::Slice& tera_key, uint64_t n
         m_del_row_ts = m_del_col_ts = m_del_qual_ts = -1;
         m_has_put = false;
 
+        // no break in switch: need to set multiple variables
         switch (type) {
             case leveldb::TKT_DEL:
                 m_del_row_ts = ts;
@@ -235,6 +238,7 @@ bool DefaultCompactStrategy::ScanDrop(const leveldb::Slice& tera_key, uint64_t n
         m_version_num = 0;
         m_del_col_ts = m_del_qual_ts = -1;
         m_has_put = false;
+        // set both variables when type is leveldb::TKT_DEL_COLUMN
         switch (type) {
             case leveldb::TKT_DEL_COLUMN:
                 m_del_col_ts = ts;

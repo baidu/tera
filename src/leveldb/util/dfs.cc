@@ -27,7 +27,6 @@ Dfs* Dfs::NewDfs(const std::string& so_path, const std::string& conf) {
     err = dlerror();
     if (err != NULL) {
         fprintf(stderr, "Load NewDfs from %s fail: %s\n", so_path.c_str(), err);
-        delete err;
         return NULL;
     }
     return (*creator)(conf.c_str());

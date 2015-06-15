@@ -219,6 +219,7 @@ Status InMemoryEnv::NewWritableFile(const std::string& fname,
     InMemoryWritableFile* f = new InMemoryWritableFile(mem_env_, dfs_env_, fname);
     if (f == NULL || !f->isValid()) {
         *result = NULL;
+        delete f;
         return IOError(fname, errno);
     }
     *result = f;

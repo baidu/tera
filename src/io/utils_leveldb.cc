@@ -112,12 +112,8 @@ bool MergeTables(const std::string& mf, const std::string& mf1,
     }
     leveldb::Comparator* cmp = new io::TimekeyComparator(leveldb::BytewiseComparator());
     if (!leveldb::MergeBoth(env, cmp, mf, mf1, mf2, mf2_file_maps)) {
-        delete env;
-        delete cmp;
         return false;
     }
-    delete env;
-    delete cmp;
     return true;
 }
 
@@ -200,7 +196,6 @@ bool MergeTablesWithLG(const std::string& table_1,
         }
     }
     if (!ret) {
-        delete env;
         return ret;
     }
     std::string path_prefix = FLAGS_tera_tabletnode_path_prefix;
@@ -208,10 +203,8 @@ bool MergeTablesWithLG(const std::string& table_1,
             path_prefix + table_1, path_prefix + merged_table)) {
         LOG(ERROR) << "fail to rename from " << table_1
             << " to " << merged_table;
-        delete env;
         return false;
     }
-    delete env;
     return ret;
 }
 

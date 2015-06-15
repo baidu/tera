@@ -1,3 +1,4 @@
+
 // Copyright (c) 2015, Baidu.com, Inc. All Rights Reserved
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
@@ -2346,7 +2347,6 @@ void MasterImpl::GetSnapshot(const GetSnapshotRequest* request,
             << ", all tables kTabletNodeOffLine";
         response->set_status(kTabletNodeOffLine);
         done->Run();
-        delete task;
         return;
     }
 }
@@ -4409,7 +4409,6 @@ void MasterImpl::DeleteObsoleteFiles() {
             }
         }
     }
-    delete env;
 }
 
 void MasterImpl::ProcessQueryCallbackForGc(QueryResponse* response) {
