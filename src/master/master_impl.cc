@@ -1440,6 +1440,7 @@ void MasterImpl::TabletNodeRecoveryCallback(std::string addr,
     if (!m_tabletnode_manager->FindTabletNode(addr, &node)) {
         LOG(WARNING) << "fail to query: server down, id: "
             << request->sequence_id() << ", server: " << addr;
+        delete request;
         delete response;
         return;
     }
@@ -1464,6 +1465,7 @@ void MasterImpl::TabletNodeRecoveryCallback(std::string addr,
                 boost::bind(&MasterImpl::RetryQueryNewTabletNode, this, addr);
             m_thread_pool->DelayTask(FLAGS_tera_master_collect_info_retry_period, closure);
         }
+        delete request;
         delete response;
         return;
     }
@@ -1533,6 +1535,7 @@ void MasterImpl::TabletNodeRecoveryCallback(std::string addr,
     NodeState old_state;
     node->SetState(kReady, &old_state);
 
+    delete request;
     delete response;
 
     // If all tabletnodes restart in one zk callback,
