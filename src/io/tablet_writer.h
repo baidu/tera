@@ -64,9 +64,10 @@ private:
     void DoWork();
     bool SwapActiveBuffer(bool force);
     /// 任务完成, 执行回调
-    bool FinishTask(const WriteTask& task, StatusCode status);
+    void FinishTaskBatch(WriteTaskBuffer* task_buffer, StatusCode status);
+    void FinishTask(const WriteTask& task, StatusCode status);
     /// 将buffer刷到磁盘(leveldb), 并sync
-    void FlushToDiskBatch(WriteTaskBuffer* task_buffer);
+    StatusCode FlushToDiskBatch(WriteTaskBuffer* task_buffer);
 
 private:
     TabletIO* m_tablet;
@@ -86,6 +87,8 @@ private:
     bool m_active_buffer_instant;      ///< active_buffer包含instant请求
     uint64_t m_active_buffer_size;      ///< active_buffer的数据大小
     bool m_tablet_busy;                 ///< tablet处于忙碌状态
+
+    std::map<uint64_t, uint64_t> m_seq_write_session_sequence;
 };
 
 } // namespace tabletnode
