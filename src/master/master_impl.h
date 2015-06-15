@@ -5,13 +5,13 @@
 #ifndef TERA_MASTER_MASTER_IMPL_H_
 #define TERA_MASTER_MASTER_IMPL_H_
 
-#include <stdint.h>
 #include <semaphore.h>
+#include <stdint.h>
 #include <string>
 #include <vector>
 
-#include "common/event.h"
 #include "common/base/scoped_ptr.h"
+#include "common/event.h"
 #include "common/mutex.h"
 #include "common/thread_pool.h"
 #include "gflags/gflags.h"
@@ -29,18 +29,18 @@ namespace tera {
 
 class LoadTabletRequest;
 class LoadTabletResponse;
-class UnloadTabletRequest;
-class UnloadTabletResponse;
-class SplitTabletRequest;
-class SplitTabletResponse;
 class MergeTabletRequest;
 class MergeTabletResponse;
 class QueryRequest;
 class QueryResponse;
-class WriteTabletRequest;
-class WriteTabletResponse;
 class ScanTabletRequest;
 class ScanTabletResponse;
+class SplitTabletRequest;
+class SplitTabletResponse;
+class UnloadTabletRequest;
+class UnloadTabletResponse;
+class WriteTabletRequest;
+class WriteTabletResponse;
 
 namespace master {
 
@@ -60,6 +60,21 @@ public:
         kIsRunning = kMasterIsRunning,
         kOnRestore = kMasterOnRestore,
         kOnWait = kMasterOnWait
+    };
+
+    // great number comes great priority
+    enum ConcurrencyTaskPriority {
+        // unload
+        kTaskUnloadForDisable = 5,
+        kTaskUnload = 10,
+        kTaskUnloadForMerge = 15,
+        kTaskUnloadForBalance = 20,
+
+        // load
+        kTaskLoad = 10,
+
+        // split
+        kTaskSplit = 10
     };
 
     MasterImpl();
@@ -126,7 +141,6 @@ public:
     void DisableQueryTabletNodeTimer();
 
     bool GetMetaTabletAddr(std::string* addr);
-    void TryLoadTablet(TabletPtr tablet, std::string addr = "");
 
 private:
     typedef Closure<void, SnapshotRequest*, SnapshotResponse*, bool, int> SnapshotClosure;
@@ -198,9 +212,11 @@ private:
 
     void RetryLoadTablet(TabletPtr tablet, int32_t retry_times);
     void RetryUnloadTablet(TabletPtr tablet, int32_t retry_times);
-    bool TrySplitTablet(TabletPtr tablet);
-    bool TryMergeTablet(TabletPtr tablet);
-    void TryMoveTablet(TabletPtr tablet, const std::string& server_addr = "");
+    void TryLoadTablet(TabletPtr tablet, int32_t priority, std::string addr = "");
+    bool TrySplitTablet(TabletPtr tablet, int32_t priority);
+    void TryUnloadTablet(TabletPtr tablet, UnloadClosure* done, int32_t priority);
+    bool TryMergeTablet(TabletPtr tablet, int32_t priority);
+    void TryMoveTablet(TabletPtr tablet, int32_t priority, const std::string& server_addr = "");
 
     void TryReleaseCache(bool enbaled_debug = false);
     void ReleaseCacheWrapper();
@@ -298,7 +314,7 @@ private:
                              SplitTabletResponse* response, bool failed,
                              int error_code);
 
-    void MergeTabletAsync(TabletPtr tablet_p1, TabletPtr tablet_p2);
+    void MergeTabletAsync(TabletPtr tablet_p1, TabletPtr tablet_p2, int32_t priority);
     void MergeTabletAsyncPhase2(TabletPtr tablet_p1, TabletPtr tablet_p2);
     void MergeTabletUnloadCallback(TabletPtr tablet, TabletPtr tablet2, Mutex* mutex,
                                            UnloadTabletRequest* request,
@@ -351,9 +367,10 @@ private:
                                     WriteTabletResponse* response,
                                     bool failed, int error_code);
     void UpdateMetaForLoadCallback(TabletPtr tablet, int32_t retry_times,
-                                    WriteTabletRequest* request,
-                                    WriteTabletResponse* response,
-                                    bool failed, int error_code);
+                                   int32_t priority,
+                                   WriteTabletRequest* request,
+                                   WriteTabletResponse* response,
+                                   bool failed, int error_code);
     void DeleteTableRecordCallback(TablePtr table, int32_t retry_times,
                                    WriteTabletRequest* request,
                                    WriteTabletResponse* response,

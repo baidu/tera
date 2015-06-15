@@ -53,6 +53,8 @@ message TabletNodeInfo {
     optional uint32 scan_pending = 43;
 
     optional float cpu_usage = 44;
+
+    optional uint32 tablet_unloading = 45;
 }
 
 message LgInheritedLiveFiles {

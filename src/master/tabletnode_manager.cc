@@ -11,6 +11,7 @@
 DECLARE_string(tera_master_meta_table_name);
 DECLARE_int32(tera_master_max_load_concurrency);
 DECLARE_int32(tera_master_max_split_concurrency);
+DECLARE_int32(tera_master_max_unload_concurrency);
 DECLARE_int32(tera_master_load_interval);
 DECLARE_double(tera_master_load_balance_size_overload_ratio);
 DECLARE_bool(tera_master_meta_isolate_enabled);
@@ -20,16 +21,20 @@ namespace master {
 
 TabletNode::TabletNode() : m_state(kOffLine),
     m_report_status(kTabletNodeInit), m_data_size(0), m_load(0),
-    m_update_time(0), m_query_fail_count(0), m_onload_count(0),
-    m_onsplit_count(0), m_plan_move_in_count(0) {
+    m_update_time(0), m_query_fail_count(0), m_plan_move_in_count(0),
+    m_load_spatula(FLAGS_tera_master_max_load_concurrency),
+    m_unload_spatula(FLAGS_tera_master_max_unload_concurrency),
+    m_split_spatula(FLAGS_tera_master_max_split_concurrency) {
     m_info.set_addr("");
 }
 
 TabletNode::TabletNode(const std::string& addr, const std::string& uuid)
     : m_addr(addr), m_uuid(uuid), m_state(kOffLine),
       m_report_status(kTabletNodeInit), m_data_size(0), m_load(0),
-      m_update_time(0), m_query_fail_count(0), m_onload_count(0),
-      m_onsplit_count(0), m_plan_move_in_count(0) {
+      m_update_time(0), m_query_fail_count(0), m_plan_move_in_count(0),
+      m_load_spatula(FLAGS_tera_master_max_load_concurrency),
+      m_unload_spatula(FLAGS_tera_master_max_unload_concurrency),
+      m_split_spatula(FLAGS_tera_master_max_split_concurrency) {
     m_info.set_addr(addr);
 }
 
@@ -98,7 +103,17 @@ bool TabletNode::MayLoadNow() {
     return false;
 }
 
-bool TabletNode::TryLoad(TabletPtr tablet) {
+void TabletNode::DeleteTablet(const TabletPtr tablet) {
+    MutexLock lock(&m_mutex);
+    if (m_table_size.find(tablet->GetTableName()) != m_table_size.end()) {
+        m_data_size -= tablet->GetDataSize();
+        m_table_size[tablet->GetTableName()] -= tablet->GetDataSize();
+    } else {
+        LOG(ERROR) << "invalid tablet: " << tablet;
+    }
+}
+
+void TabletNode::AddTablet(const TabletPtr tablet) {
     MutexLock lock(&m_mutex);
     m_data_size += tablet->GetDataSize();
     if (m_table_size.find(tablet->GetTableName()) != m_table_size.end()) {
@@ -106,82 +121,13 @@ bool TabletNode::TryLoad(TabletPtr tablet) {
     } else {
         m_table_size[tablet->GetTableName()] = tablet->GetDataSize();
     }
-    //VLOG(5) << "load on: " << m_addr << ", size: " << tablet->GetDataSize()
-    //      << ", total size: " << m_data_size;
-    if (m_wait_load_list.empty()
-        && m_onload_count < static_cast<uint32_t>(FLAGS_tera_master_max_load_concurrency)) {
-        BeginLoad();
-        return true;
-    }
-    m_wait_load_list.push_back(tablet);
-    return false;
-}
 
-void TabletNode::BeginLoad() {
-    ++m_onload_count;
     m_recent_load_time_list.push_back(get_micros());
     uint32_t list_size = m_recent_load_time_list.size();
     if (list_size > static_cast<uint32_t>(FLAGS_tera_master_max_load_concurrency)) {
         CHECK_EQ(list_size - 1, static_cast<uint32_t>(FLAGS_tera_master_max_load_concurrency));
         m_recent_load_time_list.pop_front();
     }
-}
-
-bool TabletNode::FinishLoad(TabletPtr tablet) {
-    MutexLock lock(&m_mutex);
-    assert(m_onload_count > 0);
-    --m_onload_count;
-    return true;
-}
-
-bool TabletNode::LoadNextWaitTablet(TabletPtr* tablet) {
-    MutexLock lock(&m_mutex);
-    if (m_onload_count >= static_cast<uint32_t>(FLAGS_tera_master_max_load_concurrency)) {
-        return false;
-    }
-    std::list<TabletPtr>::iterator it = m_wait_load_list.begin();
-    if (it == m_wait_load_list.end()) {
-        return false;
-    }
-    *tablet = *it;
-    m_wait_load_list.pop_front();
-    BeginLoad();
-    return true;
-}
-
-bool TabletNode::TrySplit(TabletPtr tablet) {
-    MutexLock lock(&m_mutex);
-    m_data_size -= tablet->GetDataSize();
-//    VLOG(5) << "split on: " << m_addr << ", size: " << tablet->GetDataSize()
-//        << ", total size: " << m_data_size;
-    if (m_wait_split_list.empty()
-        && m_onsplit_count < static_cast<uint32_t>(FLAGS_tera_master_max_split_concurrency)) {
-        ++m_onsplit_count;
-        return true;
-    }
-    m_wait_split_list.push_back(tablet);
-    return false;
-}
-
-bool TabletNode::FinishSplit(TabletPtr tablet) {
-    MutexLock lock(&m_mutex);
-    --m_onsplit_count;
-    return true;
-}
-
-bool TabletNode::SplitNextWaitTablet(TabletPtr* tablet) {
-    MutexLock lock(&m_mutex);
-    if (m_onsplit_count >= static_cast<uint32_t>(FLAGS_tera_master_max_split_concurrency)) {
-        return false;
-    }
-    std::list<TabletPtr>::iterator it = m_wait_split_list.begin();
-    if (it == m_wait_split_list.end()) {
-        return false;
-    }
-    *tablet = *it;
-    m_wait_split_list.pop_front();
-    ++m_onsplit_count;
-    return true;
 }
 
 NodeState TabletNode::GetState() {
@@ -303,8 +249,9 @@ void TabletNodeManager::UpdateTabletNode(const std::string& addr,
     node->m_table_size = state.m_table_size;
 
     node->m_info.set_status_m(NodeStateToString(node->m_state));
-    node->m_info.set_tablet_onload(node->m_onload_count);
-    node->m_info.set_tablet_onsplit(node->m_onsplit_count);
+    node->m_info.set_tablet_onload(node->m_load_spatula.GetRunningCount());
+    node->m_info.set_tablet_unloading(node->m_unload_spatula.GetRunningCount());
+    node->m_info.set_tablet_onsplit(node->m_split_spatula.GetRunningCount());
     VLOG(15) << "update tabletnode : " << addr;
 }
 
