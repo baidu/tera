@@ -1496,6 +1496,7 @@ void MasterImpl::TabletNodeRecoveryCallback(std::string addr,
     state.m_info.set_addr(addr);
     state.m_load = response->tabletnode_info().load();
     state.m_data_size = 0;
+    state.m_qps = 0;
     state.m_update_time = update_time.tv_sec * 1000 + update_time.tv_usec / 1000;
     // calculate data_size of tabletnode
     // only count Ready/OnLoad tablet
@@ -2590,6 +2591,7 @@ void MasterImpl::QueryTabletNodeCallback(std::string addr, QueryRequest* request
         state.m_info.set_addr(addr);
         state.m_load = response->tabletnode_info().load();
         state.m_data_size = 0;
+        state.m_qps = 0;
         state.m_update_time = update_time.tv_sec * 1000 + update_time.tv_usec / 1000;
         // calculate data_size of tabletnode
         // count both Ready/OnLoad and OffLine tablet
@@ -2599,13 +2601,17 @@ void MasterImpl::QueryTabletNodeCallback(std::string addr, QueryRequest* request
         for (it = tablet_list.begin(); it != tablet_list.end(); ++it) {
             TabletPtr tablet = *it;
             TabletStatus tablet_status = tablet->GetStatus();
+            uint64_t average_qps = tablet->GetAverageCounter().read_rows();
             if (tablet_status == kTableReady || tablet_status == kTableOnLoad
                 || tablet_status == kTableOffLine) {
                 state.m_data_size += tablet->GetDataSize();
+                state.m_qps += average_qps;
                 if (state.m_table_size.find(tablet->GetTableName()) != state.m_table_size.end()) {
                     state.m_table_size[tablet->GetTableName()] += tablet->GetDataSize();
+                    state.m_table_qps[tablet->GetTableName()] += average_qps;
                 } else {
                     state.m_table_size[tablet->GetTableName()] = tablet->GetDataSize();
+                    state.m_table_qps[tablet->GetTableName()] = average_qps;
                 }
             }
         }
@@ -2673,6 +2679,7 @@ void MasterImpl::CollectTabletInfoCallback(std::string addr,
         state.m_info.set_addr(addr);
         state.m_load = response->tabletnode_info().load();
         state.m_data_size = 0;
+        state.m_qps = 0;
         state.m_update_time = update_time.tv_sec * 1000 + update_time.tv_usec / 1000;
         // calculate data_size of tabletnode
         for (uint32_t i = 0; i < meta_num; i++) {

@@ -5,17 +5,19 @@
 #ifndef TERA_MASTER_TABLET_MANAGER_H_
 #define TERA_MASTER_TABLET_MANAGER_H_
 
-#include <stdint.h>
+#include <limits>
+#include <list>
 #include <map>
 #include <set>
+#include <stdint.h>
 #include <string>
 #include <vector>
-#include <limits>
+
+#include <boost/shared_ptr.hpp>
 
 #include "common/base/closure.h"
 #include "common/mutex.h"
 #include "common/thread_pool.h"
-#include "sofa/pbrpc/smart_ptr/shared_ptr.hpp"
 
 #include "proto/table_meta.pb.h"
 #include "proto/tabletnode_rpc.pb.h"
@@ -47,7 +49,7 @@ namespace master {
 
 class MasterImpl;
 class Table;
-typedef sofa::pbrpc::shared_ptr<Table> TablePtr;
+typedef boost::shared_ptr<Table> TablePtr;
 
 class Tablet {
     friend class TabletManager;
@@ -70,6 +72,7 @@ public:
     const KeyRange& GetKeyRange();
     const TableSchema& GetSchema();
     const TabletCounter& GetCounter();
+    const TabletCounter& GetAverageCounter();
     TabletStatus GetStatus();
     CompactStatus GetCompactStatus();
     std::string GetServerId();
@@ -122,13 +125,14 @@ private:
 
     mutable Mutex m_mutex;
     TabletMeta m_meta;
-    TabletCounter m_counter;
     TablePtr m_table;
     std::string m_server_id;
     std::string m_expect_server_addr;
+    std::list<TabletCounter> m_counter_list;
+    TabletCounter m_average_counter;
 };
 
-typedef class sofa::pbrpc::shared_ptr<Tablet> TabletPtr;
+typedef class boost::shared_ptr<Tablet> TabletPtr;
 std::ostream& operator << (std::ostream& o, const TabletPtr& tablet);
 std::ostream& operator << (std::ostream& o, const TablePtr& table);
 

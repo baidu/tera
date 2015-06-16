@@ -10,8 +10,10 @@
 namespace tera {
 namespace master {
 
-WorkloadScheduler::WorkloadScheduler() {
-    LOG(INFO) << "workload schduling is activated";
+WorkloadScheduler::WorkloadScheduler(WorkloadComparator* comparator)
+    : m_comparator(comparator) {
+    LOG(INFO) << "workload schduler [" << comparator->Name()
+        << "] is activated";
 }
 
 WorkloadScheduler::~WorkloadScheduler() {}
@@ -23,17 +25,16 @@ bool WorkloadScheduler::FindBestNode(const std::vector<TabletNodePtr>& node_list
     }
 
     TabletNodePtr null_ptr;
-    TabletNodePtr best_one;
+    TabletNodePtr best_one = node_list[0];
 
-    for (size_t i = 0; i < node_list.size(); ++i) {
+    for (size_t i = 1; i < node_list.size(); ++i) {
         TabletNodePtr cur_one = node_list[i];
 //        VLOG(5) << "node: " << cur_one->m_addr << ", load: "
 //            << cur_one->m_data_size;
-        if (best_one == null_ptr) {
+        int r = m_comparator->Compare(best_one, cur_one);
+        if (r > 0) {
             best_one = cur_one;
-        } else if (best_one->GetSize() > cur_one->GetSize()) {
-            best_one = cur_one;
-        } else if (best_one->GetSize() < cur_one->GetSize()) {
+        } else if (r < 0) {
             // do nothing
         } else if (best_one->GetAddr() <= m_last_choose_node
             && cur_one->GetAddr() > m_last_choose_node) {
@@ -48,117 +49,33 @@ bool WorkloadScheduler::FindBestNode(const std::vector<TabletNodePtr>& node_list
     return true;
 }
 
-bool WorkLoadLess(TabletNodePtr i, TabletNodePtr j) {
-    return (i->GetSize() < j->GetSize());
-}
-
-bool WorkLoadGreater(TabletNodePtr i, TabletNodePtr j) {
-    return (i->GetSize() > j->GetSize());
-}
+class WorkloadLess {
+public:
+    bool operator() (const TabletNodePtr& a, const TabletNodePtr& b) {
+        return m_comparator->Compare(a, b) < 0;
+    }
+    WorkloadLess(WorkloadComparator* comparator) : m_comparator(comparator) {}
+private:
+    WorkloadComparator* m_comparator;
+};
 
 void WorkloadScheduler::AscendingSort(std::vector<TabletNodePtr>& node_list) {
-    std::sort(node_list.begin(), node_list.end(), WorkLoadLess);
-}
-
-void WorkloadScheduler::DescendingSort(std::vector<TabletNodePtr>& node_list) {
-    std::sort(node_list.begin(), node_list.end(), WorkLoadGreater);
-}
-
-bool WorkloadScheduler::FindBestNode(const std::vector<TabletNodePtr>& node_list,
-                                     const std::string& table_name,
-                                     std::string* node_addr) {
-    if (table_name.empty()) {
-        return FindBestNode(node_list, node_addr);
-    }
-
-    if (node_list.size() == 0) {
-        return false;
-    }
-
-    TabletNodePtr null_ptr;
-    TabletNodePtr best_one;
-    uint64_t best_node_table_size = 0;
-
-    for (size_t i = 0; i < node_list.size(); ++i) {
-        TabletNodePtr cur_one = node_list[i];
-        uint64_t cur_node_table_size = cur_one->GetTableSize(table_name);
-
-        if (best_one == null_ptr) {
-            best_one = cur_one;
-            best_node_table_size = cur_node_table_size;
-        } else if (best_node_table_size > cur_node_table_size) {
-            best_one = cur_one;
-            best_node_table_size = cur_node_table_size;
-        } else if (best_node_table_size < cur_node_table_size) {
-            // do nothing
-        } else if (best_one->GetSize() > cur_one->GetSize()) {
-            best_one = cur_one;
-            best_node_table_size = cur_node_table_size;
-        } else if (best_one->GetSize() < cur_one->GetSize()) {
-            // do nothing
-        } else if (best_one->GetAddr() <= m_last_choose_node
-            && cur_one->GetAddr() > m_last_choose_node) {
-            // round-robin
-            best_one = cur_one;
-            best_node_table_size = cur_node_table_size;
-        }
-    }
-//    VLOG(5) << "choose node: " << best_one->m_addr << ", load: "
-//        << best_one->m_data_size;
-    m_last_choose_node = best_one->GetAddr();
-    *node_addr = best_one->GetAddr();
-    return true;
-}
-
-struct TableSizeLess {
-    bool operator() (const TabletNodePtr& i, const TabletNodePtr& j) {
-        uint64_t i_table_size = i->GetTableSize(table_name);
-        uint64_t j_table_size = j->GetTableSize(table_name);
-        uint64_t i_size = i->GetSize();
-        uint64_t j_size = j->GetSize();
-
-        if (i_table_size < j_table_size) {
-            return true;
-        } else if (i_table_size > j_table_size) {
-            return false;
-        } else {
-            return (i_size < j_size);
-        }
-    }
-
-    TableSizeLess(const std::string& tn) : table_name(tn) {}
-    std::string table_name;
-};
-
-struct TableSizeGreater {
-    bool operator() (const TabletNodePtr& i, const TabletNodePtr& j) {
-        uint64_t i_table_size = i->GetTableSize(table_name);
-        uint64_t j_table_size = j->GetTableSize(table_name);
-        uint64_t i_size = i->GetSize();
-        uint64_t j_size = j->GetSize();
-
-        if (i_table_size > j_table_size) {
-            return true;
-        } else if (i_table_size < j_table_size) {
-            return false;
-        } else {
-            return (i_size > j_size);
-        }
-    }
-
-    TableSizeGreater(const std::string& tn) : table_name(tn) {}
-    std::string table_name;
-};
-
-void WorkloadScheduler::AscendingSort(const std::string& table_name,
-                                      std::vector<TabletNodePtr>& node_list) {
-    TableSizeLess less(table_name);
+    WorkloadLess less(m_comparator);
     std::sort(node_list.begin(), node_list.end(), less);
 }
 
-void WorkloadScheduler::DescendingSort(const std::string& table_name,
-                                       std::vector<TabletNodePtr>& node_list) {
-    TableSizeGreater greater(table_name);
+class WorkloadGreater {
+public:
+    bool operator() (const TabletNodePtr& a, const TabletNodePtr& b) {
+        return m_comparator->Compare(a, b) > 0;
+    }
+    WorkloadGreater(WorkloadComparator* comparator) : m_comparator(comparator) {}
+private:
+    WorkloadComparator* m_comparator;
+};
+
+void WorkloadScheduler::DescendingSort(std::vector<TabletNodePtr>& node_list) {
+    WorkloadGreater greater(m_comparator);
     std::sort(node_list.begin(), node_list.end(), greater);
 }
 

@@ -33,6 +33,7 @@ DECLARE_string(tera_master_meta_table_name);
 DECLARE_bool(tera_zk_enabled);
 
 DECLARE_int32(tera_master_impl_retry_times);
+DECLARE_int32(tera_master_load_balance_qps_summarize_query_times);
 DECLARE_int32(tera_tabletnode_connect_retry_period);
 
 DECLARE_bool(tera_delete_obsolete_tabledir_enabled);
@@ -118,7 +119,17 @@ const TableSchema& Tablet::GetSchema() {
 }
 
 const TabletCounter& Tablet::GetCounter() {
-    return m_counter;
+    MutexLock lock(&m_mutex);
+    if (m_counter_list.size() > 0) {
+        return m_counter_list.back();
+    } else {
+        return m_average_counter;
+    }
+}
+
+const TabletCounter& Tablet::GetAverageCounter() {
+    MutexLock lock(&m_mutex);
+    return m_average_counter;
 }
 
 TabletStatus Tablet::GetStatus() {
@@ -142,7 +153,11 @@ TablePtr Tablet::GetTable() {
 
 bool Tablet::IsBusy() {
     MutexLock lock(&m_mutex);
-    return m_counter.is_on_busy();
+    if (m_counter_list.size() > 0) {
+        return m_counter_list.back().is_on_busy();
+    } else {
+        return false;
+    }
 }
 
 std::string Tablet::DebugString() {
@@ -152,7 +167,59 @@ std::string Tablet::DebugString() {
 
 void Tablet::SetCounter(const TabletCounter& counter) {
     MutexLock lock(&m_mutex);
-    m_counter = counter;
+
+    int32_t m = m_counter_list.size();
+    uint32_t low_read_cell = m_average_counter.low_read_cell() * m
+        + counter.low_read_cell();
+    uint32_t scan_rows = m_average_counter.scan_rows() * m
+        + counter.scan_rows();
+    uint32_t scan_kvs = m_average_counter.scan_kvs() * m
+        + counter.scan_kvs();
+    uint32_t scan_size = m_average_counter.scan_size() * m
+        + counter.scan_size();
+    uint32_t read_rows = m_average_counter.read_rows() * m
+        + counter.read_rows();
+    uint32_t read_kvs = m_average_counter.read_kvs() * m
+        + counter.read_kvs();
+    uint32_t read_size = m_average_counter.read_size() * m
+        + counter.read_size();
+    uint32_t write_rows = m_average_counter.write_rows() * m
+         + counter.write_rows();
+    uint32_t write_kvs = m_average_counter.write_kvs() * m
+        + counter.write_kvs();
+    uint32_t write_size = m_average_counter.write_size() * m
+        + counter.write_size();
+
+    const uint64_t n = FLAGS_tera_master_load_balance_qps_summarize_query_times;
+    if (m_counter_list.size() >= n) {
+        CHECK_EQ(m_counter_list.size(), n);
+        TabletCounter& earliest_counter = m_counter_list.front();
+        low_read_cell -= earliest_counter.low_read_cell();
+        scan_rows -= earliest_counter.scan_rows();
+        scan_kvs -= earliest_counter.scan_kvs();
+        scan_size -= earliest_counter.scan_size();
+        read_rows -= earliest_counter.read_rows();
+        read_kvs -= earliest_counter.read_kvs();
+        read_size -= earliest_counter.read_size();
+        write_rows -= earliest_counter.write_rows();
+        write_kvs -= earliest_counter.write_kvs();
+        write_size -= earliest_counter.write_size();
+        m_counter_list.pop_front();
+    }
+    m_counter_list.push_back(counter);
+
+    m = m_counter_list.size();
+    m_average_counter.set_low_read_cell(low_read_cell / m);
+    m_average_counter.set_scan_rows(scan_rows / m);
+    m_average_counter.set_scan_kvs(scan_kvs / m);
+    m_average_counter.set_scan_size(scan_size / m);
+    m_average_counter.set_read_rows(read_rows / m);
+    m_average_counter.set_read_kvs(read_kvs / m);
+    m_average_counter.set_read_size(read_size / m);
+    m_average_counter.set_write_rows(write_rows / m);
+    m_average_counter.set_write_kvs(write_kvs / m);
+    m_average_counter.set_write_size(write_size / m);
+    m_average_counter.set_is_on_busy(counter.is_on_busy());
 }
 
 void Tablet::SetSize(int64_t table_size) {

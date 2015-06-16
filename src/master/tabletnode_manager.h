@@ -10,7 +10,7 @@
 #include <string>
 #include <vector>
 
-#include <sofa/pbrpc/smart_ptr/shared_ptr.hpp>
+#include <boost/shared_ptr.hpp>
 
 #include "common/mutex.h"
 #include "common/thread_pool.h"
@@ -40,9 +40,11 @@ struct TabletNode {
     TabletNodeStatus m_report_status;
     TabletNodeInfo m_info;
     uint64_t m_data_size;
+    uint64_t m_qps;
     uint64_t m_load;
     uint64_t m_update_time;
     std::map<std::string, uint64_t> m_table_size;
+    std::map<std::string, uint64_t> m_table_qps;
 
     uint32_t m_query_fail_count;
     uint32_t m_onload_count;
@@ -95,7 +97,7 @@ private:
     TabletNode& operator=(const TabletNode& t);
 };
 
-typedef sofa::pbrpc::shared_ptr<TabletNode> TabletNodePtr;
+typedef boost::shared_ptr<TabletNode> TabletNodePtr;
 
 class Scheduler;
 class MasterImpl;
