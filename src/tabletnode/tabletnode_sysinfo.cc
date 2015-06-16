@@ -53,6 +53,7 @@ extern tera::Counter dfs_read_counter;
 extern tera::Counter dfs_write_counter;
 extern tera::Counter dfs_read_delay_counter;
 extern tera::Counter dfs_write_delay_counter;
+extern tera::Counter dfs_sync_delay_counter;
 extern tera::Counter dfs_sync_counter;
 extern tera::Counter dfs_flush_counter;
 extern tera::Counter dfs_list_counter;
@@ -509,6 +510,9 @@ void TabletNodeSysInfo::DumpLog() {
     double wdelay = leveldb::dfs_write_counter.Get() ?
         leveldb::dfs_write_delay_counter.Clear()/1000/leveldb::dfs_write_counter.Get()
         : 0;
+    double sdelay = leveldb::dfs_sync_counter.Get() ?
+        leveldb::dfs_sync_delay_counter.Clear()/1000/leveldb::dfs_sync_counter.Get()
+        : 0;
 
     LOG(INFO) << "[Dfs] read " << leveldb::dfs_read_counter.Clear() << " "
         << leveldb::dfs_read_hang_counter.Get() << " "
@@ -518,6 +522,7 @@ void TabletNodeSysInfo::DumpLog() {
         << "wdelay " << wdelay << " "
         << "sync " << leveldb::dfs_sync_counter.Clear() << " "
         << leveldb::dfs_sync_hang_counter.Get() << " "
+        << "sdelay " << sdelay << " "
         << "flush " << leveldb::dfs_flush_counter.Clear() << " "
         << leveldb::dfs_flush_hang_counter.Get() << " "
         << "list " << leveldb::dfs_list_counter.Clear() << " "
