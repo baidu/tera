@@ -61,15 +61,15 @@ bool TabletNodeEntry::StartServer() {
     m_tabletnode_impl.reset(new TabletNodeImpl(tabletnode_info));
     m_remote_tabletnode = new RemoteTabletNode(m_tabletnode_impl.get());
 
-    if (!m_tabletnode_impl->Init()) {
-        LOG(ERROR) << "fail to init tabletnode_impl";
-        return false;
-    }
-
     // 注册给rpcserver, rpcserver会负责delete
     m_rpc_server->RegisterService(m_remote_tabletnode);
     if (!m_rpc_server->Start(tabletnode_addr.ToString())) {
         LOG(ERROR) << "start RPC server error";
+        return false;
+    }
+
+    if (!m_tabletnode_impl->Init()) { // register on ZK
+        LOG(ERROR) << "fail to init tabletnode_impl";
         return false;
     }
 
