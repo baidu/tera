@@ -76,7 +76,6 @@ bool Hdfs2::LoadSymbol() {
     fprintf(stderr, "resolve symbol from libhdfs.so error: %s\n", error);
     return false;
   }
-
   return true;
 }
 

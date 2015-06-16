@@ -956,7 +956,7 @@ uint64_t DBTable::GetScopeSize(const std::string& start_key,
 }
 
 bool DBTable::MinorCompact() {
-    bool ok = false;
+    bool ok = true;
     std::set<uint32_t>::iterator it = options_.exist_lg_list->begin();
     for (; it != options_.exist_lg_list->end(); ++it) {
         bool ret = lg_list_[*it]->MinorCompact();

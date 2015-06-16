@@ -1,3 +1,4 @@
+
 // Copyright (c) 2015, Baidu.com, Inc. All Rights Reserved
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
@@ -1435,11 +1436,11 @@ void MasterImpl::TabletNodeRecoveryCallback(std::string addr,
                                             QueryRequest* request,
                                             QueryResponse* response,
                                             bool failed, int error_code) {
-    delete request;
     TabletNodePtr node;
     if (!m_tabletnode_manager->FindTabletNode(addr, &node)) {
         LOG(WARNING) << "fail to query: server down, id: "
             << request->sequence_id() << ", server: " << addr;
+        delete request;
         delete response;
         return;
     }
@@ -1464,6 +1465,7 @@ void MasterImpl::TabletNodeRecoveryCallback(std::string addr,
                 boost::bind(&MasterImpl::RetryQueryNewTabletNode, this, addr);
             m_thread_pool->DelayTask(FLAGS_tera_master_collect_info_retry_period, closure);
         }
+        delete request;
         delete response;
         return;
     }
@@ -1533,6 +1535,7 @@ void MasterImpl::TabletNodeRecoveryCallback(std::string addr,
     NodeState old_state;
     node->SetState(kReady, &old_state);
 
+    delete request;
     delete response;
 
     // If all tabletnodes restart in one zk callback,
