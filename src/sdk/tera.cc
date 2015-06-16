@@ -53,6 +53,7 @@ const char* strerr(ErrorCode error_code) {
         break;
     case ErrorCode::kNotImpl:
         ret = "Not Implement";
+        break;
     default:
         ret = "UnkownError";
     }

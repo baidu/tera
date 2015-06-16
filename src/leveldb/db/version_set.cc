@@ -584,16 +584,6 @@ bool Version::FindSplitKey(const Slice* smallest_user_key,
         int step_level = -1;
         for (int level = 1; level < config::kNumLevels; level++) {
             const std::vector<FileMetaData*>& files = files_[level];
-            while(now_pos[level] < files.size()) {
-                const FileMetaData* file = files[now_pos[level]];
-                if (BeforeFile(user_cmp, largest_user_key, file) ||
-                    AfterFile(user_cmp, smallest_user_key, file)) {
-                    now_pos[level] ++;
-                    continue;
-                } else {
-                    break;
-                }
-            }
             if (now_pos[level] >= files.size()) {
                 continue;
             }
@@ -605,12 +595,12 @@ bool Version::FindSplitKey(const Slice* smallest_user_key,
                 step_level = level;
             }
         }
+        // when leveldb is empty
+        if (largest_file == NULL) {
+            return false;
+        }
         split_size += files_[step_level][now_pos[step_level]]->file_size;
         now_pos[step_level] ++;
-    }
-
-    if (largest_file == NULL) {
-        return false;
     }
     *split_key = largest_file->largest.user_key().ToString();
     return true;

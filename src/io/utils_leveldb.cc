@@ -114,7 +114,6 @@ bool MergeTables(const std::string& mf, const std::string& mf1,
     if (!leveldb::MergeBoth(env, cmp, mf, mf1, mf2, mf2_file_maps)) {
         return false;
     }
-
     return true;
 }
 
