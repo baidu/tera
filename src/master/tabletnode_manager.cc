@@ -4,8 +4,8 @@
 
 #include "master/tabletnode_manager.h"
 
-#include "master/scheduler.h"
 #include "master/master_impl.h"
+#include "master/workload_scheduler.h"
 #include "utils/timer.h"
 
 DECLARE_string(tera_master_meta_table_name);
@@ -48,8 +48,11 @@ const std::string& TabletNode::GetId() {
     return m_uuid;
 }
 
-uint64_t TabletNode::GetTableSize(const std::string& table_name) {
+uint64_t TabletNode::GetSize(const std::string& table_name) {
     MutexLock lock(&m_mutex);
+    if (table_name.empty()) {
+        return m_data_size;
+    }
     uint64_t table_size = 0;
     std::map<std::string, uint64_t>::iterator it = m_table_size.find(table_name);
     if (it != m_table_size.end()) {
@@ -58,9 +61,17 @@ uint64_t TabletNode::GetTableSize(const std::string& table_name) {
     return table_size;
 }
 
-uint64_t TabletNode::GetSize() {
+uint64_t TabletNode::GetQps(const std::string& table_name) {
     MutexLock lock(&m_mutex);
-    return m_data_size;
+    if (table_name.empty()) {
+        return m_qps;
+    }
+    uint64_t table_qps = 0;
+    std::map<std::string, uint64_t>::iterator it = m_table_qps.find(table_name);
+    if (it != m_table_qps.end()) {
+        table_qps = it->second;
+    }
+    return table_qps;
 }
 
 uint32_t TabletNode::GetPlanToMoveInCount() {
@@ -348,14 +359,16 @@ bool TabletNodeManager::FindTabletNode(const std::string& addr,
     return true;
 }
 
-bool TabletNodeManager::ScheduleTabletNode(Scheduler* scheduler,
-                                           std::string* node_addr) {
-    return ScheduleTabletNode(scheduler, "", node_addr);
+bool TabletNodeManager::ScheduleTabletNode(Scheduler* scheduler, std::string* node_addr) {
+    TabletNodePtr node;
+    if (ScheduleTabletNode(scheduler, &node)) {
+        *node_addr = node->GetAddr();
+        return true;
+    }
+    return false;
 }
 
-bool TabletNodeManager::ScheduleTabletNode(Scheduler* scheduler,
-                                           const std::string& table_name,
-                                           std::string* node_addr) {
+bool TabletNodeManager::ScheduleTabletNode(Scheduler* scheduler, TabletNodePtr* node) {
     MutexLock lock(&m_mutex);
     std::string meta_node_addr;
     m_master_impl->GetMetaTabletAddr(&meta_node_addr);
@@ -378,14 +391,19 @@ bool TabletNodeManager::ScheduleTabletNode(Scheduler* scheduler,
     }
     if (candidates.size() == 0) {
         if (meta_node != null_ptr) {
-            node_addr->assign(meta_node->m_addr);
+            *node = meta_node;
             return true;
         } else {
             return false;
         }
     }
 
-    return scheduler->FindBestNode(candidates, table_name, node_addr);
+    size_t best_index = 0;
+    if (scheduler->FindBestNode(candidates, &best_index)) {
+        *node = candidates[best_index];
+        return true;
+    }
+    return false;
 }
 
 bool TabletNodeManager::IsNodeOverloadThanAverage(const std::string& node_addr) {
@@ -452,69 +470,12 @@ bool TabletNodeManager::IsNodeOverloadThanLeast(const std::string& node_addr) {
     return false;
 }
 
-bool TabletNodeManager::ShouldMoveToLeastNode(const std::string& node_addr,
-                                              uint64_t move_data_size) {
-    std::string meta_node_addr;
-    m_master_impl->GetMetaTabletAddr(&meta_node_addr);
-
-    MutexLock lock(&m_mutex);
-    /*
-    if (FLAGS_tera_master_meta_isolate_enabled && node_addr == meta_node_addr) {
-        return m_tabletnode_list.size() > 1;
-    }
-    */
-
-    uint64_t least_data_size = (uint64_t)-1;
-    TabletNodePtr this_node, least_node;
-
-    TabletNodeList::iterator it = m_tabletnode_list.begin();
-    for (; it != m_tabletnode_list.end(); ++it) {
-        TabletNodePtr node = it->second;
-        MutexLock lock2(&node->m_mutex);
-        if ((!FLAGS_tera_master_meta_isolate_enabled
-            || node->m_addr != meta_node_addr)
-            && least_data_size >= node->m_data_size) {
-            least_data_size = node->m_data_size;
-            least_node = node;
-        }
-        if (node_addr == node->m_addr) {
-            this_node = node;
-        }
-    }
-
-    TabletNodePtr null_ptr;
-    if (this_node == null_ptr) {
-        return false;
-    }
-    if (least_node == null_ptr) {
-        // there is only one node
-        return false;
-    }
-    return ShouldMoveData(this_node, least_node, "", move_data_size);
-}
-
-bool TabletNodeManager::ShouldMoveData(const std::string& src_node_addr,
-                                       const std::string& dst_node_addr,
-                                       const std::string& table_name,
-                                       uint64_t move_data_size) {
-    MutexLock lock(&m_mutex);
-    TabletNodeList::iterator it = m_tabletnode_list.find(src_node_addr);
-    if (it == m_tabletnode_list.end()) {
-        return false;
-    }
-    TabletNodePtr src_node = it->second;
-    it = m_tabletnode_list.find(dst_node_addr);
-    if (it == m_tabletnode_list.end()) {
-        return false;
-    }
-    TabletNodePtr dst_node = it->second;
-    return ShouldMoveData(src_node, dst_node, table_name, move_data_size);
-}
-
 bool TabletNodeManager::ShouldMoveData(TabletNodePtr src_node,
                                        TabletNodePtr dst_node,
-                                       const std::string& table_name,
-                                       uint64_t move_data_size) {
+                                       WorkloadGetter* load_getter,
+                                       const std::vector<TabletPtr>& tablet_candidates,
+                                       size_t* tablet_index) {
+    MutexLock lock(&m_mutex);
     if (src_node == dst_node) {
         return false;
     }
@@ -537,36 +498,34 @@ bool TabletNodeManager::ShouldMoveData(TabletNodePtr src_node,
             return true;
         }
     }
-
-    uint64_t src_node_data_size = 0, dst_node_data_size = 0;
-    MutexLock lock(&src_node->m_mutex);
-    if (table_name.empty()) {
-        src_node_data_size = src_node->m_data_size;
-    } else {
-        std::map<std::string, uint64_t>::iterator it =
-            src_node->m_table_size.find(table_name);
-        if (it != src_node->m_table_size.end()) {
-            src_node_data_size = it->second;
-        }
-    }
-    MutexLock lock2(&dst_node->m_mutex);
-    if (table_name.empty()) {
-        dst_node_data_size = dst_node->m_data_size;
-    } else {
-        std::map<std::string, uint64_t>::iterator it =
-            dst_node->m_table_size.find(table_name);
-        if (it != dst_node->m_table_size.end()) {
-            dst_node_data_size = it->second;
-        }
-    }
-
-    const double& ratio = FLAGS_tera_master_load_balance_size_overload_ratio;
-    // avoid move back and forth repeatedly
-    if (src_node_data_size < move_data_size
-        || (double)src_node_data_size <= (double)dst_node_data_size * ratio
-        || dst_node_data_size + move_data_size > src_node_data_size - move_data_size) {
+    if (tablet_candidates.size() == 0) {
         return false;
     }
+
+    uint64_t src_node_load = (*load_getter)(src_node);
+    uint64_t dst_node_load = (*load_getter)(dst_node);
+
+    const double& ratio = FLAGS_tera_master_load_balance_size_overload_ratio;
+    if ((double)src_node_load <= (double)dst_node_load * ratio) {
+        return false;
+    }
+
+    // avoid move back and forth repeatedly
+    int64_t ideal_move_load = (src_node_load - dst_node_load) / 2;
+    int64_t best_move_tablet_index = -1;
+    int64_t best_move_load = 0;
+    for (size_t i = 0; i < tablet_candidates.size(); ++i) {
+        TabletPtr tablet = tablet_candidates[i];
+        int64_t load = (*load_getter)(tablet);
+        if (load <= ideal_move_load && (best_move_tablet_index == -1 || load > best_move_load)) {
+            best_move_tablet_index = i;
+            best_move_load = load;
+        }
+    }
+    if (best_move_tablet_index == -1) {
+        return false;
+    }
+    *tablet_index = best_move_tablet_index;
     return true;
 }
 
@@ -584,5 +543,6 @@ std::string NodeStateToString(NodeState state) {
             return "";
     }
 }
+
 } // namespace master
 } // namespace tera

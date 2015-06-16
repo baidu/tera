@@ -44,7 +44,7 @@ class ScanTabletResponse;
 
 namespace master {
 
-class MasterZkAdapter;
+class MasterZkAdapterBase;
 class MetaTable;
 class Scheduler;
 class TabletManager;
@@ -236,10 +236,7 @@ private:
                               bool failed, int error_code);
 
     void LoadBalance();
-    void TabletNodeLoadBalance(const std::string& tabletnode_addr,
-                               const std::vector<TabletPtr>& tablet_list);
-    void TabletNodeLoadBalance(const std::string& tabletnode_addr,
-                               const std::string& table_name,
+    void TabletNodeLoadBalance(TabletNodePtr tabletnode, Scheduler* scheduler,
                                const std::vector<TabletPtr>& tablet_list);
 
     void GetSnapshotAsync(TabletPtr tablet, int32_t timeout,
@@ -454,8 +451,7 @@ private:
     bool m_restored;
     scoped_ptr<TabletManager> m_tablet_manager;
     scoped_ptr<TabletNodeManager> m_tabletnode_manager;
-    scoped_ptr<Scheduler> m_scheduler;
-    scoped_ptr<MasterZkAdapter> m_zk_adapter;
+    scoped_ptr<MasterZkAdapterBase> m_zk_adapter;
 
     Mutex m_mutex;
     int64_t m_release_cache_timer_id;

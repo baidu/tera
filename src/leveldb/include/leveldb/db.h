@@ -154,7 +154,8 @@ class DB {
                             std::string* split_key) = 0;
 
   virtual uint64_t GetScopeSize(const std::string& start_key,
-                                const std::string& end_key) = 0;
+                                const std::string& end_key,
+                                std::vector<uint64_t>* lgsize = NULL) = 0;
 
   virtual bool MinorCompact() = 0;
   virtual void CompactMissFiles(const Slice* begin, const Slice* end) = 0;

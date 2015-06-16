@@ -33,6 +33,7 @@ tera::Counter ssd_read_size_counter;
 tera::Counter ssd_write_counter;
 tera::Counter ssd_write_size_counter;
 
+static Logger* logger;
 // Log error message
 static Status IOError(const std::string& context, int err_number)
 {
@@ -50,13 +51,13 @@ Status CopyToLocal(const std::string& local_fname, Env* env,
     if (s.ok() && fsize == local_size) {
         return s;
     }
-    fprintf(stderr, "local file mismatch, expect %lu, actual %lu, delete %s\n",
+    Log(logger, "local file mismatch, expect %lu, actual %lu, delete %s\n",
             fsize, local_size, local_fname.c_str());
     Env::Default()->DeleteFile(local_fname);
 
-    fprintf(stderr, "open %s\n", fname.c_str());
-    SequentialFile* hdfs_file = NULL;
-    s = env->NewSequentialFile(fname, &hdfs_file);
+    Log(logger, "open %s\n", fname.c_str());
+    SequentialFile* dfs_file = NULL;
+    s = env->NewSequentialFile(fname, &dfs_file);
     if (!s.ok()) {
         return s;
     }
@@ -67,29 +68,29 @@ Status CopyToLocal(const std::string& local_fname, Env* env,
         }
     }
 
-    fprintf(stderr, "open %s\n", local_fname.c_str());
+    Log(logger, "open %s\n", local_fname.c_str());
     WritableFile* local_file = NULL;
     s = Env::Default()->NewWritableFile(local_fname, &local_file);
     if (!s.ok()) {
-        delete hdfs_file;
+        delete dfs_file;
         return s;
     }
 
     char buf[4096];
     Slice result;
     local_size = 0;
-    while (hdfs_file->Read(4096, &result, buf).ok() && result.size() > 0
+    while (dfs_file->Read(4096, &result, buf).ok() && result.size() > 0
         && local_file->Append(result).ok()) {
         local_size += result.size();
     }
-    delete hdfs_file;
+    delete dfs_file;
     delete local_file;
 
     if (local_size == fsize) {
         uint64_t time_used = env->NowMicros() - time_s;
         //if (time_used > 200000) {
         if (true) {
-            fprintf(stderr, "copy %s to local used %llu ms\n",
+            Log(logger, "copy %s to local used %llu ms\n",
                 fname.c_str(), static_cast<unsigned long long>(time_used) / 1000);
         }
         return s;
@@ -98,7 +99,7 @@ Status CopyToLocal(const std::string& local_fname, Env* env,
     uint64_t file_size = 0;
     s = env->GetFileSize(fname, &file_size);
     if (!s.ok()) {
-        return Status::IOError("hdfs GetFileSize fail", s.ToString());
+        return Status::IOError("dfs GetFileSize fail", s.ToString());
     }
 
     if (fsize == file_size) {
@@ -113,16 +114,16 @@ Status CopyToLocal(const std::string& local_fname, Env* env,
 
 class FlashSequentialFile: public SequentialFile {
 private:
-    SequentialFile* hdfs_file_;
+    SequentialFile* dfs_file_;
     SequentialFile* flash_file_;
 public:
-    FlashSequentialFile(Env* posix_env, Env* hdfs_env, const std::string& fname)
-        :hdfs_file_(NULL), flash_file_(NULL) {
-        hdfs_env->NewSequentialFile(fname, &hdfs_file_);
+    FlashSequentialFile(Env* posix_env, Env* dfs_env, const std::string& fname)
+        :dfs_file_(NULL), flash_file_(NULL) {
+        dfs_env->NewSequentialFile(fname, &dfs_file_);
     }
 
     virtual ~FlashSequentialFile() {
-        delete hdfs_file_;
+        delete dfs_file_;
         delete flash_file_;
     }
 
@@ -130,18 +131,18 @@ public:
         if (flash_file_) {
             return flash_file_->Read(n, result, scratch);
         }
-        return hdfs_file_->Read(n, result, scratch);
+        return dfs_file_->Read(n, result, scratch);
     }
 
     virtual Status Skip(uint64_t n) {
         if (flash_file_) {
             return flash_file_->Skip(n);
         }
-        return hdfs_file_->Skip(n);
+        return dfs_file_->Skip(n);
     }
 
     bool isValid() {
-        return (hdfs_file_ || flash_file_);
+        return (dfs_file_ || flash_file_);
     }
 
 };
@@ -149,21 +150,21 @@ public:
 // A file abstraction for randomly reading the contents of a file.
 class FlashRandomAccessFile :public RandomAccessFile{
 private:
-    RandomAccessFile* hdfs_file_;
+    RandomAccessFile* dfs_file_;
     RandomAccessFile* flash_file_;
 public:
-    FlashRandomAccessFile(Env* posix_env, Env* hdfs_env,
+    FlashRandomAccessFile(Env* posix_env, Env* dfs_env,
                           const std::string& fname, uint64_t fsize)
-        :hdfs_file_(NULL), flash_file_(NULL) {
+        :dfs_file_(NULL), flash_file_(NULL) {
         std::string local_fname = FlashEnv::FlashPath(fname) + fname;
 
-        // copy from hdfs with seq read
-        Status copy_status = CopyToLocal(local_fname, hdfs_env, fname, fsize);
+        // copy from dfs with seq read
+        Status copy_status = CopyToLocal(local_fname, dfs_env, fname, fsize);
         if (!copy_status.ok()) {
-            fprintf(stderr, "copy to local fail [%s]: %s\n",
+            Log(logger, "copy to local fail [%s]: %s\n",
                 copy_status.ToString().c_str(), local_fname.c_str());
-            // no flash file, use hdfs file
-            hdfs_env->NewRandomAccessFile(fname, &hdfs_file_);
+            // no flash file, use dfs file
+            dfs_env->NewRandomAccessFile(fname, &dfs_file_);
             return;
         }
 
@@ -171,13 +172,13 @@ public:
         if (s.ok()) {
             return;
         }
-        fprintf(stderr, "local file exists, but open for RandomAccess fail: %s\n",
+        Log(logger, "local file exists, but open for RandomAccess fail: %s\n",
             local_fname.c_str());
-        unlink(local_fname.c_str());
-        hdfs_env->NewRandomAccessFile(fname, &hdfs_file_);
+        Env::Default()->DeleteFile(local_fname);
+        dfs_env->NewRandomAccessFile(fname, &dfs_file_);
     }
     ~FlashRandomAccessFile() {
-        delete hdfs_file_;
+        delete dfs_file_;
         delete flash_file_;
     }
     Status Read(uint64_t offset, size_t n, Slice* result,
@@ -190,53 +191,53 @@ public:
             }
             return read_status;
         }
-        return hdfs_file_->Read(offset, n, result, scratch);
+        return dfs_file_->Read(offset, n, result, scratch);
     }
     bool isValid() {
-        return (hdfs_file_ || flash_file_);
+        return (dfs_file_ || flash_file_);
     }
 };
 
 // WritableFile
 class FlashWritableFile: public WritableFile {
 private:
-    WritableFile* hdfs_file_;
+    WritableFile* dfs_file_;
     WritableFile* flash_file_;
     std::string local_fname_;
 public:
-    FlashWritableFile(Env* posix_env, Env* hdfs_env, const std::string& fname)
-        :hdfs_file_(NULL), flash_file_(NULL) {
-        Status s = hdfs_env->NewWritableFile(fname, &hdfs_file_);
+    FlashWritableFile(Env* posix_env, Env* dfs_env, const std::string& fname)
+        :dfs_file_(NULL), flash_file_(NULL) {
+        Status s = dfs_env->NewWritableFile(fname, &dfs_file_);
         if (!s.ok()) {
             return;
         }
         if (fname.rfind(".sst") != fname.size()-4) {
-            // fprintf(stderr, "[EnvFlash] Don't cache %s\n", fname.c_str());
+            // Log(logger, "[EnvFlash] Don't cache %s\n", fname.c_str());
             return;
         }
         local_fname_ = FlashEnv::FlashPath(fname) + fname;
-        for(size_t i=1 ;i<local_fname_.size(); i++) {
+        for(size_t i = 1; i < local_fname_.size(); i++) {
             if (local_fname_.at(i) == '/') {
                 posix_env->CreateDir(local_fname_.substr(0,i));
             }
         }
         s = posix_env->NewWritableFile(local_fname_, &flash_file_);
         if (!s.ok()) {
-            fprintf(stderr, "Open local flash file for write fail: %s\n",
+            Log(logger, "Open local flash file for write fail: %s\n",
                     local_fname_.c_str());
         }
     }
     virtual ~FlashWritableFile() {
-        delete hdfs_file_;
+        delete dfs_file_;
         delete flash_file_;
     }
     void DeleteLocal() {
         delete flash_file_;
         flash_file_ = NULL;
-        unlink(local_fname_.c_str());
+        Env::Default()->DeleteFile(local_fname_);
     }
     virtual Status Append(const Slice& data) {
-        Status s = hdfs_file_->Append(data);
+        Status s = dfs_file_->Append(data);
         if (!s.ok()) {
             return s;
         }
@@ -253,11 +254,11 @@ public:
     }
 
     bool isValid() {
-        return (hdfs_file_ || flash_file_);
+        return (dfs_file_ || flash_file_);
     }
 
     virtual Status Flush() {
-        Status s = hdfs_file_->Flush();
+        Status s = dfs_file_->Flush();
         if (!s.ok()) {
             return s;
         }
@@ -273,7 +274,7 @@ public:
     }
 
     virtual Status Sync() {
-        Status s = hdfs_file_->Sync();
+        Status s = dfs_file_->Sync();
         if (!s.ok()) {
             return s;
         }
@@ -294,7 +295,7 @@ public:
                 DeleteLocal();
             }
         }
-        return hdfs_file_->Close();
+        return dfs_file_->Close();
     }
 };
 
@@ -302,7 +303,7 @@ std::vector<std::string> FlashEnv::flash_paths_(1, "./flash");
 
 FlashEnv::FlashEnv() : EnvWrapper(Env::Default())
 {
-    hdfs_env_ = EnvDfs();
+    dfs_env_ = EnvDfs();
     posix_env_ = Env::Default();
 }
 
@@ -313,7 +314,7 @@ FlashEnv::~FlashEnv()
 // SequentialFile
 Status FlashEnv::NewSequentialFile(const std::string& fname, SequentialFile** result)
 {
-    FlashSequentialFile* f = new FlashSequentialFile(posix_env_, hdfs_env_, fname);
+    FlashSequentialFile* f = new FlashSequentialFile(posix_env_, dfs_env_, fname);
     if (!f->isValid()) {
         delete f;
         *result = NULL;
@@ -327,7 +328,7 @@ Status FlashEnv::NewSequentialFile(const std::string& fname, SequentialFile** re
 Status FlashEnv::NewRandomAccessFile(const std::string& fname,
         uint64_t fsize, RandomAccessFile** result)
 {
-    FlashRandomAccessFile* f = new FlashRandomAccessFile(posix_env_, hdfs_env_,
+    FlashRandomAccessFile* f = new FlashRandomAccessFile(posix_env_, dfs_env_,
                                                          fname, fsize);
     if (f == NULL || !f->isValid()) {
         *result = NULL;
@@ -348,7 +349,7 @@ Status FlashEnv::NewWritableFile(const std::string& fname,
         WritableFile** result)
 {
     Status s;
-    FlashWritableFile* f = new FlashWritableFile(posix_env_, hdfs_env_, fname);
+    FlashWritableFile* f = new FlashWritableFile(posix_env_, dfs_env_, fname);
     if (f == NULL || !f->isValid()) {
         *result = NULL;
         return IOError(fname, errno);
@@ -360,20 +361,20 @@ Status FlashEnv::NewWritableFile(const std::string& fname,
 // FileExists
 bool FlashEnv::FileExists(const std::string& fname)
 {
-    return hdfs_env_->FileExists(fname);
+    return dfs_env_->FileExists(fname);
 }
 
 //
 Status FlashEnv::GetChildren(const std::string& path,
         std::vector<std::string>* result)
 {
-    return hdfs_env_->GetChildren(path, result);
+    return dfs_env_->GetChildren(path, result);
 }
 
 Status FlashEnv::DeleteFile(const std::string& fname)
 {
     posix_env_->DeleteFile(FlashEnv::FlashPath(fname) + fname);
-    return hdfs_env_->DeleteFile(fname);
+    return dfs_env_->DeleteFile(fname);
 }
 
 Status FlashEnv::CreateDir(const std::string& name)
@@ -385,31 +386,31 @@ Status FlashEnv::CreateDir(const std::string& name)
         }
     }
     posix_env_->CreateDir(local_name);
-    return hdfs_env_->CreateDir(name);
+    return dfs_env_->CreateDir(name);
 };
 
 Status FlashEnv::DeleteDir(const std::string& name)
 {
     posix_env_->DeleteDir(FlashEnv::FlashPath(name) + name);
-    return hdfs_env_->DeleteDir(name);
+    return dfs_env_->DeleteDir(name);
 };
 
 Status FlashEnv::ListDir(const std::string& name,
         std::vector<std::string>* result)
 {
-    return hdfs_env_->ListDir(name, result);
+    return dfs_env_->ListDir(name, result);
 }
 
 Status FlashEnv::GetFileSize(const std::string& fname, uint64_t* size)
 {
-    return hdfs_env_->GetFileSize(fname, size);
+    return dfs_env_->GetFileSize(fname, size);
 }
 
 ///
 Status FlashEnv::RenameFile(const std::string& src, const std::string& target)
 {
     posix_env_->RenameFile(FlashEnv::FlashPath(src) + src, FlashEnv::FlashPath(target) + target);
-    return hdfs_env_->RenameFile(src, target);
+    return dfs_env_->RenameFile(src, target);
 }
 
 Status FlashEnv::LockFile(const std::string& fname, FileLock** lock)
@@ -455,14 +456,20 @@ static void InitFlashEnv()
     flash_env = new FlashEnv();
 }
 
-Env* EnvFlash()
+Env* EnvFlash(Logger* l)
 {
     pthread_once(&once, InitFlashEnv);
+    if (l) {
+        logger = l;
+    }
     return flash_env;
 }
 
-Env* NewFlashEnv()
+Env* NewFlashEnv(Logger* l)
 {
+    if (l) {
+        logger = l;
+    }
     return new FlashEnv();
 }
 

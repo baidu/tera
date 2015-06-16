@@ -40,7 +40,7 @@ DECLARE_string(tera_zk_root_path);
 
 DEFINE_int32(tera_client_batch_put_num, 1000, "num of each batch in batch put mode");
 DEFINE_int32(tera_client_scan_package_size, 1024, "the package size (in KB) of each scan request");
-DEFINE_bool(tera_client_scan_async_enabled, true, "enable the streaming scan mode");
+DEFINE_bool(tera_client_scan_async_enabled, false, "enable the streaming scan mode");
 
 volatile int32_t g_start_time = 0;
 volatile int32_t g_end_time = 0;
@@ -73,14 +73,18 @@ void Usage(const std::string& prg_name) {
                                                                             \n\
        createbyfile   <schema_file> [<delimiter_file>]                      \n\
                                                                             \n\
-       update <tablename> <part-schema>                                     \n\
-            part-schema syntax:                                             \n\
-                \"prefix1:property1=value1, prefix2:property2=value2, ...\" \n\
-                prefix:   \"table\" | lg-name | cf-name                     \n\
-                property: splitsize | compress | ttl | ...                  \n\
-                value:    value of property                                 \n\
-                e.g. \"table:splitsize=9,lg0:compress=none,cf3:ttl=0\"      \n\
-                e.g. \"lg0:use_memtable_on_leveldb=true                     \n\
+       update <schema>                                                      \n\
+              - kv schema:                                                  \n\
+                    e.g. tablename<splitsize=512,storage=disk>              \n\
+              - table schema:                                               \n\
+                - update properties                                         \n\
+                    e.g. tablename<splitsize=512>                           \n\
+                    e.g. tablename{lg0{cf0<ttl=123>}}                       \n\
+                    e.g. tablename<mergesize=233>{lg0<storage=disk>{cf0<ttl=123>}}       \n\
+                - add new cf                                                \n\
+                    e.g. tablename{lg0{cf0<ttl=250>,new_cf<op=add,ttl=233>}}\n\
+                - delete cf                                                 \n\
+                    e.g. tablename{lg0{cf0<op=del>}}                        \n\
                                                                             \n\
        enable/disable/drop  <tablename>                                     \n\
                                                                             \n\
@@ -206,56 +210,44 @@ int32_t CreateByFileOp(Client* client, int32_t argc, char** argv, ErrorCode* err
     return 0;
 }
 
-/*
- * usage:
- * ./teracli update table-name "table:splitsize=100,lg0:storage=flash,cf1:ttl=0"
- *
- * schema(argv[3]):
- * "prefix:property=value,..."
- * prefix: "table" or lg-name or cf-name
- * property: (table) splitsize
- *           (lg)    compress | storage | blocksize
- *           (cf)    ttl | maxversions | minversions | diskquota
- */
 int32_t UpdateOp(Client* client, int32_t argc, char** argv, ErrorCode* err) {
-/*
- * 1. get the table's TableDescriptor
- * 2. modify it according to user's schema
- * 3. write it back
- */
-    if (argc != 4) {
-        // TODO add help info message
+    if (argc != 3) {
         Usage(argv[0]);
         return -1;
     }
-
-    std::string tablename = argv[2];
-
-    TableDescriptor* table_desc = client->GetTableDescriptor(tablename, err);
-    if (!table_desc) {
-        LOG(ERROR) << "can't get the TableDescriptor of table: " << tablename;
+    std::string schema = argv[2];
+    PropTree schema_tree;
+    if (!schema_tree.ParseFromString(schema)) {
+        LOG(ERROR) << "[update] invalid schema: " << schema;
+        LOG(ERROR) << "[update] state: " << schema_tree.State();
         return -1;
     }
-    std::string schema = argv[3];
+    std::string tablename = schema_tree.GetRootNode()->name_;
+    TableDescriptor* table_desc = client->GetTableDescriptor(tablename, err);
+    if (table_desc == NULL) {
+        LOG(ERROR) << "[update] can't get the TableDescriptor of table: " << tablename;
+        return -1;
+    }
 
+    // if try to update lg or cf, need to disable table
     bool is_update_lg_cf = false;
-
-    if (!ParseSchemaSetTableDescriptor(schema, table_desc, &is_update_lg_cf)) {
-        LOG(ERROR) << "fail to parse input table schema.";
+    if (!UpdateTableDescriptor(schema_tree, table_desc, &is_update_lg_cf )) {
+        LOG(ERROR) << "[update] update failed";
         return -1;
     }
 
     if (is_update_lg_cf && client->IsTableEnabled(table_desc->TableName(), err)) {
-        LOG(ERROR) << "table is enabled, disable it first: " << table_desc->TableName();
+        LOG(ERROR) << "[update] table is enabled, disable it first: " << table_desc->TableName();
         return -1;
     }
 
     if (!client->UpdateTable(*table_desc, err)) {
-        LOG(ERROR) << "fail to update table, "
+        LOG(ERROR) << "[update] fail to update table, "
             << strerr(*err);
         return -1;
     }
     ShowTableDescriptor(*table_desc);
+    delete table_desc;
     return 0;
 }
 
@@ -661,7 +653,7 @@ int32_t ScanOp(Client* client, int32_t argc, char** argv, ErrorCode* err) {
     ResultStream* result_stream;
     ScanDescriptor desc(start_rowkey);
     desc.SetEnd(end_rowkey);
-    desc.SetBufferSize((FLAGS_tera_client_scan_package_size << 10));
+    desc.SetBufferSize(FLAGS_tera_client_scan_package_size << 10);
     desc.SetAsync(FLAGS_tera_client_scan_async_enabled);
 
     if (argc == 5) {
@@ -689,7 +681,7 @@ int32_t ScanOp(Client* client, int32_t argc, char** argv, ErrorCode* err) {
         return -1;
     }
     g_start_time = time(NULL);
-    while (!result_stream->Done()) {
+    while (!result_stream->Done(err)) {
         int32_t len = result_stream->RowName().size()
             + result_stream->ColumnName().size()
             + sizeof(result_stream->Timestamp())
@@ -710,6 +702,10 @@ int32_t ScanOp(Client* client, int32_t argc, char** argv, ErrorCode* err) {
             g_cur_batch_num = 0;
             g_last_time = time_cur;
         }
+    }
+    if (err->GetType() != ErrorCode::kOK) {
+        LOG(ERROR) << "fail to finish scan: " << err->GetReason();
+        return -1;
     }
     g_end_time = time(NULL);
     g_used_time = g_end_time - g_start_time;
@@ -749,7 +745,18 @@ int32_t ShowTabletList(const TabletMetaList& tablet_list, bool is_server_addr, b
             }
             row.push_back(meta.path());
             row.push_back(StatusCodeToString(meta.status()));
-            row.push_back(utils::ConvertByteToString(meta.table_size()));
+
+            std::string size_str =
+                utils::ConvertByteToString(meta.table_size()) +
+                "[";
+            for (int l = 0; l < meta.lg_size_size(); ++l) {
+                size_str += utils::ConvertByteToString(meta.lg_size(l));
+                if (l < meta.lg_size_size() - 1) {
+                    size_str += " ";
+                }
+            }
+            size_str += "]";
+            row.push_back(size_str);
 
             if (tablet_list.counter_size() > 0) {
                 const TabletCounter& counter = tablet_list.counter(i);

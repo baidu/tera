@@ -162,6 +162,16 @@ bool IsDir(const std::string& path) {
     return false;
 }
 
+bool IsEmpty(const std::string& path) {
+    std::vector<std::string> children;
+    if (!IsDir(path) ||
+        !ListCurrentDir(path, &children) ||
+        children.size() != 0) {
+        return false;
+    }
+    return true;
+}
+
 bool RemoveLocalFile(const std::string& path) {
     bool done = false;
     for (int32_t i = 0; i < FLAGS_file_op_retry_times && !done; ++i) {

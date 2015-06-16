@@ -83,6 +83,7 @@ public:
 
 
     void SetSize(int64_t table_size);
+    void SetSize(const TabletMeta& meta);
     void SetCounter(const TabletCounter& counter);
     void SetCompactStatus(CompactStatus compact_status);
     void SetAddr(const std::string& server_addr);

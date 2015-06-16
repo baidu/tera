@@ -22,7 +22,7 @@ namespace tera {
 namespace tabletnode {
 
 class TabletManager;
-class TabletNodeZkAdapter;
+class TabletNodeZkAdapterBase;
 
 class TabletNodeImpl {
 public:
@@ -145,13 +145,16 @@ private:
 
     void GetInheritedLiveFiles(std::vector<InheritedLiveFiles>& inherited);
 
+    void GarbageCollectInPath(const std::string& path, leveldb::Env* env,
+                              const std::set<std::string>& inherited_files,
+                              const std::set<std::string> active_tablets);
 private:
     mutable Mutex m_status_mutex;
     TabletNodeStatus m_status;
     Mutex m_mutex;
 
     scoped_ptr<TabletManager> m_tablet_manager;
-    scoped_ptr<TabletNodeZkAdapter> m_zk_adapter;
+    scoped_ptr<TabletNodeZkAdapterBase> m_zk_adapter;
 
     uint64_t m_this_sequence_id;
     std::string m_local_addr;

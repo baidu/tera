@@ -12,64 +12,46 @@ namespace master {
 
 class TabletManager;
 
+class WorkloadGetter {
+public:
+    virtual int64_t operator() (const TabletNodePtr& t) = 0;
+    virtual int64_t operator() (const TabletPtr& t) = 0;
+    virtual const char* Name() = 0;
+};
+
 class WorkloadComparator {
 public:
     // Three-way comparison.  Returns value:
     //   < 0 iff "a" < "b",
     //   == 0 iff "a" == "b",
     //   > 0 iff "a" > "b"
-    virtual int Compare(const TabletNodePtr& a, const TabletNodePtr& b) = 0;
-    virtual const char* Name() = 0;
-};
-
-class TotalSizeComparator : public WorkloadComparator {
-public:
-    virtual const char* Name() {
-        return "total-size";
-    }
     virtual int Compare(const TabletNodePtr& a, const TabletNodePtr& b) {
-        uint64_t a_size = a->GetSize();
-        uint64_t b_size = b->GetSize();
-        if (a_size < b_size) {
+        uint64_t a_load = (*m_load_getter)(a);
+        uint64_t b_load = (*m_load_getter)(b);
+        if (a_load < b_load) {
             return -1;
-        } else if (a_size > b_size) {
+        } else if (a_load > b_load) {
             return 1;
+        } else if (m_next_comparator != NULL) {
+            return m_next_comparator->Compare(a, b);
         } else {
             return 0;
         }
     }
-};
 
-class TableSizeComparator : public WorkloadComparator {
-public:
     virtual const char* Name() {
-        return m_name.c_str();
+        return m_load_getter->Name();
     }
-    virtual int Compare(const TabletNodePtr& a, const TabletNodePtr& b) {
-        uint64_t a_table_size = a->GetTableSize(m_table_name);
-        uint64_t b_table_size = b->GetTableSize(m_table_name);
-        uint64_t a_size = a->GetSize();
-        uint64_t b_size = b->GetSize();
 
-        if (a_table_size < b_table_size) {
-            return -1;
-        } else if (a_table_size > b_table_size) {
-            return 1;
-        } else if (a_size < b_size) {
-            return -1;
-        } else if (a_size > b_size) {
-            return 1;
-        } else {
-            return 0;
-        }
-    }
-    TableSizeComparator(const std::string& table_name)
-        : m_table_name(table_name) {
-        m_name += "table (" + m_table_name + ") size";
-    }
+    WorkloadComparator(WorkloadGetter* load_getter, WorkloadComparator* next_comparator = NULL)
+        : m_load_getter(load_getter),
+          m_next_comparator(next_comparator) {}
+
+    virtual ~WorkloadComparator() {}
+
 private:
-    std::string m_table_name;
-    std::string m_name;
+    WorkloadGetter* m_load_getter;
+    WorkloadComparator* m_next_comparator;
 };
 
 class WorkloadScheduler : public Scheduler {
@@ -78,13 +60,55 @@ public:
     ~WorkloadScheduler();
 
     bool FindBestNode(const std::vector<TabletNodePtr>& node_list,
-                      std::string* node_addr);
+                      size_t* best_index);
     void AscendingSort(std::vector<TabletNodePtr>& node_list);
     void DescendingSort(std::vector<TabletNodePtr>& node_list);
+
+    const char* Name() {
+        return m_comparator->Name();
+    }
 
 private:
     WorkloadComparator* m_comparator;
     std::string m_last_choose_node;
+};
+
+class SizeGetter : public WorkloadGetter {
+public:
+    virtual int64_t operator() (const TabletNodePtr& ts) {
+        return ts->GetSize(m_table_name);
+    }
+    virtual int64_t operator() (const TabletPtr& t) {
+        return t->GetDataSize();
+    }
+    virtual const char* Name() {
+        return "datasize";
+    }
+    SizeGetter() {}
+    SizeGetter(const std::string& table_name) : m_table_name(table_name) {}
+    virtual ~SizeGetter() {}
+
+private:
+    std::string m_table_name;
+};
+
+class QPSGetter : public WorkloadGetter {
+public:
+    virtual int64_t operator() (const TabletNodePtr& ts) {
+        return ts->GetQps(m_table_name);
+    }
+    virtual int64_t operator() (const TabletPtr& t) {
+        return t->GetAverageCounter().read_rows();
+    }
+    virtual const char* Name() {
+        return "qps";
+    }
+    QPSGetter() {}
+    QPSGetter(const std::string& table_name) : m_table_name(table_name) {}
+    virtual ~QPSGetter() {}
+
+private:
+    std::string m_table_name;
 };
 
 } // namespace master

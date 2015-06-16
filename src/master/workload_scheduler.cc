@@ -19,33 +19,25 @@ WorkloadScheduler::WorkloadScheduler(WorkloadComparator* comparator)
 WorkloadScheduler::~WorkloadScheduler() {}
 
 bool WorkloadScheduler::FindBestNode(const std::vector<TabletNodePtr>& node_list,
-                                     std::string* node_addr) {
+                                     size_t* best_index) {
     if (node_list.size() == 0) {
         return false;
     }
 
-    TabletNodePtr null_ptr;
-    TabletNodePtr best_one = node_list[0];
-
+    *best_index = 0;
     for (size_t i = 1; i < node_list.size(); ++i) {
-        TabletNodePtr cur_one = node_list[i];
-//        VLOG(5) << "node: " << cur_one->m_addr << ", load: "
-//            << cur_one->m_data_size;
-        int r = m_comparator->Compare(best_one, cur_one);
+        int r = m_comparator->Compare(node_list[*best_index], node_list[i]);
         if (r > 0) {
-            best_one = cur_one;
+            *best_index = i;
         } else if (r < 0) {
             // do nothing
-        } else if (best_one->GetAddr() <= m_last_choose_node
-            && cur_one->GetAddr() > m_last_choose_node) {
+        } else if (node_list[*best_index]->GetAddr() <= m_last_choose_node
+            && node_list[i]->GetAddr() > m_last_choose_node) {
             // round-robin
-            best_one = cur_one;
+            *best_index = i;
         }
     }
-//    VLOG(5) << "choose node: " << best_one->m_addr << ", load: "
-//        << best_one->m_data_size;
-    m_last_choose_node = best_one->GetAddr();
-    *node_addr = best_one->GetAddr();
+    m_last_choose_node = node_list[*best_index]->GetAddr();
     return true;
 }
 

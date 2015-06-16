@@ -57,8 +57,9 @@ class DBImpl : public DB {
                     const std::string& end_key,
                     double ratio,
                     std::string* split_key);
-  uint64_t GetScopeSize(const std::string& start_key, const std::string& end_key);
-  uint64_t GetScopeSizeOld(const std::string& start_key, const std::string& end_key);
+  uint64_t GetScopeSize(const std::string& start_key,
+                        const std::string& end_key,
+                        std::vector<uint64_t>* lgsize = NULL);
   void CompactMissFiles(const Slice* begin, const Slice* end);
 
   // Add all sst files inherited from other tablets

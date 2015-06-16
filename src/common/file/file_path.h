@@ -5,8 +5,9 @@
 #ifndef TERA_COMMON_FILE_FILE_PATH_H_
 #define TERA_COMMON_FILE_FILE_PATH_H_
 
-#include <string>
-#include <vector>
+#include<unistd.h>
+#include<string>
+#include<vector>
 
 void SplitStringPath(const std::string& full_path,
                      std::string* dir_part,
@@ -30,6 +31,9 @@ bool ListCurrentDir(const std::string& dir_path,
 bool IsExist(const std::string& path);
 
 bool IsDir(const std::string& path);
+
+// return true when path is a dir and empty, or return false
+bool IsEmpty(const std::string& path);
 
 bool RemoveLocalFile(const std::string& path);
 

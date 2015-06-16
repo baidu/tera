@@ -100,7 +100,8 @@ public:
     virtual bool Compact(StatusCode* status = NULL);
     bool CompactMinor(StatusCode* status = NULL);
     bool Destroy(StatusCode* status = NULL);
-    virtual int64_t GetDataSize(StatusCode* status = NULL);
+    virtual int64_t GetDataSize(std::vector<uint64_t>* lgsize = NULL,
+                                StatusCode* status = NULL);
     virtual int64_t GetDataSize(const std::string& start_key,
                                 const std::string& end_key,
                                 StatusCode* status = NULL);

@@ -20,6 +20,7 @@ DEFINE_string(tera_working_dir, "./", "the base dir for system data");
 DEFINE_bool(tera_zk_enabled, true, "enable zk adapter to collaborate with other master instances");
 DEFINE_string(tera_zk_addr_list, "localhost:2180", "zookeeper server list");
 DEFINE_string(tera_zk_root_path, "/tera", "zookeeper root path");
+DEFINE_string(tera_fake_zk_path_prefix, "../fakezk", "fake zk path prefix in onebox tera");
 DEFINE_int32(tera_zk_timeout, 10000, "zookeeper session timeout");
 DEFINE_int64(tera_zk_retry_period, 3000, "zookeeper operation retry period (in ms)");
 DEFINE_int32(tera_zk_retry_max_times, 10, "zookeeper operation max retry times");

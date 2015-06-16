@@ -65,8 +65,10 @@ struct TabletNode {
     TabletNodeInfo GetInfo();
     const std::string& GetAddr();
     const std::string& GetId();
-    uint64_t GetTableSize(const std::string& table_name);
-    uint64_t GetSize();
+
+    // table_name == "" means all tables
+    uint64_t GetSize(const std::string& table_name = "");
+    uint64_t GetQps(const std::string& table_name = "");
 
     uint32_t GetPlanToMoveInCount();
     void PlanToMoveIn();
@@ -99,6 +101,7 @@ private:
 
 typedef boost::shared_ptr<TabletNode> TabletNodePtr;
 
+class WorkloadGetter;
 class Scheduler;
 class MasterImpl;
 
@@ -115,23 +118,16 @@ public:
     void GetAllTabletNodeId(std::map<std::string, std::string>* id_map);
     void GetAllTabletNodeInfo(std::vector<TabletNodePtr>* info_array);
     bool ScheduleTabletNode(Scheduler* scheduler, std::string* node_addr);
-    bool ScheduleTabletNode(Scheduler* scheduler, const std::string& table_name,
-                            std::string* node_addr);
+    bool ScheduleTabletNode(Scheduler* scheduler, TabletNodePtr* node);
     bool CheckStateSwitch(NodeState old_state, NodeState new_state);
     bool IsNodeOverloadThanAverage(const std::string& node_addr);
     bool IsNodeOverloadThanLeast(const std::string& node_addr);
-    bool ShouldMoveToLeastNode(const std::string& node_addr,
-                               uint64_t move_data_size);
-    bool ShouldMoveData(const std::string& src_node_addr,
-                        const std::string& dst_node_addr,
-                        const std::string& table_name,
-                        uint64_t move_data_size);
+    bool ShouldMoveData(TabletNodePtr src_node, TabletNodePtr dst_node,
+                        WorkloadGetter* load_getter,
+                        const std::vector<TabletPtr>& tablet_candidates,
+                        size_t* tablet_index);
 
 private:
-    bool ShouldMoveData(TabletNodePtr src_node, TabletNodePtr dst_node,
-                        const std::string& table_name,
-                        uint64_t move_data_size);
-
     mutable Mutex m_mutex;
     MasterImpl* m_master_impl;
 

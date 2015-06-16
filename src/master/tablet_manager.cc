@@ -227,6 +227,12 @@ void Tablet::SetSize(int64_t table_size) {
     m_meta.set_table_size(table_size);
 }
 
+void Tablet::SetSize(const TabletMeta& meta) {
+    MutexLock lock(&m_mutex);
+    m_meta.set_table_size(meta.table_size());
+    m_meta.mutable_lg_size()->CopyFrom(meta.lg_size());
+}
+
 void Tablet::SetCompactStatus(CompactStatus compact_status) {
     MutexLock lock(&m_mutex);
     m_meta.set_compact_status(compact_status);
