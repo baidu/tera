@@ -32,6 +32,9 @@ install:
     - tar zxvf gperftools-2.2.1.tar.gz
     - ( cd gperftools-2.2.1 && ./configure --with-pic && make -j4 && sudo make install )
 
+    - git clone https://github.com/fxsjy/ins
+    - (cd ins && make -j4 && sudo make install )
+
 before_script:
     - sed -i 's/^SOFA_PBRPC_PREFIX=.*/SOFA_PBRPC_PREFIX=.\/sofa-pbrpc\/output/' depends.mk
     - sed -i 's/^PROTOBUF_PREFIX=.*/PROTOBUF_PREFIX=\/usr\/local/' depends.mk
@@ -41,6 +44,7 @@ before_script:
     - sed -i 's/^GLOG_PREFIX=.*/GLOG_PREFIX=\/usr\/local/' depends.mk
     - sed -i 's/^GPERFTOOLS_PREFIX=.*/GPERFTOOLS_PREFIX=\/usr\/local/' depends.mk
     - sed -i 's/^BOOST_INCDIR=.*/BOOST_INCDIR=\/usr\/local\/include/' depends.mk
+    - sed -i 's/^INS_PREFIX=.*/INS_PREFIX=\/usr\/local/' depends.mk
 
 script:
     - make -j4
