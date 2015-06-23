@@ -1,7 +1,7 @@
 language: cpp
 compiler: gcc
 install:
-    - sudo apt-get install libboost-dev
+    - sudo apt-get install libboost-dev uuid-dev
 
     - wget https://github.com/google/protobuf/releases/download/v2.6.1/protobuf-2.6.1.tar.gz
     - tar xf protobuf-2.6.1.tar.gz
