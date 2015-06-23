@@ -5,15 +5,15 @@
 #       automatically config this for you.
 ################################################################
 
-SOFA_PBRPC_PREFIX=./thirdparty
-PROTOBUF_PREFIX=./thirdparty
-SNAPPY_PREFIX=./thirdparty
-ZOOKEEPER_PREFIX=./thirdparty
-GFLAGS_PREFIX=./thirdparty
-GLOG_PREFIX=./thirdparty
-GPERFTOOLS_PREFIX=./thirdparty
-INS_PREFIX=./thirdparty
-BOOST_INCDIR=./thirdparty
+SOFA_PBRPC_PREFIX=
+PROTOBUF_PREFIX=
+SNAPPY_PREFIX=
+ZOOKEEPER_PREFIX=
+GFLAGS_PREFIX=
+GLOG_PREFIX=
+GPERFTOOLS_PREFIX=
+INS_PREFIX=
+BOOST_INCDIR=
 
 SOFA_PBRPC_INCDIR = $(SOFA_PBRPC_PREFIX)/include
 PROTOBUF_INCDIR = $(PROTOBUF_PREFIX)/include
@@ -42,10 +42,10 @@ PROTOC = $(PROTOBUF_PREFIX)/bin/protoc
 DEPS_INCPATH = -I$(SOFA_PBRPC_INCDIR) -I$(PROTOBUF_INCDIR) \
                -I$(SNAPPY_INCDIR) -I$(ZOOKEEPER_INCDIR) \
                -I$(GFLAGS_INCDIR) -I$(GLOG_INCDIR) \
-               -I$(GPERFTOOLS_INCDIR) -I$(BOOST_INCDIR)
+               -I$(GPERFTOOLS_INCDIR) -I$(BOOST_INCDIR) -I$(INS_INCDIR)
 DEPS_LDPATH = -L$(SOFA_PBRPC_LIBDIR) -L$(PROTOBUF_LIBDIR) \
               -L$(SNAPPY_LIBDIR) -L$(ZOOKEEPER_LIBDIR) \
               -L$(GFLAGS_LIBDIR) -L$(GLOG_LIBDIR) \
-              -L$(GPERFTOOLS_LIBDIR)
+              -L$(GPERFTOOLS_LIBDIR) -L$(INS_LIBDIR)
 DEPS_LDFLAGS = -lins_sdk -lsofa-pbrpc -lprotobuf -lsnappy -lzookeeper_mt \
                -lgflags -lglog -ltcmalloc_minimal -luuid
