@@ -3105,7 +3105,7 @@ void MasterImpl::MergeTabletAsync(TabletPtr tablet_p1, TabletPtr tablet_p2) {
 }
 
 void MasterImpl::MergeTabletAsyncPhase2(TabletPtr tablet_p1, TabletPtr tablet_p2) {
-    leveldb::Env* env = io::LeveldbEnv();
+    leveldb::Env* env = io::LeveldbBaseEnv();
     std::vector<std::string> children;
     std::string tablet_path = FLAGS_tera_tabletnode_path_prefix + tablet_p1->GetPath();
     env->GetChildren(tablet_path, &children);
@@ -4336,7 +4336,7 @@ void MasterImpl::CollectDeadTabletsFiles() {
 void MasterImpl::CollectSingleDeadTablet(const std::string& tablename, uint64_t tabletnum) {
     std::string tablepath = FLAGS_tera_tabletnode_path_prefix + tablename;
     std::string tablet_path = leveldb::GetTabletPathFromNum(tablepath, tabletnum);
-    leveldb::Env* env = io::LeveldbEnv();
+    leveldb::Env* env = io::LeveldbBaseEnv();
     std::vector<std::string> children;
     env->GetChildren(tablet_path, &children);
     if (children.size() == 0) {
@@ -4397,7 +4397,7 @@ void MasterImpl::CollectSingleDeadTablet(const std::string& tablename, uint64_t 
 }
 
 void MasterImpl::DeleteObsoleteFiles() {
-    leveldb::Env* env = io::LeveldbEnv();
+    leveldb::Env* env = io::LeveldbBaseEnv();
     std::map<std::string, GcFileSet>::iterator table_it = m_gc_live_files.begin();
     for (; table_it != m_gc_live_files.end(); ++table_it) {
         std::string tablepath = FLAGS_tera_tabletnode_path_prefix + table_it->first;
