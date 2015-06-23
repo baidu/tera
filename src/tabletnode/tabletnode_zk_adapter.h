@@ -11,6 +11,14 @@
 #include "tabletnode/tabletnode_impl.h"
 #include "zk/zk_adapter.h"
 
+namespace galaxy{
+namespace ins{
+namespace sdk{
+    class InsSDK;
+}
+}
+}
+
 namespace tera {
 namespace tabletnode {
 
@@ -92,6 +100,38 @@ private:
     std::string m_kick_node_path;
     std::string m_fake_path;
 };
+
+
+class InsTabletNodeZkAdapter : public TabletNodeZkAdapterBase {
+public:
+    InsTabletNodeZkAdapter(TabletNodeImpl* tabletnode_impl,
+                            const std::string& server_addr);
+    virtual ~InsTabletNodeZkAdapter() {}
+    virtual void Init();
+    virtual bool GetRootTableAddr(std::string* root_table_addr);
+    void OnKickMarkCreated();
+    void OnLockChange(std::string session_id, bool deleted);
+    void OnMetaChange(std::string meta_addr, bool deleted);
+private:
+    virtual void OnChildrenChanged(const std::string& path,
+                                   const std::vector<std::string>& name_list,
+                                   const std::vector<std::string>& data_list) {}
+    virtual void OnNodeValueChanged(const std::string& path,
+                                    const std::string& value) {}
+    virtual void OnNodeCreated(const std::string& path) {}
+    virtual void OnNodeDeleted(const std::string& path) {}
+    virtual void OnWatchFailed(const std::string& path, int watch_type, int err) {}
+    virtual void OnSessionTimeout() {}
+
+private:
+    mutable Mutex m_mutex;
+    TabletNodeImpl * m_tabletnode_impl;
+    std::string m_server_addr;
+    std::string m_serve_node_path;
+    std::string m_kick_node_path;
+    galaxy::ins::sdk::InsSDK* m_ins_sdk;
+};
+
 } // namespace tabletnode
 } // namespace tera
 

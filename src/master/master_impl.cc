@@ -84,6 +84,7 @@ DECLARE_string(tera_leveldb_env_type);
 
 DECLARE_string(tera_zk_root_path);
 DECLARE_string(tera_zk_addr_list);
+DECLARE_bool(tera_ins_enabled);
 
 namespace tera {
 namespace master {
@@ -120,6 +121,9 @@ MasterImpl::~MasterImpl() {
 bool MasterImpl::Init() {
     if (FLAGS_tera_zk_enabled) {
         m_zk_adapter.reset(new MasterZkAdapter(this, m_local_addr));
+    } else if (FLAGS_tera_ins_enabled) {
+        LOG(INFO) << "ins mode" ;
+        m_zk_adapter.reset(new InsMasterZkAdapter(this, m_local_addr));
     } else {
         LOG(INFO) << "fake zk mode!";
         m_zk_adapter.reset(new FakeMasterZkAdapter(this, m_local_addr));
