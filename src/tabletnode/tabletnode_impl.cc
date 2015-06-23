@@ -966,7 +966,7 @@ void TabletNodeImpl::GarbageCollect() {
     }
 
     // collect memory env
-    leveldb::Env* mem_env = leveldb::EnvInMemory()->CacheEnv();
+    leveldb::Env* mem_env = io::LeveldbMemEnv()->CacheEnv();
     GarbageCollectInPath(FLAGS_tera_tabletnode_path_prefix, mem_env,
                          inherited_files, active_tablets);
 

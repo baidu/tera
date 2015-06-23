@@ -301,9 +301,9 @@ public:
 
 std::vector<std::string> FlashEnv::flash_paths_(1, "./flash");
 
-FlashEnv::FlashEnv() : EnvWrapper(Env::Default())
+FlashEnv::FlashEnv(Env* base_env) : EnvWrapper(Env::Default())
 {
-    dfs_env_ = EnvDfs();
+    dfs_env_ = base_env;
     posix_env_ = Env::Default();
 }
 
@@ -451,28 +451,12 @@ const std::string& FlashEnv::FlashPath(const std::string& fname) {
     return flash_paths_[hash % flash_paths_.size()];
 }
 
-static pthread_once_t once = PTHREAD_ONCE_INIT;
-static Env* flash_env;
-static void InitFlashEnv()
-{
-    flash_env = new FlashEnv();
-}
-
-Env* EnvFlash(Logger* l)
-{
-    pthread_once(&once, InitFlashEnv);
-    if (l) {
-        logger = l;
-    }
-    return flash_env;
-}
-
-Env* NewFlashEnv(Logger* l)
+Env* NewFlashEnv(Env* base_env, Logger* l)
 {
     if (l) {
         logger = l;
     }
-    return new FlashEnv();
+    return new FlashEnv(base_env);
 }
 
 }  // namespace leveldb
