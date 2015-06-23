@@ -105,7 +105,7 @@ git clone https://github.com/fxsjy/ins
 cd ins
 sed -i "s|^PREFIX=.*|PREFIX=${DEPS_PREFIX}|" Makefile
 sed -i "s|^PROTOC=.*|PROTOC=${DEPS_PREFIX}/bin/protoc|" Makefile
-make sdk
+make install_sdk
 cd -
 
 cd ${WORK_DIR}
