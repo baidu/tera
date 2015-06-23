@@ -33,7 +33,7 @@ install:
     - ( cd gperftools-2.2.1 && ./configure --with-pic && make -j4 && sudo make install )
 
     - git clone https://github.com/fxsjy/ins
-    - (cd ins && PBRPC_PATH=./sofa-pbrpc/output/ make -j4 && make sdk )
+    - (cd ins && PBRPC_PATH=../sofa-pbrpc/output/ make -j4 && make sdk )
 
 before_script:
     - sed -i 's/^SOFA_PBRPC_PREFIX=.*/SOFA_PBRPC_PREFIX=.\/sofa-pbrpc\/output/' depends.mk
