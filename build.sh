@@ -121,6 +121,7 @@ cd -
 git clone https://github.com/fxsjy/ins
 cd ins
 sed -i "s/^PREFIX=.*/PREFIX=${DEPS_PREFIX}/" Makefile
+sed -i "s/^PROTOC=.*/PROTOC=${DEPS_PREFIX}/bin/protoc" Makefile
 make -j3
 make install
 cd -
