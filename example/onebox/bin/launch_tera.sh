@@ -15,6 +15,10 @@ mkdir -p ${FAKE_ZK_PATH_PREFIX}/ts
 mkdir -p ${FAKE_ZK_PATH_PREFIX}/kick
 
 # backup tabletnode log & launch tera tabletnodes
+if [ ! -x ${CURRENT_DIR}/../log ];then
+  mkdir ${CURRENT_DIR}/../log
+fi
+
 for ((i=1; i<=$TABLETNODE_NUM; i++)); do
     echo "launching tabletnode $i..."
     TABLETNODE_LOG_FILE=${CURRENT_DIR}/../log/tabletnode.$i.stderr

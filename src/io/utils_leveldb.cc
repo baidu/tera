@@ -65,6 +65,9 @@ leveldb::Env* LeveldbEnv() {
 bool MoveEnvDirToTrash(const std::string& tablename) {
     leveldb::Env* env = LeveldbEnv();
     std::string src_dir = FLAGS_tera_tabletnode_path_prefix + "/" + tablename;
+    if (!env->FileExists(src_dir)) {
+        return true;
+    }
 
     const std::string trash("#trash");
     std::string trash_dir = FLAGS_tera_tabletnode_path_prefix + "/" + trash;
@@ -111,7 +114,6 @@ bool MergeTables(const std::string& mf, const std::string& mf1,
     if (!leveldb::MergeBoth(env, cmp, mf, mf1, mf2, mf2_file_maps)) {
         return false;
     }
-
     return true;
 }
 

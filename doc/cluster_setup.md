@@ -50,7 +50,7 @@ Tera集群搭建
   * 在TabletServer节点上，执行以下命令
   ```
   cd ${tera_prefix}/bin
-  nohup ./tera_main --flagfile=../conf/tera.flag --tera_role=tabletserver &> ../log/tabletserver.stderr &
+  nohup ./tera_main --flagfile=../conf/tera.flag --tera_role=tabletnode &> ../log/tabletserver.stderr &
   ```
 5. 停止tera
   * 用kill命令杀掉tera_main对应的进程即可

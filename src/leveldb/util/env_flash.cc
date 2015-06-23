@@ -332,6 +332,7 @@ Status FlashEnv::NewRandomAccessFile(const std::string& fname,
                                                          fname, fsize);
     if (f == NULL || !f->isValid()) {
         *result = NULL;
+        delete f;
         return IOError(fname, errno);
     }
     *result = f;
@@ -352,6 +353,7 @@ Status FlashEnv::NewWritableFile(const std::string& fname,
     FlashWritableFile* f = new FlashWritableFile(posix_env_, dfs_env_, fname);
     if (f == NULL || !f->isValid()) {
         *result = NULL;
+        delete f;
         return IOError(fname, errno);
     }
     *result = f;

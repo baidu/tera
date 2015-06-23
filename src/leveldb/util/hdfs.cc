@@ -13,35 +13,6 @@
 
 namespace leveldb {
 
-extern tera::Counter dfs_read_delay_counter;
-extern tera::Counter dfs_write_delay_counter;
-
-extern tera::Counter dfs_read_counter;
-extern tera::Counter dfs_write_counter;
-extern tera::Counter dfs_sync_counter;
-extern tera::Counter dfs_flush_counter;
-extern tera::Counter dfs_list_counter;
-extern tera::Counter dfs_other_counter;
-extern tera::Counter dfs_exists_counter;
-extern tera::Counter dfs_open_counter;
-extern tera::Counter dfs_close_counter;
-extern tera::Counter dfs_delete_counter;
-extern tera::Counter dfs_tell_counter;
-extern tera::Counter dfs_info_counter;
-
-extern tera::Counter dfs_read_hang_counter;
-extern tera::Counter dfs_write_hang_counter;
-extern tera::Counter dfs_sync_hang_counter;
-extern tera::Counter dfs_flush_hang_counter;
-extern tera::Counter dfs_list_hang_counter;
-extern tera::Counter dfs_other_hang_counter;
-extern tera::Counter dfs_exists_hang_counter;
-extern tera::Counter dfs_open_hang_counter;
-extern tera::Counter dfs_close_hang_counter;
-extern tera::Counter dfs_delete_hang_counter;
-extern tera::Counter dfs_tell_hang_counter;
-extern tera::Counter dfs_info_hang_counter;
-
 static hdfsFS (*hdfsConnect)(const char* nn, tPort port);
 static int (*hdfsDisconnect)(hdfsFS fs);
 
@@ -120,52 +91,29 @@ HFile::~HFile() {
 }
 
 int32_t HFile::Write(const char* buf, int32_t len) {
-  int64_t s = tera::get_micros();
-  tera::AutoCounter ac(&dfs_write_hang_counter, "Write", name_.c_str());
-  int32_t retval = (*hdfsWrite)((hdfsFS)fs_, (hdfsFile)file_, buf, len);
-  dfs_write_delay_counter.Add(tera::get_micros() - s);
-  dfs_write_counter.Inc();
-  return retval;
+  return (*hdfsWrite)((hdfsFS)fs_, (hdfsFile)file_, buf, len);
 }
 int32_t HFile::Flush() {
-  tera::AutoCounter ac(&dfs_flush_hang_counter, "Flush", name_.c_str());
-  dfs_flush_counter.Inc();
   return (*hdfsFlush)((hdfsFS)fs_, (hdfsFile)file_);
 }
 int32_t HFile::Sync() {
-  tera::AutoCounter ac(&dfs_sync_hang_counter, "Sync", name_.c_str());
-  dfs_sync_counter.Inc();
   return (*hdfsSync)((hdfsFS)fs_, (hdfsFile)file_);
 }
 int32_t HFile::Read(char* buf, int32_t len) {
-  int64_t s = tera::get_micros();
-  tera::AutoCounter ac(&dfs_read_hang_counter, "Read", name_.c_str());
-  int32_t retval = (*hdfsRead)((hdfsFS)fs_, (hdfsFile)file_, buf, len);
-  dfs_read_delay_counter.Add(tera::get_micros() - s);
-  dfs_read_counter.Inc();
-  return retval;
+  return (*hdfsRead)((hdfsFS)fs_, (hdfsFile)file_, buf, len);
 }
 int32_t HFile::Pread(int64_t offset, char* buf, int32_t len) {
-  tera::AutoCounter ac(&dfs_read_hang_counter, "Pread", name_.c_str());
-  dfs_read_counter.Inc();
-  int32_t retval = (*hdfsPread)((hdfsFS)fs_, (hdfsFile)file_, offset, buf, len);
-  return retval;
+  return (*hdfsPread)((hdfsFS)fs_, (hdfsFile)file_, offset, buf, len);
 }
 int64_t HFile::Tell() {
-  tera::AutoCounter ac(&dfs_tell_hang_counter, "Tell", name_.c_str());
-  dfs_tell_counter.Inc();
   int64_t retval = (*hdfsTell)((hdfsFS)fs_, (hdfsFile)file_);
   return retval;
 }
 int32_t HFile::Seek(int64_t offset) {
-  tera::AutoCounter ac(&dfs_other_hang_counter, "Seek", name_.c_str());
-  dfs_other_counter.Inc();
   return (*hdfsSeek)((hdfsFS)fs_, (hdfsFile)file_, offset);
 }
 
 int32_t HFile::CloseFile() {
-  tera::AutoCounter ac(&dfs_close_hang_counter, "CloseFile", name_.c_str());
-  dfs_close_counter.Inc();
   int32_t retval = 0;
   if ((hdfsFile)file_ != NULL) {
     retval = (*hdfsCloseFile)((hdfsFS)fs_, (hdfsFile)file_);
@@ -199,29 +147,19 @@ Hdfs::~Hdfs() {
   }
 }
 int32_t Hdfs::CreateDirectory(const std::string& path) {
-  tera::AutoCounter ac(&dfs_other_hang_counter, "CreateDirectory", path.c_str());
-  dfs_other_counter.Inc();
   return (*hdfsCreateDirectory)((hdfsFS)fs_, path.c_str());
 }
 int32_t Hdfs::DeleteDirectory(const std::string& path) {
-  tera::AutoCounter ac(&dfs_delete_hang_counter, "DeleteDirectory", path.c_str());
-  dfs_delete_counter.Inc();
   return (*hdfsDelete)((hdfsFS)fs_, path.c_str());
 }
 int32_t Hdfs::Exists(const std::string& filename) {
-  tera::AutoCounter ac(&dfs_exists_hang_counter, "Exists", filename.c_str());
-  dfs_exists_counter.Inc();
   int32_t retval = (*hdfsExists)((hdfsFS)fs_, filename.c_str());
   return retval;
 }
 int32_t Hdfs::Delete(const std::string& filename) {
-  tera::AutoCounter ac(&dfs_delete_hang_counter, "Delete", filename.c_str());
-  dfs_delete_counter.Inc();
   return (*hdfsDelete)((hdfsFS)fs_, filename.c_str());
 }
 int32_t Hdfs::GetFileSize(const std::string& filename, uint64_t* size) {
-  tera::AutoCounter ac(&dfs_info_hang_counter, "GetFileSize", filename.c_str());
-  dfs_info_counter.Inc();
   hdfsFileInfo* pFileInfo = (*hdfsGetPathInfo)((hdfsFS)fs_, filename.c_str());
   if (pFileInfo != NULL) {
     *size = pFileInfo->mSize;
@@ -231,14 +169,10 @@ int32_t Hdfs::GetFileSize(const std::string& filename, uint64_t* size) {
   return -1;
 }
 int32_t Hdfs::Rename(const std::string& from, const std::string& to) {
-  tera::AutoCounter ac(&dfs_other_hang_counter, "Rename", from.c_str());
-  dfs_other_counter.Inc();
   return (*hdfsRename)((hdfsFS)fs_, from.c_str(), to.c_str());
 }
 
 DfsFile* Hdfs::OpenFile(const std::string& filename, int32_t flags) {
-  tera::AutoCounter ac(&dfs_open_hang_counter, "OpenFile", filename.c_str());
-  dfs_open_counter.Inc();
   // fprintf(stderr, "OpenFile %s %d\n", filename.c_str(), flags);
   int32_t hflags = (flags == RDONLY ? O_RDONLY : O_WRONLY);
   hdfsFile file = (*hdfsOpenFile)((hdfsFS)fs_, filename.c_str(), hflags, 0 ,0 ,0);
@@ -258,13 +192,9 @@ DfsFile* Hdfs::OpenFile(const std::string& filename, int32_t flags) {
 }
 
 int32_t Hdfs::Copy(const std::string& from, const std::string& to) {
-  tera::AutoCounter ac(&dfs_other_hang_counter, "Copy", from.c_str());
-  dfs_other_counter.Inc();
   return (*hdfsCopy)((hdfsFS)fs_, from.c_str(), (hdfsFS)fs_, to.c_str());
 }
 int32_t Hdfs::ListDirectory(const std::string& path, std::vector<std::string>* result) {
-  tera::AutoCounter ac(&dfs_list_hang_counter, "ListDirectory", path.c_str());
-  dfs_list_counter.Inc();
   int numEntries = 0;
   hdfsFileInfo* pHdfsFileInfo = 0;
   pHdfsFileInfo = (*hdfsListDirectory)((hdfsFS)fs_, path.c_str(), &numEntries);

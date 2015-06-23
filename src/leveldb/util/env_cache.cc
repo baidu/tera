@@ -655,7 +655,7 @@ public:
             block++;
             block_offset = 0;
         }
-        delete buf;
+        delete[] buf;
         *result = Slice(scratch, n);
         return Status::OK();
     }
@@ -979,6 +979,7 @@ Status ThreeLevelCacheEnv::NewRandomAccessFile(const std::string& fname,
     CacheRandomAccessFile* f = new CacheRandomAccessFile(dfs_env_, fname);
     if (f == NULL || !f->isValid()) {
         *result = NULL;
+        delete f;
         return IOError(fname, errno);
     }
     *result = f;
@@ -990,6 +991,7 @@ Status ThreeLevelCacheEnv::NewWritableFile(const std::string& fname,
     CacheWritableFile* f = new CacheWritableFile(dfs_env_, fname);
     if (f == NULL || !f->isValid()) {
         *result = NULL;
+        delete f;
         return IOError(fname, errno);
     }
     *result = f;

@@ -39,7 +39,7 @@ TEST(FileNameTest, Parse) {
     { "LOG.old",            0,     kInfoLogFile },
     { "18446744073709551615.log", 18446744073709551615ull, kLogFile },
   };
-  for (int i = 0; i < sizeof(cases) / sizeof(cases[0]); i++) {
+  for (uint32_t i = 0; i < sizeof(cases) / sizeof(cases[0]); i++) {
     std::string f = cases[i].fname;
     ASSERT_TRUE(ParseFileName(f, &number, &type)) << f;
     ASSERT_EQ(cases[i].type, type) << f;
@@ -71,7 +71,7 @@ TEST(FileNameTest, Parse) {
     "100.",
     "100.lop"
   };
-  for (int i = 0; i < sizeof(errors) / sizeof(errors[0]); i++) {
+  for (uint32_t i = 0; i < sizeof(errors) / sizeof(errors[0]); i++) {
     std::string f = errors[i];
     ASSERT_TRUE(!ParseFileName(f, &number, &type)) << f;
   }
@@ -85,43 +85,43 @@ TEST(FileNameTest, Construction) {
   fname = CurrentFileName("foo");
   ASSERT_EQ("foo/", std::string(fname.data(), 4));
   ASSERT_TRUE(ParseFileName(fname.c_str() + 4, &number, &type));
-  ASSERT_EQ(0, number);
+  ASSERT_EQ(0UL, number);
   ASSERT_EQ(kCurrentFile, type);
 
   fname = LockFileName("foo");
   ASSERT_EQ("foo/", std::string(fname.data(), 4));
   ASSERT_TRUE(ParseFileName(fname.c_str() + 4, &number, &type));
-  ASSERT_EQ(0, number);
+  ASSERT_EQ(0UL, number);
   ASSERT_EQ(kDBLockFile, type);
 
   fname = LogFileName("foo", 192);
   ASSERT_EQ("foo/", std::string(fname.data(), 4));
   ASSERT_TRUE(ParseFileName(fname.c_str() + 4, &number, &type));
-  ASSERT_EQ(192, number);
+  ASSERT_EQ(192UL, number);
   ASSERT_EQ(kLogFile, type);
 
   fname = TableFileName("bar/table/0", 200);
   ASSERT_EQ("bar/table/0", std::string(fname.data(), 11));
   ASSERT_TRUE(ParseFileName(fname.c_str() + 12, &number, &type));
-  ASSERT_EQ(200, number);
+  ASSERT_EQ(200UL, number);
   ASSERT_EQ(kTableFile, type);
 
   fname = TableFileName("bar/tablet00000030/0", 0x8000000100000200);
   ASSERT_EQ("bar/tablet00000001/0", std::string(fname.data(), 20));
   ASSERT_TRUE(ParseFileName(fname.c_str() + 21, &number, &type));
-  ASSERT_EQ(0x200, number);
+  ASSERT_EQ(0x200UL, number);
   ASSERT_EQ(kTableFile, type);
 
   fname = DescriptorFileName("bar", 100);
   ASSERT_EQ("bar/", std::string(fname.data(), 4));
   ASSERT_TRUE(ParseFileName(fname.c_str() + 4, &number, &type));
-  ASSERT_EQ(100, number);
+  ASSERT_EQ(100UL, number);
   ASSERT_EQ(kDescriptorFile, type);
 
   fname = TempFileName("tmp", 999);
   ASSERT_EQ("tmp/", std::string(fname.data(), 4));
   ASSERT_TRUE(ParseFileName(fname.c_str() + 4, &number, &type));
-  ASSERT_EQ(999, number);
+  ASSERT_EQ(999UL, number);
   ASSERT_EQ(kTempFile, type);
 }
 
@@ -131,9 +131,9 @@ TEST(FileNameTest, BuildFullFileNumber) {
 
   dbname = "/hello/meta/0";
   number = 0;
-  ASSERT_EQ(BuildFullFileNumber(dbname, number), 0);
+  ASSERT_EQ(BuildFullFileNumber(dbname, number), 0UL);
   number = 255;
-  ASSERT_EQ(BuildFullFileNumber(dbname, number), 0xFF);
+  ASSERT_EQ(BuildFullFileNumber(dbname, number), 0xFFUL);
 
   dbname = "/hello/meta/tablet00000000/0";
   number = 0;
@@ -150,17 +150,17 @@ TEST(FileNameTest, ParseFullFileNumber) {
 
   number = 0x8000000300000001;
   ASSERT_TRUE(ParseFullFileNumber(number, &tablet, &file));
-  ASSERT_EQ(tablet, 3);
-  ASSERT_EQ(file, 1);
+  ASSERT_EQ(tablet, 3UL);
+  ASSERT_EQ(file, 1UL);
 
   number = 0x3;
   ASSERT_TRUE(ParseFullFileNumber(number, &tablet, &file));
-  ASSERT_EQ(tablet, 0);
-  ASSERT_EQ(file, 3);
+  ASSERT_EQ(tablet, 0UL);
+  ASSERT_EQ(file, 3UL);
 
   number = 0x3;
   ASSERT_TRUE(ParseFullFileNumber(number, NULL, &file));
-  ASSERT_EQ(file, 3);
+  ASSERT_EQ(file, 3UL);
 }
 
 TEST(FileNameTest, BuildTableFilePath) {
@@ -197,24 +197,24 @@ TEST(FileNameTest, ParseDbName) {
   dbname = "/hello/meta/0";
   ASSERT_EQ(false, ParseDbName(dbname, &prefix, &tablet, &lg));
   ASSERT_EQ(prefix, "/hello/meta");
-  ASSERT_EQ(lg, 0);
+  ASSERT_EQ(lg, 0UL);
   ASSERT_EQ(false, ParseDbName(dbname, &prefix, NULL, NULL));
   ASSERT_EQ(prefix, "/hello/meta");
 
   dbname = "/hello/t1/tablet00000001/0";
   ASSERT_EQ(true, ParseDbName(dbname, &prefix, &tablet, &lg));
   ASSERT_EQ(prefix, "/hello/t1");
-  ASSERT_EQ(tablet, 1);
-  ASSERT_EQ(lg, 0);
+  ASSERT_EQ(tablet, 1UL);
+  ASSERT_EQ(lg, 0UL);
   ASSERT_EQ(true, ParseDbName(dbname, NULL, &tablet, NULL));
-  ASSERT_EQ(tablet, 1);
+  ASSERT_EQ(tablet, 1UL);
 
   // 1234567=0x12d687, 89=0x59, 987654321=0x3ADE68B1
   dbname = "/hello/t1/tablet01234567/89";
   ASSERT_EQ(true, ParseDbName(dbname, &prefix, &tablet, &lg));
   ASSERT_EQ(prefix, "/hello/t1");
-  ASSERT_EQ(tablet, 1234567);
-  ASSERT_EQ(lg, 89);
+  ASSERT_EQ(tablet, 1234567UL);
+  ASSERT_EQ(lg, 89UL);
   ASSERT_EQ(true, ParseDbName(dbname, NULL, NULL, NULL));
 }
 
@@ -246,16 +246,15 @@ TEST(FileNameTest, GetChildTabletPath) {
 
 TEST(FileNameTest, GetTabletNumFromPath) {
   std::string tabletpath;
-  uint64_t tablet;
 
   tabletpath = "table1/tablet00000001";
-  ASSERT_EQ(1, GetTabletNumFromPath(tabletpath));
+  ASSERT_EQ(1UL, GetTabletNumFromPath(tabletpath));
 
   tabletpath = "table1/tablet00123456";
-  ASSERT_EQ(123456, GetTabletNumFromPath(tabletpath));
+  ASSERT_EQ(123456UL, GetTabletNumFromPath(tabletpath));
 
   tabletpath = "table1/meta";
-  ASSERT_EQ(0, GetTabletNumFromPath(tabletpath));
+  ASSERT_EQ(0UL, GetTabletNumFromPath(tabletpath));
 }
 
 TEST(FileNameTest, IsTableFileInherited) {
