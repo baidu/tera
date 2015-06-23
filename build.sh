@@ -118,12 +118,19 @@ make -j4
 make install
 cd -
 
+wget --no-check-certificate https://raw.githubusercontent.com/fxsjy/thirdparty/master/uuid-1.6.2.tar.gz
+tar -xzvf uuid-1.6.2.tar.gz
+cd uuid-1.6.2
+./configure ${DEPS_CONFIG} 
+make -j4
+make install
+cd -
+
 git clone https://github.com/fxsjy/ins
 cd ins
-sed -i "s/^PREFIX=.*/PREFIX=${DEPS_PREFIX}/" Makefile
-sed -i "s/^PROTOC=.*/PROTOC=${DEPS_PREFIX}/bin/protoc" Makefile
-make -j3
-make install
+sed -i "s|^PREFIX=.*|PREFIX=${DEPS_PREFIX}|" Makefile
+sed -i "s|^PROTOC=.*|PROTOC=${DEPS_PREFIX}/bin/protoc|" Makefile
+make sdk
 cd -
 
 cd ${WORK_DIR}

@@ -656,10 +656,12 @@ bool InsMasterZkAdapter::Init(std::string* root_tablet_addr,
     galaxy::ins::sdk::SDKError err;
     CHECK(m_ins_sdk->Lock(master_lock, &err)) << "lock master_lock fail";
     CHECK(m_ins_sdk->Put(master_path, m_server_addr, &err)) << "writer master fail";
+    CHECK(m_ins_sdk->Watch(master_lock, InsOnLockChange, this, &err)) 
+         << "watch master-lock fail";
+    CHECK(m_ins_sdk->Watch(ts_list_path, &InsOnTsChange, this, &err)) 
+         << "watch ts list failed";
     galaxy::ins::sdk::ScanResult* result = m_ins_sdk->Scan(ts_list_path+"/!", 
                                                            ts_list_path+"/~");
-    CHECK(m_ins_sdk->Watch(master_lock, InsOnLockChange, this, &err)) 
-         << "watch lock fail";
     while (!result->Done()) {
         CHECK_EQ(result->Error(), galaxy::ins::sdk::kOK);
         std::string session_id = result->Value();
@@ -669,8 +671,6 @@ bool InsMasterZkAdapter::Init(std::string* root_tablet_addr,
         (*tabletnode_list)[ts_addr] = session_id;
         result->Next();
     }                       
-    CHECK(m_ins_sdk->Watch(ts_list_path, &InsOnTsChange,
-                           this, &err)) << "watch ts failed";
     m_ins_sdk->RegisterSessionTimeout(InsOnSessionTimeout, this);
     return true;
 }
