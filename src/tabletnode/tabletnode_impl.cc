@@ -74,6 +74,7 @@ DECLARE_int32(tera_tabletnode_cache_disk_filenum);
 DECLARE_int32(tera_tabletnode_cache_log_level);
 
 DECLARE_string(tera_leveldb_env_type);
+DECLARE_bool(tera_ins_enabled);
 
 extern tera::Counter range_error_counter;
 extern tera::Counter rand_read_delay;
@@ -134,6 +135,9 @@ TabletNodeImpl::~TabletNodeImpl() {
 bool TabletNodeImpl::Init() {
     if (FLAGS_tera_zk_enabled) {
         m_zk_adapter.reset(new TabletNodeZkAdapter(this, m_local_addr));
+    } else if(FLAGS_tera_ins_enabled) {
+        LOG(INFO) << "ins mode!";
+        m_zk_adapter.reset(new InsTabletNodeZkAdapter(this, m_local_addr));
     } else {
         LOG(INFO) << "fake zk mode!";
         m_zk_adapter.reset(new FakeTabletNodeZkAdapter(this, m_local_addr));
