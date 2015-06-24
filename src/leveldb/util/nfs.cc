@@ -1,4 +1,4 @@
-// Copyright (c) 2014, Baidu.com, Inc. All Rights Reserved
+// Copyright (c) 2015, Baidu.com, Inc. All Rights Reserved
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -114,7 +114,6 @@ int32_t NFile::Write(const char* buf, int32_t len) {
 }
 int32_t NFile::Flush() {
   int32_t retval = 0;
-  // hdfsFlush有什么意义么, 我没想明白~
   // retval = hdfsFlush(fs_, file_);
   return retval;
 }

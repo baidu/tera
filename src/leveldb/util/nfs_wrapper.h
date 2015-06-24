@@ -2,8 +2,8 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#ifndef  TERA_DEPS_NFS_WRAPPER_H
-#define  TERA_DEPS_NFS_WRAPPER_H
+#ifndef  STORAGE_LEVELDB_UTIL_NFS_WRAPPER_H_
+#define  STORAGE_LEVELDB_UTIL_NFS_WRAPPER_H_
 
 #include "nfs_version.h"
 
@@ -70,5 +70,5 @@ void SetAssignNamespaceIdFunc(nfs::AssignNamespaceIdFunc func);
 }
 #endif
 
-#endif  // TERA_DEPS_NFS_WRAPPER_H
+#endif  // STORAGE_LEVELDB_UTIL_NFS_WRAPPER_H_
 
