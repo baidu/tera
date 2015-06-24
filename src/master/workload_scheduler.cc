@@ -214,7 +214,8 @@ bool SizeScheduler::FindBestTablet(TabletNodePtr src_node, TabletNodePtr dst_nod
     uint64_t dst_node_qps = qps_getter(dst_node, table_name);
 
     const double& qps_ratio = FLAGS_tera_master_load_balance_qps_policy_trigger;
-    if ((double)src_node_qps * qps_ratio <= (double)dst_node_qps) {
+    if (dst_node_qps != 0
+            && (double)src_node_qps * qps_ratio <= (double)dst_node_qps) {
         VLOG(7) << "[size-sched] revert qps reach threshold: " << src_node_qps
                 << " : " << dst_node_qps;
         return false;
@@ -233,7 +234,8 @@ bool SizeScheduler::FindBestTablet(TabletNodePtr src_node, TabletNodePtr dst_nod
         int64_t size = size_getter(tablet);
         int64_t qps = qps_getter(tablet);
         if (size <= ideal_move_size
-                && (src_node_qps - qps) * qps_ratio > (dst_node_qps + qps)
+                && (dst_node_qps == 0 && qps == 0
+                    || (src_node_qps - qps) * qps_ratio > (dst_node_qps + qps))
                 && (best_tablet_index == -1 || size > best_tablet_size)) {
             best_tablet_index = i;
             best_tablet_size = size;
@@ -333,6 +335,10 @@ bool QPSScheduler::FindBestTablet(TabletNodePtr src_node, TabletNodePtr dst_node
         }
     }
     if (best_tablet_index == -1) {
+        return false;
+    }
+    if (best_tablet_qps == 0) {
+        VLOG(7) << "[QPS-sched] no need to move 0 QPS tablet";
         return false;
     }
     *best_index = best_tablet_index;
