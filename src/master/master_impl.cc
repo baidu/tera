@@ -84,6 +84,7 @@ DECLARE_string(tera_leveldb_env_type);
 
 DECLARE_string(tera_zk_root_path);
 DECLARE_string(tera_zk_addr_list);
+DECLARE_bool(tera_ins_enabled);
 
 namespace tera {
 namespace master {
@@ -120,6 +121,9 @@ MasterImpl::~MasterImpl() {
 bool MasterImpl::Init() {
     if (FLAGS_tera_zk_enabled) {
         m_zk_adapter.reset(new MasterZkAdapter(this, m_local_addr));
+    } else if (FLAGS_tera_ins_enabled) {
+        LOG(INFO) << "ins mode" ;
+        m_zk_adapter.reset(new InsMasterZkAdapter(this, m_local_addr));
     } else {
         LOG(INFO) << "fake zk mode!";
         m_zk_adapter.reset(new FakeMasterZkAdapter(this, m_local_addr));
@@ -451,6 +455,15 @@ void MasterImpl::CreateTable(const CreateTableRequest* request,
             done->Run();
             return;
         }
+    }
+
+    // try clean env, if there is a dir same as table_name, delete it first
+    if (!io::MoveEnvDirToTrash(request->table_name())) {
+        LOG(ERROR) << "Fail to create table: " << request->table_name()
+            << ", cannot move old table dir to trash";
+        response->set_status(kTableExist);
+        done->Run();
+        return;
     }
 
     int32_t tablet_num = request->delimiters_size() + 1;
@@ -1426,11 +1439,11 @@ void MasterImpl::TabletNodeRecoveryCallback(std::string addr,
                                             QueryRequest* request,
                                             QueryResponse* response,
                                             bool failed, int error_code) {
-    delete request;
     TabletNodePtr node;
     if (!m_tabletnode_manager->FindTabletNode(addr, &node)) {
         LOG(WARNING) << "fail to query: server down, id: "
             << request->sequence_id() << ", server: " << addr;
+        delete request;
         delete response;
         return;
     }
@@ -1455,6 +1468,7 @@ void MasterImpl::TabletNodeRecoveryCallback(std::string addr,
                 boost::bind(&MasterImpl::RetryQueryNewTabletNode, this, addr);
             m_thread_pool->DelayTask(FLAGS_tera_master_collect_info_retry_period, closure);
         }
+        delete request;
         delete response;
         return;
     }
@@ -1485,7 +1499,7 @@ void MasterImpl::TabletNodeRecoveryCallback(std::string addr,
             UnloadTabletAsync(unload_tablet, done);
         } else if (tablet->SetStatusIf(kTableReady, kTabletPending)
             || tablet->SetStatusIf(kTableReady, kTableOffLine)) {
-            tablet->SetSize(meta.table_size());
+            tablet->SetSize(meta);
             tablet->SetCompactStatus(meta.compact_status());
             ProcessReadyTablet(tablet);
             VLOG(6) << "[query] " << tablet;
@@ -1524,6 +1538,7 @@ void MasterImpl::TabletNodeRecoveryCallback(std::string addr,
     NodeState old_state;
     node->SetState(kReady, &old_state);
 
+    delete request;
     delete response;
 
     // If all tabletnodes restart in one zk callback,
@@ -2571,7 +2586,7 @@ void MasterImpl::QueryTabletNodeCallback(std::string addr, QueryRequest* request
             } else if (m_tablet_manager->FindTablet(table_name, key_start, &tablet)
                 && tablet->Verify(table_name, key_start, key_end, meta.path(),
                                   meta.server_addr())) {
-                tablet->SetSize(meta.table_size());
+                tablet->SetSize(meta);
                 tablet->SetCounter(counter);
                 tablet->SetCompactStatus(meta.compact_status());
                 ClearUnusedSnapshots(tablet, meta);
@@ -3094,7 +3109,7 @@ void MasterImpl::MergeTabletAsync(TabletPtr tablet_p1, TabletPtr tablet_p2) {
 }
 
 void MasterImpl::MergeTabletAsyncPhase2(TabletPtr tablet_p1, TabletPtr tablet_p2) {
-    leveldb::Env* env = io::LeveldbEnv();
+    leveldb::Env* env = io::LeveldbBaseEnv();
     std::vector<std::string> children;
     std::string tablet_path = FLAGS_tera_tabletnode_path_prefix + tablet_p1->GetPath();
     env->GetChildren(tablet_path, &children);
@@ -4325,7 +4340,7 @@ void MasterImpl::CollectDeadTabletsFiles() {
 void MasterImpl::CollectSingleDeadTablet(const std::string& tablename, uint64_t tabletnum) {
     std::string tablepath = FLAGS_tera_tabletnode_path_prefix + tablename;
     std::string tablet_path = leveldb::GetTabletPathFromNum(tablepath, tabletnum);
-    leveldb::Env* env = io::LeveldbEnv();
+    leveldb::Env* env = io::LeveldbBaseEnv();
     std::vector<std::string> children;
     env->GetChildren(tablet_path, &children);
     if (children.size() == 0) {
@@ -4386,7 +4401,7 @@ void MasterImpl::CollectSingleDeadTablet(const std::string& tablename, uint64_t 
 }
 
 void MasterImpl::DeleteObsoleteFiles() {
-    leveldb::Env* env = io::LeveldbEnv();
+    leveldb::Env* env = io::LeveldbBaseEnv();
     std::map<std::string, GcFileSet>::iterator table_it = m_gc_live_files.begin();
     for (; table_it != m_gc_live_files.end(); ++table_it) {
         std::string tablepath = FLAGS_tera_tabletnode_path_prefix + table_it->first;

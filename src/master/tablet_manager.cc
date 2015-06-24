@@ -160,6 +160,12 @@ void Tablet::SetSize(int64_t table_size) {
     m_meta.set_table_size(table_size);
 }
 
+void Tablet::SetSize(const TabletMeta& meta) {
+    MutexLock lock(&m_mutex);
+    m_meta.set_table_size(meta.table_size());
+    m_meta.mutable_lg_size()->CopyFrom(meta.lg_size());
+}
+
 void Tablet::SetCompactStatus(CompactStatus compact_status) {
     MutexLock lock(&m_mutex);
     m_meta.set_compact_status(compact_status);
@@ -612,7 +618,7 @@ bool Table::GetTabletsForGc(std::set<uint64_t>* live_tablets,
     }
 
     std::vector<std::string> children;
-    leveldb::Env* env = io::LeveldbEnv();
+    leveldb::Env* env = io::LeveldbBaseEnv();
     std::string table_path = FLAGS_tera_tabletnode_path_prefix + m_name;
     env->GetChildren(table_path, &children);
     for (size_t i = 0; i < children.size(); ++i) {

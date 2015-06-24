@@ -19,7 +19,7 @@ namespace leveldb {
 
 class InMemoryEnv : public EnvWrapper{
 public:
-    InMemoryEnv();
+    InMemoryEnv(Env* base_env);
 
     ~InMemoryEnv();
 
@@ -68,10 +68,8 @@ private:
     Env* mem_env_;
 };
 
-/// default mem env
-Env* EnvInMemory();
 /// new mem env
-Env* NewInMemoryEnv();
+Env* NewInMemoryEnv(Env* base_env);
 }  // namespace leveldb
 
 #endif  //__LEVEL_ENV_INMEM_H_

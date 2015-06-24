@@ -13,6 +13,10 @@
 #include "common/file/file_path.h"
 #include "common/file/file_stream.h"
 
+#include "ins_sdk.h"
+
+DECLARE_string(tera_ins_addr_list);
+
 namespace tera {
 namespace zk {
 
@@ -209,6 +213,13 @@ bool FakeZkUtil::ListNodes(const std::string& path,
     if (!ListCurrentDir(path, values)) {
         return false;
     }
+    return true;
+}
+
+bool InsUtil::ReadNode(const std::string& name, std::string* value) {
+    galaxy::ins::sdk::InsSDK ins_sdk(FLAGS_tera_ins_addr_list);
+    galaxy::ins::sdk::SDKError err;
+    CHECK(ins_sdk.Get(name, value, &err)) << "sdk read ins fail";
     return true;
 }
 

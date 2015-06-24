@@ -18,7 +18,7 @@ namespace leveldb {
 
 class FlashEnv : public EnvWrapper{
 public:
-    FlashEnv();
+    FlashEnv(Env* base_env);
 
     ~FlashEnv();
 
@@ -76,10 +76,8 @@ private:
     static std::vector<std::string> flash_paths_;
 };
 
-/// default mem env
-Env* EnvFlash();
-/// new mem env
-Env* NewFlashEnv();
+/// new flash env
+Env* NewFlashEnv(Env* base_env, Logger* logger);
 }  // namespace leveldb
 
 #endif  //__LEVELDB_ENV_FLASH_H_

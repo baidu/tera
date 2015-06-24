@@ -173,9 +173,9 @@ public:
     }
 };
 
-InMemoryEnv::InMemoryEnv() : EnvWrapper(Env::Default())
+InMemoryEnv::InMemoryEnv(Env* base_env) : EnvWrapper(Env::Default())
 {
-    dfs_env_ = EnvDfs();
+    dfs_env_ = base_env;
     mem_env_ = NewMemEnv(dfs_env_);
 }
 
@@ -204,6 +204,7 @@ Status InMemoryEnv::NewRandomAccessFile(const std::string& fname,
     InMemoryRandomAccessFile* f = new InMemoryRandomAccessFile(mem_env_, dfs_env_, fname);
     if (f == NULL || !f->isValid()) {
         *result = NULL;
+        delete f;
         return IOError(fname, errno);
     }
     *result = f;
@@ -218,6 +219,7 @@ Status InMemoryEnv::NewWritableFile(const std::string& fname,
     InMemoryWritableFile* f = new InMemoryWritableFile(mem_env_, dfs_env_, fname);
     if (f == NULL || !f->isValid()) {
         *result = NULL;
+        delete f;
         return IOError(fname, errno);
     }
     *result = f;
@@ -284,24 +286,9 @@ Status InMemoryEnv::UnlockFile(FileLock* lock)
     return Status::OK();
 }
 
-static pthread_once_t once = PTHREAD_ONCE_INIT;
-static Env* inmem_env;
-static void InitInMemoryEnv()
+Env* NewInMemoryEnv(Env* base_env)
 {
-    inmem_env = new InMemoryEnv();
-}
-
-Env* EnvInMemory()
-{
-    pthread_once(&once, InitInMemoryEnv);
-    return inmem_env;
-}
-
-Env* NewInMemoryEnv()
-{
-    return new InMemoryEnv();
+    return new InMemoryEnv(base_env);
 }
 
 }  // namespace leveldb
-
-

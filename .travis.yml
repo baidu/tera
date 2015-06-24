@@ -1,7 +1,7 @@
 language: cpp
 compiler: gcc
 install:
-    - sudo apt-get install libboost-dev
+    - sudo apt-get install libboost-dev uuid-dev
 
     - wget https://github.com/google/protobuf/releases/download/v2.6.1/protobuf-2.6.1.tar.gz
     - tar xf protobuf-2.6.1.tar.gz
@@ -32,6 +32,9 @@ install:
     - tar zxvf gperftools-2.2.1.tar.gz
     - ( cd gperftools-2.2.1 && ./configure --with-pic && make -j4 && sudo make install )
 
+    - git clone https://github.com/fxsjy/ins
+    - (cd ins && PBRPC_PATH=../sofa-pbrpc/output/ make sdk )
+
 before_script:
     - sed -i 's/^SOFA_PBRPC_PREFIX=.*/SOFA_PBRPC_PREFIX=.\/sofa-pbrpc\/output/' depends.mk
     - sed -i 's/^PROTOBUF_PREFIX=.*/PROTOBUF_PREFIX=\/usr\/local/' depends.mk
@@ -41,6 +44,7 @@ before_script:
     - sed -i 's/^GLOG_PREFIX=.*/GLOG_PREFIX=\/usr\/local/' depends.mk
     - sed -i 's/^GPERFTOOLS_PREFIX=.*/GPERFTOOLS_PREFIX=\/usr\/local/' depends.mk
     - sed -i 's/^BOOST_INCDIR=.*/BOOST_INCDIR=\/usr\/local\/include/' depends.mk
+    - sed -i 's/^INS_PREFIX=.*/INS_PREFIX=.\/ins\/output/' depends.mk
 
 script:
     - make -j4

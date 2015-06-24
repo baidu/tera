@@ -54,7 +54,8 @@ DEFINE_int32(tera_io_retry_period, 100, "the retry interval period (in ms) when 
 DEFINE_int32(tera_io_retry_max_times, 20, "the max retry times when meets trouble");
 DEFINE_int32(tera_leveldb_env_local_seek_latency, 50000, "the random access latency (in ns) of local storage device");
 DEFINE_int32(tera_leveldb_env_dfs_seek_latency, 10000000, "the random access latency (in ns) of dfs storage device");
-DEFINE_int32(tera_leveldb_max_open_files, 1000, "the max open file number in leveldb table_cache");
+DEFINE_int32(tera_memenv_table_cache_size, 100, "the max open file number in leveldb table_cache");
+DEFINE_int32(tera_memenv_block_cache_size, 20, "block cache size for leveldb which do not use share block cache");
 
 DEFINE_string(tera_leveldb_compact_strategy, "default", "the default strategy to drive consum compaction, should be [default|LG|dummy]");
 
@@ -151,7 +152,7 @@ DEFINE_int32(tera_tabletnode_connect_retry_period, 1000, "the retry period (in m
 DEFINE_int32(tera_tabletnode_connect_timeout_period, 180000, "the timeout period (in ms) for each tablet node connection");
 DEFINE_string(tera_tabletnode_path_prefix, "../data/", "the path prefix for table storage");
 DEFINE_int32(tera_tabletnode_block_cache_size, 100, "the cache size of tablet (in MB)");
-DEFINE_int32(tera_tabletnode_table_cache_size, 10000, "the table cache size, means the max num of files keeping open in this tabletnode.");
+DEFINE_int32(tera_tabletnode_table_cache_size, 1000, "the table cache size, means the max num of files keeping open in this tabletnode.");
 DEFINE_int32(tera_tabletnode_scan_pack_max_size, 10240, "the max size(KB) of the package for scan rpc");
 
 DEFINE_int32(tera_asyncwriter_pending_limit, 10000, "the max pending data size (KB) in async writer");
@@ -229,3 +230,7 @@ DEFINE_int64(tera_sdk_scan_async_cache_size, 16, "the max buffer size (in MB) fo
 DEFINE_int32(tera_sdk_scan_async_parallel_max_num, 500, "the max number of concurrent task sending");
 
 DEFINE_bool(tera_sdk_pend_request_while_scan_meta_enabled, true, "pend request util meta-scan operation finished");
+
+DEFINE_string(tera_ins_addr_list, "", "the ins cluster addr. e.g. abc.com:1234,abb.com:1234");
+DEFINE_string(tera_ins_root_path, "", "root path on ins. e.g /ps/sandbox");
+DEFINE_bool(tera_ins_enabled, false, "option to open ins naming");

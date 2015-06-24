@@ -68,11 +68,10 @@ bool TabletNodeEntry::StartServer() {
         return false;
     }
 
-    if (!m_tabletnode_impl->Init()) { // register on ZK
+    if (!m_tabletnode_impl->Init()) { //register on ZK
         LOG(ERROR) << "fail to init tabletnode_impl";
         return false;
     }
-
     LOG(INFO) << "finish starting RPC server";
     return true;
 }

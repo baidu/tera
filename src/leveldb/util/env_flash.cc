@@ -33,6 +33,7 @@ tera::Counter ssd_read_size_counter;
 tera::Counter ssd_write_counter;
 tera::Counter ssd_write_size_counter;
 
+static Logger* logger;
 // Log error message
 static Status IOError(const std::string& context, int err_number)
 {
@@ -50,11 +51,11 @@ Status CopyToLocal(const std::string& local_fname, Env* env,
     if (s.ok() && fsize == local_size) {
         return s;
     }
-    fprintf(stderr, "local file mismatch, expect %lu, actual %lu, delete %s\n",
+    Log(logger, "local file mismatch, expect %lu, actual %lu, delete %s\n",
             fsize, local_size, local_fname.c_str());
     Env::Default()->DeleteFile(local_fname);
 
-    fprintf(stderr, "open %s\n", fname.c_str());
+    Log(logger, "open %s\n", fname.c_str());
     SequentialFile* dfs_file = NULL;
     s = env->NewSequentialFile(fname, &dfs_file);
     if (!s.ok()) {
@@ -67,7 +68,7 @@ Status CopyToLocal(const std::string& local_fname, Env* env,
         }
     }
 
-    fprintf(stderr, "open %s\n", local_fname.c_str());
+    Log(logger, "open %s\n", local_fname.c_str());
     WritableFile* local_file = NULL;
     s = Env::Default()->NewWritableFile(local_fname, &local_file);
     if (!s.ok()) {
@@ -89,7 +90,7 @@ Status CopyToLocal(const std::string& local_fname, Env* env,
         uint64_t time_used = env->NowMicros() - time_s;
         //if (time_used > 200000) {
         if (true) {
-            fprintf(stderr, "copy %s to local used %llu ms\n",
+            Log(logger, "copy %s to local used %llu ms\n",
                 fname.c_str(), static_cast<unsigned long long>(time_used) / 1000);
         }
         return s;
@@ -160,7 +161,7 @@ public:
         // copy from dfs with seq read
         Status copy_status = CopyToLocal(local_fname, dfs_env, fname, fsize);
         if (!copy_status.ok()) {
-            fprintf(stderr, "copy to local fail [%s]: %s\n",
+            Log(logger, "copy to local fail [%s]: %s\n",
                 copy_status.ToString().c_str(), local_fname.c_str());
             // no flash file, use dfs file
             dfs_env->NewRandomAccessFile(fname, &dfs_file_);
@@ -171,7 +172,7 @@ public:
         if (s.ok()) {
             return;
         }
-        fprintf(stderr, "local file exists, but open for RandomAccess fail: %s\n",
+        Log(logger, "local file exists, but open for RandomAccess fail: %s\n",
             local_fname.c_str());
         Env::Default()->DeleteFile(local_fname);
         dfs_env->NewRandomAccessFile(fname, &dfs_file_);
@@ -211,7 +212,7 @@ public:
             return;
         }
         if (fname.rfind(".sst") != fname.size()-4) {
-            // fprintf(stderr, "[EnvFlash] Don't cache %s\n", fname.c_str());
+            // Log(logger, "[EnvFlash] Don't cache %s\n", fname.c_str());
             return;
         }
         local_fname_ = FlashEnv::FlashPath(fname) + fname;
@@ -222,7 +223,7 @@ public:
         }
         s = posix_env->NewWritableFile(local_fname_, &flash_file_);
         if (!s.ok()) {
-            fprintf(stderr, "Open local flash file for write fail: %s\n",
+            Log(logger, "Open local flash file for write fail: %s\n",
                     local_fname_.c_str());
         }
     }
@@ -300,9 +301,9 @@ public:
 
 std::vector<std::string> FlashEnv::flash_paths_(1, "./flash");
 
-FlashEnv::FlashEnv() : EnvWrapper(Env::Default())
+FlashEnv::FlashEnv(Env* base_env) : EnvWrapper(Env::Default())
 {
-    dfs_env_ = EnvDfs();
+    dfs_env_ = base_env;
     posix_env_ = Env::Default();
 }
 
@@ -331,6 +332,7 @@ Status FlashEnv::NewRandomAccessFile(const std::string& fname,
                                                          fname, fsize);
     if (f == NULL || !f->isValid()) {
         *result = NULL;
+        delete f;
         return IOError(fname, errno);
     }
     *result = f;
@@ -351,6 +353,7 @@ Status FlashEnv::NewWritableFile(const std::string& fname,
     FlashWritableFile* f = new FlashWritableFile(posix_env_, dfs_env_, fname);
     if (f == NULL || !f->isValid()) {
         *result = NULL;
+        delete f;
         return IOError(fname, errno);
     }
     *result = f;
@@ -448,22 +451,12 @@ const std::string& FlashEnv::FlashPath(const std::string& fname) {
     return flash_paths_[hash % flash_paths_.size()];
 }
 
-static pthread_once_t once = PTHREAD_ONCE_INIT;
-static Env* flash_env;
-static void InitFlashEnv()
+Env* NewFlashEnv(Env* base_env, Logger* l)
 {
-    flash_env = new FlashEnv();
-}
-
-Env* EnvFlash()
-{
-    pthread_once(&once, InitFlashEnv);
-    return flash_env;
-}
-
-Env* NewFlashEnv()
-{
-    return new FlashEnv();
+    if (l) {
+        logger = l;
+    }
+    return new FlashEnv(base_env);
 }
 
 }  // namespace leveldb
