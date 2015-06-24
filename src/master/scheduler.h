@@ -8,6 +8,7 @@
 #include <map>
 #include <string>
 
+#include "master/tablet_manager.h"
 #include "master/tabletnode_manager.h"
 
 namespace tera {
@@ -18,9 +19,17 @@ public:
     virtual ~Scheduler() {}
 
     virtual bool FindBestNode(const std::vector<TabletNodePtr>& node_list,
+                              const std::string& table_name,
                               size_t* best_index) = 0;
-    virtual void AscendingSort(std::vector<TabletNodePtr>& node_list) = 0;
-    virtual void DescendingSort(std::vector<TabletNodePtr>& node_list) = 0;
+    virtual bool FindBestTablet(TabletNodePtr src_node, TabletNodePtr dst_node,
+                                const std::vector<TabletPtr>& table_list,
+                                const std::string& table_name,
+                                size_t* best_index) = 0;
+
+    virtual void AscendingSort(std::vector<TabletNodePtr>& node_list,
+                               const std::string& table_name) = 0;
+    virtual void DescendingSort(std::vector<TabletNodePtr>& node_list,
+                                const std::string& table_name) = 0;
 
     virtual const char* Name() = 0;
 };

@@ -12,7 +12,6 @@ DECLARE_string(tera_master_meta_table_name);
 DECLARE_int32(tera_master_max_load_concurrency);
 DECLARE_int32(tera_master_max_split_concurrency);
 DECLARE_int32(tera_master_load_interval);
-DECLARE_double(tera_master_load_balance_size_overload_ratio);
 DECLARE_bool(tera_master_meta_isolate_enabled);
 
 namespace tera {
@@ -106,6 +105,8 @@ bool TabletNode::MayLoadNow() {
         <= get_micros()) {
         return true;
     }
+    VLOG(7) << "MayLoadNow() " << m_addr << " last load time: "
+            << (get_micros() - m_recent_load_time_list.front()) / 1000000 << " seconds ago";
     return false;
 }
 
@@ -116,6 +117,12 @@ bool TabletNode::TryLoad(TabletPtr tablet) {
         m_table_size[tablet->GetTableName()] += tablet->GetDataSize();
     } else {
         m_table_size[tablet->GetTableName()] = tablet->GetDataSize();
+    }
+    m_qps += tablet->GetAverageCounter().read_rows();
+    if (m_table_qps.find(tablet->GetTableName()) != m_table_qps.end()) {
+        m_table_qps[tablet->GetTableName()] += tablet->GetAverageCounter().read_rows();
+    } else {
+        m_table_qps[tablet->GetTableName()] = tablet->GetAverageCounter().read_rows();
     }
     //VLOG(5) << "load on: " << m_addr << ", size: " << tablet->GetDataSize()
     //      << ", total size: " << m_data_size;
@@ -307,11 +314,13 @@ void TabletNodeManager::UpdateTabletNode(const std::string& addr,
     MutexLock node_lock(&node->m_mutex);
     node->m_report_status = state.m_report_status;
     node->m_data_size = state.m_data_size;
+    node->m_qps = state.m_qps;
     node->m_info = state.m_info;
     node->m_info.set_addr(addr);
     node->m_load = state.m_load;
     node->m_update_time = state.m_update_time;
     node->m_table_size = state.m_table_size;
+    node->m_table_qps = state.m_table_qps;
 
     node->m_info.set_status_m(NodeStateToString(node->m_state));
     node->m_info.set_tablet_onload(node->m_onload_count);
@@ -359,16 +368,18 @@ bool TabletNodeManager::FindTabletNode(const std::string& addr,
     return true;
 }
 
-bool TabletNodeManager::ScheduleTabletNode(Scheduler* scheduler, std::string* node_addr) {
+bool TabletNodeManager::ScheduleTabletNode(Scheduler* scheduler, const std::string& table_name,
+                                           std::string* node_addr) {
     TabletNodePtr node;
-    if (ScheduleTabletNode(scheduler, &node)) {
+    if (ScheduleTabletNode(scheduler, table_name, &node)) {
         *node_addr = node->GetAddr();
         return true;
     }
     return false;
 }
 
-bool TabletNodeManager::ScheduleTabletNode(Scheduler* scheduler, TabletNodePtr* node) {
+bool TabletNodeManager::ScheduleTabletNode(Scheduler* scheduler, const std::string& table_name,
+                                           TabletNodePtr* node) {
     MutexLock lock(&m_mutex);
     std::string meta_node_addr;
     m_master_impl->GetMetaTabletAddr(&meta_node_addr);
@@ -399,83 +410,21 @@ bool TabletNodeManager::ScheduleTabletNode(Scheduler* scheduler, TabletNodePtr* 
     }
 
     size_t best_index = 0;
-    if (scheduler->FindBestNode(candidates, &best_index)) {
+    if (scheduler->FindBestNode(candidates, table_name, &best_index)) {
         *node = candidates[best_index];
         return true;
     }
     return false;
 }
 
-bool TabletNodeManager::IsNodeOverloadThanAverage(const std::string& node_addr) {
-    bool found = false;
-    uint64_t total_data_size = 0, server_data_size = 0;
-
-    MutexLock lock(&m_mutex);
-    TabletNodeList::iterator it = m_tabletnode_list.begin();
-    for (; it != m_tabletnode_list.end(); ++it) {
-        TabletNodePtr node = it->second;
-        MutexLock lock2(&node->m_mutex);
-        total_data_size += node->m_data_size;
-        if (node_addr == node->m_addr) {
-            server_data_size = node->m_data_size;
-            found = true;
-        }
-    }
-    if (!found) {
-        return false;
-    }
-    total_data_size -= server_data_size;
-    double average_data_size = (double)total_data_size / m_tabletnode_list.size();
-    if ((double)server_data_size
-        > (double)average_data_size * FLAGS_tera_master_load_balance_size_overload_ratio) {
-        return true;
-    }
-    return false;
-}
-
-bool TabletNodeManager::IsNodeOverloadThanLeast(const std::string& node_addr) {
-    std::string meta_node_addr;
-    m_master_impl->GetMetaTabletAddr(&meta_node_addr);
-
-    MutexLock lock(&m_mutex);
-    if (FLAGS_tera_master_meta_isolate_enabled && node_addr == meta_node_addr) {
-        // to isolate meta, we assume meta node is overload
-        return m_tabletnode_list.size() > 1;
-    }
-
-    bool found = false;
-    uint64_t least_data_size = (uint64_t)-1, server_data_size = 0;
-
-    TabletNodeList::iterator it = m_tabletnode_list.begin();
-    for (; it != m_tabletnode_list.end(); ++it) {
-        TabletNodePtr node = it->second;
-        MutexLock lock2(&node->m_mutex);
-        if ((!FLAGS_tera_master_meta_isolate_enabled
-            || node->m_addr != meta_node_addr)
-            && least_data_size >= node->m_data_size) {
-            least_data_size = node->m_data_size;
-        }
-        if (node_addr == node->m_addr) {
-            server_data_size = node->m_data_size;
-            found = true;
-        }
-    }
-    if (!found) {
-        return false;
-    }
-    if ((double)server_data_size
-        > (double)least_data_size * FLAGS_tera_master_load_balance_size_overload_ratio) {
-        return true;
-    }
-    return false;
-}
-
-bool TabletNodeManager::ShouldMoveData(TabletNodePtr src_node,
-                                       TabletNodePtr dst_node,
-                                       WorkloadGetter* load_getter,
+bool TabletNodeManager::ShouldMoveData(Scheduler* scheduler, const std::string& table_name,
+                                       TabletNodePtr src_node, TabletNodePtr dst_node,
                                        const std::vector<TabletPtr>& tablet_candidates,
                                        size_t* tablet_index) {
     MutexLock lock(&m_mutex);
+    if (tablet_candidates.size() == 0) {
+        return false;
+    }
     if (src_node == dst_node) {
         return false;
     }
@@ -495,38 +444,12 @@ bool TabletNodeManager::ShouldMoveData(TabletNodePtr src_node,
             return false;
         }
         if (src_node->GetAddr() == meta_node_addr) {
+            *tablet_index = 0;
             return true;
         }
     }
-    if (tablet_candidates.size() == 0) {
-        return false;
-    }
-
-    uint64_t src_node_load = (*load_getter)(src_node);
-    uint64_t dst_node_load = (*load_getter)(dst_node);
-
-    const double& ratio = FLAGS_tera_master_load_balance_size_overload_ratio;
-    if ((double)src_node_load <= (double)dst_node_load * ratio) {
-        return false;
-    }
-
-    // avoid move back and forth repeatedly
-    int64_t ideal_move_load = (src_node_load - dst_node_load) / 2;
-    int64_t best_move_tablet_index = -1;
-    int64_t best_move_load = 0;
-    for (size_t i = 0; i < tablet_candidates.size(); ++i) {
-        TabletPtr tablet = tablet_candidates[i];
-        int64_t load = (*load_getter)(tablet);
-        if (load <= ideal_move_load && (best_move_tablet_index == -1 || load > best_move_load)) {
-            best_move_tablet_index = i;
-            best_move_load = load;
-        }
-    }
-    if (best_move_tablet_index == -1) {
-        return false;
-    }
-    *tablet_index = best_move_tablet_index;
-    return true;
+    return scheduler->FindBestTablet(src_node, dst_node, tablet_candidates,
+                                     table_name, tablet_index);
 }
 
 std::string NodeStateToString(NodeState state) {

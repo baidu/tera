@@ -117,15 +117,15 @@ public:
     void GetAllTabletNodeAddr(std::vector<std::string>* addr_array);
     void GetAllTabletNodeId(std::map<std::string, std::string>* id_map);
     void GetAllTabletNodeInfo(std::vector<TabletNodePtr>* info_array);
-    bool ScheduleTabletNode(Scheduler* scheduler, std::string* node_addr);
-    bool ScheduleTabletNode(Scheduler* scheduler, TabletNodePtr* node);
-    bool CheckStateSwitch(NodeState old_state, NodeState new_state);
-    bool IsNodeOverloadThanAverage(const std::string& node_addr);
-    bool IsNodeOverloadThanLeast(const std::string& node_addr);
-    bool ShouldMoveData(TabletNodePtr src_node, TabletNodePtr dst_node,
-                        WorkloadGetter* load_getter,
+    bool ScheduleTabletNode(Scheduler* scheduler, const std::string& table_name,
+                            std::string* node_addr);
+    bool ScheduleTabletNode(Scheduler* scheduler, const std::string& table_name,
+                            TabletNodePtr* node);
+    bool ShouldMoveData(Scheduler* scheduler, const std::string& table_name,
+                        TabletNodePtr src_node, TabletNodePtr dst_node,
                         const std::vector<TabletPtr>& tablet_candidates,
                         size_t* tablet_index);
+    bool CheckStateSwitch(NodeState old_state, NodeState new_state);
 
 private:
     mutable Mutex m_mutex;

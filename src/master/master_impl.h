@@ -236,8 +236,12 @@ private:
                               bool failed, int error_code);
 
     void LoadBalance();
+    void LoadBalance(std::vector<TabletNodePtr>& tabletnode_list,
+                     std::vector<TabletPtr>& tablet_list,
+                     const std::string& table_name = "");
     void TabletNodeLoadBalance(TabletNodePtr tabletnode, Scheduler* scheduler,
-                               const std::vector<TabletPtr>& tablet_list);
+                               const std::vector<TabletPtr>& tablet_list,
+                               const std::string& table_name = "");
 
     void GetSnapshotAsync(TabletPtr tablet, int32_t timeout,
                           SnapshotClosure* done);
@@ -452,6 +456,8 @@ private:
     scoped_ptr<TabletManager> m_tablet_manager;
     scoped_ptr<TabletNodeManager> m_tabletnode_manager;
     scoped_ptr<MasterZkAdapterBase> m_zk_adapter;
+    scoped_ptr<Scheduler> m_size_scheduler;
+    scoped_ptr<Scheduler> m_qps_scheduler;
 
     Mutex m_mutex;
     int64_t m_release_cache_timer_id;
