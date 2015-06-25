@@ -211,8 +211,8 @@ bool SizeScheduler::FindBestTablet(TabletNodePtr src_node, TabletNodePtr dst_nod
     }
 
     QPSGetter qps_getter;
-    uint64_t src_node_qps = qps_getter(src_node, table_name);
-    uint64_t dst_node_qps = qps_getter(dst_node, table_name);
+    int64_t src_node_qps = qps_getter(src_node, table_name);
+    int64_t dst_node_qps = qps_getter(dst_node, table_name);
 
     const double& qps_ratio = FLAGS_tera_master_load_balance_qps_ratio_trigger;
     if (dst_node_qps >= FLAGS_tera_master_load_balance_qps_min_limit
