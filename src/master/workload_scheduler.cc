@@ -7,8 +7,9 @@
 #include "glog/logging.h"
 #include "master/tablet_manager.h"
 
-DECLARE_double(tera_master_load_balance_size_policy_trigger);
-DECLARE_double(tera_master_load_balance_qps_policy_trigger);
+DECLARE_double(tera_master_load_balance_size_ratio_trigger);
+DECLARE_double(tera_master_load_balance_qps_ratio_trigger);
+DECLARE_int32(tera_master_load_balance_qps_min_limit);
 
 namespace tera {
 namespace master {
@@ -199,12 +200,12 @@ bool SizeScheduler::FindBestTablet(TabletNodePtr src_node, TabletNodePtr dst_nod
             << " -> " << dst_node->GetAddr();
 
     SizeGetter size_getter;
-    uint64_t src_node_size = size_getter(src_node, table_name);
-    uint64_t dst_node_size = size_getter(dst_node, table_name);
+    int64_t src_node_size = size_getter(src_node, table_name);
+    int64_t dst_node_size = size_getter(dst_node, table_name);
 
-    const double& size_ratio = FLAGS_tera_master_load_balance_size_policy_trigger;
+    const double& size_ratio = FLAGS_tera_master_load_balance_size_ratio_trigger;
     if ((double)src_node_size < (double)dst_node_size * size_ratio) {
-        VLOG(7) << "[size-sched] size not reach threshold: " << src_node_size
+        VLOG(7) << "[size-sched] size ratio not reach threshold: " << src_node_size
                 << " : " << dst_node_size;
         return false;
     }
@@ -213,10 +214,10 @@ bool SizeScheduler::FindBestTablet(TabletNodePtr src_node, TabletNodePtr dst_nod
     uint64_t src_node_qps = qps_getter(src_node, table_name);
     uint64_t dst_node_qps = qps_getter(dst_node, table_name);
 
-    const double& qps_ratio = FLAGS_tera_master_load_balance_qps_policy_trigger;
+    const double& qps_ratio = FLAGS_tera_master_load_balance_qps_ratio_trigger;
     if (dst_node_qps != 0
             && (double)src_node_qps * qps_ratio <= (double)dst_node_qps) {
-        VLOG(7) << "[size-sched] revert qps reach threshold: " << src_node_qps
+        VLOG(7) << "[size-sched] revert qps ratio reach threshold: " << src_node_qps
                 << " : " << dst_node_qps;
         return false;
     }
@@ -306,12 +307,16 @@ bool QPSScheduler::FindBestTablet(TabletNodePtr src_node, TabletNodePtr dst_node
 
     SizeGetter size_getter;
     QPSGetter qps_getter;
-    uint64_t src_node_qps = qps_getter(src_node, table_name);
-    uint64_t dst_node_qps = qps_getter(dst_node, table_name);
+    int64_t src_node_qps = qps_getter(src_node, table_name);
+    if (src_node_qps < FLAGS_tera_master_load_balance_qps_min_limit) {
+        VLOG(7) << "qps not reach min limit: " << src_node_qps;
+        return false;
+    }
 
-    const double& qps_ratio = FLAGS_tera_master_load_balance_qps_policy_trigger;
+    int64_t dst_node_qps = qps_getter(dst_node, table_name);
+    const double& qps_ratio = FLAGS_tera_master_load_balance_qps_ratio_trigger;
     if ((double)src_node_qps < (double)dst_node_qps * qps_ratio) {
-        VLOG(7) << "revert qps reach threshold: " << src_node_qps
+        VLOG(7) << "qps ratio not reach threshold: " << src_node_qps
                 << " : " << dst_node_qps;
         return false;
     }

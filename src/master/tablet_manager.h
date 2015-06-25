@@ -131,6 +131,22 @@ private:
     std::string m_expect_server_addr;
     std::list<TabletCounter> m_counter_list;
     TabletCounter m_average_counter;
+    struct TabletAccumulateCounter {
+        uint64_t low_read_cell;
+        uint64_t scan_rows;
+        uint64_t scan_kvs;
+        uint64_t scan_size;
+        uint64_t read_rows;
+        uint64_t read_kvs;
+        uint64_t read_size;
+        uint64_t write_rows;
+        uint64_t write_kvs;
+        uint64_t write_size;
+
+        TabletAccumulateCounter() {
+            memset(this, 0, sizeof(TabletAccumulateCounter));
+        }
+    } m_accumu_counter;
 };
 
 typedef class boost::shared_ptr<Tablet> TabletPtr;

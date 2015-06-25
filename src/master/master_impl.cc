@@ -334,7 +334,7 @@ void MasterImpl::RestoreUserTablet(const std::vector<TabletMeta>& report_meta_li
         TabletPtr tablet = *it;
         const std::string& server_addr = tablet->GetServerAddr();
         if (tablet->GetStatus() == kTableReady) {
-            VLOG(6) << "READY Tablet, " << tablet;
+            VLOG(8) << "READY Tablet, " << tablet;
             continue;
         }
         // meta table may be manipulated by other threads during restore
@@ -343,7 +343,7 @@ void MasterImpl::RestoreUserTablet(const std::vector<TabletMeta>& report_meta_li
         }
         CHECK(tablet->GetStatus() == kTableNotInit);
         tablet->SetStatus(kTableOffLine);
-        VLOG(6) << "OFFLINE Tablet, " << tablet;
+        VLOG(8) << "OFFLINE Tablet, " << tablet;
 
         TabletNodePtr node;
         if (!server_addr.empty()
@@ -1505,7 +1505,7 @@ void MasterImpl::TabletNodeRecoveryCallback(std::string addr,
             tablet->SetSize(meta);
             tablet->SetCompactStatus(meta.compact_status());
             ProcessReadyTablet(tablet);
-            VLOG(6) << "[query] " << tablet;
+            VLOG(8) << "[query] " << tablet;
         }
     }
 
@@ -2540,7 +2540,7 @@ void MasterImpl::QueryTabletNodeAsync(std::string addr, int32_t timeout,
         request->set_is_gc_query(true);
     }
 
-    VLOG(5) << "QueryAsync id: " << request->sequence_id() << ", "
+    VLOG(6) << "QueryAsync id: " << request->sequence_id() << ", "
         << "server: " << addr;
     node_client.Query(request, response, done);
 }
@@ -2580,7 +2580,7 @@ void MasterImpl::QueryTabletNodeCallback(std::string addr, QueryRequest* request
 
             TabletPtr tablet;
             if (meta.status() != kTableReady) {
-                VLOG(7) << "non-ready tablet: " << meta.table_name()
+                VLOG(8) << "non-ready tablet: " << meta.table_name()
                     << ", path: " << meta.path()
                     << ", range: [" << DebugString(key_start)
                     << ", " << DebugString(key_end)
@@ -2594,9 +2594,9 @@ void MasterImpl::QueryTabletNodeCallback(std::string addr, QueryRequest* request
                 tablet->SetCounter(counter);
                 tablet->SetCompactStatus(meta.compact_status());
                 ClearUnusedSnapshots(tablet, meta);
-                VLOG(7) << "[query] " << tablet;
+                VLOG(8) << "[query] " << tablet;
             } else {
-                VLOG(7) << "fail to match tablet: " << meta.table_name()
+                VLOG(8) << "fail to match tablet: " << meta.table_name()
                     << ", path: " << meta.path()
                     << ", range: [" << DebugString(key_start)
                     << ", " << DebugString(key_end)
@@ -2644,7 +2644,7 @@ void MasterImpl::QueryTabletNodeCallback(std::string addr, QueryRequest* request
         if (FLAGS_tera_master_stat_table_enabled && m_stat_table) {
             DumpStatToTable(state);
         }
-        VLOG(5) << "query tabletnode [" << addr << "], m_status: "
+        VLOG(6) << "query tabletnode [" << addr << "], m_status: "
             << StatusCodeToString(state.m_report_status);
     }
 
