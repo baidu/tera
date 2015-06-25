@@ -263,7 +263,7 @@ private:
                                            std::string* server_addr);
 
     bool GetTabletMetaOrScheduleUpdateMeta(const std::string& row,
-                                           SdkTask* task,
+                                           SdkTask* task, bool task_wait,
                                            const TabletMetaNode** tablet_meta);
 
     TabletMetaNode* GetTabletMetaNodeForKey(const std::string& key);
@@ -386,7 +386,7 @@ private:
     uint64_t _seq_mutation_commit_timer_id;
 
     std::vector<RowMutationImpl*> _seq_mutation_retry_list;
-    int64_t _seq_mutation_error_occur_time;
+    int64_t _seq_mutation_error_occur_time; // in ms
     bool _seq_mutation_wait_to_update_meta;
     bool _seq_mutation_wait_to_retry;
     uint64_t _seq_mutation_pending_rpc_count;

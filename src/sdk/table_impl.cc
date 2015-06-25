@@ -83,7 +83,7 @@ TableImpl::TableImpl(const std::string& table_name,
       _seq_mutation_pending_rpc_count(0) {
     if (options.sequential_write) {
         _seq_mutation_commit_list = new std::vector<RowMutationImpl*>;
-        _seq_mutation_session = 1;
+        _seq_mutation_session = get_micros() * get_micros();
     }
 }
 
@@ -689,7 +689,7 @@ void TableImpl::MutateCallBack(std::vector<RowMutationImpl*>* mu_list,
             if (_seq_mutation_retry_list.size() == 0) {
                 _seq_mutation_wait_to_retry = true;
                 _seq_mutation_wait_to_update_meta = false;
-                _seq_mutation_error_occur_time = get_micros();
+                _seq_mutation_error_occur_time = GetTimeStampInMs();
             }
             _seq_mutation_retry_list.push_back(row_mutation);
         } else if (err == kKeyNotInRange) {
@@ -735,10 +735,13 @@ void TableImpl::MutateCallBack(std::vector<RowMutationImpl*>* mu_list,
                 uint64_t commit_timer_id = _seq_mutation_commit_timer_id;
                 // because wait_to_retry state is non-preemptive, release lock here is safe
                 _seq_mutation_mutex.Unlock();
-                _thread_pool->CancelTask(commit_timer_id);
+                bool cancel_success = _thread_pool->CancelTask(commit_timer_id);
                 _seq_mutation_mutex.Lock();
                 CHECK(_seq_mutation_wait_to_retry);
-                CHECK_GE(_seq_mutation_commit_list->size(), 0UL);
+                CHECK_GT(_seq_mutation_commit_list->size(), 0UL);
+                if (cancel_success) {
+                    _seq_mutation_commit_timer_id = 0;
+                }
             }
 
             // move commit_list to front of accept_list
@@ -761,7 +764,7 @@ void TableImpl::MutateCallBack(std::vector<RowMutationImpl*>* mu_list,
             uint32_t retry_times = _seq_mutation_accept_list.front()->RetryTimes();
             int64_t retry_interval =
                 static_cast<int64_t>(pow(FLAGS_tera_sdk_delay_send_internal, retry_times) * 1000);
-            retry_interval -= get_micros() - _seq_mutation_error_occur_time;
+            retry_interval -= GetTimeStampInMs() - _seq_mutation_error_occur_time;
             if (retry_interval > 0) {
                 boost::function<void ()> retry_closure =
                     boost::bind(&TableImpl::RetryCommitSequentialMutation, this);
@@ -817,14 +820,14 @@ bool TableImpl::CommitNextTabletSequentialMutation() {
 
     MutexLock l(&_meta_mutex);
     const TabletMetaNode* node = NULL;
-    if (!GetTabletMetaOrScheduleUpdateMeta(row_mu->RowKey(), NULL, &node)) {
+    if (!GetTabletMetaOrScheduleUpdateMeta(row_mu->RowKey(), row_mu, false, &node)) {
         _seq_mutation_wait_to_update_meta = true;
         return false;
     }
 
     if (_seq_mutation_commit_list->size() > 0UL &&
             _seq_mutation_server_addr != node->meta.server_addr()) {
-        CHECK_GE(_seq_mutation_commit_timer_id, 0UL);
+        CHECK_GT(_seq_mutation_commit_timer_id, 0UL);
         bool is_running = false;
         if (!_thread_pool->CancelTask(_seq_mutation_commit_timer_id, true, &is_running)) {
             CHECK(is_running);
@@ -868,6 +871,14 @@ bool TableImpl::CommitNextTabletSequentialMutation() {
     if (_seq_mutation_commit_list->size() > 0) {
         if (!_seq_mutation_accept_list.empty()) {
             // no more mutation of this tablet, commit the batch
+            if (_seq_mutation_commit_timer_id > 0) {
+                bool is_running = false;
+                if (!_thread_pool->CancelTask(_seq_mutation_commit_timer_id, true, &is_running)) {
+                    CHECK(is_running);
+                    return false;
+                }
+                _seq_mutation_commit_timer_id = 0;
+            }
             CommitMutation(_seq_mutation_server_addr, _seq_mutation_commit_list);
             _seq_mutation_commit_list = new std::vector<RowMutationImpl*>;
         } else if (_seq_mutation_commit_timer_id == 0) {
@@ -882,8 +893,8 @@ bool TableImpl::CommitNextTabletSequentialMutation() {
 
 void TableImpl::DelayCommitSequentionMutation() {
     MutexLock l(&_seq_mutation_mutex);
-    CHECK_GE(_seq_mutation_commit_list->size(), 0UL);
-    CHECK_LE(_seq_mutation_commit_list->size(), _commit_size);
+    CHECK_GT(_seq_mutation_commit_list->size(), 0UL);
+    // CHECK_LT(_seq_mutation_commit_list->size(), _commit_size); // may exceed _commit_size
     _seq_mutation_commit_timer_id = 0;
 
     // if not in wait_to_retry state, commit the timeout batch
@@ -1267,7 +1278,7 @@ bool TableImpl::GetTabletAddrOrScheduleUpdateMeta(const std::string& row,
     CHECK_NOTNULL(task);
     MutexLock lock(&_meta_mutex);
     const TabletMetaNode* node = NULL;
-    if (GetTabletMetaOrScheduleUpdateMeta(row, task, &node)) {
+    if (GetTabletMetaOrScheduleUpdateMeta(row, task, true, &node)) {
         CHECK_EQ(node->status, NORMAL);
         task->SetMetaTimeStamp(node->update_time);
         *server_addr = node->meta.server_addr();
@@ -1277,13 +1288,13 @@ bool TableImpl::GetTabletAddrOrScheduleUpdateMeta(const std::string& row,
 }
 
 bool TableImpl::GetTabletMetaOrScheduleUpdateMeta(const std::string& row,
-                                                  SdkTask* task,
+                                                  SdkTask* task, bool task_wait,
                                                   const TabletMetaNode** tablet_meta) {
     _meta_mutex.AssertHeld();
     TabletMetaNode* node = GetTabletMetaNodeForKey(row);
     if (node == NULL) {
         VLOG(10) << "no meta for key: " << row;
-        if (task != NULL) {
+        if (task != NULL && task_wait) {
             ProcessTaskPendingForMeta(row, task);
         }
         TabletMetaNode& new_node = _tablet_meta_list[row];
@@ -1295,7 +1306,7 @@ bool TableImpl::GetTabletMetaOrScheduleUpdateMeta(const std::string& row,
     }
     if (node->status != NORMAL) {
         VLOG(10) << "abnormal meta for key: " << row;
-        if (task != NULL) {
+        if (task != NULL && task_wait) {
             ProcessTaskPendingForMeta(row, task);
         }
         return false;
@@ -1303,7 +1314,9 @@ bool TableImpl::GetTabletMetaOrScheduleUpdateMeta(const std::string& row,
     if (task != NULL
             && (task->GetInternalError() == kKeyNotInRange || task->GetInternalError() == kConnectError)
             && task->GetMetaTimeStamp() >= node->update_time) {
-        ProcessTaskPendingForMeta(row, task);
+        if (task_wait) {
+            ProcessTaskPendingForMeta(row, task);
+        }
         int64_t update_interval = node->update_time
             + FLAGS_tera_sdk_update_meta_internal - get_micros() / 1000;
         if (update_interval <= 0) {
@@ -1326,7 +1339,7 @@ bool TableImpl::GetTabletMetaOrScheduleUpdateMeta(const std::string& row,
 }
 
 TableImpl::TabletMetaNode* TableImpl::GetTabletMetaNodeForKey(const std::string& key) {
-    // CHECK(_meta_mutex.IsLocked());
+    _meta_mutex.AssertHeld();
     if (_tablet_meta_list.size() == 0) {
         VLOG(10) << "the meta list is empty";
         return NULL;
@@ -1363,7 +1376,7 @@ void TableImpl::DelayUpdateMeta(std::string start_key, std::string end_key) {
 }
 
 void TableImpl::UpdateMetaAsync() {
-    // CHECK(_meta_mutex.IsLocked());
+    _meta_mutex.AssertHeld();
     if (_meta_updating_count >= static_cast<uint32_t>(FLAGS_tera_sdk_update_meta_concurrency)) {
         return;
     }
@@ -1384,7 +1397,7 @@ void TableImpl::UpdateMetaAsync() {
         } else if (node.meta.key_range().key_start() == update_end_key) {
             update_end_key = node.meta.key_range().key_end();
         } else {
-            CHECK(node.meta.key_range().key_start() > update_end_key);
+            CHECK_GT(node.meta.key_range().key_start(), update_end_key);
             break;
         }
         node.status = UPDATING;
@@ -1414,7 +1427,7 @@ void TableImpl::ScanMetaTableAsyncInLock(std::string key_start, std::string key_
 
 void TableImpl::ScanMetaTableAsync(std::string key_start, std::string key_end,
                                    bool zk_access) {
-    // CHECK(_meta_mutex.IsLocked());
+    _meta_mutex.AssertHeld();
 
     std::string meta_addr = _cluster->RootTableAddr(zk_access);
     if (meta_addr.empty() && !zk_access) {
@@ -1610,7 +1623,7 @@ void TableImpl::GiveupUpdateTabletMeta(const std::string& key_start,
 }
 
 void TableImpl::UpdateTabletMetaList(const TabletMeta& new_meta) {
-    // CHECK(_meta_mutex.IsLocked());
+    _meta_mutex.AssertHeld();
     const std::string& new_start = new_meta.key_range().key_start();
     const std::string& new_end = new_meta.key_range().key_end();
     std::map<std::string, TabletMetaNode>::iterator it =
@@ -1693,7 +1706,7 @@ void TableImpl::UpdateTabletMetaList(const TabletMeta& new_meta) {
 }
 
 void TableImpl::WakeUpPendingRequest(const TabletMetaNode& node) {
-    //CHECK(_meta_mutex.IsLocked());
+    _meta_mutex.AssertHeld();
     const std::string& start_key = node.meta.key_range().key_start();
     const std::string& end_key = node.meta.key_range().key_end();
     const std::string& server_addr = node.meta.server_addr();
