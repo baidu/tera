@@ -101,7 +101,7 @@ make -j4
 make install
 cd -
 
-git clone https://github.com/fxsjy/ins
+git clone git@github.com:fxsjy/ins.git
 cd ins
 sed -i "s|^PREFIX=.*|PREFIX=${DEPS_PREFIX}|" Makefile
 sed -i "s|^PROTOC=.*|PROTOC=${DEPS_PREFIX}/bin/protoc|" Makefile
