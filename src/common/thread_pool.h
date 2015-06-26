@@ -97,8 +97,9 @@ public:
         work_cv_.Signal();
         return bg_item.id;
     }
-    /// Cancel a delayed task ,if running, wait
-    bool CancelTask(int64_t task_id) {
+    /// Cancel a delayed task
+    /// if running, wait if non_block==false; return immediately if non_block==true
+    bool CancelTask(int64_t task_id, bool non_block = false, bool* is_running = NULL) {
         if (task_id == 0) {
             return false;
         }
@@ -108,10 +109,18 @@ public:
                 if (running_task_id_ != task_id) {
                     BGMap::iterator it = latest_.find(task_id);
                     if (it == latest_.end()) {
+                        if (is_running != NULL) {
+                            *is_running = false;
+                        }
                         return false;
                     }
                     latest_.erase(it);
                     return true;
+                } else if (non_block) {
+                    if (is_running != NULL) {
+                        *is_running = true;
+                    }
+                    return false;
                 }
             }
             timespec ts = {0, 100000};
