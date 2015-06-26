@@ -16,6 +16,7 @@ mkdir -p ${DEPS_SOURCE} ${DEPS_PREFIX}
 
 git clone --depth=1 http://gitlab.baidu.com/baidups/third.git ${DEPS_SOURCE}
 git clone --depth=1 http://gitlab.baidu.com/baidups/sofa-pbrpc.git ${DEPS_SOURCE}/sofa-pbrpc
+git clone --depth=1 http://gitlab.baidu.com/baidups/ins.git ${DEPS_SOURCE}/ins
 
 cd ${DEPS_SOURCE}
 
@@ -101,11 +102,10 @@ make -j4
 make install
 cd -
 
-git clone https://github.com/fxsjy/ins
 cd ins
 sed -i "s|^PREFIX=.*|PREFIX=${DEPS_PREFIX}|" Makefile
 sed -i "s|^PROTOC=.*|PROTOC=${DEPS_PREFIX}/bin/protoc|" Makefile
-make install_sdk
+make -j4 install_sdk
 cd -
 
 cd ${WORK_DIR}
