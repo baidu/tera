@@ -81,6 +81,7 @@ class TableImpl : public Table {
     friend class MutationCommitBuffer;
 public:
     TableImpl(const std::string& table_name,
+              const TableOptions& options,
               const std::string& zk_root_path,
               const std::string& zk_addr_list,
               ThreadPool* thread_pool);
@@ -261,6 +262,10 @@ private:
                                            SdkTask* request,
                                            std::string* server_addr);
 
+    bool GetTabletMetaOrScheduleUpdateMeta(const std::string& row,
+                                           SdkTask* task, bool task_wait,
+                                           const TabletMetaNode** tablet_meta);
+
     TabletMetaNode* GetTabletMetaNodeForKey(const std::string& key);
 
     void DelayUpdateMeta(std::string start_key, std::string end_key);
@@ -304,6 +309,10 @@ private:
     void DeleteLegacyCookieLockFile(const std::string& lock_file, int timeout_seconds);
     void CloseAndRemoveCookieLockFile(int lock_fd, const std::string& cookie_lock_file);
 
+    void CommitSequentialMutation();
+    void RetryCommitSequentialMutation();
+    void DelayCommitSequentionMutation();
+    bool CommitNextTabletSequentialMutation();
 
 private:
     TableImpl(const TableImpl&);
@@ -319,6 +328,7 @@ private:
     };
 
     std::string _name;
+    const TableOptions _options;
     uint64_t _last_sequence_id;
     uint32_t _timeout;
 
@@ -362,6 +372,24 @@ private:
     /// if there is _cluster,
     ///    we save master_addr & root_table_addr in _cluster, access zookeeper only once.
     sdk::ClusterFinder* _cluster;
+
+    // sequential mutation
+    mutable Mutex _seq_mutation_mutex;
+    std::string _seq_mutation_last_accept_row;
+    std::list<RowMutationImpl*> _seq_mutation_accept_list;
+
+    uint64_t _seq_mutation_session;
+    uint64_t _seq_mutation_last_sequence;
+    std::string _seq_mutation_server_addr;
+
+    std::vector<RowMutationImpl*>* _seq_mutation_commit_list;
+    uint64_t _seq_mutation_commit_timer_id;
+
+    std::vector<RowMutationImpl*> _seq_mutation_retry_list;
+    int64_t _seq_mutation_error_occur_time; // in ms
+    bool _seq_mutation_wait_to_update_meta;
+    bool _seq_mutation_wait_to_retry;
+    uint64_t _seq_mutation_pending_rpc_count;
 };
 
 } // namespace tera

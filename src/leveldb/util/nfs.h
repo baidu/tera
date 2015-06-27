@@ -12,6 +12,7 @@
 
 namespace nfs {
   struct NFSFILE;
+  typedef int (*AssignNamespaceIdFunc)(const char* path, int max_namespaces);
 }
 
 namespace leveldb {
@@ -36,6 +37,7 @@ private:
 class Nfs : public Dfs {
 public:
   static void Init(const std::string& mountpoint, const std::string& conf_path);
+  static int CalcNamespaceId(const char* c_path, int max_namespaces);
   static Nfs* GetInstance();
   ~Nfs();
   int32_t CreateDirectory(const std::string& path);

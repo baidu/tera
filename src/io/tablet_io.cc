@@ -15,6 +15,7 @@
 #include "io/tablet_writer.h"
 #include "io/timekey_comparator.h"
 #include "io/ttlkv_compact_strategy.h"
+#include "io/utils_leveldb.h"
 #include "leveldb/cache.h"
 #include "leveldb/compact_strategy.h"
 #include "leveldb/env.h"
@@ -65,27 +66,6 @@ extern tera::Counter row_read_delay;
 
 namespace tera {
 namespace io {
-
-#define OPERATE_WITH_RETRY(func, tips, sleep_time, max_retry) \
-do { \
-    int32_t retry = 0; \
-    bool ret = false; \
-    while ( !(ret = func)  && retry < max_retry ) { \
-        ThisThread::Sleep(sleep_time); \
-        if (max_retry < 10 || retry % (max_retry / 10 + 1) == 0) { \
-            LOG(WARNING) << "try again to " << tips << ": " << retry; \
-        } \
-        retry++; \
-    } \
-    if (!ret) { \
-        LOG(ERROR) << "can not " << tips << " status: " << db_status.ToString(); \
-    } \
-} while (0)
-
-#define OPERATE_FILE_WITH_RETRY(func, tips) \
-    OPERATE_WITH_RETRY(func, tips, \
-                       FLAGS_tera_io_retry_period, \
-                       0 /*FLAGS_tera_io_retry_max_times*/);
 
 TabletIO::TabletIO()
     : m_async_writer(NULL),
@@ -1258,30 +1238,25 @@ void TabletIO::SetupOptionsForLG() {
 
         leveldb::LG_info* lg_info = new leveldb::LG_info(lg_schema.id());
 
-        if (FLAGS_tera_leveldb_env_type == "local") {
-            m_ldb_options.env = lg_info->env = leveldb::NewPosixEnv();
+        if (store == MemoryStore) {
+            m_ldb_options.env = lg_info->env = LeveldbMemEnv();
+            m_ldb_options.seek_latency = 0;
+            m_ldb_options.block_cache =
+                leveldb::NewLRUCache(FLAGS_tera_memenv_block_cache_size * 1024 * 1024);
+            m_mem_store_activated = true;
+        } else if (store == FlashStore) {
+            if (!FLAGS_tera_tabletnode_cache_enabled) {
+                m_ldb_options.env = lg_info->env = LeveldbFlashEnv(m_ldb_options.info_log);
+            } else {
+                LOG(INFO) << "activate block-level Cache store";
+                m_ldb_options.env = lg_info->env = leveldb::EnvThreeLevelCache();
+            }
             m_ldb_options.seek_latency = FLAGS_tera_leveldb_env_local_seek_latency;
         } else {
-            if (store == MemoryStore) {
-                m_ldb_options.env = lg_info->env = leveldb::EnvInMemory();
-                m_ldb_options.seek_latency = 0;
-                m_ldb_options.block_cache =
-                    leveldb::NewLRUCache(FLAGS_tera_memenv_block_cache_size * 1024 * 1024);
-                m_mem_store_activated = true;
-            } else if (store == FlashStore) {
-                if (!FLAGS_tera_tabletnode_cache_enabled) {
-                    m_ldb_options.env = lg_info->env =
-                        leveldb::EnvFlash(m_ldb_options.info_log);
-                } else {
-                    LOG(INFO) << "activate block-level Cache store";
-                    m_ldb_options.env = lg_info->env = leveldb::EnvThreeLevelCache();
-                }
-                m_ldb_options.seek_latency = FLAGS_tera_leveldb_env_local_seek_latency;
-            } else {
-                m_ldb_options.env = lg_info->env = leveldb::EnvDfs();
-                m_ldb_options.seek_latency = FLAGS_tera_leveldb_env_dfs_seek_latency;
-            }
+            m_ldb_options.env = lg_info->env = LeveldbBaseEnv();
+            m_ldb_options.seek_latency = FLAGS_tera_leveldb_env_dfs_seek_latency;
         }
+
         if (compress) {
             lg_info->compression = leveldb::kSnappyCompression;
         }
