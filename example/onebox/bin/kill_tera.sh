@@ -1,5 +1,5 @@
 #!/bin/bash
-source config
+source ./config
 
 for ((i=0; i<=${TABLETNODE_NUM}; i++)); do
     PID=`ps x | grep tera_main | grep $((PORT+i)) | awk '{print $1}'`;
