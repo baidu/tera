@@ -86,6 +86,8 @@ DECLARE_string(tera_zk_root_path);
 DECLARE_string(tera_zk_addr_list);
 DECLARE_bool(tera_ins_enabled);
 
+DECLARE_int64(tera_sdk_perf_counter_log_interval);
+
 namespace tera {
 namespace master {
 
@@ -1098,6 +1100,7 @@ void MasterImpl::QueryTabletNode() {
                                      FLAGS_tera_zk_root_path,
                                      FLAGS_tera_zk_addr_list,
                                      m_thread_pool.get());
+        FLAGS_tera_sdk_perf_counter_log_interval = 60;
         if (m_stat_table->OpenInternal(&err)) {
             m_is_stat_table = true;
         } else {
