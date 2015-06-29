@@ -15,7 +15,6 @@
 #include <iostream>
 #include <sstream>
 
-#include "hdfs.h"
 #include "leveldb/env.h"
 #include "leveldb/status.h"
 #include "leveldb/env_dfs.h"
@@ -180,7 +179,7 @@ public:
         }
         // seek to new offset
         int64_t newoffset = current + n;
-        
+
         tera::AutoCounter ac(&dfs_other_hang_counter, "Seek", filename_.c_str());
         dfs_other_counter.Inc();
         int val = file_->Seek(newoffset);
@@ -278,14 +277,14 @@ public:
         tera::Counter dfs_sync_counter;
         uint64_t n = EnvDfs()->NowMicros();
         if (file_->Sync() == -1) {
-            fprintf(stderr, "hdfs sync fail: %s\n", filename_.c_str());
+            fprintf(stderr, "dfs sync fail: %s\n", filename_.c_str());
             s = IOError(filename_, errno);
         }
         uint64_t diff = EnvDfs()->NowMicros() - n;
         if (diff > 2000000) {
             char buf[128];
             get_time_str(buf, 128);
-            fprintf(stderr, "%s hdfs sync for %s use %.2fms\n",
+            fprintf(stderr, "%s dfs sync for %s use %.2fms\n",
                 buf, filename_.c_str(), diff / 1000.0);
         }
         return s;
@@ -362,9 +361,9 @@ bool DfsEnv::FileExists(const std::string& fname)
 Status DfsEnv::CopyFile(const std::string& from, const std::string& to) {
     tera::AutoCounter ac(&dfs_other_hang_counter, "Copy", from.c_str());
     dfs_other_counter.Inc();
-    std::cerr << "HdfsEnv: " << from << " --> " << to << std::endl;
+    std::cerr << "DfsEnv: " << from << " --> " << to << std::endl;
     if (from != to && dfs_->Copy(from, to) != 0) {
-        return Status::IOError("HDFS Copy", from);
+        return Status::IOError("DFS Copy", from);
     }
     return Status::OK();
 }
@@ -431,7 +430,7 @@ Status DfsEnv::DeleteFile(const std::string& fname)
 };
 
 Status DfsEnv::CreateDir(const std::string& name)
-{  
+{
     tera::AutoCounter ac(&dfs_other_hang_counter, "CreateDirectory", name.c_str());
     dfs_other_counter.Inc();
     if (dfs_->CreateDirectory(name) == 0) {
