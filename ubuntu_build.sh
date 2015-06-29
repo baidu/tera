@@ -1,13 +1,13 @@
 #!/bin/bash
 
-sudo apt-get install libz-dev libboost-dev uuid-dev automake libtool cmake
+sudo apt-get -y install libz-dev libboost-dev uuid-dev automake libtool cmake
 
 wget https://github.com/google/protobuf/releases/download/v2.6.1/protobuf-2.6.1.tar.gz
 tar xf protobuf-2.6.1.tar.gz
 ( cd protobuf-2.6.1 && ./configure --with-pic && make -j4 && sudo make install && sudo ldconfig )
 
 git clone https://github.com/google/snappy
-(cd snappy && sh ./autogen.sh && ./configure --with-pic && make -j4 && sudo make install )
+(cd snappy && sh ./autogen.sh && ./configure --disable-shared --with-pic && make -j4 && sudo make install )
 
 git clone https://github.com/BaiduPS/sofa-pbrpc
 ( cd sofa-pbrpc && make -j4 && make install )
