@@ -131,6 +131,7 @@ cd ins
 sed -i "s|^PREFIX=.*|PREFIX=${DEPS_PREFIX}|" Makefile
 sed -i "s|^PROTOC=.*|PROTOC=${DEPS_PREFIX}/bin/protoc|" Makefile
 BOOST_PATH=${DEPS_PREFIX}/boost_1_57_0 make install_sdk
+make -j4 install_sdk
 cd -
 
 cd ${WORK_DIR}

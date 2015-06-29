@@ -8,6 +8,7 @@
 #include <map>
 #include <string>
 
+#include "master/tablet_manager.h"
 #include "master/tabletnode_manager.h"
 
 namespace tera {
@@ -17,20 +18,20 @@ class Scheduler {
 public:
     virtual ~Scheduler() {}
 
-    // all-table schedule
-    virtual bool FindBestNode(const std::vector<TabletNodePtr>& node_list,
-                              std::string* node_addr) = 0;
-    virtual void AscendingSort(std::vector<TabletNodePtr>& node_list) = 0;
-    virtual void DescendingSort(std::vector<TabletNodePtr>& node_list) = 0;
-
-    // per-table schedule
     virtual bool FindBestNode(const std::vector<TabletNodePtr>& node_list,
                               const std::string& table_name,
-                              std::string* node_addr) = 0;
-    virtual void AscendingSort(const std::string& table_name,
-                               std::vector<TabletNodePtr>& node_list) = 0;
-    virtual void DescendingSort(const std::string& table_name,
-                                std::vector<TabletNodePtr>& node_list) = 0;
+                              size_t* best_index) = 0;
+    virtual bool FindBestTablet(TabletNodePtr src_node, TabletNodePtr dst_node,
+                                const std::vector<TabletPtr>& table_list,
+                                const std::string& table_name,
+                                size_t* best_index) = 0;
+
+    virtual void AscendingSort(std::vector<TabletNodePtr>& node_list,
+                               const std::string& table_name) = 0;
+    virtual void DescendingSort(std::vector<TabletNodePtr>& node_list,
+                                const std::string& table_name) = 0;
+
+    virtual const char* Name() = 0;
 };
 
 } // namespace master
