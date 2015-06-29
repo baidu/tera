@@ -15,6 +15,7 @@
 #include <iostream>
 #include <sstream>
 
+#include "hdfs.h"
 #include "leveldb/env.h"
 #include "leveldb/status.h"
 #include "leveldb/env_dfs.h"
