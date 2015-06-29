@@ -12,8 +12,6 @@
 #include <sys/time.h>
 #include <time.h>
 
-#include <openssl/md5.h>
-
 #include "benchmark/mark.h"
 
 DECLARE_string(flagfile);
@@ -32,6 +30,7 @@ DEFINE_int64(max_outflow, -1, "max_outflow");
 DEFINE_int64(max_rate, -1, "max_rate");
 DEFINE_bool(scan_streaming, false, "enable streaming scan");
 DEFINE_int64(batch_count, 1, "batch_count(sync)");
+DEFINE_bool(seq_write, false, "enable sequential write");
 
 int mode = 0;
 int type = 0;
@@ -472,13 +471,15 @@ int main(int argc, char** argv) {
     ::google::ParseCommandLineFlags(&argc, &argv, true);
 
     tera::ErrorCode err;
-    tera::Client* client = tera::Client::NewClient("./tera.flag", "sample");
+    tera::Client* client = tera::Client::NewClient("./tera.flag", "tera_mark");
     if (NULL == client) {
         std::cerr << "fail to create client: " << tera::strerr(err) << std::endl;
         return -1;
     }
 
-    tera::Table* table = client->OpenTable(FLAGS_tablename, &err);
+    tera::TableOptions options;
+    options.sequential_write = FLAGS_seq_write;
+    tera::Table* table = client->OpenTable(FLAGS_tablename, options, &err);
     if (NULL == table) {
         std::cerr << "fail to open table: " << tera::strerr(err) << std::endl;
         return -1;

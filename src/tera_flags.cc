@@ -230,3 +230,7 @@ DEFINE_int64(tera_sdk_scan_async_cache_size, 16, "the max buffer size (in MB) fo
 DEFINE_int32(tera_sdk_scan_async_parallel_max_num, 500, "the max number of concurrent task sending");
 
 DEFINE_bool(tera_sdk_pend_request_while_scan_meta_enabled, true, "pend request util meta-scan operation finished");
+
+DEFINE_string(tera_ins_addr_list, "", "the ins cluster addr. e.g. abc.com:1234,abb.com:1234");
+DEFINE_string(tera_ins_root_path, "", "root path on ins. e.g /ps/sandbox");
+DEFINE_bool(tera_ins_enabled, false, "option to open ins naming");
