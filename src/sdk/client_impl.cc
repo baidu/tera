@@ -258,8 +258,16 @@ bool ClientImpl::EnableTable(string name, ErrorCode* err) {
 }
 
 Table* ClientImpl::OpenTable(const string& table_name, ErrorCode* err) {
+    TableOptions options;
+    return OpenTable(table_name, options, err);
+}
+
+Table* ClientImpl::OpenTable(const std::string& table_name,
+                             const TableOptions& options,
+                             ErrorCode* err) {
     err->SetFailed(ErrorCode::kOK);
     TableImpl* table = new TableImpl(table_name,
+                                     options,
                                      _zk_root_path,
                                      _zk_addr_list,
                                      &_thread_pool);

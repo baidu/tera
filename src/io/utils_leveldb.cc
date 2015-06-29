@@ -13,9 +13,12 @@
 #include "common/base/string_ext.h"
 #include "common/base/string_number.h"
 #include "common/file/file_path.h"
+#include "common/mutex.h"
 #include "io/timekey_comparator.h"
 #include "leveldb/comparator.h"
 #include "leveldb/env_dfs.h"
+#include "leveldb/env_flash.h"
+#include "leveldb/env_inmem.h"
 #include "leveldb/table_utils.h"
 #include "utils/timer.h"
 
@@ -54,7 +57,7 @@ void InitDfsEnv() {
     }
 }
 
-leveldb::Env* LeveldbEnv() {
+leveldb::Env* LeveldbBaseEnv() {
     if (FLAGS_tera_leveldb_env_type == "local") {
         return leveldb::NewPosixEnv();
     } else {
@@ -62,8 +65,32 @@ leveldb::Env* LeveldbEnv() {
     }
 }
 
+leveldb::Env* LeveldbMemEnv() {
+    static Mutex mutex;
+    static leveldb::Env* mem_env = NULL;
+    MutexLock locker(&mutex);
+    if (mem_env) {
+        return mem_env;
+    }
+    leveldb::Env* base_env = LeveldbBaseEnv();
+    mem_env = leveldb::NewInMemoryEnv(base_env);
+    return mem_env;
+}
+
+leveldb::Env* LeveldbFlashEnv(leveldb::Logger* l) {
+    static Mutex mutex;
+    static leveldb::Env* flash_env = NULL;
+    MutexLock locker(&mutex);
+    if (flash_env) {
+        return flash_env;
+    }
+    leveldb::Env* base_env = LeveldbBaseEnv();
+    flash_env = leveldb::NewFlashEnv(base_env, l);
+    return flash_env;
+}
+
 bool MoveEnvDirToTrash(const std::string& tablename) {
-    leveldb::Env* env = LeveldbEnv();
+    leveldb::Env* env = LeveldbBaseEnv();
     std::string src_dir = FLAGS_tera_tabletnode_path_prefix + "/" + tablename;
     if (!env->FileExists(src_dir)) {
         return true;
@@ -92,7 +119,7 @@ bool MoveEnvDirToTrash(const std::string& tablename) {
 }
 
 bool DeleteEnvDir(const std::string& subdir) {
-    leveldb::Env* env = LeveldbEnv();
+    leveldb::Env* env = LeveldbBaseEnv();
     std::string dir_name = FLAGS_tera_tabletnode_path_prefix + "/" + subdir;
     if (!env->DeleteDir(dir_name).ok()) {
         LOG(ERROR) << "fail to delete dir in file system, dir: " << dir_name;
@@ -108,7 +135,7 @@ bool MergeTables(const std::string& mf, const std::string& mf1,
                  leveldb::Env* db_env) {
     leveldb::Env* env = db_env;
     if (!env) {
-        env = LeveldbEnv();
+        env = LeveldbBaseEnv();
     }
     leveldb::Comparator* cmp = new io::TimekeyComparator(leveldb::BytewiseComparator());
     if (!leveldb::MergeBoth(env, cmp, mf, mf1, mf2, mf2_file_maps)) {
@@ -123,7 +150,7 @@ bool MergeTables(const std::string& table_1,
                  leveldb::Env* db_env) {
     leveldb::Env* env = db_env;
     if (!env) {
-        env = LeveldbEnv();
+        env = LeveldbBaseEnv();
     }
     std::string path_prefix = FLAGS_tera_tabletnode_path_prefix;
     std::string mf1;
@@ -182,7 +209,7 @@ bool MergeTablesWithLG(const std::string& table_1,
                        uint32_t lg_num) {
     // not need to multiple thread because manifest merge
     // would be quickly ready
-    leveldb::Env* env = LeveldbEnv();
+    leveldb::Env* env = LeveldbBaseEnv();
     bool ret = true;
     for (uint32_t i = 0; i < lg_num; ++i) {
         std::string lg_id_str = NumberToString(i);

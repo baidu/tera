@@ -150,6 +150,10 @@ public:
     /// 释放引用
     void Unref();
 
+    /// 设置序列号
+    void SetSequenceId(uint64_t sequence);
+    uint64_t SequenceId();
+
 protected:
     /// 增加一个操作
     RowMutation::Mutation& AddMutation();
@@ -171,6 +175,8 @@ private:
     ErrorCode _error_code;
     mutable Mutex _finish_mutex;
     common::CondVar _finish_cond;
+
+    uint64_t _sequence;
 };
 
 void SerializeMutation(const RowMutation::Mutation& src, tera::Mutation* dst);

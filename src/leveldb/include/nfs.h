@@ -11,19 +11,41 @@
 #include <sys/stat.h>
 #include <sys/types.h>
 
-#ifdef __cplusplus
-extern  "C" {
-#endif
-
 namespace comcfg {
 struct ConfigUnit;
 }
 
 namespace nfs {
 
+typedef int (*AssignNamespaceIdFunc)(const char* path, int max_namespaces);
+void SetAssignNamespaceIdFunc(AssignNamespaceIdFunc func);
+
 struct NFSFILE;
 struct NFSDIR;
 struct ClientConfig;
+
+struct NfsOptions {
+    // required
+    const char *master_ip;
+    uint16_t    master_port;
+    const char *username;
+    const char *password;
+    // optional
+    const char *interface;      // network adaptor
+    uint32_t   timeout;         // ms
+    uint32_t   ebusy_timeout;   // ms
+    uint32_t   tranbuf_size;    // bytes
+    uint32_t   tranbuf_num;     // num of above
+    uint16_t   write_cache;
+    uint16_t   read_cache;
+    uint16_t   is_read_primary_only;
+
+    NfsOptions() : master_ip(NULL), master_port(0), username(NULL), password(NULL),
+                   interface(NULL), timeout(180000), ebusy_timeout(180000),
+                   tranbuf_size(4096), tranbuf_num(65536),
+                   write_cache(1), read_cache(1), is_read_primary_only(0) {
+    }
+};
 
 /**
  * Length of any path should be less than or equals to NFS_MAX_FILEPATH_LEN,
@@ -78,11 +100,37 @@ void Perror(const char* s = NULL);
  *   EACCES  - user has no permission on mountpoint
  *   EIO     - other error
  */
-/*
 int Init(const char* mountpoint, const char* master_ip, uint16_t master_port,
         const char* username, const char* password, int cache = 1,
         const char* interface = NULL);
-*/
+
+/**
+ * @brief   Init nfs client system. This interface is process-level.
+ * @param   mountpoint
+ * @param   master ip
+ * @param   master port
+ * @param   username
+ * @param   password
+ * @param   espaddr
+ * @param   host_id_base
+ * @param   host_id_num
+ * @param   cache switch
+ * @param   ethernet device, default NULL means eth*
+ * @return
+ *    0     - on success
+ *   -1     - on error
+ * @errno   When error, the nfs errno will be set appropriately:
+ *   EINVAL  - mountpoint is invalid or argument is invalid
+ *   ENAMETOOLONG - mountpoint too long
+ *   ENOTDIR - mountpoint is not directory
+ *   ENOENT  - mountpoint not exist
+ *   EACCES  - user has no permission on mountpoint
+ *   EIO     - other error
+ */
+int Init(const char* mountpoint, const char* master_ip, uint16_t master_port,
+        const char* username, const char* password, uint64_t espaddr,
+        int host_id_base, int host_id_num, int cache = 1, const char* interface = NULL);
+
 /**
  * @brief   Init nfs client system. This interface is process-level.
  * @param   mountpoint
@@ -98,9 +146,8 @@ int Init(const char* mountpoint, const char* master_ip, uint16_t master_port,
  *   EACCES  - user has no permission on mountpoint
  *   EIO     - other error
  */
-/*
 int Init(const char* mountpoint, const comcfg::ConfigUnit& config);
-*/
+
 /**
  * @brief   Init nfs client system. This interface is process-level.
  * @param   mountpoint
@@ -116,9 +163,25 @@ int Init(const char* mountpoint, const comcfg::ConfigUnit& config);
  *   EACCES  - user has no permission on mountpoint
  *   EIO     - other error
  */
-/*
 int Init(const char* mountpoint, const ClientConfig& config);
-*/
+
+/**
+ * @brief   Init nfs client system. This interface is process-level.
+ * @param   mountpoint
+ * @param   config with the format of struct NfsOptions
+ * @return
+ *    0     - on success
+ *   -1     - on error
+ * @errno   When error, the nfs errno will be set appropriately:
+ *   EINVAL  - mountpoint is invalid or config invalid
+ *   ENAMETOOLONG - path too long
+ *   ENOTDIR - mountpoint is not directory
+ *   ENOENT  - mountpoint not exist
+ *   EACCES  - user has no permission on mountpoint
+ *   EIO     - other error
+ */
+int Init(const char* mountpoint, const NfsOptions& options);
+
 /**
  * @brief   Init nfs client system. This interface is process-level.
  * @param   mountpoint
@@ -159,7 +222,7 @@ int Destroy();
  *   ENOENT  - path not exist
  *   EIO     - other error
  */
-int Chdir(const char* path);
+//int Chdir(const char* path);
 
 /**
  * @brief   Get current working directory. The returned cwd string will be normalized.
@@ -172,7 +235,7 @@ int Chdir(const char* path);
  *   EINVAL  - buf is invalid, or NFS not inited
  *   ERANGE  - buf is not enough to store path
  */
-ssize_t Getcwd(char* buf, size_t size);
+//ssize_t Getcwd(char* buf, size_t size);
 
 /**
  * @brief   Check permission or existence of path.
@@ -210,6 +273,25 @@ int Access(const char* path, int mode);
 int Mkdir(const char* path);
 
 /**
+ * @brief   Make a directory.
+ * @param   path
+ * @param   is_spread_all_namespaces: whether do mkdir for all federations
+ * @param   is_pass_when_already_exist: whether pass and continue when some one federation ack EEXIST
+ * @return
+ *    0     - on success
+ *   -1     - on error
+ * @errno   When error, the nfs errno will be set appropriately:
+ *   EINVAL  - path is invalid
+ *   EACCES  - user has no permission on the path
+ *   ENAMETOOLONG - path too long
+ *   EEXIST  - path already exist
+ *   ENOENT  - path's parents not exist
+ *   ENOTDIR - path's parents is not directory // TAKE CARE
+ *   EIO     - other error
+ */
+int Mkdir(const char* path, bool is_spread_all_namespaces, bool is_pass_when_already_exist);
+
+/**
  * @brief   Remove a directory.
  * @param   path
  * @return
@@ -227,6 +309,25 @@ int Mkdir(const char* path);
 int Rmdir(const char* path);
 
 /**
+ * @brief   Remove a directory.
+ * @param   path
+ * @param   is_spread_all_namespaces: whether do rmdir for all federations
+ * @param   is_pass_when_already_exist: whether pass and continue when some one federation ack ENOENT
+ * @return
+ *    0     - on success
+ *   -1     - on error
+ * @errno   When error, the nfs errno will be set appropriately:
+ *   EINVAL  - path is invalid
+ *   EACCES  - user has no permission on the path
+ *   ENAMETOOLONG - path too long
+ *   ENOTDIR - path is not directory
+ *   ENOENT  - path not exist
+ *   ENOTEMPTY - dir has children other than . and ..
+ *   EIO     - other error
+ */
+int Rmdir(const char* path, bool is_spread_all_namespaces, bool is_pass_when_not_exist);
+
+/**
  * @brief   Open a directory.
  * @param   path
  * @return  A ptr of struct NFSDIR.
@@ -240,6 +341,23 @@ int Rmdir(const char* path);
  *   EIO     - other error
  */
 NFSDIR* Opendir(const char* path);
+
+/**
+ * @brief   Open a directory.
+ * @param   path
+ * @param   is_spread_all_namespaces: whether do opendir/readdir for all federations
+ * @param   is_pass_when_already_exist: whether pass and continue when some one federation ack ENOENT
+ * @return  A ptr of struct NFSDIR.
+ *          Do NOT use 'delete' or 'free()' to free ptr. Just only and MUST use 'Closedir()'.
+ * @errno   When error, the nfs errno will be set appropriately:
+ *   EINVAL  - path is invalid
+ *   EACCES  - user has no permission on the path
+ *   ENAMETOOLONG - path too long
+ *   ENOTDIR - path is not directory
+ *   ENOENT  - path not exist
+ *   EIO     - other error
+ */
+NFSDIR* Opendir(const char* path, bool is_spread_all_namespaces, bool is_pass_when_not_exist);
 
 /**
  * @brief   Read next entry of the opened directory.
@@ -300,6 +418,15 @@ int Create(const char* path);
  *   EIO     - other error
  */
 int Unlink(const char* path);
+
+/** 
+ * @brief GetInode from NFSFILE
+ * 
+ * @param file NFSFILE ptr
+ * 
+ * @return   uint64_t inode
+ */
+uint64_t GetInode(const NFSFILE* file);
 
 /**
  * @brief   Open a file stream.
@@ -533,10 +660,6 @@ int Truncate(const char* path, uint64_t size);
 int SetModifyTime(const char* path, time_t mtime);
 
 }
-
-#ifdef __cplusplus
-} // extern  "C"
-#endif
 
 #endif  //__NFS_API_NFS_H_
 

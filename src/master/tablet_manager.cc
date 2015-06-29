@@ -618,7 +618,7 @@ bool Table::GetTabletsForGc(std::set<uint64_t>* live_tablets,
     }
 
     std::vector<std::string> children;
-    leveldb::Env* env = io::LeveldbEnv();
+    leveldb::Env* env = io::LeveldbBaseEnv();
     std::string table_path = FLAGS_tera_tabletnode_path_prefix + m_name;
     env->GetChildren(table_path, &children);
     for (size_t i = 0; i < children.size(); ++i) {
