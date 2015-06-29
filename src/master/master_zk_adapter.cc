@@ -670,7 +670,8 @@ bool InsMasterZkAdapter::Init(std::string* root_tablet_addr,
         std::string ts_addr = key.substr(preifx_len);
         (*tabletnode_list)[ts_addr] = session_id;
         result->Next();
-    }                       
+    }   
+    delete result;
     m_ins_sdk->RegisterSessionTimeout(InsOnSessionTimeout, this);
     return true;
 }
@@ -695,7 +696,8 @@ void InsMasterZkAdapter::RefreshTabletNodeList() {
         std::string ts_addr = key.substr(preifx_len);
         tabletnode_list[ts_addr] = session_id;
         result->Next();
-    }                
+    }   
+    delete result;
     m_master_impl->RefreshTabletNodeList(tabletnode_list);    
 }
 
