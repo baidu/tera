@@ -50,7 +50,7 @@ DECLARE_string(tera_master_meta_table_name);
 DECLARE_string(tera_tabletnode_path_prefix);
 DECLARE_int32(tera_tabletnode_retry_period);
 DECLARE_string(tera_leveldb_compact_strategy);
-DECLARE_bool(tera_leveldb_read_verify_checksums);
+DECLARE_bool(tera_leveldb_verify_checksums);
 
 DECLARE_int32(tera_tabletnode_scan_pack_max_size);
 DECLARE_bool(tera_tabletnode_cache_enabled);
@@ -218,6 +218,7 @@ bool TabletIO::Load(const TableSchema& schema,
         m_ldb_options.raw_key_format = leveldb::kReadable;
         m_ldb_options.comparator = leveldb::BytewiseComparator();
     }
+    m_ldb_options.verify_checksums_in_compaction = FLAGS_tera_leveldb_verify_checksums;
     SetupOptionsForLG();
 
     m_tablet_path = FLAGS_tera_tabletnode_path_prefix + path;
@@ -547,8 +548,8 @@ int64_t TabletIO::GetDataSize(std::vector<uint64_t>* lgsize,
 bool TabletIO::Read(const leveldb::Slice& key, std::string* value,
                     uint64_t snapshot_id, StatusCode* status) {
     CHECK_NOTNULL(m_db);
-    leveldb::ReadOptions read_option;
-    read_option.verify_checksums = FLAGS_tera_leveldb_read_verify_checksums;
+    leveldb::ReadOptions read_option(&m_ldb_options);
+    read_option.verify_checksums = FLAGS_tera_leveldb_verify_checksums;
     if (snapshot_id != 0) {
         if (!SnapshotIDToSeq(snapshot_id, &read_option.snapshot)) {
             *status = kSnapshotNotExist;
@@ -572,8 +573,8 @@ StatusCode TabletIO::InitedScanInterator(const std::string& start_tera_key,
     m_key_operator->ExtractTeraKey(start_tera_key, &start_key, &start_col,
                                    &start_qual, NULL, NULL);
 
-    leveldb::ReadOptions read_option;
-    read_option.verify_checksums = FLAGS_tera_leveldb_read_verify_checksums;
+    leveldb::ReadOptions read_option(&m_ldb_options);
+    read_option.verify_checksums = FLAGS_tera_leveldb_verify_checksums;
     SetupIteratorOptions(scan_options, &read_option);
     uint64_t snapshot_id = scan_options.snapshot_id;
     if (snapshot_id != 0) {
@@ -1076,8 +1077,8 @@ bool TabletIO::Scan(const ScanOption& option, KeyValueList* kv_list,
 
     int64_t pack_size = 0;
     uint64_t snapshot_id = option.snapshot_id();
-    leveldb::ReadOptions read_option;
-    read_option.verify_checksums = FLAGS_tera_leveldb_read_verify_checksums;
+    leveldb::ReadOptions read_option(&m_ldb_options);
+    read_option.verify_checksums = FLAGS_tera_leveldb_verify_checksums;
     if (snapshot_id != 0) {
         if (!SnapshotIDToSeq(snapshot_id, &read_option.snapshot)) {
             *status = kSnapshotNotExist;

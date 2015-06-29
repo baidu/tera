@@ -1661,7 +1661,8 @@ void VersionSet::GetRange2(const std::vector<FileMetaData*>& inputs1,
 
 Iterator* VersionSet::MakeInputIterator(Compaction* c) {
   ReadOptions options;
-  options.verify_checksums = options_->paranoid_checks;
+  options.verify_checksums =
+      options_->paranoid_checks || options_->verify_checksums_in_compaction;
   options.fill_cache = false;
   options.db_opt = options_;
 

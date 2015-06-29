@@ -47,7 +47,8 @@ Options::Options()
       memtable_ldb_write_buffer_size(1 << 20),
       memtable_ldb_block_size(kDefaultBlockSize),
       drop_base_level_del_in_compaction(true),
-      sst_size(kDefaultSstSize) {
+      sst_size(kDefaultSstSize),
+      verify_checksums_in_compaction(false) {
 }
 
 }  // namespace leveldb
