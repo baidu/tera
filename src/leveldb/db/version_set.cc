@@ -68,20 +68,6 @@ static int64_t TotalFileSize(const std::vector<FileMetaData*>& files) {
   return sum;
 }
 
-namespace {
-std::string IntSetToString(const std::set<uint64_t>& s) {
-  std::string result = "{";
-  for (std::set<uint64_t>::const_iterator it = s.begin();
-       it != s.end();
-       ++it) {
-    result += (result.size() > 1) ? "," : "";
-    result += NumberToString(*it);
-  }
-  result += "}";
-  return result;
-}
-}  // namespace
-
 Version::~Version() {
   assert(refs_ == 0);
 
@@ -682,7 +668,7 @@ void Version::MissFilesInLocal(const Slice* smallest_user_key,
         Compaction* c = new Compaction(level);
         c->input_version_ = this;
         c->input_version_->Ref();
-        c->max_output_file_size_ = 
+        c->max_output_file_size_ =
             MaxFileSizeForLevel(level + 1, vset_->options_->sst_size);
         c->inputs_[0] = inputs;
         vset_->SetupOtherInputs(c);
@@ -1204,15 +1190,18 @@ Status VersionSet::ReadCurrentFile(uint64_t tablet, std::string* dscname ) {
   if (!s.ok()) {
     Log(options_->info_log, "[%s] current file lost: %s.",
         dbname_.c_str(), CurrentFileName(pdbname).c_str());
+  } else if (current.empty() || current[current.size()-1] != '\n') {
+    Log(options_->info_log, "[%s] current file error: %s, content:\"%s\".",
+        dbname_.c_str(), CurrentFileName(pdbname).c_str(), current.c_str());
+    s = Status::Corruption("current file error.");
   } else {
-    if (current.empty() || current[current.size()-1] != '\n') {
-      return Status::Corruption("CURRENT file does not end with newline");
-    }
     current.resize(current.size() - 1);
     *dscname = pdbname + "/" + current;
   }
 
-  if (!s.ok() || !env_->FileExists(*dscname)) {
+  uint64_t dscsize = 0;
+  if (!s.ok() || !env_->FileExists(*dscname) ||
+      !env_->GetFileSize(*dscname, &dscsize).ok() || dscsize == 0) {
     // manifest is not ready, now recover the backup manifest
     std::vector<std::string> files;
     env_->GetChildren(pdbname, &files);
@@ -1222,7 +1211,14 @@ Status VersionSet::ReadCurrentFile(uint64_t tablet, std::string* dscname ) {
       FileType type;
       if (ParseFileName(files[i], &number, &type)) {
         if (type == kDescriptorFile) {
-          manifest_set.insert(files[i]);
+          if (!env_->GetFileSize(pdbname + "/" + files[i], &dscsize).ok() ||
+              dscsize == 0) {
+            Log(options_->info_log, "[%s] manifest size is 0, skip it: %s.",
+                dbname_.c_str(), files[i].c_str());
+            continue;
+          } else {
+            manifest_set.insert(files[i]);
+          }
         }
       }
     }
@@ -1840,7 +1836,7 @@ Compaction* VersionSet::CompactRange(
   // and we must not pick one file and drop another older file if the
   // two files overlap.
   if (level > 0) {
-    const uint64_t limit = 
+    const uint64_t limit =
       MaxFileSizeForLevel(level, current_->vset_->options_->sst_size);
     uint64_t total = 0;
     for (size_t i = 0; i < inputs.size(); i++) {
@@ -1856,7 +1852,7 @@ Compaction* VersionSet::CompactRange(
   Compaction* c = new Compaction(level);
   c->input_version_ = current_;
   c->input_version_->Ref();
-  c->max_output_file_size_ = 
+  c->max_output_file_size_ =
     MaxFileSizeForLevel(level + 1, current_->vset_->options_->sst_size);
   c->inputs_[0] = inputs;
   SetupOtherInputs(c);
