@@ -776,6 +776,7 @@ void DBImpl::BGWork(void* db) {
 }
 
 void DBImpl::BackgroundCall() {
+  Log(options_.info_log, "[%s] BackgroundCall", dbname_.c_str());
   MutexLock l(&mutex_);
   assert(bg_compaction_scheduled_);
   if (!shutting_down_.Acquire_Load()) {
