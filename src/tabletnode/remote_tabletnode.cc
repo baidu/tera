@@ -13,6 +13,7 @@
 #include "utils/counter.h"
 #include "utils/timer.h"
 
+DECLARE_int32(tera_tabletnode_ctrl_thread_num);
 DECLARE_int32(tera_tabletnode_write_thread_num);
 DECLARE_int32(tera_tabletnode_read_thread_num);
 DECLARE_int32(tera_tabletnode_scan_thread_num);
@@ -65,6 +66,7 @@ struct ScanRpc : public RpcTask {
 
 RemoteTabletNode::RemoteTabletNode(TabletNodeImpl* tabletnode_impl)
     : m_tabletnode_impl(tabletnode_impl),
+      m_ctrl_thread_pool(new ThreadPool(FLAGS_tera_tabletnode_ctrl_thread_num)),
       m_write_thread_pool(new ThreadPool(FLAGS_tera_tabletnode_write_thread_num)),
       m_read_thread_pool(new ThreadPool(FLAGS_tera_tabletnode_read_thread_num)),
       m_scan_thread_pool(new ThreadPool(FLAGS_tera_tabletnode_scan_thread_num)),
@@ -81,7 +83,7 @@ void RemoteTabletNode::LoadTablet(google::protobuf::RpcController* controller,
     boost::function<void ()> callback =
         boost::bind(&RemoteTabletNode::DoLoadTablet, this, controller,
                    request, response, done);
-    m_write_thread_pool->AddPriorityTask(callback);
+    m_ctrl_thread_pool->AddTask(callback);
 }
 
 void RemoteTabletNode::UnloadTablet(google::protobuf::RpcController* controller,
@@ -91,7 +93,7 @@ void RemoteTabletNode::UnloadTablet(google::protobuf::RpcController* controller,
     boost::function<void ()> callback =
         boost::bind(&RemoteTabletNode::DoUnloadTablet, this, controller,
                    request, response, done);
-    m_write_thread_pool->AddPriorityTask(callback);
+    m_ctrl_thread_pool->AddTask(callback);
 }
 
 void RemoteTabletNode::ReadTablet(google::protobuf::RpcController* controller,
@@ -178,7 +180,7 @@ void RemoteTabletNode::Query(google::protobuf::RpcController* controller,
     boost::function<void ()> callback =
         boost::bind(&RemoteTabletNode::DoQuery, this, controller,
                    request, response, done);
-    m_write_thread_pool->AddPriorityTask(callback);
+    m_ctrl_thread_pool->AddPriorityTask(callback);
 }
 
 
@@ -206,7 +208,7 @@ void RemoteTabletNode::SplitTablet(google::protobuf::RpcController* controller,
     boost::function<void ()> callback =
         boost::bind(&RemoteTabletNode::DoSplitTablet, this, controller,
                     request, response, done);
-    m_write_thread_pool->AddPriorityTask(callback);
+    m_ctrl_thread_pool->AddTask(callback);
 }
 
 void RemoteTabletNode::MergeTablet(google::protobuf::RpcController* controller,
@@ -216,7 +218,7 @@ void RemoteTabletNode::MergeTablet(google::protobuf::RpcController* controller,
     boost::function<void ()> callback =
         boost::bind(&RemoteTabletNode::DoMergeTablet, this, controller,
                    request, response, done);
-    m_write_thread_pool->AddPriorityTask(callback);
+    m_ctrl_thread_pool->AddTask(callback);
 }
 
 void RemoteTabletNode::CompactTablet(google::protobuf::RpcController* controller,
