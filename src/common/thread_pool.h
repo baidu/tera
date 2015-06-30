@@ -170,7 +170,8 @@ private:
             if (!time_queue_.empty()) {
                 int64_t now_time = timer::get_micros();
                 BGItem bg_item = time_queue_.top();
-                if (now_time >= bg_item.exe_time) {
+                int64_t wait_time = (bg_item.exe_time - now_time) / 1000; // in ms
+                if (wait_time <= 0) {
                     time_queue_.pop();
                     BGMap::iterator it = latest_.find(bg_item.id);
                     if (it != latest_.end() && it->second.exe_time == bg_item.exe_time) {
@@ -188,8 +189,7 @@ private:
                     }
                     continue;
                 } else if (queue_.empty() && !stop_) {
-                    // convert us in BGItem to ms for TimeWait
-                    work_cv_.TimeWait((bg_item.exe_time - now_time) / 1000, "ThreadProcTimeWait");
+                    work_cv_.TimeWait(wait_time, "ThreadProcTimeWait");
                     continue;
                 }
             }
