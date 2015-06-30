@@ -10,8 +10,10 @@
 #include <deque>
 #include <map>
 #include <queue>
+#include <sstream>
 #include <vector>
 #include <boost/function.hpp>
+#include "counter.h"
 #include "mutex.h"
 #include "timer.h"
 
@@ -77,21 +79,21 @@ public:
     // Add a task to the thread pool.
     void AddTask(const Task& task) {
         MutexLock lock(&mutex_, "AddTask");
-        queue_.push_back(task);
+        queue_.push_back(BGItem(0, timer::get_micros(), task));
         ++pending_num_;
         work_cv_.Signal();
     }
     void AddPriorityTask(const Task& task) {
         MutexLock lock(&mutex_);
-        queue_.push_front(task);
+        queue_.push_front(BGItem(0, timer::get_micros(), task));
         ++pending_num_;
         work_cv_.Signal();
     }
     int64_t DelayTask(int64_t delay, const Task& task) {
         MutexLock lock(&mutex_);
-        int64_t now_time = timer::get_micros() / 1000;
-        int64_t exe_time = now_time + delay;
-        BGItem bg_item = {++last_task_id_, exe_time, task, false};
+        int64_t now_time = timer::get_micros();
+        int64_t exe_time = now_time + delay * 1000;
+        BGItem bg_item(++last_task_id_, exe_time, task);
         time_queue_.push(bg_item);
         latest_[bg_item.id] = bg_item;
         work_cv_.Signal();
@@ -131,6 +133,21 @@ public:
         return pending_num_;
     }
 
+    std::string ProfilingLog() {
+        int64_t schedule_cost_sum = schedule_cost_sum_.Clear();
+        int64_t schedule_count = schedule_count_.Clear();
+        int64_t task_cost_sum = task_cost_sum_.Clear();
+        int64_t task_count = task_count_.Clear();
+        std::stringstream ss;
+        ss << "schd "
+            << (schedule_count == 0 ? 0 : schedule_cost_sum / schedule_count / 1000)
+            << " " << schedule_count
+            << " task "
+            << (task_count == 0 ? 0 : task_cost_sum / task_count / 1000)
+            << " " << task_count;
+        return ss.str();
+    }
+
 private:
     ThreadPool(const ThreadPool&);
     void operator=(const ThreadPool&);
@@ -151,33 +168,46 @@ private:
             }
             // Timer task
             if (!time_queue_.empty()) {
-                int64_t now_time = timer::get_micros() / 1000;
+                int64_t now_time = timer::get_micros();
                 BGItem bg_item = time_queue_.top();
                 if (now_time >= bg_item.exe_time) {
                     time_queue_.pop();
                     BGMap::iterator it = latest_.find(bg_item.id);
                     if (it != latest_.end() && it->second.exe_time == bg_item.exe_time) {
-                        task = bg_item.callback;
+                        schedule_cost_sum_.Add(now_time - bg_item.exe_time);
+                        schedule_count_.Inc();
+                        task = bg_item.task;
                         latest_.erase(it);
                         running_task_id_ = bg_item.id;
                         mutex_.Unlock();
                         task();
+                        task_cost_sum_.Add(timer::get_micros() - now_time);
+                        task_count_.Inc();
                         mutex_.Lock("ThreadProcRelock");
                         running_task_id_ = 0;
                     }
                     continue;
                 } else if (queue_.empty() && !stop_) {
-                    work_cv_.TimeWait(bg_item.exe_time - now_time, "ThreadProcTimeWait");
+                    // convert us in BGItem to ms for TimeWait
+                    work_cv_.TimeWait((bg_item.exe_time - now_time) / 1000, "ThreadProcTimeWait");
                     continue;
                 }
             }
             // Normal task;
             if (!queue_.empty()) {
-                task = queue_.front();
+                int64_t exe_time, start_time, finish_time;
+                task = queue_.front().task;
+                exe_time = queue_.front().exe_time;
                 queue_.pop_front();
                 --pending_num_;
+                start_time = timer::get_micros();
+                schedule_cost_sum_.Add(start_time - exe_time);
+                schedule_count_.Inc();
                 mutex_.Unlock();
                 task();
+                finish_time = timer::get_micros();
+                task_cost_sum_.Add(finish_time - start_time);
+                task_count_.Inc();
                 mutex_.Lock("ThreadProcRelock2");
             }
         }
@@ -187,8 +217,7 @@ private:
     struct BGItem {
         int64_t id;
         int64_t exe_time;
-        Task callback;
-        bool canceled;
+        Task task;
         bool operator<(const BGItem& item) const {
             if (exe_time != item.exe_time) {
                 return exe_time > item.exe_time;
@@ -196,12 +225,16 @@ private:
                 return id > item.id;
             }
         }
+
+        BGItem() {}
+        BGItem(int64_t id_t, int64_t exe_time_t, const Task& task_t)
+            : id(id_t), exe_time(exe_time_t), task(task_t) {}
     };
     typedef std::priority_queue<BGItem> BGQueue;
     typedef std::map<int64_t, BGItem> BGMap;
 
     int32_t threads_num_;
-    std::deque<Task> queue_;
+    std::deque<BGItem> queue_;
     volatile int pending_num_;
     Mutex mutex_;
     CondVar work_cv_;
@@ -212,6 +245,12 @@ private:
     BGMap latest_;
     int64_t last_task_id_;
     int64_t running_task_id_;
+
+    // for profiling
+    Counter schedule_cost_sum_;
+    Counter schedule_count_;
+    Counter task_cost_sum_;
+    Counter task_count_;
 };
 
 } // namespace common
@@ -219,5 +258,3 @@ private:
 using common::ThreadPool;
 
 #endif  // TERA_COMMON_THREAD_POOL_H_
-
-/* vim: set expandtab ts=4 sw=4 sts=4 tw=100: */
