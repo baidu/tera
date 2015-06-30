@@ -10,7 +10,7 @@
 #include <string>
 #include <vector>
 
-#include <sofa/pbrpc/smart_ptr/shared_ptr.hpp>
+#include <boost/shared_ptr.hpp>
 
 #include "common/mutex.h"
 #include "common/thread_pool.h"
@@ -40,9 +40,11 @@ struct TabletNode {
     TabletNodeStatus m_report_status;
     TabletNodeInfo m_info;
     uint64_t m_data_size;
+    uint64_t m_qps;
     uint64_t m_load;
     uint64_t m_update_time;
     std::map<std::string, uint64_t> m_table_size;
+    std::map<std::string, uint64_t> m_table_qps;
 
     uint32_t m_query_fail_count;
     uint32_t m_onload_count;
@@ -63,8 +65,10 @@ struct TabletNode {
     TabletNodeInfo GetInfo();
     const std::string& GetAddr();
     const std::string& GetId();
-    uint64_t GetTableSize(const std::string& table_name);
-    uint64_t GetSize();
+
+    // table_name == "" means all tables
+    uint64_t GetSize(const std::string& table_name = "");
+    uint64_t GetQps(const std::string& table_name = "");
 
     uint32_t GetPlanToMoveInCount();
     void PlanToMoveIn();
@@ -95,8 +99,9 @@ private:
     TabletNode& operator=(const TabletNode& t);
 };
 
-typedef sofa::pbrpc::shared_ptr<TabletNode> TabletNodePtr;
+typedef boost::shared_ptr<TabletNode> TabletNodePtr;
 
+class WorkloadGetter;
 class Scheduler;
 class MasterImpl;
 
@@ -112,24 +117,17 @@ public:
     void GetAllTabletNodeAddr(std::vector<std::string>* addr_array);
     void GetAllTabletNodeId(std::map<std::string, std::string>* id_map);
     void GetAllTabletNodeInfo(std::vector<TabletNodePtr>* info_array);
-    bool ScheduleTabletNode(Scheduler* scheduler, std::string* node_addr);
     bool ScheduleTabletNode(Scheduler* scheduler, const std::string& table_name,
                             std::string* node_addr);
+    bool ScheduleTabletNode(Scheduler* scheduler, const std::string& table_name,
+                            TabletNodePtr* node);
+    bool ShouldMoveData(Scheduler* scheduler, const std::string& table_name,
+                        TabletNodePtr src_node, TabletNodePtr dst_node,
+                        const std::vector<TabletPtr>& tablet_candidates,
+                        size_t* tablet_index);
     bool CheckStateSwitch(NodeState old_state, NodeState new_state);
-    bool IsNodeOverloadThanAverage(const std::string& node_addr);
-    bool IsNodeOverloadThanLeast(const std::string& node_addr);
-    bool ShouldMoveToLeastNode(const std::string& node_addr,
-                               uint64_t move_data_size);
-    bool ShouldMoveData(const std::string& src_node_addr,
-                        const std::string& dst_node_addr,
-                        const std::string& table_name,
-                        uint64_t move_data_size);
 
 private:
-    bool ShouldMoveData(TabletNodePtr src_node, TabletNodePtr dst_node,
-                        const std::string& table_name,
-                        uint64_t move_data_size);
-
     mutable Mutex m_mutex;
     MasterImpl* m_master_impl;
 

@@ -31,6 +31,7 @@ tera::Counter dfs_write_size_counter;
 
 tera::Counter dfs_read_delay_counter;
 tera::Counter dfs_write_delay_counter;
+tera::Counter dfs_sync_delay_counter;
 
 tera::Counter dfs_read_counter;
 tera::Counter dfs_write_counter;
@@ -150,7 +151,7 @@ public:
             }
         }
         dfs_read_size_counter.Add(bytes_read);
-        return Status::OK();
+        return s;
     }
 
     virtual Status Read(uint64_t offset, size_t n, Slice* result, char* scratch) const {
@@ -195,7 +196,7 @@ private:
     bool feof() {
         tera::AutoCounter ac(&dfs_tell_hang_counter, "feof", filename_.c_str());
         dfs_tell_counter.Inc();
-        if (file_ && file_->Tell() == fileSize()) {
+        if (file_ && file_->Tell() >= fileSize()) {
             return true;
         }
         return false;
@@ -276,12 +277,13 @@ public:
         dfs_sync_counter.Inc();
         Status s;
         tera::Counter dfs_sync_counter;
-        uint64_t n = EnvDfs()->NowMicros();
+        uint64_t t = EnvDfs()->NowMicros();
         if (file_->Sync() == -1) {
             fprintf(stderr, "dfs sync fail: %s\n", filename_.c_str());
             s = IOError(filename_, errno);
         }
-        uint64_t diff = EnvDfs()->NowMicros() - n;
+        uint64_t diff = EnvDfs()->NowMicros() - t;
+        dfs_sync_delay_counter.Add(diff);
         if (diff > 2000000) {
             char buf[128];
             get_time_str(buf, 128);

@@ -7,6 +7,7 @@
 #include <string.h>
 #include <string>
 
+#include <gflags/gflags.h>
 #include <glog/logging.h>
 #include <zookeeper/zookeeper.h>
 

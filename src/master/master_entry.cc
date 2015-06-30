@@ -32,7 +32,7 @@ MasterEntry::MasterEntry()
 MasterEntry::~MasterEntry() {}
 
 bool MasterEntry::StartServer() {
-    IpAddress master_addr(utils::GetLocalHostAddr(), FLAGS_tera_master_port);
+    IpAddress master_addr("0.0.0.0", FLAGS_tera_master_port);
     LOG(INFO) << "Start master RPC server at: " << master_addr.ToString();
 
     m_master_impl.reset(new MasterImpl());
