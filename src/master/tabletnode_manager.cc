@@ -75,14 +75,14 @@ uint64_t TabletNode::GetQps(const std::string& table_name) {
 
 uint32_t TabletNode::GetPlanToMoveInCount() {
     MutexLock lock(&m_mutex);
-    VLOG(7) << "GetPlanToMoveInCount: " << m_addr << " " << m_plan_move_in_count;
+    VLOG(8) << "GetPlanToMoveInCount: " << m_addr << " " << m_plan_move_in_count;
     return m_plan_move_in_count;
 }
 
 void TabletNode::PlanToMoveIn() {
     MutexLock lock(&m_mutex);
     m_plan_move_in_count++;
-    VLOG(7) << "PlanToMoveIn: " << m_addr << " " << m_plan_move_in_count;
+    VLOG(8) << "PlanToMoveIn: " << m_addr << " " << m_plan_move_in_count;
 }
 
 void TabletNode::DoneMoveIn() {
@@ -93,7 +93,7 @@ void TabletNode::DoneMoveIn() {
     if (m_plan_move_in_count > 0) {
         m_plan_move_in_count--;
     }
-    VLOG(7) << "DoneMoveIn: " << m_addr << " " << m_plan_move_in_count;
+    VLOG(8) << "DoneMoveIn: " << m_addr << " " << m_plan_move_in_count;
 }
 
 bool TabletNode::MayLoadNow() {
@@ -105,7 +105,7 @@ bool TabletNode::MayLoadNow() {
         <= get_micros()) {
         return true;
     }
-    VLOG(7) << "MayLoadNow() " << m_addr << " last load time: "
+    VLOG(8) << "MayLoadNow() " << m_addr << " last load time: "
             << (get_micros() - m_recent_load_time_list.front()) / 1000000 << " seconds ago";
     return false;
 }
@@ -369,9 +369,9 @@ bool TabletNodeManager::FindTabletNode(const std::string& addr,
 }
 
 bool TabletNodeManager::ScheduleTabletNode(Scheduler* scheduler, const std::string& table_name,
-                                           std::string* node_addr) {
+                                           bool is_move, std::string* node_addr) {
     TabletNodePtr node;
-    if (ScheduleTabletNode(scheduler, table_name, &node)) {
+    if (ScheduleTabletNode(scheduler, table_name, is_move, &node)) {
         *node_addr = node->GetAddr();
         return true;
     }
@@ -379,7 +379,7 @@ bool TabletNodeManager::ScheduleTabletNode(Scheduler* scheduler, const std::stri
 }
 
 bool TabletNodeManager::ScheduleTabletNode(Scheduler* scheduler, const std::string& table_name,
-                                           TabletNodePtr* node) {
+                                           bool is_move, TabletNodePtr* node) {
     MutexLock lock(&m_mutex);
     std::string meta_node_addr;
     m_master_impl->GetMetaTabletAddr(&meta_node_addr);
@@ -397,6 +397,14 @@ bool TabletNodeManager::ScheduleTabletNode(Scheduler* scheduler, const std::stri
             && tablet_node->m_addr == meta_node_addr) {
             meta_node = tablet_node;
             continue;
+        }
+        if (is_move) {
+            if (!tablet_node->MayLoadNow()) {
+                continue;
+            }
+            if (tablet_node->GetPlanToMoveInCount() > 0) {
+                continue;
+            }
         }
         candidates.push_back(tablet_node);
     }
