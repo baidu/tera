@@ -326,7 +326,7 @@ void TableImpl::CommitScan(ScanTask* scan_task,
         column_family->CopyFrom(*(impl->GetColumnFamily(i)));
     }
 
-    request->set_time_stamp(common::timer::get_micros());
+    request->set_timestamp(common::timer::get_micros());
     Closure<void, ScanTabletRequest*, ScanTabletResponse*, bool, int>* done =
         NewClosure(this, &TableImpl::ScanCallBack, scan_task);
     tabletnode_client.ScanTablet(request, response, done);
@@ -336,7 +336,7 @@ void TableImpl::ScanCallBack(ScanTask* scan_task,
                              ScanTabletRequest* request,
                              ScanTabletResponse* response,
                              bool failed, int error_code) {
-    _perf_counter.rpc_w.Add(common::timer::get_micros() - request->time_stamp());
+    _perf_counter.rpc_w.Add(common::timer::get_micros() - request->timestamp());
     _perf_counter.rpc_w_cnt.Inc();
     ResultStreamImpl* stream = scan_task->stream;
 
@@ -626,7 +626,7 @@ void TableImpl::CommitMutation(const std::string& server_addr,
         }
     }
 
-    request->set_time_stamp(common::timer::get_micros());
+    request->set_timestamp(common::timer::get_micros());
     Closure<void, WriteTabletRequest*, WriteTabletResponse*, bool, int>* done =
         NewClosure(this, &TableImpl::MutateCallBack, mu_list);
     tabletnode_client_async.WriteTablet(request, response, done);
@@ -640,7 +640,7 @@ void TableImpl::MutateCallBack(std::vector<RowMutationImpl*>* mu_list,
                                WriteTabletRequest* request,
                                WriteTabletResponse* response,
                                bool failed, int error_code) {
-    _perf_counter.rpc_w.Add(common::timer::get_micros() - request->time_stamp());
+    _perf_counter.rpc_w.Add(common::timer::get_micros() - request->timestamp());
     _perf_counter.rpc_w_cnt.Inc();
     if (failed) {
         if (error_code == sofa::pbrpc::RPC_ERROR_SERVER_SHUTDOWN ||
@@ -1083,7 +1083,7 @@ void TableImpl::CommitReaders(const std::string server_addr,
         row_reader->ToProtoBuf(row_reader_info);
         // row_reader_info->CopyFrom(row_reader->GetRowReaderInfo());
     }
-    request->set_time_stamp(common::timer::get_micros());
+    request->set_timestamp(common::timer::get_micros());
     Closure<void, ReadTabletRequest*, ReadTabletResponse*, bool, int>* done =
         NewClosure(this, &TableImpl::ReaderCallBack, reader_list);
     tabletnode_client_async.ReadTablet(request, response, done);
@@ -1093,7 +1093,7 @@ void TableImpl::ReaderCallBack(std::vector<RowReaderImpl*>* reader_list,
                                ReadTabletRequest* request,
                                ReadTabletResponse* response,
                                bool failed, int error_code) {
-    _perf_counter.rpc_r.Add(common::timer::get_micros() - request->time_stamp());
+    _perf_counter.rpc_r.Add(common::timer::get_micros() - request->timestamp());
     _perf_counter.rpc_r_cnt.Inc();
     if (failed) {
         if (error_code == sofa::pbrpc::RPC_ERROR_SERVER_SHUTDOWN ||
