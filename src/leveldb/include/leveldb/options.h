@@ -278,6 +278,10 @@ struct Options {
   // Default: false
   bool verify_checksums_in_compaction;
 
+  // Ignore data corruption in compaction
+  // Default: false
+  bool ignore_corruption_in_compaction;
+
   // Create an Options object with default values for all fields.
   Options();
 };

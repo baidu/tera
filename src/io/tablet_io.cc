@@ -51,6 +51,7 @@ DECLARE_string(tera_tabletnode_path_prefix);
 DECLARE_int32(tera_tabletnode_retry_period);
 DECLARE_string(tera_leveldb_compact_strategy);
 DECLARE_bool(tera_leveldb_verify_checksums);
+DECLARE_bool(tera_leveldb_ignore_corruption_in_compaction);
 
 DECLARE_int32(tera_tabletnode_scan_pack_max_size);
 DECLARE_bool(tera_tabletnode_cache_enabled);
@@ -219,6 +220,7 @@ bool TabletIO::Load(const TableSchema& schema,
         m_ldb_options.comparator = leveldb::BytewiseComparator();
     }
     m_ldb_options.verify_checksums_in_compaction = FLAGS_tera_leveldb_verify_checksums;
+    m_ldb_options.ignore_corruption_in_compaction = FLAGS_tera_leveldb_ignore_corruption_in_compaction;
     SetupOptionsForLG();
 
     m_tablet_path = FLAGS_tera_tabletnode_path_prefix + path;
