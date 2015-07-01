@@ -72,6 +72,7 @@ DECLARE_int32(tera_tabletnode_cache_mem_size);
 DECLARE_int32(tera_tabletnode_cache_disk_size);
 DECLARE_int32(tera_tabletnode_cache_disk_filenum);
 DECLARE_int32(tera_tabletnode_cache_log_level);
+DECLARE_int32(tera_tabletnode_gc_log_level);
 
 DECLARE_string(tera_leveldb_env_type);
 DECLARE_bool(tera_ins_enabled);
@@ -79,7 +80,7 @@ DECLARE_bool(tera_ins_enabled);
 extern tera::Counter range_error_counter;
 extern tera::Counter rand_read_delay;
 
-static const int GC_LOG_LEVEL = 15;
+static const int GC_LOG_LEVEL = FLAGS_tera_tabletnode_gc_log_level;
 
 namespace tera {
 namespace tabletnode {

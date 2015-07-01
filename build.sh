@@ -17,7 +17,7 @@ mkdir -p ${DEPS_SOURCE} ${DEPS_PREFIX}
 cd ${DEPS_SOURCE}
 
 # boost
-wget http://softlayer-sng.dl.sourceforge.net/project/boost/boost/1.57.0/boost_1_57_0.tar.gz
+wget http://superb-dca2.dl.sourceforge.net/project/boost/boost/1.57.0/boost_1_57_0.tar.gz
 tar zxf boost_1_57_0.tar.gz
 rm -rf ${DEPS_PREFIX}/boost_1_57_0
 mv boost_1_57_0 ${DEPS_PREFIX}
@@ -118,10 +118,10 @@ make -j4
 make install
 cd -
 
-wget --no-check-certificate https://raw.githubusercontent.com/fxsjy/thirdparty/master/uuid-1.6.2.tar.gz
-tar -xzvf uuid-1.6.2.tar.gz
-cd uuid-1.6.2
-./configure ${DEPS_CONFIG} 
+wget http://superb-dca2.dl.sourceforge.net/project/libuuid/libuuid-1.0.3.tar.gz
+tar -xzvf libuuid-1.0.3.tar.gz
+cd libuuid-1.0.3/
+./configure ${DEPS_CONFIG}
 make -j4
 make install
 cd -
@@ -130,7 +130,8 @@ git clone https://github.com/fxsjy/ins
 cd ins
 sed -i "s|^PREFIX=.*|PREFIX=${DEPS_PREFIX}|" Makefile
 sed -i "s|^PROTOC=.*|PROTOC=${DEPS_PREFIX}/bin/protoc|" Makefile
-make install_sdk
+BOOST_PATH=${DEPS_PREFIX}/boost_1_57_0 make install_sdk
+make -j4 install_sdk
 cd -
 
 cd ${WORK_DIR}
