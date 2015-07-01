@@ -139,6 +139,7 @@ private:
 
 private:
     TabletNodeImpl* m_tabletnode_impl;
+    scoped_ptr<ThreadPool> m_ctrl_thread_pool;
     scoped_ptr<ThreadPool> m_write_thread_pool;
     scoped_ptr<ThreadPool> m_read_thread_pool;
     scoped_ptr<ThreadPool> m_scan_thread_pool;

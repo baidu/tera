@@ -16,6 +16,7 @@ mkdir -p ${DEPS_SOURCE} ${DEPS_PREFIX}
 
 git clone --depth=1 http://gitlab.baidu.com/baidups/third.git ${DEPS_SOURCE}
 git clone --depth=1 http://gitlab.baidu.com/baidups/sofa-pbrpc.git ${DEPS_SOURCE}/sofa-pbrpc
+git clone --depth=1 http://gitlab.baidu.com/baidups/ins.git ${DEPS_SOURCE}/ins
 
 cd ${DEPS_SOURCE}
 
@@ -101,6 +102,12 @@ make -j4
 make install
 cd -
 
+cd ins
+sed -i "s|^PREFIX=.*|PREFIX=${DEPS_PREFIX}|" Makefile
+sed -i "s|^PROTOC=.*|PROTOC=${DEPS_PREFIX}/bin/protoc|" Makefile
+make -j4 install_sdk
+cd -
+
 cd ${WORK_DIR}
 
 ########################################
@@ -115,6 +122,7 @@ sed -i 's/^GFLAGS_PREFIX=.*/GFLAGS_PREFIX=.\/thirdparty/' depends.mk
 sed -i 's/^GLOG_PREFIX=.*/GLOG_PREFIX=.\/thirdparty/' depends.mk
 sed -i 's/^GPERFTOOLS_PREFIX=.*/GPERFTOOLS_PREFIX=.\/thirdparty/' depends.mk
 sed -i 's/^BOOST_INCDIR=.*/BOOST_INCDIR=.\/thirdparty\/boost_1_57_0/' depends.mk
+sed -i 's/^INS_PREFIX=.*/INS_PREFIX=.\/thirdparty/' depends.mk
 
 ########################################
 # build tera

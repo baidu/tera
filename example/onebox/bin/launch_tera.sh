@@ -3,7 +3,7 @@ CURRENT_DIR=`dirname $0`
 source ${CURRENT_DIR}/config
 
 # make sure tera is killed
-sh kill_tera.sh
+bash kill_tera.sh
 
 FAKE_ZK_PATH_PREFIX="${CURRENT_DIR}/../fakezk"
 TIME=`date +%Y-%m-%d-%H:%M:%S`

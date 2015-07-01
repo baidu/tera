@@ -72,14 +72,16 @@ DECLARE_int32(tera_tabletnode_cache_mem_size);
 DECLARE_int32(tera_tabletnode_cache_disk_size);
 DECLARE_int32(tera_tabletnode_cache_disk_filenum);
 DECLARE_int32(tera_tabletnode_cache_log_level);
+DECLARE_int32(tera_tabletnode_gc_log_level);
 
 DECLARE_string(tera_leveldb_env_type);
 DECLARE_string(tera_local_addr);
+DECLARE_bool(tera_ins_enabled);
 
 extern tera::Counter range_error_counter;
 extern tera::Counter rand_read_delay;
 
-static const int GC_LOG_LEVEL = 15;
+static const int GC_LOG_LEVEL = FLAGS_tera_tabletnode_gc_log_level;
 
 namespace tera {
 namespace tabletnode {
@@ -139,6 +141,9 @@ TabletNodeImpl::~TabletNodeImpl() {
 bool TabletNodeImpl::Init() {
     if (FLAGS_tera_zk_enabled) {
         m_zk_adapter.reset(new TabletNodeZkAdapter(this, m_local_addr));
+    } else if(FLAGS_tera_ins_enabled) {
+        LOG(INFO) << "ins mode!";
+        m_zk_adapter.reset(new InsTabletNodeZkAdapter(this, m_local_addr));
     } else {
         LOG(INFO) << "fake zk mode!";
         m_zk_adapter.reset(new FakeTabletNodeZkAdapter(this, m_local_addr));
@@ -971,7 +976,7 @@ void TabletNodeImpl::GarbageCollect() {
     }
 
     // collect memory env
-    leveldb::Env* mem_env = leveldb::EnvInMemory()->CacheEnv();
+    leveldb::Env* mem_env = io::LeveldbMemEnv()->CacheEnv();
     GarbageCollectInPath(FLAGS_tera_tabletnode_path_prefix, mem_env,
                          inherited_files, active_tablets);
 

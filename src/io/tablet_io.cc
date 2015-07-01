@@ -15,6 +15,7 @@
 #include "io/tablet_writer.h"
 #include "io/timekey_comparator.h"
 #include "io/ttlkv_compact_strategy.h"
+#include "io/utils_leveldb.h"
 #include "leveldb/cache.h"
 #include "leveldb/compact_strategy.h"
 #include "leveldb/env.h"
@@ -49,6 +50,8 @@ DECLARE_string(tera_master_meta_table_name);
 DECLARE_string(tera_tabletnode_path_prefix);
 DECLARE_int32(tera_tabletnode_retry_period);
 DECLARE_string(tera_leveldb_compact_strategy);
+DECLARE_bool(tera_leveldb_verify_checksums);
+DECLARE_bool(tera_leveldb_ignore_corruption_in_compaction);
 
 DECLARE_int32(tera_tabletnode_scan_pack_max_size);
 DECLARE_bool(tera_tabletnode_cache_enabled);
@@ -65,27 +68,6 @@ extern tera::Counter row_read_delay;
 
 namespace tera {
 namespace io {
-
-#define OPERATE_WITH_RETRY(func, tips, sleep_time, max_retry) \
-do { \
-    int32_t retry = 0; \
-    bool ret = false; \
-    while ( !(ret = func)  && retry < max_retry ) { \
-        ThisThread::Sleep(sleep_time); \
-        if (max_retry < 10 || retry % (max_retry / 10 + 1) == 0) { \
-            LOG(WARNING) << "try again to " << tips << ": " << retry; \
-        } \
-        retry++; \
-    } \
-    if (!ret) { \
-        LOG(ERROR) << "can not " << tips << " status: " << db_status.ToString(); \
-    } \
-} while (0)
-
-#define OPERATE_FILE_WITH_RETRY(func, tips) \
-    OPERATE_WITH_RETRY(func, tips, \
-                       FLAGS_tera_io_retry_period, \
-                       0 /*FLAGS_tera_io_retry_max_times*/);
 
 TabletIO::TabletIO()
     : m_async_writer(NULL),
@@ -237,6 +219,8 @@ bool TabletIO::Load(const TableSchema& schema,
         m_ldb_options.raw_key_format = leveldb::kReadable;
         m_ldb_options.comparator = leveldb::BytewiseComparator();
     }
+    m_ldb_options.verify_checksums_in_compaction = FLAGS_tera_leveldb_verify_checksums;
+    m_ldb_options.ignore_corruption_in_compaction = FLAGS_tera_leveldb_ignore_corruption_in_compaction;
     SetupOptionsForLG();
 
     m_tablet_path = FLAGS_tera_tabletnode_path_prefix + path;
@@ -566,7 +550,8 @@ int64_t TabletIO::GetDataSize(std::vector<uint64_t>* lgsize,
 bool TabletIO::Read(const leveldb::Slice& key, std::string* value,
                     uint64_t snapshot_id, StatusCode* status) {
     CHECK_NOTNULL(m_db);
-    leveldb::ReadOptions read_option;
+    leveldb::ReadOptions read_option(&m_ldb_options);
+    read_option.verify_checksums = FLAGS_tera_leveldb_verify_checksums;
     if (snapshot_id != 0) {
         if (!SnapshotIDToSeq(snapshot_id, &read_option.snapshot)) {
             *status = kSnapshotNotExist;
@@ -590,7 +575,8 @@ StatusCode TabletIO::InitedScanInterator(const std::string& start_tera_key,
     m_key_operator->ExtractTeraKey(start_tera_key, &start_key, &start_col,
                                    &start_qual, NULL, NULL);
 
-    leveldb::ReadOptions read_option;
+    leveldb::ReadOptions read_option(&m_ldb_options);
+    read_option.verify_checksums = FLAGS_tera_leveldb_verify_checksums;
     SetupIteratorOptions(scan_options, &read_option);
     uint64_t snapshot_id = scan_options.snapshot_id;
     if (snapshot_id != 0) {
@@ -1093,7 +1079,8 @@ bool TabletIO::Scan(const ScanOption& option, KeyValueList* kv_list,
 
     int64_t pack_size = 0;
     uint64_t snapshot_id = option.snapshot_id();
-    leveldb::ReadOptions read_option;
+    leveldb::ReadOptions read_option(&m_ldb_options);
+    read_option.verify_checksums = FLAGS_tera_leveldb_verify_checksums;
     if (snapshot_id != 0) {
         if (!SnapshotIDToSeq(snapshot_id, &read_option.snapshot)) {
             *status = kSnapshotNotExist;
@@ -1258,30 +1245,25 @@ void TabletIO::SetupOptionsForLG() {
 
         leveldb::LG_info* lg_info = new leveldb::LG_info(lg_schema.id());
 
-        if (FLAGS_tera_leveldb_env_type == "local") {
-            m_ldb_options.env = lg_info->env = leveldb::NewPosixEnv();
+        if (store == MemoryStore) {
+            m_ldb_options.env = lg_info->env = LeveldbMemEnv();
+            m_ldb_options.seek_latency = 0;
+            m_ldb_options.block_cache =
+                leveldb::NewLRUCache(FLAGS_tera_memenv_block_cache_size * 1024 * 1024);
+            m_mem_store_activated = true;
+        } else if (store == FlashStore) {
+            if (!FLAGS_tera_tabletnode_cache_enabled) {
+                m_ldb_options.env = lg_info->env = LeveldbFlashEnv(m_ldb_options.info_log);
+            } else {
+                LOG(INFO) << "activate block-level Cache store";
+                m_ldb_options.env = lg_info->env = leveldb::EnvThreeLevelCache();
+            }
             m_ldb_options.seek_latency = FLAGS_tera_leveldb_env_local_seek_latency;
         } else {
-            if (store == MemoryStore) {
-                m_ldb_options.env = lg_info->env = leveldb::EnvInMemory();
-                m_ldb_options.seek_latency = 0;
-                m_ldb_options.block_cache =
-                    leveldb::NewLRUCache(FLAGS_tera_memenv_block_cache_size * 1024 * 1024);
-                m_mem_store_activated = true;
-            } else if (store == FlashStore) {
-                if (!FLAGS_tera_tabletnode_cache_enabled) {
-                    m_ldb_options.env = lg_info->env =
-                        leveldb::EnvFlash(m_ldb_options.info_log);
-                } else {
-                    LOG(INFO) << "activate block-level Cache store";
-                    m_ldb_options.env = lg_info->env = leveldb::EnvThreeLevelCache();
-                }
-                m_ldb_options.seek_latency = FLAGS_tera_leveldb_env_local_seek_latency;
-            } else {
-                m_ldb_options.env = lg_info->env = leveldb::EnvDfs();
-                m_ldb_options.seek_latency = FLAGS_tera_leveldb_env_dfs_seek_latency;
-            }
+            m_ldb_options.env = lg_info->env = LeveldbBaseEnv();
+            m_ldb_options.seek_latency = FLAGS_tera_leveldb_env_dfs_seek_latency;
         }
+
         if (compress) {
             lg_info->compression = leveldb::kSnappyCompression;
         }

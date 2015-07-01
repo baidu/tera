@@ -30,7 +30,14 @@ bool MergeTablesWithLG(const std::string& table_1,
 
 void InitDfsEnv();
 
-leveldb::Env* LeveldbEnv();
+// return the base env leveldb used (dfs/local), singleton
+leveldb::Env* LeveldbBaseEnv();
+
+// return the mem env leveldb used, singleton
+leveldb::Env* LeveldbMemEnv();
+
+// return the flash env leveldb used, singleton
+leveldb::Env* LeveldbFlashEnv(leveldb::Logger* l);
 
 bool MoveEnvDirToTrash(const std::string& subdir);
 

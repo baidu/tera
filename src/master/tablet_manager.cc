@@ -33,6 +33,7 @@ DECLARE_string(tera_master_meta_table_name);
 DECLARE_bool(tera_zk_enabled);
 
 DECLARE_int32(tera_master_impl_retry_times);
+DECLARE_int32(tera_master_load_balance_accumulate_query_times);
 DECLARE_int32(tera_tabletnode_connect_retry_period);
 
 DECLARE_bool(tera_delete_obsolete_tabledir_enabled);
@@ -118,7 +119,17 @@ const TableSchema& Tablet::GetSchema() {
 }
 
 const TabletCounter& Tablet::GetCounter() {
-    return m_counter;
+    MutexLock lock(&m_mutex);
+    if (m_counter_list.size() > 0) {
+        return m_counter_list.back();
+    } else {
+        return m_average_counter;
+    }
+}
+
+const TabletCounter& Tablet::GetAverageCounter() {
+    MutexLock lock(&m_mutex);
+    return m_average_counter;
 }
 
 TabletStatus Tablet::GetStatus() {
@@ -142,7 +153,11 @@ TablePtr Tablet::GetTable() {
 
 bool Tablet::IsBusy() {
     MutexLock lock(&m_mutex);
-    return m_counter.is_on_busy();
+    if (m_counter_list.size() > 0) {
+        return m_counter_list.back().is_on_busy();
+    } else {
+        return false;
+    }
 }
 
 std::string Tablet::DebugString() {
@@ -152,7 +167,49 @@ std::string Tablet::DebugString() {
 
 void Tablet::SetCounter(const TabletCounter& counter) {
     MutexLock lock(&m_mutex);
-    m_counter = counter;
+
+    m_accumu_counter.low_read_cell += counter.low_read_cell();
+    m_accumu_counter.scan_rows += counter.scan_rows();
+    m_accumu_counter.scan_kvs += counter.scan_kvs();
+    m_accumu_counter.scan_size += counter.scan_size();
+    m_accumu_counter.read_rows += counter.read_rows();
+    m_accumu_counter.read_kvs += counter.read_kvs();
+    m_accumu_counter.read_size += counter.read_size();
+    m_accumu_counter.write_rows += counter.write_rows();
+    m_accumu_counter.write_kvs += counter.write_kvs();
+    m_accumu_counter.write_size += counter.write_size();
+
+    uint64_t counter_size = m_counter_list.size();
+    const uint64_t max_counter_size = FLAGS_tera_master_load_balance_accumulate_query_times;
+    if (counter_size >= max_counter_size) {
+        CHECK_EQ(counter_size, max_counter_size);
+        TabletCounter& earliest_counter = m_counter_list.front();
+        m_accumu_counter.low_read_cell -= earliest_counter.low_read_cell();
+        m_accumu_counter.scan_rows -= earliest_counter.scan_rows();
+        m_accumu_counter.scan_kvs -= earliest_counter.scan_kvs();
+        m_accumu_counter.scan_size -= earliest_counter.scan_size();
+        m_accumu_counter.read_rows -= earliest_counter.read_rows();
+        m_accumu_counter.read_kvs -= earliest_counter.read_kvs();
+        m_accumu_counter.read_size -= earliest_counter.read_size();
+        m_accumu_counter.write_rows -= earliest_counter.write_rows();
+        m_accumu_counter.write_kvs -= earliest_counter.write_kvs();
+        m_accumu_counter.write_size -= earliest_counter.write_size();
+        m_counter_list.pop_front();
+    }
+    m_counter_list.push_back(counter);
+
+    counter_size = m_counter_list.size();
+    m_average_counter.set_low_read_cell(m_accumu_counter.low_read_cell / counter_size);
+    m_average_counter.set_scan_rows(m_accumu_counter.scan_rows / counter_size);
+    m_average_counter.set_scan_kvs(m_accumu_counter.scan_kvs / counter_size);
+    m_average_counter.set_scan_size(m_accumu_counter.scan_size / counter_size);
+    m_average_counter.set_read_rows(m_accumu_counter.read_rows / counter_size);
+    m_average_counter.set_read_kvs(m_accumu_counter.read_kvs / counter_size);
+    m_average_counter.set_read_size(m_accumu_counter.read_size / counter_size);
+    m_average_counter.set_write_rows(m_accumu_counter.write_rows / counter_size);
+    m_average_counter.set_write_kvs(m_accumu_counter.write_kvs / counter_size);
+    m_average_counter.set_write_size(m_accumu_counter.write_size / counter_size);
+    m_average_counter.set_is_on_busy(counter.is_on_busy());
 }
 
 void Tablet::SetSize(int64_t table_size) {
@@ -618,7 +675,7 @@ bool Table::GetTabletsForGc(std::set<uint64_t>* live_tablets,
     }
 
     std::vector<std::string> children;
-    leveldb::Env* env = io::LeveldbEnv();
+    leveldb::Env* env = io::LeveldbBaseEnv();
     std::string table_path = FLAGS_tera_tabletnode_path_prefix + m_name;
     env->GetChildren(table_path, &children);
     for (size_t i = 0; i < children.size(); ++i) {

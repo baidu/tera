@@ -17,7 +17,7 @@ mkdir -p ${DEPS_SOURCE} ${DEPS_PREFIX}
 cd ${DEPS_SOURCE}
 
 # boost
-wget http://softlayer-sng.dl.sourceforge.net/project/boost/boost/1.57.0/boost_1_57_0.tar.gz
+wget http://superb-dca2.dl.sourceforge.net/project/boost/boost/1.57.0/boost_1_57_0.tar.gz
 tar zxf boost_1_57_0.tar.gz
 rm -rf ${DEPS_PREFIX}/boost_1_57_0
 mv boost_1_57_0 ${DEPS_PREFIX}
@@ -118,6 +118,22 @@ make -j4
 make install
 cd -
 
+wget http://superb-dca2.dl.sourceforge.net/project/libuuid/libuuid-1.0.3.tar.gz
+tar -xzvf libuuid-1.0.3.tar.gz
+cd libuuid-1.0.3/
+./configure ${DEPS_CONFIG}
+make -j4
+make install
+cd -
+
+git clone https://github.com/fxsjy/ins
+cd ins
+sed -i "s|^PREFIX=.*|PREFIX=${DEPS_PREFIX}|" Makefile
+sed -i "s|^PROTOC=.*|PROTOC=${DEPS_PREFIX}/bin/protoc|" Makefile
+BOOST_PATH=${DEPS_PREFIX}/boost_1_57_0 make install_sdk
+make -j4 install_sdk
+cd -
+
 cd ${WORK_DIR}
 
 ########################################
@@ -132,6 +148,7 @@ sed -i 's/^GFLAGS_PREFIX=.*/GFLAGS_PREFIX=.\/thirdparty/' depends.mk
 sed -i 's/^GLOG_PREFIX=.*/GLOG_PREFIX=.\/thirdparty/' depends.mk
 sed -i 's/^GPERFTOOLS_PREFIX=.*/GPERFTOOLS_PREFIX=.\/thirdparty/' depends.mk
 sed -i 's/^BOOST_INCDIR=.*/BOOST_INCDIR=.\/thirdparty\/boost_1_57_0/' depends.mk
+sed -i 's/^INS_PREFIX=.*/INS_PREFIX=.\/thirdparty/' depends.mk
 
 ########################################
 # build tera

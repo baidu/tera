@@ -11,6 +11,14 @@
 #include "master/master_impl.h"
 #include "zk/zk_adapter.h"
 
+namespace galaxy{
+namespace ins{
+namespace sdk {
+    class InsSDK;
+}
+}
+}
+
 namespace tera {
 namespace master {
 
@@ -122,6 +130,41 @@ private:
     MasterImpl * m_master_impl;
     std::string m_server_addr;
     std::string m_fake_path;
+};
+
+
+class InsMasterZkAdapter: public MasterZkAdapterBase {
+public:
+    InsMasterZkAdapter(MasterImpl * master_impl,
+                        const std::string & server_addr);
+    virtual ~InsMasterZkAdapter();
+    virtual bool Init(std::string* root_tablet_addr,
+                      std::map<std::string, std::string>* tabletnode_list,
+                      bool* safe_mode);
+
+    virtual bool KickTabletServer(const std::string& ts_host,
+                                  const std::string& ts_zk_id);
+    virtual bool MarkSafeMode() {return true;}
+    virtual bool UnmarkSafeMode() {return true;}
+    virtual bool UpdateRootTabletNode(const std::string& root_tablet_addr);
+    void RefreshTabletNodeList();
+    void OnLockChange(std::string session_id, bool deleted);
+    void OnSessionTimeout();
+private:
+    virtual void OnChildrenChanged(const std::string& path,
+                                   const std::vector<std::string>& name_list,
+                                   const std::vector<std::string>& data_list) {}
+    virtual void OnNodeValueChanged(const std::string& path,
+                                    const std::string& value) {}
+    virtual void OnNodeCreated(const std::string& path) {}
+    virtual void OnNodeDeleted(const std::string& path) {}
+    virtual void OnWatchFailed(const std::string& path, int watch_type,
+                               int err) {}
+private:
+    mutable Mutex m_mutex;
+    MasterImpl * m_master_impl;
+    std::string m_server_addr;
+    galaxy::ins::sdk::InsSDK* m_ins_sdk;
 };
 
 } // namespace master

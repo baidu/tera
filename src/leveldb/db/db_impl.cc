@@ -412,10 +412,12 @@ Status DBImpl::Recover(VersionEdit* edit) {
     std::set<uint64_t>::iterator it_tablet = tablets.begin();
     for (; it_tablet != tablets.end(); ++it_tablet) {
       std::string path = RealDbName(dbname_, *it_tablet);
-      Log(options_.info_log, "[%s] GetChildren", path.c_str());
+      Log(options_.info_log, "[%s] GetChildren(%s)", dbname_.c_str(), path.c_str());
       std::vector<std::string> filenames;
       s = env_->GetChildren(path, &filenames);
       if (!s.ok()) {
+        Log(options_.info_log, "[%s] GetChildren(%s) fail: %s",
+            dbname_.c_str(), path.c_str(), s.ToString().c_str());
         return s;
       }
       uint64_t number;
@@ -776,6 +778,7 @@ void DBImpl::BGWork(void* db) {
 }
 
 void DBImpl::BackgroundCall() {
+  Log(options_.info_log, "[%s] BackgroundCall", dbname_.c_str());
   MutexLock l(&mutex_);
   assert(bg_compaction_scheduled_);
   if (!shutting_down_.Acquire_Load()) {
@@ -952,7 +955,10 @@ Status DBImpl::FinishCompactionOutputFile(CompactionState* compact,
   assert(output_number != 0);
 
   // Check for iterator errors
-  Status s = input->status();
+  Status s;
+  if (!options_.ignore_corruption_in_compaction) {
+      s = input->status();
+  }
   const uint64_t current_entries = compact->builder->NumEntries();
   if (s.ok()) {
     s = compact->builder->Finish();
@@ -1187,8 +1193,13 @@ Status DBImpl::DoCompactionWork(CompactionState* compact) {
   if (status.ok() && compact->builder != NULL) {
     status = FinishCompactionOutputFile(compact, input);
   }
-  if (status.ok()) {
-    status = input->status();
+  if (status.ok() && !input->status().ok()) {
+      if (options_.ignore_corruption_in_compaction) {
+          Log(options_.info_log, "[%s] ignore compaction error: %s",
+              dbname_.c_str(), input->status().ToString().c_str());
+      } else {
+          status = input->status();
+      }
   }
   delete input;
   input = NULL;
