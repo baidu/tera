@@ -41,7 +41,7 @@ class AsyncWriter {
   // is a async function which calls TreadFuncAddRecor
   // to do the actual work
   void AddRecord(const Slice& slice);
-  void Sync();
+  void Sync(bool sync_or_flush = true);
   
   // wait_sec can be:
   // positive (wait for wait_sec seconds),
