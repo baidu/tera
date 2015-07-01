@@ -13,7 +13,6 @@
 #include <sstream>
 #include <vector>
 #include <boost/function.hpp>
-#include "counter.h"
 #include "mutex.h"
 #include "timer.h"
 
@@ -134,10 +133,21 @@ public:
     }
 
     std::string ProfilingLog() {
-        int64_t schedule_cost_sum = schedule_cost_sum_.Clear();
-        int64_t schedule_count = schedule_count_.Clear();
-        int64_t task_cost_sum = task_cost_sum_.Clear();
-        int64_t task_count = task_count_.Clear();
+        int64_t schedule_cost_sum;
+        int64_t schedule_count;
+        int64_t task_cost_sum;
+        int64_t task_count;
+        {
+            MutexLock lock(&mutex_);
+            schedule_cost_sum = schedule_cost_sum_;
+            schedule_cost_sum_ = 0;
+            schedule_count = schedule_count_;
+            schedule_count_ = 0;
+            task_cost_sum = task_cost_sum_;
+            task_cost_sum_ = 0;
+            task_count = task_count_;
+            task_count_ = 0;
+        }
         std::stringstream ss;
         ss << "schd "
             << (schedule_count == 0 ? 0 : schedule_cost_sum / schedule_count / 1000)
@@ -175,15 +185,15 @@ private:
                     time_queue_.pop();
                     BGMap::iterator it = latest_.find(bg_item.id);
                     if (it != latest_.end() && it->second.exe_time == bg_item.exe_time) {
-                        schedule_cost_sum_.Add(now_time - bg_item.exe_time);
-                        schedule_count_.Inc();
+                        schedule_cost_sum_ += now_time - bg_item.exe_time;
+                        schedule_count_++;
                         task = bg_item.task;
                         latest_.erase(it);
                         running_task_id_ = bg_item.id;
                         mutex_.Unlock();
                         task();
-                        task_cost_sum_.Add(timer::get_micros() - now_time);
-                        task_count_.Inc();
+                        task_cost_sum_ += timer::get_micros() - now_time;
+                        task_count_++;
                         mutex_.Lock("ThreadProcRelock");
                         running_task_id_ = 0;
                     }
@@ -201,13 +211,13 @@ private:
                 queue_.pop_front();
                 --pending_num_;
                 start_time = timer::get_micros();
-                schedule_cost_sum_.Add(start_time - exe_time);
-                schedule_count_.Inc();
+                schedule_cost_sum_ += start_time - exe_time;
+                schedule_count_++;
                 mutex_.Unlock();
                 task();
                 finish_time = timer::get_micros();
-                task_cost_sum_.Add(finish_time - start_time);
-                task_count_.Inc();
+                task_cost_sum_ += finish_time - start_time;
+                task_count_++;
                 mutex_.Lock("ThreadProcRelock2");
             }
         }
@@ -247,10 +257,10 @@ private:
     int64_t running_task_id_;
 
     // for profiling
-    Counter schedule_cost_sum_;
-    Counter schedule_count_;
-    Counter task_cost_sum_;
-    Counter task_count_;
+    int64_t schedule_cost_sum_;
+    int64_t schedule_count_;
+    int64_t task_cost_sum_;
+    int64_t task_count_;
 };
 
 } // namespace common
