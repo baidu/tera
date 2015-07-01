@@ -27,7 +27,8 @@ wget http://download.savannah.gnu.org/releases/libunwind/libunwind-0.99-beta.tar
 tar zxvf libunwind-0.99-beta.tar.gz
 (cd libunwind-0.99-beta && ./configure CFLAGS=-U_FORTIFY_SOURCE --disable-shared --with-pic && make -j4 && sudo make install )
 
-wget https://googledrive.com/host/0B6NtGsLhIcf7MWxMMF9JdTN3UVk/gperftools-2.2.1.tar.gz
+git clone --depth=1 https://github.com/00k/gperftools
+mv gperftools/gperftools-2.2.1.tar.gz .
 tar zxvf gperftools-2.2.1.tar.gz
 ( cd gperftools-2.2.1 && ./configure --disable-shared --with-pic && make -j4 && sudo make install )
 

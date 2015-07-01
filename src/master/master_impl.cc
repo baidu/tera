@@ -85,6 +85,7 @@ DECLARE_string(tera_leveldb_env_type);
 
 DECLARE_string(tera_zk_root_path);
 DECLARE_string(tera_zk_addr_list);
+DECLARE_string(tera_local_addr);
 DECLARE_bool(tera_ins_enabled);
 
 namespace tera {
@@ -107,7 +108,11 @@ MasterImpl::MasterImpl()
     if (FLAGS_tera_master_cache_check_enabled) {
         EnableReleaseCacheTimer();
     }
-    m_local_addr = utils::GetLocalHostName() + ":" + FLAGS_tera_master_port;
+    if (FLAGS_tera_local_addr == "") {
+        m_local_addr = utils::GetLocalHostName()+ ":" + FLAGS_tera_master_port;
+    } else {
+        m_local_addr = FLAGS_tera_local_addr + ":" + FLAGS_tera_master_port;
+    }
     tabletnode::TabletNodeClient::SetThreadPool(m_thread_pool.get());
 
     if (FLAGS_tera_leveldb_env_type != "local") {

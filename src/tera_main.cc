@@ -16,6 +16,7 @@
 
 DECLARE_string(tera_role);
 DECLARE_string(tera_log_prefix);
+DECLARE_string(tera_local_addr);
 
 bool g_quit = false;
 

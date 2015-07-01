@@ -1,9 +1,10 @@
 import subprocess
 import argparse
+import time
 from xml.dom.minidom import Document
 
-conf_path_prefix = '/home/ubuntu/leiliyuan/hadoop-1.2.1/conf/'
-share_path_prefix = '/home/ubuntu/leiliyuan/share/'
+conf_path_prefix = '/opt/hadoop-1.2.1/conf/'
+share_path_prefix = '/opt/share/'
 
 def parse_input():
 	parser = argparse.ArgumentParser()
@@ -54,7 +55,7 @@ def write_core_site_xml(args):
 
 def write_hdfs_site_xml():
 	doc, hdfssite = get_doc()	
-	prop = write_property(doc, 'dfs.data.dir', share_path_prefix + 'name', True)
+	prop = write_property(doc, 'dfs.name.dir', share_path_prefix + 'name', True)
 	hdfssite.appendChild(prop)
 	prop = write_property(doc, 'dfs.data.dir', share_path_prefix + 'data', True)
 	hdfssite.appendChild(prop)
@@ -91,7 +92,7 @@ def write_maters_slaves(args):
 	f.close()
 
 def start_hdfs(args):
-	cmd_prefix = '/home/ubuntu/leiliyuan/hadoop-1.2.1/bin/hadoop-daemon.sh --config /home/ubuntu/leiliyuan/hadoop-1.2.1/'
+	cmd_prefix = '/opt/hadoop-1.2.1/bin/hadoop-daemon.sh --config /opt/hadoop-1.2.1/'
 	if args.mode == 'master':
 		p = subprocess.Popen('/opt/hadoop-1.2.1/bin/hadoop namenode -format', stdout=subprocess.PIPE, shell=True)
 		print p.stdout.read()
@@ -103,6 +104,10 @@ def start_hdfs(args):
 		p = subprocess.Popen(cmd_prefix + 'conf start datanode', stdout=subprocess.PIPE, shell=True)
 		print p.stdout.read()
 
+def doing_nothing():
+	while True:
+		time.sleep(1000)
+
 def main():
 	args = parse_input()
 	write_core_site_xml(args)
@@ -110,7 +115,8 @@ def main():
 	#write_mapred_site_xml(args)
 	write_hadoop_env()
 	write_maters_slaves(args)
-	#start_hdfs(args)
+	start_hdfs(args)
+	doing_nothing()
 
 if __name__ == '__main__':
 	main()

@@ -75,6 +75,7 @@ DECLARE_int32(tera_tabletnode_cache_log_level);
 DECLARE_int32(tera_tabletnode_gc_log_level);
 
 DECLARE_string(tera_leveldb_env_type);
+DECLARE_string(tera_local_addr);
 DECLARE_bool(tera_ins_enabled);
 
 extern tera::Counter range_error_counter;
@@ -93,7 +94,11 @@ TabletNodeImpl::TabletNodeImpl(const TabletNodeInfo& tabletnode_info,
       m_release_cache_timer_id(kInvalidTimerId),
       m_sysinfo(tabletnode_info),
       m_thread_pool(new ThreadPool(FLAGS_tera_tabletnode_impl_thread_max_num)) {
-    m_local_addr = utils::GetLocalHostName() + ":" + FLAGS_tera_tabletnode_port;
+    if (FLAGS_tera_local_addr == "") {
+        m_local_addr = utils::GetLocalHostName()+ ":" + FLAGS_tera_tabletnode_port;
+    } else {
+        m_local_addr = FLAGS_tera_local_addr + ":" + FLAGS_tera_tabletnode_port;
+    }
     TabletNodeClient::SetThreadPool(m_thread_pool.get());
 
     leveldb::Env::Default()->SetBackgroundThreads(FLAGS_tera_tabletnode_compact_thread_num);
