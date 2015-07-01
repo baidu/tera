@@ -413,7 +413,7 @@ bool MasterImpl::LoadMetaTablet(std::string* server_addr) {
     lg_schema->set_store_type(MemoryStore);
 
     while (m_tabletnode_manager->ScheduleTabletNode(m_size_scheduler.get(), "",
-                                                    server_addr)) {
+                                                    false, server_addr)) {
         meta.set_server_addr(*server_addr);
         StatusCode status = kTabletNodeOk;
         if (LoadTabletSync(meta, schema, &status)) {
@@ -1299,7 +1299,7 @@ void MasterImpl::TabletNodeLoadBalance(TabletNodePtr tabletnode, Scheduler* sche
 
     TabletNodePtr dst_tabletnode;
     size_t tablet_index = 0;
-    if (m_tabletnode_manager->ScheduleTabletNode(scheduler, table_name, &dst_tabletnode)
+    if (m_tabletnode_manager->ScheduleTabletNode(scheduler, table_name, true, &dst_tabletnode)
             && m_tabletnode_manager->ShouldMoveData(scheduler, table_name, tabletnode,
                                                     dst_tabletnode, tablet_candidates,
                                                     &tablet_index)) {
@@ -2921,7 +2921,7 @@ void MasterImpl::TryLoadTablet(TabletPtr tablet, std::string server_addr) {
         }
 
         if (!m_tabletnode_manager->ScheduleTabletNode(m_size_scheduler.get(), sche_table_name,
-                                                      &server_addr)) {
+                                                      false, &server_addr)) {
             // tablet->SetAddrIf("", kTableOffLine);
             LOG(ERROR) << "no available tabletnode, abort load " << tablet;
             return;
