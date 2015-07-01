@@ -59,7 +59,7 @@ void InitDfsEnv() {
 
 leveldb::Env* LeveldbBaseEnv() {
     if (FLAGS_tera_leveldb_env_type == "local") {
-        return leveldb::NewPosixEnv();
+        return leveldb::Env::Default();
     } else {
         return leveldb::EnvDfs();
     }
