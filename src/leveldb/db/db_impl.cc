@@ -412,10 +412,12 @@ Status DBImpl::Recover(VersionEdit* edit) {
     std::set<uint64_t>::iterator it_tablet = tablets.begin();
     for (; it_tablet != tablets.end(); ++it_tablet) {
       std::string path = RealDbName(dbname_, *it_tablet);
-      Log(options_.info_log, "[%s] GetChildren", path.c_str());
+      Log(options_.info_log, "[%s] GetChildren(%s)", dbname_.c_str(), path.c_str());
       std::vector<std::string> filenames;
       s = env_->GetChildren(path, &filenames);
       if (!s.ok()) {
+        Log(options_.info_log, "[%s] GetChildren(%s) fail: %s",
+            dbname_.c_str(), path.c_str(), s.ToString().c_str());
         return s;
       }
       uint64_t number;
