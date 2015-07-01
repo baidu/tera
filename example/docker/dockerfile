@@ -1,4 +1,4 @@
-FROM debian:jessie  
+FROM ubuntu:latest  
 
 RUN apt-get update && apt-get install -y openjdk-7-jre-headless wget
 RUN wget -q -O - http://apache.mirrors.pair.com/zookeeper/zookeeper-3.4.6/zookeeper-3.4.6.tar.gz | tar -xzf - -C /opt \
@@ -37,5 +37,6 @@ ENV PATH /usr/bin:/bin:/opt/hadoop-1.2.1/bin:/usr/local/sbin:/usr/sbin:/sbin
 ENV LD_LIBRARY_PATH $JAVA_HOME/jre/lib/amd64/server:$JAVA_HOME/jre/lib/amd64/:/opt/hadoop-1.2.1/c++/Linux-amd64-64/lib:/usr/local/lib/
 RUN cp /opt/workspace/ifconfig /sbin/
 
-ADD terawork /opt/tera
+ADD share/tera /opt/tera
 RUN mv /opt/tera/bin/tera_setup.py /opt
+RUN apt-get -y install vim

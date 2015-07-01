@@ -9,7 +9,7 @@ class Tera:
 		self.path = self.get_log_path(log_prefix)
 
 	def get_log_path(self, log_prefix):
-		path = '{pre}/tera/{ip}:{port}-{mode}-{time}'.format(pre=log_prefix, ip=self.ip, port=self.port,
+		path = '{pre}/tera/{ip}-{port}-{mode}-{time}'.format(pre=log_prefix, ip=self.ip, port=self.port,
 																												 mode=self.mode, time=time.strftime('%Y%m%d%H%M%S'))
 		os.makedirs(path)
 		return path
@@ -19,8 +19,8 @@ class Tera:
 		return info
 
 	def to_cmd(self, docker, zk):
-		cmd = 'docker run -t -d -v {dir}:/opt/share -p {port}:{port} --net=host {docker} /usr/bin/python /opt/tera_setup.py --zk {zk} --port {port} --mode {mode}'.\
-			format(dir=self.path, port=self.port, zk=zk, docker=docker, mode=self.mode)
+		cmd = 'docker run -t -d -v {dir}:/opt/share -p {port}:{port} --net=host {docker} /usr/bin/python /opt/tera_setup.py --ip {ip} --zk {zk} --port {port} --mode {mode}'.\
+			format(dir=self.path, port=self.port, ip=self.ip, zk=zk, docker=docker, mode=self.mode)
 		return cmd
 
 class TeraCluster():
