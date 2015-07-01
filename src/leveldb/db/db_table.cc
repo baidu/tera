@@ -412,8 +412,8 @@ Status DBTable::Write(const WriteOptions& options, WriteBatch* my_batch) {
             if (!s.ok()) {
                 s = Status::IOError(dbname_ + ": fail to write log: ", s.ToString());
                 force_switch_log_ = true;
-            } else if (options.sync) {
-                log_->Sync();
+            } else {
+                log_->Sync(options.sync);
                 s = log_->WaitDone(wait_sec);
                 if (s.IsTimeOut()) {
                     Log(options_.info_log, "[%s] Sync time out %lu",

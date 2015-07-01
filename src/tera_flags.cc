@@ -26,6 +26,7 @@ DEFINE_int64(tera_zk_retry_period, 3000, "zookeeper operation retry period (in m
 DEFINE_int32(tera_zk_retry_max_times, 10, "zookeeper operation max retry times");
 DEFINE_string(tera_zk_lib_log_path, "../log/zk.log", "zookeeper library log output file");
 DEFINE_string(tera_log_prefix, "", "prefix of log file (INFO, WARNING)");
+DEFINE_string(tera_local_addr, "", "local host's ip address");
 
 /////////  io  /////////
 
@@ -41,6 +42,7 @@ DEFINE_bool(tera_tablet_use_memtable_on_leveldb, false, "enable memtable based o
 DEFINE_int64(tera_tablet_memtable_ldb_write_buffer_size, 1, "the buffer size(in MB) for memtable on leveldb");
 DEFINE_int64(tera_tablet_memtable_ldb_block_size, 4, "the block size (in KB) for memtable on leveldb");
 DEFINE_int64(tera_tablet_ldb_sst_size, 8, "the sstable file size (in MB) on leveldb");
+DEFINE_bool(tera_sync_log, true, "flush all in-memory parts of log file to stable storage");
 
 DEFINE_string(tera_dfs_so_path, "", "the dfs implementation path");
 DEFINE_string(tera_dfs_conf, "", "the dfs configuration file path");
@@ -147,9 +149,10 @@ DEFINE_int32(tera_master_gc_period, 60000, "the period (in ms) for master gc");
 ///////// tablet node  /////////
 
 DEFINE_string(tera_tabletnode_port, "20000", "the tablet node port of tera system");
-DEFINE_int32(tera_tabletnode_write_thread_num, 10, "the write thread number of tablet node server");
-DEFINE_int32(tera_tabletnode_read_thread_num, 40, "the read thread number of tablet node server");
-DEFINE_int32(tera_tabletnode_scan_thread_num, 5, "the scan thread number of tablet node server");
+DEFINE_int32(tera_tabletnode_ctrl_thread_num, 10, "control thread number of tablet node (query/load/unload/split)");
+DEFINE_int32(tera_tabletnode_write_thread_num, 10, "write thread number of tablet node");
+DEFINE_int32(tera_tabletnode_read_thread_num, 40, "read thread number of tablet node");
+DEFINE_int32(tera_tabletnode_scan_thread_num, 5, "scan thread number of tablet node");
 DEFINE_int32(tera_tabletnode_manual_compact_thread_num, 2, "the manual compact thread number of tablet node server");
 DEFINE_int32(tera_tabletnode_impl_thread_min_num, 1, "the min thread number for tablet node impl operations");
 DEFINE_int32(tera_tabletnode_impl_thread_max_num, 10, "the max thread number for tablet node impl operations");

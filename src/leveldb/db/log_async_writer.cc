@@ -56,9 +56,13 @@ void AsyncWriter::AddRecord(const Slice& slice) {
   }
 }
 
-void AsyncWriter::Sync() {
+void AsyncWriter::Sync(bool sync_or_flush) {
   if (!async_mode_) {
-    s_ = dest_->Sync();
+    if (sync_or_flush) {
+      s_ = dest_->Sync();
+    } else {
+      s_ = dest_->Flush();
+    }
     finished_ = true;
   } else {
     MutexLock lock(&mutex_);
