@@ -22,6 +22,7 @@ DECLARE_bool(tera_enable_level0_limit);
 DECLARE_int32(tera_asyncwriter_sync_interval);
 DECLARE_int32(tera_asyncwriter_sync_size_threshold);
 DECLARE_int32(tera_asyncwriter_batch_size);
+DECLARE_bool(tera_sync_log);
 
 namespace tera {
 namespace io {
@@ -438,7 +439,7 @@ StatusCode TabletWriter::FlushToDiskBatch(WriteTaskBuffer* task_buffer) {
     }
 
     StatusCode status = kTableOk;
-    m_tablet->WriteBatch(&batch, true, &status);
+    m_tablet->WriteBatch(&batch, FLAGS_tera_sync_log, &status);
     batch.Clear();
     for (size_t i = 0; i < task_num; i++) {
         FinishTask((*task_buffer)[i], status);
