@@ -109,6 +109,7 @@ Status CopyToLocal(const std::string& local_fname, Env* env,
         s = IOError("dfs fsize mismatch", file_size);
     }
     Env::Default()->DeleteFile(local_fname);
+    env->DeleteFile(fname);
     return s;
 }
 
