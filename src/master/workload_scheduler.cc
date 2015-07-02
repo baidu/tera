@@ -22,7 +22,18 @@ public:
     virtual ~WorkloadGetter() {}
 };
 
-class WorkloadComparator {
+class Comparator {
+public:
+    // Three-way comparison.  Returns value:
+    //   < 0 iff "a" < "b",
+    //   == 0 iff "a" == "b",
+    //   > 0 iff "a" > "b"
+    virtual int Compare(const TabletNodePtr& a, const TabletNodePtr& b,
+                        const std::string& table_name) = 0;
+
+};
+
+class WorkloadComparator : public Comparator {
 public:
     // Three-way comparison.  Returns value:
     //   < 0 iff "a" < "b",
@@ -98,13 +109,10 @@ public:
     bool operator() (const TabletNodePtr& a, const TabletNodePtr& b) {
         return m_comparator->Compare(a, b, m_table_name) < 0;
     }
-    bool operator() (const TabletPtr& a, const TabletPtr& b) {
-        return m_comparator->Compare(a, b) < 0;
-    }
-    WorkloadLess(WorkloadComparator* comparator, const std::string& table_name = "")
+    WorkloadLess(Comparator* comparator, const std::string& table_name = "")
         : m_comparator(comparator), m_table_name(table_name) {}
 private:
-    WorkloadComparator* m_comparator;
+    Comparator* m_comparator;
     std::string m_table_name;
 };
 
@@ -113,14 +121,11 @@ public:
     bool operator() (const TabletNodePtr& a, const TabletNodePtr& b) {
         return m_comparator->Compare(a, b, m_table_name) > 0;
     }
-    bool operator() (const TabletPtr& a, const TabletPtr& b) {
-        return m_comparator->Compare(a, b) > 0;
-    }
-    WorkloadGreater(WorkloadComparator* comparator, const std::string& table_name = "")
+    WorkloadGreater(Comparator* comparator, const std::string& table_name = "")
         : m_comparator(comparator), m_table_name(table_name) {}
 
 private:
-    WorkloadComparator* m_comparator;
+    Comparator* m_comparator;
     std::string m_table_name;
 };
 
@@ -272,6 +277,39 @@ void SizeScheduler::DescendingSort(std::vector<TabletNodePtr>& node_list,
 //                QPSScheduler
 /////////////////////////////////////////////////
 
+class LoadComparator : public Comparator {
+public:
+    // Three-way comparison.  Returns value:
+    //   < 0 iff "a" < "b",
+    //   == 0 iff "a" == "b",
+    //   > 0 iff "a" > "b"
+    int Compare(const TabletNodePtr& a, const TabletNodePtr& b,
+                const std::string& table_name) {
+        bool a_has_read_pending = a->GetReadPending() > 100;
+        bool b_has_read_pending = b->GetReadPending() > 100;
+        if (!a_has_read_pending && b_has_read_pending) {
+            return -1;
+        } else if (a_has_read_pending && !b_has_read_pending) {
+            return 1;
+        }
+
+        uint64_t a_row_read_delay = a->GetRowReadDelay();
+        uint64_t b_row_read_delay = b->GetRowReadDelay();
+        if (a_row_read_delay < b_row_read_delay) {
+            return -1;
+        } else if (a_row_read_delay > b_row_read_delay) {
+            return 1;
+        }
+
+        return qps_comparator.Compare(a, b, table_name);
+    }
+
+    virtual ~LoadComparator() {}
+
+private:
+    QPSComparator qps_comparator;
+};
+
 bool QPSScheduler::FindBestNode(const std::vector<TabletNodePtr>& node_list,
                                 const std::string& table_name,
                                 size_t* best_index) {
@@ -279,7 +317,7 @@ bool QPSScheduler::FindBestNode(const std::vector<TabletNodePtr>& node_list,
         return false;
     }
 
-    QPSComparator comparator;
+    LoadComparator comparator;
     *best_index = 0;
     for (size_t i = 1; i < node_list.size(); ++i) {
         int r = comparator.Compare(node_list[*best_index], node_list[i], table_name);
@@ -305,24 +343,36 @@ bool QPSScheduler::FindBestTablet(TabletNodePtr src_node, TabletNodePtr dst_node
     VLOG(7) << "[QPS-sched] FindBestTablet() " << src_node->GetAddr()
             << " -> " << dst_node->GetAddr();
 
+    bool src_node_has_read_pending = src_node->GetReadPending() > 100;
+    if (!src_node_has_read_pending) {
+        VLOG(7) << "src has no read pending";
+        return false;
+    }
+
     SizeGetter size_getter;
     QPSGetter qps_getter;
     int64_t src_node_qps = qps_getter(src_node, table_name);
+/*
     if (src_node_qps < FLAGS_tera_master_load_balance_qps_min_limit) {
         VLOG(7) << "qps not reach min limit: " << src_node_qps;
         return false;
     }
-
+*/
     int64_t dst_node_qps = qps_getter(dst_node, table_name);
+/*
     const double& qps_ratio = FLAGS_tera_master_load_balance_qps_ratio_trigger;
     if ((double)src_node_qps < (double)dst_node_qps * qps_ratio) {
         VLOG(7) << "qps ratio not reach threshold: " << src_node_qps
                 << " : " << dst_node_qps;
         return false;
     }
-
+*/
     int64_t ideal_move_qps = (src_node_qps - dst_node_qps) / 2;
-    VLOG(7) << "[QPS-sched] qps = " << src_node_qps << " : " << dst_node_qps
+    ideal_move_qps = std::numeric_limits<int64_t>::max();
+    VLOG(7) << "[QPS-sched]"
+            << " rpending = " <<  src_node->GetReadPending() << " : " << dst_node->GetReadPending()
+            << " delay = " << src_node->GetRowReadDelay() << " : " << dst_node->GetRowReadDelay()
+            << " qps = " << src_node_qps << " : " << dst_node_qps
             << " ideal_move_qps = " << ideal_move_qps;
 
     int64_t best_tablet_index = -1;
@@ -356,14 +406,14 @@ bool QPSScheduler::FindBestTablet(TabletNodePtr src_node, TabletNodePtr dst_node
 
 void QPSScheduler::AscendingSort(std::vector<TabletNodePtr>& node_list,
                                  const std::string& table_name) {
-    QPSComparator comparator;
+    LoadComparator comparator;
     WorkloadLess less(&comparator, table_name);
     std::sort(node_list.begin(), node_list.end(), less);
 }
 
 void QPSScheduler::DescendingSort(std::vector<TabletNodePtr>& node_list,
                                   const std::string& table_name) {
-    QPSComparator comparator;
+    LoadComparator comparator;
     WorkloadGreater greater(&comparator, table_name);
     std::sort(node_list.begin(), node_list.end(), greater);
 }
