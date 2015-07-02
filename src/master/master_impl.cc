@@ -1294,7 +1294,7 @@ void MasterImpl::TabletNodeLoadBalance(TabletNodePtr tabletnode, Scheduler* sche
 
     TabletNodePtr dst_tabletnode;
     size_t tablet_index = 0;
-    if (m_tabletnode_manager->ScheduleTabletNode(scheduler, table_name, true, &dst_tabletnode)
+    if (m_tabletnode_manager->ScheduleTabletNode(scheduler, table_name, false, &dst_tabletnode)
             && m_tabletnode_manager->ShouldMoveData(scheduler, table_name, tabletnode,
                                                     dst_tabletnode, tablet_candidates,
                                                     &tablet_index)) {
