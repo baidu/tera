@@ -1373,13 +1373,14 @@ Status VersionSet::Recover() {
     }
     delete files[i];
     if (s.ok()) {
-        Version* v = new Version(this);
-        builder.SaveTo(v);
-        Finalize(v);
-        AppendVersion(v);
-        Log(options_->info_log, "[%s] recover manifest finish: %s\n", dbname_.c_str(), dscname[i].c_str());
+      Version* v = new Version(this);
+      builder.SaveTo(v);
+      Finalize(v);
+      AppendVersion(v);
+      Log(options_->info_log, "[%s] recover manifest %s finish.\n", dbname_.c_str(), dscname[i].c_str());
     } else {
-        Log(options_->info_log, "[%s] recover manifest fail %s\n", dbname_.c_str(), dscname[i].c_str());
+      Log(options_->info_log, "[%s] recover manifest %s fail: %s\n",
+          dbname_.c_str(), dscname[i].c_str(), s.ToString().c_str());
     }
   }
 
