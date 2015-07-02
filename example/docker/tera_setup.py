@@ -5,6 +5,7 @@ import time
 
 def parse_input():
 	parser = argparse.ArgumentParser()
+	parser.add_argument('--ip', required=True, type=str, help='Localhost ip address')
 	parser.add_argument('--port', required=True, type=str, help='A file describes the zk cluster')
 	parser.add_argument('--mode', required=True, type=str, choices=['master', 'tabletnode'], help='tera instnace mode')
 	parser.add_argument('--zk', required=True, type=str, help='zk list, ip:port,ip:port')
@@ -23,9 +24,9 @@ def write_config(args):
 
 def start_tera(args):
 	if args.mode == 'tabletnode':
-		p = subprocess.Popen('/opt/tera/bin/tabletnode', stdout=subprocess.PIPE, shell=True)
+		p = subprocess.Popen('/opt/tera/bin/tabletnode ' + args.ip, stdout=subprocess.PIPE, shell=True)
 	else:
-		p = subprocess.Popen('/opt/tera/bin/master', stdout=subprocess.PIPE, shell=True)
+		p = subprocess.Popen('/opt/tera/bin/master ' + args.ip, stdout=subprocess.PIPE, shell=True)
 
 def doing_nothing():
 	while True:

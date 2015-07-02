@@ -2,4 +2,5 @@
 
 export CLASSPATH=.:$CLASSPATH:$JAVA_HOME/lib:$JAVA_HOME/jre/lib:$JAVA_HOME/jre/lib/amd64/:/home/ubuntu/leiliyuan/hadoop-1.2.1/lib:$(hadoop classpath)
 cd /opt/tera/bin
-nohup ./tera_main --flagfile=../conf/tera.flag --tera_role=master &> ../../share/log/master.stderr &
+
+nohup ./tera_main --flagfile=../conf/tera.flag --tera_local_addr $1 --tera_role=master &> ../../share/log/master.stderr &
