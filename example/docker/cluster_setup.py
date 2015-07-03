@@ -2,6 +2,9 @@ import json
 import argparse
 import paramiko
 import traceback
+import socket
+import time
+import os
 import zk
 import hdfs
 import tera
@@ -23,8 +26,8 @@ class SSH():
 
 def parse_input():
 	parser = argparse.ArgumentParser()
-	parser.add_argument('file', type=str, help='A file describes the zk cluster')
-	parser.add_argument('--docker', type=str, required=True, help='ID of the docker image')
+	parser.add_argument('--conf', type=str, help='A file describes the zk cluster')
+	parser.add_argument('--docker', type=str, default='lylei/tera:latest', help='ID of the docker image')
 	parser.add_argument('--zk', action='store_true', help='Launch zk')
 	parser.add_argument('--hdfs', action='store_true', help='Launch hdfs')
 	parser.add_argument('--tera', action='store_true', help='Launch tera')
@@ -32,9 +35,18 @@ def parse_input():
 	return args
 
 def config(args):
-	config = json.load(open(args.file, 'r'))
+	config = {}
+	if args.conf is None:
+		local_ip = socket.gethostbyname(socket.gethostname())
+		log = os.path.expanduser('~')
+		config.update({"hdfs":1, "ip":local_ip, "tera":1, "zk":1, "log_prefix":log})
+	else:
+		config = json.load(open(args.conf, 'r'))
 	ip_list = config['ip'].split(':')
-	log_prefix = config['log_prefix']
+	if config.has_key('log_prefix'):
+		log_prefix = config['log_prefix']
+	else:
+		log_prefix = os.path.expanduser('~')
 	zk_cluster = zk.ZkCluster(ip_list, config['zk'], log_prefix)
 	zk_cluster.populate_zk_cluster()
 	for z in zk_cluster.cluster:
@@ -72,13 +84,15 @@ def start_hdfs(args, hdfs_cluster, s):
 		print cmd
 		s.run_cmd(hdfs_instance.ip, cmd)
 
-def start_tera(args, tera_cluster, zk_cluster, s):
+def start_tera(args, tera_cluster, zk_cluster, hdfs_cluster, s):
 	if (args.zk or args.hdfs) and not args.tera:
 		return
 	for tera_instance in tera_cluster.cluster:
 		#print tera_instance.to_string()
-		cmd = tera_instance.to_cmd(args.docker, ','.join(zk_cluster.ip_tera))
+		cmd = tera_instance.to_cmd(args.docker, ','.join(zk_cluster.ip_tera), hdfs_cluster.master_ip, ':'.join(hdfs_cluster.slave_ip))
 		print cmd
+		if tera_instance.mode == 'master':
+			time.sleep(5)
 		s.run_cmd(tera_instance.ip, cmd)
 
 def main():
@@ -87,7 +101,7 @@ def main():
 	s = SSH()
 	start_zk(args, zk_cluster, s)
 	start_hdfs(args, hdfs_cluster, s)
-	start_tera(args, tera_cluster, zk_cluster, s)
+	start_tera(args, tera_cluster, zk_cluster, hdfs_cluster, s)
 
 if __name__ == '__main__':
 	main()

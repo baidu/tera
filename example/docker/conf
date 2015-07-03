@@ -1,1 +1,1 @@
-{"hdfs": 3, "ip": "192.168.100.2:192.168.100.3:192.168.100.4", "tera": 3, "zk": 1, "log_prefix":"/home/example/log"}
+{"hdfs": 1, "ip": "ip_address1:ip_address2:ip_address3", "tera": 1, "zk": 1, "log_prefix": "your_log_path"}

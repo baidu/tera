@@ -11,6 +11,7 @@ def parse_input():
 	parser.add_argument('--masters', required=True, type=str, help='Name node ip')
 	parser.add_argument('--slaves', nargs='+', required=True, type=str, help='data node ip')
 	parser.add_argument('--mode', required=True, type=str, choices=['master', 'slave'], help='start hdfs as master/slave')
+	parser.add_argument('--tera', action='store_true')
 	args = parser.parse_args()
 	return args
 
@@ -115,8 +116,9 @@ def main():
 	#write_mapred_site_xml(args)
 	write_hadoop_env()
 	write_maters_slaves(args)
-	start_hdfs(args)
-	doing_nothing()
+	if args.tera is False:
+		start_hdfs(args)
+		doing_nothing()
 
 if __name__ == '__main__':
 	main()
