@@ -1205,22 +1205,37 @@ void MasterImpl::LoadBalance() {
 
             std::vector<TabletPtr> tablet_list;
             table->GetTablet(&tablet_list);
-
-            VLOG(5) << "LoadBalance start : " << table->GetTableName();
-            LoadBalance(all_node_list, tablet_list, table->GetTableName());
-            VLOG(5) << "LoadBalance finish : " << table->GetTableName();
+            LoadBalance(1, m_size_scheduler.get(), all_node_list, tablet_list, table->GetTableName());
+            if (FLAGS_tera_master_load_balance_qps_policy_enabled) {
+                LoadBalance(5, m_qps_scheduler.get(), all_node_list, tablet_list, table->GetTableName());
+            }
         }
     } else {
-        VLOG(5) << "LoadBalance start";
-        LoadBalance(all_node_list, all_tablet_list);
-        VLOG(5) << "LoadBalance finish";
+        LoadBalance(1, m_size_scheduler.get(), all_node_list, all_tablet_list);
+        if (FLAGS_tera_master_load_balance_qps_policy_enabled) {
+            LoadBalance(5, m_qps_scheduler.get(), all_node_list, all_tablet_list);
+        }
     }
 
     m_load_balance_timer_id = kInvalidTimerId;
     EnableLoadBalanceTimer();
 }
 
-void MasterImpl::LoadBalance(std::vector<TabletNodePtr>& tabletnode_list,
+void MasterImpl::LoadBalance(uint32_t round_num, Scheduler* scheduler,
+                             std::vector<TabletNodePtr>& tabletnode_list,
+                             std::vector<TabletPtr>& tablet_list,
+                             const std::string& table_name) {
+    for (uint32_t i = 0; i < round_num; ++i) {
+        VLOG(5) << "LoadBalance (" << scheduler->Name() << ") round "
+                << i << " start : " << table_name;
+        LoadBalance(scheduler, tabletnode_list, tablet_list, table_name);
+        VLOG(5) << "LoadBalance (" << scheduler->Name() << ") round "
+                << i << " finish : " << table_name;
+    }
+}
+
+void MasterImpl::LoadBalance(Scheduler* scheduler,
+                             std::vector<TabletNodePtr>& tabletnode_list,
                              std::vector<TabletPtr>& tablet_list,
                              const std::string& table_name) {
     std::map<std::string, std::vector<TabletPtr> > node_tablet_list;
@@ -1230,26 +1245,13 @@ void MasterImpl::LoadBalance(std::vector<TabletNodePtr>& tabletnode_list,
         node_tablet_list[tablet->GetServerAddr()].push_back(tablet);
     }
 
-    if (FLAGS_tera_master_load_balance_qps_policy_enabled) {
-        VLOG(5) << "QPS LoadBalance start : " << table_name;
-        m_qps_scheduler->DescendingSort(tabletnode_list, table_name);
-        std::vector<TabletNodePtr>::iterator node_it = tabletnode_list.begin();
-        for (; node_it != tabletnode_list.end(); ++node_it) {
-            TabletNodePtr node = *node_it;
-            const std::vector<TabletPtr>& tablet_list = node_tablet_list[node->GetAddr()];
-            TabletNodeLoadBalance(node, m_qps_scheduler.get(), tablet_list, table_name);
-        }
-        VLOG(5) << "QPS LoadBalance finish : " << table_name;
-    }
-    VLOG(5) << "Size LoadBalance start : " << table_name;
-    m_size_scheduler->DescendingSort(tabletnode_list, table_name);
+    scheduler->DescendingSort(tabletnode_list, table_name);
     std::vector<TabletNodePtr>::iterator node_it = tabletnode_list.begin();
     for (; node_it != tabletnode_list.end(); ++node_it) {
         TabletNodePtr node = *node_it;
         const std::vector<TabletPtr>& tablet_list = node_tablet_list[node->GetAddr()];
-        TabletNodeLoadBalance(node, m_size_scheduler.get(), tablet_list, table_name);
+        TabletNodeLoadBalance(node, scheduler, tablet_list, table_name);
     }
-    VLOG(5) << "Size LoadBalance finish : " << table_name;
 }
 
 void MasterImpl::TabletNodeLoadBalance(TabletNodePtr tabletnode, Scheduler* scheduler,
