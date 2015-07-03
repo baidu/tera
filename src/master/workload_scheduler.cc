@@ -220,12 +220,14 @@ bool SizeScheduler::FindBestTablet(TabletNodePtr src_node, TabletNodePtr dst_nod
     int64_t dst_node_qps = qps_getter(dst_node, table_name);
 
     const double& qps_ratio = FLAGS_tera_master_load_balance_qps_ratio_trigger;
+    /*
     if (dst_node_qps >= FLAGS_tera_master_load_balance_qps_min_limit
             && (double)src_node_qps * qps_ratio <= (double)dst_node_qps) {
         VLOG(7) << "[size-sched] revert qps ratio reach threshold: " << src_node_qps
                 << " : " << dst_node_qps;
         return false;
     }
+    */
 
     int64_t ideal_move_size = (src_node_size - dst_node_size) / 2;
     VLOG(7) << "[size-sched] size = " << src_node_size << " : " << dst_node_size
@@ -285,11 +287,11 @@ public:
     //   > 0 iff "a" > "b"
     int Compare(const TabletNodePtr& a, const TabletNodePtr& b,
                 const std::string& table_name) {
-        bool a_has_read_pending = a->GetReadPending() > 100;
-        bool b_has_read_pending = b->GetReadPending() > 100;
-        if (!a_has_read_pending && b_has_read_pending) {
+        uint64_t a_read_pending = a->GetReadPending();
+        uint64_t b_read_pending = b->GetReadPending();
+        if (a_read_pending < b_read_pending) {
             return -1;
-        } else if (a_has_read_pending && !b_has_read_pending) {
+        } else if (a_read_pending > b_read_pending) {
             return 1;
         }
 
