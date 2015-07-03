@@ -1,5 +1,4 @@
 import time
-import os
 
 class Zookeeper:
 	def __init__(self, ip, start_port, end_port, client_port, myid, log_prefix):
@@ -13,7 +12,6 @@ class Zookeeper:
 	def get_log_path(self, log_prefix):
 		path = '{pre}/zk/{ip}-{port}-{time}'.format(pre=log_prefix, ip=self.ip,
 																								port=self.client_port, time=time.strftime('%Y%m%d%H%M%S'))
-		os.makedirs(path)
 		return path
 
 	def to_string(self):
