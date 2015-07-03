@@ -236,7 +236,12 @@ private:
                               bool failed, int error_code);
 
     void LoadBalance();
-    void LoadBalance(std::vector<TabletNodePtr>& tabletnode_list,
+    void LoadBalance(uint32_t round_num, Scheduler* scheduler,
+                    std::vector<TabletNodePtr>& tabletnode_list,
+                    std::vector<TabletPtr>& tablet_list,
+                    const std::string& table_name = "");
+    void LoadBalance(Scheduler* scheduler,
+                     std::vector<TabletNodePtr>& tabletnode_list,
                      std::vector<TabletPtr>& tablet_list,
                      const std::string& table_name = "");
     void TabletNodeLoadBalance(TabletNodePtr tabletnode, Scheduler* scheduler,
