@@ -102,6 +102,8 @@ class DBImpl : public DB {
                                 SequenceNumber* latest_snapshot);
 
   Status NewDB();
+  bool IsDbExist();
+  void ArchiveFile(const std::string& fname);
 
   void MaybeIgnoreError(Status* s) const;
 
