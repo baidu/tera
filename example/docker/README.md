@@ -4,9 +4,16 @@ Docker部署Tera
 ###Dokcer篇
 * 安装Docker
   请参见https://docs.docker.com/
+  
+  例如，Ubuntu下Docker安装命令为：
+
+  ```
+    wget -qO- https://get.docker.com/ | sh
+  ```
 
 * 为Docker添加Non-root权限
-  请参见https://docs.docker.com/installation/ubuntulinux/ 之“Create a Docker group”篇
+
+  执行sudo usermod -aG docker $USER，登出再登进
 
 ###机器篇
 * 配置集群间免密码ssh登陆
@@ -14,32 +21,47 @@ Docker部署Tera
 ###Python和Docker镜像篇
 * 安装Python包并下载Tera镜像
 
-  执行exsample/docker/install.sh脚本。参数为Tera镜像名。脚本会自动安装Python所需包并将Tera镜像打包存储到本地tera.tar.gz。
+  执行exsample/docker/install.sh脚本。参数为集群中除本机外的ip地址。该脚本会下载最新Tera镜像，并分发到参数中的ip地址。
+  
+  例如，集群中有三台主机：192.168.100.2，192.168.100.3，192.168.100.4，当前登录192.168.100.2，则安装命令为：
+  
+  ```
+    ./install.sh 192.168.100.3 192.168.100.4
+  ```
 
-###分发镜像
-* 分发镜像有两种方法：
-
-  1. 登陆每台机器，下载Tera镜像
-  2. 将install.sh打包的Tera镜像拷贝到每台机器。在机器上执行docker load < ./tera.tar.gz
 
 ##第二章 奔跑
 ###配置篇
-* 修改example/docker目录下conf中的配置，其中：
+* 一键启动
+
+  直接执行/example/docker/cluster_setup.py会自动搭建一个本地Tera集群。配置如下：
+  
+  ```
+    hdfs：namenode*1，datanode*1
+    zk：  standalone
+    tera：master*1， tabletnode*1
+    log： $HOME
+  ```
+
+* 也可通过修改example/docker目录下conf中的配置自定义Tera集群，其中：
 
   ```
   ip    ：集群ip地址，用冒号分隔
   hdfs  ：hdfs集群中datanode的个数
   zk    ：Zookeeper集群中zk个数
   tera  ：Tera集群中tablenode个数
-  log_prefix：log目录
+  log_prefix：log目录（默认为$HOME）
+  
+  例如 {"ip":"192.168.100.2:192.168.100.3:192.168.100.4", "hdfs":3, "zk":3, "tera":3}
   ```
 
 ###执行篇
 * 执行cluster_setup.py
   cluster_setup.py脚本默认启动zk，hdfs和Tera，可通过参数选择启动某一或两项。
 
+
       --help：  显示帮助
-      固定参数：配置文件路径
+      --conf：  配置文件路径
       --docker：Tera的docker镜像ID
       --zk：    启动zookeeper集群
       --hdfs：  启动hdfs集群
