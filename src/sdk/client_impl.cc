@@ -695,6 +695,8 @@ bool ClientImpl::ParseTabletEntry(const TabletMeta& meta, std::vector<TabletInfo
 }
 
 static void InitFlags(const std::string& confpath, const std::string& log_prefix) {
+    static Mutex mutex;
+    MutexLock locker(&mutex);
     // search conf file, priority:
     //   user-specified > ./tera.flag > ../conf/tera.flag > env-var
     if (!confpath.empty() && IsExist(confpath)) {
