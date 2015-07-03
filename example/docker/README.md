@@ -71,7 +71,7 @@ Docker部署Tera
   例如：
 
   ```
-  python cluster_setup.py conf --docker abc   // 启动zk，hdfs和tera集群
+  python cluster_setup.py --conf my_config --docker abc   // 使用镜像abc启动配置为my_config的Tera集群
   
-  python cluster_setup.py conf --docker abc --zk --hdfs   // 启动zk和hdfs集群
+  python cluster_setup.py --zk --hdfs   // 启动单机版zk和hdfs
   ```
