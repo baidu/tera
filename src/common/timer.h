@@ -9,9 +9,18 @@
 
 #include <stdio.h>
 #include <sys/time.h>
+#include <string>
 
 namespace common {
 namespace timer {
+
+static inline std::string get_curtime_str() {
+    struct tm tt;
+    char buf[20];
+    time_t t = time(NULL);
+    strftime(buf, 20, "%Y%m%d-%H:%M:%S", localtime_r(&t, &tt));
+    return std::string(buf, 17);
+}
 
 static inline int64_t get_micros() {
     struct timeval tv;
@@ -19,34 +28,15 @@ static inline int64_t get_micros() {
     return static_cast<int64_t>(tv.tv_sec) * 1000000 + tv.tv_usec;
 }
 
-class AutoTimer {
-public:
-    AutoTimer(int64_t timeout_ms, const char* msg1, const char* msg2 = NULL)
-        : timeout_(timeout_ms),
-          msg1_(msg1),
-          msg2_(msg2) {
-        start_ = get_micros();
-    }
-    ~AutoTimer() {
-        int64_t end = get_micros();
-        if (end - start_ > timeout_ * 1000) {
-            double t = (end - start_) / 1000.0;
-            if (!msg2_) {
-                fprintf(stderr, "[AutoTimer] %s use %.3f ms\n",
-                    msg1_, t);
-            } else {
-                fprintf(stderr, "[AutoTimer] %s %s use %.3f ms\n",
-                    msg1_, msg2_, t);
-            }
-        }
-    }
-
-private:
-    int64_t start_;
-    int64_t timeout_;
-    const char* msg1_;
-    const char* msg2_;
-};
+static inline int64_t get_unique_micros(int64_t ref) {
+    struct timeval tv;
+    int64_t now;
+    do {
+        gettimeofday(&tv, NULL);
+        now = static_cast<int64_t>(tv.tv_sec) * 1000000 + tv.tv_usec;
+    } while (now == ref);
+    return now;
+}
 
 }  // namespace timer
 }  // namespace common

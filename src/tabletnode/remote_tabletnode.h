@@ -77,6 +77,7 @@ public:
                        CompactTabletResponse* response,
                        google::protobuf::Closure* done);
 
+    std::string ProfilingLog();
 private:
     void DoLoadTablet(google::protobuf::RpcController* controller,
                       const LoadTabletRequest* request,
