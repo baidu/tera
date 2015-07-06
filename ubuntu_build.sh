@@ -1,6 +1,6 @@
 #!/bin/bash
 
-sudo apt-get -y install libz-dev libboost-dev uuid-dev automake libtool cmake pkgconf
+sudo apt-get -y install libz-dev libboost-dev automake libtool cmake pkgconf
 
 wget https://github.com/google/protobuf/releases/download/v2.6.1/protobuf-2.6.1.tar.gz
 tar xf protobuf-2.6.1.tar.gz
