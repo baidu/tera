@@ -118,14 +118,6 @@ make -j4
 make install
 cd -
 
-wget http://superb-dca2.dl.sourceforge.net/project/libuuid/libuuid-1.0.3.tar.gz
-tar -xzvf libuuid-1.0.3.tar.gz
-cd libuuid-1.0.3/
-./configure ${DEPS_CONFIG}
-make -j4
-make install
-cd -
-
 git clone https://github.com/fxsjy/ins
 cd ins
 sed -i "s|^PREFIX=.*|PREFIX=${DEPS_PREFIX}|" Makefile
