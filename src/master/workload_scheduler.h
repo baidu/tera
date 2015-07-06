@@ -15,6 +15,7 @@ public:
     SizeScheduler() {}
     virtual ~SizeScheduler() {}
 
+    virtual bool MayMoveOut(TabletNodePtr node, const std::string& table_name);
     virtual bool FindBestNode(const std::vector<TabletNodePtr>& node_list,
                               const std::string& table_name,
                               size_t* best_index);
@@ -31,7 +32,7 @@ public:
                                 const std::string& table_name);
 
     virtual const char* Name() {
-        return "datasize";
+        return "size";
     }
 
 private:
@@ -39,11 +40,12 @@ private:
     std::string m_last_choose_tablet;
 };
 
-class QPSScheduler : public Scheduler {
+class LoadScheduler : public Scheduler {
 public:
-    QPSScheduler() {}
-    virtual ~QPSScheduler() {}
+    LoadScheduler() {}
+    virtual ~LoadScheduler() {}
 
+    virtual bool MayMoveOut(TabletNodePtr node, const std::string& table_name);
     virtual bool FindBestNode(const std::vector<TabletNodePtr>& node_list,
                               const std::string& table_name,
                               size_t* best_index);
@@ -60,7 +62,7 @@ public:
                                 const std::string& table_name);
 
     virtual const char* Name() {
-        return "QPS";
+        return "load";
     }
 
 private:
