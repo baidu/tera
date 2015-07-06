@@ -18,6 +18,7 @@ class Scheduler {
 public:
     virtual ~Scheduler() {}
 
+    virtual bool MayMoveOut(TabletNodePtr node, const std::string& table_name) = 0;
     virtual bool FindBestNode(const std::vector<TabletNodePtr>& node_list,
                               const std::string& table_name,
                               size_t* best_index) = 0;
