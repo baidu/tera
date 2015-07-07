@@ -327,7 +327,6 @@ bool DefaultCompactStrategy::DropByLifeTime(int32_t cf_idx, int64_t timestamp) c
         return false;
     }
     int64_t cur_time = get_micros();
-    LOG(ERROR) << "[ttl] delete_time: " << timestamp + ttl << ", cur_time: " << cur_time;
     if (timestamp + ttl > cur_time) {
         return false;
     } else {
