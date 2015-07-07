@@ -467,6 +467,7 @@ private:
     int64_t m_load_balance_timer_id;
     Counter m_this_sequence_id;
     int64_t m_load_balance_count;
+    Counter m_query_pending_count;
 
     scoped_ptr<ThreadPool> m_thread_pool;
     AutoResetEvent m_query_event;
