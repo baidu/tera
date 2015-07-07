@@ -19,7 +19,7 @@ DefaultCompactStrategy::DefaultCompactStrategy(const TableSchema& schema)
         m_cf_indexs[name] = i;
     }
     m_has_put = false;
-    VLOG(11) << "LGCompactStrategy construct";
+    VLOG(11) << "DefaultCompactStrategy construct";
 }
 
 DefaultCompactStrategy::~DefaultCompactStrategy() {}
@@ -41,8 +41,13 @@ bool DefaultCompactStrategy::Drop(const leveldb::Slice& tera_key, uint64_t n) {
     m_cur_type = type;
     m_cur_ts = ts;
     int32_t cf_id = -1;
-    if (type != leveldb::TKT_DEL && DropByColumnFamily(col.ToString(), &cf_id)) {
-        // drop illegel column family
+    if (type != leveldb::TKT_DEL && DropIllegalColumnFamily(col.ToString(), &cf_id)) {
+        // drop illegal column family
+        return true;
+    }
+
+    if (type >= leveldb::TKT_VALUE && DropByLifeTime(cf_id, ts)) {
+        // drop illegal column family
         return true;
     }
 
@@ -202,8 +207,13 @@ bool DefaultCompactStrategy::ScanDrop(const leveldb::Slice& tera_key, uint64_t n
     m_cur_type = type;
     m_cur_ts = ts;
     int32_t cf_id = -1;
-    if (type != leveldb::TKT_DEL && DropByColumnFamily(col.ToString(), &cf_id)) {
-        // drop illegel column family
+    if (type != leveldb::TKT_DEL && DropIllegalColumnFamily(col.ToString(), &cf_id)) {
+        // drop illegal column family
+        return true;
+    }
+
+    if (type >= leveldb::TKT_VALUE && DropByLifeTime(cf_id, ts)) {
+        // drop out-of-life-time record
         return true;
     }
 
@@ -297,7 +307,7 @@ bool DefaultCompactStrategy::ScanDrop(const leveldb::Slice& tera_key, uint64_t n
     return false;
 }
 
-bool DefaultCompactStrategy::DropByColumnFamily(const std::string& column_family,
+bool DefaultCompactStrategy::DropIllegalColumnFamily(const std::string& column_family,
                                                 int32_t* cf_idx) const {
     std::map<std::string, int32_t>::const_iterator it =
         m_cf_indexs.find(column_family);
@@ -311,7 +321,18 @@ bool DefaultCompactStrategy::DropByColumnFamily(const std::string& column_family
 }
 
 bool DefaultCompactStrategy::DropByLifeTime(int32_t cf_idx, int64_t timestamp) const {
-    return false;
+    int64_t ttl = m_schema.column_families(cf_idx).time_to_live() * 1000000;
+    if (ttl <= 0) {
+        // do not drop
+        return false;
+    }
+    int64_t cur_time = get_micros();
+    LOG(ERROR) << "[ttl] delete_time: " << timestamp + ttl << ", cur_time: " << cur_time;
+    if (timestamp + ttl > cur_time) {
+        return false;
+    } else {
+        return true;
+    }
 }
 
 DefaultCompactStrategyFactory::DefaultCompactStrategyFactory(const TableSchema& schema)
