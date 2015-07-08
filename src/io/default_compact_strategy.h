@@ -32,7 +32,7 @@ public:
                                 std::string* merged_key);
 
 private:
-    bool DropByColumnFamily(const std::string& column_family,
+    bool DropIllegalColumnFamily(const std::string& column_family,
                             int32_t* cf_idx = NULL) const;
     bool DropByLifeTime(int32_t cf_idx, int64_t timestamp) const;
 

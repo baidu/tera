@@ -118,9 +118,9 @@ public:
     void GetAllTabletNodeId(std::map<std::string, std::string>* id_map);
     void GetAllTabletNodeInfo(std::vector<TabletNodePtr>* info_array);
     bool ScheduleTabletNode(Scheduler* scheduler, const std::string& table_name,
-                            std::string* node_addr);
+                            bool is_move, std::string* node_addr);
     bool ScheduleTabletNode(Scheduler* scheduler, const std::string& table_name,
-                            TabletNodePtr* node);
+                            bool is_move, TabletNodePtr* node);
     bool ShouldMoveData(Scheduler* scheduler, const std::string& table_name,
                         TabletNodePtr src_node, TabletNodePtr dst_node,
                         const std::vector<TabletPtr>& tablet_candidates,

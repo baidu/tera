@@ -1,5 +1,4 @@
 import time
-import os
 
 class Hdfs:
 	def __init__(self, ip, mode, log_prefix):
@@ -9,7 +8,6 @@ class Hdfs:
 
 	def get_log_path(self, log_prefix):
 		path = '{pre}/hdfs/{ip}-{mode}-{time}'.format(pre=log_prefix, ip=self.ip, mode=self.mode, time=time.strftime('%Y%m%d%H%M%S'))
-		os.makedirs(path)
 		return path
 
 	def to_string(self):
