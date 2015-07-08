@@ -1104,6 +1104,7 @@ void MasterImpl::QueryTabletNode() {
 
     std::vector<TabletNodePtr> tabletnode_array;
     m_tabletnode_manager->GetAllTabletNodeInfo(&tabletnode_array);
+    LOG(INFO) << "query tabletnodes: " << tabletnode_array.size();
 
     if (FLAGS_tera_master_stat_table_enabled && !m_is_stat_table) {
         CreateStatTable();
@@ -1129,7 +1130,7 @@ void MasterImpl::QueryTabletNode() {
         for (; it != tabletnode_array.end(); ++it) {
             TabletNodePtr tabletnode = *it;
             if (tabletnode->m_state != kReady) {
-                LOG(INFO) << "will not query tabletnode: " << tabletnode->m_addr;
+                VLOG(20) << "will not query tabletnode: " << tabletnode->m_addr;
                 continue;
             }
             MutexLock lock(&m_gc_rw_mutex);
@@ -1137,13 +1138,16 @@ void MasterImpl::QueryTabletNode() {
         }
     }
 
+    CHECK_EQ(m_query_pending_count.Get(), 0);
+    m_query_pending_count.Inc();
     std::vector<TabletNodePtr>::iterator it = tabletnode_array.begin();
     for (; it != tabletnode_array.end(); ++it) {
         TabletNodePtr tabletnode = *it;
         if (tabletnode->m_state != kReady) {
-            LOG(INFO) << "will not query tabletnode: " << tabletnode->m_addr;
+            VLOG(20) << "will not query tabletnode: " << tabletnode->m_addr;
             continue;
         }
+        m_query_pending_count.Inc();
         QueryClosure* done =
             NewClosure(this, &MasterImpl::QueryTabletNodeCallback, tabletnode->m_addr);
         QueryTabletNodeAsync(tabletnode->m_addr,
@@ -1155,7 +1159,9 @@ void MasterImpl::QueryTabletNode() {
         m_gc_query_enable = false;
     }
     m_query_tabletnode_timer_id = kInvalidTimerId;
-    EnableQueryTabletNodeTimer();
+    if (0 == m_query_pending_count.Dec()) {
+        EnableQueryTabletNodeTimer();
+    }
 }
 
 void MasterImpl::EnableQueryTabletNodeTimer() {
@@ -2576,7 +2582,7 @@ void MasterImpl::QueryTabletNodeAsync(std::string addr, int32_t timeout,
         request->set_is_gc_query(true);
     }
 
-    VLOG(6) << "QueryAsync id: " << request->sequence_id() << ", "
+    VLOG(20) << "QueryAsync id: " << request->sequence_id() << ", "
         << "server: " << addr;
     node_client.Query(request, response, done);
 }
@@ -2616,7 +2622,7 @@ void MasterImpl::QueryTabletNodeCallback(std::string addr, QueryRequest* request
 
             TabletPtr tablet;
             if (meta.status() != kTableReady) {
-                VLOG(8) << "non-ready tablet: " << meta.table_name()
+                VLOG(30) << "non-ready tablet: " << meta.table_name()
                     << ", path: " << meta.path()
                     << ", range: [" << DebugString(key_start)
                     << ", " << DebugString(key_end)
@@ -2630,9 +2636,9 @@ void MasterImpl::QueryTabletNodeCallback(std::string addr, QueryRequest* request
                 tablet->SetCounter(counter);
                 tablet->SetCompactStatus(meta.compact_status());
                 ClearUnusedSnapshots(tablet, meta);
-                VLOG(8) << "[query] " << tablet;
+                VLOG(30) << "[query] " << tablet;
             } else {
-                VLOG(8) << "fail to match tablet: " << meta.table_name()
+                VLOG(30) << "fail to match tablet: " << meta.table_name()
                     << ", path: " << meta.path()
                     << ", range: [" << DebugString(key_start)
                     << ", " << DebugString(key_end)
@@ -2680,7 +2686,7 @@ void MasterImpl::QueryTabletNodeCallback(std::string addr, QueryRequest* request
         if (FLAGS_tera_master_stat_table_enabled && m_stat_table) {
             DumpStatToTable(state);
         }
-        VLOG(6) << "query tabletnode [" << addr << "], m_status: "
+        VLOG(20) << "query tabletnode [" << addr << "], m_status: "
             << StatusCodeToString(state.m_report_status);
     }
 
@@ -2708,6 +2714,10 @@ void MasterImpl::QueryTabletNodeCallback(std::string addr, QueryRequest* request
     }
     delete request;
     delete response;
+
+    if (0 == m_query_pending_count.Dec()) {
+        EnableQueryTabletNodeTimer();
+    }
 }
 
 void MasterImpl::CollectTabletInfoCallback(std::string addr,
