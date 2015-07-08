@@ -46,6 +46,18 @@ struct TabletNode {
     std::map<std::string, uint64_t> m_table_size;
     std::map<std::string, uint64_t> m_table_qps;
 
+    struct MutableCounter {
+        uint64_t m_read_pending;
+        uint64_t m_row_read_delay; // micros
+
+        MutableCounter() {
+            memset(this, 0, sizeof(MutableCounter));
+        }
+    };
+    MutableCounter m_average_counter;
+    MutableCounter m_accumulate_counter;
+    std::list<MutableCounter> m_counter_list;
+
     uint32_t m_query_fail_count;
     uint32_t m_onload_count;
     uint32_t m_onsplit_count;
@@ -69,6 +81,8 @@ struct TabletNode {
     // table_name == "" means all tables
     uint64_t GetSize(const std::string& table_name = "");
     uint64_t GetQps(const std::string& table_name = "");
+    uint64_t GetReadPending();
+    uint64_t GetRowReadDelay();
 
     uint32_t GetPlanToMoveInCount();
     void PlanToMoveIn();
