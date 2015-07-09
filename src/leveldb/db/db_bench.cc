@@ -849,10 +849,6 @@ class Benchmark {
         // do nothing
     } else if (strncmp(FLAGS_env, "hdfs", 5) == 0) {
        options.env = EnvDfs();
-    } else if (strncmp(FLAGS_env, "flash", 4) == 0) {
-       options.env = EnvFlash();
-    } else if (strncmp(FLAGS_env, "inmem", 4) == 0) {
-       options.env = EnvInMemory();
     } else if (strncmp(FLAGS_env, "mem", 4) == 0) {
        options.env = NewMemEnv(Env::Default());
     }
