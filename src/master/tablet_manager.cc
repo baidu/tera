@@ -1417,32 +1417,41 @@ bool TabletManager::DumpMetaTable(const std::string& meta_tablet_addr,
     for (size_t i = 0; i < tablets.size(); i++) {
         std::string packed_key;
         std::string packed_value;
+        if (tablets[i]->GetPath().empty()) {
+            std::string path = leveldb::GetTabletPathFromNum(tablets[i]->GetTableName(),
+                                                             tablets[i]->GetTable()->GetNextTabletNo());
+            tablets[i]->m_meta.set_path(path);
+        }
         tablets[i]->ToMetaTableKeyValue(&packed_key, &packed_value);
         RowMutationSequence* mu_seq = request.add_row_list();
         mu_seq->set_row_key(packed_key);
         Mutation* mutation = mu_seq->add_mutation_sequence();
         mutation->set_type(kPut);
         mutation->set_value(packed_value);
+
+        if (i == tablets.size() - 1 || i % 1000 == 999) {
+            tabletnode::TabletNodeClient meta_node_client(meta_tablet_addr);
+            if (!meta_node_client.WriteTablet(&request, &response)) {
+                SetStatusCode(kRPCError, ret_status);
+                LOG(WARNING) << "fail to dump meta tablet: "
+                    << StatusCodeToString(kRPCError);
+                return false;
+            }
+            StatusCode status = response.status();
+            if (status == kTabletNodeOk && response.row_status_list_size() > 0) {
+                status = response.row_status_list(0);
+            }
+            if (status != kTabletNodeOk) {
+                SetStatusCode(status, ret_status);
+                LOG(WARNING) << "fail to dump meta tablet: "
+                    << StatusCodeToString(status);
+                return false;
+            }
+            request.clear_row_list();
+            response.Clear();
+        }
     }
 
-    tabletnode::TabletNodeClient meta_node_client(meta_tablet_addr);
-
-    if (!meta_node_client.WriteTablet(&request, &response)) {
-        SetStatusCode(kRPCError, ret_status);
-        LOG(WARNING) << "fail to dump meta tablet: "
-            << StatusCodeToString(kRPCError);
-        return false;
-    }
-    StatusCode status = response.status();
-    if (status == kTabletNodeOk && response.row_status_list_size() > 0) {
-        status = response.row_status_list(0);
-    }
-    if (status != kTabletNodeOk) {
-        SetStatusCode(status, ret_status);
-        LOG(WARNING) << "fail to dump meta tablet: "
-            << StatusCodeToString(status);
-        return false;
-    }
     LOG(INFO) << "dump meta tablet";
     return true;
 }
