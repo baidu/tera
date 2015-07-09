@@ -412,6 +412,7 @@ bool TabletNodeManager::ScheduleTabletNode(Scheduler* scheduler, const std::stri
 
 bool TabletNodeManager::ScheduleTabletNode(Scheduler* scheduler, const std::string& table_name,
                                            bool is_move, TabletNodePtr* node) {
+    VLOG(7) << "ScheduleTabletNode()";
     MutexLock lock(&m_mutex);
     std::string meta_node_addr;
     m_master_impl->GetMetaTabletAddr(&meta_node_addr);
@@ -464,6 +465,7 @@ bool TabletNodeManager::ShouldMoveData(Scheduler* scheduler, const std::string& 
                                        TabletNodePtr src_node, TabletNodePtr dst_node,
                                        const std::vector<TabletPtr>& tablet_candidates,
                                        size_t* tablet_index) {
+    VLOG(7) << "ShouldMoveData()";
     MutexLock lock(&m_mutex);
     if (tablet_candidates.size() == 0) {
         return false;

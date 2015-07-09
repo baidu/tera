@@ -69,6 +69,7 @@ public:
 };
 
 bool SizeScheduler::MayMoveOut(TabletNodePtr node, const std::string& table_name) {
+    VLOG(7) << "[size-sched] MayMoveOut()";
     int64_t node_size = node->GetSize(table_name);
     if (node_size <= 0) {
         VLOG(7) << "[size-sched] node has no data";
@@ -80,6 +81,7 @@ bool SizeScheduler::MayMoveOut(TabletNodePtr node, const std::string& table_name
 bool SizeScheduler::FindBestNode(const std::vector<TabletNodePtr>& node_list,
                                  const std::string& table_name,
                                  size_t* best_index) {
+    VLOG(7) << "[size-sched] FindBestNode()";
     if (node_list.size() == 0) {
         return false;
     }
@@ -202,6 +204,7 @@ public:
 };
 
 bool LoadScheduler::MayMoveOut(TabletNodePtr node, const std::string& table_name) {
+    VLOG(7) << "[load-sched] MayMoveOut()";
     int64_t node_read_pending = node->GetReadPending();
     if (node_read_pending <= 0) {
         VLOG(7) << "[load-sched] node has no read pending";
@@ -218,6 +221,7 @@ bool LoadScheduler::MayMoveOut(TabletNodePtr node, const std::string& table_name
 bool LoadScheduler::FindBestNode(const std::vector<TabletNodePtr>& node_list,
                                  const std::string& table_name,
                                  size_t* best_index) {
+    VLOG(7) << "[load-sched] FindBestNode()";
     if (node_list.size() == 0) {
         return false;
     }

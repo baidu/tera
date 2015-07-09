@@ -110,7 +110,7 @@ DEFINE_int32(tera_master_load_interval, 300, "the delay interval (in sec) for lo
 // load balance
 DEFINE_bool(tera_master_move_tablet_enabled, true, "enable master to auto move tablet");
 DEFINE_bool(tera_master_meta_isolate_enabled, false, "enable master to reserve a tabletnode for meta");
-DEFINE_int32(tera_master_load_balance_period, 60000, "the period (in ms) for load balance policy execute");
+DEFINE_int32(tera_master_load_balance_period, 10000, "the period (in ms) for load balance policy execute");
 DEFINE_bool(tera_master_load_balance_table_grained, true, "whether the load balance policy only consider the specified table");
 DEFINE_double(tera_master_load_balance_size_ratio_trigger, 1.2, "ratio of heaviest node size to lightest to trigger load balance");
 DEFINE_bool(tera_master_load_balance_qps_policy_enabled, false, "enable QPS load balance");
