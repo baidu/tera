@@ -273,6 +273,15 @@ struct Options {
   // sst file size, in bytes
   int32_t sst_size;
 
+  // If true, all data read from underlying storage will be
+  // verified against corresponding checksums in compaction
+  // Default: false
+  bool verify_checksums_in_compaction;
+
+  // Ignore data corruption in compaction
+  // Default: false
+  bool ignore_corruption_in_compaction;
+
   // Create an Options object with default values for all fields.
   Options();
 };

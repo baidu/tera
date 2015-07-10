@@ -10,28 +10,64 @@
 namespace tera {
 namespace master {
 
-class TabletManager;
-
-class WorkloadScheduler : public Scheduler {
+class SizeScheduler : public Scheduler {
 public:
-    WorkloadScheduler();
-    ~WorkloadScheduler();
+    SizeScheduler() {}
+    virtual ~SizeScheduler() {}
 
-    bool FindBestNode(const std::vector<TabletNodePtr>& node_list,
-                      std::string* node_addr);
-    void AscendingSort(std::vector<TabletNodePtr>& node_list);
-    void DescendingSort(std::vector<TabletNodePtr>& node_list);
+    virtual bool MayMoveOut(TabletNodePtr node, const std::string& table_name);
+    virtual bool FindBestNode(const std::vector<TabletNodePtr>& node_list,
+                              const std::string& table_name,
+                              size_t* best_index);
 
-    bool FindBestNode(const std::vector<TabletNodePtr>& node_list,
-                      const std::string& table_name,
-                      std::string* node_addr);
-    void AscendingSort(const std::string& table_name,
-                       std::vector<TabletNodePtr>& node_list);
-    void DescendingSort(const std::string& table_name,
-                        std::vector<TabletNodePtr>& node_list);
+    virtual bool FindBestTablet(TabletNodePtr src_node, TabletNodePtr dst_node,
+                                const std::vector<TabletPtr>& tablet_list,
+                                const std::string& table_name,
+                                size_t* best_index);
+
+    virtual void AscendingSort(std::vector<TabletNodePtr>& node_list,
+                               const std::string& table_name);
+
+    virtual void DescendingSort(std::vector<TabletNodePtr>& node_list,
+                                const std::string& table_name);
+
+    virtual const char* Name() {
+        return "size";
+    }
 
 private:
     std::string m_last_choose_node;
+    std::string m_last_choose_tablet;
+};
+
+class LoadScheduler : public Scheduler {
+public:
+    LoadScheduler() {}
+    virtual ~LoadScheduler() {}
+
+    virtual bool MayMoveOut(TabletNodePtr node, const std::string& table_name);
+    virtual bool FindBestNode(const std::vector<TabletNodePtr>& node_list,
+                              const std::string& table_name,
+                              size_t* best_index);
+
+    virtual bool FindBestTablet(TabletNodePtr src_node, TabletNodePtr dst_node,
+                                const std::vector<TabletPtr>& tablet_list,
+                                const std::string& table_name,
+                                size_t* best_index);
+
+    virtual void AscendingSort(std::vector<TabletNodePtr>& node_list,
+                               const std::string& table_name);
+
+    virtual void DescendingSort(std::vector<TabletNodePtr>& node_list,
+                                const std::string& table_name);
+
+    virtual const char* Name() {
+        return "load";
+    }
+
+private:
+    std::string m_last_choose_node;
+    std::string m_last_choose_tablet;
 };
 
 } // namespace master

@@ -1,117 +1,107 @@
-import paramiko
+import json
 import argparse
+import paramiko
 import traceback
+import socket
+import time
+import os
+import zk
+import hdfs
+import tera
 
-ZK = 'zk'
-HDFS = 'hdfs'
+class SSH():
+	def __init__(self):
+		self.s = paramiko.SSHClient()
+		self.s.load_system_host_keys()
+		self.s.set_missing_host_key_policy(paramiko.AutoAddPolicy())
 
-def parse_input():
-        parser = argparse.ArgumentParser()
-        parser.add_argument('file', type=str, help='A file describes the zk cluster')
-        args = parser.parse_args()
-        return args
-
-def read_ip_list(args):
-	try:
-		fp = open(args.file, 'r')
-	except:
-		traceback.print_exc()
-	
-	zk_ip_dicts = []
-	hdfs_ip_dicts = {'master':[], 'slave':[]}
-	start_port = 2888
-	end_port = 3888
-	client_port = 2181
-	myid = 1
-	while True:
+	def run_cmd(self, ip, cmd):
 		try:
-			comp = fp.readline().split(' ')
-			if comp[0].startswith(ZK):
-				zk_ip_dicts.append([comp[1], {'start_port': str(start_port), 'end_port': str(end_port), 'client_port': str(client_port), 'myid': str(myid), 'path': comp[2][:-1]}])
-				start_port += 1
-				end_port += 1
-				client_port += 1
-				myid += 1
-			elif comp[0].startswith(HDFS):
-				if comp[3].startswith('master'):
-					hdfs_ip_dicts['master'].append([comp[1], {'path': comp[2]}]) 
-				else:
-					hdfs_ip_dicts['slave'].append([comp[1], {'path': comp[2]}])
-			else:
-				break
-		except:
-			break
-	if hdfs_ip_dicts['slave'] != [] and hdfs_ip_dicts == []:
-		print 'must have a master!'
-		return
-	return zk_ip_dicts, hdfs_ip_dicts
-
-def start_zks(ip_dicts):
-	if ip_dicts == []:
-		return
-	s=paramiko.SSHClient()
-	s.load_system_host_keys()
-	s.set_missing_host_key_policy(paramiko.AutoAddPolicy())
-	ips = []
-	for item in ip_dicts:
-		ips.append(item[0])
-	ips = ' '.join(ips)
-	for details in ip_dicts:
-		ip = details[0]
-		details = details[1]
-		try:
-			s.connect(ip)
-			cmd = 'docker run -t -d -v {dir}:/opt/share -p {cport}:{cport} -p {sport}:{sport} -p {eport}:{eport} --net=host d8 /usr/bin/python /opt/zk_setup.py --servers {ip} --port {cport} --myid {myid}'.\
-				format(dir=details['path'], cport=details['client_port'], sport=details['start_port'], eport=details['end_port'], ip=ips, myid=details['myid'])
-			stdin, stdout, stderr = s.exec_command(cmd)
-			print cmd
-			print stdout.read()
-			print '\n', stderr.read()
-			s.close()
+			self.s.connect(ip)
+			stdin, stdout, stderr = self.s.exec_command(cmd)
+			self.s.close()
 		except:
 			traceback.print_exc()
-	
-def start_hdfs(ip_dicts):
-	if ip_dicts == {}:
-		return
-	s = paramiko.SSHClient()
-	s.load_system_host_keys()
-	s.set_missing_host_key_policy(paramiko.AutoAddPolicy())
-	ips = []
-	master = ip_dicts['master'][0]
-	master_ip = master[0]
-	master_details = master[1]
-	slave_list = ip_dicts['slave']
-	for item in slave_list:
-		ips.append(item[0])
-	ips = ' '.join(ips)
-	
-	cmd = 'docker run -t -d -v {dir}:/opt/share -p 9000:9000 -p 9001:9001 --net=host 67 /usr/bin/python /opt/hdfs_setup.py --masters {master} --slaves {slaves} --mode master'.\
-		format(dir=master_details['path'], master=master_ip, slaves=ips)
-	print cmd
-	s.connect(master_ip)
-	#stdin, stdout, stderr = s.exec_command(cmd)
-	#print stdout.read()
-	#print '\n', stderr.read()
-	s.close()
+		return stdin, stdout, stderr
 
-	for slave in slave_list:
-		slave_ip = slave[0]
-		slave_details = slave[1]
-		cmd = 'docker run -t -d -v {dir}:/opt/share -p 9000:9000 -p 9001:9001 --net=host 67 /usr/bin/python /opt/hdfs_setup.py --masters {master} --slaves {slaves} --mode slave'.\
-			format(dir=slave_details['path'], master=master_ip, slaves=ips)
+def parse_input():
+	parser = argparse.ArgumentParser()
+	parser.add_argument('--conf', type=str, help='A file describes the zk cluster')
+	parser.add_argument('--docker', type=str, default='lylei/tera:latest', help='ID of the docker image')
+	parser.add_argument('--zk', action='store_true', help='Launch zk')
+	parser.add_argument('--hdfs', action='store_true', help='Launch hdfs')
+	parser.add_argument('--tera', action='store_true', help='Launch tera')
+	args = parser.parse_args()
+	return args
+
+def config(args):
+	config = {}
+	if args.conf is None:
+		local_ip = socket.gethostbyname(socket.gethostname())
+		log = os.path.expanduser('~')
+		config.update({"hdfs":1, "ip":local_ip, "tera":1, "zk":1, "log_prefix":log})
+	else:
+		config = json.load(open(args.conf, 'r'))
+	ip_list = config['ip'].split(':')
+	if config.has_key('log_prefix'):
+		log_prefix = config['log_prefix']
+	else:
+		log_prefix = os.path.expanduser('~')
+	zk_cluster = zk.ZkCluster(ip_list, config['zk'], log_prefix)
+	zk_cluster.populate_zk_cluster()
+	for z in zk_cluster.cluster:
+		print z.to_string()
+
+	hdfs_cluster = hdfs.HdfsCluster(ip_list, config['hdfs'], log_prefix)
+	ret = hdfs_cluster.populate_hdfs_cluster()
+	if ret is False:
+		exit(1)
+	for h in hdfs_cluster.cluster:
+		print h.to_string()
+
+	tera_cluster = tera.TeraCluster(ip_list, config['tera'], log_prefix)
+	tera_cluster.populate_tera_cluster()
+	for t in tera_cluster.cluster:
+		print t.to_string()
+
+	return zk_cluster, hdfs_cluster, tera_cluster
+
+def start_zk(args, zk_cluster, s):
+	if (args.hdfs or args.tera) and not args.zk:
+		return
+	for zk_instance in zk_cluster.cluster:
+		#print zk_instance.to_string()
+		cmd = zk_instance.to_cmd(' '.join(zk_cluster.ip_zk), args.docker)
 		print cmd
-		s.connect(slave_ip)
-		#stdin, stdout, stderr = s.exec_command(cmd)
-		#print stdout.read()
-		#print '\n', stderr.read()
-		s.close()
+		s.run_cmd(zk_instance.ip, cmd)
+
+def start_hdfs(args, hdfs_cluster, s):
+	if (args.zk or args.tera) and not args.hdfs:
+		return
+	for hdfs_instance in hdfs_cluster.cluster:
+		#print hdfs_instance.to_string()
+		cmd = hdfs_instance.to_cmd(args.docker, hdfs_cluster.master_ip, ' '.join(hdfs_cluster.slave_ip))
+		print cmd
+		s.run_cmd(hdfs_instance.ip, cmd)
+
+def start_tera(args, tera_cluster, zk_cluster, hdfs_cluster, s):
+	if (args.zk or args.hdfs) and not args.tera:
+		return
+	for tera_instance in tera_cluster.cluster:
+		#print tera_instance.to_string()
+		cmd = tera_instance.to_cmd(args.docker, ','.join(zk_cluster.ip_tera), hdfs_cluster.master_ip, ':'.join(hdfs_cluster.slave_ip))
+		print cmd
+		if tera_instance.mode == 'master':
+			time.sleep(5)
+		s.run_cmd(tera_instance.ip, cmd)
 
 def main():
 	args = parse_input()
-	zk_ip_dicts, hdfs_ip_dicts = read_ip_list(args)
-	start_zks(zk_ip_dicts)
-	start_hdfs(hdfs_ip_dicts)
+	zk_cluster, hdfs_cluster, tera_cluster = config(args)
+	s = SSH()
+	start_zk(args, zk_cluster, s)
+	start_hdfs(args, hdfs_cluster, s)
+	start_tera(args, tera_cluster, zk_cluster, hdfs_cluster, s)
 
 if __name__ == '__main__':
 	main()

@@ -186,11 +186,11 @@ EOF
     PLATFORM_LIBS="$PLATFORM_LIBS"
 
     # Test whether tcmalloc is available
-    $CXX $CXXFLAGS -x c++ - -o $CXXOUTPUT -ltcmalloc 2>/dev/null  <<EOF
+    $CXX $CXXFLAGS -x c++ - -o $CXXOUTPUT -ltcmalloc_minimal 2>/dev/null  <<EOF
       int main() {}
 EOF
     if [ "$?" = 0 ]; then
-        PLATFORM_LIBS="$PLATFORM_LIBS -ltcmalloc"
+        PLATFORM_LIBS="$PLATFORM_LIBS -ltcmalloc_minimal"
     fi
 
     rm -f $CXXOUTPUT 2>/dev/null

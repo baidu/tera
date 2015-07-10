@@ -54,7 +54,7 @@ LEVELDB_LIB := src/leveldb/libleveldb.a
 PROGRAM = tera_main teracli
 LIBRARY = libtera.a
 JNILIBRARY = libjni_tera.so
-BENCHMARK = tera_mark
+BENCHMARK = tera_bench tera_mark
 
 .PHONY: all clean cleanall test
 
@@ -62,6 +62,7 @@ all: $(PROGRAM) $(LIBRARY) $(JNILIBRARY) $(BENCHMARK)
 	mkdir -p build/include build/lib build/bin build/log build/benchmark
 	cp $(PROGRAM) build/bin
 	cp $(LIBRARY) $(JNILIBRARY) build/lib
+	cp src/leveldb/tera_bench .
 	cp -r benchmark/*.sh $(BENCHMARK) build/benchmark
 	cp src/sdk/tera.h build/include
 	cp -r conf build
@@ -97,7 +98,9 @@ libjni_tera.so: $(JNI_TERA_OBJ) $(LIBRARY)
 	$(CXX) -shared $(JNI_TERA_OBJ) -Xlinker "-(" $(LIBRARY) $(LDFLAGS) -Xlinker "-)" -o $@ 
 
 src/leveldb/libleveldb.a:
-	$(MAKE) -C src/leveldb libleveldb.a
+	$(MAKE) -C src/leveldb
+
+tera_bench:
 
 $(ALL_OBJ): %.o: %.cc $(PROTO_OUT_H)
 	$(CXX) $(CXXFLAGS) -c $< -o $@

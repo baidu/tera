@@ -59,6 +59,7 @@ DECLARE_int32(tera_master_collect_info_retry_times);
 DECLARE_int32(tera_master_control_tabletnode_retry_period);
 DECLARE_int32(tera_master_load_balance_period);
 DECLARE_bool(tera_master_load_balance_table_grained);
+DECLARE_bool(tera_master_load_balance_qps_policy_enabled);
 DECLARE_int32(tera_master_load_rpc_timeout);
 DECLARE_int32(tera_master_unload_rpc_timeout);
 DECLARE_int32(tera_master_split_rpc_timeout);
@@ -84,7 +85,10 @@ DECLARE_string(tera_leveldb_env_type);
 
 DECLARE_string(tera_zk_root_path);
 DECLARE_string(tera_zk_addr_list);
+DECLARE_string(tera_local_addr);
 DECLARE_bool(tera_ins_enabled);
+
+DECLARE_int64(tera_sdk_perf_counter_log_interval);
 
 namespace tera {
 namespace master {
@@ -93,11 +97,13 @@ MasterImpl::MasterImpl()
     : m_status(kNotInited), m_restored(false),
       m_tablet_manager(new TabletManager(&m_this_sequence_id, this, m_thread_pool.get())),
       m_tabletnode_manager(new TabletNodeManager(this)),
-      m_scheduler(new WorkloadScheduler),
       m_zk_adapter(NULL),
+      m_size_scheduler(new SizeScheduler),
+      m_load_scheduler(new LoadScheduler),
       m_release_cache_timer_id(kInvalidTimerId),
       m_query_tabletnode_timer_id(kInvalidTimerId),
       m_load_balance_timer_id(kInvalidTimerId),
+      m_load_balance_count(0),
       m_thread_pool(new ThreadPool(FLAGS_tera_master_impl_thread_max_num)),
       m_is_stat_table(false),
       m_stat_table(NULL),
@@ -105,7 +111,11 @@ MasterImpl::MasterImpl()
     if (FLAGS_tera_master_cache_check_enabled) {
         EnableReleaseCacheTimer();
     }
-    m_local_addr = utils::GetLocalHostName() + ":" + FLAGS_tera_master_port;
+    if (FLAGS_tera_local_addr == "") {
+        m_local_addr = utils::GetLocalHostName()+ ":" + FLAGS_tera_master_port;
+    } else {
+        m_local_addr = FLAGS_tera_local_addr + ":" + FLAGS_tera_master_port;
+    }
     tabletnode::TabletNodeClient::SetThreadPool(m_thread_pool.get());
 
     if (FLAGS_tera_leveldb_env_type != "local") {
@@ -173,6 +183,7 @@ bool MasterImpl::Restore(const std::map<std::string, std::string>& tabletnode_li
         SetMasterStatus(kOnWait);
         return false;
     }
+    m_tablet_manager->FindTablet(FLAGS_tera_master_meta_table_name, "", &m_meta_tablet);
     m_zk_adapter->UpdateRootTabletNode(meta_tablet_addr);
 
     RestoreUserTablet(tablet_list);
@@ -311,8 +322,9 @@ void MasterImpl::RestoreUserTablet(const std::vector<TabletMeta>& report_meta_li
             || !tablet->Verify(table_name, key_start, key_end, path, server_addr)) {
             LOG(INFO) << "unload unexpected table: " << path << ", server: "
                 << server_addr;
-            TabletPtr unknown_tablet(new Tablet(meta));
-            unknown_tablet->SetStatus(kTableUnLoading);
+            TabletMeta unknown_meta = meta;
+            unknown_meta.set_status(kTableUnLoading);
+            TabletPtr unknown_tablet(new Tablet(unknown_meta));
             UnloadClosure* done =
                 NewClosure(this, &MasterImpl::UnloadTabletCallback,
                            unknown_tablet, FLAGS_tera_master_impl_retry_times);
@@ -332,7 +344,7 @@ void MasterImpl::RestoreUserTablet(const std::vector<TabletMeta>& report_meta_li
         TabletPtr tablet = *it;
         const std::string& server_addr = tablet->GetServerAddr();
         if (tablet->GetStatus() == kTableReady) {
-            VLOG(6) << "READY Tablet, " << tablet;
+            VLOG(8) << "READY Tablet, " << tablet;
             continue;
         }
         // meta table may be manipulated by other threads during restore
@@ -341,7 +353,7 @@ void MasterImpl::RestoreUserTablet(const std::vector<TabletMeta>& report_meta_li
         }
         CHECK(tablet->GetStatus() == kTableNotInit);
         tablet->SetStatus(kTableOffLine);
-        VLOG(6) << "OFFLINE Tablet, " << tablet;
+        VLOG(8) << "OFFLINE Tablet, " << tablet;
 
         TabletNodePtr node;
         if (!server_addr.empty()
@@ -405,8 +417,8 @@ bool MasterImpl::LoadMetaTablet(std::string* server_addr) {
     lg_schema->set_compress_type(false);
     lg_schema->set_store_type(MemoryStore);
 
-    while (m_tabletnode_manager->ScheduleTabletNode(m_scheduler.get(),
-                                                    server_addr)) {
+    while (m_tabletnode_manager->ScheduleTabletNode(m_size_scheduler.get(), "",
+                                                    false, server_addr)) {
         meta.set_server_addr(*server_addr);
         StatusCode status = kTabletNodeOk;
         if (LoadTabletSync(meta, schema, &status)) {
@@ -1078,7 +1090,11 @@ bool MasterImpl::CheckStatusSwitch(MasterStatus old_status,
 }
 
 bool MasterImpl::GetMetaTabletAddr(std::string* addr) {
-    return m_tablet_manager->GetMetaTabletAddr(addr);
+    if (m_meta_tablet->GetStatus() == kTableReady) {
+        *addr = m_meta_tablet->GetServerAddr();
+        return true;
+    }
+    return false;
 }
 
 /////////// load balance //////////
@@ -1088,6 +1104,7 @@ void MasterImpl::QueryTabletNode() {
 
     std::vector<TabletNodePtr> tabletnode_array;
     m_tabletnode_manager->GetAllTabletNodeInfo(&tabletnode_array);
+    LOG(INFO) << "query tabletnodes: " << tabletnode_array.size();
 
     if (FLAGS_tera_master_stat_table_enabled && !m_is_stat_table) {
         CreateStatTable();
@@ -1098,6 +1115,7 @@ void MasterImpl::QueryTabletNode() {
                                      FLAGS_tera_zk_root_path,
                                      FLAGS_tera_zk_addr_list,
                                      m_thread_pool.get());
+        FLAGS_tera_sdk_perf_counter_log_interval = 60;
         if (m_stat_table->OpenInternal(&err)) {
             m_is_stat_table = true;
         } else {
@@ -1112,7 +1130,7 @@ void MasterImpl::QueryTabletNode() {
         for (; it != tabletnode_array.end(); ++it) {
             TabletNodePtr tabletnode = *it;
             if (tabletnode->m_state != kReady) {
-                LOG(INFO) << "will not query tabletnode: " << tabletnode->m_addr;
+                VLOG(20) << "will not query tabletnode: " << tabletnode->m_addr;
                 continue;
             }
             MutexLock lock(&m_gc_rw_mutex);
@@ -1120,13 +1138,16 @@ void MasterImpl::QueryTabletNode() {
         }
     }
 
+    CHECK_EQ(m_query_pending_count.Get(), 0);
+    m_query_pending_count.Inc();
     std::vector<TabletNodePtr>::iterator it = tabletnode_array.begin();
     for (; it != tabletnode_array.end(); ++it) {
         TabletNodePtr tabletnode = *it;
         if (tabletnode->m_state != kReady) {
-            LOG(INFO) << "will not query tabletnode: " << tabletnode->m_addr;
+            VLOG(20) << "will not query tabletnode: " << tabletnode->m_addr;
             continue;
         }
+        m_query_pending_count.Inc();
         QueryClosure* done =
             NewClosure(this, &MasterImpl::QueryTabletNodeCallback, tabletnode->m_addr);
         QueryTabletNodeAsync(tabletnode->m_addr,
@@ -1138,7 +1159,9 @@ void MasterImpl::QueryTabletNode() {
         m_gc_query_enable = false;
     }
     m_query_tabletnode_timer_id = kInvalidTimerId;
-    EnableQueryTabletNodeTimer();
+    if (0 == m_query_pending_count.Dec()) {
+        EnableQueryTabletNodeTimer();
+    }
 }
 
 void MasterImpl::EnableQueryTabletNodeTimer() {
@@ -1172,7 +1195,6 @@ void MasterImpl::DisableLoadBalanceTimer() {
 }
 
 void MasterImpl::LoadBalance() {
-    VLOG(5) << "LoadBalance()";
     MutexLock locker(&m_mutex);
 
     std::vector<TablePtr> all_table_list;
@@ -1182,9 +1204,15 @@ void MasterImpl::LoadBalance() {
     std::vector<TabletNodePtr> all_node_list;
     m_tabletnode_manager->GetAllTabletNodeInfo(&all_node_list);
 
+    uint32_t max_move_num = all_node_list.size();
+    // uint32_t max_round_num = std::numeric_limits<uint32_t>::max();
+
     // descending sort the node according to workload,
     // so that the node with heaviest workload will be scheduled first
-    if (FLAGS_tera_master_load_balance_table_grained) {
+    if (++m_load_balance_count % 10 == 0 && FLAGS_tera_master_load_balance_qps_policy_enabled) {
+        max_move_num -= LoadBalance(m_load_scheduler.get(), max_move_num, 1,
+                                    all_node_list, all_tablet_list);
+    } else if (FLAGS_tera_master_load_balance_table_grained) {
         for (size_t i = 0; i < all_table_list.size(); ++i) {
             TablePtr table = all_table_list[i];
             if (table->GetStatus() != kTableEnable) {
@@ -1193,62 +1221,78 @@ void MasterImpl::LoadBalance() {
             if (table->GetTableName() == FLAGS_tera_master_meta_table_name) {
                 continue;
             }
+
             std::vector<TabletPtr> tablet_list;
             table->GetTablet(&tablet_list);
-
-            std::map<std::string, std::vector<TabletPtr> > node_tablet_list;
-            std::vector<TabletPtr>::iterator it = tablet_list.begin();
-            for (; it != tablet_list.end(); ++it) {
-                TabletPtr tablet = *it;
-                node_tablet_list[tablet->GetServerAddr()].push_back(tablet);
-            }
-
-            m_scheduler->DescendingSort(table->GetTableName(), all_node_list);
-            std::vector<TabletNodePtr>::iterator node_it = all_node_list.begin();
-            for (; node_it != all_node_list.end(); ++node_it) {
-                TabletNodePtr node = *node_it;
-                const std::string& addr = node->GetAddr();
-                const std::vector<TabletPtr>& tablet_list = node_tablet_list[addr];
-                TabletNodeLoadBalance(addr, table->GetTableName(), tablet_list);
-            }
+            max_move_num -= LoadBalance(m_size_scheduler.get(), max_move_num, 3,
+                                        all_node_list, tablet_list, table->GetTableName());
         }
     } else {
-        std::map<std::string, std::vector<TabletPtr> > node_tablet_list;
-        std::vector<TabletPtr>::iterator it;
-        for (it = all_tablet_list.begin(); it != all_tablet_list.end(); ++it) {
-            TabletPtr tablet = *it;
-            node_tablet_list[tablet->GetServerAddr()].push_back(tablet);
-        }
-        m_scheduler->DescendingSort(all_node_list);
-        std::vector<TabletNodePtr>::iterator node_it = all_node_list.begin();
-        for (; node_it != all_node_list.end(); ++node_it) {
-            TabletNodePtr node = *node_it;
-            const std::string& addr = node->GetAddr();
-            const std::vector<TabletPtr>& tablet_list = node_tablet_list[addr];
-            TabletNodeLoadBalance(addr, tablet_list);
-        }
+        max_move_num -= LoadBalance(m_size_scheduler.get(), max_move_num, 3,
+                                    all_node_list, all_tablet_list);
     }
 
     m_load_balance_timer_id = kInvalidTimerId;
     EnableLoadBalanceTimer();
 }
 
-void MasterImpl::TabletNodeLoadBalance(const std::string& tabletnode_addr,
-                                       const std::vector<TabletPtr>& tablet_list) {
-    return TabletNodeLoadBalance(tabletnode_addr, "", tablet_list);
+uint32_t MasterImpl::LoadBalance(Scheduler* scheduler,
+                                 uint32_t max_move_num, uint32_t max_round_num,
+                                 std::vector<TabletNodePtr>& tabletnode_list,
+                                 std::vector<TabletPtr>& tablet_list,
+                                 const std::string& table_name) {
+    std::map<std::string, std::vector<TabletPtr> > node_tablet_list;
+    std::vector<TabletPtr>::iterator it = tablet_list.begin();
+    for (; it != tablet_list.end(); ++it) {
+        TabletPtr tablet = *it;
+        node_tablet_list[tablet->GetServerAddr()].push_back(tablet);
+    }
+
+    scheduler->DescendingSort(tabletnode_list, table_name);
+
+    uint32_t round_count = 0;
+    uint32_t total_move_count = 0;
+    while (round_count < max_round_num) {
+        LOG(INFO) << "LoadBalance (" << scheduler->Name() << ") " << table_name
+                  << " round " << round_count << " start";
+
+        uint32_t round_move_count = 0;
+        std::vector<TabletNodePtr>::iterator node_it = tabletnode_list.begin();
+        while (total_move_count < max_move_num && node_it != tabletnode_list.end()) {
+            TabletNodePtr node = *node_it;
+            const std::vector<TabletPtr>& tablet_list = node_tablet_list[node->GetAddr()];
+            if (TabletNodeLoadBalance(node, scheduler, tablet_list, table_name)) {
+                round_move_count++;
+                total_move_count++;
+            }
+            ++node_it;
+        }
+
+        LOG(INFO) << "LoadBalance (" << scheduler->Name() << ") " << table_name
+                  << " round " << round_count << " move " << round_move_count;
+
+        round_count++;
+        if (round_move_count == 0) {
+            break;
+        }
+    }
+
+    LOG(INFO) << "LoadBalance (" << scheduler->Name() << ") " << table_name
+              << " total round " << round_count << " total move " << total_move_count;
+    return total_move_count;
 }
 
-void MasterImpl::TabletNodeLoadBalance(const std::string& tabletnode_addr,
-                                       const std::string& table_name,
-                                       const std::vector<TabletPtr>& tablet_list) {
-    VLOG(5) << "TabletNodeLoadBalance() " << tabletnode_addr << " " << table_name;
+bool MasterImpl::TabletNodeLoadBalance(TabletNodePtr tabletnode, Scheduler* scheduler,
+                                       const std::vector<TabletPtr>& tablet_list,
+                                       const std::string& table_name) {
+    VLOG(7) << "TabletNodeLoadBalance() " << tabletnode->GetAddr() << " "
+            << scheduler->Name() << " " << table_name;
     if (tablet_list.size() < 1) {
-        return;
+        return false;
     }
 
     bool any_tablet_split = false;
-    TabletPtr smallest_tablet = *tablet_list.begin();
-    std::vector<TabletPtr>::const_iterator smallest_tablet_it = tablet_list.end();
+    std::vector<TabletPtr> tablet_candidates;
 
     std::vector<TabletPtr>::const_iterator it;
     for (it = tablet_list.begin(); it != tablet_list.end(); ++it) {
@@ -1277,26 +1321,26 @@ void MasterImpl::TabletNodeLoadBalance(const std::string& tabletnode_addr,
             continue;
         }
         if (tablet->GetStatus() == kTableReady) {
-            if (smallest_tablet_it == tablet_list.end()
-                || (*smallest_tablet_it)->GetDataSize() > tablet->GetDataSize()) {
-                smallest_tablet_it = it;
-            }
+            tablet_candidates.push_back(tablet);
         }
     }
 
     // if any tablet is splitting, no need to move tablet
-    if (!FLAGS_tera_master_move_tablet_enabled || any_tablet_split
-        || smallest_tablet_it == tablet_list.end()) {
-        return;
+    if (!FLAGS_tera_master_move_tablet_enabled || any_tablet_split) {
+        return false;
     }
-    uint64_t smallest_tablet_size = (*smallest_tablet_it)->GetDataSize();
-    std::string expect_server_addr;
-    if (m_tabletnode_manager->ScheduleTabletNode(m_scheduler.get(), table_name,
-                                                 &expect_server_addr)
-        && m_tabletnode_manager->ShouldMoveData(tabletnode_addr, expect_server_addr,
-                                                table_name, smallest_tablet_size)) {
-        TryMoveTablet(*smallest_tablet_it, expect_server_addr);
+
+    TabletNodePtr dst_tabletnode;
+    size_t tablet_index = 0;
+    if (scheduler->MayMoveOut(tabletnode, table_name)
+            && m_tabletnode_manager->ScheduleTabletNode(scheduler, table_name, true, &dst_tabletnode)
+            && m_tabletnode_manager->ShouldMoveData(scheduler, table_name, tabletnode,
+                                                    dst_tabletnode, tablet_candidates,
+                                                    &tablet_index)) {
+        TryMoveTablet(tablet_candidates[tablet_index], dst_tabletnode->GetAddr());
+        return true;
     }
+    return false;
 }
 
 /////////// cache release //////////
@@ -1503,7 +1547,7 @@ void MasterImpl::TabletNodeRecoveryCallback(std::string addr,
             tablet->SetSize(meta);
             tablet->SetCompactStatus(meta.compact_status());
             ProcessReadyTablet(tablet);
-            VLOG(6) << "[query] " << tablet;
+            VLOG(8) << "[query] " << tablet;
         }
     }
 
@@ -1517,6 +1561,7 @@ void MasterImpl::TabletNodeRecoveryCallback(std::string addr,
     state.m_info.set_addr(addr);
     state.m_load = response->tabletnode_info().load();
     state.m_data_size = 0;
+    state.m_qps = 0;
     state.m_update_time = update_time.tv_sec * 1000 + update_time.tv_usec / 1000;
     // calculate data_size of tabletnode
     // only count Ready/OnLoad tablet
@@ -2537,7 +2582,7 @@ void MasterImpl::QueryTabletNodeAsync(std::string addr, int32_t timeout,
         request->set_is_gc_query(true);
     }
 
-    VLOG(5) << "QueryAsync id: " << request->sequence_id() << ", "
+    VLOG(20) << "QueryAsync id: " << request->sequence_id() << ", "
         << "server: " << addr;
     node_client.Query(request, response, done);
 }
@@ -2577,7 +2622,7 @@ void MasterImpl::QueryTabletNodeCallback(std::string addr, QueryRequest* request
 
             TabletPtr tablet;
             if (meta.status() != kTableReady) {
-                VLOG(7) << "non-ready tablet: " << meta.table_name()
+                VLOG(30) << "non-ready tablet: " << meta.table_name()
                     << ", path: " << meta.path()
                     << ", range: [" << DebugString(key_start)
                     << ", " << DebugString(key_end)
@@ -2591,9 +2636,9 @@ void MasterImpl::QueryTabletNodeCallback(std::string addr, QueryRequest* request
                 tablet->SetCounter(counter);
                 tablet->SetCompactStatus(meta.compact_status());
                 ClearUnusedSnapshots(tablet, meta);
-                VLOG(7) << "[query] " << tablet;
+                VLOG(30) << "[query] " << tablet;
             } else {
-                VLOG(7) << "fail to match tablet: " << meta.table_name()
+                VLOG(30) << "fail to match tablet: " << meta.table_name()
                     << ", path: " << meta.path()
                     << ", range: [" << DebugString(key_start)
                     << ", " << DebugString(key_end)
@@ -2612,6 +2657,7 @@ void MasterImpl::QueryTabletNodeCallback(std::string addr, QueryRequest* request
         state.m_info.set_addr(addr);
         state.m_load = response->tabletnode_info().load();
         state.m_data_size = 0;
+        state.m_qps = 0;
         state.m_update_time = update_time.tv_sec * 1000 + update_time.tv_usec / 1000;
         // calculate data_size of tabletnode
         // count both Ready/OnLoad and OffLine tablet
@@ -2621,13 +2667,17 @@ void MasterImpl::QueryTabletNodeCallback(std::string addr, QueryRequest* request
         for (it = tablet_list.begin(); it != tablet_list.end(); ++it) {
             TabletPtr tablet = *it;
             TabletStatus tablet_status = tablet->GetStatus();
+            uint64_t average_qps = tablet->GetAverageCounter().read_rows();
             if (tablet_status == kTableReady || tablet_status == kTableOnLoad
                 || tablet_status == kTableOffLine) {
                 state.m_data_size += tablet->GetDataSize();
+                state.m_qps += average_qps;
                 if (state.m_table_size.find(tablet->GetTableName()) != state.m_table_size.end()) {
                     state.m_table_size[tablet->GetTableName()] += tablet->GetDataSize();
+                    state.m_table_qps[tablet->GetTableName()] += average_qps;
                 } else {
                     state.m_table_size[tablet->GetTableName()] = tablet->GetDataSize();
+                    state.m_table_qps[tablet->GetTableName()] = average_qps;
                 }
             }
         }
@@ -2636,7 +2686,7 @@ void MasterImpl::QueryTabletNodeCallback(std::string addr, QueryRequest* request
         if (FLAGS_tera_master_stat_table_enabled && m_stat_table) {
             DumpStatToTable(state);
         }
-        VLOG(5) << "query tabletnode [" << addr << "], m_status: "
+        VLOG(20) << "query tabletnode [" << addr << "], m_status: "
             << StatusCodeToString(state.m_report_status);
     }
 
@@ -2664,6 +2714,10 @@ void MasterImpl::QueryTabletNodeCallback(std::string addr, QueryRequest* request
     }
     delete request;
     delete response;
+
+    if (0 == m_query_pending_count.Dec()) {
+        EnableQueryTabletNodeTimer();
+    }
 }
 
 void MasterImpl::CollectTabletInfoCallback(std::string addr,
@@ -2695,6 +2749,7 @@ void MasterImpl::CollectTabletInfoCallback(std::string addr,
         state.m_info.set_addr(addr);
         state.m_load = response->tabletnode_info().load();
         state.m_data_size = 0;
+        state.m_qps = 0;
         state.m_update_time = update_time.tv_sec * 1000 + update_time.tv_usec / 1000;
         // calculate data_size of tabletnode
         for (uint32_t i = 0; i < meta_num; i++) {
@@ -2896,11 +2951,6 @@ void MasterImpl::TryLoadTablet(TabletPtr tablet, std::string server_addr) {
                 << ": server down, master is in safemode, abort load";
             return;
         }
-//        if (m_tabletnode_manager->IsNodeOverloadThanLeast(server_addr)) {
-//            LOG(INFO) << "server: " << server_addr
-//                << " is overloaded, try other servers";
-//            server_addr.clear();
-//        }
     }
 
     while (server_addr.empty()) {
@@ -2909,9 +2959,9 @@ void MasterImpl::TryLoadTablet(TabletPtr tablet, std::string server_addr) {
             && table_name != FLAGS_tera_master_meta_table_name) {
             sche_table_name = table_name;
         }
-        if (!m_tabletnode_manager->ScheduleTabletNode(m_scheduler.get(),
-                                                      sche_table_name,
-                                                      &server_addr)) {
+
+        if (!m_tabletnode_manager->ScheduleTabletNode(m_size_scheduler.get(), sche_table_name,
+                                                      false, &server_addr)) {
             // tablet->SetAddrIf("", kTableOffLine);
             LOG(ERROR) << "no available tabletnode, abort load " << tablet;
             return;
@@ -4460,5 +4510,6 @@ void MasterImpl::ProcessQueryCallbackForGc(QueryResponse* response) {
         }
     }
 }
+
 } // namespace master
 } // namespace tera

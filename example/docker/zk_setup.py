@@ -22,7 +22,7 @@ def config(args):
 	data_path = path + '/share/data'
 	os.mkdir(log_path)
 	os.mkdir(data_path)
-
+	
 	conf_path = zk_path + '/conf/zoo.cfg'
 	fp = open(conf_path, 'wb')
 	fp.write('tickTime=2000\ninitLimit=10\nsyncLimit=5\n')
@@ -58,7 +58,7 @@ def start_zk(args, zk_path):
 			try:
 				zookeeper.create(handler,"/tera","",[{"perms":0x7f,"scheme":"world","id":"anyone"}],0)
 				zookeeper.create(handler,"/tera/master-lock","",[{"perms":0x7f,"scheme":"world","id":"anyone"}],0)
-				zookeeper.create(handler,"/tera/zk","",[{"perms":0x7f,"scheme":"world","id":"anyone"}],0)
+				zookeeper.create(handler,"/tera/ts","",[{"perms":0x7f,"scheme":"world","id":"anyone"}],0)
 				zookeeper.create(handler,"/tera/kick","",[{"perms":0x7f,"scheme":"world","id":"anyone"}],0)
 				zookeeper.close(handler)
 				break

@@ -395,50 +395,51 @@ Status DBImpl::Recover(VersionEdit* edit) {
   s = versions_->Recover();
   Log(options_.info_log, "[%s] end VersionSet::Recover last_seq= %llu",
       dbname_.c_str(), static_cast<unsigned long long>(versions_->LastSequence()));
-  if (s.ok()) {
-    // check loss of sst files (fs exception)
-    std::map<uint64_t, int> expected;
-    versions_->AddLiveFiles(&expected);
 
-    // collect all tablets
-    std::set<uint64_t> tablets;
-    std::map<uint64_t, int>::iterator it_exp = expected.begin();
-    for (; it_exp != expected.end(); ++it_exp) {
-      uint64_t tablet;
-      ParseFullFileNumber(it_exp->first, &tablet, NULL);
-      tablets.insert(tablet);
-    }
-
-    std::set<uint64_t>::iterator it_tablet = tablets.begin();
-    for (; it_tablet != tablets.end(); ++it_tablet) {
-      std::string path = RealDbName(dbname_, *it_tablet);
-      Log(options_.info_log, "[%s] GetChildren(%s)", dbname_.c_str(), path.c_str());
-      std::vector<std::string> filenames;
-      s = env_->GetChildren(path, &filenames);
-      if (!s.ok()) {
-        Log(options_.info_log, "[%s] GetChildren(%s) fail: %s",
-            dbname_.c_str(), path.c_str(), s.ToString().c_str());
-        return s;
-      }
-      uint64_t number;
-      FileType type;
-      for (size_t i = 0; i < filenames.size(); i++) {
-        if (ParseFileName(filenames[i], &number, &type) && (type == kTableFile)) {
-          expected.erase(BuildFullFileNumber(path, number));
-        }
-      }
-    }
-    if (!expected.empty()) {
-      std::map<uint64_t, int>::iterator it = expected.begin();
-      for (; it != expected.end(); ++it) {
-        if (!env_->FileExists(TableFileName(dbname_, it->first))) {
-          Log(options_.info_log, "[%s] file system lost files: %d.sst, delete it from versionset.",
-              dbname_.c_str(), static_cast<int>(it->first));
-          edit->DeleteFile(it->second, it->first);
-        }
-      }
-    }
-  }
+//  // check loss of sst files (fs exception)
+//  if (s.ok()) {
+//    std::map<uint64_t, int> expected;
+//    versions_->AddLiveFiles(&expected);
+//
+//    // collect all tablets
+//    std::set<uint64_t> tablets;
+//    std::map<uint64_t, int>::iterator it_exp = expected.begin();
+//    for (; it_exp != expected.end(); ++it_exp) {
+//      uint64_t tablet;
+//      ParseFullFileNumber(it_exp->first, &tablet, NULL);
+//      tablets.insert(tablet);
+//    }
+//
+//    std::set<uint64_t>::iterator it_tablet = tablets.begin();
+//    for (; it_tablet != tablets.end(); ++it_tablet) {
+//      std::string path = RealDbName(dbname_, *it_tablet);
+//      Log(options_.info_log, "[%s] GetChildren(%s)", dbname_.c_str(), path.c_str());
+//      std::vector<std::string> filenames;
+//      s = env_->GetChildren(path, &filenames);
+//      if (!s.ok()) {
+//        Log(options_.info_log, "[%s] GetChildren(%s) fail: %s",
+//            dbname_.c_str(), path.c_str(), s.ToString().c_str());
+//        return s;
+//      }
+//      uint64_t number;
+//      FileType type;
+//      for (size_t i = 0; i < filenames.size(); i++) {
+//        if (ParseFileName(filenames[i], &number, &type) && (type == kTableFile)) {
+//          expected.erase(BuildFullFileNumber(path, number));
+//        }
+//      }
+//    }
+//    if (!expected.empty()) {
+//      std::map<uint64_t, int>::iterator it = expected.begin();
+//      for (; it != expected.end(); ++it) {
+//        if (!env_->FileExists(TableFileName(dbname_, it->first))) {
+//          Log(options_.info_log, "[%s] file system lost files: %d.sst, delete it from versionset.",
+//              dbname_.c_str(), static_cast<int>(it->first));
+//          edit->DeleteFile(it->second, it->first);
+//        }
+//      }
+//    }
+//  }
 
   return s;
 }
@@ -955,7 +956,10 @@ Status DBImpl::FinishCompactionOutputFile(CompactionState* compact,
   assert(output_number != 0);
 
   // Check for iterator errors
-  Status s = input->status();
+  Status s;
+  if (!options_.ignore_corruption_in_compaction) {
+      s = input->status();
+  }
   const uint64_t current_entries = compact->builder->NumEntries();
   if (s.ok()) {
     s = compact->builder->Finish();
@@ -1190,8 +1194,13 @@ Status DBImpl::DoCompactionWork(CompactionState* compact) {
   if (status.ok() && compact->builder != NULL) {
     status = FinishCompactionOutputFile(compact, input);
   }
-  if (status.ok()) {
-    status = input->status();
+  if (status.ok() && !input->status().ok()) {
+      if (options_.ignore_corruption_in_compaction) {
+          Log(options_.info_log, "[%s] ignore compaction error: %s",
+              dbname_.c_str(), input->status().ToString().c_str());
+      } else {
+          status = input->status();
+      }
   }
   delete input;
   input = NULL;

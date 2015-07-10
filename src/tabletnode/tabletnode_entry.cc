@@ -52,7 +52,7 @@ bool TabletNodeEntry::StartServer() {
     // set which core could work on this TS
     SetProcessorAffinity();
 
-    IpAddress tabletnode_addr(utils::GetLocalHostAddr(), FLAGS_tera_tabletnode_port);
+    IpAddress tabletnode_addr("0.0.0.0", FLAGS_tera_tabletnode_port);
     LOG(INFO) << "Start RPC server at: " << tabletnode_addr.ToString();
 
     TabletNodeInfo tabletnode_info;
@@ -98,6 +98,7 @@ bool TabletNodeEntry::Run() {
 
     m_tabletnode_impl->RefreshSysInfo();
     m_tabletnode_impl->GetSysInfo().DumpLog();
+    LOG(INFO) << "[ThreadPool] " << m_remote_tabletnode->ProfilingLog();
 
     int64_t now_time = get_micros();
     int64_t earliest_rpc_time = now_time;
