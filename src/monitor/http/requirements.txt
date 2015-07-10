@@ -1,0 +1,2 @@
+django==1.7
+protobuf
