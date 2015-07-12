@@ -1414,6 +1414,7 @@ bool TabletManager::DumpMetaTable(const std::string& meta_tablet_addr,
         mutation->set_value(packed_value);
     }
     // dump tablet record
+    int32_t request_size = 0;
     for (size_t i = 0; i < tablets.size(); i++) {
         std::string packed_key;
         std::string packed_value;
@@ -1428,8 +1429,9 @@ bool TabletManager::DumpMetaTable(const std::string& meta_tablet_addr,
         Mutation* mutation = mu_seq->add_mutation_sequence();
         mutation->set_type(kPut);
         mutation->set_value(packed_value);
+        request_size += mu_seq->ByteSize();
 
-        if (i == tablets.size() - 1 || i % 1000 == 999) {
+        if (i == tablets.size() - 1 || request_size >= kMaxRpcSize) {
             tabletnode::TabletNodeClient meta_node_client(meta_tablet_addr);
             if (!meta_node_client.WriteTablet(&request, &response)) {
                 SetStatusCode(kRPCError, ret_status);
@@ -1449,6 +1451,7 @@ bool TabletManager::DumpMetaTable(const std::string& meta_tablet_addr,
             }
             request.clear_row_list();
             response.Clear();
+            request_size = 0;
         }
     }
 
