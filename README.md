@@ -1,4 +1,4 @@
-[Tera - 高性能、可伸缩的结构化数据存储系统](http://github.com/BaiduPS/tera)
+[Tera - 高性能、可伸缩的结构化数据库](http://github.com/BaiduPS/tera)
 ====
 [![Build Status](https://travis-ci.org/BaiduPS/tera.svg)](https://travis-ci.org/BaiduPS/tera)
 
