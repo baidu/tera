@@ -236,10 +236,12 @@ private:
                               bool failed, int error_code);
 
     void LoadBalance();
-    void LoadBalance(std::vector<TabletNodePtr>& tabletnode_list,
-                     std::vector<TabletPtr>& tablet_list,
-                     const std::string& table_name = "");
-    void TabletNodeLoadBalance(TabletNodePtr tabletnode, Scheduler* scheduler,
+    uint32_t LoadBalance(Scheduler* scheduler,
+                         uint32_t max_move_num, uint32_t max_round_num,
+                         std::vector<TabletNodePtr>& tabletnode_list,
+                         std::vector<TabletPtr>& tablet_list,
+                         const std::string& table_name = "");
+    bool TabletNodeLoadBalance(TabletNodePtr tabletnode, Scheduler* scheduler,
                                const std::vector<TabletPtr>& tablet_list,
                                const std::string& table_name = "");
 
@@ -457,13 +459,15 @@ private:
     scoped_ptr<TabletNodeManager> m_tabletnode_manager;
     scoped_ptr<MasterZkAdapterBase> m_zk_adapter;
     scoped_ptr<Scheduler> m_size_scheduler;
-    scoped_ptr<Scheduler> m_qps_scheduler;
+    scoped_ptr<Scheduler> m_load_scheduler;
 
     Mutex m_mutex;
     int64_t m_release_cache_timer_id;
     int64_t m_query_tabletnode_timer_id;
     int64_t m_load_balance_timer_id;
     Counter m_this_sequence_id;
+    int64_t m_load_balance_count;
+    Counter m_query_pending_count;
 
     scoped_ptr<ThreadPool> m_thread_pool;
     AutoResetEvent m_query_event;
@@ -475,6 +479,8 @@ private:
     std::map<std::string, int64_t> m_tabletnode_timer_id_map;
 
     mutable Mutex m_tablet_mutex;
+
+    TabletPtr m_meta_tablet;
 
     // stat table
     bool m_is_stat_table;

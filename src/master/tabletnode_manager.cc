@@ -13,6 +13,7 @@ DECLARE_int32(tera_master_max_load_concurrency);
 DECLARE_int32(tera_master_max_split_concurrency);
 DECLARE_int32(tera_master_load_interval);
 DECLARE_bool(tera_master_meta_isolate_enabled);
+DECLARE_int32(tera_master_load_balance_accumulate_query_times);
 
 namespace tera {
 namespace master {
@@ -71,6 +72,16 @@ uint64_t TabletNode::GetQps(const std::string& table_name) {
         table_qps = it->second;
     }
     return table_qps;
+}
+
+uint64_t TabletNode::GetReadPending() {
+    MutexLock lock(&m_mutex);
+    return m_average_counter.m_read_pending;
+}
+
+uint64_t TabletNode::GetRowReadDelay() {
+    MutexLock lock(&m_mutex);
+    return m_average_counter.m_row_read_delay;
 }
 
 uint32_t TabletNode::GetPlanToMoveInCount() {
@@ -325,6 +336,27 @@ void TabletNodeManager::UpdateTabletNode(const std::string& addr,
     node->m_info.set_status_m(NodeStateToString(node->m_state));
     node->m_info.set_tablet_onload(node->m_onload_count);
     node->m_info.set_tablet_onsplit(node->m_onsplit_count);
+
+    TabletNode::MutableCounter latest_counter;
+    latest_counter.m_read_pending = state.m_info.read_pending();
+    latest_counter.m_row_read_delay = state.m_info.extra_info(1).value();
+    node->m_accumulate_counter.m_read_pending += latest_counter.m_read_pending;
+    node->m_accumulate_counter.m_row_read_delay += latest_counter.m_row_read_delay;
+
+    const uint64_t max_counter_size = FLAGS_tera_master_load_balance_accumulate_query_times;
+    uint64_t counter_size = node->m_counter_list.size();
+    if (counter_size >= max_counter_size) {
+        CHECK_EQ(counter_size, max_counter_size);
+        const TabletNode::MutableCounter& earliest_counter = node->m_counter_list.front();
+        node->m_accumulate_counter.m_read_pending -= earliest_counter.m_read_pending;
+        node->m_accumulate_counter.m_row_read_delay -= earliest_counter.m_row_read_delay;
+        node->m_counter_list.pop_front();
+    }
+    node->m_counter_list.push_back(latest_counter);
+
+    counter_size = node->m_counter_list.size();
+    node->m_average_counter.m_read_pending = node->m_accumulate_counter.m_read_pending / counter_size;
+    node->m_average_counter.m_row_read_delay = node->m_accumulate_counter.m_row_read_delay / counter_size;
     VLOG(15) << "update tabletnode : " << addr;
 }
 
@@ -380,6 +412,7 @@ bool TabletNodeManager::ScheduleTabletNode(Scheduler* scheduler, const std::stri
 
 bool TabletNodeManager::ScheduleTabletNode(Scheduler* scheduler, const std::string& table_name,
                                            bool is_move, TabletNodePtr* node) {
+    VLOG(7) << "ScheduleTabletNode()";
     MutexLock lock(&m_mutex);
     std::string meta_node_addr;
     m_master_impl->GetMetaTabletAddr(&meta_node_addr);
@@ -396,6 +429,9 @@ bool TabletNodeManager::ScheduleTabletNode(Scheduler* scheduler, const std::stri
         if (FLAGS_tera_master_meta_isolate_enabled
             && tablet_node->m_addr == meta_node_addr) {
             meta_node = tablet_node;
+            continue;
+        }
+        if (tablet_node->m_average_counter.m_read_pending > 100) {
             continue;
         }
         if (is_move) {
@@ -429,6 +465,7 @@ bool TabletNodeManager::ShouldMoveData(Scheduler* scheduler, const std::string& 
                                        TabletNodePtr src_node, TabletNodePtr dst_node,
                                        const std::vector<TabletPtr>& tablet_candidates,
                                        size_t* tablet_index) {
+    VLOG(7) << "ShouldMoveData()";
     MutexLock lock(&m_mutex);
     if (tablet_candidates.size() == 0) {
         return false;
@@ -437,6 +474,9 @@ bool TabletNodeManager::ShouldMoveData(Scheduler* scheduler, const std::string& 
         return false;
     }
     if (dst_node->GetState() != kReady) {
+        return false;
+    }
+    if (dst_node->m_average_counter.m_read_pending > 100) {
         return false;
     }
     if (!dst_node->MayLoadNow()) {

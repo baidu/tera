@@ -143,8 +143,8 @@ bool PropTree::ParseFromString(const std::string& input) {
 
 bool PropTree::ParseFromTokens(std::deque<Tokenizer::Token>& tokens,
                                int depth, Node** node) {
-    if (tokens.size() <= 0) {
-        return false;
+    if (tokens.size() == 0) {
+        return true;
     }
     if (tokens.front().type != Tokenizer::IDENTIFIER) {
         AddError("syntax error: node name error: " + tokens.front().text);
@@ -196,15 +196,16 @@ bool PropTree::ParseFromTokens(std::deque<Tokenizer::Token>& tokens,
         }
         tokens.pop_front();  // pop "{"
         tokens.pop_back();  // pop "}"
+        if (tokens.back().text == ",") {
+            // discard the last ","
+            tokens.pop_back();
+        }
+
         std::deque<Tokenizer::Token> child_tokens;
         int is_inner_comma = 0;
         while (tokens.size() > 0) {
             child_tokens.push_back(tokens.front());
             std::string tokentext = tokens.front().text;
-            if (tokens.size() == 1 && tokentext == ",") {
-                // skip the last ',', e.g. "root{child1, child2, }"
-                return true;
-            }
             tokens.pop_front();
 
             if (tokentext == "<" || tokentext == "{") {
@@ -229,7 +230,8 @@ bool PropTree::ParseFromTokens(std::deque<Tokenizer::Token>& tokens,
                              &node_t->children_.back())) {
             return false;
         }
-    } else if (tokens.size() == 0 || tokens.size() == 2) {
+    } else if (tokens.size() == 0 || tokens.size() == 2 ||
+               (tokens.size() == 1 && tokens.front().text == ",")) {
         // none child
     } else {
         // never reach here

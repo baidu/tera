@@ -358,27 +358,6 @@ void DBImpl::DeleteObsoleteFiles() {
   }
 }
 
-void DBImpl::ArchiveFile(const std::string& fname) {
-  // Move into another directory.  E.g., for
-  //    dir/foo
-  // rename to
-  //    dir/lost/foo
-  const char* slash = strrchr(fname.c_str(), '/');
-  std::string new_dir;
-  if (slash != NULL) {
-    new_dir.assign(fname.data(), slash - fname.data());
-  }
-  new_dir.append("/lost");
-  env_->CreateDir(new_dir);  // Ignore error
-  std::string new_file = new_dir;
-  new_file.append("/");
-  new_file.append((slash == NULL) ? fname.c_str() : slash + 1);
-  Status s = env_->RenameFile(fname, new_file);
-  Log(options_.info_log, "[%s] Archiving %s: %s\n",
-      dbname_.c_str(),
-      fname.c_str(), s.ToString().c_str());
-}
-
 bool DBImpl::IsDbExist() {
   if (env_->FileExists(CurrentFileName(dbname_))) {
     // db exist, ready to load
@@ -397,7 +376,7 @@ bool DBImpl::IsDbExist() {
       if (!env_->GetFileSize(filename, &filesize).ok() ||
           filesize == 0) {
         // illegel MANIFEST, achieve it
-        ArchiveFile(filename);
+        ArchiveFile(env_, filename);
       } else {
         is_manifest_exist = true;
       }
@@ -472,8 +451,9 @@ Status DBImpl::Recover(VersionEdit* edit) {
   s = versions_->Recover();
   Log(options_.info_log, "[%s] end VersionSet::Recover last_seq= %llu",
       dbname_.c_str(), static_cast<unsigned long long>(versions_->LastSequence()));
+
+  // check loss of sst files (fs exception)
   if (s.ok()) {
-    // check loss of sst files (fs exception)
     std::map<uint64_t, int> expected;
     versions_->AddLiveFiles(&expected);
 
