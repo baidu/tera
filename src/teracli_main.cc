@@ -1528,6 +1528,29 @@ int32_t FindTsOp(Client* client, int32_t argc, char** argv, ErrorCode* err) {
     return 0;
 }
 
+void WriteToStream(std::ofstream& ofs,
+                   const std::string& key,
+                   const std::string& value) {
+    uint32_t key_size = key.size();
+    uint32_t value_size = value.size();
+    ofs.write((char*)&key_size, sizeof(key_size));
+    ofs.write(key.data(), key_size);
+    ofs.write((char*)&value_size, sizeof(value_size));
+    ofs.write(value.data(), value_size);
+}
+
+void WriteTable(const TableMeta& meta, std::ofstream& ofs) {
+    std::string key, value;
+    MakeMetaTableKeyValue(meta, &key, &value);
+    WriteToStream(ofs, key, value);
+}
+
+void WriteTablet(const TabletMeta& meta, std::ofstream& ofs) {
+    std::string key, value;
+    MakeMetaTableKeyValue(meta, &key, &value);
+    WriteToStream(ofs, key, value);
+}
+
 int32_t Meta2Op(Client *client, int32_t argc, char** argv) {
     if (argc < 3) {
         Usage(argv[0]);
@@ -1535,7 +1558,7 @@ int32_t Meta2Op(Client *client, int32_t argc, char** argv) {
     }
 
     std::string op = argv[2];
-    if (op != "check" && op != "show" && op != "bak") {
+    if (op != "check" && op != "show" && op != "bak" && op != "repair") {
         Usage(argv[0]);
         return -1;
     }
@@ -1601,7 +1624,7 @@ int32_t Meta2Op(Client *client, int32_t argc, char** argv) {
     }
 
     std::ofstream bak;
-    if (op == "bak") {
+    if (op == "bak" || op == "repair") {
         bak.open("meta.bak", std::ofstream::trunc|std::ofstream::binary);
     }
 
@@ -1629,15 +1652,8 @@ int32_t Meta2Op(Client *client, int32_t argc, char** argv) {
                     << cf.time_to_live() << ")" << std::endl;
             }
         }
-        if (op == "bak") {
-            std::string buffer;
-            if (!meta.SerializeToString(&buffer)) {
-                std::cerr << "bak table fail: " << meta.table_name();
-                return -1;
-            }
-            int32_t data_size = buffer.size();
-            bak.write((char*)&data_size, sizeof(data_size));
-            bak.write(buffer.data(), data_size);
+        if (op == "bak" || op == "repair") {
+            WriteTable(meta, bak);
         }
     }
 
@@ -1655,16 +1671,7 @@ int32_t Meta2Op(Client *client, int32_t argc, char** argv) {
                 << StatusCodeToString(meta.compact_status()) << std::endl;
         }
         if (op == "bak") {
-            std::string buffer;
-            if (!meta.SerializeToString(&buffer)) {
-                std::cerr << "bak tablet fail: " << meta.table_name() << " ["
-                    << meta.key_range().key_start() << ","
-                    << meta.key_range().key_end() << "]";
-                return -1;
-            }
-            int32_t data_size = buffer.size();
-            bak.write((char*)&data_size, sizeof(data_size));
-            bak.write(buffer.data(), data_size);
+            WriteTablet(meta, bak);
         }
         // check self range
         if (!meta.key_range().key_end().empty() &&
@@ -1679,20 +1686,41 @@ int32_t Meta2Op(Client *client, int32_t argc, char** argv) {
             // ignore invalid tablet
             continue;
         }
+
+        tera::TabletMeta repair_meta;
+        bool covered = false;
         // check miss/cover/overlap with previous tablet
         if (!table_start) {
-            bool covered = false;
+            assert(!last.key_range().key_end().empty());
             if (meta.table_name() != last.table_name()) {
                 std::cerr << "miss tablet: " << last.table_name() << ", ["
                     << last.key_range().key_end() << ",-]" << std::endl;
+                if (op == "repair") {
+                    tera::TabletMeta miss_meta;
+                    miss_meta.set_table_name(last.table_name());
+                    miss_meta.mutable_key_range()->set_key_start(last.key_range().key_end());
+                    miss_meta.mutable_key_range()->set_key_end("");
+                    WriteTablet(miss_meta, bak);
+                }
                 table_start = true;
             } else if (meta.key_range().key_start() > last.key_range().key_end()) {
                 std::cerr << "miss tablet " << last.table_name() << " ["
                     << last.key_range().key_end() << ","
                     << meta.key_range().key_start() << "]" << std::endl;
+                if (op == "repair") {
+                    tera::TabletMeta miss_meta;
+                    miss_meta.set_table_name(last.table_name());
+                    miss_meta.mutable_key_range()->set_key_start(last.key_range().key_end());
+                    miss_meta.mutable_key_range()->set_key_end(meta.key_range().key_start());
+                    WriteTablet(miss_meta, bak);
+                    WriteTablet(meta, bak);
+                }
             } else if (meta.key_range().key_start() == last.key_range().key_end()) {
-                // ok
-            } else if (meta.key_range().key_end() <= last.key_range().key_end()) {
+                if (op == "repair") {
+                    WriteTablet(meta, bak);
+                }
+            } else if (!meta.key_range().key_end().empty()
+                            && meta.key_range().key_end() <= last.key_range().key_end()) {
                 std::cerr << "tablet " << meta.table_name() << " ["
                     << meta.key_range().key_start() << ","
                     << meta.key_range().key_end() << "] is coverd by tablet "
@@ -1707,21 +1735,37 @@ int32_t Meta2Op(Client *client, int32_t argc, char** argv) {
                     << last.table_name() << " ["
                     << last.key_range().key_start() << ","
                     << last.key_range().key_end() << "]" << std::endl;
+                if (op == "repair") {
+                    tera::TabletMeta repair_meta = meta;
+                    repair_meta.mutable_key_range()->set_key_start(last.key_range().key_end());
+                    WriteTablet(repair_meta, bak);
+                }
             }
-            // ignore covered tablet
-            if (!covered) {
-                last.CopyFrom(meta);
-            }
-        } else {
+        }
+        if (table_start) {
             if (!meta.key_range().key_start().empty()) {
                 std::cerr << "miss tablet " << meta.table_name() << " [-,"
                     << meta.key_range().key_start() << "]" << std::endl;
+                if (op == "repair") {
+                    tera::TabletMeta miss_meta;
+                    miss_meta.set_table_name(meta.table_name());
+                    miss_meta.mutable_key_range()->set_key_start("");
+                    miss_meta.mutable_key_range()->set_key_end(meta.key_range().key_start());
+                    WriteTablet(miss_meta, bak);
+                }
             }
+            if (op == "repair") {
+                WriteTablet(meta, bak);
+            }
+        }
+
+        // ignore covered tablet
+        if (!covered) {
             last.CopyFrom(meta);
         }
         table_start = meta.key_range().key_end().empty();
     }
-    if (op == "bak") {
+    if (op == "bak" || op == "repair") {
         bak.close();
     }
     return 0;

@@ -1091,7 +1091,7 @@ bool MasterImpl::CheckStatusSwitch(MasterStatus old_status,
 }
 
 bool MasterImpl::GetMetaTabletAddr(std::string* addr) {
-    if (m_meta_tablet->GetStatus() == kTableReady) {
+    if (m_restored && m_meta_tablet->GetStatus() == kTableReady) {
         *addr = m_meta_tablet->GetServerAddr();
         return true;
     }
