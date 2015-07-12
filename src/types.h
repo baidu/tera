@@ -31,6 +31,7 @@ const std::string kSms = "[SMS] ";
 const std::string kMail = "[MAIL] ";
 const int64_t kLatestTs = INT64_MAX;
 const int64_t kOldestTs = INT64_MIN;
+const int32_t kMaxRpcSize = (16 << 20);
 
 } // namespace tera
 
