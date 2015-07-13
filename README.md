@@ -40,6 +40,8 @@ map\<RowKey, map\<ColummnFamily:Qualifier, map\<Timestamp, Value> > > <br>
 
 [通过OneBox体验Tera](https://github.com/BaiduPS/tera/blob/master/doc/Onebox.md)
 
+[通过docker体验Tera](https://github.com/BaiduPS/tera/blob/master/example/docker)
+
 [主要API使用方法](https://github.com/BaiduPS/tera/wiki/%E4%B8%BB%E8%A6%81API%E4%BD%BF%E7%94%A8%E6%96%B9%E6%B3%95)
 
 [命令行工具使用手册](https://github.com/BaiduPS/tera/blob/master/doc/teracli.md)
