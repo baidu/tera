@@ -26,6 +26,7 @@ DEFINE_int64(tera_zk_retry_period, 3000, "zookeeper operation retry period (in m
 DEFINE_int32(tera_zk_retry_max_times, 10, "zookeeper operation max retry times");
 DEFINE_string(tera_zk_lib_log_path, "../log/zk.log", "zookeeper library log output file");
 DEFINE_string(tera_log_prefix, "", "prefix of log file (INFO, WARNING)");
+DEFINE_string(tera_local_addr, "", "local host's ip address");
 
 /////////  io  /////////
 
@@ -146,9 +147,10 @@ DEFINE_int32(tera_master_gc_period, 60000, "the period (in ms) for master gc");
 ///////// tablet node  /////////
 
 DEFINE_string(tera_tabletnode_port, "20000", "the tablet node port of tera system");
-DEFINE_int32(tera_tabletnode_write_thread_num, 10, "the write thread number of tablet node server");
-DEFINE_int32(tera_tabletnode_read_thread_num, 40, "the read thread number of tablet node server");
-DEFINE_int32(tera_tabletnode_scan_thread_num, 5, "the scan thread number of tablet node server");
+DEFINE_int32(tera_tabletnode_ctrl_thread_num, 10, "control thread number of tablet node (query/load/unload/split)");
+DEFINE_int32(tera_tabletnode_write_thread_num, 10, "write thread number of tablet node");
+DEFINE_int32(tera_tabletnode_read_thread_num, 40, "read thread number of tablet node");
+DEFINE_int32(tera_tabletnode_scan_thread_num, 5, "scan thread number of tablet node");
 DEFINE_int32(tera_tabletnode_manual_compact_thread_num, 2, "the manual compact thread number of tablet node server");
 DEFINE_int32(tera_tabletnode_impl_thread_min_num, 1, "the min thread number for tablet node impl operations");
 DEFINE_int32(tera_tabletnode_impl_thread_max_num, 10, "the max thread number for tablet node impl operations");
@@ -233,6 +235,9 @@ DEFINE_int32(tera_sdk_update_meta_concurrency, 3, "the concurrency for updating 
 DEFINE_bool(tera_sdk_cookie_enabled, true, "enable sdk cookie");
 DEFINE_string(tera_sdk_cookie_path, "/tmp/.tera_cookie", "the default path of sdk cookie");
 DEFINE_int32(tera_sdk_cookie_update_interval, 600, "the interval of cookie updating(s)");
+
+DEFINE_bool(tera_sdk_perf_counter_enabled, true, "enable performance counter log");
+DEFINE_int64(tera_sdk_perf_counter_log_interval, 1, "the interval of performance counter log dumping");
 
 DEFINE_int64(tera_sdk_scan_async_cache_size, 16, "the max buffer size (in MB) for cached scan results");
 DEFINE_int32(tera_sdk_scan_async_parallel_max_num, 500, "the max number of concurrent task sending");

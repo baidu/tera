@@ -11,6 +11,7 @@
 #include <sys/stat.h>
 #include <sys/types.h>
 #include <fstream>
+#include <sstream>
 
 #include <boost/bind.hpp>
 #include <gflags/gflags.h>
@@ -49,6 +50,8 @@ DECLARE_bool(tera_sdk_cookie_enabled);
 DECLARE_string(tera_sdk_cookie_path);
 DECLARE_int32(tera_sdk_cookie_update_interval);
 DECLARE_bool(tera_sdk_pend_request_while_scan_meta_enabled);
+DECLARE_bool(tera_sdk_perf_counter_enabled);
+DECLARE_int64(tera_sdk_perf_counter_log_interval);
 
 namespace tera {
 
@@ -91,6 +94,7 @@ TableImpl::~TableImpl() {
     if (FLAGS_tera_sdk_cookie_enabled) {
         DoDumpCookie();
     }
+    _thread_pool->CancelTask(_perf_log_task_id);
 
     delete _cluster;
 }
@@ -322,6 +326,7 @@ void TableImpl::CommitScan(ScanTask* scan_task,
         column_family->CopyFrom(*(impl->GetColumnFamily(i)));
     }
 
+    request->set_timestamp(common::timer::get_micros());
     Closure<void, ScanTabletRequest*, ScanTabletResponse*, bool, int>* done =
         NewClosure(this, &TableImpl::ScanCallBack, scan_task);
     tabletnode_client.ScanTablet(request, response, done);
@@ -331,6 +336,8 @@ void TableImpl::ScanCallBack(ScanTask* scan_task,
                              ScanTabletRequest* request,
                              ScanTabletResponse* response,
                              bool failed, int error_code) {
+    _perf_counter.rpc_w.Add(common::timer::get_micros() - request->timestamp());
+    _perf_counter.rpc_w_cnt.Inc();
     ResultStreamImpl* stream = scan_task->stream;
 
     if (failed) {
@@ -410,6 +417,9 @@ bool TableImpl::OpenInternal(ErrorCode* err) {
             return false;
         }
         EnableCookieUpdateTimer();
+    }
+    if (FLAGS_tera_sdk_perf_counter_enabled) {
+        DumpPerfCounterLogDelay();
     }
     return true;
 }
@@ -616,6 +626,7 @@ void TableImpl::CommitMutation(const std::string& server_addr,
         }
     }
 
+    request->set_timestamp(common::timer::get_micros());
     Closure<void, WriteTabletRequest*, WriteTabletResponse*, bool, int>* done =
         NewClosure(this, &TableImpl::MutateCallBack, mu_list);
     tabletnode_client_async.WriteTablet(request, response, done);
@@ -629,6 +640,8 @@ void TableImpl::MutateCallBack(std::vector<RowMutationImpl*>* mu_list,
                                WriteTabletRequest* request,
                                WriteTabletResponse* response,
                                bool failed, int error_code) {
+    _perf_counter.rpc_w.Add(common::timer::get_micros() - request->timestamp());
+    _perf_counter.rpc_w_cnt.Inc();
     if (failed) {
         if (error_code == sofa::pbrpc::RPC_ERROR_SERVER_SHUTDOWN ||
             error_code == sofa::pbrpc::RPC_ERROR_SERVER_UNREACHABLE ||
@@ -671,7 +684,10 @@ void TableImpl::MutateCallBack(std::vector<RowMutationImpl*>* mu_list,
             row_mutation->SetError(ErrorCode::kOK);
             // only for flow control
             _cur_commit_pending_counter.Sub(row_mutation->MutationNum());
+            int64_t perf_time = common::timer::get_micros();
             row_mutation->RunCallback();
+            _perf_counter.user_callback.Add(common::timer::get_micros() - perf_time);
+            _perf_counter.user_callback_cnt.Inc();
         } else if (row_mutation->RetryTimes() >= static_cast<uint32_t>(FLAGS_tera_sdk_retry_times)) {
             if (err == kKeyNotInRange || err == kConnectError) {
                 ScheduleUpdateMeta(row_mutation->RowKey(),
@@ -682,7 +698,10 @@ void TableImpl::MutateCallBack(std::vector<RowMutationImpl*>* mu_list,
             row_mutation->SetError(ErrorCode::kSystem, err_reason);
             // only for flow control
             _cur_commit_pending_counter.Sub(row_mutation->MutationNum());
+            int64_t perf_time = common::timer::get_micros();
             row_mutation->RunCallback();
+            _perf_counter.user_callback.Add(common::timer::get_micros() - perf_time);
+            _perf_counter.user_callback_cnt.Inc();
         } else if (_options.sequential_write) {
             row_mutation->IncRetryTimes();
             MutexLock l(&_seq_mutation_mutex);
@@ -1064,6 +1083,7 @@ void TableImpl::CommitReaders(const std::string server_addr,
         row_reader->ToProtoBuf(row_reader_info);
         // row_reader_info->CopyFrom(row_reader->GetRowReaderInfo());
     }
+    request->set_timestamp(common::timer::get_micros());
     Closure<void, ReadTabletRequest*, ReadTabletResponse*, bool, int>* done =
         NewClosure(this, &TableImpl::ReaderCallBack, reader_list);
     tabletnode_client_async.ReadTablet(request, response, done);
@@ -1073,6 +1093,8 @@ void TableImpl::ReaderCallBack(std::vector<RowReaderImpl*>* reader_list,
                                ReadTabletRequest* request,
                                ReadTabletResponse* response,
                                bool failed, int error_code) {
+    _perf_counter.rpc_r.Add(common::timer::get_micros() - request->timestamp());
+    _perf_counter.rpc_r_cnt.Inc();
     if (failed) {
         if (error_code == sofa::pbrpc::RPC_ERROR_SERVER_SHUTDOWN ||
             error_code == sofa::pbrpc::RPC_ERROR_SERVER_UNREACHABLE ||
@@ -1109,17 +1131,26 @@ void TableImpl::ReaderCallBack(std::vector<RowReaderImpl*>* reader_list,
         if (err == kTabletNodeOk) {
             row_reader->SetResult(response->detail().row_result(row_result_num++));
             row_reader->SetError(ErrorCode::kOK);
+            int64_t perf_time = common::timer::get_micros();
             row_reader->RunCallback();
+            _perf_counter.user_callback.Add(common::timer::get_micros() - perf_time);
+            _perf_counter.user_callback_cnt.Inc();
             // only for flow control
             _cur_reader_pending_counter.Dec();
         } else if (err == kKeyNotExist) {
             row_reader->SetError(ErrorCode::kNotFound, "not found");
+            int64_t perf_time = common::timer::get_micros();
             row_reader->RunCallback();
+            _perf_counter.user_callback.Add(common::timer::get_micros() - perf_time);
+            _perf_counter.user_callback_cnt.Inc();
             // only for flow control
             _cur_reader_pending_counter.Dec();
         } else if (err == kSnapshotNotExist) {
             row_reader->SetError(ErrorCode::kNotFound, "snapshot not found");
+            int64_t perf_time = common::timer::get_micros();
             row_reader->RunCallback();
+            _perf_counter.user_callback.Add(common::timer::get_micros() - perf_time);
+            _perf_counter.user_callback_cnt.Inc();
             // only for flow control
             _cur_reader_pending_counter.Dec();
         } else if (row_reader->RetryTimes() >= static_cast<uint32_t>(FLAGS_tera_sdk_retry_times)) {
@@ -1130,7 +1161,10 @@ void TableImpl::ReaderCallBack(std::vector<RowReaderImpl*>* reader_list,
             std::string err_reason = StringFormat("Reach the limit of retry times, error: %s",
                     StatusCodeToString(err).c_str());
             row_reader->SetError(ErrorCode::kSystem, err_reason);
+            int64_t perf_time = common::timer::get_micros();
             row_reader->RunCallback();
+            _perf_counter.user_callback.Add(common::timer::get_micros() - perf_time);
+            _perf_counter.user_callback_cnt.Inc();
             // only for flow control
             _cur_reader_pending_counter.Dec();
         } else if (err == kKeyNotInRange) {
@@ -1957,7 +1991,7 @@ static uint32_t Hash(const char* data, size_t n, uint32_t seed) {
     return h;
 }
 
-// stores hash as a string, not including the terminating '\0' character 
+// stores hash as a string, not including the terminating '\0' character
 // `HASH_LEN' is the length of this string
 const static long HASH_LEN = 8;
 
@@ -1993,7 +2027,7 @@ static bool IsCookieChecksumRight(const std::string& cookie_file) {
     std::fstream outfile(cookie_file.c_str(), std::ios_base::in | std::ios_base::out);
     int errno_saved = errno;
     if(outfile.fail()) {
-        LOG(INFO) << "[SDK COOKIE] fail to open " << cookie_file.c_str() 
+        LOG(INFO) << "[SDK COOKIE] fail to open " << cookie_file.c_str()
             << " " << strerror(errno_saved);
         return false;
     }
@@ -2144,7 +2178,7 @@ static bool AppendChecksumToCookie(const std::string& cookie_file) {
     std::fstream outfile(cookie_file.c_str(), std::ios_base::in | std::ios_base::out);
     int errno_saved = errno;
     if(outfile.fail()) {
-        LOG(INFO) << "[SDK COOKIE] fail to open " << cookie_file.c_str() 
+        LOG(INFO) << "[SDK COOKIE] fail to open " << cookie_file.c_str()
             << " " << strerror(errno_saved);
         return false;
     }
@@ -2156,7 +2190,7 @@ static bool AppendChecksumToCookie(const std::string& cookie_file) {
         LOG(INFO) << "[SDK COOKIE] invalid file size: " << file_size;
         return false;
     }
-    
+
     // calculates checksum according to cookie file content
     outfile.seekp(0, std::ios_base::beg);
     char hash_str[HASH_LEN] = {'\0'};
@@ -2186,7 +2220,7 @@ static bool AddOtherUserWritePermission(const std::string& cookie_file) {
         // other user has write permission already
         return true;
     }
-    return chmod(cookie_file.c_str(), 
+    return chmod(cookie_file.c_str(),
              S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP | S_IROTH | S_IWOTH) == 0;
 }
 
@@ -2276,5 +2310,40 @@ std::string TableImpl::GetCookieFileName(const std::string& tablename,
     char hash_str[8] = {'\0'};
     sprintf(hash_str, "%08x", hash);
     return std::string((char*)hash_str, 8);
+}
+
+void TableImpl::DumpPerfCounterLogDelay() {
+    DoDumpPerfCounterLog();
+    boost::function<void ()> closure =
+        boost::bind(&TableImpl::DumpPerfCounterLogDelay, this);
+    _perf_log_task_id =
+        _thread_pool->DelayTask(FLAGS_tera_sdk_perf_counter_log_interval * 1000, closure);
+}
+
+void TableImpl::DoDumpPerfCounterLog() {
+    LOG(INFO) << "[Table " << _name << "] " <<  _perf_counter.ToLog()
+        << "pending_r: " << _cur_reader_pending_counter.Get() << ", "
+        << "pending_w: " << _cur_commit_pending_counter.Get();
+}
+
+
+static int64_t CalcAverage(Counter& sum, Counter& cnt, int64_t interval) {
+    if (cnt.Get() == 0 || interval == 0) {
+        return 0;
+    } else {
+        return sum.Clear() * 1000 / cnt.Clear() / interval / 1000;
+    }
+}
+
+std::string TableImpl::PerfCounter::ToLog() {
+    std::stringstream ss;
+    int64_t ts = common::timer::get_micros();
+    int64_t interval = (ts - start_time) / 1000;
+    ss << "rpc_r: " << CalcAverage(rpc_r, rpc_r_cnt, interval) << ", ";
+    ss << "rpc_w: " << CalcAverage(rpc_w, rpc_w_cnt, interval) << ", ";
+    ss << "rpc_s: " << CalcAverage(rpc_s, rpc_s_cnt, interval) << ", ";
+    ss << "callback: " << CalcAverage(user_callback, user_callback_cnt, interval) << ", ";
+    start_time = ts;
+    return ss.str();
 }
 } // namespace tera

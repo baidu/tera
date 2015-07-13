@@ -6,6 +6,7 @@
 #define  TERA_SDK_TABLE_IMPL_H_
 
 #include "common/mutex.h"
+#include "common/timer.h"
 #include "common/thread_pool.h"
 
 #include "proto/table_meta.pb.h"
@@ -185,6 +186,26 @@ public:
 
     bool IsKvOnlyTable();
 
+    struct PerfCounter {
+        int64_t start_time;
+        Counter rpc_r;
+        Counter rpc_r_cnt;
+
+        Counter rpc_w;
+        Counter rpc_w_cnt;
+
+        Counter rpc_s;
+        Counter rpc_s_cnt;
+
+        Counter user_callback;
+        Counter user_callback_cnt;
+
+        std::string ToLog();
+
+        PerfCounter() {
+            start_time = common::timer::get_micros();
+        }
+    };
 private:
     bool ScanTabletNode(const TabletMeta & tablet_meta,
                         const std::string& key_start,
@@ -314,6 +335,9 @@ private:
     void DelayCommitSequentionMutation();
     bool CommitNextTabletSequentialMutation();
 
+    void DumpPerfCounterLogDelay();
+    void DoDumpPerfCounterLog();
+
 private:
     TableImpl(const TableImpl&);
     void operator=(const TableImpl&);
@@ -372,6 +396,9 @@ private:
     /// if there is _cluster,
     ///    we save master_addr & root_table_addr in _cluster, access zookeeper only once.
     sdk::ClusterFinder* _cluster;
+
+    PerfCounter _perf_counter;  // calc time consumption, for performance analysis
+    int64_t _perf_log_task_id;
 
     // sequential mutation
     mutable Mutex _seq_mutation_mutex;

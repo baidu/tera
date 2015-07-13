@@ -695,6 +695,9 @@ bool ClientImpl::ParseTabletEntry(const TabletMeta& meta, std::vector<TabletInfo
 }
 
 static void InitFlags(const std::string& confpath, const std::string& log_prefix) {
+    static Mutex mutex;
+    static bool is_glog_init = false;
+    MutexLock locker(&mutex);
     // search conf file, priority:
     //   user-specified > ./tera.flag > ../conf/tera.flag > env-var
     if (!confpath.empty() && IsExist(confpath)) {
@@ -728,8 +731,11 @@ static void InitFlags(const std::string& confpath, const std::string& log_prefix
 
     // the gflags will get flags from FLAGS_flagfile
     ::google::ParseCommandLineFlags(&argc, &argv, true);
-    ::google::InitGoogleLogging(log_prefix.c_str());
-    utils::SetupLog(log_prefix);
+    if (!is_glog_init) {
+        ::google::InitGoogleLogging(log_prefix.c_str());
+        utils::SetupLog(log_prefix);
+        is_glog_init = true;
+    }
     delete[] argv;
 
     LOG(INFO) << "USER = " << FLAGS_tera_user_identity;

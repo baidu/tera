@@ -85,7 +85,10 @@ DECLARE_string(tera_leveldb_env_type);
 
 DECLARE_string(tera_zk_root_path);
 DECLARE_string(tera_zk_addr_list);
+DECLARE_string(tera_local_addr);
 DECLARE_bool(tera_ins_enabled);
+
+DECLARE_int64(tera_sdk_perf_counter_log_interval);
 
 namespace tera {
 namespace master {
@@ -104,11 +107,16 @@ MasterImpl::MasterImpl()
       m_thread_pool(new ThreadPool(FLAGS_tera_master_impl_thread_max_num)),
       m_is_stat_table(false),
       m_stat_table(NULL),
+      m_gc_timer_id(kInvalidTimerId),
       m_gc_query_enable(false) {
     if (FLAGS_tera_master_cache_check_enabled) {
         EnableReleaseCacheTimer();
     }
-    m_local_addr = utils::GetLocalHostName() + ":" + FLAGS_tera_master_port;
+    if (FLAGS_tera_local_addr == "") {
+        m_local_addr = utils::GetLocalHostName()+ ":" + FLAGS_tera_master_port;
+    } else {
+        m_local_addr = FLAGS_tera_local_addr + ":" + FLAGS_tera_master_port;
+    }
     tabletnode::TabletNodeClient::SetThreadPool(m_thread_pool.get());
 
     if (FLAGS_tera_leveldb_env_type != "local") {
@@ -1108,6 +1116,7 @@ void MasterImpl::QueryTabletNode() {
                                      FLAGS_tera_zk_root_path,
                                      FLAGS_tera_zk_addr_list,
                                      m_thread_pool.get());
+        FLAGS_tera_sdk_perf_counter_log_interval = 60;
         if (m_stat_table->OpenInternal(&err)) {
             m_is_stat_table = true;
         } else {
