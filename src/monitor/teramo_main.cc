@@ -186,8 +186,8 @@ int GetAllTabletNodes(Table* table,
             if (string::npos == stream->RowName().find(cur_ts)) {
                 break;
             }
-            if (stream->Timestamp() < max_time &&
-                stream->Timestamp() > min_time) {
+            if (stream->Timestamp() >= max_time ||
+                stream->Timestamp() < min_time) { // [min_time, max_time)
                 // skip out-time-range records
             } else if (stream->Family() == "tsinfo") {
                 stats.push_front(stream->Value());

@@ -205,17 +205,16 @@ private:
             }
             // Normal task;
             if (!queue_.empty()) {
-                int64_t exe_time, start_time, finish_time;
                 task = queue_.front().task;
-                exe_time = queue_.front().exe_time;
+                int64_t exe_time = queue_.front().exe_time;
                 queue_.pop_front();
                 --pending_num_;
-                start_time = timer::get_micros();
+                int64_t start_time = timer::get_micros();
                 schedule_cost_sum_ += start_time - exe_time;
                 schedule_count_++;
                 mutex_.Unlock();
                 task();
-                finish_time = timer::get_micros();
+                int64_t finish_time = timer::get_micros();
                 task_cost_sum_ += finish_time - start_time;
                 task_count_++;
                 mutex_.Lock("ThreadProcRelock2");
