@@ -107,6 +107,7 @@ MasterImpl::MasterImpl()
       m_thread_pool(new ThreadPool(FLAGS_tera_master_impl_thread_max_num)),
       m_is_stat_table(false),
       m_stat_table(NULL),
+      m_gc_timer_id(kInvalidTimerId),
       m_gc_query_enable(false) {
     if (FLAGS_tera_master_cache_check_enabled) {
         EnableReleaseCacheTimer();
