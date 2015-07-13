@@ -34,6 +34,7 @@ map\<RowKey, map\<ColummnFamily:Qualifier, map\<Timestamp, Value> > > <br>
  * 使用Sofa-pbrpc实现跨进程通信
 
 #系统构建
+sh build.sh
 参考[BUILD](https://github.com/BaiduPS/tera/blob/master/BUILD)
 
 #使用示例
