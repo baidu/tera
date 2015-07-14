@@ -132,6 +132,10 @@ public:
         return pending_num_;
     }
 
+    // log format: 3 numbers seperated by " ", e.g. "15 24 32"
+    // 1st: thread pool schedule average cost (ms)
+    // 2nd: user task average cost (ms)
+    // 3rd: total task count since last ProfilingLog called
     std::string ProfilingLog() {
         int64_t schedule_cost_sum;
         int64_t schedule_count;
@@ -149,11 +153,8 @@ public:
             task_count_ = 0;
         }
         std::stringstream ss;
-        ss << "schd "
-            << (schedule_count == 0 ? 0 : schedule_cost_sum / schedule_count / 1000)
-            << " " << schedule_count
-            << " task "
-            << (task_count == 0 ? 0 : task_cost_sum / task_count / 1000)
+        ss << (schedule_count == 0 ? 0 : schedule_cost_sum / schedule_count / 1000)
+            << " " << (task_count == 0 ? 0 : task_cost_sum / task_count / 1000)
             << " " << task_count;
         return ss.str();
     }
