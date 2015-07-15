@@ -360,7 +360,8 @@ void DBImpl::DeleteObsoleteFiles() {
 
 bool DBImpl::IsDbExist() {
   if (env_->FileExists(CurrentFileName(dbname_))) {
-    // db exist, ready to load
+    // db exist, ready to load, discard parent_tablets
+    options_.parent_tablets.resize(0);
     return true;
   }
 
