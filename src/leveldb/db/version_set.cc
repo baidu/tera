@@ -1162,21 +1162,6 @@ Status VersionSet::LogAndApply(VersionEdit* edit, port::Mutex* mu) {
   return s;
 }
 
-static bool IsDbExist(Env* env, const std::string& dbname) {
-    std::vector<std::string> files;
-    env->GetChildren(dbname, &files);
-    for (size_t i = 0; i < files.size(); ++i) {
-      uint64_t number;
-      FileType type;
-      if (ParseFileName(files[i], &number, &type)) {
-        if (type == kDescriptorFile) {
-            return true;
-        }
-      }
-    }
-    return false;
-}
-
 Status VersionSet::ReadCurrentFile(uint64_t tablet, std::string* dscname ) {
   Status s;
   std::string pdbname;
@@ -1249,9 +1234,7 @@ Status VersionSet::Recover() {
   Status s;
   size_t parent_size = options_->parent_tablets.size();
   std::string current;
-  if (parent_size  == 0 ||
-      env_->FileExists(CurrentFileName(dbname_)) ||
-      IsDbExist(env_, dbname_)) {
+  if (parent_size  == 0) {
     Log(options_->info_log, "[%s] recover old or create new db.", dbname_.c_str());
     dscname.resize(1);
     s = ReadCurrentFile(0, &dscname[0]);
