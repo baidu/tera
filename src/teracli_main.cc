@@ -334,9 +334,8 @@ int32_t PutCounterOp(Client* client, int32_t argc, char** argv, ErrorCode* err) 
        LOG(ERROR) << "invalid Integer number Got: " << value;
        return -1;
     }
-    char counter_buf[sizeof(int64_t)];
-    io::EncodeBigEndian(counter_buf,counter);
-    std::string s_counter(counter_buf,sizeof(counter_buf));
+
+    std::string s_counter = tera::CounterCoding::EncodeCounter(counter);
     if (!table->Put(rowkey, columnfamily, qualifier, s_counter, err)) {
         LOG(ERROR) << "fail to put record to table: " << tablename;
         return -1;
@@ -580,7 +579,13 @@ int32_t GetCounterOp(Client* client, int32_t argc, char** argv, ErrorCode* err) 
         return -1;
     }
 
-    std::cout << io::DecodeBigEndainSign(value.c_str());
+    int64_t counter = 0;
+    bool ret = tera::CounterCoding::DecodeCounter(value, &counter);
+    if (!ret) {
+        LOG(ERROR) << "invalid counter read, fail to parse";
+    } else {
+        std::cout << counter << std::endl;
+    }
     delete table;
     return 0;
 }
