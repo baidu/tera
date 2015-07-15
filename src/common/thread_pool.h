@@ -102,6 +102,9 @@ public:
     /// if running, wait if non_block==false; return immediately if non_block==true
     bool CancelTask(int64_t task_id, bool non_block = false, bool* is_running = NULL) {
         if (task_id == 0) {
+            if (is_running != NULL) {
+                *is_running = false;
+            }
             return false;
         }
         while (1) {
