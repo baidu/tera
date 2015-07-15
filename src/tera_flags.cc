@@ -231,6 +231,7 @@ DEFINE_int64(tera_sdk_max_mutation_pending_num, INT64_MAX, "default number of pe
 DEFINE_int64(tera_sdk_max_reader_pending_num, INT64_MAX, "default number of pending readers in async get op");
 DEFINE_bool(tera_sdk_async_blocking_enabled, true, "enable blocking when async writing and reading");
 DEFINE_int32(tera_sdk_update_meta_concurrency, 3, "the concurrency for updating meta");
+DEFINE_int32(tera_sdk_update_meta_buffer_limit, 102400, "the pack size limit for updating meta");
 
 DEFINE_bool(tera_sdk_cookie_enabled, true, "enable sdk cookie");
 DEFINE_string(tera_sdk_cookie_path, "/tmp/.tera_cookie", "the default path of sdk cookie");
