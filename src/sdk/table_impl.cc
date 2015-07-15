@@ -20,6 +20,7 @@
 #include "common/file/file_path.h"
 #include "common/file/recordio/record_io.h"
 
+#include "io/coding.h"
 #include "proto/kv_helper.h"
 #include "proto/proto_helper.h"
 #include "proto/tabletnode_client.h"
@@ -2346,4 +2347,22 @@ std::string TableImpl::PerfCounter::ToLog() {
     start_time = ts;
     return ss.str();
 }
+
+std::string CounterCoding::EncodeCounter(int64_t counter) {
+    char counter_buf[sizeof(int64_t)];
+    io::EncodeBigEndian(counter_buf, counter);
+    return std::string(counter_buf, sizeof(counter_buf));
+}
+
+bool CounterCoding::DecodeCounter(const std::string& buf,
+                                  int64_t* counter) {
+    assert(counter);
+    if (buf.size() != sizeof(int64_t)) {
+        *counter = 0;
+        return false;
+    }
+    *counter = io::DecodeBigEndainSign(buf.data());
+    return true;
+}
+
 } // namespace tera
