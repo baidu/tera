@@ -101,9 +101,10 @@ MasterImpl::MasterImpl()
       m_size_scheduler(new SizeScheduler),
       m_load_scheduler(new LoadScheduler),
       m_release_cache_timer_id(kInvalidTimerId),
+      m_query_enabled(false),
       m_query_tabletnode_timer_id(kInvalidTimerId),
+      m_load_balance_enabled(false),
       m_load_balance_timer_id(kInvalidTimerId),
-      m_load_balance_count(0),
       m_thread_pool(new ThreadPool(FLAGS_tera_master_impl_thread_max_num)),
       m_is_stat_table(false),
       m_stat_table(NULL),
@@ -141,8 +142,6 @@ bool MasterImpl::Init() {
     }
 
     SetMasterStatus(kIsSecondary);
-    DisableQueryTabletNodeTimer();
-    DisableTabletNodeGcTimer();
     m_thread_pool->AddTask(boost::bind(&MasterImpl::InitAsync, this));
     return true;
 }
@@ -1101,6 +1100,14 @@ bool MasterImpl::GetMetaTabletAddr(std::string* addr) {
 /////////// load balance //////////
 
 void MasterImpl::QueryTabletNode() {
+    {
+        MutexLock locker(&m_query_mutex);
+        if (!m_query_enabled) {
+            m_query_tabletnode_timer_id = kInvalidTimerId;
+            return;
+        }
+    }
+
     MutexLock locker(&m_mutex);
 
     std::vector<TabletNodePtr> tabletnode_array;
@@ -1159,44 +1166,78 @@ void MasterImpl::QueryTabletNode() {
     if (m_gc_query_enable) {
         m_gc_query_enable = false;
     }
-    m_query_tabletnode_timer_id = kInvalidTimerId;
     if (0 == m_query_pending_count.Dec()) {
-        EnableQueryTabletNodeTimer();
+        MutexLock locker(&m_query_mutex);
+        if (m_query_enabled) {
+            ScheduleQueryTabletNode();
+        } else {
+            m_query_tabletnode_timer_id = kInvalidTimerId;
+        }
     }
 }
 
-void MasterImpl::EnableQueryTabletNodeTimer() {
-    assert(m_query_tabletnode_timer_id == kInvalidTimerId);
+void MasterImpl::ScheduleQueryTabletNode() {
+    m_query_mutex.AssertHeld();
     boost::function<void ()> closure =
         boost::bind(&MasterImpl::QueryTabletNode, this);
     m_query_tabletnode_timer_id = m_thread_pool->DelayTask(
         FLAGS_tera_master_query_tabletnode_period, closure);
 }
 
-void MasterImpl::DisableQueryTabletNodeTimer() {
-    if (m_query_tabletnode_timer_id != kInvalidTimerId) {
-        m_thread_pool->CancelTask(m_query_tabletnode_timer_id);
-        m_query_tabletnode_timer_id = kInvalidTimerId;
+void MasterImpl::EnableQueryTabletNodeTimer() {
+    MutexLock locker(&m_query_mutex);
+    if (m_query_tabletnode_timer_id == kInvalidTimerId) {
+        ScheduleQueryTabletNode();
     }
+    m_query_enabled = true;
 }
 
-void MasterImpl::EnableLoadBalanceTimer() {
-    assert(m_load_balance_timer_id == kInvalidTimerId);
+void MasterImpl::DisableQueryTabletNodeTimer() {
+    MutexLock locker(&m_query_mutex);
+    if (m_query_tabletnode_timer_id != kInvalidTimerId) {
+        bool non_block = true;
+        if (m_thread_pool->CancelTask(m_query_tabletnode_timer_id, non_block)) {
+            m_query_tabletnode_timer_id = kInvalidTimerId;
+        }
+    }
+    m_query_enabled = false;
+}
+
+void MasterImpl::ScheduleLoadBalance() {
+    m_load_balance_mutex.AssertHeld();
     boost::function<void ()> closure =
         boost::bind(&MasterImpl::LoadBalance, this);
     m_load_balance_timer_id = m_thread_pool->DelayTask(
         FLAGS_tera_master_load_balance_period, closure);
 }
 
-void MasterImpl::DisableLoadBalanceTimer() {
-    if (m_load_balance_timer_id != kInvalidTimerId) {
-        m_thread_pool->CancelTask(m_load_balance_timer_id);
-        m_load_balance_timer_id = kInvalidTimerId;
+void MasterImpl::EnableLoadBalanceTimer() {
+    MutexLock locker(&m_load_balance_mutex);
+    if (m_load_balance_timer_id == kInvalidTimerId) {
+        ScheduleLoadBalance();
     }
+    m_load_balance_enabled = true;
+}
+
+void MasterImpl::DisableLoadBalanceTimer() {
+    MutexLock locker(&m_load_balance_mutex);
+    if (m_load_balance_timer_id != kInvalidTimerId) {
+        bool non_block = true;
+        if (m_thread_pool->CancelTask(m_load_balance_timer_id, non_block)) {
+            m_load_balance_timer_id = kInvalidTimerId;
+        }
+    }
+    m_load_balance_enabled = false;
 }
 
 void MasterImpl::LoadBalance() {
-    MutexLock locker(&m_mutex);
+    {
+        MutexLock locker(&m_load_balance_mutex);
+        if (!m_load_balance_enabled) {
+            m_load_balance_timer_id = kInvalidTimerId;
+            return;
+        }
+    }
 
     std::vector<TablePtr> all_table_list;
     std::vector<TabletPtr> all_tablet_list;
@@ -1210,7 +1251,7 @@ void MasterImpl::LoadBalance() {
 
     // descending sort the node according to workload,
     // so that the node with heaviest workload will be scheduled first
-    if (++m_load_balance_count % 10 == 0 && FLAGS_tera_master_load_balance_qps_policy_enabled) {
+    if (m_load_balance_count.Inc() % 10 == 0 && FLAGS_tera_master_load_balance_qps_policy_enabled) {
         max_move_num -= LoadBalance(m_load_scheduler.get(), max_move_num, 1,
                                     all_node_list, all_tablet_list);
     } else if (FLAGS_tera_master_load_balance_table_grained) {
@@ -1233,8 +1274,12 @@ void MasterImpl::LoadBalance() {
                                     all_node_list, all_tablet_list);
     }
 
-    m_load_balance_timer_id = kInvalidTimerId;
-    EnableLoadBalanceTimer();
+    MutexLock locker(&m_load_balance_mutex);
+    if (m_load_balance_enabled) {
+        ScheduleLoadBalance();
+    } else {
+        m_load_balance_timer_id = kInvalidTimerId;
+    }
 }
 
 uint32_t MasterImpl::LoadBalance(Scheduler* scheduler,
@@ -2717,7 +2762,12 @@ void MasterImpl::QueryTabletNodeCallback(std::string addr, QueryRequest* request
     delete response;
 
     if (0 == m_query_pending_count.Dec()) {
-        EnableQueryTabletNodeTimer();
+        MutexLock locker(&m_query_mutex);
+        if (m_query_enabled) {
+            ScheduleQueryTabletNode();
+        } else {
+            m_query_tabletnode_timer_id = kInvalidTimerId;
+        }
     }
 }
 

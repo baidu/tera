@@ -235,6 +235,7 @@ private:
                               UnloadTabletResponse* response,
                               bool failed, int error_code);
 
+    void ScheduleLoadBalance();
     void LoadBalance();
     uint32_t LoadBalance(Scheduler* scheduler,
                          uint32_t max_move_num, uint32_t max_round_num,
@@ -269,6 +270,8 @@ private:
                              WriteTabletRequest* request,
                              WriteTabletResponse* response,
                              bool failed, int error_code);
+
+    void ScheduleQueryTabletNode();
     void QueryTabletNode();
     void QueryTabletNodeAsync(std::string addr, int32_t timeout,
                               bool is_gc, QueryClosure* done);
@@ -463,11 +466,17 @@ private:
 
     Mutex m_mutex;
     int64_t m_release_cache_timer_id;
-    int64_t m_query_tabletnode_timer_id;
-    int64_t m_load_balance_timer_id;
     Counter m_this_sequence_id;
-    int64_t m_load_balance_count;
+
+    Mutex m_query_mutex;
+    bool m_query_enabled;
+    int64_t m_query_tabletnode_timer_id;
     Counter m_query_pending_count;
+
+    Mutex m_load_balance_mutex;
+    bool m_load_balance_enabled;
+    int64_t m_load_balance_timer_id;
+    Counter m_load_balance_count;
 
     scoped_ptr<ThreadPool> m_thread_pool;
     AutoResetEvent m_query_event;
