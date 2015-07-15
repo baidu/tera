@@ -750,19 +750,159 @@ inline bool TabletIO::LowLevelScan(const std::string& start_tera_key,
 
     if (!it_status.ok()) {
         SetStatusCode(it_status, status);
+        VLOG(10) << "ll-seek fail: " << "tablet=[" << m_tablet_path <<
+            "] status=[" << StatusCodeToString(*status);
+        return false;
+    }
+
+    return true;
+}
+
+// Get several columns from a
+bool TabletIO::LowLevelSeek(const std::string& row_key,
+                            const ScanOptions& scan_options,
+                            RowResult* value_list,
+                            uint32_t* read_row_count,
+                            uint32_t* read_bytes,
+                            bool* is_complete,
+                            StatusCode* status) {
+    value_list->clear_key_values();
+    *read_row_count = 0;
+    *read_bytes = 0;
+
+    // create tera iterator
+    leveldb::ReadOptions read_option(&m_ldb_options);
+    read_option.verify_checksums = FLAGS_tera_leveldb_verify_checksums;
+    SetupIteratorOptions(scan_options, &read_option);
+    uint64_t snapshot_id = scan_options.snapshot_id;
+    if (snapshot_id != 0) {
+        if (!SnapshotIDToSeq(snapshot_id, &read_option.snapshot)) {
+            TearDownIteratorOptions(&read_option);
+            SetStatusCode(kSnapshotNotExist, status);
+            return false;
+        }
+    }
+    leveldb::Iterator* it_data = m_db->NewIterator(read_option);
+    TearDownIteratorOptions(&read_option);
+
+    // init compact strategy
+    leveldb::CompactStrategy* compact_strategy =
+        m_ldb_options.compact_strategy_factory->NewInstance();
+
+    // seek to the row start & process row delete mark
+    std::string row_seek_key;
+    m_key_operator->EncodeTeraKey(row_key, "", "", kLatestTs,
+                                  leveldb::TKT_FORSEEK, &row_seek_key);
+    it_data->Seek(row_seek_key);
+    if (it_data->Valid()) {
+        leveldb::Slice cur_row_key;
+        m_key_operator->ExtractTeraKey(it_data->key(), &cur_row_key,
+                                       NULL, NULL, NULL, NULL);
+        if (cur_row_key.ToString() > row_key) {
+            SetStatusCode(kKeyNotExist, status);
+            return true;
+        } else {
+            compact_strategy->ScanDrop(it_data->key(), 0);
+        }
+    } else {
+        SetStatusCode(kKeyNotExist, status);
+        return true;
+    }
+
+    ColumnFamilyMap::const_iterator it_cf =
+        scan_options.column_family_list.begin();
+    for (; it_cf != scan_options.column_family_list.end(); ++it_cf) {
+        const string& cf_name = it_cf->first;
+        const std::set<std::string>& qu_set = it_cf->second;
+
+        // seek to the cf start & process cf delete mark
+        std::string cf_seek_key;
+        m_key_operator->EncodeTeraKey(row_key, cf_name, "", kLatestTs,
+                                      leveldb::TKT_FORSEEK, &cf_seek_key);
+        it_data->Seek(cf_seek_key);
+        if (it_data->Valid()) {
+            leveldb::Slice cur_cf;
+            m_key_operator->ExtractTeraKey(it_data->key(), &cur_cf,
+                                           NULL, NULL, NULL, NULL);
+            if (cur_cf.ToString() > cf_name) {
+                continue;
+            } else {
+                compact_strategy->ScanDrop(it_data->key(), 0);
+            }
+        } else {
+            VLOG(10) << "ll-seek fail, error iterator.";
+            return false;
+        }
+
+        if (qu_set.empty()) {
+            LOG(FATAL) << "low level seek only support qualifier read.";
+        }
+        std::set<std::string>::iterator it_qu = qu_set.begin();
+        for (; it_qu != qu_set.end(); ++it_qu) {
+            const string& qu_name = *it_qu;
+
+            // seek to the cf start & process cf delete mark
+            std::string qu_seek_key;
+            m_key_operator->EncodeTeraKey(row_key, cf_name, qu_name, kLatestTs,
+                                          leveldb::TKT_FORSEEK, &qu_seek_key);
+            it_data->Seek(qu_seek_key);
+            uint32_t version_num = 0;
+            for (; it_data->Valid();) {
+                leveldb::Slice cur_qu, value;
+                int64_t timestamp;
+                m_key_operator->ExtractTeraKey(it_data->key(), NULL, &cur_qu,
+                                               &value, &timestamp, NULL);
+                if (cur_qu.ToString() > qu_name) {
+                    break;
+                }
+
+                // skip qu delete mark
+                if (compact_strategy->ScanDrop(it_data->key(), 0)) {
+                    it_data->Next();
+                    continue;
+                }
+
+                // version filter
+                if (++version_num > scan_options.max_versions) {
+                    break;
+                }
+
+                KeyValuePair* kv = value_list->add_key_values();
+                kv->set_key(row_key);
+                kv->set_column_family(cf_name);
+                kv->set_qualifier(qu_name);
+                kv->set_timestamp(timestamp);
+
+                std::string merged_value;
+                bool has_merged =
+                    compact_strategy->ScanMergedValue(it_data, &merged_value);
+                if (has_merged) {
+                    kv->set_value(merged_value);
+                } else {
+                    kv->set_value(value.data(), value.size());
+                }
+            }
+        }
+    }
+
+    leveldb::Status it_status;
+    if (!it_data->Valid()) {
+        it_status = it_data->status();
+    }
+
+    delete compact_strategy;
+
+    if (!it_status.ok()) {
+        SetStatusCode(it_status, status);
         VLOG(10) << "ll-scan fail: " << "tablet=[" << m_tablet_path <<
             "] status=[" << StatusCodeToString(*status);
         return false;
     }
 
-    // check if scan finished
     SetStatusCode(kTableOk, status);
-    if (buffer_size < scan_options.max_size) {
-        *is_complete = true;
-    } else {
-        *is_complete = false;
-    }
+    *is_complete = true;
 
+    delete it_data;
     return true;
 }
 
@@ -808,13 +948,8 @@ bool TabletIO::ReadCells(const RowReaderInfo& row_reader, RowResult* value_list,
         return true;
     }
 
-    std::string start_tera_key;
-    m_key_operator->EncodeTeraKey(row_reader.key(), "", "", kLatestTs,
-                                    leveldb::TKT_VALUE, &start_tera_key);
-    std::string end_row_key = row_reader.key() + '\0';
-    VLOG(10) << "ReadCells: " << "key=[" << DebugString(row_reader.key()) << "]";
-
     ScanOptions scan_options;
+    bool ll_seek_available = true;
     for (int32_t i = 0; i < row_reader.cf_list_size(); ++i) {
         const ColumnFamily& column_family = row_reader.cf_list(i);
         const std::string& column_family_name = column_family.family_name();
@@ -824,8 +959,15 @@ bool TabletIO::ReadCells(const RowReaderInfo& row_reader, RowResult* value_list,
         for (int32_t j = 0; j < column_family.qualifier_list_size(); ++j) {
             qualifier_list.insert(column_family.qualifier_list(j));
         }
+        if (qualifier_list.empty()) {
+            ll_seek_available = false;
+        }
         scan_options.iter_cf_set.insert(column_family_name);
     }
+    if (scan_options.column_family_list.empty()) {
+        ll_seek_available = false;
+    }
+
     if (row_reader.has_max_version()) {
         scan_options.max_versions = row_reader.max_version();
     }
@@ -839,24 +981,36 @@ bool TabletIO::ReadCells(const RowReaderInfo& row_reader, RowResult* value_list,
     uint32_t read_bytes = 0;
     bool is_complete = false;
 
-    if (!LowLevelScan(start_tera_key, end_row_key, scan_options,
-                      value_list, &read_row_count, &read_bytes,
-                      &is_complete, status)) {
-        m_counter.read_rows.Inc();
-        row_read_delay.Add(get_micros() - read_ms);
-        {
-            MutexLock lock(&m_mutex);
-            m_db_ref_count--;
-        }
-        return false;
+    VLOG(10) << "ReadCells: " << "key=[" << DebugString(row_reader.key()) << "]";
+
+    bool ret = false;
+    // if read all columns, use LowLevelScan
+    if (ll_seek_available) {
+        ret = LowLevelSeek(row_reader.key(), scan_options,
+                           value_list, &read_row_count, &read_bytes,
+                           &is_complete, status);
+    } else {
+        std::string start_tera_key;
+        m_key_operator->EncodeTeraKey(row_reader.key(), "", "", kLatestTs,
+                                        leveldb::TKT_VALUE, &start_tera_key);
+        std::string end_row_key = row_reader.key() + '\0';
+
+        ret = LowLevelScan(start_tera_key, end_row_key, scan_options,
+                           value_list, &read_row_count, &read_bytes,
+                           &is_complete, status);
     }
     m_counter.read_rows.Inc();
-    m_counter.read_size.Add(value_list->ByteSize());
     row_read_delay.Add(get_micros() - read_ms);
     {
         MutexLock lock(&m_mutex);
         m_db_ref_count--;
     }
+    if (!ret) {
+        return false;
+    } else {
+        m_counter.read_size.Add(value_list->ByteSize());
+    }
+
     if (!is_complete) {
         // buffer full
         value_list->Clear();

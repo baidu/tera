@@ -77,11 +77,19 @@ public:
                                 int64_t* timestamp,
                                 TeraKeyType* type) const {
         int key_len = strlen(tera_key.data());
-        *row_key = Slice(tera_key.data(), key_len);
+        if (row_key) {
+            *row_key = Slice(tera_key.data(), key_len);
+        }
+
         int family_len = strlen(tera_key.data() + key_len + 1);
-        *family = Slice(tera_key.data() + key_len + 1, family_len);
+        if (family) {
+            *family = Slice(tera_key.data() + key_len + 1, family_len);
+        }
+
         int qualifier_len = strlen(family->data() + family_len + 1);
-        *qualifier = Slice(family->data() + family_len + 1, qualifier_len);
+        if (qualifier) {
+            *qualifier = Slice(family->data() + family_len + 1, qualifier_len);
+        }
 
         if (key_len + family_len + qualifier_len + 3 + sizeof(uint64_t) != tera_key.size()) {
             return false;
@@ -154,9 +162,15 @@ public:
             return false;
         }
 
-        *row_key = Slice(tera_key.data(), key_len);
-        *family = Slice(tera_key.data() + key_len, family_len);
-        *qualifier = Slice(family->data() + family_len + 1, qualifier_len);
+        if (row_key) {
+            *row_key = Slice(tera_key.data(), key_len);
+        }
+        if (family) {
+            *family = Slice(tera_key.data() + key_len, family_len);
+        }
+        if (qualifier) {
+            *qualifier = Slice(family->data() + family_len + 1, qualifier_len);
+        }
 
         Slice internal_tera_key = Slice(tera_key.data(), tera_key.size() - sizeof(uint32_t));
         ExtractTsAndType(internal_tera_key, timestamp, type);

@@ -127,6 +127,14 @@ public:
                       bool* is_complete,
                       StatusCode* status = NULL);
 
+    bool LowLevelSeek(const std::string& row_key,
+                      const ScanOptions& scan_options,
+                      RowResult* value_list,
+                      uint32_t* read_row_count,
+                      uint32_t* read_bytes,
+                      bool* is_complete,
+                      StatusCode* status = NULL);
+
     bool WriteOne(const std::string& key, const std::string& value,
                   bool sync = false, StatusCode* status = NULL);
     bool WriteBatch(leveldb::WriteBatch* batch, bool sync = false,
