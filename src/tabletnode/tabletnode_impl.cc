@@ -380,6 +380,7 @@ void TabletNodeImpl::ReadTablet(int64_t start_micros,
                 request->tablet_name(), request->row_info_list(i).key(), &row_status);
             if (tablet_io == NULL) {
                 range_error_counter.Inc();
+                response->mutable_detail()->add_status(kKeyNotInRange);
             } else {
                 if (tablet_io->ReadCells(request->row_info_list(i),
                                          response->mutable_detail()->add_row_result(),
@@ -389,8 +390,8 @@ void TabletNodeImpl::ReadTablet(int64_t start_micros,
                     response->mutable_detail()->mutable_row_result()->RemoveLast();
                 }
                 tablet_io->DecRef();
+                response->mutable_detail()->add_status(row_status);
             }
-            response->mutable_detail()->add_status(row_status);
         }
         response->set_success_num(read_success_num);
         response->set_status(kTabletNodeOk);

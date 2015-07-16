@@ -233,11 +233,11 @@ void RemoteTabletNode::CompactTablet(google::protobuf::RpcController* controller
 }
 
 std::string RemoteTabletNode::ProfilingLog() {
-    return "ctrl: " + m_ctrl_thread_pool->ProfilingLog()
-        + ", read: " + m_read_thread_pool->ProfilingLog()
-        + ", write: " + m_write_thread_pool->ProfilingLog()
-        + ", scan: " + m_scan_thread_pool->ProfilingLog()
-        + ", compact: " + m_compact_thread_pool->ProfilingLog();
+    return "ctrl " + m_ctrl_thread_pool->ProfilingLog()
+        + " read " + m_read_thread_pool->ProfilingLog()
+        + " write " + m_write_thread_pool->ProfilingLog()
+        + " scan " + m_scan_thread_pool->ProfilingLog()
+        + " compact " + m_compact_thread_pool->ProfilingLog();
 }
 
 void RemoteTabletNode::DoLoadTablet(google::protobuf::RpcController* controller,
