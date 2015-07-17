@@ -755,6 +755,13 @@ inline bool TabletIO::LowLevelScan(const std::string& start_tera_key,
         return false;
     }
 
+    // check if scan finished
+    SetStatusCode(kTableOk, status);
+    if (buffer_size < scan_options.max_size) {
+        *is_complete = true;
+    } else {
+        *is_complete = false;
+    }
     return true;
 }
 
@@ -762,13 +769,8 @@ inline bool TabletIO::LowLevelScan(const std::string& start_tera_key,
 bool TabletIO::LowLevelSeek(const std::string& row_key,
                             const ScanOptions& scan_options,
                             RowResult* value_list,
-                            uint32_t* read_row_count,
-                            uint32_t* read_bytes,
-                            bool* is_complete,
                             StatusCode* status) {
     value_list->clear_key_values();
-    *read_row_count = 0;
-    *read_bytes = 0;
 
     // create tera iterator
     leveldb::ReadOptions read_option(&m_ldb_options);
@@ -794,7 +796,10 @@ bool TabletIO::LowLevelSeek(const std::string& row_key,
     m_key_operator->EncodeTeraKey(row_key, "", "", kLatestTs,
                                   leveldb::TKT_FORSEEK, &row_seek_key);
     it_data->Seek(row_seek_key);
+    m_counter.low_read_cell.Inc();
     if (it_data->Valid()) {
+        VLOG(10) << "ll-seek: " << "tablet=[" << m_tablet_path
+            << "] row_key=[" << row_key << "]";
         leveldb::Slice cur_row_key;
         m_key_operator->ExtractTeraKey(it_data->key(), &cur_row_key,
                                        NULL, NULL, NULL, NULL);
@@ -820,10 +825,14 @@ bool TabletIO::LowLevelSeek(const std::string& row_key,
         m_key_operator->EncodeTeraKey(row_key, cf_name, "", kLatestTs,
                                       leveldb::TKT_FORSEEK, &cf_seek_key);
         it_data->Seek(cf_seek_key);
+        m_counter.low_read_cell.Inc();
         if (it_data->Valid()) {
+            VLOG(10) << "ll-seek: " << "tablet=[" << m_tablet_path
+                << "] row_key=[" << row_key
+                << "] cf=[" << cf_name << "]";
             leveldb::Slice cur_cf;
-            m_key_operator->ExtractTeraKey(it_data->key(), &cur_cf,
-                                           NULL, NULL, NULL, NULL);
+            m_key_operator->ExtractTeraKey(it_data->key(), NULL, &cur_cf,
+                                           NULL, NULL, NULL);
             if (cur_cf.ToString() > cf_name) {
                 continue;
             } else {
@@ -831,7 +840,8 @@ bool TabletIO::LowLevelSeek(const std::string& row_key,
             }
         } else {
             VLOG(10) << "ll-seek fail, error iterator.";
-            return false;
+            SetStatusCode(kKeyNotExist, status);
+            return true;
         }
 
         if (qu_set.empty()) {
@@ -840,6 +850,9 @@ bool TabletIO::LowLevelSeek(const std::string& row_key,
         std::set<std::string>::iterator it_qu = qu_set.begin();
         for (; it_qu != qu_set.end(); ++it_qu) {
             const string& qu_name = *it_qu;
+            VLOG(10) << "ll-seek: try find " << "tablet=[" << m_tablet_path
+                << "] row_key=[" << row_key << "] cf=[" << cf_name
+                << "] qu=[" << qu_name << "]";
 
             // seek to the cf start & process cf delete mark
             std::string qu_seek_key;
@@ -848,16 +861,23 @@ bool TabletIO::LowLevelSeek(const std::string& row_key,
             it_data->Seek(qu_seek_key);
             uint32_t version_num = 0;
             for (; it_data->Valid();) {
-                leveldb::Slice cur_qu, value;
+                m_counter.low_read_cell.Inc();
+                VLOG(10) << "ll-seek: " << "tablet=[" << m_tablet_path
+                    << "] row_key=[" << row_key << "] cf=[" << cf_name
+                    << "] qu=[" << qu_name << "]";
+                leveldb::Slice cur_qu;
                 int64_t timestamp;
-                m_key_operator->ExtractTeraKey(it_data->key(), NULL, &cur_qu,
-                                               &value, &timestamp, NULL);
+                m_key_operator->ExtractTeraKey(it_data->key(), NULL, NULL,
+                                               &cur_qu, &timestamp, NULL);
                 if (cur_qu.ToString() > qu_name) {
                     break;
                 }
 
                 // skip qu delete mark
                 if (compact_strategy->ScanDrop(it_data->key(), 0)) {
+                    VLOG(10) << "ll-seek: scan drop " << "tablet=[" << m_tablet_path
+                        << "] row_key=[" << row_key << "] cf=[" << cf_name
+                        << "] qu=[" << qu_name << "]";
                     it_data->Next();
                     continue;
                 }
@@ -879,30 +899,16 @@ bool TabletIO::LowLevelSeek(const std::string& row_key,
                 if (has_merged) {
                     kv->set_value(merged_value);
                 } else {
+                    leveldb::Slice value = it_data->value();
                     kv->set_value(value.data(), value.size());
                 }
             }
         }
     }
-
-    leveldb::Status it_status;
-    if (!it_data->Valid()) {
-        it_status = it_data->status();
-    }
-
     delete compact_strategy;
-
-    if (!it_status.ok()) {
-        SetStatusCode(it_status, status);
-        VLOG(10) << "ll-scan fail: " << "tablet=[" << m_tablet_path <<
-            "] status=[" << StatusCodeToString(*status);
-        return false;
-    }
+    delete it_data;
 
     SetStatusCode(kTableOk, status);
-    *is_complete = true;
-
-    delete it_data;
     return true;
 }
 
@@ -977,24 +983,21 @@ bool TabletIO::ReadCells(const RowReaderInfo& row_reader, RowResult* value_list,
     }
 
     scan_options.snapshot_id = snapshot_id;
-    uint32_t read_row_count = 0;
-    uint32_t read_bytes = 0;
-    bool is_complete = false;
 
     VLOG(10) << "ReadCells: " << "key=[" << DebugString(row_reader.key()) << "]";
 
     bool ret = false;
     // if read all columns, use LowLevelScan
     if (ll_seek_available) {
-        ret = LowLevelSeek(row_reader.key(), scan_options,
-                           value_list, &read_row_count, &read_bytes,
-                           &is_complete, status);
+        ret = LowLevelSeek(row_reader.key(), scan_options, value_list, status);
     } else {
         std::string start_tera_key;
         m_key_operator->EncodeTeraKey(row_reader.key(), "", "", kLatestTs,
                                         leveldb::TKT_VALUE, &start_tera_key);
         std::string end_row_key = row_reader.key() + '\0';
-
+        uint32_t read_row_count = 0;
+        uint32_t read_bytes = 0;
+        bool is_complete = false;
         ret = LowLevelScan(start_tera_key, end_row_key, scan_options,
                            value_list, &read_row_count, &read_bytes,
                            &is_complete, status);
@@ -1011,12 +1014,6 @@ bool TabletIO::ReadCells(const RowReaderInfo& row_reader, RowResult* value_list,
         m_counter.read_size.Add(value_list->ByteSize());
     }
 
-    if (!is_complete) {
-        // buffer full
-        value_list->Clear();
-        SetStatusCode(kTableNotSupport, status);
-        return false;
-    }
     if (value_list->key_values_size() == 0) {
         SetStatusCode(kKeyNotExist, status);
         return false;
