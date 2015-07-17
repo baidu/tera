@@ -2736,6 +2736,10 @@ void MasterImpl::QueryTabletNodeCallback(std::string addr, QueryRequest* request
             << StatusCodeToString(state.m_report_status);
     }
 
+    if (0 == m_query_pending_count.Dec()) {
+        EnableQueryTabletNodeTimer();
+    }
+
     // if this is a gc query, process it
     if (request->is_gc_query()) {
         MutexLock lock(&m_gc_rw_mutex);
