@@ -765,11 +765,12 @@ inline bool TabletIO::LowLevelScan(const std::string& start_tera_key,
     return true;
 }
 
-// Get several columns from a
 bool TabletIO::LowLevelSeek(const std::string& row_key,
                             const ScanOptions& scan_options,
                             RowResult* value_list,
                             StatusCode* status) {
+    StatusCode s;
+    SetStatusCode(kTableOk, &s);
     value_list->clear_key_values();
 
     // create tera iterator
@@ -804,14 +805,18 @@ bool TabletIO::LowLevelSeek(const std::string& row_key,
         m_key_operator->ExtractTeraKey(it_data->key(), &cur_row_key,
                                        NULL, NULL, NULL, NULL);
         if (cur_row_key.ToString() > row_key) {
-            SetStatusCode(kKeyNotExist, status);
-            return true;
+            SetStatusCode(kKeyNotExist, &s);
         } else {
             compact_strategy->ScanDrop(it_data->key(), 0);
         }
     } else {
-        SetStatusCode(kKeyNotExist, status);
-        return true;
+        SetStatusCode(kKeyNotExist, &s);
+    }
+    if (s != kTableOk) {
+        delete compact_strategy;
+        delete it_data;
+        SetStatusCode(s, status);
+        return false;
     }
 
     ColumnFamilyMap::const_iterator it_cf =
@@ -840,8 +845,8 @@ bool TabletIO::LowLevelSeek(const std::string& row_key,
             }
         } else {
             VLOG(10) << "ll-seek fail, error iterator.";
-            SetStatusCode(kKeyNotExist, status);
-            return true;
+            SetStatusCode(kKeyNotExist, &s);
+            break;
         }
 
         if (qu_set.empty()) {
@@ -908,8 +913,12 @@ bool TabletIO::LowLevelSeek(const std::string& row_key,
     delete compact_strategy;
     delete it_data;
 
-    SetStatusCode(kTableOk, status);
-    return true;
+    SetStatusCode(s, status);
+    if (s == kTableOk) {
+        return true;
+    } else {
+        return false;
+    }
 }
 
 bool TabletIO::ReadCells(const RowReaderInfo& row_reader, RowResult* value_list,
