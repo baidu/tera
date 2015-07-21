@@ -30,6 +30,11 @@ public:
     /// 修改一个列
     void Put(const std::string& family, const std::string& qualifier,
              const std::string& value);
+
+    /// 修改一个列，value数据类型为int64
+    void Put(const std::string& family, const std::string& qualifier,
+             const int64_t value);
+
     /// 带TTL的修改一个列
     void Put(const std::string& family, const std::string& qualifier,
              const std::string& value, int32_t ttl);

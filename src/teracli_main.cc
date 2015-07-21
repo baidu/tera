@@ -304,6 +304,44 @@ void ParseCfQualifier(const std::string& input, std::string* columnfamily, std::
     }
 }
 
+int32_t PutInt64Op(Client* client, int32_t argc, char** argv, ErrorCode* err) {
+    if (argc != 5 && argc != 6) {
+        LOG(ERROR) << "args number error: " << argc << ", need 5 | 6.";
+        Usage(argv[0]);
+        return -1;
+    }
+
+    std::string tablename = argv[2];
+    Table* table = NULL;
+    if ((table = client->OpenTable(tablename, err)) == NULL) {
+        LOG(ERROR) << "fail to open table";
+        return -1;
+    }
+
+    std::string rowkey = argv[3];
+    std::string columnfamily = "";
+    std::string qualifier = "";
+    std::string value;
+    if (argc == 5) {
+        // use table as kv
+        value = argv[4];
+    } else if (argc == 6) {
+        ParseCfQualifier(argv[4], &columnfamily, &qualifier);
+        value = argv[5];
+    }
+    int64_t value_int;
+    if (!StringToNumber(value.c_str(), &value_int)) {
+       LOG(ERROR) << "invalid Integer number Got: " << value;
+       return -1;
+    }
+    if (!table->Put(rowkey, columnfamily, qualifier, value_int, err)) {
+        LOG(ERROR) << "fail to put record to table: " << tablename;
+        return -1;
+    }
+    delete table;
+    return 0;
+}
+
 int32_t PutCounterOp(Client* client, int32_t argc, char** argv, ErrorCode* err) {
     if (argc != 5 && argc != 6) {
         LOG(ERROR) << "args number error: " << argc << ", need 5 | 6.";
@@ -513,6 +551,40 @@ int32_t AddOp(Client* client, int32_t argc, char** argv, ErrorCode* err) {
         LOG(ERROR) << "fail to add record to table: " << tablename;
         return -1;
     }
+    delete table;
+    return 0;
+}
+
+int32_t GetInt64Op(Client* client, int32_t argc, char** argv, ErrorCode* err) {
+    if (argc != 4 && argc != 5) {
+        LOG(ERROR) << "args number error: " << argc << ", need 5 | 6.";
+        Usage(argv[0]);
+        return -1;
+    }
+
+    std::string tablename = argv[2];
+    Table* table = NULL;
+    if ((table = client->OpenTable(tablename, err)) == NULL) {
+        LOG(ERROR) << "fail to open table";
+        return -1;
+    }
+
+    std::string rowkey = argv[3];
+    std::string columnfamily = "";
+    std::string qualifier = "";
+    int64_t value;
+    if (argc == 4) {
+        // use table as kv
+    } else if (argc == 5) {
+        ParseCfQualifier(argv[4], &columnfamily, &qualifier);
+    }
+
+    if (!table->Get(rowkey, columnfamily, qualifier, &value, err)) {
+        LOG(ERROR) << "fail to get record from table: " << tablename;
+        return -1;
+    }
+
+    std::cout << value;
     delete table;
     return 0;
 }
@@ -1203,6 +1275,64 @@ int32_t BatchPutOp(Client* client, int32_t argc, char** argv, ErrorCode* err) {
     return 0;
 }
 
+int32_t BatchPutInt64Op(Client* client, int32_t argc, char** argv, ErrorCode* err) {
+    if (argc != 4) {
+        LOG(ERROR) << "args number error: " << argc << ", need 4.";
+        Usage(argv[0]);
+        return -1;
+    }
+
+    std::string tablename = argv[2];
+    std::string record_file = argv[3];
+    Table* table = NULL;
+    if ((table = client->OpenTable(tablename, err)) == NULL) {
+        LOG(ERROR) << "fail to open table";
+        return -1;
+    }
+    const int32_t buf_size = 1024 * 1024;
+    char buf[buf_size];
+    std::ifstream stream(record_file.c_str());
+
+    // input record format: rowkey columnfamily:qualifier value
+    // or: key:value
+    std::vector<std::string> input_v;
+    g_start_time = time(NULL);
+    while (stream.getline(buf, buf_size)) {
+        SplitString(buf, " ", &input_v);
+        if (input_v.size() != 3 && input_v.size() != 2) {
+            LOG(ERROR) << "input file format error, skip it: " << buf;
+            continue;
+        }
+        std::string& rowkey = input_v[0];
+        std::string family;
+        std::string qualifier;
+        std::string& value = input_v[input_v.size() - 1];
+        RowMutation* mutation = table->NewRowMutation(rowkey);
+        if (input_v.size() == 2) {
+            // for kv mode
+            std::cout << "BatchPutInt64 doesn't support kv mode" << std::endl;
+        } else {
+            // for table mode, put(family, qulifier, value)
+            std::istringstream ss(value);
+            int64_t value_int;
+            ss >> value_int;
+            ParseCfQualifier(input_v[1], &family, &qualifier);
+            mutation->Put(family, qualifier, value_int);
+        }
+        mutation->SetCallBack(BatchPutCallBack);
+        table->ApplyMutation(mutation);
+    }
+    while (!table->IsPutFinished()) {
+        usleep(100000);
+    }
+
+    g_end_time = time(NULL);
+    g_used_time = g_end_time-g_start_time;
+    LOG(INFO) << "Write done,write_key_num=" << g_key_num << " used_time=" << g_used_time <<std::endl;
+    delete table;
+    return 0;
+}
+
 void BatchGetCallBack(RowReader* reader) {
     while (!reader->Done()) {
         {
@@ -1316,6 +1446,136 @@ int32_t BatchGetOp(Client* client, int32_t argc, char** argv, ErrorCode* err) {
                 reader->SetSnapshot(snapshot);
             }
             reader->SetCallBack(BatchGetCallBack);
+            table->Get(reader);
+        }
+    }
+    while (!table->IsGetFinished()) {
+        // waiting async get finishing
+        usleep(100000);
+    }
+    g_end_time = time(NULL);
+    g_used_time = g_end_time-g_start_time;
+    LOG(INFO) << "Read done,write_key_num=" << g_key_num << " used_time=" << g_used_time <<std::endl;
+    delete table;
+    return 0;
+}
+
+void BatchGetInt64CallBack(RowReader* reader) {
+    while (!reader->Done()) {
+        {
+            // for performance testing
+            MutexLock locker(&g_stat_lock);
+            g_key_num ++;
+            g_total_size += reader->RowName().size()
+                + reader->ColumnName().size()
+                + sizeof(reader->Timestamp())
+                + reader->Value().size();
+            int32_t time_cur = time(NULL);
+            int32_t time_used = time_cur - g_start_time;
+            if (time_cur > g_last_time) {
+                g_last_time = time_cur;
+                LOG(INFO) << "Read file  "<<g_key_num<<" keys "<<g_key_num/(time_used?time_used:1)
+                    <<" keys/S "<<g_total_size/1024.0/1024/(time_used?time_used:1)<<" MB/S ";
+            }
+        }
+        uint64_t tmp_data = io::DecodeBigEndain(reader->Value().c_str());
+        int value_int = tmp_data - std::numeric_limits<int64_t>::max();
+        std::cout << reader->RowName() << ":"
+            << reader->ColumnName() << ":"
+            << reader->Timestamp() << ":"
+            << value_int << std::endl;
+        reader->Next();
+    }
+    delete reader;
+}
+
+int32_t BatchGetInt64Op(Client* client, int32_t argc, char** argv, ErrorCode* err) {
+    if (argc != 4 && argc != 5) {
+        LOG(ERROR) << "args number error: " << argc << ", need 4 | 5.";
+        Usage(argv[0]);
+        return -1;
+    }
+
+    uint64_t snapshot = 0;
+    if (argc == 5) {
+        std::stringstream is;
+        is << std::string(argv[4]);
+        is >> snapshot;
+    }
+
+    std::string tablename = argv[2];
+    std::string input_file = argv[3];
+    Table* table = NULL;
+    if ((table = client->OpenTable(tablename, err)) == NULL) {
+        LOG(ERROR) << "fail to open table";
+        return -1;
+    }
+    const int32_t buf_size = 1024 * 1024;
+    char buf[buf_size];
+    std::ifstream stream(input_file.c_str());
+
+    // input file format: rowkey [columnfamily|cf:qualifier]...
+    // std::cout << "rowkey:columnfamily:qualifier:timestamp:value" << std::endl;
+    std::vector<std::string> input_v;
+    while (stream.getline(buf, buf_size)) {
+        SplitString(buf, " ", &input_v);
+        if (input_v.size() <= 0) {
+            LOG(ERROR) << "input file format error: " << buf;
+            continue;
+        }
+        std::string& rowkey = input_v[0];
+        if (input_v.size() == 1) {
+            // only rowkey explicit, scan all records out
+            ScanDescriptor desc(rowkey);
+            ResultStream* result_stream;
+            desc.SetEnd(rowkey);
+            if ((result_stream = table->Scan(desc, err)) == NULL) {
+                LOG(ERROR) << "fail to get records from table: " << tablename;
+                return -1;
+            }
+
+            while (!result_stream->Done()) {
+                {
+                    // for performance testing
+                    MutexLock locker(&g_stat_lock);
+                    g_key_num ++;
+                    g_total_size += result_stream->RowName().size()
+                        + result_stream->ColumnName().size()
+                        + sizeof(result_stream->Timestamp())
+                        + result_stream->Value().size();
+                    int32_t time_cur = time(NULL);
+                    int32_t time_used = time_cur - g_start_time;
+                    if (time_cur > g_last_time) {
+                        g_last_time = time_cur;
+                        LOG(INFO) << "Read file  "<<g_key_num<<" keys "<<g_key_num/(time_used?time_used:1)
+                            <<" keys/S "<<g_total_size/1024.0/1024/(time_used?time_used:1)<<" MB/S ";
+                    }
+                }
+
+                uint64_t tmp_data = io::DecodeBigEndain(result_stream->Value().c_str());
+                int value_int = tmp_data - std::numeric_limits<int64_t>::max();
+                std::cout << result_stream->RowName() << ":"
+                    << result_stream->ColumnName() << ":"
+                    << result_stream->Timestamp() << ":"
+                    << value_int << std::endl;
+                result_stream->Next();
+            }
+        } else {
+            // get specific records with RowReader
+            RowReader* reader = table->NewRowReader(rowkey);
+            for (size_t i = 1; i < input_v.size(); ++i) {
+                std::string& cfqu = input_v[i];
+                std::string::size_type pos = cfqu.find(":", 0);
+                if (pos != std::string::npos) {
+                    // add column
+                    reader->AddColumn(cfqu.substr(0, pos), cfqu.substr(pos + 1));
+                } else {
+                    // add columnfamily
+                    reader->AddColumnFamily(cfqu);
+                }
+                reader->SetSnapshot(snapshot);
+            }
+            reader->SetCallBack(BatchGetInt64CallBack);
             table->Get(reader);
         }
     }
@@ -1807,6 +2067,8 @@ int main(int argc, char* argv[]) {
         ret = ShowTabletNodesOp(client, argc, argv, &error_code);
     } else if (cmd == "put") {
         ret = PutOp(client, argc, argv, &error_code);
+    } else if (cmd == "putint64") {
+        ret = PutInt64Op(client, argc, argv, &error_code);
     } else if (cmd == "put-ttl") {
         ret = PutTTLOp(client, argc, argv, &error_code);
     } else if (cmd == "put_counter") {
@@ -1819,14 +2081,20 @@ int main(int argc, char* argv[]) {
         ret = AppendOp(client, argc, argv, &error_code);
     } else if (cmd == "get") {
         ret = GetOp(client, argc, argv, &error_code);
+    } else if (cmd == "getint64") {
+        ret = GetInt64Op(client, argc, argv, &error_code);
     } else if (cmd == "get_counter") {
         ret = GetCounterOp(client, argc, argv, &error_code);
     } else if (cmd == "delete" || cmd == "delete1v") {
         ret = DeleteOp(client, argc, argv, &error_code);
     } else if (cmd == "batchput") {
         ret = BatchPutOp(client, argc, argv, &error_code);
+    } else if (cmd == "batchputint64") {
+        ret = BatchPutInt64Op(client, argc, argv, &error_code);
     } else if (cmd == "batchget") {
         ret = BatchGetOp(client, argc, argv, &error_code);
+    } else if (cmd == "batchgetint64") {
+        ret = BatchGetInt64Op(client, argc, argv, &error_code);
     } else if (cmd == "scan" || cmd == "scanallv") {
         ret = ScanOp(client, argc, argv, &error_code);
     } else if (cmd == "safemode") {

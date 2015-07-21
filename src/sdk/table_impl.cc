@@ -20,6 +20,7 @@
 #include "common/file/file_path.h"
 #include "common/file/recordio/record_io.h"
 
+#include "io/coding.h"
 #include "proto/kv_helper.h"
 #include "proto/proto_helper.h"
 #include "proto/tabletnode_client.h"
@@ -121,6 +122,16 @@ void TableImpl::ApplyMutation(const std::vector<RowMutation*>& row_mutations) {
         mu_list[i] = static_cast<RowMutationImpl*>(row_mutations[i]);
     }
     ApplyMutation(mu_list, true);
+}
+
+bool TableImpl::Put(const std::string& row_key, const std::string& family,
+                    const std::string& qualifier, const int64_t value,
+                    ErrorCode* err) {
+    char buffer[sizeof(int64_t)];
+    uint64_t data = std::numeric_limits<int64_t>::max() + value;
+    io::EncodeBigEndian(buffer, data);
+    std::string value_str(buffer, sizeof(int64_t));
+    return Put(row_key, family, qualifier, value_str, err);
 }
 
 bool TableImpl::Put(const std::string& row_key, const std::string& family,
@@ -227,6 +238,19 @@ void TableImpl::Get(const std::vector<RowReader*>& row_readers) {
         row_reader_list[i] = static_cast<RowReaderImpl*>(row_readers[i]);
     }
     ReadRows(row_reader_list, true);
+}
+
+bool TableImpl::Get(const std::string& row_key, const std::string& family,
+                    const std::string& qualifier, int64_t* value,
+                    ErrorCode* err) {
+    std::string value_str;
+    if (Get(row_key, family, qualifier, &value_str, err)
+        && value_str.size() >= sizeof(int64_t)) {
+        uint64_t tmp_data = io::DecodeBigEndain(value_str.c_str());
+        *value = tmp_data - std::numeric_limits<int64_t>::max();
+        return true;
+    }
+    return false;
 }
 
 bool TableImpl::Get(const std::string& row_key, const std::string& family,

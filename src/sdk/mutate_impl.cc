@@ -75,6 +75,16 @@ void RowMutationImpl::Put(const std::string& family, const std::string& qualifie
     Put(family, qualifier, kLatestTimestamp, value);
 }
 
+/// 修改一个列
+void RowMutationImpl::Put(const std::string& family, const std::string& qualifier,
+                          const int64_t value) {
+    char buffer[sizeof(int64_t)];
+    uint64_t data = std::numeric_limits<int64_t>::max() + value;
+    io::EncodeBigEndian(buffer, data);
+    std::string value_str(buffer, sizeof(int64_t));
+    Put(family, qualifier, value_str);
+}
+
 /// 带TTL修改一个列
 void RowMutationImpl::Put(const std::string& family, const std::string& qualifier,
                           const std::string& value, int32_t ttl) {
