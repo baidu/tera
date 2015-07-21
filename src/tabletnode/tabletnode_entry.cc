@@ -98,7 +98,8 @@ bool TabletNodeEntry::Run() {
 
     m_tabletnode_impl->RefreshSysInfo();
     m_tabletnode_impl->GetSysInfo().DumpLog();
-    LOG(INFO) << "[ThreadPool] " << m_remote_tabletnode->ProfilingLog();
+    LOG(INFO) << "[ThreadPool schd/task/cnt] "
+        << m_remote_tabletnode->ProfilingLog();
 
     int64_t now_time = get_micros();
     int64_t earliest_rpc_time = now_time;

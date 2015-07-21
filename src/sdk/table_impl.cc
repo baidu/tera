@@ -47,6 +47,7 @@ DECLARE_bool(tera_sdk_async_blocking_enabled);
 DECLARE_int32(tera_sdk_sync_wait_timeout);
 DECLARE_int32(tera_sdk_scan_buffer_limit);
 DECLARE_int32(tera_sdk_update_meta_concurrency);
+DECLARE_int32(tera_sdk_update_meta_buffer_limit);
 DECLARE_bool(tera_sdk_cookie_enabled);
 DECLARE_string(tera_sdk_cookie_path);
 DECLARE_int32(tera_sdk_cookie_update_interval);
@@ -1441,10 +1442,12 @@ void TableImpl::UpdateMetaAsync() {
     bool need_update = false;
     std::string update_start_key;
     std::string update_end_key;
+    std::string update_expand_end_key; // update more tablet than need
     std::map<std::string, TabletMetaNode>::iterator it = _tablet_meta_list.begin();
     for (; it != _tablet_meta_list.end(); ++it) {
         TabletMetaNode& node = it->second;
         if (node.status != WAIT_UPDATE && need_update) {
+            update_expand_end_key = node.meta.key_range().key_start();
             break;
         } else if (node.status != WAIT_UPDATE) {
             continue;
@@ -1456,6 +1459,7 @@ void TableImpl::UpdateMetaAsync() {
             update_end_key = node.meta.key_range().key_end();
         } else {
             CHECK_GT(node.meta.key_range().key_start(), update_end_key);
+            update_expand_end_key = node.meta.key_range().key_start();
             break;
         }
         node.status = UPDATING;
@@ -1464,28 +1468,29 @@ void TableImpl::UpdateMetaAsync() {
         return;
     }
     _meta_updating_count++;
-    ScanMetaTableAsync(update_start_key, update_end_key, false);
+    ScanMetaTableAsync(update_start_key, update_end_key, update_expand_end_key, false);
 }
 
 void TableImpl::ScanMetaTable(const std::string& key_start,
                               const std::string& key_end) {
     MutexLock lock(&_meta_mutex);
     _meta_updating_count++;
-    ScanMetaTableAsync(key_start, key_end, false);
+    ScanMetaTableAsync(key_start, key_end, key_end, false);
     while (_meta_updating_count > 0) {
         _meta_cond.Wait();
     }
 }
 
 void TableImpl::ScanMetaTableAsyncInLock(std::string key_start, std::string key_end,
-                                         bool zk_access) {
+                                         std::string expand_key_end, bool zk_access) {
     MutexLock lock(&_meta_mutex);
-    ScanMetaTableAsync(key_start, key_end, zk_access);
+    ScanMetaTableAsync(key_start, key_end, expand_key_end, zk_access);
 }
 
-void TableImpl::ScanMetaTableAsync(std::string key_start, std::string key_end,
-                                   bool zk_access) {
+void TableImpl::ScanMetaTableAsync(const std::string& key_start, const std::string& key_end,
+                                   const std::string& expand_key_end, bool zk_access) {
     _meta_mutex.AssertHeld();
+    CHECK(expand_key_end == "" || expand_key_end >= key_end);
 
     std::string meta_addr = _cluster->RootTableAddr(zk_access);
     if (meta_addr.empty() && !zk_access) {
@@ -1496,7 +1501,8 @@ void TableImpl::ScanMetaTableAsync(std::string key_start, std::string key_end,
         VLOG(6) << "root is empty";
 
         boost::function<void ()> retry_closure =
-            boost::bind(&TableImpl::ScanMetaTableAsyncInLock, this, key_start, key_end, true);
+            boost::bind(&TableImpl::ScanMetaTableAsyncInLock, this, key_start, key_end,
+                        expand_key_end, true);
         _thread_pool->DelayTask(FLAGS_tera_sdk_update_meta_internal, retry_closure);
         return;
     }
@@ -1507,19 +1513,20 @@ void TableImpl::ScanMetaTableAsync(std::string key_start, std::string key_end,
     ScanTabletResponse* response = new ScanTabletResponse;
     request->set_sequence_id(_last_sequence_id++);
     request->set_table_name(FLAGS_tera_master_meta_table_name);
-    MetaTableScanRange(_name, key_start, key_end,
+    MetaTableScanRange(_name, key_start, expand_key_end,
                        request->mutable_start(),
                        request->mutable_end());
-    request->set_buffer_limit(FLAGS_tera_sdk_scan_buffer_limit);
+    request->set_buffer_limit(FLAGS_tera_sdk_update_meta_buffer_limit);
     request->set_round_down(true);
 
     Closure<void, ScanTabletRequest*, ScanTabletResponse*, bool, int>* done =
-        NewClosure(this, &TableImpl::ScanMetaTableCallBack, key_start, key_end);
+        NewClosure(this, &TableImpl::ScanMetaTableCallBack, key_start, key_end, expand_key_end);
     tabletnode_client_async.ScanTablet(request, response, done);
 }
 
 void TableImpl::ScanMetaTableCallBack(std::string key_start,
                                       std::string key_end,
+                                      std::string expand_key_end,
                                       ScanTabletRequest* request,
                                       ScanTabletResponse* response,
                                       bool failed, int error_code) {
@@ -1550,19 +1557,18 @@ void TableImpl::ScanMetaTableCallBack(std::string key_start,
             GiveupUpdateTabletMeta(key_start, key_end);
         }
         boost::function<void ()> retry_closure =
-            boost::bind(&TableImpl::ScanMetaTableAsyncInLock, this, key_start, key_end, true);
+            boost::bind(&TableImpl::ScanMetaTableAsyncInLock, this, key_start, key_end,
+                        expand_key_end, true);
         _thread_pool->DelayTask(FLAGS_tera_sdk_update_meta_internal, retry_closure);
         delete request;
         delete response;
         return;
     }
 
-    std::string last_key;
     std::string return_start, return_end;
     const RowResult& scan_result = response->results();
     for (int32_t i = 0; i < scan_result.key_values_size(); i++) {
         const KeyValuePair& kv = scan_result.key_values(i);
-        last_key = kv.key();
 
         TabletMeta meta;
         ParseMetaTableKeyValue(kv.key(), kv.value(), &meta);
@@ -1579,17 +1585,16 @@ void TableImpl::ScanMetaTableCallBack(std::string key_start,
     }
     VLOG(10) << "scan meta table [" << request->start()
         << ", " << request->end() << "] success: return "
-        << scan_result.key_values_size() << " records";
+        << scan_result.key_values_size() << " records, is_complete: " << response->complete();
+    bool scan_meta_error = false;
     if (scan_result.key_values_size() == 0
         || return_start > key_start
-        || (!return_end.empty() && (key_end.empty() || return_end < key_end))) {
+        || (response->complete() && !return_end.empty() && (key_end.empty() || return_end < key_end))) {
         LOG(ERROR) << "scan meta table [" << key_start << ", " << key_end
             << "] return [" << return_start << ", " << return_end << "]";
         // TODO(lk): process omitted tablets
+        scan_meta_error = true;
     }
-
-    std::string end = request->end();
-    delete request;
 
     if (_options.sequential_write) {
         MutexLock l(&_seq_mutation_mutex);
@@ -1601,20 +1606,23 @@ void TableImpl::ScanMetaTableCallBack(std::string key_start,
         }
     }
 
-
     MutexLock lock(&_meta_mutex);
-    if (!response->complete()) {
-        ScanMetaTableAsync(last_key, end, false);
+    if (scan_meta_error) {
+        ScanMetaTableAsync(key_start, key_end, expand_key_end, false);
+    } else if (!return_end.empty() && (key_end.empty() || return_end < key_end)) {
+        CHECK(!response->complete());
+        ScanMetaTableAsync(return_end, key_end, expand_key_end, false);
     } else {
         _meta_updating_count--;
         _meta_cond.Signal();
         UpdateMetaAsync();
     }
+    delete request;
     delete response;
 }
 
 void TableImpl::GiveupUpdateTabletMeta(const std::string& key_start,
-        const std::string& key_end) {
+                                       const std::string& key_end) {
     std::map<std::string, std::list<SdkTask*> >::iterator ilist =
             _pending_task_list.lower_bound(key_start);
     while (ilist != _pending_task_list.end()) {
@@ -2370,4 +2378,22 @@ std::string TableImpl::PerfCounter::ToLog() {
     start_time = ts;
     return ss.str();
 }
+
+std::string CounterCoding::EncodeCounter(int64_t counter) {
+    char counter_buf[sizeof(int64_t)];
+    io::EncodeBigEndian(counter_buf, counter);
+    return std::string(counter_buf, sizeof(counter_buf));
+}
+
+bool CounterCoding::DecodeCounter(const std::string& buf,
+                                  int64_t* counter) {
+    assert(counter);
+    if (buf.size() != sizeof(int64_t)) {
+        *counter = 0;
+        return false;
+    }
+    *counter = io::DecodeBigEndainSign(buf.data());
+    return true;
+}
+
 } // namespace tera

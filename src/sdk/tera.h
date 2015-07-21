@@ -398,6 +398,16 @@ private:
     void operator=(const RowMutation&);
 };
 
+//用于解析原子计数器
+class CounterCoding {
+public:
+    //整数编码为字节buffer
+    static std::string EncodeCounter(int64_t counter);
+    //字节buffer解码为整数
+    static bool DecodeCounter(const std::string& buf,
+                              int64_t* counter);
+};
+
 class RowReaderImpl;
 /// 读取操作
 class RowReader {
