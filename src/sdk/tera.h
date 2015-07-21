@@ -288,7 +288,8 @@ public:
         kDeleteRow,
         kAdd,
         kPutIfAbsent,
-        kAppend
+        kAppend,
+        kAddInt64
     };
     struct Mutation {
         Type type;
@@ -308,15 +309,18 @@ public:
 
     /// 修改指定列
     virtual void Put(const std::string& family, const std::string& qualifier,
-                     const std::string& value) = 0;
-	/// 修改指定列
-    virtual void Put(const std::string& family, const std::string& qualifier,
                      const int64_t value) = 0;
+    /// 修改指定列
+    virtual void Put(const std::string& family, const std::string& qualifier,
+                     const std::string& value) = 0;
     /// 带TTL的修改一个列
     virtual void Put(const std::string& family, const std::string& qualifier,
                      const std::string& value, int32_t ttl) = 0;
     // 原子加一个Cell
     virtual void Add(const std::string& family, const std::string& qualifier,
+                     const int64_t delta) = 0;
+    // 原子加一个Cell
+    virtual void AddInt64(const std::string& family, const std::string& qualifier,
                      const int64_t delta) = 0;
 
     // 原子操作：如果不存在才能Put成功
@@ -336,6 +340,8 @@ public:
                      int64_t timestamp, const std::string& value, int32_t ttl) = 0;
     /// 修改默认列
     virtual void Put(const std::string& value) = 0;
+    /// 修改默认列
+    virtual void Put(const int64_t value) = 0;
 
     /// 带TTL的修改默认列
     virtual void Put(const std::string& value, int32_t ttl) = 0;
@@ -523,6 +529,10 @@ public:
                      int64_t timestamp, int32_t ttl, ErrorCode* err) = 0;
     /// 原子加一个Cell
     virtual bool Add(const std::string& row_key, const std::string& family,
+                     const std::string& qualifier, int64_t delta,
+                     ErrorCode* err) = 0;
+    /// 原子加一个Cell
+    virtual bool AddInt64(const std::string& row_key, const std::string& family,
                      const std::string& qualifier, int64_t delta,
                      ErrorCode* err) = 0;
 

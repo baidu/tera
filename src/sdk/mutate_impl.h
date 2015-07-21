@@ -31,7 +31,7 @@ public:
     void Put(const std::string& family, const std::string& qualifier,
              const std::string& value);
 
-    /// 修改一个列，value数据类型为int64
+    /// 修改一个列
     void Put(const std::string& family, const std::string& qualifier,
              const int64_t value);
 
@@ -49,6 +49,8 @@ public:
 
     /// 修改默认列
     void Put(const std::string& value);
+    /// 修改默认列
+    void Put(const int64_t value);
 
     /// 带TTL的修改默认列
     virtual void Put(const std::string& value, int32_t ttl);
@@ -58,6 +60,8 @@ public:
 
     /// 原子加一个Cell
     void Add(const std::string& family, const std::string& qualifier, const int64_t delta);
+    /// 原子加一个Cell
+    void AddInt64(const std::string& family, const std::string& qualifier, const int64_t delta);
 
     //  原子操作：如果不存在才能Put成功
     void PutIfAbsent(const std::string& family, const std::string& qualifier,

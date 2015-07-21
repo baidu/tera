@@ -36,6 +36,18 @@ void RowMutationImpl::Reset(const std::string& row_key) {
 }
 
 // 原子加一个Cell
+void RowMutationImpl::AddInt64(const std::string& family, const std::string& qualifier,
+                          const int64_t delta) {
+    std::string delta_str((char*)&delta, sizeof(int64_t));
+    RowMutation::Mutation& mutation = AddMutation();
+    mutation.type = RowMutation::kAddInt64;
+    mutation.family = family;
+    mutation.qualifier = qualifier;
+    mutation.timestamp = get_micros(); // 为了避免retry引起的重复加，所以自带时间戳
+    mutation.value.assign(delta_str);
+}
+
+// 原子加一个Cell
 void RowMutationImpl::Add(const std::string& family, const std::string& qualifier,
                           const int64_t delta) {
     char delta_buf[sizeof(int64_t)];
@@ -78,10 +90,7 @@ void RowMutationImpl::Put(const std::string& family, const std::string& qualifie
 /// 修改一个列
 void RowMutationImpl::Put(const std::string& family, const std::string& qualifier,
                           const int64_t value) {
-    char buffer[sizeof(int64_t)];
-    uint64_t data = std::numeric_limits<int64_t>::max() + value;
-    io::EncodeBigEndian(buffer, data);
-    std::string value_str(buffer, sizeof(int64_t));
+    std::string value_str((char*)&value, sizeof(int64_t));
     Put(family, qualifier, value_str);
 }
 
@@ -131,6 +140,12 @@ void RowMutationImpl::Put(const std::string& family, const std::string& qualifie
 /// 修改默认列
 void RowMutationImpl::Put(const std::string& value) {
     Put("", "", kLatestTimestamp, value);
+}
+
+/// 修改默认列
+void RowMutationImpl::Put(const int64_t value) {
+    std::string value_str((char*)&value, sizeof(int64_t));
+    Put(value_str);
 }
 
 /// 带TTL的修改默认列
@@ -396,6 +411,13 @@ void SerializeMutation(const RowMutation::Mutation& src, tera::Mutation* dst) {
             break;
         case RowMutation::kAdd:
             dst->set_type(tera::kAdd);
+            dst->set_family(src.family);
+            dst->set_qualifier(src.qualifier);
+            dst->set_timestamp(src.timestamp);
+            dst->set_value(src.value);
+            break;
+        case RowMutation::kAddInt64:
+            dst->set_type(tera::kAddInt64);
             dst->set_family(src.family);
             dst->set_qualifier(src.qualifier);
             dst->set_timestamp(src.timestamp);

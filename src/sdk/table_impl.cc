@@ -128,10 +128,7 @@ void TableImpl::ApplyMutation(const std::vector<RowMutation*>& row_mutations) {
 bool TableImpl::Put(const std::string& row_key, const std::string& family,
                     const std::string& qualifier, const int64_t value,
                     ErrorCode* err) {
-    char buffer[sizeof(int64_t)];
-    uint64_t data = std::numeric_limits<int64_t>::max() + value;
-    io::EncodeBigEndian(buffer, data);
-    std::string value_str(buffer, sizeof(int64_t));
+    std::string value_str((char*)&value, sizeof(int64_t));
     return Put(row_key, family, qualifier, value_str, err);
 }
 
@@ -184,6 +181,14 @@ bool TableImpl::Add(const std::string& row_key, const std::string& family,
     return (err->GetType() == ErrorCode::kOK ? true : false);
 }
 
+bool TableImpl::AddInt64(const std::string& row_key, const std::string& family,
+                    const std::string& qualifier, int64_t delta, ErrorCode* err) {
+    RowMutation* row_mu = NewRowMutation(row_key);
+    row_mu->AddInt64(family, qualifier, delta);
+    ApplyMutation(row_mu);
+    *err = row_mu->GetError();
+    return (err->GetType() == ErrorCode::kOK ? true : false);
+}
 
 bool TableImpl::PutIfAbsent(const std::string& row_key, const std::string& family,
                             const std::string& qualifier, const std::string& value,
@@ -246,9 +251,8 @@ bool TableImpl::Get(const std::string& row_key, const std::string& family,
                     ErrorCode* err) {
     std::string value_str;
     if (Get(row_key, family, qualifier, &value_str, err)
-        && value_str.size() >= sizeof(int64_t)) {
-        uint64_t tmp_data = io::DecodeBigEndain(value_str.c_str());
-        *value = tmp_data - std::numeric_limits<int64_t>::max();
+        && value_str.size() == sizeof(int64_t)) {
+        *value = *(int64_t*)value_str.c_str();
         return true;
     }
     return false;

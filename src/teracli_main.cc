@@ -104,12 +104,20 @@ void Usage(const std::string& prg_name) {
                 delete row/columnfamily/qualifiers.                         \n\
                 (only delete latest version when using suffix \"1v\")       \n\
                                                                             \n\
-       put_counter <tablename> <rowkey> [<columnfamily:qualifier>] <integer>\n\
+       put_counter <tablename> <rowkey> [<columnfamily:qualifier>] <integer(int64_t)>   \n\
                                                                             \n\
        get_counter <tablename> <rowkey> [<columnfamily:qualifier>]          \n\
                                                                             \n\
        add      <tablename> <rowkey> <columnfamily:qualifier>   delta       \n\
                 add 'delta'(int64_t) to specified cell                      \n\
+                                                                            \n\
+       putint64 <tablename> <rowkey> [<columnfamily:qualifier>] <integer(int64_t)>       \n\
+                                                                            \n\
+       getint64 <tablename> <rowkey> [<columnfamily:qualifier>]             \n\
+                                                                            \n\
+       addint64 <tablename> <rowkey> <columnfamily:qualifier>  delta        \n\
+                add 'delta'(int64_t) to specified cell                      \n\
+                                                                            \n\
        append   <tablename> <rowkey> [<columnfamily:qualifier>] <value>     \n\
                                                                             \n\
        batchput <tablename> <input file>                                    \n\
@@ -578,6 +586,44 @@ int32_t AddOp(Client* client, int32_t argc, char** argv, ErrorCode* err) {
     return 0;
 }
 
+int32_t AddInt64Op(Client* client, int32_t argc, char** argv, ErrorCode* err) {
+    if (argc != 5 && argc != 6) {
+        LOG(ERROR)<< "args number error: " << argc << ", need 5 | 6.";
+        Usage(argv[0]);
+        return -1;
+    }
+
+    std::string tablename = argv[2];
+    Table* table = NULL;
+    if ((table = client->OpenTable(tablename, err)) == NULL) {
+        LOG(ERROR) << "fail to open table";
+        return -1;
+    }
+
+    std::string rowkey = argv[3];
+    std::string columnfamily = "";
+    std::string qualifier = "";
+    std::string value;
+    if (argc == 5) {
+        // use table as kv
+        value = argv[4];
+    } else if (argc == 6) {
+        ParseCfQualifier(argv[4], &columnfamily, &qualifier);
+        value = argv[5];
+    }
+    int64_t delta;
+    if (!StringToNumber(value.c_str(), &delta)) {
+        LOG(ERROR) << "invalid Integer number Got: " << value;
+        return -1;
+    }
+    if (!table->AddInt64(rowkey, columnfamily, qualifier, delta, err)) {
+        LOG(ERROR) << "fail to add record to table: " << tablename;
+        return -1;
+    }
+    delete table;
+    return 0;
+}
+
 int32_t GetInt64Op(Client* client, int32_t argc, char** argv, ErrorCode* err) {
     if (argc != 4 && argc != 5) {
         LOG(ERROR) << "args number error: " << argc << ", need 5 | 6.";
@@ -607,7 +653,7 @@ int32_t GetInt64Op(Client* client, int32_t argc, char** argv, ErrorCode* err) {
         return -1;
     }
 
-    std::cout << value;
+    std::cout << value << std::endl;
     delete table;
     return 0;
 }
@@ -1337,14 +1383,16 @@ int32_t BatchPutInt64Op(Client* client, int32_t argc, char** argv, ErrorCode* er
         std::string qualifier;
         std::string& value = input_v[input_v.size() - 1];
         RowMutation* mutation = table->NewRowMutation(rowkey);
+        int64_t value_int;
+        if (!StringToNumber(value.c_str(), &value_int)) {
+           LOG(ERROR) << "invalid Integer number Got: " << value;
+           return -1;
+        }
         if (input_v.size() == 2) {
             // for kv mode
-            std::cout << "BatchPutInt64 doesn't support kv mode" << std::endl;
+            mutation->Put(value_int);
         } else {
             // for table mode, put(family, qulifier, value)
-            std::istringstream ss(value);
-            int64_t value_int;
-            ss >> value_int;
             ParseCfQualifier(input_v[1], &family, &qualifier);
             mutation->Put(family, qualifier, value_int);
         }
@@ -1508,7 +1556,7 @@ void BatchGetInt64CallBack(RowReader* reader) {
             }
         }
         uint64_t tmp_data = io::DecodeBigEndain(reader->Value().c_str());
-        int value_int = tmp_data - std::numeric_limits<int64_t>::max();
+        int64_t value_int = tmp_data - std::numeric_limits<int64_t>::max();
         std::cout << reader->RowName() << ":"
             << reader->ColumnName() << ":"
             << reader->Timestamp() << ":"
@@ -2172,6 +2220,8 @@ int main(int argc, char* argv[]) {
         ret = PutCounterOp(client, argc, argv, &error_code);
     } else if (cmd == "add") {
         ret = AddOp(client, argc, argv, &error_code);
+    } else if (cmd == "addint64") {
+        ret = AddInt64Op(client, argc, argv, &error_code);
     } else if (cmd == "putif") {
         ret = PutIfAbsentOp(client, argc, argv, &error_code);
     } else if (cmd == "append") {

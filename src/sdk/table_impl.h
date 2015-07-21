@@ -117,6 +117,11 @@ public:
                      const std::string& qualifier,
                      int64_t delta,
                      ErrorCode* err);
+    virtual bool AddInt64(const std::string& row_key,
+                     const std::string& family,
+                     const std::string& qualifier,
+                     int64_t delta,
+                     ErrorCode* err);
 
     virtual bool PutIfAbsent(const std::string& row_key,
                              const std::string& family,
