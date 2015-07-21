@@ -1108,13 +1108,14 @@ Status DBImpl::DoCompactionWork(CompactionState* compact) {
         last_sequence_for_key = kMaxSequenceNumber;
       }
 
+      bool is_base_level = compact->compaction->IsBaseLevelForKey(ikey.user_key);
       if (last_sequence_for_key <= compact->smallest_snapshot) {
         // Hidden by an newer entry for same user key
         drop = true;    // (A)
       } else if (ikey.type == kTypeDeletion &&
                  ikey.sequence <= compact->smallest_snapshot &&
                  options_.drop_base_level_del_in_compaction &&
-                 compact->compaction->IsBaseLevelForKey(ikey.user_key)) {
+                 is_base_level) {
         // For this user key:
         // (1) there is no data in higher levels
         // (2) data in lower levels will have larger sequence numbers
@@ -1126,7 +1127,7 @@ Status DBImpl::DoCompactionWork(CompactionState* compact) {
       } else if (!UserKeyInRange(ikey.user_key)) {
         drop = true;
       } else if (compact_strategy) {
-        drop = compact_strategy->Drop(ikey.user_key, ikey.sequence);
+        drop = compact_strategy->Drop(ikey.user_key, ikey.sequence, is_base_level);
       }
 
       last_sequence_for_key = ikey.sequence;

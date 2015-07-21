@@ -17,7 +17,7 @@ public:
     KvCompactStrategy(const TableSchema& schema);
     virtual ~KvCompactStrategy();
 
-    virtual bool Drop(const leveldb::Slice& k, uint64_t n);
+    virtual bool Drop(const leveldb::Slice& k, uint64_t n, bool is_base_level);
 
     // tera-specific, based on all-level iterators.
     // used in LowLevelScan
