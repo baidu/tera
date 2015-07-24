@@ -27,7 +27,11 @@ public:
           work_cv_(&mutex_),
           stop_(false),
           last_task_id_(0),
-          running_task_id_(0) {
+          running_task_id_(0),
+          schedule_cost_sum_(0),
+          schedule_count_(0),
+          task_cost_sum_(0),
+          task_count_(0) {
         Start();
     }
     ~ThreadPool() {
@@ -132,6 +136,10 @@ public:
         return pending_num_;
     }
 
+    // log format: 3 numbers seperated by " ", e.g. "15 24 32"
+    // 1st: thread pool schedule average cost (ms)
+    // 2nd: user task average cost (ms)
+    // 3rd: total task count since last ProfilingLog called
     std::string ProfilingLog() {
         int64_t schedule_cost_sum;
         int64_t schedule_count;
@@ -149,11 +157,8 @@ public:
             task_count_ = 0;
         }
         std::stringstream ss;
-        ss << "schd "
-            << (schedule_count == 0 ? 0 : schedule_cost_sum / schedule_count / 1000)
-            << " " << schedule_count
-            << " task "
-            << (task_count == 0 ? 0 : task_cost_sum / task_count / 1000)
+        ss << (schedule_count == 0 ? 0 : schedule_cost_sum / schedule_count / 1000)
+            << " " << (task_count == 0 ? 0 : task_cost_sum / task_count / 1000)
             << " " << task_count;
         return ss.str();
     }
@@ -205,17 +210,16 @@ private:
             }
             // Normal task;
             if (!queue_.empty()) {
-                int64_t exe_time, start_time, finish_time;
                 task = queue_.front().task;
-                exe_time = queue_.front().exe_time;
+                int64_t exe_time = queue_.front().exe_time;
                 queue_.pop_front();
                 --pending_num_;
-                start_time = timer::get_micros();
+                int64_t start_time = timer::get_micros();
                 schedule_cost_sum_ += start_time - exe_time;
                 schedule_count_++;
                 mutex_.Unlock();
                 task();
-                finish_time = timer::get_micros();
+                int64_t finish_time = timer::get_micros();
                 task_cost_sum_ += finish_time - start_time;
                 task_count_++;
                 mutex_.Lock("ThreadProcRelock2");

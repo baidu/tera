@@ -293,13 +293,15 @@ private:
 
     void UpdateMetaAsync();
 
-    void ScanMetaTableAsync(std::string key_start, std::string key_end, bool zk_access);
+    void ScanMetaTableAsync(const std::string& key_start, const std::string& key_end,
+                            const std::string& expand_key_end, bool zk_access);
 
     void ScanMetaTableAsyncInLock(std::string key_start, std::string key_end,
-                                  bool zk_access);
+                                  std::string expand_key_end, bool zk_access);
 
     void ScanMetaTableCallBack(std::string key_start,
                                std::string key_end,
+                               std::string expand_key_end,
                                ScanTabletRequest* request,
                                ScanTabletResponse* response,
                                bool failed, int error_code);

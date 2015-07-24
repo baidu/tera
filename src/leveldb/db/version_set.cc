@@ -1362,17 +1362,17 @@ Status VersionSet::Recover() {
     }
     delete files[i];
     if (s.ok()) {
-        Version* v = new Version(this);
-        builder.SaveTo(v);
-        Finalize(v);
-        AppendVersion(v);
-        Log(options_->info_log, "[%s] recover manifest finish: %s\n",
-            dbname_.c_str(), dscname[i].c_str());
+      Version* v = new Version(this);
+      builder.SaveTo(v);
+      Finalize(v);
+      AppendVersion(v);
+      Log(options_->info_log, "[%s] recover manifest finish: %s\n",
+          dbname_.c_str(), dscname[i].c_str());
     } else {
-        Log(options_->info_log, "[%s] recover manifest fail %s, %s\n",
-            dbname_.c_str(), dscname[i].c_str(), s.ToString().c_str());
-        ArchiveFile(env_, dscname[i]);
-        return Status::Corruption("recover manifest fail");
+      Log(options_->info_log, "[%s] recover manifest fail %s, %s\n",
+          dbname_.c_str(), dscname[i].c_str(), s.ToString().c_str());
+      ArchiveFile(env_, dscname[i]);
+      return Status::Corruption("recover manifest fail");
     }
   }
 

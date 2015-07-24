@@ -107,6 +107,7 @@ MasterImpl::MasterImpl()
       m_thread_pool(new ThreadPool(FLAGS_tera_master_impl_thread_max_num)),
       m_is_stat_table(false),
       m_stat_table(NULL),
+      m_gc_timer_id(kInvalidTimerId),
       m_gc_query_enable(false) {
     if (FLAGS_tera_master_cache_check_enabled) {
         EnableReleaseCacheTimer();
@@ -2690,6 +2691,10 @@ void MasterImpl::QueryTabletNodeCallback(std::string addr, QueryRequest* request
             << StatusCodeToString(state.m_report_status);
     }
 
+    if (0 == m_query_pending_count.Dec()) {
+        EnableQueryTabletNodeTimer();
+    }
+
     // if this is a gc query, process it
     if (request->is_gc_query()) {
         MutexLock lock(&m_gc_rw_mutex);
@@ -2714,10 +2719,6 @@ void MasterImpl::QueryTabletNodeCallback(std::string addr, QueryRequest* request
     }
     delete request;
     delete response;
-
-    if (0 == m_query_pending_count.Dec()) {
-        EnableQueryTabletNodeTimer();
-    }
 }
 
 void MasterImpl::CollectTabletInfoCallback(std::string addr,

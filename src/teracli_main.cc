@@ -130,6 +130,30 @@ void Usage(const std::string& prg_name) {
        version\n\n";
 }
 
+void UsageMore(const std::string& prg_name) {
+    std::cout << "\nSYNOPSIS\n";
+    std::cout << "       " << prg_name << "  OPERATION  [OPTION...] \n\n";
+    std::cout << "DESCRIPTION \n\
+       tablet   <operation> <params>                                        \n\
+           - operation                                                      \n\
+                move    <tablet_path> <target_addr>                         \n\
+                        move a tablet to target tabletnode                  \n\
+                compact <tablet_path>                                       \n\
+                split   <tablet_path>                                       \n\
+                                                                            \n\
+       safemode [get|enter|leave]                                           \n\
+                                                                            \n\
+       meta     [backup]                                                    \n\
+                backup metatable in master memory                           \n\
+                                                                            \n\
+       meta2    [check|bak|show|repair]                                     \n\
+                operate meta table.                                         \n\
+                                                                            \n\
+       findts   <tablename> <rowkey>                                        \n\
+                find the specify tabletnode serving 'rowkey'.               \n\
+                                                                            \n\
+       version\n\n";
+}
 int32_t CreateOp(Client* client, int32_t argc, char** argv, ErrorCode* err) {
     if (argc < 2) {
         Usage(argv[0]);
@@ -334,9 +358,8 @@ int32_t PutCounterOp(Client* client, int32_t argc, char** argv, ErrorCode* err) 
        LOG(ERROR) << "invalid Integer number Got: " << value;
        return -1;
     }
-    char counter_buf[sizeof(int64_t)];
-    io::EncodeBigEndian(counter_buf,counter);
-    std::string s_counter(counter_buf,sizeof(counter_buf));
+
+    std::string s_counter = tera::CounterCoding::EncodeCounter(counter);
     if (!table->Put(rowkey, columnfamily, qualifier, s_counter, err)) {
         LOG(ERROR) << "fail to put record to table: " << tablename;
         return -1;
@@ -580,7 +603,13 @@ int32_t GetCounterOp(Client* client, int32_t argc, char** argv, ErrorCode* err) 
         return -1;
     }
 
-    std::cout << io::DecodeBigEndainSign(value.c_str());
+    int64_t counter = 0;
+    bool ret = tera::CounterCoding::DecodeCounter(value, &counter);
+    if (!ret) {
+        LOG(ERROR) << "invalid counter read, fail to parse";
+    } else {
+        std::cout << counter << std::endl;
+    }
     delete table;
     return 0;
 }
@@ -1377,13 +1406,13 @@ int32_t SnapshotOp(Client* client, int32_t argc, char** argv, ErrorCode* err) {
 
 int32_t SafeModeOp(Client* client, int32_t argc, char** argv, ErrorCode* err) {
     if (argc < 3) {
-        Usage(argv[0]);
+        UsageMore(argv[0]);
         return -1;
     }
 
     std::string op = argv[2];
     if (op != "get" && op != "leave" && op != "enter") {
-        Usage(argv[0]);
+        UsageMore(argv[0]);
         return -1;
     }
 
@@ -1407,15 +1436,83 @@ int32_t SafeModeOp(Client* client, int32_t argc, char** argv, ErrorCode* err) {
     return 0;
 }
 
+int32_t CompactTabletOp(Client* client, int32_t argc, char** argv, ErrorCode* err) {
+    if (argc != 4) {
+        UsageMore(argv[0]);
+        return -1;
+    }
+
+    std::string tablet_path = argv[3];
+    std::string::size_type pos = tablet_path.find('/');
+    if (pos == std::string::npos) {
+        LOG(ERROR) << "tablet path error, format [tablename/tabletname]: " << tablet_path;
+        return -1;
+    }
+    std::string tablename = tablet_path.substr(0, pos);
+    std::string tabletname = tablet_path.substr(pos + 1);
+
+    std::vector<TabletInfo> tablet_list;
+    if (!client->GetTabletLocation(tablename, &tablet_list, err)) {
+        LOG(ERROR) << "fail to list tablet info";
+        return -1;
+    }
+
+    std::vector<TabletInfo>::iterator tablet_it = tablet_list.begin();
+    for (; tablet_it != tablet_list.end(); ++tablet_it) {
+        if (tablet_it->path == tablet_path) {
+            break;
+        }
+    }
+    if (tablet_it == tablet_list.end()) {
+        LOG(ERROR) << "fail to find tablet: " << tablet_path;
+        return -1;
+    }
+
+    CompactTabletRequest request;
+    CompactTabletResponse response;
+    request.set_sequence_id(0);
+    request.set_tablet_name(tablet_it->table_name);
+    request.mutable_key_range()->set_key_start(tablet_it->start_key);
+    request.mutable_key_range()->set_key_end(tablet_it->end_key);
+    tabletnode::TabletNodeClient tabletnode_client(tablet_it->server_addr, 3600000);
+
+    std::cerr << "try compact tablet: " << tablet_it->path
+        << " on " << tabletnode_client.GetConnectAddr() << std::endl;
+    if (!tabletnode_client.CompactTablet(&request, &response)) {
+        LOG(ERROR) << "no response from [" << tabletnode_client.GetConnectAddr()
+            << "]";
+        return -1;
+    }
+
+    if (response.status() != kTabletNodeOk) {
+        LOG(ERROR) << "fail to compact table, status: "
+            << StatusCodeToString(response.status());
+        return -1;
+    }
+
+    if (response.compact_status() != kTableCompacted) {
+        LOG(ERROR) << "fail to compact table, status: "
+            << StatusCodeToString(response.compact_status());
+        return -1;
+    }
+
+    std::cerr << "compact tablet success, data size: "
+        << response.compact_size() << std::endl;
+    return 0;
+}
+
 int32_t TabletOp(Client* client, int32_t argc, char** argv, ErrorCode* err) {
     if (argc != 4 && argc != 5) {
-        Usage(argv[0]);
+        UsageMore(argv[0]);
         return -1;
     }
 
     std::string op = argv[2];
-    if (op != "move" && op != "split") {
-        Usage(argv[0]);
+
+    if (op == "compact") {
+        return CompactTabletOp(client, argc, argv, err);
+    } else if (op != "move" && op != "split") {
+        UsageMore(argv[0]);
         return -1;
     }
 
@@ -1440,13 +1537,13 @@ int32_t TabletOp(Client* client, int32_t argc, char** argv, ErrorCode* err) {
 
 int32_t MetaOp(Client* client, int32_t argc, char** argv, ErrorCode* err) {
     if (argc != 4 && argc != 5) {
-        Usage(argv[0]);
+        UsageMore(argv[0]);
         return -1;
     }
 
     std::string op = argv[2];
     if (op != "backup") {
-        Usage(argv[0]);
+        UsageMore(argv[0]);
         return -1;
     }
 
@@ -1466,7 +1563,7 @@ int32_t MetaOp(Client* client, int32_t argc, char** argv, ErrorCode* err) {
 
 int32_t CompactOp(int32_t argc, char** argv) {
     if (argc != 6) {
-        Usage(argv[0]);
+        UsageMore(argv[0]);
         return -1;
     }
 
@@ -1503,7 +1600,7 @@ int32_t CompactOp(int32_t argc, char** argv) {
 
 int32_t FindTsOp(Client* client, int32_t argc, char** argv, ErrorCode* err) {
     if (argc != 4) {
-        Usage(argv[0]);
+        UsageMore(argv[0]);
         return -1;
     }
 
@@ -1553,13 +1650,13 @@ void WriteTablet(const TabletMeta& meta, std::ofstream& ofs) {
 
 int32_t Meta2Op(Client *client, int32_t argc, char** argv) {
     if (argc < 3) {
-        Usage(argv[0]);
+        UsageMore(argv[0]);
         return -1;
     }
 
     std::string op = argv[2];
     if (op != "check" && op != "show" && op != "bak" && op != "repair") {
-        Usage(argv[0]);
+        UsageMore(argv[0]);
         return -1;
     }
 
@@ -1846,6 +1943,10 @@ int main(int argc, char* argv[]) {
         PrintSystemVersion();
     } else if (cmd == "snapshot") {
         ret = SnapshotOp(client, argc, argv, &error_code);
+    } else if (cmd == "help") {
+        Usage(argv[0]);
+    } else if (cmd == "helpmore") {
+        UsageMore(argv[0]);
     } else {
         Usage(argv[0]);
     }
