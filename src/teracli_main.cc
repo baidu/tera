@@ -179,6 +179,18 @@ int32_t CreateOp(Client* client, int32_t argc, char** argv, ErrorCode* err) {
         while (fin >> str) {
             delimiters.push_back(str);
         }
+        bool is_delim_error = false;
+        for (size_t i = 1; i < delimiters.size() - 1; i++) {
+            if (delimiters[i] <= delimiters[i-1]) {
+                LOG(ERROR) << "delimiter error: line: " << i + 1
+                    << ", [" << delimiters[i] << "]";
+                is_delim_error = true;
+            }
+        }
+        if (is_delim_error) {
+            LOG(ERROR) << "create table fail, delimiter error.";
+            return -1;
+        }
     } else if (argc > 4) {
         LOG(ERROR) << "too many args: " << argc;
         return -1;
