@@ -300,7 +300,7 @@ Iterator* Table::BlockReader(void* arg,
 
   Iterator* iter;
   if (block != NULL) {
-    iter = block->NewIterator(table->rep_->options.comparator);
+    iter = block->NewIterator(options.db_opt->comparator);
     if (cache_handle == NULL) {
       iter->RegisterCleanup(&DeleteBlock, block, NULL);
     } else {
@@ -314,7 +314,7 @@ Iterator* Table::BlockReader(void* arg,
 
 Iterator* Table::NewIterator(const ReadOptions& options) const {
   return NewTwoLevelIterator(
-      rep_->index_block->NewIterator(rep_->options.comparator),
+      rep_->index_block->NewIterator(options.db_opt->comparator),
       &Table::BlockReader, const_cast<Table*>(this), options);
 }
 
@@ -323,16 +323,16 @@ Iterator* Table::NewIterator(const ReadOptions& options,
                              const Slice& largest) const {
   return new TableIter(
       NewTwoLevelIterator(
-          rep_->index_block->NewIterator(rep_->options.comparator),
+          rep_->index_block->NewIterator(options.db_opt->comparator),
           &Table::BlockReader, const_cast<Table*>(this), options),
-      rep_->options.comparator, smallest, largest);
+      options.db_opt->comparator, smallest, largest);
 }
 
 Status Table::InternalGet(const ReadOptions& options, const Slice& k,
                           void* arg,
                           void (*saver)(void*, const Slice&, const Slice&)) {
   Status s;
-  Iterator* iiter = rep_->index_block->NewIterator(rep_->options.comparator);
+  Iterator* iiter = rep_->index_block->NewIterator(options.db_opt->comparator);
   iiter->Seek(k);
   if (iiter->Valid()) {
     Slice handle_value = iiter->value();

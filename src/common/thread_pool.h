@@ -27,7 +27,11 @@ public:
           work_cv_(&mutex_),
           stop_(false),
           last_task_id_(0),
-          running_task_id_(0) {
+          running_task_id_(0),
+          schedule_cost_sum_(0),
+          schedule_count_(0),
+          task_cost_sum_(0),
+          task_count_(0) {
         Start();
     }
     ~ThreadPool() {
