@@ -230,11 +230,11 @@ class NoOpLogger : public Logger {
   virtual void Logv(const char* format, va_list ap) { }
 };
 
-class InMemoryEnv : public EnvWrapper {
+class MemoryEnv : public EnvWrapper {
  public:
-  explicit InMemoryEnv(Env* base_env) : EnvWrapper(base_env) { }
+  explicit MemoryEnv(Env* base_env) : EnvWrapper(base_env) { }
 
-  virtual ~InMemoryEnv() {
+  virtual ~MemoryEnv() {
     for (FileSystem::iterator i = file_map_.begin(); i != file_map_.end(); ++i){
       i->second->Unref();
     }
@@ -384,7 +384,7 @@ class InMemoryEnv : public EnvWrapper {
 }  // namespace
 
 Env* NewMemEnv(Env* base_env) {
-  return new InMemoryEnv(base_env);
+  return new MemoryEnv(base_env);
 }
 
 }  // namespace leveldb
