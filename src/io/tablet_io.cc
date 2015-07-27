@@ -870,9 +870,10 @@ bool TabletIO::ReadCells(const RowReaderInfo& row_reader, RowResult* value_list,
     return true;
 }
 
-bool TabletIO::WriteBatch(leveldb::WriteBatch* batch, bool sync,
+bool TabletIO::WriteBatch(leveldb::WriteBatch* batch, bool disable_log, bool sync,
                           StatusCode* status) {
     leveldb::WriteOptions options;
+    options.disable_wal = disable_log;
     options.sync = sync;
 
     CHECK_NOTNULL(m_db);
