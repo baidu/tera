@@ -310,7 +310,8 @@ bool DefaultCompactStrategy::ScanDrop(const leveldb::Slice& tera_key, uint64_t n
         if (m_version_num >
             static_cast<uint32_t>(m_schema.column_families(cf_id).max_versions())) {
             // drop out-of-range version
-            LOG(INFO) << "drop true: " << key.ToString();
+            VLOG(20) << "drop true: " << key.ToString()
+                << ", version: " << m_version_num;
             return true;
         }
     }
