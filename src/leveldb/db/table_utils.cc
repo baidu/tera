@@ -25,6 +25,26 @@
 #include <map>
 
 namespace leveldb {
+
+void ArchiveFile(Env* env, const std::string& fname) {
+  // Move into another directory.  E.g., for
+  //    dir/foo
+  // rename to
+  //    dir/lost/foo
+  const char* slash = strrchr(fname.c_str(), '/');
+  std::string new_dir;
+  if (slash != NULL) {
+    new_dir.assign(fname.data(), slash - fname.data());
+  }
+  new_dir.append("/lost");
+  env->CreateDir(new_dir);  // Ignore error
+  std::string new_file = new_dir;
+  new_file.append("/");
+  new_file.append((slash == NULL) ? fname.c_str() : slash + 1);
+  Status s = env->RenameFile(fname, new_file);
+  fprintf(stderr, "Archiving %s: %s\n", fname.c_str(), s.ToString().c_str());
+}
+
 bool GuessType(const std::string& fname, FileType* type) {
   size_t pos = fname.rfind('/');
   std::string basename;
