@@ -467,11 +467,10 @@ void print_summary_proc(Adapter* adapter, double duration) {
 }
 
 int main(int argc, char** argv) {
-    FLAGS_flagfile = "./tera.flag";
     ::google::ParseCommandLineFlags(&argc, &argv, true);
 
     tera::ErrorCode err;
-    tera::Client* client = tera::Client::NewClient("./tera.flag", "tera_mark");
+    tera::Client* client = tera::Client::NewClient("", "tera_mark");
     if (NULL == client) {
         std::cerr << "fail to create client: " << tera::strerr(err) << std::endl;
         return -1;
