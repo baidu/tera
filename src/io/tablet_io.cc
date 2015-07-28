@@ -804,7 +804,7 @@ bool TabletIO::LowLevelSeek(const std::string& row_key,
         leveldb::Slice cur_row_key;
         m_key_operator->ExtractTeraKey(it_data->key(), &cur_row_key,
                                        NULL, NULL, NULL, NULL);
-        if (cur_row_key.ToString() > row_key) {
+        if (cur_row_key.compare(row_key) > 0) {
             SetStatusCode(kKeyNotExist, &s);
         } else {
             compact_strategy->ScanDrop(it_data->key(), 0);
@@ -835,10 +835,10 @@ bool TabletIO::LowLevelSeek(const std::string& row_key,
             VLOG(10) << "ll-seek: " << "tablet=[" << m_tablet_path
                 << "] row_key=[" << row_key
                 << "] cf=[" << cf_name << "]";
-            leveldb::Slice cur_cf;
-            m_key_operator->ExtractTeraKey(it_data->key(), NULL, &cur_cf,
+            leveldb::Slice cur_row, cur_cf;
+            m_key_operator->ExtractTeraKey(it_data->key(), &cur_row, &cur_cf,
                                            NULL, NULL, NULL);
-            if (cur_cf.ToString() > cf_name) {
+            if (cur_row.compare(row_key) > 0 || cur_cf.compare(cf_name) > 0) {
                 continue;
             } else {
                 compact_strategy->ScanDrop(it_data->key(), 0);
@@ -870,11 +870,12 @@ bool TabletIO::LowLevelSeek(const std::string& row_key,
                 VLOG(10) << "ll-seek: " << "tablet=[" << m_tablet_path
                     << "] row_key=[" << row_key << "] cf=[" << cf_name
                     << "] qu=[" << qu_name << "]";
-                leveldb::Slice cur_qu;
+                leveldb::Slice cur_row, cur_cf, cur_qu;
                 int64_t timestamp;
-                m_key_operator->ExtractTeraKey(it_data->key(), NULL, NULL,
+                m_key_operator->ExtractTeraKey(it_data->key(), &cur_row, &cur_cf,
                                                &cur_qu, &timestamp, NULL);
-                if (cur_qu.ToString() > qu_name) {
+                if (cur_row.compare(row_key) > 0 || cur_cf.compare(cf_name) > 0 ||
+                    cur_qu.compare(qu_name) > 0) {
                     break;
                 }
 
