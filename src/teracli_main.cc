@@ -1055,7 +1055,7 @@ int32_t ShowTabletNodesInfo(Client* client, bool is_x, ErrorCode* err) {
                        " ", "address", "status", "size", "num",
                        "lread", "r", "rspd", "w", "wspd",
                        "s", "sspd", "rdly", "rp", "sp",
-                       "wp", "load", "busy", "mem", "net_tx",
+                       "wp", "ld", "bs", "mem", "net_tx",
                        "net_rx", "dfs_r", "dfs_w");
         std::vector<string> row;
         for (size_t i = 0; i < infos.size(); ++i) {
