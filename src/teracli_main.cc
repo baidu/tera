@@ -1049,31 +1049,41 @@ int32_t ShowTabletNodesInfo(Client* client, bool is_x, ErrorCode* err) {
     int cols;
     TPrinter printer;
     if (is_x) {
-        cols = 20;
+        cols = 23;
         printer.Reset(cols);
         printer.AddRow(cols,
-                       " ", "address", "status", "workload", "lread",
-                       "read", "rspeed", "write", "wspeed", "scan",
-                       "sspeed", "tablet", "load", "busy", "split",
-                       "mem", "net_tx", "net_rx", "dfs_r", "dfs_w");
+                       " ", "address", "status", "size", "num",
+                       "lread", "r", "rspd", "w", "wspd",
+                       "s", "sspd", "rdly", "rp", "sp",
+                       "wp", "ld", "bs", "mem", "net_tx",
+                       "net_rx", "dfs_r", "dfs_w");
         std::vector<string> row;
         for (size_t i = 0; i < infos.size(); ++i) {
+            std::map<string, string> extra;
+            for (int j = 0; j < infos[i].extra_info_size(); ++j) {
+                extra[infos[i].extra_info(j).name()] =
+                    NumberToString(infos[i].extra_info(j).value());
+            }
+
             row.clear();
             row.push_back(NumberToString(i));
             row.push_back(infos[i].addr());
             row.push_back(infos[i].status_m());
             row.push_back(utils::ConvertByteToString(infos[i].load()));
+            row.push_back(NumberToString(infos[i].tablet_total()));
             row.push_back(NumberToString(infos[i].low_read_cell()));
             row.push_back(NumberToString(infos[i].read_rows()));
-            row.push_back(utils::ConvertByteToString(infos[i].read_size()) + "B/s");
+            row.push_back(utils::ConvertByteToString(infos[i].read_size()) + "B");
             row.push_back(NumberToString(infos[i].write_rows()));
-            row.push_back(utils::ConvertByteToString(infos[i].write_size()) + "B/s");
+            row.push_back(utils::ConvertByteToString(infos[i].write_size()) + "B");
             row.push_back(NumberToString(infos[i].scan_rows()));
-            row.push_back(utils::ConvertByteToString(infos[i].scan_size()) + "B/s");
-            row.push_back(NumberToString(infos[i].tablet_total()));
+            row.push_back(utils::ConvertByteToString(infos[i].scan_size()) + "B");
+            row.push_back(extra["rand_read_delay"] + "ms");
+            row.push_back(extra["read_pending"]);
+            row.push_back(extra["write_pending"]);
+            row.push_back(extra["scan_pending"]);
             row.push_back(NumberToString(infos[i].tablet_onload()));
             row.push_back(NumberToString(infos[i].tablet_onbusy()));
-            row.push_back(NumberToString(infos[i].tablet_onsplit()));
             row.push_back(utils::ConvertByteToString(infos[i].mem_used()));
             row.push_back(utils::ConvertByteToString(infos[i].net_tx()));
             row.push_back(utils::ConvertByteToString(infos[i].net_rx()));
