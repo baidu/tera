@@ -412,10 +412,12 @@ bool TableImpl::IsKvOnlyTable() {
 
 bool TableImpl::OpenInternal(ErrorCode* err) {
     if (!UpdateTableMeta(err)) {
+        LOG(ERROR) << "fail to update table meta.";
         return false;
     }
     if (FLAGS_tera_sdk_cookie_enabled) {
         if (!RestoreCookie()) {
+            LOG(ERROR) << "fail to restore cookie.";
             return false;
         }
         EnableCookieUpdateTimer();

@@ -1973,7 +1973,8 @@ int main(int argc, char* argv[]) {
         Usage(argv[0]);
     }
     if (error_code.GetType() != ErrorCode::kOK) {
-        LOG(ERROR) << "fail reason: " << error_code.GetReason();
+        LOG(ERROR) << "fail reason: " << strerr(error_code)
+            << " " << error_code.GetReason();
     }
     delete client;
     return ret;
