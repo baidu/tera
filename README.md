@@ -1,11 +1,11 @@
-[Tera - 分布式表格系统](http://github.com/BaiduPS/tera)
+[Tera - 高性能、可伸缩的结构化数据库](http://github.com/baidu/tera)
 ====
-[![Build Status](https://travis-ci.org/BaiduPS/tera.svg)](https://travis-ci.org/BaiduPS/tera)
+[![Build Status](https://travis-ci.org/baidu/tera.svg)](https://travis-ci.org/baidu/tera)
 
 Copyright 2015, Baidu, Inc.
 
 #Overview
-Tera是一个高性能、可伸缩的数据库系统，被设计用来管理搜索引擎万亿量级的超链与网页信息。为实现数据的实时分析与高效访问，我们使用按行键、列名和时间戳全局排序的三维数据模型组织数据，使用多级Cache系统，充分利用新一代服务器硬件大内存、SSD盘和万兆网卡的性能优势，做到模型灵活的同时，实现了高吞吐与水平扩展。
+Tera是一个高性能、可伸缩的结构化数据存储系统，被设计用来管理搜索引擎万亿量级的超链与网页信息。为实现数据的实时分析与高效访问，我们使用按行键、列名和时间戳全局排序的三维数据模型组织数据，使用多级Cache系统，充分利用新一代服务器硬件大内存、SSD盘和万兆网卡的性能优势，做到模型灵活的同时，实现了高吞吐与水平扩展。
 
 #特性
  * 全局有序
@@ -26,7 +26,7 @@ map\<RowKey, map\<ColummnFamily:Qualifier, map\<Timestamp, Value> > > <br>
 系统主要由Tabletserver、Master和ClientSDK三部分构成。其中Tabletserver是核心服务器，承载着所有的数据管理与访问；Master是系统的仲裁者，负责表格的创建、schema更新与负载均衡；ClientSDK包含供管理员使用的命令行工具teracli和给用户使用的SDK。
 表格被按RowKey全局排序，并横向切分成多个Tablet，每个Tablet负责服务RowKey的一个区间，表格又被纵向且分为多个LocalityGroup，一个Tablet的多个Localitygroup在物理上单独存储，可以选择不同的存储介质，以优化访问效率。
 
-![架构图](https://github.com/BaiduPS/tera/blob/master/resources/images/arch.png?raw=true)
+![架构图](https://github.com/baidu/tera/blob/master/resources/images/arch.png?raw=true)
 
 #系统依赖
  * 使用分布式文件系统（HDFS、NFS等）持久化数据与元信息
@@ -34,15 +34,18 @@ map\<RowKey, map\<ColummnFamily:Qualifier, map\<Timestamp, Value> > > <br>
  * 使用Sofa-pbrpc实现跨进程通信
 
 #系统构建
-参考[BUILD](https://github.com/BaiduPS/tera/blob/master/BUILD)
+sh ./build.sh  
+参考[BUILD](https://github.com/baidu/tera/blob/master/BUILD)
 
 #使用示例
 
-[通过OneBox体验Tera](https://github.com/BaiduPS/tera/blob/master/doc/Onebox.md)
+[通过OneBox体验Tera](https://github.com/baidu/tera/blob/master/doc/Onebox.md)
 
-[主要API使用方法](https://github.com/BaiduPS/tera/wiki/%E4%B8%BB%E8%A6%81API%E4%BD%BF%E7%94%A8%E6%96%B9%E6%B3%95)
+[通过docker体验Tera](https://github.com/baidu/tera/blob/master/example/docker)
 
-[命令行工具使用手册](https://github.com/BaiduPS/tera/blob/master/doc/teracli.md)
+[主要API使用方法](https://github.com/baidu/tera/wiki/%E4%B8%BB%E8%A6%81API%E4%BD%BF%E7%94%A8%E6%96%B9%E6%B3%95)
+
+[命令行工具使用手册](https://github.com/baidu/tera/blob/master/doc/teracli.md)
 
 #反馈与技术支持
 tera_dev@baidu.com

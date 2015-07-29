@@ -33,7 +33,7 @@ enum StatusCode {
     kTabletSplited = 51;
     kTabletOnMerge = 50;
     kTabletUnLoading = 52;
-    kTabletUnLoading2 = 57;
+    kTabletUnLoading2 = 68;
     
     kTableNotFound = 45;
     kTableCorrupt = 46;
@@ -117,6 +117,7 @@ enum TabletStatus {
     kTableSplited = 51;
     kTableSplitFail = 61;
     kTableUnLoading = 52;
+    kTableUnLoading2 = 68;
     kTableUnLoadFail = 62;
     kTableOnMerge = 50;
     kTabletDeleting = 63;

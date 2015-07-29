@@ -169,6 +169,8 @@ std::string StatusCodeToString(int32_t status) {
         return "kTabletDisable";
     case kTabletPending:
         return "kTabletPending";
+    case kTabletUnLoading2:
+        return "kTabletUnLoading2";
 
     //// TableStatus ////
     case kTableEnable:

@@ -235,11 +235,14 @@ private:
                               UnloadTabletResponse* response,
                               bool failed, int error_code);
 
+    void ScheduleLoadBalance();
     void LoadBalance();
-    void LoadBalance(std::vector<TabletNodePtr>& tabletnode_list,
-                     std::vector<TabletPtr>& tablet_list,
-                     const std::string& table_name = "");
-    void TabletNodeLoadBalance(TabletNodePtr tabletnode, Scheduler* scheduler,
+    uint32_t LoadBalance(Scheduler* scheduler,
+                         uint32_t max_move_num, uint32_t max_round_num,
+                         std::vector<TabletNodePtr>& tabletnode_list,
+                         std::vector<TabletPtr>& tablet_list,
+                         const std::string& table_name = "");
+    bool TabletNodeLoadBalance(TabletNodePtr tabletnode, Scheduler* scheduler,
                                const std::vector<TabletPtr>& tablet_list,
                                const std::string& table_name = "");
 
@@ -267,6 +270,8 @@ private:
                              WriteTabletRequest* request,
                              WriteTabletResponse* response,
                              bool failed, int error_code);
+
+    void ScheduleQueryTabletNode();
     void QueryTabletNode();
     void QueryTabletNodeAsync(std::string addr, int32_t timeout,
                               bool is_gc, QueryClosure* done);
@@ -438,9 +443,10 @@ private:
     // garbage clean
     void EnableTabletNodeGcTimer();
     void DisableTabletNodeGcTimer();
+    void ScheduleTabletNodeGarbageClean();
     void TabletNodeGarbageClean();
     void DoTabletNodeGarbageClean();
-    void DoTabletNodeGarbageCleanPhase2(bool is_success);
+    void DoTabletNodeGarbageCleanPhase2();
     void CollectDeadTabletsFiles();
     void CollectSingleDeadTablet(const std::string& tablename, uint64_t tabletnum);
     void DeleteObsoleteFiles();
@@ -457,13 +463,19 @@ private:
     scoped_ptr<TabletNodeManager> m_tabletnode_manager;
     scoped_ptr<MasterZkAdapterBase> m_zk_adapter;
     scoped_ptr<Scheduler> m_size_scheduler;
-    scoped_ptr<Scheduler> m_qps_scheduler;
+    scoped_ptr<Scheduler> m_load_scheduler;
 
     Mutex m_mutex;
     int64_t m_release_cache_timer_id;
-    int64_t m_query_tabletnode_timer_id;
-    int64_t m_load_balance_timer_id;
     Counter m_this_sequence_id;
+
+    bool m_query_enabled;
+    int64_t m_query_tabletnode_timer_id;
+    Counter m_query_pending_count;
+
+    bool m_load_balance_enabled;
+    int64_t m_load_balance_timer_id;
+    Counter m_load_balance_count;
 
     scoped_ptr<ThreadPool> m_thread_pool;
     AutoResetEvent m_query_event;
@@ -476,6 +488,8 @@ private:
 
     mutable Mutex m_tablet_mutex;
 
+    TabletPtr m_meta_tablet;
+
     // stat table
     bool m_is_stat_table;
     std::map<std::string, int64_t> m_ts_stat_update_time;
@@ -484,7 +498,7 @@ private:
 
     // tabletnode garbage clean
     // first: live tablet, second: dead tablet
-    mutable Mutex m_gc_rw_mutex;
+    bool m_gc_enabled;
     typedef std::pair<std::set<uint64_t>, std::set<uint64_t> > GcTabletSet;
     std::map<std::string, GcTabletSet> m_gc_tablets;
     typedef std::vector<std::set<uint64_t> > GcFileSet;

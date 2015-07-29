@@ -364,51 +364,40 @@ void TabletNodeImpl::ReadTablet(int64_t start_micros,
                                 ReadTabletResponse* response,
                                 google::protobuf::Closure* done,
                                 ReadRpcTimer* timer) {
-    response->set_sequence_id(request->sequence_id());
-    StatusCode status = kTabletNodeOk;
-
     int32_t row_num = request->row_info_list_size();
-
     uint64_t snapshot_id = request->snapshot_id() == 0 ? 0 : request->snapshot_id();
+    uint32_t read_success_num = 0;
 
-    if (request->row_info_list_size() > 0) {
-        uint32_t read_success_num = 0;
-        int32_t row_size = request->row_info_list_size();
-        for (int32_t i = 0; i < row_size; i++) {
-            StatusCode row_status = kTabletNodeOk;
-            io::TabletIO* tablet_io = m_tablet_manager->GetTablet(
-                request->tablet_name(), request->row_info_list(i).key(), &row_status);
-            if (tablet_io == NULL) {
-                range_error_counter.Inc();
+    for (int32_t i = 0; i < row_num; i++) {
+        StatusCode row_status = kTabletNodeOk;
+        io::TabletIO* tablet_io = m_tablet_manager->GetTablet(
+            request->tablet_name(), request->row_info_list(i).key(), &row_status);
+        if (tablet_io == NULL) {
+            range_error_counter.Inc();
+            response->mutable_detail()->add_status(kKeyNotInRange);
+        } else {
+            if (tablet_io->ReadCells(request->row_info_list(i),
+                                     response->mutable_detail()->add_row_result(),
+                                     snapshot_id, &row_status)) {
+                read_success_num++;
             } else {
-                if (tablet_io->ReadCells(request->row_info_list(i),
-                                         response->mutable_detail()->add_row_result(),
-                                         snapshot_id, &row_status)) {
-                    read_success_num++;
-                } else {
-                    response->mutable_detail()->mutable_row_result()->RemoveLast();
-                }
-                tablet_io->DecRef();
+                response->mutable_detail()->mutable_row_result()->RemoveLast();
             }
+            tablet_io->DecRef();
             response->mutable_detail()->add_status(row_status);
         }
-        response->set_success_num(read_success_num);
-        response->set_status(kTabletNodeOk);
-        VLOG(8) << "read_row_num = " << row_size
-            << ", read_success_num = " << read_success_num;
-        done->Run();
-        if (NULL != timer) {
-            RpcTimerList::Instance()->Erase(timer);
-            delete timer;
-        }
-    } else {
-        response->set_status(status);
-        done->Run();
-        if (NULL != timer) {
-            RpcTimerList::Instance()->Erase(timer);
-            delete timer;
-        }
-        return;
+    }
+
+    VLOG(8) << "read_row_num = " << row_num
+        << ", read_success_num = " << read_success_num;
+    response->set_sequence_id(request->sequence_id());
+    response->set_success_num(read_success_num);
+    response->set_status(kTabletNodeOk);
+    done->Run();
+
+    if (NULL != timer) {
+        RpcTimerList::Instance()->Erase(timer);
+        delete timer;
     }
 
     int64_t now_ms = get_micros();
