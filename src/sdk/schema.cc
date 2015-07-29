@@ -111,6 +111,14 @@ int64_t TableDescriptor::MergeSize() const {
     return _impl->MergeSize();
 }
 
+void TableDescriptor::DisableWal() {
+    _impl->DisableWal();
+}
+
+bool TableDescriptor::IsWalEnabled() const {
+    return _impl->IsWalEnabled();
+}
+
 int32_t TableDescriptor::AddSnapshot(uint64_t snapshot) {
     return _impl->AddSnapshot(snapshot);
 }
