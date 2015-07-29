@@ -21,7 +21,8 @@ enum TeraKeyType {
     TKT_TYPE_NUM,
     TKT_ADD,
     TKT_PUT_IFABSENT,
-    TKT_APPEND
+    TKT_APPEND,
+    TKT_ADDINT64
 };
 
 class RawKeyOperator {

@@ -355,6 +355,9 @@ bool TabletWriter::BatchRequest(const WriteTabletRequest& request,
                     case kAdd:
                         type = leveldb::TKT_ADD;
                         break;
+                    case kAddInt64:
+                        type = leveldb::TKT_ADDINT64;
+                        break;
                     case kPutIfAbsent:
                         type = leveldb::TKT_PUT_IFABSENT;
                         break;
