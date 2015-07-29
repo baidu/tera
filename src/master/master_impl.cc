@@ -101,12 +101,14 @@ MasterImpl::MasterImpl()
       m_size_scheduler(new SizeScheduler),
       m_load_scheduler(new LoadScheduler),
       m_release_cache_timer_id(kInvalidTimerId),
+      m_query_enabled(false),
       m_query_tabletnode_timer_id(kInvalidTimerId),
+      m_load_balance_enabled(false),
       m_load_balance_timer_id(kInvalidTimerId),
-      m_load_balance_count(0),
       m_thread_pool(new ThreadPool(FLAGS_tera_master_impl_thread_max_num)),
       m_is_stat_table(false),
       m_stat_table(NULL),
+      m_gc_enabled(false),
       m_gc_timer_id(kInvalidTimerId),
       m_gc_query_enable(false) {
     if (FLAGS_tera_master_cache_check_enabled) {
@@ -141,8 +143,6 @@ bool MasterImpl::Init() {
     }
 
     SetMasterStatus(kIsSecondary);
-    DisableQueryTabletNodeTimer();
-    DisableTabletNodeGcTimer();
     m_thread_pool->AddTask(boost::bind(&MasterImpl::InitAsync, this));
     return true;
 }
@@ -1101,7 +1101,18 @@ bool MasterImpl::GetMetaTabletAddr(std::string* addr) {
 /////////// load balance //////////
 
 void MasterImpl::QueryTabletNode() {
-    MutexLock locker(&m_mutex);
+    bool gc_query_enable = false;
+    {
+        MutexLock locker(&m_mutex);
+        if (!m_query_enabled) {
+            m_query_tabletnode_timer_id = kInvalidTimerId;
+            return;
+        }
+        if (m_gc_query_enable) {
+            m_gc_query_enable = false;
+            gc_query_enable = true;
+        }
+    }
 
     std::vector<TabletNodePtr> tabletnode_array;
     m_tabletnode_manager->GetAllTabletNodeInfo(&tabletnode_array);
@@ -1126,19 +1137,6 @@ void MasterImpl::QueryTabletNode() {
         }
     }
 
-    if (m_gc_query_enable) {
-        std::vector<TabletNodePtr>::iterator it = tabletnode_array.begin();
-        for (; it != tabletnode_array.end(); ++it) {
-            TabletNodePtr tabletnode = *it;
-            if (tabletnode->m_state != kReady) {
-                VLOG(20) << "will not query tabletnode: " << tabletnode->m_addr;
-                continue;
-            }
-            MutexLock lock(&m_gc_rw_mutex);
-            m_gc_tabletnodes.insert(tabletnode->m_addr);
-        }
-    }
-
     CHECK_EQ(m_query_pending_count.Get(), 0);
     m_query_pending_count.Inc();
     std::vector<TabletNodePtr>::iterator it = tabletnode_array.begin();
@@ -1153,50 +1151,86 @@ void MasterImpl::QueryTabletNode() {
             NewClosure(this, &MasterImpl::QueryTabletNodeCallback, tabletnode->m_addr);
         QueryTabletNodeAsync(tabletnode->m_addr,
                              FLAGS_tera_master_query_tabletnode_period,
-                             m_gc_query_enable, done);
+                             gc_query_enable, done);
     }
 
-    if (m_gc_query_enable) {
-        m_gc_query_enable = false;
-    }
-    m_query_tabletnode_timer_id = kInvalidTimerId;
     if (0 == m_query_pending_count.Dec()) {
-        EnableQueryTabletNodeTimer();
+        {
+            MutexLock locker(&m_mutex);
+            if (m_query_enabled) {
+                ScheduleQueryTabletNode();
+            } else {
+                m_query_tabletnode_timer_id = kInvalidTimerId;
+            }
+        }
+        if (gc_query_enable) {
+            DoTabletNodeGarbageCleanPhase2();
+        }
     }
 }
 
-void MasterImpl::EnableQueryTabletNodeTimer() {
-    assert(m_query_tabletnode_timer_id == kInvalidTimerId);
+void MasterImpl::ScheduleQueryTabletNode() {
+    m_mutex.AssertHeld();
     boost::function<void ()> closure =
         boost::bind(&MasterImpl::QueryTabletNode, this);
     m_query_tabletnode_timer_id = m_thread_pool->DelayTask(
         FLAGS_tera_master_query_tabletnode_period, closure);
 }
 
-void MasterImpl::DisableQueryTabletNodeTimer() {
-    if (m_query_tabletnode_timer_id != kInvalidTimerId) {
-        m_thread_pool->CancelTask(m_query_tabletnode_timer_id);
-        m_query_tabletnode_timer_id = kInvalidTimerId;
+void MasterImpl::EnableQueryTabletNodeTimer() {
+    MutexLock locker(&m_mutex);
+    if (m_query_tabletnode_timer_id == kInvalidTimerId) {
+        ScheduleQueryTabletNode();
     }
+    m_query_enabled = true;
 }
 
-void MasterImpl::EnableLoadBalanceTimer() {
-    assert(m_load_balance_timer_id == kInvalidTimerId);
+void MasterImpl::DisableQueryTabletNodeTimer() {
+    MutexLock locker(&m_mutex);
+    if (m_query_tabletnode_timer_id != kInvalidTimerId) {
+        bool non_block = true;
+        if (m_thread_pool->CancelTask(m_query_tabletnode_timer_id, non_block)) {
+            m_query_tabletnode_timer_id = kInvalidTimerId;
+        }
+    }
+    m_query_enabled = false;
+}
+
+void MasterImpl::ScheduleLoadBalance() {
+    m_mutex.AssertHeld();
     boost::function<void ()> closure =
         boost::bind(&MasterImpl::LoadBalance, this);
     m_load_balance_timer_id = m_thread_pool->DelayTask(
         FLAGS_tera_master_load_balance_period, closure);
 }
 
-void MasterImpl::DisableLoadBalanceTimer() {
-    if (m_load_balance_timer_id != kInvalidTimerId) {
-        m_thread_pool->CancelTask(m_load_balance_timer_id);
-        m_load_balance_timer_id = kInvalidTimerId;
+void MasterImpl::EnableLoadBalanceTimer() {
+    MutexLock locker(&m_mutex);
+    if (m_load_balance_timer_id == kInvalidTimerId) {
+        ScheduleLoadBalance();
     }
+    m_load_balance_enabled = true;
+}
+
+void MasterImpl::DisableLoadBalanceTimer() {
+    MutexLock locker(&m_mutex);
+    if (m_load_balance_timer_id != kInvalidTimerId) {
+        bool non_block = true;
+        if (m_thread_pool->CancelTask(m_load_balance_timer_id, non_block)) {
+            m_load_balance_timer_id = kInvalidTimerId;
+        }
+    }
+    m_load_balance_enabled = false;
 }
 
 void MasterImpl::LoadBalance() {
-    MutexLock locker(&m_mutex);
+    {
+        MutexLock locker(&m_mutex);
+        if (!m_load_balance_enabled) {
+            m_load_balance_timer_id = kInvalidTimerId;
+            return;
+        }
+    }
 
     std::vector<TablePtr> all_table_list;
     std::vector<TabletPtr> all_tablet_list;
@@ -1210,7 +1244,7 @@ void MasterImpl::LoadBalance() {
 
     // descending sort the node according to workload,
     // so that the node with heaviest workload will be scheduled first
-    if (++m_load_balance_count % 10 == 0 && FLAGS_tera_master_load_balance_qps_policy_enabled) {
+    if (m_load_balance_count.Inc() % 10 == 0 && FLAGS_tera_master_load_balance_qps_policy_enabled) {
         max_move_num -= LoadBalance(m_load_scheduler.get(), max_move_num, 1,
                                     all_node_list, all_tablet_list);
     } else if (FLAGS_tera_master_load_balance_table_grained) {
@@ -1233,8 +1267,12 @@ void MasterImpl::LoadBalance() {
                                     all_node_list, all_tablet_list);
     }
 
-    m_load_balance_timer_id = kInvalidTimerId;
-    EnableLoadBalanceTimer();
+    MutexLock locker(&m_mutex);
+    if (m_load_balance_enabled) {
+        ScheduleLoadBalance();
+    } else {
+        m_load_balance_timer_id = kInvalidTimerId;
+    }
 }
 
 uint32_t MasterImpl::LoadBalance(Scheduler* scheduler,
@@ -2694,35 +2732,29 @@ void MasterImpl::QueryTabletNodeCallback(std::string addr, QueryRequest* request
         VLOG(20) << "query tabletnode [" << addr << "], m_status: "
             << StatusCodeToString(state.m_report_status);
     }
-
     // if this is a gc query, process it
     if (request->is_gc_query()) {
-        MutexLock lock(&m_gc_rw_mutex);
         ProcessQueryCallbackForGc(response);
-        m_gc_tabletnodes.erase(addr);
-
-        if (m_gc_tabletnodes.size() == 0) {
-            m_gc_rw_mutex.Unlock();
-            // query finished
-            bool is_success = true;
-            std::map<std::string, GcTabletSet>::iterator it = m_gc_tablets.begin();
-            for (; it != m_gc_tablets.end(); ++it) {
-                if (it->second.first.size() != 0) {
-                    VLOG(10) << "[gc] there are tablet not ready: " << it->first;
-                    is_success = false;
-                    break;
-                }
-            }
-            DoTabletNodeGarbageCleanPhase2(is_success);
-            m_gc_rw_mutex.Lock();
-        }
     }
-    delete request;
-    delete response;
 
     if (0 == m_query_pending_count.Dec()) {
-        EnableQueryTabletNodeTimer();
+        {
+            MutexLock locker(&m_mutex);
+            if (m_query_enabled) {
+                ScheduleQueryTabletNode();
+            } else {
+                m_query_tabletnode_timer_id = kInvalidTimerId;
+            }
+        }
+
+        if (request->is_gc_query()) {
+            DoTabletNodeGarbageCleanPhase2();
+        }
     }
+
+
+    delete request;
+    delete response;
 }
 
 void MasterImpl::CollectTabletInfoCallback(std::string addr,
@@ -4299,20 +4331,32 @@ void MasterImpl::DumpStatToTable(const TabletNode& stat) {
     m_stat_table->ApplyMutation(mutation);
 }
 
-void MasterImpl::EnableTabletNodeGcTimer() {
-    LOG(INFO) << "[gc] EnableTabletNodeGcTimer";
-    assert(m_gc_timer_id == kInvalidTimerId);
+void MasterImpl::ScheduleTabletNodeGarbageClean() {
+    m_mutex.AssertHeld();
+    LOG(INFO) << "[gc] ScheduleTabletNodeGcTimer";
     boost::function<void ()> closure =
         boost::bind(&MasterImpl::TabletNodeGarbageClean, this);
     m_gc_timer_id = m_thread_pool->DelayTask(
         FLAGS_tera_master_gc_period, closure);
 }
 
-void MasterImpl::DisableTabletNodeGcTimer() {
-    if (m_gc_timer_id != kInvalidTimerId) {
-        m_thread_pool->CancelTask(m_gc_timer_id);
-        m_gc_timer_id = kInvalidTimerId;
+void MasterImpl::EnableTabletNodeGcTimer() {
+    MutexLock lock(&m_mutex);
+    if (m_gc_timer_id == kInvalidTimerId) {
+        ScheduleTabletNodeGarbageClean();
     }
+    m_gc_enabled = true;
+}
+
+void MasterImpl::DisableTabletNodeGcTimer() {
+    MutexLock lock(&m_mutex);
+    if (m_gc_timer_id != kInvalidTimerId) {
+        bool non_block = true;
+        if (m_thread_pool->CancelTask(m_gc_timer_id, non_block)) {
+            m_gc_timer_id = kInvalidTimerId;
+        }
+    }
+    m_gc_enabled = false;
 }
 
 void MasterImpl::TabletNodeGarbageClean() {
@@ -4323,10 +4367,17 @@ void MasterImpl::TabletNodeGarbageClean() {
 }
 
 void MasterImpl::DoTabletNodeGarbageClean() {
+    {
+        MutexLock lock(&m_mutex);
+        if (!m_gc_enabled) {
+            m_gc_timer_id = kInvalidTimerId;
+            return;
+        }
+    }
+
     int64_t start_ts = get_micros();
     m_gc_live_files.clear();
     m_gc_tablets.clear();
-    m_gc_tabletnodes.clear();
 
     std::vector<TablePtr> tables;
 
@@ -4352,8 +4403,12 @@ void MasterImpl::DoTabletNodeGarbageClean() {
 
     if (m_gc_tablets.size() == 0) {
         LOG(INFO) << "[gc] do not need gc this time.";
-        m_gc_timer_id = kInvalidTimerId;
-        EnableTabletNodeGcTimer();
+        MutexLock lock(&m_mutex);
+        if (m_gc_enabled) {
+            ScheduleTabletNodeGarbageClean();
+        } else {
+            m_gc_timer_id = kInvalidTimerId;
+        }
         return;
     }
 
@@ -4361,25 +4416,39 @@ void MasterImpl::DoTabletNodeGarbageClean() {
     m_gc_query_enable = true;
 }
 
-void MasterImpl::DoTabletNodeGarbageCleanPhase2(bool is_success) {
+void MasterImpl::DoTabletNodeGarbageCleanPhase2() {
+    bool is_success = true;
+    std::map<std::string, GcTabletSet>::iterator it = m_gc_tablets.begin();
+    for (; it != m_gc_tablets.end(); ++it) {
+        if (it->second.first.size() != 0) {
+            VLOG(10) << "[gc] there are tablet not ready: " << it->first;
+            is_success = false;
+            break;
+        }
+    }
     if (!is_success) {
         LOG(INFO) << "[gc] gc not success, try next time.";
-        m_gc_timer_id = kInvalidTimerId;
-        EnableTabletNodeGcTimer();
+        MutexLock lock(&m_mutex);
+        if (m_gc_enabled) {
+            ScheduleTabletNodeGarbageClean();
+        } else {
+            m_gc_timer_id = kInvalidTimerId;
+        }
         return;
     }
 
     int64_t start_ts = get_micros();
-    std::map<std::string, GcTabletSet>::iterator it =  m_gc_tablets.begin();
-    for (; it != m_gc_tablets.end(); ++it) {
-        CHECK(it->second.first.size() == 0);
-    }
 
     DeleteObsoleteFiles();
-    m_gc_timer_id = kInvalidTimerId;
-    EnableTabletNodeGcTimer();
     LOG(INFO) << "[gc] DoTabletNodeGarbageCleanPhase2 finished, cost:"
         << (get_micros() - start_ts) / 1000 << "ms.";
+
+    MutexLock lock(&m_mutex);
+    if (m_gc_enabled) {
+        ScheduleTabletNodeGarbageClean();
+    } else {
+        m_gc_timer_id = kInvalidTimerId;
+    }
 }
 
 void MasterImpl::CollectDeadTabletsFiles() {
