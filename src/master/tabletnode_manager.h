@@ -99,6 +99,7 @@ struct TabletNode {
     bool TrySplit(TabletPtr tablet);
     bool FinishSplit(TabletPtr tablet);
     bool SplitNextWaitTablet(TabletPtr* tablet);
+    void FlushWaitTablet(std::list<TabletPtr>* wait_queue);
 
     NodeState GetState();
     bool SetState(NodeState new_state, NodeState* old_state);
@@ -140,13 +141,16 @@ public:
                         const std::vector<TabletPtr>& tablet_candidates,
                         size_t* tablet_index);
     bool CheckStateSwitch(NodeState old_state, NodeState new_state);
-
+    bool ReschedOrphanOnSplitTablet(TabletPtr *tablet);
 private:
     mutable Mutex m_mutex;
     MasterImpl* m_master_impl;
 
     typedef std::map<std::string, TabletNodePtr> TabletNodeList;
     TabletNodeList m_tabletnode_list;
+
+    // use for split flow control
+    std::list<TabletPtr> m_wait_split_list;
 };
 
 } // namespace master

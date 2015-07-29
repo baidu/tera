@@ -98,6 +98,9 @@ DEFINE_string(tera_master_meta_table_name, "meta_table", "the meta table name");
 DEFINE_string(tera_master_meta_table_path, "meta", "the path of meta table");
 
 DEFINE_int64(tera_master_split_tablet_size, 512, "the size (in MB) of tablet to trigger split");
+DEFINE_int64(debug_tera_master_split_phase_crash, 0, "debug master crash when trigger  split: set {50, 51, 60, 61, 70, 71} will crash");
+DEFINE_int64(debug_tera_ts_split_phase_crash, 0, "debug ts crash when trigger  split: set {20,25,30,35,40,45,50} will crash");
+
 DEFINE_bool(tera_master_merge_enabled, false, "enable the auto-merge tablet");
 DEFINE_int64(tera_master_merge_tablet_size, 0, "the size (in MB) of tablet to trigger merge");
 // deprecated

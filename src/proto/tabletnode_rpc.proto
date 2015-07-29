@@ -248,16 +248,24 @@ message ReadTabletResponse {
     optional BytesList detail = 4;
 }
 
+// new split message
 message SplitTabletRequest {
     required uint64 sequence_id = 1;
-    required string tablet_name = 2;
-    required KeyRange key_range = 3;
-    optional TabletMeta tablet_meta = 4;
-    repeated uint64 child_tablets = 5;
+    required string table_name = 2; // 表名
+    required KeyRange key_range = 3; //keyrange
+                    
+    optional uint64 parent_tablet = 4;
+    repeated uint64 child_tablets = 5;// 新的tablet号:分裂2个
+    required bytes mid_key = 6;//用于分裂的key
+                                    
+    optional string session_id = 7; //uuid，zk产生
+    optional TableSchema schema = 8;//用于terakey的解析
+    repeated uint64 snapshots_id = 9;
+    repeated uint64 snapshots_sequence = 10;
 }
 
 message SplitTabletResponse {
-    required StatusCode status = 1 [default = kTableMergeError];
+    required StatusCode status = 1;
     required uint64 sequence_id = 2;
 }
 
@@ -301,6 +309,7 @@ service TabletNodeServer {
     rpc ReleaseSnapshot(ReleaseSnapshotRequest) returns(ReleaseSnapshotResponse);
 
     rpc SplitTablet(SplitTabletRequest) returns(SplitTabletResponse);
+    
     rpc MergeTablet(MergeTabletRequest) returns(MergeTabletResponse);
 }
 option cc_generic_services = true;

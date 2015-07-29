@@ -61,6 +61,10 @@ public:
     explicit Tablet(const TabletMeta& meta);
     Tablet(const TabletMeta& meta, TablePtr table);
     ~Tablet();
+    
+    bool CollectSplitContext(TabletOpLog* log);
+    void SetTabletOpLog(TabletOpLog& log);
+    bool GetTabletOpLog(TabletOpLog* log);
 
     void ToMeta(TabletMeta* meta);
     const std::string& GetTableName();
@@ -205,7 +209,16 @@ public:
 
     void Init();
     void Stop();
+    
+    bool GetTabletWithOpLog(std::vector<TabletPtr>* log_tablets);
 
+    bool RepairWithSplitLog(std::vector<TabletPtr>& log_tablets, 
+                                        const TabletMeta& report_tabletmeta, 
+                                                std::string& node_uuid);
+    
+    bool SplitTablet(TabletPtr parent, TabletPtr lchild_tablet, 
+                                        TabletPtr rchild_tablet);
+    
     bool LoadMetaTable(const std::string& addr, StatusCode* ret_status = NULL);
     bool DumpMetaTable(const std::string& addr, StatusCode* ret_status = NULL);
     bool ClearMetaTable(const std::string& addr, StatusCode* ret_status = NULL);

@@ -37,6 +37,13 @@ public:
     TabletNodeImpl(const TabletNodeInfo& tabletnode_info,
                    TabletManager* tablet_manager = NULL);
     ~TabletNodeImpl();
+    
+    // use for debug ts's crash
+    enum debug_tera_ts_crash_func_set {
+        DEBUG_ts_split_crash_or_suspend,
+    };
+    inline void DebugTeraTabletServerCrashOrSuspend(
+                enum debug_tera_ts_crash_func_set debug_func, int64_t phase);
 
     bool Init();
 
@@ -88,7 +95,7 @@ public:
     void SplitTablet(const SplitTabletRequest* request,
                      SplitTabletResponse* response,
                      google::protobuf::Closure* done);
-
+    
     void MergeTablet(const MergeTabletRequest* request,
                      MergeTabletResponse* response,
                      google::protobuf::Closure* done);
@@ -126,17 +133,7 @@ private:
     bool CheckInKeyRange(const RowReaderList& reader_list,
                          const std::string& key_start,
                          const std::string& key_end);
-
-    void UpdateMetaTableAsync(const SplitTabletRequest* request,
-             SplitTabletResponse* response, google::protobuf::Closure* done,
-             const std::string& path, const std::string& key_split,
-             const TableSchema& schema, int64_t first_size, int64_t second_size,
-             const TabletMeta& meta);
-    void UpdateMetaTableCallback(const SplitTabletRequest* rpc_request,
-             SplitTabletResponse* rpc_response, google::protobuf::Closure* rpc_done,
-             WriteTabletRequest* request, WriteTabletResponse* response,
-             bool failed, int error_code);
-
+    
     void InitCacheSystem();
 
     void ReleaseMallocCache();

@@ -66,7 +66,7 @@ public:
                      const SplitTabletRequest* request,
                      SplitTabletResponse* response,
                      google::protobuf::Closure* done);
-
+    
     void MergeTablet(google::protobuf::RpcController* controller,
                      const MergeTabletRequest* request,
                      MergeTabletResponse* response,
@@ -125,7 +125,7 @@ private:
                        const SplitTabletRequest* request,
                        SplitTabletResponse* response,
                        google::protobuf::Closure* done);
-
+    
     void DoMergeTablet(google::protobuf::RpcController* controller,
                        const MergeTabletRequest* request,
                        MergeTabletResponse* response,

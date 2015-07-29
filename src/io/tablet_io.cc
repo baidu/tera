@@ -134,6 +134,11 @@ bool TabletIO::Load(const TableSchema& schema,
                     StatusCode* status) {
     {
         MutexLock lock(&m_mutex);
+        LOG(INFO) << __func__ << ", path " << path << ", status "
+            << StatusCodeToString(m_status) << ", m_start_key "
+            << m_start_key << ", m_end_key " << m_end_key 
+            << ", key_start " << key_start << ", key_end " << key_end;
+
         if (m_status == kReady && m_start_key == key_start
             && m_end_key == key_end) {
             return true;
@@ -313,12 +318,13 @@ bool TabletIO::Unload(StatusCode* status) {
 
     {
         MutexLock lock(&m_mutex);
-        m_status = kNotInit;
+        m_status = kFrozen;
         m_db_ref_count--;
     }
     return true;
 }
 
+// discard it, never use it
 bool TabletIO::Split(std::string* split_key, StatusCode* status) {
     {
         MutexLock lock(&m_mutex);
@@ -390,6 +396,64 @@ bool TabletIO::Split(std::string* split_key, StatusCode* status) {
     {
         MutexLock lock(&m_mutex);
         m_status = kSplited;
+        m_db_ref_count--;
+    }
+    return true;
+}
+
+bool TabletIO::GetMidKey(std::string* mid_key, StatusCode* status) 
+{
+    {
+        MutexLock lock(&m_mutex);
+        if (m_status != kReady && 
+            m_status != kOnSplit &&
+            m_status != kSplited &&
+            m_status != kUnLoading) {
+            SetStatusCode(m_status, status);
+            return false;
+        }
+        m_db_ref_count++;
+    }
+
+    // find mid key
+    std::string raw_split_key;
+    if (!m_db->FindSplitKey(m_raw_start_key, m_raw_end_key, 0.5,
+                                        &raw_split_key)) {
+        MutexLock lock(&m_mutex);
+        SetStatusCode(kTableNotSupport, status);
+        m_db_ref_count--;
+        return false;
+    }
+    
+    // parse key
+    leveldb::Slice key_split;
+    if (m_kv_only && m_table_schema.raw_key() == Readable) {
+        key_split = raw_split_key;
+    } else {
+        leveldb::Slice cf_split;
+        leveldb::Slice qu_split;
+        if (!m_key_operator->ExtractTeraKey(raw_split_key, &key_split,
+                                    &cf_split, &qu_split, NULL, NULL)) {
+            SetStatusCode(kTableNotSupport, status);
+            MutexLock lock(&m_mutex);
+            m_db_ref_count--;
+            return false;
+        }
+    }
+
+    // sanity check key
+    if (key_split.empty() || key_split.ToString() <= m_start_key ||
+        (!m_end_key.empty() && key_split.ToString() >= m_end_key)) {
+        SetStatusCode(kTableNotSupport, status);
+        MutexLock lock(&m_mutex);
+        m_db_ref_count--;
+        return false;
+    }
+    
+    *mid_key = key_split.ToString();
+    {
+        MutexLock lock(&m_mutex);
+        SetStatusCode(kTabletNodeOk, status);
         m_db_ref_count--;
     }
     return true;
@@ -1501,6 +1565,12 @@ const leveldb::RawKeyOperator* TabletIO::GetRawKeyOperator() {
 }
 
 void TabletIO::GetAndClearCounter(TabletCounter* counter, int64_t interval) {
+    std::string mid_key;
+    StatusCode status = kTabletNodeOk;
+    if (!GetMidKey(&mid_key, &status)) {
+        mid_key.clear();
+    }
+    
     counter->set_low_read_cell(m_counter.low_read_cell.Clear() * 1000000 / interval);
     counter->set_scan_rows(m_counter.scan_rows.Clear() * 1000000 / interval);
     counter->set_scan_kvs(m_counter.scan_kvs.Clear() * 1000000 / interval);
@@ -1512,6 +1582,8 @@ void TabletIO::GetAndClearCounter(TabletCounter* counter, int64_t interval) {
     counter->set_write_kvs(m_counter.write_kvs.Clear() * 1000000 / interval);
     counter->set_write_size(m_counter.write_size.Clear() * 1000000 / interval);
     counter->set_is_on_busy(IsBusy());
+
+    counter->set_mid_key(mid_key);
 }
 
 int32_t TabletIO::AddRef() {
