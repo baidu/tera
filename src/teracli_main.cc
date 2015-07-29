@@ -852,17 +852,19 @@ int32_t ShowAllTables(Client* client, bool is_x, bool show_all, ErrorCode* err) 
     TPrinter printer;
     int cols;
     if (is_x) {
-        cols = 17;
+        cols = 18;
         printer.Reset(cols);
         printer.AddRow(cols,
-                       " ", "tablename", "status", "size", "tablet",
-                       "busy", "notready", "lread", "read", "rmax",
-                       "rspeed", "write", "wmax", "wspeed", "scan",
-                       "smax", "sspeed");
+                       " ", "tablename", "status", "size", "lg_size",
+                       "tablet", "busy", "notready", "lread", "read",
+                       "rmax", "rspeed", "write", "wmax", "wspeed",
+                       "scan", "smax", "sspeed");
     } else {
-        cols = 6;
+        cols = 7;
         printer.Reset(cols);
-        printer.AddRow(cols, " ", "tablename", "status", "size", "tablet", "busy");
+        printer.AddRow(cols,
+                       " ", "tablename", "status", "size", "lg_size",
+                       "tablet", "busy");
     }
     for (int32_t table_no = 0; table_no < table_list.meta_size(); ++table_no) {
         std::string tablename = table_list.meta(table_no).table_name();
@@ -881,6 +883,8 @@ int32_t ShowAllTables(Client* client, bool is_x, bool show_all, ErrorCode* err) 
         uint32_t scan = 0;
         uint32_t smax = 0;
         uint64_t sspeed = 0;
+        int64_t lg_num = 0;
+        std::vector<int64_t> lg_size;
         for (int32_t i = 0; i < tablet_list.meta_size(); ++i) {
             if (tablet_list.meta(i).table_name() == tablename) {
                 size += tablet_list.meta(i).table_size();
@@ -907,14 +911,32 @@ int32_t ShowAllTables(Client* client, bool is_x, bool show_all, ErrorCode* err) 
                     smax = tablet_list.counter(i).scan_rows();
                 }
                 sspeed += tablet_list.counter(i).scan_size();
+
+                if (lg_num == 0) {
+                    lg_num = tablet_list.meta(i).lg_size_size();
+                    lg_size.resize(lg_num, 0);
+                }
+                for (int l = 0; l < lg_num; ++l) {
+                    lg_size[l] += tablet_list.meta(i).lg_size(l);
+                }
             }
         }
+
+        std::string lg_size_str = "";
+        for (int l = 0; l < lg_num; ++l) {
+            lg_size_str += utils::ConvertByteToString(lg_size[l]);
+            if (l < lg_num - 1) {
+                lg_size_str += " ";
+            }
+        }
+        lg_size_str += "";
         if (is_x) {
             printer.AddRow(cols,
                            NumberToString(table_no).data(),
                            tablename.data(),
                            StatusCodeToString(status).data(),
                            utils::ConvertByteToString(size).data(),
+                           lg_size_str.data(),
                            NumberToString(tablet).data(),
                            NumberToString(busy).data(),
                            NumberToString(notready).data(),
@@ -934,6 +956,7 @@ int32_t ShowAllTables(Client* client, bool is_x, bool show_all, ErrorCode* err) 
                            tablename.data(),
                            StatusCodeToString(status).data(),
                            utils::ConvertByteToString(size).data(),
+                           lg_size_str.data(),
                            NumberToString(tablet).data(),
                            NumberToString(busy).data());
         }
