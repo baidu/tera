@@ -10,6 +10,7 @@ namespace io {
 
 bool IsAtomicOP(leveldb::TeraKeyType keyType) {
     if (keyType == leveldb::TKT_ADD ||
+        keyType == leveldb::TKT_ADDINT64 ||
         keyType == leveldb::TKT_PUT_IFABSENT ||
         keyType == leveldb::TKT_APPEND) {
         return true;
@@ -20,7 +21,8 @@ bool IsAtomicOP(leveldb::TeraKeyType keyType) {
 AtomicMergeStrategy::AtomicMergeStrategy()
     : m_merged_key(NULL),
       m_merged_value(NULL),
-      m_counter(0) {
+      m_counter(0),
+      m_int64(0) {
 }
 
 void AtomicMergeStrategy::Init(std::string* merged_key,
@@ -38,6 +40,10 @@ void AtomicMergeStrategy::Init(std::string* merged_key,
         case leveldb::TKT_ADD:
             m_merged_key->assign(latest_key.data(), latest_key.size());
             m_counter = io::DecodeBigEndain(latest_value.data());
+            break;
+        case leveldb::TKT_ADDINT64:
+            m_merged_key->assign(latest_key.data(), latest_key.size());
+            m_int64 = *(int64_t*)latest_value.data();
             break;
         case leveldb::TKT_PUT_IFABSENT:
             m_merged_key->assign(latest_key.data(), latest_key.size());
@@ -62,6 +68,11 @@ void AtomicMergeStrategy::MergeStep(const leveldb::Slice& key,
                 m_counter += io::DecodeBigEndain(value.data());
             }
             break;
+        case leveldb::TKT_ADDINT64:
+            if (key_type == leveldb::TKT_ADDINT64 || key_type == leveldb::TKT_VALUE) {
+                m_int64 += *(int64_t*)value.data();
+            }
+            break;
         case leveldb::TKT_PUT_IFABSENT:
             if (key_type == leveldb::TKT_PUT_IFABSENT || key_type == leveldb::TKT_VALUE) {
                 m_merged_value->assign(value.data(), value.size());
@@ -84,6 +95,9 @@ bool AtomicMergeStrategy::Finish() {
             char buf[sizeof(int64_t)];
             io::EncodeBigEndian(buf, m_counter);
             m_merged_value->assign(buf, sizeof(buf));
+            break;
+        case leveldb::TKT_ADDINT64:
+            m_merged_value->assign(std::string((char*)&m_int64, sizeof(int64_t)));
             break;
         case leveldb::TKT_PUT_IFABSENT:
             // do nothing

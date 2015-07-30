@@ -1530,6 +1530,54 @@ void TabletIO::TearDownIteratorOptions(leveldb::ReadOptions* opts) {
     }
 }
 
+static bool CheckValue(const KeyValuePair& kv, const Filter& filter) {
+    int64_t v1 = *(int64_t*)kv.value().c_str(); 
+    int64_t v2 = *(int64_t*)filter.ref_value().c_str();
+    BinCompOp op = filter.bin_comp_op();
+    switch (op) {
+    case EQ:
+        return v1 == v2;
+        break;
+    case NE:
+        return v1 != v2;
+        break;
+    case LT:
+        return v1 < v2;
+        break;
+    case LE:
+        return v1 <= v2;
+        break;
+    case GT:
+        return v1 > v2;
+        break;
+    case GE:
+        return v1 >= v2;
+        break;
+    default:
+        LOG(ERROR) << "illegal compare operator: " << op;
+    }
+    return false; 
+}
+
+static bool CheckCell(const KeyValuePair& kv, const Filter& filter) {
+    switch (filter.type()) {
+    case BinComp: {
+        if (filter.field() == ValueFilter) {
+            if (!CheckValue(kv, filter)) {
+                return false;
+            }
+        } else {
+            LOG(ERROR) << "only support value-compare."; 
+        }
+        break;
+    }
+    default: {
+        LOG(ERROR) << "only support compare.";
+        break;
+    }}
+    return true;
+}
+
 void TabletIO::ProcessRowBuffer(std::list<KeyValuePair>& row_buf,
                                 const ScanOptions& scan_options,
                                 RowResult* value_list,
@@ -1542,16 +1590,19 @@ void TabletIO::ProcessRowBuffer(std::list<KeyValuePair>& row_buf,
 
     VLOG(10) << "Filter check: kv_num: " << row_buf.size()
         << ", filter_num: " << filter_num;
-    if (filter_num > 0) {
-        ScanFilter scan_filter(scan_options.filter_list);
+
+    for (int i = 0; i < filter_num; ++i) {
+        const Filter& filter = scan_options.filter_list.filter(i);
         for (it = row_buf.begin(); it != row_buf.end(); ++it) {
-            if (!scan_filter.Check(*it)) {
-                // filter check failed, skip this row.
+            if (it->column_family() != filter.content()) {
+                continue;
+            }
+            if (filter.value_type() != kINT64) {
+                LOG(ERROR) << "only support int64 value.";
                 return;
             }
-            if (scan_filter.IsSuccess()) {
-                // all filter success, keep this row.
-                break;
+            if (!CheckCell(*it, filter)) {
+                return;
             }
         }
     }
