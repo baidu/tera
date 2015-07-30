@@ -1190,14 +1190,14 @@ int32_t ShowTabletNodesInfo(Client* client, bool is_x, ErrorCode* err) {
     int cols;
     TPrinter printer;
     if (is_x) {
-        cols = 23;
+        cols = 24;
         printer.Reset(cols);
         printer.AddRow(cols,
                        " ", "address", "status", "size", "num",
                        "lread", "r", "rspd", "w", "wspd",
                        "s", "sspd", "rdly", "rp", "sp",
-                       "wp", "ld", "bs", "mem", "net_tx",
-                       "net_rx", "dfs_r", "dfs_w");
+                       "wp", "ld", "bs", "mem", "cpu",
+                       "net_tx", "net_rx", "dfs_r", "dfs_w");
         std::vector<string> row;
         for (size_t i = 0; i < infos.size(); ++i) {
             std::map<string, string> extra;
@@ -1226,6 +1226,7 @@ int32_t ShowTabletNodesInfo(Client* client, bool is_x, ErrorCode* err) {
             row.push_back(NumberToString(infos[i].tablet_onload()));
             row.push_back(NumberToString(infos[i].tablet_onbusy()));
             row.push_back(utils::ConvertByteToString(infos[i].mem_used()));
+            row.push_back(NumberToString(infos[i].cpu_usage()));
             row.push_back(utils::ConvertByteToString(infos[i].net_tx()));
             row.push_back(utils::ConvertByteToString(infos[i].net_rx()));
             row.push_back(utils::ConvertByteToString(infos[i].dfs_io_r()));
