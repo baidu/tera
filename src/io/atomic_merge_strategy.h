@@ -34,6 +34,7 @@ private:
     std::string* m_merged_value;
     leveldb::TeraKeyType m_latest_key_type;
     int64_t m_counter; // for ADD
+    int64_t m_int64;   // for int64(add)
     std::string m_append_buffer; // for Append
 };
 

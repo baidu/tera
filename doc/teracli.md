@@ -123,3 +123,17 @@ cf    | diskquota   | 存储限额  | >0 | MB | 0 | 暂未使用
 # 更新部分属性时需要disable表格，程序会在运行时给出提示
 ./teracli update "kvtable<splitsize=1024>"
 ```
+
+## Put整形值(putint64)
+```bash
+./teracli putint64 testtable row1 "cf0:qu0" 67
+```
+## Get整形值(getint64)
+```bash
+./teracli getint64 testtable row1 "cf0:qu0"
+```
+
+## 原子加整形值(addint64)
+```bash
+./teracli addint64 testtable row1 "cf0:qu0" -1
+```
