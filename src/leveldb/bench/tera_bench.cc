@@ -40,6 +40,15 @@ static double FLAGS_compression_ratio = 0.5;
 // Number of tablets
 static int FLAGS_tablet_num = 1;
 
+// CF list in format: "cf0:q1,cf1:q2..."
+static std::string FLAGS_cf_list = "";
+
+// Seq mode start key
+static int FLAGS_start_key = 0;
+
+// Generate different data each time
+static char FLAGS_random_seed = 'f';
+
 namespace leveldb {
 
 // Helper for quickly generating random data.
@@ -53,8 +62,8 @@ class RandomGenerator {
   RandomGenerator() {
     // We use a limited amount of data over and over again and ensure
     // that it is larger than the compression window (32KB), and also
-    // large enough to serve all typical value sizes we want to write.
-    Random rnd(301);
+    // large enough to serve all typical value sizes we want to write. 
+    Random rnd(FLAGS_random_seed);
     std::string piece;
     while (data_.size() < 1048576) {
       // Add a short fragment that is as compressible as specified
@@ -136,10 +145,10 @@ class Benchmark {
   : num_(FLAGS_num),
     reads_(FLAGS_reads < 0 ? FLAGS_num : FLAGS_reads),
     bytes_(0),
-    rand_(301) {
+    rand_(FLAGS_random_seed) {
     tablet_rand_vector_ = new Random*[FLAGS_tablet_num];
     for (int i = 0; i < FLAGS_tablet_num; i++) {
-      tablet_rand_vector_[i] = new Random(301);
+      tablet_rand_vector_[i] = new Random(FLAGS_random_seed);
     }
   }
 
@@ -151,6 +160,20 @@ class Benchmark {
   }
 
   void Run() {
+    // parse cf list
+    std::vector<std::string> cfs;
+    if (FLAGS_cf_list != "") {
+      std::string buffer = FLAGS_cf_list;
+      size_t start_index = 0;
+      size_t end_index = buffer.find(",");
+      while (end_index != std::string::npos) {
+        cfs.push_back(buffer.substr(start_index, end_index - start_index));
+        start_index = end_index + 1;
+        end_index = buffer.find(",", start_index);
+      }
+      cfs.push_back(buffer.substr(start_index));
+    }
+    
     const char* benchmarks = FLAGS_benchmarks;
     while (benchmarks != NULL) {
       const char* sep = strchr(benchmarks, ',');
@@ -167,9 +190,9 @@ class Benchmark {
 
       bool known = true;
       if (name == Slice("seq")) {
-        Output(SEQUENTIAL, num_, FLAGS_value_size);
+        Output(SEQUENTIAL, num_, FLAGS_value_size, cfs);
       } else if (name == Slice("random")) {
-        Output(RANDOM, num_, FLAGS_value_size);
+        Output(RANDOM, num_, FLAGS_value_size, cfs);
       } else {
         known = false;
         if (name != Slice()) {  // No error message for empty name
@@ -184,7 +207,7 @@ class Benchmark {
 
  private:
 
-  void Output(Order order, int num_entries, int value_size) {
+  void Output(Order order, int num_entries, int value_size, std::vector<std::string>& cfs) {
     if (num_entries != num_) {
       char msg[100];
       snprintf(msg, sizeof(msg), "(%d ops)", num_entries);
@@ -192,14 +215,22 @@ class Benchmark {
     }
 
     // Write to database
-    for (int i = 0; i < num_entries; i++)
+    int i = FLAGS_start_key;
+    int end_key = i + num_entries;
+    for (; i < end_key; i++)
     {
       const int t = rand_.Next() % FLAGS_tablet_num;
       const int k = (order == SEQUENTIAL) ? i : (tablet_rand_vector_[t]->Next());
       char key[10000];
       snprintf(key, sizeof(key), "%06d%0*d", t, FLAGS_key_size - 6, k);
       bytes_ += value_size + strlen(key);
-      fprintf(stdout, "%s\t%s\n", key, gen_.Generate(value_size).ToString().c_str());
+      if (cfs.empty() == true) {
+        fprintf(stdout, "%s\t%s\t%s\n", key, gen_.Generate(value_size).ToString().c_str(), "0");
+      } else {
+        for (size_t j = 0; j < cfs.size(); ++j) {
+          fprintf(stdout, "%s\t%s\t%s\t%s\n", key, gen_.Generate(value_size).ToString().c_str(), cfs[j].c_str(), "0");
+        }
+      }
     }
   }
 };
@@ -211,6 +242,7 @@ int main(int argc, char** argv) {
     double d;
     int n;
     char junk;
+    char cf_list[1024];
     if (leveldb::Slice(argv[i]).starts_with("--benchmarks=")) {
       FLAGS_benchmarks = argv[i] + strlen("--benchmarks=");
     } else if (sscanf(argv[i], "--compression_ratio=%lf%c", &d, &junk) == 1) {
@@ -225,6 +257,17 @@ int main(int argc, char** argv) {
       FLAGS_value_size = n;
     } else if (sscanf(argv[i], "--tablet_num=%d%c", &n, &junk) == 1) {
       FLAGS_tablet_num = n;
+    } else if (sscanf(argv[i], "--cf=%s", cf_list) == 1) {
+      FLAGS_cf_list = std::string(cf_list);
+    } else if (sscanf(argv[i], "--start_key=%d%c", &n, &junk) == 1) {
+      FLAGS_start_key = n;
+    } else if (sscanf(argv[i], "--random=%c", &junk) == 1) {
+      if (junk == 't') {
+        FLAGS_random_seed = time(NULL);
+      } else {
+        FLAGS_random_seed = 301;
+      }
+      
     } else {
       fprintf(stderr, "Invalid flag '%s'\n", argv[i]);
       exit(1);
