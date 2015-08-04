@@ -62,7 +62,8 @@ bool KvCompactStrategy::ScanDrop(const leveldb::Slice& tera_key, uint64_t n) {
     return Drop(tera_key, n, false); // used in scan.
 }
 
-bool KvCompactStrategy::ScanMergedValue(Iterator* it, std::string* merged_value) {
+bool KvCompactStrategy::ScanMergedValue(Iterator* it, std::string* merged_value,
+                                        int64_t* merged_num) {
     return false;
 }
 

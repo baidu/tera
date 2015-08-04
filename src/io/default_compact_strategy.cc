@@ -130,9 +130,12 @@ bool DefaultCompactStrategy::Drop(const leveldb::Slice& tera_key, uint64_t n,
     return false;
 }
 
-bool DefaultCompactStrategy::ScanMergedValue(leveldb::Iterator* it, std::string* merged_value) {
+bool DefaultCompactStrategy::ScanMergedValue(leveldb::Iterator* it,
+                                             std::string* merged_value,
+                                             int64_t* merged_num) {
     std::string merged_key;
-    bool has_merge =  InternalMergeProcess(it, merged_value, &merged_key, true, false);
+    bool has_merge =  InternalMergeProcess(it, merged_value, &merged_key,
+                                           true, false, merged_num);
     return has_merge;
 }
 
@@ -140,12 +143,16 @@ bool DefaultCompactStrategy::MergeAtomicOPs(leveldb::Iterator* it,
                                             std::string* merged_value,
                                             std::string* merged_key) {
     bool merge_put_flag = false; // don't merge the last PUT if we have
-    return InternalMergeProcess(it, merged_value, merged_key, merge_put_flag, true);
+    return InternalMergeProcess(it, merged_value, merged_key, merge_put_flag,
+                                true, NULL);
 }
 
-bool DefaultCompactStrategy::InternalMergeProcess(leveldb::Iterator* it, std::string* merged_value,
+bool DefaultCompactStrategy::InternalMergeProcess(leveldb::Iterator* it,
+                                                  std::string* merged_value,
                                                   std::string* merged_key,
-                                                  bool merge_put_flag, bool is_internal_key) {
+                                                  bool merge_put_flag,
+                                                  bool is_internal_key,
+                                                  int64_t* merged_num) {
     if (!tera::io::IsAtomicOP(m_cur_type)) {
         return false;
     }
@@ -156,10 +163,12 @@ bool DefaultCompactStrategy::InternalMergeProcess(leveldb::Iterator* it, std::st
     atom_merge.Init(merged_key, merged_value, it->key(), it->value(), m_cur_type);
 
     it->Next();
+    int64_t merged_num_t = 1;
     int64_t last_ts_atomic = m_cur_ts;
     int64_t version_num = 0;
 
     while (it->Valid()) {
+        merged_num_t++;
         if (version_num >= 1) {
             break; //avoid accumulate to many versions
         }
@@ -203,6 +212,9 @@ bool DefaultCompactStrategy::InternalMergeProcess(leveldb::Iterator* it, std::st
         it->Next();
     }
     atom_merge.Finish();
+    if (merged_num) {
+        *merged_num = merged_num_t;
+    }
     return true;
 }
 
