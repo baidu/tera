@@ -707,9 +707,12 @@ inline bool TabletIO::LowLevelScan(const std::string& start_tera_key,
             last_col.assign(col.data(), col.size());
             last_qual.assign(qual.data(), qual.size());
             version_num = 1;
-            has_merged = compact_strategy->ScanMergedValue(it, &merged_value);
+            int64_t merged_num;
+            has_merged =
+                compact_strategy->ScanMergedValue(it, &merged_value, &merged_num);
             VLOG(10) << "has_merged:" << has_merged;
             if (has_merged) {
+                m_counter.low_read_cell.Add(merged_num);
                 value = merged_value;
                 key = last_key;
                 col = last_col;
@@ -1531,7 +1534,7 @@ void TabletIO::TearDownIteratorOptions(leveldb::ReadOptions* opts) {
 }
 
 static bool CheckValue(const KeyValuePair& kv, const Filter& filter) {
-    int64_t v1 = *(int64_t*)kv.value().c_str(); 
+    int64_t v1 = *(int64_t*)kv.value().c_str();
     int64_t v2 = *(int64_t*)filter.ref_value().c_str();
     BinCompOp op = filter.bin_comp_op();
     switch (op) {
@@ -1556,7 +1559,7 @@ static bool CheckValue(const KeyValuePair& kv, const Filter& filter) {
     default:
         LOG(ERROR) << "illegal compare operator: " << op;
     }
-    return false; 
+    return false;
 }
 
 static bool CheckCell(const KeyValuePair& kv, const Filter& filter) {
@@ -1567,7 +1570,7 @@ static bool CheckCell(const KeyValuePair& kv, const Filter& filter) {
                 return false;
             }
         } else {
-            LOG(ERROR) << "only support value-compare."; 
+            LOG(ERROR) << "only support value-compare.";
         }
         break;
     }

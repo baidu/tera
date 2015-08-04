@@ -26,7 +26,9 @@ public:
 
     virtual const char* Name() const;
 
-    virtual bool ScanMergedValue(leveldb::Iterator* it, std::string* merged_value);
+    virtual bool ScanMergedValue(leveldb::Iterator* it,
+                                 std::string* merged_value,
+                                 int64_t* merged_num = NULL);
 
     virtual bool MergeAtomicOPs(leveldb::Iterator* it, std::string* merged_value,
                                 std::string* merged_key);
@@ -38,7 +40,8 @@ private:
 
     bool InternalMergeProcess(leveldb::Iterator* it, std::string* merged_value,
                               std::string* merged_key,
-                              bool merge_put_flag, bool is_internal_key);
+                              bool merge_put_flag, bool is_internal_key,
+                              int64_t* merged_num);
 
 private:
     std::map<std::string, int32_t> m_cf_indexs;
