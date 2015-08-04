@@ -51,6 +51,7 @@ private:
     std::string m_last_key;
     std::string m_last_col;
     std::string m_last_qual;
+    int64_t m_last_ts;
     leveldb::TeraKeyType m_last_type;
     leveldb::TeraKeyType m_cur_type;
     int64_t m_del_row_ts;

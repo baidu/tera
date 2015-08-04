@@ -217,6 +217,7 @@ bool DefaultCompactStrategy::ScanDrop(const leveldb::Slice& tera_key, uint64_t n
     }
 
     m_cur_type = type;
+    m_last_ts = m_cur_ts;
     m_cur_ts = ts;
     int32_t cf_id = -1;
     if (type != leveldb::TKT_DEL && DropIllegalColumnFamily(col.ToString(), &cf_id)) {
@@ -311,10 +312,20 @@ bool DefaultCompactStrategy::ScanDrop(const leveldb::Slice& tera_key, uint64_t n
     }
 
     CHECK(cf_id >= 0) << "illegel column family";
-    if (type == leveldb::TKT_VALUE &&
-            ++m_version_num > static_cast<uint32_t>(m_schema.column_families(cf_id).max_versions())) {
-        // drop out-of-range version
-        return true;
+    if (type == leveldb::TKT_VALUE) {
+        if (m_cur_ts == m_last_ts && m_last_qual == qual.ToString() &&
+            m_last_col == col.ToString() && m_last_key == key.ToString()) {
+            // this is the same key, do not chang version num
+        } else {
+            m_version_num++;
+        }
+        if (m_version_num >
+            static_cast<uint32_t>(m_schema.column_families(cf_id).max_versions())) {
+            // drop out-of-range version
+            VLOG(20) << "drop true: " << key.ToString()
+                << ", version: " << m_version_num;
+            return true;
+        }
     }
     return false;
 }
