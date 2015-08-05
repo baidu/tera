@@ -5,12 +5,13 @@
 #include "filter_utils.h"
 
 #include <stdint.h>
-#include <limits>
+
 #include <sstream>
 
 #include <glog/logging.h>
 
 #include "common/base/string_ext.h"
+#include "common/base/string_number.h"
 #include "io/coding.h"
 #include "sdk/sdk_utils.h"
 
@@ -36,62 +37,15 @@ bool DefaultValueConverter(const string& in, const string& type, string* out) {
         LOG(ERROR) << "null ptr: out";
         return false;
     }
-    std::istringstream mem(in);
-    if (type == "int8") {
-        char buffer[sizeof(uint8_t)];
-        int8_t temp_data = 0;
-        mem >> temp_data;
-        uint8_t data = std::numeric_limits<char>::max() + temp_data;
-        memcpy(buffer, &data, sizeof(uint8_t));
-        out->assign(buffer, sizeof(uint8_t));
-    } else if (type == "uint8") {
-        char buffer[sizeof(uint8_t)];
-        uint8_t data = 0;
-        mem >> data;
-        memcpy(buffer, &data, sizeof(uint8_t));
-        out->assign(buffer, sizeof(uint8_t));
-    } else if (type == "int32") {
-        char buffer[sizeof(uint32_t)];
-        int32_t temp_data = 0;
-        mem >> temp_data;
-        uint32_t data = std::numeric_limits<int>::max() + temp_data;
-        io::EncodeBigEndian32(buffer, data);
-        out->assign(buffer, sizeof(uint32_t));
-    } else if (type == "uint32") {
-        char buffer[sizeof(uint32_t)];
-        uint32_t data = 0;
-        mem >> data;
-        io::EncodeBigEndian32(buffer, data);
-        out->assign(buffer, sizeof(uint32_t));
-    } else if (type == "int64") {
-        char buffer[sizeof(uint64_t)];
-        int64_t temp_data = 0;
-        mem >> temp_data;
-        uint64_t data = std::numeric_limits<long int>::max() + temp_data;
-        io::EncodeBigEndian(buffer, data);
-        out->assign(buffer, sizeof(uint64_t));
-    } else if (type == "uint64") {
-        char buffer[sizeof(uint64_t)];
-        uint64_t data = 0;
-        mem >> data;
-        io::EncodeBigEndian(buffer, data);
-        out->assign(buffer, sizeof(uint64_t));
-    } else if (type == "double") {
-        char buffer[sizeof(double)];
-        double data = 0.0;
-        mem >> data;
-        memcpy(buffer, &data, sizeof(double));
-        out->assign(buffer, sizeof(double));
-    } else if (type == "bool") {
-        char buffer[sizeof(bool)];
-        bool data = 0;
-        mem >> data;
-        memcpy(buffer, &data, sizeof(bool));
-        out->assign(buffer, sizeof(bool));
-    } else if (type == "string" || type == "binary" || type == "") {
-        out->assign(in);
+    if (type == "int64") {
+        int64_t value_int64;
+        if (!StringToNumber(in.c_str(), &value_int64)) {
+           LOG(ERROR) << "invalid Integer number Got: " << in;
+           return false;
+        }
+        out->assign((char*)&value_int64, sizeof(int64_t));
     } else {
-        LOG(ERROR) << "unknow type: " << type;
+        LOG(ERROR) << "not supported type: " << type;
         return false;
     }
     return true;

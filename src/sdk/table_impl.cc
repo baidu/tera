@@ -126,6 +126,13 @@ void TableImpl::ApplyMutation(const std::vector<RowMutation*>& row_mutations) {
 }
 
 bool TableImpl::Put(const std::string& row_key, const std::string& family,
+                    const std::string& qualifier, const int64_t value,
+                    ErrorCode* err) {
+    std::string value_str((char*)&value, sizeof(int64_t));
+    return Put(row_key, family, qualifier, value_str, err);
+}
+
+bool TableImpl::Put(const std::string& row_key, const std::string& family,
                     const std::string& qualifier, const std::string& value,
                     ErrorCode* err) {
     RowMutation* row_mu = NewRowMutation(row_key);
@@ -174,6 +181,14 @@ bool TableImpl::Add(const std::string& row_key, const std::string& family,
     return (err->GetType() == ErrorCode::kOK ? true : false);
 }
 
+bool TableImpl::AddInt64(const std::string& row_key, const std::string& family,
+                    const std::string& qualifier, int64_t delta, ErrorCode* err) {
+    RowMutation* row_mu = NewRowMutation(row_key);
+    row_mu->AddInt64(family, qualifier, delta);
+    ApplyMutation(row_mu);
+    *err = row_mu->GetError();
+    return (err->GetType() == ErrorCode::kOK ? true : false);
+}
 
 bool TableImpl::PutIfAbsent(const std::string& row_key, const std::string& family,
                             const std::string& qualifier, const std::string& value,
@@ -229,6 +244,18 @@ void TableImpl::Get(const std::vector<RowReader*>& row_readers) {
         row_reader_list[i] = static_cast<RowReaderImpl*>(row_readers[i]);
     }
     ReadRows(row_reader_list, true);
+}
+
+bool TableImpl::Get(const std::string& row_key, const std::string& family,
+                    const std::string& qualifier, int64_t* value,
+                    ErrorCode* err) {
+    std::string value_str;
+    if (Get(row_key, family, qualifier, &value_str, err)
+        && value_str.size() == sizeof(int64_t)) {
+        *value = *(int64_t*)value_str.c_str();
+        return true;
+    }
+    return false;
 }
 
 bool TableImpl::Get(const std::string& row_key, const std::string& family,
@@ -412,10 +439,12 @@ bool TableImpl::IsKvOnlyTable() {
 
 bool TableImpl::OpenInternal(ErrorCode* err) {
     if (!UpdateTableMeta(err)) {
+        LOG(ERROR) << "fail to update table meta.";
         return false;
     }
     if (FLAGS_tera_sdk_cookie_enabled) {
         if (!RestoreCookie()) {
+            LOG(ERROR) << "fail to restore cookie.";
             return false;
         }
         EnableCookieUpdateTimer();

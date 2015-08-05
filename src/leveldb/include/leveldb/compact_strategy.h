@@ -28,7 +28,8 @@ public:
     // used in LowLevelScan
     virtual bool ScanDrop(const Slice& k, uint64_t n) = 0;
 
-    virtual bool ScanMergedValue(Iterator* it, std::string* merged_value) = 0;
+    virtual bool ScanMergedValue(Iterator* it, std::string* merged_value,
+                                 int64_t* merged_num = NULL) = 0;
 
     virtual bool MergeAtomicOPs(Iterator* it, std::string* merged_value,
                                 std::string* merged_key) = 0;
@@ -58,7 +59,8 @@ public:
         return false;
     }
 
-    virtual bool ScanMergedValue(Iterator* it, std::string* merged_value) {
+    virtual bool ScanMergedValue(Iterator* it, std::string* merged_value,
+                                 int64_t* merged_num) {
         return false;
     }
 };
