@@ -56,6 +56,8 @@ void FillTabletNodeStat(const TabletNodeInfo& info, TabletNodeStat* stat) {
     stat->set_local_io_r(info.local_io_r());
     stat->set_local_io_w(info.local_io_w());
 
+    stat->set_cpu_usage(info.cpu_usage());
+
     stat->set_status_m(info.status_m());
     stat->set_tablet_onload(info.tablet_onload());
     stat->set_tablet_onsplit(info.tablet_onsplit());
@@ -63,6 +65,12 @@ void FillTabletNodeStat(const TabletNodeInfo& info, TabletNodeStat* stat) {
     stat->set_read_pending(info.read_pending());
     stat->set_write_pending(info.write_pending());
     stat->set_scan_pending(info.scan_pending());
+
+    for (int i = 0; i < info.extra_info_size(); ++i) {
+    	ExtraStat* estat = stat->add_extra_stat();
+    	estat->set_name(info.extra_info(i).name());
+    	estat->set_value(info.extra_info(i).value());
+    }
 }
 
 void FillTabletNodeStats(std::list<string>& raw_stats, TabletNodeStats* stat_list) {
@@ -344,7 +352,14 @@ void PrintResponse(const MonitorResponse& response) {
         const TabletNodeStats& stat_list = response.stat_list(i);
         for (int j = 0; j < stat_list.stat_size(); ++j) {
             const TabletNodeStat& stat = stat_list.stat(j);
-            std::cout << stat.ShortDebugString() << std::endl;
+            std::cout << stat.ShortDebugString() << " ";
+            for (int k = 0; k < stat.extra_stat_size(); ++k) {
+                ExtraStat extra_stat = stat.extra_stat(k);
+                if (extra_stat.name() == "rand_read_delay") {
+                	std::cout << extra_stat.name() << ": " << extra_stat.value() << " ";
+                }
+            }
+            std::cout << std::endl;
         }
     }
 }
