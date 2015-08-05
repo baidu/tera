@@ -103,6 +103,9 @@ public:
                      const std::string& qualifier, const std::string& value,
                      int64_t timestamp, ErrorCode* err);
     virtual bool Put(const std::string& row_key, const std::string& family,
+                     const std::string& qualifier, const int64_t value,
+                     ErrorCode* err);
+    virtual bool Put(const std::string& row_key, const std::string& family,
                      const std::string& qualifier, const std::string& value,
                      int32_t ttl, ErrorCode* err);
     virtual bool Put(const std::string& row_key, const std::string& family,
@@ -110,6 +113,11 @@ public:
                      int64_t timestamp, int32_t ttl, ErrorCode* err);
 
     virtual bool Add(const std::string& row_key,
+                     const std::string& family,
+                     const std::string& qualifier,
+                     int64_t delta,
+                     ErrorCode* err);
+    virtual bool AddInt64(const std::string& row_key,
                      const std::string& family,
                      const std::string& qualifier,
                      int64_t delta,
@@ -131,6 +139,9 @@ public:
     virtual bool Get(const std::string& row_key, const std::string& family,
                      const std::string& qualifier, std::string* value,
                      ErrorCode* err);
+    virtual bool Get(const std::string& row_key, const std::string& family,
+                    const std::string& qualifier, int64_t* value,
+                    ErrorCode* err);
 
     virtual bool IsPutFinished() { return _cur_commit_pending_counter.Get() == 0; }
 

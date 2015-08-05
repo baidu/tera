@@ -691,43 +691,53 @@ bool ScanDescImpl::ParseValueCompareFilter(const string& filter_str,
             << filter_str;
         return false;
     }
+    string::size_type type_pos;
+    string::size_type cf_pos;
+    if ((type_pos = filter_str.find("int64")) != string::npos) {
+        filter->set_value_type(kINT64);
+        cf_pos = type_pos + 5;
+    } else {
+        LOG(ERROR) << "only support int64 value filter, but got: "
+            << filter_str;
+        return false;
+    }
 
     string cf_name, value;
     string::size_type op_pos;
     BinCompOp comp_op = UNKNOWN;
     if ((op_pos = filter_str.find(">=")) != string::npos) {
-        cf_name = filter_str.substr(0, op_pos);
+        cf_name = filter_str.substr(cf_pos, op_pos - cf_pos);
         value = filter_str.substr(op_pos + 2, filter_str.size() - op_pos - 2);
         comp_op = GE;
     } else if ((op_pos = filter_str.find(">")) != string::npos) {
-        cf_name = filter_str.substr(0, op_pos);
+        cf_name = filter_str.substr(cf_pos, op_pos - cf_pos);
         value = filter_str.substr(op_pos + 1, filter_str.size() - op_pos - 1);
         comp_op = GT;
     } else if ((op_pos = filter_str.find("<=")) != string::npos) {
-        cf_name = filter_str.substr(0, op_pos);
+        cf_name = filter_str.substr(cf_pos, op_pos - cf_pos);
         value = filter_str.substr(op_pos + 2, filter_str.size() - op_pos - 2);
         comp_op = LE;
     } else if ((op_pos = filter_str.find("<")) != string::npos) {
-        cf_name = filter_str.substr(0, op_pos);
+        cf_name = filter_str.substr(cf_pos, op_pos - cf_pos);
         value = filter_str.substr(op_pos + 1, filter_str.size() - op_pos - 1);
         comp_op = LT;
     } else if ((op_pos = filter_str.find("==")) != string::npos) {
-        cf_name = filter_str.substr(0, op_pos);
+        cf_name = filter_str.substr(cf_pos, op_pos - cf_pos);
         value = filter_str.substr(op_pos + 2, filter_str.size() - op_pos - 2);
         comp_op = EQ;
     } else if ((op_pos = filter_str.find("!=")) != string::npos) {
-        cf_name = filter_str.substr(0, op_pos);
+        cf_name = filter_str.substr(cf_pos, op_pos - cf_pos);
         value = filter_str.substr(op_pos + 2, filter_str.size() - op_pos - 2);
         comp_op = NE;
     } else {
         LOG(ERROR) << "fail to parse expression: " << filter_str;
         return false;
     }
-
     string type;
-    if (!GetCfType(cf_name, &type)) {
-        LOG(ERROR) << "fail to get column family type: \"" << cf_name << "\"";
-        return false;
+    if (filter->value_type() == kINT64) {
+        type = "int64";
+    } else {
+        assert(false);
     }
 
     string value_internal;

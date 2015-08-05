@@ -599,6 +599,10 @@ class PosixEnv : public Env {
     }
     struct dirent* entry;
     while ((entry = readdir(d)) != NULL) {
+      if (strcmp(entry->d_name, ".") == 0 ||
+          strcmp(entry->d_name, "..") == 0) {
+        continue;
+      }
       result->push_back(entry->d_name);
     }
     closedir(d);
