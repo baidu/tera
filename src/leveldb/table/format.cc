@@ -98,6 +98,10 @@ Status ReadBlock(RandomAccessFile* file,
     if (actual != crc) {
       delete[] buf;
       s = Status::Corruption("block checksum mismatch");
+      Log(options.db_opt->info_log, "block checksum mismatch: %llu %llu",
+          static_cast<unsigned long long>(handle.offset()),
+          static_cast<unsigned long long>(n + kBlockTrailerSize));
+
       return s;
     }
   }

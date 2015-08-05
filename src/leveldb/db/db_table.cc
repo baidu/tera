@@ -236,13 +236,15 @@ Status DBTable::Init() {
 
             Log(options_.info_log,
                 "[%s] Recover lg %d last_log_seq= %lu", dbname_.c_str(), i, last_seq);
-
             if (min_log_sequence > last_seq) {
                 min_log_sequence = last_seq;
             }
             if (last_sequence_ < last_seq) {
                 last_sequence_ = last_seq;
             }
+        } else {
+            Log(options_.info_log, "[%s] fail to Recover lg %d", dbname_.c_str(), i);
+            break;
         }
     }
     if (!s.ok()) {
@@ -250,6 +252,7 @@ Status DBTable::Init() {
             delete lg_list_[i];
         }
         lg_list_.clear();
+        Log(options_.info_log, "[%s] fail to Recover table.", dbname_.c_str());
         return s;
     }
 
