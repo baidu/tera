@@ -15,6 +15,8 @@
 
 namespace leveldb {
 
+static int32_t kMemCompactReadCountTrigger = 1000;
+
 MemTableOnLevelDB::MemTableOnLevelDB(const InternalKeyComparator& comparator,
                                      CompactStrategyFactory* compact_strategy_factory,
                                      size_t write_buffer_size,
@@ -58,6 +60,11 @@ size_t MemTableOnLevelDB::ApproximateMemoryUsage() {
 }
 
 Iterator* MemTableOnLevelDB::NewIterator() {
+    static int64_t read_count = 0;
+    read_count++;
+    if (read_count % kMemCompactReadCountTrigger == 0) {
+        memdb_->MinorCompact();
+    }
     return memdb_->NewInternalIterator();
 }
 
