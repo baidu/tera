@@ -1211,6 +1211,8 @@ Status VersionSet::ReadCurrentFile(uint64_t tablet, std::string* dscname ) {
       }
     }
     if (manifest_set.size() < 1) {
+      Log(options_->info_log, "[%s] none available manifest file.",
+          dbname_.c_str());
       return Status::Corruption("DB has none available manifest file.");
     }
     // select the largest manifest number

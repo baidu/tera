@@ -385,6 +385,7 @@ bool DBImpl::IsDbExist() {
   }
   if (is_manifest_exist) {
     // CURRENT file lost, but MANIFEST exist, still open it
+    options_.parent_tablets.resize(0);
     return true;
   }
 
