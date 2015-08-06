@@ -74,8 +74,8 @@ void ShowTableSchema(const TableSchema& schema, bool is_x) {
         if (is_x || schema.merge_size() != FLAGS_tera_master_merge_tablet_size) {
             ss << "mergesize=" << schema.merge_size() << ",";
         }
-        if (is_x || !schema.wal()) {
-            ss << "wal=" << Switch2Str(schema.wal()) << ",";
+        if (is_x || !schema.use_wal()) {
+            ss << "wal=" << Switch2Str(schema.use_wal()) << ",";
         }
         if (is_x || lg_schema.store_type() != DiskStore) {
             ss << "storage=" << LgProp2Str(lg_schema.store_type()) << ",";
@@ -96,8 +96,8 @@ void ShowTableSchema(const TableSchema& schema, bool is_x) {
     if (is_x || schema.merge_size() != FLAGS_tera_master_merge_tablet_size) {
         ss << "mergesize=" << schema.merge_size() << ",";
     }
-    if (is_x || !schema.wal()) {
-        ss << "wal=" << Switch2Str(schema.wal()) << ",";
+    if (is_x || !schema.use_wal()) {
+        ss << "wal=" << Switch2Str(schema.use_wal()) << ",";
     }
     ss << "\b> {" << std::endl;
 
@@ -190,7 +190,7 @@ void TableDescToSchema(const TableDescriptor& desc, TableSchema* schema) {
     schema->set_split_size(desc.SplitSize());
     schema->set_merge_size(desc.MergeSize());
     schema->set_kv_only(desc.IsKv());
-    schema->set_wal(desc.IsWalEnabled());
+    schema->set_use_wal(desc.IsWalEnabled());
 
     // add lg
     int num = desc.LocalityGroupNum();
@@ -256,7 +256,7 @@ void TableSchemaToDesc(const TableSchema& schema, TableDescriptor* desc) {
     if (schema.has_merge_size()) {
         desc->SetMergeSize(schema.merge_size());
     }
-    if (schema.has_wal() && !schema.wal()) {
+    if (schema.has_use_wal() && !schema.use_wal()) {
         desc->DisableWal();
     }
 

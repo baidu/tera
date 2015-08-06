@@ -50,7 +50,7 @@ Options::Options()
       sst_size(kDefaultSstSize),
       verify_checksums_in_compaction(false),
       ignore_corruption_in_compaction(false),
-      wal(true) {
+      use_wal(true) {
 }
 
 }  // namespace leveldb

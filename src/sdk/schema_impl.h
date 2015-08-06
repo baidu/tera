@@ -200,7 +200,7 @@ private:
     RawKeyType      _raw_key_type;
     int64_t         _split_size;
     int64_t         _merge_size;
-    bool            _wal;
+    bool            _use_wal;
 };
 
 } // namespace tera

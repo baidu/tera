@@ -221,7 +221,7 @@ bool TabletIO::Load(const TableSchema& schema,
     }
     m_ldb_options.verify_checksums_in_compaction = FLAGS_tera_leveldb_verify_checksums;
     m_ldb_options.ignore_corruption_in_compaction = FLAGS_tera_leveldb_ignore_corruption_in_compaction;
-    m_ldb_options.wal = m_table_schema.wal();
+    m_ldb_options.use_wal = m_table_schema.use_wal();
     SetupOptionsForLG();
 
     m_tablet_path = FLAGS_tera_tabletnode_path_prefix + path;
