@@ -32,7 +32,7 @@ Tera指标体系
 其中，bin目录下为可执行文件，conf目录下为tera.flag，log目录下taracli, tera_mark以及teramo的log路径，log目录下的eva目录为指标系统的log路径。tmp目录下为tera_mark的输出文件以及指标系统产生的schema，dele以及指标结果文件。指标结果文件为html格式，可以通过机器邮件客户端发送到用户邮箱。
 
 ## 体验开始！
-* 1. 修改/src/benchmark/eva下的conf.sample文件：
+* 修改/src/benchmark/eva下的conf.sample文件：
 
   ```
   {
@@ -52,4 +52,9 @@ Tera指标体系
     // table schema，设置"table_schema": {}为kv模式
 }
   ```
-2* . 
+  
+* 开始测试
+在{path}/bin目录下运行python run.py {conf}其中conf为测试配置文件路径
+
+* 测试结束
+测试结束后会生成一份报告，位于{path}/tmp目录下。
