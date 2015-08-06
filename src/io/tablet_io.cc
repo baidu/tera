@@ -63,6 +63,7 @@ DECLARE_int32(tera_memenv_block_cache_size);
 DECLARE_bool(tera_tablet_use_memtable_on_leveldb);
 DECLARE_int64(tera_tablet_memtable_ldb_write_buffer_size);
 DECLARE_int64(tera_tablet_memtable_ldb_block_size);
+DECLARE_bool(tera_tablet_ll_seek_available);
 
 extern tera::Counter row_read_delay;
 
@@ -968,7 +969,7 @@ bool TabletIO::ReadCells(const RowReaderInfo& row_reader, RowResult* value_list,
     }
 
     ScanOptions scan_options;
-    bool ll_seek_available = true;
+    bool ll_seek_available = FLAGS_tera_tablet_ll_seek_available;
     for (int32_t i = 0; i < row_reader.cf_list_size(); ++i) {
         const ColumnFamily& column_family = row_reader.cf_list(i);
         const std::string& column_family_name = column_family.family_name();
@@ -1436,7 +1437,7 @@ void TabletIO::SetupOptionsForLG() {
         if (lg_schema.use_memtable_on_leveldb()) {
             lg_info->use_memtable_on_leveldb = true;
             lg_info->memtable_ldb_write_buffer_size =
-                lg_schema.memtable_ldb_write_buffer_size() * 1024 * 1024;
+                lg_schema.memtable_ldb_write_buffer_size() * 1024 ;
             lg_info->memtable_ldb_block_size =
                 lg_schema.memtable_ldb_block_size() * 1024;
             LOG(INFO) << "enable mem-ldb for LG:" << lg_schema.name().c_str()

@@ -1399,9 +1399,7 @@ Status DBImpl::Write(const WriteOptions& options, WriteBatch* my_batch) {
     uint64_t batch_sequence = WriteBatchInternal::Sequence(my_batch);
     WriteBatch* updates = BuildBatchGroup(&last_writer);
     WriteBatchInternal::SetSequence(updates, batch_sequence);
-    if (!options_.use_memtable_on_leveldb) {
-      assert(writers_.size() == 1);
-    }
+    assert(writers_.size() == 1);
 
     // Apply to memtable.  We can release the lock
     // during this phase since &w is currently responsible for logging
