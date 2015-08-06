@@ -225,7 +225,7 @@ class Benchmark {
       snprintf(key, sizeof(key), "%06d%0*d", t, FLAGS_key_size - 6, k);
       bytes_ += value_size + strlen(key);
       if (cfs.empty() == true) {
-        fprintf(stdout, "%s\t%s\t%s\n", key, gen_.Generate(value_size).ToString().c_str(), "0");
+        fprintf(stdout, "%s\t%s\n", key, gen_.Generate(value_size).ToString().c_str());
       } else {
         for (size_t j = 0; j < cfs.size(); ++j) {
           fprintf(stdout, "%s\t%s\t%s\t%s\n", key, gen_.Generate(value_size).ToString().c_str(), cfs[j].c_str(), "0");

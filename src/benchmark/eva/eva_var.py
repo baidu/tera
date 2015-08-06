@@ -1,72 +1,107 @@
-TABLET_NUM = 8
-KEY_SIZE = 20  # Bytes
-VALUE_SIZE = 1024  # Bytes
-ENTRY_SIZE = KEY_SIZE + VALUE_SIZE  # Bytes
-ENTRY_NUM = 4  # MB
-DATA_PATH = ''
-MODE_WRITE = 'w'
-MODE_READ = 'r'
-MODE_SCAN = 's'
+class CONF:
+    def __init__(self):
+        self.TABLE_NAME = 'table_name'
+        self.TABLET_NUM = 'tablet_number'
+        self.KEY_SIZE = 'key_size(B)'  # Bytes
+        self.VALUE_SIZE = 'value_sizeB(B)'  # Bytes
+        self.ENTRY_SIZE = 'entry_size(B)'  # Bytes
+        self.ENTRY_NUM = 'entry_number(M)'  # MB
+        self.LG_NUM = 'lg_number'
+        self.CF_NUM = 'cf_number'
+        self.CF = 'cf'
+        self.KV = 'kv_mode'
+        self.WRITE_SPEED_LIMIT = 'write_speed_limit(/TS*M)'
+        self.READ_SPEED_LIMIT = 'read_speed_limit(/TS*Qps)'
+        self.MODE_SEQ_WRITE = 'sw'
+        self.MODE_RAND_WRITE = 'rw'
+        self.MODE_READ = 'r'
+        self.MODE_SCAN = 's'
+        self.MODE = 'mode'
+        self.SCAN_BUFFER = 'scan_buffer(M)'
+        self.TERA_BENCH = ''
+        self.SPLIT_SIZE = 'split_size'
+        self.SCHEMA = 'table_schema'
+        self.g_speed_limit = 0
 
-TS_NUMBER = 1
-READY = 'kReady'
-OFFLINE = 'kOffLine'
-ONKICK = 'kOnKick'
-WAITKICK = 'kWaitKick'
-TS_STATUS_KEYS = [READY, OFFLINE, ONKICK, WAITKICK]
+        self.TS_NUMBER = 'ts_number'
 
-T_TOTAL = 'tablet_total'
-T_BUSY = 'tablet_onbusy'
-T_SPLIT = 'tablet_onsplit'
-T_LOAD = 'tablet_onload'
-SCAN = 'scan_size'
-WRITE = 'write_size'
-READ = 'read_rows'
-DFS_READ = 'dfs_io_r'
-DFS_WRITE = 'dfs_io_w'
-LOCAL_READ = 'local_io_r'
-LOCAL_WRITE = 'local_io_w'
-STAT_KEYS = [T_TOTAL, T_BUSY, T_SPLIT, T_LOAD, SCAN, WRITE, READ, DFS_READ, DFS_WRITE, LOCAL_READ, LOCAL_WRITE]
-ACCUMULATE_PART = [SCAN, WRITE, READ, DFS_READ, DFS_WRITE, LOCAL_READ, LOCAL_WRITE]
-RATIO_PART = [T_BUSY, T_SPLIT, T_LOAD]
+        self.g_test_conf = {self.TABLE_NAME: '', self.TABLET_NUM: 0, self.KEY_SIZE: 20, self.VALUE_SIZE: 1024,
+                            self.ENTRY_SIZE: 20 + 1024, self.ENTRY_NUM: 0, self.LG_NUM: 0, self.CF_NUM: 1, self.CF: '',
+                            self.KV: None, self.WRITE_SPEED_LIMIT: 0, self.READ_SPEED_LIMIT: 0, self.MODE: '',
+                            self.SCAN_BUFFER: 0, self.TS_NUMBER: 0, self.SPLIT_SIZE: 0, self.SCHEMA: ''}
+conf = CONF()
 
-WRITE_AMP = 'write_amplification'
-READ_AMP = 'read_amplification'
 
-TERACLI = '../bin/teracli'
-TERAMO = '../bin/teramo'
-CREATE = 'create'
-DROP = 'drop'
-QUERY_INTERVAL = 20
-REPORT_INTERVAL = 10 * 60 * 60
-MICRO = 1000000
-MEGA = 1000000.0
-EMAIL_BLOCK_TITLE = ''
-SENDMAIL = '/usr/sbin/sendmail'
-MAIL_PATH = '../tmp/mail_report'
-MAIL_HEADER = 'Sender: leiliyuan <leiliyuan@baidu.com>\n\
-To: leiliyuan <leiliyuan@baidu.com>\n\
-Content-type: text/html\n\
-Subject: EVA report\n\n'
+class Stat:
+    def __init__(self):
+        self.READY = 'kReady'
+        self.OFFLINE = 'kOffLine'
+        self.ONKICK = 'kOnKick'
+        self.WAITKICK = 'kWaitKick'
+        self.TS_STATUS_KEYS = [self.READY, self.OFFLINE, self.ONKICK, self.WAITKICK]
 
-SPLIT_SIZE = 512
+        self.T_TOTAL = 'tablet_total'
+        self.T_BUSY = 'tablet_onbusy'
+        self.T_SPLIT = 'tablet_onsplit'
+        self.T_LOAD = 'tablet_onload'
+        self.SCAN = 'scan_size'
+        self.WRITE = 'write_size'
+        self.READ_SIZE = 'read_size'
+        self.READ_ROWS = 'read_rows'
+        self.READ_DELAY = 'rand_read_delay'
+        self.DFS_READ = 'dfs_io_r'
+        self.DFS_WRITE = 'dfs_io_w'
+        self.LOCAL_READ = 'local_io_r'
+        self.LOCAL_WRITE = 'local_io_w'
+        self.CPU = 'cpu_usage'
+        self.MEM = 'mem_used'
+        self.STAT_KEYS = [self.T_TOTAL, self.T_BUSY, self.T_SPLIT, self.T_LOAD, self.SCAN, self.WRITE, self.READ_SIZE,
+                          self.READ_ROWS, self.DFS_READ, self.READ_DELAY, self.DFS_WRITE, self.LOCAL_READ,
+                          self.LOCAL_WRITE, self.CPU, self.MEM]
+        self.ACCUMULATE_PART = [self.SCAN, self.WRITE, self.READ_SIZE, self.READ_ROWS, self.DFS_READ, self.READ_DELAY,
+                                self.DFS_WRITE, self.LOCAL_READ, self.LOCAL_WRITE, self.CPU, self.MEM]
+        self.RATIO_PART = [self.T_BUSY, self.T_SPLIT, self.T_LOAD]
 
-g_query_thread = None
-g_query_event = None
-g_report_thread = None
-g_exit = False
-g_logger = None
+        self.WRITE_AMP = 'write_amplification'
+        self.READ_AMP = 'read_amplification'
+        self.SCAN_AMP = 'scan_amplification'
 
-g_mode = ' '
+        self.g_ts_status = {}
+        for item in self.TS_STATUS_KEYS:
+            self.g_ts_status.update({item: 0})
 
-g_next_query_time = 0
-g_last_query_ts = 0
-g_query_times = 0
+        self.g_stat = {}
+        for item in self.STAT_KEYS:
+            self.g_stat.update({item: 0})
 
-g_ts_status = {}
-for item in TS_STATUS_KEYS:
-    g_ts_status.update({item: 0})
+stat = Stat()
 
-g_stat = {}
-for item in STAT_KEYS:
-    g_stat.update({item: 0})
+
+class Common:
+    def __init__(self):
+        self.TERACLI = './teracli'
+        self.TERAMO = './teramo'
+        self.TMP_DIR = '../tmp/'
+        self.CREATE = 'create'
+        self.DROP = 'drop'
+        self.QUERY_INTERVAL = 20
+        self.REPORT_INTERVAL = 10 * 60 * 60
+        self.MICRO = 1000000
+        self.MEGA = 1024.0 * 1024.0
+        self.EMAIL_BLOCK_TITLE = ''
+        self.SENDMAIL = '/usr/sbin/sendmail'
+        self.MAIL_PATH = '../tmp/mail_report'
+        self.MAIL_HEADER = 'Sender: leiliyuan <leiliyuan@baidu.com>\nTo: leiliyuan <leiliyuan@baidu.com>\n\
+Content-type: text/html\nSubject: EVA report\n\n'
+
+        self.g_query_thread = None
+        self.g_query_event = None
+        self.g_report_thread = None
+        self.g_exit = False
+        self.g_logger = None
+
+        self.g_next_query_time = 0
+        self.g_last_query_ts = 0
+        self.g_query_times = 0
+common = Common()
+
