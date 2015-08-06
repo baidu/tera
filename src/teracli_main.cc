@@ -1195,8 +1195,8 @@ int32_t ShowTabletNodesInfo(Client* client, bool is_x, ErrorCode* err) {
         printer.AddRow(cols,
                        " ", "address", "status", "size", "num",
                        "lread", "r", "rspd", "w", "wspd",
-                       "s", "sspd", "rdly", "rp", "sp",
-                       "wp", "ld", "bs", "mem", "cpu",
+                       "s", "sspd", "rdly", "rp", "wp",
+                       "sp", "ld", "bs", "mem", "cpu",
                        "net_tx", "net_rx", "dfs_r", "dfs_w");
         std::vector<string> row;
         for (size_t i = 0; i < infos.size(); ++i) {
