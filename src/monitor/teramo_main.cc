@@ -274,10 +274,9 @@ void InitFlags(int32_t argc, char** argv, const MonitorRequest& request) {
     }
 
     // init log dir
-    //if (FLAGS_log_dir.empty()) {
-            //FLAGS_log_dir = "./";
-	//}
-    FLAGS_log_dir = "../log";
+    if (FLAGS_log_dir.empty()) {
+            FLAGS_log_dir = "./";
+	}
 
 	::google::ParseCommandLineFlags(&argc, &argv, true);
 	::google::InitGoogleLogging(argv[0]);
