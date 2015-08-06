@@ -47,7 +47,7 @@ static std::string FLAGS_cf_list = "";
 static int FLAGS_start_key = 0;
 
 // Generate different data each time
-static char FLAGS_random_seed = 'f';
+static int FLAGS_random_seed = 301;
 
 namespace leveldb {
 
