@@ -5,7 +5,7 @@ Tera指标体系
 
 ## 配置及要求：
 * 一个搭建好的Tera集群
-* pyhton2.7 并在环境变量中添加PYTHONPATH=$HOME/{path}，其中path为指标系统的本目录
+* pyhton2.7 并在环境变量中添加PYTHONPATH=$HOME/{path}，其中path为指标系统的根目录
 
 ## 准备工作
 请按以下方式将需要的文件拷贝到相应目录下：
