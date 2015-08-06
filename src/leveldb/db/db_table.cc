@@ -305,15 +305,13 @@ Status DBTable::Init() {
         s = DeleteLogFile(logfiles);
     }
 
-    if (s.ok()) {
+    if (s.ok() && options_.wal) {
         std::string log_file_name = LogHexFileName(dbname_, last_sequence_ + 1);
         s = options_.env->NewWritableFile(log_file_name, &logfile_);
         if (s.ok()) {
-            if (options_.wal) {
-                //Log(options_.info_log, "[%s] open logfile %s",
-                //    dbname_.c_str(), log_file_name.c_str());
-                log_ = new log::AsyncWriter(logfile_, options_.log_async_mode);
-            }
+            //Log(options_.info_log, "[%s] open logfile %s",
+            //    dbname_.c_str(), log_file_name.c_str());
+            log_ = new log::AsyncWriter(logfile_, options_.log_async_mode);
         } else {
             Log(options_.info_log, "[%s] fail to open logfile %s",
                 dbname_.c_str(), log_file_name.c_str());
