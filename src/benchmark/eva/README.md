@@ -54,7 +54,9 @@ Tera指标体系
   ```
   
 * 开始测试
+
 在{path}/bin目录下运行python run.py {conf}其中conf为测试配置文件路径
 
 * 测试结束
+
 测试结束后会生成一份报告，位于{path}/tmp目录下。
