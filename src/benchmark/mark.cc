@@ -258,7 +258,7 @@ void Adapter::ReadCallback(tera::RowReader* reader, size_t req_size,
             }
         }
         std::cerr << "], timestamp=[" << reader->GetTimestamp()
-            << "], status=" << tera::strerr(err) << std::endl;
+            << "], status=" << tera::strerr(err) << ":" << err.GetReason()  << std::endl;
     }
     delete reader;
 
