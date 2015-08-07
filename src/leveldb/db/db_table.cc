@@ -243,16 +243,16 @@ Status DBTable::Init() {
                 last_sequence_ = last_seq;
             }
         } else {
-            Log(options_.info_log, "[%s] fail to Recover lg %d", dbname_.c_str(), i);
+            Log(options_.info_log, "[%s] fail to recover lg %d", dbname_.c_str(), i);
             break;
         }
     }
     if (!s.ok()) {
+        Log(options_.info_log, "[%s] fail to recover table.", dbname_.c_str());
         for (uint32_t i = 0; i != lg_list_.size(); ++i) {
             delete lg_list_[i];
         }
         lg_list_.clear();
-        Log(options_.info_log, "[%s] fail to Recover table.", dbname_.c_str());
         return s;
     }
 
