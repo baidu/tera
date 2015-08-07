@@ -27,6 +27,7 @@
 #include "sdk/sdk_zk.h"
 #include "sdk/table_impl.h"
 #include "sdk/tera.h"
+#include "utils/crypt.h"
 #include "utils/string_util.h"
 #include "utils/tprinter.h"
 #include "utils/utils_cmd.h"
@@ -134,6 +135,11 @@ void Usage(const std::string& prg_name) {
        showts[x] [<tabletnode addr>]                                        \n\
                 show all tabletnodes or single tabletnode info.             \n\
                 (show more detail when using suffix \"x\")                  \n\
+                                                                            \n\
+       hash username password                                               \n\
+                calculate the hash of username & password                   \n\
+                username & password used in client flag file                \n\
+                hash used in master flag file                               \n\
                                                                             \n\
        version\n\n";
 }
@@ -1728,6 +1734,25 @@ int32_t GetRandomNumKey(int32_t key_size,std::string *p_key){
     return 0;
 }
 
+int32_t HashOp(Client* client, int32_t argc, char** argv, ErrorCode* err) {
+    if (argc != 4) {
+      Usage(argv[0]);
+      return -1;
+    }
+
+    std::string user = argv[2];
+    std::string password = argv[3];
+    std::string hash;
+    if (GetHashString(user + ":" + password, 0, &hash) != 0) {
+        std::cout << "invalid arguments" << std::endl;
+        return -1;
+    }
+    std::cout << "password hash:" << hash << ", place it in master flag file."
+        << " and place password(not hash) in client flag file" << std::endl;
+    
+    return 0;
+}
+
 int32_t SnapshotOp(Client* client, int32_t argc, char** argv, ErrorCode* err) {
     if (argc < 4) {
       Usage(argv[0]);
@@ -2307,6 +2332,8 @@ int main(int argc, char* argv[]) {
         PrintSystemVersion();
     } else if (cmd == "snapshot") {
         ret = SnapshotOp(client, argc, argv, &error_code);
+    } else if (cmd == "hash") {
+        ret = HashOp(client, argc, argv, &error_code);
     } else if (cmd == "help") {
         Usage(argv[0]);
     } else if (cmd == "helpmore") {

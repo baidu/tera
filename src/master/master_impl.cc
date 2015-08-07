@@ -11,7 +11,6 @@
 #include <glog/logging.h>
 #include <gperftools/malloc_extension.h>
 
-
 #include "db/filename.h"
 #include "io/io_utils.h"
 #include "io/utils_leveldb.h"
@@ -89,6 +88,8 @@ DECLARE_string(tera_local_addr);
 DECLARE_bool(tera_ins_enabled);
 
 DECLARE_int64(tera_sdk_perf_counter_log_interval);
+
+DECLARE_string(tera_acl_root_token);
 
 namespace tera {
 namespace master {
@@ -4254,6 +4255,7 @@ bool MasterImpl::CreateStatTable() {
     CreateTableResponse response;
     request.set_sequence_id(0);
     request.set_table_name(FLAGS_tera_master_stat_table_name);
+    request.set_user_token(FLAGS_tera_acl_root_token);
     TableSchema* schema = request.mutable_schema();
 
     schema->set_name(FLAGS_tera_master_stat_table_name);
