@@ -443,10 +443,10 @@ private:
     // garbage clean
     void EnableTabletNodeGcTimer();
     void DisableTabletNodeGcTimer();
-    void ScheduleTabletNodeGarbageClean();
-    void TabletNodeGarbageClean();
-    void DoTabletNodeGarbageClean();
-    void DoTabletNodeGarbageCleanPhase2();
+    void ScheduleTabletNodeGc();
+    void TabletNodeGc();
+    void DoTabletNodeGc();
+    void DoTabletNodeGcPhase2();
     void CollectDeadTabletsFiles();
     void CollectSingleDeadTablet(const std::string& tablename, uint64_t tabletnum);
     void DeleteObsoleteFiles();
@@ -499,11 +499,11 @@ private:
     // tabletnode garbage clean
     // first: live tablet, second: dead tablet
     bool m_gc_enabled;
+    mutable Mutex m_gc_mutex;
     typedef std::pair<std::set<uint64_t>, std::set<uint64_t> > GcTabletSet;
     std::map<std::string, GcTabletSet> m_gc_tablets;
     typedef std::vector<std::set<uint64_t> > GcFileSet;
     std::map<std::string, GcFileSet> m_gc_live_files;
-    std::set<std::string> m_gc_tabletnodes;
     int64_t m_gc_timer_id;
     bool m_gc_query_enable;
 };
