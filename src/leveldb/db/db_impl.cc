@@ -631,17 +631,6 @@ bool DBImpl::MinorCompact() {
     return s.ok();
 }
 
-bool DBImpl::UserKeyInRange(const Slice& user_key) {
-    if (!key_start_.empty()
-        && user_comparator()->Compare(user_key, Slice(key_start_)) < 0) {
-        return false;
-    } else if (!key_end_.empty()
-               && user_comparator()->Compare(user_key, Slice(key_end_)) >= 0) {
-        return false;
-    }
-    return true;
-}
-
 void DBImpl::CompactMissFiles(const Slice* begin, const Slice* end) {
     Slice smallest(key_start_);
     Slice largest(key_end_);
@@ -1123,8 +1112,6 @@ Status DBImpl::DoCompactionWork(CompactionState* compact) {
         //     smaller sequence numbers will be dropped in the next
         //     few iterations of this loop (by rule (A) above).
         // Therefore this deletion marker is obsolete and can be dropped.
-        drop = true;
-      } else if (!UserKeyInRange(ikey.user_key)) {
         drop = true;
       } else if (compact_strategy) {
         drop = compact_strategy->Drop(ikey.user_key, ikey.sequence, is_base_level);
