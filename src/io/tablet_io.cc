@@ -903,10 +903,12 @@ bool TabletIO::LowLevelSeek(const std::string& row_key,
                 kv->set_qualifier(qu_name);
                 kv->set_timestamp(timestamp);
 
+                int64_t merged_num;
                 std::string merged_value;
                 bool has_merged =
-                    compact_strategy->ScanMergedValue(it_data, &merged_value);
+                    compact_strategy->ScanMergedValue(it_data, &merged_value, &merged_num);
                 if (has_merged) {
+                    m_counter.low_read_cell.Add(merged_num);
                     kv->set_value(merged_value);
                 } else {
                     leveldb::Slice value = it_data->value();
