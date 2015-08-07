@@ -243,16 +243,16 @@ Status DBTable::Init() {
                 last_sequence_ = last_seq;
             }
         } else {
-            Log(options_.info_log, "[%s] fail to Recover lg %d", dbname_.c_str(), i);
+            Log(options_.info_log, "[%s] fail to recover lg %d", dbname_.c_str(), i);
             break;
         }
     }
     if (!s.ok()) {
+        Log(options_.info_log, "[%s] fail to recover table.", dbname_.c_str());
         for (uint32_t i = 0; i != lg_list_.size(); ++i) {
             delete lg_list_[i];
         }
         lg_list_.clear();
-        Log(options_.info_log, "[%s] fail to Recover table.", dbname_.c_str());
         return s;
     }
 
@@ -308,7 +308,7 @@ Status DBTable::Init() {
         s = DeleteLogFile(logfiles);
     }
 
-    if (s.ok()) {
+    if (s.ok() && !options_.disable_wal) {
         std::string log_file_name = LogHexFileName(dbname_, last_sequence_ + 1);
         s = options_.env->NewWritableFile(log_file_name, &logfile_);
         if (s.ok()) {
@@ -371,6 +371,11 @@ Status DBTable::Write(const WriteOptions& options, WriteBatch* my_batch) {
     RecordWriter* last_writer = &w;
     WriteBatch* updates = NULL;
     if (s.ok()) {
+        updates = GroupWriteBatch(&last_writer);
+        WriteBatchInternal::SetSequence(updates, last_sequence_ + 1);
+    }
+
+    if (s.ok() && !options_.disable_wal && !options.disable_wal) {
         if (force_switch_log_ || current_log_size_ > options_.log_file_size) {
             mutex_.Unlock();
             if (SwitchLog(false) == 2) {
@@ -383,10 +388,7 @@ Status DBTable::Write(const WriteOptions& options, WriteBatch* my_batch) {
     }
 
     // dump to log
-    if (s.ok()) {
-        updates = GroupWriteBatch(&last_writer);
-        WriteBatchInternal::SetSequence(updates, last_sequence_ + 1);
-
+    if (s.ok() && !options_.disable_wal && !options.disable_wal) {
         mutex_.Unlock();
 
         Slice slice = WriteBatchInternal::Contents(updates);

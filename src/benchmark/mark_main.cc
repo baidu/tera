@@ -32,6 +32,7 @@ DEFINE_int64(max_rate, -1, "max_rate");
 DEFINE_bool(scan_streaming, false, "enable streaming scan");
 DEFINE_int64(batch_count, 1, "batch_count(sync)");
 DEFINE_bool(seq_write, false, "enable sequential write");
+DEFINE_int64(entry_limit, 0, "writing/reading speed limit");
 
 int mode = 0;
 int type = 0;
@@ -537,7 +538,16 @@ int main(int argc, char** argv) {
 
     int last_opt = NONE;
     bool finish = false;
+    int64_t count = 0;
     while (true) {
+        if (count == FLAGS_entry_limit) {
+            struct timeval now;
+            gettimeofday(&now, NULL);
+            if (1000000 - now.tv_usec > 0)  {
+                usleep(1000000 - now.tv_usec);
+            }
+            count = 0;
+        }
         switch (mode) {
         case WRITE:
             opt = PUT;
@@ -597,6 +607,7 @@ int main(int argc, char** argv) {
         largest_ts = tera::kLatestTs;
         smallest_ts = tera::kOldestTs;
         value.clear();
+        count += 1;
     }
 
     std::cout << "wait for completion..." << std::endl;

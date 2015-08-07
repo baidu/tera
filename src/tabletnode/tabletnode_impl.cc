@@ -405,7 +405,7 @@ void TabletNodeImpl::ReadTablet(int64_t start_micros,
     if (used_ms <= 0) {
         LOG(ERROR) << "now ms: "<< now_ms << " start_ms: "<< start_micros;
     }
-    rand_read_delay.Add(used_ms * row_num);
+    rand_read_delay.Add(used_ms);
 }
 
 void TabletNodeImpl::WriteTablet(const WriteTabletRequest* request,

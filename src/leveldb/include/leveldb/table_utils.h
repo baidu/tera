@@ -13,6 +13,8 @@
 
 namespace leveldb {
 
+void ArchiveFile(Env* env, const std::string& fname);
+
 bool HandleDumpCommand(Env* env, char** files, int num);
 
 bool HandleMergeCommnad(Env* env, char** files, int num);

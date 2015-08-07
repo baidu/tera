@@ -49,7 +49,8 @@ Options::Options()
       drop_base_level_del_in_compaction(true),
       sst_size(kDefaultSstSize),
       verify_checksums_in_compaction(false),
-      ignore_corruption_in_compaction(false) {
+      ignore_corruption_in_compaction(false),
+      disable_wal(false) {
 }
 
 }  // namespace leveldb

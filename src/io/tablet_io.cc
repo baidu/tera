@@ -221,6 +221,7 @@ bool TabletIO::Load(const TableSchema& schema,
     }
     m_ldb_options.verify_checksums_in_compaction = FLAGS_tera_leveldb_verify_checksums;
     m_ldb_options.ignore_corruption_in_compaction = FLAGS_tera_leveldb_ignore_corruption_in_compaction;
+    m_ldb_options.disable_wal = m_table_schema.disable_wal();
     SetupOptionsForLG();
 
     m_tablet_path = FLAGS_tera_tabletnode_path_prefix + path;
@@ -902,10 +903,12 @@ bool TabletIO::LowLevelSeek(const std::string& row_key,
                 kv->set_qualifier(qu_name);
                 kv->set_timestamp(timestamp);
 
+                int64_t merged_num;
                 std::string merged_value;
                 bool has_merged =
-                    compact_strategy->ScanMergedValue(it_data, &merged_value);
+                    compact_strategy->ScanMergedValue(it_data, &merged_value, &merged_num);
                 if (has_merged) {
+                    m_counter.low_read_cell.Add(merged_num);
                     kv->set_value(merged_value);
                 } else {
                     leveldb::Slice value = it_data->value();
@@ -1034,9 +1037,10 @@ bool TabletIO::ReadCells(const RowReaderInfo& row_reader, RowResult* value_list,
     return true;
 }
 
-bool TabletIO::WriteBatch(leveldb::WriteBatch* batch, bool sync,
+bool TabletIO::WriteBatch(leveldb::WriteBatch* batch, bool disable_wal, bool sync,
                           StatusCode* status) {
     leveldb::WriteOptions options;
+    options.disable_wal = disable_wal;
     options.sync = sync;
 
     CHECK_NOTNULL(m_db);
@@ -1057,7 +1061,7 @@ bool TabletIO::WriteOne(const std::string& key, const std::string& value,
                         bool sync, StatusCode* status) {
     leveldb::WriteBatch batch;
     batch.Put(key, value);
-    return WriteBatch(&batch, sync, status);
+    return WriteBatch(&batch, false, sync, status);
 }
 
 bool TabletIO::Write(const WriteTabletRequest* request,
