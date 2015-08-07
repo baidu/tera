@@ -128,8 +128,8 @@ public:
                       StatusCode* status = NULL);
 
     bool WriteOne(const std::string& key, const std::string& value,
-                  bool sync = false, StatusCode* status = NULL);
-    bool WriteBatch(leveldb::WriteBatch* batch, bool disable_log = false, bool sync = false,
+                  bool sync = true, StatusCode* status = NULL);
+    bool WriteBatch(leveldb::WriteBatch* batch, bool use_wal = true, bool sync = true,
                     StatusCode* status = NULL);
     virtual bool Write(const WriteTabletRequest* request,
                        WriteTabletResponse* response,

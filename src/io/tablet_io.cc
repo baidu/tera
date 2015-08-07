@@ -871,10 +871,10 @@ bool TabletIO::ReadCells(const RowReaderInfo& row_reader, RowResult* value_list,
     return true;
 }
 
-bool TabletIO::WriteBatch(leveldb::WriteBatch* batch, bool disable_log, bool sync,
+bool TabletIO::WriteBatch(leveldb::WriteBatch* batch, bool use_wal, bool sync,
                           StatusCode* status) {
     leveldb::WriteOptions options;
-    options.disable_wal = disable_log;
+    options.disable_wal = !use_wal;
     options.sync = sync;
 
     CHECK_NOTNULL(m_db);
@@ -895,7 +895,7 @@ bool TabletIO::WriteOne(const std::string& key, const std::string& value,
                         bool sync, StatusCode* status) {
     leveldb::WriteBatch batch;
     batch.Put(key, value);
-    return WriteBatch(&batch, sync, status);
+    return WriteBatch(&batch, true, sync, status);
 }
 
 bool TabletIO::Write(const WriteTabletRequest* request,

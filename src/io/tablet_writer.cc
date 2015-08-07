@@ -439,8 +439,8 @@ StatusCode TabletWriter::FlushToDiskBatch(WriteTaskBuffer* task_buffer) {
     }
 
     StatusCode status = kTableOk;
-    const bool wal_enabled = true;
-    m_tablet->WriteBatch(&batch, !wal_enabled, FLAGS_tera_sync_log, &status);
+    const bool use_wal = true;
+    m_tablet->WriteBatch(&batch, use_wal, FLAGS_tera_sync_log, &status);
     batch.Clear();
     for (size_t i = 0; i < task_num; i++) {
         FinishTask((*task_buffer)[i], status);
