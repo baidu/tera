@@ -193,7 +193,7 @@ TableDescImpl::TableDescImpl(const std::string& tb_name, bool is_kv)
       _raw_key_type(kReadable),
       _split_size(FLAGS_tera_master_split_tablet_size),
       _merge_size(FLAGS_tera_master_merge_tablet_size),
-      _use_wal(true) {
+      _disable_wal(false) {
 }
 
 /*
@@ -399,11 +399,11 @@ int64_t TableDescImpl::MergeSize() const {
 }
 
 void TableDescImpl::DisableWal() {
-    _use_wal = false;
+    _disable_wal = true;
 }
 
-bool TableDescImpl::IsWalEnabled() const {
-    return _use_wal;
+bool TableDescImpl::IsWalDisabled() const {
+    return _disable_wal;
 }
 
 /// 插入snapshot

@@ -115,8 +115,8 @@ void TableDescriptor::DisableWal() {
     _impl->DisableWal();
 }
 
-bool TableDescriptor::IsWalEnabled() const {
-    return _impl->IsWalEnabled();
+bool TableDescriptor::IsWalDisabled() const {
+    return _impl->IsWalDisabled();
 }
 
 int32_t TableDescriptor::AddSnapshot(uint64_t snapshot) {

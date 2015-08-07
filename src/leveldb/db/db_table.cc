@@ -305,7 +305,7 @@ Status DBTable::Init() {
         s = DeleteLogFile(logfiles);
     }
 
-    if (s.ok() && options_.use_wal) {
+    if (s.ok() && !options_.disable_wal) {
         std::string log_file_name = LogHexFileName(dbname_, last_sequence_ + 1);
         s = options_.env->NewWritableFile(log_file_name, &logfile_);
         if (s.ok()) {
@@ -372,7 +372,7 @@ Status DBTable::Write(const WriteOptions& options, WriteBatch* my_batch) {
         WriteBatchInternal::SetSequence(updates, last_sequence_ + 1);
     }
 
-    if (s.ok() && options_.use_wal && !options.disable_wal) {
+    if (s.ok() && !options_.disable_wal && !options.disable_wal) {
         if (force_switch_log_ || current_log_size_ > options_.log_file_size) {
             mutex_.Unlock();
             if (SwitchLog(false) == 2) {
@@ -385,7 +385,7 @@ Status DBTable::Write(const WriteOptions& options, WriteBatch* my_batch) {
     }
 
     // dump to log
-    if (s.ok() && options_.use_wal && !options.disable_wal) {
+    if (s.ok() && !options_.disable_wal && !options.disable_wal) {
         mutex_.Unlock();
 
         Slice slice = WriteBatchInternal::Contents(updates);

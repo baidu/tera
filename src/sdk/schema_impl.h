@@ -172,7 +172,7 @@ public:
     int64_t MergeSize() const;
 
     void DisableWal();
-    bool IsWalEnabled() const;
+    bool IsWalDisabled() const;
 
     /// 插入snapshot
     int32_t AddSnapshot(uint64_t snapshot);
@@ -200,7 +200,7 @@ private:
     RawKeyType      _raw_key_type;
     int64_t         _split_size;
     int64_t         _merge_size;
-    bool            _use_wal;
+    bool            _disable_wal;
 };
 
 } // namespace tera

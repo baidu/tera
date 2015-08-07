@@ -51,6 +51,6 @@ message TableSchema {
     optional int64 split_size = 8; // MB
     optional int64 merge_size = 10; // MB
     optional bool kv_only = 9 [default = false];
-    optional bool use_wal = 11 [default = true];
+    optional bool disable_wal = 11 [default = false];
 }
 

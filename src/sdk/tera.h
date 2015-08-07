@@ -188,7 +188,7 @@ public:
     int64_t MergeSize() const;
 
     void DisableWal();
-    bool IsWalEnabled() const;
+    bool IsWalDisabled() const;
 
     /// 插入snapshot
     int32_t AddSnapshot(uint64_t snapshot);
