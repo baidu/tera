@@ -22,7 +22,8 @@ class CompactStrategy {
 public:
     virtual ~CompactStrategy() {}
 
-    virtual bool Drop(const Slice& k, uint64_t n, bool is_base_level = false) = 0;
+    virtual bool Drop(const Slice& k, uint64_t n,
+                      const std::string& lower_bound = "") = 0;
 
     // tera-specific, based on all-level iterators.
     // used in LowLevelScan
@@ -42,7 +43,7 @@ class DummyCompactStrategy : public CompactStrategy {
 public:
     virtual ~DummyCompactStrategy() {}
 
-    virtual bool Drop(const Slice& k, uint64_t n, bool is_base_level) {
+    virtual bool Drop(const Slice& k, uint64_t n, const std::string& lower_bound) {
         return false;
     }
 

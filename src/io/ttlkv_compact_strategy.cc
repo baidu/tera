@@ -24,7 +24,7 @@ const char* KvCompactStrategy::Name() const {
 }
 
 bool KvCompactStrategy::Drop(const leveldb::Slice& tera_key, uint64_t n,
-                             bool is_base_level) {
+                             const std::string& lower_bound) {
     // If expire timestamp + schema's TTL <= time(NULL), Then Drop.
     // Desc: 当前TTL的语义理解为：假设用户指定了key在03:10分过期，
     // 同时Schema的TTL为+300(延后5分钟), 那么这个key将在03:15分过期.

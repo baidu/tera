@@ -28,9 +28,9 @@ const char* DefaultCompactStrategy::Name() const {
     return "tera.DefaultCompactStrategy";
 }
 
-bool DefaultCompactStrategy::Drop(const leveldb::Slice& tera_key, uint64_t n,
-                                  bool is_base_level) {
-    leveldb::Slice key, col, qual;
+bool DefaultCompactStrategy::Drop(const Slice& tera_key, uint64_t n,
+                                  const std::string& lower_bound) {
+    Slice key, col, qual;
     int64_t ts = -1;
     leveldb::TeraKeyType type;
 
@@ -68,8 +68,8 @@ bool DefaultCompactStrategy::Drop(const leveldb::Slice& tera_key, uint64_t n,
                 m_del_col_ts = ts;
             case leveldb::TKT_DEL_QUALIFIERS: {
                 m_del_qual_ts = ts;
-                if (is_base_level) {
-                    return true;
+                if (CheckCompactLowerBound(key, lower_bound)) {
+                  return true;
                 }
             }
             default:;
@@ -90,8 +90,8 @@ bool DefaultCompactStrategy::Drop(const leveldb::Slice& tera_key, uint64_t n,
                 m_del_col_ts = ts;
             case leveldb::TKT_DEL_QUALIFIERS: {
                 m_del_qual_ts = ts;
-                if (is_base_level) {
-                    return true;
+                if (CheckCompactLowerBound(key, lower_bound)) {
+                  return true;
                 }
             }
             default:;
@@ -107,8 +107,8 @@ bool DefaultCompactStrategy::Drop(const leveldb::Slice& tera_key, uint64_t n,
         m_has_put = false;
         if (type == leveldb::TKT_DEL_QUALIFIERS) {
             m_del_qual_ts = ts;
-            if (is_base_level) {
-                return true;
+            if (CheckCompactLowerBound(key, lower_bound)) {
+              return true;
             }
         }
     } else if (m_del_qual_ts > ts) {
@@ -172,10 +172,10 @@ bool DefaultCompactStrategy::InternalMergeProcess(leveldb::Iterator* it,
         if (version_num >= 1) {
             break; //avoid accumulate to many versions
         }
-        leveldb::Slice itkey = it->key();
-        leveldb::Slice key;
-        leveldb::Slice col;
-        leveldb::Slice qual;
+        Slice itkey = it->key();
+        Slice key;
+        Slice col;
+        Slice qual;
         int64_t ts = -1;
         leveldb::TeraKeyType type;
 
@@ -218,8 +218,8 @@ bool DefaultCompactStrategy::InternalMergeProcess(leveldb::Iterator* it,
     return true;
 }
 
-bool DefaultCompactStrategy::ScanDrop(const leveldb::Slice& tera_key, uint64_t n) {
-    leveldb::Slice key, col, qual;
+bool DefaultCompactStrategy::ScanDrop(const Slice& tera_key, uint64_t n) {
+    Slice key, col, qual;
     int64_t ts = -1;
     leveldb::TeraKeyType type;
 
@@ -366,6 +366,25 @@ bool DefaultCompactStrategy::DropByLifeTime(int32_t cf_idx, int64_t timestamp) c
         return false;
     } else {
         return true;
+    }
+}
+
+bool DefaultCompactStrategy::CheckCompactLowerBound(const Slice& cur_key,
+                                                    const std::string& lower_bound) {
+    if (lower_bound.empty()) {
+        return false;
+    }
+
+    Slice rkey;
+    CHECK (m_raw_key_operator->ExtractTeraKey(lower_bound, &rkey, NULL, NULL, NULL, NULL));
+    int res = rkey.compare(cur_key);
+    if (res > 0) {
+        return true;
+    } else if (res == 0) {
+        return false;
+    } else {
+        LOG(FATAL) << "key order error: " << rkey.ToString()
+            << " < " << cur_key.ToString();
     }
 }
 

@@ -631,17 +631,6 @@ bool DBImpl::MinorCompact() {
     return s.ok();
 }
 
-bool DBImpl::UserKeyInRange(const Slice& user_key) {
-    if (!key_start_.empty()
-        && user_comparator()->Compare(user_key, Slice(key_start_)) < 0) {
-        return false;
-    } else if (!key_end_.empty()
-               && user_comparator()->Compare(user_key, Slice(key_end_)) >= 0) {
-        return false;
-    }
-    return true;
-}
-
 void DBImpl::CompactMissFiles(const Slice* begin, const Slice* end) {
     Slice smallest(key_start_);
     Slice largest(key_end_);
@@ -1108,14 +1097,13 @@ Status DBImpl::DoCompactionWork(CompactionState* compact) {
         last_sequence_for_key = kMaxSequenceNumber;
       }
 
-      bool is_base_level = compact->compaction->IsBaseLevelForKey(ikey.user_key);
       if (last_sequence_for_key <= compact->smallest_snapshot) {
         // Hidden by an newer entry for same user key
         drop = true;    // (A)
       } else if (ikey.type == kTypeDeletion &&
                  ikey.sequence <= compact->smallest_snapshot &&
                  options_.drop_base_level_del_in_compaction &&
-                 is_base_level) {
+                 compact->compaction->IsBaseLevelForKey(ikey.user_key)) {
         // For this user key:
         // (1) there is no data in higher levels
         // (2) data in lower levels will have larger sequence numbers
@@ -1124,10 +1112,12 @@ Status DBImpl::DoCompactionWork(CompactionState* compact) {
         //     few iterations of this loop (by rule (A) above).
         // Therefore this deletion marker is obsolete and can be dropped.
         drop = true;
-      } else if (!UserKeyInRange(ikey.user_key)) {
-        drop = true;
       } else if (compact_strategy) {
-        drop = compact_strategy->Drop(ikey.user_key, ikey.sequence, is_base_level);
+        std::string lower_bound;
+        if (options_.drop_base_level_del_in_compaction) {
+            lower_bound = compact->compaction->drop_lower_bound();
+        }
+        drop = compact_strategy->Drop(ikey.user_key, ikey.sequence, lower_bound);
       }
 
       last_sequence_for_key = ikey.sequence;
