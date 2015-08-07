@@ -282,6 +282,9 @@ struct Options {
   // Default: false
   bool ignore_corruption_in_compaction;
 
+  // disable write-ahead-log
+  bool disable_wal;
+
   // Create an Options object with default values for all fields.
   Options();
 };
