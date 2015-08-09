@@ -124,6 +124,8 @@ def query():
         common.g_logger.info('next query in {s} seconds'.
                              format(s=str(int(common.g_next_query_time - time.time()))))
         common.g_query_event.wait(common.g_next_query_time - time.time())
+        if common.g_exit is True:
+            return
 
         common.g_next_query_time = time.time() + common.QUERY_INTERVAL
         common.g_logger.info('start querying...')
@@ -234,12 +236,12 @@ def write_email(fp, desp):
         performance = (('read Qps(/s)', '%6.2f' % stat.g_stat[stat.READ_ROWS]),
                        ('read amplification', '%4.2f' % stat.g_stat[stat.READ_AMP]),
                        ('CPU usage', '%4.2f' % stat.g_stat[stat.CPU]),
-                       ('Memory(G)', '%4.2f' % (stat.g_stat[stat.MEM]/common.MEGA)))
+                       ('Memory(G)', '%4.2f' % (stat.g_stat[stat.MEM]/1024.0)))
     elif conf.g_test_conf[conf.MODE] == conf.MODE_SCAN:
         performance = (('scan throughput(M)', '%6.3f' % stat.g_stat[stat.SCAN]),
                        ('scan amplification', '%4.2f' % stat.g_stat[stat.SCAN_AMP]),
                        ('CPU usage', '%4.2f' % stat.g_stat[stat.CPU]),
-                       ('Memory(G)', '%4.2f' % (stat.g_stat[stat.MEM]/common.MEGA)))
+                       ('Memory(G)', '%4.2f' % (stat.g_stat[stat.MEM]/1024.0)))
     ts_tuple = (('ready(%)', '%06.3f' % (stat.g_ts_status[stat.READY] * 100)),
                 ('wait kick(%)', '%6.3f' % (stat.g_ts_status[stat.WAITKICK] * 100)),
                 ('on kick(%)', '%6.3f' % (stat.g_ts_status[stat.ONKICK] * 100)),
@@ -278,6 +280,7 @@ def compute_stat():
     times = float(common.g_query_times)
     tablet_total = stat.g_stat[stat.T_TOTAL]
     stat.g_stat[stat.CPU] *= common.MEGA
+    stat.g_stat[stat.READ_DELAY] *= common.MEGA
     for item in stat.ACCUMULATE_PART:
         stat.g_stat[item] /= common.MEGA * times  # TS
     for item in stat.RATIO_PART:
