@@ -274,6 +274,7 @@ void InitFlags(int32_t argc, char** argv, const MonitorRequest& request) {
     }
 
     // init log dir
+    /*
     if (FLAGS_log_dir.empty()) {
             FLAGS_log_dir = "./";
 	}
@@ -281,6 +282,7 @@ void InitFlags(int32_t argc, char** argv, const MonitorRequest& request) {
 	::google::ParseCommandLineFlags(&argc, &argv, true);
 	::google::InitGoogleLogging(argv[0]);
 	utils::SetupLog(argv[0]);
+	*/
 
 	if (request.has_tera_zk_addr()) {
 		FLAGS_tera_zk_addr_list = request.tera_zk_addr();

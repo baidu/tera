@@ -220,9 +220,7 @@ def run_read_test():
 
     for i in range(conf.g_test_conf[conf.TABLET_NUM]):
         prefix = '%04d' % i
-        bench_cmd = conf.TERA_BENCH + " | awk -F '\t' '{print \"" + prefix + """\"$1"\t"$3}' """
-        if conf.g_test_conf[conf.KV] is True:
-            bench_cmd = conf.TERA_BENCH + " | awk -F '\t' '{print \"" + prefix + """\"$1}' """
+        bench_cmd = conf.TERA_BENCH[0:conf.TERA_BENCH.rfind('--cf')] + " | awk -F '\t' '{print \"" + prefix + """\"$1}' """
         cmd = '{bench} | ./tera_mark --mode=r --tablename={name} --type=async --verify=false --entry_limit={limit}'.\
             format(bench=bench_cmd, name=conf.g_test_conf[conf.TABLE_NAME], limit=conf.g_test_conf[conf.READ_SPEED_LIMIT])
         print cmd
