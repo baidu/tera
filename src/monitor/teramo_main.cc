@@ -29,6 +29,10 @@ DECLARE_string(tera_master_stat_table_name);
 DECLARE_string(tera_sdk_conf_file);
 DECLARE_string(tera_zk_addr_list);
 DECLARE_string(tera_zk_root_path);
+DECLARE_string(tera_ins_addr_list);
+DECLARE_string(tera_ins_root_path);
+DECLARE_bool(tera_zk_enabled);
+DECLARE_bool(tera_ins_enabled);
 DECLARE_int64(tera_master_stat_table_interval);
 
 using namespace tera;
@@ -67,9 +71,9 @@ void FillTabletNodeStat(const TabletNodeInfo& info, TabletNodeStat* stat) {
     stat->set_scan_pending(info.scan_pending());
 
     for (int i = 0; i < info.extra_info_size(); ++i) {
-    	ExtraStat* estat = stat->add_extra_stat();
-    	estat->set_name(info.extra_info(i).name());
-    	estat->set_value(info.extra_info(i).value());
+        ExtraStat* estat = stat->add_extra_stat();
+        estat->set_name(info.extra_info(i).name());
+        estat->set_value(info.extra_info(i).value());
     }
 }
 
@@ -277,19 +281,29 @@ void InitFlags(int32_t argc, char** argv, const MonitorRequest& request) {
     /*
     if (FLAGS_log_dir.empty()) {
             FLAGS_log_dir = "./";
-	}
+    }
 
-	::google::ParseCommandLineFlags(&argc, &argv, true);
-	::google::InitGoogleLogging(argv[0]);
-	utils::SetupLog(argv[0]);
-	*/
-
-	if (request.has_tera_zk_addr()) {
-		FLAGS_tera_zk_addr_list = request.tera_zk_addr();
-	}
-	if (request.has_tera_zk_root()) {
-		FLAGS_tera_zk_root_path = request.tera_zk_root();
-	}
+    ::google::ParseCommandLineFlags(&argc, &argv, true);
+    ::google::InitGoogleLogging(argv[0]);
+    utils::SetupLog(argv[0]);
+    */
+    if (request.use_nexus()) {
+        if (request.has_tera_zk_addr()) {
+            FLAGS_tera_ins_addr_list = request.tera_zk_addr();
+        }
+        if (request.has_tera_zk_root()) {
+            FLAGS_tera_ins_root_path = request.tera_zk_root();
+        }
+        FLAGS_tera_ins_enabled = true;
+        FLAGS_tera_zk_enabled = false;
+    } else {
+        if (request.has_tera_zk_addr()) {
+            FLAGS_tera_zk_addr_list = request.tera_zk_addr();
+        }
+        if (request.has_tera_zk_root()) {
+            FLAGS_tera_zk_root_path = request.tera_zk_root();
+        }
+    }
 }
 
 int DumpResponse(const string& resfile, const MonitorResponse& response) {
@@ -357,7 +371,7 @@ void PrintResponse(const MonitorResponse& response) {
             for (int k = 0; k < stat.extra_stat_size(); ++k) {
                 ExtraStat extra_stat = stat.extra_stat(k);
                 if (extra_stat.name() == "rand_read_delay") {
-                	std::cout << extra_stat.name() << ": " << extra_stat.value() << " ";
+                    std::cout << extra_stat.name() << ": " << extra_stat.value() << " ";
                 }
             }
             std::cout << std::endl;
