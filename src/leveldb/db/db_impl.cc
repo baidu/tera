@@ -124,7 +124,7 @@ Options SanitizeOptions(const std::string& dbname,
 }
 
 DBImpl::DBImpl(const Options& options, const std::string& dbname)
-    : shutdown_phase_(-1), key_start_(options.key_start), key_end_(options.key_end),
+    : state_(kNotOpen), key_start_(options.key_start), key_end_(options.key_end),
       env_(options.env),
       internal_comparator_(options.comparator),
       internal_filter_policy_(options.filter_policy),
@@ -167,8 +167,8 @@ DBImpl::DBImpl(const Options& options, const std::string& dbname)
 }
 
 Status DBImpl::Shutdown1() {
-  assert(shutdown_phase_ == 0);
-  shutdown_phase_ = 1;
+  assert(state_ == kOpened);
+  state_ = kShutdown1;
 
   MutexLock l(&mutex_);
   shutting_down_.Release_Store(this);  // Any non-NULL value is ok
@@ -205,8 +205,8 @@ Status DBImpl::Shutdown1() {
 }
 
 Status DBImpl::Shutdown2() {
-  assert(shutdown_phase_ == 1);
-  shutdown_phase_ = 2;
+  assert(state_ == kShutdown1);
+  state_ = kShutdown2;
 
   MutexLock l(&mutex_);
   Status s;
@@ -223,7 +223,7 @@ Status DBImpl::Shutdown2() {
 }
 
 DBImpl::~DBImpl() {
-  if (shutdown_phase_ == 0) {
+  if (state_ == kOpened) {
     Status s = Shutdown1();
     if (s.ok()) {
         Shutdown2();
@@ -512,7 +512,7 @@ Status DBImpl::Recover(VersionEdit* edit) {
   }
 
   if (s.ok()) {
-    shutdown_phase_ = 0;
+    state_ = kOpened;
   }
   return s;
 }
