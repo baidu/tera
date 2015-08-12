@@ -913,6 +913,7 @@ bool TabletIO::LowLevelSeek(const std::string& row_key,
                 } else {
                     leveldb::Slice value = it_data->value();
                     kv->set_value(value.data(), value.size());
+                    it_data->Next();
                 }
             }
         }
