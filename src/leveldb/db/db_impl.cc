@@ -124,7 +124,7 @@ Options SanitizeOptions(const std::string& dbname,
 }
 
 DBImpl::DBImpl(const Options& options, const std::string& dbname)
-    : key_start_(options.key_start), key_end_(options.key_end),
+    : state_(kNotOpen), key_start_(options.key_start), key_end_(options.key_end),
       env_(options.env),
       internal_comparator_(options.comparator),
       internal_filter_policy_(options.filter_policy),
@@ -167,6 +167,9 @@ DBImpl::DBImpl(const Options& options, const std::string& dbname)
 }
 
 Status DBImpl::Shutdown1() {
+  assert(state_ == kOpened);
+  state_ = kShutdown1;
+
   MutexLock l(&mutex_);
   shutting_down_.Release_Store(this);  // Any non-NULL value is ok
 
@@ -202,6 +205,9 @@ Status DBImpl::Shutdown1() {
 }
 
 Status DBImpl::Shutdown2() {
+  assert(state_ == kShutdown1);
+  state_ = kShutdown2;
+
   MutexLock l(&mutex_);
   Status s;
   if (!options_.dump_mem_on_shutdown) {
@@ -217,6 +223,12 @@ Status DBImpl::Shutdown2() {
 }
 
 DBImpl::~DBImpl() {
+  if (state_ == kOpened) {
+    Status s = Shutdown1();
+    if (s.ok()) {
+        Shutdown2();
+    }
+  }
   if (db_lock_ != NULL) {
     env_->UnlockFile(db_lock_);
   }
@@ -499,6 +511,9 @@ Status DBImpl::Recover(VersionEdit* edit) {
     }
   }
 
+  if (s.ok()) {
+    state_ = kOpened;
+  }
   return s;
 }
 
