@@ -48,7 +48,7 @@ Tera指标体系
   "write_speed_limit(/TS*M)": "60", // 写速度限制
   "entry_number(M)": "10",  // 每个tablet的数据条数
   "split_size": 102400,     // tablet分裂阈值
-  "table_schema": {"lg0": {"storage": "flash", "cf": "cf0:q"}, "lg1": {"blocksize": 32, "storage": "disk", "cf": "cf1:q1,cf1:q2,cf2:q"}}
+  "table_schema": {"lg0": {"storage": "flash", "cf": "cf0:q"}, "lg1": {"blocksize": "32", "storage": "disk", "cf": "cf1:q1,cf1:q2,cf2:q"}}
                             // table schema，设置"table_schema": {}为kv模式
 }
   ```
