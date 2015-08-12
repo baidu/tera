@@ -135,6 +135,8 @@ class DBImpl : public DB {
   Status InstallCompactionResults(CompactionState* compact)
       EXCLUSIVE_LOCKS_REQUIRED(mutex_);
 
+  int shutdown_phase_; // -1: not init, 0: not shutdown, 1: shutdown1 done, 2: shutdown2 done
+
   // tera-specific
   std::string key_start_;
   std::string key_end_;

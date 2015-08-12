@@ -167,7 +167,7 @@ private:
     void GarbageClean();
 
 private:
-    int shutdown_phase_; // 0: not shutdown, 1: shutdown1 done, 2: shutdown2 done
+    int shutdown_phase_; // -1: not init, 0: not shutdown, 1: shutdown1 done, 2: shutdown2 done
     std::vector<DBImpl*> lg_list_;
     port::Mutex mutex_;
     port::AtomicPointer shutting_down_;
