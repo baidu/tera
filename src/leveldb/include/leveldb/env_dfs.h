@@ -45,7 +45,7 @@ public:
 
     virtual Status DeleteDir(const std::string& name);
 
-    virtual Status ListDir(const std::string& name, std::vector<std::string>* result);
+    virtual Status GetChildrenWithTime(const std::string& name, std::vector<std::string>* result, std::vector<time_t>* time);
 
     virtual Status CopyFile(const std::string& from, const std::string& to);
 
