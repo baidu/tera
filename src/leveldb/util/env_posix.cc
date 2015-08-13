@@ -704,7 +704,10 @@ class PosixEnv : public Env {
       if (strcmp(ptr->d_name, ".") != 0 && strcmp(ptr->d_name, "..") != 0) {
         result->push_back(ptr->d_name);
         stat((name + "/" + ptr->d_name).c_str(), &stat_buf);
-        time->push_back(stat_buf.st_ctime);
+        if (errno == 0)
+          time->push_back(stat_buf.st_ctime);
+        else
+          time->push_back(LONG_MAX);
       }
     }
     closedir(dir);

@@ -316,7 +316,10 @@ int32_t Nfs::ListDirectory(const std::string& path,
       result->push_back(pathname);
       if (time != NULL) {
           (*nfsStat)((path + "/" + pathname).c_str(), &stat_buf);
-          time->push_back(stat_buf.st_ctime);
+          if (errno == 0)
+            time->push_back(stat_buf.st_ctime);
+          else
+            time->push_back(LONG_MAX);
       }
     }
   }

@@ -208,11 +208,7 @@ int32_t Hdfs::ListDirectory(const std::string& path,
       if (filename != NULL) {
         result->push_back(filename + 1);
         if (time != NULL) {
-          if (errno == 0) {
             time->push_back(pHdfsFileInfo[i].mLastMod);
-          } else {
-            time->push_back(errno);
-          }
         }
       }
     }
