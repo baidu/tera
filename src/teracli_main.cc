@@ -2194,27 +2194,37 @@ int32_t Meta2Op(Client *client, int32_t argc, char** argv) {
             }
         }
         if (table_start) {
-            if (!meta.key_range().key_start().empty()) {
-                std::cerr << "miss tablet " << meta.table_name() << " [-,"
-                    << meta.key_range().key_start() << "]" << std::endl;
-                if (op == "repair") {
-                    tera::TabletMeta miss_meta;
-                    miss_meta.set_table_name(meta.table_name());
-                    miss_meta.mutable_key_range()->set_key_start("");
-                    miss_meta.mutable_key_range()->set_key_end(meta.key_range().key_start());
-                    WriteTablet(miss_meta, bak);
+            if (meta.table_name() == last.table_name()) {
+                std::cerr << "tablet " << meta.table_name() << " ["
+                    << meta.key_range().key_start() << ","
+                    << meta.key_range().key_end() << "] is coverd by tablet "
+                    << last.table_name() << " ["
+                    << last.key_range().key_start() << ","
+                    << last.key_range().key_end() << "]" << std::endl;
+                covered = true;
+            } else {
+                if (!meta.key_range().key_start().empty()) {
+                    std::cerr << "miss tablet " << meta.table_name() << " [-,"
+                        << meta.key_range().key_start() << "]" << std::endl;
+                    if (op == "repair") {
+                        tera::TabletMeta miss_meta;
+                        miss_meta.set_table_name(meta.table_name());
+                        miss_meta.mutable_key_range()->set_key_start("");
+                        miss_meta.mutable_key_range()->set_key_end(meta.key_range().key_start());
+                        WriteTablet(miss_meta, bak);
+                    }
                 }
-            }
-            if (op == "repair") {
-                WriteTablet(meta, bak);
+                if (op == "repair") {
+                    WriteTablet(meta, bak);
+                }
             }
         }
 
         // ignore covered tablet
         if (!covered) {
             last.CopyFrom(meta);
+            table_start = meta.key_range().key_end().empty();
         }
-        table_start = meta.key_range().key_end().empty();
     }
     if (op == "bak" || op == "repair") {
         bak.close();
