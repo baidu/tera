@@ -598,7 +598,7 @@ void Version::MissFilesInLocal(const Slice* smallest_user_key,
     inputs->clear();
     std::vector<std::string> local_file_list;
     std::vector<std::string>::iterator it;
-    vset_->env_->ListDir(vset_->dbname_, &local_file_list);
+    vset_->env_->GetChildren(vset_->dbname_, &local_file_list);
 
     const Comparator* user_cmp = vset_->icmp_.user_comparator();
     for (int level = 1; level < config::kNumLevels; level++) {
@@ -636,7 +636,7 @@ void Version::MissFilesInLocal(const Slice* smallest_user_key,
     compact_inputs->clear();
     std::vector<std::string> local_file_list;
     std::vector<std::string>::iterator it;
-    vset_->env_->ListDir(vset_->dbname_, &local_file_list);
+    vset_->env_->GetChildren(vset_->dbname_, &local_file_list);
 
     std::vector<FileMetaData*> inputs;
     const Comparator* user_cmp = vset_->icmp_.user_comparator();

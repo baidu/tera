@@ -257,10 +257,11 @@ Status InMemoryEnv::DeleteDir(const std::string& name)
     return dfs_env_->DeleteDir(name);
 };
 
-Status InMemoryEnv::ListDir(const std::string& name,
-        std::vector<std::string>* result)
+Status InMemoryEnv::GetChildrenWithTime(const std::string& name, 
+                                        std::vector<std::string>* result,
+                                        std::vector<time_t>* time)
 {
-    return dfs_env_->ListDir(name, result);
+    return dfs_env_->GetChildrenWithTime(name, result, time);
 }
 
 Status InMemoryEnv::GetFileSize(const std::string& fname, uint64_t* size)

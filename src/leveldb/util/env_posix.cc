@@ -685,8 +685,9 @@ class PosixEnv : public Env {
     return result;
   }
 
-  virtual Status ListDir(const std::string& name,
-      std::vector<std::string>* result) {
+  virtual Status GetChildrenWithTime(const std::string& name,
+                                     std::vector<std::string>* result,
+                                     std::vector<time_t>* time) {
     posix_list_counter.Inc();
     DIR *dir = NULL;
     struct dirent *ptr = NULL;
@@ -699,8 +700,10 @@ class PosixEnv : public Env {
       /// if (ptr->d_type == DT_REG) {
       ///     result->push_back(ptr->d_name);
       /// }
+      struct stat stat_buf;
       if (strcmp(ptr->d_name, ".") != 0 && strcmp(ptr->d_name, "..") != 0) {
         result->push_back(ptr->d_name);
+        time->push_back(stat_buf.st_ctime);
       }
     }
     closedir(dir);

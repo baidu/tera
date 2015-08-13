@@ -232,7 +232,7 @@ void FindFileMap(const std::vector<uint64_t>& deleted_files,
 bool CollectSSTFile(Env* env, const std::string& dir_path,
                     std::set<uint64_t>* sst_list) {
     std::vector<std::string> files;
-    Status s = env->ListDir(dir_path, &files);
+    Status s = env->GetChildren(dir_path, &files);
     if (!s.ok()) {
         return false;
     }
@@ -509,7 +509,7 @@ bool ParseMapFileName(const std::string& path,
 
 bool CleanFlagFile(Env* env, const std::string& path) {
     std::vector<std::string> files;
-    Status s = env->ListDir(path, &files);
+    Status s = env->GetChildren(path, &files);
     if (!s.ok()) {
         return false;
     }
@@ -559,7 +559,7 @@ bool GatherFileMapFromDir(Env* env, const std::string& dir_path,
                           std::string* table_name,
                           std::map<uint64_t, uint64_t>* file_map) {
     std::vector<std::string> files;
-    Status s = env->ListDir(dir_path, &files);
+    Status s = env->GetChildren(dir_path, &files);
     if (!s.ok()) {
         return false;
     }
@@ -588,7 +588,7 @@ bool GatherFileMapFromDir(Env* env, const std::string& dir_path,
 bool BackupNotSSTFile(Env* env, const std::string& dir_path,
                       std::string* mf) {
     std::vector<std::string> files;
-    Status s = env->ListDir(dir_path, &files);
+    Status s = env->GetChildren(dir_path, &files);
     if (!s.ok()) {
         return false;
     }
@@ -627,7 +627,7 @@ bool BackupNotSSTFile(Env* env, const std::string& dir_path,
 
 bool RollbackBackupNotSst(Env* env, const std::string& dir_path) {
     std::vector<std::string> files;
-    Status s = env->ListDir(dir_path, &files);
+    Status s = env->GetChildren(dir_path, &files);
     if (!s.ok()) {
         return false;
     }
@@ -656,7 +656,7 @@ bool MoveMergedSst(Env* env, const std::string& from_path,
                    const std::string& to_path,
                    const std::map<uint64_t, uint64_t>& file_map) {
     std::vector<std::string> files;
-    Status s = env->ListDir(from_path, &files);
+    Status s = env->GetChildren(from_path, &files);
     if (!s.ok()) {
         return false;
     }
@@ -705,7 +705,7 @@ bool MoveMergedSst(Env* env, const std::string& path) {
     SplitStringPath(path, &path_prefix, &cur_table);
     std::string merged_table_path = path_prefix + "/" + merged_table;
     std::vector<std::string> files;
-    Status s = env->ListDir(merged_table_path, &files);
+    Status s = env->GetChildren(merged_table_path, &files);
     if (!s.ok()) {
         return false;
     }
