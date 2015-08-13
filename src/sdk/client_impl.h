@@ -116,6 +116,7 @@ private:
     bool ParseTabletEntry(const TabletMeta& meta,
                           std::vector<TabletInfo>* tablet_list);
 
+    std::string GetUserToken();
 private:
     ClientImpl(const ClientImpl&);
     void operator=(const ClientImpl&);
