@@ -702,7 +702,14 @@ void TableImpl::MutateCallBack(std::vector<RowMutationImpl*>* mu_list,
     for (uint32_t i = 0; i < mu_list->size(); ++i) {
         StatusCode err = response->status();
         if (err == kTabletNodeOk) {
-            err = response->row_status_list(i);
+            if (response->row_status_list_size() == (int64_t)mu_list->size()) {
+                err = response->row_status_list(i);
+            } else {
+                LOG(ERROR) << "response status num error: "
+                    << response->row_status_list_size() << ", "
+                    << mu_list->size() << " required";
+                err = kKeyNotInRange;
+            }
         }
         if (err != kTabletNodeOk) {
             VLOG(10) << "fail to mutate table: " << _name
@@ -1150,7 +1157,14 @@ void TableImpl::ReaderCallBack(std::vector<RowReaderImpl*>* reader_list,
     for (uint32_t i = 0; i < reader_list->size(); ++i) {
         StatusCode err = response->status();
         if (err == kTabletNodeOk) {
-            err = response->detail().status(i);
+            if (response->detail().status_size() == (int64_t)reader_list->size()) {
+                err = response->detail().status(i);
+            } else {
+                LOG(ERROR) << "response status num error: "
+                    << response->detail().status_size() << ", "
+                    << reader_list->size() << " required";
+                err = kKeyNotInRange;
+            }
         }
         if (err != kTabletNodeOk && err != kKeyNotExist && err != kSnapshotNotExist) {
             VLOG(10) << "fail to read table: " << _name

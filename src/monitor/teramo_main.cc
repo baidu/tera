@@ -29,6 +29,10 @@ DECLARE_string(tera_master_stat_table_name);
 DECLARE_string(tera_sdk_conf_file);
 DECLARE_string(tera_zk_addr_list);
 DECLARE_string(tera_zk_root_path);
+DECLARE_string(tera_ins_addr_list);
+DECLARE_string(tera_ins_root_path);
+DECLARE_bool(tera_zk_enabled);
+DECLARE_bool(tera_ins_enabled);
 DECLARE_int64(tera_master_stat_table_interval);
 
 using namespace tera;
@@ -56,6 +60,8 @@ void FillTabletNodeStat(const TabletNodeInfo& info, TabletNodeStat* stat) {
     stat->set_local_io_r(info.local_io_r());
     stat->set_local_io_w(info.local_io_w());
 
+    stat->set_cpu_usage(info.cpu_usage());
+
     stat->set_status_m(info.status_m());
     stat->set_tablet_onload(info.tablet_onload());
     stat->set_tablet_onsplit(info.tablet_onsplit());
@@ -63,6 +69,12 @@ void FillTabletNodeStat(const TabletNodeInfo& info, TabletNodeStat* stat) {
     stat->set_read_pending(info.read_pending());
     stat->set_write_pending(info.write_pending());
     stat->set_scan_pending(info.scan_pending());
+
+    for (int i = 0; i < info.extra_info_size(); ++i) {
+        ExtraStat* estat = stat->add_extra_stat();
+        estat->set_name(info.extra_info(i).name());
+        estat->set_value(info.extra_info(i).value());
+    }
 }
 
 void FillTabletNodeStats(std::list<string>& raw_stats, TabletNodeStats* stat_list) {
@@ -177,6 +189,7 @@ int GetAllTabletNodes(Table* table,
     ErrorCode err;
     ResultStream* stream;
     stream = table->Scan(desc, &err);
+    std::cout << err.GetReason() << std::endl;
     int ts_count = 0;
     while (!stream->Done()) {
         int slen = stream->RowName().size() - 16;
@@ -199,7 +212,7 @@ int GetAllTabletNodes(Table* table,
         TabletNodeStats* stat_list = response->add_stat_list();
         stat_list->set_addr(cur_ts);
         FillTabletNodeStats(stats, stat_list);
-        LOG(ERROR) << "get stat finish: " << cur_ts << ", " << ts_count++;
+        LOG(INFO) << "get stat finish: " << cur_ts << ", " << ts_count++;
     }
     delete stream;
     return 0;
@@ -265,19 +278,31 @@ void InitFlags(int32_t argc, char** argv, const MonitorRequest& request) {
     }
 
     // init log dir
+    /*
     if (FLAGS_log_dir.empty()) {
-        FLAGS_log_dir = "./";
+            FLAGS_log_dir = "./";
     }
 
     ::google::ParseCommandLineFlags(&argc, &argv, true);
     ::google::InitGoogleLogging(argv[0]);
     utils::SetupLog(argv[0]);
-
-    if (request.has_tera_zk_addr()) {
-        FLAGS_tera_zk_addr_list = request.tera_zk_addr();
-    }
-    if (request.has_tera_zk_root()) {
-        FLAGS_tera_zk_root_path = request.tera_zk_root();
+    */
+    if (request.use_nexus()) {
+        if (request.has_tera_zk_addr()) {
+            FLAGS_tera_ins_addr_list = request.tera_zk_addr();
+        }
+        if (request.has_tera_zk_root()) {
+            FLAGS_tera_ins_root_path = request.tera_zk_root();
+        }
+        FLAGS_tera_ins_enabled = true;
+        FLAGS_tera_zk_enabled = false;
+    } else {
+        if (request.has_tera_zk_addr()) {
+            FLAGS_tera_zk_addr_list = request.tera_zk_addr();
+        }
+        if (request.has_tera_zk_root()) {
+            FLAGS_tera_zk_root_path = request.tera_zk_root();
+        }
     }
 }
 
@@ -319,6 +344,7 @@ int ParseRequest(const string& reqfile, MonitorRequest* request) {
 }
 
 void PrintResponse(const MonitorResponse& response) {
+    /*
     for (int i = 0; i < response.stat_list(0).stat_size(); ++i) {
         int64_t total = 0;
         uint64_t t_time = 0;
@@ -335,6 +361,21 @@ void PrintResponse(const MonitorResponse& response) {
         }
         printf("%20lu%10lu%14ld%6d\n",
                 t_time / ts_count, total / ts_count, total, ts_count);
+    }
+      */
+    for (int i = 0; i < response.stat_list_size(); ++i) {
+        const TabletNodeStats& stat_list = response.stat_list(i);
+        for (int j = 0; j < stat_list.stat_size(); ++j) {
+            const TabletNodeStat& stat = stat_list.stat(j);
+            std::cout << stat.ShortDebugString() << " ";
+            for (int k = 0; k < stat.extra_stat_size(); ++k) {
+                ExtraStat extra_stat = stat.extra_stat(k);
+                if (extra_stat.name() == "rand_read_delay") {
+                    std::cout << extra_stat.name() << ": " << extra_stat.value() << " ";
+                }
+            }
+            std::cout << std::endl;
+        }
     }
 }
 
@@ -377,9 +418,23 @@ void TEST_FillGetPartRequest(MonitorRequest* request) {
 
 void TEST_FillGetAllRequest(MonitorRequest* request) {
     request->set_cmd(tera::kGetAll);
-    request->set_min_timestamp(1423220400l * 1000000);
-    request->set_max_timestamp(1423275660l * 1000000);
+    request->set_min_timestamp(0);
+    request->set_max_timestamp(std::numeric_limits<int64_t>::max());
 }
+
+void Eva_FillGetInfoRequest(MonitorRequest* request, std::string ts_start, std::string ts_end) {
+    request->set_cmd(tera::kGetAll);
+    std::stringstream ss;
+    int64_t start, end;
+    ss << ts_start;
+    ss >> start;
+    std::stringstream se;
+    se << ts_end;
+    se >> end;
+    request->set_min_timestamp(start);
+    request->set_max_timestamp(end);
+}
+
 
 int main(int argc, char* argv[]) {
     int ret = 0;
@@ -387,7 +442,6 @@ int main(int argc, char* argv[]) {
     string resfile = FLAGS_tera_monitor_default_response_filename;
     MonitorRequest request;
     MonitorResponse response;
-
     if (argc < 2) {
         // scan all
     } else if (string(argv[1]) == "print") {
@@ -401,6 +455,8 @@ int main(int argc, char* argv[]) {
         TEST_FillGetPartRequest(&request);
     } else if (string(argv[1]) == "testgetall") {
         TEST_FillGetAllRequest(&request);
+    } else if (string(argv[1]) == "eva") { // ./teramo eva timestamp_strat timestamp_end
+        Eva_FillGetInfoRequest(&request, argv[2], argv[3]);
     } else {
         reqfile = argv[1];
         if (argc >= 3) {
