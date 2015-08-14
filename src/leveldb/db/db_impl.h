@@ -140,7 +140,6 @@ class DBImpl : public DB {
   // tera-specific
   std::string key_start_;
   std::string key_end_;
-  bool UserKeyInRange(const Slice& user_key);
   Status RecoverInsertMem(WriteBatch* wb, VersionEdit* edit);
   Status RecoverLastDumpToLevel0(VersionEdit* edit);
 

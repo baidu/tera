@@ -28,7 +28,8 @@ const char* DefaultCompactStrategy::Name() const {
     return "tera.DefaultCompactStrategy";
 }
 
-bool DefaultCompactStrategy::Drop(const leveldb::Slice& tera_key, uint64_t n) {
+bool DefaultCompactStrategy::Drop(const leveldb::Slice& tera_key, uint64_t n,
+                                  bool is_base_level) {
     leveldb::Slice key, col, qual;
     int64_t ts = -1;
     leveldb::TeraKeyType type;
@@ -65,8 +66,12 @@ bool DefaultCompactStrategy::Drop(const leveldb::Slice& tera_key, uint64_t n) {
                 m_del_row_ts = ts;
             case leveldb::TKT_DEL_COLUMN:
                 m_del_col_ts = ts;
-            case leveldb::TKT_DEL_QUALIFIERS:
+            case leveldb::TKT_DEL_QUALIFIERS: {
                 m_del_qual_ts = ts;
+                if (is_base_level) {
+                    return true;
+                }
+            }
             default:;
         }
     } else if (m_del_row_ts >= ts) {
@@ -83,8 +88,12 @@ bool DefaultCompactStrategy::Drop(const leveldb::Slice& tera_key, uint64_t n) {
         switch (type) {
             case leveldb::TKT_DEL_COLUMN:
                 m_del_col_ts = ts;
-            case leveldb::TKT_DEL_QUALIFIERS:
+            case leveldb::TKT_DEL_QUALIFIERS: {
                 m_del_qual_ts = ts;
+                if (is_base_level) {
+                    return true;
+                }
+            }
             default:;
         }
     } else if (m_del_col_ts > ts) {
@@ -98,6 +107,9 @@ bool DefaultCompactStrategy::Drop(const leveldb::Slice& tera_key, uint64_t n) {
         m_has_put = false;
         if (type == leveldb::TKT_DEL_QUALIFIERS) {
             m_del_qual_ts = ts;
+            if (is_base_level) {
+                return true;
+            }
         }
     } else if (m_del_qual_ts > ts) {
         // skip deleted qualifier
