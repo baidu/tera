@@ -190,7 +190,7 @@ bool TabletIO::Load(const TableSchema& schema,
 
     m_ldb_options.use_memtable_on_leveldb = FLAGS_tera_tablet_use_memtable_on_leveldb;
     m_ldb_options.memtable_ldb_write_buffer_size =
-            FLAGS_tera_tablet_memtable_ldb_write_buffer_size * 1024 * 1024;
+            FLAGS_tera_tablet_memtable_ldb_write_buffer_size * 1024;
     m_ldb_options.memtable_ldb_block_size = FLAGS_tera_tablet_memtable_ldb_block_size * 1024;
     if (FLAGS_tera_tablet_use_memtable_on_leveldb) {
         LOG(INFO) << "enable mem-ldb for this tablet-server:"
@@ -1440,7 +1440,7 @@ void TabletIO::SetupOptionsForLG() {
         if (lg_schema.use_memtable_on_leveldb()) {
             lg_info->use_memtable_on_leveldb = true;
             lg_info->memtable_ldb_write_buffer_size =
-                lg_schema.memtable_ldb_write_buffer_size() * 1024 * 1024;
+                lg_schema.memtable_ldb_write_buffer_size() * 1024;
             lg_info->memtable_ldb_block_size =
                 lg_schema.memtable_ldb_block_size() * 1024;
             LOG(INFO) << "enable mem-ldb for LG:" << lg_schema.name().c_str()

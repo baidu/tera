@@ -399,23 +399,47 @@ bool ClientImpl::ShowTablesInfo(TableMetaList* table_list,
     tablet_list->Clear();
 
     master::MasterClient master_client(_cluster->MasterAddr());
-
-    ShowTablesRequest request;
-    ShowTablesResponse response;
-    request.set_sequence_id(0);
-
-    if (master_client.ShowTables(&request, &response) &&
-        response.status() == kMasterOk) {
-        if (response.table_meta_list().meta_size() == 0) {
-            return false;
+    std::string start_table_name;
+    bool has_more = true;
+    bool has_error = false;
+    std::string err_msg;
+    while(has_more && !has_error) {
+        ShowTablesRequest request;
+        ShowTablesResponse response;
+        request.set_start_table_name(start_table_name);
+        request.set_max_table_num(1); //fetch one table for each RPC
+        request.set_sequence_id(0);
+        if (master_client.ShowTables(&request, &response) &&
+            response.status() == kMasterOk) {
+            std::string cur_table_name;
+            if (response.table_meta_list().meta_size() == 0) {
+                has_error = true;
+                err_msg = StatusCodeToString(response.status());
+                break;
+            } else {
+                cur_table_name = response.table_meta_list().meta(0).table_name();
+            }
+            for(int i = 0; i < response.table_meta_list().meta_size(); i++){
+                table_list->add_meta()->CopyFrom(response.table_meta_list().meta(i));
+            }
+            for(int i = 0; i < response.tablet_meta_list().meta_size(); i++){
+                tablet_list->add_meta()->CopyFrom(response.tablet_meta_list().meta(i));
+                tablet_list->add_counter()->CopyFrom(response.tablet_meta_list().counter(i));
+            }
+            start_table_name = cur_table_name;
+            LOG(INFO) << "fetch meta: " << start_table_name;
+            start_table_name.append(1,'\0'); // fetch next
+        } else {
+            has_more = false;
         }
-        table_list->CopyFrom(response.table_meta_list());
-        tablet_list->CopyFrom(response.tablet_meta_list());
-        return true;
+    };
+
+    if (has_error) {
+        LOG(ERROR) << "fail to show table info.";
+        err->SetFailed(ErrorCode::kSystem, err_msg);
+        return false;
     }
-    LOG(ERROR) << "fail to show table info.";
-    err->SetFailed(ErrorCode::kSystem, StatusCodeToString(response.status()));
-    return false;
+    return true;
 }
 
 bool ClientImpl::ShowTabletNodesInfo(const string& addr,
