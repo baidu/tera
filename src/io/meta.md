@@ -18,6 +18,6 @@ struct UnpackContent {
 
 WrtieMeta(std::map<MetaPtr, bool>);
 
-SuspendMetaWrite(std::map<MetaPtr, WriteClosure* done, WriteClosure* done)
+SuspendMetaWrite(std::map<MetaPtr, bool>, WriteClosure* done, WriteClosure* done)
 
 UnpackMeta(UnpackContent content);
