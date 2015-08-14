@@ -11,13 +11,19 @@ class TabletMeta : public Meta
 * meta_io:
 
 struct UnpackContent {
+
   TablePtr* table = NULL;
+  
   std::vector<TabletPtr>* tablets = NULL;
+  
 }
 
 struct ScanContent {
+
   std::vector<TalbeMeta*>* table_metas = NULL;
+  
   std::vector<TalbetMeta*>* tablet_metas = NULL;
+  
 }
 
 WrtieMeta(std::map<MetaPtr, bool>);
