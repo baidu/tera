@@ -3196,9 +3196,9 @@ void MasterImpl::MergeTabletAsyncPhase2(TabletPtr tablet_p1, TabletPtr tablet_p2
     leveldb::Env* env = io::LeveldbBaseEnv();
     std::vector<std::string> children;
     std::string tablet_path = FLAGS_tera_tabletnode_path_prefix + tablet_p1->GetPath();
-    env->GetChildren(tablet_path, &children);
+    env->GetChildren(tablet_path, &children, NULL);
     tablet_path = FLAGS_tera_tabletnode_path_prefix + tablet_p2->GetPath();
-    env->GetChildren(tablet_path, &children);
+    env->GetChildren(tablet_path, &children, NULL);
     for (size_t i = 0; i < children.size(); ++i) {
         leveldb::FileType type = leveldb::kUnknown;
         uint64_t number = 0;
@@ -4463,7 +4463,7 @@ void MasterImpl::CollectSingleDeadTablet(const std::string& tablename, uint64_t 
     std::string tablet_path = leveldb::GetTabletPathFromNum(tablepath, tabletnum);
     leveldb::Env* env = io::LeveldbBaseEnv();
     std::vector<std::string> children;
-    env->GetChildren(tablet_path, &children);
+    env->GetChildren(tablet_path, &children, NULL);
     if (children.size() == 0) {
         LOG(INFO) << "[gc] delete empty tablet dir: " << tablet_path;
         env->DeleteDir(tablet_path);
@@ -4487,7 +4487,8 @@ void MasterImpl::CollectSingleDeadTablet(const std::string& tablename, uint64_t 
         }
 
         std::vector<std::string> files;
-        env->GetChildren(lg_path, &files);
+        std::vector<time_t> ctimes;
+        env->GetChildren(lg_path, &files, &ctimes);
         if (files.size() == 0) {
             LOG(INFO) << "[gc] delete empty lg dir: " << lg_path;
             env->DeleteDir(lg_path);

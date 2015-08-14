@@ -37,17 +37,14 @@ public:
     bool CheckDelete(const std::string& fname, std::vector<std::string>* flags);
 
     virtual Status GetChildren(const std::string& path,
-            std::vector<std::string>* result);
+            std::vector<std::string>* result,
+            std::vector<time_t>* ctime);
 
     virtual Status DeleteFile(const std::string& fname);
 
     virtual Status CreateDir(const std::string& name);
 
     virtual Status DeleteDir(const std::string& name);
-
-    virtual Status GetChildrenWithTime(const std::string& name,
-                                       std::vector<std::string>* result,
-                                       std::vector<time_t>* time);
 
     virtual Status CopyFile(const std::string& from,
                             const std::string& to) {

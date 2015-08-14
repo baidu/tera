@@ -27,11 +27,8 @@ public:
     virtual bool FileExists(const std::string& fname);
 
     virtual Status GetChildren(const std::string& path,
-            std::vector<std::string>* result);
-
-    virtual Status GetChildrenWithTime(const std::string& path,
             std::vector<std::string>* result,
-            std::vector<time_t>* time);
+            std::vector<time_t>* ctime);
 
     virtual Status DeleteFile(const std::string& fname);
 

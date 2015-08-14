@@ -286,9 +286,12 @@ class MemoryEnv : public EnvWrapper {
   }
 
   virtual Status GetChildren(const std::string& dir,
-                             std::vector<std::string>* result) {
+                             std::vector<std::string>* result, std::vector<time_t>* ctime) {
     MutexLock lock(&mutex_);
     result->clear();
+    if (ctime != NULL) {
+      // pass, master does not need to do memenv gc
+    }
 
     for (FileSystem::iterator i = file_map_.begin(); i != file_map_.end(); ++i){
       const std::string& filename = i->first;

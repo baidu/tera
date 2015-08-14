@@ -598,7 +598,7 @@ void Version::MissFilesInLocal(const Slice* smallest_user_key,
     inputs->clear();
     std::vector<std::string> local_file_list;
     std::vector<std::string>::iterator it;
-    vset_->env_->GetChildren(vset_->dbname_, &local_file_list);
+    vset_->env_->GetChildren(vset_->dbname_, &local_file_list, NULL);
 
     const Comparator* user_cmp = vset_->icmp_.user_comparator();
     for (int level = 1; level < config::kNumLevels; level++) {
@@ -636,7 +636,7 @@ void Version::MissFilesInLocal(const Slice* smallest_user_key,
     compact_inputs->clear();
     std::vector<std::string> local_file_list;
     std::vector<std::string>::iterator it;
-    vset_->env_->GetChildren(vset_->dbname_, &local_file_list);
+    vset_->env_->GetChildren(vset_->dbname_, &local_file_list, NULL);
 
     std::vector<FileMetaData*> inputs;
     const Comparator* user_cmp = vset_->icmp_.user_comparator();
@@ -1164,7 +1164,7 @@ Status VersionSet::LogAndApply(VersionEdit* edit, port::Mutex* mu) {
 
 static bool IsDbExist(Env* env, const std::string& dbname) {
     std::vector<std::string> files;
-    env->GetChildren(dbname, &files);
+    env->GetChildren(dbname, &files, NULL);
     for (size_t i = 0; i < files.size(); ++i) {
       uint64_t number;
       FileType type;
@@ -1204,7 +1204,7 @@ Status VersionSet::ReadCurrentFile(uint64_t tablet, std::string* dscname ) {
       !env_->GetFileSize(*dscname, &dscsize).ok() || dscsize == 0) {
     // manifest is not ready, now recover the backup manifest
     std::vector<std::string> files;
-    env_->GetChildren(pdbname, &files);
+    env_->GetChildren(pdbname, &files, NULL);
     std::set<std::string> manifest_set;
     for (size_t i = 0; i < files.size(); ++i) {
       uint64_t number;

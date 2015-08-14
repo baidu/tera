@@ -372,7 +372,9 @@ Status DfsEnv::CopyFile(const std::string& from, const std::string& to) {
 }
 
 
-Status DfsEnv::GetChildren(const std::string& path, std::vector<std::string>* result)
+Status DfsEnv::GetChildren(const std::string& path,
+                           std::vector<std::string>* result,
+                           std::vector<time_t>* ctime)
 {
     {
         tera::AutoCounter ac(&dfs_exists_hang_counter, "Exists", path.c_str());
@@ -386,7 +388,7 @@ Status DfsEnv::GetChildren(const std::string& path, std::vector<std::string>* re
 
     tera::AutoCounter ac(&dfs_list_hang_counter, "ListDirectory", path.c_str());
     dfs_list_counter.Inc();
-    if (0 != dfs_->ListDirectory(path, result, NULL)) {
+    if (0 != dfs_->ListDirectory(path, result, ctime)) {
         abort();
     }
     return Status::OK();
@@ -451,15 +453,6 @@ Status DfsEnv::DeleteDir(const std::string& name)
     }
     return IOError(name, errno);
 };
-
-Status DfsEnv::GetChildrenWithTime(const std::string& name,
-                                   std::vector<std::string>* result,
-                                   std::vector<time_t>* time) {
-    tera::AutoCounter ac(&dfs_list_hang_counter, "GetChildren", name.c_str());
-    dfs_list_counter.Inc();
-    dfs_->ListDirectory(name, result, time);
-    return Status::OK();
-}
 
 Status DfsEnv::GetFileSize(const std::string& fname, uint64_t* size)
 {
