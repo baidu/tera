@@ -135,7 +135,7 @@ class Repairer {
 
   Status FindFiles() {
     std::vector<std::string> filenames;
-    Status status = env_->GetChildren(dbname_, &filenames);
+    Status status = env_->GetChildren(dbname_, &filenames, NULL);
     if (!status.ok()) {
       return status;
     }
@@ -524,7 +524,7 @@ public:
 private:
     Status FindFiles() {
         std::vector<std::string> filenames;
-        Status status = env_->GetChildren(dbname_, &filenames);
+        Status status = env_->GetChildren(dbname_, &filenames, NULL);
         if (!status.ok()) {
             return status;
         }

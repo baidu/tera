@@ -85,7 +85,8 @@ class Env {
   // The names are relative to "dir".
   // Original contents of *results are dropped.
   virtual Status GetChildren(const std::string& dir,
-                             std::vector<std::string>* result) = 0;
+                             std::vector<std::string>* result,
+                             std::vector<time_t>* ctime) = 0;
 
   // Delete the named file.
   virtual Status DeleteFile(const std::string& fname) = 0;
@@ -97,8 +98,6 @@ class Env {
   virtual Status DeleteDir(const std::string& dirname) = 0;
 
   // Deprecated, use GetChildren
-  virtual Status ListDir(const std::string& path,
-                         std::vector<std::string>* result) = 0;
 
   virtual Status CopyFile(const std::string& from,
                           const std::string& to) = 0;
@@ -325,18 +324,12 @@ class EnvWrapper : public Env {
     return target_->NewWritableFile(f, r);
   }
   bool FileExists(const std::string& f) { return target_->FileExists(f); }
-  Status GetChildren(const std::string& dir, std::vector<std::string>* r) {
-    return target_->GetChildren(dir, r);
-  }
-  Status GetChildrenNR(const std::string& dir, std::vector<std::string>* r) {
-    return GetChildren(dir, r);
+  Status GetChildren(const std::string& dir, std::vector<std::string>* r, std::vector<time_t>* ctime) {
+    return target_->GetChildren(dir, r, ctime);
   }
   Status DeleteFile(const std::string& f) { return target_->DeleteFile(f); }
   Status CreateDir(const std::string& d) { return target_->CreateDir(d); }
   Status DeleteDir(const std::string& d) { return target_->DeleteDir(d); }
-  Status ListDir(const std::string& d, std::vector<std::string>* r) {
-    return target_->ListDir(d, r);
-  }
   Status CopyFile(const std::string& f, const std::string& t) {
     return target_->CopyFile(f, t);
   }

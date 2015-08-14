@@ -16,6 +16,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <limits.h>
 #include <sys/mman.h>
 #include <sys/stat.h>
 #ifdef OS_LINUX
@@ -590,7 +591,8 @@ class PosixEnv : public Env {
   }
 
   virtual Status GetChildren(const std::string& dir,
-                             std::vector<std::string>* result) {
+                             std::vector<std::string>* result,
+                             std::vector<time_t>* ctime) {
     posix_list_counter.Inc();
     result->clear();
     DIR* d = opendir(dir.c_str());
@@ -598,12 +600,20 @@ class PosixEnv : public Env {
       return IOError(dir, errno);
     }
     struct dirent* entry;
+    struct stat stat_buf;
     while ((entry = readdir(d)) != NULL) {
       if (strcmp(entry->d_name, ".") == 0 ||
           strcmp(entry->d_name, "..") == 0) {
         continue;
       }
       result->push_back(entry->d_name);
+      if (ctime != NULL) {
+        stat((dir + "/" + entry->d_name).c_str(), &stat_buf);
+        if (errno == 0)
+          ctime->push_back(stat_buf.st_ctime);
+        else
+          ctime->push_back(LONG_MAX);
+      }
     }
     closedir(d);
     return Status::OK();
@@ -644,7 +654,7 @@ class PosixEnv : public Env {
     posix_delete_counter.Inc();
     Status s;
     std::vector<std::string> files;
-    s = GetChildren(name, &files);
+    s = GetChildren(name, &files, NULL);
     if (!s.ok()) {
       return s;
     }
@@ -683,28 +693,6 @@ class PosixEnv : public Env {
       result = IOError(name, errno);
     }
     return result;
-  }
-
-  virtual Status ListDir(const std::string& name,
-      std::vector<std::string>* result) {
-    posix_list_counter.Inc();
-    DIR *dir = NULL;
-    struct dirent *ptr = NULL;
-    dir = opendir(name.c_str());
-    if (dir == NULL) {
-      closedir(dir);
-      return IOError(name, errno);
-    }
-    while ((ptr = readdir(dir)) != NULL) {
-      /// if (ptr->d_type == DT_REG) {
-      ///     result->push_back(ptr->d_name);
-      /// }
-      if (strcmp(ptr->d_name, ".") != 0 && strcmp(ptr->d_name, "..") != 0) {
-        result->push_back(ptr->d_name);
-      }
-    }
-    closedir(dir);
-    return Status::OK();
   }
 
   virtual Status CopyFile(const std::string& from, const std::string& to) {

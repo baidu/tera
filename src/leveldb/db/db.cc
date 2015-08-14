@@ -61,7 +61,7 @@ Status DB::Open(const Options& options, const std::string& dbname,
 Status DestroyLG(const std::string& lgname, const Options& options) {
     Env* env = options.env;
     std::vector<std::string> filenames;
-    env->GetChildren(lgname, &filenames);
+    env->GetChildren(lgname, &filenames, NULL);
     if (filenames.empty()) {
         return Status::OK();
     }
@@ -86,7 +86,7 @@ Status DestroyLG(const std::string& lgname, const Options& options) {
     }
 
     filenames.clear();
-    env->GetChildren(lgname + "/lost", &filenames);
+    env->GetChildren(lgname + "/lost", &filenames, NULL);
     for (size_t i = 0; i < filenames.size(); i++) {
         Status del = env->DeleteFile(lgname + "/lost/" + filenames[i]);
     }
@@ -103,7 +103,7 @@ Status DestroyDB(const std::string& dbname, const Options& opt) {
     Env* env = options.env;
 
     std::vector<std::string> filenames;
-    env->GetChildren(dbname, &filenames);
+    env->GetChildren(dbname, &filenames, NULL);
     if (filenames.empty()) {
         return Status::OK();
     }
@@ -160,7 +160,7 @@ Status DestroyDB(const std::string& dbname, const Options& opt) {
 
     // clean db/lost dir
     filenames.clear();
-    env->GetChildren(dbname + "/lost", &filenames);
+    env->GetChildren(dbname + "/lost", &filenames, NULL);
     for (size_t i = 0; i < filenames.size(); i++) {
         Status del = env->DeleteFile(dbname + "/lost/" + filenames[i]);
     }

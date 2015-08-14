@@ -62,8 +62,10 @@ public:
     /// Returns 0 on success.
     virtual int32_t Copy(const std::string& from, const std::string& to) = 0;
     /// Returns 0 on success.
-    virtual int32_t ListDirectory(const std::string& path, std::vector<std::string>* result) = 0;
-    /// Returns DfsFile handler on success, NULL on error.
+    virtual int32_t ListDirectory(const std::string& path,
+                                  std::vector<std::string>* result,
+                                  std::vector<time_t>* ctime) = 0;
+    /// Returns DfsFile handler on success, NULL on error.WithTime
     virtual DfsFile* OpenFile(const std::string& filename, int32_t flags) = 0;
     /// Returns Dfs handler on success, NULL on error.
     static Dfs* NewDfs(const std::string& so_path, const std::string& conf); 

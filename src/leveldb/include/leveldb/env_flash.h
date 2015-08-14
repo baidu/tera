@@ -37,16 +37,13 @@ public:
     virtual bool FileExists(const std::string& fname);
 
     virtual Status GetChildren(const std::string& path,
-            std::vector<std::string>* result);
+            std::vector<std::string>* result, std::vector<time_t>* ctime);
 
     virtual Status DeleteFile(const std::string& fname);
 
     virtual Status CreateDir(const std::string& name);
 
     virtual Status DeleteDir(const std::string& name);
-
-    virtual Status ListDir(const std::string& name,
-            std::vector<std::string>* result);
 
     virtual Status CopyFile(const std::string& from,
                             const std::string& to) {

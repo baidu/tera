@@ -300,7 +300,7 @@ void DBImpl::DeleteObsoleteFiles() {
 
   std::vector<std::string> filenames;
   mutex_.Unlock();
-  env_->GetChildren(dbname_, &filenames); // Ignoring errors on purpose
+  env_->GetChildren(dbname_, &filenames, NULL); // Ignoring errors on purpose
   mutex_.Lock();
   uint64_t number;
   FileType type;
@@ -415,7 +415,7 @@ Status DBImpl::Recover(VersionEdit* edit) {
       std::string path = RealDbName(dbname_, *it_tablet);
       Log(options_.info_log, "[%s] GetChildren(%s)", dbname_.c_str(), path.c_str());
       std::vector<std::string> filenames;
-      s = env_->GetChildren(path, &filenames);
+      s = env_->GetChildren(path, &filenames, NULL);
       if (!s.ok()) {
         Log(options_.info_log, "[%s] GetChildren(%s) fail: %s",
             dbname_.c_str(), path.c_str(), s.ToString().c_str());

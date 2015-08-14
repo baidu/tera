@@ -368,9 +368,10 @@ bool FlashEnv::FileExists(const std::string& fname)
 
 //
 Status FlashEnv::GetChildren(const std::string& path,
-        std::vector<std::string>* result)
+        std::vector<std::string>* result,
+        std::vector<time_t>* ctime)
 {
-    return dfs_env_->GetChildren(path, result);
+    return dfs_env_->GetChildren(path, result, ctime);
 }
 
 Status FlashEnv::DeleteFile(const std::string& fname)
@@ -396,12 +397,6 @@ Status FlashEnv::DeleteDir(const std::string& name)
     posix_env_->DeleteDir(FlashEnv::FlashPath(name) + name);
     return dfs_env_->DeleteDir(name);
 };
-
-Status FlashEnv::ListDir(const std::string& name,
-        std::vector<std::string>* result)
-{
-    return dfs_env_->ListDir(name, result);
-}
 
 Status FlashEnv::GetFileSize(const std::string& fname, uint64_t* size)
 {
