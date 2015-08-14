@@ -97,8 +97,9 @@ class Env {
   virtual Status DeleteDir(const std::string& dirname) = 0;
 
   // Deprecated, use GetChildren
-  virtual Status ListDir(const std::string& path,
-                         std::vector<std::string>* result) = 0;
+  virtual Status GetChildrenWithTime(const std::string& path,
+                                     std::vector<std::string>* result,
+                                     std::vector<time_t>* time) = 0;
 
   virtual Status CopyFile(const std::string& from,
                           const std::string& to) = 0;
@@ -328,15 +329,14 @@ class EnvWrapper : public Env {
   Status GetChildren(const std::string& dir, std::vector<std::string>* r) {
     return target_->GetChildren(dir, r);
   }
-  Status GetChildrenNR(const std::string& dir, std::vector<std::string>* r) {
-    return GetChildren(dir, r);
+  Status GetChildrenWithTime(const std::string& dir,
+                             std::vector<std::string>* r,
+                             std::vector<time_t>* time) {
+    return target_->GetChildrenWithTime(dir, r, time);
   }
   Status DeleteFile(const std::string& f) { return target_->DeleteFile(f); }
   Status CreateDir(const std::string& d) { return target_->CreateDir(d); }
   Status DeleteDir(const std::string& d) { return target_->DeleteDir(d); }
-  Status ListDir(const std::string& d, std::vector<std::string>* r) {
-    return target_->ListDir(d, r);
-  }
   Status CopyFile(const std::string& f, const std::string& t) {
     return target_->CopyFile(f, t);
   }
