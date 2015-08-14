@@ -92,7 +92,7 @@ Options InitOptionsLG(const Options& options, uint32_t lg_id) {
 }
 
 DBTable::DBTable(const Options& options, const std::string& dbname)
-    : shutdown_phase_(0), shutting_down_(NULL), bg_cv_(&mutex_),
+    : state_(kNotOpen), shutting_down_(NULL), bg_cv_(&mutex_),
       bg_cv_timer_(&mutex_), bg_cv_sleeper_(&mutex_),
       options_(InitDefaultOptions(options, dbname)),
       dbname_(dbname), env_(options.env),
@@ -107,8 +107,8 @@ DBTable::DBTable(const Options& options, const std::string& dbname)
 }
 
 Status DBTable::Shutdown1() {
-    assert(shutdown_phase_ == 0);
-    shutdown_phase_ = 1;
+    assert(state_ == kOpened);
+    state_ = kShutdown1;
 
     Log(options_.info_log, "[%s] shutdown1 start", dbname_.c_str());
     shutting_down_.Release_Store(this);
@@ -139,8 +139,8 @@ Status DBTable::Shutdown1() {
 }
 
 Status DBTable::Shutdown2() {
-    assert(shutdown_phase_ == 1);
-    shutdown_phase_ = 2;
+    assert(state_ == kShutdown1);
+    state_ = kShutdown2;
 
     Log(options_.info_log, "[%s] shutdown2 start", dbname_.c_str());
 
@@ -175,11 +175,10 @@ Status DBTable::Shutdown2() {
 }
 
 DBTable::~DBTable() {
-    assert(shutdown_phase_ >= 0 && shutdown_phase_ <= 2);
     // Shutdown1 must be called before delete.
     // Shutdown2 is both OK to be called or not.
     // But if Shutdown1 returns non-ok, Shutdown2 must NOT be called.
-    if (shutdown_phase_ < 1) {
+    if (state_ == kOpened) {
         Status s = Shutdown1();
         if (s.ok()) {
             Shutdown2();
@@ -243,16 +242,16 @@ Status DBTable::Init() {
                 last_sequence_ = last_seq;
             }
         } else {
-            Log(options_.info_log, "[%s] fail to Recover lg %d", dbname_.c_str(), i);
+            Log(options_.info_log, "[%s] fail to recover lg %d", dbname_.c_str(), i);
             break;
         }
     }
     if (!s.ok()) {
+        Log(options_.info_log, "[%s] fail to recover table.", dbname_.c_str());
         for (uint32_t i = 0; i != lg_list_.size(); ++i) {
             delete lg_list_[i];
         }
         lg_list_.clear();
-        Log(options_.info_log, "[%s] fail to Recover table.", dbname_.c_str());
         return s;
     }
 
@@ -308,7 +307,7 @@ Status DBTable::Init() {
         s = DeleteLogFile(logfiles);
     }
 
-    if (s.ok()) {
+    if (s.ok() && !options_.disable_wal) {
         std::string log_file_name = LogHexFileName(dbname_, last_sequence_ + 1);
         s = options_.env->NewWritableFile(log_file_name, &logfile_);
         if (s.ok()) {
@@ -320,13 +319,21 @@ Status DBTable::Init() {
                 dbname_.c_str(), log_file_name.c_str());
         }
     }
-    Log(options_.info_log, "[%s] custom compact strategy: %s, flush trigger %lu",
-        dbname_.c_str(), options_.compact_strategy_factory->Name(),
-        options_.flush_triggered_log_num);
 
-    Log(options_.info_log, "[%s] Init() done, last_seq=%llu", dbname_.c_str(),
-        static_cast<unsigned long long>(last_sequence_));
+    if (s.ok()) {
+        state_ = kOpened;
+        Log(options_.info_log, "[%s] custom compact strategy: %s, flush trigger %lu",
+            dbname_.c_str(), options_.compact_strategy_factory->Name(),
+            options_.flush_triggered_log_num);
 
+        Log(options_.info_log, "[%s] Init() done, last_seq=%llu", dbname_.c_str(),
+            static_cast<unsigned long long>(last_sequence_));
+    } else {
+        for (uint32_t i = 0; i != lg_list_.size(); ++i) {
+            delete lg_list_[i];
+        }
+        lg_list_.clear();
+    }
     return s;
 }
 
@@ -371,6 +378,11 @@ Status DBTable::Write(const WriteOptions& options, WriteBatch* my_batch) {
     RecordWriter* last_writer = &w;
     WriteBatch* updates = NULL;
     if (s.ok()) {
+        updates = GroupWriteBatch(&last_writer);
+        WriteBatchInternal::SetSequence(updates, last_sequence_ + 1);
+    }
+
+    if (s.ok() && !options_.disable_wal && !options.disable_wal) {
         if (force_switch_log_ || current_log_size_ > options_.log_file_size) {
             mutex_.Unlock();
             if (SwitchLog(false) == 2) {
@@ -383,10 +395,7 @@ Status DBTable::Write(const WriteOptions& options, WriteBatch* my_batch) {
     }
 
     // dump to log
-    if (s.ok()) {
-        updates = GroupWriteBatch(&last_writer);
-        WriteBatchInternal::SetSequence(updates, last_sequence_ + 1);
-
+    if (s.ok() && !options_.disable_wal && !options.disable_wal) {
         mutex_.Unlock();
 
         Slice slice = WriteBatchInternal::Contents(updates);
@@ -1111,6 +1120,7 @@ void DBTable::GarbageClean() {
     bool found = false;
     std::set<uint32_t>::iterator it = options_.exist_lg_list->begin();
     for (; it != options_.exist_lg_list->end(); ++it) {
+        assert(*it < lg_list_.size());
         DBImpl* impl = lg_list_[*it];
         uint64_t last_seq = impl->GetLastVerSequence();
         if (last_seq < min_last_seq) {

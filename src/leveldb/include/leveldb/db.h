@@ -40,6 +40,13 @@ struct Range {
 // any external synchronization.
 class DB {
  public:
+  enum State {
+    kNotOpen = 0,
+    kOpened = 1,
+    kShutdown1 = 2,
+    kShutdown2 = 3
+  };
+
   // Open the database with the specified "name".
   // Stores a pointer to a heap-allocated database in *dbptr and returns
   // OK on success.

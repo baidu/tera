@@ -19,6 +19,7 @@
 #include "db/table_cache.h"
 #include "leveldb/env.h"
 #include "leveldb/table_builder.h"
+#include "leveldb/table_utils.h"
 #include "leveldb/compact_strategy.h"
 #include "table/merger.h"
 #include "table/two_level_iterator.h"
@@ -1162,21 +1163,6 @@ Status VersionSet::LogAndApply(VersionEdit* edit, port::Mutex* mu) {
   return s;
 }
 
-static bool IsDbExist(Env* env, const std::string& dbname) {
-    std::vector<std::string> files;
-    env->GetChildren(dbname, &files, NULL);
-    for (size_t i = 0; i < files.size(); ++i) {
-      uint64_t number;
-      FileType type;
-      if (ParseFileName(files[i], &number, &type)) {
-        if (type == kDescriptorFile) {
-            return true;
-        }
-      }
-    }
-    return false;
-}
-
 Status VersionSet::ReadCurrentFile(uint64_t tablet, std::string* dscname ) {
   Status s;
   std::string pdbname;
@@ -1191,9 +1177,10 @@ Status VersionSet::ReadCurrentFile(uint64_t tablet, std::string* dscname ) {
     Log(options_->info_log, "[%s] current file lost: %s.",
         dbname_.c_str(), CurrentFileName(pdbname).c_str());
   } else if (current.empty() || current[current.size()-1] != '\n') {
-    Log(options_->info_log, "[%s] current file error: %s, content:\"%s\".",
-        dbname_.c_str(), CurrentFileName(pdbname).c_str(), current.c_str());
-    s = Status::Corruption("current file error.");
+    Log(options_->info_log, "[%s] current file error: %s, content:\"%s\", size:%lu.",
+        dbname_.c_str(), CurrentFileName(pdbname).c_str(),
+        current.c_str(), current.size());
+    ArchiveFile(env_, CurrentFileName(pdbname));
   } else {
     current.resize(current.size() - 1);
     *dscname = pdbname + "/" + current;
@@ -1215,6 +1202,7 @@ Status VersionSet::ReadCurrentFile(uint64_t tablet, std::string* dscname ) {
               dscsize == 0) {
             Log(options_->info_log, "[%s] manifest size is 0, skip it: %s.",
                 dbname_.c_str(), files[i].c_str());
+            ArchiveFile(env_, pdbname + "/" + files[i]);
             continue;
           } else {
             manifest_set.insert(files[i]);
@@ -1223,6 +1211,8 @@ Status VersionSet::ReadCurrentFile(uint64_t tablet, std::string* dscname ) {
       }
     }
     if (manifest_set.size() < 1) {
+      Log(options_->info_log, "[%s] none available manifest file.",
+          dbname_.c_str());
       return Status::Corruption("DB has none available manifest file.");
     }
     // select the largest manifest number
@@ -1249,13 +1239,12 @@ Status VersionSet::Recover() {
   Status s;
   size_t parent_size = options_->parent_tablets.size();
   std::string current;
-  if (parent_size  == 0 ||
-      env_->FileExists(CurrentFileName(dbname_)) ||
-      IsDbExist(env_, dbname_)) {
+  if (parent_size  == 0) {
     Log(options_->info_log, "[%s] recover old or create new db.", dbname_.c_str());
     dscname.resize(1);
     s = ReadCurrentFile(0, &dscname[0]);
     if (!s.ok()) {
+      Log(options_->info_log, "[%s] fail to read current.", dbname_.c_str());
       return s;
     }
   } else if (parent_size == 1) {
@@ -1264,6 +1253,8 @@ Status VersionSet::Recover() {
     dscname.resize(1);
     s = ReadCurrentFile(options_->parent_tablets[0], &dscname[0]);
     if (!s.ok()) {
+      Log(options_->info_log, "[%s] fail to read current (split): %ld.",
+          dbname_.c_str(), options_->parent_tablets[0]);
       return s;
     }
   } else if (parent_size == 2) {
@@ -1274,12 +1265,16 @@ Status VersionSet::Recover() {
     // read first tablet CURRENT
     s = ReadCurrentFile(options_->parent_tablets[0], &dscname[0]);
     if (!s.ok()) {
+      Log(options_->info_log, "[%s] fail to read current (merge0): %ld.",
+          dbname_.c_str(), options_->parent_tablets[0]);
       return s;
     }
 
     // read second tablet CURRENT
     s = ReadCurrentFile(options_->parent_tablets[1], &dscname[1]);
     if (!s.ok()) {
+      Log(options_->info_log, "[%s] fail to read current (merge1): %ld.",
+          dbname_.c_str(), options_->parent_tablets[1]);
       return s;
     }
   } else {
@@ -1373,10 +1368,13 @@ Status VersionSet::Recover() {
       builder.SaveTo(v);
       Finalize(v);
       AppendVersion(v);
-      Log(options_->info_log, "[%s] recover manifest %s finish.\n", dbname_.c_str(), dscname[i].c_str());
+      Log(options_->info_log, "[%s] recover manifest finish: %s\n",
+          dbname_.c_str(), dscname[i].c_str());
     } else {
-      Log(options_->info_log, "[%s] recover manifest %s fail: %s\n",
+      Log(options_->info_log, "[%s] recover manifest fail %s, %s\n",
           dbname_.c_str(), dscname[i].c_str(), s.ToString().c_str());
+      ArchiveFile(env_, dscname[i]);
+      return Status::Corruption("recover manifest fail");
     }
   }
 

@@ -102,6 +102,7 @@ class DBImpl : public DB {
                                 SequenceNumber* latest_snapshot);
 
   Status NewDB();
+  bool IsDbExist();
 
   void MaybeIgnoreError(Status* s) const;
 
@@ -133,6 +134,8 @@ class DBImpl : public DB {
   Status FinishCompactionOutputFile(CompactionState* compact, Iterator* input);
   Status InstallCompactionResults(CompactionState* compact)
       EXCLUSIVE_LOCKS_REQUIRED(mutex_);
+
+  State state_;
 
   // tera-specific
   std::string key_start_;

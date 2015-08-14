@@ -13,6 +13,7 @@ message CreateTableRequest {
     required string table_name = 2;
     optional TableSchema schema = 3;
     repeated bytes delimiters = 6;
+    optional bytes user_token = 7;
 }
 
 message CreateTableResponse {
@@ -24,6 +25,7 @@ message CreateTableResponse {
 message DeleteTableRequest {
     required uint64 sequence_id = 1;
     required string table_name = 2;
+    optional bytes user_token = 3;
 }
 
 message DeleteTableResponse {
@@ -34,6 +36,7 @@ message DeleteTableResponse {
 message DisableTableRequest {
     required uint64 sequence_id = 1;
     required string table_name = 2;
+    optional bytes user_token = 3;
 }
 
 message DisableTableResponse {
@@ -44,6 +47,7 @@ message DisableTableResponse {
 message EnableTableRequest {
     required uint64 sequence_id = 1;
     required string table_name = 2;
+    optional bytes user_token = 3;
 }
 
 message EnableTableResponse {
@@ -55,6 +59,7 @@ message UpdateTableRequest {
     required uint64 sequence_id = 1;
     required string table_name = 2;
     optional TableSchema schema = 3;
+    optional bytes user_token = 4;
 }
 
 message UpdateTableResponse {
