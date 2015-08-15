@@ -165,7 +165,6 @@ class DB {
                                 std::vector<uint64_t>* lgsize = NULL) = 0;
 
   virtual bool MinorCompact() = 0;
-  virtual void CompactMissFiles(const Slice* begin, const Slice* end) = 0;
 
   // Add all sst files inherited from other tablets
   virtual void AddInheritedLiveFiles(std::vector<std::set<uint64_t> >* live) = 0;
