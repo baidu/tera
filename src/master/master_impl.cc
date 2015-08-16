@@ -1975,7 +1975,7 @@ bool MasterImpl::LoadTabletSync(const TabletMeta& meta,
     return false;
 }
 
-void MasterImpl::LoadTabletAsync(TabletPtr tablet, LoadClosure* done, uint64_t) {
+void MasterImpl::LoadTabletAsync(TabletPtr tablet, LoadClosure* done, bool new_db, uint64_t) {
     tabletnode::TabletNodeClient node_client(tablet->GetServerAddr(),
                                             FLAGS_tera_master_load_rpc_timeout);
     LoadTabletRequest* request = new LoadTabletRequest;
@@ -2002,8 +2002,12 @@ void MasterImpl::LoadTabletAsync(TabletPtr tablet, LoadClosure* done, uint64_t) 
     tablet->ToMeta(&meta);
     CHECK(meta.parent_tablets_size() <= 2)
         << "too many parents tablets: " << meta.parent_tablets_size();
-    for (int32_t i = 0; i < meta.parent_tablets_size(); ++i) {
-        request->add_parent_tablets(meta.parent_tablets(i));
+    if (new_db) {
+        LOG(INFO) << "LoadTabletAsync set new_db";
+    } else {
+        for (int32_t i = 0; i < meta.parent_tablets_size(); ++i) {
+            request->add_parent_tablets(meta.parent_tablets(i));
+        }
     }
 
     LOG(INFO) << "LoadTabletAsync id: " << request->sequence_id() << ", "
@@ -2103,7 +2107,7 @@ void MasterImpl::LoadTabletCallback(TabletPtr tablet, int32_t retry,
 
     // retry
     boost::function<void ()> closure =
-        boost::bind(&MasterImpl::RetryLoadTablet, this, tablet, retry + 1);
+        boost::bind(&MasterImpl::RetryLoadTablet, this, tablet, retry + 1, (status == kIOError));
     m_thread_pool->DelayTask(
         FLAGS_tera_master_control_tabletnode_retry_period, closure);
 }
@@ -3065,7 +3069,7 @@ void MasterImpl::TryLoadTablet(TabletPtr tablet, std::string server_addr) {
     return;
 }
 
-void MasterImpl::RetryLoadTablet(TabletPtr tablet, int32_t retry_times) {
+void MasterImpl::RetryLoadTablet(TabletPtr tablet, int32_t retry_times, bool new_db) {
     CHECK(tablet->GetStatus() == kTableOnLoad);
     TabletNodePtr node;
     if (!m_tabletnode_manager->FindTabletNode(tablet->GetServerAddr(), &node)) {
@@ -3088,7 +3092,7 @@ void MasterImpl::RetryLoadTablet(TabletPtr tablet, int32_t retry_times) {
 
     LoadClosure* done = NewClosure(this, &MasterImpl::LoadTabletCallback, tablet,
                                    retry_times);
-    LoadTabletAsync(tablet, done);
+    LoadTabletAsync(tablet, done, new_db);
     return;
 }
 

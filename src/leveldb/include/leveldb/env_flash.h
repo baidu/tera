@@ -10,9 +10,10 @@
 #include <sys/time.h>
 #include <time.h>
 #include <iostream>
+#include <set>
 #include "env.h"
 #include "status.h"
-
+#include "util/mutexlock.h"
 
 namespace leveldb {
 
@@ -73,6 +74,8 @@ public:
 private:
     Env* dfs_env_;
     Env* posix_env_;
+    port::Mutex mask_mutex_;
+    std::set<std::string> mask_files_;
     static std::vector<std::string> flash_paths_;
 };
 

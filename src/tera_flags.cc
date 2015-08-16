@@ -41,7 +41,7 @@ DEFINE_int64(tera_tablet_write_block_size, 4, "the block size (in KB) for teblet
 DEFINE_int64(tera_tablet_living_period, -1, "the living period of tablet");
 DEFINE_int32(tera_tablet_flush_log_num, 100000, "the max log number before flush memtable");
 DEFINE_bool(tera_tablet_use_memtable_on_leveldb, false, "enable memtable based on in-memory leveldb");
-DEFINE_int64(tera_tablet_memtable_ldb_write_buffer_size, 1, "the buffer size(in MB) for memtable on leveldb");
+DEFINE_int64(tera_tablet_memtable_ldb_write_buffer_size, 1000, "the buffer size(in KB) for memtable on leveldb");
 DEFINE_int64(tera_tablet_memtable_ldb_block_size, 4, "the block size (in KB) for memtable on leveldb");
 DEFINE_int64(tera_tablet_ldb_sst_size, 8, "the sstable file size (in MB) on leveldb");
 DEFINE_bool(tera_sync_log, true, "flush all in-memory parts of log file to stable storage");
@@ -251,3 +251,5 @@ DEFINE_bool(tera_sdk_pend_request_while_scan_meta_enabled, true, "pend request u
 DEFINE_string(tera_ins_addr_list, "", "the ins cluster addr. e.g. abc.com:1234,abb.com:1234");
 DEFINE_string(tera_ins_root_path, "", "root path on ins. e.g /ps/sandbox");
 DEFINE_bool(tera_ins_enabled, false, "option to open ins naming");
+
+DEFINE_bool(tera_tablet_ll_seek_available, false, "enable lowlevel seek when read");

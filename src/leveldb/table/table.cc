@@ -157,6 +157,7 @@ Status Table::Open(const Options& options,
 
   // Read the index block
   ReadOptions opt;
+  opt.db_opt = &options;
   opt.verify_checksums = true;
   BlockContents contents;
   Block* index_block = NULL;
@@ -195,6 +196,7 @@ void Table::ReadMeta(const Footer& footer) {
   // TODO(sanjay): Skip this if footer.metaindex_handle() size indicates
   // it is an empty block.
   ReadOptions opt;
+  opt.db_opt = &rep_->options;
   opt.verify_checksums = true;
   BlockContents contents;
   if (!ReadBlock(rep_->file, opt, footer.metaindex_handle(), &contents).ok()) {
@@ -224,6 +226,7 @@ void Table::ReadFilter(const Slice& filter_handle_value) {
   // We might want to unify with ReadBlock() if we start
   // requiring checksum verification in Table::Open.
   ReadOptions opt;
+  opt.db_opt = &rep_->options;
   opt.verify_checksums = true;
   BlockContents block;
   if (!ReadBlock(rep_->file, opt, filter_handle, &block).ok()) {
