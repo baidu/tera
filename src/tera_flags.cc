@@ -11,6 +11,8 @@ DEFINE_string(tera_role, "", "the role of tera running binary, should be one of 
 
 DEFINE_string(tera_user_identity, "", "the identity of tera user");
 DEFINE_string(tera_user_passcode, "", "the passcode of tera user");
+DEFINE_bool(tera_acl_enabled, false, "enable access control");
+DEFINE_string(tera_acl_root_token, "", "the token of root user");
 
 DEFINE_int64(tera_heartbeat_retry_period_factor, 1, "the heartbeat period factor when retry send heartbeat");
 DEFINE_int32(tera_heartbeat_retry_times, 5, "the max retry times when fail to send report request");
@@ -240,6 +242,7 @@ DEFINE_int32(tera_sdk_cookie_update_interval, 600, "the interval of cookie updat
 DEFINE_bool(tera_sdk_perf_counter_enabled, true, "enable performance counter log");
 DEFINE_int64(tera_sdk_perf_counter_log_interval, 1, "the interval of performance counter log dumping");
 
+DEFINE_bool(tera_sdk_scan_async_enabled, false, "enable async scan");
 DEFINE_int64(tera_sdk_scan_async_cache_size, 16, "the max buffer size (in MB) for cached scan results");
 DEFINE_int32(tera_sdk_scan_async_parallel_max_num, 500, "the max number of concurrent task sending");
 

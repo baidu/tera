@@ -719,28 +719,6 @@ void TabletNodeImpl::SplitTablet(const SplitTabletRequest* request,
                          first_half_size, second_half_size, request->tablet_meta());
 }
 
-void TabletNodeImpl::MergeTablet(const MergeTabletRequest* request,
-                                 MergeTabletResponse* response,
-                                 google::protobuf::Closure* done) {
-    LOG(INFO) << "MergeTablet(): request: " << request->DebugString();
-    response->set_sequence_id(request->sequence_id());
-    if (!m_merge_rpc_compactor.RpcExceptionHappened(
-            request->sequence_id(), response, done)) {
-        return;
-    }
-
-    std::string tb1_path = request->tablet_path_1();
-    std::string tb2_path = request->tablet_path_2();
-    std::string tb_merge = request->tablet_merged_path();
-    StatusCode status = kTabletNodeOk;
-    if (!io::MergeTablesWithLG(tb1_path, tb2_path, tb_merge)) {
-        LOG(ERROR) << "fail to merge: " << tb2_path << " to: " << tb1_path;
-        status = kTableMergeError;
-    }
-    response->set_status(status);
-    m_merge_rpc_compactor.FillResponseAndDone(response);
-}
-
 bool TabletNodeImpl::CheckInKeyRange(const KeyList& key_list,
                                      const std::string& key_start,
                                      const std::string& key_end) {
@@ -979,8 +957,7 @@ void TabletNodeImpl::GarbageCollectInPath(const std::string& path, leveldb::Env*
     env->GetChildren(path, &table_dirs);
     for (size_t i = 0; i < table_dirs.size(); ++i) {
         std::vector<std::string> cached_tablets;
-        env->GetChildren(path + "/" + table_dirs[i],
-                &cached_tablets);
+        env->GetChildren(path + "/" + table_dirs[i], &cached_tablets);
         if (cached_tablets.size() == 0) {
             VLOG(GC_LOG_LEVEL) << "[gc] this directory is empty, delete it: "
                 << path + "/" + table_dirs[i];

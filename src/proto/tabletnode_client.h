@@ -68,10 +68,6 @@ public:
                      SplitTabletResponse* response,
                      Closure<void, SplitTabletRequest*, SplitTabletResponse*, bool, int>* done = NULL);
 
-    bool MergeTablet(const MergeTabletRequest* request,
-                     MergeTabletResponse* response,
-                     Closure<void, MergeTabletRequest*, MergeTabletResponse*, bool, int>* done = NULL);
-
     bool CompactTablet(const CompactTabletRequest* request,
                        CompactTabletResponse* response,
                        Closure<void, CompactTabletRequest*, CompactTabletResponse*, bool, int>* done = NULL);

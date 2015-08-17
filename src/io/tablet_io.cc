@@ -410,7 +410,6 @@ bool TabletIO::Compact(StatusCode* status) {
         m_db_ref_count++;
     }
     CHECK_NOTNULL(m_db);
-    m_db->CompactMissFiles(NULL, NULL);
     m_db->CompactRange(NULL, NULL);
 
     {
@@ -913,6 +912,7 @@ bool TabletIO::LowLevelSeek(const std::string& row_key,
                 } else {
                     leveldb::Slice value = it_data->value();
                     kv->set_value(value.data(), value.size());
+                    it_data->Next();
                 }
             }
         }

@@ -30,6 +30,7 @@
 #include "sdk/schema_impl.h"
 #include "sdk/sdk_zk.h"
 #include "sdk/tera.h"
+#include "utils/crypt.h"
 #include "utils/string_util.h"
 #include "utils/timer.h"
 
@@ -702,7 +703,14 @@ void TableImpl::MutateCallBack(std::vector<RowMutationImpl*>* mu_list,
     for (uint32_t i = 0; i < mu_list->size(); ++i) {
         StatusCode err = response->status();
         if (err == kTabletNodeOk) {
-            err = response->row_status_list(i);
+            if (response->row_status_list_size() == (int64_t)mu_list->size()) {
+                err = response->row_status_list(i);
+            } else {
+                LOG(ERROR) << "response status num error: "
+                    << response->row_status_list_size() << ", "
+                    << mu_list->size() << " required";
+                err = kKeyNotInRange;
+            }
         }
         if (err != kTabletNodeOk) {
             VLOG(10) << "fail to mutate table: " << _name
@@ -1150,7 +1158,14 @@ void TableImpl::ReaderCallBack(std::vector<RowReaderImpl*>* reader_list,
     for (uint32_t i = 0; i < reader_list->size(); ++i) {
         StatusCode err = response->status();
         if (err == kTabletNodeOk) {
-            err = response->detail().status(i);
+            if (response->detail().status_size() == (int64_t)reader_list->size()) {
+                err = response->detail().status(i);
+            } else {
+                LOG(ERROR) << "response status num error: "
+                    << response->detail().status_size() << ", "
+                    << reader_list->size() << " required";
+                err = kKeyNotInRange;
+            }
         }
         if (err != kTabletNodeOk && err != kKeyNotExist && err != kSnapshotNotExist) {
             VLOG(10) << "fail to read table: " << _name
@@ -1997,43 +2012,7 @@ void TableImpl::ReadTableMetaCallBack(ErrorCode* ret_err,
     delete response;
 }
 
-// copy from leveldb/util/hash.h
-static uint32_t Hash(const char* data, size_t n, uint32_t seed) {
-    // Similar to murmur hash
-    const uint32_t m = 0xc6a4a793;
-    const uint32_t r = 24;
-    const char* limit = data + n;
-    uint32_t h = seed ^ (n * m);
-
-    // Pick up four bytes at a time
-    while (data + 4 <= limit) {
-        uint32_t w = *(uint32_t*)data;
-        data += 4;
-        h += w;
-        h *= m;
-        h ^= (h >> 16);
-    }
-
-    // Pick up remaining bytes
-    switch (limit - data) {
-    case 3:
-        h += data[2] << 16;
-    case 2:
-        h += data[1] << 8;
-    case 1:
-        h += data[0];
-        h *= m;
-        h ^= (h >> r);
-    break;
-    }
-    return h;
-}
-
-// stores hash as a string, not including the terminating '\0' character
-// `HASH_LEN' is the length of this string
-const static long HASH_LEN = 8;
-
-static bool CalculateChecksumOfData(std::fstream& outfile, long size, char *hash_str) {
+static bool CalculateChecksumOfData(std::fstream& outfile, long size, std::string* hash_str) {
     // 100 MB, (100 * 1024 * 1024) / 250 = 419,430
     // cookie文件中，每个tablet的缓存大小约为100~200 Bytes，不妨计为250 Bytes，
     // 那么，100MB可以支持约40万个tablets
@@ -2047,17 +2026,15 @@ static bool CalculateChecksumOfData(std::fstream& outfile, long size, char *hash
         LOG(INFO) << "[SDK COOKIE] input argument `hash_str' is NULL";
         return false;
     }
-    char* data = new char[size];
-    CHECK(data);
-    outfile.read(data, size);
+    std::string data(size, '\0');
+    outfile.read(const_cast<char*>(data.data()), size);
     if(outfile.fail()) {
         LOG(INFO) << "[SDK COOKIE] fail to read cookie file";
-        delete data;
         return false;
     }
-    uint32_t hash = Hash(data, size, 0);
-    sprintf(hash_str, "%08x", hash);
-    delete data;
+    if (GetHashString(data, 0, hash_str) != 0) {
+        return false;
+    }
     return true;
 }
 
@@ -2073,22 +2050,22 @@ static bool IsCookieChecksumRight(const std::string& cookie_file) {
     // gets file size, in bytes
     outfile.seekp(0, std::ios_base::end);
     long file_size = outfile.tellp();
-    if(file_size < HASH_LEN) {
+    if(file_size < HASH_STRING_LEN) {
         LOG(INFO) << "[SDK COOKIE] invalid file size: " << file_size;
         return false;
     }
 
     // calculates checksum according to cookie file content
-    char hash_str[HASH_LEN] = {'\0'};
+    std::string hash_str;
     outfile.seekp(0, std::ios_base::beg);
-    if(!CalculateChecksumOfData(outfile, file_size - HASH_LEN, hash_str)) {
+    if(!CalculateChecksumOfData(outfile, file_size - HASH_STRING_LEN, &hash_str)) {
         return false;
     }
     LOG(INFO) << "[SDK COOKIE] checksum rebuild: " << hash_str;
 
     // gets checksum in cookie file
-    char hash_str_saved[HASH_LEN] = {'\0'};
-    outfile.read(hash_str_saved, HASH_LEN);
+    char hash_str_saved[HASH_STRING_LEN + 1] = {'\0'};
+    outfile.read(hash_str_saved, HASH_STRING_LEN);
     if(outfile.fail()) {
         int errno_saved = errno;
         LOG(INFO) << "[SDK COOKIE] fail to get checksum: " << strerror(errno_saved);
@@ -2097,7 +2074,7 @@ static bool IsCookieChecksumRight(const std::string& cookie_file) {
     LOG(INFO) << "[SDK COOKIE] checksum in file: " << hash_str_saved;
 
     outfile.close();
-    return strncmp(hash_str, hash_str_saved, HASH_LEN) == 0;
+    return strncmp(hash_str.c_str(), hash_str_saved, HASH_STRING_LEN) == 0;
 }
 
 bool TableImpl::RestoreCookie() {
@@ -2224,22 +2201,22 @@ static bool AppendChecksumToCookie(const std::string& cookie_file) {
     // get file size, in bytes
     outfile.seekp(0, std::ios_base::end);
     long file_size = outfile.tellp();
-    if(file_size < HASH_LEN) {
+    if(file_size < HASH_STRING_LEN) {
         LOG(INFO) << "[SDK COOKIE] invalid file size: " << file_size;
         return false;
     }
 
     // calculates checksum according to cookie file content
     outfile.seekp(0, std::ios_base::beg);
-    char hash_str[HASH_LEN] = {'\0'};
-    if(!CalculateChecksumOfData(outfile, file_size, hash_str)) {
+    std::string hash_str;
+    if(!CalculateChecksumOfData(outfile, file_size, &hash_str)) {
         return false;
     }
     LOG(INFO) << "[SDK COOKIE] file checksum: " << hash_str;
 
     // append checksum to the end of cookie file
     outfile.seekp(0, std::ios_base::end);
-    outfile.write(hash_str, HASH_LEN);
+    outfile.write(hash_str.c_str(), hash_str.length());
     if(outfile.fail()) {
         LOG(INFO) << "[SDK COOKIE] fail to append checksum";
         return false;
@@ -2341,11 +2318,12 @@ std::string TableImpl::GetCookieFileName(const std::string& tablename,
                                          const std::string& zk_addr,
                                          const std::string& zk_path) {
     uint32_t hash = 0;
-    hash = Hash(tablename.data(), tablename.size(), hash);
-    hash = Hash(zk_addr.data(), zk_addr.size(), hash);
-    hash = Hash(zk_path.data(), zk_path.size(), hash);
-
-    char hash_str[8] = {'\0'};
+    if (GetHashNumber(tablename, hash, &hash) != 0
+        || GetHashNumber(zk_addr, hash, &hash) != 0
+        || GetHashNumber(zk_path, hash, &hash) != 0) {
+        LOG(FATAL) << "invalid arguments";
+    }
+    char hash_str[9] = {'\0'};
     sprintf(hash_str, "%08x", hash);
     return std::string((char*)hash_str, 8);
 }
