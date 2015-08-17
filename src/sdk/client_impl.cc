@@ -411,7 +411,7 @@ bool ClientImpl::ShowTablesInfo(TableMetaList* table_list,
         request.set_start_table_name(start_table_name);
         request.set_start_tablet_key(start_tablet_key);
         request.set_max_table_num(1); //fetch one table for each RPC
-        request.set_max_tablet_num(5000); //fetch at most 5k tablets meta once
+        request.set_max_tablet_num(FLAGS_tera_sdk_show_max_num); //fetch at most 5k tablets meta once
         request.set_sequence_id(0);
         if (master_client.ShowTables(&request, &response) &&
             response.status() == kMasterOk) {
