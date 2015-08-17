@@ -14,20 +14,13 @@ namespace leveldb {
 class LGCompactThread : public Thread {
 public:
     LGCompactThread(uint32_t lg_id, DBImpl* lg_impl,
-                    const Slice* begin = NULL, const Slice* end = NULL,
-                    bool is_miss_file = false)
+                    const Slice* begin = NULL, const Slice* end = NULL)
         : lg_id_(lg_id), lg_impl_(lg_impl),
-          begin_(begin), end_(end), is_for_missing_(is_miss_file) {}
+          begin_(begin), end_(end) {}
     virtual ~LGCompactThread() {}
 
     virtual void Run(void* params) {
-        std::cout << "LG Thread #" << lg_id_ << ": CompactRange(): "
-            << (is_for_missing_?"just copy missing file":"") << std::endl;
-        if (is_for_missing_) {
-            lg_impl_->CompactMissFiles(begin_, end_);
-        } else {
-            lg_impl_->CompactRange(begin_, end_);
-        }
+        lg_impl_->CompactRange(begin_, end_);
     }
 
 private:
@@ -35,7 +28,6 @@ private:
     DBImpl* lg_impl_;
     const Slice* begin_;
     const Slice* end_;
-    bool is_for_missing_;
 };
 
 } // namespace leveldb

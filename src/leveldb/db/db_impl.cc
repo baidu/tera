@@ -715,27 +715,6 @@ bool DBImpl::UserKeyInRange(const Slice& user_key) {
     return true;
 }
 
-void DBImpl::CompactMissFiles(const Slice* begin, const Slice* end) {
-    Slice smallest(key_start_);
-    Slice largest(key_end_);
-    std::vector<std::string> inputs;
-    const Slice* find_start = begin?begin:(key_start_.empty()?NULL:&smallest);
-    const Slice* find_end = end?end:(key_end_.empty()?NULL:&largest);
-
-    MutexLock l(&mutex_);
-    versions_->current()->MissFilesInLocal(find_start, find_end, &inputs);
-    std::cerr << "CompactMissFiles(): begin: " << (find_start?key_start_:"")
-            << ", end:" << (find_end?key_end_:"")
-            << ", num = " << inputs.size() << std::endl;
-
-    for (uint32_t i = 0; i < inputs.size(); ++i) {
-        if (!MigrateTableFile(env_, dbname_, inputs[i])) {
-            std::cerr << "CompactMissFiles(): fail to migrate file: "
-                    << inputs[i] << std::endl;
-        }
-    }
-}
-
 void DBImpl::AddInheritedLiveFiles(std::vector<std::set<uint64_t> >* live) {
   uint64_t tablet, lg;
   if (!ParseDbName(dbname_, NULL, &tablet, &lg)) {

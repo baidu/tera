@@ -307,7 +307,6 @@ service TabletNodeServer {
     rpc ReleaseSnapshot(ReleaseSnapshotRequest) returns(ReleaseSnapshotResponse);
 
     rpc SplitTablet(SplitTabletRequest) returns(SplitTabletResponse);
-    rpc MergeTablet(MergeTabletRequest) returns(MergeTabletResponse);
 }
 option cc_generic_services = true;
 

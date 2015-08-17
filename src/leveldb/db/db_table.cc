@@ -979,21 +979,6 @@ bool DBTable::MinorCompact() {
     return ok;
 }
 
-void DBTable::CompactMissFiles(const Slice* begin, const Slice* end) {
-    std::vector<LGCompactThread*> lg_threads;
-    std::set<uint32_t>::iterator it = options_.exist_lg_list->begin();
-    for (; it != options_.exist_lg_list->end(); ++it) {
-        LGCompactThread* thread = new LGCompactThread(*it, lg_list_[*it],
-                                                      begin, end, true);
-        lg_threads.push_back(thread);
-        thread->Start();
-    }
-    for (uint32_t i = 0; i < lg_threads.size(); ++i) {
-        lg_threads[i]->Join();
-        delete lg_threads[i];
-    }
-}
-
 void DBTable::AddInheritedLiveFiles(std::vector<std::set<uint64_t> >* live) {
     size_t lg_num = lg_list_.size();
     assert(live && live->size() == lg_num);
