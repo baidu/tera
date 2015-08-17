@@ -401,33 +401,28 @@ bool ClientImpl::ShowTablesInfo(TableMetaList* table_list,
     master::MasterClient master_client(_cluster->MasterAddr());
     std::string start_tablet_key;
     std::string start_table_name;
-    std::string last_table_name;
     bool has_more = true;
     bool has_error = false;
+    bool table_meta_copied = false;
     std::string err_msg;
     while(has_more && !has_error) {
         ShowTablesRequest request;
         ShowTablesResponse response;
         request.set_start_table_name(start_table_name);
         request.set_start_tablet_key(start_tablet_key);
-        request.set_max_table_num(1); //fetch one table for each RPC
-        request.set_max_tablet_num(FLAGS_tera_sdk_show_max_num); //fetch at most 5k tablets meta once
+        request.set_max_tablet_num(FLAGS_tera_sdk_show_max_num); //tablets be fetched at most in one RPC
         request.set_sequence_id(0);
         if (master_client.ShowTables(&request, &response) &&
             response.status() == kMasterOk) {
-            std::string cur_table_name;
             has_more = response.is_more();
             if (response.table_meta_list().meta_size() == 0) {
                 has_error = true;
                 err_msg = StatusCodeToString(response.status());
                 break;
-            } else {
-                cur_table_name = response.table_meta_list().meta(0).table_name();
             }
-            if (last_table_name != cur_table_name) {//first scan of one table
-                for(int i = 0; i < response.table_meta_list().meta_size(); i++){
-                    table_list->add_meta()->CopyFrom(response.table_meta_list().meta(i));
-                }
+            if (!table_meta_copied) {
+                table_list->CopyFrom(response.table_meta_list());
+                table_meta_copied = true;
             }
             for(int i = 0; i < response.tablet_meta_list().meta_size(); i++){
                 tablet_list->add_meta()->CopyFrom(response.tablet_meta_list().meta(i));
@@ -437,14 +432,7 @@ bool ClientImpl::ShowTablesInfo(TableMetaList* table_list,
                     start_tablet_key = response.tablet_meta_list().meta(i).key_range().key_start();
                 }
             }
-            VLOG(16) << "fetch meta: " << cur_table_name;
-            last_table_name = cur_table_name;
-            if (response.tablet_meta_list().meta_size() == 0) {
-                start_table_name.append(1, '\0'); ///fetch next table
-                start_tablet_key = "";
-            } else {
-                start_tablet_key.append(1,'\0'); // fetch next tablet
-            }
+            start_tablet_key.append(1,'\0'); // fetch next tablet
         } else {
             if (response.status() != kMasterOk &&
                 response.status() != kTableNotFound) {
@@ -453,6 +441,8 @@ bool ClientImpl::ShowTablesInfo(TableMetaList* table_list,
             }
             has_more = false;
         }
+        VLOG(16) << "fetch meta:" << start_table_name.c_str() 
+                 << " / " << start_tablet_key;
     };
 
     if (has_error) {
