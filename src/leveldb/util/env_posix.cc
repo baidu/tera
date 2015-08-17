@@ -592,7 +592,7 @@ class PosixEnv : public Env {
 
   virtual Status GetChildren(const std::string& dir,
                              std::vector<std::string>* result,
-                             std::vector<int64_t>* ctime) {
+                             std::vector<int64_t>* ctime=NULL) {
     posix_list_counter.Inc();
     result->clear();
     DIR* d = opendir(dir.c_str());
