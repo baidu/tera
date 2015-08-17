@@ -437,7 +437,7 @@ bool ClientImpl::ShowTablesInfo(TableMetaList* table_list,
                     start_tablet_key = response.tablet_meta_list().meta(i).key_range().key_start();
                 }
             }
-            LOG(INFO) << "fetch meta: " << cur_table_name;
+            VLOG(16) << "fetch meta: " << cur_table_name;
             last_table_name = cur_table_name;
             if (response.tablet_meta_list().meta_size() == 0) {
                 start_table_name.append(1, '\0'); ///fetch next table
@@ -446,6 +446,11 @@ bool ClientImpl::ShowTablesInfo(TableMetaList* table_list,
                 start_tablet_key.append(1,'\0'); // fetch next tablet
             }
         } else {
+            if (response.status() != kMasterOk &&
+                response.status() != kTableNotFound) {
+                has_error = true;
+                err_msg = StatusCodeToString(response.status());
+            }
             has_more = false;
         }
     };
