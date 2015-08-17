@@ -37,7 +37,7 @@ public:
 
     bool CheckDelete(const std::string& fname, std::vector<std::string>* flags);
 
-    virtual Status GetChildren(const std::string& path, std::vector<std::string>* result, std::vector<time_t>* ctime);
+    virtual Status GetChildren(const std::string& path, std::vector<std::string>* result, std::vector<int64_t>* ctime);
 
     virtual Status DeleteFile(const std::string& fname);
 

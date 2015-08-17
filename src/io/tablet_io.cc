@@ -410,7 +410,6 @@ bool TabletIO::Compact(StatusCode* status) {
         m_db_ref_count++;
     }
     CHECK_NOTNULL(m_db);
-    m_db->CompactMissFiles(NULL, NULL);
     m_db->CompactRange(NULL, NULL);
 
     {

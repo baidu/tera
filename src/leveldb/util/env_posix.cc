@@ -592,7 +592,7 @@ class PosixEnv : public Env {
 
   virtual Status GetChildren(const std::string& dir,
                              std::vector<std::string>* result,
-                             std::vector<time_t>* ctime) {
+                             std::vector<int64_t>* ctime) {
     posix_list_counter.Inc();
     result->clear();
     DIR* d = opendir(dir.c_str());
@@ -610,9 +610,9 @@ class PosixEnv : public Env {
       if (ctime != NULL) {
         stat((dir + "/" + entry->d_name).c_str(), &stat_buf);
         if (errno == 0)
-          ctime->push_back(stat_buf.st_ctime);
+          ctime->push_back(static_cast<int64_t>(stat_buf.st_ctime));
         else
-          ctime->push_back(std::numeric_limits<long>::max());
+          ctime->push_back(std::numeric_limits<int64_t>::max());
       }
     }
     closedir(d);

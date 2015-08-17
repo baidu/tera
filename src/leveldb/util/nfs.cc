@@ -302,7 +302,7 @@ int32_t Nfs::Copy(const std::string& from, const std::string& to) {
 }
 int32_t Nfs::ListDirectory(const std::string& path,
                            std::vector<std::string>* result,
-                           std::vector<time_t>* ctime) {
+                           std::vector<int64_t>* ctime) {
   nfs::NFSDIR* dir = (*nfsOpendir)(path.c_str());
   if (NULL == dir) {
     fprintf(stderr, "Opendir %s fail\n", path.c_str());
@@ -318,9 +318,9 @@ int32_t Nfs::ListDirectory(const std::string& path,
       if (ctime != NULL) {
           (*nfsStat)((path + "/" + pathname).c_str(), &stat_buf);
           if (errno == 0)
-            ctime->push_back(stat_buf.st_ctime);
+            ctime->push_back(static_cast<int64_t>(stat_buf.st_ctime));
           else
-            ctime->push_back(std::numeric_limits<long>::max());
+            ctime->push_back(std::numeric_limits<int64_t>::max());
       }
     }
   }

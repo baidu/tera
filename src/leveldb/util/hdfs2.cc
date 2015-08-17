@@ -208,7 +208,7 @@ int32_t Hdfs2::Copy(const std::string& from, const std::string& to) {
 
 int32_t Hdfs2::ListDirectory(const std::string& path,
                              std::vector<std::string>* result,
-                             std::vector<time_t>* ctime) {
+                             std::vector<int64_t>* ctime) {
   int numEntries = 0;
   hdfsFileInfo* pHdfsFileInfo = 0;
   pHdfsFileInfo = (*hdfsListDirectory)((hdfsFS)GetFSHandle(path), path.c_str(), &numEntries);
@@ -219,7 +219,7 @@ int32_t Hdfs2::ListDirectory(const std::string& path,
       if (filename != NULL) {
         result->push_back(filename + 1);
         if (ctime != NULL) {
-          ctime->push_back(pHdfsFileInfo[i].mLastMod);
+          ctime->push_back(static_cast<int64_t>(pHdfsFileInfo[i].mLastMod));
         }
       }
     }

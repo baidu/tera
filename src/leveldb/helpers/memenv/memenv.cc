@@ -286,7 +286,7 @@ class MemoryEnv : public EnvWrapper {
   }
 
   virtual Status GetChildren(const std::string& dir,
-                             std::vector<std::string>* result, std::vector<time_t>* ctime) {
+                             std::vector<std::string>* result, std::vector<int64_t>* ctime) {
     MutexLock lock(&mutex_);
     result->clear();
     if (ctime != NULL) {

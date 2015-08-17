@@ -86,7 +86,7 @@ class Env {
   // Original contents of *results are dropped.
   virtual Status GetChildren(const std::string& dir,
                              std::vector<std::string>* result,
-                             std::vector<time_t>* ctime) = 0;
+                             std::vector<int64_t>* ctime) = 0;
 
   // Delete the named file.
   virtual Status DeleteFile(const std::string& fname) = 0;

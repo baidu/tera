@@ -374,7 +374,7 @@ Status DfsEnv::CopyFile(const std::string& from, const std::string& to) {
 
 Status DfsEnv::GetChildren(const std::string& path,
                            std::vector<std::string>* result,
-                           std::vector<time_t>* ctime)
+                           std::vector<int64_t>* ctime)
 {
     {
         tera::AutoCounter ac(&dfs_exists_hang_counter, "Exists", path.c_str());
