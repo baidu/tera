@@ -6,6 +6,7 @@
 
 #include <algorithm>
 #include <boost/bind.hpp>
+#include <fstream>
 
 #include <gflags/gflags.h>
 #include <glog/logging.h>
@@ -89,8 +90,6 @@ DECLARE_bool(tera_ins_enabled);
 
 DECLARE_int64(tera_sdk_perf_counter_log_interval);
 
-DECLARE_string(tera_acl_root_token);
-
 namespace tera {
 namespace master {
 
@@ -101,6 +100,7 @@ MasterImpl::MasterImpl()
       m_zk_adapter(NULL),
       m_size_scheduler(new SizeScheduler),
       m_load_scheduler(new LoadScheduler),
+      m_user_manager(new UserManager),
       m_release_cache_timer_id(kInvalidTimerId),
       m_query_enabled(false),
       m_query_tabletnode_timer_id(kInvalidTimerId),
@@ -185,6 +185,7 @@ bool MasterImpl::Restore(const std::map<std::string, std::string>& tabletnode_li
         SetMasterStatus(kOnWait);
         return false;
     }
+    m_user_manager->SetupRootUser();
     m_tablet_manager->FindTablet(FLAGS_tera_master_meta_table_name, "", &m_meta_tablet);
     m_zk_adapter->UpdateRootTabletNode(meta_tablet_addr);
 
@@ -277,7 +278,7 @@ bool MasterImpl::RestoreMetaTablet(const std::vector<TabletMeta>& tablet_list,
     // meta table has been loaded up by now
     if (FLAGS_tera_master_meta_recovery_enabled) {
         const std::string& filename = FLAGS_tera_master_meta_recovery_file;
-        while (!m_tablet_manager->LoadMetaTableFromFile(filename)) {
+        while (!LoadMetaTableFromFile(filename)) {
             LOG(ERROR) << kSms << "fail to recovery meta table from backup";
             ThisThread::Sleep(60 * 1000);
         }
@@ -298,7 +299,7 @@ bool MasterImpl::RestoreMetaTablet(const std::vector<TabletMeta>& tablet_list,
     }
 
     StatusCode status = kTabletNodeOk;
-    while (!m_tablet_manager->LoadMetaTable(*meta_tablet_addr, &status)) {
+    while (!LoadMetaTable(*meta_tablet_addr, &status)) {
         TryKickTabletNode(*meta_tablet_addr);
         if (!LoadMetaTablet(meta_tablet_addr)) {
             return false;
@@ -443,6 +444,144 @@ void MasterImpl::UnloadMetaTablet(const std::string& server_addr) {
         LOG(ERROR) << "fail to unload meta tablet on node: " << server_addr;
         TryKickTabletNode(server_addr);
     }
+}
+
+bool MasterImpl::ReadFromStream(std::ifstream& ifs,
+                                std::string* key,
+                                std::string* value) {
+    uint32_t key_size = 0, value_size = 0;
+    ifs.read((char*)&key_size, sizeof(key_size));
+    if (ifs.eof() && ifs.gcount() == 0) {
+        key->clear();
+        value->clear();
+        return true;
+    }
+    key->resize(key_size);
+    ifs.read((char*)key->data(), key_size);
+    if (ifs.fail()) {
+        return false;
+    }
+    ifs.read((char*)&value_size, sizeof(value_size));
+    if (ifs.fail()) {
+        return false;
+    }
+    value->resize(value_size);
+    ifs.read((char*)value->data(), value_size);
+    if (ifs.fail()) {
+        return false;
+    }
+    return true;
+}
+
+bool MasterImpl::LoadMetaTableFromFile(const std::string& filename,
+                                          StatusCode* ret_status) {
+    m_tablet_manager->ClearTableList();
+    std::ifstream ifs(filename.c_str(), std::ofstream::binary);
+    if (!ifs.is_open()) {
+        LOG(ERROR) << "fail to open file " << filename << " for read";
+        SetStatusCode(kIOError, ret_status);
+        return false;
+    }
+
+    uint64_t count = 0;
+    std::string key, value;
+    while (ReadFromStream(ifs, &key, &value)) {
+        if (key.empty()) {
+            LOG(INFO) << "load meta table success, " << count << " records";
+            TabletPtr meta_tablet;
+            TableSchema schema;
+            LocalityGroupSchema* lg = schema.add_locality_groups();
+            schema.set_name(FLAGS_tera_master_meta_table_name);
+            lg->set_name("lg_meta");
+            lg->set_compress_type(false);
+            lg->set_store_type(MemoryStore);
+            m_tablet_manager->AddTablet(FLAGS_tera_master_meta_table_name, "", "",
+                      FLAGS_tera_master_meta_table_path, "",
+                      schema, kTableNotInit, 0, &meta_tablet);
+            return true;
+        }
+
+        char first_key_char = key[0];
+        if (first_key_char == '~') {
+            m_user_manager->LoadUserMeta(key, value);
+        } else if (first_key_char == '@') {
+            m_tablet_manager->LoadTableMeta(key, value);
+        } else if (first_key_char > '@') {
+            m_tablet_manager->LoadTabletMeta(key, value);
+        } else {
+            continue;
+        }
+
+        count++;
+    }
+    m_tablet_manager->ClearTableList();
+
+    SetStatusCode(kIOError, ret_status);
+    LOG(ERROR) << "fail to load meta table: " << StatusCodeToString(kIOError);
+    return false;
+}
+
+bool MasterImpl::LoadMetaTable(const std::string& meta_tablet_addr,
+                               StatusCode* ret_status) {
+    m_tablet_manager->ClearTableList();
+    ScanTabletRequest request;
+    ScanTabletResponse response;
+    request.set_sequence_id(m_this_sequence_id.Inc());
+    request.set_table_name(FLAGS_tera_master_meta_table_name);
+    request.set_start("");
+    request.set_end("");
+    tabletnode::TabletNodeClient meta_node_client(meta_tablet_addr);
+    while (meta_node_client.ScanTablet(&request, &response)) {
+        if (response.status() != kTabletNodeOk) {
+            SetStatusCode(response.status(), ret_status);
+            LOG(ERROR) << "fail to load meta table: "
+                << StatusCodeToString(response.status());
+            m_tablet_manager->ClearTableList();
+            return false;
+        }
+        if (response.results().key_values_size() <= 0) {
+            LOG(INFO) << "load meta table success";
+            TabletPtr meta_tablet;
+            TableSchema schema;
+            schema.set_kv_only(true);
+            LocalityGroupSchema* lg = schema.add_locality_groups();
+            schema.set_name(FLAGS_tera_master_meta_table_name);
+            lg->set_name("lg_meta");
+            lg->set_compress_type(false);
+            lg->set_store_type(MemoryStore);
+            m_tablet_manager->AddTablet(FLAGS_tera_master_meta_table_name, "", "",
+                      FLAGS_tera_master_meta_table_path, meta_tablet_addr,
+                      schema, kTableReady, 0, &meta_tablet);
+            return true;
+        }
+        uint32_t record_size = response.results().key_values_size();
+        LOG(INFO) << "load meta table: " << record_size << " records";
+
+        std::string last_record_key;
+        for (uint32_t i = 0; i < record_size; i++) {
+            const KeyValuePair& record = response.results().key_values(i);
+            last_record_key = record.key();
+            char first_key_char = record.key()[0];
+            if (first_key_char == '~') {
+                m_user_manager->LoadUserMeta(record.key(), record.value());
+            } else if (first_key_char == '@') {
+                m_tablet_manager->LoadTableMeta(record.key(), record.value());
+            } else if (first_key_char > '@') {
+                m_tablet_manager->LoadTabletMeta(record.key(), record.value());
+            } else {
+                continue;
+            }
+        }
+        std::string next_record_key = NextKey(last_record_key);
+        request.set_start(next_record_key);
+        request.set_end("");
+        request.set_sequence_id(m_this_sequence_id.Inc());
+        response.Clear();
+    }
+    SetStatusCode(kRPCError, ret_status);
+    LOG(ERROR) << "fail to load meta table: " << StatusCodeToString(kRPCError);
+    m_tablet_manager->ClearTableList();
+    return false;
 }
 
 /////////////  RPC interface //////////////
@@ -922,6 +1061,160 @@ void MasterImpl::CmdCtrl(const CmdCtrlRequest* request,
     } else {
         response->set_status(kInvalidArgument);
     }
+}
+
+void MasterImpl::WriteUserInfoToMetaTableAsync(UserInfo& user_info, bool is_delete,
+                                               WriteClosure* done, 
+                                               OperateUserResponse* rpc_response,
+                                               google::protobuf::Closure* rpc_done) {
+    VLOG(5) << "WriteUserInfoToMetaTableAsync()";
+    std::string meta_addr;
+    if (!m_tablet_manager->GetMetaTabletAddr(&meta_addr)) {
+        LOG(INFO) << "fail to add(delete) user: " << user_info.user_name();
+        rpc_response->set_status(kMetaTabletError);
+        rpc_done->Run();
+        return;
+    }
+
+    WriteTabletRequest* request = new WriteTabletRequest;
+    WriteTabletResponse* response = new WriteTabletResponse;
+    request->set_sequence_id(m_this_sequence_id.Inc());
+    request->set_tablet_name(FLAGS_tera_master_meta_table_name);
+    request->set_is_sync(true);
+    request->set_is_instant(true);
+
+    std::string packed_key = "~" + user_info.user_name();
+    LOG(INFO) << "packed_key: " << packed_key;
+    std::string packed_value;
+    user_info.SerializeToString(&packed_value);
+    //LOG(ERROR) << "packed_value: " << packed_value;
+    RowMutationSequence* mu_seq = request->add_row_list();
+    mu_seq->set_row_key(packed_key);
+    Mutation* mutation = mu_seq->add_mutation_sequence();
+    if (is_delete) {
+        mutation->set_type(kDeleteRow);
+    } else {
+        mutation->set_type(kPut);
+        mutation->set_value(packed_value);
+    }
+
+    LOG(INFO) << "WriteUserInfoToMetaTableAsync id: " << request->sequence_id()
+        << ", user: " << user_info.user_name();
+    tabletnode::TabletNodeClient meta_node_client(meta_addr);
+    meta_node_client.WriteTablet(request, response, done);
+}
+
+void MasterImpl::AddUserInfoToMetaCallback(UserInfo user_info, // TODO pointer
+                                           bool is_delete,
+                                           const OperateUserRequest* rpc_request,
+                                           OperateUserResponse* rpc_response,
+                                           google::protobuf::Closure* rpc_done,
+                                           WriteTabletRequest* request,
+                                           WriteTabletResponse* response,
+                                           bool rpc_failed, int error_code) {
+    StatusCode status = response->status();
+
+    // TODO ?
+    if (!rpc_failed && status == kTabletNodeOk) {
+        // all the row status should be the same
+        //CHECK_GT(response->row_status_list_size(), 0);
+        //status = response->row_status_list(0);
+    }
+    delete request;
+    delete response;
+    if (rpc_failed || status != kTabletNodeOk) {
+        if (rpc_failed) {
+            LOG(ERROR) << "fail to add to meta tablet: "
+                << sofa::pbrpc::RpcErrorCodeToString(error_code) << ", "
+                << user_info.user_name() << "...";
+        } else {
+            LOG(ERROR) << "fail to add to meta tablet: "
+                << StatusCodeToString(status) << ", " << user_info.user_name() << "...";
+        }
+        rpc_response->set_status(kMetaTabletError);
+        rpc_done->Run();
+        /*
+        if (retry_times <= 0) {
+            rpc_response->set_status(kMetaTabletError);
+            rpc_done->Run();
+        } else {
+            WriteClosure* done =
+                NewClosure(this, &MasterImpl::AddMetaCallback, table,
+                           tablets, retry_times - 1, rpc_request, rpc_response,
+                           rpc_done);
+            SuspendMetaOperation(table, tablets, false, done);
+
+        }  */
+        return;
+    }
+
+    rpc_response->set_status(kMasterOk);
+    rpc_done->Run();
+    if (rpc_request->op_type() == kDeleteUser) {
+        m_user_manager->DeleteUser(user_info.user_name());
+    } else if (rpc_request->op_type() == kCreateUser){
+        m_user_manager->AddUser(user_info.user_name(), user_info);
+    } else if (rpc_request->op_type() == kUpdateUser) {
+        m_user_manager->DeleteUser(user_info.user_name());
+        m_user_manager->AddUser(user_info.user_name(), user_info);
+    } else {
+        LOG(ERROR) << "501";
+    }
+    m_user_manager->ListAll();
+}
+
+void MasterImpl::OperateUser(const OperateUserRequest* request,
+                            OperateUserResponse* response,
+                            google::protobuf::Closure* done) {
+    response->set_sequence_id(request->sequence_id());
+    MasterStatus master_status = GetMasterStatus();
+    if (master_status != kIsRunning) {
+        LOG(ERROR) << "master is not ready, m_status = "
+            << StatusCodeToString(master_status);
+        response->set_status(static_cast<StatusCode>(master_status));
+        done->Run();
+        return;
+    }
+    
+    UserInfo operated_user = request->user_info();
+    bool is_delete = false;
+    if (request->op_type() == kCreateUser) {
+        if (!operated_user.has_user_name() || !operated_user.has_token()
+            || !m_user_manager->IsUserNameValid(operated_user.user_name())
+            || m_user_manager->IsUserExist(operated_user.user_name())){
+            response->set_status(kTableInvalidArg);
+            done->Run();
+            return;
+        }
+    } else if (request->op_type() == kDeleteUser) {
+        if (!operated_user.has_user_name()
+            || !m_user_manager->IsUserExist(operated_user.user_name())
+            || operated_user.user_name() == "root") {
+            response->set_status(kTableInvalidArg);
+            done->Run();
+            return;
+        }
+        is_delete = true;
+    } else if (request->op_type() == kUpdateUser) {
+        if (!operated_user.has_user_name() || !operated_user.has_token()
+            || !m_user_manager->IsUserExist(operated_user.user_name())) {
+            response->set_status(kTableInvalidArg);
+            done->Run();
+            return;
+        }
+    } else {
+        CHECK(request->op_type() == kShowUser);
+    }
+
+    // add user to meta-table
+    WriteClosure* closure =
+        NewClosure(this, &MasterImpl::AddUserInfoToMetaCallback, operated_user,
+                   is_delete, request, response, done);
+    WriteUserInfoToMetaTableAsync(operated_user, is_delete, closure, response, done);
+}
+
+UserManager* MasterImpl::GetUserManager() {
+    return m_user_manager.get();
 }
 
 void MasterImpl::SafeModeCmdCtrl(const CmdCtrlRequest* request,
@@ -4255,7 +4548,7 @@ bool MasterImpl::CreateStatTable() {
     CreateTableResponse response;
     request.set_sequence_id(0);
     request.set_table_name(FLAGS_tera_master_stat_table_name);
-    request.set_user_token(FLAGS_tera_acl_root_token);
+    request.set_user_token(m_user_manager->GetUserToken("root"));
     TableSchema* schema = request.mutable_schema();
 
     schema->set_name(FLAGS_tera_master_stat_table_name);

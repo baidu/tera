@@ -48,6 +48,14 @@ public:
 
     virtual bool EnableTable(string name, ErrorCode* err);
 
+    virtual bool CreateUser(const std::string& user, 
+                            const std::string& password, ErrorCode* err);
+
+    virtual bool DeleteUser(const std::string& user, ErrorCode* err);
+
+    virtual bool UpdateUser(const std::string& user, 
+                            const std::string& password, ErrorCode* err);
+
     virtual Table* OpenTable(const string& table_name, ErrorCode* err);
 
     virtual Table* OpenTable(const std::string& table_name,
@@ -116,7 +124,11 @@ private:
     bool ParseTabletEntry(const TabletMeta& meta,
                           std::vector<TabletInfo>* tablet_list);
 
-    std::string GetUserToken();
+    std::string GetUserToken(const std::string& user, const std::string& password);
+
+    template <typename Response>
+    bool CheckReturnValue(const Response& response, std::string& reason, ErrorCode* err);
+
 private:
     ClientImpl(const ClientImpl&);
     void operator=(const ClientImpl&);

@@ -18,6 +18,7 @@
 #include "common/base/string_number.h"
 #include "common/file/file_path.h"
 #include "io/coding.h"
+#include "proto/master_rpc.pb.h"
 #include "proto/kv_helper.h"
 #include "proto/proto_helper.h"
 #include "proto/tabletnode.pb.h"
@@ -73,6 +74,10 @@ void Usage(const std::string& prg_name) {
                     tablename{cf1, cf2, cf3, ...}                           \n\
                                                                             \n\
        createbyfile   <schema_file> [<delimiter_file>]                      \n\
+                                                                            \n\
+       createuser username password                                         \n\
+       deleteuser username                                                  \n\
+       updateuser username new-password                                     \n\
                                                                             \n\
        update <schema>                                                      \n\
               - kv schema:                                                  \n\
@@ -168,6 +173,7 @@ void UsageMore(const std::string& prg_name) {
                                                                             \n\
        version\n\n";
 }
+
 int32_t CreateOp(Client* client, int32_t argc, char** argv, ErrorCode* err) {
     if (argc < 2) {
         Usage(argv[0]);
@@ -215,6 +221,50 @@ int32_t CreateOp(Client* client, int32_t argc, char** argv, ErrorCode* err) {
         return -1;
     }
     ShowTableDescriptor(table_desc);
+    return 0;
+}
+
+int32_t CreateUserOp(Client* client, int32_t argc, char** argv, ErrorCode* err) {
+    if (argc != 4) {
+        Usage(argv[0]);
+        return -1;
+    }
+    std::string user = argv[2];
+    std::string password = argv[3];
+    if (!client->CreateUser(user, password, err)) {
+        LOG(ERROR) << "fail to create user: " << argv[1]
+            << ", " << strerr(*err);
+        return -1;
+    }
+    return 0;
+}
+
+int32_t DeleteUserOp(Client* client, int32_t argc, char** argv, ErrorCode* err) {
+    if (argc != 3) {
+        Usage(argv[0]);
+        return -1;
+    }
+    std::string user = argv[2];
+    if (!client->DeleteUser(user, err)) {
+        LOG(ERROR) << "fail to delete user: " << argv[1]
+            << ", " << strerr(*err);
+        return -1;
+    }
+    return 0;
+}
+
+int32_t UpdateUserOp(Client* client, int32_t argc, char** argv, ErrorCode* err) {
+    if (argc != 4) {
+        Usage(argv[0]);
+        return -1;
+    }
+    std::string user = argv[2];
+    std::string password = argv[3];
+    if (!client->UpdateUser(user, password, err)) {
+        LOG(ERROR) << "fail to update user: " << argv[1]
+            << ", " << strerr(*err);
+        return -1;
+    }
     return 0;
 }
 
@@ -2078,6 +2128,8 @@ int32_t Meta2Op(Client *client, int32_t argc, char** argv) {
             char first_key_char = record.key()[0];
             if (first_key_char == '@') {
                 ParseMetaTableKeyValue(record.key(), record.value(), table_list.add_meta());
+            } else if (first_key_char == '~') {
+                std::cout << "(user: " << record.key().substr(1) << ")" << std::endl;
             } else if (first_key_char > '@') {
                 ParseMetaTableKeyValue(record.key(), record.value(), tablet_list.add_meta());
             } else {
@@ -2328,6 +2380,12 @@ int main(int argc, char* argv[]) {
         ret = FindTsOp(client, argc, argv, &error_code);
     } else if (cmd == "meta2") {
         ret = Meta2Op(client, argc, argv);
+    } else if (cmd == "createuser") {
+        ret = CreateUserOp(client, argc, argv, &error_code);
+    } else if (cmd == "deleteuser") {
+        ret = DeleteUserOp(client, argc, argv, &error_code);
+    } else if (cmd == "updateuser") {
+        ret = UpdateUserOp(client, argc, argv, &error_code);
     } else if (cmd == "version") {
         PrintSystemVersion();
     } else if (cmd == "snapshot") {

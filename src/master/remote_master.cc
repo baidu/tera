@@ -18,7 +18,6 @@ DECLARE_int32(tera_master_thread_max_num);
 DECLARE_string(tera_master_stat_table_name);
 
 DECLARE_bool(tera_acl_enabled);
-DECLARE_string(tera_acl_root_token);
 
 namespace tera {
 namespace master {
@@ -26,8 +25,7 @@ namespace master {
 
 RemoteMaster::RemoteMaster(MasterImpl* master_impl)
     : m_master_impl(master_impl),
-      m_thread_pool(new ThreadPool(FLAGS_tera_master_thread_max_num)),
-      m_root_token(FLAGS_tera_acl_root_token) {}
+      m_thread_pool(new ThreadPool(FLAGS_tera_master_thread_max_num)) {}
 
 RemoteMaster::~RemoteMaster() {}
 
@@ -41,8 +39,9 @@ void RemoteMaster::GetSnapshot(google::protobuf::RpcController* controller,
     m_thread_pool->AddTask(callback);
 }
 
+// support root only
 bool RemoteMaster::CheckUserToken(const std::string& token) {
-    return token == m_root_token;
+    return m_master_impl->GetUserManager()->IsUserAndTokenMatch("root", token);
 }
 
 template <typename Request, typename Response, typename Callback>
@@ -54,7 +53,7 @@ bool RemoteMaster::HasPermission(const Request* request, Response* response,
         LOG(INFO) << "[acl] is acl enabled: " << FLAGS_tera_acl_enabled;
         return true;
     } else {
-        LOG(INFO) << "[acl] fail to " << operate << ": " << request->table_name();
+        LOG(INFO) << "[acl] fail to " << operate;
         response->set_sequence_id(request->sequence_id());
         response->set_status(kNotPermission);
         done->Run();
@@ -186,6 +185,19 @@ void RemoteMaster::CmdCtrl(google::protobuf::RpcController* controller,
     m_thread_pool->AddTask(callback);
 }
 
+void RemoteMaster::OperateUser(google::protobuf::RpcController* controller,
+                                const OperateUserRequest* request,
+                                OperateUserResponse* response,
+                                google::protobuf::Closure* done) {
+    if (!HasPermission(request, response, done, "create user")) {
+        return;
+    }
+    boost::function<void ()> callback =
+        boost::bind(&RemoteMaster::DoOperateUser, this, controller,
+                    request, response, done);
+    m_thread_pool->AddTask(callback);
+}
+
 // internal
 
 void RemoteMaster::DoGetSnapshot(google::protobuf::RpcController* controller,
@@ -298,6 +310,14 @@ void RemoteMaster::DoCmdCtrl(google::protobuf::RpcController* controller,
     done->Run();
 }
 
+void RemoteMaster::DoOperateUser(google::protobuf::RpcController* controller,
+                                const OperateUserRequest* request,
+                                OperateUserResponse* response,
+                                google::protobuf::Closure* done) {
+    LOG(INFO) << "accept RPC (OperateUser)";
+    m_master_impl->OperateUser(request, response, done);
+    LOG(INFO) << "finish RPC (OperateUser)";
+}
 
 } // namespace master
 } // namespace tera

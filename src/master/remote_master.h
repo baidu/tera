@@ -80,6 +80,11 @@ public:
                  CmdCtrlResponse* response,
                  google::protobuf::Closure* done);
 
+    void OperateUser(google::protobuf::RpcController* controller,
+                      const OperateUserRequest* request,
+                      OperateUserResponse* response,
+                      google::protobuf::Closure* done);
+
 private:
     void DoGetSnapshot(google::protobuf::RpcController* controller,
                        const GetSnapshotRequest* request,
@@ -138,6 +143,11 @@ private:
                    const CmdCtrlRequest* request,
                    CmdCtrlResponse* response,
                    google::protobuf::Closure* done);
+
+    void DoOperateUser(google::protobuf::RpcController* controller,
+                      const OperateUserRequest* request,
+                      OperateUserResponse* response,
+                      google::protobuf::Closure* done);
 
     bool CheckUserToken(const std::string& token);
     template <typename Request, typename Response, typename Callback>

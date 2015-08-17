@@ -18,6 +18,7 @@
 
 #include "master/tablet_manager.h"
 #include "master/tabletnode_manager.h"
+#include "master/user_manager.h"
 #include "proto/master_rpc.pb.h"
 #include "proto/table_meta.pb.h"
 #include "sdk/client_impl.h"
@@ -116,6 +117,10 @@ public:
     void CmdCtrl(const CmdCtrlRequest* request,
                  CmdCtrlResponse* response);
 
+    void OperateUser(const OperateUserRequest* request,
+                     OperateUserResponse* response,
+                     google::protobuf::Closure* done);
+
     void RefreshTabletNodeList(const std::map<std::string, std::string>& ts_node_list);
 
     bool SetMasterStatus(const MasterStatus& new_status,
@@ -127,6 +132,8 @@ public:
 
     bool GetMetaTabletAddr(std::string* addr);
     void TryLoadTablet(TabletPtr tablet, std::string addr = "");
+    
+    UserManager* GetUserManager();
 
 private:
     typedef Closure<void, SnapshotRequest*, SnapshotResponse*, bool, int> SnapshotClosure;
@@ -141,7 +148,8 @@ private:
     enum MetaTaskType {
         kWrite = 0,
         kScan,
-        kRepair
+        kRepair,
+        kUserInfo
     };
     struct MetaTask {
         MetaTaskType m_type;
@@ -166,6 +174,13 @@ private:
         TabletPtr m_tablet;
         ScanTabletResponse* m_scan_resp;
     };
+    struct UserInfoTask {
+        MetaTaskType m_type;
+        WriteClosure* m_done;
+        UserInfo* user_info;
+        bool m_is_delete;
+    };
+
     struct SnapshotTask {
         const GetSnapshotRequest* request;
         GetSnapshotResponse* response;
@@ -334,6 +349,19 @@ private:
                          WriteTabletRequest* request,
                          WriteTabletResponse* response,
                          bool failed, int error_code);
+
+    void WriteUserInfoToMetaTableAsync(UserInfo& user_info, bool is_delete,
+                                       WriteClosure* done,
+                                       OperateUserResponse* rpc_response,
+                                       google::protobuf::Closure* rpc_done);
+    void AddUserInfoToMetaCallback(UserInfo user_info, bool is_delete,
+                                   const OperateUserRequest* rpc_request,
+                                   OperateUserResponse* rpc_response,
+                                   google::protobuf::Closure* rpc_done,
+                                   WriteTabletRequest* request,
+                                   WriteTabletResponse* response,
+                                   bool rpc_failed, int error_code);
+
     void UpdateTableRecordForDisableCallback(TablePtr table, int32_t retry_times,
                                              DisableTableResponse* rpc_response,
                                              google::protobuf::Closure* rpc_done,
@@ -388,7 +416,16 @@ private:
                                       WriteTabletResponse* response,
                                       bool failed, int error_code);
 
+    // load metabale to master memory
+    bool LoadMetaTable(const std::string& meta_tablet_addr,
+                       StatusCode* ret_status);
+    bool LoadMetaTableFromFile(const std::string& filename,
+                               StatusCode* ret_status = NULL);
+    bool ReadFromStream(std::ifstream& ifs,
+                        std::string* key,
+                        std::string* value);
 
+    // load metatable on a tabletserver
     bool LoadMetaTablet(std::string* server_addr);
     void UnloadMetaTablet(const std::string& server_addr);
 
@@ -464,6 +501,7 @@ private:
     scoped_ptr<MasterZkAdapterBase> m_zk_adapter;
     scoped_ptr<Scheduler> m_size_scheduler;
     scoped_ptr<Scheduler> m_load_scheduler;
+    scoped_ptr<UserManager> m_user_manager;
 
     Mutex m_mutex;
     int64_t m_release_cache_timer_id;

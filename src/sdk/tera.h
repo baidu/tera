@@ -626,6 +626,16 @@ public:
     virtual bool DisableTable(std::string name, ErrorCode* err) = 0;
     /// 恢复表格服务
     virtual bool EnableTable(std::string name, ErrorCode* err) = 0;
+
+    virtual bool CreateUser(const std::string& user,
+                            const std::string& password, ErrorCode* err) = 0;
+
+    virtual bool DeleteUser(const std::string& user, ErrorCode* err) = 0;
+    
+    virtual bool UpdateUser(const std::string& user, 
+                            const std::string& password, ErrorCode* err) = 0;
+
+
     /// 打开表格, 失败返回NULL
     virtual Table* OpenTable(const std::string& table_name, ErrorCode* err) = 0;
     virtual Table* OpenTable(const std::string& table_name,
