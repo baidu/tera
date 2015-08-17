@@ -89,10 +89,6 @@ public:
                      SplitTabletResponse* response,
                      google::protobuf::Closure* done);
 
-    void MergeTablet(const MergeTabletRequest* request,
-                     MergeTabletResponse* response,
-                     google::protobuf::Closure* done);
-
     void EnterSafeMode();
     void LeaveSafeMode();
     void ExitService();

@@ -15,7 +15,6 @@ static void Usage() {
       stderr,
       "Usage: leveldbutil command...\n"
       "   dump  files...         -- dump contents of specified files\n"
-      "   merge files...         -- dump contents of specified files\n"
       );
 }
 
@@ -29,8 +28,6 @@ int main(int argc, char** argv) {
     std::string command = argv[1];
     if (command == "dump") {
       ok = leveldb::HandleDumpCommand(env, argv+2, argc-2);
-    } else if (command == "merge") {
-      ok = leveldb::HandleMergeCommnad(env, argv+2, argc-2);
     } else {
       Usage();
       ok = false;

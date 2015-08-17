@@ -211,16 +211,6 @@ void RemoteTabletNode::SplitTablet(google::protobuf::RpcController* controller,
     m_ctrl_thread_pool->AddTask(callback);
 }
 
-void RemoteTabletNode::MergeTablet(google::protobuf::RpcController* controller,
-                                   const MergeTabletRequest* request,
-                                   MergeTabletResponse* response,
-                                   google::protobuf::Closure* done) {
-    boost::function<void ()> callback =
-        boost::bind(&RemoteTabletNode::DoMergeTablet, this, controller,
-                   request, response, done);
-    m_ctrl_thread_pool->AddTask(callback);
-}
-
 void RemoteTabletNode::CompactTablet(google::protobuf::RpcController* controller,
                                    const CompactTabletRequest* request,
                                    CompactTabletResponse* response,
@@ -335,16 +325,6 @@ void RemoteTabletNode::DoSplitTablet(google::protobuf::RpcController* controller
     LOG(INFO) << "accept RPC (SplitTablet) id: " << id;
     m_tabletnode_impl->SplitTablet(request, response, done);
     LOG(INFO) << "finish RPC (SplitTablet) id: " << id;
-}
-
-void RemoteTabletNode::DoMergeTablet(google::protobuf::RpcController* controller,
-                                     const MergeTabletRequest* request,
-                                     MergeTabletResponse* response,
-                                     google::protobuf::Closure* done) {
-    uint64_t id = request->sequence_id();
-    LOG(INFO) << "accept RPC (MergeTablet) id: " << id;
-    m_tabletnode_impl->MergeTablet(request, response, done);
-    LOG(INFO) << "finish RPC (MergeTablet) id: " << id;
 }
 
 void RemoteTabletNode::DoCompactTablet(google::protobuf::RpcController* controller,
