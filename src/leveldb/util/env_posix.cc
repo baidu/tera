@@ -16,7 +16,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <limits.h>
+#include <limits>
 #include <sys/mman.h>
 #include <sys/stat.h>
 #ifdef OS_LINUX
@@ -612,7 +612,7 @@ class PosixEnv : public Env {
         if (errno == 0)
           ctime->push_back(stat_buf.st_ctime);
         else
-          ctime->push_back(LONG_MAX);
+          ctime->push_back(std::numeric_limits<long>::max());
       }
     }
     closedir(d);

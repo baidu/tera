@@ -6,6 +6,7 @@
 #include <errno.h>
 #include <fcntl.h>
 #include <stdlib.h>
+#include <limits>
 
 #include "nfs.h"
 #include "nfs_wrapper.h"
@@ -319,7 +320,7 @@ int32_t Nfs::ListDirectory(const std::string& path,
           if (errno == 0)
             ctime->push_back(stat_buf.st_ctime);
           else
-            ctime->push_back(LONG_MAX);
+            ctime->push_back(std::numeric_limits<long>::max());
       }
     }
   }
