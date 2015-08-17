@@ -1106,7 +1106,7 @@ Status VersionSet::ReadCurrentFile(uint64_t tablet, std::string* dscname ) {
       !env_->GetFileSize(*dscname, &dscsize).ok() || dscsize == 0) {
     // manifest is not ready, now recover the backup manifest
     std::vector<std::string> files;
-    env_->GetChildren(pdbname, &files, NULL);
+    env_->GetChildren(pdbname, &files);
     std::set<std::string> manifest_set;
     for (size_t i = 0; i < files.size(); ++i) {
       uint64_t number;

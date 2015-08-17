@@ -369,7 +369,7 @@ bool FlashEnv::FileExists(const std::string& fname)
 //
 Status FlashEnv::GetChildren(const std::string& path,
         std::vector<std::string>* result,
-        std::vector<time_t>* ctime)
+        std::vector<int64_t>* ctime)
 {
     return dfs_env_->GetChildren(path, result, ctime);
 }

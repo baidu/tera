@@ -654,7 +654,7 @@ class PosixEnv : public Env {
     posix_delete_counter.Inc();
     Status s;
     std::vector<std::string> files;
-    s = GetChildren(name, &files, NULL);
+    s = GetChildren(name, &files);
     if (!s.ok()) {
       return s;
     }

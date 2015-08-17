@@ -424,7 +424,7 @@ class Benchmark {
     reads_(FLAGS_reads < 0 ? FLAGS_num : FLAGS_reads),
     heap_counter_(0) {
     std::vector<std::string> files;
-    Env::Default()->GetChildren(FLAGS_db, &files, NULL);
+    Env::Default()->GetChildren(FLAGS_db, &files);
     for (uint32_t i = 0; i < files.size(); i++) {
       if (Slice(files[i]).starts_with("heap-")) {
         Env::Default()->DeleteFile(std::string(FLAGS_db) + "/" + files[i]);

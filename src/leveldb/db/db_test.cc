@@ -423,7 +423,7 @@ class DBTest {
 
   int CountFiles() {
     std::vector<std::string> files;
-    env_->GetChildren(dbname_, &files, NULL);
+    env_->GetChildren(dbname_, &files);
     return static_cast<int>(files.size());
   }
 

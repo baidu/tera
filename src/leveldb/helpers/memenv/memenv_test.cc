@@ -39,7 +39,7 @@ TEST(MemEnvTest, Basics) {
   // Check that the directory is empty.
   ASSERT_TRUE(!env_->FileExists("/dir/non_existent"));
   ASSERT_TRUE(!env_->GetFileSize("/dir/non_existent", &file_size).ok());
-  ASSERT_OK(env_->GetChildren("/dir", &children, NULL));
+  ASSERT_OK(env_->GetChildren("/dir", &children));
   ASSERT_EQ(0, children.size());
 
   // Create a file.
@@ -50,7 +50,7 @@ TEST(MemEnvTest, Basics) {
   ASSERT_TRUE(env_->FileExists("/dir/f"));
   ASSERT_OK(env_->GetFileSize("/dir/f", &file_size));
   ASSERT_EQ(0, file_size);
-  ASSERT_OK(env_->GetChildren("/dir", &children, NULL));
+  ASSERT_OK(env_->GetChildren("/dir", &children));
   ASSERT_EQ(1, children.size());
   ASSERT_EQ("f", children[0]);
 

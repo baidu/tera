@@ -86,7 +86,7 @@ class Env {
   // Original contents of *results are dropped.
   virtual Status GetChildren(const std::string& dir,
                              std::vector<std::string>* result,
-                             std::vector<int64_t>* ctime) = 0;
+                             std::vector<int64_t>* ctime=NULL) = 0;
 
   // Delete the named file.
   virtual Status DeleteFile(const std::string& fname) = 0;
@@ -324,7 +324,7 @@ class EnvWrapper : public Env {
     return target_->NewWritableFile(f, r);
   }
   bool FileExists(const std::string& f) { return target_->FileExists(f); }
-  Status GetChildren(const std::string& dir, std::vector<std::string>* r, std::vector<time_t>* ctime) {
+  Status GetChildren(const std::string& dir, std::vector<std::string>* r, std::vector<int64_t>* ctime=NULL) {
     return target_->GetChildren(dir, r, ctime);
   }
   Status DeleteFile(const std::string& f) { return target_->DeleteFile(f); }

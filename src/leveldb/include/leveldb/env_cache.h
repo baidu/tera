@@ -28,7 +28,7 @@ public:
 
     virtual Status GetChildren(const std::string& path,
             std::vector<std::string>* result,
-            std::vector<time_t>* ctime);
+            std::vector<int64_t>* ctime=NULL);
 
     virtual Status DeleteFile(const std::string& fname);
 

@@ -705,7 +705,7 @@ void DBTable::CompactRange(const Slice* begin, const Slice* end) {
 Status DBTable::GatherLogFile(uint64_t begin_num,
                               std::vector<uint64_t>* logfiles) {
     std::vector<std::string> files;
-    Status s = env_->GetChildren(dbname_, &files, NULL);
+    Status s = env_->GetChildren(dbname_, &files);
     if (!s.ok()) {
         Log(options_.info_log, "[%s] GatherLogFile fail", dbname_.c_str());
         return s;
@@ -883,7 +883,7 @@ Status DBTable::DeleteLogFile(const std::vector<uint64_t>& log_numbers) {
 
 void DBTable::DeleteObsoleteFiles(uint64_t seq_no) {
     std::vector<std::string> filenames;
-    env_->GetChildren(dbname_, &filenames, NULL);
+    env_->GetChildren(dbname_, &filenames);
     std::sort(filenames.begin(), filenames.end());
     Log(options_.info_log, "[%s] will delete obsolete file num: %u [seq < %llu]",
         dbname_.c_str(), static_cast<uint32_t>(filenames.size()),

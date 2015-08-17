@@ -127,7 +127,7 @@ class CorruptionTest {
         db_path = dbname_ + "/" + Uint64ToString(lg_id);
     }
     std::vector<std::string> filenames;
-    ASSERT_OK(env_.GetChildren(db_path, &filenames, NULL));
+    ASSERT_OK(env_.GetChildren(db_path, &filenames));
     uint64_t number;
     FileType type;
     std::string fname;
