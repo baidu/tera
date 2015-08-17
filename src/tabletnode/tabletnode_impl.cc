@@ -957,8 +957,7 @@ void TabletNodeImpl::GarbageCollectInPath(const std::string& path, leveldb::Env*
     env->GetChildren(path, &table_dirs);
     for (size_t i = 0; i < table_dirs.size(); ++i) {
         std::vector<std::string> cached_tablets;
-        env->GetChildren(path + "/" + table_dirs[i],
-                &cached_tablets);
+        env->GetChildren(path + "/" + table_dirs[i], &cached_tablets);
         if (cached_tablets.size() == 0) {
             VLOG(GC_LOG_LEVEL) << "[gc] this directory is empty, delete it: "
                 << path + "/" + table_dirs[i];
