@@ -1041,7 +1041,9 @@ int32_t ShowAllTables(Client* client, bool is_x, bool show_all, ErrorCode* err) 
                     lg_size.resize(lg_num, 0);
                 }
                 for (int l = 0; l < lg_num; ++l) {
-                    lg_size[l] += tablet_list.meta(i).lg_size(l);
+                    if (tablet_list.meta(i).lg_size_size() == lg_num) {
+                        lg_size[l] += tablet_list.meta(i).lg_size(l);
+                    }
                 }
             }
         }
@@ -1749,7 +1751,7 @@ int32_t HashOp(Client* client, int32_t argc, char** argv, ErrorCode* err) {
     }
     std::cout << "password hash:" << hash << ", place it in master flag file."
         << " and place password(not hash) in client flag file" << std::endl;
-    
+
     return 0;
 }
 
