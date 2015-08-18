@@ -844,10 +844,6 @@ void MasterImpl::ShowTables(const ShowTablesRequest* request,
             TabletPtr tablet = tablet_list[i];
             TabletMeta meta;
             tablet->ToMeta(&meta);
-            if (table_list.size() > 1) {
-                meta.mutable_key_range()->clear_key_start();
-                meta.mutable_key_range()->clear_key_end();
-            }
             tablet_meta_list->add_meta()->CopyFrom(meta);
             tablet_meta_list->add_counter()->CopyFrom(tablet->GetCounter());
         }

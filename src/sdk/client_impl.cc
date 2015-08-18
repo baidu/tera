@@ -721,6 +721,9 @@ bool ClientImpl::ListInternal(std::vector<TableInfo>* table_list,
         if (!response.has_is_more() || !response.is_more()) {
             is_more = false;
         } else {
+            if (tablet_meta_list.meta_size() == 0) { //argument @max_tablet_found maybe zero
+                break;
+            }
             const tera::TabletMeta& meta = tablet_meta_list.meta(tablet_meta_list.meta_size()-1);
             const string& last_key = meta.key_range().key_start();
             request.set_start_table_name(meta.table_name());
