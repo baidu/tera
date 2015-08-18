@@ -451,7 +451,6 @@ bool ClientImpl::ShowTablesInfo(TableMetaList* table_list,
         request.set_sequence_id(0);
         if (master_client.ShowTables(&request, &response) &&
             response.status() == kMasterOk) {
-            has_more = response.is_more();
             if (response.table_meta_list().meta_size() == 0) {
                 has_error = true;
                 err_msg = StatusCodeToString(response.status());
@@ -461,12 +460,21 @@ bool ClientImpl::ShowTablesInfo(TableMetaList* table_list,
                 table_list->CopyFrom(response.table_meta_list());
                 table_meta_copied = true;
             }
+            if (response.tablet_meta_list().meta_size() == 0) {
+                has_more = false;
+            }
             for(int i = 0; i < response.tablet_meta_list().meta_size(); i++){
                 tablet_list->add_meta()->CopyFrom(response.tablet_meta_list().meta(i));
                 tablet_list->add_counter()->CopyFrom(response.tablet_meta_list().counter(i));
                 if (i == response.tablet_meta_list().meta_size() - 1 ) {
                     start_table_name = response.tablet_meta_list().meta(i).table_name();
-                    start_tablet_key = response.tablet_meta_list().meta(i).key_range().key_start();
+                    std::string last_key = response.tablet_meta_list().meta(i).key_range().key_start();
+                    if (last_key <= start_tablet_key) {
+                        LOG(WARNING) << "the master has older version";
+                        has_more = false;
+                        break;
+                    }
+                    start_tablet_key = last_key;
                 }
             }
             start_tablet_key.append(1,'\0'); // fetch next tablet
