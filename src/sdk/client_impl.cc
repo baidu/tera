@@ -478,7 +478,7 @@ bool ClientImpl::ShowTablesInfo(TableMetaList* table_list,
             }
             has_more = false;
         }
-        VLOG(16) << "fetch meta:" << start_table_name.c_str() 
+        VLOG(16) << "fetch meta:" << start_table_name
                  << " / " << start_tablet_key;
     };
 
