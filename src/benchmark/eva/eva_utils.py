@@ -23,8 +23,10 @@ def write_deli():
 def table_manipulate(tablename, op, schema):
     schema_file = common.TMP_DIR+'t.schema'
     fp = open(schema_file, 'w')
-    if schema == {}:
-        schema_str = '{tablename} <splitsize={size},storage=flash>'.format(tablename=tablename, size=str(conf.g_test_conf[conf.SPLIT_SIZE]))
+    if 'storage' in schema:
+        schema_str = '{tablename} <splitsize={size},storage={storage}>'.\
+            format(tablename=tablename, size=str(conf.g_test_conf[conf.SPLIT_SIZE]),
+                   storage=schema['storage'])
         fp.write(schema_str)
         conf.g_test_conf[conf.KV] = True
         if op == conf.CF:

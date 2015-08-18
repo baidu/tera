@@ -540,7 +540,7 @@ int main(int argc, char** argv) {
     bool finish = false;
     int64_t count = 0;
     while (true) {
-        if (count == FLAGS_entry_limit) {
+        if (FLAGS_entry_limit != 0 && count == FLAGS_entry_limit) {
             struct timeval now;
             gettimeofday(&now, NULL);
             if (1000000 - now.tv_usec > 0)  {
