@@ -981,12 +981,16 @@ bool TabletManager::ShowTable(std::vector<TablePtr>* table_meta_list,
             table_meta_list->push_back(table);
         }
         table_found_num++;
-
-        it2 = table->m_tablets_list.begin();
-
+        if (table_found_num == 1) {
+            it2 = table->m_tablets_list.lower_bound(start_tablet_key);
+        } else {
+            it2 = table->m_tablets_list.begin();
+        }
         for (; it2 != table->m_tablets_list.end(); ++it2) {
-            if (tablet_found_num >= max_tablet_found)
+            if (tablet_found_num >= max_tablet_found) {
+                *is_more = true;
                 break;
+            }
             TabletPtr tablet = it2->second;
             tablet_found_num++;
             if (tablet_meta_list != NULL) {
@@ -995,6 +999,7 @@ bool TabletManager::ShowTable(std::vector<TablePtr>* table_meta_list,
         }
         table->m_mutex.Unlock();
         if (table_found_num >= max_table_found) {
+            *is_more = true;
             break;
         }
     }

@@ -11,7 +11,6 @@
 #include <glog/logging.h>
 #include <gperftools/malloc_extension.h>
 
-
 #include "db/filename.h"
 #include "io/io_utils.h"
 #include "io/utils_leveldb.h"
@@ -89,6 +88,8 @@ DECLARE_string(tera_local_addr);
 DECLARE_bool(tera_ins_enabled);
 
 DECLARE_int64(tera_sdk_perf_counter_log_interval);
+
+DECLARE_string(tera_acl_root_token);
 
 namespace tera {
 namespace master {
@@ -841,7 +842,9 @@ void MasterImpl::ShowTables(const ShowTablesRequest* request,
         TabletMetaList* tablet_meta_list = response->mutable_tablet_meta_list();
         for (uint32_t i = 0; i < tablet_list.size(); ++i) {
             TabletPtr tablet = tablet_list[i];
-            tablet->ToMeta(tablet_meta_list->add_meta());
+            TabletMeta meta;
+            tablet->ToMeta(&meta);
+            tablet_meta_list->add_meta()->CopyFrom(meta);
             tablet_meta_list->add_counter()->CopyFrom(tablet->GetCounter());
         }
         response->set_is_more(is_more);
@@ -1164,7 +1167,7 @@ void MasterImpl::QueryTabletNode() {
             }
         }
         if (gc_query_enable) {
-            DoTabletNodeGarbageCleanPhase2();
+            DoTabletNodeGcPhase2();
         }
     }
 }
@@ -2744,7 +2747,7 @@ void MasterImpl::QueryTabletNodeCallback(std::string addr, QueryRequest* request
         }
 
         if (request->is_gc_query()) {
-            DoTabletNodeGarbageCleanPhase2();
+            DoTabletNodeGcPhase2();
         }
     }
 
@@ -4254,6 +4257,7 @@ bool MasterImpl::CreateStatTable() {
     CreateTableResponse response;
     request.set_sequence_id(0);
     request.set_table_name(FLAGS_tera_master_stat_table_name);
+    request.set_user_token(FLAGS_tera_acl_root_token);
     TableSchema* schema = request.mutable_schema();
 
     schema->set_name(FLAGS_tera_master_stat_table_name);
@@ -4327,11 +4331,11 @@ void MasterImpl::DumpStatToTable(const TabletNode& stat) {
     m_stat_table->ApplyMutation(mutation);
 }
 
-void MasterImpl::ScheduleTabletNodeGarbageClean() {
+void MasterImpl::ScheduleTabletNodeGc() {
     m_mutex.AssertHeld();
     LOG(INFO) << "[gc] ScheduleTabletNodeGcTimer";
     boost::function<void ()> closure =
-        boost::bind(&MasterImpl::TabletNodeGarbageClean, this);
+        boost::bind(&MasterImpl::TabletNodeGc, this);
     m_gc_timer_id = m_thread_pool->DelayTask(
         FLAGS_tera_master_gc_period, closure);
 }
@@ -4339,7 +4343,7 @@ void MasterImpl::ScheduleTabletNodeGarbageClean() {
 void MasterImpl::EnableTabletNodeGcTimer() {
     MutexLock lock(&m_mutex);
     if (m_gc_timer_id == kInvalidTimerId) {
-        ScheduleTabletNodeGarbageClean();
+        ScheduleTabletNodeGc();
     }
     m_gc_enabled = true;
 }
@@ -4355,14 +4359,14 @@ void MasterImpl::DisableTabletNodeGcTimer() {
     m_gc_enabled = false;
 }
 
-void MasterImpl::TabletNodeGarbageClean() {
-    VLOG(10) << "[gc] TabletNodeGarbageClean()";
+void MasterImpl::TabletNodeGc() {
+    VLOG(10) << "[gc] TabletNodeGc()";
     MutexLock locker(&m_mutex);
 
-    m_thread_pool->AddTask(boost::bind(&MasterImpl::DoTabletNodeGarbageClean, this));
+    m_thread_pool->AddTask(boost::bind(&MasterImpl::DoTabletNodeGc, this));
 }
 
-void MasterImpl::DoTabletNodeGarbageClean() {
+void MasterImpl::DoTabletNodeGc() {
     {
         MutexLock lock(&m_mutex);
         if (!m_gc_enabled) {
@@ -4394,14 +4398,14 @@ void MasterImpl::DoTabletNodeGarbageClean() {
 
     CollectDeadTabletsFiles();
 
-    LOG(INFO) << "[gc] DoTabletNodeGarbageClean: collect all files, cost: "
+    LOG(INFO) << "[gc] DoTabletNodeGc: collect all files, cost: "
         << (get_micros() - start_ts) / 1000 << "ms.";
 
     if (m_gc_tablets.size() == 0) {
         LOG(INFO) << "[gc] do not need gc this time.";
         MutexLock lock(&m_mutex);
         if (m_gc_enabled) {
-            ScheduleTabletNodeGarbageClean();
+            ScheduleTabletNodeGc();
         } else {
             m_gc_timer_id = kInvalidTimerId;
         }
@@ -4412,7 +4416,7 @@ void MasterImpl::DoTabletNodeGarbageClean() {
     m_gc_query_enable = true;
 }
 
-void MasterImpl::DoTabletNodeGarbageCleanPhase2() {
+void MasterImpl::DoTabletNodeGcPhase2() {
     bool is_success = true;
     std::map<std::string, GcTabletSet>::iterator it = m_gc_tablets.begin();
     for (; it != m_gc_tablets.end(); ++it) {
@@ -4426,7 +4430,7 @@ void MasterImpl::DoTabletNodeGarbageCleanPhase2() {
         LOG(INFO) << "[gc] gc not success, try next time.";
         MutexLock lock(&m_mutex);
         if (m_gc_enabled) {
-            ScheduleTabletNodeGarbageClean();
+            ScheduleTabletNodeGc();
         } else {
             m_gc_timer_id = kInvalidTimerId;
         }
@@ -4436,12 +4440,12 @@ void MasterImpl::DoTabletNodeGarbageCleanPhase2() {
     int64_t start_ts = get_micros();
 
     DeleteObsoleteFiles();
-    LOG(INFO) << "[gc] DoTabletNodeGarbageCleanPhase2 finished, cost:"
+    LOG(INFO) << "[gc] DoTabletNodeGcPhase2 finished, cost:"
         << (get_micros() - start_ts) / 1000 << "ms.";
 
     MutexLock lock(&m_mutex);
     if (m_gc_enabled) {
-        ScheduleTabletNodeGarbageClean();
+        ScheduleTabletNodeGc();
     } else {
         m_gc_timer_id = kInvalidTimerId;
     }
@@ -4539,6 +4543,7 @@ void MasterImpl::DeleteObsoleteFiles() {
 }
 
 void MasterImpl::ProcessQueryCallbackForGc(QueryResponse* response) {
+    MutexLock lock(&m_gc_mutex);
     std::set<std::string> gc_table_set;
     for (int i = 0; i < response->inh_live_files_size(); ++i) {
         const InheritedLiveFiles& live = response->inh_live_files(i);

@@ -7,4 +7,9 @@ src/proto/*.pb.*
 #version.cc is auto generated
 src/version.cc
 
+#leveldb binary
+src/leveldb/db_import
+src/leveldb/leveldbutil
+src/leveldb/tera_bench
+
 depends.mk

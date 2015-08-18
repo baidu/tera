@@ -1003,8 +1003,9 @@ bool ThreeLevelCacheEnv::FileExists(const std::string& fname) {
 }
 
 Status ThreeLevelCacheEnv::GetChildren(const std::string& path,
-                             std::vector<std::string>* result) {
-    return dfs_env_->GetChildren(path, result);
+                             std::vector<std::string>* result,
+                             std::vector<int64_t>* ctime) {
+    return dfs_env_->GetChildren(path, result, ctime);
 }
 
 Status ThreeLevelCacheEnv::DeleteFile(const std::string& fname) {
@@ -1019,11 +1020,6 @@ Status ThreeLevelCacheEnv::CreateDir(const std::string& name) {
 Status ThreeLevelCacheEnv::DeleteDir(const std::string& name) {
     posix_env_->DeleteDirRecursive(ThreeLevelCacheEnv::CachePath(name) + name);
     return dfs_env_->DeleteDir(name);
-}
-
-Status ThreeLevelCacheEnv::ListDir(const std::string& name,
-                         std::vector<std::string>* result) {
-    return dfs_env_->ListDir(name, result);
 }
 
 Status ThreeLevelCacheEnv::GetFileSize(const std::string& fname, uint64_t* size) {
