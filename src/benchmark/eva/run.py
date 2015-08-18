@@ -199,17 +199,23 @@ def run_scan_test():
     return wait_list, []
 
 
+bench_cmd = ''
 def run_read_test():
     write_ret_list = []
     read_ret_list = []
-    if conf.g_test_conf[conf.WRITE_SPEED_LIMIT]:
+    if conf.g_test_conf[conf.WRITE_SPEED_LIMIT] != 0:
         for i in range(conf.g_test_conf[conf.TABLET_NUM]):
-            tera_bench = './tera_bench --value_size=1024 --compression_ratio=1 --random=t --key_size=16 --benchmarks=random --cf={cf} --num=10000000'.\
-                format(cf=conf.g_test_conf[conf.CF])
             prefix = '%04d' % i
-            bench_cmd = tera_bench + " | awk -F '\t' '{print \"" + prefix + """\"$1"\t"$2"\t"$3"\t"$4}' """
+
+            global bench_cmd
             if conf.g_test_conf[conf.KV] is True:
+                tera_bench = './tera_bench --value_size={vs} --compression_ratio=1 --random=t --key_size={ks} --benchmarks=random --num=10000000'.\
+                    format(ks=conf.g_test_conf[conf.KEY_SIZE], vs=conf.g_test_conf[conf.VALUE_SIZE])
                 bench_cmd = tera_bench + " | awk -F '\t' '{print \"" + prefix + """\"$1"\t"$2}' """
+            else:
+                tera_bench = './tera_bench --value_size=1024 --compression_ratio=1 --random=t --key_size=16 --benchmarks=random --cf={cf} --num=10000000'.\
+                    format(cf=conf.g_test_conf[conf.CF])
+                bench_cmd = tera_bench + " | awk -F '\t' '{print \"" + prefix + """\"$1"\t"$2"\t"$3"\t"$4}' """
             cmd = '{bench} | ./tera_mark --mode=w --tablename={name} --type=async --verify=false --entry_limit={limit}'.\
                 format(bench=bench_cmd, name=conf.g_test_conf[conf.TABLE_NAME], limit=str(conf.g_test_conf[conf.WRITE_SPEED_LIMIT]))
             print cmd
