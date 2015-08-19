@@ -694,9 +694,10 @@ bool ClientImpl::ParseTabletEntry(const TabletMeta& meta, std::vector<TabletInfo
     return true;
 }
 
+static Mutex mutex;
+static bool is_glog_init = false;
+
 static void InitFlags(const std::string& confpath, const std::string& log_prefix) {
-    static Mutex mutex;
-    static bool is_glog_init = false;
     MutexLock locker(&mutex);
     // search conf file, priority:
     //   user-specified > ./tera.flag > ../conf/tera.flag > env-var
@@ -756,6 +757,11 @@ Client* Client::NewClient(const string& confpath, ErrorCode* err) {
 
 Client* Client::NewClient() {
     return NewClient("", "teracli", NULL);
+}
+
+void Client::SetGlogIsInitialized() {
+    MutexLock locker(&mutex);
+    is_glog_init = true;
 }
 
 } // namespace tera
