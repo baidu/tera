@@ -51,5 +51,5 @@ message TableSchema {
     optional int64 split_size = 8; // MB
     optional int64 merge_size = 10; // MB
     optional bool kv_only = 9 [default = false];
+    optional string admin_group = 11; // users in admin_group can admin this table
 }
-

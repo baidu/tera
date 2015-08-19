@@ -149,16 +149,9 @@ private:
                       OperateUserResponse* response,
                       google::protobuf::Closure* done);
 
-    bool CheckUserToken(const std::string& token);
-    template <typename Request, typename Response, typename Callback>
-    bool HasPermission(const Request* request, Response* response, 
-                                     Callback* done, const char* operate);
 private:
     MasterImpl* m_master_impl;
     scoped_ptr<ThreadPool> m_thread_pool;
-
-    // acl
-    std::string m_root_token;
 };
 
 

@@ -7,10 +7,10 @@
 
 #include <boost/shared_ptr.hpp>
 
-#include "proto/master_rpc.pb.h"
-
-#include "common/mutex.h"
 #include "common/base/scoped_ptr.h"
+#include "common/mutex.h"
+
+#include "proto/master_rpc.pb.h"
 
 namespace tera {
 namespace master {
@@ -21,7 +21,9 @@ class User {
 
 public:
     User(const std::string& name);
-    const std::string& GetToken();
+    std::string GetUserName();
+    UserInfo& GetUserInfo();
+    const std::string GetToken();
 
 private:
     User(const User&) {}
@@ -35,13 +37,13 @@ typedef boost::shared_ptr<User> UserPtr;
 
 class UserManager {
 public:
-    bool AddUser(const std::string& user_name, UserInfo& user_info);
-    bool DeleteUser(const std::string& user_name);
-    bool IsUserExist(const std::string& user_name);
-
     // load a user meta entry(memtable) into user_manager(memory)
     void LoadUserMeta(const std::string& key,
                       const std::string& value); 
+
+    // setups root user if root not found in metatable after master init
+    // e.g. the tera cluster first starts.
+    void SetupRootUser();
 
     // valid user name:
     // 1. kLenMin <= user_name.length() <= kLenMax 
@@ -49,14 +51,28 @@ public:
     // 3. contains only alphabet or digit
     bool IsUserNameValid(const std::string& user_name);
 
-    // setups root user if root not found in metatable after master inits
-    // e.g. the tera cluster first starts.
-    void SetupRootUser();
+    bool AddUser(const std::string& user_name, UserInfo& user_info);
+    bool DeleteUser(const std::string& user_name);
+    bool IsUserExist(const std::string& user_name);
 
-    std::string GetUserToken(const std::string& user_name);
-    bool IsUserAndTokenMatch(const std::string& user_name, const std::string& token);
+    std::string UserNameToToken(const std::string& user_name);
+    std::string TokenToUserName(const std::string& token);
 
-    // for debug
+    bool GetUserInfo(const std::string& user_name, UserInfo* user_info);
+    bool SetUserInfo(const std::string& user_name, UserInfo& user_info);
+
+    bool DeleteGroupFromUserInfo(UserInfo& user_info, const std::string& group);
+    bool IsUserInGroup(const std::string& user_name, const std::string& group_name);
+
+    bool IsValidForCreate(const std::string& token, const std::string& user_name);
+    bool IsValidForDelete(const std::string& token, const std::string& user_name);
+    bool IsValidForChangepwd(const std::string& token, const std::string& user_name);
+    bool IsValidForAddToGroup(const std::string& token, 
+                              const std::string& user_name, 
+                              const std::string& group_name);
+    bool IsValidForDeleteFromGroup(const std::string& token, 
+                                   const std::string& user_name, 
+                                   const std::string& group_name);
     void ListAll();
 private:
     mutable Mutex m_mutex;

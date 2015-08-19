@@ -253,83 +253,91 @@ bool ClientImpl::EnableTable(string name, ErrorCode* err) {
     return false;
 }
 
-bool ClientImpl::CreateUser(const std::string& user, 
-                            const std::string& password, ErrorCode* err) {
+void ClientImpl::DoShowUser(OperateUserResponse& response) {
+    if (!response.has_user_info()) {
+        return;
+    }
+    UserInfo user_info = response.user_info();
+    std::cout << "user:" << user_info.user_name()
+              << "\ngroups:";
+    for (int i = 0; i < user_info.group_name_size(); ++i) {
+        std::cout << user_info.group_name(i) << " ";
+    }
+    std::cout << std::endl;
+}
+
+bool ClientImpl::OperateUser(UserInfo& operated_user, UserOperateType type, 
+                             ErrorCode* err) {
     master::MasterClient master_client(_cluster->MasterAddr());
     OperateUserRequest request;
     OperateUserResponse response;
     request.set_sequence_id(0);
     request.set_user_token(GetUserToken(_user_identity, _user_passcode));
-    request.set_op_type(kCreateUser);
 
-    UserInfo* created_user = request.mutable_user_info();
-    created_user->set_user_name(user);
-    created_user->set_token(GetUserToken(user, password));
+    request.set_op_type(type);
+    UserInfo* user_info = request.mutable_user_info();
+    user_info->CopyFrom(operated_user);
 
     std::string reason;
     if (master_client.OperateUser(&request, &response)) {
         if (CheckReturnValue(response, reason, err)) {
+            if (type == kShowUser) {
+                DoShowUser(response);
+            }
             return true;
         }
         LOG(ERROR) << reason << "| status: " << StatusCodeToString(response.status());
     } else {
-        reason = "rpc fail to create user: " + user;
+        reason = "rpc fail to operate user: " + operated_user.user_name();
         LOG(ERROR) << reason;
         err->SetFailed(ErrorCode::kSystem, reason);
     }
     return false;
+}
+
+bool ClientImpl::CreateUser(const std::string& user, 
+                            const std::string& password, ErrorCode* err) {
+    UserInfo created_user;
+    created_user.set_user_name(user);
+    created_user.set_token(GetUserToken(user, password));
+    return OperateUser(created_user, kCreateUser, err);
 }
 
 bool ClientImpl::DeleteUser(const std::string& user, ErrorCode* err) {
-    master::MasterClient master_client(_cluster->MasterAddr());
-    OperateUserRequest request;
-    OperateUserResponse response;
-    request.set_sequence_id(0);
-    request.set_user_token(GetUserToken(_user_identity, _user_passcode));
-    request.set_op_type(kDeleteUser);
-
-    UserInfo* deleted_user = request.mutable_user_info();
-    deleted_user->set_user_name(user);
-
-    std::string reason;
-    if (master_client.OperateUser(&request, &response)) {
-        if (CheckReturnValue(response, reason, err)) {
-            return true;
-        }
-        LOG(ERROR) << reason << "| status: " << StatusCodeToString(response.status());
-    } else {
-        reason = "rpc fail to delete user: " + user;
-        LOG(ERROR) << reason;
-        err->SetFailed(ErrorCode::kSystem, reason);
-    }
-    return false;
+    UserInfo deleted_user;
+    deleted_user.set_user_name(user);
+    return OperateUser(deleted_user, kDeleteUser, err);
 }
 
-bool ClientImpl::UpdateUser(const std::string& user, 
+bool ClientImpl::ChangePwd(const std::string& user, 
                             const std::string& password, ErrorCode* err) {
-    master::MasterClient master_client(_cluster->MasterAddr());
-    OperateUserRequest request;
-    OperateUserResponse response;
-    request.set_sequence_id(0);
-    request.set_user_token(GetUserToken(_user_identity, _user_passcode));
-    request.set_op_type(kUpdateUser);
+    UserInfo updated_user;
+    updated_user.set_user_name(user);
+    updated_user.set_token(GetUserToken(user, password));
+    return OperateUser(updated_user, kChangePwd, err);
+}
 
-    UserInfo* updated_user = request.mutable_user_info();
-    updated_user->set_user_name(user);
-    updated_user->set_token(GetUserToken(user, password));
+bool ClientImpl::ShowUser(const std::string& user, ErrorCode* err) {
+    UserInfo user_info;
+    user_info.set_user_name(user);
+    user_info.set_token(GetUserToken(_user_identity, _user_passcode));
+    return OperateUser(user_info, kShowUser, err);
+}
 
-    std::string reason;
-    if (master_client.OperateUser(&request, &response)) {
-        if (CheckReturnValue(response, reason, err)) {
-            return true;
-        }
-        LOG(ERROR) << reason << "| status: " << StatusCodeToString(response.status());
-    } else {
-        reason = "rpc fail to update user: " + user;
-        LOG(ERROR) << reason;
-        err->SetFailed(ErrorCode::kSystem, reason);
-    }
-    return false;
+bool ClientImpl::AddUserToGroup(const std::string& user_name,
+                                const std::string& group_name, ErrorCode* err) {
+    UserInfo user;
+    user.set_user_name(user_name);
+    user.add_group_name(group_name);
+    return OperateUser(user, kAddToGroup, err);
+}
+
+bool ClientImpl::DeleteUserFromGroup(const std::string& user_name,
+                                     const std::string& group_name, ErrorCode* err) {
+    UserInfo user;
+    user.set_user_name(user_name);
+    user.add_group_name(group_name);
+    return OperateUser(user, kDeleteFromGroup, err);
 }
 
 Table* ClientImpl::OpenTable(const string& table_name, ErrorCode* err) {
@@ -447,6 +455,7 @@ bool ClientImpl::ShowTablesInfo(const string& name,
     request.set_sequence_id(0);
     request.set_start_table_name(name);
     request.set_max_table_num(1);
+    request.set_user_token(GetUserToken(_user_identity, _user_passcode));
 
     if (master_client.ShowTables(&request, &response) &&
         response.status() == kMasterOk) {
@@ -478,6 +487,7 @@ bool ClientImpl::ShowTablesInfo(TableMetaList* table_list,
     ShowTablesRequest request;
     ShowTablesResponse response;
     request.set_sequence_id(0);
+    request.set_user_token(GetUserToken(_user_identity, _user_passcode));
 
     if (master_client.ShowTables(&request, &response) &&
         response.status() == kMasterOk) {
@@ -510,6 +520,7 @@ bool ClientImpl::ShowTabletNodesInfo(const string& addr,
     request.set_sequence_id(0);
     request.set_addr(addr);
     request.set_is_showall(false);
+    request.set_user_token(GetUserToken(_user_identity, _user_passcode));
 
     if (master_client.ShowTabletNodes(&request, &response) &&
         response.status() == kMasterOk) {
@@ -697,6 +708,7 @@ bool ClientImpl::ListInternal(std::vector<TableInfo>* table_list,
     request.set_max_tablet_num(max_tablet_found);
     request.set_start_table_name(start_table_name);
     request.set_start_tablet_key(start_tablet_key);
+    request.set_user_token(GetUserToken(_user_identity, _user_passcode));
 
     bool is_more = true;
     while (is_more) {

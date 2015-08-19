@@ -77,7 +77,10 @@ void Usage(const std::string& prg_name) {
                                                                             \n\
        createuser username password                                         \n\
        deleteuser username                                                  \n\
-       updateuser username new-password                                     \n\
+       changepwd  username new-password                                     \n\
+       showuser   username                                                  \n\
+       addtogroup username groupname                                        \n\
+       deletefromgroup username groupname                                   \n\
                                                                             \n\
        update <schema>                                                      \n\
               - kv schema:                                                  \n\
@@ -232,7 +235,7 @@ int32_t CreateUserOp(Client* client, int32_t argc, char** argv, ErrorCode* err) 
     std::string user = argv[2];
     std::string password = argv[3];
     if (!client->CreateUser(user, password, err)) {
-        LOG(ERROR) << "fail to create user: " << argv[1]
+        LOG(ERROR) << "fail to create user: " << user
             << ", " << strerr(*err);
         return -1;
     }
@@ -246,23 +249,67 @@ int32_t DeleteUserOp(Client* client, int32_t argc, char** argv, ErrorCode* err) 
     }
     std::string user = argv[2];
     if (!client->DeleteUser(user, err)) {
-        LOG(ERROR) << "fail to delete user: " << argv[1]
+        LOG(ERROR) << "fail to delete user: " << user
             << ", " << strerr(*err);
         return -1;
     }
     return 0;
 }
 
-int32_t UpdateUserOp(Client* client, int32_t argc, char** argv, ErrorCode* err) {
+int32_t ChangePwdOp(Client* client, int32_t argc, char** argv, ErrorCode* err) {
     if (argc != 4) {
         Usage(argv[0]);
         return -1;
     }
     std::string user = argv[2];
     std::string password = argv[3];
-    if (!client->UpdateUser(user, password, err)) {
-        LOG(ERROR) << "fail to update user: " << argv[1]
+    if (!client->ChangePwd(user, password, err)) {
+        LOG(ERROR) << "fail to update user: " << user
             << ", " << strerr(*err);
+        return -1;
+    }
+    return 0;
+}
+
+int32_t ShowUserOp(Client* client, int32_t argc, char** argv, ErrorCode* err) {
+    if (argc != 3) {
+        Usage(argv[0]);
+        return -1;
+    }
+    std::string user = argv[2];
+    if (!client->ShowUser(user, err)) {
+        LOG(ERROR) << "fail to show user: " << user
+            << ", " << strerr(*err);
+        return -1;
+    }
+    return 0;
+}
+
+int32_t AddUserToGroupOp(Client* client, int32_t argc, char** argv, ErrorCode* err) {
+    if (argc != 4) {
+        Usage(argv[0]);
+        return -1;
+    }
+    std::string user = argv[2];
+    std::string group = argv[3];
+    if (!client->AddUserToGroup(user, group, err)) {
+        LOG(ERROR) << "fail to add user: " << user
+            << " to group:" << group << strerr(*err);
+        return -1;
+    }
+    return 0;
+}
+
+int32_t DeleteUserFromGroupOp(Client* client, int32_t argc, char** argv, ErrorCode* err) {
+    if (argc != 4) {
+        Usage(argv[0]);
+        return -1;
+    }
+    std::string user = argv[2];
+    std::string group = argv[3];
+    if (!client->DeleteUserFromGroup(user, group, err)) {
+        LOG(ERROR) << "fail to delete user: " << user
+            << " from group: " << group << strerr(*err);
         return -1;
     }
     return 0;
@@ -2384,8 +2431,14 @@ int main(int argc, char* argv[]) {
         ret = CreateUserOp(client, argc, argv, &error_code);
     } else if (cmd == "deleteuser") {
         ret = DeleteUserOp(client, argc, argv, &error_code);
-    } else if (cmd == "updateuser") {
-        ret = UpdateUserOp(client, argc, argv, &error_code);
+    } else if (cmd == "changepwd") {
+        ret = ChangePwdOp(client, argc, argv, &error_code);
+    } else if (cmd == "showuser") {
+        ret = ShowUserOp(client, argc, argv, &error_code);
+    } else if (cmd == "addtogroup") {
+        ret = AddUserToGroupOp(client, argc, argv, &error_code);
+    } else if (cmd == "deletefromgroup") {
+        ret = DeleteUserFromGroupOp(client, argc, argv, &error_code);
     } else if (cmd == "version") {
         PrintSystemVersion();
     } else if (cmd == "snapshot") {

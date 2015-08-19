@@ -71,6 +71,9 @@ void ShowTableSchema(const TableSchema& schema, bool is_x) {
         if (is_x || lg_schema.block_size() != FLAGS_tera_tablet_write_block_size) {
             ss << "blocksize=" << lg_schema.block_size() << ",";
         }
+        if (is_x || schema.admin_group() != "") {
+            ss << "admin_group=" << schema.admin_group() << ",";
+        }
         ss << "\b>\n" << "  (kv mode)\n";
         std::cout << ss.str() << std::endl;
         return;
@@ -83,6 +86,9 @@ void ShowTableSchema(const TableSchema& schema, bool is_x) {
     ss << "splitsize=" << schema.split_size() << ",";
     if (is_x || schema.merge_size() != FLAGS_tera_master_merge_tablet_size) {
         ss << "mergesize=" << schema.merge_size() << ",";
+    }
+    if (is_x || schema.admin_group() != "") {
+        ss << "admin_group=" << schema.admin_group() << ",";
     }
     ss << "\b> {" << std::endl;
 
@@ -175,6 +181,7 @@ void TableDescToSchema(const TableDescriptor& desc, TableSchema* schema) {
     schema->set_split_size(desc.SplitSize());
     schema->set_merge_size(desc.MergeSize());
     schema->set_kv_only(desc.IsKv());
+    schema->set_admin_group(desc.AdminGroup());
 
     // add lg
     int num = desc.LocalityGroupNum();
@@ -239,6 +246,9 @@ void TableSchemaToDesc(const TableSchema& schema, TableDescriptor* desc) {
     }
     if (schema.has_merge_size()) {
         desc->SetMergeSize(schema.merge_size());
+    }
+    if (schema.has_admin_group()) {
+        desc->SetAdminGroup(schema.admin_group());
     }
 
     int32_t lg_num = schema.locality_groups_size();
@@ -400,6 +410,8 @@ bool SetTableProperties(const string& name, const string& value,
             return false;
         }
         desc->SetMergeSize(mergesize);
+    } else if (name == "admin_group"){
+        desc->SetAdminGroup(value);
     } else {
         return false;
     }

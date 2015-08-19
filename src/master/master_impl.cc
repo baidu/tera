@@ -90,6 +90,8 @@ DECLARE_bool(tera_ins_enabled);
 
 DECLARE_int64(tera_sdk_perf_counter_log_interval);
 
+DECLARE_bool(tera_acl_enabled);
+
 namespace tera {
 namespace master {
 
@@ -446,81 +448,6 @@ void MasterImpl::UnloadMetaTablet(const std::string& server_addr) {
     }
 }
 
-bool MasterImpl::ReadFromStream(std::ifstream& ifs,
-                                std::string* key,
-                                std::string* value) {
-    uint32_t key_size = 0, value_size = 0;
-    ifs.read((char*)&key_size, sizeof(key_size));
-    if (ifs.eof() && ifs.gcount() == 0) {
-        key->clear();
-        value->clear();
-        return true;
-    }
-    key->resize(key_size);
-    ifs.read((char*)key->data(), key_size);
-    if (ifs.fail()) {
-        return false;
-    }
-    ifs.read((char*)&value_size, sizeof(value_size));
-    if (ifs.fail()) {
-        return false;
-    }
-    value->resize(value_size);
-    ifs.read((char*)value->data(), value_size);
-    if (ifs.fail()) {
-        return false;
-    }
-    return true;
-}
-
-bool MasterImpl::LoadMetaTableFromFile(const std::string& filename,
-                                          StatusCode* ret_status) {
-    m_tablet_manager->ClearTableList();
-    std::ifstream ifs(filename.c_str(), std::ofstream::binary);
-    if (!ifs.is_open()) {
-        LOG(ERROR) << "fail to open file " << filename << " for read";
-        SetStatusCode(kIOError, ret_status);
-        return false;
-    }
-
-    uint64_t count = 0;
-    std::string key, value;
-    while (ReadFromStream(ifs, &key, &value)) {
-        if (key.empty()) {
-            LOG(INFO) << "load meta table success, " << count << " records";
-            TabletPtr meta_tablet;
-            TableSchema schema;
-            LocalityGroupSchema* lg = schema.add_locality_groups();
-            schema.set_name(FLAGS_tera_master_meta_table_name);
-            lg->set_name("lg_meta");
-            lg->set_compress_type(false);
-            lg->set_store_type(MemoryStore);
-            m_tablet_manager->AddTablet(FLAGS_tera_master_meta_table_name, "", "",
-                      FLAGS_tera_master_meta_table_path, "",
-                      schema, kTableNotInit, 0, &meta_tablet);
-            return true;
-        }
-
-        char first_key_char = key[0];
-        if (first_key_char == '~') {
-            m_user_manager->LoadUserMeta(key, value);
-        } else if (first_key_char == '@') {
-            m_tablet_manager->LoadTableMeta(key, value);
-        } else if (first_key_char > '@') {
-            m_tablet_manager->LoadTabletMeta(key, value);
-        } else {
-            continue;
-        }
-
-        count++;
-    }
-    m_tablet_manager->ClearTableList();
-
-    SetStatusCode(kIOError, ret_status);
-    LOG(ERROR) << "fail to load meta table: " << StatusCodeToString(kIOError);
-    return false;
-}
-
 bool MasterImpl::LoadMetaTable(const std::string& meta_tablet_addr,
                                StatusCode* ret_status) {
     m_tablet_manager->ClearTableList();
@@ -584,6 +511,112 @@ bool MasterImpl::LoadMetaTable(const std::string& meta_tablet_addr,
     return false;
 }
 
+bool MasterImpl::LoadMetaTableFromFile(const std::string& filename,
+                                          StatusCode* ret_status) {
+    m_tablet_manager->ClearTableList();
+    std::ifstream ifs(filename.c_str(), std::ofstream::binary);
+    if (!ifs.is_open()) {
+        LOG(ERROR) << "fail to open file " << filename << " for read";
+        SetStatusCode(kIOError, ret_status);
+        return false;
+    }
+
+    uint64_t count = 0;
+    std::string key, value;
+    while (ReadFromStream(ifs, &key, &value)) {
+        if (key.empty()) {
+            LOG(INFO) << "load meta table success, " << count << " records";
+            TabletPtr meta_tablet;
+            TableSchema schema;
+            LocalityGroupSchema* lg = schema.add_locality_groups();
+            schema.set_name(FLAGS_tera_master_meta_table_name);
+            lg->set_name("lg_meta");
+            lg->set_compress_type(false);
+            lg->set_store_type(MemoryStore);
+            m_tablet_manager->AddTablet(FLAGS_tera_master_meta_table_name, "", "",
+                      FLAGS_tera_master_meta_table_path, "",
+                      schema, kTableNotInit, 0, &meta_tablet);
+            return true;
+        }
+
+        char first_key_char = key[0];
+        if (first_key_char == '~') {
+            m_user_manager->LoadUserMeta(key, value);
+        } else if (first_key_char == '@') {
+            m_tablet_manager->LoadTableMeta(key, value);
+        } else if (first_key_char > '@') {
+            m_tablet_manager->LoadTabletMeta(key, value);
+        } else {
+            continue;
+        }
+
+        count++;
+    }
+    m_tablet_manager->ClearTableList();
+
+    SetStatusCode(kIOError, ret_status);
+    LOG(ERROR) << "fail to load meta table: " << StatusCodeToString(kIOError);
+    return false;
+}
+
+bool MasterImpl::ReadFromStream(std::ifstream& ifs,
+                                std::string* key,
+                                std::string* value) {
+    uint32_t key_size = 0, value_size = 0;
+    ifs.read((char*)&key_size, sizeof(key_size));
+    if (ifs.eof() && ifs.gcount() == 0) {
+        key->clear();
+        value->clear();
+        return true;
+    }
+    key->resize(key_size);
+    ifs.read((char*)key->data(), key_size);
+    if (ifs.fail()) {
+        return false;
+    }
+    ifs.read((char*)&value_size, sizeof(value_size));
+    if (ifs.fail()) {
+        return false;
+    }
+    value->resize(value_size);
+    ifs.read((char*)value->data(), value_size);
+    if (ifs.fail()) {
+        return false;
+    }
+    return true;
+}
+
+bool MasterImpl::IsRootUser(const std::string& token) {
+    return m_user_manager->UserNameToToken("root") == token;
+}
+
+bool MasterImpl::CheckUserPermissionOnTable(const std::string& token, TablePtr table) {
+    std::string group_name = table->GetSchema().admin_group();
+    LOG(INFO) << "admin_group:" << group_name << ".";
+    std::string user_name = m_user_manager->TokenToUserName(token);
+    return group_name == "" // no admin, so every one could access this table
+           || m_user_manager->IsUserInGroup(user_name, group_name);
+}
+
+template <typename Request, typename Response, typename Callback>
+bool MasterImpl::HasTablePermission(const Request* request, Response* response, 
+                                    Callback* done, TablePtr table, const char* operate) {
+    // check permission
+    if (!FLAGS_tera_acl_enabled 
+        || IsRootUser(request->user_token())
+        || (request->has_user_token() 
+            && CheckUserPermissionOnTable(request->user_token(), table))) {
+        LOG(INFO) << "[acl] is acl enabled: " << FLAGS_tera_acl_enabled;
+        return true;
+    } else {
+        LOG(INFO) << "[acl] fail to " << operate;
+        response->set_sequence_id(request->sequence_id());
+        response->set_status(kNotPermission);
+        done->Run();
+        return false;
+    }
+}
+
 /////////////  RPC interface //////////////
 
 void MasterImpl::CreateTable(const CreateTableRequest* request,
@@ -605,6 +638,12 @@ void MasterImpl::CreateTable(const CreateTableRequest* request,
             LOG(ERROR) << "Fail to create table: " << request->table_name()
                 << ", table already exist";
             response->set_status(kTableExist);
+            done->Run();
+            return;
+        }
+        if (FLAGS_tera_acl_enabled && !IsRootUser(request->user_token())) {
+            response->set_sequence_id(request->sequence_id());
+            response->set_status(kNotPermission);
             done->Run();
             return;
         }
@@ -706,6 +745,9 @@ void MasterImpl::DeleteTable(const DeleteTableRequest* request,
         done->Run();
         return;
     }
+    if (!HasTablePermission(request, response, done, table, "delete table")) {
+        return;
+    }
 
     TableStatus old_status;
     if (!table->SetStatus(kTableDeleting, &old_status)) {
@@ -755,6 +797,9 @@ void MasterImpl::DisableTable(const DisableTableRequest* request,
             << ", table not exist";
         response->set_status(kTableNotFound);
         done->Run();
+        return;
+    }
+    if (!HasTablePermission(request, response, done, table, "disable table")) {
         return;
     }
 
@@ -811,6 +856,9 @@ void MasterImpl::EnableTable(const EnableTableRequest* request,
         done->Run();
         return;
     }
+    if (!HasTablePermission(request, response, done, table, "enable table")) {
+        return;
+    }
 
     TableStatus old_status;
     if (!table->SetStatus(kTableEnable, &old_status)) {
@@ -856,6 +904,9 @@ void MasterImpl::UpdateTable(const UpdateTableRequest* request,
             << ", table not exist";
         response->set_status(kTableNotExist);
         done->Run();
+        return;
+    }
+    if (!HasTablePermission(request, response, done, table, "update table")) {
         return;
     }
 
@@ -945,6 +996,7 @@ void MasterImpl::ShowTables(const ShowTablesRequest* request,
         done->Run();
         return;
     }
+    LOG(INFO) << "master showtables:" << request->user_token();
 
     std::string start_table_name;
     if (request->has_start_table_name()) {
@@ -976,11 +1028,19 @@ void MasterImpl::ShowTables(const ShowTablesRequest* request,
         TableMetaList* table_meta_list = response->mutable_table_meta_list();
         for (uint32_t i = 0; i < table_list.size(); ++i) {
             TablePtr table = table_list[i];
+            if (!IsRootUser(request->user_token())
+                && !CheckUserPermissionOnTable(request->user_token(), table)) {
+                continue;
+            }
             table->ToMeta(table_meta_list->add_meta());
         }
         TabletMetaList* tablet_meta_list = response->mutable_tablet_meta_list();
         for (uint32_t i = 0; i < tablet_list.size(); ++i) {
             TabletPtr tablet = tablet_list[i];
+            if (!IsRootUser(request->user_token())
+                && !CheckUserPermissionOnTable(request->user_token(), tablet->GetTable())) {
+                continue;
+            }
             tablet->ToMeta(tablet_meta_list->add_meta());
             tablet_meta_list->add_counter()->CopyFrom(tablet->GetCounter());
         }
@@ -1028,6 +1088,10 @@ void MasterImpl::ShowTabletNodes(const ShowTabletNodesRequest* request,
         std::vector<TabletPtr> tablet_list;
         m_tablet_manager->FindTablet(request->addr(), &tablet_list);
         for (size_t i = 0; i < tablet_list.size(); ++i) {
+            if (!IsRootUser(request->user_token())
+                && !CheckUserPermissionOnTable(request->user_token(), tablet_list[i]->GetTable())) {
+                continue;
+            }
             TabletMeta* meta = response->mutable_tabletmeta_list()->add_meta();
             TabletCounter* counter = response->mutable_tabletmeta_list()->add_counter();
             tablet_list[i]->ToMeta(meta);
@@ -1087,6 +1151,7 @@ void MasterImpl::WriteUserInfoToMetaTableAsync(UserInfo& user_info, bool is_dele
     LOG(INFO) << "packed_key: " << packed_key;
     std::string packed_value;
     user_info.SerializeToString(&packed_value);
+    LOG(INFO) << "async-size:" << user_info.group_name_size();
     //LOG(ERROR) << "packed_value: " << packed_value;
     RowMutationSequence* mu_seq = request->add_row_list();
     mu_seq->set_row_key(packed_key);
@@ -1150,13 +1215,19 @@ void MasterImpl::AddUserInfoToMetaCallback(UserInfo user_info, // TODO pointer
 
     rpc_response->set_status(kMasterOk);
     rpc_done->Run();
+    std::string user_name = user_info.user_name();
     if (rpc_request->op_type() == kDeleteUser) {
-        m_user_manager->DeleteUser(user_info.user_name());
+        m_user_manager->DeleteUser(user_name);
     } else if (rpc_request->op_type() == kCreateUser){
-        m_user_manager->AddUser(user_info.user_name(), user_info);
-    } else if (rpc_request->op_type() == kUpdateUser) {
-        m_user_manager->DeleteUser(user_info.user_name());
-        m_user_manager->AddUser(user_info.user_name(), user_info);
+        m_user_manager->AddUser(user_name, user_info);
+    } else if (rpc_request->op_type() == kChangePwd) {
+        m_user_manager->SetUserInfo(user_name, user_info);
+    } else if (rpc_request->op_type() == kAddToGroup) {
+        m_user_manager->SetUserInfo(user_name, user_info);
+        //m_user_manager->UpdateGroupList(user_name, user_info);
+    } else if (rpc_request->op_type() == kDeleteFromGroup) {
+        m_user_manager->SetUserInfo(user_name, user_info);
+        //m_user_manager->UpdateGroupList(user_name, user_info);
     } else {
         LOG(ERROR) << "501";
     }
@@ -1164,8 +1235,8 @@ void MasterImpl::AddUserInfoToMetaCallback(UserInfo user_info, // TODO pointer
 }
 
 void MasterImpl::OperateUser(const OperateUserRequest* request,
-                            OperateUserResponse* response,
-                            google::protobuf::Closure* done) {
+                             OperateUserResponse* response,
+                             google::protobuf::Closure* done) {
     response->set_sequence_id(request->sequence_id());
     MasterStatus master_status = GetMasterStatus();
     if (master_status != kIsRunning) {
@@ -1175,46 +1246,66 @@ void MasterImpl::OperateUser(const OperateUserRequest* request,
         done->Run();
         return;
     }
-    
+
     UserInfo operated_user = request->user_info();
+    std::string user_name = operated_user.user_name();
+    std::string token = request->user_token(); // who call this function
     bool is_delete = false;
+    bool is_invalid = false;
     if (request->op_type() == kCreateUser) {
         if (!operated_user.has_user_name() || !operated_user.has_token()
-            || !m_user_manager->IsUserNameValid(operated_user.user_name())
-            || m_user_manager->IsUserExist(operated_user.user_name())){
-            response->set_status(kTableInvalidArg);
-            done->Run();
-            return;
+            || !m_user_manager->IsValidForCreate(token, user_name)) {
+            is_invalid = true;
         }
     } else if (request->op_type() == kDeleteUser) {
         if (!operated_user.has_user_name()
-            || !m_user_manager->IsUserExist(operated_user.user_name())
-            || operated_user.user_name() == "root") {
-            response->set_status(kTableInvalidArg);
-            done->Run();
-            return;
+            || !m_user_manager->IsValidForDelete(token, user_name)) {
+            is_invalid = true;
         }
         is_delete = true;
-    } else if (request->op_type() == kUpdateUser) {
+    } else if (request->op_type() == kChangePwd) {
         if (!operated_user.has_user_name() || !operated_user.has_token()
-            || !m_user_manager->IsUserExist(operated_user.user_name())) {
-            response->set_status(kTableInvalidArg);
-            done->Run();
-            return;
+            || !m_user_manager->IsValidForChangepwd(token, user_name)) {
+            is_invalid = true;
         }
+        m_user_manager->GetUserInfo(user_name, &operated_user);
+        operated_user.set_token(request->user_info().token());
+    } else if (request->op_type() == kAddToGroup) {
+        std::string group = request->user_info().group_name(0);
+        if (!operated_user.has_user_name() || operated_user.group_name_size() != 1
+            || !m_user_manager->IsValidForAddToGroup(token, user_name, group) ) {
+            is_invalid = true;
+        }
+        m_user_manager->GetUserInfo(user_name, &operated_user);
+        operated_user.add_group_name(group);
+    } else if (request->op_type() == kDeleteFromGroup) {
+        std::string group = request->user_info().group_name(0);
+        if (!operated_user.has_user_name() || operated_user.group_name_size() != 1
+            || !m_user_manager->IsValidForDeleteFromGroup(token ,user_name, group)) {
+            is_invalid = true;
+        }
+        m_user_manager->GetUserInfo(user_name, &operated_user);
+        m_user_manager->DeleteGroupFromUserInfo(operated_user, group);
+    } else if (request->op_type() == kShowUser) {
+        UserInfo* user_info = response->mutable_user_info();
+        m_user_manager->GetUserInfo(user_name, user_info);
+        response->set_status(kMasterOk);
+        done->Run();
+        return;
     } else {
-        CHECK(request->op_type() == kShowUser);
+        LOG(ERROR) << "unknown operate";
+        is_invalid = true;
+    }
+    if (is_invalid) {
+        response->set_status(kInvalidArgument);
+        done->Run();
+        return;
     }
 
-    // add user to meta-table
     WriteClosure* closure =
         NewClosure(this, &MasterImpl::AddUserInfoToMetaCallback, operated_user,
                    is_delete, request, response, done);
     WriteUserInfoToMetaTableAsync(operated_user, is_delete, closure, response, done);
-}
-
-UserManager* MasterImpl::GetUserManager() {
-    return m_user_manager.get();
 }
 
 void MasterImpl::SafeModeCmdCtrl(const CmdCtrlRequest* request,
@@ -4548,7 +4639,7 @@ bool MasterImpl::CreateStatTable() {
     CreateTableResponse response;
     request.set_sequence_id(0);
     request.set_table_name(FLAGS_tera_master_stat_table_name);
-    request.set_user_token(m_user_manager->GetUserToken("root"));
+    request.set_user_token(m_user_manager->UserNameToToken("root"));
     TableSchema* schema = request.mutable_schema();
 
     schema->set_name(FLAGS_tera_master_stat_table_name);

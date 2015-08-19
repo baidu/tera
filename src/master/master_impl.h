@@ -132,8 +132,6 @@ public:
 
     bool GetMetaTabletAddr(std::string* addr);
     void TryLoadTablet(TabletPtr tablet, std::string addr = "");
-    
-    UserManager* GetUserManager();
 
 private:
     typedef Closure<void, SnapshotRequest*, SnapshotResponse*, bool, int> SnapshotClosure;
@@ -148,8 +146,7 @@ private:
     enum MetaTaskType {
         kWrite = 0,
         kScan,
-        kRepair,
-        kUserInfo
+        kRepair
     };
     struct MetaTask {
         MetaTaskType m_type;
@@ -174,13 +171,6 @@ private:
         TabletPtr m_tablet;
         ScanTabletResponse* m_scan_resp;
     };
-    struct UserInfoTask {
-        MetaTaskType m_type;
-        WriteClosure* m_done;
-        UserInfo* user_info;
-        bool m_is_delete;
-    };
-
     struct SnapshotTask {
         const GetSnapshotRequest* request;
         GetSnapshotResponse* response;
@@ -488,6 +478,15 @@ private:
     void CollectSingleDeadTablet(const std::string& tablename, uint64_t tabletnum);
     void DeleteObsoleteFiles();
     void ProcessQueryCallbackForGc(QueryResponse* response);
+
+    bool IsRootUser(const std::string& token);
+    bool CheckUserPermissionOnTable(const std::string& token, TablePtr table);
+
+    template <typename Request, typename Response, typename Callback>
+    bool MasterImpl::HasTablePermission(const Request* request, Response* response, 
+                                     Callback* done, TablePtr table, const char* operate);
+    template <typename Response, typename Callback>
+    void MasterImpl::CheckMasterStatus(Response* response, Callback* done, bool not_ready);
 
 private:
     mutable Mutex m_status_mutex;
