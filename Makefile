@@ -102,7 +102,7 @@ tera_mark: $(MARK_OBJ) $(LIBRARY) $(LEVELDB_LIB)
 libjni_tera.so: $(JNI_TERA_OBJ) $(LIBRARY) 
 	$(CXX) -shared $(JNI_TERA_OBJ) -Xlinker "-(" $(LIBRARY) $(LDFLAGS) -Xlinker "-)" -o $@ 
 
-src/leveldb/libleveldb.a:
+src/leveldb/libleveldb.a: FORCE
 	$(MAKE) -C src/leveldb
 
 tera_bench:

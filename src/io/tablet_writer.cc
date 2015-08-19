@@ -355,6 +355,9 @@ bool TabletWriter::BatchRequest(const WriteTabletRequest& request,
                     case kAdd:
                         type = leveldb::TKT_ADD;
                         break;
+                    case kAddInt64:
+                        type = leveldb::TKT_ADDINT64;
+                        break;
                     case kPutIfAbsent:
                         type = leveldb::TKT_PUT_IFABSENT;
                         break;
@@ -439,7 +442,8 @@ StatusCode TabletWriter::FlushToDiskBatch(WriteTaskBuffer* task_buffer) {
     }
 
     StatusCode status = kTableOk;
-    m_tablet->WriteBatch(&batch, FLAGS_tera_sync_log, &status);
+    const bool disable_wal = false;
+    m_tablet->WriteBatch(&batch, disable_wal, FLAGS_tera_sync_log, &status);
     batch.Clear();
     for (size_t i = 0; i < task_num; i++) {
         FinishTask((*task_buffer)[i], status);

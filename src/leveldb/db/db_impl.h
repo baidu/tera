@@ -60,7 +60,6 @@ class DBImpl : public DB {
   uint64_t GetScopeSize(const std::string& start_key,
                         const std::string& end_key,
                         std::vector<uint64_t>* lgsize = NULL);
-  void CompactMissFiles(const Slice* begin, const Slice* end);
 
   // Add all sst files inherited from other tablets
   virtual void AddInheritedLiveFiles(std::vector<std::set<uint64_t> >* live);
@@ -102,6 +101,7 @@ class DBImpl : public DB {
                                 SequenceNumber* latest_snapshot);
 
   Status NewDB();
+  bool IsDbExist();
 
   void MaybeIgnoreError(Status* s) const;
 
@@ -133,6 +133,8 @@ class DBImpl : public DB {
   Status FinishCompactionOutputFile(CompactionState* compact, Iterator* input);
   Status InstallCompactionResults(CompactionState* compact)
       EXCLUSIVE_LOCKS_REQUIRED(mutex_);
+
+  State state_;
 
   // tera-specific
   std::string key_start_;

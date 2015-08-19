@@ -133,7 +133,6 @@ public:
                                   std::vector<uint64_t>* lgsize);
 
     virtual bool MinorCompact();
-    virtual void CompactMissFiles(const Slice* begin, const Slice* end);
 
     // Add all sst files inherited from other tablets
     virtual void AddInheritedLiveFiles(std::vector<std::set<uint64_t> >* live);
@@ -167,7 +166,7 @@ private:
     void GarbageClean();
 
 private:
-    int shutdown_phase_; // 0: not shutdown, 1: shutdown1 done, 2: shutdown2 done
+    State state_;
     std::vector<DBImpl*> lg_list_;
     port::Mutex mutex_;
     port::AtomicPointer shutting_down_;

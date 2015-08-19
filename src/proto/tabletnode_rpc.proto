@@ -97,6 +97,7 @@ enum MutationType {
     kAdd = 5;
     kPutIfAbsent = 6;
     kAppend = 7;
+    kAddInt64 = 8;
 }
 
 // Put           : family, qualifier, timestamp, value
@@ -161,12 +162,17 @@ enum BinCompOp {
     UNKNOWN = 39;
 };
 
+enum FilterValueType {
+    kINT64 = 50;
+}
+
 message Filter {
     optional CompType type = 1 [default = BinComp];
     optional BinCompOp bin_comp_op = 2;
     optional Field field = 3 [default = ValueFilter];
     optional bytes content = 4;
     optional bytes ref_value = 5;
+    optional FilterValueType value_type = 6; // for value compare/filter
 };
 
 message FilterList {
@@ -301,7 +307,6 @@ service TabletNodeServer {
     rpc ReleaseSnapshot(ReleaseSnapshotRequest) returns(ReleaseSnapshotResponse);
 
     rpc SplitTablet(SplitTabletRequest) returns(SplitTabletResponse);
-    rpc MergeTablet(MergeTabletRequest) returns(MergeTabletResponse);
 }
 option cc_generic_services = true;
 
