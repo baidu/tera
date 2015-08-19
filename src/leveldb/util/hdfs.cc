@@ -194,7 +194,10 @@ DfsFile* Hdfs::OpenFile(const std::string& filename, int32_t flags) {
 int32_t Hdfs::Copy(const std::string& from, const std::string& to) {
   return (*hdfsCopy)((hdfsFS)fs_, from.c_str(), (hdfsFS)fs_, to.c_str());
 }
-int32_t Hdfs::ListDirectory(const std::string& path, std::vector<std::string>* result) {
+
+int32_t Hdfs::ListDirectory(const std::string& path,
+                            std::vector<std::string>* result,
+                            std::vector<int64_t>* ctime) {
   int numEntries = 0;
   hdfsFileInfo* pHdfsFileInfo = 0;
   pHdfsFileInfo = (*hdfsListDirectory)((hdfsFS)fs_, path.c_str(), &numEntries);
@@ -204,6 +207,9 @@ int32_t Hdfs::ListDirectory(const std::string& path, std::vector<std::string>* r
       char* filename = rindex(pathname, '/');
       if (filename != NULL) {
         result->push_back(filename + 1);
+        if (ctime != NULL) {
+            ctime->push_back(static_cast<int64_t>(pHdfsFileInfo[i].mLastMod));
+        }
       }
     }
     if (pHdfsFileInfo != NULL) {

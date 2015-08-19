@@ -116,12 +116,6 @@ class Version {
                     const Slice* largest_user_key,
                     double ratio,
                     std::string* split_key);
-  void MissFilesInLocal(const Slice* smallest_user_key,
-                        const Slice* largest_user_key,
-                        std::vector<Compaction*>* compact_inputs);
-  void MissFilesInLocal(const Slice* smallest_user_key,
-                        const Slice* largest_user_key,
-                        std::vector<std::string>* inputs);
 
   // Return a human readable string that describes this version's contents.
   std::string DebugString() const;

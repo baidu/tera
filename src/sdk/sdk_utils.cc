@@ -371,7 +371,7 @@ bool SetLgProperties(const string& name, const string& value,
             return false;
         }
     } else if (name == "memtable_ldb_write_buffer_size") {
-        int32_t buffer_size = atoi(value.c_str()); //MB
+        int32_t buffer_size = atoi(value.c_str()); //KB
         if (buffer_size <= 0) {
             return false;
         }
