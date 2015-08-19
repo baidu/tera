@@ -1989,6 +1989,7 @@ void TableImpl::ReadTableMetaCallBack(ErrorCode* ret_err,
         const KeyValuePair& kv = response->detail().row_result(0).key_values(0);
         ParseMetaTableKeyValue(kv.key(), kv.value(), &table_meta);
         _table_schema.CopyFrom(table_meta.schema());
+        _create_time = table_meta.create_time();
         ret_err->SetFailed(ErrorCode::kOK);
         _table_meta_updating = false;
         _table_meta_cond.Signal();
@@ -2140,7 +2141,7 @@ bool TableImpl::RestoreCookie() {
 
 std::string TableImpl::GetCookieFilePathName(void) {
     return FLAGS_tera_sdk_cookie_path + "/"
-        + GetCookieFileName(_name, _zk_addr_list, _zk_root_path);
+        + GetCookieFileName(_name, _zk_addr_list, _zk_root_path, _create_time);
 }
 
 std::string TableImpl::GetCookieLockFilePathName(void) {
@@ -2316,16 +2317,18 @@ void TableImpl::EnableCookieUpdateTimer() {
 
 std::string TableImpl::GetCookieFileName(const std::string& tablename,
                                          const std::string& zk_addr,
-                                         const std::string& zk_path) {
+                                         const std::string& zk_path,
+                                         int64_t create_time) {
     uint32_t hash = 0;
-    if (GetHashNumber(tablename, hash, &hash) != 0
-        || GetHashNumber(zk_addr, hash, &hash) != 0
+    if (GetHashNumber(zk_addr, hash, &hash) != 0
         || GetHashNumber(zk_path, hash, &hash) != 0) {
         LOG(FATAL) << "invalid arguments";
     }
     char hash_str[9] = {'\0'};
     sprintf(hash_str, "%08x", hash);
-    return std::string((char*)hash_str, 8);
+    std::stringstream fname;
+    fname << tablename << "-" << create_time << "-" << hash_str;
+    return fname.str();
 }
 
 void TableImpl::DumpPerfCounterLogDelay() {
