@@ -171,9 +171,6 @@ class VersionEdit {
   void EncodeTo(std::string* dst) const;
   Status DecodeFrom(const Slice& src);
 
-  Status DecodeFilterFrom(const Slice& src,
-                          const std::set<uint64_t>& sst_list);
-
   std::string DebugString() const;
 
  private:
