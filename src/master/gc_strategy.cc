@@ -5,6 +5,8 @@
 #include "master/gc_strategy.h"
 
 #include <gflags/gflags.h>
+#include <iostream>
+#include <boost/lexical_cast.hpp> 
 
 #include "db/filename.h"
 #include "io/utils_leveldb.h"
@@ -207,6 +209,303 @@ void BatchGcStrategy::DeleteObsoleteFiles() {
             }
         }
     }
+}
+
+IncrementalGcStrategy::IncrementalGcStrategy(boost::shared_ptr<TabletManager> tablet_manager)
+    :   m_tablet_manager(tablet_manager),
+        m_last_gc_time(std::numeric_limits<int64_t>::max()),
+        m_max_ts(std::numeric_limits<int64_t>::max()) {}
+
+bool IncrementalGcStrategy::PreQuery () {
+    int64_t start_ts = get_micros();
+    LOG(INFO) << "LL:in prequery";
+    std::vector<TablePtr> tables;
+    m_tablet_manager->ShowTable(&tables, NULL);
+
+    for (size_t i = 0; i < tables.size(); ++i) {
+        TabletFiles tablet_files;
+        std::string table_name = tables[i]->GetTableName();
+        LOG(INFO) << "LL: table_name=" << table_name;
+        if (table_name == FLAGS_tera_master_meta_table_name) continue;
+        m_dead_tablet_files.insert(std::make_pair(table_name, tablet_files));
+        m_live_tablet_files.insert(std::make_pair(table_name, tablet_files));
+
+        std::set<uint64_t> live_tablets, dead_tablets;
+        tables[i]->GetTabletsForGc(&live_tablets, &dead_tablets);
+        std::set<uint64_t>::iterator it;
+        // update dead tablets
+        for (it = dead_tablets.begin(); it != dead_tablets.end(); ++it) {
+            TabletFiles& temp_tablet_files = m_dead_tablet_files[table_name];
+            TabletFileSet tablet_file_set(get_micros() / 1000000, 0);
+            bool ret = temp_tablet_files.insert(std::make_pair(*it, tablet_file_set)).second;
+            if (ret == true) {
+                CollectSingleDeadTablet(table_name, *it);
+            }
+        }
+
+        // erase newly dead tablets from live tablets
+        for (TabletFiles::iterator it = m_live_tablet_files[table_name].begin();
+             it != m_live_tablet_files[table_name].end(); ++it) {
+            if (m_dead_tablet_files[table_name].find(static_cast<uint64_t>(it->first)) != m_dead_tablet_files[table_name].end()) {
+                LOG(INFO) << "LL: erase " << it->first;
+                m_live_tablet_files[table_name].erase(it);
+            }
+        }
+
+        // add new live tablets
+        for (it = live_tablets.begin(); it != live_tablets.end(); ++it) {
+            LOG(INFO) << "LL: add live " << *it;
+            TabletFiles& temp_tablet_files = m_live_tablet_files[table_name];
+            TabletFileSet tablet_file_set;
+            temp_tablet_files.insert(std::make_pair(*it, tablet_file_set));
+        }
+    }
+    TEST_print_files(true);
+    TEST_print_files(false);
+    LOG(INFO) << "[gc] Gather dead tablets, cost: " << (get_micros() - start_ts) / 1000 << "ms.";
+
+    // do not need gc if there is no new dead tablet
+    if (m_dead_tablet_files.size() == 0) {
+        LOG(INFO) << "[gc] Do not need gc this time";
+    }
+    return m_dead_tablet_files.size() != 0;
+}
+
+void IncrementalGcStrategy::ProcessQueryCallbackForGc(QueryResponse* response) {
+    LOG(INFO) << "LL: in ProcessQueryCallbackForGc";
+    MutexLock lock(&m_gc_mutex);
+
+    std::set<std::string> ready_tables;
+    for (int table = 0; table < response->inh_live_files_size(); ++table) {
+        ready_tables.insert(response->inh_live_files(table).table_name());
+        LOG(INFO) << "LL: see live table " << response->inh_live_files(table).table_name();
+    }
+
+    // update tablet ready time
+    for (int i = 0; i < response->tabletmeta_list().meta_size(); ++i) {
+        LOG(INFO) << "LL: meta " << response->tabletmeta_list().meta(i).ShortDebugString();
+        const TabletMeta& meta = response->tabletmeta_list().meta(i);
+        std::string table_name = meta.table_name();
+        if (table_name == FLAGS_tera_master_meta_table_name) continue;
+        if (m_live_tablet_files.find(table_name) == m_live_tablet_files.end() ||
+            ready_tables.find(table_name) == ready_tables.end()) {
+            LOG(INFO) << "LL: skip table=" << table_name;
+            continue;
+        }
+        int64_t tablet_number = static_cast<int64_t>(leveldb::GetTabletNumFromPath(meta.path()));
+        if (m_live_tablet_files[table_name].find(tablet_number) == m_live_tablet_files[table_name].end()) continue;
+        LOG(INFO) << "LL: see live tablet " << tablet_number;
+        m_live_tablet_files[table_name][tablet_number].m_ready_time = get_micros() / 1000000;
+    }
+    
+    // insert live files
+    for (int table = 0; table < response->inh_live_files_size(); ++table) {
+        InheritedLiveFiles live_files = response->inh_live_files(table);
+        std::string table_name = live_files.table_name();
+        if (table_name == FLAGS_tera_master_meta_table_name) continue;
+        LOG(INFO) << "LL: inh pb: " << response->inh_live_files(table).ShortDebugString();
+        if (m_live_tablet_files.find(table_name) == m_live_tablet_files.end()) {
+            LOG(INFO) << "LL: skip table=" << table_name;
+            continue;
+        }
+        LOG(INFO) << "LL: see live table " << table_name;
+        // collect live files
+        TabletFiles temp_tablet_files;
+        for (int lg = 0; lg < live_files.lg_live_files_size(); ++lg) {
+            LgInheritedLiveFiles lg_live_files = live_files.lg_live_files(lg);
+            uint32_t lg_no = lg_live_files.lg_no();
+            LOG(INFO) << "LL:   see live lg " << lg_no << " files#=" << lg_live_files.file_number_size();
+            for (int i = 0; i < lg_live_files.file_number_size(); ++i) {
+                uint64_t tablet_number, file;
+                uint64_t file_number = lg_live_files.file_number(i);
+                leveldb::ParseFullFileNumber(file_number, &tablet_number, &file);
+                TabletFileSet tablet_file_set;
+                temp_tablet_files.insert(std::make_pair(tablet_number, tablet_file_set));
+                TabletFileSet& temp_tablet_file_set = temp_tablet_files[tablet_number];
+                LgFileSet lg_files;
+                temp_tablet_file_set.m_files.insert(std::make_pair(lg_no, lg_files));
+                temp_tablet_file_set.m_files[lg_no].m_live_files.insert(file_number);
+                LOG(INFO) << "LL:     insert live file " << tablet_number << "-" << file;
+            }
+        }
+        // update live files in dead tablets
+        TabletFiles::iterator tablet_it = temp_tablet_files.begin();
+        TabletFiles& dead_tablets = m_dead_tablet_files[table_name];
+        for (; tablet_it != temp_tablet_files.end(); ++tablet_it) {
+            uint64_t tablet_number = tablet_it->first;
+            if (dead_tablets.find(tablet_number) == dead_tablets.end()) {
+                LOG(INFO) << "LL: skip tablet=" << table_name << "-" << tablet_number;
+                continue;
+            }
+            std::map<int64_t, LgFileSet>& live_lg = (tablet_it->second).m_files;
+            std::map<int64_t, LgFileSet>& dead_lg = dead_tablets[tablet_number].m_files;
+            std::map<int64_t, LgFileSet>::iterator lg_it = live_lg.begin();
+            for (; lg_it != live_lg.end(); ++lg_it) {
+                uint32_t lg_no = lg_it->first;
+                LgFileSet lg_file_set;
+                dead_lg.insert(std::make_pair(lg_no, lg_file_set));
+                dead_lg[lg_no].m_live_files.clear();
+                dead_lg[lg_no].m_live_files = live_lg[lg_no].m_live_files;
+                LOG(INFO) << "LL: copy " << tablet_number << "-" << lg_no;
+            }
+        }
+    }
+    TEST_print_files(true);
+    TEST_print_files(false);
+}
+
+void IncrementalGcStrategy::PostQuery () {
+    LOG(INFO) << "LL: in PostQuery";
+    TableFiles::iterator table_it = m_dead_tablet_files.begin();
+    for (; table_it != m_dead_tablet_files.end(); ++table_it) {
+        DeleteTableFiles(table_it->first);
+    }
+}
+
+void IncrementalGcStrategy::DeleteTableFiles(const std::string& table_name) {
+    std::string table_path = FLAGS_tera_tabletnode_path_prefix + table_name;
+    leveldb::Env* env = io::LeveldbBaseEnv();
+    TabletFiles& dead_tablets = m_dead_tablet_files[table_name];
+    TabletFiles& live_tablets = m_live_tablet_files[table_name];
+    int64_t earliest_ready_time = m_max_ts;
+    TabletFiles::iterator tablet_it = live_tablets.begin();
+    for (; tablet_it != live_tablets.end(); ++tablet_it) {
+        if (tablet_it->second.m_ready_time < earliest_ready_time) {
+            earliest_ready_time = tablet_it->second.m_ready_time;
+        }
+    }
+    LOG(INFO) << "LL: earliest_ready_time " << earliest_ready_time;
+
+    std::set<int64_t> gc_tablets;
+    for (tablet_it = dead_tablets.begin(); tablet_it != dead_tablets.end(); ++tablet_it) {
+        if (tablet_it->second.m_dead_time <= earliest_ready_time) {
+            gc_tablets.insert(tablet_it->first);
+        }
+    }
+
+    std::set<int64_t>::iterator gc_it = gc_tablets.begin();
+    for (; gc_it != gc_tablets.end();) {
+        std::map<int64_t, LgFileSet>& lg_files = dead_tablets[*gc_it].m_files;
+        std::map<int64_t, LgFileSet>::iterator lg_it = lg_files.begin();
+        std::string tablet_path = leveldb::GetTabletPathFromNum(table_path, *gc_it);
+        for (; lg_it != lg_files.end();) {
+            LgFileSet& lg_file_set = lg_it->second;
+            std::set<uint64_t>::iterator file_it = lg_file_set.m_storage_files.begin();
+            for (; file_it != lg_file_set.m_storage_files.end();) {
+                if (lg_file_set.m_live_files.find(*file_it) == lg_file_set.m_live_files.end()) {
+                    std::string file_path =
+                        leveldb::BuildTableFilePath(table_path, lg_it->first, *file_it);
+                    LOG(INFO) << "LL: delete " << file_path;
+                    env->DeleteFile(file_path);
+                    lg_file_set.m_storage_files.erase(file_it);
+                }
+                file_it++;
+            }
+            if (lg_file_set.m_storage_files.size() == 0) {
+                CHECK(lg_file_set.m_live_files.size() ==0) << "[gc] still has live files";
+                std::string lg_str = boost::lexical_cast<std::string>(lg_it->first);
+                std::string lg_path = tablet_path + "/" + lg_str;
+                LOG(INFO) << "LL: can delete lg " << lg_path;
+                env->DeleteDir(lg_path);
+                lg_files.erase(lg_it);
+            }
+            lg_it++;
+        }
+        if (lg_files.size() == 0) {
+            LOG(INFO) << "LL: can delete tablet " << tablet_path;
+            env->DeleteDir(tablet_path);
+            dead_tablets.erase(*gc_it);
+        }
+        gc_it++;
+    }
+}
+
+void IncrementalGcStrategy::CollectSingleDeadTablet(const std::string& tablename, uint64_t tabletnum) {
+    std::string tablepath = FLAGS_tera_tabletnode_path_prefix + tablename;
+    std::string tablet_path = leveldb::GetTabletPathFromNum(tablepath, tabletnum);
+    leveldb::Env* env = io::LeveldbBaseEnv();
+    std::vector<std::string> children;
+    env->GetChildren(tablet_path, &children);
+    if (children.size() == 0) {
+        LOG(INFO) << "[gc] delete empty tablet dir: " << tablet_path;
+        env->DeleteDir(tablet_path);
+        return;
+    }
+    for (size_t lg = 0; lg < children.size(); ++lg) {
+        std::string lg_path = tablet_path + "/" + children[lg];
+        leveldb::FileType type = leveldb::kUnknown;
+        uint64_t number = 0;
+        if (ParseFileName(children[lg], &number, &type)) {
+            LOG(INFO) << "[gc] delete log file: " << lg_path;
+            env->DeleteFile(lg_path);
+            continue;
+        }
+
+        leveldb::Slice rest(children[lg]);
+        uint64_t lg_num = 0;
+        if (!leveldb::ConsumeDecimalNumber(&rest, &lg_num)) {
+            LOG(INFO) << "[gc] skip unknown dir: " << lg_path;
+            continue;
+        }
+
+        std::vector<std::string> files;
+        env->GetChildren(lg_path, &files);
+        if (files.size() == 0) {
+            LOG(INFO) << "[gc] delete empty lg dir: " << lg_path;
+            env->DeleteDir(lg_path);
+            continue;
+        }
+        int64_t lg_no = boost::lexical_cast<int64_t>(children[lg]);
+        std::map<int64_t, LgFileSet>& tablet_files = m_dead_tablet_files[tablename][tabletnum].m_files;
+        LgFileSet lg_file_set;
+        tablet_files.insert(std::make_pair(lg_no, lg_file_set));
+        LgFileSet& temp_lg_files_set = tablet_files[lg_no];
+        for (size_t f = 0; f < files.size(); ++f) {
+            std::string file_path = lg_path + "/" + files[f];
+            type = leveldb::kUnknown;
+            number = 0;
+            if (!ParseFileName(files[f], &number, &type) ||
+                type != leveldb::kTableFile) {
+                // only keep sst, delete rest files
+                LOG(INFO) << "[gc] delete obsolete file: " << file_path;
+                env->DeleteFile(file_path);
+                continue;
+            }
+
+            uint64_t full_number = leveldb::BuildFullFileNumber(lg_path, number);
+            temp_lg_files_set.m_storage_files.insert(full_number);
+        }
+    }
+}
+
+void IncrementalGcStrategy::TEST_print_files(bool print_dead) {
+    TableFiles all_tablet_files;
+    if (print_dead == true) {
+        LOG(INFO) << "----------------------------LL: Test print DEAD";
+        all_tablet_files = m_dead_tablet_files;
+    } else {
+        LOG(INFO) << "----------------------------LL: Test print LIVE";
+        all_tablet_files = m_live_tablet_files;
+    }
+    TableFiles::iterator table_it;
+    for (table_it = all_tablet_files.begin(); table_it != all_tablet_files.end(); ++table_it) {
+        LOG(INFO) << "LL: table=" << table_it->first;
+        TabletFiles& tablet_files = table_it->second;
+        TabletFiles::iterator tablet_it;
+        for (tablet_it = tablet_files.begin(); tablet_it != tablet_files.end(); ++tablet_it) {
+            LOG(INFO) << "LL:   tablet -- " << tablet_it->first;
+            TabletFileSet tablet_file_set = tablet_it->second;
+            LOG(INFO) << "LL:   ready -- " << tablet_file_set.m_ready_time;
+            LOG(INFO) << "LL:   dead  -- " << tablet_file_set.m_dead_time;
+            std::map<int64_t, LgFileSet>& files = tablet_file_set.m_files;
+            std::map<int64_t, LgFileSet>::iterator lg_it;
+            for (lg_it = files.begin(); lg_it != files.end(); ++lg_it) {
+                LOG(INFO) << "LL:     lg stor -- " << lg_it->first << "-" << (lg_it->second).m_storage_files.size();
+                LOG(INFO) << "LL:     lg live -- " << lg_it->first << "-" << (lg_it->second).m_live_files.size();
+            }
+        }
+    }
+    LOG(INFO) << "----------------------------LL: Done Test print";
 }
 
 } // namespace master

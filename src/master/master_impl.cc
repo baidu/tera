@@ -90,6 +90,7 @@ DECLARE_bool(tera_ins_enabled);
 DECLARE_int64(tera_sdk_perf_counter_log_interval);
 
 DECLARE_string(tera_acl_root_token);
+DECLARE_string(tera_master_gc_strategy);
 
 namespace tera {
 namespace master {
@@ -111,8 +112,7 @@ MasterImpl::MasterImpl()
       m_stat_table(NULL),
       m_gc_enabled(false),
       m_gc_timer_id(kInvalidTimerId),
-      m_gc_query_enable(false),
-      gc_strategy(new BatchGcStrategy(m_tablet_manager)) {
+      m_gc_query_enable(false) {
     if (FLAGS_tera_master_cache_check_enabled) {
         EnableReleaseCacheTimer();
     }
@@ -125,6 +125,14 @@ MasterImpl::MasterImpl()
 
     if (FLAGS_tera_leveldb_env_type != "local") {
         io::InitDfsEnv();
+    }
+
+    if (FLAGS_tera_master_gc_strategy == "default") {
+         gc_strategy = boost::shared_ptr<GcStrategy>(new BatchGcStrategy(m_tablet_manager));
+    } else if (FLAGS_tera_master_gc_strategy == "incremental") {
+        gc_strategy = boost::shared_ptr<GcStrategy>(new IncrementalGcStrategy(m_tablet_manager));
+    } else {
+        LOG(ERROR) << "Unknown gc strategy";
     }
 }
 
