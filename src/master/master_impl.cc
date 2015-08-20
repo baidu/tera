@@ -592,7 +592,6 @@ bool MasterImpl::IsRootUser(const std::string& token) {
 
 bool MasterImpl::CheckUserPermissionOnTable(const std::string& token, TablePtr table) {
     std::string group_name = table->GetSchema().admin_group();
-    LOG(INFO) << "admin_group:" << group_name << ".";
     std::string user_name = m_user_manager->TokenToUserName(token);
     return group_name == "" // no admin, so every one could access this table
            || m_user_manager->IsUserInGroup(user_name, group_name);
@@ -1156,8 +1155,6 @@ void MasterImpl::AddUserInfoToMetaCallback(UserPtr user_ptr,
             LOG(ERROR) << "fail to add to meta tablet: "
                 << StatusCodeToString(status) << ", " << user_ptr->GetUserInfo().user_name() << "...";
         }
-        rpc_response->set_status(kMetaTabletError);
-        rpc_done->Run();
         if (retry_times <= 0) {
             rpc_response->set_status(kMetaTabletError);
             rpc_done->Run();
@@ -1173,6 +1170,8 @@ void MasterImpl::AddUserInfoToMetaCallback(UserPtr user_ptr,
 
     rpc_response->set_status(kMasterOk);
     rpc_done->Run();
+    LOG(INFO) << "write user info to meta table done: "
+              << StatusCodeToString(status) << ", " << user_ptr->GetUserInfo().user_name();
     std::string user_name = user_ptr->GetUserInfo().user_name();
     if (rpc_request->op_type() == kDeleteUser) {
         m_user_manager->DeleteUser(user_name);
@@ -1187,7 +1186,7 @@ void MasterImpl::AddUserInfoToMetaCallback(UserPtr user_ptr,
     } else {
         LOG(ERROR) << "unknown operate type";
     }
-    m_user_manager->ListAll();
+    m_user_manager->ListAll();// log user info, for debug in the future
 }
 
 void MasterImpl::OperateUser(const OperateUserRequest* request,
