@@ -194,6 +194,7 @@ private:
     TableStatus m_status;
     uint32_t m_deleted_tablet_num;
     uint64_t m_max_tablet_no;
+    int64_t m_create_time;
 };
 
 class TabletManager {

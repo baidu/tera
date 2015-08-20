@@ -1107,6 +1107,8 @@ int32_t ShowSingleTable(Client* client, const string& table_name,
     }
 
     std::cout << std::endl;
+    std::cout << "create time: " << table_meta.create_time() << std::endl;
+    std::cout << std::endl;
     ShowTabletList(tablet_list, true, is_x);
     std::cout << std::endl;
     return 0;
@@ -1751,7 +1753,7 @@ int32_t HashOp(Client* client, int32_t argc, char** argv, ErrorCode* err) {
     }
     std::cout << "password hash:" << hash << ", place it in master flag file."
         << " and place password(not hash) in client flag file" << std::endl;
-    
+
     return 0;
 }
 
