@@ -1177,8 +1177,8 @@ void MasterImpl::WriteUserInfoToMetaTableAsync(UserInfo& user_info, bool is_dele
     meta_node_client.WriteTablet(request, response, done);
 }
 
-void MasterImpl::AddUserInfoToMetaCallback(UserInfo user_info, // TODO pointer
-                                           bool is_delete,
+void MasterImpl::AddUserInfoToMetaCallback(UserPtr user_ptr,
+                                           int32_t retry_times,
                                            const OperateUserRequest* rpc_request,
                                            OperateUserResponse* rpc_response,
                                            google::protobuf::Closure* rpc_done,
@@ -1187,55 +1187,45 @@ void MasterImpl::AddUserInfoToMetaCallback(UserInfo user_info, // TODO pointer
                                            bool rpc_failed, int error_code) {
     StatusCode status = response->status();
 
-    // TODO ?
-    if (!rpc_failed && status == kTabletNodeOk) {
-        // all the row status should be the same
-        //CHECK_GT(response->row_status_list_size(), 0);
-        //status = response->row_status_list(0);
-    }
     delete request;
     delete response;
     if (rpc_failed || status != kTabletNodeOk) {
         if (rpc_failed) {
             LOG(ERROR) << "fail to add to meta tablet: "
                 << sofa::pbrpc::RpcErrorCodeToString(error_code) << ", "
-                << user_info.user_name() << "...";
+                << user_ptr->GetUserInfo().user_name() << "...";
         } else {
             LOG(ERROR) << "fail to add to meta tablet: "
-                << StatusCodeToString(status) << ", " << user_info.user_name() << "...";
+                << StatusCodeToString(status) << ", " << user_ptr->GetUserInfo().user_name() << "...";
         }
         rpc_response->set_status(kMetaTabletError);
         rpc_done->Run();
-        /*
         if (retry_times <= 0) {
             rpc_response->set_status(kMetaTabletError);
             rpc_done->Run();
         } else {
             WriteClosure* done =
-                NewClosure(this, &MasterImpl::AddMetaCallback, table,
-                           tablets, retry_times - 1, rpc_request, rpc_response,
-                           rpc_done);
-            SuspendMetaOperation(table, tablets, false, done);
-
-        }  */
+                NewClosure(this, &MasterImpl::AddUserInfoToMetaCallback, user_ptr,
+                           retry_times - 1, rpc_request, rpc_response, rpc_done);
+            SuspendMetaOperation(boost::bind(&User::ToMetaTableKeyValue, user_ptr, _1, _2), 
+                                 rpc_request->op_type() == kDeleteUser, done);
+        }
         return;
     }
 
     rpc_response->set_status(kMasterOk);
     rpc_done->Run();
-    std::string user_name = user_info.user_name();
+    std::string user_name = user_ptr->GetUserInfo().user_name();
     if (rpc_request->op_type() == kDeleteUser) {
         m_user_manager->DeleteUser(user_name);
     } else if (rpc_request->op_type() == kCreateUser){
-        m_user_manager->AddUser(user_name, user_info);
+        m_user_manager->AddUser(user_name, user_ptr->GetUserInfo());
     } else if (rpc_request->op_type() == kChangePwd) {
-        m_user_manager->SetUserInfo(user_name, user_info);
+        m_user_manager->SetUserInfo(user_name, user_ptr->GetUserInfo());
     } else if (rpc_request->op_type() == kAddToGroup) {
-        m_user_manager->SetUserInfo(user_name, user_info);
-        //m_user_manager->UpdateGroupList(user_name, user_info);
+        m_user_manager->SetUserInfo(user_name, user_ptr->GetUserInfo());
     } else if (rpc_request->op_type() == kDeleteFromGroup) {
-        m_user_manager->SetUserInfo(user_name, user_info);
-        //m_user_manager->UpdateGroupList(user_name, user_info);
+        m_user_manager->SetUserInfo(user_name, user_ptr->GetUserInfo());
     } else {
         LOG(ERROR) << "501";
     }
@@ -1304,16 +1294,18 @@ void MasterImpl::OperateUser(const OperateUserRequest* request,
         LOG(ERROR) << "unknown operate";
         is_invalid = true;
     }
+
     if (is_invalid) {
         response->set_status(kInvalidArgument);
         done->Run();
         return;
     }
-
+    UserPtr user_ptr(new User(user_name, operated_user));
     WriteClosure* closure =
-        NewClosure(this, &MasterImpl::AddUserInfoToMetaCallback, operated_user,
-                   is_delete, request, response, done);
-    WriteUserInfoToMetaTableAsync(operated_user, is_delete, closure, response, done);
+        NewClosure(this, &MasterImpl::AddUserInfoToMetaCallback, user_ptr,
+                   FLAGS_tera_master_meta_retry_times, request, response, done);
+    BatchWriteMetaTableAsync(boost::bind(&User::ToMetaTableKeyValue, user_ptr, _1, _2), 
+                             is_delete, closure);
 }
 
 void MasterImpl::SafeModeCmdCtrl(const CmdCtrlRequest* request,

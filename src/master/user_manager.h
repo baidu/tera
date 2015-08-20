@@ -20,10 +20,12 @@ class User {
     friend class UserManager;
 
 public:
-    User(const std::string& name);
+    User(const std::string& name, UserInfo& user_info);
     std::string GetUserName();
     UserInfo& GetUserInfo();
     const std::string GetToken();
+    void ToMetaTableKeyValue(std::string* packed_key,
+                             std::string* packed_value);
 
 private:
     User(const User&) {}

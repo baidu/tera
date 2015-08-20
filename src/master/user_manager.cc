@@ -9,7 +9,8 @@
 namespace tera {
 namespace master {
 
-User::User(const std::string& name) : m_name(name) {}
+User::User(const std::string& name, UserInfo& user_info) 
+    : m_name(name), m_user_info(user_info){}
 
 std::ostream& operator << (std::ostream& o, const User& user) {
     MutexLock locker(&user.m_mutex);
@@ -37,9 +38,16 @@ const std::string User::GetToken() {
     return m_user_info.token();
 }
 
+void User::ToMetaTableKeyValue(std::string* packed_key,
+                               std::string* packed_value) {
+    MutexLock locker(&m_mutex);
+    *packed_key = '~' + m_name;
+    m_user_info.SerializeToString(packed_value);
+}
+
 bool UserManager::AddUser(const std::string& user_name, UserInfo& user_info) {
     MutexLock locker(&m_mutex);
-    boost::shared_ptr<User> user(new User(user_name));
+    boost::shared_ptr<User> user(new User(user_name, user_info));
     user->m_user_info.CopyFrom(user_info);
 
     std::pair<UserList::iterator, bool> ret =
