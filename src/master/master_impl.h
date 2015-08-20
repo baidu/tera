@@ -475,10 +475,10 @@ private:
     bool CheckUserPermissionOnTable(const std::string& token, TablePtr table);
 
     template <typename Request, typename Response, typename Callback>
-    bool MasterImpl::HasTablePermission(const Request* request, Response* response, 
+    bool HasTablePermission(const Request* request, Response* response, 
                                      Callback* done, TablePtr table, const char* operate);
     template <typename Response, typename Callback>
-    void MasterImpl::CheckMasterStatus(Response* response, Callback* done, bool not_ready);
+    void CheckMasterStatus(Response* response, Callback* done, bool not_ready);
 
 private:
     mutable Mutex m_status_mutex;
