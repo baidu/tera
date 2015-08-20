@@ -489,7 +489,7 @@ Status DBImpl::Recover(VersionEdit* edit) {
       if (!s.ok()) {
         Log(options_.info_log, "[%s] GetChildren(%s) fail: %s",
             dbname_.c_str(), path.c_str(), s.ToString().c_str());
-        return s;
+        continue;
       }
       uint64_t number;
       FileType type;
