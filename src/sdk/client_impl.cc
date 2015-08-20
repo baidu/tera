@@ -69,11 +69,54 @@ bool ClientImpl::CreateTable(const TableDescriptor& desc, ErrorCode* err) {
     return CreateTable(desc, empty_delimiter, err);
 }
 
-std::string ClientImpl::GetUserToken() {
-    std::string token_str = _user_identity + ":" + _user_passcode;
+std::string ClientImpl::GetUserToken(const std::string& user, const std::string& password) {
+    std::string token_str = user + ":" + password;
     std::string token;
     GetHashString(token_str, 0, &token);
     return token;
+}
+
+template <typename Response>
+bool ClientImpl::CheckReturnValue(const Response& response, std::string& reason, ErrorCode* err) {
+    switch (response.status()) {
+        case kMasterOk:
+            err->SetFailed(ErrorCode::kOK, "success");
+            LOG(INFO) << "master status is OK.";
+            return true;
+        case kTableExist:
+            reason = "table already exist.";
+            err->SetFailed(ErrorCode::kBadParam, reason);
+            break;
+        case kTableNotExist:
+            reason = "table not exist.";
+            err->SetFailed(ErrorCode::kBadParam, reason);
+            break;
+        case kTableNotFound:
+            reason = "table not found.";
+            err->SetFailed(ErrorCode::kBadParam, reason);
+            break;
+        case kTableDisable:
+            reason = "table status: disable.";
+            err->SetFailed(ErrorCode::kBadParam, reason);
+            break;
+        case kTableStatusEnable:
+            reason = "table status: enable.";
+            err->SetFailed(ErrorCode::kSystem, reason);
+            break;
+        case kInvalidArgument:
+            reason = "invalid arguments.";
+            err->SetFailed(ErrorCode::kBadParam, reason);
+            break;
+        case kNotPermission:
+            reason = "permission denied.";
+            err->SetFailed(ErrorCode::kNoAuth, reason);
+            break;
+        default:
+            reason = "tera master is not ready, please wait..";
+            err->SetFailed(ErrorCode::kSystem, reason);
+            break;
+    }
+    return false;
 }
 
 bool ClientImpl::CreateTable(const TableDescriptor& desc,
@@ -85,7 +128,7 @@ bool ClientImpl::CreateTable(const TableDescriptor& desc,
     CreateTableResponse response;
     request.set_sequence_id(0);
     request.set_table_name(desc.TableName());
-    request.set_user_token(GetUserToken());
+    request.set_user_token(GetUserToken(_user_identity, _user_passcode));
 
     TableSchema* schema = request.mutable_schema();
 
@@ -98,27 +141,8 @@ bool ClientImpl::CreateTable(const TableDescriptor& desc,
     }
     string reason;
     if (master_client.CreateTable(&request, &response)) {
-        switch (response.status()) {
-            case kMasterOk:
-                err->SetFailed(ErrorCode::kOK, "success");
-                LOG(INFO) << "create table:" << desc.TableName() << " successfully.";
-                return true;
-            case kTableExist:
-                reason = "fail to create, table:" + desc.TableName() + " already exist.";
-                err->SetFailed(ErrorCode::kBadParam, reason);
-                break;
-            case kInvalidArgument:
-                reason = "fail to create, table descriptor error.";
-                err->SetFailed(ErrorCode::kBadParam, reason);
-                break;
-            case kNotPermission:
-                reason = "fail to create, permission denied.";
-                err->SetFailed(ErrorCode::kNoAuth, reason);
-                break;
-            default:
-                reason = "tera master is not ready, please wait..";
-                err->SetFailed(ErrorCode::kSystem, reason);
-                break;
+        if (CheckReturnValue(response, reason, err)) {
+            return true;
         }
         LOG(ERROR) << reason << "| status: " << StatusCodeToString(response.status());
     } else {
@@ -141,34 +165,15 @@ bool ClientImpl::UpdateTable(const TableDescriptor& desc, ErrorCode* err) {
     UpdateTableResponse response;
     request.set_sequence_id(0);
     request.set_table_name(desc.TableName());
-    request.set_user_token(GetUserToken());
+    request.set_user_token(GetUserToken(_user_identity, _user_passcode));
 
     TableSchema* schema = request.mutable_schema();
     TableDescToSchema(desc, schema);
 
     string reason;
     if (master_client.UpdateTable(&request, &response)) {
-        switch (response.status()) {
-            case kMasterOk:
-                err->SetFailed(ErrorCode::kOK, "success");
-                LOG(INFO) << "update table:" << desc.TableName() << " successfully.";
-                return true;
-            case kTableNotExist:
-                reason = "fail to update, table:" + desc.TableName() + " not exist.";
-                err->SetFailed(ErrorCode::kBadParam, reason);
-                break;
-            case kInvalidArgument:
-                reason = "fail to update, table descriptor error.";
-                err->SetFailed(ErrorCode::kBadParam, reason);
-                break;
-            case kNotPermission:
-                reason = "fail to update, permission denied.";
-                err->SetFailed(ErrorCode::kNoAuth, reason);
-                break;
-            default:
-                reason = "tera master is not ready, please wait..";
-                err->SetFailed(ErrorCode::kSystem, reason);
-                break;
+        if (CheckReturnValue(response, reason, err)) {
+            return true;
         }
         LOG(ERROR) << reason << "| status: " << StatusCodeToString(response.status());
     } else {
@@ -186,30 +191,12 @@ bool ClientImpl::DeleteTable(string name, ErrorCode* err) {
     DeleteTableResponse response;
     request.set_sequence_id(0);
     request.set_table_name(name);
-    request.set_user_token(GetUserToken());
+    request.set_user_token(GetUserToken(_user_identity, _user_passcode));
 
     string reason;
     if (master_client.DeleteTable(&request, &response)) {
-        switch (response.status()) {
-            case kMasterOk:
-                err->SetFailed(ErrorCode::kOK, "success");
-                LOG(INFO) << "delete table:" << name << " successfully.";
-                return true;
-            case kTableNotFound:
-                reason = "fail to delete, table:" + name + " not found.";
-                err->SetFailed(ErrorCode::kBadParam, reason);
-                break;
-            case kTableStatusEnable:
-                reason = "fail to delete, table:" + name + " still enable, disable it first.";
-                err->SetFailed(ErrorCode::kSystem, reason);
-                break;
-            case kNotPermission:
-                reason = "fail to delete, permission denied.";
-                err->SetFailed(ErrorCode::kNoAuth, reason);
-                break;
-            default:
-                reason = "tera master is not ready.";
-                err->SetFailed(ErrorCode::kSystem, reason);
+        if (CheckReturnValue(response, reason, err)) {
+            return true;
         }
         LOG(ERROR) << reason << "| status: " << StatusCodeToString(response.status());
     } else {
@@ -227,26 +214,12 @@ bool ClientImpl::DisableTable(string name, ErrorCode* err) {
     DisableTableResponse response;
     request.set_sequence_id(0);
     request.set_table_name(name);
-    request.set_user_token(GetUserToken());
+    request.set_user_token(GetUserToken(_user_identity, _user_passcode));
 
     string reason;
     if (master_client.DisableTable(&request, &response)) {
-         switch (response.status()) {
-            case kMasterOk:
-                err->SetFailed(ErrorCode::kOK, "success");
-                LOG(INFO) << "disable table:" << name << " successfully.";
-                return true;
-            case kTableNotFound:
-                reason = "fail to disable, table:" + name + " not found.";
-                err->SetFailed(ErrorCode::kBadParam, reason);
-                break;
-            case kNotPermission:
-                reason = "fail to disable, permission denied.";
-                err->SetFailed(ErrorCode::kNoAuth, reason);
-                break;
-            default:
-                reason = "tera master is not ready.";
-                err->SetFailed(ErrorCode::kSystem, reason);
+        if (CheckReturnValue(response, reason, err)) {
+            return true;
         }
         LOG(ERROR) << reason << "| status: " << StatusCodeToString(response.status());
     } else {
@@ -264,26 +237,12 @@ bool ClientImpl::EnableTable(string name, ErrorCode* err) {
     EnableTableResponse response;
     request.set_sequence_id(0);
     request.set_table_name(name);
-    request.set_user_token(GetUserToken());
+    request.set_user_token(GetUserToken(_user_identity, _user_passcode));
 
     std::string reason;
     if (master_client.EnableTable(&request, &response)) {
-        switch (response.status()) {
-            case kMasterOk:
-                err->SetFailed(ErrorCode::kOK, "success");
-                LOG(INFO) << "enable table:" << name << " successfully.";
-                return true;
-            case kTableNotFound:
-                reason = "fail to enable, table:" + name + " not found.";
-                err->SetFailed(ErrorCode::kBadParam, reason);
-                break;
-            case kNotPermission:
-                reason = "fail to enable, permission denied.";
-                err->SetFailed(ErrorCode::kNoAuth, reason);
-                break;
-            default:
-                reason = "tera master is not ready.";
-                err->SetFailed(ErrorCode::kSystem, reason);
+        if (CheckReturnValue(response, reason, err)) {
+            return true;
         }
         LOG(ERROR) << reason << "| status: " << StatusCodeToString(response.status());
     } else {
@@ -292,6 +251,93 @@ bool ClientImpl::EnableTable(string name, ErrorCode* err) {
         err->SetFailed(ErrorCode::kSystem, reason);
     }
     return false;
+}
+
+void ClientImpl::DoShowUser(OperateUserResponse& response) {
+    if (!response.has_user_info()) {
+        return;
+    }
+    UserInfo user_info = response.user_info();
+    std::cout << "user:" << user_info.user_name()
+              << "\ngroups:";
+    for (int i = 0; i < user_info.group_name_size(); ++i) {
+        std::cout << user_info.group_name(i) << " ";
+    }
+    std::cout << std::endl;
+}
+
+bool ClientImpl::OperateUser(UserInfo& operated_user, UserOperateType type, 
+                             ErrorCode* err) {
+    master::MasterClient master_client(_cluster->MasterAddr());
+    OperateUserRequest request;
+    OperateUserResponse response;
+    request.set_sequence_id(0);
+    request.set_user_token(GetUserToken(_user_identity, _user_passcode));
+
+    request.set_op_type(type);
+    UserInfo* user_info = request.mutable_user_info();
+    user_info->CopyFrom(operated_user);
+
+    std::string reason;
+    if (master_client.OperateUser(&request, &response)) {
+        if (CheckReturnValue(response, reason, err)) {
+            if (type == kShowUser) {
+                DoShowUser(response);
+            }
+            return true;
+        }
+        LOG(ERROR) << reason << "| status: " << StatusCodeToString(response.status());
+    } else {
+        reason = "rpc fail to operate user: " + operated_user.user_name();
+        LOG(ERROR) << reason;
+        err->SetFailed(ErrorCode::kSystem, reason);
+    }
+    return false;
+}
+
+bool ClientImpl::CreateUser(const std::string& user, 
+                            const std::string& password, ErrorCode* err) {
+    UserInfo created_user;
+    created_user.set_user_name(user);
+    created_user.set_token(GetUserToken(user, password));
+    return OperateUser(created_user, kCreateUser, err);
+}
+
+bool ClientImpl::DeleteUser(const std::string& user, ErrorCode* err) {
+    UserInfo deleted_user;
+    deleted_user.set_user_name(user);
+    return OperateUser(deleted_user, kDeleteUser, err);
+}
+
+bool ClientImpl::ChangePwd(const std::string& user, 
+                            const std::string& password, ErrorCode* err) {
+    UserInfo updated_user;
+    updated_user.set_user_name(user);
+    updated_user.set_token(GetUserToken(user, password));
+    return OperateUser(updated_user, kChangePwd, err);
+}
+
+bool ClientImpl::ShowUser(const std::string& user, ErrorCode* err) {
+    UserInfo user_info;
+    user_info.set_user_name(user);
+    user_info.set_token(GetUserToken(_user_identity, _user_passcode));
+    return OperateUser(user_info, kShowUser, err);
+}
+
+bool ClientImpl::AddUserToGroup(const std::string& user_name,
+                                const std::string& group_name, ErrorCode* err) {
+    UserInfo user;
+    user.set_user_name(user_name);
+    user.add_group_name(group_name);
+    return OperateUser(user, kAddToGroup, err);
+}
+
+bool ClientImpl::DeleteUserFromGroup(const std::string& user_name,
+                                     const std::string& group_name, ErrorCode* err) {
+    UserInfo user;
+    user.set_user_name(user_name);
+    user.add_group_name(group_name);
+    return OperateUser(user, kDeleteFromGroup, err);
 }
 
 Table* ClientImpl::OpenTable(const string& table_name, ErrorCode* err) {
@@ -409,6 +455,7 @@ bool ClientImpl::ShowTablesInfo(const string& name,
     request.set_sequence_id(0);
     request.set_start_table_name(name);
     request.set_max_table_num(1);
+    request.set_user_token(GetUserToken(_user_identity, _user_passcode));
 
     if (master_client.ShowTables(&request, &response) &&
         response.status() == kMasterOk) {
@@ -449,6 +496,7 @@ bool ClientImpl::ShowTablesInfo(TableMetaList* table_list,
         request.set_start_tablet_key(start_tablet_key);
         request.set_max_tablet_num(FLAGS_tera_sdk_show_max_num); //tablets be fetched at most in one RPC
         request.set_sequence_id(0);
+        request.set_user_token(GetUserToken(_user_identity, _user_passcode));
         if (master_client.ShowTables(&request, &response) &&
             response.status() == kMasterOk) {
             if (response.table_meta_list().meta_size() == 0) {
@@ -516,6 +564,7 @@ bool ClientImpl::ShowTabletNodesInfo(const string& addr,
     request.set_sequence_id(0);
     request.set_addr(addr);
     request.set_is_showall(false);
+    request.set_user_token(GetUserToken(_user_identity, _user_passcode));
 
     if (master_client.ShowTabletNodes(&request, &response) &&
         response.status() == kMasterOk) {
@@ -703,6 +752,7 @@ bool ClientImpl::ListInternal(std::vector<TableInfo>* table_list,
     request.set_max_tablet_num(max_tablet_found);
     request.set_start_table_name(start_table_name);
     request.set_start_tablet_key(start_tablet_key);
+    request.set_user_token(GetUserToken(_user_identity, _user_passcode));
 
     bool is_more = true;
     while (is_more) {

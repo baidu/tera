@@ -83,6 +83,9 @@ void ShowTableSchema(const TableSchema& schema, bool is_x) {
         if (is_x || lg_schema.block_size() != FLAGS_tera_tablet_write_block_size) {
             ss << "blocksize=" << lg_schema.block_size() << ",";
         }
+        if (is_x || schema.admin_group() != "") {
+            ss << "admin_group=" << schema.admin_group() << ",";
+        }
         ss << "\b>\n" << "  (kv mode)\n";
         std::cout << ss.str() << std::endl;
         return;
@@ -95,6 +98,9 @@ void ShowTableSchema(const TableSchema& schema, bool is_x) {
     ss << "splitsize=" << schema.split_size() << ",";
     if (is_x || schema.merge_size() != FLAGS_tera_master_merge_tablet_size) {
         ss << "mergesize=" << schema.merge_size() << ",";
+    }
+    if (is_x || schema.admin_group() != "") {
+        ss << "admin_group=" << schema.admin_group() << ",";
     }
     if (is_x || schema.disable_wal()) {
         ss << "wal=" << Switch2Str(!schema.disable_wal()) << ",";
@@ -190,6 +196,7 @@ void TableDescToSchema(const TableDescriptor& desc, TableSchema* schema) {
     schema->set_split_size(desc.SplitSize());
     schema->set_merge_size(desc.MergeSize());
     schema->set_kv_only(desc.IsKv());
+    schema->set_admin_group(desc.AdminGroup());
     schema->set_disable_wal(desc.IsWalDisabled());
 
     // add lg
@@ -255,6 +262,9 @@ void TableSchemaToDesc(const TableSchema& schema, TableDescriptor* desc) {
     }
     if (schema.has_merge_size()) {
         desc->SetMergeSize(schema.merge_size());
+    }
+    if (schema.has_admin_group()) {
+        desc->SetAdminGroup(schema.admin_group());
     }
     if (schema.has_disable_wal() && schema.disable_wal()) {
         desc->DisableWal();
@@ -419,6 +429,8 @@ bool SetTableProperties(const string& name, const string& value,
             return false;
         }
         desc->SetMergeSize(mergesize);
+    } else if (name == "admin_group"){
+        desc->SetAdminGroup(value);
     } else if (name == "wal") {
         if (value == "on") {
             // do nothing

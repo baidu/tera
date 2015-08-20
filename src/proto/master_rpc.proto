@@ -97,6 +97,7 @@ message ShowTablesRequest {
     optional bytes start_tablet_key = 3;
     optional uint32 max_table_num = 4;
     optional uint32 max_tablet_num = 5;
+    optional bytes user_token = 6;
 }
 
 message ShowTablesResponse {
@@ -111,6 +112,7 @@ message ShowTabletNodesRequest {
     required uint64 sequence_id = 1;
     optional string addr = 2;
     optional bool is_showall = 3 [default = true];
+    optional bytes user_token = 4;
 }
 
 message ShowTabletNodesResponse {
@@ -118,6 +120,35 @@ message ShowTabletNodesResponse {
     required uint64 sequence_id = 2;
     repeated TabletNodeInfo tabletnode_info = 3;
     optional TabletMetaList tabletmeta_list = 4;
+}
+
+// acl
+message UserInfo {
+    required string user_name = 1;
+    repeated string group_name = 2;
+    optional string token = 3;
+}
+
+enum UserOperateType {
+    kCreateUser = 1;
+    kDeleteUser = 2;
+    kChangePwd = 3;
+    kShowUser = 4;
+    kAddToGroup = 5;
+    kDeleteFromGroup = 6;
+}
+
+message OperateUserRequest {
+    required uint64 sequence_id = 1;
+    required bytes user_token = 3;   // token of which user call this request
+    required UserInfo user_info = 2; // operated user
+    required UserOperateType op_type = 4;
+}
+
+message OperateUserResponse {
+    required uint64 sequence_id = 1;
+    required StatusCode status = 2;
+    optional UserInfo user_info = 3;
 }
 
 // Tablet node
@@ -199,5 +230,7 @@ service MasterServer {
     rpc Report(ReportRequest) returns(ReportResponse);
 
     rpc CmdCtrl(CmdCtrlRequest) returns(CmdCtrlResponse);
+
+    rpc OperateUser(OperateUserRequest) returns(OperateUserResponse);
 }
 option cc_generic_services = true;

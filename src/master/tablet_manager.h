@@ -207,12 +207,9 @@ public:
     void Init();
     void Stop();
 
-    bool LoadMetaTable(const std::string& addr, StatusCode* ret_status = NULL);
     bool DumpMetaTable(const std::string& addr, StatusCode* ret_status = NULL);
     bool ClearMetaTable(const std::string& addr, StatusCode* ret_status = NULL);
 
-    bool LoadMetaTableFromFile(const std::string& filename,
-                               StatusCode* ret_status = NULL);
     bool DumpMetaTableToFile(const std::string& filename,
                              StatusCode* ret_status = NULL);
 
@@ -272,6 +269,9 @@ public:
 
     bool PickMergeTablet(TabletPtr& tablet, TabletPtr* tablet2);
 
+    void LoadTableMeta(const std::string& key, const std::string& value);
+    void LoadTabletMeta(const std::string& key, const std::string& value);
+
 private:
     void PackTabletMeta(TabletMeta* meta, const std::string& table_name,
                         const std::string& key_start = "",
@@ -300,9 +300,6 @@ private:
                               CompactTabletRequest* request,
                               CompactTabletResponse* response,
                               bool failed, int error_code);
-
-    void LoadTableMeta(const std::string& key, const std::string& value);
-    void LoadTabletMeta(const std::string& key, const std::string& value);
 
     bool ReadFromStream(std::ifstream& ifs, std::string* key,
                         std::string* value);

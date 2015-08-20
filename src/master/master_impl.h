@@ -18,6 +18,7 @@
 
 #include "master/tablet_manager.h"
 #include "master/tabletnode_manager.h"
+#include "master/user_manager.h"
 #include "proto/master_rpc.pb.h"
 #include "proto/table_meta.pb.h"
 #include "sdk/client_impl.h"
@@ -115,6 +116,10 @@ public:
 
     void CmdCtrl(const CmdCtrlRequest* request,
                  CmdCtrlResponse* response);
+
+    void OperateUser(const OperateUserRequest* request,
+                     OperateUserResponse* response,
+                     google::protobuf::Closure* done);
 
     void RefreshTabletNodeList(const std::map<std::string, std::string>& ts_node_list);
 
@@ -331,6 +336,13 @@ private:
                          WriteTabletRequest* request,
                          WriteTabletResponse* response,
                          bool failed, int error_code);
+    void AddUserInfoToMetaCallback(UserPtr user_ptr, int32_t retry_times,
+                                   const OperateUserRequest* rpc_request,
+                                   OperateUserResponse* rpc_response,
+                                   google::protobuf::Closure* rpc_done,
+                                   WriteTabletRequest* request,
+                                   WriteTabletResponse* response,
+                                   bool rpc_failed, int error_code);
     void UpdateTableRecordForDisableCallback(TablePtr table, int32_t retry_times,
                                              DisableTableResponse* rpc_response,
                                              google::protobuf::Closure* rpc_done,
@@ -385,7 +397,16 @@ private:
                                       WriteTabletResponse* response,
                                       bool failed, int error_code);
 
+    // load metabale to master memory
+    bool LoadMetaTable(const std::string& meta_tablet_addr,
+                       StatusCode* ret_status);
+    bool LoadMetaTableFromFile(const std::string& filename,
+                               StatusCode* ret_status = NULL);
+    bool ReadFromStream(std::ifstream& ifs,
+                        std::string* key,
+                        std::string* value);
 
+    // load metatable on a tabletserver
     bool LoadMetaTablet(std::string* server_addr);
     void UnloadMetaTablet(const std::string& server_addr);
 
@@ -450,6 +471,15 @@ private:
     void DeleteObsoleteFiles();
     void ProcessQueryCallbackForGc(QueryResponse* response);
 
+    bool IsRootUser(const std::string& token);
+    bool CheckUserPermissionOnTable(const std::string& token, TablePtr table);
+
+    template <typename Request, typename Response, typename Callback>
+    bool HasTablePermission(const Request* request, Response* response, 
+                                     Callback* done, TablePtr table, const char* operate);
+    template <typename Response, typename Callback>
+    void CheckMasterStatus(Response* response, Callback* done, bool not_ready);
+
 private:
     mutable Mutex m_status_mutex;
     MasterStatus m_status;
@@ -462,6 +492,7 @@ private:
     scoped_ptr<MasterZkAdapterBase> m_zk_adapter;
     scoped_ptr<Scheduler> m_size_scheduler;
     scoped_ptr<Scheduler> m_load_scheduler;
+    scoped_ptr<UserManager> m_user_manager;
 
     Mutex m_mutex;
     int64_t m_release_cache_timer_id;
