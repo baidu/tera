@@ -483,25 +483,69 @@ bool ClientImpl::ShowTablesInfo(TableMetaList* table_list,
     tablet_list->Clear();
 
     master::MasterClient master_client(_cluster->MasterAddr());
-
-    ShowTablesRequest request;
-    ShowTablesResponse response;
-    request.set_sequence_id(0);
-    request.set_user_token(GetUserToken(_user_identity, _user_passcode));
-
-    if (master_client.ShowTables(&request, &response) &&
-        response.status() == kMasterOk) {
-        if (response.table_meta_list().meta_size() == 0) {
-            return false;
+    std::string start_tablet_key;
+    std::string start_table_name;
+    bool has_more = true;
+    bool has_error = false;
+    bool table_meta_copied = false;
+    std::string err_msg;
+    while(has_more && !has_error) {
+        ShowTablesRequest request;
+        ShowTablesResponse response;
+        request.set_start_table_name(start_table_name);
+        request.set_start_tablet_key(start_tablet_key);
+        request.set_max_tablet_num(FLAGS_tera_sdk_show_max_num); //tablets be fetched at most in one RPC
+        request.set_sequence_id(0);
+        request.set_user_token(GetUserToken(_user_identity, _user_passcode));
+        if (master_client.ShowTables(&request, &response) &&
+            response.status() == kMasterOk) {
+            if (response.table_meta_list().meta_size() == 0) {
+                has_error = true;
+                err_msg = StatusCodeToString(response.status());
+                break;
+            }
+            if (!table_meta_copied) {
+                table_list->CopyFrom(response.table_meta_list());
+                table_meta_copied = true;
+            }
+            if (response.tablet_meta_list().meta_size() == 0) {
+                has_more = false;
+            }
+            for(int i = 0; i < response.tablet_meta_list().meta_size(); i++){
+                tablet_list->add_meta()->CopyFrom(response.tablet_meta_list().meta(i));
+                tablet_list->add_counter()->CopyFrom(response.tablet_meta_list().counter(i));
+                if (i == response.tablet_meta_list().meta_size() - 1 ) {
+                    start_table_name = response.tablet_meta_list().meta(i).table_name();
+                    std::string last_key = response.tablet_meta_list().meta(i).key_range().key_start();
+                    if (last_key <= start_tablet_key) {
+                        LOG(WARNING) << "the master has older version";
+                        has_more = false;
+                        break;
+                    }
+                    start_tablet_key = last_key;
+                }
+            }
+            start_tablet_key.append(1,'\0'); // fetch next tablet
+        } else {
+            if (response.status() != kMasterOk &&
+                response.status() != kTableNotFound) {
+                has_error = true;
+                err_msg = StatusCodeToString(response.status());
+            }
+            has_more = false;
         }
-        table_list->CopyFrom(response.table_meta_list());
-        tablet_list->CopyFrom(response.tablet_meta_list());
-        return true;
+        VLOG(16) << "fetch meta:" << start_table_name
+                 << " / " << start_tablet_key;
+    };
+
+    if (has_error) {
+        LOG(ERROR) << "fail to show table info.";
+        err->SetFailed(ErrorCode::kSystem, err_msg);
+        return false;
     }
-    LOG(ERROR) << "fail to show table info.";
-    err->SetFailed(ErrorCode::kSystem, StatusCodeToString(response.status()));
-    return false;
+    return true;
 }
+
 
 bool ClientImpl::ShowTabletNodesInfo(const string& addr,
                                     TabletNodeInfo* info,
@@ -735,6 +779,9 @@ bool ClientImpl::ListInternal(std::vector<TableInfo>* table_list,
         if (!response.has_is_more() || !response.is_more()) {
             is_more = false;
         } else {
+            if (tablet_meta_list.meta_size() == 0) { //argument @max_tablet_found maybe zero
+                break;
+            }
             const tera::TabletMeta& meta = tablet_meta_list.meta(tablet_meta_list.meta_size()-1);
             const string& last_key = meta.key_range().key_start();
             request.set_start_table_name(meta.table_name());

@@ -1138,7 +1138,9 @@ int32_t ShowAllTables(Client* client, bool is_x, bool show_all, ErrorCode* err) 
                     lg_size.resize(lg_num, 0);
                 }
                 for (int l = 0; l < lg_num; ++l) {
-                    lg_size[l] += tablet_list.meta(i).lg_size(l);
+                    if (tablet_list.meta(i).lg_size_size() > l) {
+                        lg_size[l] += tablet_list.meta(i).lg_size(l);
+                    }
                 }
             }
         }
@@ -1298,8 +1300,8 @@ int32_t ShowTabletNodesInfo(Client* client, bool is_x, ErrorCode* err) {
         printer.AddRow(cols,
                        " ", "address", "status", "size", "num",
                        "lread", "r", "rspd", "w", "wspd",
-                       "s", "sspd", "rdly", "rp", "sp",
-                       "wp", "ld", "bs", "mem", "cpu",
+                       "s", "sspd", "rdly", "rp", "wp",
+                       "sp", "ld", "bs", "mem", "cpu",
                        "net_tx", "net_rx", "dfs_r", "dfs_w");
         std::vector<string> row;
         for (size_t i = 0; i < infos.size(); ++i) {
@@ -2318,27 +2320,37 @@ int32_t Meta2Op(Client *client, int32_t argc, char** argv) {
             }
         }
         if (table_start) {
-            if (!meta.key_range().key_start().empty()) {
-                std::cerr << "miss tablet " << meta.table_name() << " [-,"
-                    << meta.key_range().key_start() << "]" << std::endl;
-                if (op == "repair") {
-                    tera::TabletMeta miss_meta;
-                    miss_meta.set_table_name(meta.table_name());
-                    miss_meta.mutable_key_range()->set_key_start("");
-                    miss_meta.mutable_key_range()->set_key_end(meta.key_range().key_start());
-                    WriteTablet(miss_meta, bak);
+            if (meta.table_name() == last.table_name()) {
+                std::cerr << "tablet " << meta.table_name() << " ["
+                    << meta.key_range().key_start() << ","
+                    << meta.key_range().key_end() << "] is coverd by tablet "
+                    << last.table_name() << " ["
+                    << last.key_range().key_start() << ","
+                    << last.key_range().key_end() << "]" << std::endl;
+                covered = true;
+            } else {
+                if (!meta.key_range().key_start().empty()) {
+                    std::cerr << "miss tablet " << meta.table_name() << " [-,"
+                        << meta.key_range().key_start() << "]" << std::endl;
+                    if (op == "repair") {
+                        tera::TabletMeta miss_meta;
+                        miss_meta.set_table_name(meta.table_name());
+                        miss_meta.mutable_key_range()->set_key_start("");
+                        miss_meta.mutable_key_range()->set_key_end(meta.key_range().key_start());
+                        WriteTablet(miss_meta, bak);
+                    }
                 }
-            }
-            if (op == "repair") {
-                WriteTablet(meta, bak);
+                if (op == "repair") {
+                    WriteTablet(meta, bak);
+                }
             }
         }
 
         // ignore covered tablet
         if (!covered) {
             last.CopyFrom(meta);
+            table_start = meta.key_range().key_end().empty();
         }
-        table_start = meta.key_range().key_end().empty();
     }
     if (op == "bak" || op == "repair") {
         bak.close();
@@ -2453,7 +2465,8 @@ int main(int argc, char* argv[]) {
         Usage(argv[0]);
     }
     if (error_code.GetType() != ErrorCode::kOK) {
-        LOG(ERROR) << "fail reason: " << error_code.GetReason();
+        LOG(ERROR) << "fail reason: " << strerr(error_code)
+            << " " << error_code.GetReason();
     }
     delete client;
     return ret;

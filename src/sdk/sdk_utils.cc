@@ -15,6 +15,7 @@
 #include "glog/logging.h"
 
 #include "sdk/filter_utils.h"
+
 DECLARE_int64(tera_tablet_write_block_size);
 DECLARE_int64(tera_tablet_ldb_sst_size);
 DECLARE_int64(tera_master_merge_tablet_size);
@@ -53,6 +54,14 @@ string TableProp2Str(RawKey type) {
     }
 }
 
+string Switch2Str(bool enabled) {
+    if (enabled) {
+        return "on";
+    } else {
+        return "off";
+    }
+}
+
 void ShowTableSchema(const TableSchema& schema, bool is_x) {
     std::stringstream ss;
     if (schema.kv_only()) {
@@ -64,6 +73,9 @@ void ShowTableSchema(const TableSchema& schema, bool is_x) {
         ss << "splitsize=" << schema.split_size() << ",";
         if (is_x || schema.merge_size() != FLAGS_tera_master_merge_tablet_size) {
             ss << "mergesize=" << schema.merge_size() << ",";
+        }
+        if (is_x || schema.disable_wal()) {
+            ss << "wal=" << Switch2Str(!schema.disable_wal()) << ",";
         }
         if (is_x || lg_schema.store_type() != DiskStore) {
             ss << "storage=" << LgProp2Str(lg_schema.store_type()) << ",";
@@ -89,6 +101,9 @@ void ShowTableSchema(const TableSchema& schema, bool is_x) {
     }
     if (is_x || schema.admin_group() != "") {
         ss << "admin_group=" << schema.admin_group() << ",";
+    }
+    if (is_x || schema.disable_wal()) {
+        ss << "wal=" << Switch2Str(!schema.disable_wal()) << ",";
     }
     ss << "\b> {" << std::endl;
 
@@ -182,6 +197,7 @@ void TableDescToSchema(const TableDescriptor& desc, TableSchema* schema) {
     schema->set_merge_size(desc.MergeSize());
     schema->set_kv_only(desc.IsKv());
     schema->set_admin_group(desc.AdminGroup());
+    schema->set_disable_wal(desc.IsWalDisabled());
 
     // add lg
     int num = desc.LocalityGroupNum();
@@ -249,6 +265,9 @@ void TableSchemaToDesc(const TableSchema& schema, TableDescriptor* desc) {
     }
     if (schema.has_admin_group()) {
         desc->SetAdminGroup(schema.admin_group());
+    }
+    if (schema.has_disable_wal() && schema.disable_wal()) {
+        desc->DisableWal();
     }
 
     int32_t lg_num = schema.locality_groups_size();
@@ -362,7 +381,7 @@ bool SetLgProperties(const string& name, const string& value,
             return false;
         }
     } else if (name == "memtable_ldb_write_buffer_size") {
-        int32_t buffer_size = atoi(value.c_str()); //MB
+        int32_t buffer_size = atoi(value.c_str()); //KB
         if (buffer_size <= 0) {
             return false;
         }
@@ -412,6 +431,14 @@ bool SetTableProperties(const string& name, const string& value,
         desc->SetMergeSize(mergesize);
     } else if (name == "admin_group"){
         desc->SetAdminGroup(value);
+    } else if (name == "wal") {
+        if (value == "on") {
+            // do nothing
+        } else if (value == "off") {
+            desc->DisableWal();
+        } else {
+            return false;
+        }
     } else {
         return false;
     }

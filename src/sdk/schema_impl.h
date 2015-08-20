@@ -171,6 +171,9 @@ public:
     void SetMergeSize(int64_t size);
     int64_t MergeSize() const;
 
+    void DisableWal();
+    bool IsWalDisabled() const;
+
     /// 插入snapshot
     int32_t AddSnapshot(uint64_t snapshot);
     /// 获取snapshot
@@ -201,6 +204,7 @@ private:
     int64_t         _split_size;
     int64_t         _merge_size;
     std::string     _admin_group;
+    bool            _disable_wal;
 };
 
 } // namespace tera

@@ -98,14 +98,6 @@ bool TabletNodeClient::SplitTablet(const SplitTabletRequest* request,
                                 m_rpc_timeout, m_thread_pool);
 }
 
-bool TabletNodeClient::MergeTablet(const MergeTabletRequest* request,
-                                        MergeTabletResponse* response,
-                                        Closure<void, MergeTabletRequest*, MergeTabletResponse*, bool, int>* done) {
-    return SendMessageWithRetry(&TabletNodeServer::Stub::MergeTablet,
-                                request, response, done, "MergeTablet",
-                                m_rpc_timeout, m_thread_pool);
-}
-
 bool TabletNodeClient::CompactTablet(const CompactTabletRequest* request,
                                           CompactTabletResponse* response,
                                           Closure<void, CompactTabletRequest*, CompactTabletResponse*, bool, int>* done) {
