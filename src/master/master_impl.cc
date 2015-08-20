@@ -1135,48 +1135,6 @@ void MasterImpl::CmdCtrl(const CmdCtrlRequest* request,
     }
 }
 
-void MasterImpl::WriteUserInfoToMetaTableAsync(UserInfo& user_info, bool is_delete,
-                                               WriteClosure* done, 
-                                               OperateUserResponse* rpc_response,
-                                               google::protobuf::Closure* rpc_done) {
-    VLOG(5) << "WriteUserInfoToMetaTableAsync()";
-    std::string meta_addr;
-    if (!m_tablet_manager->GetMetaTabletAddr(&meta_addr)) {
-        LOG(INFO) << "fail to add(delete) user: " << user_info.user_name();
-        rpc_response->set_status(kMetaTabletError);
-        rpc_done->Run();
-        return;
-    }
-
-    WriteTabletRequest* request = new WriteTabletRequest;
-    WriteTabletResponse* response = new WriteTabletResponse;
-    request->set_sequence_id(m_this_sequence_id.Inc());
-    request->set_tablet_name(FLAGS_tera_master_meta_table_name);
-    request->set_is_sync(true);
-    request->set_is_instant(true);
-
-    std::string packed_key = "~" + user_info.user_name();
-    LOG(INFO) << "packed_key: " << packed_key;
-    std::string packed_value;
-    user_info.SerializeToString(&packed_value);
-    LOG(INFO) << "async-size:" << user_info.group_name_size();
-    //LOG(ERROR) << "packed_value: " << packed_value;
-    RowMutationSequence* mu_seq = request->add_row_list();
-    mu_seq->set_row_key(packed_key);
-    Mutation* mutation = mu_seq->add_mutation_sequence();
-    if (is_delete) {
-        mutation->set_type(kDeleteRow);
-    } else {
-        mutation->set_type(kPut);
-        mutation->set_value(packed_value);
-    }
-
-    LOG(INFO) << "WriteUserInfoToMetaTableAsync id: " << request->sequence_id()
-        << ", user: " << user_info.user_name();
-    tabletnode::TabletNodeClient meta_node_client(meta_addr);
-    meta_node_client.WriteTablet(request, response, done);
-}
-
 void MasterImpl::AddUserInfoToMetaCallback(UserPtr user_ptr,
                                            int32_t retry_times,
                                            const OperateUserRequest* rpc_request,
@@ -1227,7 +1185,7 @@ void MasterImpl::AddUserInfoToMetaCallback(UserPtr user_ptr,
     } else if (rpc_request->op_type() == kDeleteFromGroup) {
         m_user_manager->SetUserInfo(user_name, user_ptr->GetUserInfo());
     } else {
-        LOG(ERROR) << "501";
+        LOG(ERROR) << "unknown operate type";
     }
     m_user_manager->ListAll();
 }

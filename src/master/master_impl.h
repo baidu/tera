@@ -343,10 +343,6 @@ private:
                                    WriteTabletRequest* request,
                                    WriteTabletResponse* response,
                                    bool rpc_failed, int error_code);
-    void WriteUserInfoToMetaTableAsync(UserInfo& user_info, bool is_delete,
-                                       WriteClosure* done,
-                                       OperateUserResponse* rpc_response,
-                                       google::protobuf::Closure* rpc_done);
     void UpdateTableRecordForDisableCallback(TablePtr table, int32_t retry_times,
                                              DisableTableResponse* rpc_response,
                                              google::protobuf::Closure* rpc_done,
