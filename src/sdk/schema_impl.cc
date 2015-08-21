@@ -246,6 +246,14 @@ void TableDescImpl::SetKvOnly() {
     _kv_only = true;
 }
 
+void TableDescImpl::SetAdminGroup(const std::string& name) {
+    _admin_group = name;
+}
+
+std::string TableDescImpl::AdminGroup() const {
+    return _admin_group;
+}
+
 /// 增加一个localitygroup
 LocalityGroupDescriptor* TableDescImpl::AddLocalityGroup(const std::string& lg_name) {
     if (_kv_only && _lg_map.size() > 1) {
