@@ -65,6 +65,7 @@ message TableMeta {
     optional TableStatus status = 2;
     optional TableSchema schema = 3;
     repeated uint64 snapshot_list = 4;
+    optional uint64 create_time = 5;
 }
 
 message TabletMeta {

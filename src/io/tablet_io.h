@@ -131,9 +131,12 @@ public:
                       bool* is_complete,
                       StatusCode* status = NULL);
 
+    bool LowLevelSeek(const std::string& row_key, const ScanOptions& scan_options,
+                      RowResult* value_list, StatusCode* status = NULL);
+
     bool WriteOne(const std::string& key, const std::string& value,
-                  bool sync = false, StatusCode* status = NULL);
-    bool WriteBatch(leveldb::WriteBatch* batch, bool sync = false,
+                  bool sync = true, StatusCode* status = NULL);
+    bool WriteBatch(leveldb::WriteBatch* batch, bool disable_wal = false, bool sync = true,
                     StatusCode* status = NULL);
     virtual bool Write(const WriteTabletRequest* request,
                        WriteTabletResponse* response,

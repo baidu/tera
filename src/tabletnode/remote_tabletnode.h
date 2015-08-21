@@ -66,11 +66,6 @@ public:
                      const SplitTabletRequest* request,
                      SplitTabletResponse* response,
                      google::protobuf::Closure* done);
-    
-    void MergeTablet(google::protobuf::RpcController* controller,
-                     const MergeTabletRequest* request,
-                     MergeTabletResponse* response,
-                     google::protobuf::Closure* done);
 
     void CompactTablet(google::protobuf::RpcController* controller,
                        const CompactTabletRequest* request,

@@ -27,6 +27,7 @@
 #include "sdk/sdk_zk.h"
 #include "sdk/table_impl.h"
 #include "sdk/tera.h"
+#include "utils/crypt.h"
 #include "utils/string_util.h"
 #include "utils/tprinter.h"
 #include "utils/utils_cmd.h"
@@ -104,12 +105,20 @@ void Usage(const std::string& prg_name) {
                 delete row/columnfamily/qualifiers.                         \n\
                 (only delete latest version when using suffix \"1v\")       \n\
                                                                             \n\
-       put_counter <tablename> <rowkey> [<columnfamily:qualifier>] <integer>\n\
+       put_counter <tablename> <rowkey> [<columnfamily:qualifier>] <integer(int64_t)>   \n\
                                                                             \n\
        get_counter <tablename> <rowkey> [<columnfamily:qualifier>]          \n\
                                                                             \n\
        add      <tablename> <rowkey> <columnfamily:qualifier>   delta       \n\
                 add 'delta'(int64_t) to specified cell                      \n\
+                                                                            \n\
+       putint64 <tablename> <rowkey> [<columnfamily:qualifier>] <integer(int64_t)>       \n\
+                                                                            \n\
+       getint64 <tablename> <rowkey> [<columnfamily:qualifier>]             \n\
+                                                                            \n\
+       addint64 <tablename> <rowkey> <columnfamily:qualifier>  delta        \n\
+                add 'delta'(int64_t) to specified cell                      \n\
+                                                                            \n\
        append   <tablename> <rowkey> [<columnfamily:qualifier>] <value>     \n\
                                                                             \n\
        batchput <tablename> <input file>                                    \n\
@@ -126,6 +135,11 @@ void Usage(const std::string& prg_name) {
        showts[x] [<tabletnode addr>]                                        \n\
                 show all tabletnodes or single tabletnode info.             \n\
                 (show more detail when using suffix \"x\")                  \n\
+                                                                            \n\
+       hash username password                                               \n\
+                calculate the hash of username & password                   \n\
+                username & password used in client flag file                \n\
+                hash used in master flag file                               \n\
                                                                             \n\
        version\n\n";
 }
@@ -340,6 +354,44 @@ void ParseCfQualifier(const std::string& input, std::string* columnfamily, std::
     }
 }
 
+int32_t PutInt64Op(Client* client, int32_t argc, char** argv, ErrorCode* err) {
+    if (argc != 5 && argc != 6) {
+        LOG(ERROR) << "args number error: " << argc << ", need 5 | 6.";
+        Usage(argv[0]);
+        return -1;
+    }
+
+    std::string tablename = argv[2];
+    Table* table = NULL;
+    if ((table = client->OpenTable(tablename, err)) == NULL) {
+        LOG(ERROR) << "fail to open table";
+        return -1;
+    }
+
+    std::string rowkey = argv[3];
+    std::string columnfamily = "";
+    std::string qualifier = "";
+    std::string value;
+    if (argc == 5) {
+        // use table as kv
+        value = argv[4];
+    } else if (argc == 6) {
+        ParseCfQualifier(argv[4], &columnfamily, &qualifier);
+        value = argv[5];
+    }
+    int64_t value_int;
+    if (!StringToNumber(value.c_str(), &value_int)) {
+       LOG(ERROR) << "invalid Integer number Got: " << value;
+       return -1;
+    }
+    if (!table->Put(rowkey, columnfamily, qualifier, value_int, err)) {
+        LOG(ERROR) << "fail to put record to table: " << tablename;
+        return -1;
+    }
+    delete table;
+    return 0;
+}
+
 int32_t PutCounterOp(Client* client, int32_t argc, char** argv, ErrorCode* err) {
     if (argc != 5 && argc != 6) {
         LOG(ERROR) << "args number error: " << argc << ", need 5 | 6.";
@@ -548,6 +600,78 @@ int32_t AddOp(Client* client, int32_t argc, char** argv, ErrorCode* err) {
         LOG(ERROR) << "fail to add record to table: " << tablename;
         return -1;
     }
+    delete table;
+    return 0;
+}
+
+int32_t AddInt64Op(Client* client, int32_t argc, char** argv, ErrorCode* err) {
+    if (argc != 5 && argc != 6) {
+        LOG(ERROR)<< "args number error: " << argc << ", need 5 | 6.";
+        Usage(argv[0]);
+        return -1;
+    }
+
+    std::string tablename = argv[2];
+    Table* table = NULL;
+    if ((table = client->OpenTable(tablename, err)) == NULL) {
+        LOG(ERROR) << "fail to open table";
+        return -1;
+    }
+
+    std::string rowkey = argv[3];
+    std::string columnfamily = "";
+    std::string qualifier = "";
+    std::string value;
+    if (argc == 5) {
+        // use table as kv
+        value = argv[4];
+    } else if (argc == 6) {
+        ParseCfQualifier(argv[4], &columnfamily, &qualifier);
+        value = argv[5];
+    }
+    int64_t delta;
+    if (!StringToNumber(value.c_str(), &delta)) {
+        LOG(ERROR) << "invalid Integer number Got: " << value;
+        return -1;
+    }
+    if (!table->AddInt64(rowkey, columnfamily, qualifier, delta, err)) {
+        LOG(ERROR) << "fail to add record to table: " << tablename;
+        return -1;
+    }
+    delete table;
+    return 0;
+}
+
+int32_t GetInt64Op(Client* client, int32_t argc, char** argv, ErrorCode* err) {
+    if (argc != 4 && argc != 5) {
+        LOG(ERROR) << "args number error: " << argc << ", need 5 | 6.";
+        Usage(argv[0]);
+        return -1;
+    }
+
+    std::string tablename = argv[2];
+    Table* table = NULL;
+    if ((table = client->OpenTable(tablename, err)) == NULL) {
+        LOG(ERROR) << "fail to open table";
+        return -1;
+    }
+
+    std::string rowkey = argv[3];
+    std::string columnfamily = "";
+    std::string qualifier = "";
+    int64_t value;
+    if (argc == 4) {
+        // use table as kv
+    } else if (argc == 5) {
+        ParseCfQualifier(argv[4], &columnfamily, &qualifier);
+    }
+
+    if (!table->Get(rowkey, columnfamily, qualifier, &value, err)) {
+        LOG(ERROR) << "fail to get record from table: " << tablename;
+        return -1;
+    }
+
+    std::cout << value << std::endl;
     delete table;
     return 0;
 }
@@ -852,17 +976,19 @@ int32_t ShowAllTables(Client* client, bool is_x, bool show_all, ErrorCode* err) 
     TPrinter printer;
     int cols;
     if (is_x) {
-        cols = 17;
+        cols = 18;
         printer.Reset(cols);
         printer.AddRow(cols,
-                       " ", "tablename", "status", "size", "tablet",
-                       "busy", "notready", "lread", "read", "rmax",
-                       "rspeed", "write", "wmax", "wspeed", "scan",
-                       "smax", "sspeed");
+                       " ", "tablename", "status", "size", "lg_size",
+                       "tablet", "busy", "notready", "lread", "read",
+                       "rmax", "rspeed", "write", "wmax", "wspeed",
+                       "scan", "smax", "sspeed");
     } else {
-        cols = 6;
+        cols = 7;
         printer.Reset(cols);
-        printer.AddRow(cols, " ", "tablename", "status", "size", "tablet", "busy");
+        printer.AddRow(cols,
+                       " ", "tablename", "status", "size", "lg_size",
+                       "tablet", "busy");
     }
     for (int32_t table_no = 0; table_no < table_list.meta_size(); ++table_no) {
         std::string tablename = table_list.meta(table_no).table_name();
@@ -881,6 +1007,8 @@ int32_t ShowAllTables(Client* client, bool is_x, bool show_all, ErrorCode* err) 
         uint32_t scan = 0;
         uint32_t smax = 0;
         uint64_t sspeed = 0;
+        int64_t lg_num = 0;
+        std::vector<int64_t> lg_size;
         for (int32_t i = 0; i < tablet_list.meta_size(); ++i) {
             if (tablet_list.meta(i).table_name() == tablename) {
                 size += tablet_list.meta(i).table_size();
@@ -907,14 +1035,34 @@ int32_t ShowAllTables(Client* client, bool is_x, bool show_all, ErrorCode* err) 
                     smax = tablet_list.counter(i).scan_rows();
                 }
                 sspeed += tablet_list.counter(i).scan_size();
+
+                if (lg_num == 0) {
+                    lg_num = tablet_list.meta(i).lg_size_size();
+                    lg_size.resize(lg_num, 0);
+                }
+                for (int l = 0; l < lg_num; ++l) {
+                    if (tablet_list.meta(i).lg_size_size() > l) {
+                        lg_size[l] += tablet_list.meta(i).lg_size(l);
+                    }
+                }
             }
         }
+
+        std::string lg_size_str = "";
+        for (int l = 0; l < lg_num; ++l) {
+            lg_size_str += utils::ConvertByteToString(lg_size[l]);
+            if (l < lg_num - 1) {
+                lg_size_str += " ";
+            }
+        }
+        lg_size_str += "";
         if (is_x) {
             printer.AddRow(cols,
                            NumberToString(table_no).data(),
                            tablename.data(),
                            StatusCodeToString(status).data(),
                            utils::ConvertByteToString(size).data(),
+                           lg_size_str.data(),
                            NumberToString(tablet).data(),
                            NumberToString(busy).data(),
                            NumberToString(notready).data(),
@@ -934,6 +1082,7 @@ int32_t ShowAllTables(Client* client, bool is_x, bool show_all, ErrorCode* err) 
                            tablename.data(),
                            StatusCodeToString(status).data(),
                            utils::ConvertByteToString(size).data(),
+                           lg_size_str.data(),
                            NumberToString(tablet).data(),
                            NumberToString(busy).data());
         }
@@ -957,6 +1106,8 @@ int32_t ShowSingleTable(Client* client, const string& table_name,
         return -1;
     }
 
+    std::cout << std::endl;
+    std::cout << "create time: " << table_meta.create_time() << std::endl;
     std::cout << std::endl;
     ShowTabletList(tablet_list, true, is_x);
     std::cout << std::endl;
@@ -1049,14 +1200,14 @@ int32_t ShowTabletNodesInfo(Client* client, bool is_x, ErrorCode* err) {
     int cols;
     TPrinter printer;
     if (is_x) {
-        cols = 23;
+        cols = 24;
         printer.Reset(cols);
         printer.AddRow(cols,
                        " ", "address", "status", "size", "num",
                        "lread", "r", "rspd", "w", "wspd",
-                       "s", "sspd", "rdly", "rp", "sp",
-                       "wp", "ld", "bs", "mem", "net_tx",
-                       "net_rx", "dfs_r", "dfs_w");
+                       "s", "sspd", "rdly", "rp", "wp",
+                       "sp", "ld", "bs", "mem", "cpu",
+                       "net_tx", "net_rx", "dfs_r", "dfs_w");
         std::vector<string> row;
         for (size_t i = 0; i < infos.size(); ++i) {
             std::map<string, string> extra;
@@ -1085,6 +1236,7 @@ int32_t ShowTabletNodesInfo(Client* client, bool is_x, ErrorCode* err) {
             row.push_back(NumberToString(infos[i].tablet_onload()));
             row.push_back(NumberToString(infos[i].tablet_onbusy()));
             row.push_back(utils::ConvertByteToString(infos[i].mem_used()));
+            row.push_back(NumberToString(infos[i].cpu_usage()));
             row.push_back(utils::ConvertByteToString(infos[i].net_tx()));
             row.push_back(utils::ConvertByteToString(infos[i].net_rx()));
             row.push_back(utils::ConvertByteToString(infos[i].dfs_io_r()));
@@ -1254,6 +1406,66 @@ int32_t BatchPutOp(Client* client, int32_t argc, char** argv, ErrorCode* err) {
     return 0;
 }
 
+int32_t BatchPutInt64Op(Client* client, int32_t argc, char** argv, ErrorCode* err) {
+    if (argc != 4) {
+        LOG(ERROR) << "args number error: " << argc << ", need 4.";
+        Usage(argv[0]);
+        return -1;
+    }
+
+    std::string tablename = argv[2];
+    std::string record_file = argv[3];
+    Table* table = NULL;
+    if ((table = client->OpenTable(tablename, err)) == NULL) {
+        LOG(ERROR) << "fail to open table";
+        return -1;
+    }
+    const int32_t buf_size = 1024 * 1024;
+    char buf[buf_size];
+    std::ifstream stream(record_file.c_str());
+
+    // input record format: rowkey columnfamily:qualifier value
+    // or: key:value
+    std::vector<std::string> input_v;
+    g_start_time = time(NULL);
+    while (stream.getline(buf, buf_size)) {
+        SplitString(buf, " ", &input_v);
+        if (input_v.size() != 3 && input_v.size() != 2) {
+            LOG(ERROR) << "input file format error, skip it: " << buf;
+            continue;
+        }
+        std::string& rowkey = input_v[0];
+        std::string family;
+        std::string qualifier;
+        std::string& value = input_v[input_v.size() - 1];
+        RowMutation* mutation = table->NewRowMutation(rowkey);
+        int64_t value_int;
+        if (!StringToNumber(value.c_str(), &value_int)) {
+           LOG(ERROR) << "invalid Integer number Got: " << value;
+           return -1;
+        }
+        if (input_v.size() == 2) {
+            // for kv mode
+            mutation->Put(value_int);
+        } else {
+            // for table mode, put(family, qulifier, value)
+            ParseCfQualifier(input_v[1], &family, &qualifier);
+            mutation->Put(family, qualifier, value_int);
+        }
+        mutation->SetCallBack(BatchPutCallBack);
+        table->ApplyMutation(mutation);
+    }
+    while (!table->IsPutFinished()) {
+        usleep(100000);
+    }
+
+    g_end_time = time(NULL);
+    g_used_time = g_end_time-g_start_time;
+    LOG(INFO) << "Write done,write_key_num=" << g_key_num << " used_time=" << g_used_time <<std::endl;
+    delete table;
+    return 0;
+}
+
 void BatchGetCallBack(RowReader* reader) {
     while (!reader->Done()) {
         {
@@ -1381,6 +1593,136 @@ int32_t BatchGetOp(Client* client, int32_t argc, char** argv, ErrorCode* err) {
     return 0;
 }
 
+void BatchGetInt64CallBack(RowReader* reader) {
+    while (!reader->Done()) {
+        {
+            // for performance testing
+            MutexLock locker(&g_stat_lock);
+            g_key_num ++;
+            g_total_size += reader->RowName().size()
+                + reader->ColumnName().size()
+                + sizeof(reader->Timestamp())
+                + reader->Value().size();
+            int32_t time_cur = time(NULL);
+            int32_t time_used = time_cur - g_start_time;
+            if (time_cur > g_last_time) {
+                g_last_time = time_cur;
+                LOG(INFO) << "Read file  "<<g_key_num<<" keys "<<g_key_num/(time_used?time_used:1)
+                    <<" keys/S "<<g_total_size/1024.0/1024/(time_used?time_used:1)<<" MB/S ";
+            }
+        }
+        uint64_t tmp_data = io::DecodeBigEndain(reader->Value().c_str());
+        int64_t value_int = tmp_data - std::numeric_limits<int64_t>::max();
+        std::cout << reader->RowName() << ":"
+            << reader->ColumnName() << ":"
+            << reader->Timestamp() << ":"
+            << value_int << std::endl;
+        reader->Next();
+    }
+    delete reader;
+}
+
+int32_t BatchGetInt64Op(Client* client, int32_t argc, char** argv, ErrorCode* err) {
+    if (argc != 4 && argc != 5) {
+        LOG(ERROR) << "args number error: " << argc << ", need 4 | 5.";
+        Usage(argv[0]);
+        return -1;
+    }
+
+    uint64_t snapshot = 0;
+    if (argc == 5) {
+        std::stringstream is;
+        is << std::string(argv[4]);
+        is >> snapshot;
+    }
+
+    std::string tablename = argv[2];
+    std::string input_file = argv[3];
+    Table* table = NULL;
+    if ((table = client->OpenTable(tablename, err)) == NULL) {
+        LOG(ERROR) << "fail to open table";
+        return -1;
+    }
+    const int32_t buf_size = 1024 * 1024;
+    char buf[buf_size];
+    std::ifstream stream(input_file.c_str());
+
+    // input file format: rowkey [columnfamily|cf:qualifier]...
+    // std::cout << "rowkey:columnfamily:qualifier:timestamp:value" << std::endl;
+    std::vector<std::string> input_v;
+    while (stream.getline(buf, buf_size)) {
+        SplitString(buf, " ", &input_v);
+        if (input_v.size() <= 0) {
+            LOG(ERROR) << "input file format error: " << buf;
+            continue;
+        }
+        std::string& rowkey = input_v[0];
+        if (input_v.size() == 1) {
+            // only rowkey explicit, scan all records out
+            ScanDescriptor desc(rowkey);
+            ResultStream* result_stream;
+            desc.SetEnd(rowkey);
+            if ((result_stream = table->Scan(desc, err)) == NULL) {
+                LOG(ERROR) << "fail to get records from table: " << tablename;
+                return -1;
+            }
+
+            while (!result_stream->Done()) {
+                {
+                    // for performance testing
+                    MutexLock locker(&g_stat_lock);
+                    g_key_num ++;
+                    g_total_size += result_stream->RowName().size()
+                        + result_stream->ColumnName().size()
+                        + sizeof(result_stream->Timestamp())
+                        + result_stream->Value().size();
+                    int32_t time_cur = time(NULL);
+                    int32_t time_used = time_cur - g_start_time;
+                    if (time_cur > g_last_time) {
+                        g_last_time = time_cur;
+                        LOG(INFO) << "Read file  "<<g_key_num<<" keys "<<g_key_num/(time_used?time_used:1)
+                            <<" keys/S "<<g_total_size/1024.0/1024/(time_used?time_used:1)<<" MB/S ";
+                    }
+                }
+
+                uint64_t tmp_data = io::DecodeBigEndain(result_stream->Value().c_str());
+                int value_int = tmp_data - std::numeric_limits<int64_t>::max();
+                std::cout << result_stream->RowName() << ":"
+                    << result_stream->ColumnName() << ":"
+                    << result_stream->Timestamp() << ":"
+                    << value_int << std::endl;
+                result_stream->Next();
+            }
+        } else {
+            // get specific records with RowReader
+            RowReader* reader = table->NewRowReader(rowkey);
+            for (size_t i = 1; i < input_v.size(); ++i) {
+                std::string& cfqu = input_v[i];
+                std::string::size_type pos = cfqu.find(":", 0);
+                if (pos != std::string::npos) {
+                    // add column
+                    reader->AddColumn(cfqu.substr(0, pos), cfqu.substr(pos + 1));
+                } else {
+                    // add columnfamily
+                    reader->AddColumnFamily(cfqu);
+                }
+                reader->SetSnapshot(snapshot);
+            }
+            reader->SetCallBack(BatchGetInt64CallBack);
+            table->Get(reader);
+        }
+    }
+    while (!table->IsGetFinished()) {
+        // waiting async get finishing
+        usleep(100000);
+    }
+    g_end_time = time(NULL);
+    g_used_time = g_end_time-g_start_time;
+    LOG(INFO) << "Read done,write_key_num=" << g_key_num << " used_time=" << g_used_time <<std::endl;
+    delete table;
+    return 0;
+}
+
 int32_t GetRandomNumKey(int32_t key_size,std::string *p_key){
     std::stringstream ss;
     std::string temp_str;
@@ -1393,6 +1735,25 @@ int32_t GetRandomNumKey(int32_t key_size,std::string *p_key){
         *p_key += temp_str;
         ss.clear();
     }
+    return 0;
+}
+
+int32_t HashOp(Client* client, int32_t argc, char** argv, ErrorCode* err) {
+    if (argc != 4) {
+      Usage(argv[0]);
+      return -1;
+    }
+
+    std::string user = argv[2];
+    std::string password = argv[3];
+    std::string hash;
+    if (GetHashString(user + ":" + password, 0, &hash) != 0) {
+        std::cout << "invalid arguments" << std::endl;
+        return -1;
+    }
+    std::cout << "password hash:" << hash << ", place it in master flag file."
+        << " and place password(not hash) in client flag file" << std::endl;
+
     return 0;
 }
 
@@ -1862,27 +2223,37 @@ int32_t Meta2Op(Client *client, int32_t argc, char** argv) {
             }
         }
         if (table_start) {
-            if (!meta.key_range().key_start().empty()) {
-                std::cerr << "miss tablet " << meta.table_name() << " [-,"
-                    << meta.key_range().key_start() << "]" << std::endl;
-                if (op == "repair") {
-                    tera::TabletMeta miss_meta;
-                    miss_meta.set_table_name(meta.table_name());
-                    miss_meta.mutable_key_range()->set_key_start("");
-                    miss_meta.mutable_key_range()->set_key_end(meta.key_range().key_start());
-                    WriteTablet(miss_meta, bak);
+            if (meta.table_name() == last.table_name()) {
+                std::cerr << "tablet " << meta.table_name() << " ["
+                    << meta.key_range().key_start() << ","
+                    << meta.key_range().key_end() << "] is coverd by tablet "
+                    << last.table_name() << " ["
+                    << last.key_range().key_start() << ","
+                    << last.key_range().key_end() << "]" << std::endl;
+                covered = true;
+            } else {
+                if (!meta.key_range().key_start().empty()) {
+                    std::cerr << "miss tablet " << meta.table_name() << " [-,"
+                        << meta.key_range().key_start() << "]" << std::endl;
+                    if (op == "repair") {
+                        tera::TabletMeta miss_meta;
+                        miss_meta.set_table_name(meta.table_name());
+                        miss_meta.mutable_key_range()->set_key_start("");
+                        miss_meta.mutable_key_range()->set_key_end(meta.key_range().key_start());
+                        WriteTablet(miss_meta, bak);
+                    }
                 }
-            }
-            if (op == "repair") {
-                WriteTablet(meta, bak);
+                if (op == "repair") {
+                    WriteTablet(meta, bak);
+                }
             }
         }
 
         // ignore covered tablet
         if (!covered) {
             last.CopyFrom(meta);
+            table_start = meta.key_range().key_end().empty();
         }
-        table_start = meta.key_range().key_end().empty();
     }
     if (op == "bak" || op == "repair") {
         bak.close();
@@ -1926,26 +2297,36 @@ int main(int argc, char* argv[]) {
         ret = ShowTabletNodesOp(client, argc, argv, &error_code);
     } else if (cmd == "put") {
         ret = PutOp(client, argc, argv, &error_code);
+    } else if (cmd == "putint64") {
+        ret = PutInt64Op(client, argc, argv, &error_code);
     } else if (cmd == "put-ttl") {
         ret = PutTTLOp(client, argc, argv, &error_code);
     } else if (cmd == "put_counter") {
         ret = PutCounterOp(client, argc, argv, &error_code);
     } else if (cmd == "add") {
         ret = AddOp(client, argc, argv, &error_code);
+    } else if (cmd == "addint64") {
+        ret = AddInt64Op(client, argc, argv, &error_code);
     } else if (cmd == "putif") {
         ret = PutIfAbsentOp(client, argc, argv, &error_code);
     } else if (cmd == "append") {
         ret = AppendOp(client, argc, argv, &error_code);
     } else if (cmd == "get") {
         ret = GetOp(client, argc, argv, &error_code);
+    } else if (cmd == "getint64") {
+        ret = GetInt64Op(client, argc, argv, &error_code);
     } else if (cmd == "get_counter") {
         ret = GetCounterOp(client, argc, argv, &error_code);
     } else if (cmd == "delete" || cmd == "delete1v") {
         ret = DeleteOp(client, argc, argv, &error_code);
     } else if (cmd == "batchput") {
         ret = BatchPutOp(client, argc, argv, &error_code);
+    } else if (cmd == "batchputint64") {
+        ret = BatchPutInt64Op(client, argc, argv, &error_code);
     } else if (cmd == "batchget") {
         ret = BatchGetOp(client, argc, argv, &error_code);
+    } else if (cmd == "batchgetint64") {
+        ret = BatchGetInt64Op(client, argc, argv, &error_code);
     } else if (cmd == "scan" || cmd == "scanallv") {
         ret = ScanOp(client, argc, argv, &error_code);
     } else if (cmd == "safemode") {
@@ -1965,6 +2346,8 @@ int main(int argc, char* argv[]) {
         PrintSystemVersion();
     } else if (cmd == "snapshot") {
         ret = SnapshotOp(client, argc, argv, &error_code);
+    } else if (cmd == "hash") {
+        ret = HashOp(client, argc, argv, &error_code);
     } else if (cmd == "help") {
         Usage(argv[0]);
     } else if (cmd == "helpmore") {
@@ -1973,7 +2356,8 @@ int main(int argc, char* argv[]) {
         Usage(argv[0]);
     }
     if (error_code.GetType() != ErrorCode::kOK) {
-        LOG(ERROR) << "fail reason: " << error_code.GetReason();
+        LOG(ERROR) << "fail reason: " << strerr(error_code)
+            << " " << error_code.GetReason();
     }
     delete client;
     return ret;

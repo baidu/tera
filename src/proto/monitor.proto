@@ -14,6 +14,7 @@ message MonitorRequest {
     repeated string tabletnodes = 6;
     optional uint64 min_timestamp = 7;
     optional uint64 max_timestamp = 8;
+    optional bool use_nexus = 9 [default = false];
 }
 
 message TabletNodeStat {

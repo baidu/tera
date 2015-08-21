@@ -95,10 +95,6 @@ public:
     void SplitTablet(const SplitTabletRequest* request,
                      SplitTabletResponse* response,
                      google::protobuf::Closure* done);
-    
-    void MergeTablet(const MergeTabletRequest* request,
-                     MergeTabletResponse* response,
-                     google::protobuf::Closure* done);
 
     void EnterSafeMode();
     void LeaveSafeMode();

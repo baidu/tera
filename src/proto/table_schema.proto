@@ -22,7 +22,7 @@ message LocalityGroupSchema {
     optional bool use_bloom_filter = 6;
     optional bool is_del = 7 [default = false];
     optional bool use_memtable_on_leveldb = 8 [default = false];
-    optional int32 memtable_ldb_write_buffer_size = 9 [default = 1]; //MB
+    optional int32 memtable_ldb_write_buffer_size = 9 [default = 1000]; //KB
     optional int32 memtable_ldb_block_size = 10 [default = 4]; //KB
     optional int32 sst_size = 11 [default = 8388608]; // Bytes
 }
@@ -51,5 +51,6 @@ message TableSchema {
     optional int64 split_size = 8; // MB
     optional int64 merge_size = 10; // MB
     optional bool kv_only = 9 [default = false];
+    optional bool disable_wal = 11 [default = false];
 }
 

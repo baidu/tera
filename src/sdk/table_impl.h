@@ -103,6 +103,9 @@ public:
                      const std::string& qualifier, const std::string& value,
                      int64_t timestamp, ErrorCode* err);
     virtual bool Put(const std::string& row_key, const std::string& family,
+                     const std::string& qualifier, const int64_t value,
+                     ErrorCode* err);
+    virtual bool Put(const std::string& row_key, const std::string& family,
                      const std::string& qualifier, const std::string& value,
                      int32_t ttl, ErrorCode* err);
     virtual bool Put(const std::string& row_key, const std::string& family,
@@ -110,6 +113,11 @@ public:
                      int64_t timestamp, int32_t ttl, ErrorCode* err);
 
     virtual bool Add(const std::string& row_key,
+                     const std::string& family,
+                     const std::string& qualifier,
+                     int64_t delta,
+                     ErrorCode* err);
+    virtual bool AddInt64(const std::string& row_key,
                      const std::string& family,
                      const std::string& qualifier,
                      int64_t delta,
@@ -131,6 +139,9 @@ public:
     virtual bool Get(const std::string& row_key, const std::string& family,
                      const std::string& qualifier, std::string* value,
                      ErrorCode* err);
+    virtual bool Get(const std::string& row_key, const std::string& family,
+                    const std::string& qualifier, int64_t* value,
+                    ErrorCode* err);
 
     virtual bool IsPutFinished() { return _cur_commit_pending_counter.Get() == 0; }
 
@@ -326,7 +337,8 @@ private:
     void DoDumpCookie();
     std::string GetCookieFileName(const std::string& tablename,
                                   const std::string& zk_addr,
-                                  const std::string& zk_path);
+                                  const std::string& zk_path,
+                                  int64_t create_time);
     std::string GetCookieFilePathName();
     std::string GetCookieLockFilePathName();
     void DeleteLegacyCookieLockFile(const std::string& lock_file, int timeout_seconds);
@@ -354,6 +366,7 @@ private:
     };
 
     std::string _name;
+    int64_t _create_time;
     const TableOptions _options;
     uint64_t _last_sequence_id;
     uint32_t _timeout;

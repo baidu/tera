@@ -187,6 +187,9 @@ public:
     void SetMergeSize(int64_t size);
     int64_t MergeSize() const;
 
+    void DisableWal();
+    bool IsWalDisabled() const;
+
     /// 插入snapshot
     int32_t AddSnapshot(uint64_t snapshot);
     /// 获取snapshot
@@ -288,7 +291,8 @@ public:
         kDeleteRow,
         kAdd,
         kPutIfAbsent,
-        kAppend
+        kAppend,
+        kAddInt64
     };
     struct Mutation {
         Type type;
@@ -308,12 +312,18 @@ public:
 
     /// 修改指定列
     virtual void Put(const std::string& family, const std::string& qualifier,
+                     const int64_t value) = 0;
+    /// 修改指定列
+    virtual void Put(const std::string& family, const std::string& qualifier,
                      const std::string& value) = 0;
     /// 带TTL的修改一个列
     virtual void Put(const std::string& family, const std::string& qualifier,
                      const std::string& value, int32_t ttl) = 0;
     // 原子加一个Cell
     virtual void Add(const std::string& family, const std::string& qualifier,
+                     const int64_t delta) = 0;
+    // 原子加一个Cell
+    virtual void AddInt64(const std::string& family, const std::string& qualifier,
                      const int64_t delta) = 0;
 
     // 原子操作：如果不存在才能Put成功
@@ -333,6 +343,8 @@ public:
                      int64_t timestamp, const std::string& value, int32_t ttl) = 0;
     /// 修改默认列
     virtual void Put(const std::string& value) = 0;
+    /// 修改默认列
+    virtual void Put(const int64_t value) = 0;
 
     /// 带TTL的修改默认列
     virtual void Put(const std::string& value, int32_t ttl) = 0;
@@ -506,6 +518,10 @@ public:
     virtual bool Put(const std::string& row_key, const std::string& family,
                      const std::string& qualifier, const std::string& value,
                      ErrorCode* err) = 0;
+    /// 修改指定列, 当作为kv或二维表格使用时的便捷接口
+    virtual bool Put(const std::string& row_key, const std::string& family,
+                     const std::string& qualifier, const int64_t value,
+                     ErrorCode* err) = 0;
     /// 带TTL修改指定列, 当作为kv或二维表格使用时的便捷接口
     virtual bool Put(const std::string& row_key, const std::string& family,
                      const std::string& qualifier, const std::string& value,
@@ -516,6 +532,10 @@ public:
                      int64_t timestamp, int32_t ttl, ErrorCode* err) = 0;
     /// 原子加一个Cell
     virtual bool Add(const std::string& row_key, const std::string& family,
+                     const std::string& qualifier, int64_t delta,
+                     ErrorCode* err) = 0;
+    /// 原子加一个Cell
+    virtual bool AddInt64(const std::string& row_key, const std::string& family,
                      const std::string& qualifier, int64_t delta,
                      ErrorCode* err) = 0;
 
@@ -537,6 +557,10 @@ public:
     /// 读取指定cell, 当作为kv或二维表格使用时的便捷接口
     virtual bool Get(const std::string& row_key, const std::string& family,
                      const std::string& qualifier, std::string* value,
+                     ErrorCode* err) = 0;
+    /// 读取指定cell, 当作为kv或二维表格使用时的便捷接口
+    virtual bool Get(const std::string& row_key, const std::string& family,
+                     const std::string& qualifier, int64_t* value,
                      ErrorCode* err) = 0;
 
     virtual bool IsPutFinished() = 0;

@@ -556,7 +556,8 @@ Table::Table(const std::string& table_name)
     : m_name(table_name),
       m_status(kTableEnable),
       m_deleted_tablet_num(0),
-      m_max_tablet_no(0) {
+      m_max_tablet_no(0),
+      m_create_time((int64_t)time(NULL)) {
 }
 
 bool Table::FindTablet(const std::string& key_start, TabletPtr* tablet) {
@@ -697,6 +698,7 @@ void Table::ToMeta(TableMeta* meta) {
     meta->set_table_name(m_name);
     meta->set_status(m_status);
     meta->mutable_schema()->CopyFrom(m_schema);
+    meta->set_create_time(m_create_time);
     for (size_t i = 0; i < m_snapshot_list.size(); i++) {
         meta->add_snapshot_list(m_snapshot_list[i]);
     }
@@ -882,6 +884,7 @@ bool TabletManager::AddTable(const std::string& table_name,
     m_mutex.Unlock();
     (*table)->m_schema.CopyFrom(meta.schema());
     (*table)->m_status = meta.status();
+    (*table)->m_create_time = meta.create_time();
     for (int32_t i = 0; i < meta.snapshot_list_size(); ++i) {
         (*table)->m_snapshot_list.push_back(meta.snapshot_list(i));
         LOG(INFO) << table_name << " add snapshot " << meta.snapshot_list(i);
@@ -1126,12 +1129,15 @@ bool TabletManager::ShowTable(std::vector<TablePtr>* table_meta_list,
             table_meta_list->push_back(table);
         }
         table_found_num++;
-
-        it2 = table->m_tablets_list.begin();
-
+        if (table_found_num == 1) {
+            it2 = table->m_tablets_list.lower_bound(start_tablet_key);
+        } else {
+            it2 = table->m_tablets_list.begin();
+        }
         for (; it2 != table->m_tablets_list.end(); ++it2) {
-            if (tablet_found_num >= max_tablet_found)
+            if (tablet_found_num >= max_tablet_found) {
                 break;
+            }
             TabletPtr tablet = it2->second;
             tablet_found_num++;
             if (tablet_meta_list != NULL) {
