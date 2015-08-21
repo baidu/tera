@@ -385,7 +385,16 @@ private:
                                       WriteTabletResponse* response,
                                       bool failed, int error_code);
 
+    // load metabale to master memory
+    bool LoadMetaTable(const std::string& meta_tablet_addr,
+                       StatusCode* ret_status);
+    bool LoadMetaTableFromFile(const std::string& filename,
+                               StatusCode* ret_status = NULL);
+    bool ReadFromStream(std::ifstream& ifs,
+                        std::string* key,
+                        std::string* value);
 
+    // load metatable on a tabletserver
     bool LoadMetaTablet(std::string* server_addr);
     void UnloadMetaTablet(const std::string& server_addr);
 
