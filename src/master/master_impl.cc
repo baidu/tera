@@ -6,6 +6,7 @@
 
 #include <algorithm>
 #include <boost/bind.hpp>
+#include <fstream>
 
 #include <gflags/gflags.h>
 #include <glog/logging.h>
@@ -277,7 +278,7 @@ bool MasterImpl::RestoreMetaTablet(const std::vector<TabletMeta>& tablet_list,
     // meta table has been loaded up by now
     if (FLAGS_tera_master_meta_recovery_enabled) {
         const std::string& filename = FLAGS_tera_master_meta_recovery_file;
-        while (!m_tablet_manager->LoadMetaTableFromFile(filename)) {
+        while (!LoadMetaTableFromFile(filename)) {
             LOG(ERROR) << kSms << "fail to recovery meta table from backup";
             ThisThread::Sleep(60 * 1000);
         }
@@ -298,7 +299,7 @@ bool MasterImpl::RestoreMetaTablet(const std::vector<TabletMeta>& tablet_list,
     }
 
     StatusCode status = kTabletNodeOk;
-    while (!m_tablet_manager->LoadMetaTable(*meta_tablet_addr, &status)) {
+    while (!LoadMetaTable(*meta_tablet_addr, &status)) {
         TryKickTabletNode(*meta_tablet_addr);
         if (!LoadMetaTablet(meta_tablet_addr)) {
             return false;
@@ -445,6 +446,139 @@ void MasterImpl::UnloadMetaTablet(const std::string& server_addr) {
     }
 }
 
+bool MasterImpl::LoadMetaTable(const std::string& meta_tablet_addr,
+                               StatusCode* ret_status) {
+    m_tablet_manager->ClearTableList();
+    ScanTabletRequest request;
+    ScanTabletResponse response;
+    request.set_sequence_id(m_this_sequence_id.Inc());
+    request.set_table_name(FLAGS_tera_master_meta_table_name);
+    request.set_start("");
+    request.set_end("");
+    tabletnode::TabletNodeClient meta_node_client(meta_tablet_addr);
+    while (meta_node_client.ScanTablet(&request, &response)) {
+        if (response.status() != kTabletNodeOk) {
+            SetStatusCode(response.status(), ret_status);
+            LOG(ERROR) << "fail to load meta table: "
+                << StatusCodeToString(response.status());
+            m_tablet_manager->ClearTableList();
+            return false;
+        }
+        if (response.results().key_values_size() <= 0) {
+            LOG(INFO) << "load meta table success";
+            TabletPtr meta_tablet;
+            TableSchema schema;
+            schema.set_kv_only(true);
+            LocalityGroupSchema* lg = schema.add_locality_groups();
+            schema.set_name(FLAGS_tera_master_meta_table_name);
+            lg->set_name("lg_meta");
+            lg->set_compress_type(false);
+            lg->set_store_type(MemoryStore);
+            m_tablet_manager->AddTablet(FLAGS_tera_master_meta_table_name, "", "",
+                      FLAGS_tera_master_meta_table_path, meta_tablet_addr,
+                      schema, kTableReady, 0, &meta_tablet);
+            return true;
+        }
+        uint32_t record_size = response.results().key_values_size();
+        LOG(INFO) << "load meta table: " << record_size << " records";
+
+        std::string last_record_key;
+        for (uint32_t i = 0; i < record_size; i++) {
+            const KeyValuePair& record = response.results().key_values(i);
+            last_record_key = record.key();
+            char first_key_char = record.key()[0];
+            if (first_key_char == '@') {
+                m_tablet_manager->LoadTableMeta(record.key(), record.value());
+            } else if (first_key_char > '@') {
+                m_tablet_manager->LoadTabletMeta(record.key(), record.value());
+            } else {
+                continue;
+            }
+        }
+        std::string next_record_key = NextKey(last_record_key);
+        request.set_start(next_record_key);
+        request.set_end("");
+        request.set_sequence_id(m_this_sequence_id.Inc());
+        response.Clear();
+    }
+    SetStatusCode(kRPCError, ret_status);
+    LOG(ERROR) << "fail to load meta table: " << StatusCodeToString(kRPCError);
+    m_tablet_manager->ClearTableList();
+    return false;
+}
+
+bool MasterImpl::LoadMetaTableFromFile(const std::string& filename,
+                                          StatusCode* ret_status) {
+    m_tablet_manager->ClearTableList();
+    std::ifstream ifs(filename.c_str(), std::ofstream::binary);
+    if (!ifs.is_open()) {
+        LOG(ERROR) << "fail to open file " << filename << " for read";
+        SetStatusCode(kIOError, ret_status);
+        return false;
+    }
+
+    uint64_t count = 0;
+    std::string key, value;
+    while (ReadFromStream(ifs, &key, &value)) {
+        if (key.empty()) {
+            LOG(INFO) << "load meta table success, " << count << " records";
+            TabletPtr meta_tablet;
+            TableSchema schema;
+            LocalityGroupSchema* lg = schema.add_locality_groups();
+            schema.set_name(FLAGS_tera_master_meta_table_name);
+            lg->set_name("lg_meta");
+            lg->set_compress_type(false);
+            lg->set_store_type(MemoryStore);
+            m_tablet_manager->AddTablet(FLAGS_tera_master_meta_table_name, "", "",
+                      FLAGS_tera_master_meta_table_path, "",
+                      schema, kTableNotInit, 0, &meta_tablet);
+            return true;
+        }
+
+        char first_key_char = key[0];
+        if (first_key_char == '@') {
+            m_tablet_manager->LoadTableMeta(key, value);
+        } else if (first_key_char > '@') {
+            m_tablet_manager->LoadTabletMeta(key, value);
+        } else {
+            continue;
+        }
+
+        count++;
+    }
+    m_tablet_manager->ClearTableList();
+
+    SetStatusCode(kIOError, ret_status);
+    LOG(ERROR) << "fail to load meta table: " << StatusCodeToString(kIOError);
+    return false;
+}
+
+bool MasterImpl::ReadFromStream(std::ifstream& ifs,
+                                std::string* key,
+                                std::string* value) {
+    uint32_t key_size = 0, value_size = 0;
+    ifs.read((char*)&key_size, sizeof(key_size));
+    if (ifs.eof() && ifs.gcount() == 0) {
+        key->clear();
+        value->clear();
+        return true;
+    }
+    key->resize(key_size);
+    ifs.read((char*)key->data(), key_size);
+    if (ifs.fail()) {
+        return false;
+    }
+    ifs.read((char*)&value_size, sizeof(value_size));
+    if (ifs.fail()) {
+        return false;
+    }
+    value->resize(value_size);
+    ifs.read((char*)value->data(), value_size);
+    if (ifs.fail()) {
+        return false;
+    }
+    return true;
+}
 /////////////  RPC interface //////////////
 
 void MasterImpl::CreateTable(const CreateTableRequest* request,
