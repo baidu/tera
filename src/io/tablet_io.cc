@@ -1161,7 +1161,13 @@ bool TabletIO::ScanRowsRestricted(const ScanTabletRequest* request,
         ret = true;
     }
 
-    response->set_status(status);
+    if (status == kTabletUnLoading2) {
+        // keep compatable for old sdk protocol
+        // we can remove this in the future.
+        response->set_status(kKeyNotInRange);
+    }else {
+        response->set_status(status);
+    }
     done->Run();
     return ret;
 }
