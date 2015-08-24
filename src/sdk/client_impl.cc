@@ -740,10 +740,11 @@ bool ClientImpl::ParseTabletEntry(const TabletMeta& meta, std::vector<TabletInfo
     return true;
 }
 
+static Mutex g_mutex;
+static bool g_is_glog_init = false;
+
 static void InitFlags(const std::string& confpath, const std::string& log_prefix) {
-    static Mutex mutex;
-    static bool is_glog_init = false;
-    MutexLock locker(&mutex);
+    MutexLock locker(&g_mutex);
     // search conf file, priority:
     //   user-specified > ./tera.flag > ../conf/tera.flag > env-var
     if (!confpath.empty() && IsExist(confpath)) {
@@ -777,10 +778,10 @@ static void InitFlags(const std::string& confpath, const std::string& log_prefix
 
     // the gflags will get flags from FLAGS_flagfile
     ::google::ParseCommandLineFlags(&argc, &argv, true);
-    if (!is_glog_init) {
+    if (!g_is_glog_init) {
         ::google::InitGoogleLogging(log_prefix.c_str());
         utils::SetupLog(log_prefix);
-        is_glog_init = true;
+        g_is_glog_init = true;
     }
     delete[] argv;
 
@@ -802,6 +803,11 @@ Client* Client::NewClient(const string& confpath, ErrorCode* err) {
 
 Client* Client::NewClient() {
     return NewClient("", "teracli", NULL);
+}
+
+void Client::SetGlogIsInitialized() {
+    MutexLock locker(&g_mutex);
+    g_is_glog_init = true;
 }
 
 } // namespace tera
