@@ -21,7 +21,7 @@ TEST(TokenizerTest, ConsumeUselessChars) {
     input = "hello";
     Tokenizer t(input);
     t.ConsumeUselessChars();
-    ASSERT_EQ(t.cur_pos_, 0);
+    ASSERT_EQ(t.cur_pos_, 0u);
 
     input = "    hello";
     t.Reset(input);
@@ -121,7 +121,7 @@ TEST(PropTreeTest, ParseFromString) {
     input = "root{child1, child2, child3,}";
     EXPECT_TRUE(pt.ParseFromString(input));
     proot = pt.GetRootNode();
-    EXPECT_EQ(3, proot->children_.size());
+    EXPECT_EQ(proot->children_.size(), 3u);
 
     input = "root{child1<prop1=value1>}";
     EXPECT_TRUE(pt.ParseFromString(input));
@@ -141,7 +141,7 @@ TEST(PropTreeTest, ParseFromString) {
                 child2 \
              }";
     EXPECT_TRUE(pt.ParseFromString(input));
-    EXPECT_EQ(pt.GetRootNode()->children_.size(), 2);
+    EXPECT_EQ(pt.GetRootNode()->children_.size(), 2u);
     EXPECT_EQ(pt.MaxDepth(), 3);
     EXPECT_EQ(pt.MinDepth(), 2);
     // LOG(ERROR) << pt.FormatString();
