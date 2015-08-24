@@ -252,6 +252,96 @@ bool ClientImpl::EnableTable(string name, ErrorCode* err) {
     return false;
 }
 
+void ClientImpl::DoShowUser(OperateUserResponse& response,
+                            std::vector<std::string>& user_groups) {
+    if (!response.has_user_info()) {
+        return;
+    }
+    UserInfo user_info = response.user_info();
+    user_groups.push_back(user_info.user_name());
+    for (int i = 0; i < user_info.group_name_size(); ++i) {
+        user_groups.push_back(user_info.group_name(i));
+    }
+}
+
+bool ClientImpl::OperateUser(UserInfo& operated_user, UserOperateType type,
+                             std::vector<std::string>& user_groups, ErrorCode* err) {
+    master::MasterClient master_client(_cluster->MasterAddr());
+    OperateUserRequest request;
+    OperateUserResponse response;
+    request.set_sequence_id(0);
+    request.set_user_token(GetUserToken(_user_identity, _user_passcode));
+    request.set_op_type(type);
+    UserInfo* user_info = request.mutable_user_info();
+    user_info->CopyFrom(operated_user);
+    std::string reason;
+    if (master_client.OperateUser(&request, &response)) {
+        if (CheckReturnValue(response.status(), reason, err)) {
+            if (type == kShowUser) {
+                DoShowUser(response, user_groups);
+            }
+            return true;
+        }
+        LOG(ERROR) << reason << "| status: " << StatusCodeToString(response.status());
+    } else {
+        reason = "rpc fail to operate user: " + operated_user.user_name();
+        LOG(ERROR) << reason;
+        err->SetFailed(ErrorCode::kSystem, reason);
+    }
+    return false;
+}
+
+bool ClientImpl::CreateUser(const std::string& user,
+                            const std::string& password, ErrorCode* err) {
+    UserInfo created_user;
+    created_user.set_user_name(user);
+    created_user.set_token(GetUserToken(user, password));
+    std::vector<std::string> null;
+    return OperateUser(created_user, kCreateUser, null, err);
+}
+
+bool ClientImpl::DeleteUser(const std::string& user, ErrorCode* err) {
+    UserInfo deleted_user;
+    deleted_user.set_user_name(user);
+    std::vector<std::string> null;
+    return OperateUser(deleted_user, kDeleteUser, null, err);
+}
+
+bool ClientImpl::ChangePwd(const std::string& user,
+                           const std::string& password, ErrorCode* err) {
+    UserInfo updated_user;
+    updated_user.set_user_name(user);
+    updated_user.set_token(GetUserToken(user, password));
+    std::vector<std::string> null;
+    return OperateUser(updated_user, kChangePwd, null, err);
+}
+
+bool ClientImpl::ShowUser(const std::string& user, std::vector<std::string>& user_groups, 
+                          ErrorCode* err) {
+    UserInfo user_info;
+    user_info.set_user_name(user);
+    user_info.set_token(GetUserToken(_user_identity, _user_passcode));
+    return OperateUser(user_info, kShowUser, user_groups, err);
+}
+
+bool ClientImpl::AddUserToGroup(const std::string& user_name,
+                                const std::string& group_name, ErrorCode* err) {
+    UserInfo user;
+    user.set_user_name(user_name);
+    user.add_group_name(group_name);
+    std::vector<std::string> null;
+    return OperateUser(user, kAddToGroup, null, err);
+}
+
+bool ClientImpl::DeleteUserFromGroup(const std::string& user_name,
+                                     const std::string& group_name, ErrorCode* err) {
+    UserInfo user;
+    user.set_user_name(user_name);
+    user.add_group_name(group_name);
+    std::vector<std::string> null;
+    return OperateUser(user, kDeleteFromGroup, null, err);
+}
+
 Table* ClientImpl::OpenTable(const string& table_name, ErrorCode* err) {
     TableOptions options;
     return OpenTable(table_name, options, err);

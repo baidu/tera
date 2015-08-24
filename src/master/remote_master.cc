@@ -146,6 +146,16 @@ void RemoteMaster::CmdCtrl(google::protobuf::RpcController* controller,
     m_thread_pool->AddTask(callback);
 }
 
+void RemoteMaster::OperateUser(google::protobuf::RpcController* controller,
+                               const OperateUserRequest* request,
+                               OperateUserResponse* response,
+                               google::protobuf::Closure* done) {
+    boost::function<void ()> callback =
+        boost::bind(&RemoteMaster::DoOperateUser, this, controller,
+                    request, response, done);
+    m_thread_pool->AddTask(callback);
+}
+
 // internal
 
 void RemoteMaster::DoGetSnapshot(google::protobuf::RpcController* controller,
@@ -258,6 +268,14 @@ void RemoteMaster::DoCmdCtrl(google::protobuf::RpcController* controller,
     done->Run();
 }
 
+void RemoteMaster::DoOperateUser(google::protobuf::RpcController* controller,
+                                 const OperateUserRequest* request,
+                                 OperateUserResponse* response,
+                                 google::protobuf::Closure* done) {
+    LOG(INFO) << "accept RPC (OperateUser)";
+    m_master_impl->OperateUser(request, response, done);
+    LOG(INFO) << "finish RPC (OperateUser)";
+}
 
 } // namespace master
 } // namespace tera

@@ -16,9 +16,10 @@
 #include "common/thread_pool.h"
 #include "gflags/gflags.h"
 
+#include "master/gc_strategy.h"
 #include "master/tablet_manager.h"
 #include "master/tabletnode_manager.h"
-#include "master/gc_strategy.h"
+#include "master/user_manager.h"
 #include "proto/master_rpc.pb.h"
 #include "proto/table_meta.pb.h"
 #include "sdk/client_impl.h"
@@ -116,6 +117,9 @@ public:
 
     void CmdCtrl(const CmdCtrlRequest* request,
                  CmdCtrlResponse* response);
+    void OperateUser(const OperateUserRequest* request,
+                     OperateUserResponse* response,
+                     google::protobuf::Closure* done);
 
     void RefreshTabletNodeList(const std::map<std::string, std::string>& ts_node_list);
 
@@ -332,6 +336,14 @@ private:
                          WriteTabletRequest* request,
                          WriteTabletResponse* response,
                          bool failed, int error_code);
+    void AddUserInfoToMetaCallback(UserPtr user_ptr,
+                                   int32_t retry_times,
+                                   const OperateUserRequest* rpc_request,
+                                   OperateUserResponse* rpc_response,
+                                   google::protobuf::Closure* rpc_done,
+                                   WriteTabletRequest* request,
+                                   WriteTabletResponse* response,
+                                   bool rpc_failed, int error_code);
     void UpdateTableRecordForDisableCallback(TablePtr table, int32_t retry_times,
                                              DisableTableResponse* rpc_response,
                                              google::protobuf::Closure* rpc_done,
@@ -469,6 +481,7 @@ private:
     bool m_restored;
     boost::shared_ptr<TabletManager> m_tablet_manager;
     boost::shared_ptr<TabletNodeManager> m_tabletnode_manager;
+    boost::shared_ptr<UserManager> m_user_manager;
     scoped_ptr<MasterZkAdapterBase> m_zk_adapter;
     scoped_ptr<Scheduler> m_size_scheduler;
     scoped_ptr<Scheduler> m_load_scheduler;

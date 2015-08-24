@@ -6,6 +6,7 @@
 #define TERA_SDK_CLIENT_IMPL_
 
 #include "common/thread_pool.h"
+#include "proto/master_rpc.pb.h"
 #include "proto/tabletnode_client.h"
 #include "sdk/sdk_zk.h"
 #include "sdk/tera.h"
@@ -47,6 +48,20 @@ public:
     virtual bool DisableTable(string name, ErrorCode* err);
 
     virtual bool EnableTable(string name, ErrorCode* err);
+
+    virtual bool CreateUser(const std::string& user,
+                            const std::string& password, ErrorCode* err);
+    virtual bool DeleteUser(const std::string& user, ErrorCode* err);
+    virtual bool ChangePwd(const std::string& user,
+                           const std::string& password, ErrorCode* err);
+    virtual bool ShowUser(const std::string& user, std::vector<std::string>& user_groups, 
+                          ErrorCode* err);
+    virtual bool AddUserToGroup(const std::string& user,
+                                const std::string& group, ErrorCode* err);
+    virtual bool DeleteUserFromGroup(const std::string& user,
+                                     const std::string& group, ErrorCode* err);
+    bool OperateUser(UserInfo& operated_user, UserOperateType type,
+                     std::vector<std::string>& user_groups, ErrorCode* err);
 
     virtual Table* OpenTable(const string& table_name, ErrorCode* err);
 
@@ -117,7 +132,8 @@ private:
                           std::vector<TabletInfo>* tablet_list);
 
     std::string GetUserToken(const std::string& user, const std::string& password);
-
+    void DoShowUser(OperateUserResponse& response,
+                    std::vector<std::string>& user_groups);
     bool CheckReturnValue(StatusCode status, std::string& reason, ErrorCode* err);
 private:
     ClientImpl(const ClientImpl&);
