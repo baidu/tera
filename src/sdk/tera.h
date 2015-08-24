@@ -200,6 +200,10 @@ public:
     void SetKvOnly();
     bool IsKv() const;
 
+    /// acl
+    void SetAdminGroup(const std::string& name);
+    std::string AdminGroup() const;
+
 private:
     TableDescriptor(const TableDescriptor&);
     void operator=(const TableDescriptor&);
