@@ -383,14 +383,8 @@ void TabletNodeImpl::ReadTablet(int64_t start_micros,
             } else {
                 response->mutable_detail()->mutable_row_result()->RemoveLast();
             }
-            if (row_status == kTabletUnLoading2) {
-                // keep compatable for old sdk protocol
-                // we can remove this in the future.
-                response->mutable_detail()->add_status(kKeyNotInRange);
-            }else {
-                response->mutable_detail()->add_status(row_status);
-            }
             tablet_io->DecRef();
+            response->mutable_detail()->add_status(row_status);
         }
     }
 
@@ -494,13 +488,7 @@ void TabletNodeImpl::WriteTablet(const WriteTabletRequest* request,
             tablet_io->DecRef();
             for (int32_t i = 0; i < index_num; i++) {
                 int32_t index = (*index_list)[i];
-                if (status == kTabletUnLoading2) {
-                    // keep compatable for old sdk protocol
-                    // we can remove this in the future.
-                    response->mutable_row_status_list()->Set(index, kKeyNotInRange);
-                }else {
-                    response->mutable_row_status_list()->Set(index, status);
-                }
+                response->mutable_row_status_list()->Set(index, status);
             }
             delete index_list;
             if (done_counter->Add(index_num) == row_num) {
