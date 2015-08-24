@@ -90,6 +90,7 @@ DECLARE_bool(tera_ins_enabled);
 
 DECLARE_int64(tera_sdk_perf_counter_log_interval);
 
+DECLARE_bool(tera_acl_enabled);
 DECLARE_string(tera_acl_root_token);
 
 namespace tera {
@@ -447,6 +448,27 @@ void MasterImpl::UnloadMetaTablet(const std::string& server_addr) {
     }
 }
 
+bool MasterImpl::IsRootUser(const std::string& token) {
+    return token == FLAGS_tera_acl_root_token;
+}
+
+template <typename Request, typename Response, typename Callback>
+bool MasterImpl::HasTablePermission(const Request* request, Response* response, 
+                                    Callback* done, TablePtr table, const char* operate) {
+    // check permission
+    if (!FLAGS_tera_acl_enabled 
+        || IsRootUser(request->user_token())) {
+        LOG(INFO) << "[acl] is acl enabled: " << FLAGS_tera_acl_enabled;
+        return true;
+    } else {
+        LOG(INFO) << "[acl] fail to " << operate;
+        response->set_sequence_id(request->sequence_id());
+        response->set_status(kNotPermission);
+        done->Run();
+        return false;
+    }
+}
+
 bool MasterImpl::LoadMetaTable(const std::string& meta_tablet_addr,
                                StatusCode* ret_status) {
     m_tablet_manager->ClearTableList();
@@ -580,6 +602,7 @@ bool MasterImpl::ReadFromStream(std::ifstream& ifs,
     }
     return true;
 }
+
 /////////////  RPC interface //////////////
 
 void MasterImpl::CreateTable(const CreateTableRequest* request,
@@ -601,6 +624,12 @@ void MasterImpl::CreateTable(const CreateTableRequest* request,
             LOG(ERROR) << "Fail to create table: " << request->table_name()
                 << ", table already exist";
             response->set_status(kTableExist);
+            done->Run();
+            return;
+        }
+        if (FLAGS_tera_acl_enabled && !IsRootUser(request->user_token())) {
+            response->set_sequence_id(request->sequence_id());
+            response->set_status(kNotPermission);
             done->Run();
             return;
         }
@@ -702,6 +731,9 @@ void MasterImpl::DeleteTable(const DeleteTableRequest* request,
         done->Run();
         return;
     }
+    if (!HasTablePermission(request, response, done, table, "delete table")) {
+        return;
+    }
 
     TableStatus old_status;
     if (!table->SetStatus(kTableDeleting, &old_status)) {
@@ -753,6 +785,9 @@ void MasterImpl::DisableTable(const DisableTableRequest* request,
             << ", table not exist";
         response->set_status(kTableNotFound);
         done->Run();
+        return;
+    }
+    if (!HasTablePermission(request, response, done, table, "disable table")) {
         return;
     }
 
@@ -811,6 +846,9 @@ void MasterImpl::EnableTable(const EnableTableRequest* request,
         done->Run();
         return;
     }
+    if (!HasTablePermission(request, response, done, table, "enable table")) {
+        return;
+    }
 
     TableStatus old_status;
     if (!table->SetStatus(kTableEnable, &old_status)) {
@@ -857,6 +895,9 @@ void MasterImpl::UpdateTable(const UpdateTableRequest* request,
             << ", table not exist";
         response->set_status(kTableNotExist);
         done->Run();
+        return;
+    }
+    if (!HasTablePermission(request, response, done, table, "update table")) {
         return;
     }
 

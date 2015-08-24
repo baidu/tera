@@ -455,6 +455,11 @@ private:
     void DoTabletNodeGc();
     void DoTabletNodeGcPhase2();
 
+    bool IsRootUser(const std::string& token);
+
+    template <typename Request, typename Response, typename Callback>
+    bool HasTablePermission(const Request* request, Response* response, 
+                            Callback* done, TablePtr table, const char* operate);
 private:
     mutable Mutex m_status_mutex;
     MasterStatus m_status;
