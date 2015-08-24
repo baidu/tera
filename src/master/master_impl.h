@@ -18,6 +18,7 @@
 
 #include "master/tablet_manager.h"
 #include "master/tabletnode_manager.h"
+#include "master/gc_strategy.h"
 #include "proto/master_rpc.pb.h"
 #include "proto/table_meta.pb.h"
 #include "sdk/client_impl.h"
@@ -385,7 +386,16 @@ private:
                                       WriteTabletResponse* response,
                                       bool failed, int error_code);
 
+    // load metabale to master memory
+    bool LoadMetaTable(const std::string& meta_tablet_addr,
+                       StatusCode* ret_status);
+    bool LoadMetaTableFromFile(const std::string& filename,
+                               StatusCode* ret_status = NULL);
+    bool ReadFromStream(std::ifstream& ifs,
+                        std::string* key,
+                        std::string* value);
 
+    // load metatable on a tabletserver
     bool LoadMetaTablet(std::string* server_addr);
     void UnloadMetaTablet(const std::string& server_addr);
 
@@ -442,13 +452,8 @@ private:
     void EnableTabletNodeGcTimer();
     void DisableTabletNodeGcTimer();
     void ScheduleTabletNodeGc();
-    void TabletNodeGc();
     void DoTabletNodeGc();
     void DoTabletNodeGcPhase2();
-    void CollectDeadTabletsFiles();
-    void CollectSingleDeadTablet(const std::string& tablename, uint64_t tabletnum);
-    void DeleteObsoleteFiles();
-    void ProcessQueryCallbackForGc(QueryResponse* response);
 
 private:
     mutable Mutex m_status_mutex;
@@ -457,8 +462,8 @@ private:
 
     mutable Mutex m_tabletnode_mutex;
     bool m_restored;
-    scoped_ptr<TabletManager> m_tablet_manager;
-    scoped_ptr<TabletNodeManager> m_tabletnode_manager;
+    boost::shared_ptr<TabletManager> m_tablet_manager;
+    boost::shared_ptr<TabletNodeManager> m_tabletnode_manager;
     scoped_ptr<MasterZkAdapterBase> m_zk_adapter;
     scoped_ptr<Scheduler> m_size_scheduler;
     scoped_ptr<Scheduler> m_load_scheduler;
@@ -495,15 +500,10 @@ private:
     TableImpl* m_stat_table;
 
     // tabletnode garbage clean
-    // first: live tablet, second: dead tablet
     bool m_gc_enabled;
-    mutable Mutex m_gc_mutex;
-    typedef std::pair<std::set<uint64_t>, std::set<uint64_t> > GcTabletSet;
-    std::map<std::string, GcTabletSet> m_gc_tablets;
-    typedef std::vector<std::set<uint64_t> > GcFileSet;
-    std::map<std::string, GcFileSet> m_gc_live_files;
     int64_t m_gc_timer_id;
     bool m_gc_query_enable;
+    boost::shared_ptr<GcStrategy> gc_strategy;
 };
 
 } // namespace master

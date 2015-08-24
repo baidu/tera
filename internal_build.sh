@@ -86,6 +86,15 @@ make -j4
 make install
 cd -
 
+# gtest
+unzip gtest-1.7.0.zip
+cd gtest-1.7.0
+./configure ${DEPS_CONFIG}
+make
+cp -a lib/.libs/* ${DEPS_PREFIX}/lib
+cp -a include/gtest ${DEPS_PREFIX}/include
+cd -
+
 # libunwind for gperftools
 tar zxf libunwind-0.99-beta.tar.gz
 cd libunwind-0.99-beta
@@ -120,6 +129,7 @@ sed -i 's/^SNAPPY_PREFIX=.*/SNAPPY_PREFIX=.\/thirdparty/' depends.mk
 sed -i 's/^ZOOKEEPER_PREFIX=.*/ZOOKEEPER_PREFIX=.\/thirdparty/' depends.mk
 sed -i 's/^GFLAGS_PREFIX=.*/GFLAGS_PREFIX=.\/thirdparty/' depends.mk
 sed -i 's/^GLOG_PREFIX=.*/GLOG_PREFIX=.\/thirdparty/' depends.mk
+sed -i 's/^GTEST_PREFIX=.*/GTEST_PREFIX=.\/thirdparty/' depends.mk
 sed -i 's/^GPERFTOOLS_PREFIX=.*/GPERFTOOLS_PREFIX=.\/thirdparty/' depends.mk
 sed -i 's/^BOOST_INCDIR=.*/BOOST_INCDIR=.\/thirdparty\/boost_1_57_0/' depends.mk
 sed -i 's/^INS_PREFIX=.*/INS_PREFIX=.\/thirdparty/' depends.mk
