@@ -4,8 +4,8 @@
 
 #define private public
 
-#include "tprinter.h"
-#include "gtest/gtest.h"
+#include "utils/tprinter.h"
+#include <gtest/gtest.h>
 
 namespace tera {
 
