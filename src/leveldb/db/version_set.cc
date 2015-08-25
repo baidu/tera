@@ -1671,6 +1671,10 @@ Compaction* VersionSet::PickCompaction() {
 
   SetupOtherInputs(c);
 
+  // tera-specific: calculate the smallest rowkey which do not overlap file not
+  // in this compaction.
+  SetupCompactionBoundary(c);
+
   return c;
 }
 
@@ -1742,6 +1746,30 @@ void VersionSet::SetupOtherInputs(Compaction* c) {
   // key range next time.
   compact_pointer_[level] = largest.Encode().ToString();
   c->edit_.SetCompactPointer(level, largest);
+}
+
+void VersionSet::SetupCompactionBoundary(Compaction* c) {
+  if (c->level_ == 0) {
+    // compaction on level 0, do not drop delete mark
+    return;
+  }
+
+  int base_level = config::kNumLevels;
+  while (base_level > 0) {
+    if (current_->files_[base_level].size() != 0) {
+      break;
+    }
+    base_level--;
+  }
+  if (base_level > c->level_ + 1) {
+    // not base level
+    return;
+  }
+
+  // do not need calculate input[1].
+  int input0_size = c->inputs_[0].size();
+  FileMetaData* last_file = c->inputs_[0][input0_size - 1];
+  c->set_drop_lower_bound(last_file->largest.user_key().ToString());
 }
 
 Compaction* VersionSet::CompactRange(

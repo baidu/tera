@@ -704,17 +704,6 @@ bool DBImpl::MinorCompact() {
     return s.ok();
 }
 
-bool DBImpl::UserKeyInRange(const Slice& user_key) {
-    if (!key_start_.empty()
-        && user_comparator()->Compare(user_key, Slice(key_start_)) < 0) {
-        return false;
-    } else if (!key_end_.empty()
-               && user_comparator()->Compare(user_key, Slice(key_end_)) >= 0) {
-        return false;
-    }
-    return true;
-}
-
 void DBImpl::AddInheritedLiveFiles(std::vector<std::set<uint64_t> >* live) {
   uint64_t tablet, lg;
   if (!ParseDbName(dbname_, NULL, &tablet, &lg)) {
@@ -1175,10 +1164,12 @@ Status DBImpl::DoCompactionWork(CompactionState* compact) {
         //     few iterations of this loop (by rule (A) above).
         // Therefore this deletion marker is obsolete and can be dropped.
         drop = true;
-      } else if (!UserKeyInRange(ikey.user_key)) {
-        drop = true;
       } else if (compact_strategy) {
-        drop = compact_strategy->Drop(ikey.user_key, ikey.sequence);
+        std::string lower_bound;
+        if (options_.drop_base_level_del_in_compaction) {
+            lower_bound = compact->compaction->drop_lower_bound();
+        }
+        drop = compact_strategy->Drop(ikey.user_key, ikey.sequence, lower_bound);
       }
 
       last_sequence_for_key = ikey.sequence;
