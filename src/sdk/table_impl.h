@@ -195,8 +195,6 @@ public:
     uint64_t GetMaxMutationPendingNum() { return _max_commit_pending_num; }
     uint64_t GetMaxReaderPendingNum() { return _max_reader_pending_num; }
 
-    bool IsKvOnlyTable();
-
     struct PerfCounter {
         int64_t start_time;
         Counter rpc_r;
