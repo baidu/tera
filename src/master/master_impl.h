@@ -128,6 +128,7 @@ public:
 
     bool GetMetaTabletAddr(std::string* addr);
     void TryLoadTablet(TabletPtr tablet, std::string addr = "");
+    void RenameCmdCtrl(const CmdCtrlRequest* request, CmdCtrlResponse* response);
 
 private:
     typedef Closure<void, SnapshotRequest*, SnapshotResponse*, bool, int> SnapshotClosure;

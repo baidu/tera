@@ -1103,6 +1103,8 @@ void MasterImpl::CmdCtrl(const CmdCtrlRequest* request,
         TabletCmdCtrl(request, response);
     } else if (request->command() == "meta") {
         MetaCmdCtrl(request, response);
+    } else if (request->command() == "rename") {
+        RenameCmdCtrl(request, response);
     } else {
         response->set_status(kInvalidArgument);
     }
@@ -1187,6 +1189,27 @@ void MasterImpl::TabletCmdCtrl(const CmdCtrlRequest* request,
     } else {
         response->set_status(kInvalidArgument);
     }
+}
+
+void MasterImpl::RenameCmdCtrl(const CmdCtrlRequest* request,
+                               CmdCtrlResponse* response) {
+    if (request->arg_list_size() != 2) {
+        response->set_status(kInvalidArgument);
+        return;
+    }
+    response->set_sequence_id(request->sequence_id());
+    MasterStatus master_status = GetMasterStatus();
+    if (master_status != kIsRunning) {
+        LOG(ERROR) << "master is not ready, m_status = "
+            << StatusCodeToString(master_status);
+        response->set_status(static_cast<StatusCode>(master_status));
+        return;
+    }
+    const std::string& old_table_name = request->arg_list(0);
+    const std::string& new_table_name = request->arg_list(1);
+    LOG(INFO) << "rename table: " << old_table_name << " -> " << new_table_name;
+    response->set_status(kMasterOk);
+    //To be continue ...
 }
 
 void MasterImpl::MetaCmdCtrl(const CmdCtrlRequest* request,

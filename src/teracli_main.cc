@@ -166,6 +166,9 @@ void UsageMore(const std::string& prg_name) {
        findts   <tablename> <rowkey>                                        \n\
                 find the specify tabletnode serving 'rowkey'.               \n\
                                                                             \n\
+       rename   <old table name> <new table name>                           \n\
+                rename table's name                                         \n\
+                                                                            \n\
        version\n\n";
 }
 int32_t CreateOp(Client* client, int32_t argc, char** argv, ErrorCode* err) {
@@ -1918,6 +1921,27 @@ int32_t TabletOp(Client* client, int32_t argc, char** argv, ErrorCode* err) {
     return 0;
 }
 
+int32_t RenameOp(Client* client, int32_t argc, char** argv, ErrorCode* err) {
+    if (argc != 4 ) {
+        UsageMore(argv[0]);
+        return -1;
+    }
+    std::vector<std::string> arg_list;
+    std::string op = "rename";
+    std::string old_table_name = argv[2];
+    std::string new_table_name = argv[3];
+    arg_list.push_back(old_table_name);
+    arg_list.push_back(new_table_name);
+    if (!client->CmdCtrl(op, arg_list, NULL, NULL, err)) {
+        LOG(ERROR) << "fail to rename table: " 
+                   << old_table_name << " -> " << new_table_name << std::endl;
+        return -1;
+    }
+    std::cout << "rename OK: " << old_table_name 
+              << " -> " << new_table_name << std::endl;
+    return 0;
+}
+
 int32_t MetaOp(Client* client, int32_t argc, char** argv, ErrorCode* err) {
     if (argc != 4 && argc != 5) {
         UsageMore(argv[0]);
@@ -2333,6 +2357,8 @@ int main(int argc, char* argv[]) {
         ret = SafeModeOp(client, argc, argv, &error_code);
     } else if (cmd == "tablet") {
         ret = TabletOp(client, argc, argv, &error_code);
+    } else if (cmd == "rename") {
+        ret = RenameOp(client, argc, argv, &error_code);
     } else if (cmd == "meta") {
         ret = MetaOp(client, argc, argv, &error_code);
     } else if (cmd == "compact") {
