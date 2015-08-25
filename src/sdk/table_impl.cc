@@ -275,16 +275,16 @@ bool TableImpl::Get(const std::string& row_key, const std::string& family,
 
 ResultStream* TableImpl::Scan(const ScanDescriptor& desc, ErrorCode* err) {
     ScanDescImpl * impl = desc.GetImpl();
+    impl->SetTableSchema(_table_schema);
     if (impl->GetFilterString() != "") {
         MutexLock lock(&_table_meta_mutex);
-        impl->SetTableSchema(_table_schema);
         if (!impl->ParseFilterString()) {
             // fail to parse filter string
             return NULL;
         }
     }
     ResultStream * results = NULL;
-    if (desc.IsAsync() && !IsKvOnlyTable()) {
+    if (desc.IsAsync() && !_table_schema.kv_only()) {
         VLOG(6) << "activate async-scan";
         results = new ResultStreamAsyncImpl(this, impl);
     } else {
@@ -428,13 +428,6 @@ bool TableImpl::LockRow(const std::string& rowkey, RowLock* lock, ErrorCode* err
 bool TableImpl::GetStartEndKeys(std::string* start_key, std::string* end_key,
                                 ErrorCode* err) {
     err->SetFailed(ErrorCode::kNotImpl);
-    return false;
-}
-
-bool TableImpl::IsKvOnlyTable() {
-    if (_table_schema.column_families_size() > 0) {
-        return true;
-    }
     return false;
 }
 
