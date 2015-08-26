@@ -37,6 +37,8 @@ MONITOR_SRC := src/monitor/teramo_main.cc
 MARK_SRC := src/benchmark/mark.cc src/benchmark/mark_main.cc
 TEST_SRC := src/utils/test/prop_tree_test.cc src/utils/test/tprinter_test.cc
 
+TEST_OUTPUT := test_output
+
 MASTER_OBJ := $(MASTER_SRC:.cc=.o)
 TABLETNODE_OBJ := $(TABLETNODE_SRC:.cc=.o)
 IO_OBJ := $(IO_SRC:.cc=.o)
@@ -65,6 +67,8 @@ TEST = prop_tree_test tprinter_test
 
 all: $(PROGRAM) $(LIBRARY) $(JNILIBRARY) $(BENCHMARK) $(TEST)
 	mkdir -p build/include build/lib build/bin build/log build/benchmark
+	mkdir $(TEST_OUTPUT)
+	mv $(TEST) $(TEST_OUTPUT)
 	cp $(PROGRAM) build/bin
 	cp $(LIBRARY) $(JNILIBRARY) build/lib
 	cp src/leveldb/tera_bench .
@@ -74,7 +78,7 @@ all: $(PROGRAM) $(LIBRARY) $(JNILIBRARY) $(BENCHMARK) $(TEST)
 	echo 'Done'
 
 clean:
-	rm -rf $(ALL_OBJ) $(PROTO_OUT_CC) $(PROTO_OUT_H)
+	rm -rf $(ALL_OBJ) $(PROTO_OUT_CC) $(PROTO_OUT_H) $(TEST_OUTPUT)
 	$(MAKE) clean -C src/leveldb
 	rm -rf $(PROGRAM) $(LIBRARY) $(JNILIBRARY) $(BENCHMARK) $(TEST)
 

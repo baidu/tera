@@ -1155,10 +1155,11 @@ int32_t ShowSingleTabletNodeInfo(Client* client, const string& addr,
     printer.Print();
 
     std::cout << "\nHardware Info:\n";
-    cols = 7;
+    cols = 8;
     printer.Reset(cols);
     row.clear();
-    printer.AddRow(cols, "mem_used", "net_tx", "net_rx", "dfs_r", "dfs_w", "local_r", "local_w");
+    printer.AddRow(cols, "cpu", "mem_used", "net_tx", "net_rx", "dfs_r", "dfs_w", "local_r", "local_w");
+    row.push_back(NumberToString(info.cpu_usage()));
     row.push_back(utils::ConvertByteToString(info.mem_used()));
     row.push_back(utils::ConvertByteToString(info.net_tx()) + "B/s");
     row.push_back(utils::ConvertByteToString(info.net_rx()) + "B/s");
