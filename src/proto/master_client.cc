@@ -135,5 +135,13 @@ bool MasterClient::CmdCtrl(const CmdCtrlRequest* request,
                                 "CmdCtrl", m_rpc_timeout);
 }
 
+bool MasterClient::Rename(const RenameRequest* request, 
+                          RenameResponse* response) {
+    return SendMessageWithRetry(&MasterServer::Stub::Rename,
+                                request, response,
+                                (Closure<void, RenameRequest*, RenameResponse*, bool, int>*)NULL,
+                                "Rename", m_rpc_timeout);
+}
+
 } // namespace master
 } // namespace tera

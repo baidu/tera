@@ -1927,12 +1927,9 @@ int32_t RenameOp(Client* client, int32_t argc, char** argv, ErrorCode* err) {
         return -1;
     }
     std::vector<std::string> arg_list;
-    std::string op = "rename";
     std::string old_table_name = argv[2];
     std::string new_table_name = argv[3];
-    arg_list.push_back(old_table_name);
-    arg_list.push_back(new_table_name);
-    if (!client->CmdCtrl(op, arg_list, NULL, NULL, err)) {
+    if (!client->Rename(old_table_name, new_table_name, err)) {
         LOG(ERROR) << "fail to rename table: " 
                    << old_table_name << " -> " << new_table_name << std::endl;
         return -1;

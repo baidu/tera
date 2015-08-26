@@ -671,7 +671,9 @@ public:
                          bool* bool_result,
                          std::string* str_result,
                          ErrorCode* err) = 0;
-
+    virtual bool Rename(const std::string& old_table_name,
+                        const std::string& new_table_name,
+                        ErrorCode* err) = 0 ;
     Client() {}
     virtual ~Client() {}
 

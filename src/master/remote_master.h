@@ -80,6 +80,11 @@ public:
                  CmdCtrlResponse* response,
                  google::protobuf::Closure* done);
 
+    void Rename(google::protobuf::RpcController* controller,
+                const RenameRequest* request,
+                RenameResponse* response,
+                google::protobuf::Closure* done);
+
 private:
     void DoGetSnapshot(google::protobuf::RpcController* controller,
                        const GetSnapshotRequest* request,

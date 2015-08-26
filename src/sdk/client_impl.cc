@@ -647,6 +647,26 @@ bool ClientImpl::CmdCtrl(const string& command,
     return true;
 }
 
+bool ClientImpl::Rename(const std::string& old_table_name,
+                        const std::string& new_table_name,
+                        ErrorCode* err) {
+    master::MasterClient master_client(_cluster->MasterAddr());
+    RenameRequest request;
+    RenameResponse response;
+    uint64_t sequence_id = 0;
+    request.set_sequence_id(sequence_id);
+    request.set_old_table_name(old_table_name);
+    request.set_new_table_name(new_table_name);
+    bool ok = master_client.Rename(&request, &response);
+    if (!ok && response.status() != kMasterOk) {
+        err->SetFailed(ErrorCode::kSystem, "failed to rename table");
+        return false;
+    }
+    LOG(INFO) << "rename table OK. " << old_table_name 
+              << " -> " << new_table_name;
+    return true;
+}
+
 bool ClientImpl::ListInternal(std::vector<TableInfo>* table_list,
                               std::vector<TabletInfo>* tablet_list,
                               const string& start_table_name,
