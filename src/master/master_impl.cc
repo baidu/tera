@@ -1421,8 +1421,7 @@ bool MasterImpl::TabletNodeLoadBalance(TabletNodePtr tabletnode, Scheduler* sche
             // tablet size is error, skip it
             continue;
         } else if (tablet->GetDataSize() > (split_size << 20)) {
-            SplitTablet(tablet, 0);
-            any_tablet_split = true;
+            any_tablet_split = SplitTablet(tablet, 0);
             continue;
         } else if (tablet->GetDataSize() < (merge_size << 20)) {
             TryMergeTablet(tablet);
@@ -3085,30 +3084,15 @@ bool MasterImpl::SplitTablet(TabletPtr tablet, uint32_t phase)
     if (phase == 1) {
         CHECK(tablet->GetStatus() == kTableOnSplit);
         DebugTeraMasterCrashOrSuspend(DEBUG_master_split_crash_or_suspend, 50);
-        
-        TablePtr null_table;
-        std::vector<TabletPtr> tablets(1, tablet);
-
-        WriteClosure* done = 
-            NewClosure(this, &MasterImpl::SplitTabletWriteLogCallback, 
-                                                        tablet, 0);
-        // use write meta rpc
-        BatchWriteMetaTableAsync(null_table, tablets, false, done);
-    }
-    
-    // send split cmd to TS
-    if (phase == 2) {
-        CHECK(tablet->GetStatus() == kTableOnSplit);
-        DebugTeraMasterCrashOrSuspend(DEBUG_master_split_crash_or_suspend, 60);
-        
+       
         std::string server_addr = tablet->GetServerAddr();
         std::string table_name = tablet->GetTableName();
         
-        LOG(INFO) << tablet->GetPath() << ": split phase 2, tablet[addr " 
+        LOG(INFO) << tablet->GetPath() << ": split phase 1, tablet[addr " 
             << tablet->GetServerAddr() << ", uuid " << tablet->GetServerId() << "]";
-
+        
+        // if TS server down or restart, try on other node and rewrite tablet's addr.
         TabletNodePtr node;
-        // TS server down or restart
         if (!m_tabletnode_manager->FindTabletNode(server_addr, &node) ||
             (node->m_uuid != tablet->GetServerId())) {
             server_addr.clear();
@@ -3126,7 +3110,7 @@ bool MasterImpl::SplitTablet(TabletPtr tablet, uint32_t phase)
             tablet->SetServerId(node->m_uuid);
         }
         
-        LOG(INFO) << tablet->GetPath() << ": split phase 2, tablet[addr " 
+        LOG(INFO) << tablet->GetPath() << ": split phase 1, tablet[addr " 
             << tablet->GetServerAddr() << ", uuid " << tablet->GetServerId() << "]";
         
         // now tablet's server_addr and m_uuid is valid
@@ -3134,13 +3118,26 @@ bool MasterImpl::SplitTablet(TabletPtr tablet, uint32_t phase)
             LOG(INFO) << "TS "<< server_addr << ", split delay";
             return false;
         }
+
+        // use write meta rpc
+        TablePtr null_table;
+        std::vector<TabletPtr> tablets(1, tablet);
+        WriteClosure* done = 
+            NewClosure(this, &MasterImpl::SplitTabletWriteLogCallback, 
+                                                        tablet, 0);
+        BatchWriteMetaTableAsync(null_table, tablets, false, done);
+    }
+    
+    // send split cmd to TS
+    if (phase == 2) {
+        CHECK(tablet->GetStatus() == kTableOnSplit);
+        DebugTeraMasterCrashOrSuspend(DEBUG_master_split_crash_or_suspend, 60);
         
         TabletOpLog log;
         tablet->GetTabletOpLog(&log);
         LOG(INFO) << "phase 2, " << tablet->GetTableName() << ", keystart " << tablet->GetKeyStart()
             << ", keyend " << tablet->GetKeyEnd() << ", mid_key " << log.mid_key() 
-            << ", lchild " << log.lchild_tablet() << ", rchild " << log.rchild_tablet()
-            << ", server addr " << node->m_addr << ", uuid " << node->m_uuid;
+            << ", lchild " << log.lchild_tablet() << ", rchild " << log.rchild_tablet();
 
         SplitClosure* done = 
             NewClosure(this, &MasterImpl::SplitTabletCallback, tablet, 0);
@@ -3288,7 +3285,7 @@ void MasterImpl::SplitTabletCallback(TabletPtr tablet,
         }
         
         // schedule tablet on other TS
-        SplitTablet(tablet, 2);
+        SplitTablet(tablet, 1);
         return ;
     }
     
@@ -3302,16 +3299,18 @@ void MasterImpl::SplitTabletCallback(TabletPtr tablet,
         // reschedule next wait split rpc on this node
         TabletPtr next_tablet;
         if (node->SplitNextWaitTablet(&next_tablet)) {
-            SplitClosure* done = 
-                NewClosure(this, &MasterImpl::SplitTabletCallback,
+            TablePtr null_table;
+            std::vector<TabletPtr> tablets(1, next_tablet);
+            WriteClosure* done = 
+                NewClosure(this, &MasterImpl::SplitTabletWriteLogCallback, 
                         next_tablet, 0);
-            SplitTabletAsync(tablet, done);
+            BatchWriteMetaTableAsync(null_table, tablets, false, done);
         }
     } else {
         // resched wait tablet to other ts
         TabletPtr next_tablet;
         if (m_tabletnode_manager->ReschedOrphanOnSplitTablet(&next_tablet)) {
-            SplitTablet(next_tablet, 2);
+            SplitTablet(next_tablet, 1);
         }
     }
 

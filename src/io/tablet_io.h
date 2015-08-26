@@ -40,8 +40,6 @@ public:
         kOnLoad = kTabletOnLoad,
         kUnLoading = kTabletUnLoading,
         kUnLoading2 = kTabletUnLoading2,
-        kOnSplit = kTabletOnSplit,// discard
-        kSplited = kTabletSplited,// discard
         kFrozen = kTabletFrozen,
     };
     typedef std::map< std::string, std::set<std::string> > ColumnFamilyMap;
@@ -98,7 +96,6 @@ public:
                       StatusCode* status = NULL);
     virtual bool Unload(StatusCode* status = NULL);
     
-    virtual bool Split(std::string* split_key, StatusCode* status = NULL);
     virtual bool GetMidKey(std::string* mid_key, StatusCode* status); 
     
     virtual bool Compact(StatusCode* status = NULL);

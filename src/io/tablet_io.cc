@@ -136,8 +136,8 @@ bool TabletIO::Load(const TableSchema& schema,
         MutexLock lock(&m_mutex);
         LOG(INFO) << __func__ << ", path " << path << ", status "
             << StatusCodeToString(m_status) << ", m_start_key "
-            << m_start_key << ", m_end_key " << m_end_key 
-            << ", key_start " << key_start << ", key_end " << key_end;
+            << DebugString(m_start_key) << ", m_end_key " << DebugString(m_end_key) 
+            << ", key_start " << DebugString(key_start) << ", key_end " << DebugString(key_end);
 
         if (m_status == kReady && m_start_key == key_start
             && m_end_key == key_end) {
@@ -263,7 +263,14 @@ bool TabletIO::Load(const TableSchema& schema,
         m_status = kReady;
         m_db_ref_count--;
     }
-
+    
+    // TODO: test 
+    timeval mtime;
+    gettimeofday(&mtime, NULL);
+    LOG(ERROR) << __func__ << ", Avail, " << m_tablet_path 
+        << ", " << DebugString(m_start_key) << ", " << DebugString(m_end_key)
+        << ", tv_sec " << mtime.tv_sec << ", tv_usec " << mtime.tv_usec;
+    
     LOG(INFO) << "[Load] Load " << m_tablet_path << " done";
     return true;
 }
@@ -271,7 +278,7 @@ bool TabletIO::Load(const TableSchema& schema,
 bool TabletIO::Unload(StatusCode* status) {
     {
         MutexLock lock(&m_mutex);
-        if (m_status != kReady && m_status != kSplited) {
+        if (m_status != kReady) {
             SetStatusCode(m_status, status);
             return false;
         }
@@ -286,7 +293,14 @@ bool TabletIO::Unload(StatusCode* status) {
         MutexLock lock(&m_mutex);
         m_status = kUnLoading2;
     }
-
+    
+    // TODO: test 
+    timeval mtime;
+    gettimeofday(&mtime, NULL);
+    LOG(ERROR) << __func__ << ", NotAvail, " << m_tablet_path 
+        << ", " << DebugString(m_start_key) << ", " << DebugString(m_end_key)
+        << ", tv_sec " << mtime.tv_sec << ", tv_usec " << mtime.tv_usec;
+    
     uint32_t retry = 0;
     while (m_db_ref_count > 1) {
         LOG(ERROR) << "tablet is busy, db ref: " << m_db_ref_count
@@ -325,90 +339,11 @@ bool TabletIO::Unload(StatusCode* status) {
     return true;
 }
 
-// discard it, never use it
-bool TabletIO::Split(std::string* split_key, StatusCode* status) {
-    {
-        MutexLock lock(&m_mutex);
-        if (m_status != kReady) {
-            SetStatusCode(m_status, status);
-            return false;
-        }
-        if (m_compact_status == kTableOnCompact) {
-            SetStatusCode(kTableNotSupport, status);
-            return false;
-        }
-        m_status = kOnSplit;
-        m_db_ref_count++;
-    }
-
-    int64_t table_size = GetDataSize(NULL, status);
-    if (table_size <= 0) {
-        SetStatusCode(kTableNotSupport, status);
-        MutexLock lock(&m_mutex);
-        m_status = kReady;
-        m_db_ref_count--;
-        return false;
-    }
-
-    std::string raw_split_key;
-    if (!m_db->FindSplitKey(m_raw_start_key, m_raw_end_key, 0.5,
-                            &raw_split_key)) {
-        VLOG(5) << "fail to find split key";
-        SetStatusCode(kTableNotSupport, status);
-        MutexLock lock(&m_mutex);
-        m_status = kReady;
-        m_db_ref_count--;
-        return false;
-    }
-
-    leveldb::Slice key_split;
-
-    if (m_kv_only && m_table_schema.raw_key() == Readable) {
-        key_split = raw_split_key;
-    } else { // Table && TTL-KV
-        leveldb::Slice cf_split;
-        leveldb::Slice qu_split;
-        if (!m_key_operator->ExtractTeraKey(raw_split_key, &key_split,
-                                            &cf_split, &qu_split, NULL, NULL)) {
-            VLOG(5) << "fail to extract split key";
-            SetStatusCode(kTableNotSupport, status);
-            MutexLock lock(&m_mutex);
-            m_status = kReady;
-            m_db_ref_count--;
-            return false;
-        }
-    }
-
-    VLOG(5) << "start: [" << DebugString(m_start_key)
-        << "], end: [" << DebugString(m_end_key)
-        << "], split: [" << DebugString(key_split.ToString()) << "]";
-
-    if (key_split.empty() || key_split.ToString() <= m_start_key
-        || (!m_end_key.empty() && key_split.ToString() >= m_end_key)) {
-        SetStatusCode(kTableNotSupport, status);
-        MutexLock lock(&m_mutex);
-        m_status = kReady;
-        m_db_ref_count--;
-        return false;
-    }
-
-    *split_key = key_split.ToString();
-
-    {
-        MutexLock lock(&m_mutex);
-        m_status = kSplited;
-        m_db_ref_count--;
-    }
-    return true;
-}
-
 bool TabletIO::GetMidKey(std::string* mid_key, StatusCode* status) 
 {
     {
         MutexLock lock(&m_mutex);
         if (m_status != kReady && 
-            m_status != kOnSplit &&
-            m_status != kSplited &&
             m_status != kUnLoading) {
             SetStatusCode(m_status, status);
             return false;
@@ -508,8 +443,8 @@ int64_t TabletIO::GetDataSize(const std::string& start_key,
                               StatusCode* status) {
     {
         MutexLock lock(&m_mutex);
-        if (m_status != kReady && m_status != kOnSplit
-            && m_status != kSplited && m_status != kUnLoading) {
+        if (m_status != kReady && 
+            m_status != kUnLoading) {
             SetStatusCode(m_status, status);
             return -1;
         }
@@ -590,8 +525,8 @@ int64_t TabletIO::GetDataSize(std::vector<uint64_t>* lgsize,
                               StatusCode* status) {
     {
         MutexLock lock(&m_mutex);
-        if (m_status != kReady && m_status != kOnSplit
-            && m_status != kSplited && m_status != kUnLoading) {
+        if (m_status != kReady && 
+            m_status != kUnLoading) {
             SetStatusCode(m_status, status);
             return -1;
         }
@@ -996,8 +931,8 @@ bool TabletIO::ReadCells(const RowReaderInfo& row_reader, RowResult* value_list,
                          uint64_t snapshot_id, StatusCode* status) {
     {
         MutexLock lock(&m_mutex);
-        if (m_status != kReady && m_status != kOnSplit
-            && m_status != kSplited && m_status != kUnLoading) {
+        if (m_status != kReady && 
+            m_status != kUnLoading) {
             SetStatusCode(m_status, status);
             return false;
         }
@@ -1136,8 +1071,8 @@ bool TabletIO::Write(const WriteTabletRequest* request,
                      StatusCode* status) {
     {
         MutexLock lock(&m_mutex);
-        if (m_status != kReady && m_status != kOnSplit
-            && m_status != kSplited && m_status != kUnLoading) {
+        if (m_status != kReady && 
+            m_status != kUnLoading) {
             SetStatusCode(m_status, status);
             return false;
         }
@@ -1158,8 +1093,8 @@ bool TabletIO::ScanRows(const ScanTabletRequest* request,
     StatusCode status = kTabletNodeOk;
     {
         MutexLock lock(&m_mutex);
-        if (m_status != kReady && m_status != kOnSplit
-            && m_status != kSplited && m_status != kUnLoading) {
+        if (m_status != kReady && 
+            m_status != kUnLoading) {
             SetStatusCode(m_status, &status);
             response->set_status(status);
             done->Run();

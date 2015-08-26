@@ -814,7 +814,7 @@ void TabletNodeImpl::SplitTablet(const SplitTabletRequest* request,
         
         if (stage == 2) {
             DebugTeraTabletServerCrashOrSuspend(DEBUG_ts_split_crash_or_suspend, 40);
-            
+           
             // when step into stage 2, no race condition;
             // And parent tabletIO has been unload
             io::TabletIO *lchild_tabletio = NULL;
@@ -875,7 +875,7 @@ void TabletNodeImpl::SplitTablet(const SplitTabletRequest* request,
                 done->Run();
                 return ;
             }
-             
+            
             // delete parent tabletio, add left && right child in tablet manager;
             // split success parent tabletIO will decref.
             CHECK(m_tablet_manager->SplitTabletIO(request->table_name(),
