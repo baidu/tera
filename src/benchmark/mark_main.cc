@@ -31,7 +31,6 @@ DEFINE_int64(max_outflow, -1, "max_outflow");
 DEFINE_int64(max_rate, -1, "max_rate");
 DEFINE_bool(scan_streaming, false, "enable streaming scan");
 DEFINE_int64(batch_count, 1, "batch_count(sync)");
-DEFINE_bool(seq_write, false, "enable sequential write");
 DEFINE_int64(entry_limit, 0, "writing/reading speed limit");
 
 int mode = 0;
@@ -478,9 +477,7 @@ int main(int argc, char** argv) {
         return -1;
     }
 
-    tera::TableOptions options;
-    options.sequential_write = FLAGS_seq_write;
-    tera::Table* table = client->OpenTable(FLAGS_tablename, options, &err);
+    tera::Table* table = client->OpenTable(FLAGS_tablename, &err);
     if (NULL == table) {
         std::cerr << "fail to open table: " << tera::strerr(err) << std::endl;
         return -1;

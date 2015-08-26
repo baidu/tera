@@ -45,6 +45,7 @@ DEFINE_int64(tera_tablet_memtable_ldb_write_buffer_size, 1000, "the buffer size(
 DEFINE_int64(tera_tablet_memtable_ldb_block_size, 4, "the block size (in KB) for memtable on leveldb");
 DEFINE_int64(tera_tablet_ldb_sst_size, 8, "the sstable file size (in MB) on leveldb");
 DEFINE_bool(tera_sync_log, true, "flush all in-memory parts of log file to stable storage");
+DEFINE_bool(tera_io_cache_path_vanish_allowed, false, "if true, allow cache path not exist");
 
 DEFINE_string(tera_dfs_so_path, "", "the dfs implementation path");
 DEFINE_string(tera_dfs_conf, "", "the dfs configuration file path");
@@ -102,6 +103,8 @@ DEFINE_string(tera_master_meta_table_path, "meta", "the path of meta table");
 DEFINE_int64(tera_master_split_tablet_size, 512, "the size (in MB) of tablet to trigger split");
 DEFINE_bool(tera_master_merge_enabled, false, "enable the auto-merge tablet");
 DEFINE_int64(tera_master_merge_tablet_size, 0, "the size (in MB) of tablet to trigger merge");
+DEFINE_string(tera_master_gc_strategy, "default", "gc strategy, [default, incremental]");
+
 // deprecated
 DEFINE_int64(tera_master_merge_size_threshold, 10, "the size (in MB) of tablet to trigger merge");
 DEFINE_int64(tera_master_merge_timer_period, 180, "the actived time (in sec) for merge timer");
@@ -245,8 +248,6 @@ DEFINE_int64(tera_sdk_perf_counter_log_interval, 1, "the interval of performance
 DEFINE_bool(tera_sdk_scan_async_enabled, false, "enable async scan");
 DEFINE_int64(tera_sdk_scan_async_cache_size, 16, "the max buffer size (in MB) for cached scan results");
 DEFINE_int32(tera_sdk_scan_async_parallel_max_num, 500, "the max number of concurrent task sending");
-
-DEFINE_bool(tera_sdk_pend_request_while_scan_meta_enabled, true, "pend request util meta-scan operation finished");
 
 DEFINE_string(tera_ins_addr_list, "", "the ins cluster addr. e.g. abc.com:1234,abb.com:1234");
 DEFINE_string(tera_ins_root_path, "", "root path on ins. e.g /ps/sandbox");

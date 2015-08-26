@@ -138,10 +138,10 @@ public:
     virtual void Get(const std::vector<RowReader*>& row_readers);
     virtual bool Get(const std::string& row_key, const std::string& family,
                      const std::string& qualifier, std::string* value,
-                     ErrorCode* err);
+                     ErrorCode* err, uint64_t snapshot_id = 0);
     virtual bool Get(const std::string& row_key, const std::string& family,
                     const std::string& qualifier, int64_t* value,
-                    ErrorCode* err);
+                    ErrorCode* err, uint64_t snapshot_id = 0);
 
     virtual bool IsPutFinished() { return _cur_commit_pending_counter.Get() == 0; }
 
@@ -195,8 +195,6 @@ public:
     uint64_t GetMaxMutationPendingNum() { return _max_commit_pending_num; }
     uint64_t GetMaxReaderPendingNum() { return _max_reader_pending_num; }
 
-    bool IsKvOnlyTable();
-
     struct PerfCounter {
         int64_t start_time;
         Counter rpc_r;
@@ -227,54 +225,57 @@ private:
     void ApplyMutation(const std::vector<RowMutationImpl*>& mu_list,
                        bool called_by_user);
 
-    void RetryApplyMutation(std::vector<RowMutationImpl*>* retry_mu_list);
+    void RetryApplyMutation(std::vector<int64_t>* retry_mu_id_list);
 
     void ApplyMutation(const std::string& server_addr,
-                       std::vector<RowMutationImpl*>* mu_list,
+                       std::vector<RowMutationImpl*>& mu_list,
                        bool flush);
 
-    void CommitMutationBuffer(std::string server_addr);
+    void CommitMutationBatch(std::string server_addr);
 
     void CommitMutation(const std::string& server_addr,
-                        std::vector<RowMutationImpl*>* mu_list);
+                        std::vector<int64_t>& mu_id_list);
+    void CommitMutation(const std::string& server_addr,
+                        std::vector<RowMutationImpl*>& mu_list);
 
-    void MutateCallBack(std::vector<RowMutationImpl*>* mu_list,
+    void MutateCallBack(std::vector<int64_t>* mu_id_list,
                         WriteTabletRequest* request,
                         WriteTabletResponse* response,
                         bool failed, int error_code);
+
+    void MutationTimeout(int64_t mutation_id);
 
     void ReadRows(const std::vector<RowReaderImpl*>& row_reader_list,
                   bool called_by_user);
 
     void ReadRows(const std::string& server_addr,
-                  std::vector<RowReaderImpl*>* reader_list);
+                  std::vector<RowReaderImpl*>& reader_list);
 
-    void CommitReaderBuffer(std::string server_addr);
+    void CommitReaderBatch(std::string server_addr);
 
     void CommitReaders(const std::string server_addr,
-                       std::vector<RowReaderImpl*>* reader_list);
+                       std::vector<int64_t>& reader_id_list);
+    void CommitReaders(const std::string server_addr,
+                       std::vector<RowReaderImpl*>& reader_list);
 
-    void ReaderCallBack(std::vector<RowReaderImpl*>* reader_list,
+    void ReaderCallBack(std::vector<int64_t>* reader_id_list,
                         ReadTabletRequest* request,
                         ReadTabletResponse* response,
                         bool failed, int error_code);
 
-    void RetryReadRows(std::vector<RowReaderImpl*>* retry_reader_list);
+    void RetryReadRows(std::vector<int64_t>* reader_id_list);
 
-    void ScanTabletAsync(ScanTask* scan_task, int);
+    void ReaderTimeout(int64_t mutation_id);
+
+    void ScanTabletAsync(ScanTask* scan_task, bool called_by_user);
 
     void CommitScan(ScanTask* scan_task, const std::string& server_addr);
 
     void ScanCallBack(ScanTask* scan_task, ScanTabletRequest* request,
                       ScanTabletResponse* response, bool failed, int error_code);
 
-    template <class T>
-    void BreakRequest(T* row_request) {
-        row_request->RunCallback();
-    }
+    void BreakRequest(int64_t task_id);
     void BreakScan(ScanTask* scan_task);
-
-    void ProcessTaskPendingForMeta(const std::string& row, SdkTask* task);
 
     enum TabletMetaStatus {
         NORMAL,
@@ -293,10 +294,6 @@ private:
     bool GetTabletAddrOrScheduleUpdateMeta(const std::string& row,
                                            SdkTask* request,
                                            std::string* server_addr);
-
-    bool GetTabletMetaOrScheduleUpdateMeta(const std::string& row,
-                                           SdkTask* task, bool task_wait,
-                                           const TabletMetaNode** tablet_meta);
 
     TabletMetaNode* GetTabletMetaNodeForKey(const std::string& key);
 
@@ -344,11 +341,6 @@ private:
     void DeleteLegacyCookieLockFile(const std::string& lock_file, int timeout_seconds);
     void CloseAndRemoveCookieLockFile(int lock_fd, const std::string& cookie_lock_file);
 
-    void CommitSequentialMutation();
-    void RetryCommitSequentialMutation();
-    void DelayCommitSequentionMutation();
-    bool CommitNextTabletSequentialMutation();
-
     void DumpPerfCounterLogDelay();
     void DoDumpPerfCounterLog();
 
@@ -356,13 +348,9 @@ private:
     TableImpl(const TableImpl&);
     void operator=(const TableImpl&);
 
-    struct CommitBuffer {
-        uint64_t _timer_id;
-        std::vector<RowMutationImpl*>* _row_list;
-    };
-    struct ReaderBuffer {
-        uint64_t _timer_id;
-        std::vector<RowReaderImpl*>* _reader_list;
+    struct TaskBatch {
+        uint64_t timer_id;
+        std::vector<int64_t>* row_id_list;
     };
 
     std::string _name;
@@ -371,12 +359,12 @@ private:
     uint64_t _last_sequence_id;
     uint32_t _timeout;
 
-    mutable Mutex _commit_buffer_mutex;
-    mutable Mutex _reader_buffer_mutex;
+    mutable Mutex _mutation_batch_mutex;
+    mutable Mutex _reader_batch_mutex;
     uint32_t _commit_size;
     uint64_t _commit_timeout;
-    std::map<std::string, CommitBuffer> _commit_buffers;
-    std::map<std::string, ReaderBuffer> _reader_buffers;
+    std::map<std::string, TaskBatch> _mutation_batch_map;
+    std::map<std::string, TaskBatch> _reader_batch_map;
     Counter _cur_commit_pending_counter;
     Counter _cur_reader_pending_counter;
     int64_t _max_commit_pending_num;
@@ -385,7 +373,7 @@ private:
     // meta management
     mutable Mutex _meta_mutex;
     common::CondVar _meta_cond;
-    std::map<std::string, std::list<SdkTask*> > _pending_task_list;
+    std::map<std::string, std::list<int64_t> > _pending_task_id_list;
     uint32_t _meta_updating_count;
     std::map<std::string, TabletMetaNode> _tablet_meta_list;
     // end of meta management
@@ -396,6 +384,9 @@ private:
     bool _table_meta_updating;
     TableSchema _table_schema;
     // end of table meta managerment
+
+    SdkTaskHashMap _task_pool;
+    Counter _next_task_id;
 
     master::MasterClient* _master_client;
     tabletnode::TabletNodeClient* _tabletnode_client;
@@ -414,24 +405,6 @@ private:
 
     PerfCounter _perf_counter;  // calc time consumption, for performance analysis
     int64_t _perf_log_task_id;
-
-    // sequential mutation
-    mutable Mutex _seq_mutation_mutex;
-    std::string _seq_mutation_last_accept_row;
-    std::list<RowMutationImpl*> _seq_mutation_accept_list;
-
-    uint64_t _seq_mutation_session;
-    uint64_t _seq_mutation_last_sequence;
-    std::string _seq_mutation_server_addr;
-
-    std::vector<RowMutationImpl*>* _seq_mutation_commit_list;
-    uint64_t _seq_mutation_commit_timer_id;
-
-    std::vector<RowMutationImpl*> _seq_mutation_retry_list;
-    int64_t _seq_mutation_error_occur_time; // in ms
-    bool _seq_mutation_wait_to_update_meta;
-    bool _seq_mutation_wait_to_retry;
-    uint64_t _seq_mutation_pending_rpc_count;
 };
 
 } // namespace tera

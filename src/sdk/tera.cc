@@ -8,8 +8,7 @@
 
 namespace tera {
 
-TableOptions::TableOptions()
-    : sequential_write(false) {
+TableOptions::TableOptions() {
 }
 
 ErrorCode::ErrorCode() : _err(kOK) {
