@@ -17,8 +17,15 @@ class TabletNodeManager;
 class GcStrategy {
 public:
     virtual ~GcStrategy() {}
+
+    // get file system image before query
+    // return true if need to triger gc (gc query & post query)
     virtual bool PreQuery () = 0;
+
+    // process gc query results
     virtual void ProcessQueryCallbackForGc(QueryResponse* response) = 0;
+
+    // delete useless files
     virtual void PostQuery () = 0;
 };
 

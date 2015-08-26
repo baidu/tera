@@ -235,7 +235,7 @@ bool IncrementalGcStrategy::PreQuery () {
             TabletFiles& temp_tablet_files = m_dead_tablet_files[table_name];
             TabletFileSet tablet_file_set(get_micros() / 1000000, 0);
             bool ret = temp_tablet_files.insert(std::make_pair(*it, tablet_file_set)).second;
-            if (ret == true) {
+            if (ret) {
                 CollectSingleDeadTablet(table_name, *it);
             }
         }
