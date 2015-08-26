@@ -1101,9 +1101,9 @@ Status VersionSet::ReadCurrentFile(uint64_t tablet, std::string* dscname ) {
     *dscname = pdbname + "/" + current;
   }
 
-  uint64_t dscsize = 0;
-  if (!s.ok() || !env_->FileExists(*dscname) ||
-      !env_->GetFileSize(*dscname, &dscsize).ok() || dscsize == 0) {
+  // don't check manifest size because some dfs (eg. hdfs)
+  // may return 0 even if the actual size is not 0
+  if (!s.ok() || !env_->FileExists(*dscname)) {
     // manifest is not ready, now recover the backup manifest
     std::vector<std::string> files;
     env_->GetChildren(pdbname, &files);
@@ -1113,15 +1113,7 @@ Status VersionSet::ReadCurrentFile(uint64_t tablet, std::string* dscname ) {
       FileType type;
       if (ParseFileName(files[i], &number, &type)) {
         if (type == kDescriptorFile) {
-          if (!env_->GetFileSize(pdbname + "/" + files[i], &dscsize).ok() ||
-              dscsize == 0) {
-            Log(options_->info_log, "[%s] manifest size is 0, skip it: %s.",
-                dbname_.c_str(), files[i].c_str());
-            ArchiveFile(env_, pdbname + "/" + files[i]);
-            continue;
-          } else {
-            manifest_set.insert(files[i]);
-          }
+          manifest_set.insert(files[i]);
         }
       }
     }
@@ -1671,6 +1663,10 @@ Compaction* VersionSet::PickCompaction() {
 
   SetupOtherInputs(c);
 
+  // tera-specific: calculate the smallest rowkey which do not overlap file not
+  // in this compaction.
+  SetupCompactionBoundary(c);
+
   return c;
 }
 
@@ -1742,6 +1738,30 @@ void VersionSet::SetupOtherInputs(Compaction* c) {
   // key range next time.
   compact_pointer_[level] = largest.Encode().ToString();
   c->edit_.SetCompactPointer(level, largest);
+}
+
+void VersionSet::SetupCompactionBoundary(Compaction* c) {
+  if (c->level_ == 0) {
+    // compaction on level 0, do not drop delete mark
+    return;
+  }
+
+  int base_level = config::kNumLevels;
+  while (base_level > 0) {
+    if (current_->files_[base_level].size() != 0) {
+      break;
+    }
+    base_level--;
+  }
+  if (base_level > c->level_ + 1) {
+    // not base level
+    return;
+  }
+
+  // do not need calculate input[1].
+  int input0_size = c->inputs_[0].size();
+  FileMetaData* last_file = c->inputs_[0][input0_size - 1];
+  c->set_drop_lower_bound(last_file->largest.user_key().ToString());
 }
 
 Compaction* VersionSet::CompactRange(

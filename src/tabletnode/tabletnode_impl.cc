@@ -388,8 +388,9 @@ void TabletNodeImpl::ReadTablet(int64_t start_micros,
         }
     }
 
-    VLOG(8) << "read_row_num = " << row_num
-        << ", read_success_num = " << read_success_num;
+    VLOG(10) << "seq_id: " << request->sequence_id()
+        << ", req_row: " << row_num
+        << ", read_suc: " << read_success_num;
     response->set_sequence_id(request->sequence_id());
     response->set_success_num(read_success_num);
     response->set_status(kTabletNodeOk);

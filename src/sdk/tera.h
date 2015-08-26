@@ -200,6 +200,10 @@ public:
     void SetKvOnly();
     bool IsKv() const;
 
+    /// acl
+    void SetAdminGroup(const std::string& name);
+    std::string AdminGroup() const;
+
 private:
     TableDescriptor(const TableDescriptor&);
     void operator=(const TableDescriptor&);
@@ -607,6 +611,9 @@ private:
 
 class Client {
 public:
+    /// 使用glog的用户必须调用此接口，避免glog被重复初始化
+    static void SetGlogIsInitialized();
+
     static Client* NewClient(const std::string& confpath,
                              const std::string& log_prefix,
                              ErrorCode* err = NULL);

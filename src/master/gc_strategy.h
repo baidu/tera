@@ -1,8 +1,8 @@
 // Copyright (c) 2015, Baidu.com, Inc. All Rights Reserved
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
-#ifndef STORAGE_LEVELDB_INCLUDE_GC_STRATEGY_H_
-#define STORAGE_LEVELDB_INCLUDE_GC_STRATEGY_H_
+#ifndef TERA_MASTER_GC_STRATEGY_H_
+#define TERA_MASTER_GC_STRATEGY_H_
 
 #include "master/tablet_manager.h"
 #include "proto/tabletnode_client.h"
@@ -16,34 +16,34 @@ class TabletNodeManager;
 
 class GcStrategy {
 public:
-	virtual ~GcStrategy() {}
-	virtual bool PreQuery () = 0;
-	virtual void ProcessQueryCallbackForGc(QueryResponse* response) = 0;
-	virtual void PostQuery () = 0;
+    virtual ~GcStrategy() {}
+    virtual bool PreQuery () = 0;
+    virtual void ProcessQueryCallbackForGc(QueryResponse* response) = 0;
+    virtual void PostQuery () = 0;
 };
 
 class BatchGcStrategy : public GcStrategy {
 public:
-	BatchGcStrategy (boost::shared_ptr<TabletManager> tablet_manager);
-	virtual ~BatchGcStrategy() {}
+    BatchGcStrategy (boost::shared_ptr<TabletManager> tablet_manager);
+    virtual ~BatchGcStrategy() {}
 
     // get file system image before query
-	virtual bool PreQuery ();
+    virtual bool PreQuery ();
 
     // compute dead files
-	virtual void ProcessQueryCallbackForGc(QueryResponse* response);
+    virtual void ProcessQueryCallbackForGc(QueryResponse* response);
 
     // delete dead files
-	virtual void PostQuery ();
+    virtual void PostQuery ();
 
 private:
-	void CollectDeadTabletsFiles();
+    void CollectDeadTabletsFiles();
     void CollectSingleDeadTablet(const std::string& tablename, uint64_t tabletnum);
     void DeleteObsoleteFiles();
 
     boost::shared_ptr<TabletManager> m_tablet_manager;
 
-	// tabletnode garbage clean
+    // tabletnode garbage clean
     // first: live tablet, second: dead tablet
     typedef std::pair<std::set<uint64_t>, std::set<uint64_t> > GcTabletSet;
     typedef std::vector<std::set<uint64_t> > GcFileSet;
@@ -102,4 +102,4 @@ private:
 } // namespace master
 } // namespace tera
 
-#endif  // STORAGE_LEVELDB_INCLUDE_GC_STRATEGY_H_
+#endif  // TERA_MASTER_GC_STRATEGY_H_

@@ -195,8 +195,6 @@ public:
     uint64_t GetMaxMutationPendingNum() { return _max_commit_pending_num; }
     uint64_t GetMaxReaderPendingNum() { return _max_reader_pending_num; }
 
-    bool IsKvOnlyTable();
-
     struct PerfCounter {
         int64_t start_time;
         Counter rpc_r;
@@ -337,7 +335,8 @@ private:
     void DoDumpCookie();
     std::string GetCookieFileName(const std::string& tablename,
                                   const std::string& zk_addr,
-                                  const std::string& zk_path);
+                                  const std::string& zk_path,
+                                  int64_t create_time);
     std::string GetCookieFilePathName();
     std::string GetCookieLockFilePathName();
     void DeleteLegacyCookieLockFile(const std::string& lock_file, int timeout_seconds);
@@ -365,6 +364,7 @@ private:
     };
 
     std::string _name;
+    int64_t _create_time;
     const TableOptions _options;
     uint64_t _last_sequence_id;
     uint32_t _timeout;

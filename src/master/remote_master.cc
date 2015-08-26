@@ -17,17 +17,12 @@ DECLARE_int32(tera_master_thread_min_num);
 DECLARE_int32(tera_master_thread_max_num);
 DECLARE_string(tera_master_stat_table_name);
 
-DECLARE_bool(tera_acl_enabled);
-DECLARE_string(tera_acl_root_token);
-
 namespace tera {
 namespace master {
 
-
 RemoteMaster::RemoteMaster(MasterImpl* master_impl)
     : m_master_impl(master_impl),
-      m_thread_pool(new ThreadPool(FLAGS_tera_master_thread_max_num)),
-      m_root_token(FLAGS_tera_acl_root_token) {}
+      m_thread_pool(new ThreadPool(FLAGS_tera_master_thread_max_num)) {}
 
 RemoteMaster::~RemoteMaster() {}
 
@@ -41,26 +36,6 @@ void RemoteMaster::GetSnapshot(google::protobuf::RpcController* controller,
     m_thread_pool->AddTask(callback);
 }
 
-bool RemoteMaster::CheckUserToken(const std::string& token) {
-    return token == m_root_token;
-}
-
-template <typename Request, typename Response, typename Callback>
-bool RemoteMaster::HasPermission(const Request* request, Response* response, 
-                                 Callback* done, const char* operate) {
-    // check permission
-    if (!FLAGS_tera_acl_enabled 
-        || (request->has_user_token() && CheckUserToken(request->user_token()))) {
-        LOG(INFO) << "[acl] is acl enabled: " << FLAGS_tera_acl_enabled;
-        return true;
-    } else {
-        LOG(INFO) << "[acl] fail to " << operate << ": " << request->table_name();
-        response->set_sequence_id(request->sequence_id());
-        response->set_status(kNotPermission);
-        done->Run();
-        return false;
-    }
-}
 void RemoteMaster::DelSnapshot(google::protobuf::RpcController* controller,
                                const DelSnapshotRequest* request,
                                DelSnapshotResponse* response,
@@ -75,9 +50,6 @@ void RemoteMaster::CreateTable(google::protobuf::RpcController* controller,
                                const CreateTableRequest* request,
                                CreateTableResponse* response,
                                google::protobuf::Closure* done) {
-    if (!HasPermission(request, response, done, "create table")) {
-        return;
-    }
     boost::function<void ()> callback =
         boost::bind(&RemoteMaster::DoCreateTable, this, controller,
                     request, response, done);
@@ -88,9 +60,6 @@ void RemoteMaster::DeleteTable(google::protobuf::RpcController* controller,
                                const DeleteTableRequest* request,
                                DeleteTableResponse* response,
                                google::protobuf::Closure* done) {
-    if (!HasPermission(request, response, done, "delete table")) {
-        return;
-    }
     boost::function<void ()> callback =
         boost::bind(&RemoteMaster::DoDeleteTable, this, controller,
                     request, response, done);
@@ -101,9 +70,6 @@ void RemoteMaster::DisableTable(google::protobuf::RpcController* controller,
                                 const DisableTableRequest* request,
                                 DisableTableResponse* response,
                                 google::protobuf::Closure* done) {
-    if (!HasPermission(request, response, done, "disable table")) {
-        return;
-    }
     boost::function<void ()> callback =
         boost::bind(&RemoteMaster::DoDisableTable, this, controller,
                     request, response, done);
@@ -114,9 +80,6 @@ void RemoteMaster::EnableTable(google::protobuf::RpcController* controller,
                                const EnableTableRequest* request,
                                EnableTableResponse* response,
                                google::protobuf::Closure* done) {
-    if (!HasPermission(request, response, done, "enable table")) {
-        return;
-    }
     boost::function<void ()> callback =
         boost::bind(&RemoteMaster::DoEnableTable, this, controller,
                     request, response, done);
@@ -127,9 +90,6 @@ void RemoteMaster::UpdateTable(google::protobuf::RpcController* controller,
                                const UpdateTableRequest* request,
                                UpdateTableResponse* response,
                                google::protobuf::Closure* done) {
-    if (!HasPermission(request, response, done, "update table")) {
-        return;
-    }
     boost::function<void ()> callback =
         boost::bind(&RemoteMaster::DoUpdateTable, this, controller,
                     request, response, done);

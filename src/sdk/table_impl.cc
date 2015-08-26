@@ -275,16 +275,16 @@ bool TableImpl::Get(const std::string& row_key, const std::string& family,
 
 ResultStream* TableImpl::Scan(const ScanDescriptor& desc, ErrorCode* err) {
     ScanDescImpl * impl = desc.GetImpl();
+    impl->SetTableSchema(_table_schema);
     if (impl->GetFilterString() != "") {
         MutexLock lock(&_table_meta_mutex);
-        impl->SetTableSchema(_table_schema);
         if (!impl->ParseFilterString()) {
             // fail to parse filter string
             return NULL;
         }
     }
     ResultStream * results = NULL;
-    if (desc.IsAsync() && !IsKvOnlyTable()) {
+    if (desc.IsAsync() && !_table_schema.kv_only()) {
         VLOG(6) << "activate async-scan";
         results = new ResultStreamAsyncImpl(this, impl);
     } else {
@@ -428,13 +428,6 @@ bool TableImpl::LockRow(const std::string& rowkey, RowLock* lock, ErrorCode* err
 bool TableImpl::GetStartEndKeys(std::string* start_key, std::string* end_key,
                                 ErrorCode* err) {
     err->SetFailed(ErrorCode::kNotImpl);
-    return false;
-}
-
-bool TableImpl::IsKvOnlyTable() {
-    if (_table_schema.column_families_size() > 0) {
-        return true;
-    }
     return false;
 }
 
@@ -703,14 +696,7 @@ void TableImpl::MutateCallBack(std::vector<RowMutationImpl*>* mu_list,
     for (uint32_t i = 0; i < mu_list->size(); ++i) {
         StatusCode err = response->status();
         if (err == kTabletNodeOk) {
-            if (response->row_status_list_size() == (int64_t)mu_list->size()) {
-                err = response->row_status_list(i);
-            } else {
-                LOG(ERROR) << "response status num error: "
-                    << response->row_status_list_size() << ", "
-                    << mu_list->size() << " required";
-                err = kKeyNotInRange;
-            }
+            err = response->row_status_list(i);
         }
         if (err != kTabletNodeOk) {
             VLOG(10) << "fail to mutate table: " << _name
@@ -1158,14 +1144,7 @@ void TableImpl::ReaderCallBack(std::vector<RowReaderImpl*>* reader_list,
     for (uint32_t i = 0; i < reader_list->size(); ++i) {
         StatusCode err = response->status();
         if (err == kTabletNodeOk) {
-            if (response->detail().status_size() == (int64_t)reader_list->size()) {
-                err = response->detail().status(i);
-            } else {
-                LOG(ERROR) << "response status num error: "
-                    << response->detail().status_size() << ", "
-                    << reader_list->size() << " required";
-                err = kKeyNotInRange;
-            }
+            err = response->detail().status(i);
         }
         if (err != kTabletNodeOk && err != kKeyNotExist && err != kSnapshotNotExist) {
             VLOG(10) << "fail to read table: " << _name
@@ -1989,6 +1968,7 @@ void TableImpl::ReadTableMetaCallBack(ErrorCode* ret_err,
         const KeyValuePair& kv = response->detail().row_result(0).key_values(0);
         ParseMetaTableKeyValue(kv.key(), kv.value(), &table_meta);
         _table_schema.CopyFrom(table_meta.schema());
+        _create_time = table_meta.create_time();
         ret_err->SetFailed(ErrorCode::kOK);
         _table_meta_updating = false;
         _table_meta_cond.Signal();
@@ -2140,7 +2120,7 @@ bool TableImpl::RestoreCookie() {
 
 std::string TableImpl::GetCookieFilePathName(void) {
     return FLAGS_tera_sdk_cookie_path + "/"
-        + GetCookieFileName(_name, _zk_addr_list, _zk_root_path);
+        + GetCookieFileName(_name, _zk_addr_list, _zk_root_path, _create_time);
 }
 
 std::string TableImpl::GetCookieLockFilePathName(void) {
@@ -2316,16 +2296,18 @@ void TableImpl::EnableCookieUpdateTimer() {
 
 std::string TableImpl::GetCookieFileName(const std::string& tablename,
                                          const std::string& zk_addr,
-                                         const std::string& zk_path) {
+                                         const std::string& zk_path,
+                                         int64_t create_time) {
     uint32_t hash = 0;
-    if (GetHashNumber(tablename, hash, &hash) != 0
-        || GetHashNumber(zk_addr, hash, &hash) != 0
+    if (GetHashNumber(zk_addr, hash, &hash) != 0
         || GetHashNumber(zk_path, hash, &hash) != 0) {
         LOG(FATAL) << "invalid arguments";
     }
     char hash_str[9] = {'\0'};
     sprintf(hash_str, "%08x", hash);
-    return std::string((char*)hash_str, 8);
+    std::stringstream fname;
+    fname << tablename << "-" << create_time << "-" << hash_str;
+    return fname.str();
 }
 
 void TableImpl::DumpPerfCounterLogDelay() {

@@ -139,6 +139,14 @@ bool TableDescriptor::IsKv() const {
     return _impl->IsKv();
 }
 
+void TableDescriptor::SetAdminGroup(const std::string& name) {
+    return _impl->SetAdminGroup(name);
+}
+
+std::string TableDescriptor::AdminGroup() const {
+    return _impl->AdminGroup();
+}
+
 } // namespace tera
 
 /* vim: set expandtab ts=4 sw=4 sts=4 tw=100: */

@@ -21,7 +21,7 @@ BatchGcStrategy::BatchGcStrategy (boost::shared_ptr<TabletManager> tablet_manage
 	  : m_tablet_manager(tablet_manager) {}
 
 bool BatchGcStrategy::PreQuery () {
-	int64_t start_ts = get_micros();
+    int64_t start_ts = get_micros();
     m_gc_live_files.clear();
     m_gc_tablets.clear();
 
@@ -55,7 +55,7 @@ bool BatchGcStrategy::PreQuery () {
 }
 
 void BatchGcStrategy::PostQuery () {
-	bool is_success = true;
+    bool is_success = true;
     std::map<std::string, GcTabletSet>::iterator it = m_gc_tablets.begin();
     for (; it != m_gc_tablets.end(); ++it) {
         if (it->second.first.size() != 0) {
@@ -76,7 +76,7 @@ void BatchGcStrategy::PostQuery () {
 }
 
 void BatchGcStrategy::ProcessQueryCallbackForGc(QueryResponse* response) {
-	MutexLock lock(&m_gc_mutex);
+    MutexLock lock(&m_gc_mutex);
     std::set<std::string> gc_table_set;
     for (int i = 0; i < response->inh_live_files_size(); ++i) {
         const InheritedLiveFiles& live = response->inh_live_files(i);
