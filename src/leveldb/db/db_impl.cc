@@ -382,17 +382,10 @@ bool DBImpl::IsDbExist() {
   std::vector<std::string> files;
   env_->GetChildren(dbname_, &files);
   for (size_t i = 0; i < files.size(); ++i) {
-    uint64_t number, filesize;
+    uint64_t number;
     FileType type;
     if (ParseFileName(files[i], &number, &type) && type == kDescriptorFile) {
-      std::string filename = dbname_ + "/" + files[i];
-      if (!env_->GetFileSize(filename, &filesize).ok() ||
-          filesize == 0) {
-        // illegel MANIFEST, achieve it
-        ArchiveFile(env_, filename);
-      } else {
-        is_manifest_exist = true;
-      }
+      is_manifest_exist = true;
     }
   }
   if (is_manifest_exist) {

@@ -1101,9 +1101,9 @@ Status VersionSet::ReadCurrentFile(uint64_t tablet, std::string* dscname ) {
     *dscname = pdbname + "/" + current;
   }
 
-  uint64_t dscsize = 0;
-  if (!s.ok() || !env_->FileExists(*dscname) ||
-      !env_->GetFileSize(*dscname, &dscsize).ok() || dscsize == 0) {
+  // don't check manifest size because some dfs (eg. hdfs)
+  // may return 0 even if the actual size is not 0
+  if (!s.ok() || !env_->FileExists(*dscname)) {
     // manifest is not ready, now recover the backup manifest
     std::vector<std::string> files;
     env_->GetChildren(pdbname, &files);
@@ -1113,15 +1113,7 @@ Status VersionSet::ReadCurrentFile(uint64_t tablet, std::string* dscname ) {
       FileType type;
       if (ParseFileName(files[i], &number, &type)) {
         if (type == kDescriptorFile) {
-          if (!env_->GetFileSize(pdbname + "/" + files[i], &dscsize).ok() ||
-              dscsize == 0) {
-            Log(options_->info_log, "[%s] manifest size is 0, skip it: %s.",
-                dbname_.c_str(), files[i].c_str());
-            ArchiveFile(env_, pdbname + "/" + files[i]);
-            continue;
-          } else {
-            manifest_set.insert(files[i]);
-          }
+          manifest_set.insert(files[i]);
         }
       }
     }
