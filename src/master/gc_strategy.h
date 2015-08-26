@@ -67,7 +67,6 @@ public:
     virtual void PostQuery ();
 
 private:
-    void TEST_print_files(bool print_dead);
     void CollectSingleDeadTablet(const std::string& tablename, uint64_t tabletnum);
     void DeleteTableFiles(const std::string& table_name);
 
