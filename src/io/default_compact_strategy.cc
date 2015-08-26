@@ -356,7 +356,7 @@ bool DefaultCompactStrategy::DropIllegalColumnFamily(const std::string& column_f
 }
 
 bool DefaultCompactStrategy::DropByLifeTime(int32_t cf_idx, int64_t timestamp) const {
-    int64_t ttl = m_schema.column_families(cf_idx).time_to_live() * 1000000;
+    int64_t ttl = m_schema.column_families(cf_idx).time_to_live() * 1000000LL;
     if (ttl <= 0) {
         // do not drop
         return false;

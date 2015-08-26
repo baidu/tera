@@ -168,7 +168,9 @@ bool DumpTable(Env* env, const std::string& fname) {
     return false;
   }
 
+  Options db_opt;
   ReadOptions ro;
+  ro.db_opt = &db_opt;
   ro.fill_cache = false;
   Iterator* iter = table->NewIterator(ro);
   for (iter->SeekToFirst(); iter->Valid(); iter->Next()) {
