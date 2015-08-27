@@ -1130,11 +1130,11 @@ void MasterImpl::AddUserInfoToMetaCallback(UserPtr user_ptr,
     delete response;
     if (rpc_failed || status != kTabletNodeOk) {
         if (rpc_failed) {
-            LOG(ERROR) << "fail to add to meta tablet: "
+            LOG(ERROR) << "[user-manager] fail to add to meta tablet: "
                 << sofa::pbrpc::RpcErrorCodeToString(error_code) << ", "
                 << user_ptr->GetUserInfo().user_name() << "...";
         } else {
-            LOG(ERROR) << "fail to add to meta tablet: "
+            LOG(ERROR) << "[user-manager] fail to add to meta tablet: "
                 << StatusCodeToString(status) << ", " << user_ptr->GetUserInfo().user_name() << "...";
         }
         if (retry_times <= 0) {
@@ -1151,7 +1151,7 @@ void MasterImpl::AddUserInfoToMetaCallback(UserPtr user_ptr,
     }
     rpc_response->set_status(kMasterOk);
     rpc_done->Run();
-    LOG(INFO) << "write user info to meta table done: "
+    LOG(INFO) << "[user-manager] write user info to meta table done: "
         << StatusCodeToString(status) << ", " << user_ptr->GetUserInfo().user_name();
     std::string user_name = user_ptr->GetUserInfo().user_name();
     UserOperateType op_type = rpc_request->op_type();
@@ -1166,7 +1166,7 @@ void MasterImpl::AddUserInfoToMetaCallback(UserPtr user_ptr,
     } else if (op_type == kDeleteFromGroup) {
         m_user_manager->SetUserInfo(user_name, user_ptr->GetUserInfo());
     } else {
-        LOG(ERROR) << "unknown operate type: " << op_type;
+        LOG(ERROR) << "[user-manager] unknown operate type: " << op_type;
     }
     m_user_manager->LogAll();// log user info, for debug in the future
 }
@@ -1236,7 +1236,7 @@ void MasterImpl::OperateUser(const OperateUserRequest* request,
         done->Run();
         return;
     } else {
-        LOG(ERROR) << "unknown operate type: " << op_type;
+        LOG(ERROR) << "[user-manager] unknown operate type: " << op_type;
         is_invalid = true;
     }
     if (is_invalid) {
