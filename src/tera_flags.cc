@@ -101,6 +101,8 @@ DEFINE_string(tera_master_meta_table_path, "meta", "the path of meta table");
 DEFINE_int64(tera_master_split_tablet_size, 512, "the size (in MB) of tablet to trigger split");
 DEFINE_bool(tera_master_merge_enabled, false, "enable the auto-merge tablet");
 DEFINE_int64(tera_master_merge_tablet_size, 0, "the size (in MB) of tablet to trigger merge");
+DEFINE_string(tera_master_gc_strategy, "default", "gc strategy, [default, incremental]");
+
 // deprecated
 DEFINE_int64(tera_master_merge_size_threshold, 10, "the size (in MB) of tablet to trigger merge");
 DEFINE_int64(tera_master_merge_timer_period, 180, "the actived time (in sec) for merge timer");
