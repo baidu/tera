@@ -18,34 +18,61 @@ namespace tera {
 
 class TPrinter {
 public:
-    typedef std::vector<string> Line;
-    typedef std::vector<Line> Table;
+    enum CellType {
+        INT,
+        DOUBLE,
+        STRING
+    };
 
-    TPrinter();
-    TPrinter(int cols);
+    struct Cell {
+        CellType type;
+        union {
+            int64_t i;
+            double  d;
+            string* s;
+        } value;
+
+        Cell (int64_t v, CellType t) {
+            value.i = v;
+            type = t;
+        }
+        Cell (double v, CellType t)  {
+            value.d = v;
+            type = t;
+        }
+        Cell (const string& v, CellType t)  {
+            value.s = new string(v);
+            type = t;
+        }
+        ~Cell () {
+            if (type == STRING) {
+                delete value.s;
+            }
+        }
+    };
+
+    TPrinter(int cols, ...);
     ~TPrinter();
 
-    bool AddRow(const std::vector<string>& cols);
-
-    bool AddRow(int argc, ...);
-
-    bool AddRow(const std::vector<int64_t>& cols);
+    bool AddRow(int cols, ...);
 
     void Print(bool has_head = true);
 
     string ToString(bool has_head = true);
 
-    void Reset();
-
-    void Reset(int cols);
-
     static string RemoveSubString(const string& input, const string& substr);
 
 private:
+    // type format: "name<int>"
+    static bool ParseColType(const string& item, string* name, string* type);
+
+private:
+    typedef std::vector<Cell> Line;
+    std::vector<std::pair<std::string, CellType> > head_;
+    std::vector<Line> body_;
+    std::vector<int> col_width_;
+    size_t cols_;
     static const uint32_t kMaxColWidth = 50;
-    size_t _cols;
-    std::vector<int> _col_width;
-    Table _table;
 };
 
 } // namespace tera

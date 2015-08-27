@@ -14,69 +14,64 @@
 
 namespace tera {
 
-TPrinter::TPrinter() : _cols(0) {
-}
-
-TPrinter::TPrinter(int cols) : _cols(cols) {
-    if (cols > 0) {
-        _col_width.resize(cols, 0);
+TPrinter::TPrinter(int cols, ...) : cols_(cols) {
+    assert (cols > 0);
+    va_list args;
+    va_start(args, cols);
+    for (int i = 0; i < cols; ++i) {
+        string item = va_arg(args, char*);
+        string name, type;
+        if (!ParseColType(item, &name, &type)) {
+            name = item;
+            type = "string";
+        }
+        if (type == "int") {
+            head_.push_back(std::make_pair(name, INT));
+        } else if (type == "double") {
+            head_.push_back(std::make_pair(name, DOUBLE));
+        } else if (type == "string") {
+            head_.push_back(std::make_pair(name, STRING));
+        } else {
+            abort();
+        }
     }
+    va_end(args);
 }
 
-TPrinter::~TPrinter() {}
+TPrinter::~TPrinter() {
+}
 
-bool TPrinter::AddRow(const std::vector<string>& cols) {
-    if (cols.size() != _cols) {
-        std::cerr << "arg num error: " << cols.size() << " vs " << _cols << std::endl;
+bool TPrinter::AddRow(int cols, ...) {
+    if (cols != cols_) {
         return false;
     }
-    Line line;
-    for (size_t i = 0; i < cols.size(); ++i) {
-        string item = cols[i];
-        if (item.size() > kMaxColWidth) {
-            item = item.substr(0, kMaxColWidth);
+    va_list args;
+    va_start(args, cols);
+    for (int i = 0; i < cols; ++i) {
+        switch (head_[i].second)
+        string item = va_arg(args, char*);
+        string name, type;
+        if (!ParseColType(item, &name, &type)) {
+            name = item;
+            type = "string";
         }
-        if (item.size() > static_cast<uint32_t>(_col_width[i])) {
-            _col_width[i] = item.size();
+
+        if (type == "int") {
+            head_.push_back(std::make_pair(name, INT));
+        } else if (type == "double") {
+            head_.push_back(std::make_pair(name, DOUBLE));
+        } else if (type == "string") {
+            head_.push_back(std::make_pair(name, STRING));
+        } else {
+            abort();
         }
-        if (item.size() == 0) {
-            item = "-";
-        }
-        line.push_back(item);
     }
-    _table.push_back(line);
+    va_end(args);
     return true;
 }
 
-bool TPrinter::AddRow(int argc, ...) {
-    if (static_cast<uint32_t>(argc) != _cols) {
-        std::cerr << "arg num error: " << argc << " vs " << _cols << std::endl;
-        return false;
-    }
-    std::vector<string> v;
-    va_list args;
-    va_start(args, argc);
-    for (int i = 0; i < argc; ++i) {
-        string item = va_arg(args, char*);
-        v.push_back(item);
-    }
-    va_end(args);
-    return AddRow(v);
-}
-
-bool TPrinter::AddRow(const std::vector<int64_t>& cols) {
-    if (cols.size() != _cols) {
-        std::cerr << "arg num error: " << cols.size() << " vs " << _cols << std::endl;
-        return false;
-    }
-    std::vector<string> v;
-    for (size_t i = 0; i < cols.size(); ++i) {
-        v.push_back(NumberToString(cols[i]));
-    }
-    return AddRow(v);
-}
-
 void TPrinter::Print(bool has_head) {
+#if 0
     if (_table.size() < 1) {
         return;
     }
@@ -105,9 +100,11 @@ void TPrinter::Print(bool has_head) {
         }
         std::cout << std::endl;
     }
+#endif
 }
 
 string TPrinter::ToString(bool has_head) {
+#if 0
     std::ostringstream ostr;
     if (_table.size() < 1) {
         return "";
@@ -138,17 +135,22 @@ string TPrinter::ToString(bool has_head) {
         ostr << std::endl;
     }
     return ostr.str();
+#endif
+    return "";
 }
 
-void TPrinter::Reset() {
-    std::vector<int> tmp(_cols, 0);
-    _col_width.swap(tmp);
-    _table.clear();
-}
-
-void TPrinter::Reset(int cols) {
-    _cols = cols;
-    Reset();
+bool TPrinter::ParseColType(const string& item, string* name, string* type) {
+    string::size_type pos1;
+    pos1 = item.find('<');
+    if (pos1 == string::npos) {
+        return false;
+    }
+    if (item[item.size() - 1] != '>') {
+        return false;
+    }
+    *name = item.substr(0, pos1);
+    *type = item.substr(pos1 + 1, item.size() - pos1 - 2);
+    return true;
 }
 
 string TPrinter::RemoveSubString(const string& input, const string& substr) {

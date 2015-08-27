@@ -113,10 +113,10 @@ tera_bench:
 
 # unit test
 prop_tree_test: src/utils/test/prop_tree_test.o $(LIBRARY)
-	$(CXX) $(LDFLAGS) -o $@ $^
+	$(CXX) -o $@ $^ $(LDFLAGS) 
 
 tprinter_test: src/utils/test/tprinter_test.o $(LIBRARY)
-	$(CXX) $(LDFLAGS) -o $@ $^
+	$(CXX) -o $@ $^ $(LDFLAGS) 
 
 $(ALL_OBJ): %.o: %.cc $(PROTO_OUT_H)
 	$(CXX) $(CXXFLAGS) -c $< -o $@
