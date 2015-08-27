@@ -138,10 +138,10 @@ public:
     virtual void Get(const std::vector<RowReader*>& row_readers);
     virtual bool Get(const std::string& row_key, const std::string& family,
                      const std::string& qualifier, std::string* value,
-                     ErrorCode* err);
+                     ErrorCode* err, uint64_t snapshot_id = 0);
     virtual bool Get(const std::string& row_key, const std::string& family,
                     const std::string& qualifier, int64_t* value,
-                    ErrorCode* err);
+                    ErrorCode* err, uint64_t snapshot_id = 0);
 
     virtual bool IsPutFinished() { return _cur_commit_pending_counter.Get() == 0; }
 

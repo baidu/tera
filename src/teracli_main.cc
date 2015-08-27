@@ -43,6 +43,8 @@ DEFINE_int32(tera_client_batch_put_num, 1000, "num of each batch in batch put mo
 DEFINE_int32(tera_client_scan_package_size, 1024, "the package size (in KB) of each scan request");
 DEFINE_bool(tera_client_scan_async_enabled, false, "enable the streaming scan mode");
 
+DEFINE_int64(snapshot, 0, "read | scan snapshot");
+
 volatile int32_t g_start_time = 0;
 volatile int32_t g_end_time = 0;
 volatile int32_t g_used_time = 0;
@@ -666,7 +668,7 @@ int32_t GetInt64Op(Client* client, int32_t argc, char** argv, ErrorCode* err) {
         ParseCfQualifier(argv[4], &columnfamily, &qualifier);
     }
 
-    if (!table->Get(rowkey, columnfamily, qualifier, &value, err)) {
+    if (!table->Get(rowkey, columnfamily, qualifier, &value, err, FLAGS_snapshot)) {
         LOG(ERROR) << "fail to get record from table: " << tablename;
         return -1;
     }
@@ -700,12 +702,12 @@ int32_t GetOp(Client* client, int32_t argc, char** argv, ErrorCode* err) {
         ParseCfQualifier(argv[4], &columnfamily, &qualifier);
     }
 
-    if (!table->Get(rowkey, columnfamily, qualifier, &value, err)) {
+    if (!table->Get(rowkey, columnfamily, qualifier, &value, err, FLAGS_snapshot)) {
         LOG(ERROR) << "fail to get record from table: " << tablename;
         return -1;
     }
 
-    std::cout << value;
+    std::cout << value << std::endl;
     delete table;
     return 0;
 }
@@ -799,8 +801,8 @@ int32_t DeleteOp(Client* client, int32_t argc, char** argv, ErrorCode* err) {
 }
 
 int32_t ScanOp(Client* client, int32_t argc, char** argv, ErrorCode* err) {
-    if (argc != 5 && argc != 6 && argc != 7) {
-        LOG(ERROR) << "args number error: " << argc << ", need 5 | 6 | 7.";
+    if (argc != 5 && argc != 6) {
+        LOG(ERROR) << "args number error: " << argc << ", need 5 | 6.";
         Usage(argv[0]);
         return -1;
     }
@@ -833,14 +835,7 @@ int32_t ScanOp(Client* client, int32_t argc, char** argv, ErrorCode* err) {
         desc.SetMaxVersions(std::numeric_limits<int>::max());
     }
 
-    uint64_t snapshot = 0;
-    if (argc == 7) {
-        std::stringstream is;
-        is << std::string(argv[6]);
-        is >> snapshot;
-    }
-
-    desc.SetSnapshot(snapshot);
+    desc.SetSnapshot(FLAGS_snapshot);
     if ((result_stream = table->Scan(desc, err)) == NULL) {
         LOG(ERROR) << "fail to scan records from table: " << tablename;
         return -1;
@@ -2262,6 +2257,8 @@ int32_t Meta2Op(Client *client, int32_t argc, char** argv) {
 }
 
 int main(int argc, char* argv[]) {
+    ::google::ParseCommandLineFlags(&argc, &argv, true);
+
     if (argc < 2) {
         Usage(argv[0]);
         return -1;
