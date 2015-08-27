@@ -3061,7 +3061,7 @@ bool MasterImpl::SplitTablet(TabletPtr tablet, uint32_t phase)
          
         // collect tablet's split log context
         if (!tablet->CollectSplitContext(&log)) {
-            LOG(INFO) << " no need split";
+            VLOG(10) << " no need split";
             return false;
         }
         
@@ -3073,7 +3073,7 @@ bool MasterImpl::SplitTablet(TabletPtr tablet, uint32_t phase)
         }
         // race success
         tablet->SetTabletOpLog(log);
-        LOG(INFO) << __func__ << ": phase " << phase << ", " << tablet->GetPath()
+        VLOG(20) << __func__ << ": phase " << phase << ", " << tablet->GetPath()
             << ", keystart " << tablet->GetKeyStart() 
             << ", keyend " << tablet->GetKeyEnd() << ", mid_key " << log.mid_key()
             << ", lchild " << log.lchild_tablet() << ", rchild " << log.rchild_tablet();
@@ -3088,7 +3088,7 @@ bool MasterImpl::SplitTablet(TabletPtr tablet, uint32_t phase)
         std::string server_addr = tablet->GetServerAddr();
         std::string table_name = tablet->GetTableName();
         
-        LOG(INFO) << tablet->GetPath() << ": split phase 1, tablet[addr " 
+        VLOG(20) << tablet->GetPath() << ": split phase 1, tablet[addr " 
             << tablet->GetServerAddr() << ", uuid " << tablet->GetServerId() << "]";
         
         // if TS server down or restart, try on other node and rewrite tablet's addr.
@@ -3110,7 +3110,7 @@ bool MasterImpl::SplitTablet(TabletPtr tablet, uint32_t phase)
             tablet->SetServerId(node->m_uuid);
         }
         
-        LOG(INFO) << tablet->GetPath() << ": split phase 1, tablet[addr " 
+        VLOG(20) << tablet->GetPath() << ": split phase 1, tablet[addr " 
             << tablet->GetServerAddr() << ", uuid " << tablet->GetServerId() << "]";
         
         // now tablet's server_addr and m_uuid is valid
@@ -3135,7 +3135,7 @@ bool MasterImpl::SplitTablet(TabletPtr tablet, uint32_t phase)
         
         TabletOpLog log;
         tablet->GetTabletOpLog(&log);
-        LOG(INFO) << "phase 2, " << tablet->GetTableName() << ", keystart " << tablet->GetKeyStart()
+        VLOG(20) << "phase 2, " << tablet->GetTableName() << ", keystart " << tablet->GetKeyStart()
             << ", keyend " << tablet->GetKeyEnd() << ", mid_key " << log.mid_key() 
             << ", lchild " << log.lchild_tablet() << ", rchild " << log.rchild_tablet();
 
@@ -3150,7 +3150,7 @@ bool MasterImpl::SplitTablet(TabletPtr tablet, uint32_t phase)
         
         TabletOpLog log;
         tablet->GetTabletOpLog(&log);
-        LOG(INFO) << "phase 3, " << tablet->GetTableName() << ", keystart " << tablet->GetKeyStart()
+        VLOG(20) << "phase 3, " << tablet->GetTableName() << ", keystart " << tablet->GetKeyStart()
             << ", keyend " << tablet->GetKeyEnd() << ", mid_key " << log.mid_key() 
             << ", lchild " << log.lchild_tablet() << ", rchild " << log.rchild_tablet();
 
@@ -3195,7 +3195,7 @@ void MasterImpl::SplitTabletWriteLogCallback(TabletPtr tablet,
     }
 
     // handle success
-    LOG(INFO) << tablet->GetTableName() << ", write log success, keystart " << tablet->GetKeyStart() 
+    VLOG(20) << tablet->GetTableName() << ", write log success, keystart " << tablet->GetKeyStart() 
         << ", keyend " << tablet->GetKeyEnd();
     
     DebugTeraMasterCrashOrSuspend(DEBUG_master_split_crash_or_suspend, 51);
@@ -3269,19 +3269,6 @@ void MasterImpl::SplitTabletCallback(TabletPtr tablet,
                         FLAGS_tera_master_control_tabletnode_retry_period, closure);
                 return ;
             }
-#if 0 
-            // TS alive, immediate split rpc re-send
-            SplitClosure* done = 
-                NewClosure(this, &MasterImpl::SplitTabletCallback,
-                        tablet, retry_times + 1);
-            SplitTabletAsync(tablet, done);
-            
-            // when split fail too many, kick
-            if ((retry_times + 1) > FLAGS_tera_master_impl_retry_times) {
-                TryKickTabletNode(tablet->GetServerAddr());
-            }
-            return ;
-#endif
         }
         
         // schedule tablet on other TS
@@ -3289,7 +3276,7 @@ void MasterImpl::SplitTabletCallback(TabletPtr tablet,
         return ;
     }
     
-    LOG(INFO) << tablet->GetPath() << ", ServerAddr " << server_addr 
+    VLOG(20) << tablet->GetPath() << ", ServerAddr " << server_addr 
         << ", ServerId " << tablet->GetServerId();
     // ts split rpc success
     if (m_tabletnode_manager->FindTabletNode(server_addr, &node) &&
@@ -3316,7 +3303,7 @@ void MasterImpl::SplitTabletCallback(TabletPtr tablet,
 
     TabletOpLog log;
     tablet->GetTabletOpLog(&log);
-    LOG(INFO) << tablet->GetTableName() 
+    VLOG(20) << tablet->GetTableName() 
         << ", keystart " << tablet->GetKeyStart() 
         << ", keyend " << tablet->GetKeyEnd() 
         << ", mid_key " << log.mid_key() 
@@ -3395,7 +3382,7 @@ void MasterImpl::SplitTabletUpdateMetaAsync(TabletPtr tablet)
     tablets.push_back(lchild_tablet);
     tablets.push_back(rchild_tablet);
     
-    LOG(INFO) << tablet->GetTableName()
+    VLOG(20) << tablet->GetTableName()
         << ", parent: keystart " << tablet->GetKeyStart()
         << ", keyend " << tablet->GetKeyEnd() 
         << ", lchild: keystart " << tablets[0]->GetKeyStart() 
@@ -3452,7 +3439,7 @@ void MasterImpl::SplitTabletUpdateMetaCallback(TablePtr null_table,
 
     // handle success, enable new tablet
     tablets.clear();
-    LOG(INFO) << "split " << tablet->GetTableName() << " success"
+    VLOG(20) << "split " << tablet->GetTableName() << " success"
         << ", parent: keystart " << tablet->GetKeyStart()
         << ", keyend " << tablet->GetKeyEnd() 
         << ", lchild: keystart " << lchild_tablet->GetKeyStart() 

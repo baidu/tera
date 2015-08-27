@@ -184,7 +184,7 @@ bool TabletNode::TrySplit(TabletPtr tablet) {
   //m_data_size -= tablet->GetDataSize();
   //    VLOG(5) << "split on: " << m_addr << ", size: " << tablet->GetDataSize()
   //        << ", total size: " << m_data_size;
-    LOG(INFO) << __func__ << ": addr " << m_addr << ", uuid " << m_uuid
+    VLOG(20) << __func__ << ": addr " << m_addr << ", uuid " << m_uuid
         << ", sizeof split wait queue " << m_wait_split_list.size()
         << ", split counter " << m_onsplit_count;
     if (m_wait_split_list.empty()

@@ -6,6 +6,7 @@
 #define TERA_TABLETNODE_TABLETNODE_IMPL_H_
 
 #include <string>
+#include <semaphore.h>
 
 #include "common/base/scoped_ptr.h"
 #include "common/thread_pool.h"
@@ -95,6 +96,13 @@ public:
     void SplitTablet(const SplitTabletRequest* request,
                      SplitTabletResponse* response,
                      google::protobuf::Closure* done);
+    
+    void LoadTabletForSplitAsync(io::TabletIO* tabletio,
+                const SplitTabletRequest* request, int child_index,
+                const std::vector<uint64_t> parent_tablets,
+                std::map<uint64_t, uint64_t> snapshots,
+                StatusCode* status,
+                sem_t* finish_counter);
 
     void EnterSafeMode();
     void LeaveSafeMode();
@@ -116,7 +124,7 @@ public:
 
     void TryReleaseMallocCache();
 
-private:
+private: 
     bool CheckInKeyRange(const KeyList& key_list,
                          const std::string& key_start,
                          const std::string& key_end);

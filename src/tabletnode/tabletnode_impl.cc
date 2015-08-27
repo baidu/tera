@@ -689,7 +689,7 @@ void TabletNodeImpl::SplitTablet(const SplitTabletRequest* request,
     std::string right_tabletname = leveldb::GetChildTabletPath(parent_tabletname, 
                                                         request->child_tablets(1));
     
-    LOG(INFO) << __func__ << ": parent " << parent_tabletname << ", lchild "
+    VLOG(20) << __func__ << ": parent " << parent_tabletname << ", lchild "
         << left_tabletname << ", rchild " << right_tabletname << ", start "
         << request->key_range().key_start() << ", end " 
         << request->key_range().key_end();
@@ -785,7 +785,7 @@ void TabletNodeImpl::SplitTablet(const SplitTabletRequest* request,
     if (parent_tabletio) {
         if (stage == 1) {
             std::vector<uint64_t> null_parent_tablets;
-            LOG(INFO) << __func__ << ", load parent " << parent_tabletname 
+            VLOG(20) << __func__ << ", load parent " << parent_tabletname 
                 << ", start " << request->key_range().key_start() 
                 << ", end " << request->key_range().key_end();
             
@@ -834,26 +834,36 @@ void TabletNodeImpl::SplitTablet(const SplitTabletRequest* request,
             parent_tablets.push_back(request->parent_tablet());
             
             // load left child
-            LOG(INFO) << __func__ << ": parent " << parent_tablets[0] << ", " 
+            VLOG(20) << __func__ << ": parent " << parent_tablets[0] << ", " 
                 << left_tabletname << ", start " << request->key_range().key_start()
                 << ", end " << request->mid_key();
-            bool lflag = lchild_tabletio->Load(request->schema(), request->key_range().key_start(),
-                                        request->mid_key(), left_tabletname,
-                                        parent_tablets, snapshots, m_ldb_logger,
-                                        m_ldb_block_cache, m_ldb_table_cache, &status);
             
+            sem_t finish_counter;
+            sem_init(&finish_counter, 0, 0);
+            StatusCode lstatus = kTabletNodeOk;
+            bool lflag = true;
+            boost::function<void ()> closure =
+                boost::bind(&TabletNodeImpl::LoadTabletForSplitAsync, this, lchild_tabletio, 
+                                            request, 0, parent_tablets, snapshots, 
+                                            &lstatus, &finish_counter);
+            m_thread_pool->AddTask(closure);
+
             // load right child
-            LOG(INFO) << __func__ << ": parent " << parent_tablets[0] << ", " 
+            VLOG(20) << __func__ << ": parent " << parent_tablets[0] << ", " 
                 << right_tabletname << ", start " << request->mid_key()
                 << ", end " << request->key_range().key_end();
             
             DebugTeraTabletServerCrashOrSuspend(DEBUG_ts_split_crash_or_suspend, 45);
-            
+           
             bool rflag = rchild_tabletio->Load(request->schema(), request->mid_key(),
                                        request->key_range().key_end(), right_tabletname,
                                        parent_tablets, snapshots, m_ldb_logger,
                                        m_ldb_block_cache, m_ldb_table_cache, &status);
             
+            sem_wait(&finish_counter);
+            sem_destroy(&finish_counter);
+            lflag = (lstatus == kTabletNodeOk);
+
             // left or right child fail
             if (!lflag || !rflag) {
                 LOG(INFO) << __func__ << ", load child fail, lflag " << lflag
@@ -891,7 +901,7 @@ void TabletNodeImpl::SplitTablet(const SplitTabletRequest* request,
             done->Run();
             
             DebugTeraTabletServerCrashOrSuspend(DEBUG_ts_split_crash_or_suspend, 50);
-            return ;
+            return;
         }
         // fail in race condition
         parent_tabletio->DecRef();
@@ -899,6 +909,35 @@ void TabletNodeImpl::SplitTablet(const SplitTabletRequest* request,
         done->Run();
     }
     return;
+}
+
+// @child_index:        0 for left, 1 for right
+void TabletNodeImpl::LoadTabletForSplitAsync(io::TabletIO* tabletio,
+                const SplitTabletRequest* request, int child_index,
+                const std::vector<uint64_t> parent_tablets,
+                std::map<uint64_t, uint64_t> snapshots,
+                StatusCode* status,
+                sem_t* finish_counter)
+{
+    SetStatusCode(kTabletNodeOk, status);
+    std::string parent_tabletname = leveldb::GetTabletPathFromNum(request->table_name(), 
+                                                                request->parent_tablet());
+    std::string path = leveldb::GetChildTabletPath(parent_tabletname, 
+                                                    request->child_tablets(child_index));
+    std::string key_start;
+    std::string key_end;
+    if (child_index == 0) {
+        key_start = request->key_range().key_start();
+        key_end = request->mid_key(); 
+    } else {
+        key_start = request->mid_key(); 
+        key_end = request->key_range().key_end();
+    }
+
+    tabletio->Load(request->schema(), key_start, key_end, path,
+                    parent_tablets, snapshots, m_ldb_logger,
+                    m_ldb_block_cache, m_ldb_table_cache, status);
+    sem_post(finish_counter);
 }
 
 bool TabletNodeImpl::CheckInKeyRange(const KeyList& key_list,

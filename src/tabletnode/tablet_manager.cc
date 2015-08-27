@@ -46,7 +46,7 @@ bool TabletManager::TestSplitTablet(const std::string& table_name,
         CHECK(it != m_tablet_list.end());
         return true;
     }
-    LOG(INFO) << __func__ << ", split not finish, " << table_name << ", start "
+    VLOG(20) << __func__ << ", split not finish, " << table_name << ", start "
         << start_key << ", mid " << mid_key << ", end " << end_key;
     return false; 
 }

@@ -267,7 +267,7 @@ bool TabletIO::Load(const TableSchema& schema,
     // TODO: test 
     timeval mtime;
     gettimeofday(&mtime, NULL);
-    LOG(ERROR) << __func__ << ", Avail, " << m_tablet_path 
+    VLOG(20) << __func__ << ", Avail, " << m_tablet_path 
         << ", " << DebugString(m_start_key) << ", " << DebugString(m_end_key)
         << ", tv_sec " << mtime.tv_sec << ", tv_usec " << mtime.tv_usec;
     
@@ -297,7 +297,7 @@ bool TabletIO::Unload(StatusCode* status) {
     // TODO: test 
     timeval mtime;
     gettimeofday(&mtime, NULL);
-    LOG(ERROR) << __func__ << ", NotAvail, " << m_tablet_path 
+    VLOG(20) << __func__ << ", NotAvail, " << m_tablet_path 
         << ", " << DebugString(m_start_key) << ", " << DebugString(m_end_key)
         << ", tv_sec " << mtime.tv_sec << ", tv_usec " << mtime.tv_usec;
     
