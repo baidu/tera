@@ -134,10 +134,6 @@ bool TabletIO::Load(const TableSchema& schema,
                     StatusCode* status) {
     {
         MutexLock lock(&m_mutex);
-        LOG(INFO) << __func__ << ", path " << path << ", status "
-            << StatusCodeToString(m_status) << ", m_start_key "
-            << DebugString(m_start_key) << ", m_end_key " << DebugString(m_end_key) 
-            << ", key_start " << DebugString(key_start) << ", key_end " << DebugString(key_end);
 
         if (m_status == kReady && m_start_key == key_start
             && m_end_key == key_end) {
