@@ -45,6 +45,7 @@ DEFINE_int64(tera_tablet_memtable_ldb_write_buffer_size, 1000, "the buffer size(
 DEFINE_int64(tera_tablet_memtable_ldb_block_size, 4, "the block size (in KB) for memtable on leveldb");
 DEFINE_int64(tera_tablet_ldb_sst_size, 8, "the sstable file size (in MB) on leveldb");
 DEFINE_bool(tera_sync_log, true, "flush all in-memory parts of log file to stable storage");
+DEFINE_bool(tera_io_cache_path_vanish_allowed, false, "if true, allow cache path not exist");
 
 DEFINE_string(tera_dfs_so_path, "", "the dfs implementation path");
 DEFINE_string(tera_dfs_conf, "", "the dfs configuration file path");

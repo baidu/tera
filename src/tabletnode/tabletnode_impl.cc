@@ -78,6 +78,8 @@ DECLARE_string(tera_leveldb_env_type);
 DECLARE_string(tera_local_addr);
 DECLARE_bool(tera_ins_enabled);
 
+DECLARE_bool(tera_io_cache_path_vanish_allowed);
+
 extern tera::Counter range_error_counter;
 extern tera::Counter rand_read_delay;
 
@@ -157,7 +159,8 @@ bool TabletNodeImpl::Init() {
 void TabletNodeImpl::InitCacheSystem() {
     if (!FLAGS_tera_tabletnode_cache_enabled) {
         // compitable with legacy FlashEnv
-        leveldb::FlashEnv::SetFlashPath(FLAGS_tera_tabletnode_cache_paths);
+        leveldb::FlashEnv::SetFlashPath(FLAGS_tera_tabletnode_cache_paths,
+                                        FLAGS_tera_io_cache_path_vanish_allowed);
         return;
     }
 
