@@ -61,7 +61,7 @@ public:
     virtual Env* CacheEnv() { return posix_env_; }
 
     /// flash path for local flash cache
-    static void SetFlashPath(const std::string& path);
+    static void SetFlashPath(const std::string& path, bool vanish_allowed);
     static const std::string& FlashPath(const std::string& fname);
     static const std::vector<std::string>& GetFlashPaths() {
         return flash_paths_;
@@ -71,6 +71,7 @@ private:
     Env* dfs_env_;
     Env* posix_env_;
     static std::vector<std::string> flash_paths_;
+    static bool vanish_allowed_;
 };
 
 /// new flash env
