@@ -69,7 +69,7 @@ bool DefaultCompactStrategy::Drop(const Slice& tera_key, uint64_t n,
             case leveldb::TKT_DEL_QUALIFIERS: {
                 m_del_qual_ts = ts;
                 if (CheckCompactLowerBound(key, lower_bound)) {
-                  return true;
+                    return true;
                 }
             }
             default:;
