@@ -24,6 +24,10 @@ install:
     - git clone https://github.com/google/glog
     - ( cd glog && git checkout v0.3.3 && ./configure --disable-shared --with-pic && make -j4 && sudo make install )
     
+    - wget --no-check-certificate https://googletest.googlecode.com/files/gtest-1.7.0.zip
+    - unzip gtest-1.7.0.zip
+    - ( cd gtest-1.7.0 && ./configure --disable-shared --with-pic && make -j4 && sudo cp -a lib/.libs/* /usr/lib && sudo cp -a include/gtest /usr/include )
+
     - wget http://download.savannah.gnu.org/releases/libunwind/libunwind-0.99-beta.tar.gz
     - tar zxvf libunwind-0.99-beta.tar.gz
     - ( cd libunwind-0.99-beta && ./configure CFLAGS=-U_FORTIFY_SOURCE --with-pic && make -j4 && sudo make install )
@@ -42,6 +46,7 @@ before_script:
     - sed -i 's/^ZOOKEEPER_PREFIX=.*/ZOOKEEPER_PREFIX=\/usr\/local/' depends.mk
     - sed -i 's/^GFLAGS_PREFIX=.*/GFLAGS_PREFIX=\/usr\/local/' depends.mk
     - sed -i 's/^GLOG_PREFIX=.*/GLOG_PREFIX=\/usr\/local/' depends.mk
+    - sed -i 's/^GTEST_PREFIX=.*/GTEST_PREFIX=.\/thirdparty/' depends.mk
     - sed -i 's/^GPERFTOOLS_PREFIX=.*/GPERFTOOLS_PREFIX=\/usr\/local/' depends.mk
     - sed -i 's/^BOOST_INCDIR=.*/BOOST_INCDIR=\/usr\/local\/include/' depends.mk
     - sed -i 's/^INS_PREFIX=.*/INS_PREFIX=.\/ins\/output/' depends.mk

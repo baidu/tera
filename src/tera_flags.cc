@@ -45,6 +45,7 @@ DEFINE_int64(tera_tablet_memtable_ldb_write_buffer_size, 1000, "the buffer size(
 DEFINE_int64(tera_tablet_memtable_ldb_block_size, 4, "the block size (in KB) for memtable on leveldb");
 DEFINE_int64(tera_tablet_ldb_sst_size, 8, "the sstable file size (in MB) on leveldb");
 DEFINE_bool(tera_sync_log, true, "flush all in-memory parts of log file to stable storage");
+DEFINE_bool(tera_io_cache_path_vanish_allowed, false, "if true, allow cache path not exist");
 
 DEFINE_string(tera_dfs_so_path, "", "the dfs implementation path");
 DEFINE_string(tera_dfs_conf, "", "the dfs configuration file path");
@@ -102,6 +103,8 @@ DEFINE_string(tera_master_meta_table_path, "meta", "the path of meta table");
 DEFINE_int64(tera_master_split_tablet_size, 512, "the size (in MB) of tablet to trigger split");
 DEFINE_bool(tera_master_merge_enabled, false, "enable the auto-merge tablet");
 DEFINE_int64(tera_master_merge_tablet_size, 0, "the size (in MB) of tablet to trigger merge");
+DEFINE_string(tera_master_gc_strategy, "default", "gc strategy, [default, incremental]");
+
 // deprecated
 DEFINE_int64(tera_master_merge_size_threshold, 10, "the size (in MB) of tablet to trigger merge");
 DEFINE_int64(tera_master_merge_timer_period, 180, "the actived time (in sec) for merge timer");

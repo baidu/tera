@@ -934,7 +934,13 @@ bool TabletIO::ReadCells(const RowReaderInfo& row_reader, RowResult* value_list,
         MutexLock lock(&m_mutex);
         if (m_status != kReady && m_status != kOnSplit
             && m_status != kSplited && m_status != kUnLoading) {
-            SetStatusCode(m_status, status);
+            if (m_status == kUnLoading2) {
+                // keep compatable for old sdk protocol
+                // we can remove this in the future.
+                SetStatusCode(kUnLoading, status);
+            } else {
+                SetStatusCode(m_status, status);
+            }
             return false;
         }
         m_db_ref_count++;
@@ -1074,7 +1080,13 @@ bool TabletIO::Write(const WriteTabletRequest* request,
         MutexLock lock(&m_mutex);
         if (m_status != kReady && m_status != kOnSplit
             && m_status != kSplited && m_status != kUnLoading) {
-            SetStatusCode(m_status, status);
+            if (m_status == kUnLoading2) {
+                // keep compatable for old sdk protocol
+                // we can remove this in the future.
+                SetStatusCode(kUnLoading, status);
+            } else {
+                SetStatusCode(m_status, status);
+            }
             return false;
         }
         m_db_ref_count++;
@@ -1096,7 +1108,13 @@ bool TabletIO::ScanRows(const ScanTabletRequest* request,
         MutexLock lock(&m_mutex);
         if (m_status != kReady && m_status != kOnSplit
             && m_status != kSplited && m_status != kUnLoading) {
-            SetStatusCode(m_status, &status);
+            if (m_status == kUnLoading2) {
+                // keep compatable for old sdk protocol
+                // we can remove this in the future.
+                SetStatusCode(kUnLoading, &status);
+            } else {
+                SetStatusCode(m_status, &status);
+            }
             response->set_status(status);
             done->Run();
             return false;

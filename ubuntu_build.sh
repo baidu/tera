@@ -32,6 +32,11 @@ mv gperftools/gperftools-2.2.1.tar.gz .
 tar zxvf gperftools-2.2.1.tar.gz
 ( cd gperftools-2.2.1 && ./configure --disable-shared --with-pic && make -j4 && sudo make install )
 
+git clone --depth=1 https://github.com/xupeilin/gtest_archive
+mv gtest_archive/gtest-1.7.0.zip .
+unzip gtest-1.7.0.zip
+(cd gtest-1.7.0 && ./configure --disable-shared --with-pic && make && cp -a lib/.libs/* /usr/lib && cp -a include/gtest /usr/include
+
 git clone https://github.com/fxsjy/ins
 (cd ins && PBRPC_PATH=../sofa-pbrpc/output/ make sdk )
 
@@ -41,6 +46,7 @@ sed -i 's/^SNAPPY_PREFIX=.*/SNAPPY_PREFIX=\/usr\/local/' depends.mk
 sed -i 's/^ZOOKEEPER_PREFIX=.*/ZOOKEEPER_PREFIX=\/usr\/local/' depends.mk
 sed -i 's/^GFLAGS_PREFIX=.*/GFLAGS_PREFIX=\/usr\/local/' depends.mk
 sed -i 's/^GLOG_PREFIX=.*/GLOG_PREFIX=\/usr\/local/' depends.mk
+sed -i 's/^GTEST_PREFIX=.*/GTEST_PREFIX=\/usr\/local/' depends.mk
 sed -i 's/^GPERFTOOLS_PREFIX=.*/GPERFTOOLS_PREFIX=\/usr\/local/' depends.mk
 sed -i 's/^BOOST_INCDIR=.*/BOOST_INCDIR=\/usr\/local\/include/' depends.mk
 sed -i 's/^INS_PREFIX=.*/INS_PREFIX=.\/ins\/output/' depends.mk

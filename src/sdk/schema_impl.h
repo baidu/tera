@@ -183,6 +183,9 @@ public:
     /// 是否为kv表
     bool IsKv() const;
 
+    void SetAdminGroup(const std::string& name);
+    std::string AdminGroup() const;
+
 private:
     typedef std::map<std::string, LGDescImpl*> LGMap;
     typedef std::map<std::string, CFDescImpl*> CFMap;
@@ -201,6 +204,7 @@ private:
     int64_t         _split_size;
     int64_t         _merge_size;
     bool            _disable_wal;
+    std::string     _admin_group;
 };
 
 } // namespace tera
