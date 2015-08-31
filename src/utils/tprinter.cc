@@ -10,7 +10,6 @@
 #include <iomanip>
 #include <iostream>
 #include <sstream>
-#include "common/base/string_number.h"
 
 namespace tera {
 
@@ -20,20 +19,13 @@ TPrinter::TPrinter(int cols, ...) : cols_(cols) {
     va_start(args, cols);
     for (int i = 0; i < cols; ++i) {
         string item = va_arg(args, char*);
-        string name, type;
+        string name;
+        CellType type;
         if (!ParseColType(item, &name, &type)) {
             name = item;
-            type = "string";
+            type = STRING;
         }
-        if (type == "int") {
-            head_.push_back(std::make_pair(name, INT));
-        } else if (type == "double") {
-            head_.push_back(std::make_pair(name, DOUBLE));
-        } else if (type == "string") {
-            head_.push_back(std::make_pair(name, STRING));
-        } else {
-            abort();
-        }
+        head_.push_back(std::make_pair(name, type));
     }
     va_end(args);
 }
@@ -45,32 +37,30 @@ bool TPrinter::AddRow(int cols, ...) {
     if (cols != cols_) {
         return false;
     }
+    Line line;
     va_list args;
     va_start(args, cols);
     for (int i = 0; i < cols; ++i) {
-        switch (head_[i].second)
-        string item = va_arg(args, char*);
-        string name, type;
-        if (!ParseColType(item, &name, &type)) {
-            name = item;
-            type = "string";
-        }
-
-        if (type == "int") {
-            head_.push_back(std::make_pair(name, INT));
-        } else if (type == "double") {
-            head_.push_back(std::make_pair(name, DOUBLE));
-        } else if (type == "string") {
-            head_.push_back(std::make_pair(name, STRING));
-        } else {
+        switch (head_[i].second) {
+        case INT:
+            line.push_back(Cell((int64_t)va_arg(args, int64_t), INT));
+            break;
+        case DOUBLE:
+            line.push_back(Cell((double)va_arg(args, double), DOUBLE));
+            break;
+        case STRING:
+            line.push_back(Cell((char*)va_arg(args, char*), STRING));
+            break;
+        default:
             abort();
         }
     }
     va_end(args);
+    body_.push_back(line);
     return true;
 }
 
-void TPrinter::Print(bool has_head) {
+void TPrinter::Print(const PrintOpt& opt) {
 #if 0
     if (_table.size() < 1) {
         return;
@@ -103,7 +93,7 @@ void TPrinter::Print(bool has_head) {
 #endif
 }
 
-string TPrinter::ToString(bool has_head) {
+string TPrinter::ToString(const PrintOpt& opt) {
 #if 0
     std::ostringstream ostr;
     if (_table.size() < 1) {
@@ -139,7 +129,7 @@ string TPrinter::ToString(bool has_head) {
     return "";
 }
 
-bool TPrinter::ParseColType(const string& item, string* name, string* type) {
+bool TPrinter::ParseColType(const string& item, string* name, CellType* type) {
     string::size_type pos1;
     pos1 = item.find('<');
     if (pos1 == string::npos) {
@@ -148,25 +138,56 @@ bool TPrinter::ParseColType(const string& item, string* name, string* type) {
     if (item[item.size() - 1] != '>') {
         return false;
     }
+    string type_str = item.substr(pos1 + 1, item.size() - pos1 - 2);
+    if (type_str == "int") {
+        *type = INT;
+    } else if (type_str == "double") {
+        *type = DOUBLE;
+    } else if (type_str == "string") {
+        *type = STRING;
+    } else {
+        return false;
+    }
     *name = item.substr(0, pos1);
-    *type = item.substr(pos1 + 1, item.size() - pos1 - 2);
     return true;
 }
 
-string TPrinter::RemoveSubString(const string& input, const string& substr) {
-    string ret;
-    string::size_type p = 0;
-    string tmp = input;
-    while (1) {
-        tmp = tmp.substr(p);
-        p = tmp.find(substr);
-        ret.append(tmp.substr(0, p));
-        if (p == string::npos) {
-            break;
-        }
-        p += substr.size();
-    }
+string TPrinter::NumToStr(const int64_t num) {
+    const int64_t kKB = 1000;
+    const int64_t kMB = kKB * 1000;
+    const int64_t kGB = kMB * 1000;
+    const int64_t kTB = kGB * 1000;
+    const int64_t kPB = kTB * 1000;
 
-    return ret;
+    std::string unit;
+    double res;
+    if (num > kPB) {
+        res = (1.0 * num) / kPB;
+        unit = "P";
+    } else if (num > kTB) {
+        res = (1.0 * num) / kTB;
+        unit = "T";
+    } else if (num > kGB) {
+        res = (1.0 * num) / kGB;
+        unit = "G";
+    } else if (num > kMB) {
+        res = (1.0 * num) / kMB;
+        unit = "M";
+    } else if (num > kKB) {
+        res = (1.0 * num) / kKB;
+        unit = "K";
+    } else {
+        res = num;
+        unit = "";
+    }
+    const int buflen = 16;
+    char buf[buflen];
+    if ((int)res - res == 0) {
+        snprintf(buf, buflen, "%d%s", (int)res, unit.c_str());
+    } else {
+        snprintf(buf, buflen, "%.2f%s", res, unit.c_str());
+    }
+    return string(buf);
 }
+
 } // namespace tera
