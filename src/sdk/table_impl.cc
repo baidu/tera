@@ -55,6 +55,7 @@ DECLARE_int32(tera_sdk_cookie_update_interval);
 DECLARE_bool(tera_sdk_pend_request_while_scan_meta_enabled);
 DECLARE_bool(tera_sdk_perf_counter_enabled);
 DECLARE_int64(tera_sdk_perf_counter_log_interval);
+DECLARE_int32(FLAGS_tera_rpc_timeout_period);
 
 namespace tera {
 
@@ -86,7 +87,8 @@ TableImpl::TableImpl(const std::string& table_name,
       _seq_mutation_error_occur_time(0),
       _seq_mutation_wait_to_update_meta(false),
       _seq_mutation_wait_to_retry(false),
-      _seq_mutation_pending_rpc_count(0) {
+      _seq_mutation_pending_rpc_count(0),
+      _pending_timeout_ms(FLAGS_tera_rpc_timeout_period) {
     if (options.sequential_write) {
         _seq_mutation_commit_list = new std::vector<RowMutationImpl*>;
         _seq_mutation_session = get_micros() * get_micros();
@@ -1101,6 +1103,7 @@ void TableImpl::CommitReaders(const std::string server_addr,
     ReadTabletResponse* response = new ReadTabletResponse;
     request->set_sequence_id(_last_sequence_id++);
     request->set_tablet_name(_name);
+    request->set_client_timeout_ms(_pending_timeout_ms);
     for (uint32_t i = 0; i < reader_list->size(); ++i) {
         RowReaderImpl* row_reader = (*reader_list)[i];
         RowReaderInfo* row_reader_info = request->add_row_info_list();

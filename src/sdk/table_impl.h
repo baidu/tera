@@ -430,6 +430,10 @@ private:
     bool _seq_mutation_wait_to_update_meta;
     bool _seq_mutation_wait_to_retry;
     uint64_t _seq_mutation_pending_rpc_count;
+
+    /// read request will contain this member, 
+    /// so tabletnodes can drop the read-request that timeouted
+    uint64_t _pending_timeout_ms;
 };
 
 } // namespace tera
