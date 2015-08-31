@@ -249,9 +249,9 @@ void TableImpl::Get(const std::vector<RowReader*>& row_readers) {
 
 bool TableImpl::Get(const std::string& row_key, const std::string& family,
                     const std::string& qualifier, int64_t* value,
-                    ErrorCode* err) {
+                    ErrorCode* err, uint64_t snapshot_id) {
     std::string value_str;
-    if (Get(row_key, family, qualifier, &value_str, err)
+    if (Get(row_key, family, qualifier, &value_str, err, snapshot_id)
         && value_str.size() == sizeof(int64_t)) {
         *value = *(int64_t*)value_str.c_str();
         return true;
@@ -261,9 +261,10 @@ bool TableImpl::Get(const std::string& row_key, const std::string& family,
 
 bool TableImpl::Get(const std::string& row_key, const std::string& family,
                     const std::string& qualifier, std::string* value,
-                    ErrorCode* err) {
+                    ErrorCode* err, uint64_t snapshot_id) {
     RowReader* row_reader = NewRowReader(row_key);
     row_reader->AddColumn(family, qualifier);
+    row_reader->SetSnapshot(snapshot_id);
     Get(row_reader);
     *err = row_reader->GetError();
     if (err->GetType() == ErrorCode::kOK) {
