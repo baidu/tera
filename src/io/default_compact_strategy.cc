@@ -380,11 +380,8 @@ bool DefaultCompactStrategy::CheckCompactLowerBound(const Slice& cur_key,
     int res = rkey.compare(cur_key);
     if (res > 0) {
         return true;
-    } else if (res == 0) {
-        return false;
     } else {
-        LOG(FATAL) << "key order error: " << rkey.ToString()
-            << " < " << cur_key.ToString();
+        return false;
     }
 }
 
