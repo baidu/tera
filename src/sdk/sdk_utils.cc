@@ -64,9 +64,13 @@ string Switch2Str(bool enabled) {
 
 void ShowTableSchema(const TableSchema& schema, bool is_x) {
     std::stringstream ss;
+    std::string table_alias = schema.name();
+    if (!schema.alias().empty()) {
+        table_alias = schema.alias();
+    }
     if (schema.kv_only()) {
         const LocalityGroupSchema& lg_schema = schema.locality_groups(0);
-        ss << "\n  " << schema.name() << " <";
+        ss << "\n  " << table_alias << " <";
         if (is_x || schema.raw_key() != Readable) {
             ss << "rawkey=" << TableProp2Str(schema.raw_key()) << ",";
         }
@@ -91,7 +95,7 @@ void ShowTableSchema(const TableSchema& schema, bool is_x) {
         return;
     }
 
-    ss << "\n  " << schema.name() << " <";
+    ss << "\n  " << table_alias << " <";
     if (is_x || schema.raw_key() != Readable) {
         ss << "rawkey=" << TableProp2Str(schema.raw_key()) << ",";
     }

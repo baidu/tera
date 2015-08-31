@@ -512,6 +512,7 @@ bool MasterImpl::LoadMetaTable(const std::string& meta_tablet_addr,
             char first_key_char = record.key()[0];
             if (first_key_char == '@') {
                 m_tablet_manager->LoadTableMeta(record.key(), record.value());
+                FillAlias(record.key(), record.value());
             } else if (first_key_char > '@') {
                 m_tablet_manager->LoadTabletMeta(record.key(), record.value());
             } else {
@@ -528,6 +529,17 @@ bool MasterImpl::LoadMetaTable(const std::string& meta_tablet_addr,
     LOG(ERROR) << "fail to load meta table: " << StatusCodeToString(kRPCError);
     m_tablet_manager->ClearTableList();
     return false;
+}
+
+void MasterImpl::FillAlias(const std::string& key, const std::string& value) {
+    TableMeta meta;
+    ParseMetaTableKeyValue(key, value, &meta);
+    if (!meta.schema().alias().empty()) {
+        MutexLock locker(&m_alias_mutex);
+        m_alias[meta.schema().alias()] = meta.schema().name();
+        LOG(INFO) << "table alias:" << meta.schema().alias() 
+                  << " -> " << meta.schema().name();
+    }
 }
 
 bool MasterImpl::LoadMetaTableFromFile(const std::string& filename,
@@ -561,6 +573,7 @@ bool MasterImpl::LoadMetaTableFromFile(const std::string& filename,
         char first_key_char = key[0];
         if (first_key_char == '@') {
             m_tablet_manager->LoadTableMeta(key, value);
+            FillAlias(key, value);
         } else if (first_key_char > '@') {
             m_tablet_manager->LoadTabletMeta(key, value);
         } else {
@@ -633,6 +646,22 @@ void MasterImpl::CreateTable(const CreateTableRequest* request,
             done->Run();
             return;
         }
+        if (!request->schema().alias().empty()) {
+            bool alias_exist = false;
+            {
+                MutexLock locker(&m_alias_mutex);
+                if (m_alias.find(request->schema().alias()) != m_alias.end()) {
+                    alias_exist =  true;
+                }
+            }
+            if (alias_exist) {
+                LOG(ERROR) << "Fail to create table: " << request->table_name()
+                << ", table already exist, alias:" << request->schema().alias() ;
+                response->set_status(kTableExist);
+                done->Run();
+                return;
+            }
+        }
     }
 
     // try clean env, if there is a dir same as table_name, delete it first
@@ -703,6 +732,11 @@ void MasterImpl::CreateTable(const CreateTableRequest* request,
         << request->schema().ShortDebugString();
     // write meta tablet
     TablePtr table = tablets[0]->GetTable();
+    std::string table_alias = table->GetSchema().alias();
+    if (!table_alias.empty()) {
+        MutexLock locker(&m_alias_mutex);
+        m_alias[table_alias] = table_name;
+    }
     WriteClosure* closure =
         NewClosure(this, &MasterImpl::AddMetaCallback, table, tablets,
                    FLAGS_tera_master_meta_retry_times, request, response, done);
@@ -4013,6 +4047,11 @@ void MasterImpl::DeleteTableRecordCallback(TablePtr table, int32_t retry_times,
                                  true, done);
         }
         return;
+    }
+    std::string table_alias = table->GetSchema().alias();
+    if (!table_alias.empty()) {
+        MutexLock locker(&m_alias_mutex);
+        m_alias.erase(table_alias);
     }
     LOG(INFO) << "delete meta table record success, " << table;
 }

@@ -995,6 +995,10 @@ int32_t ShowAllTables(Client* client, bool is_x, bool show_all, ErrorCode* err) 
     }
     for (int32_t table_no = 0; table_no < table_list.meta_size(); ++table_no) {
         std::string tablename = table_list.meta(table_no).table_name();
+        std::string table_alias = tablename;
+        if (!table_list.meta(table_no).schema().alias().empty()) {
+            table_alias = table_list.meta(table_no).schema().alias();
+        }
         TableStatus status = table_list.meta(table_no).status();
         int64_t size = 0;
         uint32_t tablet = 0;
@@ -1062,7 +1066,7 @@ int32_t ShowAllTables(Client* client, bool is_x, bool show_all, ErrorCode* err) 
         if (is_x) {
             printer.AddRow(cols,
                            NumberToString(table_no).data(),
-                           tablename.data(),
+                           table_alias.data(),
                            StatusCodeToString(status).data(),
                            utils::ConvertByteToString(size).data(),
                            lg_size_str.data(),
@@ -1082,7 +1086,7 @@ int32_t ShowAllTables(Client* client, bool is_x, bool show_all, ErrorCode* err) 
         } else {
             printer.AddRow(cols,
                            NumberToString(table_no).data(),
-                           tablename.data(),
+                           table_alias.data(),
                            StatusCodeToString(status).data(),
                            utils::ConvertByteToString(size).data(),
                            lg_size_str.data(),

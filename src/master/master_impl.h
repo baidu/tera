@@ -464,6 +464,7 @@ private:
     template <typename Request, typename Response, typename Callback>
     bool HasTablePermission(const Request* request, Response* response, 
                             Callback* done, TablePtr table, const char* operate);
+    void FillAlias(const std::string& key, const std::string& value);
 private:
     mutable Mutex m_status_mutex;
     MasterStatus m_status;
@@ -513,6 +514,8 @@ private:
     int64_t m_gc_timer_id;
     bool m_gc_query_enable;
     boost::shared_ptr<GcStrategy> gc_strategy;
+    std::map<std::string, std::string> m_alias;
+    mutable Mutex m_alias_mutex;
 };
 
 } // namespace master
