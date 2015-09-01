@@ -45,7 +45,7 @@ DECLARE_int32(tera_sdk_batch_send_interval);
 DECLARE_int64(tera_sdk_max_mutation_pending_num);
 DECLARE_int64(tera_sdk_max_reader_pending_num);
 DECLARE_bool(tera_sdk_async_blocking_enabled);
-DECLARE_int32(tera_sdk_sync_wait_timeout);
+DECLARE_int32(tera_sdk_timeout);
 DECLARE_int32(tera_sdk_scan_buffer_limit);
 DECLARE_int32(tera_sdk_update_meta_concurrency);
 DECLARE_int32(tera_sdk_update_meta_buffer_limit);
@@ -54,6 +54,7 @@ DECLARE_string(tera_sdk_cookie_path);
 DECLARE_int32(tera_sdk_cookie_update_interval);
 DECLARE_bool(tera_sdk_perf_counter_enabled);
 DECLARE_int64(tera_sdk_perf_counter_log_interval);
+DECLARE_int32(FLAGS_tera_rpc_timeout_period);
 
 namespace tera {
 
@@ -65,7 +66,7 @@ TableImpl::TableImpl(const std::string& table_name,
     : _name(table_name),
       _options(options),
       _last_sequence_id(0),
-      _timeout(FLAGS_tera_sdk_sync_wait_timeout),
+      _timeout(FLAGS_tera_sdk_timeout),
       _commit_size(FLAGS_tera_sdk_batch_size),
       _commit_timeout(FLAGS_tera_sdk_batch_send_interval),
       _max_commit_pending_num(FLAGS_tera_sdk_max_mutation_pending_num),
@@ -77,7 +78,8 @@ TableImpl::TableImpl(const std::string& table_name,
       _zk_root_path(zk_root_path),
       _zk_addr_list(zk_addr_list),
       _thread_pool(thread_pool),
-      _cluster(new sdk::ClusterFinder(zk_root_path, zk_addr_list)) {
+      _cluster(new sdk::ClusterFinder(zk_root_path, zk_addr_list)),
+      _pending_timeout_ms(FLAGS_tera_rpc_timeout_period) {
 }
 
 TableImpl::~TableImpl() {
@@ -985,6 +987,7 @@ void TableImpl::CommitReaders(const std::string server_addr,
     ReadTabletResponse* response = new ReadTabletResponse;
     request->set_sequence_id(_last_sequence_id++);
     request->set_tablet_name(_name);
+    request->set_client_timeout_ms(_pending_timeout_ms);
     for (uint32_t i = 0; i < reader_list.size(); ++i) {
         RowReaderImpl* row_reader = reader_list[i];
         RowReaderInfo* row_reader_info = request->add_row_info_list();

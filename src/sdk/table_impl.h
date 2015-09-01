@@ -405,6 +405,10 @@ private:
 
     PerfCounter _perf_counter;  // calc time consumption, for performance analysis
     int64_t _perf_log_task_id;
+
+    /// read request will contain this member,
+    /// so tabletnodes can drop the read-request that timeouted
+    uint64_t _pending_timeout_ms;
 };
 
 } // namespace tera
