@@ -69,7 +69,7 @@ bool DefaultCompactStrategy::Drop(const Slice& tera_key, uint64_t n,
             case leveldb::TKT_DEL_QUALIFIERS: {
                 m_del_qual_ts = ts;
                 if (CheckCompactLowerBound(key, lower_bound)) {
-                  return true;
+                    return true;
                 }
             }
             default:;
@@ -380,11 +380,8 @@ bool DefaultCompactStrategy::CheckCompactLowerBound(const Slice& cur_key,
     int res = rkey.compare(cur_key);
     if (res > 0) {
         return true;
-    } else if (res == 0) {
-        return false;
     } else {
-        LOG(FATAL) << "key order error: " << rkey.ToString()
-            << " < " << cur_key.ToString();
+        return false;
     }
 }
 
