@@ -9,9 +9,10 @@
 
 #include <stdint.h>
 
+#include <iostream>
+#include <map>
 #include <string>
 #include <vector>
-#include <iostream>
 
 using std::string;
 
@@ -30,14 +31,20 @@ public:
         PrintOpt() : print_head(true), sort_dir(0) {}
     };
 
+    TPrinter();
     TPrinter(int cols, ...);
     ~TPrinter();
 
     bool AddRow(int cols, ...);
+    bool AddRow(const std::vector<string>& row);
+    bool AddRow(const std::vector<int64_t>& row);
 
     void Print(const PrintOpt& opt = PrintOpt());
 
     string ToString(const PrintOpt& opt = PrintOpt());
+
+    void Reset(int cols, ...);
+    void Reset(const std::vector<string>& head);
 
 private:
     enum CellType {
@@ -52,6 +59,8 @@ private:
             double  d;
             string* s;
         } value;
+
+        string ToString();
 
         Cell (int64_t v,       CellType t) { value.i = v; type = t; }
         Cell (double  v,       CellType t) { value.d = v; type = t; }
@@ -68,18 +77,18 @@ private:
             return *this;
         }
     };
+    typedef std::vector<Cell> Line;
 
     // column format: "name<int>"
-    static bool ParseColType(const string& item, string* name, CellType* type);
-    static string NumToStr(const int64_t num);
+    bool ParseColType(const string& item, string* name, CellType* type);
+    void FormatOneLine(Line& ori, std::vector<string>* dst);
+    static string NumToStr(const double num);
 
 private:
-    typedef std::vector<Cell> Line;
-    std::vector<std::pair<std::string, CellType> > head_;
-    std::vector<Line> body_;
-//    std::vector<int> col_width_;
     int cols_;
-    static const uint32_t kMaxColWidth = 50;
+    std::vector<std::pair<string, CellType> > head_;
+    std::vector<Line> body_;
+    std::vector<size_t> col_width_;
 };
 
 } // namespace tera
