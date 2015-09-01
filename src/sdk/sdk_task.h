@@ -80,9 +80,7 @@ private:
     const static uint32_t kShardBits = 6;
     const static uint32_t kShardNum = (1 << kShardBits);
     typedef boost::unordered_map<int64_t, SdkTask*> TaskHashMap;
-    typedef boost::heap::fibonacci_heap<SdkTask*> TaskTimeoutQueue;
     TaskHashMap _map_shard[kShardNum];
-    TaskTimeoutQueue _queue_shard[kShardNum];
     mutable Mutex _mutex_shard[kShardNum];
 };
 
