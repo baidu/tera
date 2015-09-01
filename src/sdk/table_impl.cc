@@ -2137,12 +2137,10 @@ void TableImpl::BreakRequest(int64_t task_id) {
     CHECK_EQ(task->GetRef(), 1);
     switch (task->Type()) {
     case SdkTask::MUTATION:
-        RowMutationImpl* row_mutation = (RowMutationImpl*)task;
-        row_mutation->RunCallback();
+        ((RowMutationImpl*)task)->RunCallback();
         break;
     case SdkTask::READ:
-        RowReaderImpl* row_reader = (RowReaderImpl*)task;
-        row_reader->RunCallback();
+        ((RowReaderImpl*)task)->RunCallback();
         break;
     default:
         CHECK(false);
