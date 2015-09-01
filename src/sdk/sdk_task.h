@@ -5,7 +5,6 @@
 #ifndef  TERA_SDK_SDK_TASK_H_
 #define  TERA_SDK_SDK_TASK_H_
 
-#include <boost/heap/fibonacci_heap.hpp>
 #include <boost/unordered_map.hpp>
 
 #include "common/mutex.h"
