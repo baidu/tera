@@ -1735,7 +1735,7 @@ void VersionSet::SetupOtherInputs(Compaction* c) {
   compact_pointer_[level] = largest.Encode().ToString();
   c->edit_.SetCompactPointer(level, largest);
 
-  // tera-specific: calculate the smallest rowkey which do not overlap file not
+  // tera-specific: calculate the smallest rowkey which overlap with file not
   // in this compaction.
   SetupCompactionBoundary(c);
 }
