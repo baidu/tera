@@ -245,11 +245,15 @@ bool ClientImpl::DisableTable(string name, ErrorCode* err) {
 
 bool ClientImpl::EnableTable(string name, ErrorCode* err) {
     master::MasterClient master_client(_cluster->MasterAddr());
-
+    std::string internal_table_name;
+    if (!GetInternalTableName(name, err, &internal_table_name)) {
+        LOG(ERROR) << "faild to scan meta schema";
+        return false;
+    }
     EnableTableRequest request;
     EnableTableResponse response;
     request.set_sequence_id(0);
-    request.set_table_name(name);
+    request.set_table_name(internal_table_name);
     request.set_user_token(GetUserToken(_user_identity, _user_passcode));
 
     std::string reason;
@@ -274,7 +278,7 @@ Table* ClientImpl::OpenTable(const string& table_name, ErrorCode* err) {
 bool ClientImpl::GetInternalTableName(const std::string& table_name, ErrorCode* err,
                                       std::string* internal_table_name) {
     *internal_table_name = table_name;
-    tabletnode::TabletNodeClient meta_client(_cluster->RootTableAddr());
+    tabletnode::TabletNodeClient meta_client(_cluster->RootTableAddr(true));
     ScanTabletRequest request;
     ScanTabletResponse response;
     request.set_sequence_id(0);
@@ -336,10 +340,15 @@ bool ClientImpl::GetTabletLocation(const string& table_name,
                                    std::vector<TabletInfo>* tablets,
                                    ErrorCode* err) {
     std::vector<TableInfo> table_list;
-    ListInternal(&table_list, tablets, table_name, "", 1,
+    std::string internal_table_name;
+    if (!GetInternalTableName(table_name, err, &internal_table_name)) {
+        LOG(ERROR) << "faild to scan meta schema";
+        return false;
+    }
+    ListInternal(&table_list, tablets, internal_table_name, "", 1,
                  FLAGS_tera_sdk_show_max_num, err);
     if (table_list.size() > 0
-        && table_list[0].table_desc->TableName() == table_name) {
+        && table_list[0].table_desc->TableName() == internal_table_name) {
         return true;
     }
     return false;
@@ -588,10 +597,15 @@ bool ClientImpl::ShowTabletNodesInfo(std::vector<TabletNodeInfo>* infos,
 bool ClientImpl::List(const string& table_name, TableInfo* table_info,
                       std::vector<TabletInfo>* tablet_list, ErrorCode* err) {
     std::vector<TableInfo> table_list;
-    bool ret = ListInternal(&table_list, tablet_list, table_name, "", 1,
+    std::string internal_table_name;
+    if (!GetInternalTableName(table_name, err, &internal_table_name)) {
+        LOG(ERROR) << "faild to scan meta schema";
+        return false;
+    }
+    bool ret = ListInternal(&table_list, tablet_list, internal_table_name, "", 1,
                             FLAGS_tera_sdk_show_max_num, err);
     if (table_list.size() > 0
-        && table_list[0].table_desc->TableName() == table_name) {
+        && table_list[0].table_desc->TableName() == internal_table_name) {
         *table_info = table_list[0];
     }
     return ret;
@@ -599,9 +613,14 @@ bool ClientImpl::List(const string& table_name, TableInfo* table_info,
 
 bool ClientImpl::IsTableExist(const string& table_name, ErrorCode* err) {
     std::vector<TableInfo> table_list;
-    ListInternal(&table_list, NULL, table_name, "", 1, 0, err);
+    std::string internal_table_name;
+    if (!GetInternalTableName(table_name, err, &internal_table_name)) {
+        LOG(ERROR) << "faild to scan meta schema";
+        return false;
+    }
+    ListInternal(&table_list, NULL, internal_table_name, "", 1, 0, err);
     if (table_list.size() > 0
-        && table_list[0].table_desc->TableName() == table_name) {
+        && table_list[0].table_desc->TableName() == internal_table_name) {
         return true;
     }
     return false;
@@ -609,9 +628,14 @@ bool ClientImpl::IsTableExist(const string& table_name, ErrorCode* err) {
 
 bool ClientImpl::IsTableEnabled(const string& table_name, ErrorCode* err) {
     std::vector<TableInfo> table_list;
-    ListInternal(&table_list, NULL, table_name, "", 1, 0, err);
+    std::string internal_table_name;
+    if (!GetInternalTableName(table_name, err, &internal_table_name)) {
+        LOG(ERROR) << "faild to scan meta schema";
+        return false;
+    }
+    ListInternal(&table_list, NULL, internal_table_name, "", 1, 0, err);
     if (table_list.size() > 0
-        && table_list[0].table_desc->TableName() == table_name) {
+        && table_list[0].table_desc->TableName() == internal_table_name) {
         if (table_list[0].status == "kTableEnable") {
             return true;
         } else {
@@ -626,10 +650,15 @@ bool ClientImpl::IsTableEnabled(const string& table_name, ErrorCode* err) {
 bool ClientImpl::IsTableEmpty(const string& table_name, ErrorCode* err) {
     std::vector<TableInfo> table_list;
     std::vector<TabletInfo> tablet_list;
-    ListInternal(&table_list, &tablet_list, table_name, "", 1,
+    std::string internal_table_name;
+    if (!GetInternalTableName(table_name, err, &internal_table_name)) {
+        LOG(ERROR) << "faild to scan meta schema";
+        return false;
+    }
+    ListInternal(&table_list, &tablet_list, internal_table_name, "", 1,
                  FLAGS_tera_sdk_show_max_num, err);
     if (table_list.size() > 0
-        && table_list[0].table_desc->TableName() == table_name) {
+        && table_list[0].table_desc->TableName() == internal_table_name) {
         if (tablet_list.size() == 0
             || (tablet_list.size() == 1 && tablet_list[0].data_size <= 0)) {
             return true;

@@ -640,6 +640,13 @@ void MasterImpl::CreateTable(const CreateTableRequest* request,
             done->Run();
             return;
         }
+        if (m_tablet_manager->FindTable(request->schema().alias(), &table)) {
+            LOG(ERROR) << "Fail to create table: " << request->schema().alias()
+                << ", table already exist";
+            response->set_status(kTableExist);
+            done->Run();
+            return;
+        }
         if (FLAGS_tera_acl_enabled && !IsRootUser(request->user_token())) {
             response->set_sequence_id(request->sequence_id());
             response->set_status(kNotPermission);
@@ -4701,6 +4708,14 @@ void MasterImpl::RenameTable(const RenameRequest* request,
         LOG(ERROR) << "Fail to update table: " << internal_table_name
             << ", table not exist";
         response->set_status(kTableNotExist);
+        done->Run();
+        return;
+    }
+    TablePtr table2;
+    if (m_tablet_manager->FindTable(new_alias, &table2)) {
+        LOG(ERROR) << "Fail to rename table to: " << new_alias
+            << ", table exist";
+        response->set_status(kTableExist);
         done->Run();
         return;
     }
