@@ -89,6 +89,9 @@ void Usage(const std::string& prg_name) {
                                                                             \n\
        enable/disable/drop  <tablename>                                     \n\
                                                                             \n\
+       rename   <old table name> <new table name>                           \n\
+                rename table's name                                         \n\
+                                                                            \n\
        put      <tablename> <rowkey> [<columnfamily:qualifier>] <value>     \n\
                                                                             \n\
        put-ttl  <tablename> <rowkey> [<columnfamily:qualifier>] <value> <ttl(second)>    \n\
@@ -166,8 +169,6 @@ void UsageMore(const std::string& prg_name) {
        findts   <tablename> <rowkey>                                        \n\
                 find the specify tabletnode serving 'rowkey'.               \n\
                                                                             \n\
-       rename   <old table name> <new table name>                           \n\
-                rename table's name                                         \n\
                                                                             \n\
        version\n\n";
 }
