@@ -747,7 +747,9 @@ static void InitFlags(const std::string& confpath, const std::string& log_prefix
     MutexLock locker(&g_mutex);
     // search conf file, priority:
     //   user-specified > ./tera.flag > ../conf/tera.flag > env-var
-    if (!confpath.empty() && IsExist(confpath)) {
+    if (!FLAGS_flagfile.empty()) {
+        // do nothing
+    } else if (!confpath.empty() && IsExist(confpath)) {
         FLAGS_flagfile = confpath;
     } else if (!FLAGS_tera_sdk_conf_file.empty() && IsExist(confpath)) {
         FLAGS_flagfile = FLAGS_tera_sdk_conf_file;
@@ -758,7 +760,7 @@ static void InitFlags(const std::string& confpath, const std::string& log_prefix
     } else if (IsExist(utils::GetValueFromeEnv("TERA_CONF"))) {
         FLAGS_flagfile = utils::GetValueFromeEnv("TERA_CONF");
     } else {
-        LOG(ERROR) << "config file not found";
+        LOG(ERROR) << "config file not found, exit(-1)";
         exit(-1);
     }
 
