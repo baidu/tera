@@ -882,15 +882,13 @@ int32_t ShowTabletList(const TabletMetaList& tablet_list, bool is_server_addr, b
     if (is_x) {
         if (is_server_addr) {
             cols = 14;
-            printer.Reset(cols);
-            printer.AddRow(cols,
+            printer.Reset(cols,
                            " ", "server_addr", "path", "status", "size",
                            "isbusy", "lread", "read", "rspeed", "write",
                            "wspeed", "scan", "sspeed", "startkey");
         } else {
             cols = 13;
-            printer.Reset(cols);
-            printer.AddRow(cols,
+            printer.Reset(cols,
                            " ", "path", "status", "size", "isbusy",
                            "lread", "read", "rspeed", "write", "wspeed",
                            "scan", "sspeed", "startkey");
@@ -938,8 +936,7 @@ int32_t ShowTabletList(const TabletMetaList& tablet_list, bool is_server_addr, b
         }
     } else {
         cols = 7;
-        printer.Reset(cols);
-        printer.AddRow(cols,
+        printer.Reset(cols,
                        " ", "server_addr", "path", "status",
                        "size", "startkey", "endkey");
         for (int32_t i = 0; i < tablet_list.meta_size(); ++i) {
@@ -972,16 +969,14 @@ int32_t ShowAllTables(Client* client, bool is_x, bool show_all, ErrorCode* err) 
     int cols;
     if (is_x) {
         cols = 18;
-        printer.Reset(cols);
-        printer.AddRow(cols,
+        printer.Reset(cols,
                        " ", "tablename", "status", "size", "lg_size",
                        "tablet", "busy", "notready", "lread", "read",
                        "rmax", "rspeed", "write", "wmax", "wspeed",
                        "scan", "smax", "sspeed");
     } else {
         cols = 7;
-        printer.Reset(cols);
-        printer.AddRow(cols,
+        printer.Reset(cols,
                        " ", "tablename", "status", "size", "lg_size",
                        "tablet", "busy");
     }
@@ -1123,8 +1118,7 @@ int32_t ShowSingleTabletNodeInfo(Client* client, const string& addr,
     std::cout << "  address:  " << info.addr() << std::endl;
     std::cout << "  status:   " << info.status_m() << "\n\n";
     int cols = 5;
-    TPrinter printer(cols);
-    printer.AddRow(cols, "workload", "tablets", "load", "busy", "split");
+    TPrinter printer(cols, "workload", "tablets", "load", "busy", "split");
     std::vector<string> row;
     row.push_back(utils::ConvertByteToString(info.load()));
     row.push_back(NumberToString(info.tablet_total()));
@@ -1136,8 +1130,7 @@ int32_t ShowSingleTabletNodeInfo(Client* client, const string& addr,
 
     std::cout << std::endl;
     cols = 7;
-    printer.Reset(cols);
-    printer.AddRow(cols, "lread", "read", "rspeed", "write", "wspeed", "scan", "sspeed");
+    printer.Reset(cols, "lread", "read", "rspeed", "write", "wspeed", "scan", "sspeed");
     row.clear();
     row.push_back(NumberToString(info.low_read_cell()));
     row.push_back(NumberToString(info.read_rows()));
@@ -1150,10 +1143,10 @@ int32_t ShowSingleTabletNodeInfo(Client* client, const string& addr,
     printer.Print();
 
     std::cout << "\nHardware Info:\n";
-    cols = 7;
-    printer.Reset(cols);
+    cols = 8;
+    printer.Reset(cols, "cpu", "mem_used", "net_tx", "net_rx", "dfs_r", "dfs_w", "local_r", "local_w");
     row.clear();
-    printer.AddRow(cols, "mem_used", "net_tx", "net_rx", "dfs_r", "dfs_w", "local_r", "local_w");
+    row.push_back(NumberToString(info.cpu_usage()));
     row.push_back(utils::ConvertByteToString(info.mem_used()));
     row.push_back(utils::ConvertByteToString(info.net_tx()) + "B/s");
     row.push_back(utils::ConvertByteToString(info.net_rx()) + "B/s");
@@ -1166,12 +1159,11 @@ int32_t ShowSingleTabletNodeInfo(Client* client, const string& addr,
 
     std::cout << "\nOther Infos:\n";
     cols = info.extra_info_size();
-    printer.Reset(cols);
     row.clear();
     for (int i = 0; i < cols; ++i) {
         row.push_back(info.extra_info(i).name());
     }
-    printer.AddRow(row);
+    printer.Reset(row);
     std::vector<int64_t> row_int;
     for (int i = 0; i < cols; ++i) {
         row_int.push_back(info.extra_info(i).value());
@@ -1196,8 +1188,7 @@ int32_t ShowTabletNodesInfo(Client* client, bool is_x, ErrorCode* err) {
     TPrinter printer;
     if (is_x) {
         cols = 24;
-        printer.Reset(cols);
-        printer.AddRow(cols,
+        printer.Reset(cols,
                        " ", "address", "status", "size", "num",
                        "lread", "r", "rspd", "w", "wspd",
                        "s", "sspd", "rdly", "rp", "wp",
@@ -1240,8 +1231,7 @@ int32_t ShowTabletNodesInfo(Client* client, bool is_x, ErrorCode* err) {
         }
     } else {
         cols = 7;
-        printer.Reset(cols);
-        printer.AddRow(cols,
+        printer.Reset(cols,
                        " ", "address", "status", "workload",
                        "tablet", "load", "busy");
         std::vector<string> row;
