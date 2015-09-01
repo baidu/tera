@@ -202,7 +202,7 @@ void TableDescToSchema(const TableDescriptor& desc, TableSchema* schema) {
     schema->set_kv_only(desc.IsKv());
     schema->set_admin_group(desc.AdminGroup());
     schema->set_disable_wal(desc.IsWalDisabled());
-
+    schema->set_alias(desc.Alias());
     // add lg
     int num = desc.LocalityGroupNum();
     for (int i = 0; i < num; ++i) {
@@ -273,7 +273,9 @@ void TableSchemaToDesc(const TableSchema& schema, TableDescriptor* desc) {
     if (schema.has_disable_wal() && schema.disable_wal()) {
         desc->DisableWal();
     }
-
+    if (schema.has_alias()) {
+        desc->SetAlias(schema.alias());
+    }
     int32_t lg_num = schema.locality_groups_size();
     for (int32_t i = 0; i < lg_num; i++) {
         const LocalityGroupSchema& lg = schema.locality_groups(i);

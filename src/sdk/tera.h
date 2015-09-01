@@ -204,6 +204,10 @@ public:
     void SetAdminGroup(const std::string& name);
     std::string AdminGroup() const;
 
+    /// alias
+    void SetAlias(const std::string& alias);
+    std::string Alias() const;
+
 private:
     TableDescriptor(const TableDescriptor&);
     void operator=(const TableDescriptor&);

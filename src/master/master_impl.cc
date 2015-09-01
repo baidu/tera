@@ -3877,7 +3877,6 @@ void MasterImpl::UpdateTableRecordForEnableCallback(TablePtr table, int32_t retr
     rpc_done->Run();
 }
 
-
 void MasterImpl::UpdateTableRecordForUpdateCallback(TablePtr table, int32_t retry_times,
                                                     UpdateTableResponse* rpc_response,
                                                     google::protobuf::Closure* rpc_done,
@@ -3914,6 +3913,56 @@ void MasterImpl::UpdateTableRecordForUpdateCallback(TablePtr table, int32_t retr
         return;
     }
     LOG(INFO) << "update meta table success, " << table;
+    rpc_response->set_status(kMasterOk);
+    rpc_done->Run();
+}
+
+void MasterImpl::UpdateTableRecordForRenameCallback(TablePtr table, int32_t retry_times,
+                                                    RenameResponse* rpc_response,
+                                                    google::protobuf::Closure* rpc_done,
+                                                    std::string old_alias,
+                                                    std::string new_alias,
+                                                    WriteTabletRequest* request,
+                                                    WriteTabletResponse* response,
+                                                    bool failed, int error_code
+                                                    ) {
+    StatusCode status = response->status();
+    if (!failed && status == kTabletNodeOk) {
+        // all the row status should be the same
+        CHECK_GT(response->row_status_list_size(), 0);
+        status = response->row_status_list(0);
+    }
+    delete request;
+    delete response;
+    if (failed || status != kTabletNodeOk) {
+        if (failed) {
+            LOG(ERROR) << "fail to update meta table: "
+                << sofa::pbrpc::RpcErrorCodeToString(error_code) << ", " << table;
+        } else {
+            LOG(ERROR) << "fail to update meta table: "
+                << StatusCodeToString(status) << ", " << table;
+        }
+        if (retry_times <= 0) {
+            LOG(ERROR) << kSms << "abort update meta table, " << table;
+            rpc_response->set_status(kMetaTabletError);
+            rpc_done->Run();
+        } else {
+            WriteClosure* done =
+                NewClosure(this, &MasterImpl::UpdateTableRecordForRenameCallback,
+                           table, retry_times - 1, rpc_response, rpc_done,
+                           old_alias, new_alias);
+            SuspendMetaOperation(boost::bind(&Table::ToMetaTableKeyValue, table, _1, _2),
+                                 false, done);
+        }
+        return;
+    }
+    {
+        MutexLock locker(&m_alias_mutex);
+        const std::string& internal_table_name = table->GetSchema().name();
+        m_alias[new_alias] =  internal_table_name;
+        m_alias.erase(old_alias);
+    }
+    LOG(INFO) << "Rename done. update meta table success, " << table;
     rpc_response->set_status(kMasterOk);
     rpc_done->Run();
 }
@@ -4607,8 +4656,65 @@ void MasterImpl::RenameTable(const RenameRequest* request,
                              RenameResponse* response,
                              google::protobuf::Closure* done) {
     response->set_sequence_id(request->sequence_id());
-    response->set_status(kMasterOk);
-    done->Run();
+    MasterStatus master_status = GetMasterStatus();
+    if (master_status != kIsRunning) {
+        LOG(ERROR) << "master is not ready, m_status = "
+            << StatusCodeToString(master_status);
+        response->set_status(static_cast<StatusCode>(master_status));
+        done->Run();
+        return;
+    }
+    std::string old_alias = request->old_table_name();
+    std::string new_alias = request->new_table_name();
+    std::string internal_table_name;
+
+    {
+        MutexLock locker(&m_alias_mutex);
+        if (m_alias.find(old_alias) == m_alias.end()) {
+            LOG(ERROR) << "Fail to reanme, " << old_alias << " not exist";
+            response->set_status(kTableNotExist);
+            done->Run();
+            return;
+        } else if (m_alias.find(new_alias) != m_alias.end()) {
+            LOG(ERROR) << "Fail to rename, " << new_alias << "already exist";
+            response->set_status(kTableExist);
+            done->Run();
+            return;
+        } else if (new_alias.find("@") != std::string::npos) {
+            LOG(ERROR) << "Fail to rename, " 
+                << new_alias << "contains invalid chars: @";
+            response->set_status(kInvalidArgument);
+            done->Run();
+            return;
+        } else if (new_alias.empty()) {
+            LOG(ERROR) << "Fail to rename, new alias is empty";
+            response->set_status(kInvalidArgument);
+            done->Run();
+            return;
+        } else {
+            internal_table_name = m_alias[old_alias];
+        }
+    }
+
+    TablePtr table;
+    if (!m_tablet_manager->FindTable(internal_table_name, &table)) {
+        LOG(ERROR) << "Fail to update table: " << internal_table_name
+            << ", table not exist";
+        response->set_status(kTableNotExist);
+        done->Run();
+        return;
+    }
+    TableSchema schema;
+    schema.CopyFrom(table->GetSchema());
+    schema.set_alias(new_alias);
+    table->SetSchema(schema);
+    // write meta tablet
+    WriteClosure* closure =
+        NewClosure(this, &MasterImpl::UpdateTableRecordForRenameCallback, table,
+                   FLAGS_tera_master_meta_retry_times, response, done,
+                   old_alias, new_alias);
+    BatchWriteMetaTableAsync(boost::bind(&Table::ToMetaTableKeyValue, table, _1, _2),
+                             false, closure);
 }
 
 } // namespace master

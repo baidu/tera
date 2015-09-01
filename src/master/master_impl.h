@@ -348,12 +348,22 @@ private:
                                             WriteTabletRequest* request,
                                             WriteTabletResponse* response,
                                             bool failed, int error_code);
+
     void UpdateTableRecordForUpdateCallback(TablePtr table, int32_t retry_times,
                                             UpdateTableResponse* rpc_response,
                                             google::protobuf::Closure* rpc_done,
                                             WriteTabletRequest* request,
                                             WriteTabletResponse* response,
                                             bool failed, int error_code);
+    void UpdateTableRecordForRenameCallback(TablePtr table, int32_t retry_times,
+                                            RenameResponse* rpc_response,
+                                            google::protobuf::Closure* rpc_done,
+                                            std::string old_alias,
+                                            std::string new_alias,
+                                            WriteTabletRequest* request,
+                                            WriteTabletResponse* response,
+                                            bool failed, int error_code
+                                            );
     void UpdateTabletRecordCallback(TabletPtr tablet, int32_t retry_times,
                                     WriteTabletRequest* request,
                                     WriteTabletResponse* response,

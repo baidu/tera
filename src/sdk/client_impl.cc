@@ -722,7 +722,7 @@ bool ClientImpl::Rename(const std::string& old_table_name,
     request.set_old_table_name(old_table_name);
     request.set_new_table_name(new_table_name);
     bool ok = master_client.Rename(&request, &response);
-    if (!ok && response.status() != kMasterOk) {
+    if (!ok || response.status() != kMasterOk) {
         err->SetFailed(ErrorCode::kSystem, "failed to rename table");
         return false;
     }
