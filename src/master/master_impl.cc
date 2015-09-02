@@ -6,6 +6,7 @@
 
 #include <algorithm>
 #include <boost/bind.hpp>
+#include <fstream>
 
 #include <gflags/gflags.h>
 #include <glog/logging.h>
@@ -91,7 +92,9 @@ DECLARE_bool(tera_ins_enabled);
 
 DECLARE_int64(tera_sdk_perf_counter_log_interval);
 
+DECLARE_bool(tera_acl_enabled);
 DECLARE_string(tera_acl_root_token);
+DECLARE_string(tera_master_gc_strategy);
 
 namespace tera {
 namespace master {
@@ -126,6 +129,14 @@ MasterImpl::MasterImpl()
 
     if (FLAGS_tera_leveldb_env_type != "local") {
         io::InitDfsEnv();
+    }
+
+    if (FLAGS_tera_master_gc_strategy == "default") {
+         gc_strategy = boost::shared_ptr<GcStrategy>(new BatchGcStrategy(m_tablet_manager));
+    } else if (FLAGS_tera_master_gc_strategy == "incremental") {
+        gc_strategy = boost::shared_ptr<GcStrategy>(new IncrementalGcStrategy(m_tablet_manager));
+    } else {
+        LOG(ERROR) << "Unknown gc strategy";
     }
 }
 
@@ -302,7 +313,7 @@ bool MasterImpl::RestoreMetaTablet(const std::vector<TabletMeta>& tablet_list,
     // meta table has been loaded up by now
     if (FLAGS_tera_master_meta_recovery_enabled) {
         const std::string& filename = FLAGS_tera_master_meta_recovery_file;
-        while (!m_tablet_manager->LoadMetaTableFromFile(filename)) {
+        while (!LoadMetaTableFromFile(filename)) {
             LOG(ERROR) << kSms << "fail to recovery meta table from backup";
             ThisThread::Sleep(60 * 1000);
         }
@@ -323,7 +334,7 @@ bool MasterImpl::RestoreMetaTablet(const std::vector<TabletMeta>& tablet_list,
     }
 
     StatusCode status = kTabletNodeOk;
-    while (!m_tablet_manager->LoadMetaTable(*meta_tablet_addr, &status)) {
+    while (!LoadMetaTable(*meta_tablet_addr, &status)) {
         TryKickTabletNode(*meta_tablet_addr);
         if (!LoadMetaTablet(meta_tablet_addr)) {
             return false;
@@ -502,6 +513,161 @@ void MasterImpl::UnloadMetaTablet(const std::string& server_addr) {
     }
 }
 
+bool MasterImpl::IsRootUser(const std::string& token) {
+    return token == FLAGS_tera_acl_root_token;
+}
+
+template <typename Request, typename Response, typename Callback>
+bool MasterImpl::HasTablePermission(const Request* request, Response* response, 
+                                    Callback* done, TablePtr table, const char* operate) {
+    // check permission
+    if (!FLAGS_tera_acl_enabled 
+        || IsRootUser(request->user_token())) {
+        LOG(INFO) << "[acl] is acl enabled: " << FLAGS_tera_acl_enabled;
+        return true;
+    } else {
+        LOG(INFO) << "[acl] fail to " << operate;
+        response->set_sequence_id(request->sequence_id());
+        response->set_status(kNotPermission);
+        done->Run();
+        return false;
+    }
+}
+
+bool MasterImpl::LoadMetaTable(const std::string& meta_tablet_addr,
+                               StatusCode* ret_status) {
+    m_tablet_manager->ClearTableList();
+    ScanTabletRequest request;
+    ScanTabletResponse response;
+    request.set_sequence_id(m_this_sequence_id.Inc());
+    request.set_table_name(FLAGS_tera_master_meta_table_name);
+    request.set_start("");
+    request.set_end("");
+    tabletnode::TabletNodeClient meta_node_client(meta_tablet_addr);
+    while (meta_node_client.ScanTablet(&request, &response)) {
+        if (response.status() != kTabletNodeOk) {
+            SetStatusCode(response.status(), ret_status);
+            LOG(ERROR) << "fail to load meta table: "
+                << StatusCodeToString(response.status());
+            m_tablet_manager->ClearTableList();
+            return false;
+        }
+        if (response.results().key_values_size() <= 0) {
+            LOG(INFO) << "load meta table success";
+            TabletPtr meta_tablet;
+            TableSchema schema;
+            schema.set_kv_only(true);
+            LocalityGroupSchema* lg = schema.add_locality_groups();
+            schema.set_name(FLAGS_tera_master_meta_table_name);
+            lg->set_name("lg_meta");
+            lg->set_compress_type(false);
+            lg->set_store_type(MemoryStore);
+            m_tablet_manager->AddTablet(FLAGS_tera_master_meta_table_name, "", "",
+                      FLAGS_tera_master_meta_table_path, meta_tablet_addr,
+                      schema, kTableReady, 0, &meta_tablet);
+            return true;
+        }
+        uint32_t record_size = response.results().key_values_size();
+        LOG(INFO) << "load meta table: " << record_size << " records";
+
+        std::string last_record_key;
+        for (uint32_t i = 0; i < record_size; i++) {
+            const KeyValuePair& record = response.results().key_values(i);
+            last_record_key = record.key();
+            char first_key_char = record.key()[0];
+            if (first_key_char == '@') {
+                m_tablet_manager->LoadTableMeta(record.key(), record.value());
+            } else if (first_key_char > '@') {
+                m_tablet_manager->LoadTabletMeta(record.key(), record.value());
+            } else {
+                continue;
+            }
+        }
+        std::string next_record_key = NextKey(last_record_key);
+        request.set_start(next_record_key);
+        request.set_end("");
+        request.set_sequence_id(m_this_sequence_id.Inc());
+        response.Clear();
+    }
+    SetStatusCode(kRPCError, ret_status);
+    LOG(ERROR) << "fail to load meta table: " << StatusCodeToString(kRPCError);
+    m_tablet_manager->ClearTableList();
+    return false;
+}
+
+bool MasterImpl::LoadMetaTableFromFile(const std::string& filename,
+                                          StatusCode* ret_status) {
+    m_tablet_manager->ClearTableList();
+    std::ifstream ifs(filename.c_str(), std::ofstream::binary);
+    if (!ifs.is_open()) {
+        LOG(ERROR) << "fail to open file " << filename << " for read";
+        SetStatusCode(kIOError, ret_status);
+        return false;
+    }
+
+    uint64_t count = 0;
+    std::string key, value;
+    while (ReadFromStream(ifs, &key, &value)) {
+        if (key.empty()) {
+            LOG(INFO) << "load meta table success, " << count << " records";
+            TabletPtr meta_tablet;
+            TableSchema schema;
+            LocalityGroupSchema* lg = schema.add_locality_groups();
+            schema.set_name(FLAGS_tera_master_meta_table_name);
+            lg->set_name("lg_meta");
+            lg->set_compress_type(false);
+            lg->set_store_type(MemoryStore);
+            m_tablet_manager->AddTablet(FLAGS_tera_master_meta_table_name, "", "",
+                      FLAGS_tera_master_meta_table_path, "",
+                      schema, kTableNotInit, 0, &meta_tablet);
+            return true;
+        }
+
+        char first_key_char = key[0];
+        if (first_key_char == '@') {
+            m_tablet_manager->LoadTableMeta(key, value);
+        } else if (first_key_char > '@') {
+            m_tablet_manager->LoadTabletMeta(key, value);
+        } else {
+            continue;
+        }
+
+        count++;
+    }
+    m_tablet_manager->ClearTableList();
+
+    SetStatusCode(kIOError, ret_status);
+    LOG(ERROR) << "fail to load meta table: " << StatusCodeToString(kIOError);
+    return false;
+}
+
+bool MasterImpl::ReadFromStream(std::ifstream& ifs,
+                                std::string* key,
+                                std::string* value) {
+    uint32_t key_size = 0, value_size = 0;
+    ifs.read((char*)&key_size, sizeof(key_size));
+    if (ifs.eof() && ifs.gcount() == 0) {
+        key->clear();
+        value->clear();
+        return true;
+    }
+    key->resize(key_size);
+    ifs.read((char*)key->data(), key_size);
+    if (ifs.fail()) {
+        return false;
+    }
+    ifs.read((char*)&value_size, sizeof(value_size));
+    if (ifs.fail()) {
+        return false;
+    }
+    value->resize(value_size);
+    ifs.read((char*)value->data(), value_size);
+    if (ifs.fail()) {
+        return false;
+    }
+    return true;
+}
+
 /////////////  RPC interface //////////////
 
 void MasterImpl::CreateTable(const CreateTableRequest* request,
@@ -523,6 +689,12 @@ void MasterImpl::CreateTable(const CreateTableRequest* request,
             LOG(ERROR) << "Fail to create table: " << request->table_name()
                 << ", table already exist";
             response->set_status(kTableExist);
+            done->Run();
+            return;
+        }
+        if (FLAGS_tera_acl_enabled && !IsRootUser(request->user_token())) {
+            response->set_sequence_id(request->sequence_id());
+            response->set_status(kNotPermission);
             done->Run();
             return;
         }
@@ -624,6 +796,9 @@ void MasterImpl::DeleteTable(const DeleteTableRequest* request,
         done->Run();
         return;
     }
+    if (!HasTablePermission(request, response, done, table, "delete table")) {
+        return;
+    }
 
     TableStatus old_status;
     if (!table->SetStatus(kTableDeleting, &old_status)) {
@@ -675,6 +850,9 @@ void MasterImpl::DisableTable(const DisableTableRequest* request,
             << ", table not exist";
         response->set_status(kTableNotFound);
         done->Run();
+        return;
+    }
+    if (!HasTablePermission(request, response, done, table, "disable table")) {
         return;
     }
 
@@ -733,6 +911,9 @@ void MasterImpl::EnableTable(const EnableTableRequest* request,
         done->Run();
         return;
     }
+    if (!HasTablePermission(request, response, done, table, "enable table")) {
+        return;
+    }
 
     TableStatus old_status;
     if (!table->SetStatus(kTableEnable, &old_status)) {
@@ -779,6 +960,9 @@ void MasterImpl::UpdateTable(const UpdateTableRequest* request,
             << ", table not exist";
         response->set_status(kTableNotExist);
         done->Run();
+        return;
+    }
+    if (!HasTablePermission(request, response, done, table, "update table")) {
         return;
     }
 
@@ -2765,7 +2949,7 @@ void MasterImpl::QueryTabletNodeCallback(std::string addr, QueryRequest* request
     }
     // if this is a gc query, process it
     if (request->is_gc_query()) {
-        ProcessQueryCallbackForGc(response);
+        gc_strategy->ProcessQueryCallbackForGc(response);
     }
 
     if (0 == m_query_pending_count.Dec()) {
@@ -4465,7 +4649,7 @@ void MasterImpl::ScheduleTabletNodeGc() {
     m_mutex.AssertHeld();
     LOG(INFO) << "[gc] ScheduleTabletNodeGcTimer";
     boost::function<void ()> closure =
-        boost::bind(&MasterImpl::TabletNodeGc, this);
+        boost::bind(&MasterImpl::DoTabletNodeGc, this);
     m_gc_timer_id = m_thread_pool->DelayTask(
         FLAGS_tera_master_gc_period, closure);
 }
@@ -4489,13 +4673,6 @@ void MasterImpl::DisableTabletNodeGcTimer() {
     m_gc_enabled = false;
 }
 
-void MasterImpl::TabletNodeGc() {
-    VLOG(10) << "[gc] TabletNodeGc()";
-    MutexLock locker(&m_mutex);
-
-    m_thread_pool->AddTask(boost::bind(&MasterImpl::DoTabletNodeGc, this));
-}
-
 void MasterImpl::DoTabletNodeGc() {
     {
         MutexLock lock(&m_mutex);
@@ -4504,36 +4681,10 @@ void MasterImpl::DoTabletNodeGc() {
             return;
         }
     }
+    bool need_gc = gc_strategy->PreQuery();
 
-    int64_t start_ts = get_micros();
-    m_gc_live_files.clear();
-    m_gc_tablets.clear();
-
-    std::vector<TablePtr> tables;
-
-    m_tablet_manager->ShowTable(&tables, NULL);
-    for (size_t i = 0; i < tables.size(); ++i) {
-        if (tables[i]->GetStatus() != kTableEnable ||
-            tables[i]->GetTableName() == FLAGS_tera_master_meta_table_name) {
-            // table not ready and skip metatable
-            continue;
-        }
-        GcTabletSet& tablet_set = m_gc_tablets[tables[i]->GetTableName()];
-        if (!tables[i]->GetTabletsForGc(&tablet_set.first, &tablet_set.second)) {
-            // tablet not ready or there is none dead tablets
-            m_gc_tablets.erase(tables[i]->GetTableName());
-            continue;
-        }
-    }
-
-    CollectDeadTabletsFiles();
-
-    LOG(INFO) << "[gc] DoTabletNodeGc: collect all files, cost: "
-        << (get_micros() - start_ts) / 1000 << "ms.";
-
-    if (m_gc_tablets.size() == 0) {
-        LOG(INFO) << "[gc] do not need gc this time.";
-        MutexLock lock(&m_mutex);
+    MutexLock lock(&m_mutex);
+    if (!need_gc) {
         if (m_gc_enabled) {
             ScheduleTabletNodeGc();
         } else {
@@ -4541,178 +4692,16 @@ void MasterImpl::DoTabletNodeGc() {
         }
         return;
     }
-
-    MutexLock lock(&m_mutex);
     m_gc_query_enable = true;
 }
 
 void MasterImpl::DoTabletNodeGcPhase2() {
-    bool is_success = true;
-    std::map<std::string, GcTabletSet>::iterator it = m_gc_tablets.begin();
-    for (; it != m_gc_tablets.end(); ++it) {
-        if (it->second.first.size() != 0) {
-            VLOG(10) << "[gc] there are tablet not ready: " << it->first;
-            is_success = false;
-            break;
-        }
-    }
-    if (!is_success) {
-        LOG(INFO) << "[gc] gc not success, try next time.";
-        MutexLock lock(&m_mutex);
-        if (m_gc_enabled) {
-            ScheduleTabletNodeGc();
-        } else {
-            m_gc_timer_id = kInvalidTimerId;
-        }
-        return;
-    }
-
-    int64_t start_ts = get_micros();
-
-    DeleteObsoleteFiles();
-    LOG(INFO) << "[gc] DoTabletNodeGcPhase2 finished, cost:"
-        << (get_micros() - start_ts) / 1000 << "ms.";
-
+    gc_strategy->PostQuery();
     MutexLock lock(&m_mutex);
     if (m_gc_enabled) {
         ScheduleTabletNodeGc();
     } else {
         m_gc_timer_id = kInvalidTimerId;
-    }
-}
-
-void MasterImpl::CollectDeadTabletsFiles() {
-    std::map<std::string, GcTabletSet>::iterator table_it = m_gc_tablets.begin();
-    for (; table_it != m_gc_tablets.end(); ++table_it) {
-        std::set<uint64_t>& dead_tablets = table_it->second.second;
-        std::set<uint64_t>::iterator tablet_it = dead_tablets.begin();
-        for (; tablet_it != dead_tablets.end(); ++tablet_it) {
-            CollectSingleDeadTablet(table_it->first, *tablet_it);
-        }
-    }
-}
-
-void MasterImpl::CollectSingleDeadTablet(const std::string& tablename, uint64_t tabletnum) {
-    std::string tablepath = FLAGS_tera_tabletnode_path_prefix + tablename;
-    std::string tablet_path = leveldb::GetTabletPathFromNum(tablepath, tabletnum);
-    leveldb::Env* env = io::LeveldbBaseEnv();
-    std::vector<std::string> children;
-    env->GetChildren(tablet_path, &children);
-    if (children.size() == 0) {
-        LOG(INFO) << "[gc] delete empty tablet dir: " << tablet_path;
-        env->DeleteDir(tablet_path);
-        return;
-    }
-    for (size_t lg = 0; lg < children.size(); ++lg) {
-        std::string lg_path = tablet_path + "/" + children[lg];
-        leveldb::FileType type = leveldb::kUnknown;
-        uint64_t number = 0;
-        if (ParseFileName(children[lg], &number, &type)) {
-            LOG(INFO) << "[gc] delete log file: " << lg_path;
-            env->DeleteFile(lg_path);
-            continue;
-        }
-
-        leveldb::Slice rest(children[lg]);
-        uint64_t lg_num = 0;
-        if (!leveldb::ConsumeDecimalNumber(&rest, &lg_num)) {
-            LOG(INFO) << "[gc] skip unknown dir: " << lg_path;
-            continue;
-        }
-
-        std::vector<std::string> files;
-        env->GetChildren(lg_path, &files);
-        if (files.size() == 0) {
-            LOG(INFO) << "[gc] delete empty lg dir: " << lg_path;
-            env->DeleteDir(lg_path);
-            continue;
-        }
-        for (size_t f = 0; f < files.size(); ++f) {
-            std::string file_path = lg_path + "/" + files[f];
-            type = leveldb::kUnknown;
-            number = 0;
-            if (!ParseFileName(files[f], &number, &type) ||
-                type != leveldb::kTableFile) {
-                // only keep sst, delete rest files
-                LOG(INFO) << "[gc] delete obsolete file: " << file_path;
-                env->DeleteFile(file_path);
-                continue;
-            }
-
-            uint64_t full_number = leveldb::BuildFullFileNumber(lg_path, number);
-            GcFileSet& file_set = m_gc_live_files[tablename];
-            if (file_set.size() == 0) {
-                TablePtr table;
-                m_tablet_manager->FindTable(tablename, &table);
-                file_set.resize(table->GetSchema().locality_groups_size());
-                VLOG(10) << "[gc] resize : " << tablename
-                    << " fileset lg size: " << file_set.size();
-            }
-            VLOG(10) << "[gc] " << tablename << " insert live file: " << file_path;
-            CHECK(lg_num < file_set.size());
-            file_set[lg_num].insert(full_number);
-        }
-    }
-}
-
-void MasterImpl::DeleteObsoleteFiles() {
-    leveldb::Env* env = io::LeveldbBaseEnv();
-    std::map<std::string, GcFileSet>::iterator table_it = m_gc_live_files.begin();
-    for (; table_it != m_gc_live_files.end(); ++table_it) {
-        std::string tablepath = FLAGS_tera_tabletnode_path_prefix + table_it->first;
-        GcFileSet& file_set = table_it->second;
-        for (size_t lg = 0; lg < file_set.size(); ++lg) {
-            std::set<uint64_t>::iterator it = file_set[lg].begin();
-            for (; it != file_set[lg].end(); ++it) {
-                std::string file_path = leveldb::BuildTableFilePath(tablepath, lg, *it);
-                LOG(INFO) << "[gc] delete trash table file: " << file_path;
-                env->DeleteFile(file_path);
-            }
-        }
-    }
-}
-
-void MasterImpl::ProcessQueryCallbackForGc(QueryResponse* response) {
-    MutexLock lock(&m_gc_mutex);
-    std::set<std::string> gc_table_set;
-    for (int i = 0; i < response->inh_live_files_size(); ++i) {
-        const InheritedLiveFiles& live = response->inh_live_files(i);
-        gc_table_set.insert(live.table_name());
-    }
-
-    for (int i = 0; i < response->tabletmeta_list().meta_size(); ++i) {
-        const TabletMeta& meta = response->tabletmeta_list().meta(i);
-        VLOG(10) << "[gc] try erase live tablet: " << meta.path()
-            << ", tablename: " << meta.table_name();
-        if (m_gc_tablets.find(meta.table_name()) != m_gc_tablets.end() &&
-            gc_table_set.find(meta.table_name()) != gc_table_set.end()) {
-            // erase live tablet
-            VLOG(10) << "[gc] erase live tablet: " << meta.path();
-            uint64_t tabletnum = leveldb::GetTabletNumFromPath(meta.path());
-            m_gc_tablets[meta.table_name()].first.erase(tabletnum);
-        }
-    }
-
-    // erase inherited live files
-    for (int i = 0; i < response->inh_live_files_size(); ++i) {
-        const InheritedLiveFiles& live = response->inh_live_files(i);
-        if (m_gc_live_files.find(live.table_name()) == m_gc_live_files.end()) {
-            VLOG(10) << "[gc] table: " << live.table_name() << " skip gc.";
-            continue;
-        }
-        GcFileSet& file_set = m_gc_live_files[live.table_name()];
-        int lg_num = live.lg_live_files_size();
-        CHECK(static_cast<size_t>(lg_num) == file_set.size())
-            << "lg_num should eq " << file_set.size();
-        for (int lg = 0; lg < lg_num; ++lg) {
-            const LgInheritedLiveFiles& lg_live_files = live.lg_live_files(lg);
-            for (int f = 0; f < lg_live_files.file_number_size(); ++f) {
-                std::string file_path = leveldb::BuildTableFilePath(
-                    live.table_name(), lg, lg_live_files.file_number(f));
-                VLOG(10) << "[gc] " << " erase live file: " << file_path;
-                file_set[lg].erase(lg_live_files.file_number(f));
-            }
-        }
     }
 }
 

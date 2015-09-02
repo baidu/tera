@@ -55,6 +55,7 @@ DECLARE_int32(tera_sdk_cookie_update_interval);
 DECLARE_bool(tera_sdk_pend_request_while_scan_meta_enabled);
 DECLARE_bool(tera_sdk_perf_counter_enabled);
 DECLARE_int64(tera_sdk_perf_counter_log_interval);
+DECLARE_int32(FLAGS_tera_rpc_timeout_period);
 
 namespace tera {
 
@@ -86,7 +87,8 @@ TableImpl::TableImpl(const std::string& table_name,
       _seq_mutation_error_occur_time(0),
       _seq_mutation_wait_to_update_meta(false),
       _seq_mutation_wait_to_retry(false),
-      _seq_mutation_pending_rpc_count(0) {
+      _seq_mutation_pending_rpc_count(0),
+      _pending_timeout_ms(FLAGS_tera_rpc_timeout_period) {
     if (options.sequential_write) {
         _seq_mutation_commit_list = new std::vector<RowMutationImpl*>;
         _seq_mutation_session = get_micros() * get_micros();
@@ -249,9 +251,9 @@ void TableImpl::Get(const std::vector<RowReader*>& row_readers) {
 
 bool TableImpl::Get(const std::string& row_key, const std::string& family,
                     const std::string& qualifier, int64_t* value,
-                    ErrorCode* err) {
+                    ErrorCode* err, uint64_t snapshot_id) {
     std::string value_str;
-    if (Get(row_key, family, qualifier, &value_str, err)
+    if (Get(row_key, family, qualifier, &value_str, err, snapshot_id)
         && value_str.size() == sizeof(int64_t)) {
         *value = *(int64_t*)value_str.c_str();
         return true;
@@ -261,9 +263,10 @@ bool TableImpl::Get(const std::string& row_key, const std::string& family,
 
 bool TableImpl::Get(const std::string& row_key, const std::string& family,
                     const std::string& qualifier, std::string* value,
-                    ErrorCode* err) {
+                    ErrorCode* err, uint64_t snapshot_id) {
     RowReader* row_reader = NewRowReader(row_key);
     row_reader->AddColumn(family, qualifier);
+    row_reader->SetSnapshot(snapshot_id);
     Get(row_reader);
     *err = row_reader->GetError();
     if (err->GetType() == ErrorCode::kOK) {
@@ -275,16 +278,16 @@ bool TableImpl::Get(const std::string& row_key, const std::string& family,
 
 ResultStream* TableImpl::Scan(const ScanDescriptor& desc, ErrorCode* err) {
     ScanDescImpl * impl = desc.GetImpl();
+    impl->SetTableSchema(_table_schema);
     if (impl->GetFilterString() != "") {
         MutexLock lock(&_table_meta_mutex);
-        impl->SetTableSchema(_table_schema);
         if (!impl->ParseFilterString()) {
             // fail to parse filter string
             return NULL;
         }
     }
     ResultStream * results = NULL;
-    if (desc.IsAsync() && !IsKvOnlyTable()) {
+    if (desc.IsAsync() && !_table_schema.kv_only()) {
         VLOG(6) << "activate async-scan";
         results = new ResultStreamAsyncImpl(this, impl);
     } else {
@@ -428,13 +431,6 @@ bool TableImpl::LockRow(const std::string& rowkey, RowLock* lock, ErrorCode* err
 bool TableImpl::GetStartEndKeys(std::string* start_key, std::string* end_key,
                                 ErrorCode* err) {
     err->SetFailed(ErrorCode::kNotImpl);
-    return false;
-}
-
-bool TableImpl::IsKvOnlyTable() {
-    if (_table_schema.column_families_size() > 0) {
-        return true;
-    }
     return false;
 }
 
@@ -703,14 +699,7 @@ void TableImpl::MutateCallBack(std::vector<RowMutationImpl*>* mu_list,
     for (uint32_t i = 0; i < mu_list->size(); ++i) {
         StatusCode err = response->status();
         if (err == kTabletNodeOk) {
-            if (response->row_status_list_size() == (int64_t)mu_list->size()) {
-                err = response->row_status_list(i);
-            } else {
-                LOG(ERROR) << "response status num error: "
-                    << response->row_status_list_size() << ", "
-                    << mu_list->size() << " required";
-                err = kKeyNotInRange;
-            }
+            err = response->row_status_list(i);
         }
         if (err != kTabletNodeOk) {
             VLOG(10) << "fail to mutate table: " << _name
@@ -1115,6 +1104,7 @@ void TableImpl::CommitReaders(const std::string server_addr,
     ReadTabletResponse* response = new ReadTabletResponse;
     request->set_sequence_id(_last_sequence_id++);
     request->set_tablet_name(_name);
+    request->set_client_timeout_ms(_pending_timeout_ms);
     for (uint32_t i = 0; i < reader_list->size(); ++i) {
         RowReaderImpl* row_reader = (*reader_list)[i];
         RowReaderInfo* row_reader_info = request->add_row_info_list();
@@ -1158,14 +1148,7 @@ void TableImpl::ReaderCallBack(std::vector<RowReaderImpl*>* reader_list,
     for (uint32_t i = 0; i < reader_list->size(); ++i) {
         StatusCode err = response->status();
         if (err == kTabletNodeOk) {
-            if (response->detail().status_size() == (int64_t)reader_list->size()) {
-                err = response->detail().status(i);
-            } else {
-                LOG(ERROR) << "response status num error: "
-                    << response->detail().status_size() << ", "
-                    << reader_list->size() << " required";
-                err = kKeyNotInRange;
-            }
+            err = response->detail().status(i);
         }
         if (err != kTabletNodeOk && err != kKeyNotExist && err != kSnapshotNotExist) {
             VLOG(10) << "fail to read table: " << _name

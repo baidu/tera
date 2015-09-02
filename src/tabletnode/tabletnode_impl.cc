@@ -81,6 +81,8 @@ DECLARE_string(tera_leveldb_env_type);
 DECLARE_string(tera_local_addr);
 DECLARE_bool(tera_ins_enabled);
 
+DECLARE_bool(tera_io_cache_path_vanish_allowed);
+
 extern tera::Counter range_error_counter;
 extern tera::Counter rand_read_delay;
 
@@ -185,7 +187,8 @@ bool TabletNodeImpl::Init() {
 void TabletNodeImpl::InitCacheSystem() {
     if (!FLAGS_tera_tabletnode_cache_enabled) {
         // compitable with legacy FlashEnv
-        leveldb::FlashEnv::SetFlashPath(FLAGS_tera_tabletnode_cache_paths);
+        leveldb::FlashEnv::SetFlashPath(FLAGS_tera_tabletnode_cache_paths,
+                                        FLAGS_tera_io_cache_path_vanish_allowed);
         return;
     }
 
@@ -416,8 +419,9 @@ void TabletNodeImpl::ReadTablet(int64_t start_micros,
         }
     }
 
-    VLOG(8) << "read_row_num = " << row_num
-        << ", read_success_num = " << read_success_num;
+    VLOG(10) << "seq_id: " << request->sequence_id()
+        << ", req_row: " << row_num
+        << ", read_suc: " << read_success_num;
     response->set_sequence_id(request->sequence_id());
     response->set_success_num(read_success_num);
     response->set_status(kTabletNodeOk);
@@ -549,7 +553,7 @@ void TabletNodeImpl::GetSnapshot(const SnapshotRequest* request,
         done->Run();
         return;
     }
-    uint64_t snapshot = tablet_io->GetSnapshot(request->snapshot_id(), 0, &status);
+    uint64_t snapshot = tablet_io->GetSnapshot(request->snapshot_id(), (0x1ull << 56) - 1, &status);
     if (status != kTabletNodeOk) {
         response->set_status(status);
     } else if (snapshot == 0) {

@@ -245,6 +245,7 @@ message ReadTabletRequest {
     //repeated KeyValuePair key_values = 5;
     optional uint64 snapshot_id = 6;
     optional int64 timestamp = 7 [default = 0];
+    optional int64 client_timeout_ms = 8 [default = 0];
 }
 
 message ReadTabletResponse {

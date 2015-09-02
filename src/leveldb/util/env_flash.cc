@@ -35,15 +35,13 @@ tera::Counter ssd_write_size_counter;
 
 static Logger* logger;
 // Log error message
-static Status IOError(const std::string& context, int err_number)
-{
+static Status IOError(const std::string& context, int err_number) {
     return Status::IOError(context, strerror(err_number));
 }
 
 /// copy file from env to local
 Status CopyToLocal(const std::string& local_fname, Env* env,
-                   const std::string& fname, uint64_t fsize)
-{
+                   const std::string& fname, uint64_t fsize, bool vanish_allowed) {
     uint64_t time_s = env->NowMicros();
 
     uint64_t local_size = 0;
@@ -72,6 +70,10 @@ Status CopyToLocal(const std::string& local_fname, Env* env,
     WritableFile* local_file = NULL;
     s = Env::Default()->NewWritableFile(local_fname, &local_file);
     if (!s.ok()) {
+        if (!vanish_allowed) {
+            Log(logger, "local env error, exit: %s\n", local_fname.c_str());
+            exit(-1);
+        }
         delete dfs_file;
         return s;
     }
@@ -116,6 +118,7 @@ class FlashSequentialFile: public SequentialFile {
 private:
     SequentialFile* dfs_file_;
     SequentialFile* flash_file_;
+
 public:
     FlashSequentialFile(Env* posix_env, Env* dfs_env, const std::string& fname)
         :dfs_file_(NULL), flash_file_(NULL) {
@@ -153,13 +156,14 @@ private:
     RandomAccessFile* dfs_file_;
     RandomAccessFile* flash_file_;
 public:
-    FlashRandomAccessFile(Env* posix_env, Env* dfs_env,
-                          const std::string& fname, uint64_t fsize)
+    FlashRandomAccessFile(Env* posix_env, Env* dfs_env, const std::string& fname,
+                          uint64_t fsize, bool vanish_allowed)
         :dfs_file_(NULL), flash_file_(NULL) {
         std::string local_fname = FlashEnv::FlashPath(fname) + fname;
 
         // copy from dfs with seq read
-        Status copy_status = CopyToLocal(local_fname, dfs_env, fname, fsize);
+        Status copy_status = CopyToLocal(local_fname, dfs_env, fname, fsize,
+                                         vanish_allowed);
         if (!copy_status.ok()) {
             Log(logger, "copy to local fail [%s]: %s\n",
                 copy_status.ToString().c_str(), local_fname.c_str());
@@ -328,8 +332,9 @@ Status FlashEnv::NewSequentialFile(const std::string& fname, SequentialFile** re
 Status FlashEnv::NewRandomAccessFile(const std::string& fname,
         uint64_t fsize, RandomAccessFile** result)
 {
-    FlashRandomAccessFile* f = new FlashRandomAccessFile(posix_env_, dfs_env_,
-                                                         fname, fsize);
+    FlashRandomAccessFile* f =
+        new FlashRandomAccessFile(posix_env_, dfs_env_, fname,
+                                  fsize, vanish_allowed_);
     if (f == NULL || !f->isValid()) {
         *result = NULL;
         delete f;
@@ -421,9 +426,10 @@ Status FlashEnv::UnlockFile(FileLock* lock)
     return Status::OK();
 }
 
-void FlashEnv::SetFlashPath(const std::string& path) {
+void FlashEnv::SetFlashPath(const std::string& path, bool vanish_allowed) {
     std::vector<std::string> backup;
     flash_paths_.swap(backup);
+    vanish_allowed_ = vanish_allowed;
 
     size_t beg = 0;
     const char *str = path.c_str();
@@ -431,6 +437,13 @@ void FlashEnv::SetFlashPath(const std::string& path) {
         if ((str[i] == '\0' || str[i] == ';') && i - beg > 0) {
             flash_paths_.push_back(std::string(str + beg, i - beg));
             beg = i +1;
+            if (!vanish_allowed) {
+                if (!Env::Default()->FileExists(flash_paths_.back())) {
+                    fprintf(stderr, "cannot access cache dir: %s\n",
+                        flash_paths_.back().c_str());
+                    exit(-1);
+                }
+            }
         }
     }
     if (!flash_paths_.size()) {
@@ -445,6 +458,8 @@ const std::string& FlashEnv::FlashPath(const std::string& fname) {
     uint32_t hash = Hash(fname.c_str(), fname.size(), 13);
     return flash_paths_[hash % flash_paths_.size()];
 }
+
+bool FlashEnv::vanish_allowed_ = false;
 
 Env* NewFlashEnv(Env* base_env, Logger* l)
 {

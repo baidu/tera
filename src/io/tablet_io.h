@@ -149,7 +149,7 @@ public:
                           ScanTabletResponse* response,
                           google::protobuf::Closure* done);
 
-    uint64_t GetSnapshot(uint64_t id, uint64_t snapshot_sequence = 0,
+    uint64_t GetSnapshot(uint64_t id, uint64_t snapshot_sequence,
                          StatusCode* status = NULL);
     bool ReleaseSnapshot(uint64_t snapshot_id,  StatusCode* status = NULL);
     void ListSnapshot(std::vector<uint64_t>* snapshot_id);
