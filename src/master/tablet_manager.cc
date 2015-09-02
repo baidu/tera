@@ -505,7 +505,8 @@ Table::Table(const std::string& table_name)
     : m_name(table_name),
       m_status(kTableEnable),
       m_deleted_tablet_num(0),
-      m_max_tablet_no(0) {
+      m_max_tablet_no(0),
+      m_create_time((int64_t)time(NULL)) {
 }
 
 bool Table::FindTablet(const std::string& key_start, TabletPtr* tablet) {
@@ -646,6 +647,7 @@ void Table::ToMeta(TableMeta* meta) {
     meta->set_table_name(m_name);
     meta->set_status(m_status);
     meta->mutable_schema()->CopyFrom(m_schema);
+    meta->set_create_time(m_create_time);
     for (size_t i = 0; i < m_snapshot_list.size(); i++) {
         meta->add_snapshot_list(m_snapshot_list[i]);
     }
@@ -737,6 +739,7 @@ bool TabletManager::AddTable(const std::string& table_name,
     m_mutex.Unlock();
     (*table)->m_schema.CopyFrom(meta.schema());
     (*table)->m_status = meta.status();
+    (*table)->m_create_time = meta.create_time();
     for (int32_t i = 0; i < meta.snapshot_list_size(); ++i) {
         (*table)->m_snapshot_list.push_back(meta.snapshot_list(i));
         LOG(INFO) << table_name << " add snapshot " << meta.snapshot_list(i);
@@ -981,12 +984,15 @@ bool TabletManager::ShowTable(std::vector<TablePtr>* table_meta_list,
             table_meta_list->push_back(table);
         }
         table_found_num++;
-
-        it2 = table->m_tablets_list.begin();
-
+        if (table_found_num == 1) {
+            it2 = table->m_tablets_list.lower_bound(start_tablet_key);
+        } else {
+            it2 = table->m_tablets_list.begin();
+        }
         for (; it2 != table->m_tablets_list.end(); ++it2) {
-            if (tablet_found_num >= max_tablet_found)
+            if (tablet_found_num >= max_tablet_found) {
                 break;
+            }
             TabletPtr tablet = it2->second;
             tablet_found_num++;
             if (tablet_meta_list != NULL) {
@@ -1097,33 +1103,6 @@ void TabletManager::WriteToStream(std::ofstream& ofs,
     ofs.write(value.data(), value_size);
 }
 
-bool TabletManager::ReadFromStream(std::ifstream& ifs,
-                                   std::string* key,
-                                   std::string* value) {
-    uint32_t key_size = 0, value_size = 0;
-    ifs.read((char*)&key_size, sizeof(key_size));
-    if (ifs.eof() && ifs.gcount() == 0) {
-        key->clear();
-        value->clear();
-        return true;
-    }
-    key->resize(key_size);
-    ifs.read((char*)key->data(), key_size);
-    if (ifs.fail()) {
-        return false;
-    }
-    ifs.read((char*)&value_size, sizeof(value_size));
-    if (ifs.fail()) {
-        return false;
-    }
-    value->resize(value_size);
-    ifs.read((char*)value->data(), value_size);
-    if (ifs.fail()) {
-        return false;
-    }
-    return true;
-}
-
 bool TabletManager::DumpMetaTableToFile(const std::string& filename,
                                         StatusCode* status) {
     std::ofstream ofs(filename.c_str(), std::ofstream::binary | std::ofstream::trunc);
@@ -1161,113 +1140,6 @@ bool TabletManager::DumpMetaTableToFile(const std::string& filename,
     }
     ofs.close();
     return true;
-}
-
-bool TabletManager::LoadMetaTableFromFile(const std::string& filename,
-                                          StatusCode* ret_status) {
-    ClearTableList();
-    std::ifstream ifs(filename.c_str(), std::ofstream::binary);
-    if (!ifs.is_open()) {
-        LOG(ERROR) << "fail to open file " << filename << " for read";
-        SetStatusCode(kIOError, ret_status);
-        return false;
-    }
-
-    uint64_t count = 0;
-    std::string key, value;
-    while (ReadFromStream(ifs, &key, &value)) {
-        if (key.empty()) {
-            LOG(INFO) << "load meta table success, " << count << " records";
-            TabletPtr meta_tablet;
-            TableSchema schema;
-            LocalityGroupSchema* lg = schema.add_locality_groups();
-            schema.set_name(FLAGS_tera_master_meta_table_name);
-            lg->set_name("lg_meta");
-            lg->set_compress_type(false);
-            lg->set_store_type(MemoryStore);
-            AddTablet(FLAGS_tera_master_meta_table_name, "", "",
-                      FLAGS_tera_master_meta_table_path, "",
-                      schema, kTableNotInit, 0, &meta_tablet);
-            return true;
-        }
-
-        char first_key_char = key[0];
-        if (first_key_char == '@') {
-            LoadTableMeta(key, value);
-        } else if (first_key_char > '@') {
-            LoadTabletMeta(key, value);
-        } else {
-            continue;
-        }
-
-        count++;
-    }
-    ClearTableList();
-
-    SetStatusCode(kIOError, ret_status);
-    LOG(ERROR) << "fail to load meta table: " << StatusCodeToString(kIOError);
-    return false;
-}
-
-bool TabletManager::LoadMetaTable(const std::string& meta_tablet_addr,
-                                  StatusCode* ret_status) {
-    ClearTableList();
-    ScanTabletRequest request;
-    ScanTabletResponse response;
-    request.set_sequence_id(m_this_sequence_id->Inc());
-    request.set_table_name(FLAGS_tera_master_meta_table_name);
-    request.set_start("");
-    request.set_end("");
-    tabletnode::TabletNodeClient meta_node_client(meta_tablet_addr);
-    while (meta_node_client.ScanTablet(&request, &response)) {
-        if (response.status() != kTabletNodeOk) {
-            SetStatusCode(response.status(), ret_status);
-            LOG(ERROR) << "fail to load meta table: "
-                << StatusCodeToString(response.status());
-            ClearTableList();
-            return false;
-        }
-        if (response.results().key_values_size() <= 0) {
-            LOG(INFO) << "load meta table success";
-            TabletPtr meta_tablet;
-            TableSchema schema;
-            schema.set_kv_only(true);
-            LocalityGroupSchema* lg = schema.add_locality_groups();
-            schema.set_name(FLAGS_tera_master_meta_table_name);
-            lg->set_name("lg_meta");
-            lg->set_compress_type(false);
-            lg->set_store_type(MemoryStore);
-            AddTablet(FLAGS_tera_master_meta_table_name, "", "",
-                      FLAGS_tera_master_meta_table_path, meta_tablet_addr,
-                      schema, kTableReady, 0, &meta_tablet);
-            return true;
-        }
-        uint32_t record_size = response.results().key_values_size();
-        LOG(INFO) << "load meta table: " << record_size << " records";
-
-        std::string last_record_key;
-        for (uint32_t i = 0; i < record_size; i++) {
-            const KeyValuePair& record = response.results().key_values(i);
-            last_record_key = record.key();
-            char first_key_char = record.key()[0];
-            if (first_key_char == '@') {
-                LoadTableMeta(record.key(), record.value());
-            } else if (first_key_char > '@') {
-                LoadTabletMeta(record.key(), record.value());
-            } else {
-                continue;
-            }
-        }
-        std::string next_record_key = NextKey(last_record_key);
-        request.set_start(next_record_key);
-        request.set_end("");
-        request.set_sequence_id(m_this_sequence_id->Inc());
-        response.Clear();
-    }
-    SetStatusCode(kRPCError, ret_status);
-    LOG(ERROR) << "fail to load meta table: " << StatusCodeToString(kRPCError);
-    ClearTableList();
-    return false;
 }
 
 void TabletManager::LoadTableMeta(const std::string& key,

@@ -13,6 +13,7 @@
 #include <time.h>
 
 #include "benchmark/mark.h"
+#include "types.h"
 
 DECLARE_string(flagfile);
 DEFINE_string(tablename, "", "table_name");
@@ -31,6 +32,7 @@ DEFINE_int64(max_rate, -1, "max_rate");
 DEFINE_bool(scan_streaming, false, "enable streaming scan");
 DEFINE_int64(batch_count, 1, "batch_count(sync)");
 DEFINE_bool(seq_write, false, "enable sequential write");
+DEFINE_int64(entry_limit, 0, "writing/reading speed limit");
 
 int mode = 0;
 int type = 0;
@@ -73,12 +75,12 @@ bool parse_row(const char* buffer, ssize_t size,
         delim = end;
     }
     row->assign(buffer, delim - buffer);
-    if (delim == end && mode != WRITE && *op != PUT) {
+    if (delim == end && mode != WRITE && (mode != MIX || *op != PUT)) {
         return true;
     }
 
     // parse value
-    if (mode == WRITE || *op == PUT) {
+    if (mode == WRITE || (mode == MIX && *op == PUT)) {
         if (delim == end) {
             return false;
         }
@@ -166,7 +168,7 @@ bool parse_row(const char* buffer, ssize_t size,
     }
     if (comma == end) {
         return true;
-    } else if (mode == WRITE || *op == PUT) {
+    } else if (mode == WRITE || (mode == MIX && *op == PUT)) {
         return false;
     }
 
@@ -467,11 +469,10 @@ void print_summary_proc(Adapter* adapter, double duration) {
 }
 
 int main(int argc, char** argv) {
-    FLAGS_flagfile = "./tera.flag";
     ::google::ParseCommandLineFlags(&argc, &argv, true);
 
     tera::ErrorCode err;
-    tera::Client* client = tera::Client::NewClient("./tera.flag", "tera_mark");
+    tera::Client* client = tera::Client::NewClient("", "tera_mark");
     if (NULL == client) {
         std::cerr << "fail to create client: " << tera::strerr(err) << std::endl;
         return -1;
@@ -531,13 +532,22 @@ int main(int argc, char** argv) {
     int opt = NONE;
     std::string row;
     std::map<std::string, std::set<std::string> > column;
-    uint64_t largest_ts = (uint64_t)-1;
-    uint64_t smallest_ts = 0;
+    uint64_t largest_ts = tera::kLatestTs;
+    uint64_t smallest_ts = tera::kOldestTs;
     std::string value;
 
     int last_opt = NONE;
     bool finish = false;
+    int64_t count = 0;
     while (true) {
+        if (FLAGS_entry_limit != 0 && count == FLAGS_entry_limit) {
+            struct timeval now;
+            gettimeofday(&now, NULL);
+            if (1000000 - now.tv_usec > 0)  {
+                usleep(1000000 - now.tv_usec);
+            }
+            count = 0;
+        }
         switch (mode) {
         case WRITE:
             opt = PUT;
@@ -594,9 +604,10 @@ int main(int argc, char** argv) {
         opt = NONE;
         row.clear();
         column.clear();
-        largest_ts = (uint64_t)-1;
-        smallest_ts = 0;
+        largest_ts = tera::kLatestTs;
+        smallest_ts = tera::kOldestTs;
         value.clear();
+        count += 1;
     }
 
     std::cout << "wait for completion..." << std::endl;

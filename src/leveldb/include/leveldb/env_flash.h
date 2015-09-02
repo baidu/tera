@@ -37,16 +37,13 @@ public:
     virtual bool FileExists(const std::string& fname);
 
     virtual Status GetChildren(const std::string& path,
-            std::vector<std::string>* result);
+            std::vector<std::string>* result, std::vector<int64_t>* ctime = NULL);
 
     virtual Status DeleteFile(const std::string& fname);
 
     virtual Status CreateDir(const std::string& name);
 
     virtual Status DeleteDir(const std::string& name);
-
-    virtual Status ListDir(const std::string& name,
-            std::vector<std::string>* result);
 
     virtual Status CopyFile(const std::string& from,
                             const std::string& to) {
@@ -64,7 +61,7 @@ public:
     virtual Env* CacheEnv() { return posix_env_; }
 
     /// flash path for local flash cache
-    static void SetFlashPath(const std::string& path);
+    static void SetFlashPath(const std::string& path, bool vanish_allowed);
     static const std::string& FlashPath(const std::string& fname);
     static const std::vector<std::string>& GetFlashPaths() {
         return flash_paths_;
@@ -74,6 +71,7 @@ private:
     Env* dfs_env_;
     Env* posix_env_;
     static std::vector<std::string> flash_paths_;
+    static bool vanish_allowed_;
 };
 
 /// new flash env

@@ -16,6 +16,7 @@
 #include "utils/atomic.h"
 #include "utils/timer.h"
 
+DECLARE_bool(tera_sdk_scan_async_enabled);
 DECLARE_int64(tera_sdk_scan_async_cache_size);
 DECLARE_int32(tera_sdk_scan_async_parallel_max_num);
 
@@ -356,7 +357,10 @@ bool ResultStreamSyncImpl::Done(ErrorCode* err) {
 
         if (!_response->complete()) {
             const KeyValuePair& kv = _response->results().key_values(_result_pos - 1);
-            if (kv.timestamp() == 0) {
+            if (_scan_desc_impl->IsKvOnlyTable()) {
+                _scan_desc_impl->SetStart(kv.key() + '\x1', kv.column_family(),
+                                          kv.qualifier(), kv.timestamp());
+            } else if (kv.timestamp() == 0) {
                 _scan_desc_impl->SetStart(kv.key(), kv.column_family(),
                                           kv.qualifier() + '\x1', kv.timestamp());
             } else {
@@ -462,7 +466,7 @@ ScanDescImpl::ScanDescImpl(const string& rowkey)
     : _start_timestamp(0),
       _timer_range(NULL),
       _buf_size(65536),
-      _is_async(true),
+      _is_async(FLAGS_tera_sdk_scan_async_enabled),
       _max_version(1),
       _snapshot(0),
       _value_converter(&DefaultValueConverter) {
@@ -659,6 +663,10 @@ bool ScanDescImpl::ParseFilterString() {
     return true;
 }
 
+bool ScanDescImpl::IsKvOnlyTable() {
+    return _table_schema.kv_only();
+}
+
 bool ScanDescImpl::ParseSubFilterString(const string& filter_str,
                                         Filter* filter) {
     string filter_t = RemoveInvisibleChar(filter_str);
@@ -691,43 +699,53 @@ bool ScanDescImpl::ParseValueCompareFilter(const string& filter_str,
             << filter_str;
         return false;
     }
+    string::size_type type_pos;
+    string::size_type cf_pos;
+    if ((type_pos = filter_str.find("int64")) != string::npos) {
+        filter->set_value_type(kINT64);
+        cf_pos = type_pos + 5;
+    } else {
+        LOG(ERROR) << "only support int64 value filter, but got: "
+            << filter_str;
+        return false;
+    }
 
     string cf_name, value;
     string::size_type op_pos;
     BinCompOp comp_op = UNKNOWN;
     if ((op_pos = filter_str.find(">=")) != string::npos) {
-        cf_name = filter_str.substr(0, op_pos);
+        cf_name = filter_str.substr(cf_pos, op_pos - cf_pos);
         value = filter_str.substr(op_pos + 2, filter_str.size() - op_pos - 2);
         comp_op = GE;
     } else if ((op_pos = filter_str.find(">")) != string::npos) {
-        cf_name = filter_str.substr(0, op_pos);
+        cf_name = filter_str.substr(cf_pos, op_pos - cf_pos);
         value = filter_str.substr(op_pos + 1, filter_str.size() - op_pos - 1);
         comp_op = GT;
     } else if ((op_pos = filter_str.find("<=")) != string::npos) {
-        cf_name = filter_str.substr(0, op_pos);
+        cf_name = filter_str.substr(cf_pos, op_pos - cf_pos);
         value = filter_str.substr(op_pos + 2, filter_str.size() - op_pos - 2);
         comp_op = LE;
     } else if ((op_pos = filter_str.find("<")) != string::npos) {
-        cf_name = filter_str.substr(0, op_pos);
+        cf_name = filter_str.substr(cf_pos, op_pos - cf_pos);
         value = filter_str.substr(op_pos + 1, filter_str.size() - op_pos - 1);
         comp_op = LT;
     } else if ((op_pos = filter_str.find("==")) != string::npos) {
-        cf_name = filter_str.substr(0, op_pos);
+        cf_name = filter_str.substr(cf_pos, op_pos - cf_pos);
         value = filter_str.substr(op_pos + 2, filter_str.size() - op_pos - 2);
         comp_op = EQ;
     } else if ((op_pos = filter_str.find("!=")) != string::npos) {
-        cf_name = filter_str.substr(0, op_pos);
+        cf_name = filter_str.substr(cf_pos, op_pos - cf_pos);
         value = filter_str.substr(op_pos + 2, filter_str.size() - op_pos - 2);
         comp_op = NE;
     } else {
         LOG(ERROR) << "fail to parse expression: " << filter_str;
         return false;
     }
-
     string type;
-    if (!GetCfType(cf_name, &type)) {
-        LOG(ERROR) << "fail to get column family type: \"" << cf_name << "\"";
-        return false;
+    if (filter->value_type() == kINT64) {
+        type = "int64";
+    } else {
+        assert(false);
     }
 
     string value_internal;
@@ -742,17 +760,6 @@ bool ScanDescImpl::ParseValueCompareFilter(const string& filter_str,
     filter->set_content(cf_name);
     filter->set_ref_value(value_internal);
     return true;
-}
-
-bool ScanDescImpl::GetCfType(const std::string& cf_name, std::string* type) {
-    for (int32_t i = 0; i < _table_schema.column_families_size(); ++i) {
-        const ColumnFamilySchema& cf_schema = _table_schema.column_families(i);
-        if (cf_schema.name() == cf_name) {
-            *type = cf_schema.type();
-            return true;
-        }
-    }
-    return false;
 }
 
 } // namespace tera

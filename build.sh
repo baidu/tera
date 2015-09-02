@@ -98,6 +98,18 @@ make -j4
 make install
 cd -
 
+# gtest
+# wget --no-check-certificate https://googletest.googlecode.com/files/gtest-1.7.0.zip
+git clone --depth=1 https://github.com/xupeilin/gtest_archive
+mv gtest_archive/gtest-1.7.0.zip .
+unzip gtest-1.7.0.zip
+cd gtest-1.7.0
+./configure ${DEPS_CONFIG}
+make
+cp -a lib/.libs/* ${DEPS_PREFIX}/lib
+cp -a include/gtest ${DEPS_PREFIX}/include
+cd -
+
 # libunwind for gperftools
 wget http://download.savannah.gnu.org/releases/libunwind/libunwind-0.99-beta.tar.gz
 tar zxf libunwind-0.99-beta.tar.gz
@@ -138,6 +150,7 @@ sed -i 's/^SNAPPY_PREFIX=.*/SNAPPY_PREFIX=.\/thirdparty/' depends.mk
 sed -i 's/^ZOOKEEPER_PREFIX=.*/ZOOKEEPER_PREFIX=.\/thirdparty/' depends.mk
 sed -i 's/^GFLAGS_PREFIX=.*/GFLAGS_PREFIX=.\/thirdparty/' depends.mk
 sed -i 's/^GLOG_PREFIX=.*/GLOG_PREFIX=.\/thirdparty/' depends.mk
+sed -i 's/^GTEST_PREFIX=.*/GTEST_PREFIX=.\/thirdparty/' depends.mk
 sed -i 's/^GPERFTOOLS_PREFIX=.*/GPERFTOOLS_PREFIX=.\/thirdparty/' depends.mk
 sed -i 's/^BOOST_INCDIR=.*/BOOST_INCDIR=.\/thirdparty\/boost_1_57_0/' depends.mk
 sed -i 's/^INS_PREFIX=.*/INS_PREFIX=.\/thirdparty/' depends.mk

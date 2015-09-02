@@ -111,6 +111,14 @@ int64_t TableDescriptor::MergeSize() const {
     return _impl->MergeSize();
 }
 
+void TableDescriptor::DisableWal() {
+    _impl->DisableWal();
+}
+
+bool TableDescriptor::IsWalDisabled() const {
+    return _impl->IsWalDisabled();
+}
+
 int32_t TableDescriptor::AddSnapshot(uint64_t snapshot) {
     return _impl->AddSnapshot(snapshot);
 }
@@ -129,6 +137,14 @@ void TableDescriptor::SetKvOnly() {
 
 bool TableDescriptor::IsKv() const {
     return _impl->IsKv();
+}
+
+void TableDescriptor::SetAdminGroup(const std::string& name) {
+    return _impl->SetAdminGroup(name);
+}
+
+std::string TableDescriptor::AdminGroup() const {
+    return _impl->AdminGroup();
 }
 
 } // namespace tera

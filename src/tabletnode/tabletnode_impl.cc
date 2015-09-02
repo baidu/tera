@@ -78,6 +78,8 @@ DECLARE_string(tera_leveldb_env_type);
 DECLARE_string(tera_local_addr);
 DECLARE_bool(tera_ins_enabled);
 
+DECLARE_bool(tera_io_cache_path_vanish_allowed);
+
 extern tera::Counter range_error_counter;
 extern tera::Counter rand_read_delay;
 
@@ -157,7 +159,8 @@ bool TabletNodeImpl::Init() {
 void TabletNodeImpl::InitCacheSystem() {
     if (!FLAGS_tera_tabletnode_cache_enabled) {
         // compitable with legacy FlashEnv
-        leveldb::FlashEnv::SetFlashPath(FLAGS_tera_tabletnode_cache_paths);
+        leveldb::FlashEnv::SetFlashPath(FLAGS_tera_tabletnode_cache_paths,
+                                        FLAGS_tera_io_cache_path_vanish_allowed);
         return;
     }
 
@@ -364,51 +367,41 @@ void TabletNodeImpl::ReadTablet(int64_t start_micros,
                                 ReadTabletResponse* response,
                                 google::protobuf::Closure* done,
                                 ReadRpcTimer* timer) {
-    response->set_sequence_id(request->sequence_id());
-    StatusCode status = kTabletNodeOk;
-
     int32_t row_num = request->row_info_list_size();
-
     uint64_t snapshot_id = request->snapshot_id() == 0 ? 0 : request->snapshot_id();
+    uint32_t read_success_num = 0;
 
-    if (request->row_info_list_size() > 0) {
-        uint32_t read_success_num = 0;
-        int32_t row_size = request->row_info_list_size();
-        for (int32_t i = 0; i < row_size; i++) {
-            StatusCode row_status = kTabletNodeOk;
-            io::TabletIO* tablet_io = m_tablet_manager->GetTablet(
-                request->tablet_name(), request->row_info_list(i).key(), &row_status);
-            if (tablet_io == NULL) {
-                range_error_counter.Inc();
+    for (int32_t i = 0; i < row_num; i++) {
+        StatusCode row_status = kTabletNodeOk;
+        io::TabletIO* tablet_io = m_tablet_manager->GetTablet(
+            request->tablet_name(), request->row_info_list(i).key(), &row_status);
+        if (tablet_io == NULL) {
+            range_error_counter.Inc();
+            response->mutable_detail()->add_status(kKeyNotInRange);
+        } else {
+            if (tablet_io->ReadCells(request->row_info_list(i),
+                                     response->mutable_detail()->add_row_result(),
+                                     snapshot_id, &row_status)) {
+                read_success_num++;
             } else {
-                if (tablet_io->ReadCells(request->row_info_list(i),
-                                         response->mutable_detail()->add_row_result(),
-                                         snapshot_id, &row_status)) {
-                    read_success_num++;
-                } else {
-                    response->mutable_detail()->mutable_row_result()->RemoveLast();
-                }
-                tablet_io->DecRef();
+                response->mutable_detail()->mutable_row_result()->RemoveLast();
             }
+            tablet_io->DecRef();
             response->mutable_detail()->add_status(row_status);
         }
-        response->set_success_num(read_success_num);
-        response->set_status(kTabletNodeOk);
-        VLOG(8) << "read_row_num = " << row_size
-            << ", read_success_num = " << read_success_num;
-        done->Run();
-        if (NULL != timer) {
-            RpcTimerList::Instance()->Erase(timer);
-            delete timer;
-        }
-    } else {
-        response->set_status(status);
-        done->Run();
-        if (NULL != timer) {
-            RpcTimerList::Instance()->Erase(timer);
-            delete timer;
-        }
-        return;
+    }
+
+    VLOG(10) << "seq_id: " << request->sequence_id()
+        << ", req_row: " << row_num
+        << ", read_suc: " << read_success_num;
+    response->set_sequence_id(request->sequence_id());
+    response->set_success_num(read_success_num);
+    response->set_status(kTabletNodeOk);
+    done->Run();
+
+    if (NULL != timer) {
+        RpcTimerList::Instance()->Erase(timer);
+        delete timer;
     }
 
     int64_t now_ms = get_micros();
@@ -416,7 +409,7 @@ void TabletNodeImpl::ReadTablet(int64_t start_micros,
     if (used_ms <= 0) {
         LOG(ERROR) << "now ms: "<< now_ms << " start_ms: "<< start_micros;
     }
-    rand_read_delay.Add(used_ms * row_num);
+    rand_read_delay.Add(used_ms);
 }
 
 void TabletNodeImpl::WriteTablet(const WriteTabletRequest* request,
@@ -532,7 +525,7 @@ void TabletNodeImpl::GetSnapshot(const SnapshotRequest* request,
         done->Run();
         return;
     }
-    uint64_t snapshot = tablet_io->GetSnapshot(request->snapshot_id(), 0, &status);
+    uint64_t snapshot = tablet_io->GetSnapshot(request->snapshot_id(), (0x1ull << 56) - 1, &status);
     if (status != kTabletNodeOk) {
         response->set_status(status);
     } else if (snapshot == 0) {
@@ -728,28 +721,6 @@ void TabletNodeImpl::SplitTablet(const SplitTabletRequest* request,
 
     UpdateMetaTableAsync(request, response, done, path, split_key, schema,
                          first_half_size, second_half_size, request->tablet_meta());
-}
-
-void TabletNodeImpl::MergeTablet(const MergeTabletRequest* request,
-                                 MergeTabletResponse* response,
-                                 google::protobuf::Closure* done) {
-    LOG(INFO) << "MergeTablet(): request: " << request->DebugString();
-    response->set_sequence_id(request->sequence_id());
-    if (!m_merge_rpc_compactor.RpcExceptionHappened(
-            request->sequence_id(), response, done)) {
-        return;
-    }
-
-    std::string tb1_path = request->tablet_path_1();
-    std::string tb2_path = request->tablet_path_2();
-    std::string tb_merge = request->tablet_merged_path();
-    StatusCode status = kTabletNodeOk;
-    if (!io::MergeTablesWithLG(tb1_path, tb2_path, tb_merge)) {
-        LOG(ERROR) << "fail to merge: " << tb2_path << " to: " << tb1_path;
-        status = kTableMergeError;
-    }
-    response->set_status(status);
-    m_merge_rpc_compactor.FillResponseAndDone(response);
 }
 
 bool TabletNodeImpl::CheckInKeyRange(const KeyList& key_list,
@@ -990,8 +961,7 @@ void TabletNodeImpl::GarbageCollectInPath(const std::string& path, leveldb::Env*
     env->GetChildren(path, &table_dirs);
     for (size_t i = 0; i < table_dirs.size(); ++i) {
         std::vector<std::string> cached_tablets;
-        env->GetChildren(path + "/" + table_dirs[i],
-                &cached_tablets);
+        env->GetChildren(path + "/" + table_dirs[i], &cached_tablets);
         if (cached_tablets.size() == 0) {
             VLOG(GC_LOG_LEVEL) << "[gc] this directory is empty, delete it: "
                 << path + "/" + table_dirs[i];

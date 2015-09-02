@@ -211,16 +211,6 @@ void RemoteTabletNode::SplitTablet(google::protobuf::RpcController* controller,
     m_ctrl_thread_pool->AddTask(callback);
 }
 
-void RemoteTabletNode::MergeTablet(google::protobuf::RpcController* controller,
-                                   const MergeTabletRequest* request,
-                                   MergeTabletResponse* response,
-                                   google::protobuf::Closure* done) {
-    boost::function<void ()> callback =
-        boost::bind(&RemoteTabletNode::DoMergeTablet, this, controller,
-                   request, response, done);
-    m_ctrl_thread_pool->AddTask(callback);
-}
-
 void RemoteTabletNode::CompactTablet(google::protobuf::RpcController* controller,
                                    const CompactTabletRequest* request,
                                    CompactTabletResponse* response,
@@ -233,11 +223,11 @@ void RemoteTabletNode::CompactTablet(google::protobuf::RpcController* controller
 }
 
 std::string RemoteTabletNode::ProfilingLog() {
-    return "ctrl: " + m_ctrl_thread_pool->ProfilingLog()
-        + ", read: " + m_read_thread_pool->ProfilingLog()
-        + ", write: " + m_write_thread_pool->ProfilingLog()
-        + ", scan: " + m_scan_thread_pool->ProfilingLog()
-        + ", compact: " + m_compact_thread_pool->ProfilingLog();
+    return "ctrl " + m_ctrl_thread_pool->ProfilingLog()
+        + " read " + m_read_thread_pool->ProfilingLog()
+        + " write " + m_write_thread_pool->ProfilingLog()
+        + " scan " + m_scan_thread_pool->ProfilingLog()
+        + " compact " + m_compact_thread_pool->ProfilingLog();
 }
 
 void RemoteTabletNode::DoLoadTablet(google::protobuf::RpcController* controller,
@@ -337,16 +327,6 @@ void RemoteTabletNode::DoSplitTablet(google::protobuf::RpcController* controller
     LOG(INFO) << "finish RPC (SplitTablet) id: " << id;
 }
 
-void RemoteTabletNode::DoMergeTablet(google::protobuf::RpcController* controller,
-                                     const MergeTabletRequest* request,
-                                     MergeTabletResponse* response,
-                                     google::protobuf::Closure* done) {
-    uint64_t id = request->sequence_id();
-    LOG(INFO) << "accept RPC (MergeTablet) id: " << id;
-    m_tabletnode_impl->MergeTablet(request, response, done);
-    LOG(INFO) << "finish RPC (MergeTablet) id: " << id;
-}
-
 void RemoteTabletNode::DoCompactTablet(google::protobuf::RpcController* controller,
                                      const CompactTabletRequest* request,
                                      CompactTabletResponse* response,
@@ -368,6 +348,18 @@ void RemoteTabletNode::DoScheduleRpc(RpcSchedule* rpc_schedule) {
     case RPC_READ: {
         ReadRpc* read_rpc = (ReadRpc*)rpc;
         table_name = read_rpc->request->tablet_name();
+        int64_t read_timeout = read_rpc->request->client_timeout_ms() * 1000;// ms -> us
+        int64_t detal = get_micros() - read_rpc->start_micros;
+        if (read_rpc->request->has_client_timeout_ms()
+            && (detal > read_timeout)) {
+            VLOG(5) << "timeout, drop read request for:" << table_name
+                << ", detal(in us):" << detal << ", read_timeout(in us):" << read_timeout;
+            read_rpc->response->set_sequence_id(read_rpc->request->sequence_id());
+            read_rpc->response->set_success_num(0);
+            read_rpc->response->set_status(kTableIsBusy);
+            read_rpc->done->Run();
+            break;
+        }
         DoReadTablet(read_rpc->controller, read_rpc->start_micros,
                      read_rpc->request, read_rpc->response,
                      read_rpc->done,read_rpc->timer);

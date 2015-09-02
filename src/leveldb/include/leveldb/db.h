@@ -40,6 +40,13 @@ struct Range {
 // any external synchronization.
 class DB {
  public:
+  enum State {
+    kNotOpen = 0,
+    kOpened = 1,
+    kShutdown1 = 2,
+    kShutdown2 = 3
+  };
+
   // Open the database with the specified "name".
   // Stores a pointer to a heap-allocated database in *dbptr and returns
   // OK on success.
@@ -158,7 +165,6 @@ class DB {
                                 std::vector<uint64_t>* lgsize = NULL) = 0;
 
   virtual bool MinorCompact() = 0;
-  virtual void CompactMissFiles(const Slice* begin, const Slice* end) = 0;
 
   // Add all sst files inherited from other tablets
   virtual void AddInheritedLiveFiles(std::vector<std::set<uint64_t> >* live) = 0;

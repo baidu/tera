@@ -229,12 +229,12 @@ public:
 
     bool ParseFilterString();
 
+    bool IsKvOnlyTable();
+
 private:
     bool ParseSubFilterString(const std::string& filter_str, Filter* filter);
 
     bool ParseValueCompareFilter(const std::string& filter_str, Filter* filter);
-
-    bool GetCfType(const std::string& cf_name, std::string* type);
 
 private:
     std::string _start_key;

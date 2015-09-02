@@ -171,6 +171,9 @@ public:
     void SetMergeSize(int64_t size);
     int64_t MergeSize() const;
 
+    void DisableWal();
+    bool IsWalDisabled() const;
+
     /// 插入snapshot
     int32_t AddSnapshot(uint64_t snapshot);
     /// 获取snapshot
@@ -179,6 +182,9 @@ public:
     int32_t SnapshotNum() const;
     /// 是否为kv表
     bool IsKv() const;
+
+    void SetAdminGroup(const std::string& name);
+    std::string AdminGroup() const;
 
 private:
     typedef std::map<std::string, LGDescImpl*> LGMap;
@@ -197,6 +203,8 @@ private:
     RawKeyType      _raw_key_type;
     int64_t         _split_size;
     int64_t         _merge_size;
+    bool            _disable_wal;
+    std::string     _admin_group;
 };
 
 } // namespace tera

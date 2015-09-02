@@ -116,6 +116,9 @@ private:
     bool ParseTabletEntry(const TabletMeta& meta,
                           std::vector<TabletInfo>* tablet_list);
 
+    std::string GetUserToken(const std::string& user, const std::string& password);
+
+    bool CheckReturnValue(StatusCode status, std::string& reason, ErrorCode* err);
 private:
     ClientImpl(const ClientImpl&);
     void operator=(const ClientImpl&);

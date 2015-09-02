@@ -18,6 +18,7 @@
 
 #include "master/tablet_manager.h"
 #include "master/tabletnode_manager.h"
+#include "master/gc_strategy.h"
 #include "proto/master_rpc.pb.h"
 #include "proto/table_meta.pb.h"
 #include "sdk/client_impl.h"
@@ -137,6 +138,7 @@ private:
     typedef Closure<void, SplitTabletRequest*, SplitTabletResponse*, bool, int> SplitClosure;
     typedef Closure<void, WriteTabletRequest*, WriteTabletResponse*, bool, int> WriteClosure;
     typedef Closure<void, ScanTabletRequest*, ScanTabletResponse*, bool, int> ScanClosure;
+    typedef boost::function<void (std::string*, std::string*)> ToMetaFunc;
 
     enum MetaTaskType {
         kWrite = 0,
@@ -149,8 +151,7 @@ private:
     struct WriteTask {
         MetaTaskType m_type;
         WriteClosure* m_done;
-        TablePtr m_table;
-        std::vector<TabletPtr> m_tablet;
+        std::vector<ToMetaFunc> m_meta_entries;
         bool m_is_delete;
     };
     struct ScanTask {
@@ -235,6 +236,7 @@ private:
                               UnloadTabletResponse* response,
                               bool failed, int error_code);
 
+    void ScheduleLoadBalance();
     void LoadBalance();
     uint32_t LoadBalance(Scheduler* scheduler,
                          uint32_t max_move_num, uint32_t max_round_num,
@@ -269,6 +271,8 @@ private:
                              WriteTabletRequest* request,
                              WriteTabletResponse* response,
                              bool failed, int error_code);
+
+    void ScheduleQueryTabletNode();
     void QueryTabletNode();
     void QueryTabletNodeAsync(std::string addr, int32_t timeout,
                               bool is_gc, QueryClosure* done);
@@ -314,12 +318,9 @@ private:
                                       bool failed, int error_code);
     void MergeTabletFailed(TabletPtr tablet_p1, TabletPtr tablet_p2);
 
-    void WriteMetaTableAsync(TablePtr table, bool is_delete,
-                             WriteClosure* done);
-    void WriteMetaTableAsync(TabletPtr tablet, bool is_delete,
-                             WriteClosure* done);
-    void WriteMetaTableAsync(TablePtr table, TabletPtr tablet, bool is_delete,
-                             WriteClosure* done);
+    void BatchWriteMetaTableAsync(ToMetaFunc meta_entry, bool is_delete, WriteClosure* done);
+    void BatchWriteMetaTableAsync(std::vector<ToMetaFunc> meta_entries,
+                                  bool is_delete, WriteClosure* done);
     void BatchWriteMetaTableAsync(TablePtr table,
                                   const std::vector<TabletPtr>& tablets,
                                   bool is_delete, WriteClosure* done);
@@ -385,7 +386,16 @@ private:
                                       WriteTabletResponse* response,
                                       bool failed, int error_code);
 
+    // load metabale to master memory
+    bool LoadMetaTable(const std::string& meta_tablet_addr,
+                       StatusCode* ret_status);
+    bool LoadMetaTableFromFile(const std::string& filename,
+                               StatusCode* ret_status = NULL);
+    bool ReadFromStream(std::ifstream& ifs,
+                        std::string* key,
+                        std::string* value);
 
+    // load metatable on a tabletserver
     bool LoadMetaTablet(std::string* server_addr);
     void UnloadMetaTablet(const std::string& server_addr);
 
@@ -412,12 +422,13 @@ private:
     void RestoreUserTablet(const std::vector<TabletMeta>& report_tablet_list);
     void LoadAllOffLineTablet();
 
-    void SuspendMetaOperation(TablePtr table, bool is_delete, WriteClosure* done);
-    void SuspendMetaOperation(TabletPtr tablet, bool is_delete, WriteClosure* done);
-    void SuspendMetaOperation(TablePtr table, TabletPtr tablet, bool is_delete,
-                              WriteClosure* done);
     void SuspendMetaOperation(TablePtr table, const std::vector<TabletPtr>& tablets,
                               bool is_delete, WriteClosure* done);
+    void SuspendMetaOperation(ToMetaFunc meta_entry,
+                              bool is_delete, WriteClosure* done);
+    void SuspendMetaOperation(std::vector<ToMetaFunc> meta_entries,
+                              bool is_delete, WriteClosure* done);
+    
     void SuspendMetaOperation(const std::string& table_name,
                               const std::string& tablet_key_start,
                               const std::string& tablet_key_end,
@@ -440,14 +451,15 @@ private:
     // garbage clean
     void EnableTabletNodeGcTimer();
     void DisableTabletNodeGcTimer();
-    void TabletNodeGarbageClean();
-    void DoTabletNodeGarbageClean();
-    void DoTabletNodeGarbageCleanPhase2(bool is_success);
-    void CollectDeadTabletsFiles();
-    void CollectSingleDeadTablet(const std::string& tablename, uint64_t tabletnum);
-    void DeleteObsoleteFiles();
-    void ProcessQueryCallbackForGc(QueryResponse* response);
+    void ScheduleTabletNodeGc();
+    void DoTabletNodeGc();
+    void DoTabletNodeGcPhase2();
 
+    bool IsRootUser(const std::string& token);
+
+    template <typename Request, typename Response, typename Callback>
+    bool HasTablePermission(const Request* request, Response* response, 
+                            Callback* done, TablePtr table, const char* operate);
 private:
     mutable Mutex m_status_mutex;
     MasterStatus m_status;
@@ -455,19 +467,23 @@ private:
 
     mutable Mutex m_tabletnode_mutex;
     bool m_restored;
-    scoped_ptr<TabletManager> m_tablet_manager;
-    scoped_ptr<TabletNodeManager> m_tabletnode_manager;
+    boost::shared_ptr<TabletManager> m_tablet_manager;
+    boost::shared_ptr<TabletNodeManager> m_tabletnode_manager;
     scoped_ptr<MasterZkAdapterBase> m_zk_adapter;
     scoped_ptr<Scheduler> m_size_scheduler;
     scoped_ptr<Scheduler> m_load_scheduler;
 
     Mutex m_mutex;
     int64_t m_release_cache_timer_id;
-    int64_t m_query_tabletnode_timer_id;
-    int64_t m_load_balance_timer_id;
     Counter m_this_sequence_id;
-    int64_t m_load_balance_count;
+
+    bool m_query_enabled;
+    int64_t m_query_tabletnode_timer_id;
     Counter m_query_pending_count;
+
+    bool m_load_balance_enabled;
+    int64_t m_load_balance_timer_id;
+    Counter m_load_balance_count;
 
     scoped_ptr<ThreadPool> m_thread_pool;
     AutoResetEvent m_query_event;
@@ -489,15 +505,10 @@ private:
     TableImpl* m_stat_table;
 
     // tabletnode garbage clean
-    // first: live tablet, second: dead tablet
-    mutable Mutex m_gc_rw_mutex;
-    typedef std::pair<std::set<uint64_t>, std::set<uint64_t> > GcTabletSet;
-    std::map<std::string, GcTabletSet> m_gc_tablets;
-    typedef std::vector<std::set<uint64_t> > GcFileSet;
-    std::map<std::string, GcFileSet> m_gc_live_files;
-    std::set<std::string> m_gc_tabletnodes;
+    bool m_gc_enabled;
     int64_t m_gc_timer_id;
     bool m_gc_query_enable;
+    boost::shared_ptr<GcStrategy> gc_strategy;
 };
 
 } // namespace master

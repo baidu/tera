@@ -22,13 +22,15 @@ class CompactStrategy {
 public:
     virtual ~CompactStrategy() {}
 
-    virtual bool Drop(const Slice& k, uint64_t n) = 0;
+    virtual bool Drop(const Slice& k, uint64_t n,
+                      const std::string& lower_bound = "") = 0;
 
     // tera-specific, based on all-level iterators.
     // used in LowLevelScan
     virtual bool ScanDrop(const Slice& k, uint64_t n) = 0;
 
-    virtual bool ScanMergedValue(Iterator* it, std::string* merged_value) = 0;
+    virtual bool ScanMergedValue(Iterator* it, std::string* merged_value,
+                                 int64_t* merged_num = NULL) = 0;
 
     virtual bool MergeAtomicOPs(Iterator* it, std::string* merged_value,
                                 std::string* merged_key) = 0;
@@ -41,7 +43,7 @@ class DummyCompactStrategy : public CompactStrategy {
 public:
     virtual ~DummyCompactStrategy() {}
 
-    virtual bool Drop(const Slice& k, uint64_t n) {
+    virtual bool Drop(const Slice& k, uint64_t n, const std::string& lower_bound) {
         return false;
     }
 
@@ -58,7 +60,8 @@ public:
         return false;
     }
 
-    virtual bool ScanMergedValue(Iterator* it, std::string* merged_value) {
+    virtual bool ScanMergedValue(Iterator* it, std::string* merged_value,
+                                 int64_t* merged_num) {
         return false;
     }
 };

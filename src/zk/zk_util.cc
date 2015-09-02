@@ -218,7 +218,7 @@ bool FakeZkUtil::ListNodes(const std::string& path,
 }
 
 bool InsUtil::ReadNode(const std::string& name, std::string* value) {
-    galaxy::ins::sdk::InsSDK ins_sdk(FLAGS_tera_ins_addr_list);
+    static galaxy::ins::sdk::InsSDK ins_sdk(FLAGS_tera_ins_addr_list);
     galaxy::ins::sdk::SDKError err;
     CHECK(ins_sdk.Get(name, value, &err)) << "sdk read ins fail";
     return true;

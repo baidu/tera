@@ -13,20 +13,25 @@
 namespace tera {
 namespace io {
 
+using leveldb::Slice;
+
 class DefaultCompactStrategy : public leveldb::CompactStrategy {
 public:
     DefaultCompactStrategy(const TableSchema& schema);
     virtual ~DefaultCompactStrategy();
 
-    virtual bool Drop(const leveldb::Slice& k, uint64_t n);
+    virtual bool Drop(const Slice& k, uint64_t n,
+                      const std::string& lower_bound);
 
     // tera-specific, based on all-level iterators.
     // used in LowLevelScan
-    virtual bool ScanDrop(const leveldb::Slice& k, uint64_t n);
+    virtual bool ScanDrop(const Slice& k, uint64_t n);
 
     virtual const char* Name() const;
 
-    virtual bool ScanMergedValue(leveldb::Iterator* it, std::string* merged_value);
+    virtual bool ScanMergedValue(leveldb::Iterator* it,
+                                 std::string* merged_value,
+                                 int64_t* merged_num = NULL);
 
     virtual bool MergeAtomicOPs(leveldb::Iterator* it, std::string* merged_value,
                                 std::string* merged_key);
@@ -38,7 +43,11 @@ private:
 
     bool InternalMergeProcess(leveldb::Iterator* it, std::string* merged_value,
                               std::string* merged_key,
-                              bool merge_put_flag, bool is_internal_key);
+                              bool merge_put_flag, bool is_internal_key,
+                              int64_t* merged_num);
+
+    bool CheckCompactLowerBound(const Slice& cur_key,
+                                const std::string& lower_bound);
 
 private:
     std::map<std::string, int32_t> m_cf_indexs;
@@ -48,6 +57,7 @@ private:
     std::string m_last_key;
     std::string m_last_col;
     std::string m_last_qual;
+    int64_t m_last_ts;
     leveldb::TeraKeyType m_last_type;
     leveldb::TeraKeyType m_cur_type;
     int64_t m_del_row_ts;

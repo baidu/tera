@@ -17,13 +17,15 @@ public:
     KvCompactStrategy(const TableSchema& schema);
     virtual ~KvCompactStrategy();
 
-    virtual bool Drop(const leveldb::Slice& k, uint64_t n);
+    virtual bool Drop(const leveldb::Slice& k, uint64_t n,
+                      const std::string& lower_bound);
 
     // tera-specific, based on all-level iterators.
     // used in LowLevelScan
     virtual bool ScanDrop(const leveldb::Slice& k, uint64_t n);
 
-    virtual bool ScanMergedValue(leveldb::Iterator* it, std::string* merged_value);
+    virtual bool ScanMergedValue(leveldb::Iterator* it, std::string* merged_value,
+                                 int64_t* merged_num);
 
     virtual bool MergeAtomicOPs(leveldb::Iterator* it, std::string* merged_value,
                                 std::string* merged_key);
