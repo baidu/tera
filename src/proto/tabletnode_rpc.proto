@@ -34,6 +34,19 @@ message ReleaseSnapshotResponse {
     optional uint64 snapshot_id = 3;
 }
 
+message SnapshotRollbackRequest {
+    required uint64 sequence_id = 1;
+    required string table_name = 2;
+    required KeyRange key_range = 3;
+    required uint64 snapshot_id = 4;
+}
+
+message SnapshotRollbackResponse {
+    required uint64 sequence_id = 1;
+    required StatusCode status = 2;
+    required uint64 rollback_point = 3;
+}
+
 message QueryRequest {
     required uint64 sequence_id = 1;
     optional bool is_gc_query = 2;
@@ -305,6 +318,7 @@ service TabletNodeServer {
     }
     rpc GetSnapshot(SnapshotRequest) returns(SnapshotResponse);
     rpc ReleaseSnapshot(ReleaseSnapshotRequest) returns(ReleaseSnapshotResponse);
+    rpc Rollback(SnapshotRollbackRequest) returns(SnapshotRollbackResponse);
 
     rpc SplitTablet(SplitTabletRequest) returns(SplitTabletResponse);
 }

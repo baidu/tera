@@ -558,6 +558,7 @@ bool TabletIO::Read(const leveldb::Slice& key, std::string* value,
             return false;
         }
     }
+    read_option.rollbacks = rollbacks_;
     leveldb::Status db_status = m_db->Get(read_option, key, value);
     if (!db_status.ok()) {
         // LOG(ERROR) << "fail to read value for key: " << key.data()
@@ -585,6 +586,7 @@ StatusCode TabletIO::InitedScanInterator(const std::string& start_tera_key,
             return kSnapshotNotExist;
         }
     }
+    read_option.rollbacks = rollbacks_;
     *scan_it = m_db->NewIterator(read_option);
     TearDownIteratorOptions(&read_option);
 
@@ -788,6 +790,7 @@ bool TabletIO::LowLevelSeek(const std::string& row_key,
             return false;
         }
     }
+    read_option.rollbacks = rollbacks_;
     leveldb::Iterator* it_data = m_db->NewIterator(read_option);
     TearDownIteratorOptions(&read_option);
 
@@ -1273,6 +1276,11 @@ bool TabletIO::Scan(const ScanOption& option, KeyValueList* kv_list,
             return false;
         }
     }
+    read_option.rollbacks = rollbacks_;
+    std::map<uint64_t, uint64_t>::iterator iter = read_option.rollbacks.begin();
+    for (; iter != read_option.rollbacks.end(); ++iter) {
+        VLOG(1) << "LL:read read_option=" << iter->first << "-" << iter->second;
+    }
     // TTL-KV : m_key_operator::Compare会解RawKey([row_key | expire_timestamp])
     // 因此传递给Leveldb的Key一定要保证以expire_timestamp结尾.
     leveldb::CompactStrategy* strategy = NULL;
@@ -1713,6 +1721,28 @@ void TabletIO::ListSnapshot(std::vector<uint64_t>* snapshot_id) {
         snapshot_id->push_back(it->first);
         VLOG(7) << m_tablet_path << " ListSnapshot: " << it->first << " - " << it->second;
     }
+}
+
+uint64_t TabletIO::Rollback(uint64_t snapshot_id, StatusCode* status) {
+    {
+        MutexLock lock(&m_mutex);
+        if (m_status != kReady) {
+            SetStatusCode(m_status, status);
+            return false;
+        }
+        if (id_to_snapshot_num_.find(snapshot_id) == id_to_snapshot_num_.end()) {
+            SetStatusCode(kSnapshotNotExist, status);
+            return false;
+        }
+        m_db_ref_count++;
+    }
+    VLOG(1) << "LL:in tabletio";
+    uint64_t rollback_point = m_db->Rollback(id_to_snapshot_num_[snapshot_id]);
+    VLOG(1) << "LL:new rollback point=" << rollback_point;
+    MutexLock lock(&m_mutex);
+    rollbacks_[id_to_snapshot_num_[snapshot_id]] = rollback_point;
+    m_db_ref_count--;
+    return rollback_point;
 }
 
 uint32_t TabletIO::GetLGidByCFName(const std::string& cfname) {

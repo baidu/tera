@@ -25,7 +25,8 @@ Status BuildTable(const std::string& dbname,
                   TableCache* table_cache,
                   Iterator* iter,
                   FileMetaData* meta,
-                  uint64_t* saved_size) {
+                  uint64_t* saved_size,
+                  std::map<uint64_t, uint64_t> rollbacks) {
   Status s;
   meta->file_size = 0;
   iter->SeekToFirst();
@@ -59,7 +60,7 @@ Status BuildTable(const std::string& dbname,
       // type==kTypeValue, 且drop==true的记录可以被丢弃,
       // 其他记录均正常进入Memtable compact SST流程.
       if (static_cast<ValueType>(tag & 0xff) == kTypeValue && compact_strategy) {
-        bool drop = compact_strategy->Drop(raw_key, sequence_id);
+        bool drop = compact_strategy->Drop(raw_key, sequence_id, std::map<uint64_t, uint64_t>());
         if (drop) {
             iter->Next();
 //             Log(options.info_log, "[Memtable Drop] sequence_id: %llu, raw_key: %s",

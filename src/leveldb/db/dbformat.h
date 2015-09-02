@@ -10,6 +10,7 @@
 #define STORAGE_LEVELDB_DB_FORMAT_H_
 
 #include <stdio.h>
+#include <iostream>
 #include "leveldb/comparator.h"
 #include "leveldb/db.h"
 #include "leveldb/filter_policy.h"
@@ -89,6 +90,10 @@ extern void AppendInternalKey(std::string* result,
 // On error, returns false, leaves "*result" in an undefined state.
 extern bool ParseInternalKey(const Slice& internal_key,
                              ParsedInternalKey* result);
+
+extern void ParseInternalKeySeq(const Slice& internal_key, uint64_t* seq);
+
+extern bool RollbackDrop(uint64_t seq, std::map<uint64_t, uint64_t> rollbacks);
 
 // Returns the user key portion of an internal key.
 inline Slice ExtractUserKey(const Slice& internal_key) {
@@ -179,6 +184,36 @@ inline bool ParseInternalKey(const Slice& internal_key,
   result->type = static_cast<ValueType>(c);
   result->user_key = Slice(internal_key.data(), n - 8);
   return (c <= static_cast<unsigned char>(kTypeValue));
+}
+
+inline bool RollbackDrop(uint64_t seq, std::map<uint64_t, uint64_t> rollbacks) {
+  if (rollbacks.empty()) {
+    return false;
+  }
+  std::map<uint64_t, uint64_t>::iterator it;
+  it = rollbacks.begin();
+  for (; it != rollbacks.end(); ++it) {
+    std::cerr<< "LL:in iter:" << it->first << "-" << it->second << std::endl;
+  }
+  it = rollbacks.lower_bound(seq);
+  if (seq < it->first || it == rollbacks.end()) {
+    --it;
+  }
+  std::cerr<< "LL:result:" << it->first << "-" << it->second << std::endl;
+
+  if (seq > it->first && seq <= it->second) {
+    std::cerr<< "LL:Drop seq = " << seq << std::endl;
+    return true;
+  } else {
+    std::cerr<< "LL:!!!Drop seq = " << seq << std::endl;
+    return false;
+  }
+}
+
+inline void ParseInternalKeySeq(const Slice& key, uint64_t* seq) {
+  ParsedInternalKey ikey;
+  ParseInternalKey(key, &ikey);
+  *seq = static_cast<uint64_t>(ikey.sequence);
 }
 
 // A helper class useful for DBImpl::Get()

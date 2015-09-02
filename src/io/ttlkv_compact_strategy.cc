@@ -24,7 +24,12 @@ const char* KvCompactStrategy::Name() const {
 }
 
 bool KvCompactStrategy::Drop(const leveldb::Slice& tera_key, uint64_t n,
+                             std::map<uint64_t, uint64_t> rollbacks,
                              const std::string& lower_bound) {
+
+    if (CompactStrategy::RollbackDrop(n, rollbacks)) {
+        return true;
+    }
     // If expire timestamp + schema's TTL <= time(NULL), Then Drop.
     // Desc: 当前TTL的语义理解为：假设用户指定了key在03:10分过期，
     // 同时Schema的TTL为+300(延后5分钟), 那么这个key将在03:15分过期.
@@ -59,7 +64,7 @@ bool KvCompactStrategy::Drop(const leveldb::Slice& tera_key, uint64_t n,
 }
 
 bool KvCompactStrategy::ScanDrop(const leveldb::Slice& tera_key, uint64_t n) {
-    return Drop(tera_key, n, ""); // used in scan.
+    return Drop(tera_key, n, std::map<uint64_t, uint64_t>(), ""); // used in scan.
 }
 
 bool KvCompactStrategy::ScanMergedValue(Iterator* it, std::string* merged_value,

@@ -1761,20 +1761,23 @@ int32_t SnapshotOp(Client* client, int32_t argc, char** argv, ErrorCode* err) {
     std::string tablename = argv[2];
     uint64_t snapshot = 0;
     if (argc == 5 && strcmp(argv[3], "del") == 0) {
-        std::stringstream is;
-        is << std::string(argv[4]);
-        is >> snapshot;
-        if (!client->DelSnapshot(tablename, snapshot, err)) {
-            LOG(ERROR) << "fail to del snapshot: " << snapshot << " ," << err->GetReason();
+        if (!client->DelSnapshot(tablename, FLAGS_snapshot, err)) {
+            LOG(ERROR) << "fail to del snapshot: " << FLAGS_snapshot << " ," << err->GetReason();
             return -1;
         }
         std::cout << "Del snapshot " << snapshot << std::endl;
-    } else if (strcmp(argv[3], "create") == 0 ) {
+    } else if (strcmp(argv[3], "create") == 0) {
         if (!client->GetSnapshot(tablename, &snapshot, err)) {
             LOG(ERROR) << "fail to get snapshot: " << err->GetReason();
             return -1;
         }
         std::cout << "new snapshot: " << snapshot << std::endl;
+    }  else if (strcmp(argv[3], "rollback") == 0) {
+        if (!client->Rollback(tablename, FLAGS_snapshot, err)) {
+            LOG(ERROR) << "fail to rollback to snapshot: " << err->GetReason();
+            return -1;
+        }
+        std::cout << "rollback to snapshot: " << FLAGS_snapshot << std::endl;
     } else {
         Usage(argv[0]);
         return -1;

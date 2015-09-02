@@ -665,6 +665,7 @@ public:
 
     virtual bool GetSnapshot(const std::string& name, uint64_t* snapshot, ErrorCode* err) = 0;
     virtual bool DelSnapshot(const std::string& name, uint64_t snapshot, ErrorCode* err) = 0;
+    virtual bool Rollback(const std::string& name, uint64_t snapshot, ErrorCode* err) = 0;
 
     virtual bool CmdCtrl(const std::string& command,
                          const std::vector<std::string>& arg_list,

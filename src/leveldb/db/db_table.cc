@@ -643,11 +643,22 @@ const uint64_t DBTable::GetSnapshot(uint64_t last_sequence) {
 }
 
 void DBTable::ReleaseSnapshot(uint64_t sequence_number) {
+    Log(options_.info_log, "[%s] LL:in db table rollback...\n", dbname_.c_str());
     std::set<uint32_t>::iterator it = options_.exist_lg_list->begin();
     for (; it != options_.exist_lg_list->end(); ++it) {
         lg_list_[*it]->ReleaseSnapshot(sequence_number);
     }
     MutexLock lock(&mutex_);
+}
+
+const uint64_t DBTable::Rollback(uint64_t snapshot_seq, uint64_t rollback_point) {
+    std::set<uint32_t>::iterator it = options_.exist_lg_list->begin();
+    rollback_point = last_sequence_;
+    for (; it != options_.exist_lg_list->end(); ++it) {
+        lg_list_[*it]->Rollback(snapshot_seq, rollback_point);
+    }
+    MutexLock lock(&mutex_);
+    return rollback_point;
 }
 
 bool DBTable::GetProperty(const Slice& property, std::string* value) {

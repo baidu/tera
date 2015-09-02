@@ -13,11 +13,14 @@
 #include "leveldb/env.h"
 #include "leveldb/filter_policy.h"
 #include "leveldb/options.h"
+#include "db/dbformat.h"
 #include "table/block.h"
 #include "table/filter_block.h"
 #include "table/format.h"
 #include "table/two_level_iterator.h"
 #include "util/coding.h"
+
+#include <iostream>
 
 namespace leveldb {
 
@@ -346,7 +349,12 @@ Status Table::InternalGet(const ReadOptions& options, const Slice& k,
       Iterator* block_iter = BlockReader(this, options, iiter->value());
       block_iter->Seek(k);
       if (block_iter->Valid()) {
-        (*saver)(arg, block_iter->key(), block_iter->value());
+        uint64_t seq;
+        ParseInternalKeySeq(block_iter->key(), &seq);
+        std::cerr<<"LL:in table.cc seq=" << seq << std::endl;
+        if (!RollbackDrop(seq, options.rollbacks)) {
+          (*saver)(arg, block_iter->key(), block_iter->value());
+        }
       }
       s = block_iter->status();
       delete block_iter;

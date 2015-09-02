@@ -45,6 +45,7 @@ class DBImpl : public DB {
   virtual Iterator* NewIterator(const ReadOptions&);
   virtual const uint64_t GetSnapshot(uint64_t last_sequence = kMaxSequenceNumber);
   virtual void ReleaseSnapshot(uint64_t sequence_number);
+  virtual const uint64_t Rollback(uint64_t snapshot_seq, uint64_t rollback_point = kMaxSequenceNumber);
   virtual bool GetProperty(const Slice& property, std::string* value);
   virtual void GetApproximateSizes(const Range* range, int n, uint64_t* sizes);
   virtual void CompactRange(const Slice* begin, const Slice* end);
@@ -185,6 +186,7 @@ class DBImpl : public DB {
   WriteBatch* tmp_batch_;
 
   std::multiset<uint64_t> snapshots_;
+  std::map<uint64_t, uint64_t> rollbacks_;
 
   // Set of table files to protect from deletion because they are
   // part of ongoing compactions.

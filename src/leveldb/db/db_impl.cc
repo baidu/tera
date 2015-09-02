@@ -526,7 +526,7 @@ Status DBImpl::WriteLevel0Table(MemTable* mem, VersionEdit* edit,
   {
     mutex_.Unlock();
     s = BuildTable(dbname_, env_, options_, table_cache_, iter, &meta,
-                   &saved_size);
+                   &saved_size, rollbacks_);
     mutex_.Lock();
   }
 
@@ -1162,7 +1162,7 @@ Status DBImpl::DoCompactionWork(CompactionState* compact) {
         if (options_.drop_base_level_del_in_compaction) {
             lower_bound = compact->compaction->drop_lower_bound();
         }
-        drop = compact_strategy->Drop(ikey.user_key, ikey.sequence, lower_bound);
+        drop = compact_strategy->Drop(ikey.user_key, ikey.sequence, std::map<uint64_t, uint64_t>(), lower_bound);
       }
 
       last_sequence_for_key = ikey.sequence;
@@ -1351,9 +1351,9 @@ Status DBImpl::Get(const ReadOptions& options,
     mutex_.Unlock();
     // First look in the memtable, then in the immutable memtable (if any).
     LookupKey lkey(key, snapshot);
-    if (mem->Get(lkey, value, &s)) {
+    if (mem->Get(lkey, value, options.rollbacks, &s)) {
       // Done
-    } else if (imm != NULL && imm->Get(lkey, value, &s)) {
+    } else if (imm != NULL && imm->Get(lkey, value, options.rollbacks, &s)) {
       // Done
     } else {
       s = current->Get(options, lkey, value, &stats);
@@ -1377,15 +1377,12 @@ Iterator* DBImpl::NewIterator(const ReadOptions& options) {
   return NewDBIterator(
       &dbname_, env_, user_comparator(), internal_iter,
       (options.snapshot != kMaxSequenceNumber
-       ? options.snapshot : latest_snapshot));
+       ? options.snapshot : latest_snapshot),
+       options.rollbacks);
 }
 
 const uint64_t DBImpl::GetSnapshot(uint64_t last_sequence) {
   MutexLock l(&mutex_);
-  if (last_sequence == kMaxSequenceNumber) {
-    snapshots_.insert(GetLastSequence(false));
-    return GetLastSequence(false);
-  }
   snapshots_.insert(last_sequence);
   return last_sequence;
 }
@@ -1395,6 +1392,24 @@ void DBImpl::ReleaseSnapshot(uint64_t sequence_number) {
   std::multiset<uint64_t>::iterator it = snapshots_.find(sequence_number);
   assert(it != snapshots_.end());
   snapshots_.erase(it);
+}
+
+const uint64_t DBImpl::Rollback(uint64_t snapshot_seq, uint64_t rollback_point) {
+  MutexLock l(&mutex_);
+  std::multiset<uint64_t>::iterator it = snapshots_.find(snapshot_seq);
+  assert(it != snapshots_.end());
+  assert(rollback_point >= snapshot_seq);
+  if (rollback_point != snapshot_seq) {
+    rollbacks_[snapshot_seq] = rollback_point;
+  } else {
+    Log(options_.info_log, "[%s] LL:skip rollback %lu-%lu", dbname_.c_str(), snapshot_seq, rollback_point);
+  }
+  Log(options_.info_log, "[%s] LL:in ldb rollback...\n", dbname_.c_str());
+  std::map<uint64_t, uint64_t>::iterator iter = rollbacks_.begin();
+  for (; iter != rollbacks_.end(); ++iter) {
+    Log(options_.info_log, "[%s] LL:in rollbacks_ %lu-%lu", dbname_.c_str(), iter->first, iter->second);
+  }
+  return rollback_point;
 }
 
 // Convenience methods

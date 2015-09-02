@@ -2776,6 +2776,108 @@ void MasterImpl::ReleaseSnapshotCallback(ReleaseSnapshotRequest* request,
     /// 删掉删不掉无所谓, 不计较~
 }
 
+void MasterImpl::Rollback(const RollbackRequest* request,
+                          RollbackResponse* response,
+                          google::protobuf::Closure* done) {
+    LOG(INFO) << "MasterImpl Rollback";
+    response->set_sequence_id(request->sequence_id());
+
+    MasterStatus master_status = GetMasterStatus();
+    if (master_status != kIsRunning) {
+        LOG(WARNING) << "master is not ready, m_status = "
+            << StatusCodeToString(master_status);
+        response->set_status(static_cast<StatusCode>(master_status));
+        done->Run();
+        return;
+    }
+
+    TablePtr table;
+    if (!m_tablet_manager->FindTable(request->table_name(), &table)) {
+        LOG(WARNING) << "fail to create snapshot: " << request->table_name()
+            << ", table not exist";
+        response->set_status(kTableNotFound);
+        done->Run();
+        return;
+    }
+
+    RollbackTask* task = new RollbackTask;
+    table->GetTablet(&task->tablets);
+
+    assert(task->tablets.size());
+
+    task->snapshot_id.resize(task->tablets.size());
+    task->request = request;
+    task->response = response;
+    task->done = done;
+    task->table = table;
+    task->task_num = 0;
+    task->finish_num = 0;
+    MutexLock lock(&task->mutex);
+    for (uint32_t i = 0; i < task->tablets.size(); ++i) {
+        TabletPtr tablet = task->tablets[i];
+        ++task->task_num;
+        RollbackClosure* closure =
+            NewClosure(this, &MasterImpl::RollbackCallback, static_cast<int32_t>(i), task);
+        RollbackAsync(tablet, request->snapshot_id(), 3000, closure);
+    }
+    if (task->task_num == 0) {
+        LOG(WARNING) << "fail to rollback to snapshot: " << request->table_name()
+            << ", all tables kTabletNodeOffLine";
+        response->set_status(kTabletNodeOffLine);
+        done->Run();
+        return;
+    }
+}
+
+void MasterImpl::RollbackAsync(TabletPtr tablet, uint64_t snapshot_id,
+                                int32_t timeout, RollbackClosure* done) {
+    std::string addr = tablet->GetServerAddr();
+    tabletnode::TabletNodeClient node_client(addr, timeout);
+
+    SnapshotRollbackRequest* request = new SnapshotRollbackRequest;
+    SnapshotRollbackResponse* response = new SnapshotRollbackResponse;
+    request->set_sequence_id(m_this_sequence_id.Inc());
+    request->set_table_name(tablet->GetTableName());
+    request->set_snapshot_id(snapshot_id);
+    request->mutable_key_range()->set_key_start(tablet->GetKeyStart());
+    request->mutable_key_range()->set_key_end(tablet->GetKeyEnd());
+
+    LOG(INFO) << "RollbackAsync id: " << request->sequence_id() << ", "
+        << "server: " << addr;
+    node_client.Rollback(request, response, done);
+}
+
+void MasterImpl::RollbackCallback(int32_t tablet_id, RollbackTask* task,
+                                  SnapshotRollbackRequest* master_request,
+                                  SnapshotRollbackResponse* master_response,
+                                  bool failed, int error_code) {
+    task->mutex.Lock();
+    ++task->finish_num;
+    VLOG(6) << "MasterImpl Rollback id= " << tablet_id
+        << " finish_num= " << task->finish_num;
+    if (task->finish_num != task->task_num) {
+        if (!failed && master_response->status() == kTabletNodeOk) {
+            // TODO: add to memory
+        } else {
+            task->aborted = true;
+        }
+        task->mutex.Unlock();
+        return;
+    }
+
+    if (failed || task->aborted) {
+        LOG(WARNING) << "MasterImpl Rollback fail done";
+        task->response->set_status(kTabletNodeOffLine);
+        task->done->Run();
+    } else {
+        // TODO: add to memory meta
+        task->response->set_status(kMasterOk);
+        task->done->Run();
+    }
+    task->mutex.Unlock();
+    delete task;
+}
+
 void MasterImpl::ClearUnusedSnapshots(TabletPtr tablet, const TabletMeta& meta) {
     std::vector<uint64_t> snapshots;
     TablePtr table = tablet->GetTable();

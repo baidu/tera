@@ -166,6 +166,17 @@ message DelSnapshotResponse {
     optional uint64 sequence_id = 2;
 }
 
+message RollbackRequest {
+    required uint64 sequence_id = 1;
+    required string table_name = 2;
+    required uint64 snapshot_id = 3;
+}
+
+message RollbackResponse {
+    required StatusCode status = 1;
+    required uint64 sequence_id = 2;
+}
+
 // admin
 
 message CmdCtrlRequest {
@@ -186,6 +197,7 @@ message CmdCtrlResponse {
 service MasterServer {
     rpc GetSnapshot(GetSnapshotRequest) returns(GetSnapshotResponse);
     rpc DelSnapshot(DelSnapshotRequest) returns(DelSnapshotResponse);
+    rpc Rollback(RollbackRequest) returns (RollbackResponse);
     rpc CreateTable(CreateTableRequest) returns(CreateTableResponse);
     rpc DeleteTable(DeleteTableRequest) returns (DeleteTableResponse);
     rpc DisableTable(DisableTableRequest) returns (DisableTableResponse);

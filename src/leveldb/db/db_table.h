@@ -83,6 +83,8 @@ public:
     // use "snapshot" after this call.
     virtual void ReleaseSnapshot(uint64_t sequence_number);
 
+    virtual const uint64_t Rollback(uint64_t snapshot_seq, uint64_t rollback_point = kMaxSequenceNumber);
+
     // DB implementations can export properties about their state
     // via this method.  If "property" is a valid property understood by this
     // DB implementation, fills "*value" with its current value and returns

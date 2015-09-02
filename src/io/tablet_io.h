@@ -153,6 +153,8 @@ public:
     bool ReleaseSnapshot(uint64_t snapshot_id,  StatusCode* status = NULL);
     void ListSnapshot(std::vector<uint64_t>* snapshot_id);
 
+    uint64_t Rollback(uint64_t snapshot_id, StatusCode* status);
+
     uint32_t GetLGidByCFName(const std::string& cfname);
 
     const leveldb::RawKeyOperator* GetRawKeyOperator();
@@ -232,6 +234,7 @@ private:
     TableSchema m_table_schema;
     bool m_kv_only;
     std::map<uint64_t, uint64_t> id_to_snapshot_num_;
+    std::map<uint64_t, uint64_t> rollbacks_;
 
     const leveldb::RawKeyOperator* m_key_operator;
 

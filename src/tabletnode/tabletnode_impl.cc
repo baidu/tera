@@ -583,6 +583,40 @@ void TabletNodeImpl::ReleaseSnapshot(const ReleaseSnapshotRequest* request,
     done->Run();
 }
 
+void TabletNodeImpl::Rollback(const SnapshotRollbackRequest* request, SnapshotRollbackResponse* response,
+                              google::protobuf::Closure* done) {
+    StatusCode status = kTabletNodeOk;
+    io::TabletIO* tablet_io = m_tablet_manager->GetTablet(request->table_name(),
+                                                          request->key_range().key_start(),
+                                                          request->key_range().key_end(),
+                                                          &status);
+    if (tablet_io == NULL) {
+        LOG(WARNING) << "rollback to snapshot fail to get tablet: " << request->table_name()
+            << " [" << DebugString(request->key_range().key_start())
+            << ", " << DebugString(request->key_range().key_end())
+            << "], status: " << StatusCodeToString(status);
+        response->set_status(kKeyNotInRange);
+        done->Run();
+        return;
+    }
+    LOG(INFO) << "LL: in tabletnode impl before=" << request->snapshot_id();
+    uint64_t rollback_point = tablet_io->Rollback(request->snapshot_id(), &status);
+    LOG(INFO) << "LL: in tabletnode impl after";
+    if (status != kTabletNodeOk) {
+        response->set_status(status);
+    } else {
+        response->set_sequence_id(request->sequence_id());
+        response->set_status(kTabletNodeOk);
+        response->set_rollback_point(rollback_point);
+        LOG(INFO) << "rollback point " << rollback_point << " to snapshot: " << request->snapshot_id()
+            << ", tablet: " << tablet_io->GetTablePath()
+            << " [" << DebugString(tablet_io->GetStartKey())
+            << ", " << DebugString(tablet_io->GetEndKey()) << "]";
+    }
+    tablet_io->DecRef();
+    done->Run();
+}
+
 void TabletNodeImpl::Query(const QueryRequest* request,
                            QueryResponse* response,
                            google::protobuf::Closure* done) {

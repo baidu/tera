@@ -20,7 +20,7 @@ public:
     DefaultCompactStrategy(const TableSchema& schema);
     virtual ~DefaultCompactStrategy();
 
-    virtual bool Drop(const Slice& k, uint64_t n,
+    virtual bool Drop(const Slice& k, uint64_t n, std::map<uint64_t, uint64_t> rollbacks,
                       const std::string& lower_bound);
 
     // tera-specific, based on all-level iterators.
