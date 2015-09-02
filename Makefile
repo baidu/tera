@@ -38,6 +38,7 @@ MARK_SRC := src/benchmark/mark.cc src/benchmark/mark_main.cc
 TEST_SRC := src/utils/test/prop_tree_test.cc src/utils/test/tprinter_test.cc
 
 TEST_OUTPUT := test_output
+UNITTEST_OUTPUT := $(TEST_OUTPUT)/unittest
 
 MASTER_OBJ := $(MASTER_SRC:.cc=.o)
 TABLETNODE_OBJ := $(TABLETNODE_SRC:.cc=.o)
@@ -67,8 +68,8 @@ TEST = prop_tree_test tprinter_test
 
 all: $(PROGRAM) $(LIBRARY) $(JNILIBRARY) $(BENCHMARK) $(TEST)
 	mkdir -p build/include build/lib build/bin build/log build/benchmark
-	mkdir $(TEST_OUTPUT)
-	mv $(TEST) $(TEST_OUTPUT)
+	mkdir -p $(UNITTEST_OUTPUT)
+	mv $(TEST) $(UNITTEST_OUTPUT)
 	cp $(PROGRAM) build/bin
 	cp $(LIBRARY) $(JNILIBRARY) build/lib
 	cp src/leveldb/tera_bench .
