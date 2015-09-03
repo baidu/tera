@@ -743,11 +743,13 @@ bool ClientImpl::ParseTabletEntry(const TabletMeta& meta, std::vector<TabletInfo
 static Mutex g_mutex;
 static bool g_is_glog_init = false;
 
-static void InitFlags(const std::string& confpath, const std::string& log_prefix) {
+static int InitFlags(const std::string& confpath, const std::string& log_prefix) {
     MutexLock locker(&g_mutex);
     // search conf file, priority:
     //   user-specified > ./tera.flag > ../conf/tera.flag > env-var
-    if (!confpath.empty() && IsExist(confpath)) {
+    if (!FLAGS_flagfile.empty()) {
+        // do nothing
+    } else if (!confpath.empty() && IsExist(confpath)) {
         FLAGS_flagfile = confpath;
     } else if (!FLAGS_tera_sdk_conf_file.empty() && IsExist(confpath)) {
         FLAGS_flagfile = FLAGS_tera_sdk_conf_file;
@@ -759,7 +761,7 @@ static void InitFlags(const std::string& confpath, const std::string& log_prefix
         FLAGS_flagfile = utils::GetValueFromeEnv("TERA_CONF");
     } else {
         LOG(ERROR) << "config file not found";
-        exit(-1);
+        return -1;
     }
 
     // init user identity & role
@@ -787,10 +789,13 @@ static void InitFlags(const std::string& confpath, const std::string& log_prefix
 
     LOG(INFO) << "USER = " << FLAGS_tera_user_identity;
     LOG(INFO) << "Load config file: " << FLAGS_flagfile;
+    return 0;
 }
 
 Client* Client::NewClient(const string& confpath, const string& log_prefix, ErrorCode* err) {
-    InitFlags(confpath, log_prefix);
+    if (InitFlags(confpath, log_prefix) != 0) {
+        return NULL;
+    }
     return new ClientImpl(FLAGS_tera_user_identity,
                           FLAGS_tera_user_passcode,
                           FLAGS_tera_zk_addr_list,

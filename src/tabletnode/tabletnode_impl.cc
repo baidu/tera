@@ -525,7 +525,7 @@ void TabletNodeImpl::GetSnapshot(const SnapshotRequest* request,
         done->Run();
         return;
     }
-    uint64_t snapshot = tablet_io->GetSnapshot(request->snapshot_id(), 0, &status);
+    uint64_t snapshot = tablet_io->GetSnapshot(request->snapshot_id(), (0x1ull << 56) - 1, &status);
     if (status != kTabletNodeOk) {
         response->set_status(status);
     } else if (snapshot == 0) {

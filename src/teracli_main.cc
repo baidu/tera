@@ -43,6 +43,8 @@ DEFINE_int32(tera_client_batch_put_num, 1000, "num of each batch in batch put mo
 DEFINE_int32(tera_client_scan_package_size, 1024, "the package size (in KB) of each scan request");
 DEFINE_bool(tera_client_scan_async_enabled, false, "enable the streaming scan mode");
 
+DEFINE_int64(snapshot, 0, "read | scan snapshot");
+
 volatile int32_t g_start_time = 0;
 volatile int32_t g_end_time = 0;
 volatile int32_t g_used_time = 0;
@@ -666,7 +668,7 @@ int32_t GetInt64Op(Client* client, int32_t argc, char** argv, ErrorCode* err) {
         ParseCfQualifier(argv[4], &columnfamily, &qualifier);
     }
 
-    if (!table->Get(rowkey, columnfamily, qualifier, &value, err)) {
+    if (!table->Get(rowkey, columnfamily, qualifier, &value, err, FLAGS_snapshot)) {
         LOG(ERROR) << "fail to get record from table: " << tablename;
         return -1;
     }
@@ -700,12 +702,12 @@ int32_t GetOp(Client* client, int32_t argc, char** argv, ErrorCode* err) {
         ParseCfQualifier(argv[4], &columnfamily, &qualifier);
     }
 
-    if (!table->Get(rowkey, columnfamily, qualifier, &value, err)) {
+    if (!table->Get(rowkey, columnfamily, qualifier, &value, err, FLAGS_snapshot)) {
         LOG(ERROR) << "fail to get record from table: " << tablename;
         return -1;
     }
 
-    std::cout << value;
+    std::cout << value << std::endl;
     delete table;
     return 0;
 }
@@ -799,8 +801,8 @@ int32_t DeleteOp(Client* client, int32_t argc, char** argv, ErrorCode* err) {
 }
 
 int32_t ScanOp(Client* client, int32_t argc, char** argv, ErrorCode* err) {
-    if (argc != 5 && argc != 6 && argc != 7) {
-        LOG(ERROR) << "args number error: " << argc << ", need 5 | 6 | 7.";
+    if (argc != 5 && argc != 6) {
+        LOG(ERROR) << "args number error: " << argc << ", need 5 | 6.";
         Usage(argv[0]);
         return -1;
     }
@@ -833,14 +835,7 @@ int32_t ScanOp(Client* client, int32_t argc, char** argv, ErrorCode* err) {
         desc.SetMaxVersions(std::numeric_limits<int>::max());
     }
 
-    uint64_t snapshot = 0;
-    if (argc == 7) {
-        std::stringstream is;
-        is << std::string(argv[6]);
-        is >> snapshot;
-    }
-
-    desc.SetSnapshot(snapshot);
+    desc.SetSnapshot(FLAGS_snapshot);
     if ((result_stream = table->Scan(desc, err)) == NULL) {
         LOG(ERROR) << "fail to scan records from table: " << tablename;
         return -1;
@@ -887,15 +882,13 @@ int32_t ShowTabletList(const TabletMetaList& tablet_list, bool is_server_addr, b
     if (is_x) {
         if (is_server_addr) {
             cols = 14;
-            printer.Reset(cols);
-            printer.AddRow(cols,
+            printer.Reset(cols,
                            " ", "server_addr", "path", "status", "size",
                            "isbusy", "lread", "read", "rspeed", "write",
                            "wspeed", "scan", "sspeed", "startkey");
         } else {
             cols = 13;
-            printer.Reset(cols);
-            printer.AddRow(cols,
+            printer.Reset(cols,
                            " ", "path", "status", "size", "isbusy",
                            "lread", "read", "rspeed", "write", "wspeed",
                            "scan", "sspeed", "startkey");
@@ -943,8 +936,7 @@ int32_t ShowTabletList(const TabletMetaList& tablet_list, bool is_server_addr, b
         }
     } else {
         cols = 7;
-        printer.Reset(cols);
-        printer.AddRow(cols,
+        printer.Reset(cols,
                        " ", "server_addr", "path", "status",
                        "size", "startkey", "endkey");
         for (int32_t i = 0; i < tablet_list.meta_size(); ++i) {
@@ -977,16 +969,14 @@ int32_t ShowAllTables(Client* client, bool is_x, bool show_all, ErrorCode* err) 
     int cols;
     if (is_x) {
         cols = 18;
-        printer.Reset(cols);
-        printer.AddRow(cols,
+        printer.Reset(cols,
                        " ", "tablename", "status", "size", "lg_size",
                        "tablet", "busy", "notready", "lread", "read",
                        "rmax", "rspeed", "write", "wmax", "wspeed",
                        "scan", "smax", "sspeed");
     } else {
         cols = 7;
-        printer.Reset(cols);
-        printer.AddRow(cols,
+        printer.Reset(cols,
                        " ", "tablename", "status", "size", "lg_size",
                        "tablet", "busy");
     }
@@ -1128,8 +1118,7 @@ int32_t ShowSingleTabletNodeInfo(Client* client, const string& addr,
     std::cout << "  address:  " << info.addr() << std::endl;
     std::cout << "  status:   " << info.status_m() << "\n\n";
     int cols = 5;
-    TPrinter printer(cols);
-    printer.AddRow(cols, "workload", "tablets", "load", "busy", "split");
+    TPrinter printer(cols, "workload", "tablets", "load", "busy", "split");
     std::vector<string> row;
     row.push_back(utils::ConvertByteToString(info.load()));
     row.push_back(NumberToString(info.tablet_total()));
@@ -1141,8 +1130,7 @@ int32_t ShowSingleTabletNodeInfo(Client* client, const string& addr,
 
     std::cout << std::endl;
     cols = 7;
-    printer.Reset(cols);
-    printer.AddRow(cols, "lread", "read", "rspeed", "write", "wspeed", "scan", "sspeed");
+    printer.Reset(cols, "lread", "read", "rspeed", "write", "wspeed", "scan", "sspeed");
     row.clear();
     row.push_back(NumberToString(info.low_read_cell()));
     row.push_back(NumberToString(info.read_rows()));
@@ -1155,10 +1143,10 @@ int32_t ShowSingleTabletNodeInfo(Client* client, const string& addr,
     printer.Print();
 
     std::cout << "\nHardware Info:\n";
-    cols = 7;
-    printer.Reset(cols);
+    cols = 8;
+    printer.Reset(cols, "cpu", "mem_used", "net_tx", "net_rx", "dfs_r", "dfs_w", "local_r", "local_w");
     row.clear();
-    printer.AddRow(cols, "mem_used", "net_tx", "net_rx", "dfs_r", "dfs_w", "local_r", "local_w");
+    row.push_back(NumberToString(info.cpu_usage()));
     row.push_back(utils::ConvertByteToString(info.mem_used()));
     row.push_back(utils::ConvertByteToString(info.net_tx()) + "B/s");
     row.push_back(utils::ConvertByteToString(info.net_rx()) + "B/s");
@@ -1171,12 +1159,11 @@ int32_t ShowSingleTabletNodeInfo(Client* client, const string& addr,
 
     std::cout << "\nOther Infos:\n";
     cols = info.extra_info_size();
-    printer.Reset(cols);
     row.clear();
     for (int i = 0; i < cols; ++i) {
         row.push_back(info.extra_info(i).name());
     }
-    printer.AddRow(row);
+    printer.Reset(row);
     std::vector<int64_t> row_int;
     for (int i = 0; i < cols; ++i) {
         row_int.push_back(info.extra_info(i).value());
@@ -1201,8 +1188,7 @@ int32_t ShowTabletNodesInfo(Client* client, bool is_x, ErrorCode* err) {
     TPrinter printer;
     if (is_x) {
         cols = 24;
-        printer.Reset(cols);
-        printer.AddRow(cols,
+        printer.Reset(cols,
                        " ", "address", "status", "size", "num",
                        "lread", "r", "rspd", "w", "wspd",
                        "s", "sspd", "rdly", "rp", "wp",
@@ -1245,8 +1231,7 @@ int32_t ShowTabletNodesInfo(Client* client, bool is_x, ErrorCode* err) {
         }
     } else {
         cols = 7;
-        printer.Reset(cols);
-        printer.AddRow(cols,
+        printer.Reset(cols,
                        " ", "address", "status", "workload",
                        "tablet", "load", "busy");
         std::vector<string> row;
@@ -2262,6 +2247,8 @@ int32_t Meta2Op(Client *client, int32_t argc, char** argv) {
 }
 
 int main(int argc, char* argv[]) {
+    ::google::ParseCommandLineFlags(&argc, &argv, true);
+
     if (argc < 2) {
         Usage(argv[0]);
         return -1;

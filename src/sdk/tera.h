@@ -561,11 +561,11 @@ public:
     /// 读取指定cell, 当作为kv或二维表格使用时的便捷接口
     virtual bool Get(const std::string& row_key, const std::string& family,
                      const std::string& qualifier, std::string* value,
-                     ErrorCode* err) = 0;
+                     ErrorCode* err, uint64_t snapshot_id = 0) = 0;
     /// 读取指定cell, 当作为kv或二维表格使用时的便捷接口
     virtual bool Get(const std::string& row_key, const std::string& family,
                      const std::string& qualifier, int64_t* value,
-                     ErrorCode* err) = 0;
+                     ErrorCode* err, uint64_t snapshot_id = 0) = 0;
 
     virtual bool IsPutFinished() = 0;
     virtual bool IsGetFinished() = 0;
