@@ -37,22 +37,6 @@ public:
                                 std::string* merged_key) = 0;
 
     virtual const char* Name() const = 0;
-
-    bool RollbackDrop(uint64_t n, std::map<uint64_t, uint64_t>& rollbacks) {
-        if (rollbacks.empty()) {
-            return false;
-        }
-
-        std::map<uint64_t, uint64_t>::iterator it = rollbacks.lower_bound(n);
-        if (n < it->first) {
-            --it;
-        }
-        if (n > it->first && n <= it->second) {
-            return true;
-        } else {
-            return false;
-        }
-    }
 };
 
 

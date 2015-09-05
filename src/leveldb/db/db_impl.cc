@@ -1162,7 +1162,7 @@ Status DBImpl::DoCompactionWork(CompactionState* compact) {
         if (options_.drop_base_level_del_in_compaction) {
             lower_bound = compact->compaction->drop_lower_bound();
         }
-        drop = compact_strategy->Drop(ikey.user_key, ikey.sequence, std::map<uint64_t, uint64_t>(), lower_bound);
+        drop = compact_strategy->Drop(ikey.user_key, ikey.sequence, rollbacks_, lower_bound);
       }
 
       last_sequence_for_key = ikey.sequence;

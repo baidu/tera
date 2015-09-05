@@ -2,6 +2,7 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include "db/dbformat.h"
 #include "io/ttlkv_compact_strategy.h"
 #include "io/io_utils.h"
 #include "leveldb/slice.h"
@@ -27,7 +28,8 @@ bool KvCompactStrategy::Drop(const leveldb::Slice& tera_key, uint64_t n,
                              std::map<uint64_t, uint64_t> rollbacks,
                              const std::string& lower_bound) {
 
-    if (CompactStrategy::RollbackDrop(n, rollbacks)) {
+    if (leveldb::RollbackDrop(n, rollbacks)) {
+        LOG(INFO) << "LL: kvcomp drop " << tera_key.data() << " n=" << n;
         return true;
     }
     // If expire timestamp + schema's TTL <= time(NULL), Then Drop.
