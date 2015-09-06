@@ -104,7 +104,7 @@ RowReader* TableImpl::NewRowReader(const std::string& row_key) {
 void TableImpl::ApplyMutation(RowMutation* row_mu) {
     std::vector<RowMutationImpl*> mu_list;
     mu_list.push_back(static_cast<RowMutationImpl*>(row_mu));
-    ApplyMutation(mu_list, true);
+    DistributeMutations(mu_list, true);
 }
 
 void TableImpl::ApplyMutation(const std::vector<RowMutation*>& row_mutations) {
@@ -112,7 +112,7 @@ void TableImpl::ApplyMutation(const std::vector<RowMutation*>& row_mutations) {
     for (uint32_t i = 0; i < row_mutations.size(); i++) {
         mu_list[i] = static_cast<RowMutationImpl*>(row_mutations[i]);
     }
-    ApplyMutation(mu_list, true);
+    DistributeMutations(mu_list, true);
 }
 
 bool TableImpl::Put(const std::string& row_key, const std::string& family,
@@ -225,7 +225,7 @@ void TableImpl::SetWriteTimeout(int64_t timeout_ms) {
 void TableImpl::Get(RowReader* row_reader) {
     std::vector<RowReaderImpl*> row_reader_list;
     row_reader_list.push_back(static_cast<RowReaderImpl*>(row_reader));
-    ReadRows(row_reader_list, true);
+    DistributeReaders(row_reader_list, true);
 }
 
 void TableImpl::Get(const std::vector<RowReader*>& row_readers) {
@@ -233,7 +233,7 @@ void TableImpl::Get(const std::vector<RowReader*>& row_readers) {
     for (uint32_t i = 0; i < row_readers.size(); ++i) {
         row_reader_list[i] = static_cast<RowReaderImpl*>(row_readers[i]);
     }
-    ReadRows(row_reader_list, true);
+    DistributeReaders(row_reader_list, true);
 }
 
 bool TableImpl::Get(const std::string& row_key, const std::string& family,
@@ -452,8 +452,8 @@ struct MuFlushPair {
     MuFlushPair() : flush(false) {}
 };
 
-void TableImpl::ApplyMutation(const std::vector<RowMutationImpl*>& mu_list,
-                              bool called_by_user) {
+void TableImpl::DistributeMutations(const std::vector<RowMutationImpl*>& mu_list,
+                                    bool called_by_user) {
     typedef std::map<std::string, MuFlushPair> TsMuMap;
     TsMuMap ts_mu_list;
 
@@ -531,7 +531,7 @@ void TableImpl::ApplyMutation(const std::vector<RowMutationImpl*>& mu_list,
     TsMuMap::iterator it = ts_mu_list.begin();
     for (; it != ts_mu_list.end(); ++it) {
         MuFlushPair& mu_flush_pair = it->second;
-        ApplyMutation(it->first, mu_flush_pair.mu_list, mu_flush_pair.flush);
+        PackMutations(it->first, mu_flush_pair.mu_list, mu_flush_pair.flush);
     }
     // 从现在开始，所有异步的row_mutation都不可以再操作了，因为随时会被用户释放
 
@@ -551,7 +551,7 @@ void TableImpl::ApplyMutation(const std::vector<RowMutationImpl*>& mu_list,
     }
 }
 
-void TableImpl::RetryApplyMutation(std::vector<int64_t>* mu_id_list) {
+void TableImpl::DistributeMutationsById(std::vector<int64_t>* mu_id_list) {
     std::vector<RowMutationImpl*> mu_list;
     for (uint32_t i = 0; i < mu_id_list->size(); ++i) {
         int64_t mu_id = (*mu_id_list)[i];
@@ -564,15 +564,15 @@ void TableImpl::RetryApplyMutation(std::vector<int64_t>* mu_id_list) {
         RowMutationImpl* row_mutation = (RowMutationImpl*)task;
         mu_list.push_back(row_mutation);
     }
-    ApplyMutation(mu_list, false);
+    DistributeMutations(mu_list, false);
     delete mu_id_list;
 }
 
-void TableImpl::ApplyMutation(const std::string& server_addr,
+void TableImpl::PackMutations(const std::string& server_addr,
                               std::vector<RowMutationImpl*>& mu_list,
                               bool flush) {
     if (flush) {
-        CommitMutation(server_addr, mu_list);
+        CommitMutations(server_addr, mu_list);
         return;
     }
 
@@ -584,7 +584,7 @@ void TableImpl::ApplyMutation(const std::string& server_addr,
         mutation_batch = &_mutation_batch_map[server_addr];
         mutation_batch->row_id_list = new std::vector<int64_t>;
         boost::function<void ()> closure =
-            boost::bind(&TableImpl::CommitMutationBatch, this, server_addr);
+            boost::bind(&TableImpl::MutationBatchTimeout, this, server_addr);
         int64_t timer_id = _thread_pool->DelayTask(_commit_timeout, closure);
         mutation_batch->timer_id = timer_id;
     } else {
@@ -605,14 +605,14 @@ void TableImpl::ApplyMutation(const std::string& server_addr,
             _mutation_batch_mutex.Lock();
             _mutation_batch_map.erase(server_addr);
             _mutation_batch_mutex.Unlock();
-            CommitMutation(server_addr, *mu_id_list);
+            CommitMutationsById(server_addr, *mu_id_list);
             delete mu_id_list;
         }
         _mutation_batch_mutex.Lock();
     }
 }
 
-void TableImpl::CommitMutationBatch(std::string server_addr) {
+void TableImpl::MutationBatchTimeout(std::string server_addr) {
     std::vector<int64_t>* mu_id_list = NULL;
     {
         MutexLock lock(&_mutation_batch_mutex);
@@ -625,12 +625,12 @@ void TableImpl::CommitMutationBatch(std::string server_addr) {
         mu_id_list = mutation_batch->row_id_list;
         _mutation_batch_map.erase(it);
     }
-    CommitMutation(server_addr, *mu_id_list);
+    CommitMutationsById(server_addr, *mu_id_list);
     delete mu_id_list;
 }
 
-void TableImpl::CommitMutation(const std::string& server_addr,
-                               std::vector<int64_t>& mu_id_list) {
+void TableImpl::CommitMutationsById(const std::string& server_addr,
+                                    std::vector<int64_t>& mu_id_list) {
     std::vector<RowMutationImpl*> mu_list;
     for (size_t i = 0; i < mu_id_list.size(); i++) {
         int64_t mu_id = mu_id_list[i];
@@ -642,11 +642,11 @@ void TableImpl::CommitMutation(const std::string& server_addr,
         CHECK_EQ(task->Type(), SdkTask::MUTATION);
         mu_list.push_back((RowMutationImpl*)task);
     }
-    CommitMutation(server_addr, mu_list);
+    CommitMutations(server_addr, mu_list);
 }
 
-void TableImpl::CommitMutation(const std::string& server_addr,
-                               std::vector<RowMutationImpl*>& mu_list) {
+void TableImpl::CommitMutations(const std::string& server_addr,
+                                std::vector<RowMutationImpl*>& mu_list) {
     tabletnode::TabletNodeClient tabletnode_client_async(server_addr);
     WriteTabletRequest* request = new WriteTabletRequest;
     WriteTabletResponse* response = new WriteTabletResponse;
@@ -760,14 +760,14 @@ void TableImpl::MutateCallBack(std::vector<int64_t>* mu_id_list,
     }
 
     if (not_in_range_list.size() > 0) {
-        ApplyMutation(not_in_range_list, false);
+        DistributeMutations(not_in_range_list, false);
     }
     std::map<uint32_t, std::vector<int64_t>* >::iterator it;
     for (it = retry_times_list.begin(); it != retry_times_list.end(); ++it) {
         int64_t retry_interval =
             static_cast<int64_t>(pow(FLAGS_tera_sdk_delay_send_internal, it->first) * 1000);
         boost::function<void ()> retry_closure =
-            boost::bind(&TableImpl::RetryApplyMutation, this, it->second);
+            boost::bind(&TableImpl::DistributeMutationsById, this, it->second);
         _thread_pool->DelayTask(retry_interval, retry_closure);
     }
 
@@ -816,8 +816,8 @@ bool TableImpl::GetDescriptor(TableDescriptor* desc, ErrorCode* err) {
     return false;
 }
 
-void TableImpl::ReadRows(const std::vector<RowReaderImpl*>& row_reader_list,
-                         bool called_by_user) {
+void TableImpl::DistributeReaders(const std::vector<RowReaderImpl*>& row_reader_list,
+                                  bool called_by_user) {
     typedef std::map<std::string, std::vector<RowReaderImpl*> > TsReaderMap;
     TsReaderMap ts_reader_list;
 
@@ -887,9 +887,9 @@ void TableImpl::ReadRows(const std::vector<RowReaderImpl*>& row_reader_list,
     TsReaderMap::iterator it = ts_reader_list.begin();
     for (; it != ts_reader_list.end(); ++it) {
         std::vector<RowReaderImpl*>& reader_list = it->second;
-        ReadRows(it->first, reader_list);
+        PackReaders(it->first, reader_list);
     }
-    // 从现在开始，所有异步的row_mutation都不可以再操作了，因为随时会被用户释放
+    // 从现在开始，所有异步的row_reader都不可以再操作了，因为随时会被用户释放
 
     // 不是用户调用的，立即返回
     if (!called_by_user) {
@@ -907,8 +907,8 @@ void TableImpl::ReadRows(const std::vector<RowReaderImpl*>& row_reader_list,
     }
 }
 
-void TableImpl::ReadRows(const std::string& server_addr,
-                         std::vector<RowReaderImpl*>& reader_list) {
+void TableImpl::PackReaders(const std::string& server_addr,
+                            std::vector<RowReaderImpl*>& reader_list) {
     MutexLock lock(&_reader_batch_mutex);
     TaskBatch* reader_buffer = NULL;
     std::map<std::string, TaskBatch>::iterator it =
@@ -917,7 +917,7 @@ void TableImpl::ReadRows(const std::string& server_addr,
         reader_buffer = &_reader_batch_map[server_addr];
         reader_buffer->row_id_list = new std::vector<int64_t>;
         boost::function<void ()> closure =
-            boost::bind(&TableImpl::CommitReaderBatch, this, server_addr);
+            boost::bind(&TableImpl::ReaderBatchTimeout, this, server_addr);
         uint64_t timer_id = _thread_pool->DelayTask(_commit_timeout, closure);
         reader_buffer->timer_id = timer_id;
     } else {
@@ -938,14 +938,14 @@ void TableImpl::ReadRows(const std::string& server_addr,
             _reader_batch_mutex.Lock();
             _reader_batch_map.erase(server_addr);
             _reader_batch_mutex.Unlock();
-            CommitReaders(server_addr, *reader_id_list);
+            CommitReadersById(server_addr, *reader_id_list);
             delete reader_id_list;
         }
         _reader_batch_mutex.Lock();
     }
 }
 
-void TableImpl::CommitReaderBatch(std::string server_addr) {
+void TableImpl::ReaderBatchTimeout(std::string server_addr) {
     std::vector<int64_t>* reader_id_list = NULL;
     {
         MutexLock lock(&_reader_batch_mutex);
@@ -958,12 +958,12 @@ void TableImpl::CommitReaderBatch(std::string server_addr) {
         reader_id_list = reader_buffer->row_id_list;
         _reader_batch_map.erase(it);
     }
-    CommitReaders(server_addr, *reader_id_list);
+    CommitReadersById(server_addr, *reader_id_list);
     delete reader_id_list;
 }
 
-void TableImpl::CommitReaders(const std::string server_addr,
-                              std::vector<int64_t>& reader_id_list) {
+void TableImpl::CommitReadersById(const std::string server_addr,
+                                  std::vector<int64_t>& reader_id_list) {
     std::vector<RowReaderImpl*> reader_list;
     for (size_t i = 0; i < reader_id_list.size(); ++i) {
         int64_t reader_id = reader_id_list[i];
@@ -1096,14 +1096,14 @@ void TableImpl::ReaderCallBack(std::vector<int64_t>* reader_id_list,
     }
 
     if (not_in_range_list.size() > 0) {
-        ReadRows(not_in_range_list, false);
+        DistributeReaders(not_in_range_list, false);
     }
     std::map<uint32_t, std::vector<int64_t>* >::iterator it;
     for (it = retry_times_list.begin(); it != retry_times_list.end(); ++it) {
         int64_t retry_interval =
             static_cast<int64_t>(pow(FLAGS_tera_sdk_delay_send_internal, it->first) * 1000);
         boost::function<void ()> retry_closure =
-            boost::bind(&TableImpl::RetryReadRows, this, it->second);
+            boost::bind(&TableImpl::DistributeReadersById, this, it->second);
         _thread_pool->DelayTask(retry_interval, retry_closure);
     }
 
@@ -1112,7 +1112,7 @@ void TableImpl::ReaderCallBack(std::vector<int64_t>* reader_id_list,
     delete reader_id_list;
 }
 
-void TableImpl::RetryReadRows(std::vector<int64_t>* reader_id_list) {
+void TableImpl::DistributeReadersById(std::vector<int64_t>* reader_id_list) {
     std::vector<RowReaderImpl*> reader_list;
     for (size_t i = 0; i < reader_id_list->size(); ++i) {
         int64_t reader_id = (*reader_id_list)[i];
@@ -1124,7 +1124,7 @@ void TableImpl::RetryReadRows(std::vector<int64_t>* reader_id_list) {
         CHECK_EQ(task->Type(), SdkTask::READ);
         reader_list.push_back((RowReaderImpl*)task);
     }
-    ReadRows(reader_list, false);
+    DistributeReaders(reader_list, false);
     delete reader_id_list;
 }
 
@@ -1607,10 +1607,10 @@ void TableImpl::WakeUpPendingRequest(const TabletMetaNode& node) {
 
     if (mutation_list.size() > 0) {
         // TODO: flush ?
-        ApplyMutation(server_addr, mutation_list, false);
+        PackMutations(server_addr, mutation_list, false);
     }
     if (reader_list.size() > 0) {
-        ReadRows(server_addr, reader_list);
+        PackReaders(server_addr, reader_list);
     }
 }
 

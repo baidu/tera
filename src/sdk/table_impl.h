@@ -222,49 +222,61 @@ private:
                         std::vector<KeyValuePair>* kv_list,
                         ErrorCode* err);
 
-    void ApplyMutation(const std::vector<RowMutationImpl*>& mu_list,
-                       bool called_by_user);
+    // 将一批mutation根据rowkey分配给各个TS
+    void DistributeMutations(const std::vector<RowMutationImpl*>& mu_list,
+                            bool called_by_user);
 
-    void RetryApplyMutation(std::vector<int64_t>* retry_mu_id_list);
+    void DistributeMutationsById(std::vector<int64_t>* retry_mu_id_list);
 
-    void ApplyMutation(const std::string& server_addr,
+    // 分配完成后将mutation打包
+    void PackMutations(const std::string& server_addr,
                        std::vector<RowMutationImpl*>& mu_list,
                        bool flush);
 
-    void CommitMutationBatch(std::string server_addr);
+    // mutation打包不满但到达最大等待时间
+    void MutationBatchTimeout(std::string server_addr);
 
-    void CommitMutation(const std::string& server_addr,
-                        std::vector<int64_t>& mu_id_list);
-    void CommitMutation(const std::string& server_addr,
-                        std::vector<RowMutationImpl*>& mu_list);
+    // 通过异步RPC将mutation提交至TS
+    void CommitMutationsById(const std::string& server_addr,
+                             std::vector<int64_t>& mu_id_list);
+    void CommitMutations(const std::string& server_addr,
+                         std::vector<RowMutationImpl*>& mu_list);
 
+    // mutate RPC回调
     void MutateCallBack(std::vector<int64_t>* mu_id_list,
                         WriteTabletRequest* request,
                         WriteTabletResponse* response,
                         bool failed, int error_code);
 
+    // mutation到达用户设置的超时时间但尚未处理完
     void MutationTimeout(int64_t mutation_id);
 
-    void ReadRows(const std::vector<RowReaderImpl*>& row_reader_list,
-                  bool called_by_user);
+    // 将一批reader根据rowkey分配给各个TS
+    void DistributeReaders(const std::vector<RowReaderImpl*>& row_reader_list,
+                           bool called_by_user);
 
-    void ReadRows(const std::string& server_addr,
-                  std::vector<RowReaderImpl*>& reader_list);
+    void DistributeReadersById(std::vector<int64_t>* reader_id_list);
 
-    void CommitReaderBatch(std::string server_addr);
+    // 分配完成后将reader打包
+    void PackReaders(const std::string& server_addr,
+                     std::vector<RowReaderImpl*>& reader_list);
 
-    void CommitReaders(const std::string server_addr,
-                       std::vector<int64_t>& reader_id_list);
+    // reader打包不满但到达最大等待时间
+    void ReaderBatchTimeout(std::string server_addr);
+
+    // 通过异步RPC将reader提交至TS
+    void CommitReadersById(const std::string server_addr,
+                           std::vector<int64_t>& reader_id_list);
     void CommitReaders(const std::string server_addr,
                        std::vector<RowReaderImpl*>& reader_list);
 
+    // reader RPC回调
     void ReaderCallBack(std::vector<int64_t>* reader_id_list,
                         ReadTabletRequest* request,
                         ReadTabletResponse* response,
                         bool failed, int error_code);
 
-    void RetryReadRows(std::vector<int64_t>* reader_id_list);
-
+    // reader到达用户设置的超时时间但尚未处理完
     void ReaderTimeout(int64_t mutation_id);
 
     void ScanTabletAsync(ScanTask* scan_task, bool called_by_user);
