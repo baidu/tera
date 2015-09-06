@@ -62,8 +62,19 @@ string Switch2Str(bool enabled) {
     }
 }
 
+void ReplaceStringInPlace(std::string& subject, 
+                          const std::string& search,
+                          const std::string& replace) {
+    size_t pos = 0;
+    while ((pos = subject.find(search, pos)) != std::string::npos) {
+        subject.replace(pos, search.length(), replace);
+        pos += replace.length();
+    }   
+}
+
 void ShowTableSchema(const TableSchema& schema, bool is_x) {
     std::stringstream ss;
+    std::string str;
     if (schema.kv_only()) {
         const LocalityGroupSchema& lg_schema = schema.locality_groups(0);
         ss << "\n  " << schema.name() << " <";
@@ -83,11 +94,13 @@ void ShowTableSchema(const TableSchema& schema, bool is_x) {
         if (is_x || lg_schema.block_size() != FLAGS_tera_tablet_write_block_size) {
             ss << "blocksize=" << lg_schema.block_size() << ",";
         }
-        if (is_x || schema.admin_group() != "") {
+        if (is_x && schema.admin_group() != "") {
             ss << "admin_group=" << schema.admin_group() << ",";
         }
         ss << "\b>\n" << "  (kv mode)\n";
-        std::cout << ss.str() << std::endl;
+        str = ss.str();
+        ReplaceStringInPlace(str, ",\b", "");
+        std::cout << str << std::endl;
         return;
     }
 
@@ -99,7 +112,7 @@ void ShowTableSchema(const TableSchema& schema, bool is_x) {
     if (is_x || schema.merge_size() != FLAGS_tera_master_merge_tablet_size) {
         ss << "mergesize=" << schema.merge_size() << ",";
     }
-    if (is_x || schema.admin_group() != "") {
+    if (is_x && schema.admin_group() != "") {
         ss << "admin_group=" << schema.admin_group() << ",";
     }
     if (is_x || schema.disable_wal()) {
@@ -160,7 +173,9 @@ void ShowTableSchema(const TableSchema& schema, bool is_x) {
         ss << "      }," << std::endl;
     }
     ss << "  }" << std::endl;
-    std::cout << ss.str() << std::endl;
+    str = ss.str();
+    ReplaceStringInPlace(str, ",\b", "");
+    std::cout << str << std::endl;
 }
 
 void ShowTableMeta(const TableMeta& meta) {
