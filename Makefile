@@ -35,7 +35,10 @@ SERVER_SRC := src/tera_main.cc src/tera_entry.cc
 CLIENT_SRC := src/teracli_main.cc
 MONITOR_SRC := src/monitor/teramo_main.cc
 MARK_SRC := src/benchmark/mark.cc src/benchmark/mark_main.cc
-TEST_SRC := src/utils/test/prop_tree_test.cc
+TEST_SRC := src/utils/test/prop_tree_test.cc src/utils/test/tprinter_test.cc
+
+TEST_OUTPUT := test_output
+UNITTEST_OUTPUT := $(TEST_OUTPUT)/unittest
 
 MASTER_OBJ := $(MASTER_SRC:.cc=.o)
 TABLETNODE_OBJ := $(TABLETNODE_SRC:.cc=.o)
@@ -59,12 +62,14 @@ PROGRAM = tera_main teracli teramo
 LIBRARY = libtera.a
 JNILIBRARY = libjni_tera.so
 BENCHMARK = tera_bench tera_mark
-TEST = prop_tree_test
+TEST = prop_tree_test tprinter_test
 
 .PHONY: all clean cleanall test
 
 all: $(PROGRAM) $(LIBRARY) $(JNILIBRARY) $(BENCHMARK) $(TEST)
 	mkdir -p build/include build/lib build/bin build/log build/benchmark
+	mkdir -p $(UNITTEST_OUTPUT)
+	mv $(TEST) $(UNITTEST_OUTPUT)
 	cp $(PROGRAM) build/bin
 	cp $(LIBRARY) $(JNILIBRARY) build/lib
 	cp src/leveldb/tera_bench .
@@ -74,7 +79,7 @@ all: $(PROGRAM) $(LIBRARY) $(JNILIBRARY) $(BENCHMARK) $(TEST)
 	echo 'Done'
 
 clean:
-	rm -rf $(ALL_OBJ) $(PROTO_OUT_CC) $(PROTO_OUT_H)
+	rm -rf $(ALL_OBJ) $(PROTO_OUT_CC) $(PROTO_OUT_H) $(TEST_OUTPUT)
 	$(MAKE) clean -C src/leveldb
 	rm -rf $(PROGRAM) $(LIBRARY) $(JNILIBRARY) $(BENCHMARK) $(TEST)
 
@@ -108,8 +113,11 @@ src/leveldb/libleveldb.a: FORCE
 tera_bench:
 
 # unit test
-prop_tree_test: src/utils/test/prop_tree_test.o src/utils/prop_tree.o
-	$(CXX) $(LDFLAGS) -o $@ $^
+prop_tree_test: src/utils/test/prop_tree_test.o $(LIBRARY)
+	$(CXX) -o $@ $^ $(LDFLAGS) 
+
+tprinter_test: src/utils/test/tprinter_test.o $(LIBRARY)
+	$(CXX) -o $@ $^ $(LDFLAGS) 
 
 $(ALL_OBJ): %.o: %.cc $(PROTO_OUT_H)
 	$(CXX) $(CXXFLAGS) -c $< -o $@
