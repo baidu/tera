@@ -124,7 +124,7 @@ Options SanitizeOptions(const std::string& dbname,
 }
 
 DBImpl::DBImpl(const Options& options, const std::string& dbname)
-    : key_start_(options.key_start), key_end_(options.key_end),
+    : state_(kNotOpen), key_start_(options.key_start), key_end_(options.key_end),
       env_(options.env),
       internal_comparator_(options.comparator),
       internal_filter_policy_(options.filter_policy),
@@ -167,6 +167,9 @@ DBImpl::DBImpl(const Options& options, const std::string& dbname)
 }
 
 Status DBImpl::Shutdown1() {
+  assert(state_ == kOpened);
+  state_ = kShutdown1;
+
   MutexLock l(&mutex_);
   shutting_down_.Release_Store(this);  // Any non-NULL value is ok
 
@@ -202,6 +205,9 @@ Status DBImpl::Shutdown1() {
 }
 
 Status DBImpl::Shutdown2() {
+  assert(state_ == kShutdown1);
+  state_ = kShutdown2;
+
   MutexLock l(&mutex_);
   Status s;
   if (!options_.dump_mem_on_shutdown) {
@@ -217,6 +223,12 @@ Status DBImpl::Shutdown2() {
 }
 
 DBImpl::~DBImpl() {
+  if (state_ == kOpened) {
+    Status s = Shutdown1();
+    if (s.ok()) {
+        Shutdown2();
+    }
+  }
   if (db_lock_ != NULL) {
     env_->UnlockFile(db_lock_);
   }
@@ -370,17 +382,10 @@ bool DBImpl::IsDbExist() {
   std::vector<std::string> files;
   env_->GetChildren(dbname_, &files);
   for (size_t i = 0; i < files.size(); ++i) {
-    uint64_t number, filesize;
+    uint64_t number;
     FileType type;
     if (ParseFileName(files[i], &number, &type) && type == kDescriptorFile) {
-      std::string filename = dbname_ + "/" + files[i];
-      if (!env_->GetFileSize(filename, &filesize).ok() ||
-          filesize == 0) {
-        // illegel MANIFEST, achieve it
-        ArchiveFile(env_, filename);
-      } else {
-        is_manifest_exist = true;
-      }
+      is_manifest_exist = true;
     }
   }
   if (is_manifest_exist) {
@@ -477,7 +482,7 @@ Status DBImpl::Recover(VersionEdit* edit) {
       if (!s.ok()) {
         Log(options_.info_log, "[%s] GetChildren(%s) fail: %s",
             dbname_.c_str(), path.c_str(), s.ToString().c_str());
-        return s;
+        continue;
       }
       uint64_t number;
       FileType type;
@@ -499,6 +504,9 @@ Status DBImpl::Recover(VersionEdit* edit) {
     }
   }
 
+  if (s.ok()) {
+    state_ = kOpened;
+  }
   return s;
 }
 
@@ -687,38 +695,6 @@ uint64_t DBImpl::GetScopeSize(const std::string& start_key,
 bool DBImpl::MinorCompact() {
     Status s = TEST_CompactMemTable();
     return s.ok();
-}
-
-bool DBImpl::UserKeyInRange(const Slice& user_key) {
-    if (!key_start_.empty()
-        && user_comparator()->Compare(user_key, Slice(key_start_)) < 0) {
-        return false;
-    } else if (!key_end_.empty()
-               && user_comparator()->Compare(user_key, Slice(key_end_)) >= 0) {
-        return false;
-    }
-    return true;
-}
-
-void DBImpl::CompactMissFiles(const Slice* begin, const Slice* end) {
-    Slice smallest(key_start_);
-    Slice largest(key_end_);
-    std::vector<std::string> inputs;
-    const Slice* find_start = begin?begin:(key_start_.empty()?NULL:&smallest);
-    const Slice* find_end = end?end:(key_end_.empty()?NULL:&largest);
-
-    MutexLock l(&mutex_);
-    versions_->current()->MissFilesInLocal(find_start, find_end, &inputs);
-    std::cerr << "CompactMissFiles(): begin: " << (find_start?key_start_:"")
-            << ", end:" << (find_end?key_end_:"")
-            << ", num = " << inputs.size() << std::endl;
-
-    for (uint32_t i = 0; i < inputs.size(); ++i) {
-        if (!MigrateTableFile(env_, dbname_, inputs[i])) {
-            std::cerr << "CompactMissFiles(): fail to migrate file: "
-                    << inputs[i] << std::endl;
-        }
-    }
 }
 
 void DBImpl::AddInheritedLiveFiles(std::vector<std::set<uint64_t> >* live) {
@@ -1181,10 +1157,12 @@ Status DBImpl::DoCompactionWork(CompactionState* compact) {
         //     few iterations of this loop (by rule (A) above).
         // Therefore this deletion marker is obsolete and can be dropped.
         drop = true;
-      } else if (!UserKeyInRange(ikey.user_key)) {
-        drop = true;
       } else if (compact_strategy) {
-        drop = compact_strategy->Drop(ikey.user_key, ikey.sequence);
+        std::string lower_bound;
+        if (options_.drop_base_level_del_in_compaction) {
+            lower_bound = compact->compaction->drop_lower_bound();
+        }
+        drop = compact_strategy->Drop(ikey.user_key, ikey.sequence, lower_bound);
       }
 
       last_sequence_for_key = ikey.sequence;

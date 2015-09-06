@@ -11,14 +11,14 @@
 #include "glog/logging.h"
 
 #include "master/master_impl.h"
-
+#include "utils/crypt.h"
 
 DECLARE_int32(tera_master_thread_min_num);
 DECLARE_int32(tera_master_thread_max_num);
+DECLARE_string(tera_master_stat_table_name);
 
 namespace tera {
 namespace master {
-
 
 RemoteMaster::RemoteMaster(MasterImpl* master_impl)
     : m_master_impl(master_impl),

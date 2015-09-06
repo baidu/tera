@@ -11,6 +11,8 @@ DEFINE_string(tera_role, "", "the role of tera running binary, should be one of 
 
 DEFINE_string(tera_user_identity, "", "the identity of tera user");
 DEFINE_string(tera_user_passcode, "", "the passcode of tera user");
+DEFINE_bool(tera_acl_enabled, false, "enable access control");
+DEFINE_string(tera_acl_root_token, "", "the token of root user");
 
 DEFINE_int64(tera_heartbeat_retry_period_factor, 1, "the heartbeat period factor when retry send heartbeat");
 DEFINE_int32(tera_heartbeat_retry_times, 5, "the max retry times when fail to send report request");
@@ -39,10 +41,11 @@ DEFINE_int64(tera_tablet_write_block_size, 4, "the block size (in KB) for teblet
 DEFINE_int64(tera_tablet_living_period, -1, "the living period of tablet");
 DEFINE_int32(tera_tablet_flush_log_num, 100000, "the max log number before flush memtable");
 DEFINE_bool(tera_tablet_use_memtable_on_leveldb, false, "enable memtable based on in-memory leveldb");
-DEFINE_int64(tera_tablet_memtable_ldb_write_buffer_size, 1, "the buffer size(in MB) for memtable on leveldb");
+DEFINE_int64(tera_tablet_memtable_ldb_write_buffer_size, 1000, "the buffer size(in KB) for memtable on leveldb");
 DEFINE_int64(tera_tablet_memtable_ldb_block_size, 4, "the block size (in KB) for memtable on leveldb");
 DEFINE_int64(tera_tablet_ldb_sst_size, 8, "the sstable file size (in MB) on leveldb");
 DEFINE_bool(tera_sync_log, true, "flush all in-memory parts of log file to stable storage");
+DEFINE_bool(tera_io_cache_path_vanish_allowed, false, "if true, allow cache path not exist");
 
 DEFINE_string(tera_dfs_so_path, "", "the dfs implementation path");
 DEFINE_string(tera_dfs_conf, "", "the dfs configuration file path");
@@ -100,6 +103,8 @@ DEFINE_string(tera_master_meta_table_path, "meta", "the path of meta table");
 DEFINE_int64(tera_master_split_tablet_size, 512, "the size (in MB) of tablet to trigger split");
 DEFINE_bool(tera_master_merge_enabled, false, "enable the auto-merge tablet");
 DEFINE_int64(tera_master_merge_tablet_size, 0, "the size (in MB) of tablet to trigger merge");
+DEFINE_string(tera_master_gc_strategy, "default", "gc strategy, [default, incremental]");
+
 // deprecated
 DEFINE_int64(tera_master_merge_size_threshold, 10, "the size (in MB) of tablet to trigger merge");
 DEFINE_int64(tera_master_merge_timer_period, 180, "the actived time (in sec) for merge timer");
@@ -240,6 +245,7 @@ DEFINE_int32(tera_sdk_cookie_update_interval, 600, "the interval of cookie updat
 DEFINE_bool(tera_sdk_perf_counter_enabled, true, "enable performance counter log");
 DEFINE_int64(tera_sdk_perf_counter_log_interval, 1, "the interval of performance counter log dumping");
 
+DEFINE_bool(tera_sdk_scan_async_enabled, false, "enable async scan");
 DEFINE_int64(tera_sdk_scan_async_cache_size, 16, "the max buffer size (in MB) for cached scan results");
 DEFINE_int32(tera_sdk_scan_async_parallel_max_num, 500, "the max number of concurrent task sending");
 

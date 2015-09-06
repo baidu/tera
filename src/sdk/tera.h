@@ -200,6 +200,10 @@ public:
     void SetKvOnly();
     bool IsKv() const;
 
+    /// acl
+    void SetAdminGroup(const std::string& name);
+    std::string AdminGroup() const;
+
 private:
     TableDescriptor(const TableDescriptor&);
     void operator=(const TableDescriptor&);
@@ -557,11 +561,11 @@ public:
     /// 读取指定cell, 当作为kv或二维表格使用时的便捷接口
     virtual bool Get(const std::string& row_key, const std::string& family,
                      const std::string& qualifier, std::string* value,
-                     ErrorCode* err) = 0;
+                     ErrorCode* err, uint64_t snapshot_id = 0) = 0;
     /// 读取指定cell, 当作为kv或二维表格使用时的便捷接口
     virtual bool Get(const std::string& row_key, const std::string& family,
                      const std::string& qualifier, int64_t* value,
-                     ErrorCode* err) = 0;
+                     ErrorCode* err, uint64_t snapshot_id = 0) = 0;
 
     virtual bool IsPutFinished() = 0;
     virtual bool IsGetFinished() = 0;
@@ -607,6 +611,9 @@ private:
 
 class Client {
 public:
+    /// 使用glog的用户必须调用此接口，避免glog被重复初始化
+    static void SetGlogIsInitialized();
+
     static Client* NewClient(const std::string& confpath,
                              const std::string& log_prefix,
                              ErrorCode* err = NULL);

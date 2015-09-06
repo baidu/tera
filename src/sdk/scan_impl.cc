@@ -16,6 +16,7 @@
 #include "utils/atomic.h"
 #include "utils/timer.h"
 
+DECLARE_bool(tera_sdk_scan_async_enabled);
 DECLARE_int64(tera_sdk_scan_async_cache_size);
 DECLARE_int32(tera_sdk_scan_async_parallel_max_num);
 
@@ -356,7 +357,10 @@ bool ResultStreamSyncImpl::Done(ErrorCode* err) {
 
         if (!_response->complete()) {
             const KeyValuePair& kv = _response->results().key_values(_result_pos - 1);
-            if (kv.timestamp() == 0) {
+            if (_scan_desc_impl->IsKvOnlyTable()) {
+                _scan_desc_impl->SetStart(kv.key() + '\x1', kv.column_family(),
+                                          kv.qualifier(), kv.timestamp());
+            } else if (kv.timestamp() == 0) {
                 _scan_desc_impl->SetStart(kv.key(), kv.column_family(),
                                           kv.qualifier() + '\x1', kv.timestamp());
             } else {
@@ -462,7 +466,7 @@ ScanDescImpl::ScanDescImpl(const string& rowkey)
     : _start_timestamp(0),
       _timer_range(NULL),
       _buf_size(65536),
-      _is_async(true),
+      _is_async(FLAGS_tera_sdk_scan_async_enabled),
       _max_version(1),
       _snapshot(0),
       _value_converter(&DefaultValueConverter) {
@@ -659,6 +663,10 @@ bool ScanDescImpl::ParseFilterString() {
     return true;
 }
 
+bool ScanDescImpl::IsKvOnlyTable() {
+    return _table_schema.kv_only();
+}
+
 bool ScanDescImpl::ParseSubFilterString(const string& filter_str,
                                         Filter* filter) {
     string filter_t = RemoveInvisibleChar(filter_str);
@@ -752,17 +760,6 @@ bool ScanDescImpl::ParseValueCompareFilter(const string& filter_str,
     filter->set_content(cf_name);
     filter->set_ref_value(value_internal);
     return true;
-}
-
-bool ScanDescImpl::GetCfType(const std::string& cf_name, std::string* type) {
-    for (int32_t i = 0; i < _table_schema.column_families_size(); ++i) {
-        const ColumnFamilySchema& cf_schema = _table_schema.column_families(i);
-        if (cf_schema.name() == cf_name) {
-            *type = cf_schema.type();
-            return true;
-        }
-    }
-    return false;
 }
 
 } // namespace tera

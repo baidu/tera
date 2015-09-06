@@ -35,6 +35,10 @@ SERVER_SRC := src/tera_main.cc src/tera_entry.cc
 CLIENT_SRC := src/teracli_main.cc
 MONITOR_SRC := src/monitor/teramo_main.cc
 MARK_SRC := src/benchmark/mark.cc src/benchmark/mark_main.cc
+TEST_SRC := src/utils/test/prop_tree_test.cc src/utils/test/tprinter_test.cc
+
+TEST_OUTPUT := test_output
+UNITTEST_OUTPUT := $(TEST_OUTPUT)/unittest
 
 MASTER_OBJ := $(MASTER_SRC:.cc=.o)
 TABLETNODE_OBJ := $(TABLETNODE_SRC:.cc=.o)
@@ -48,20 +52,24 @@ SERVER_OBJ := $(SERVER_SRC:.cc=.o)
 CLIENT_OBJ := $(CLIENT_SRC:.cc=.o)
 MONITOR_OBJ := $(MONITOR_SRC:.cc=.o)
 MARK_OBJ := $(MARK_SRC:.cc=.o)
+TEST_OBJ := $(TEST_SRC:.cc=.o)
 ALL_OBJ := $(MASTER_OBJ) $(TABLETNODE_OBJ) $(IO_OBJ) $(SDK_OBJ) $(PROTO_OBJ) \
            $(JNI_TERA_OBJ) $(OTHER_OBJ) $(COMMON_OBJ) $(SERVER_OBJ) $(CLIENT_OBJ) \
-           $(MONITOR_OBJ) $(MARK_OBJ)
+           $(MONITOR_OBJ) $(MARK_OBJ) $(TEST_OBJ)
 LEVELDB_LIB := src/leveldb/libleveldb.a
 
 PROGRAM = tera_main teracli teramo
 LIBRARY = libtera.a
 JNILIBRARY = libjni_tera.so
 BENCHMARK = tera_bench tera_mark
+TEST = prop_tree_test tprinter_test
 
 .PHONY: all clean cleanall test
 
-all: $(PROGRAM) $(LIBRARY) $(JNILIBRARY) $(BENCHMARK)
+all: $(PROGRAM) $(LIBRARY) $(JNILIBRARY) $(BENCHMARK) $(TEST)
 	mkdir -p build/include build/lib build/bin build/log build/benchmark
+	mkdir -p $(UNITTEST_OUTPUT)
+	mv $(TEST) $(UNITTEST_OUTPUT)
 	cp $(PROGRAM) build/bin
 	cp $(LIBRARY) $(JNILIBRARY) build/lib
 	cp src/leveldb/tera_bench .
@@ -70,13 +78,10 @@ all: $(PROGRAM) $(LIBRARY) $(JNILIBRARY) $(BENCHMARK)
 	cp -r conf build
 	echo 'Done'
 
-test:
-	echo "No test now!"
-	
 clean:
-	rm -rf $(ALL_OBJ) $(PROTO_OUT_CC) $(PROTO_OUT_H)
+	rm -rf $(ALL_OBJ) $(PROTO_OUT_CC) $(PROTO_OUT_H) $(TEST_OUTPUT)
 	$(MAKE) clean -C src/leveldb
-	rm -rf $(PROGRAM) $(LIBRARY) $(JNILIBRARY) $(BENCHMARK)
+	rm -rf $(PROGRAM) $(LIBRARY) $(JNILIBRARY) $(BENCHMARK) $(TEST)
 
 cleanall:
 	$(MAKE) clean
@@ -106,6 +111,13 @@ src/leveldb/libleveldb.a: FORCE
 	$(MAKE) -C src/leveldb
 
 tera_bench:
+
+# unit test
+prop_tree_test: src/utils/test/prop_tree_test.o $(LIBRARY)
+	$(CXX) -o $@ $^ $(LDFLAGS) 
+
+tprinter_test: src/utils/test/tprinter_test.o $(LIBRARY)
+	$(CXX) -o $@ $^ $(LDFLAGS) 
 
 $(ALL_OBJ): %.o: %.cc $(PROTO_OUT_H)
 	$(CXX) $(CXXFLAGS) -c $< -o $@

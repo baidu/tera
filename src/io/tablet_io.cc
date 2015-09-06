@@ -190,7 +190,7 @@ bool TabletIO::Load(const TableSchema& schema,
 
     m_ldb_options.use_memtable_on_leveldb = FLAGS_tera_tablet_use_memtable_on_leveldb;
     m_ldb_options.memtable_ldb_write_buffer_size =
-            FLAGS_tera_tablet_memtable_ldb_write_buffer_size * 1024 * 1024;
+            FLAGS_tera_tablet_memtable_ldb_write_buffer_size * 1024;
     m_ldb_options.memtable_ldb_block_size = FLAGS_tera_tablet_memtable_ldb_block_size * 1024;
     if (FLAGS_tera_tablet_use_memtable_on_leveldb) {
         LOG(INFO) << "enable mem-ldb for this tablet-server:"
@@ -410,7 +410,6 @@ bool TabletIO::Compact(StatusCode* status) {
         m_db_ref_count++;
     }
     CHECK_NOTNULL(m_db);
-    m_db->CompactMissFiles(NULL, NULL);
     m_db->CompactRange(NULL, NULL);
 
     {
@@ -913,6 +912,7 @@ bool TabletIO::LowLevelSeek(const std::string& row_key,
                 } else {
                     leveldb::Slice value = it_data->value();
                     kv->set_value(value.data(), value.size());
+                    it_data->Next();
                 }
             }
         }
@@ -934,7 +934,13 @@ bool TabletIO::ReadCells(const RowReaderInfo& row_reader, RowResult* value_list,
         MutexLock lock(&m_mutex);
         if (m_status != kReady && m_status != kOnSplit
             && m_status != kSplited && m_status != kUnLoading) {
-            SetStatusCode(m_status, status);
+            if (m_status == kUnLoading2) {
+                // keep compatable for old sdk protocol
+                // we can remove this in the future.
+                SetStatusCode(kUnLoading, status);
+            } else {
+                SetStatusCode(m_status, status);
+            }
             return false;
         }
         m_db_ref_count++;
@@ -1074,7 +1080,13 @@ bool TabletIO::Write(const WriteTabletRequest* request,
         MutexLock lock(&m_mutex);
         if (m_status != kReady && m_status != kOnSplit
             && m_status != kSplited && m_status != kUnLoading) {
-            SetStatusCode(m_status, status);
+            if (m_status == kUnLoading2) {
+                // keep compatable for old sdk protocol
+                // we can remove this in the future.
+                SetStatusCode(kUnLoading, status);
+            } else {
+                SetStatusCode(m_status, status);
+            }
             return false;
         }
         m_db_ref_count++;
@@ -1096,7 +1108,13 @@ bool TabletIO::ScanRows(const ScanTabletRequest* request,
         MutexLock lock(&m_mutex);
         if (m_status != kReady && m_status != kOnSplit
             && m_status != kSplited && m_status != kUnLoading) {
-            SetStatusCode(m_status, &status);
+            if (m_status == kUnLoading2) {
+                // keep compatable for old sdk protocol
+                // we can remove this in the future.
+                SetStatusCode(kUnLoading, &status);
+            } else {
+                SetStatusCode(m_status, &status);
+            }
             response->set_status(status);
             done->Run();
             return false;
@@ -1440,7 +1458,7 @@ void TabletIO::SetupOptionsForLG() {
         if (lg_schema.use_memtable_on_leveldb()) {
             lg_info->use_memtable_on_leveldb = true;
             lg_info->memtable_ldb_write_buffer_size =
-                lg_schema.memtable_ldb_write_buffer_size() * 1024 * 1024;
+                lg_schema.memtable_ldb_write_buffer_size() * 1024;
             lg_info->memtable_ldb_block_size =
                 lg_schema.memtable_ldb_block_size() * 1024;
             LOG(INFO) << "enable mem-ldb for LG:" << lg_schema.name().c_str()

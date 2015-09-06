@@ -593,91 +593,6 @@ bool Version::FindSplitKey(const Slice* smallest_user_key,
     return true;
 }
 
-void Version::MissFilesInLocal(const Slice* smallest_user_key,
-                               const Slice* largest_user_key,
-                               std::vector<std::string>* inputs) {
-    inputs->clear();
-    std::vector<std::string> local_file_list;
-    std::vector<std::string>::iterator it;
-    vset_->env_->ListDir(vset_->dbname_, &local_file_list);
-
-    const Comparator* user_cmp = vset_->icmp_.user_comparator();
-    for (int level = 1; level < config::kNumLevels; level++) {
-        const std::vector<FileMetaData*>& files = files_[level];
-        for (size_t i = 0; i < files.size(); i++) {
-            FileMetaData* file = files[i];
-            // std::cerr << "level: " << level << ", id: " << i
-            //     << ", num: " << file->number
-            //     << ", small: [" << file->smallest.user_key().ToString()
-            //     << "], largest: [" << file->largest.user_key().ToString()
-            //     << "], size: " << file->file_size << std::endl;
-            if (BeforeFile(user_cmp, largest_user_key, file)
-                || AfterFile(user_cmp, smallest_user_key, file)) {
-                continue;
-            }
-            char buf[100] = {'\0'};
-            snprintf(buf, sizeof(buf), "%06llu.sst",
-                   static_cast<unsigned long long>(files[i]->number));
-
-            std::cerr << "level: " << level << ", check: " << buf << std::endl;
-
-            it = std::find(local_file_list.begin(), local_file_list.end(), buf);
-            if (it == local_file_list.end()) {
-                inputs->push_back(buf);
-            }
-        }
-
-    }
-
-}
-
-void Version::MissFilesInLocal(const Slice* smallest_user_key,
-                               const Slice* largest_user_key,
-                               std::vector<Compaction*>* compact_inputs) {
-    compact_inputs->clear();
-    std::vector<std::string> local_file_list;
-    std::vector<std::string>::iterator it;
-    vset_->env_->ListDir(vset_->dbname_, &local_file_list);
-
-    std::vector<FileMetaData*> inputs;
-    const Comparator* user_cmp = vset_->icmp_.user_comparator();
-    for (int level = 1; level < config::kNumLevels; level++) {
-        const std::vector<FileMetaData*>& files = files_[level];
-        for (size_t i = 0; i < files.size(); i++) {
-            FileMetaData* file = files[i];
-            // std::cerr << "level: " << level << ", id: " << i
-            //     << ", num: " << file->number
-            //     << ", small: [" << file->smallest.user_key().ToString()
-            //     << "], largest: [" << file->largest.user_key().ToString()
-            //     << "], size: " << file->file_size << std::endl;
-            if (BeforeFile(user_cmp, largest_user_key, file)
-                || AfterFile(user_cmp, smallest_user_key, file)) {
-                continue;
-            }
-            char buf[100] = {'\0'};
-            snprintf(buf, sizeof(buf), "%06llu.sst",
-                   static_cast<unsigned long long>(files[i]->number));
-
-            std::cerr << "level: " << level << ", check: " << buf << std::endl;
-
-            it = std::find(local_file_list.begin(), local_file_list.end(), buf);
-            if (it == local_file_list.end()) {
-                inputs.push_back(files[i]);
-            }
-        }
-
-        Compaction* c = new Compaction(level);
-        c->input_version_ = this;
-        c->input_version_->Ref();
-        c->max_output_file_size_ =
-            MaxFileSizeForLevel(level + 1, vset_->options_->sst_size);
-        c->inputs_[0] = inputs;
-        vset_->SetupOtherInputs(c);
-        compact_inputs->push_back(c);
-    }
-
-}
-
 //  end of tera-specific
 
 std::string Version::DebugString() const {
@@ -1186,9 +1101,9 @@ Status VersionSet::ReadCurrentFile(uint64_t tablet, std::string* dscname ) {
     *dscname = pdbname + "/" + current;
   }
 
-  uint64_t dscsize = 0;
-  if (!s.ok() || !env_->FileExists(*dscname) ||
-      !env_->GetFileSize(*dscname, &dscsize).ok() || dscsize == 0) {
+  // don't check manifest size because some dfs (eg. hdfs)
+  // may return 0 even if the actual size is not 0
+  if (!s.ok() || !env_->FileExists(*dscname)) {
     // manifest is not ready, now recover the backup manifest
     std::vector<std::string> files;
     env_->GetChildren(pdbname, &files);
@@ -1198,15 +1113,7 @@ Status VersionSet::ReadCurrentFile(uint64_t tablet, std::string* dscname ) {
       FileType type;
       if (ParseFileName(files[i], &number, &type)) {
         if (type == kDescriptorFile) {
-          if (!env_->GetFileSize(pdbname + "/" + files[i], &dscsize).ok() ||
-              dscsize == 0) {
-            Log(options_->info_log, "[%s] manifest size is 0, skip it: %s.",
-                dbname_.c_str(), files[i].c_str());
-            ArchiveFile(env_, pdbname + "/" + files[i]);
-            continue;
-          } else {
-            manifest_set.insert(files[i]);
-          }
+          manifest_set.insert(files[i]);
         }
       }
     }
@@ -1827,6 +1734,34 @@ void VersionSet::SetupOtherInputs(Compaction* c) {
   // key range next time.
   compact_pointer_[level] = largest.Encode().ToString();
   c->edit_.SetCompactPointer(level, largest);
+
+  // tera-specific: calculate the smallest rowkey which overlap with file not
+  // in this compaction.
+  SetupCompactionBoundary(c);
+}
+
+void VersionSet::SetupCompactionBoundary(Compaction* c) {
+  if (c->level_ == 0) {
+    // compaction on level 0, do not drop delete mark
+    return;
+  }
+
+  int base_level = config::kNumLevels - 1;
+  while (base_level > 0) {
+    if (current_->files_[base_level].size() != 0) {
+      break;
+    }
+    base_level--;
+  }
+  if (base_level > c->level_ + 1) {
+    // not base level
+    return;
+  }
+
+  // do not need calculate input[1].
+  int input0_size = c->inputs_[0].size();
+  FileMetaData* last_file = c->inputs_[0][input0_size - 1];
+  c->set_drop_lower_bound(last_file->largest.user_key().ToString());
 }
 
 Compaction* VersionSet::CompactRange(

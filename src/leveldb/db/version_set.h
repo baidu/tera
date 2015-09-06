@@ -116,12 +116,6 @@ class Version {
                     const Slice* largest_user_key,
                     double ratio,
                     std::string* split_key);
-  void MissFilesInLocal(const Slice* smallest_user_key,
-                        const Slice* largest_user_key,
-                        std::vector<Compaction*>* compact_inputs);
-  void MissFilesInLocal(const Slice* smallest_user_key,
-                        const Slice* largest_user_key,
-                        std::vector<std::string>* inputs);
 
   // Return a human readable string that describes this version's contents.
   std::string DebugString() const;
@@ -301,6 +295,7 @@ class VersionSet {
                  InternalKey* largest);
 
   void SetupOtherInputs(Compaction* c);
+  void SetupCompactionBoundary(Compaction* c);
 
   // Save current contents to *log
   Status WriteSnapshot(log::Writer* log);
@@ -383,6 +378,11 @@ class Compaction {
   // is successful.
   void ReleaseInputs();
 
+  std::string drop_lower_bound() const { return drop_lower_bound_; }
+  void set_drop_lower_bound(const std::string& lower_bound) {
+    drop_lower_bound_ = lower_bound;
+  }
+
  private:
   friend class Version;
   friend class VersionSet;
@@ -412,6 +412,12 @@ class Compaction {
   // higher level than the ones involved in this compaction (i.e. for
   // all L >= level_ + 2).
   size_t level_ptrs_[config::kNumLevels];
+
+  // tera-specific
+  // State for drop base level delete mark.
+  // If delete mark is not less than this lower_bound, do not drop it.
+  // If compaction is not on base level, this is an empty string.
+  std::string drop_lower_bound_;
 };
 
 }  // namespace leveldb

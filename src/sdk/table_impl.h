@@ -138,10 +138,10 @@ public:
     virtual void Get(const std::vector<RowReader*>& row_readers);
     virtual bool Get(const std::string& row_key, const std::string& family,
                      const std::string& qualifier, std::string* value,
-                     ErrorCode* err);
+                     ErrorCode* err, uint64_t snapshot_id = 0);
     virtual bool Get(const std::string& row_key, const std::string& family,
                     const std::string& qualifier, int64_t* value,
-                    ErrorCode* err);
+                    ErrorCode* err, uint64_t snapshot_id = 0);
 
     virtual bool IsPutFinished() { return _cur_commit_pending_counter.Get() == 0; }
 
@@ -194,8 +194,6 @@ public:
 
     uint64_t GetMaxMutationPendingNum() { return _max_commit_pending_num; }
     uint64_t GetMaxReaderPendingNum() { return _max_reader_pending_num; }
-
-    bool IsKvOnlyTable();
 
     struct PerfCounter {
         int64_t start_time;
@@ -337,7 +335,8 @@ private:
     void DoDumpCookie();
     std::string GetCookieFileName(const std::string& tablename,
                                   const std::string& zk_addr,
-                                  const std::string& zk_path);
+                                  const std::string& zk_path,
+                                  int64_t create_time);
     std::string GetCookieFilePathName();
     std::string GetCookieLockFilePathName();
     void DeleteLegacyCookieLockFile(const std::string& lock_file, int timeout_seconds);
@@ -365,6 +364,7 @@ private:
     };
 
     std::string _name;
+    int64_t _create_time;
     const TableOptions _options;
     uint64_t _last_sequence_id;
     uint32_t _timeout;
@@ -430,6 +430,10 @@ private:
     bool _seq_mutation_wait_to_update_meta;
     bool _seq_mutation_wait_to_retry;
     uint64_t _seq_mutation_pending_rpc_count;
+
+    /// read request will contain this member, 
+    /// so tabletnodes can drop the read-request that timeouted
+    uint64_t _pending_timeout_ms;
 };
 
 } // namespace tera

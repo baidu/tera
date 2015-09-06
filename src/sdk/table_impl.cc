@@ -30,6 +30,7 @@
 #include "sdk/schema_impl.h"
 #include "sdk/sdk_zk.h"
 #include "sdk/tera.h"
+#include "utils/crypt.h"
 #include "utils/string_util.h"
 #include "utils/timer.h"
 
@@ -54,6 +55,7 @@ DECLARE_int32(tera_sdk_cookie_update_interval);
 DECLARE_bool(tera_sdk_pend_request_while_scan_meta_enabled);
 DECLARE_bool(tera_sdk_perf_counter_enabled);
 DECLARE_int64(tera_sdk_perf_counter_log_interval);
+DECLARE_int32(FLAGS_tera_rpc_timeout_period);
 
 namespace tera {
 
@@ -85,7 +87,8 @@ TableImpl::TableImpl(const std::string& table_name,
       _seq_mutation_error_occur_time(0),
       _seq_mutation_wait_to_update_meta(false),
       _seq_mutation_wait_to_retry(false),
-      _seq_mutation_pending_rpc_count(0) {
+      _seq_mutation_pending_rpc_count(0),
+      _pending_timeout_ms(FLAGS_tera_rpc_timeout_period) {
     if (options.sequential_write) {
         _seq_mutation_commit_list = new std::vector<RowMutationImpl*>;
         _seq_mutation_session = get_micros() * get_micros();
@@ -248,9 +251,9 @@ void TableImpl::Get(const std::vector<RowReader*>& row_readers) {
 
 bool TableImpl::Get(const std::string& row_key, const std::string& family,
                     const std::string& qualifier, int64_t* value,
-                    ErrorCode* err) {
+                    ErrorCode* err, uint64_t snapshot_id) {
     std::string value_str;
-    if (Get(row_key, family, qualifier, &value_str, err)
+    if (Get(row_key, family, qualifier, &value_str, err, snapshot_id)
         && value_str.size() == sizeof(int64_t)) {
         *value = *(int64_t*)value_str.c_str();
         return true;
@@ -260,9 +263,10 @@ bool TableImpl::Get(const std::string& row_key, const std::string& family,
 
 bool TableImpl::Get(const std::string& row_key, const std::string& family,
                     const std::string& qualifier, std::string* value,
-                    ErrorCode* err) {
+                    ErrorCode* err, uint64_t snapshot_id) {
     RowReader* row_reader = NewRowReader(row_key);
     row_reader->AddColumn(family, qualifier);
+    row_reader->SetSnapshot(snapshot_id);
     Get(row_reader);
     *err = row_reader->GetError();
     if (err->GetType() == ErrorCode::kOK) {
@@ -274,16 +278,16 @@ bool TableImpl::Get(const std::string& row_key, const std::string& family,
 
 ResultStream* TableImpl::Scan(const ScanDescriptor& desc, ErrorCode* err) {
     ScanDescImpl * impl = desc.GetImpl();
+    impl->SetTableSchema(_table_schema);
     if (impl->GetFilterString() != "") {
         MutexLock lock(&_table_meta_mutex);
-        impl->SetTableSchema(_table_schema);
         if (!impl->ParseFilterString()) {
             // fail to parse filter string
             return NULL;
         }
     }
     ResultStream * results = NULL;
-    if (desc.IsAsync() && !IsKvOnlyTable()) {
+    if (desc.IsAsync() && !_table_schema.kv_only()) {
         VLOG(6) << "activate async-scan";
         results = new ResultStreamAsyncImpl(this, impl);
     } else {
@@ -427,13 +431,6 @@ bool TableImpl::LockRow(const std::string& rowkey, RowLock* lock, ErrorCode* err
 bool TableImpl::GetStartEndKeys(std::string* start_key, std::string* end_key,
                                 ErrorCode* err) {
     err->SetFailed(ErrorCode::kNotImpl);
-    return false;
-}
-
-bool TableImpl::IsKvOnlyTable() {
-    if (_table_schema.column_families_size() > 0) {
-        return true;
-    }
     return false;
 }
 
@@ -1107,6 +1104,7 @@ void TableImpl::CommitReaders(const std::string server_addr,
     ReadTabletResponse* response = new ReadTabletResponse;
     request->set_sequence_id(_last_sequence_id++);
     request->set_tablet_name(_name);
+    request->set_client_timeout_ms(_pending_timeout_ms);
     for (uint32_t i = 0; i < reader_list->size(); ++i) {
         RowReaderImpl* row_reader = (*reader_list)[i];
         RowReaderInfo* row_reader_info = request->add_row_info_list();
@@ -1974,6 +1972,7 @@ void TableImpl::ReadTableMetaCallBack(ErrorCode* ret_err,
         const KeyValuePair& kv = response->detail().row_result(0).key_values(0);
         ParseMetaTableKeyValue(kv.key(), kv.value(), &table_meta);
         _table_schema.CopyFrom(table_meta.schema());
+        _create_time = table_meta.create_time();
         ret_err->SetFailed(ErrorCode::kOK);
         _table_meta_updating = false;
         _table_meta_cond.Signal();
@@ -1997,43 +1996,7 @@ void TableImpl::ReadTableMetaCallBack(ErrorCode* ret_err,
     delete response;
 }
 
-// copy from leveldb/util/hash.h
-static uint32_t Hash(const char* data, size_t n, uint32_t seed) {
-    // Similar to murmur hash
-    const uint32_t m = 0xc6a4a793;
-    const uint32_t r = 24;
-    const char* limit = data + n;
-    uint32_t h = seed ^ (n * m);
-
-    // Pick up four bytes at a time
-    while (data + 4 <= limit) {
-        uint32_t w = *(uint32_t*)data;
-        data += 4;
-        h += w;
-        h *= m;
-        h ^= (h >> 16);
-    }
-
-    // Pick up remaining bytes
-    switch (limit - data) {
-    case 3:
-        h += data[2] << 16;
-    case 2:
-        h += data[1] << 8;
-    case 1:
-        h += data[0];
-        h *= m;
-        h ^= (h >> r);
-    break;
-    }
-    return h;
-}
-
-// stores hash as a string, not including the terminating '\0' character
-// `HASH_LEN' is the length of this string
-const static long HASH_LEN = 8;
-
-static bool CalculateChecksumOfData(std::fstream& outfile, long size, char *hash_str) {
+static bool CalculateChecksumOfData(std::fstream& outfile, long size, std::string* hash_str) {
     // 100 MB, (100 * 1024 * 1024) / 250 = 419,430
     // cookie文件中，每个tablet的缓存大小约为100~200 Bytes，不妨计为250 Bytes，
     // 那么，100MB可以支持约40万个tablets
@@ -2047,17 +2010,15 @@ static bool CalculateChecksumOfData(std::fstream& outfile, long size, char *hash
         LOG(INFO) << "[SDK COOKIE] input argument `hash_str' is NULL";
         return false;
     }
-    char* data = new char[size];
-    CHECK(data);
-    outfile.read(data, size);
+    std::string data(size, '\0');
+    outfile.read(const_cast<char*>(data.data()), size);
     if(outfile.fail()) {
         LOG(INFO) << "[SDK COOKIE] fail to read cookie file";
-        delete data;
         return false;
     }
-    uint32_t hash = Hash(data, size, 0);
-    sprintf(hash_str, "%08x", hash);
-    delete data;
+    if (GetHashString(data, 0, hash_str) != 0) {
+        return false;
+    }
     return true;
 }
 
@@ -2073,22 +2034,22 @@ static bool IsCookieChecksumRight(const std::string& cookie_file) {
     // gets file size, in bytes
     outfile.seekp(0, std::ios_base::end);
     long file_size = outfile.tellp();
-    if(file_size < HASH_LEN) {
+    if(file_size < HASH_STRING_LEN) {
         LOG(INFO) << "[SDK COOKIE] invalid file size: " << file_size;
         return false;
     }
 
     // calculates checksum according to cookie file content
-    char hash_str[HASH_LEN] = {'\0'};
+    std::string hash_str;
     outfile.seekp(0, std::ios_base::beg);
-    if(!CalculateChecksumOfData(outfile, file_size - HASH_LEN, hash_str)) {
+    if(!CalculateChecksumOfData(outfile, file_size - HASH_STRING_LEN, &hash_str)) {
         return false;
     }
     LOG(INFO) << "[SDK COOKIE] checksum rebuild: " << hash_str;
 
     // gets checksum in cookie file
-    char hash_str_saved[HASH_LEN] = {'\0'};
-    outfile.read(hash_str_saved, HASH_LEN);
+    char hash_str_saved[HASH_STRING_LEN + 1] = {'\0'};
+    outfile.read(hash_str_saved, HASH_STRING_LEN);
     if(outfile.fail()) {
         int errno_saved = errno;
         LOG(INFO) << "[SDK COOKIE] fail to get checksum: " << strerror(errno_saved);
@@ -2097,7 +2058,7 @@ static bool IsCookieChecksumRight(const std::string& cookie_file) {
     LOG(INFO) << "[SDK COOKIE] checksum in file: " << hash_str_saved;
 
     outfile.close();
-    return strncmp(hash_str, hash_str_saved, HASH_LEN) == 0;
+    return strncmp(hash_str.c_str(), hash_str_saved, HASH_STRING_LEN) == 0;
 }
 
 bool TableImpl::RestoreCookie() {
@@ -2163,7 +2124,7 @@ bool TableImpl::RestoreCookie() {
 
 std::string TableImpl::GetCookieFilePathName(void) {
     return FLAGS_tera_sdk_cookie_path + "/"
-        + GetCookieFileName(_name, _zk_addr_list, _zk_root_path);
+        + GetCookieFileName(_name, _zk_addr_list, _zk_root_path, _create_time);
 }
 
 std::string TableImpl::GetCookieLockFilePathName(void) {
@@ -2224,22 +2185,22 @@ static bool AppendChecksumToCookie(const std::string& cookie_file) {
     // get file size, in bytes
     outfile.seekp(0, std::ios_base::end);
     long file_size = outfile.tellp();
-    if(file_size < HASH_LEN) {
+    if(file_size < HASH_STRING_LEN) {
         LOG(INFO) << "[SDK COOKIE] invalid file size: " << file_size;
         return false;
     }
 
     // calculates checksum according to cookie file content
     outfile.seekp(0, std::ios_base::beg);
-    char hash_str[HASH_LEN] = {'\0'};
-    if(!CalculateChecksumOfData(outfile, file_size, hash_str)) {
+    std::string hash_str;
+    if(!CalculateChecksumOfData(outfile, file_size, &hash_str)) {
         return false;
     }
     LOG(INFO) << "[SDK COOKIE] file checksum: " << hash_str;
 
     // append checksum to the end of cookie file
     outfile.seekp(0, std::ios_base::end);
-    outfile.write(hash_str, HASH_LEN);
+    outfile.write(hash_str.c_str(), hash_str.length());
     if(outfile.fail()) {
         LOG(INFO) << "[SDK COOKIE] fail to append checksum";
         return false;
@@ -2339,15 +2300,18 @@ void TableImpl::EnableCookieUpdateTimer() {
 
 std::string TableImpl::GetCookieFileName(const std::string& tablename,
                                          const std::string& zk_addr,
-                                         const std::string& zk_path) {
+                                         const std::string& zk_path,
+                                         int64_t create_time) {
     uint32_t hash = 0;
-    hash = Hash(tablename.data(), tablename.size(), hash);
-    hash = Hash(zk_addr.data(), zk_addr.size(), hash);
-    hash = Hash(zk_path.data(), zk_path.size(), hash);
-
-    char hash_str[8] = {'\0'};
+    if (GetHashNumber(zk_addr, hash, &hash) != 0
+        || GetHashNumber(zk_path, hash, &hash) != 0) {
+        LOG(FATAL) << "invalid arguments";
+    }
+    char hash_str[9] = {'\0'};
     sprintf(hash_str, "%08x", hash);
-    return std::string((char*)hash_str, 8);
+    std::stringstream fname;
+    fname << tablename << "-" << create_time << "-" << hash_str;
+    return fname.str();
 }
 
 void TableImpl::DumpPerfCounterLogDelay() {

@@ -66,7 +66,7 @@ std::string ConvertByteToString(const uint64_t size) {
     const uint64_t kPB = kTB * 1024;
 
     if (size == 0) {
-        return "0 ";
+        return "0";
     }
 
     if (size > kPB) {
@@ -86,7 +86,7 @@ std::string ConvertByteToString(const uint64_t size) {
         hight_unit = "K";
     } else {
         min_size = size;
-        hight_unit = " ";
+        hight_unit = "";
     }
 
     if ((int)min_size - min_size == 0) {
