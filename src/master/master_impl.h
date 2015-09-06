@@ -191,7 +191,7 @@ private:
         google::protobuf::Closure* done;
         TablePtr table;
         std::vector<TabletPtr> tablets;
-        std::vector<uint64_t> snapshot_id;
+        std::vector<uint64_t> rollback_points;
         int task_num;
         int finish_num;
         mutable Mutex mutex;
@@ -295,6 +295,15 @@ private:
                           SnapshotRollbackRequest* master_request,
                           SnapshotRollbackResponse* master_response,
                           bool failed, int error_code);
+    void AddRollbackCallback(TablePtr table,
+                             std::vector<TabletPtr> tablets,
+                             int32_t retry_times,
+                             const RollbackRequest* rpc_request,
+                             RollbackResponse* rpc_response,
+                             google::protobuf::Closure* rpc_done,
+                             WriteTabletRequest* request,
+                             WriteTabletResponse* response,
+                             bool failed, int error_code);
 
     void ScheduleQueryTabletNode();
     void QueryTabletNode();
