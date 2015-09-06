@@ -10,6 +10,7 @@
 #include <stdint.h>
 #include <queue>
 #include <string>
+#include <sys/time.h>
 
 namespace tera {
 namespace zk {

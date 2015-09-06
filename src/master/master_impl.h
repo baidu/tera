@@ -196,6 +196,13 @@ private:
                           const std::string& server_addr, StatusCode* status);
     void UnloadTabletAsync(std::string table_name, std::string key_start,
                            std::string server_addr, int32_t retry);
+    void LogUnload(TabletPtr tablet, UnloadClosure* done);
+    void UnloadTabletAfterLog(TabletPtr tablet, UnloadClosure* done);
+    void LogUnloadCallback(TabletPtr log_unload_tablet, int retry_times,
+                            TabletPtr tablet, UnloadClosure *done, 
+                            WriteTabletRequest* log_request, 
+                            WriteTabletResponse* log_response,
+                            bool failed, int errcode);
 
     void RetryLoadTablet(TabletPtr tablet, int32_t retry_times);
     void RetryUnloadTablet(TabletPtr tablet, int32_t retry_times);

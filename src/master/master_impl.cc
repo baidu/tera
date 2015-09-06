@@ -331,22 +331,28 @@ void MasterImpl::RestoreUserTablet(const std::vector<TabletMeta>& report_meta_li
         CompactStatus compact_status = meta.compact_status();
 
         TabletPtr tablet;
-        if (!m_tablet_manager->FindTablet(table_name, key_start, &tablet)
-            || !tablet->Verify(table_name, key_start, key_end, path, server_addr)) {
-            LOG(INFO) << "unload unexpected table: " << path << ", server: "
-                << server_addr;
-            TabletMeta unknown_meta = meta;
-            unknown_meta.set_status(kTableUnLoading);
-            TabletPtr unknown_tablet(new Tablet(unknown_meta));
-            UnloadClosure* done =
-                NewClosure(this, &MasterImpl::UnloadTabletCallback,
-                           unknown_tablet, FLAGS_tera_master_impl_retry_times);
-            UnloadTabletAsync(unknown_tablet, done);
+        if (m_tablet_manager->FindTablet(table_name, key_start, &tablet) && 
+                (tablet->GetStatus() == kTableUnLoading)) {
+            // noting done here
         } else {
-            tablet->SetStatus(kTableReady);
-            tablet->SetSize(size);
-            tablet->SetCompactStatus(compact_status);
+            if (!m_tablet_manager->FindTablet(table_name, key_start, &tablet)
+                    || !tablet->Verify(table_name, key_start, key_end, path, server_addr)) {
+                LOG(INFO) << "unload unexpected table: " << path << ", server: "
+                    << server_addr;
+                TabletMeta unknown_meta = meta;
+                unknown_meta.set_status(kTableUnLoading);
+                TabletPtr unknown_tablet(new Tablet(unknown_meta));
+                UnloadClosure* done =
+                    NewClosure(this, &MasterImpl::UnloadTabletCallback,
+                            unknown_tablet, FLAGS_tera_master_impl_retry_times);
+                UnloadTabletAsync(unknown_tablet, done);
+            } else {
+                tablet->SetStatus(kTableReady);
+                tablet->SetSize(size);
+                tablet->SetCompactStatus(compact_status);
+            }
         }
+        
     }
 
     std::vector<TabletPtr> dead_node_tablet_list;
@@ -364,6 +370,16 @@ void MasterImpl::RestoreUserTablet(const std::vector<TabletMeta>& report_meta_li
         if (tablet->GetTableName() == FLAGS_tera_master_meta_table_name) {
             continue;
         }
+
+        // redo unload
+        if (tablet->GetStatus() == kTableUnLoading) {
+            UnloadClosure* done =
+                NewClosure(this, &MasterImpl::UnloadTabletCallback,
+                        tablet, FLAGS_tera_master_impl_retry_times);
+            UnloadTabletAfterLog(tablet, done);
+            continue;
+        }
+
         CHECK(tablet->GetStatus() == kTableNotInit);
         tablet->SetStatus(kTableOffLine);
         VLOG(8) << "OFFLINE Tablet, " << tablet;
@@ -2330,7 +2346,47 @@ bool MasterImpl::UnloadTabletSync(const std::string& table_name,
     return true;
 }
 
-void MasterImpl::UnloadTabletAsync(TabletPtr tablet, UnloadClosure* done) {
+void MasterImpl::LogUnload(TabletPtr tablet, UnloadClosure* done)
+{
+    TabletMeta log_unload_meta;
+    tablet->ToMeta(&log_unload_meta);
+    log_unload_meta.set_status(kTableUnLoading);
+    log_unload_meta.set_server_addr(tablet->GetServerAddr());
+    TabletPtr log_unload_tablet(new Tablet(log_unload_meta));  
+    WriteClosure* log_unload_done = 
+        NewClosure(this, &MasterImpl::LogUnloadCallback, log_unload_tablet, 0, tablet, done);
+    BatchWriteMetaTableAsync(boost::bind(&Tablet::ToMetaTableKeyValue, log_unload_tablet, _1, _2), 
+                                    false, log_unload_done);
+}
+
+void MasterImpl::LogUnloadCallback(TabletPtr log_unload_tablet, int retry_times,
+                            TabletPtr tablet, UnloadClosure *done, 
+                            WriteTabletRequest* log_request, 
+                            WriteTabletResponse* log_response,
+                            bool failed, int errcode)
+{
+    StatusCode status = log_response->status();
+    if (!failed && status == kTabletNodeOk) {
+        CHECK_GT(log_response->row_status_list_size(), 0);
+        status = log_response->row_status_list(0);
+    }
+    delete log_request;
+    delete log_response;
+    if (failed || status != kTabletNodeOk) {
+        WriteClosure* log_unload_done = 
+            NewClosure(this, &MasterImpl::LogUnloadCallback, log_unload_tablet, retry_times, 
+                                tablet, done);
+        SuspendMetaOperation(boost::bind(&Tablet::ToMetaTableKeyValue, log_unload_tablet, _1, _2), 
+                                    false, log_unload_done);
+        return;
+    }
+
+    // exec unload op
+    UnloadTabletAfterLog(tablet, done);
+}
+
+void MasterImpl::UnloadTabletAfterLog(TabletPtr tablet, UnloadClosure* done)
+{
     tabletnode::TabletNodeClient node_client(tablet->GetServerAddr(),
             FLAGS_tera_master_unload_rpc_timeout);
     UnloadTabletRequest* request = new UnloadTabletRequest;
@@ -2342,6 +2398,10 @@ void MasterImpl::UnloadTabletAsync(TabletPtr tablet, UnloadClosure* done) {
     LOG(INFO) << "UnloadTabletAsync id: " << request->sequence_id() << ", "
         << tablet;
     node_client.UnloadTablet(request, response, done);
+}
+
+void MasterImpl::UnloadTabletAsync(TabletPtr tablet, UnloadClosure* done) {
+    LogUnload(tablet, done);
 }
 
 void MasterImpl::UnloadTabletCallback(TabletPtr tablet, int32_t retry,
