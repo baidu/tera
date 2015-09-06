@@ -29,6 +29,8 @@
 
 namespace leveldb {
 
+const double kHighDelLogScore = 1000.0;
+
 struct DBTable::RecordWriter {
     Status status;
     WriteBatch* batch;
@@ -126,6 +128,9 @@ Status DBTable::Shutdown1() {
 
     Log(options_.info_log, "[%s] wait bg garbage clean finish", dbname_.c_str());
     mutex_.Lock();
+    if (bg_schedule_gc_) {
+        env_->ReSchedule(bg_schedule_gc_id_, kHighDelLogScore);
+    }
     while (bg_schedule_gc_) {
         bg_cv_.Wait();
     }
