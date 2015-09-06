@@ -3283,7 +3283,7 @@ bool MasterImpl::SplitTablet(TabletPtr tablet, uint32_t phase)
             while (server_addr.empty()) {
                 if (!m_tabletnode_manager->ScheduleTabletNode(m_size_scheduler.get(),
                                                 table_name, false, &server_addr)) {
-                    LOG(ERROR) << " resched TS, no available";
+                    VLOG(15) << " resched TS, no available";
                 }
                 if (!server_addr.empty() && 
                     !m_tabletnode_manager->FindTabletNode(server_addr, &node)) {
@@ -3299,7 +3299,7 @@ bool MasterImpl::SplitTablet(TabletPtr tablet, uint32_t phase)
         
         // now tablet's server_addr and m_uuid is valid
         if (!node->TrySplit(tablet)) {
-            LOG(INFO) << "TS "<< server_addr << ", split delay";
+            VLOG(20) << "TS "<< server_addr << ", split delay";
             return false;
         }
 
