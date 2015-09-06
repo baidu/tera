@@ -120,8 +120,7 @@ void ShowTableSchema(const TableSchema& schema, bool is_x) {
             ss << "sst_size=" << (lg_schema.sst_size() >> 20) << ",";
         }
         if (lg_schema.use_memtable_on_leveldb()) {
-            ss << "use_memtable_on_leveldb="
-                << lg_schema.use_memtable_on_leveldb()
+            ss << "use_memtable_on_leveldb=true"
                 << ",memtable_ldb_write_buffer_size="
                 << lg_schema.memtable_ldb_write_buffer_size()
                 << ",memtable_ldb_block_size="
