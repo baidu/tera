@@ -213,6 +213,7 @@ Status DBTable::Init() {
 
     uint64_t min_log_sequence = kMaxSequenceNumber;
     std::vector<uint64_t> snapshot_sequence = options_.snapshots_sequence;
+    std::map<uint64_t, uint64_t> rollbacks = options_.rollbacks;
     for (std::set<uint32_t>::iterator it = options_.exist_lg_list->begin();
          it != options_.exist_lg_list->end() && s.ok(); ++it) {
         uint32_t i = *it;
@@ -222,6 +223,10 @@ Status DBTable::Init() {
         lg_edits.push_back(new VersionEdit);
         for (uint32_t i = 0; i < snapshot_sequence.size(); ++i) {
             impl->GetSnapshot(snapshot_sequence[i]);
+        }
+        std::map<uint64_t, uint64_t>::iterator rollback_it = rollbacks.begin();
+        for (; rollback_it != rollbacks.end(); ++rollback_it) {
+            impl->Rollback(rollback_it->first, rollback_it->second);
         }
 
         // recover SST
@@ -643,7 +648,6 @@ const uint64_t DBTable::GetSnapshot(uint64_t last_sequence) {
 }
 
 void DBTable::ReleaseSnapshot(uint64_t sequence_number) {
-    Log(options_.info_log, "[%s] LL:in db table rollback...\n", dbname_.c_str());
     std::set<uint32_t>::iterator it = options_.exist_lg_list->begin();
     for (; it != options_.exist_lg_list->end(); ++it) {
         lg_list_[*it]->ReleaseSnapshot(sequence_number);

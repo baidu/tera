@@ -359,6 +359,13 @@ int32_t Tablet::AddRollback(uint64_t rollback_point) {
     return m_meta.rollback_points_size() - 1;
 }
 
+void Tablet::ListRollback(std::vector<uint64_t>* rollback_points) {
+    MutexLock lock(&m_mutex);
+    for (int i = 0; i < m_meta.rollback_points_size(); i++) {
+        rollback_points->push_back(m_meta.rollback_points(i));
+    }
+}
+
 bool Tablet::IsBound() {
     TablePtr null_ptr;
     if (m_table != null_ptr) {
@@ -633,6 +640,11 @@ int32_t Table::AddRollback(uint64_t snapshot_id) {
     MutexLock lock(&m_mutex);
     m_rollback_snapshots.push_back(snapshot_id);
     return m_rollback_snapshots.size() - 1;
+}
+
+void Table::ListRollback(std::vector<uint64_t>* snapshots) {
+    MutexLock lock(&m_mutex);
+    *snapshots = m_rollback_snapshots;
 }
 
 void Table::AddDeleteTabletCount() {

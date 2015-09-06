@@ -176,7 +176,6 @@ void RemoteTabletNode::Rollback(google::protobuf::RpcController* controller,
                                 const SnapshotRollbackRequest* request,
                                 SnapshotRollbackResponse* response,
                                 google::protobuf::Closure* done) {
-    LOG(INFO)<<"LL:remote tablet";
     boost::function<void ()> callback =
     boost::bind(&RemoteTabletNode::DoRollback, this, controller,
                request, response, done);

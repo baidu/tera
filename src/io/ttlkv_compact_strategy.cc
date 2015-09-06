@@ -29,7 +29,6 @@ bool KvCompactStrategy::Drop(const leveldb::Slice& tera_key, uint64_t n,
                              const std::string& lower_bound) {
 
     if (leveldb::RollbackDrop(n, rollbacks)) {
-        LOG(INFO) << "LL: kvcomp drop " << tera_key.data() << " n=" << n;
         return true;
     }
     // If expire timestamp + schema's TTL <= time(NULL), Then Drop.

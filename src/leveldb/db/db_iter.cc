@@ -16,8 +16,6 @@
 #include "util/logging.h"
 #include "util/mutexlock.h"
 
-#include <iostream>
-
 namespace leveldb {
 
 #if 0

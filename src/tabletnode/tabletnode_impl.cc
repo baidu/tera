@@ -229,6 +229,14 @@ void TabletNodeImpl::LoadTablet(const LoadTabletRequest* request,
         snapshots[request->snapshots_id(i)] = request->snapshots_sequence(i);
     }
 
+    // to recover rollbacks
+    assert(request->rollback_snapshots_size() == request->rollback_pionrts_size());
+    std::map<uint64_t, uint64_t> rollbacks;
+    int32_t num_of_rollbacks = request->rollback_snapshots_size();
+    for (int32_t i = 0; i < num_of_rollbacks; ++i) {
+        rollbacks[request->rollback_snapshots(i)] = request->rollback_pionrts(i);
+    }
+
     LOG(INFO) << "start load tablet, id: " << request->sequence_id()
         << ", table: " << request->tablet_name()
         << ", range: [" << DebugString(key_start)
@@ -254,8 +262,8 @@ void TabletNodeImpl::LoadTablet(const LoadTabletRequest* request,
         response->set_status((StatusCode)tablet_io->GetStatus());
         tablet_io->DecRef();
     } else if (!tablet_io->Load(schema, key_start, key_end,
-                                request->path(), parent_tablets, snapshots, m_ldb_logger,
-                                m_ldb_block_cache, m_ldb_table_cache, &status)) {
+                                request->path(), parent_tablets, snapshots, rollbacks, 
+                                m_ldb_logger, m_ldb_block_cache, m_ldb_table_cache, &status)) {
         tablet_io->DecRef();
         LOG(ERROR) << "fail to load tablet: " << request->path()
             << " [" << DebugString(key_start) << ", "
@@ -599,9 +607,7 @@ void TabletNodeImpl::Rollback(const SnapshotRollbackRequest* request, SnapshotRo
         done->Run();
         return;
     }
-    LOG(INFO) << "LL: in tabletnode impl before=" << request->snapshot_id();
     uint64_t rollback_point = tablet_io->Rollback(request->snapshot_id(), &status);
-    LOG(INFO) << "LL: in tabletnode impl after";
     if (status != kTabletNodeOk) {
         response->set_status(status);
     } else {

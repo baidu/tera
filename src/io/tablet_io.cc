@@ -128,6 +128,7 @@ bool TabletIO::Load(const TableSchema& schema,
                     const std::string& path,
                     const std::vector<uint64_t>& parent_tablets,
                     std::map<uint64_t, uint64_t> snapshots,
+                    std::map<uint64_t, uint64_t> rollbacks,
                     leveldb::Logger* logger,
                     leveldb::Cache* block_cache,
                     leveldb::TableCache* table_cache,
@@ -232,6 +233,13 @@ bool TabletIO::Load(const TableSchema& schema,
         id_to_snapshot_num_[it->first] = it->second;
         m_ldb_options.snapshots_sequence.push_back(it->second);
     }
+    // recover rollback
+    it = rollbacks.begin();
+    for (; it != rollbacks.end(); ++it) {
+        rollbacks_[id_to_snapshot_num_[it->first]] = it->second;
+        m_ldb_options.rollbacks[id_to_snapshot_num_[it->first]] = it->second;
+    }
+
     leveldb::Status db_status = leveldb::DB::Open(m_ldb_options, m_tablet_path, &m_db);
 
     if (!db_status.ok()) {
@@ -1277,10 +1285,6 @@ bool TabletIO::Scan(const ScanOption& option, KeyValueList* kv_list,
         }
     }
     read_option.rollbacks = rollbacks_;
-    std::map<uint64_t, uint64_t>::iterator iter = read_option.rollbacks.begin();
-    for (; iter != read_option.rollbacks.end(); ++iter) {
-        VLOG(1) << "LL:read read_option=" << iter->first << "-" << iter->second;
-    }
     // TTL-KV : m_key_operator::Compare会解RawKey([row_key | expire_timestamp])
     // 因此传递给Leveldb的Key一定要保证以expire_timestamp结尾.
     leveldb::CompactStrategy* strategy = NULL;
@@ -1736,9 +1740,7 @@ uint64_t TabletIO::Rollback(uint64_t snapshot_id, StatusCode* status) {
         }
         m_db_ref_count++;
     }
-    VLOG(1) << "LL:in tabletio";
     uint64_t rollback_point = m_db->Rollback(id_to_snapshot_num_[snapshot_id]);
-    VLOG(1) << "LL:new rollback point=" << rollback_point;
     MutexLock lock(&m_mutex);
     rollbacks_[id_to_snapshot_num_[snapshot_id]] = rollback_point;
     m_db_ref_count--;

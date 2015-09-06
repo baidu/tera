@@ -10,7 +10,6 @@
 #define STORAGE_LEVELDB_DB_FORMAT_H_
 
 #include <stdio.h>
-#include <iostream>
 #include "leveldb/comparator.h"
 #include "leveldb/db.h"
 #include "leveldb/filter_policy.h"
@@ -190,22 +189,14 @@ inline bool RollbackDrop(uint64_t seq, std::map<uint64_t, uint64_t> rollbacks) {
   if (rollbacks.empty()) {
     return false;
   }
-  std::map<uint64_t, uint64_t>::iterator it;
-  it = rollbacks.begin();
-  for (; it != rollbacks.end(); ++it) {
-    std::cerr<< "LL:in iter:" << it->first << "-" << it->second << std::endl;
-  }
-  it = rollbacks.lower_bound(seq);
+  std::map<uint64_t, uint64_t>::iterator it = rollbacks.lower_bound(seq);
   if (seq < it->first || it == rollbacks.end()) {
     --it;
   }
-  std::cerr<< "LL:result:" << it->first << "-" << it->second << std::endl;
 
   if (seq > it->first && seq <= it->second) {
-    std::cerr<< "LL:Drop seq = " << seq << std::endl;
     return true;
   } else {
-    std::cerr<< "LL:!!!Drop seq = " << seq << std::endl;
     return false;
   }
 }

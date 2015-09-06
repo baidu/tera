@@ -91,6 +91,7 @@ public:
                       const std::string& path,
                       const std::vector<uint64_t>& parent_tablets,
                       std::map<uint64_t, uint64_t> snapshots,
+                      std::map<uint64_t, uint64_t> rolllbacks,
                       leveldb::Logger* logger = NULL,
                       leveldb::Cache* block_cache = NULL,
                       leveldb::TableCache* table_cache = NULL,

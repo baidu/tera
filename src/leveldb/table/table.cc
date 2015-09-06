@@ -20,8 +20,6 @@
 #include "table/two_level_iterator.h"
 #include "util/coding.h"
 
-#include <iostream>
-
 namespace leveldb {
 
 struct Table::Rep {
@@ -351,7 +349,6 @@ Status Table::InternalGet(const ReadOptions& options, const Slice& k,
       if (block_iter->Valid()) {
         uint64_t seq;
         ParseInternalKeySeq(block_iter->key(), &seq);
-        std::cerr<<"LL:in table.cc seq=" << seq << std::endl;
         if (!RollbackDrop(seq, options.rollbacks)) {
           (*saver)(arg, block_iter->key(), block_iter->value());
         }

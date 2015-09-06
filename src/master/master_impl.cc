@@ -2185,12 +2185,21 @@ void MasterImpl::LoadTabletAsync(TabletPtr tablet, LoadClosure* done, uint64_t) 
     std::vector<uint64_t> snapshot_seq;
     table->ListSnapshot(&snapshot_id);
     tablet->ListSnapshot(&snapshot_seq);
-    LOG(INFO) << "LL: snapshot_id_size=" << snapshot_id.size() << " snapshot_seq_size=" << snapshot_seq.size();
     assert(snapshot_id.size() == snapshot_seq.size());
     for (uint32_t i = 0; i < snapshot_id.size(); ++i) {
         request->add_snapshots_id(snapshot_id[i]);
         request->add_snapshots_sequence(snapshot_seq[i]);
     }
+    std::vector<uint64_t> rollback_snapshots;
+    std::vector<uint64_t> rollback_points;
+    table->ListRollback(&rollback_snapshots);
+    tablet->ListRollback(&rollback_points);
+    assert(rollback_snapshots.size() == rollback_points.size());
+    for (uint32_t i = 0; i < rollback_snapshots.size(); ++i) {
+        request->add_rollback_snapshots(rollback_snapshots[i]);
+        request->add_rollback_pionrts(rollback_points[i]);
+    }
+
     TabletMeta meta;
     tablet->ToMeta(&meta);
     CHECK(meta.parent_tablets_size() <= 2)
@@ -4335,14 +4344,6 @@ void MasterImpl::ScanMetaCallbackForSplit(TabletPtr tablet,
     // update second child tablet meta
     second_meta.set_status(kTableOffLine);
     m_tablet_manager->AddTablet(second_meta, TableSchema(), &second_tablet);
-    for (int i = 0; i < second_meta.snapshot_list_size(); ++i) {
-        second_tablet->AddSnapshot(second_meta.snapshot_list(i));
-        LOG(INFO) << "second_tablet add snapshot " << second_meta.snapshot_list(i);
-    }
-    for (int i = 0; i < second_meta.rollback_points_size(); ++i) {
-        second_tablet->AddRollback(second_meta.rollback_points(i));
-        LOG(INFO) << "second_tablet add rollback " << second_meta.rollback_points(i);
-    }
 
     // delete old tablet
     tablet->SetStatus(kTableDeleted);
@@ -4351,14 +4352,6 @@ void MasterImpl::ScanMetaCallbackForSplit(TabletPtr tablet,
     // update first child tablet meta
     first_meta.set_status(kTableOffLine);
     m_tablet_manager->AddTablet(first_meta, TableSchema(), &first_tablet);
-    for (int i = 0; i < first_meta.snapshot_list_size(); ++i) {
-        first_tablet->AddSnapshot(first_meta.snapshot_list(i));
-        LOG(INFO) << "first_tablet add snapshot " << first_meta.snapshot_list(i);
-    }
-    for (int i = 0; i < first_meta.rollback_points_size(); ++i) {
-        second_tablet->AddRollback(first_meta.rollback_points(i));
-        LOG(INFO) << "first_tablet add rollback " << first_meta.rollback_points(i);
-    }
 
     LOG(INFO) << "try load child tablets, \nfirst: " << first_meta.ShortDebugString()
         << "\nsecond: " << second_meta.ShortDebugString();

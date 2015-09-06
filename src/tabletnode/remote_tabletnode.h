@@ -58,9 +58,9 @@ public:
                          google::protobuf::Closure* done);
 
     void Rollback(google::protobuf::RpcController* controller,
-                     const SnapshotRollbackRequest* request,
-                     SnapshotRollbackResponse* response,
-                     google::protobuf::Closure* done);
+                  const SnapshotRollbackRequest* request,
+                  SnapshotRollbackResponse* response,
+                  google::protobuf::Closure* done);
 
     void Query(google::protobuf::RpcController* controller,
                const QueryRequest* request,

@@ -85,7 +85,6 @@ bool TabletNodeClient::ReleaseSnapshot(const ReleaseSnapshotRequest* request,
 bool TabletNodeClient::Rollback(const SnapshotRollbackRequest* request,
                                 SnapshotRollbackResponse* response,
                                 Closure<void, SnapshotRollbackRequest*, SnapshotRollbackResponse*, bool, int>* done) {
-    LOG(INFO) << "LL:tabletnode client";
     return SendMessageWithRetry(&TabletNodeServer::Stub::Rollback,
                                 request, response, done, "Rollback",
                                 m_rpc_timeout, m_thread_pool);

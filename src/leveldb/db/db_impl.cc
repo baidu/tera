@@ -1399,16 +1399,7 @@ const uint64_t DBImpl::Rollback(uint64_t snapshot_seq, uint64_t rollback_point) 
   std::multiset<uint64_t>::iterator it = snapshots_.find(snapshot_seq);
   assert(it != snapshots_.end());
   assert(rollback_point >= snapshot_seq);
-  if (rollback_point != snapshot_seq) {
-    rollbacks_[snapshot_seq] = rollback_point;
-  } else {
-    Log(options_.info_log, "[%s] LL:skip rollback %lu-%lu", dbname_.c_str(), snapshot_seq, rollback_point);
-  }
-  Log(options_.info_log, "[%s] LL:in ldb rollback...\n", dbname_.c_str());
-  std::map<uint64_t, uint64_t>::iterator iter = rollbacks_.begin();
-  for (; iter != rollbacks_.end(); ++iter) {
-    Log(options_.info_log, "[%s] LL:in rollbacks_ %lu-%lu", dbname_.c_str(), iter->first, iter->second);
-  }
+  rollbacks_[snapshot_seq] = rollback_point;
   return rollback_point;
 }
 

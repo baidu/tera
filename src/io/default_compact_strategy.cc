@@ -32,7 +32,6 @@ bool DefaultCompactStrategy::Drop(const Slice& tera_key, uint64_t n,
                                   std::map<uint64_t, uint64_t> rollbacks,
                                   const std::string& lower_bound) {
     if (leveldb::RollbackDrop(n, rollbacks)) {
-        LOG(INFO) << "LL:comp drop " << tera_key.data() << " n=" << n;
         return true;
     }
     Slice key, col, qual;

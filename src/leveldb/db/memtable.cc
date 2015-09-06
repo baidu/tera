@@ -134,7 +134,6 @@ bool MemTable::Get(const LookupKey& key, std::string* value, std::map<uint64_t, 
     const char* key_ptr = GetVarint32Ptr(entry, entry+5, &key_length);
     uint64_t seq;
     ParseInternalKeySeq(Slice(key_ptr, key_length), &seq);
-    std::cerr<<"LL:in memtable.cc seq=" << seq << std::endl;
     if (RollbackDrop(seq, rollbacks)) {
       return false;
     }
