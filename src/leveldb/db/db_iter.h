@@ -24,7 +24,7 @@ extern Iterator* NewDBIterator(
     const Comparator* user_key_comparator,
     Iterator* internal_iter,
     const SequenceNumber& sequence,
-    std::map<uint64_t, uint64_t> rollbacks);
+    const std::map<uint64_t, uint64_t>& rollbacks);
 
 }  // namespace leveldb
 

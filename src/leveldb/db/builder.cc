@@ -60,7 +60,8 @@ Status BuildTable(const std::string& dbname,
       // type==kTypeValue, 且drop==true的记录可以被丢弃,
       // 其他记录均正常进入Memtable compact SST流程.
       if (static_cast<ValueType>(tag & 0xff) == kTypeValue && compact_strategy) {
-        bool drop = compact_strategy->Drop(raw_key, sequence_id, rollbacks);
+        bool drop = RollbackDrop(sequence_id, rollbacks) || 
+                    compact_strategy->Drop(raw_key);
         if (drop) {
             iter->Next();
 //             Log(options.info_log, "[Memtable Drop] sequence_id: %llu, raw_key: %s",

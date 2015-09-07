@@ -147,7 +147,7 @@ bool MemTable::Get(const LookupKey& key, std::string* value, std::map<uint64_t, 
           Slice v = GetLengthPrefixedSlice(key_ptr + key_length);
           CompactStrategy* strategy = compact_strategy_factory_ ?
                   compact_strategy_factory_->NewInstance() : NULL;
-          if (!strategy || !strategy->Drop(Slice(key_ptr, key_length - 8), 0, rollbacks)) {
+          if (!strategy || !strategy->Drop(Slice(key_ptr, key_length - 8))) {
               value->assign(v.data(), v.size());
           } else {
               *s = Status::NotFound(Slice());

@@ -1162,7 +1162,8 @@ Status DBImpl::DoCompactionWork(CompactionState* compact) {
         if (options_.drop_base_level_del_in_compaction) {
             lower_bound = compact->compaction->drop_lower_bound();
         }
-        drop = compact_strategy->Drop(ikey.user_key, ikey.sequence, rollbacks_, lower_bound);
+        drop = RollbackDrop(ikey.sequence, rollbacks_) ||
+               compact_strategy->Drop(ikey.user_key, lower_bound);
       }
 
       last_sequence_for_key = ikey.sequence;
@@ -1400,6 +1401,12 @@ const uint64_t DBImpl::Rollback(uint64_t snapshot_seq, uint64_t rollback_point) 
   assert(it != snapshots_.end());
   assert(rollback_point >= snapshot_seq);
   rollbacks_[snapshot_seq] = rollback_point;
+
+  std::map<uint64_t, uint64_t>::iterator iter = rollbacks_.begin();
+  for (; iter != rollbacks_.end(); ++iter) {
+    Log(options_.info_log,
+      "[%s] roll to: %lu-%lu", dbname_.c_str(), iter->first, iter->second);
+  }
   return rollback_point;
 }
 

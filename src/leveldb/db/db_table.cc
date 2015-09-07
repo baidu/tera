@@ -652,7 +652,6 @@ void DBTable::ReleaseSnapshot(uint64_t sequence_number) {
     for (; it != options_.exist_lg_list->end(); ++it) {
         lg_list_[*it]->ReleaseSnapshot(sequence_number);
     }
-    MutexLock lock(&mutex_);
 }
 
 const uint64_t DBTable::Rollback(uint64_t snapshot_seq, uint64_t rollback_point) {
@@ -661,7 +660,6 @@ const uint64_t DBTable::Rollback(uint64_t snapshot_seq, uint64_t rollback_point)
     for (; it != options_.exist_lg_list->end(); ++it) {
         lg_list_[*it]->Rollback(snapshot_seq, rollback_point);
     }
-    MutexLock lock(&mutex_);
     return rollback_point;
 }
 

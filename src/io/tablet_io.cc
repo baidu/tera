@@ -686,7 +686,7 @@ inline bool TabletIO::LowLevelScan(const std::string& start_tera_key,
             continue;
         }
 
-        if (compact_strategy->ScanDrop(it->key(), 0)) {
+        if (compact_strategy->ScanDrop(it->key())) {
             // skip drop record
             it->Next();
             continue;
@@ -821,7 +821,7 @@ bool TabletIO::LowLevelSeek(const std::string& row_key,
         if (cur_row_key.compare(row_key) > 0) {
             SetStatusCode(kKeyNotExist, &s);
         } else {
-            compact_strategy->ScanDrop(it_data->key(), 0);
+            compact_strategy->ScanDrop(it_data->key());
         }
     } else {
         SetStatusCode(kKeyNotExist, &s);
@@ -855,7 +855,7 @@ bool TabletIO::LowLevelSeek(const std::string& row_key,
             if (cur_row.compare(row_key) > 0 || cur_cf.compare(cf_name) > 0) {
                 continue;
             } else {
-                compact_strategy->ScanDrop(it_data->key(), 0);
+                compact_strategy->ScanDrop(it_data->key());
             }
         } else {
             VLOG(10) << "ll-seek fail, error iterator.";
@@ -894,7 +894,7 @@ bool TabletIO::LowLevelSeek(const std::string& row_key,
                 }
 
                 // skip qu delete mark
-                if (compact_strategy->ScanDrop(it_data->key(), 0)) {
+                if (compact_strategy->ScanDrop(it_data->key())) {
                     VLOG(10) << "ll-seek: scan drop " << "tablet=[" << m_tablet_path
                         << "] row_key=[" << row_key << "] cf=[" << cf_name
                         << "] qu=[" << qu_name << "]";
@@ -1321,7 +1321,7 @@ bool TabletIO::Scan(const ScanOption& option, KeyValueList* kv_list,
         if (*complete || (option.size_limit() > 0 && pack_size > option.size_limit())) {
             break;
         } else {
-            if (!(strategy && strategy->ScanDrop(key, 0))) {
+            if (!(strategy && strategy->ScanDrop(key))) {
                 KeyValuePair* pair = kv_list->Add();
                 if (m_table_schema.raw_key() == TTLKv) {
                     pair->set_key(key.data(), key.size() - sizeof(int64_t));
@@ -1694,22 +1694,17 @@ uint64_t TabletIO::GetSnapshot(uint64_t id, uint64_t snapshot_sequence,
 }
 
 bool TabletIO::ReleaseSnapshot(uint64_t snapshot_id, StatusCode* status) {
-    {
-        MutexLock lock(&m_mutex);
-        if (m_status != kReady) {
-            SetStatusCode(m_status, status);
-            return false;
-        }
-        if (id_to_snapshot_num_.find(snapshot_id) == id_to_snapshot_num_.end()) {
-            SetStatusCode(kSnapshotNotExist, status);
-            return false;
-        }
-        m_db_ref_count++;
-    }
-
-    m_db->ReleaseSnapshot(id_to_snapshot_num_[snapshot_id]);
-
     MutexLock lock(&m_mutex);
+    if (m_status != kReady) {
+        SetStatusCode(m_status, status);
+        return false;
+    }
+    if (id_to_snapshot_num_.find(snapshot_id) == id_to_snapshot_num_.end()) {
+        SetStatusCode(kSnapshotNotExist, status);
+        return false;
+    }
+    m_db_ref_count++;
+    m_db->ReleaseSnapshot(id_to_snapshot_num_[snapshot_id]);
     id_to_snapshot_num_.erase(snapshot_id);
     m_db_ref_count--;
     return true;
@@ -1728,21 +1723,19 @@ void TabletIO::ListSnapshot(std::vector<uint64_t>* snapshot_id) {
 }
 
 uint64_t TabletIO::Rollback(uint64_t snapshot_id, StatusCode* status) {
-    {
-        MutexLock lock(&m_mutex);
-        if (m_status != kReady) {
-            SetStatusCode(m_status, status);
-            return false;
-        }
-        if (id_to_snapshot_num_.find(snapshot_id) == id_to_snapshot_num_.end()) {
-            SetStatusCode(kSnapshotNotExist, status);
-            return false;
-        }
-        m_db_ref_count++;
-    }
-    uint64_t rollback_point = m_db->Rollback(id_to_snapshot_num_[snapshot_id]);
     MutexLock lock(&m_mutex);
-    rollbacks_[id_to_snapshot_num_[snapshot_id]] = rollback_point;
+    if (m_status != kReady) {
+        SetStatusCode(m_status, status);
+        return false;
+    }
+    std::map<uint64_t, uint64_t>::iterator it = id_to_snapshot_num_.find(snapshot_id);
+    if (it == id_to_snapshot_num_.end()) {
+        SetStatusCode(kSnapshotNotExist, status);
+        return false;
+    }
+    m_db_ref_count++;
+    uint64_t rollback_point = m_db->Rollback(it->second);
+    rollbacks_[it->second] = rollback_point;
     m_db_ref_count--;
     return rollback_point;
 }
