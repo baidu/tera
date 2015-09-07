@@ -2911,9 +2911,8 @@ void MasterImpl::QueryTabletNodeCallback(std::string addr, QueryRequest* request
                                           tablet->GetKeyEnd());
             if ((tablet_map.find(range) == tablet_map.end()) && 
                 (tablet->SetStatusIf(kTableOffLine, kTableReady))) {
-                // master loads tablet, but ts not
-                LOG(ERROR) << __func__ << ", master has " 
-                           << tablet->GetPath() << ", ts:" << addr << " not.";
+                LOG(ERROR) << "master load tablet, but ts not: addr " << addr
+                           << ", " << tablet; 
                 TryLoadTablet(tablet, addr);
                 continue;
             }
