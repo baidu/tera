@@ -308,7 +308,8 @@ static void SaveValue(void* arg, const Slice& ikey, const Slice& v) {
     if (s->ucmp->Compare(parsed_key.user_key, s->user_key) == 0) {
       s->state = (parsed_key.type == kTypeValue) ? kFound : kDeleted;
       if (s->state == kFound) {
-        if (!s->compact_strategy || !s->compact_strategy->Drop(parsed_key.user_key, 0, std::map<uint64_t, uint64_t>())) {
+        std::map<uint64_t, uint64_t> rollbacks;
+        if (!s->compact_strategy || !s->compact_strategy->Drop(parsed_key.user_key, 0, rollbacks)) {
           s->value->assign(v.data(), v.size());
         } else {
           s->state = kDeleted; // stop searching in other files.

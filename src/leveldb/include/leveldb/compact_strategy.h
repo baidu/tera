@@ -23,7 +23,7 @@ class CompactStrategy {
 public:
     virtual ~CompactStrategy() {}
 
-    virtual bool Drop(const Slice& k, uint64_t n, std::map<uint64_t, uint64_t> rollbacks,
+    virtual bool Drop(const Slice& k, uint64_t n, std::map<uint64_t, uint64_t>& rollbacks,
                       const std::string& lower_bound = "") = 0;
 
     // tera-specific, based on all-level iterators.
@@ -44,7 +44,7 @@ class DummyCompactStrategy : public CompactStrategy {
 public:
     virtual ~DummyCompactStrategy() {}
 
-    virtual bool Drop(const Slice& k, uint64_t n, std::map<uint64_t, uint64_t> rollbacks, const std::string& lower_bound) {
+    virtual bool Drop(const Slice& k, uint64_t n, std::map<uint64_t, uint64_t>& rollbacks, const std::string& lower_bound) {
         return false;
     }
 

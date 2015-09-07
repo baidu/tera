@@ -25,7 +25,7 @@ const char* KvCompactStrategy::Name() const {
 }
 
 bool KvCompactStrategy::Drop(const leveldb::Slice& tera_key, uint64_t n,
-                             std::map<uint64_t, uint64_t> rollbacks,
+                             std::map<uint64_t, uint64_t>& rollbacks,
                              const std::string& lower_bound) {
 
     if (leveldb::RollbackDrop(n, rollbacks)) {
@@ -65,7 +65,8 @@ bool KvCompactStrategy::Drop(const leveldb::Slice& tera_key, uint64_t n,
 }
 
 bool KvCompactStrategy::ScanDrop(const leveldb::Slice& tera_key, uint64_t n) {
-    return Drop(tera_key, n, std::map<uint64_t, uint64_t>(), ""); // used in scan.
+    std::map<uint64_t, uint64_t> rollbacks;
+    return Drop(tera_key, n, rollbacks, ""); // used in scan.
 }
 
 bool KvCompactStrategy::ScanMergedValue(Iterator* it, std::string* merged_value,

@@ -1400,6 +1400,12 @@ const uint64_t DBImpl::Rollback(uint64_t snapshot_seq, uint64_t rollback_point) 
   assert(it != snapshots_.end());
   assert(rollback_point >= snapshot_seq);
   rollbacks_[snapshot_seq] = rollback_point;
+
+  std::map<uint64_t, uint64_t>::iterator iter = rollbacks_.begin();
+  for (; iter != rollbacks_.end(); ++iter) {
+    Log(options_.info_log,
+      "[%s] roll to: %lu-%lu", dbname_.c_str(), iter->first, iter->second);
+  }
   return rollback_point;
 }
 

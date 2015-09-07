@@ -2141,6 +2141,12 @@ int32_t Meta2Op(Client *client, int32_t argc, char** argv) {
                 << meta.table_size() << ", "
                 << StatusCodeToString(meta.status()) << ", "
                 << StatusCodeToString(meta.compact_status()) << std::endl;
+            int32_t roll_size = meta.rollback_points_size();
+            std::cout << "roll=";
+            for (int32_t r = 0; r < roll_size; ++r) {
+                std::cout << meta.rollback_points(r) << " ";
+            }
+            std::cout << std::endl;
         }
         if (op == "bak") {
             WriteTablet(meta, bak);
