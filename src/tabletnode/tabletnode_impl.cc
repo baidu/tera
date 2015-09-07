@@ -733,23 +733,23 @@ void TabletNodeImpl::SplitTablet(const SplitTabletRequest* request,
                 LOG(INFO) << "LG[" << i << "] is del";
                 continue;
             }
-            std::string left_LGname = FLAGS_tera_tabletnode_path_prefix + "/" + 
+            std::string left_lgname = FLAGS_tera_tabletnode_path_prefix + "/" + 
                                  left_tabletname + "/" + leveldb::Uint64ToString(i);
-            std::string right_LGname = FLAGS_tera_tabletnode_path_prefix + "/" + 
+            std::string right_lgname = FLAGS_tera_tabletnode_path_prefix + "/" + 
                                  right_tabletname + "/" + leveldb::Uint64ToString(i);
             
-            LOG(INFO) << __func__ << ", left LGname " << left_LGname 
-                << ", right LGname " << right_LGname;
+            LOG(INFO) << __func__ << ", left lgname " << left_lgname 
+                << ", right lgname " << right_lgname;
             
             DebugTeraTabletServerCrashOrSuspend(DEBUG_ts_split_crash_or_suspend, 20);
             
-            if (env->FileExists(leveldb::CurrentFileName(left_LGname))) {
+            if (env->FileExists(leveldb::CurrentFileName(left_lgname))) {
                 // step into split stage 2
                 parent_tabletio->SetStatus(io::TabletIO::kFrozen); 
                 stage = 2;
                 break;
             }
-            if (env->FileExists(leveldb::CurrentFileName(right_LGname))) {
+            if (env->FileExists(leveldb::CurrentFileName(right_lgname))) {
                 // step into split stage 2
                 parent_tabletio->SetStatus(io::TabletIO::kFrozen);
                 stage = 2;

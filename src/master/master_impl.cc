@@ -222,7 +222,7 @@ bool MasterImpl::Restore(const std::map<std::string, std::string>& tabletnode_li
         return false;
     }
     m_tablet_manager->FindTablet(FLAGS_tera_master_meta_table_name, "", &m_meta_tablet);
-    m_zk_adapter->UpdateRootTabletNode(meta_tablet_addr); 
+    m_zk_adapter->UpdateRootTabletNode(meta_tablet_addr);
 
     RestoreUserTablet(tablet_list);
 
@@ -350,7 +350,7 @@ void MasterImpl::RestoreUserTablet(const std::vector<TabletMeta>& report_meta_li
     
     {
         std::vector<TabletPtr>::iterator it = log_tablets.begin();
-        for (; it != log_tablets.end(); it++) {
+        for (; it != log_tablets.end(); ++it) {
             LOG(INFO) << __func__ << ", status " << StatusCodeToString((*it)->GetStatus())
                 << ", path " << (*it)->GetPath();
             (*it)->SetStatus(kTableReady);
@@ -1243,13 +1243,6 @@ void MasterImpl::TabletCmdCtrl(const CmdCtrlRequest* request,
             response->set_status(kInvalidArgument);
             return;
         }
-#if 0
-        std::string split_key;
-        if (request->arg_list_size() == 3) {
-            split_key = request->arg_list(2);
-            LOG(INFO) << "ignore user specified split key: not support";
-        }
-#endif
         SplitTablet(tablet, 0);
         response->set_status(kMasterOk);
     } else {
@@ -3344,11 +3337,10 @@ bool MasterImpl::SplitTablet(TabletPtr tablet, uint32_t phase)
 }
 
 void MasterImpl::SplitTabletWriteLogCallback(TabletPtr tablet, 
-                                        int32_t retry_times,
-                                        WriteTabletRequest *request,
-                                        WriteTabletResponse *response,
-                                        bool failed, int ErrCode)
-{
+                                             int32_t retry_times,
+                                             WriteTabletRequest *request,
+                                             WriteTabletResponse *response,
+                                             bool failed, int ErrCode) {
     CHECK(tablet->GetStatus() == kTableOnSplit);
     StatusCode status = response->status();
     if (!failed && status == kTabletNodeOk) {
@@ -3424,16 +3416,15 @@ void MasterImpl::SplitTabletAsync(TabletPtr tablet, SplitClosure *done)
     
     // send split rpc
     tabletnode::TabletNodeClient node_client(tablet->GetServerAddr(),
-                                        FLAGS_tera_master_split_rpc_timeout);
+                                             FLAGS_tera_master_split_rpc_timeout);
     node_client.SplitTablet(request, response, done);
 }
 
 void MasterImpl::SplitTabletCallback(TabletPtr tablet, 
-                                    int32_t retry_times,
-                                    SplitTabletRequest* request,
-                                    SplitTabletResponse* response,
-                                    bool failed, int error_code)
-{
+                                     int32_t retry_times,
+                                     SplitTabletRequest* request,
+                                     SplitTabletResponse* response,
+                                     bool failed, int error_code) {
     CHECK(tablet->GetStatus() == kTableOnSplit);
     StatusCode status = response->status();
     delete request;
@@ -3496,7 +3487,7 @@ void MasterImpl::SplitTabletCallback(TabletPtr tablet,
 
     DebugTeraMasterCrashOrSuspend(DEBUG_master_split_crash_or_suspend, 61);
     SplitTablet(tablet, 3);
-    return ;
+    return;
 }
 
 void MasterImpl::DelayRetrySplitTabletAsync(TabletPtr delay_tablet, 
@@ -3505,18 +3496,17 @@ void MasterImpl::DelayRetrySplitTabletAsync(TabletPtr delay_tablet,
     LOG(INFO) << __func__ << ", " << delay_tablet->GetPath();
     SplitClosure* done = 
         NewClosure(this, &MasterImpl::SplitTabletCallback,
-                delay_tablet, delay_retry_times + 1);
+                   delay_tablet, delay_retry_times + 1);
     SplitTabletAsync(delay_tablet, done);
 
     // when split fail too many, kick
     if ((delay_retry_times + 1) > FLAGS_tera_master_impl_retry_times) {
         TryKickTabletNode(delay_tablet->GetServerAddr());
     }
-    return ;
+    return;
 }
 
-void MasterImpl::SplitTabletUpdateMetaAsync(TabletPtr tablet)
-{
+void MasterImpl::SplitTabletUpdateMetaAsync(TabletPtr tablet) {
     // construct tablet meta
     TabletOpLog log;
     CHECK(tablet->GetTabletOpLog(&log));
@@ -3582,13 +3572,12 @@ void MasterImpl::SplitTabletUpdateMetaAsync(TabletPtr tablet)
 }
 
 void MasterImpl::SplitTabletUpdateMetaCallback(TablePtr null_table,
-                                        std::vector<TabletPtr> tablets,
-                                        TabletPtr tablet, // parent tablet
-                                        int32_t retry_times,
-                                        WriteTabletRequest* request,
-                                        WriteTabletResponse* response,
-                                        bool failed, int ErrCode)
-{
+                                               std::vector<TabletPtr> tablets,
+                                               TabletPtr tablet, // parent tablet
+                                               int32_t retry_times,
+                                               WriteTabletRequest* request,
+                                               WriteTabletResponse* response,
+                                               bool failed, int ErrCode) {
     StatusCode status = response->status();
     if (!failed && status == kTabletNodeOk) {
         CHECK_GT(response->row_status_list_size(), 0);
@@ -3618,7 +3607,7 @@ void MasterImpl::SplitTabletUpdateMetaCallback(TablePtr null_table,
             NewClosure(this, &MasterImpl::SplitTabletUpdateMetaCallback,
                     null_table, tablets, tablet, retry_times + 1);
             SuspendMetaOperation(null_table, tablets, false, done);
-        return ;
+        return;
     }
 
     // handle success, enable new tablet
@@ -3634,7 +3623,7 @@ void MasterImpl::SplitTabletUpdateMetaCallback(TablePtr null_table,
     CHECK(m_tablet_manager->SplitTablet(tablet, lchild_tablet, rchild_tablet));
     
     DebugTeraMasterCrashOrSuspend(DEBUG_master_split_crash_or_suspend, 71);
-    return ;
+    return;
 }
 
 bool MasterImpl::TryMergeTablet(TabletPtr tablet) {

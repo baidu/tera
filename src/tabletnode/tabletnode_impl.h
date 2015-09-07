@@ -96,14 +96,7 @@ public:
     void SplitTablet(const SplitTabletRequest* request,
                      SplitTabletResponse* response,
                      google::protobuf::Closure* done);
-    
-    void LoadTabletForSplitAsync(io::TabletIO* tabletio,
-                const SplitTabletRequest* request, int child_index,
-                const std::vector<uint64_t> parent_tablets,
-                std::map<uint64_t, uint64_t> snapshots,
-                StatusCode* status,
-                sem_t* finish_counter);
-
+     
     void EnterSafeMode();
     void LeaveSafeMode();
     void ExitService();
@@ -139,6 +132,14 @@ private:
                          const std::string& key_end);
     
     void InitCacheSystem();
+    
+    void LoadTabletForSplitAsync(io::TabletIO* tabletio,
+                                 const SplitTabletRequest* request, 
+                                 int child_index,
+                                 const std::vector<uint64_t> parent_tablets,
+                                 std::map<uint64_t, uint64_t> snapshots,
+                                 StatusCode* status,
+                                 sem_t* finish_counter);
 
     void ReleaseMallocCache();
     void EnableReleaseMallocCacheTimer(int32_t expand_factor = 1);

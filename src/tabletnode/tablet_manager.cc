@@ -28,8 +28,7 @@ TabletManager::~TabletManager() {}
 bool TabletManager::TestSplitTablet(const std::string& table_name,
                                     const std::string& start_key,
                                     const std::string& mid_key,
-                                    const std::string& end_key)
-{
+                                    const std::string& end_key) {
     TabletRange parent(table_name, start_key, end_key);
     TabletRange lchild(table_name, start_key, mid_key);
     TabletRange rchild(table_name, mid_key, end_key);

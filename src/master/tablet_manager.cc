@@ -69,8 +69,7 @@ Tablet::~Tablet() {
     m_table.reset();
 }
 
-bool Tablet::CollectSplitContext(TabletOpLog* log)
-{
+bool Tablet::CollectSplitContext(TabletOpLog* log) {
     // MutexLock lock(&m_mutex);
     m_mutex.Lock();
 

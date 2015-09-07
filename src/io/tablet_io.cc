@@ -335,8 +335,7 @@ bool TabletIO::Unload(StatusCode* status) {
     return true;
 }
 
-bool TabletIO::GetMidKey(std::string* mid_key, StatusCode* status) 
-{
+bool TabletIO::GetMidKey(std::string* mid_key, StatusCode* status) {
     {
         MutexLock lock(&m_mutex);
         if (m_status != kReady && 
@@ -350,7 +349,7 @@ bool TabletIO::GetMidKey(std::string* mid_key, StatusCode* status)
     // find mid key
     std::string raw_split_key;
     if (!m_db->FindSplitKey(m_raw_start_key, m_raw_end_key, 0.5,
-                                        &raw_split_key)) {
+                            &raw_split_key)) {
         MutexLock lock(&m_mutex);
         SetStatusCode(kTableNotSupport, status);
         m_db_ref_count--;
@@ -365,7 +364,7 @@ bool TabletIO::GetMidKey(std::string* mid_key, StatusCode* status)
         leveldb::Slice cf_split;
         leveldb::Slice qu_split;
         if (!m_key_operator->ExtractTeraKey(raw_split_key, &key_split,
-                                    &cf_split, &qu_split, NULL, NULL)) {
+                                            &cf_split, &qu_split, NULL, NULL)) {
             SetStatusCode(kTableNotSupport, status);
             MutexLock lock(&m_mutex);
             m_db_ref_count--;
