@@ -22,6 +22,87 @@ TabletManager::TabletManager() {}
 
 TabletManager::~TabletManager() {}
 
+//  @TestSplitTablet:     test whether split finish
+//
+//  @return:              return true if split success
+bool TabletManager::TestSplitTablet(const std::string& table_name,
+                                    const std::string& start_key,
+                                    const std::string& mid_key,
+                                    const std::string& end_key)
+{
+    TabletRange parent(table_name, start_key, end_key);
+    TabletRange lchild(table_name, start_key, mid_key);
+    TabletRange rchild(table_name, mid_key, end_key);
+    
+    MutexLock lock(&m_mutex);
+
+    std::map<TabletRange, io::TabletIO *>::iterator it; 
+    it = m_tablet_list.find(rchild);
+    if (it != m_tablet_list.end()) {
+        // get right child
+        LOG(INFO) << __func__ << ", step into phase 2, " << table_name << ", start "
+            << start_key << ", mid " << mid_key << ", end " << end_key;
+        it = m_tablet_list.find(lchild);
+        CHECK(it != m_tablet_list.end());
+        return true;
+    }
+    VLOG(20) << __func__ << ", split not finish, " << table_name << ", start "
+        << start_key << ", mid " << mid_key << ", end " << end_key;
+    return false; 
+}
+
+// @SplitTabletIO:          delete parent tabletio, add left && right child
+bool TabletManager::SplitTabletIO(const std::string& table_name,
+                                  const std::string& key_start,
+                                  const std::string& mid_key,
+                                  const std::string& key_end,
+                                  io::TabletIO *parent_tabletIO,
+                                  io::TabletIO *left_tabletIO,
+                                  io::TabletIO *right_tabletIO)
+{
+    TabletRange parent(table_name, key_start, key_end);
+    TabletRange lchild(table_name, key_start, mid_key);
+    TabletRange rchild(table_name, mid_key, key_end);
+    
+    MutexLock lock(&m_mutex);
+    std::map<TabletRange, io::TabletIO *>::iterator it;
+    it = m_tablet_list.find(parent);
+    if (it != m_tablet_list.end()) {
+        m_tablet_list.erase(it);
+        parent_tabletIO->DecRef();
+        
+        LOG(INFO) << __func__ << ": " << table_name << ", start " << key_start
+            << ", mid_key " << mid_key << ", end " << key_end;
+
+        m_tablet_list.insert(std::pair<TabletRange, io::TabletIO*>(lchild, left_tabletIO));
+        m_tablet_list.insert(std::pair<TabletRange, io::TabletIO*>(rchild, right_tabletIO));
+        return true;
+    }
+    return false;
+}
+
+// @AddTablet:      add tabletIO into tabletmanager
+bool TabletManager::AddTablet(const std::string& table_name,
+                              const std::string& key_start,
+                              const std::string& key_end,
+                              io::TabletIO *tablet_io)
+{
+    MutexLock lock(&m_mutex);
+    
+    TabletRange range(table_name, key_start, key_end);
+    std::map<TabletRange, io::TabletIO*>::iterator it =
+        m_tablet_list.find(range);
+    if (it != m_tablet_list.end()) {
+        LOG(INFO) << "tablet exist: " << table_name << ", " << key_start
+            << ", old endkey " << it->first.key_end << ", new endkey "
+            << key_end;
+        return false;
+    }
+    m_tablet_list.insert(std::pair<TabletRange, io::TabletIO*>(range, tablet_io));
+    tablet_io->AddRef();
+    return true;
+}
+
 bool TabletManager::AddTablet(const std::string& table_name,
                               const std::string& table_path,
                               const std::string& key_start,
