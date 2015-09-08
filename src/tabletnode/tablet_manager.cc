@@ -75,6 +75,8 @@ bool TabletManager::SplitTabletIO(const std::string& table_name,
 
         m_tablet_list.insert(std::pair<TabletRange, io::TabletIO*>(lchild, left_tabletIO));
         m_tablet_list.insert(std::pair<TabletRange, io::TabletIO*>(rchild, right_tabletIO));
+        left_tabletIO->AddRef();
+        right_tabletIO->AddRef();
         return true;
     }
     return false;

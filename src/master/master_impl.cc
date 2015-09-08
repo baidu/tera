@@ -353,8 +353,8 @@ void MasterImpl::RestoreUserTablet(const std::vector<TabletMeta>& report_meta_li
         for (; it != log_tablets.end(); ++it) {
             LOG(INFO) << __func__ << ", status " << StatusCodeToString((*it)->GetStatus())
                 << ", path " << (*it)->GetPath();
-            (*it)->SetStatus(kTableReady);
-            (*it)->SetStatus(kTableOnSplit);
+            CHECK((*it)->SetStatusIf(kTableReady, kTableNotInit)); 
+            CHECK((*it)->SetStatusIf(kTableOnSplit, kTableReady));
         }
     }
 
