@@ -41,11 +41,11 @@
 #include "util/coding.h"
 #include "util/logging.h"
 #include "util/mutexlock.h"
+#include "util/thread_pool.h"
 
 namespace leveldb {
 
 const int kNumNonTableCacheFiles = 10;
-const double kVeryHighScore = 1000.0;
 
 // Information kept for every waiting writer
 struct DBImpl::Writer {
@@ -175,7 +175,7 @@ Status DBImpl::Shutdown1() {
 
   Log(options_.info_log, "[%s] wait bg compact finish", dbname_.c_str());
   if (bg_compaction_scheduled_) {
-    env_->ReSchedule(bg_schedule_id_, kVeryHighScore);
+    env_->ReSchedule(bg_schedule_id_, kDumpMemTableUrgentScore);
   }
   while (bg_compaction_scheduled_) {
     bg_cv_.Wait();
@@ -782,10 +782,10 @@ void DBImpl::MaybeScheduleCompaction() {
   } else {
     double score = versions_->CompactionScore();
     if (manual_compaction_ != NULL) {
-        score = 10.0;
+        score = kManualCompactScore;
     }
     if (imm_ != NULL) {
-        score = 100.0;
+        score = kDumpMemTableScore;
     }
     if (score > 0) {
         if (bg_compaction_scheduled_ && score <= bg_compaction_score_) {

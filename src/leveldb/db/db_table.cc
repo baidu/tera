@@ -26,6 +26,7 @@
 #include "leveldb/table_utils.h"
 #include "table/merger.h"
 #include "util/string_ext.h"
+#include "util/thread_pool.h"
 
 namespace leveldb {
 
@@ -126,6 +127,9 @@ Status DBTable::Shutdown1() {
 
     Log(options_.info_log, "[%s] wait bg garbage clean finish", dbname_.c_str());
     mutex_.Lock();
+    if (bg_schedule_gc_) {
+        env_->ReSchedule(bg_schedule_gc_id_, kDeleteLogUrgentScore);
+    }
     while (bg_schedule_gc_) {
         bg_cv_.Wait();
     }
@@ -975,7 +979,7 @@ bool DBTable::MinorCompact() {
         ok = (ok && ret);
     }
     MutexLock lock(&mutex_);
-    ScheduleGarbageClean(20.0);
+    ScheduleGarbageClean(kDeleteLogScore);
     return ok;
 }
 
@@ -1044,7 +1048,7 @@ int DBTable::SwitchLog(bool blocked_switch) {
 
             // protect bg thread cv
             mutex_.Lock();
-            ScheduleGarbageClean(10.0);
+            ScheduleGarbageClean(kDeleteLogScore);
             mutex_.Unlock();
 
             if (blocked_switch) {
@@ -1078,11 +1082,11 @@ void DBTable::ScheduleGarbageClean(double score) {
         env_->ReSchedule(bg_schedule_gc_id_, score);
         bg_schedule_gc_score_ = score;
     } else {
-        Log(options_.info_log, "[%s] Schedule Garbage clean[%ld] score= %.2f",
-            dbname_.c_str(), bg_schedule_gc_id_, score);
         bg_schedule_gc_id_ = env_->Schedule(&DBTable::GarbageCleanWrapper, this, score);
         bg_schedule_gc_score_ = score;
         bg_schedule_gc_ = true;
+        Log(options_.info_log, "[%s] Schedule Garbage clean[%ld] score= %.2f",
+            dbname_.c_str(), bg_schedule_gc_id_, score);
     }
 }
 
