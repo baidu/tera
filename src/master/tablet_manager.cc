@@ -1174,7 +1174,9 @@ void TabletManager::LoadTabletMeta(const std::string& key,
                 << meta.path();
             return;
         }
-        meta.set_status(kTableNotInit);
+        if (meta.status() != kTableUnLoading) {
+            meta.set_status(kTableNotInit);
+        }
         if (!AddTablet(meta, table->GetSchema(), &tablet, &ret_status)) {
             LOG(ERROR) << "duplicate tablet in meta table: table=" << meta.table_name()
                 << " start=" << DebugString(meta.key_range().key_start());
