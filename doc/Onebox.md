@@ -82,17 +82,19 @@
 
 读出一条数据：
 
-`./teracli get hello row_first`
+`./teracli get hello_kv row_first`
 
 `./teracli get hello_table row_first "cf1:qu"`
 
 卸载表格：
 
-`./teracli disable hello`
+`./teracli disable hello_kv`
+`./teracli disable hello_table`
 
 删除表格：
 
-`./teracli drop hello`
+`./teracli drop hello_kv`
+`./teracli drop hello_table`
 
 ## 写在最后
 Tera onebox模式可以体验几乎所有的功能特性，希望通过上面的介绍可以让大家对Tera有一个初步的认识。
