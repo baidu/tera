@@ -20,11 +20,12 @@ public:
     DefaultCompactStrategy(const TableSchema& schema);
     virtual ~DefaultCompactStrategy();
 
-    virtual bool Drop(const Slice& k, const std::string& lower_bound);
+    virtual bool Drop(const Slice& k, uint64_t n,
+                      const std::string& lower_bound);
 
     // tera-specific, based on all-level iterators.
     // used in LowLevelScan
-    virtual bool ScanDrop(const Slice& k);
+    virtual bool ScanDrop(const Slice& k, uint64_t n);
 
     virtual const char* Name() const;
 

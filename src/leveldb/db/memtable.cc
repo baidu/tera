@@ -114,7 +114,7 @@ void MemTable::Add(SequenceNumber s, ValueType type,
   last_seq_ = s;
 }
 
-bool MemTable::Get(const LookupKey& key, std::string* value, std::map<uint64_t, uint64_t> rollbacks, Status* s) {
+bool MemTable::Get(const LookupKey& key, std::string* value, const std::map<uint64_t, uint64_t>& rollbacks, Status* s) {
   Slice memkey = key.memtable_key();
   Table::Iterator iter(&table_);
   iter.Seek(memkey.data());
@@ -132,9 +132,9 @@ bool MemTable::Get(const LookupKey& key, std::string* value, std::map<uint64_t, 
 
     uint32_t key_length;
     const char* key_ptr = GetVarint32Ptr(entry, entry+5, &key_length);
-    uint64_t seq;
-    ParseInternalKeySeq(Slice(key_ptr, key_length), &seq);
-    if (RollbackDrop(seq, rollbacks)) {
+    ParsedInternalKey ikey;
+    ParseInternalKey(Slice(key_ptr, key_length), &ikey);
+    if (RollbackDrop(ikey.sequence, rollbacks)) {
       return false;
     }
     if (comparator_.comparator.user_comparator()->Compare(
@@ -147,7 +147,7 @@ bool MemTable::Get(const LookupKey& key, std::string* value, std::map<uint64_t, 
           Slice v = GetLengthPrefixedSlice(key_ptr + key_length);
           CompactStrategy* strategy = compact_strategy_factory_ ?
                   compact_strategy_factory_->NewInstance() : NULL;
-          if (!strategy || !strategy->Drop(Slice(key_ptr, key_length - 8))) {
+          if (!strategy || !strategy->Drop(Slice(key_ptr, key_length - 8), 0)) {
               value->assign(v.data(), v.size());
           } else {
               *s = Status::NotFound(Slice());

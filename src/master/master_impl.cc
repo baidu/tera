@@ -2197,7 +2197,7 @@ void MasterImpl::LoadTabletAsync(TabletPtr tablet, LoadClosure* done, uint64_t) 
     assert(rollback_snapshots.size() == rollback_points.size());
     for (uint32_t i = 0; i < rollback_snapshots.size(); ++i) {
         request->add_rollback_snapshots(rollback_snapshots[i]);
-        request->add_rollback_pionrts(rollback_points[i]);
+        request->add_rollback_points(rollback_points[i]);
     }
 
     TabletMeta meta;

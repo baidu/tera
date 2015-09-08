@@ -2100,10 +2100,6 @@ int32_t Meta2Op(Client *client, int32_t argc, char** argv) {
         const tera::TableMeta& meta = table_list.meta(i);
         if (op == "show") {
             std::cout << "table: " << meta.table_name() << std::endl;
-            std::cout << "rollback size: " << meta.rollback_snapshot_size() << std::endl;
-            for (int32_t i = 0; i < meta.rollback_snapshot_size(); ++i) {
-                std::cout << "rollback: " << meta.rollback_snapshot(i) << std::endl;
-            }
             int32_t lg_size = meta.schema().locality_groups_size();
             for (int32_t lg_id = 0; lg_id < lg_size; lg_id++) {
                 const tera::LocalityGroupSchema& lg =
@@ -2141,12 +2137,6 @@ int32_t Meta2Op(Client *client, int32_t argc, char** argv) {
                 << meta.table_size() << ", "
                 << StatusCodeToString(meta.status()) << ", "
                 << StatusCodeToString(meta.compact_status()) << std::endl;
-            int32_t roll_size = meta.rollback_points_size();
-            std::cout << "roll=";
-            for (int32_t r = 0; r < roll_size; ++r) {
-                std::cout << meta.rollback_points(r) << " ";
-            }
-            std::cout << std::endl;
         }
         if (op == "bak") {
             WriteTablet(meta, bak);

@@ -347,9 +347,9 @@ Status Table::InternalGet(const ReadOptions& options, const Slice& k,
       Iterator* block_iter = BlockReader(this, options, iiter->value());
       block_iter->Seek(k);
       if (block_iter->Valid()) {
-        uint64_t seq;
-        ParseInternalKeySeq(block_iter->key(), &seq);
-        if (!RollbackDrop(seq, options.rollbacks)) {
+        ParsedInternalKey ikey;
+        ParseInternalKey(block_iter->key(), &ikey);
+        if (!RollbackDrop(ikey.sequence, options.rollbacks)) {
           (*saver)(arg, block_iter->key(), block_iter->value());
         }
       }

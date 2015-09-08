@@ -327,7 +327,6 @@ struct ReadOptions {
         snapshot(kMaxSequenceNumber),
         target_lgs(NULL),
         db_opt(db_option) {
-    rollbacks = std::map<uint64_t, uint64_t>();
   }
   ReadOptions() {
     *this = ReadOptions(NULL);

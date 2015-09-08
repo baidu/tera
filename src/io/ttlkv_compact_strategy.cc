@@ -2,7 +2,6 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include "db/dbformat.h"
 #include "io/ttlkv_compact_strategy.h"
 #include "io/io_utils.h"
 #include "leveldb/slice.h"
@@ -24,7 +23,8 @@ const char* KvCompactStrategy::Name() const {
     return "tera.TTLKvCompactStrategy";
 }
 
-bool KvCompactStrategy::Drop(const leveldb::Slice& tera_key, const std::string& lower_bound) {
+bool KvCompactStrategy::Drop(const leveldb::Slice& tera_key, uint64_t n,
+                             const std::string& lower_bound) {
     // If expire timestamp + schema's TTL <= time(NULL), Then Drop.
     // Desc: 当前TTL的语义理解为：假设用户指定了key在03:10分过期，
     // 同时Schema的TTL为+300(延后5分钟), 那么这个key将在03:15分过期.
@@ -58,8 +58,8 @@ bool KvCompactStrategy::Drop(const leveldb::Slice& tera_key, const std::string& 
     return true;
 }
 
-bool KvCompactStrategy::ScanDrop(const leveldb::Slice& tera_key) {
-    return Drop(tera_key, ""); // used in scan.
+bool KvCompactStrategy::ScanDrop(const leveldb::Slice& tera_key, uint64_t n) {
+    return Drop(tera_key, n, ""); // used in scan.
 }
 
 bool KvCompactStrategy::ScanMergedValue(Iterator* it, std::string* merged_value,

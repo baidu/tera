@@ -7,7 +7,6 @@
 
 #include <stdint.h>
 #include <string>
-#include <map>
 #include "leveldb/iterator.h"
 
 namespace leveldb {
@@ -23,11 +22,12 @@ class CompactStrategy {
 public:
     virtual ~CompactStrategy() {}
 
-    virtual bool Drop(const Slice& k, const std::string& lower_bound = "") = 0;
+    virtual bool Drop(const Slice& k, uint64_t n,
+                      const std::string& lower_bound = "") = 0;
 
     // tera-specific, based on all-level iterators.
     // used in LowLevelScan
-    virtual bool ScanDrop(const Slice& k) = 0;
+    virtual bool ScanDrop(const Slice& k, uint64_t n) = 0;
 
     virtual bool ScanMergedValue(Iterator* it, std::string* merged_value,
                                  int64_t* merged_num = NULL) = 0;
@@ -43,11 +43,11 @@ class DummyCompactStrategy : public CompactStrategy {
 public:
     virtual ~DummyCompactStrategy() {}
 
-    virtual bool Drop(const Slice& k, const std::string& lower_bound) {
+    virtual bool Drop(const Slice& k, uint64_t n, const std::string& lower_bound) {
         return false;
     }
 
-    virtual bool ScanDrop(const Slice& k) {
+    virtual bool ScanDrop(const Slice& k, uint64_t n) {
         return false;
     }
 

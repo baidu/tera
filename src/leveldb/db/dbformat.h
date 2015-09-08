@@ -90,8 +90,6 @@ extern void AppendInternalKey(std::string* result,
 extern bool ParseInternalKey(const Slice& internal_key,
                              ParsedInternalKey* result);
 
-extern void ParseInternalKeySeq(const Slice& internal_key, uint64_t* seq);
-
 extern bool RollbackDrop(uint64_t seq, std::map<uint64_t, uint64_t> rollbacks);
 
 // Returns the user key portion of an internal key.
@@ -186,25 +184,13 @@ inline bool ParseInternalKey(const Slice& internal_key,
 }
 
 inline bool RollbackDrop(uint64_t seq, std::map<uint64_t, uint64_t> rollbacks) {
-  if (rollbacks.empty()) {
-    return false;
+  std::map<uint64_t, uint64_t>::iterator it = rollbacks.begin();
+  for (; it != rollbacks.end(); ++it) {
+    if (seq > it->first && seq <= it->second) {
+      return true;
+    }
   }
-  std::map<uint64_t, uint64_t>::iterator it = rollbacks.lower_bound(seq);
-  if (seq < it->first || it == rollbacks.end()) {
-    --it;
-  }
-
-  if (seq > it->first && seq <= it->second) {
-    return true;
-  } else {
-    return false;
-  }
-}
-
-inline void ParseInternalKeySeq(const Slice& key, uint64_t* seq) {
-  ParsedInternalKey ikey;
-  ParseInternalKey(key, &ikey);
-  *seq = static_cast<uint64_t>(ikey.sequence);
+  return false;
 }
 
 // A helper class useful for DBImpl::Get()

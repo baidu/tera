@@ -656,11 +656,11 @@ void DBTable::ReleaseSnapshot(uint64_t sequence_number) {
 
 const uint64_t DBTable::Rollback(uint64_t snapshot_seq, uint64_t rollback_point) {
     std::set<uint32_t>::iterator it = options_.exist_lg_list->begin();
-    rollback_point = last_sequence_;
+    uint64_t rollback_seq = rollback_point == kMaxSequenceNumber ? last_sequence_ : rollback_point;;
     for (; it != options_.exist_lg_list->end(); ++it) {
-        lg_list_[*it]->Rollback(snapshot_seq, rollback_point);
+        lg_list_[*it]->Rollback(snapshot_seq, rollback_seq);
     }
-    return rollback_point;
+    return rollback_seq;
 }
 
 bool DBTable::GetProperty(const Slice& property, std::string* value) {

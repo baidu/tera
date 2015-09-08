@@ -28,7 +28,8 @@ const char* DefaultCompactStrategy::Name() const {
     return "tera.DefaultCompactStrategy";
 }
 
-bool DefaultCompactStrategy::Drop(const Slice& tera_key, const std::string& lower_bound) {
+bool DefaultCompactStrategy::Drop(const Slice& tera_key, uint64_t n,
+                                  const std::string& lower_bound) {
     Slice key, col, qual;
     int64_t ts = -1;
     leveldb::TeraKeyType type;
@@ -217,7 +218,7 @@ bool DefaultCompactStrategy::InternalMergeProcess(leveldb::Iterator* it,
     return true;
 }
 
-bool DefaultCompactStrategy::ScanDrop(const Slice& tera_key) {
+bool DefaultCompactStrategy::ScanDrop(const Slice& tera_key, uint64_t n) {
     Slice key, col, qual;
     int64_t ts = -1;
     leveldb::TeraKeyType type;
