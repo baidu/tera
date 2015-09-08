@@ -65,7 +65,14 @@ public:
 
     MasterImpl();
     ~MasterImpl();
-
+    
+    // use for debug master's crash
+    enum debug_tera_master_crash_func_set {
+        DEBUG_master_split_crash_or_suspend,
+    };
+    inline void DebugTeraMasterCrashOrSuspend(
+                enum debug_tera_master_crash_func_set debug_func, int64_t phase);
+    
     bool Init();
 
     bool Restore(const std::map<std::string, std::string>& tabletnode_list);
@@ -199,10 +206,34 @@ private:
 
     void RetryLoadTablet(TabletPtr tablet, int32_t retry_times);
     void RetryUnloadTablet(TabletPtr tablet, int32_t retry_times);
-    bool TrySplitTablet(TabletPtr tablet);
+    
+    bool SplitTablet(TabletPtr tablet, uint32_t phase);
+    void SplitTabletWriteLogCallback(TabletPtr tablet, 
+                                    int32_t retry_times,
+                                    WriteTabletRequest *request,
+                                    WriteTabletResponse *response,
+                                    bool failed, int ErrCode);
+    void SplitTabletAsync(TabletPtr tablet, SplitClosure *done);
+    void SplitTabletCallback(TabletPtr tablet, 
+                                    int32_t retry_times,
+                                    SplitTabletRequest* request,
+                                    SplitTabletResponse* response,
+                                    bool failed, int error_code);
+    void DelayRetrySplitTabletAsync(TabletPtr delay_tablet, 
+                                    int32_t delay_retry_times); 
+    void SplitTabletUpdateMetaAsync(TabletPtr tablet);
+    void SplitTabletUpdateMetaCallback(TablePtr null_table,
+                                    std::vector<TabletPtr> tablets,
+                                    TabletPtr tablet, // parent tablet
+                                    int32_t retry_times,
+                                    WriteTabletRequest* request,
+                                    WriteTabletResponse* response,
+                                    bool failed, int ErrCode);
+    
     bool TryMergeTablet(TabletPtr tablet);
     void TryMoveTablet(TabletPtr tablet, const std::string& server_addr = "");
 
+    
     void TryReleaseCache(bool enbaled_debug = false);
     void ReleaseCacheWrapper();
     void EnableReleaseCacheTimer();
@@ -300,11 +331,6 @@ private:
                                 sem_t* finish_counter, Mutex* mutex);
     void RetryQueryNewTabletNode(std::string addr);
 
-    void SplitTabletAsync(TabletPtr tablet);
-    void SplitTabletCallback(TabletPtr tablet, SplitTabletRequest* request,
-                             SplitTabletResponse* response, bool failed,
-                             int error_code);
-
     void MergeTabletAsync(TabletPtr tablet_p1, TabletPtr tablet_p2);
     void MergeTabletAsyncPhase2(TabletPtr tablet_p1, TabletPtr tablet_p2);
     void MergeTabletUnloadCallback(TabletPtr tablet, TabletPtr tablet2, Mutex* mutex,
@@ -371,21 +397,11 @@ private:
                             const std::string& tablet_key_start,
                             const std::string& tablet_key_end,
                             ScanClosure* done);
-    void ScanMetaCallbackForSplit(TabletPtr tablet,
-                                  ScanTabletRequest* request,
-                                  ScanTabletResponse* response,
-                                  bool failed, int error_code);
-
+    
     void RepairMetaTableAsync(TabletPtr tablet,
                               ScanTabletResponse* response,
                               WriteClosure* done);
-    void RepairMetaAfterSplitCallback(TabletPtr tablet,
-                                      ScanTabletResponse* scan_resp,
-                                      int32_t retry_times,
-                                      WriteTabletRequest* request,
-                                      WriteTabletResponse* response,
-                                      bool failed, int error_code);
-
+    
     // load metabale to master memory
     bool LoadMetaTable(const std::string& meta_tablet_addr,
                        StatusCode* ret_status);

@@ -38,10 +38,9 @@ public:
         kNotInit = kTabletNotInit,
         kReady = kTabletReady,
         kOnLoad = kTabletOnLoad,
-        kOnSplit = kTabletOnSplit,
-        kSplited = kTabletSplited,
         kUnLoading = kTabletUnLoading,
-        kUnLoading2 = kTabletUnLoading2
+        kUnLoading2 = kTabletUnLoading2,
+        kFrozen = kTabletFrozen,
     };
     typedef std::map< std::string, std::set<std::string> > ColumnFamilyMap;
     struct ScanOptions {
@@ -96,7 +95,9 @@ public:
                       leveldb::TableCache* table_cache = NULL,
                       StatusCode* status = NULL);
     virtual bool Unload(StatusCode* status = NULL);
-    virtual bool Split(std::string* split_key, StatusCode* status = NULL);
+    
+    virtual bool GetMidKey(std::string* mid_key, StatusCode* status); 
+    
     virtual bool Compact(StatusCode* status = NULL);
     bool CompactMinor(StatusCode* status = NULL);
     bool Destroy(StatusCode* status = NULL);

@@ -48,6 +48,24 @@ public:
     TabletManager();
     virtual ~TabletManager();
 
+    virtual bool TestSplitTablet(const std::string& table_name,
+                            const std::string& start_key,
+                            const std::string& mid_key,
+                            const std::string& end_key);
+    
+    virtual bool SplitTabletIO(const std::string& table_name,
+                            const std::string& key_start,
+                            const std::string& mid_key,
+                            const std::string& key_end,
+                            io::TabletIO *parent_tabletIO,
+                            io::TabletIO *left_tabletIO,
+                            io::TabletIO *right_tabletIO);
+    
+    virtual bool AddTablet(const std::string& table_name,
+                            const std::string& key_start,
+                            const std::string& key_end,
+                            io::TabletIO *tablet_io);
+    
     virtual bool AddTablet(const std::string& table_name, const std::string& table_path,
                            const std::string& key_start, const std::string& key_end,
                            io::TabletIO** tablet_io, StatusCode* status = NULL);
