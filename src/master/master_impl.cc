@@ -3,6 +3,7 @@
 // found in the LICENSE file.
 
 #include "master/master_impl.h"
+#include "tabletnode/tablet_manager.h"
 
 #include <algorithm>
 #include <boost/bind.hpp>
@@ -2864,12 +2865,18 @@ void MasterImpl::QueryTabletNodeCallback(std::string addr, QueryRequest* request
     } else {
         // update tablet meta
         uint32_t meta_num = response->tabletmeta_list().meta_size();
+        std::map<tabletnode::TabletRange, int> tablet_map;
         for (uint32_t i = 0; i < meta_num; i++) {
             const TabletMeta& meta = response->tabletmeta_list().meta(i);
             const TabletCounter& counter = response->tabletmeta_list().counter(i);
             const std::string& table_name = meta.table_name();
             const std::string& key_start = meta.key_range().key_start();
             const std::string& key_end = meta.key_range().key_end();
+            
+            tabletnode::TabletRange range(table_name, key_start, key_end);
+            std::map<tabletnode::TabletRange, int>::iterator it = tablet_map.find(range);
+            CHECK(it == tablet_map.end());
+            tablet_map[range] = 1;
 
             TabletPtr tablet;
             if (meta.status() != kTableReady) {
@@ -2917,6 +2924,16 @@ void MasterImpl::QueryTabletNodeCallback(std::string addr, QueryRequest* request
         std::vector<TabletPtr>::iterator it;
         for (it = tablet_list.begin(); it != tablet_list.end(); ++it) {
             TabletPtr tablet = *it;
+            tabletnode::TabletRange range(tablet->GetTableName(), tablet->GetKeyStart(), 
+                                          tablet->GetKeyEnd());
+            if ((tablet_map.find(range) == tablet_map.end()) && 
+                (tablet->SetStatusIf(kTableOffLine, kTableReady))) {
+                LOG(ERROR) << "master load tablet, but ts not: addr " << addr
+                           << ", " << tablet; 
+                TryLoadTablet(tablet, addr);
+                continue;
+            }
+
             TabletStatus tablet_status = tablet->GetStatus();
             uint64_t average_qps = tablet->GetAverageCounter().read_rows();
             if (tablet_status == kTableReady || tablet_status == kTableOnLoad
