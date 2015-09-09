@@ -17,10 +17,10 @@
 namespace leveldb {
 
 enum ThreadPoolScore {
-   kDeleteLogUrgentScore = 1010,
-   kDumpMemTableUrgentScore = 1000,
-   kDumpMemTableScore = 100,
-   kDeleteLogScore = 90,
+   kDeleteLogUrgentScore = 100,
+   kDumpMemTableUrgentScore = 90,
+   kDumpMemTableScore = 60,
+   kDeleteLogScore = 50,
    kManualCompactScore = 10,
 };
 
