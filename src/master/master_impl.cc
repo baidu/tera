@@ -2860,7 +2860,7 @@ void MasterImpl::QueryTabletNodeCallback(std::string addr, QueryRequest* request
             std::map<tabletnode::TabletRange, int>::iterator it = tablet_map.find(range);
             if (it != tablet_map.end()) {
                 LOG(WARNING) << "query found ts has more than tow table_name+startkey item: "
-                    << table_name << ", " << key_start << ", " << key_end; 
+                    << table_name << ", " << DebugString(key_start) << ", " << DebugString(key_end); 
             } else {
                 tablet_map[range] = 1;
             }
