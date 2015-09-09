@@ -217,8 +217,8 @@ private:
     TabletWriter* m_async_writer;
 
     std::string m_tablet_path;
-    std::string m_start_key;
-    std::string m_end_key;
+    const std::string m_start_key;
+    const std::string m_end_key;
     std::string m_raw_start_key;
     std::string m_raw_end_key;
     CompactStatus m_compact_status;

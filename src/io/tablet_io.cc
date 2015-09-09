@@ -71,14 +71,14 @@ namespace io {
 
 TabletIO::TabletIO(const std::string& key_start, const std::string& key_end)
     : m_async_writer(NULL),
+      m_start_key(key_start),
+      m_end_key(key_end),
       m_compact_status(kTableNotCompact),
       m_status(kNotInit),
       m_ref_count(1), m_db_ref_count(0), m_db(NULL),
       m_mem_store_activated(false),
       m_kv_only(false),
       m_key_operator(NULL) {
-      m_start_key = key_start;
-      m_end_key = key_end;
 }
 
 TabletIO::~TabletIO() {
