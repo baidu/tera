@@ -188,6 +188,7 @@ bool TabletNode::TrySplit(TabletPtr tablet) {
         ++m_onsplit_count;
         return true;
     }
+
     std::list<TabletPtr>::iterator it = m_wait_split_list.begin();
     for (; it != m_wait_split_list.end(); ++it) {
         if (*it == tablet) {
