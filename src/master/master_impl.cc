@@ -2858,8 +2858,12 @@ void MasterImpl::QueryTabletNodeCallback(std::string addr, QueryRequest* request
             
             tabletnode::TabletRange range(table_name, key_start, key_end);
             std::map<tabletnode::TabletRange, int>::iterator it = tablet_map.find(range);
-            CHECK(it == tablet_map.end());
-            tablet_map[range] = 1;
+            if (it != tablet_map.end()) {
+                LOG(WARNING) << "query found ts has more than one table_name+startkey item: "
+                    << table_name << ", " << DebugString(key_start) << ", " << DebugString(key_end); 
+            } else {
+                tablet_map[range] = 1;
+            }
 
             TabletPtr tablet;
             if (meta.status() != kTableReady) {
