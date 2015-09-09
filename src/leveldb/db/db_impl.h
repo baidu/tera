@@ -69,6 +69,7 @@ class DBImpl : public DB {
   // Compact memtables to sst
   bool MinorCompact();
 
+  void SchedulePendingCompaction();
   // Extra methods (for testing) that are not in the public DB interface
 
   // Compact any files in the named level that overlap [*begin,*end]
@@ -192,8 +193,11 @@ class DBImpl : public DB {
 
   // Has a background compaction been scheduled or is running?
   bool bg_compaction_scheduled_;
+  int bg_compaction_scheduled_count_;
   double bg_compaction_score_;
   int64_t bg_schedule_id_;
+  bool imm_dump_;
+  int unscheduled_compactions_;
 
   // Information for a manual compaction
   struct ManualCompaction {
