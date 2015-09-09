@@ -188,14 +188,10 @@ bool TabletNode::TrySplit(TabletPtr tablet) {
         ++m_onsplit_count;
         return true;
     }
-
-    std::list<TabletPtr>::iterator it = m_wait_split_list.begin();
-    for (; it != m_wait_split_list.end(); ++it) {
-        if (*it == tablet) {
-            return false;
-        }
+    if (std::find(m_wait_split_list.begin(), m_wait_split_list.end(), tablet) == 
+        m_wait_split_list.end()) {
+        m_wait_split_list.push_back(tablet);
     }
-    m_wait_split_list.push_back(tablet);
     return false;
 }
 
