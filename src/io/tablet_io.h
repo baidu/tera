@@ -74,7 +74,7 @@ public:
     };
 
 public:
-    TabletIO();
+    TabletIO(const std::string& key_start, const std::string& key_end);
     virtual ~TabletIO();
 
     std::string GetTableName() const;

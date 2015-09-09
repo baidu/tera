@@ -69,7 +69,7 @@ extern tera::Counter row_read_delay;
 namespace tera {
 namespace io {
 
-TabletIO::TabletIO()
+TabletIO::TabletIO(const std::string& key_start, const std::string& key_end)
     : m_async_writer(NULL),
       m_compact_status(kTableNotCompact),
       m_status(kNotInit),
@@ -77,6 +77,8 @@ TabletIO::TabletIO()
       m_mem_store_activated(false),
       m_kv_only(false),
       m_key_operator(NULL) {
+      m_start_key = key_start;
+      m_end_key = key_end;
 }
 
 TabletIO::~TabletIO() {
@@ -246,9 +248,6 @@ bool TabletIO::Load(const TableSchema& schema,
 //         delete m_ldb_options.env;
         return false;
     }
-
-    m_start_key = key_start;
-    m_end_key = key_end;
 
     m_async_writer = new TabletWriter(this);
     m_async_writer->Start();
