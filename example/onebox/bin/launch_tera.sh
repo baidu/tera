@@ -3,7 +3,7 @@ CURRENT_DIR=`dirname $0`
 source ${CURRENT_DIR}/config
 
 # make sure tera is killed
-bash kill_tera.sh
+./kill_tera.sh
 
 FAKE_ZK_PATH_PREFIX="${CURRENT_DIR}/../fakezk"
 TIME=`date +%Y-%m-%d-%H:%M:%S`
@@ -29,12 +29,16 @@ for ((i=1; i<=$TABLETNODE_NUM; i++)); do
     if [ -f ${LEVELDB_LOG_FILE} ];then
         mv ${LEVELDB_LOG_FILE} ${LEVELDB_LOG_FILE}.${TIME}
     fi
+    CACHE_PATH=${CURRENT_DIR}/../cache/tabletnode.$i
+    if [ ! -x $CACHE_PATH ];then
+        mkdir -p $CACHE_PATH
+    fi
     ${CURRENT_DIR}/tera_main \
         --flagfile=${CURRENT_DIR}/../conf/tera.flag \
         --tera_role=tabletnode \
         --tera_tabletnode_port=$((PORT+i)) \
         --tera_leveldb_log_path=${LEVELDB_LOG_FILE} \
-        --tera_tabletnode_cache_paths=../cache/tabletnode.$i \
+        --tera_tabletnode_cache_paths=${CACHE_PATH} \
         --tera_log_prefix=tabletnode.$i \
         --tera_fake_zk_path_prefix=${FAKE_ZK_PATH_PREFIX} \
         &> ${TABLETNODE_LOG_FILE} </dev/null &
