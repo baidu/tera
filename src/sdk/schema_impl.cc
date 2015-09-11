@@ -254,6 +254,14 @@ std::string TableDescImpl::AdminGroup() const {
     return _admin_group;
 }
 
+void TableDescImpl::SetAlias(const std::string& alias) {
+    _alias =  alias;
+}
+
+std::string TableDescImpl::Alias() const {
+    return _alias;
+}
+
 /// 增加一个localitygroup
 LocalityGroupDescriptor* TableDescImpl::AddLocalityGroup(const std::string& lg_name) {
     if (_kv_only && _lg_map.size() > 1) {

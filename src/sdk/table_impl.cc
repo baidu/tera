@@ -41,7 +41,8 @@ DECLARE_int32(tera_sdk_retry_period);
 DECLARE_int32(tera_sdk_update_meta_internal);
 DECLARE_bool(tera_sdk_write_sync);
 DECLARE_int32(tera_sdk_batch_size);
-DECLARE_int32(tera_sdk_batch_send_interval);
+DECLARE_int32(tera_sdk_write_send_interval);
+DECLARE_int32(tera_sdk_read_send_interval);
 DECLARE_int64(tera_sdk_max_mutation_pending_num);
 DECLARE_int64(tera_sdk_max_reader_pending_num);
 DECLARE_bool(tera_sdk_async_blocking_enabled);
@@ -69,7 +70,8 @@ TableImpl::TableImpl(const std::string& table_name,
       _last_sequence_id(0),
       _timeout(FLAGS_tera_sdk_sync_wait_timeout),
       _commit_size(FLAGS_tera_sdk_batch_size),
-      _commit_timeout(FLAGS_tera_sdk_batch_send_interval),
+      _write_commit_timeout(FLAGS_tera_sdk_write_send_interval),
+      _read_commit_timeout(FLAGS_tera_sdk_read_send_interval),
       _max_commit_pending_num(FLAGS_tera_sdk_max_mutation_pending_num),
       _max_reader_pending_num(FLAGS_tera_sdk_max_reader_pending_num),
       _meta_cond(&_meta_mutex),
@@ -583,7 +585,7 @@ void TableImpl::ApplyMutation(const std::string& server_addr,
         commit_buffer->_row_list = new std::vector<RowMutationImpl*>;
         boost::function<void ()> closure =
             boost::bind(&TableImpl::CommitMutationBuffer, this, server_addr);
-        int64_t timer_id = _thread_pool->DelayTask(_commit_timeout, closure);
+        int64_t timer_id = _thread_pool->DelayTask(_write_commit_timeout, closure);
         commit_buffer->_timer_id = timer_id;
     } else {
         commit_buffer = &it->second;
@@ -932,7 +934,7 @@ bool TableImpl::CommitNextTabletSequentialMutation() {
             // wait for more mutations to fill up the batch
             boost::function<void ()> closure =
                 boost::bind(&TableImpl::DelayCommitSequentionMutation, this);
-            _seq_mutation_commit_timer_id = _thread_pool->DelayTask(_commit_timeout, closure);
+            _seq_mutation_commit_timer_id = _thread_pool->DelayTask(_write_commit_timeout, closure);
         }
     }
     return true;
@@ -1058,7 +1060,7 @@ void TableImpl::ReadRows(const std::string& server_addr,
         reader_buffer->_reader_list = new std::vector<RowReaderImpl*>;
         boost::function<void ()> closure =
             boost::bind(&TableImpl::CommitReaderBuffer, this, server_addr);
-        uint64_t timer_id = _thread_pool->DelayTask(_commit_timeout, closure);
+        uint64_t timer_id = _thread_pool->DelayTask(_read_commit_timeout, closure);
         reader_buffer->_timer_id = timer_id;
     } else {
         reader_buffer = &it->second;

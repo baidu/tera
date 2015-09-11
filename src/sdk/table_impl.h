@@ -372,7 +372,8 @@ private:
     mutable Mutex _commit_buffer_mutex;
     mutable Mutex _reader_buffer_mutex;
     uint32_t _commit_size;
-    uint64_t _commit_timeout;
+    uint64_t _write_commit_timeout;
+    uint64_t _read_commit_timeout;
     std::map<std::string, CommitBuffer> _commit_buffers;
     std::map<std::string, ReaderBuffer> _reader_buffers;
     Counter _cur_commit_pending_counter;
@@ -431,7 +432,7 @@ private:
     bool _seq_mutation_wait_to_retry;
     uint64_t _seq_mutation_pending_rpc_count;
 
-    /// read request will contain this member, 
+    /// read request will contain this member,
     /// so tabletnodes can drop the read-request that timeouted
     uint64_t _pending_timeout_ms;
 };

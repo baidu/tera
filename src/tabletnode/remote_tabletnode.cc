@@ -348,17 +348,18 @@ void RemoteTabletNode::DoScheduleRpc(RpcSchedule* rpc_schedule) {
     case RPC_READ: {
         ReadRpc* read_rpc = (ReadRpc*)rpc;
         table_name = read_rpc->request->tablet_name();
-        int64_t read_timeout = read_rpc->request->client_timeout_ms() * 1000;// ms -> us
-        int64_t detal = get_micros() - read_rpc->start_micros;
-        if (read_rpc->request->has_client_timeout_ms()
-            && (detal > read_timeout)) {
-            VLOG(5) << "timeout, drop read request for:" << table_name
-                << ", detal(in us):" << detal << ", read_timeout(in us):" << read_timeout;
-            read_rpc->response->set_sequence_id(read_rpc->request->sequence_id());
-            read_rpc->response->set_success_num(0);
-            read_rpc->response->set_status(kTableIsBusy);
-            read_rpc->done->Run();
-            break;
+        if (read_rpc->request->has_client_timeout_ms()) {
+            int64_t read_timeout = read_rpc->request->client_timeout_ms() * 1000; // ms -> us
+            int64_t detal = get_micros() - read_rpc->start_micros;
+            if (detal > read_timeout) {
+                VLOG(5) << "timeout, drop read request for:" << table_name
+                    << ", detal(in us):" << detal << ", read_timeout(in us):" << read_timeout;
+                read_rpc->response->set_sequence_id(read_rpc->request->sequence_id());
+                read_rpc->response->set_success_num(0);
+                read_rpc->response->set_status(kTableIsBusy);
+                read_rpc->done->Run();
+                break;
+            }
         }
         DoReadTablet(read_rpc->controller, read_rpc->start_micros,
                      read_rpc->request, read_rpc->response,

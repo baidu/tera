@@ -181,6 +181,17 @@ message CmdCtrlResponse {
     optional string str_result = 4;
 }
 
+message RenameTableRequest {
+    required uint64 sequence_id = 1;
+    required string old_table_name = 2;
+    required string new_table_name = 3;
+}
+
+message RenameTableResponse {
+    required uint64 sequence_id = 1;
+    required StatusCode status = 2;
+}
+
 // RPC interface
 
 service MasterServer {
@@ -201,5 +212,6 @@ service MasterServer {
     rpc Report(ReportRequest) returns(ReportResponse);
 
     rpc CmdCtrl(CmdCtrlRequest) returns(CmdCtrlResponse);
+    rpc RenameTable(RenameTableRequest) returns (RenameTableResponse);
 }
 option cc_generic_services = true;
