@@ -64,9 +64,13 @@ string Switch2Str(bool enabled) {
 
 void ShowTableSchema(const TableSchema& schema, bool is_x) {
     std::stringstream ss;
+    std::string table_alias = schema.name();
+    if (!schema.alias().empty()) {
+        table_alias = schema.alias();
+    }
     if (schema.kv_only()) {
         const LocalityGroupSchema& lg_schema = schema.locality_groups(0);
-        ss << "\n  " << schema.name() << " <";
+        ss << "\n  " << table_alias << " <";
         if (is_x || schema.raw_key() != Readable) {
             ss << "rawkey=" << TableProp2Str(schema.raw_key()) << ",";
         }
@@ -91,7 +95,7 @@ void ShowTableSchema(const TableSchema& schema, bool is_x) {
         return;
     }
 
-    ss << "\n  " << schema.name() << " <";
+    ss << "\n  " << table_alias << " <";
     if (is_x || schema.raw_key() != Readable) {
         ss << "rawkey=" << TableProp2Str(schema.raw_key()) << ",";
     }
@@ -197,7 +201,7 @@ void TableDescToSchema(const TableDescriptor& desc, TableSchema* schema) {
     schema->set_kv_only(desc.IsKv());
     schema->set_admin_group(desc.AdminGroup());
     schema->set_disable_wal(desc.IsWalDisabled());
-
+    schema->set_alias(desc.Alias());
     // add lg
     int num = desc.LocalityGroupNum();
     for (int i = 0; i < num; ++i) {
@@ -268,7 +272,9 @@ void TableSchemaToDesc(const TableSchema& schema, TableDescriptor* desc) {
     if (schema.has_disable_wal() && schema.disable_wal()) {
         desc->DisableWal();
     }
-
+    if (schema.has_alias()) {
+        desc->SetAlias(schema.alias());
+    }
     int32_t lg_num = schema.locality_groups_size();
     for (int32_t i = 0; i < lg_num; i++) {
         const LocalityGroupSchema& lg = schema.locality_groups(i);

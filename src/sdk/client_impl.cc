@@ -126,12 +126,16 @@ bool ClientImpl::CreateTable(const TableDescriptor& desc,
     CreateTableRequest request;
     CreateTableResponse response;
     request.set_sequence_id(0);
-    request.set_table_name(desc.TableName());
+    std::string timestamp = tera::get_curtime_str_plain();
+    std::string internal_table_name = desc.TableName() + "@" + timestamp;
+    request.set_table_name(internal_table_name);
     request.set_user_token(GetUserToken(_user_identity, _user_passcode));
 
     TableSchema* schema = request.mutable_schema();
 
     TableDescToSchema(desc, schema);
+    schema->set_alias(desc.TableName());
+    schema->set_name(internal_table_name);
     // add delimiter
     size_t delim_num = tablet_delim.size();
     for (size_t i = 0; i < delim_num; ++i) {
@@ -184,12 +188,17 @@ bool ClientImpl::UpdateTable(const TableDescriptor& desc, ErrorCode* err) {
 }
 
 bool ClientImpl::DeleteTable(string name, ErrorCode* err) {
+    std::string internal_table_name;
+    if (!GetInternalTableName(name, err, &internal_table_name)) {
+        LOG(ERROR) << "faild to scan meta schema";
+        return false;
+    }
     master::MasterClient master_client(_cluster->MasterAddr());
 
     DeleteTableRequest request;
     DeleteTableResponse response;
     request.set_sequence_id(0);
-    request.set_table_name(name);
+    request.set_table_name(internal_table_name);
     request.set_user_token(GetUserToken(_user_identity, _user_passcode));
 
     string reason;
@@ -207,12 +216,17 @@ bool ClientImpl::DeleteTable(string name, ErrorCode* err) {
 }
 
 bool ClientImpl::DisableTable(string name, ErrorCode* err) {
+    std::string internal_table_name;
+    if (!GetInternalTableName(name, err, &internal_table_name)) {
+        LOG(ERROR) << "faild to scan meta schema";
+        return false;
+    }
     master::MasterClient master_client(_cluster->MasterAddr());
 
     DisableTableRequest request;
     DisableTableResponse response;
     request.set_sequence_id(0);
-    request.set_table_name(name);
+    request.set_table_name(internal_table_name);
     request.set_user_token(GetUserToken(_user_identity, _user_passcode));
 
     string reason;
@@ -231,11 +245,15 @@ bool ClientImpl::DisableTable(string name, ErrorCode* err) {
 
 bool ClientImpl::EnableTable(string name, ErrorCode* err) {
     master::MasterClient master_client(_cluster->MasterAddr());
-
+    std::string internal_table_name;
+    if (!GetInternalTableName(name, err, &internal_table_name)) {
+        LOG(ERROR) << "faild to scan meta schema";
+        return false;
+    }
     EnableTableRequest request;
     EnableTableResponse response;
     request.set_sequence_id(0);
-    request.set_table_name(name);
+    request.set_table_name(internal_table_name);
     request.set_user_token(GetUserToken(_user_identity, _user_passcode));
 
     std::string reason;
@@ -257,11 +275,53 @@ Table* ClientImpl::OpenTable(const string& table_name, ErrorCode* err) {
     return OpenTable(table_name, options, err);
 }
 
+bool ClientImpl::GetInternalTableName(const std::string& table_name, ErrorCode* err,
+                                      std::string* internal_table_name) {
+    *internal_table_name = table_name;
+    tabletnode::TabletNodeClient meta_client(_cluster->RootTableAddr(true));
+    ScanTabletRequest request;
+    ScanTabletResponse response;
+    request.set_sequence_id(0);
+    request.set_table_name(FLAGS_tera_master_meta_table_name);
+    request.set_start("");
+    request.set_end("@~");
+    if (!meta_client.ScanTablet(&request, &response)
+          || response.status() != kTabletNodeOk) {
+         err->SetFailed(ErrorCode::kSystem, "system error");
+         return false;
+    }
+    err->SetFailed(ErrorCode::kOK);
+    int32_t table_size = response.results().key_values_size();
+    for (int32_t i = 0; i < table_size; i++) {
+        const KeyValuePair& record = response.results().key_values(i);
+        const string& key = record.key();
+        const string& value = record.value();
+        if (key[0] == '@') {
+            TableMeta meta;
+            ParseMetaTableKeyValue(key, value, &meta);
+            if (meta.schema().alias() == table_name) {
+                *internal_table_name =  meta.table_name();
+                break;
+            }
+        } else if (key[0] > '@') {
+            break;
+        } else {
+            continue;
+        }
+    }
+    return true;
+}
+
 Table* ClientImpl::OpenTable(const std::string& table_name,
                              const TableOptions& options,
                              ErrorCode* err) {
+    std::string internal_table_name;
+    if (!GetInternalTableName(table_name, err, &internal_table_name)) {
+        LOG(ERROR) << "faild to scan meta schema";
+        return NULL;
+    }
     err->SetFailed(ErrorCode::kOK);
-    TableImpl* table = new TableImpl(table_name,
+    TableImpl* table = new TableImpl(internal_table_name,
                                      options,
                                      _zk_root_path,
                                      _zk_addr_list,
@@ -281,10 +341,15 @@ bool ClientImpl::GetTabletLocation(const string& table_name,
                                    std::vector<TabletInfo>* tablets,
                                    ErrorCode* err) {
     std::vector<TableInfo> table_list;
-    ListInternal(&table_list, tablets, table_name, "", 1,
+    std::string internal_table_name;
+    if (!GetInternalTableName(table_name, err, &internal_table_name)) {
+        LOG(ERROR) << "faild to scan meta schema";
+        return false;
+    }
+    ListInternal(&table_list, tablets, internal_table_name, "", 1,
                  FLAGS_tera_sdk_show_max_num, err);
     if (table_list.size() > 0
-        && table_list[0].table_desc->TableName() == table_name) {
+        && table_list[0].table_desc->TableName() == internal_table_name) {
         return true;
     }
     return false;
@@ -292,10 +357,15 @@ bool ClientImpl::GetTabletLocation(const string& table_name,
 
 TableDescriptor* ClientImpl::GetTableDescriptor(const string& table_name,
                                                 ErrorCode* err) {
+    std::string internal_table_name;
+    if (!GetInternalTableName(table_name, err, &internal_table_name)) {
+        LOG(ERROR) << "faild to scan meta schema";
+        return NULL;
+    }
     std::vector<TableInfo> table_list;
-    ListInternal(&table_list, NULL, table_name, "", 1, 0, err);
+    ListInternal(&table_list, NULL, internal_table_name, "", 1, 0, err);
     if (table_list.size() > 0
-        && table_list[0].table_desc->TableName() == table_name) {
+        && table_list[0].table_desc->TableName() == internal_table_name) {
         return table_list[0].table_desc;
     }
     return NULL;
@@ -359,13 +429,17 @@ bool ClientImpl::ShowTablesInfo(const string& name,
         return false;
     }
     tablet_list->Clear();
-
+    std::string internal_table_name;
+    if (!GetInternalTableName(name, err, &internal_table_name)) {
+        LOG(ERROR) << "faild to scan meta schema";
+        return false;
+    }
     master::MasterClient master_client(_cluster->MasterAddr());
 
     ShowTablesRequest request;
     ShowTablesResponse response;
     request.set_sequence_id(0);
-    request.set_start_table_name(name);
+    request.set_start_table_name(internal_table_name);
     request.set_max_table_num(1);
     request.set_user_token(GetUserToken(_user_identity, _user_passcode));
 
@@ -373,7 +447,7 @@ bool ClientImpl::ShowTablesInfo(const string& name,
         response.status() == kMasterOk) {
         if (response.table_meta_list().meta_size() == 0) {
             return false;
-        } else if (response.table_meta_list().meta(0).table_name() != name) {
+        } else if (response.table_meta_list().meta(0).table_name() != internal_table_name) {
             return false;
         }
         meta->CopyFrom(response.table_meta_list().meta(0));
@@ -524,10 +598,15 @@ bool ClientImpl::ShowTabletNodesInfo(std::vector<TabletNodeInfo>* infos,
 bool ClientImpl::List(const string& table_name, TableInfo* table_info,
                       std::vector<TabletInfo>* tablet_list, ErrorCode* err) {
     std::vector<TableInfo> table_list;
-    bool ret = ListInternal(&table_list, tablet_list, table_name, "", 1,
+    std::string internal_table_name;
+    if (!GetInternalTableName(table_name, err, &internal_table_name)) {
+        LOG(ERROR) << "faild to scan meta schema";
+        return false;
+    }
+    bool ret = ListInternal(&table_list, tablet_list, internal_table_name, "", 1,
                             FLAGS_tera_sdk_show_max_num, err);
     if (table_list.size() > 0
-        && table_list[0].table_desc->TableName() == table_name) {
+        && table_list[0].table_desc->TableName() == internal_table_name) {
         *table_info = table_list[0];
     }
     return ret;
@@ -535,9 +614,14 @@ bool ClientImpl::List(const string& table_name, TableInfo* table_info,
 
 bool ClientImpl::IsTableExist(const string& table_name, ErrorCode* err) {
     std::vector<TableInfo> table_list;
-    ListInternal(&table_list, NULL, table_name, "", 1, 0, err);
+    std::string internal_table_name;
+    if (!GetInternalTableName(table_name, err, &internal_table_name)) {
+        LOG(ERROR) << "faild to scan meta schema";
+        return false;
+    }
+    ListInternal(&table_list, NULL, internal_table_name, "", 1, 0, err);
     if (table_list.size() > 0
-        && table_list[0].table_desc->TableName() == table_name) {
+        && table_list[0].table_desc->TableName() == internal_table_name) {
         return true;
     }
     return false;
@@ -545,9 +629,14 @@ bool ClientImpl::IsTableExist(const string& table_name, ErrorCode* err) {
 
 bool ClientImpl::IsTableEnabled(const string& table_name, ErrorCode* err) {
     std::vector<TableInfo> table_list;
-    ListInternal(&table_list, NULL, table_name, "", 1, 0, err);
+    std::string internal_table_name;
+    if (!GetInternalTableName(table_name, err, &internal_table_name)) {
+        LOG(ERROR) << "faild to scan meta schema";
+        return false;
+    }
+    ListInternal(&table_list, NULL, internal_table_name, "", 1, 0, err);
     if (table_list.size() > 0
-        && table_list[0].table_desc->TableName() == table_name) {
+        && table_list[0].table_desc->TableName() == internal_table_name) {
         if (table_list[0].status == "kTableEnable") {
             return true;
         } else {
@@ -562,10 +651,15 @@ bool ClientImpl::IsTableEnabled(const string& table_name, ErrorCode* err) {
 bool ClientImpl::IsTableEmpty(const string& table_name, ErrorCode* err) {
     std::vector<TableInfo> table_list;
     std::vector<TabletInfo> tablet_list;
-    ListInternal(&table_list, &tablet_list, table_name, "", 1,
+    std::string internal_table_name;
+    if (!GetInternalTableName(table_name, err, &internal_table_name)) {
+        LOG(ERROR) << "faild to scan meta schema";
+        return false;
+    }
+    ListInternal(&table_list, &tablet_list, internal_table_name, "", 1,
                  FLAGS_tera_sdk_show_max_num, err);
     if (table_list.size() > 0
-        && table_list[0].table_desc->TableName() == table_name) {
+        && table_list[0].table_desc->TableName() == internal_table_name) {
         if (tablet_list.size() == 0
             || (tablet_list.size() == 1 && tablet_list[0].data_size <= 0)) {
             return true;
@@ -644,6 +738,26 @@ bool ClientImpl::CmdCtrl(const string& command,
     if (str_result != NULL && response.has_str_result()) {
         *str_result = response.str_result();
     }
+    return true;
+}
+
+bool ClientImpl::Rename(const std::string& old_table_name,
+                        const std::string& new_table_name,
+                        ErrorCode* err) {
+    master::MasterClient master_client(_cluster->MasterAddr());
+    RenameTableRequest request;
+    RenameTableResponse response;
+    uint64_t sequence_id = 0;
+    request.set_sequence_id(sequence_id);
+    request.set_old_table_name(old_table_name);
+    request.set_new_table_name(new_table_name);
+    bool ok = master_client.RenameTable(&request, &response);
+    if (!ok || response.status() != kMasterOk) {
+        err->SetFailed(ErrorCode::kSystem, "failed to rename table");
+        return false;
+    }
+    LOG(INFO) << "rename table OK. " << old_table_name 
+              << " -> " << new_table_name;
     return true;
 }
 
