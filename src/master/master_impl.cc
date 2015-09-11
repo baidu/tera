@@ -349,14 +349,12 @@ void MasterImpl::RestoreUserTablet(const std::vector<TabletMeta>& report_meta_li
     std::vector<TabletPtr> log_tablets;
     m_tablet_manager->GetTabletWithOpLog(&log_tablets);
     
-    {
-        std::vector<TabletPtr>::iterator it = log_tablets.begin();
-        for (; it != log_tablets.end(); ++it) {
-            LOG(INFO) << __func__ << ", status " << StatusCodeToString((*it)->GetStatus())
-                << ", path " << (*it)->GetPath();
-            CHECK((*it)->SetStatusIf(kTableReady, kTableNotInit)); 
-            CHECK((*it)->SetStatusIf(kTableOnSplit, kTableReady));
-        }
+    std::vector<TabletPtr>::iterator log_it = log_tablets.begin();
+    for (; log_it != log_tablets.end(); ++log_it) {
+        LOG(INFO) << __func__ << ", status " << StatusCodeToString((*log_it)->GetStatus())
+            << ", path " << (*log_it)->GetPath();
+        (*log_it)->SetStatusIf(kTableReady, kTableNotInit); 
+        (*log_it)->SetStatusIf(kTableOnSplit, kTableReady);
     }
 
     std::vector<TabletMeta>::const_iterator meta_it = report_meta_list.begin();
@@ -380,8 +378,7 @@ void MasterImpl::RestoreUserTablet(const std::vector<TabletMeta>& report_meta_li
             TabletPtr tablet;
             if (!node_valid || !m_tablet_manager->FindTablet(table_name, key_start, &tablet)
                     || !tablet->Verify(table_name, key_start, key_end, path, server_addr)) {
-                LOG(INFO) << __func__ << ", some BUG happen, unload unexpected table "
-                    << path << ", server: " << server_addr;
+                LOG(INFO) << "unload unexpected table " << path << ", server: " << server_addr;
                 TabletMeta unknown_meta = meta;
                 unknown_meta.set_status(kTableUnLoading);
                 TabletPtr unknown_tablet(new Tablet(unknown_meta));
@@ -398,11 +395,9 @@ void MasterImpl::RestoreUserTablet(const std::vector<TabletMeta>& report_meta_li
         }
     }
 
-    {
-        std::vector<TabletPtr>::iterator it = log_tablets.begin();
-        for (; it != log_tablets.end(); it++) {
-            SplitTablet(*it, 2); 
-        }
+    log_it = log_tablets.begin();
+    for (; log_it != log_tablets.end(); ++log_it) {
+        SplitTablet(*log_it, 2); 
     }
 
     // reload all offline tablet
@@ -1893,6 +1888,8 @@ void MasterImpl::TabletNodeRecoveryCallback(std::string addr,
         if (tablet->GetStatus() == kTableOffLine) {
             LOG(INFO) << "try load, " << tablet;
             TryLoadTablet(tablet, addr);
+        } else {
+            RescheduleOnSplitWait(tablet);
         }
     }
 
@@ -1930,11 +1927,15 @@ void MasterImpl::DeleteTabletNode(const std::string& tabletnode_addr) {
             || tablet->SetStatusIf(kTableOffLine, kTableUnLoadFail)) {
             ProcessOffLineTablet(tablet);
         }
+
         if (tablet->GetTableName() == FLAGS_tera_master_meta_table_name
             && tablet->GetStatus() == kTableOffLine) {
             LOG(INFO) << "try move meta tablet";
             TryLoadTablet(tablet);
         }
+        
+        // reschedule tablet (on wait split state) to other ts
+        RescheduleOnSplitWait(tablet);
     }
 
     TryEnterSafeMode();
@@ -2055,20 +2056,6 @@ bool MasterImpl::LeaveSafeMode(StatusCode* status) {
     return true;
 }
 
-void MasterImpl::LoadAllOffLineTablets() {
-    std::vector<TabletPtr> all_tablet_list;
-    m_tablet_manager->ShowTable(NULL, &all_tablet_list);
-
-    std::vector<TabletPtr>::iterator it;
-    for (it = all_tablet_list.begin(); it != all_tablet_list.end(); ++it) {
-        TabletPtr tablet = *it;
-        if (tablet->GetStatus() == kTableOffLine) {
-            LOG(INFO) << "try move, " << tablet;
-            TryLoadTablet(tablet);
-        }
-    }
-}
-
 void MasterImpl::LoadAllDeadNodeTablets() {
     std::vector<TabletPtr> all_tablet_list;
     m_tablet_manager->ShowTable(NULL, &all_tablet_list);
@@ -2076,6 +2063,12 @@ void MasterImpl::LoadAllDeadNodeTablets() {
     std::vector<TabletPtr>::iterator it;
     for (it = all_tablet_list.begin(); it != all_tablet_list.end(); ++it) {
         TabletPtr tablet = *it;
+
+        // reschudule wait split
+        if (RescheduleOnSplitWait(tablet)) {
+            continue;
+        }
+
         if (tablet->GetStatus() != kTableOffLine) {
             continue;
         }
@@ -2394,8 +2387,7 @@ void MasterImpl::UnloadTabletCallback(TabletPtr tablet, int32_t retry,
                                       UnloadTabletResponse* response,
                                       bool failed, int error_code) {
     CHECK(tablet->GetStatus() == kTableUnLoading
-          || tablet->GetStatus() == kTableOnLoad
-          || tablet->GetStatus() == kTableOnSplit);
+          || tablet->GetStatus() == kTableOnLoad);
     StatusCode status = response->status();
     delete request;
     delete response;
@@ -2413,7 +2405,6 @@ void MasterImpl::UnloadTabletCallback(TabletPtr tablet, int32_t retry,
         } else if (tablet->SetAddrAndStatusIf("", kTableOffLine, kTableOnLoad)) {
             ProcessOffLineTablet(tablet);
             TryLoadTablet(tablet);
-        } else {
         }
         return;
     }
@@ -2454,7 +2445,6 @@ void MasterImpl::UnloadTabletCallback(TabletPtr tablet, int32_t retry,
                 }
                 node->FinishLoad(next_tablet);
             }
-        } else {
         }
         return;
     }
@@ -2472,8 +2462,7 @@ void MasterImpl::UnloadTabletCallback(TabletPtr tablet, int32_t retry,
     if (retry <= 0) {
         LOG(ERROR) << "abort UnloadTablet: kick tabletnode, " << tablet;
         tablet->SetStatusIf(kTableUnLoadFail, kTableUnLoading)
-            || tablet->SetStatusIf(kTableLoadFail, kTableOnLoad)
-            || tablet->SetStatusIf(kTableSplitFail, kTableOnSplit);
+            || tablet->SetStatusIf(kTableLoadFail, kTableOnLoad);
         TryKickTabletNode(tablet->GetServerAddr());
         return;
     }
@@ -3285,15 +3274,17 @@ bool MasterImpl::SplitTablet(TabletPtr tablet, uint32_t phase)
         VLOG(20) << tablet->GetPath() << ": split phase 1, tablet[addr " 
             << tablet->GetServerAddr() << ", uuid " << tablet->GetServerId() << "]";
         
-        // if TS server down or restart, try on other node and rewrite tablet's addr.
+        // if TS server down, try on other node and rewrite tablet's addr.
+        // if TS restart, retry split on it.
         TabletNodePtr node;
-        if (!m_tabletnode_manager->FindTabletNode(server_addr, &node) ||
-            (node->m_uuid != tablet->GetServerId())) {
+        if (!m_tabletnode_manager->FindTabletNode(server_addr, &node)) {
             server_addr.clear();
             while (server_addr.empty()) {
                 if (!m_tabletnode_manager->ScheduleTabletNode(m_size_scheduler.get(),
                                                 table_name, false, &server_addr)) {
-                    VLOG(15) << " resched TS, no available";
+                    LOG(WARNING) << "split reschule, no available ts: " << tablet;
+                    tablet->SetStatusIf(kTableOnSplitWait, kTableOnSplit);
+                    return false;
                 }
                 if (!server_addr.empty() && 
                     !m_tabletnode_manager->FindTabletNode(server_addr, &node)) {
@@ -3301,15 +3292,16 @@ bool MasterImpl::SplitTablet(TabletPtr tablet, uint32_t phase)
                 }
             }
             tablet->SetAddr(server_addr);
-            tablet->SetServerId(node->m_uuid);
         }
+        tablet->SetServerId(node->m_uuid);
         
         VLOG(20) << tablet->GetPath() << ": split phase 1, tablet[addr " 
             << tablet->GetServerAddr() << ", uuid " << tablet->GetServerId() << "]";
         
         // now tablet's server_addr and m_uuid is valid
         if (!node->TrySplit(tablet)) {
-            VLOG(20) << "TS "<< server_addr << ", split delay";
+            VLOG(20) << "split delay, ts split too much: " << tablet;
+            tablet->SetStatusIf(kTableOnSplitWait, kTableOnSplit);
             return false;
         }
 
@@ -3350,6 +3342,24 @@ bool MasterImpl::SplitTablet(TabletPtr tablet, uint32_t phase)
 
         SplitTabletUpdateMetaAsync(tablet);
     }
+    return true;
+}
+
+// ts down or restart, reschedule OnsplitWait
+bool MasterImpl::RescheduleOnSplitWait(TabletPtr tablet)
+{
+    TabletNodePtr node;
+    if (tablet->GetStatus() != kTableOnSplitWait) {
+        return false;
+    }
+    if (m_tabletnode_manager->FindTabletNode(tablet->GetServerAddr(), &node) &&
+        (tablet->GetServerId() == node->m_uuid)) {
+        return false;
+    }
+    if (!tablet->SetStatusIf(kTableOnSplit, kTableOnSplitWait)) {
+        return false;
+    }
+    SplitTablet(tablet, 1);
     return true;
 }
 
@@ -3396,8 +3406,7 @@ void MasterImpl::SplitTabletWriteLogCallback(TabletPtr tablet,
 }
 
 // send split cmd to TS
-void MasterImpl::SplitTabletAsync(TabletPtr tablet, SplitClosure *done)
-{
+void MasterImpl::SplitTabletAsync(TabletPtr tablet, SplitClosure *done) {
     SplitTabletRequest* request = new SplitTabletRequest;
     SplitTabletResponse* response = new SplitTabletResponse;
     CHECK(request);
@@ -3454,13 +3463,10 @@ void MasterImpl::SplitTabletCallback(TabletPtr tablet,
         if (m_tabletnode_manager->FindTabletNode(server_addr, &node) &&
             (node->m_uuid == tablet->GetServerId())) {
             // TS alive, delay split rpc re-send
-            {
-                boost::function<void ()> closure = 
+            boost::function<void ()> closure = 
                     boost::bind(&MasterImpl::DelayRetrySplitTabletAsync, this, tablet, retry_times);
-                m_thread_pool->DelayTask(
-                        FLAGS_tera_master_control_tabletnode_retry_period, closure);
-                return ;
-            }
+            m_thread_pool->DelayTask(FLAGS_tera_master_control_tabletnode_retry_period, closure);
+            return ;
         }
         
         // schedule tablet on other TS
@@ -3477,19 +3483,22 @@ void MasterImpl::SplitTabletCallback(TabletPtr tablet,
         
         // reschedule next wait split rpc on this node
         TabletPtr next_tablet;
-        if (node->SplitNextWaitTablet(&next_tablet)) {
-            TablePtr null_table;
-            std::vector<TabletPtr> tablets(1, next_tablet);
-            WriteClosure* done = 
-                NewClosure(this, &MasterImpl::SplitTabletWriteLogCallback, 
-                        next_tablet, 0);
-            BatchWriteMetaTableAsync(null_table, tablets, false, done);
-        }
-    } else {
-        // resched wait tablet to other ts
-        TabletPtr next_tablet;
-        if (m_tabletnode_manager->ReschedOrphanOnSplitTablet(&next_tablet)) {
-            SplitTablet(next_tablet, 1);
+        while (node->SplitNextWaitTablet(&next_tablet)) {
+            if (next_tablet->GetStatus() != kTableOnSplitWait) {
+                LOG(WARNING) << "tablet status Change, while wait split: " << next_tablet
+                    << ", node addr " << node->GetAddr() << ", uuid " << node->GetId();
+            }
+            if (next_tablet->SetStatusIf(kTableOnSplit, kTableOnSplitWait)) {
+                TablePtr null_table;
+                std::vector<TabletPtr> tablets(1, next_tablet);
+                WriteClosure* done = 
+                    NewClosure(this, &MasterImpl::SplitTabletWriteLogCallback, 
+                               next_tablet, 0);
+                BatchWriteMetaTableAsync(null_table, tablets, false, done);
+                break;
+            }
+            node->FinishSplit(next_tablet);
+            LOG(WARNING) << "next tablet resched when wait: " << next_tablet;
         }
     }
 

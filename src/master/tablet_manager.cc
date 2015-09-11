@@ -478,14 +478,14 @@ bool Tablet::CheckStatusSwitch(TabletStatus old_status,
         }
         break;
     case kTableOnSplit:
-        if (new_status == kTableReady             // request rejected
-            || new_status == kTableOffLine        // split fail
-            || new_status == kTableSplitFail) {   // don't know result, wait tabletnode to be killed
+        if (new_status == kTableReady               // request rejected
+            || new_status == kTableOffLine          // split fail
+            || new_status == kTableOnSplitWait) {   // split wait
             return true;
         }
         break;
-    case kTableSplitFail:
-        if (new_status == kTableOnSplit) {       // tabletnode is killed, ready to scan meta
+    case kTableOnSplitWait:
+        if (new_status == kTableOnSplit) {       // reschedule split
             return true;
         }
         break;

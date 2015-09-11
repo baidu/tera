@@ -677,12 +677,10 @@ void TabletNodeImpl::ScanTablet(const ScanTabletRequest* request,
 
 void TabletNodeImpl::SplitTablet(const SplitTabletRequest* request,
                                  SplitTabletResponse* response,
-                                 google::protobuf::Closure* done)
-{
+                                 google::protobuf::Closure* done) {
     response->set_sequence_id(request->sequence_id());
     
     int stage = 1;
-    int load_parent = 0;
     StatusCode status = kTabletNodeOk;
     io::TabletIO *parent_tabletio = NULL;
       
@@ -707,6 +705,13 @@ void TabletNodeImpl::SplitTablet(const SplitTabletRequest* request,
         response->set_status(kTabletNodeOk);
         done->Run();
         return ;
+    }
+    
+    // snapshot relatively
+    CHECK(request->snapshots_id_size() == request->snapshots_sequence_size());
+    std::map<uint64_t, uint64_t> snapshots;
+    for (int i = 0; i < request->snapshots_id_size(); i++) {
+        snapshots[request->snapshots_id(i)] = request->snapshots_sequence(i);
     }
     
     parent_tabletio = m_tablet_manager->GetTablet(request->table_name(),
@@ -778,33 +783,18 @@ void TabletNodeImpl::SplitTablet(const SplitTabletRequest* request,
             done->Run();
             return ;
         }
+        
         DebugTeraTabletServerCrashOrSuspend(DEBUG_ts_split_crash_or_suspend, 25);
         // this thread new parent_tabletio
-        load_parent = 1;
-    } else {
-        load_parent = 0;
-    }
-    
-    CHECK(request->snapshots_id_size() == request->snapshots_sequence_size());
-    std::map<uint64_t, uint64_t> snapshots;
-    for (int i = 0; i < request->snapshots_id_size(); i++) {
-        snapshots[request->snapshots_id(i)] = request->snapshots_sequence(i);
-    }
-
-    // double check wether parent tablet in TM
-    CHECK(parent_tabletio);
-    if (stage == 1) {
         std::vector<uint64_t> null_parent_tablets;
         VLOG(20) << __func__ << ", load parent " << parent_tabletname 
             << ", start " << request->key_range().key_start() 
             << ", end " << request->key_range().key_end();
 
-        DebugTeraTabletServerCrashOrSuspend(DEBUG_ts_split_crash_or_suspend, 30);
-
-        if (load_parent && !parent_tabletio->Load(request->schema(), request->key_range().key_start(),
-                                                  request->key_range().key_end(), parent_tabletname,
-                                                  null_parent_tablets, snapshots, m_ldb_logger,
-                                                  m_ldb_block_cache, m_ldb_table_cache, &status)) {
+        if (!parent_tabletio->Load(request->schema(), request->key_range().key_start(),
+                                   request->key_range().key_end(), parent_tabletname,
+                                   null_parent_tablets, snapshots, m_ldb_logger,
+                                   m_ldb_block_cache, m_ldb_table_cache, &status)) {
             parent_tabletio->DecRef();
             m_tablet_manager->RemoveTablet(request->table_name(), 
                                            request->key_range().key_start(),
@@ -814,126 +804,123 @@ void TabletNodeImpl::SplitTablet(const SplitTabletRequest* request,
             done->Run();
             return ;
         }
+    }
 
+    // double check wether parent tablet in TM
+    CHECK(parent_tabletio);
+    if (stage == 1) {
         DebugTeraTabletServerCrashOrSuspend(DEBUG_ts_split_crash_or_suspend, 35);
-
         if (!parent_tabletio->Unload(&status)) {
             parent_tabletio->DecRef();
             response->set_status(kTabletSplitError);
             done->Run();
             return ;
         }
-        stage = 2; 
     }
 
-    if (stage == 2) {
-        DebugTeraTabletServerCrashOrSuspend(DEBUG_ts_split_crash_or_suspend, 40);
+    DebugTeraTabletServerCrashOrSuspend(DEBUG_ts_split_crash_or_suspend, 40);
+    // when step into stage 2, no race condition;
+    // And parent tabletIO has been unload
+    io::TabletIO *lchild_tabletio = NULL;
+    io::TabletIO *rchild_tabletio = NULL;
 
-        // when step into stage 2, no race condition;
-        // And parent tabletIO has been unload
-        io::TabletIO *lchild_tabletio = NULL;
-        io::TabletIO *rchild_tabletio = NULL;
+    lchild_tabletio = new io::TabletIO();
+    CHECK(lchild_tabletio != NULL);
+    lchild_tabletio->SetStatus(io::TabletIO::kNotInit);
 
-        lchild_tabletio = new io::TabletIO();
-        CHECK(lchild_tabletio != NULL);
-        lchild_tabletio->SetStatus(io::TabletIO::kNotInit);
+    rchild_tabletio = new io::TabletIO();
+    CHECK(rchild_tabletio != NULL);
+    rchild_tabletio->SetStatus(io::TabletIO::kNotInit);
 
-        rchild_tabletio = new io::TabletIO();
-        CHECK(rchild_tabletio != NULL);
-        rchild_tabletio->SetStatus(io::TabletIO::kNotInit);
+    // left && right tabletIO here no need refcount;
+    // because no one see them except SPLIT func.
+    std::vector<uint64_t> parent_tablets;
+    parent_tablets.push_back(request->parent_tablet());
 
-        // left && right tabletIO here no need refcount;
-        // because no one see them except SPLIT func.
-        std::vector<uint64_t> parent_tablets;
-        parent_tablets.push_back(request->parent_tablet());
+    // load left child
+    VLOG(20) << __func__ << ": parent " << parent_tablets[0] << ", " 
+        << left_tabletname << ", start " << request->key_range().key_start()
+        << ", end " << request->mid_key();
+    sem_t finish_counter;
+    sem_init(&finish_counter, 0, 0);
+    StatusCode lstatus = kTabletNodeOk;
+    bool lflag = true;
+    boost::function<void ()> closure =
+        boost::bind(&TabletNodeImpl::LoadTabletForSplitAsync, this, lchild_tabletio, 
+                    request, 0, parent_tablets, snapshots, 
+                    &lstatus, &finish_counter);
+    m_thread_pool->AddTask(closure);
 
-        // load left child
-        VLOG(20) << __func__ << ": parent " << parent_tablets[0] << ", " 
-            << left_tabletname << ", start " << request->key_range().key_start()
-            << ", end " << request->mid_key();
+    // load right child
+    VLOG(20) << __func__ << ": parent " << parent_tablets[0] << ", " 
+        << right_tabletname << ", start " << request->mid_key()
+        << ", end " << request->key_range().key_end();
 
-        sem_t finish_counter;
-        sem_init(&finish_counter, 0, 0);
-        StatusCode lstatus = kTabletNodeOk;
-        bool lflag = true;
-        boost::function<void ()> closure =
-            boost::bind(&TabletNodeImpl::LoadTabletForSplitAsync, this, lchild_tabletio, 
-                        request, 0, parent_tablets, snapshots, 
-                        &lstatus, &finish_counter);
-        m_thread_pool->AddTask(closure);
+    DebugTeraTabletServerCrashOrSuspend(DEBUG_ts_split_crash_or_suspend, 45);
+    bool rflag = rchild_tabletio->Load(request->schema(), request->mid_key(),
+                                       request->key_range().key_end(), right_tabletname,
+                                       parent_tablets, snapshots, m_ldb_logger,
+                                       m_ldb_block_cache, m_ldb_table_cache, &status);
 
-        // load right child
-        VLOG(20) << __func__ << ": parent " << parent_tablets[0] << ", " 
-            << right_tabletname << ", start " << request->mid_key()
-            << ", end " << request->key_range().key_end();
+    sem_wait(&finish_counter);
+    sem_destroy(&finish_counter);
+    lflag = (lstatus == kTabletNodeOk);
 
-        DebugTeraTabletServerCrashOrSuspend(DEBUG_ts_split_crash_or_suspend, 45);
+    // left or right child fail
+    if (!lflag || !rflag) {
+        LOG(WARNING) << __func__ << ", load child fail, lflag " << lflag
+            << ", rflag " << rflag << ", status " << StatusCodeToString(status);
+        lchild_tabletio->Unload(&status);
+        rchild_tabletio->Unload(&status);
 
-        bool rflag = rchild_tabletio->Load(request->schema(), request->mid_key(),
-                                           request->key_range().key_end(), right_tabletname,
-                                           parent_tablets, snapshots, m_ldb_logger,
-                                           m_ldb_block_cache, m_ldb_table_cache, &status);
-
-        sem_wait(&finish_counter);
-        sem_destroy(&finish_counter);
-        lflag = (lstatus == kTabletNodeOk);
-
-        // left or right child fail
-        if (!lflag || !rflag) {
-            LOG(INFO) << __func__ << ", load child fail, lflag " << lflag
-                << ", rflag " << rflag << ", status " << StatusCodeToString(status);
-            lchild_tabletio->Unload(&status);
-            rchild_tabletio->Unload(&status);
-
-            // delete left && right child
-            lchild_tabletio->DecRef();
-            rchild_tabletio->DecRef();
-
-            // delete parent
-            parent_tabletio->DecRef();
-            m_tablet_manager->RemoveTablet(request->table_name(),
-                                           request->key_range().key_start(),
-                                           request->key_range().key_end(),
-                                           &status);
-            response->set_status(kTabletSplitError);
-            done->Run();
-            return ;
-        }
-
-        // delete parent tabletio, add left && right child in tablet manager;
-        // split success parent tabletIO will decref.
-        CHECK(m_tablet_manager->SplitTabletIO(request->table_name(),
-                                              request->key_range().key_start(),
-                                              request->mid_key(),
-                                              request->key_range().key_end(),
-                                              parent_tabletio, 
-                                              lchild_tabletio,
-                                              rchild_tabletio));
-        // split success, delete parent tabletIO
-        parent_tabletio->DecRef();
+        // delete left && right child
         lchild_tabletio->DecRef();
         rchild_tabletio->DecRef();
-        response->set_status(kTabletNodeOk);
-        done->Run();
 
-        DebugTeraTabletServerCrashOrSuspend(DEBUG_ts_split_crash_or_suspend, 50);
+        // delete parent
+        parent_tabletio->DecRef();
+        m_tablet_manager->RemoveTablet(request->table_name(),
+                                       request->key_range().key_start(),
+                                       request->key_range().key_end(),
+                                       &status);
+        response->set_status(kTabletSplitError);
+        done->Run();
+        return ;
     }
+
+    // delete parent tabletio, add left && right child in tablet manager;
+    // split success parent tabletIO will decref.
+    CHECK(m_tablet_manager->SplitTabletIO(request->table_name(),
+                                          request->key_range().key_start(),
+                                          request->mid_key(),
+                                          request->key_range().key_end(),
+                                          parent_tabletio, 
+                                          lchild_tabletio,
+                                          rchild_tabletio));
+    // split success, delete parent tabletIO
+    parent_tabletio->DecRef();
+    lchild_tabletio->DecRef();
+    rchild_tabletio->DecRef();
+    response->set_status(kTabletNodeOk);
+    done->Run();
+
+    DebugTeraTabletServerCrashOrSuspend(DEBUG_ts_split_crash_or_suspend, 50);
     return;
 }
 
 // @child_index:        0 for left, 1 for right
 void TabletNodeImpl::LoadTabletForSplitAsync(io::TabletIO* tabletio,
-                const SplitTabletRequest* request, int child_index,
-                const std::vector<uint64_t> parent_tablets,
-                std::map<uint64_t, uint64_t> snapshots,
-                StatusCode* status,
-                sem_t* finish_counter)
-{
+                                             const SplitTabletRequest* request, 
+                                             int child_index,
+                                             const std::vector<uint64_t> parent_tablets,
+                                             std::map<uint64_t, uint64_t> snapshots,
+                                             StatusCode* status,
+                                             sem_t* finish_counter) {
     SetStatusCode(kTabletNodeOk, status);
     std::string parent_tabletname = leveldb::GetTabletPathFromNum(request->table_name(), 
-                                                                request->parent_tablet());
+                                                                  request->parent_tablet());
     std::string path = leveldb::GetChildTabletPath(parent_tabletname, 
-                                                    request->child_tablets(child_index));
+                                                   request->child_tablets(child_index));
     std::string key_start;
     std::string key_end;
     if (child_index == 0) {

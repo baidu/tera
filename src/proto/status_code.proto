@@ -113,10 +113,9 @@ enum TabletStatus {
     kTableWaitLoad = 58;
     kTableOnLoad = 43;
     kTableLoadFail = 60;
-    kTableWaitSplit = 59;
     kTableOnSplit = 44;
     kTableSplited = 51;
-    kTableSplitFail = 61;
+    kTableOnSplitWait = 59;
     kTableUnLoading = 52;
     kTableUnLoading2 = 68;
     kTableUnLoadFail = 62;

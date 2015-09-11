@@ -178,12 +178,11 @@ bool TabletNode::LoadNextWaitTablet(TabletPtr* tablet) {
     return true;
 }
 
+// @TrySplit:       if tablet need split, add and only add 
+//                  once into waitqueue.
 bool TabletNode::TrySplit(TabletPtr tablet) {
     MutexLock lock(&m_mutex);
     
-  //m_data_size -= tablet->GetDataSize();
-  //    VLOG(5) << "split on: " << m_addr << ", size: " << tablet->GetDataSize()
-  //        << ", total size: " << m_data_size;
     VLOG(20) << __func__ << ": addr " << m_addr << ", uuid " << m_uuid
         << ", sizeof split wait queue " << m_wait_split_list.size()
         << ", split counter " << m_onsplit_count;
@@ -192,7 +191,10 @@ bool TabletNode::TrySplit(TabletPtr tablet) {
         ++m_onsplit_count;
         return true;
     }
-    m_wait_split_list.push_back(tablet);
+    if (std::find(m_wait_split_list.begin(), m_wait_split_list.end(), tablet) == 
+        m_wait_split_list.end()) {
+        m_wait_split_list.push_back(tablet);
+    }
     return false;
 }
 
@@ -202,6 +204,8 @@ bool TabletNode::FinishSplit(TabletPtr tablet) {
     return true;
 }
 
+// @SplitNextWaitTablet:        pop first waiting tablet,
+//                              and add onsplit counter.
 bool TabletNode::SplitNextWaitTablet(TabletPtr* tablet) {
     MutexLock lock(&m_mutex);
     if (m_onsplit_count >= static_cast<uint32_t>(FLAGS_tera_master_max_split_concurrency)) {
@@ -215,17 +219,6 @@ bool TabletNode::SplitNextWaitTablet(TabletPtr* tablet) {
     m_wait_split_list.pop_front();
     ++m_onsplit_count;
     return true;
-}
-
-void TabletNode::FlushWaitTablet(std::list<TabletPtr>* wait_queue)
-{
-    MutexLock lock(&m_mutex);
-    std::list<TabletPtr>::iterator it = m_wait_split_list.begin();
-    for (; it != m_wait_split_list.end(); it++) {
-        wait_queue->push_back(*it);
-    }
-    LOG(INFO) << __func__ << ", num of wait tablet " 
-        << m_wait_split_list.size();
 }
 
 NodeState TabletNode::GetState() {
@@ -297,19 +290,6 @@ TabletNodeManager::~TabletNodeManager() {
     MutexLock lock(&m_mutex);
 }
 
-bool TabletNodeManager::ReschedOrphanOnSplitTablet(TabletPtr *tablet)
-{
-    MutexLock lock(&m_mutex);
-    
-    std::list<TabletPtr>::iterator it = m_wait_split_list.begin();
-    if (it == m_wait_split_list.end()) {
-        return false;
-    }
-    *tablet = *it;
-    m_wait_split_list.pop_front();
-    return true;
-}
-
 void TabletNodeManager::AddTabletNode(const std::string& addr,
                                       const std::string& uuid) {
     MutexLock lock(&m_mutex);
@@ -335,7 +315,6 @@ void TabletNodeManager::DelTabletNode(const std::string& addr) {
             return;
         }
         state = it->second;
-        state->FlushWaitTablet(&m_wait_split_list);
         m_tabletnode_list.erase(it);
     }
     // delete node may block, so we'd better release the mutex before that

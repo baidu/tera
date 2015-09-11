@@ -208,6 +208,7 @@ private:
     void RetryUnloadTablet(TabletPtr tablet, int32_t retry_times);
     
     bool SplitTablet(TabletPtr tablet, uint32_t phase);
+    bool RescheduleOnSplitWait(TabletPtr tablet);
     void SplitTabletWriteLogCallback(TabletPtr tablet, 
                                     int32_t retry_times,
                                     WriteTabletRequest *request,
@@ -429,7 +430,6 @@ private:
     void MoveOffLineTablets(const std::vector<TabletPtr>& tablet_list);
     double LiveNodeTabletRatio();
     void LoadAllDeadNodeTablets();
-    void LoadAllOffLineTablets();
 
     void CollectAllTabletInfo(const std::map<std::string, std::string>& tabletnode_list,
                               std::vector<TabletMeta>* tablet_list);
