@@ -301,6 +301,7 @@ bool ClientImpl::GetInternalTableName(const std::string& table_name, ErrorCode* 
             ParseMetaTableKeyValue(key, value, &meta);
             if (meta.schema().alias() == table_name) {
                 *internal_table_name =  meta.table_name();
+                break;
             }
         } else if (key[0] > '@') {
             break;
@@ -744,13 +745,13 @@ bool ClientImpl::Rename(const std::string& old_table_name,
                         const std::string& new_table_name,
                         ErrorCode* err) {
     master::MasterClient master_client(_cluster->MasterAddr());
-    RenameRequest request;
-    RenameResponse response;
+    RenameTableRequest request;
+    RenameTableResponse response;
     uint64_t sequence_id = 0;
     request.set_sequence_id(sequence_id);
     request.set_old_table_name(old_table_name);
     request.set_new_table_name(new_table_name);
-    bool ok = master_client.Rename(&request, &response);
+    bool ok = master_client.RenameTable(&request, &response);
     if (!ok || response.status() != kMasterOk) {
         err->SetFailed(ErrorCode::kSystem, "failed to rename table");
         return false;

@@ -258,13 +258,13 @@ void RemoteMaster::DoCmdCtrl(google::protobuf::RpcController* controller,
     done->Run();
 }
 
-void RemoteMaster::Rename(google::protobuf::RpcController* controller,
-                          const RenameRequest* request,
-                          RenameResponse* response,
-                          google::protobuf::Closure* done) {
-    LOG(INFO) << "accept RPC (Rename)";
+void RemoteMaster::RenameTable(google::protobuf::RpcController* controller,
+                               const RenameTableRequest* request,
+                               RenameTableResponse* response,
+                               google::protobuf::Closure* done) {
+    LOG(INFO) << "accept RPC (RenameTable)";
     m_master_impl->RenameTable(request, response, done);
-    LOG(INFO) << "finish RPC (Rename)";
+    LOG(INFO) << "finish RPC (RenameTable)";
 }
 
 } // namespace master

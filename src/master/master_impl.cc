@@ -3925,7 +3925,7 @@ void MasterImpl::UpdateTableRecordForUpdateCallback(TablePtr table, int32_t retr
 }
 
 void MasterImpl::UpdateTableRecordForRenameCallback(TablePtr table, int32_t retry_times,
-                                                    RenameResponse* rpc_response,
+                                                    RenameTableResponse* rpc_response,
                                                     google::protobuf::Closure* rpc_done,
                                                     std::string old_alias,
                                                     std::string new_alias,
@@ -4659,8 +4659,8 @@ void MasterImpl::DoTabletNodeGcPhase2() {
     }
 }
 
-void MasterImpl::RenameTable(const RenameRequest* request,
-                             RenameResponse* response,
+void MasterImpl::RenameTable(const RenameTableRequest* request,
+                             RenameTableResponse* response,
                              google::protobuf::Closure* done) {
     response->set_sequence_id(request->sequence_id());
     MasterStatus master_status = GetMasterStatus();

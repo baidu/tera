@@ -114,8 +114,8 @@ public:
                          ShowTabletNodesResponse* response,
                          google::protobuf::Closure* done);
 
-    void RenameTable(const RenameRequest* request,
-                     RenameResponse* response,
+    void RenameTable(const RenameTableRequest* request,
+                     RenameTableResponse* response,
                      google::protobuf::Closure* done);
     
     void CmdCtrl(const CmdCtrlRequest* request,
@@ -356,7 +356,7 @@ private:
                                             WriteTabletResponse* response,
                                             bool failed, int error_code);
     void UpdateTableRecordForRenameCallback(TablePtr table, int32_t retry_times,
-                                            RenameResponse* rpc_response,
+                                            RenameTableResponse* rpc_response,
                                             google::protobuf::Closure* rpc_done,
                                             std::string old_alias,
                                             std::string new_alias,

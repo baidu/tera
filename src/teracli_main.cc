@@ -1928,7 +1928,7 @@ int32_t TabletOp(Client* client, int32_t argc, char** argv, ErrorCode* err) {
 
 int32_t RenameOp(Client* client, int32_t argc, char** argv, ErrorCode* err) {
     if (argc != 4 ) {
-        UsageMore(argv[0]);
+        Usage(argv[0]);
         return -1;
     }
     std::vector<std::string> arg_list;

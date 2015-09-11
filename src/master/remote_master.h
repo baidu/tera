@@ -80,9 +80,9 @@ public:
                  CmdCtrlResponse* response,
                  google::protobuf::Closure* done);
 
-    void Rename(google::protobuf::RpcController* controller,
-                const RenameRequest* request,
-                RenameResponse* response,
+    void RenameTable(google::protobuf::RpcController* controller,
+                const RenameTableRequest* request,
+                RenameTableResponse* response,
                 google::protobuf::Closure* done);
 
 private:
