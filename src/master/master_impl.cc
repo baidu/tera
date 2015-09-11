@@ -3647,8 +3647,10 @@ void MasterImpl::SplitTabletUpdateMetaCallback(TablePtr null_table,
         << ", keyend " << rchild_tablet->GetKeyEnd();
 
     CHECK(m_tablet_manager->SplitTablet(tablet, lchild_tablet, rchild_tablet));
-    
+     
     DebugTeraMasterCrashOrSuspend(DEBUG_master_split_crash_or_suspend, 71);
+    ProcessReadyTablet(lchild_tablet); 
+    ProcessReadyTablet(rchild_tablet); 
     return;
 }
 
