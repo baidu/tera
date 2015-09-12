@@ -160,8 +160,11 @@ class DB {
                             double ratio,
                             std::string* split_key) = 0;
 
-  virtual uint64_t GetScopeSize(const std::string& start_key,
-                                const std::string& end_key,
+  // Get several size
+  // size: db size, include mem, imm, all sst files
+  // size_under_level1: for tera split, only include sst files level>=1
+  // lgsize: 
+  virtual bool GetScopeSize(uint64_t* size, uint64_t* size_under_level1,
                                 std::vector<uint64_t>* lgsize = NULL) = 0;
 
   virtual bool MinorCompact() = 0;
