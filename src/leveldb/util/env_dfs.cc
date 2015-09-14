@@ -469,7 +469,6 @@ Status DfsEnv::GetFileSize(const std::string& fname, uint64_t* size)
 ///
 Status DfsEnv::RenameFile(const std::string& src, const std::string& target)
 {
-    DeleteFile(target);
     tera::AutoCounter ac(&dfs_other_hang_counter, "RenameFile", src.c_str());
     dfs_other_counter.Inc();
     if (dfs_->Rename(src, target) == 0) {
