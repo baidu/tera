@@ -130,6 +130,7 @@ MasterImpl::MasterImpl()
         io::InitDfsEnv();
     }
 
+    LOG(INFO) << "LL:" << FLAGS_tera_master_gc_strategy;
     if (FLAGS_tera_master_gc_strategy == "default") {
          gc_strategy = boost::shared_ptr<GcStrategy>(new BatchGcStrategy(m_tablet_manager));
     } else if (FLAGS_tera_master_gc_strategy == "incremental") {
