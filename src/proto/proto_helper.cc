@@ -151,12 +151,10 @@ std::string StatusCodeToString(int32_t status) {
         return "kTableOnLoad";
     case kTableLoadFail:
         return "kTableLoadFail";
-    case kTableWaitSplit:
-        return "kTableWaitSplit";
     case kTableOnSplit:
         return "kTableOnSplit";
-    case kTableSplitFail:
-        return "kTableSplitFail";
+    case kTableOnSplitWait:
+        return "kTableOnSplitWait";
     case kTableUnLoading:
         return "kTableUnLoading";
     case kTableUnLoadFail:

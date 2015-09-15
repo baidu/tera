@@ -140,7 +140,6 @@ public:
                         const std::vector<TabletPtr>& tablet_candidates,
                         size_t* tablet_index);
     bool CheckStateSwitch(NodeState old_state, NodeState new_state);
-
 private:
     mutable Mutex m_mutex;
     MasterImpl* m_master_impl;

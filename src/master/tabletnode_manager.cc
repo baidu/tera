@@ -178,11 +178,14 @@ bool TabletNode::LoadNextWaitTablet(TabletPtr* tablet) {
     return true;
 }
 
+// @TrySplit:       if tablet need split, add and only add 
+//                  once into waitqueue.
 bool TabletNode::TrySplit(TabletPtr tablet) {
     MutexLock lock(&m_mutex);
-    m_data_size -= tablet->GetDataSize();
-//    VLOG(5) << "split on: " << m_addr << ", size: " << tablet->GetDataSize()
-//        << ", total size: " << m_data_size;
+    
+    VLOG(20) << __func__ << ": addr " << m_addr << ", uuid " << m_uuid
+        << ", sizeof split wait queue " << m_wait_split_list.size()
+        << ", split counter " << m_onsplit_count;
     if (m_wait_split_list.empty()
         && m_onsplit_count < static_cast<uint32_t>(FLAGS_tera_master_max_split_concurrency)) {
         ++m_onsplit_count;
@@ -201,6 +204,8 @@ bool TabletNode::FinishSplit(TabletPtr tablet) {
     return true;
 }
 
+// @SplitNextWaitTablet:        pop first waiting tablet,
+//                              and add onsplit counter.
 bool TabletNode::SplitNextWaitTablet(TabletPtr* tablet) {
     MutexLock lock(&m_mutex);
     if (m_onsplit_count >= static_cast<uint32_t>(FLAGS_tera_master_max_split_concurrency)) {

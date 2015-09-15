@@ -34,7 +34,7 @@ enum StatusCode {
     kTabletOnMerge = 50;
     kTabletUnLoading = 52;
     kTabletUnLoading2 = 68;
-    
+
     kTableNotFound = 45;
     kTableCorrupt = 46;
     kTableNotSupport = 47;
@@ -53,6 +53,7 @@ enum StatusCode {
     kTableNotExist = 202;
     kTableIsBusy = 203;
     kTableMergeError = 204;
+    kTabletSplitError = 205;
 
     // register
     kInvalidSequenceId = 304;
@@ -108,10 +109,9 @@ enum TabletStatus {
     kTableWaitLoad = 58;
     kTableOnLoad = 43;
     kTableLoadFail = 60;
-    kTableWaitSplit = 59;
     kTableOnSplit = 44;
     kTableSplited = 51;
-    kTableSplitFail = 61;
+    kTableOnSplitWait = 59;
     kTableUnLoading = 52;
     kTableUnLoading2 = 68;
     kTableUnLoadFail = 62;
@@ -121,6 +121,7 @@ enum TabletStatus {
     kTabletPending = 65;
     kTabletOnSnapshot = 66;
     kTabletDelSnapshot = 67;
+    kTabletFrozen = 91;
 }
 
 enum TableStatus {

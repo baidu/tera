@@ -742,6 +742,7 @@ class PosixEnv : public Env {
       close(fd);
       locks_.Remove(fname);
     } else {
+      //fprintf(stderr, "%s, lock %s\n", __func__, fname.c_str());
       PosixFileLock* my_lock = new PosixFileLock;
       my_lock->fd_ = fd;
       my_lock->name_ = fname;
@@ -756,6 +757,7 @@ class PosixEnv : public Env {
     if (LockOrUnlock(my_lock->fd_, false) == -1) {
       result = IOError("unlock", errno);
     }
+    //fprintf(stderr, "%s, unlock %s\n", __func__, my_lock->name_.c_str());
     locks_.Remove(my_lock->name_);
     close(my_lock->fd_);
     delete my_lock;
