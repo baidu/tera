@@ -438,7 +438,8 @@ void FlashEnv::SetFlashPath(const std::string& path, bool vanish_allowed) {
             flash_paths_.push_back(std::string(str + beg, i - beg));
             beg = i +1;
             if (!vanish_allowed) {
-                if (!Env::Default()->FileExists(flash_paths_.back())) {
+                if (!Env::Default()->FileExists(flash_paths_.back()) &&
+                    !Env::Default()->CreateDir(flash_paths_.back()).ok()) {
                     fprintf(stderr, "cannot access cache dir: %s\n",
                         flash_paths_.back().c_str());
                     exit(-1);
