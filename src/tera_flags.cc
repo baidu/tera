@@ -221,7 +221,7 @@ DEFINE_int32(tera_sdk_rpc_max_pending_buffer_size, 200, "max pending buffer size
 DEFINE_int32(tera_sdk_rpc_work_thread_num, 8, "thread num of sdk rpc client");
 DEFINE_int32(tera_sdk_update_meta_internal, 10000, "the sdk update meta table internal time(ms)");
 DEFINE_int32(tera_sdk_check_timer_internal, 100, "the sdk check the resend quest queue internal time");
-DEFINE_int32(tera_sdk_sync_wait_timeout, 60000, "timeout of wait in sync reader&mutation mode");
+DEFINE_int32(tera_sdk_timeout, 60000, "timeout of wait in sync reader&mutation mode");
 DEFINE_int32(tera_sdk_delay_send_internal, 2, "the sdk resend the request internal time(s)");
 DEFINE_int32(tera_sdk_scan_buffer_limit, 2048000, "the pack size limit for scan operation");
 DEFINE_bool(tera_sdk_write_sync, false, "sync flag for write");
@@ -244,8 +244,6 @@ DEFINE_int64(tera_sdk_perf_counter_log_interval, 1, "the interval of performance
 DEFINE_bool(tera_sdk_scan_async_enabled, false, "enable async scan");
 DEFINE_int64(tera_sdk_scan_async_cache_size, 16, "the max buffer size (in MB) for cached scan results");
 DEFINE_int32(tera_sdk_scan_async_parallel_max_num, 500, "the max number of concurrent task sending");
-
-DEFINE_bool(tera_sdk_pend_request_while_scan_meta_enabled, true, "pend request util meta-scan operation finished");
 
 DEFINE_string(tera_ins_addr_list, "", "the ins cluster addr. e.g. abc.com:1234,abb.com:1234");
 DEFINE_string(tera_ins_root_path, "", "root path on ins. e.g /ps/sandbox");

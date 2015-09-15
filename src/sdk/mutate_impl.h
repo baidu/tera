@@ -147,8 +147,8 @@ public:
     /// 设置错误码
     void SetError(ErrorCode::ErrorCodeType err , const std::string& reason = "");
 
-    /// 等待结束或超时，abs_time_ms是绝对时间
-    bool Wait(int64_t abs_time_ms = 0);
+    /// 等待结束
+    void Wait();
 
     /// 执行异步回调
     void RunCallback();
@@ -159,10 +159,6 @@ public:
     /// 释放引用
     void Unref();
 
-    /// 设置序列号
-    void SetSequenceId(uint64_t sequence);
-    uint64_t SequenceId();
-
 protected:
     /// 增加一个操作
     RowMutation::Mutation& AddMutation();
@@ -171,9 +167,6 @@ private:
     TableImpl* _table;
     std::string _row_key;
     std::vector<RowMutation::Mutation> _mu_seq;
-
-    mutable Mutex _mutex;
-    int32_t _refs;
 
     RowMutation::Callback _callback;
     void* _user_context;
@@ -184,8 +177,6 @@ private:
     ErrorCode _error_code;
     mutable Mutex _finish_mutex;
     common::CondVar _finish_cond;
-
-    uint64_t _sequence;
 };
 
 void SerializeMutation(const RowMutation::Mutation& src, tera::Mutation* dst);

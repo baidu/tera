@@ -270,11 +270,6 @@ bool ClientImpl::EnableTable(string name, ErrorCode* err) {
     return false;
 }
 
-Table* ClientImpl::OpenTable(const string& table_name, ErrorCode* err) {
-    TableOptions options;
-    return OpenTable(table_name, options, err);
-}
-
 bool ClientImpl::GetInternalTableName(const std::string& table_name, ErrorCode* err,
                                       std::string* internal_table_name) {
     *internal_table_name = table_name;
@@ -313,7 +308,6 @@ bool ClientImpl::GetInternalTableName(const std::string& table_name, ErrorCode* 
 }
 
 Table* ClientImpl::OpenTable(const std::string& table_name,
-                             const TableOptions& options,
                              ErrorCode* err) {
     std::string internal_table_name;
     if (!GetInternalTableName(table_name, err, &internal_table_name)) {
@@ -322,7 +316,6 @@ Table* ClientImpl::OpenTable(const std::string& table_name,
     }
     err->SetFailed(ErrorCode::kOK);
     TableImpl* table = new TableImpl(internal_table_name,
-                                     options,
                                      _zk_root_path,
                                      _zk_addr_list,
                                      &_thread_pool);

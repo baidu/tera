@@ -227,27 +227,11 @@ void RowReaderImpl::RunCallback() {
     }
 }
 
-bool RowReaderImpl::Wait(int64_t abs_time_ms) {
-    int64_t timeout = -1;
-    if (abs_time_ms > 0) {
-        timeout = abs_time_ms - GetTimeStampInMs();
-        if (timeout < 0) {
-            timeout = 0;
-        }
-    }
-
+void RowReaderImpl::Wait() {
     MutexLock lock(&_finish_mutex);
-    while (!_finish && timeout != 0) {
-        _finish_cond.TimeWait(timeout);
-        if (abs_time_ms > 0) {
-            timeout = abs_time_ms - GetTimeStampInMs();
-            if (timeout < 0) {
-                timeout = 0;
-            }
-        }
+    while (!_finish) {
+        _finish_cond.Wait();
     }
-
-    return _finish;
 }
 
 /// Get数量
