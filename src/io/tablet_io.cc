@@ -224,7 +224,12 @@ bool TabletIO::Load(const TableSchema& schema,
     m_ldb_options.disable_wal = m_table_schema.disable_wal();
     SetupOptionsForLG();
 
-    m_tablet_path = FLAGS_tera_tabletnode_path_prefix + path;
+    std::string path_prefix = FLAGS_tera_tabletnode_path_prefix;
+    if (*path_prefix.rbegin() != '/') {
+        path_prefix.push_back('/');
+    }
+
+    m_tablet_path = path_prefix + path;
     LOG(INFO) << "[Load] Start Open " << m_tablet_path;
     // recover snapshot
     std::map<uint64_t, uint64_t>::iterator it = snapshots.begin();
