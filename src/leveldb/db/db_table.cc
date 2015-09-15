@@ -26,7 +26,6 @@
 #include "leveldb/table_utils.h"
 #include "table/merger.h"
 #include "util/string_ext.h"
-#include "util/thread_pool.h"
 
 namespace leveldb {
 

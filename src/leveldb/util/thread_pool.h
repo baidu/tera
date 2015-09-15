@@ -16,14 +16,6 @@
 
 namespace leveldb {
 
-enum ThreadPoolScore {
-   kDeleteLogUrgentScore = 100,
-   kDumpMemTableUrgentScore = 90,
-   kDumpMemTableScore = 60,
-   kDeleteLogScore = 50,
-   kManualCompactScore = 10,
-};
-
 class ThreadPool {
 public:
   ThreadPool();
