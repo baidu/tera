@@ -60,12 +60,10 @@ DECLARE_int32(FLAGS_tera_rpc_timeout_period);
 namespace tera {
 
 TableImpl::TableImpl(const std::string& table_name,
-                     const TableOptions& options,
                      const std::string& zk_root_path,
                      const std::string& zk_addr_list,
                      common::ThreadPool* thread_pool)
     : _name(table_name),
-      _options(options),
       _last_sequence_id(0),
       _timeout(FLAGS_tera_sdk_timeout),
       _commit_size(FLAGS_tera_sdk_batch_size),

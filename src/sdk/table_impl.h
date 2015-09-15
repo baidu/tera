@@ -82,7 +82,6 @@ class TableImpl : public Table {
     friend class MutationCommitBuffer;
 public:
     TableImpl(const std::string& table_name,
-              const TableOptions& options,
               const std::string& zk_root_path,
               const std::string& zk_addr_list,
               ThreadPool* thread_pool);
@@ -367,7 +366,6 @@ private:
 
     std::string _name;
     int64_t _create_time;
-    const TableOptions _options;
     uint64_t _last_sequence_id;
     uint32_t _timeout;
 

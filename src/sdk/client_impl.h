@@ -50,10 +50,6 @@ public:
 
     virtual Table* OpenTable(const string& table_name, ErrorCode* err);
 
-    virtual Table* OpenTable(const std::string& table_name,
-                             const TableOptions& options,
-                             ErrorCode* err);
-
     virtual bool GetTabletLocation(const string& table_name,
                                    std::vector<TabletInfo>* tablets,
                                    ErrorCode* err);

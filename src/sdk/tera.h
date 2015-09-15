@@ -503,10 +503,6 @@ struct TabletInfo {
     std::string status;
 };
 
-struct TableOptions {
-    TableOptions();
-};
-
 /// 表接口
 class Table {
 public:
@@ -640,9 +636,6 @@ public:
     virtual bool EnableTable(std::string name, ErrorCode* err) = 0;
     /// 打开表格, 失败返回NULL
     virtual Table* OpenTable(const std::string& table_name, ErrorCode* err) = 0;
-    virtual Table* OpenTable(const std::string& table_name,
-                             const TableOptions& options,
-                             ErrorCode* err) = 0;
     /// 获取表格分布信息
     virtual bool GetTabletLocation(const std::string& table_name,
                                    std::vector<TabletInfo>* tablets,

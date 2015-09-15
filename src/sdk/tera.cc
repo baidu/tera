@@ -8,9 +8,6 @@
 
 namespace tera {
 
-TableOptions::TableOptions() {
-}
-
 ErrorCode::ErrorCode() : _err(kOK) {
 }
 
