@@ -374,7 +374,8 @@ private:
     mutable Mutex _mutation_batch_mutex;
     mutable Mutex _reader_batch_mutex;
     uint32_t _commit_size;
-    uint64_t _commit_timeout;
+    uint64_t _write_commit_timeout;
+    uint64_t _read_commit_timeout;
     std::map<std::string, TaskBatch> _mutation_batch_map;
     std::map<std::string, TaskBatch> _reader_batch_map;
     Counter _cur_commit_pending_counter;

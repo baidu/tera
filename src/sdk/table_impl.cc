@@ -41,7 +41,8 @@ DECLARE_int32(tera_sdk_retry_period);
 DECLARE_int32(tera_sdk_update_meta_internal);
 DECLARE_bool(tera_sdk_write_sync);
 DECLARE_int32(tera_sdk_batch_size);
-DECLARE_int32(tera_sdk_batch_send_interval);
+DECLARE_int32(tera_sdk_write_send_interval);
+DECLARE_int32(tera_sdk_read_send_interval);
 DECLARE_int64(tera_sdk_max_mutation_pending_num);
 DECLARE_int64(tera_sdk_max_reader_pending_num);
 DECLARE_bool(tera_sdk_async_blocking_enabled);
@@ -68,7 +69,8 @@ TableImpl::TableImpl(const std::string& table_name,
       _last_sequence_id(0),
       _timeout(FLAGS_tera_sdk_timeout),
       _commit_size(FLAGS_tera_sdk_batch_size),
-      _commit_timeout(FLAGS_tera_sdk_batch_send_interval),
+      _write_commit_timeout(FLAGS_tera_sdk_write_send_interval),
+      _read_commit_timeout(FLAGS_tera_sdk_read_send_interval),
       _max_commit_pending_num(FLAGS_tera_sdk_max_mutation_pending_num),
       _max_reader_pending_num(FLAGS_tera_sdk_max_reader_pending_num),
       _meta_cond(&_meta_mutex),
@@ -585,7 +587,7 @@ void TableImpl::PackMutations(const std::string& server_addr,
         mutation_batch->row_id_list = new std::vector<int64_t>;
         boost::function<void ()> closure =
             boost::bind(&TableImpl::MutationBatchTimeout, this, server_addr);
-        int64_t timer_id = _thread_pool->DelayTask(_commit_timeout, closure);
+        int64_t timer_id = _thread_pool->DelayTask(_write_commit_timeout, closure);
         mutation_batch->timer_id = timer_id;
     } else {
         mutation_batch = &it->second;
@@ -918,7 +920,7 @@ void TableImpl::PackReaders(const std::string& server_addr,
         reader_buffer->row_id_list = new std::vector<int64_t>;
         boost::function<void ()> closure =
             boost::bind(&TableImpl::ReaderBatchTimeout, this, server_addr);
-        uint64_t timer_id = _thread_pool->DelayTask(_commit_timeout, closure);
+        uint64_t timer_id = _thread_pool->DelayTask(_read_commit_timeout, closure);
         reader_buffer->timer_id = timer_id;
     } else {
         reader_buffer = &it->second;

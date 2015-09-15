@@ -83,7 +83,6 @@ DEFINE_int32(tera_master_connect_timeout_period, 5000, "the timeout period (in m
 DEFINE_int32(tera_master_query_tabletnode_period, 10000, "the period (in ms) for query tabletnode status" );
 DEFINE_int32(tera_master_common_retry_period, 1000, "the period (in ms) for common operation" );
 DEFINE_int32(tera_master_meta_retry_times, 5, "the max retry times when master read/write meta");
-//DEFINE_int32(tera_master_meta_retry_period, 1000, "the retry period (in ms) for master read/write meta" );
 DEFINE_bool(tera_master_meta_recovery_enabled, false, "whether recovery meta tablet at startup");
 DEFINE_string(tera_master_meta_recovery_file, "../data/meta.bak", "path of meta table recovery file");
 
@@ -104,10 +103,6 @@ DEFINE_int64(tera_master_split_tablet_size, 512, "the size (in MB) of tablet to 
 DEFINE_bool(tera_master_merge_enabled, false, "enable the auto-merge tablet");
 DEFINE_int64(tera_master_merge_tablet_size, 0, "the size (in MB) of tablet to trigger merge");
 DEFINE_string(tera_master_gc_strategy, "default", "gc strategy, [default, incremental]");
-
-// deprecated
-DEFINE_int64(tera_master_merge_size_threshold, 10, "the size (in MB) of tablet to trigger merge");
-DEFINE_int64(tera_master_merge_timer_period, 180, "the actived time (in sec) for merge timer");
 
 DEFINE_int32(tera_master_max_split_concurrency, 1, "the max concurrency of tabletnode for split tablet");
 DEFINE_int32(tera_master_max_load_concurrency, 5, "the max concurrency of tabletnode for load tablet");
@@ -231,7 +226,8 @@ DEFINE_int32(tera_sdk_delay_send_internal, 2, "the sdk resend the request intern
 DEFINE_int32(tera_sdk_scan_buffer_limit, 2048000, "the pack size limit for scan operation");
 DEFINE_bool(tera_sdk_write_sync, false, "sync flag for write");
 DEFINE_int32(tera_sdk_batch_size, 100, "batch_size");
-DEFINE_int32(tera_sdk_batch_send_interval, 100, "batch send interval time");
+DEFINE_int32(tera_sdk_write_send_interval, 100, "write batch send interval time");
+DEFINE_int32(tera_sdk_read_send_interval, 10, "read batch send interval time");
 DEFINE_int64(tera_sdk_max_mutation_pending_num, INT64_MAX, "default number of pending mutations in async put op");
 DEFINE_int64(tera_sdk_max_reader_pending_num, INT64_MAX, "default number of pending readers in async get op");
 DEFINE_bool(tera_sdk_async_blocking_enabled, true, "enable blocking when async writing and reading");
