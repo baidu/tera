@@ -35,6 +35,8 @@ public:
     virtual bool MergeAtomicOPs(Iterator* it, std::string* merged_value,
                                 std::string* merged_key) = 0;
 
+    virtual void SetSnapshot(uint64_t snapshot) = 0;
+
     virtual const char* Name() const = 0;
 };
 
@@ -53,6 +55,9 @@ public:
 
     virtual const char* Name() const {
         return "leveldb.DummyCompactStrategy";
+    }
+    virtual void SetSnapshot(uint64_t snapshot) {
+        // snapshot is taken care of by leveldb
     }
 
     virtual bool MergeAtomicOPs(Iterator* it, std::string* merged_value,

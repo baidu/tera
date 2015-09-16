@@ -10,6 +10,7 @@
 #define STORAGE_LEVELDB_DB_BUILDER_H_
 
 #include <stdint.h>
+#include <set>
 
 #include "leveldb/status.h"
 
@@ -34,7 +35,8 @@ extern Status BuildTable(const std::string& dbname,
                          TableCache* table_cache,
                          Iterator* iter,
                          FileMetaData* meta,
-                         uint64_t* saved_size);
+                         uint64_t* saved_size,
+                         uint64_t smallest_snapshot);
 
 }  // namespace leveldb
 
