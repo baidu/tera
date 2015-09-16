@@ -335,8 +335,8 @@ bool TabletIO::Split(std::string* split_key, StatusCode* status) {
         m_db_ref_count++;
     }
 
-    int64_t table_size;
-    CHECK(GetDataSize(NULL, &table_size, NULL, status);
+    uint64_t table_size;
+    GetDataSize(NULL, &table_size, NULL, status);
     if (table_size <= 0) {
         SetStatusCode(kTableNotSupport, status);
         MutexLock lock(&m_mutex);
@@ -487,8 +487,8 @@ bool TabletIO::SnapshotIDToSeq(uint64_t snapshot_id, uint64_t* snapshot_sequence
     return true;
 }
 
-int64_t TabletIO::GetDataSize(uint64_t* size, uint64_t* size_for_split,
-                              std::vector<uint64_t>* lgsize, StatusCode* status) {
+bool TabletIO::GetDataSize(uint64_t* size, uint64_t* size_for_split,
+                           std::vector<uint64_t>* lgsize, StatusCode* status) {
     {
         MutexLock lock(&m_mutex);
         if (m_status != kReady && m_status != kOnSplit

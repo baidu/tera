@@ -733,7 +733,11 @@ bool ClientImpl::ParseTabletEntry(const TabletMeta& meta, std::vector<TabletInfo
     tablet.start_key = meta.key_range().key_start();
     tablet.end_key = meta.key_range().key_end();
     tablet.server_addr = meta.server_addr();
-    tablet.data_size = meta.table_size();
+    if (meta.has_size()) {
+        tablet.data_size = meta.size();
+    } else {
+        tablet.data_size = meta.size_for_split();
+    }
     tablet.status = StatusCodeToString(meta.status());
 
     tablet_list->push_back(tablet);

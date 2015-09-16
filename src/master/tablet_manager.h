@@ -67,6 +67,9 @@ public:
     const std::string& GetServerAddr();
     const std::string& GetPath();
     int64_t GetDataSize();
+
+    // size_for_split <= tabletsize, donot include mem and level0 in leveldb
+    int64_t GetDataSizeForSplit();
     const std::string& GetKeyStart();
     const std::string& GetKeyEnd();
     const KeyRange& GetKeyRange();
@@ -81,8 +84,6 @@ public:
     bool IsBusy();
     std::string DebugString();
 
-
-    void SetSize(int64_t table_size);
     void SetSize(const TabletMeta& meta);
     void SetCounter(const TabletCounter& counter);
     void SetCompactStatus(CompactStatus compact_status);
@@ -280,12 +281,6 @@ private:
                         const std::string& server_addr = "",
                         const TabletStatus& table_status = kTableNotInit,
                         int64_t data_size = 0);
-
-    void UpdateTabletMeta(TabletMeta* new_meta, const TabletMeta& old_meta,
-                          const std::string* key_end, const std::string* path,
-                          const std::string* server_addr,
-                          const TabletStatus* table_status, int64_t* table_size,
-                          const CompactStatus* compact_status);
 
     bool CheckStatusSwitch(TabletStatus old_status, TabletStatus new_status);
 
