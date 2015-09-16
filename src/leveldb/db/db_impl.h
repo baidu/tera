@@ -47,6 +47,9 @@ class DBImpl : public DB {
   virtual void ReleaseSnapshot(uint64_t sequence_number);
   virtual bool GetProperty(const Slice& property, std::string* value);
   virtual void GetApproximateSizes(const Range* range, int n, uint64_t* sizes);
+  // lgsize not used in db_impl, just for interface compatable
+  virtual void GetApproximateSizes(uint64_t* size, uint64_t* size_under_level1,
+                                   std::vector<uint64_t>* lgsize = NULL);
   virtual void CompactRange(const Slice* begin, const Slice* end);
 
   void AddBoundLogSize(uint64_t size);
@@ -57,9 +60,6 @@ class DBImpl : public DB {
                     const std::string& end_key,
                     double ratio,
                     std::string* split_key);
-  uint64_t GetScopeSize(const std::string& start_key,
-                        const std::string& end_key,
-                        std::vector<uint64_t>* lgsize = NULL);
 
   // Add all sst files inherited from other tablets
   virtual void AddInheritedLiveFiles(std::vector<std::set<uint64_t> >* live);

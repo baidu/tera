@@ -688,6 +688,34 @@ void DBTable::GetApproximateSizes(const Range* range, int n,
     }
 }
 
+void DBTable::GetApproximateSizes(uint64_t* size, uint64_t* size_under_level1,
+                                  std::vector<uint64_t>* lgsize) {
+    if (size) {
+        *size = 0;
+    }
+    if (size_under_level1) {
+        *size_under_level1 = 0;
+    }
+    if (lgsize) {
+        lgsize->clear();
+    }
+    std::set<uint32_t>::iterator it = options_.exist_lg_list->begin();
+    for (; it != options_.exist_lg_list->end(); ++it) {
+        uint32_t i = *it;
+        uint64_t size_tmp, size_under_l1;
+        lg_list_[i]->GetApproximateSizes(&size_tmp, &size_under_l1);
+        if (size) {
+            *size += size_tmp;
+        }
+        if (size_under_level1) {
+            *size_under_level1 += size_under_l1;
+        }
+        if (lgsize) {
+            lgsize->push_back(size_tmp);
+        }
+    }
+}
+
 void DBTable::CompactRange(const Slice* begin, const Slice* end) {
     std::vector<LGCompactThread*> lg_threads;
     std::set<uint32_t>::iterator it = options_.exist_lg_list->begin();
@@ -937,8 +965,9 @@ bool DBTable::FindSplitKey(const std::string& start_key,
     MutexLock l(&mutex_);
     std::set<uint32_t>::iterator it = options_.exist_lg_list->begin();
     for (; it != options_.exist_lg_list->end(); ++it) {
-        uint64_t size = lg_list_[*it]->GetScopeSize(start_key, end_key);
-        size_of_lg[size] = lg_list_[*it];
+        uint64_t size_under_level1;
+        lg_list_[*it]->GetApproximateSizes(NULL, &size_under_level1);
+        size_of_lg[size_under_level1] = lg_list_[*it];
     }
     std::map<uint64_t, DBImpl*>::reverse_iterator biggest_it =
         size_of_lg.rbegin();
@@ -947,24 +976,6 @@ bool DBTable::FindSplitKey(const std::string& start_key,
     }
     return biggest_it->second->FindSplitKey(start_key, end_key,
                                             ratio, split_key);
-}
-
-uint64_t DBTable::GetScopeSize(const std::string& start_key,
-                               const std::string& end_key,
-                               std::vector<uint64_t>* lgsize) {
-    uint64_t size = 0;
-    if (lgsize != NULL) {
-        lgsize->clear();
-    }
-    std::set<uint32_t>::iterator it = options_.exist_lg_list->begin();
-    for (; it != options_.exist_lg_list->end(); ++it) {
-        uint64_t lsize = lg_list_[*it]->GetScopeSize(start_key, end_key);
-        size += lsize;
-        if (lgsize != NULL) {
-            lgsize->push_back(lsize);
-        }
-    }
-    return size;
 }
 
 bool DBTable::MinorCompact() {

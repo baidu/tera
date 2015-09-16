@@ -53,7 +53,8 @@ MemTableOnLevelDB::~MemTableOnLevelDB() {
 }
 
 size_t MemTableOnLevelDB::ApproximateMemoryUsage() {
-    uint64_t size = memdb_->GetScopeSize("", "");
+    uint64_t size;
+    memdb_->GetApproximateSizes(&size, NULL);
     return size;
 }
 
