@@ -147,6 +147,14 @@ std::string TableDescriptor::AdminGroup() const {
     return _impl->AdminGroup();
 }
 
+void TableDescriptor::SetAlias(const std::string& alias) {
+    return _impl->SetAlias(alias);
+}
+
+std::string TableDescriptor::Alias() const {
+    return _impl->Alias();
+}
+
 } // namespace tera
 
 /* vim: set expandtab ts=4 sw=4 sts=4 tw=100: */

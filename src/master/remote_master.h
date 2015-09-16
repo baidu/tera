@@ -84,6 +84,12 @@ public:
                      const OperateUserRequest* request,
                      OperateUserResponse* response,
                      google::protobuf::Closure* done);
+
+    void RenameTable(google::protobuf::RpcController* controller,
+                const RenameTableRequest* request,
+                RenameTableResponse* response,
+                google::protobuf::Closure* done);
+
 private:
     void DoGetSnapshot(google::protobuf::RpcController* controller,
                        const GetSnapshotRequest* request,

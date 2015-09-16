@@ -65,10 +65,6 @@ public:
 
     virtual Table* OpenTable(const string& table_name, ErrorCode* err);
 
-    virtual Table* OpenTable(const std::string& table_name,
-                             const TableOptions& options,
-                             ErrorCode* err);
-
     virtual bool GetTabletLocation(const string& table_name,
                                    std::vector<TabletInfo>* tablets,
                                    ErrorCode* err);
@@ -113,6 +109,10 @@ public:
     bool ShowTabletNodesInfo(std::vector<TabletNodeInfo>* infos,
                              ErrorCode* err);
 
+    bool Rename(const std::string& old_table_name,
+                const std::string& new_table_name,
+                ErrorCode* err);
+    
     std::string GetZkAddrList() { return _zk_addr_list; }
     std::string GetZkRootPath() { return _zk_root_path; }
 
@@ -135,6 +135,8 @@ private:
     void DoShowUser(OperateUserResponse& response,
                     std::vector<std::string>& user_groups);
     bool CheckReturnValue(StatusCode status, std::string& reason, ErrorCode* err);
+    bool GetInternalTableName(const std::string& table_name, ErrorCode* err,
+                              std::string* internal_table_name);
 private:
     ClientImpl(const ClientImpl&);
     void operator=(const ClientImpl&);

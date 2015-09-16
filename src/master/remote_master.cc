@@ -277,5 +277,14 @@ void RemoteMaster::DoOperateUser(google::protobuf::RpcController* controller,
     LOG(INFO) << "finish RPC (OperateUser)";
 }
 
+void RemoteMaster::RenameTable(google::protobuf::RpcController* controller,
+                               const RenameTableRequest* request,
+                               RenameTableResponse* response,
+                               google::protobuf::Closure* done) {
+    LOG(INFO) << "accept RPC (RenameTable)";
+    m_master_impl->RenameTable(request, response, done);
+    LOG(INFO) << "finish RPC (RenameTable)";
+}
+
 } // namespace master
 } // namespace tera
