@@ -65,9 +65,9 @@ TEST(SkipTest, InsertAndLookup) {
 
   for (int i = 0; i < R; i++) {
     if (list.Contains(i)) {
-      ASSERT_EQ(keys.count(i), 1);
+      ASSERT_EQ(keys.count(i), 1u);
     } else {
-      ASSERT_EQ(keys.count(i), 0);
+      ASSERT_EQ(keys.count(i), 0u);
     }
   }
 
@@ -199,7 +199,7 @@ class ConcurrentTest {
     }
 
     State() {
-      for (int k = 0; k < K; k++) {
+      for (uint32_t k = 0; k < K; k++) {
         Set(k, 0);
       }
     }
@@ -229,7 +229,7 @@ class ConcurrentTest {
   void ReadStep(Random* rnd) {
     // Remember the initial committed state of the skiplist.
     State initial_state;
-    for (int k = 0; k < K; k++) {
+    for (uint32_t k = 0; k < K; k++) {
       initial_state.Set(k, current_.Get(k));
     }
 
@@ -253,8 +253,8 @@ class ConcurrentTest {
 
         // Note that generation 0 is never inserted, so it is ok if
         // <*,0,*> is missing.
-        ASSERT_TRUE((gen(pos) == 0) ||
-                    (gen(pos) > initial_state.Get(key(pos)))
+        ASSERT_TRUE((gen(pos) == 0u) ||
+                    (static_cast<int>(gen(pos)) > initial_state.Get(key(pos)))
                     ) << "key: " << key(pos)
                       << "; gen: " << gen(pos)
                       << "; initgen: "
@@ -337,6 +337,7 @@ class TestState {
   port::CondVar state_cv_;
 };
 
+#if 0 // disable by taocipian for anqin disable caller, so callee is unused
 static void ConcurrentReader(void* arg) {
   TestState* state = reinterpret_cast<TestState*>(arg);
   Random rnd(state->seed_);
@@ -368,6 +369,7 @@ static void RunConcurrent(int run) {
     state.Wait(TestState::DONE);
   }
 }
+#endif
 
 #if 0 // disabled by anqin for thread blocking, need check!
 

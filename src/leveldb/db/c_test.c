@@ -206,19 +206,8 @@ int main(int argc, char** argv) {
   leveldb_destroy_db(options, dbname, &err);
   Free(&err);
 
-  StartPhase("open_error");
-  db = leveldb_open(options, dbname, &err);
-  CheckCondition(err != NULL);
-  Free(&err);
-
-  StartPhase("leveldb_free");
-  db = leveldb_open(options, dbname, &err);
-  CheckCondition(err != NULL);
-  leveldb_free(err);
-  err = NULL;
-
+  // create_if_missing is default
   StartPhase("open");
-  leveldb_options_set_create_if_missing(options, 1);
   db = leveldb_open(options, dbname, &err);
   CheckNoError(err);
   CheckGet(db, roptions, "foo", NULL);

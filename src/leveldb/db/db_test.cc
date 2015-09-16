@@ -334,7 +334,7 @@ class DBTest {
     }
 
     // Check reverse iteration results are the reverse of forward results
-    int matched = 0;
+    size_t matched = 0;
     for (iter->SeekToLast(); iter->Valid(); iter->Prev()) {
       ASSERT_LT(matched, forward.size());
       ASSERT_EQ(IterStatus(iter), forward[forward.size() - matched - 1]);
@@ -983,7 +983,7 @@ TEST(DBTest, CompactionsGenerateMultipleFiles) {
   }
 }
 
-#if 0
+#if 0 // config::kL0_StopWritesTrigger is changed
 TEST(DBTest, RepeatedWritesToSameKey) {
   Options options = CurrentOptions();
   options.env = env_;
@@ -1325,7 +1325,6 @@ TEST(DBTest, OverlapInLevel0) {
 }
 #endif
 
-#if 1
 TEST(DBTest, L0_CompactionBug_Issue44_a) {
   Reopen();
   ASSERT_OK(Put("b", "v"));
@@ -1368,7 +1367,6 @@ TEST(DBTest, L0_CompactionBug_Issue44_b) {
   DelayMilliseconds(1000);  // Wait for compaction to finish
   ASSERT_EQ("(->)(c->cv)", Contents());
 }
-#endif
 
 TEST(DBTest, ComparatorCheck) {
   class NewComparator : public Comparator {
@@ -1393,7 +1391,6 @@ TEST(DBTest, ComparatorCheck) {
       << s.ToString();
 }
 
-#if 0
 TEST(DBTest, CustomComparator) {
   class NumberComparator : public Comparator {
    public:
@@ -1448,7 +1445,6 @@ TEST(DBTest, CustomComparator) {
     Compact("[0]", "[1000000]");
   }
 }
-#endif
 
 TEST(DBTest, ManualCompaction) {
   ASSERT_EQ(config::kMaxMemCompactLevel, 2)
@@ -1488,34 +1484,10 @@ TEST(DBTest, DBOpen_Options) {
   std::string dbname = test::TmpDir() + "/db_options_test";
   DestroyDB(dbname, Options());
 
-  // Does not exist, and create_if_missing == false: error
+  // Does not exist, create_if_missing is default
   DB* db = NULL;
   Options opts;
-  opts.create_if_missing = false;
   Status s = DB::Open(opts, dbname, &db);
-  ASSERT_TRUE(strstr(s.ToString().c_str(), "does not exist") != NULL);
-  ASSERT_TRUE(db == NULL);
-
-  // Does not exist, and create_if_missing == true: OK
-  opts.create_if_missing = true;
-  s = DB::Open(opts, dbname, &db);
-  ASSERT_OK(s);
-  ASSERT_TRUE(db != NULL);
-
-  delete db;
-  db = NULL;
-
-  // Does exist, and error_if_exists == true: error
-  opts.create_if_missing = false;
-  opts.error_if_exists = true;
-  s = DB::Open(opts, dbname, &db);
-  ASSERT_TRUE(strstr(s.ToString().c_str(), "exists") != NULL);
-  ASSERT_TRUE(db == NULL);
-
-  // Does exist, and error_if_exists == false: OK
-  opts.create_if_missing = true;
-  opts.error_if_exists = false;
-  s = DB::Open(opts, dbname, &db);
   ASSERT_OK(s);
   ASSERT_TRUE(db != NULL);
 
@@ -1764,7 +1736,8 @@ static void MTThreadBody(void* arg) {
       } else {
         // Check that the writer thread counter is >= the counter in the value
         ASSERT_OK(s);
-        int k, w, c;
+        int k, w;
+        uint32_t c;
         ASSERT_EQ(3, sscanf(value.c_str(), "%d.%d.%d", &k, &w, &c)) << value;
         ASSERT_EQ(k, key);
         ASSERT_GE(w, 0);
@@ -1826,8 +1799,8 @@ class ModelDB: public DB {
 
   explicit ModelDB(const Options& options): options_(options), snapshot_id_(0) { }
   ~ModelDB() { }
-  virtual Status Shutdown1() { }
-  virtual Status Shutdown2() { }
+  virtual Status Shutdown1() { return Status(); }
+  virtual Status Shutdown2() { return Status(); }
   virtual Status Put(const WriteOptions& o, const Slice& k, const Slice& v) {
     return DB::Put(o, k, v);
   }
@@ -1864,6 +1837,10 @@ class ModelDB: public DB {
         delete it->second;
         snapshots_.erase(it);
     }
+  }
+  virtual const uint64_t Rollback(uint64_t snapshot_seq, uint64_t rollback_point = kMaxSequenceNumber) {
+      // TODO
+      return 0;
   }
   virtual bool BusyWrite() {
     return false;
@@ -1903,7 +1880,8 @@ class ModelDB: public DB {
   }
 
   virtual uint64_t GetScopeSize(const std::string& start_key,
-                                const std::string& end_key) {
+                                const std::string& end_key,
+                                std::vector<uint64_t>* lgsize = NULL) {
       return 0;
   }
 
