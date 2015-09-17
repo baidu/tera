@@ -32,6 +32,14 @@ class SequentialFile;
 class Slice;
 class WritableFile;
 
+enum ThreadPoolScore {
+   kDeleteLogUrgentScore = 100,
+   kDumpMemTableUrgentScore = 90,
+   kDumpMemTableScore = 60,
+   kDeleteLogScore = 50,
+   kManualCompactScore = 10,
+};
+
 class Env {
  public:
   Env() { }

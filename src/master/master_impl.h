@@ -78,6 +78,10 @@ public:
                      DelSnapshotResponse* response,
                      google::protobuf::Closure* done);
 
+    void Rollback(const RollbackRequest* request,
+                  RollbackResponse* response,
+                  google::protobuf::Closure* done);
+
     void CreateTable(const CreateTableRequest* request,
                      CreateTableResponse* response,
                      google::protobuf::Closure* done);
@@ -114,6 +118,10 @@ public:
                          ShowTabletNodesResponse* response,
                          google::protobuf::Closure* done);
 
+    void RenameTable(const RenameTableRequest* request,
+                     RenameTableResponse* response,
+                     google::protobuf::Closure* done);
+    
     void CmdCtrl(const CmdCtrlRequest* request,
                  CmdCtrlResponse* response);
 
@@ -131,6 +139,7 @@ public:
 
 private:
     typedef Closure<void, SnapshotRequest*, SnapshotResponse*, bool, int> SnapshotClosure;
+    typedef Closure<void, SnapshotRollbackRequest*, SnapshotRollbackResponse*, bool, int> RollbackClosure;
     typedef Closure<void, ReleaseSnapshotRequest*, ReleaseSnapshotResponse*, bool, int> DelSnapshotClosure;
     typedef Closure<void, QueryRequest*, QueryResponse*, bool, int> QueryClosure;
     typedef Closure<void, LoadTabletRequest*, LoadTabletResponse*, bool, int> LoadClosure;
@@ -174,6 +183,19 @@ private:
         TablePtr table;
         std::vector<TabletPtr> tablets;
         std::vector<uint64_t> snapshot_id;
+        int task_num;
+        int finish_num;
+        mutable Mutex mutex;
+        bool aborted;
+    };
+
+    struct RollbackTask {
+        const RollbackRequest* request;
+        RollbackResponse* response;
+        google::protobuf::Closure* done;
+        TablePtr table;
+        std::vector<TabletPtr> tablets;
+        std::vector<uint64_t> rollback_points;
         int task_num;
         int finish_num;
         mutable Mutex mutex;
@@ -271,6 +293,21 @@ private:
                              WriteTabletRequest* request,
                              WriteTabletResponse* response,
                              bool failed, int error_code);
+    void RollbackAsync(TabletPtr tablet, uint64_t snapshot_id, int32_t timeout,
+                          RollbackClosure* done);
+    void RollbackCallback(int32_t tablet_id, RollbackTask* task,
+                          SnapshotRollbackRequest* master_request,
+                          SnapshotRollbackResponse* master_response,
+                          bool failed, int error_code);
+    void AddRollbackCallback(TablePtr table,
+                             std::vector<TabletPtr> tablets,
+                             int32_t retry_times,
+                             const RollbackRequest* rpc_request,
+                             RollbackResponse* rpc_response,
+                             google::protobuf::Closure* rpc_done,
+                             WriteTabletRequest* request,
+                             WriteTabletResponse* response,
+                             bool failed, int error_code);
 
     void ScheduleQueryTabletNode();
     void QueryTabletNode();
@@ -344,12 +381,22 @@ private:
                                             WriteTabletRequest* request,
                                             WriteTabletResponse* response,
                                             bool failed, int error_code);
+
     void UpdateTableRecordForUpdateCallback(TablePtr table, int32_t retry_times,
                                             UpdateTableResponse* rpc_response,
                                             google::protobuf::Closure* rpc_done,
                                             WriteTabletRequest* request,
                                             WriteTabletResponse* response,
                                             bool failed, int error_code);
+    void UpdateTableRecordForRenameCallback(TablePtr table, int32_t retry_times,
+                                            RenameTableResponse* rpc_response,
+                                            google::protobuf::Closure* rpc_done,
+                                            std::string old_alias,
+                                            std::string new_alias,
+                                            WriteTabletRequest* request,
+                                            WriteTabletResponse* response,
+                                            bool failed, int error_code
+                                            );
     void UpdateTabletRecordCallback(TabletPtr tablet, int32_t retry_times,
                                     WriteTabletRequest* request,
                                     WriteTabletResponse* response,
@@ -460,6 +507,7 @@ private:
     template <typename Request, typename Response, typename Callback>
     bool HasTablePermission(const Request* request, Response* response, 
                             Callback* done, TablePtr table, const char* operate);
+    void FillAlias(const std::string& key, const std::string& value);
 private:
     mutable Mutex m_status_mutex;
     MasterStatus m_status;
@@ -509,6 +557,8 @@ private:
     int64_t m_gc_timer_id;
     bool m_gc_query_enable;
     boost::shared_ptr<GcStrategy> gc_strategy;
+    std::map<std::string, std::string> m_alias;
+    mutable Mutex m_alias_mutex;
 };
 
 } // namespace master

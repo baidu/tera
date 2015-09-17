@@ -172,6 +172,16 @@ void RemoteTabletNode::ReleaseSnapshot(google::protobuf::RpcController* controll
     m_write_thread_pool->AddPriorityTask(callback);
 }
 
+void RemoteTabletNode::Rollback(google::protobuf::RpcController* controller,
+                                const SnapshotRollbackRequest* request,
+                                SnapshotRollbackResponse* response,
+                                google::protobuf::Closure* done) {
+    boost::function<void ()> callback =
+    boost::bind(&RemoteTabletNode::DoRollback, this, controller,
+               request, response, done);
+    m_write_thread_pool->AddPriorityTask(callback);
+}
+
 
 void RemoteTabletNode::Query(google::protobuf::RpcController* controller,
                              const QueryRequest* request,
@@ -303,6 +313,16 @@ void RemoteTabletNode::DoReleaseSnapshot(google::protobuf::RpcController* contro
     LOG(INFO) << "finish RPC (ReleaseSnapshot) id: " << id;
 }
 
+
+void RemoteTabletNode::DoRollback(google::protobuf::RpcController* controller,
+                                  const SnapshotRollbackRequest* request,
+                                  SnapshotRollbackResponse* response,
+                                  google::protobuf::Closure* done) {
+    uint64_t id = request->sequence_id();
+    LOG(INFO) << "accept RPC (Rollback) id: " << id;
+    m_tabletnode_impl->Rollback(request, response, done);
+    LOG(INFO) << "finish RPC (Rollback) id: " << id;
+}
 
 
 void RemoteTabletNode::DoQuery(google::protobuf::RpcController* controller,

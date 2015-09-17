@@ -204,6 +204,10 @@ public:
     void SetAdminGroup(const std::string& name);
     std::string AdminGroup() const;
 
+    /// alias
+    void SetAlias(const std::string& alias);
+    std::string Alias() const;
+
 private:
     TableDescriptor(const TableDescriptor&);
     void operator=(const TableDescriptor&);
@@ -499,12 +503,6 @@ struct TabletInfo {
     std::string status;
 };
 
-struct TableOptions {
-    bool sequential_write;
-
-    TableOptions();
-};
-
 /// 表接口
 class Table {
 public:
@@ -638,9 +636,6 @@ public:
     virtual bool EnableTable(std::string name, ErrorCode* err) = 0;
     /// 打开表格, 失败返回NULL
     virtual Table* OpenTable(const std::string& table_name, ErrorCode* err) = 0;
-    virtual Table* OpenTable(const std::string& table_name,
-                             const TableOptions& options,
-                             ErrorCode* err) = 0;
     /// 获取表格分布信息
     virtual bool GetTabletLocation(const std::string& table_name,
                                    std::vector<TabletInfo>* tablets,
@@ -665,13 +660,16 @@ public:
 
     virtual bool GetSnapshot(const std::string& name, uint64_t* snapshot, ErrorCode* err) = 0;
     virtual bool DelSnapshot(const std::string& name, uint64_t snapshot, ErrorCode* err) = 0;
+    virtual bool Rollback(const std::string& name, uint64_t snapshot, ErrorCode* err) = 0;
 
     virtual bool CmdCtrl(const std::string& command,
                          const std::vector<std::string>& arg_list,
                          bool* bool_result,
                          std::string* str_result,
                          ErrorCode* err) = 0;
-
+    virtual bool Rename(const std::string& old_table_name,
+                        const std::string& new_table_name,
+                        ErrorCode* err) = 0 ;
     Client() {}
     virtual ~Client() {}
 

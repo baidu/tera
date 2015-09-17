@@ -29,6 +29,9 @@ public:
     virtual bool DelSnapshot(const DelSnapshotRequest* request,
                              DelSnapshotResponse* response);
 
+    virtual bool Rollback(const RollbackRequest* request,
+                          RollbackResponse* response);
+
     virtual bool CreateTable(const CreateTableRequest* request,
                              CreateTableResponse* response);
 
@@ -64,6 +67,9 @@ public:
 
     virtual bool CmdCtrl(const CmdCtrlRequest* request,
                          CmdCtrlResponse* response);
+
+    virtual bool RenameTable(const RenameTableRequest* request, 
+                             RenameTableResponse* response);
 
 private:
     int32_t m_rpc_timeout;

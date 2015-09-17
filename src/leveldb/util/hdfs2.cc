@@ -188,6 +188,9 @@ int32_t Hdfs2::GetFileSize(const std::string& filename, uint64_t* size) {
 
 int32_t Hdfs2::Rename(const std::string& from, const std::string& to) {
   assert(GetFSHandle(from) == GetFSHandle(to));
+  // Hdfs not support rename to an exist path, so we delete target path first.
+  // But this may cause Rename not a atomic operation.
+  (*hdfsDelete)((hdfsFS)GetFSHandle(to), to.c_str(), 1);
   return (*hdfsRename)((hdfsFS)GetFSHandle(from), from.c_str(), to.c_str());
 }
 
