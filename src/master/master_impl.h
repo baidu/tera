@@ -78,6 +78,10 @@ public:
                      DelSnapshotResponse* response,
                      google::protobuf::Closure* done);
 
+    void Rollback(const RollbackRequest* request,
+                  RollbackResponse* response,
+                  google::protobuf::Closure* done);
+
     void CreateTable(const CreateTableRequest* request,
                      CreateTableResponse* response,
                      google::protobuf::Closure* done);
@@ -135,6 +139,7 @@ public:
 
 private:
     typedef Closure<void, SnapshotRequest*, SnapshotResponse*, bool, int> SnapshotClosure;
+    typedef Closure<void, SnapshotRollbackRequest*, SnapshotRollbackResponse*, bool, int> RollbackClosure;
     typedef Closure<void, ReleaseSnapshotRequest*, ReleaseSnapshotResponse*, bool, int> DelSnapshotClosure;
     typedef Closure<void, QueryRequest*, QueryResponse*, bool, int> QueryClosure;
     typedef Closure<void, LoadTabletRequest*, LoadTabletResponse*, bool, int> LoadClosure;
@@ -178,6 +183,19 @@ private:
         TablePtr table;
         std::vector<TabletPtr> tablets;
         std::vector<uint64_t> snapshot_id;
+        int task_num;
+        int finish_num;
+        mutable Mutex mutex;
+        bool aborted;
+    };
+
+    struct RollbackTask {
+        const RollbackRequest* request;
+        RollbackResponse* response;
+        google::protobuf::Closure* done;
+        TablePtr table;
+        std::vector<TabletPtr> tablets;
+        std::vector<uint64_t> rollback_points;
         int task_num;
         int finish_num;
         mutable Mutex mutex;
@@ -271,6 +289,21 @@ private:
                              int32_t retry_times,
                              const DelSnapshotRequest* rpc_request,
                              DelSnapshotResponse* rpc_response,
+                             google::protobuf::Closure* rpc_done,
+                             WriteTabletRequest* request,
+                             WriteTabletResponse* response,
+                             bool failed, int error_code);
+    void RollbackAsync(TabletPtr tablet, uint64_t snapshot_id, int32_t timeout,
+                          RollbackClosure* done);
+    void RollbackCallback(int32_t tablet_id, RollbackTask* task,
+                          SnapshotRollbackRequest* master_request,
+                          SnapshotRollbackResponse* master_response,
+                          bool failed, int error_code);
+    void AddRollbackCallback(TablePtr table,
+                             std::vector<TabletPtr> tablets,
+                             int32_t retry_times,
+                             const RollbackRequest* rpc_request,
+                             RollbackResponse* rpc_response,
                              google::protobuf::Closure* rpc_done,
                              WriteTabletRequest* request,
                              WriteTabletResponse* response,

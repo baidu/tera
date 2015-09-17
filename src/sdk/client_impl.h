@@ -71,6 +71,8 @@ public:
 
     virtual bool DelSnapshot(const string& name, uint64_t snapshot, ErrorCode* err);
 
+    virtual bool Rollback(const string& name, uint64_t snapshot, ErrorCode* err);
+
     virtual bool CmdCtrl(const string& command,
                          const std::vector<string>& arg_list,
                          bool* bool_result,

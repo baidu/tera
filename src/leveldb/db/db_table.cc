@@ -216,6 +216,7 @@ Status DBTable::Init() {
 
     uint64_t min_log_sequence = kMaxSequenceNumber;
     std::vector<uint64_t> snapshot_sequence = options_.snapshots_sequence;
+    std::map<uint64_t, uint64_t> rollbacks = options_.rollbacks;
     for (std::set<uint32_t>::iterator it = options_.exist_lg_list->begin();
          it != options_.exist_lg_list->end() && s.ok(); ++it) {
         uint32_t i = *it;
@@ -225,6 +226,10 @@ Status DBTable::Init() {
         lg_edits.push_back(new VersionEdit);
         for (uint32_t i = 0; i < snapshot_sequence.size(); ++i) {
             impl->GetSnapshot(snapshot_sequence[i]);
+        }
+        std::map<uint64_t, uint64_t>::iterator rollback_it = rollbacks.begin();
+        for (; rollback_it != rollbacks.end(); ++rollback_it) {
+            impl->Rollback(rollback_it->first, rollback_it->second);
         }
 
         // recover SST
@@ -650,7 +655,15 @@ void DBTable::ReleaseSnapshot(uint64_t sequence_number) {
     for (; it != options_.exist_lg_list->end(); ++it) {
         lg_list_[*it]->ReleaseSnapshot(sequence_number);
     }
-    MutexLock lock(&mutex_);
+}
+
+const uint64_t DBTable::Rollback(uint64_t snapshot_seq, uint64_t rollback_point) {
+    std::set<uint32_t>::iterator it = options_.exist_lg_list->begin();
+    uint64_t rollback_seq = rollback_point == kMaxSequenceNumber ? last_sequence_ : rollback_point;;
+    for (; it != options_.exist_lg_list->end(); ++it) {
+        lg_list_[*it]->Rollback(snapshot_seq, rollback_seq);
+    }
+    return rollback_seq;
 }
 
 bool DBTable::GetProperty(const Slice& property, std::string* value) {

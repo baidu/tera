@@ -703,6 +703,26 @@ bool ClientImpl::DelSnapshot(const string& name, uint64_t snapshot, ErrorCode* e
     return false;
 }
 
+bool ClientImpl::Rollback(const string& name, uint64_t snapshot, ErrorCode* err) {
+    master::MasterClient master_client(_cluster->MasterAddr());
+
+    RollbackRequest request;
+    RollbackResponse response;
+    request.set_sequence_id(0);
+    request.set_table_name(name);
+    request.set_snapshot_id(snapshot);
+
+    if (master_client.Rollback(&request, &response)) {
+        if (response.status() == kMasterOk) {
+            std::cout << name << " rollback to snapshot sucessfully" << std::endl;
+            return true;
+        }
+    }
+    err->SetFailed(ErrorCode::kSystem, StatusCodeToString(response.status()));
+    std::cout << name << " rollback to snapshot failed";
+    return false;
+}
+
 bool ClientImpl::CmdCtrl(const string& command,
                          const std::vector<string>& arg_list,
                          bool* bool_result,

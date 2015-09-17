@@ -229,6 +229,14 @@ void TabletNodeImpl::LoadTablet(const LoadTabletRequest* request,
         snapshots[request->snapshots_id(i)] = request->snapshots_sequence(i);
     }
 
+    // to recover rollbacks
+    assert(request->rollback_snapshots_size() == request->rollback_points_size());
+    std::map<uint64_t, uint64_t> rollbacks;
+    int32_t num_of_rollbacks = request->rollback_snapshots_size();
+    for (int32_t i = 0; i < num_of_rollbacks; ++i) {
+        rollbacks[request->rollback_snapshots(i)] = request->rollback_points(i);
+    }
+
     LOG(INFO) << "start load tablet, id: " << request->sequence_id()
         << ", table: " << request->tablet_name()
         << ", range: [" << DebugString(key_start)
@@ -254,8 +262,8 @@ void TabletNodeImpl::LoadTablet(const LoadTabletRequest* request,
         response->set_status((StatusCode)tablet_io->GetStatus());
         tablet_io->DecRef();
     } else if (!tablet_io->Load(schema, key_start, key_end,
-                                request->path(), parent_tablets, snapshots, m_ldb_logger,
-                                m_ldb_block_cache, m_ldb_table_cache, &status)) {
+                                request->path(), parent_tablets, snapshots, rollbacks, 
+                                m_ldb_logger, m_ldb_block_cache, m_ldb_table_cache, &status)) {
         tablet_io->DecRef();
         LOG(ERROR) << "fail to load tablet: " << request->path()
             << " [" << DebugString(key_start) << ", "
@@ -580,6 +588,38 @@ void TabletNodeImpl::ReleaseSnapshot(const ReleaseSnapshotRequest* request,
     }
     tablet_io->DecRef();
     response->set_snapshot_id(request->snapshot_id());
+    done->Run();
+}
+
+void TabletNodeImpl::Rollback(const SnapshotRollbackRequest* request, SnapshotRollbackResponse* response,
+                              google::protobuf::Closure* done) {
+    StatusCode status = kTabletNodeOk;
+    io::TabletIO* tablet_io = m_tablet_manager->GetTablet(request->table_name(),
+                                                          request->key_range().key_start(),
+                                                          request->key_range().key_end(),
+                                                          &status);
+    if (tablet_io == NULL) {
+        LOG(WARNING) << "rollback to snapshot fail to get tablet: " << request->table_name()
+            << " [" << DebugString(request->key_range().key_start())
+            << ", " << DebugString(request->key_range().key_end())
+            << "], status: " << StatusCodeToString(status);
+        response->set_status(kKeyNotInRange);
+        done->Run();
+        return;
+    }
+    uint64_t rollback_point = tablet_io->Rollback(request->snapshot_id(), &status);
+    if (status != kTabletNodeOk) {
+        response->set_status(status);
+    } else {
+        response->set_sequence_id(request->sequence_id());
+        response->set_status(kTabletNodeOk);
+        response->set_rollback_point(rollback_point);
+        LOG(INFO) << "rollback point " << rollback_point << " to snapshot: " << request->snapshot_id()
+            << ", tablet: " << tablet_io->GetTablePath()
+            << " [" << DebugString(tablet_io->GetStartKey())
+            << ", " << DebugString(tablet_io->GetEndKey()) << "]";
+    }
+    tablet_io->DecRef();
     done->Run();
 }
 

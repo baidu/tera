@@ -210,6 +210,7 @@ struct Options {
   std::string key_end;
 
   std::vector<uint64_t> snapshots_sequence;
+  std::map<uint64_t, uint64_t> rollbacks;
 
   std::set<uint32_t>* exist_lg_list;
   std::map<uint32_t, LG_info*>* lg_info_list;
@@ -308,6 +309,8 @@ struct ReadOptions {
   // snapshot of the state at the beginning of this read operation.
   // Default: NULL
   uint64_t snapshot;
+
+  std::map<uint64_t, uint64_t> rollbacks;
 
   // The "target_lgs" specifies the target locality groups
   // which is hit during the read operation. If NULL, all

@@ -1141,7 +1141,9 @@ Status DBImpl::DoCompactionWork(CompactionState* compact) {
         last_sequence_for_key = kMaxSequenceNumber;
       }
 
-      if (last_sequence_for_key <= compact->smallest_snapshot) {
+      if (RollbackDrop(ikey.sequence, rollbacks_)) {
+        drop = true;
+      } else if (last_sequence_for_key <= compact->smallest_snapshot) {
         // Hidden by an newer entry for same user key
         drop = true;    // (A)
       } else if (ikey.type == kTypeDeletion &&
@@ -1350,9 +1352,9 @@ Status DBImpl::Get(const ReadOptions& options,
     mutex_.Unlock();
     // First look in the memtable, then in the immutable memtable (if any).
     LookupKey lkey(key, snapshot);
-    if (mem->Get(lkey, value, &s)) {
+    if (mem->Get(lkey, value, options.rollbacks, &s)) {
       // Done
-    } else if (imm != NULL && imm->Get(lkey, value, &s)) {
+    } else if (imm != NULL && imm->Get(lkey, value, options.rollbacks, &s)) {
       // Done
     } else {
       s = current->Get(options, lkey, value, &stats);
@@ -1376,15 +1378,12 @@ Iterator* DBImpl::NewIterator(const ReadOptions& options) {
   return NewDBIterator(
       &dbname_, env_, user_comparator(), internal_iter,
       (options.snapshot != kMaxSequenceNumber
-       ? options.snapshot : latest_snapshot));
+       ? options.snapshot : latest_snapshot),
+       options.rollbacks);
 }
 
 const uint64_t DBImpl::GetSnapshot(uint64_t last_sequence) {
   MutexLock l(&mutex_);
-  if (last_sequence == kMaxSequenceNumber) {
-    snapshots_.insert(GetLastSequence(false));
-    return GetLastSequence(false);
-  }
   snapshots_.insert(last_sequence);
   return last_sequence;
 }
@@ -1394,6 +1393,13 @@ void DBImpl::ReleaseSnapshot(uint64_t sequence_number) {
   std::multiset<uint64_t>::iterator it = snapshots_.find(sequence_number);
   assert(it != snapshots_.end());
   snapshots_.erase(it);
+}
+
+const uint64_t DBImpl::Rollback(uint64_t snapshot_seq, uint64_t rollback_point) {
+  MutexLock l(&mutex_);
+  assert(rollback_point >= snapshot_seq);
+  rollbacks_[snapshot_seq] = rollback_point;
+  return rollback_point;
 }
 
 // Convenience methods
