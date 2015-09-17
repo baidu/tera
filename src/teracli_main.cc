@@ -44,6 +44,7 @@ DEFINE_int32(tera_client_scan_package_size, 1024, "the package size (in KB) of e
 DEFINE_bool(tera_client_scan_async_enabled, false, "enable the streaming scan mode");
 
 DEFINE_int64(snapshot, 0, "read | scan snapshot");
+DEFINE_string(rollback_switch, "close", "Pandora's box, do not open");
 
 volatile int32_t g_start_time = 0;
 volatile int32_t g_end_time = 0;
@@ -1762,7 +1763,7 @@ int32_t SnapshotOp(Client* client, int32_t argc, char** argv, ErrorCode* err) {
             return -1;
         }
         std::cout << "new snapshot: " << snapshot << std::endl;
-    }  else if (strcmp(argv[3], "rollback") == 0) {
+    }  else if (FLAGS_rollback_switch == "open" && strcmp(argv[3], "rollback") == 0) {
         if (!client->Rollback(tablename, FLAGS_snapshot, err)) {
             LOG(ERROR) << "fail to rollback to snapshot: " << err->GetReason();
             return -1;

@@ -52,7 +52,7 @@ class DBIter: public Iterator {
 
   DBIter(const std::string* dbname, Env* env,
          const Comparator* cmp, Iterator* iter, SequenceNumber s,
-         std::map<uint64_t, uint64_t> rollbacks)
+         const std::map<uint64_t, uint64_t>& rollbacks)
       : dbname_(dbname),
         env_(env),
         user_comparator_(cmp),
@@ -111,7 +111,7 @@ class DBIter: public Iterator {
   const Comparator* const user_comparator_;
   Iterator* const iter_;
   SequenceNumber const sequence_;
-  std::map<uint64_t, uint64_t> rollbacks_;
+  const std::map<uint64_t, uint64_t> rollbacks_;
 
   Status status_;
   std::string saved_key_;     // == current key when direction_==kReverse

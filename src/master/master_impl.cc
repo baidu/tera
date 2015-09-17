@@ -2861,7 +2861,7 @@ void MasterImpl::RollbackCallback(int32_t tablet_id, RollbackTask* task,
                                   SnapshotRollbackRequest* master_request,
                                   SnapshotRollbackResponse* master_response,
                                   bool failed, int error_code) {
-    task->mutex.Lock();
+    MutexLock lock(&task->mutex);
     ++task->finish_num;
     VLOG(6) << "MasterImpl Rollback id= " << tablet_id
         << " finish_num= " << task->finish_num
@@ -2872,7 +2872,6 @@ void MasterImpl::RollbackCallback(int32_t tablet_id, RollbackTask* task,
         } else {
             task->aborted = true;
         }
-        task->mutex.Unlock();
         return;
     }
 
@@ -2895,7 +2894,6 @@ void MasterImpl::RollbackCallback(int32_t tablet_id, RollbackTask* task,
                     task->request, task->response, task->done);
         BatchWriteMetaTableAsync(task->table, task->tablets, false, closure);
     }
-    task->mutex.Unlock();
     delete task;
 }
 

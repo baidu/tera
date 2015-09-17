@@ -90,7 +90,7 @@ extern void AppendInternalKey(std::string* result,
 extern bool ParseInternalKey(const Slice& internal_key,
                              ParsedInternalKey* result);
 
-extern bool RollbackDrop(uint64_t seq, std::map<uint64_t, uint64_t> rollbacks);
+extern bool RollbackDrop(uint64_t seq, const std::map<uint64_t, uint64_t>& rollbacks);
 
 // Returns the user key portion of an internal key.
 inline Slice ExtractUserKey(const Slice& internal_key) {
@@ -183,8 +183,8 @@ inline bool ParseInternalKey(const Slice& internal_key,
   return (c <= static_cast<unsigned char>(kTypeValue));
 }
 
-inline bool RollbackDrop(uint64_t seq, std::map<uint64_t, uint64_t> rollbacks) {
-  std::map<uint64_t, uint64_t>::iterator it = rollbacks.begin();
+inline bool RollbackDrop(uint64_t seq, const std::map<uint64_t, uint64_t>& rollbacks) {
+  std::map<uint64_t, uint64_t>::const_iterator it = rollbacks.begin();
   for (; it != rollbacks.end(); ++it) {
     if (seq > it->first && seq <= it->second) {
       return true;
