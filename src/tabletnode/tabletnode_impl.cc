@@ -262,7 +262,7 @@ void TabletNodeImpl::LoadTablet(const LoadTabletRequest* request,
         response->set_status((StatusCode)tablet_io->GetStatus());
         tablet_io->DecRef();
     } else if (!tablet_io->Load(schema, key_start, key_end,
-                                request->path(), parent_tablets, snapshots, rollbacks, 
+                                request->path(), parent_tablets, snapshots, rollbacks,
                                 m_ldb_logger, m_ldb_block_cache, m_ldb_table_cache, &status)) {
         tablet_io->DecRef();
         LOG(ERROR) << "fail to load tablet: " << request->path()
@@ -359,7 +359,7 @@ void TabletNodeImpl::CompactTablet(const CompactTabletRequest* request,
     CompactStatus compact_status = tablet_io->GetCompactStatus();
     response->set_status(status);
     response->set_compact_status(compact_status);
-    uint64_t compact_size;
+    uint64_t compact_size = 0;
     tablet_io->GetDataSize(&compact_size);
     response->set_compact_size(compact_size);
     LOG(INFO) << "compact tablet: " << tablet_io->GetTablePath()
@@ -723,7 +723,7 @@ void TabletNodeImpl::SplitTablet(const SplitTabletRequest* request,
         done->Run();
         return;
     }
-    uint64_t tablet_size;
+    uint64_t tablet_size = 0;
     tablet_io->GetDataSize(&tablet_size);
     int64_t first_half_size = tablet_size / 2;
     int64_t second_half_size = tablet_size / 2;

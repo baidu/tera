@@ -347,7 +347,7 @@ bool TabletIO::Split(std::string* split_key, StatusCode* status) {
         m_db_ref_count++;
     }
 
-    uint64_t table_size;
+    uint64_t table_size = 0;
     GetDataSize(NULL, &table_size, NULL, status);
     if (table_size <= 0) {
         SetStatusCode(kTableNotSupport, status);
