@@ -236,8 +236,8 @@ int32_t CreateByFileOp(Client* client, int32_t argc, char** argv, ErrorCode* err
     std::vector<std::string> delimiters;
     if (fin.good()) {
         std::string str;
-        while (fin >> str) {
-            schema.append(str);
+        while (std::getline(fin, str)) {
+            schema.append(str + "\n");
         }
     }
 
@@ -1924,11 +1924,11 @@ int32_t RenameOp(Client* client, int32_t argc, char** argv, ErrorCode* err) {
     std::string old_table_name = argv[2];
     std::string new_table_name = argv[3];
     if (!client->Rename(old_table_name, new_table_name, err)) {
-        LOG(ERROR) << "fail to rename table: " 
+        LOG(ERROR) << "fail to rename table: "
                    << old_table_name << " -> " << new_table_name << std::endl;
         return -1;
     }
-    std::cout << "rename OK: " << old_table_name 
+    std::cout << "rename OK: " << old_table_name
               << " -> " << new_table_name << std::endl;
     return 0;
 }

@@ -116,6 +116,7 @@ bool PropTree::ParseFromString(const std::string& input) {
             } else if (token.text == ">") {
                 if (angle_braket_diff <= 0) {
                     AddError("syntax error: \">\" should be after \"<\".");
+                    return false;
                 }
                 angle_braket_diff--;
             } else if (token.text == "{") {
@@ -123,11 +124,16 @@ bool PropTree::ParseFromString(const std::string& input) {
             } else if (token.text == "}") {
                 if (brace_diff <= 0) {
                     AddError("syntax error: \"}\" should be after \"{\".");
+                    return false;
                 }
                 brace_diff--;
             }
         }
         tokens.push_back(token);
+    }
+    if (tokens.size() == 0) {
+        AddError("syntax error: input string empty.");
+        return false;
     }
     if (angle_braket_diff != 0) {
         AddError("syntax error: \"<\" and \">\" are not matching.");
