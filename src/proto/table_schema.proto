@@ -11,6 +11,7 @@ enum RawKey {
     Readable = 0;
     Binary = 1;
     TTLKv = 2; // Key-value-pair with ttl in key.
+    GeneralKv = 3;
 }
 
 message LocalityGroupSchema {
@@ -50,8 +51,10 @@ message TableSchema {
     optional RawKey raw_key = 7 [default = Readable];
     optional int64 split_size = 8; // MB
     optional int64 merge_size = 10; // MB
-    optional bool kv_only = 9 [default = false];
     optional bool disable_wal = 11 [default = false];
     optional string admin_group = 12; // users in admin_group can admin this table 
     optional string alias = 13; // table alias
+
+    // deprecated, instead by raw_key GeneralKv
+    optional bool kv_only = 9 [default = false];
 }

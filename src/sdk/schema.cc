@@ -7,8 +7,8 @@
 
 namespace tera {
 
-TableDescriptor::TableDescriptor(const std::string& tb_name, bool is_kv) {
-    _impl = new TableDescImpl(tb_name, is_kv);
+TableDescriptor::TableDescriptor(const std::string& tb_name) {
+    _impl = new TableDescImpl(tb_name);
 }
 TableDescriptor::~TableDescriptor() {
     delete _impl;
@@ -129,14 +129,6 @@ uint64_t TableDescriptor::Snapshot(int32_t id) const {
 /// Snapshot数量
 int32_t TableDescriptor::SnapshotNum() const {
     return _impl->SnapshotNum();
-}
-/// 是否为kv表
-void TableDescriptor::SetKvOnly() {
-    _impl->SetKvOnly();
-}
-
-bool TableDescriptor::IsKv() const {
-    return _impl->IsKv();
 }
 
 void TableDescriptor::SetAdminGroup(const std::string& name) {

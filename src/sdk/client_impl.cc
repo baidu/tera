@@ -769,7 +769,7 @@ bool ClientImpl::Rename(const std::string& old_table_name,
         err->SetFailed(ErrorCode::kSystem, "failed to rename table");
         return false;
     }
-    LOG(INFO) << "rename table OK. " << old_table_name 
+    LOG(INFO) << "rename table OK. " << old_table_name
               << " -> " << new_table_name;
     return true;
 }
