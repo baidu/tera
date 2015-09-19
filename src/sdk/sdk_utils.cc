@@ -49,6 +49,8 @@ string TableProp2Str(RawKey type) {
         return "binary";
     } else if (type == TTLKv) {
         return "ttlkv";
+    } else if (type == GeneralKv) {
+        return "kv";
     } else {
         return "";
     }
@@ -72,17 +74,19 @@ void ReplaceStringInPlace(std::string& subject,
     }
 }
 
-void ShowTableSchema(const TableSchema& schema, bool is_x) {
+void ShowTableSchema(const TableSchema& s, bool is_x) {
+    TableSchema schema = s;
     std::stringstream ss;
     std::string str;
     std::string table_alias = schema.name();
     if (!schema.alias().empty()) {
         table_alias = schema.alias();
     }
+    if (schema.has_kv_only() && schema.kv_only()) {
+        schema.set_raw_key(GeneralKv);
+    }
 
-    if (schema.raw_key() == TTLKv ||
-        schema.raw_key() == GeneralKv ||
-        (schema.has_kv_only() && schema.kv_only())) {
+    if (schema.raw_key() == TTLKv || schema.raw_key() == GeneralKv) {
         const LocalityGroupSchema& lg_schema = schema.locality_groups(0);
         ss << "\n  " << table_alias << " <";
         if (is_x || schema.raw_key() != Readable) {
@@ -460,6 +464,8 @@ bool SetTableProperties(const string& name, const string& value,
             desc->SetRawKey(kBinary);
         } else if (value == "ttlkv") {
             desc->SetRawKey(kTTLKv);
+        } else if (value == "kv") {
+            desc->SetRawKey(kGeneralKv);
         } else {
             return false;
         }
