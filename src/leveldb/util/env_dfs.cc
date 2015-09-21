@@ -372,9 +372,7 @@ Status DfsEnv::CopyFile(const std::string& from, const std::string& to) {
 }
 
 
-Status DfsEnv::GetChildren(const std::string& path,
-                           std::vector<std::string>* result,
-                           std::vector<int64_t>* ctime)
+Status DfsEnv::GetChildren(const std::string& path, std::vector<std::string>* result)
 {
     {
         tera::AutoCounter ac(&dfs_exists_hang_counter, "Exists", path.c_str());
@@ -388,7 +386,7 @@ Status DfsEnv::GetChildren(const std::string& path,
 
     tera::AutoCounter ac(&dfs_list_hang_counter, "ListDirectory", path.c_str());
     dfs_list_counter.Inc();
-    if (0 != dfs_->ListDirectory(path, result, ctime)) {
+    if (0 != dfs_->ListDirectory(path, result)) {
         abort();
     }
     return Status::OK();
@@ -401,7 +399,7 @@ bool DfsEnv::CheckDelete(const std::string& fname, std::vector<std::string>* fla
     assert(r);
     std::string prefix = file + "_del_";
     std::vector<std::string> files;
-    dfs_->ListDirectory(path, &files, NULL);
+    dfs_->ListDirectory(path, &files);
     size_t max_len = 0;
     size_t value = 0;
     for (size_t i = 0; i < files.size(); i++) {
