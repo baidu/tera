@@ -30,7 +30,8 @@ enum MODE {
     WRITE = 1,
     READ = 2,
     SCAN = 3,
-    MIX = 4
+    MIX = 4,
+    DELETE = 5
 };
 extern int mode;
 
@@ -44,7 +45,8 @@ enum OP {
     NONE= 0,
     PUT = 1,
     GET = 2,
-    SCN = 3
+    SCN = 3,
+    DEL = 4
 };
 
 int64_t Now();
@@ -331,6 +333,9 @@ public:
     void ReadCallback(tera::RowReader* reader,
                       size_t req_size,
                       int64_t req_time);
+
+    void Delete(const std::string& row,
+               std::map<std::string, std::set<std::string> >& column);
 
     void Scan(const std::string& start_key,
               const std::string& end_key,

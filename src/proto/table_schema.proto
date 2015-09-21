@@ -53,4 +53,5 @@ message TableSchema {
     optional bool kv_only = 9 [default = false];
     optional bool disable_wal = 11 [default = false];
     optional string admin_group = 12; // users in admin_group can admin this table 
+    optional string alias = 13; // table alias
 }

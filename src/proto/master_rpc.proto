@@ -166,6 +166,17 @@ message DelSnapshotResponse {
     optional uint64 sequence_id = 2;
 }
 
+message RollbackRequest {
+    optional uint64 sequence_id = 1;
+    optional string table_name = 2;
+    optional uint64 snapshot_id = 3;
+}
+
+message RollbackResponse {
+    optional StatusCode status = 1;
+    optional uint64 sequence_id = 2;
+}
+
 // admin
 
 message CmdCtrlRequest {
@@ -181,11 +192,23 @@ message CmdCtrlResponse {
     optional string str_result = 4;
 }
 
+message RenameTableRequest {
+    required uint64 sequence_id = 1;
+    required string old_table_name = 2;
+    required string new_table_name = 3;
+}
+
+message RenameTableResponse {
+    required uint64 sequence_id = 1;
+    required StatusCode status = 2;
+}
+
 // RPC interface
 
 service MasterServer {
     rpc GetSnapshot(GetSnapshotRequest) returns(GetSnapshotResponse);
     rpc DelSnapshot(DelSnapshotRequest) returns(DelSnapshotResponse);
+    rpc Rollback(RollbackRequest) returns (RollbackResponse);
     rpc CreateTable(CreateTableRequest) returns(CreateTableResponse);
     rpc DeleteTable(DeleteTableRequest) returns (DeleteTableResponse);
     rpc DisableTable(DisableTableRequest) returns (DisableTableResponse);
@@ -201,5 +224,6 @@ service MasterServer {
     rpc Report(ReportRequest) returns(ReportResponse);
 
     rpc CmdCtrl(CmdCtrlRequest) returns(CmdCtrlResponse);
+    rpc RenameTable(RenameTableRequest) returns (RenameTableResponse);
 }
 option cc_generic_services = true;

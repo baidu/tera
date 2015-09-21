@@ -46,6 +46,16 @@ void RemoteMaster::DelSnapshot(google::protobuf::RpcController* controller,
     m_thread_pool->AddTask(callback);
 }
 
+void RemoteMaster::Rollback(google::protobuf::RpcController* controller,
+                            const RollbackRequest* request,
+                            RollbackResponse* response,
+                            google::protobuf::Closure* done) {
+    boost::function<void ()> callback =
+        boost::bind(&RemoteMaster::DoRollback, this, controller,
+                    request, response, done);
+    m_thread_pool->AddTask(callback);
+}
+
 void RemoteMaster::CreateTable(google::protobuf::RpcController* controller,
                                const CreateTableRequest* request,
                                CreateTableResponse* response,
@@ -166,6 +176,15 @@ void RemoteMaster::DoDelSnapshot(google::protobuf::RpcController* controller,
     LOG(INFO) << "finish RPC (DelSnapshot)";
 }
 
+void RemoteMaster::DoRollback(google::protobuf::RpcController* controller,
+                            const RollbackRequest* request,
+                            RollbackResponse* response,
+                            google::protobuf::Closure* done) {
+    LOG(INFO) << "accept RPC (Rollback)";
+    m_master_impl->Rollback(request, response, done);
+    LOG(INFO) << "finish RPC (Rollback)";
+}
+
 void RemoteMaster::DoCreateTable(google::protobuf::RpcController* controller,
                                  const CreateTableRequest* request,
                                  CreateTableResponse* response,
@@ -258,6 +277,14 @@ void RemoteMaster::DoCmdCtrl(google::protobuf::RpcController* controller,
     done->Run();
 }
 
+void RemoteMaster::RenameTable(google::protobuf::RpcController* controller,
+                               const RenameTableRequest* request,
+                               RenameTableResponse* response,
+                               google::protobuf::Closure* done) {
+    LOG(INFO) << "accept RPC (RenameTable)";
+    m_master_impl->RenameTable(request, response, done);
+    LOG(INFO) << "finish RPC (RenameTable)";
+}
 
 } // namespace master
 } // namespace tera
