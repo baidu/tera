@@ -95,7 +95,7 @@ bool TPrinter::AddRow(const std::vector<int64_t>& row) {
 }
 
 void TPrinter::Print(const PrintOpt& opt) {
-    std::cout << ToString(opt) << std::endl;
+    std::cout << ToString(opt);
 }
 
 string TPrinter::ToString(const PrintOpt& opt) {

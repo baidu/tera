@@ -153,12 +153,19 @@ bool TabletIO::Load(const TableSchema& schema,
         // only prepare for kv-only mode, no need to set fields of it.
         m_table_schema.add_locality_groups();
     }
-    if (m_table_schema.column_families_size() == 0) {
-        // only prepare for kv-only mode, no need to set fields of it.
-        m_table_schema.add_column_families();
+
+    RawKey raw_key = m_table_schema.raw_key();
+    if (raw_key == TTLKv || raw_key == GeneralKv) {
         m_kv_only = true;
     } else {
-        m_kv_only = m_table_schema.kv_only();
+        // for compatible
+        if (m_table_schema.column_families_size() == 0) {
+            // only prepare for kv-only mode, no need to set fields of it.
+            m_table_schema.add_column_families();
+            m_kv_only = true;
+        } else {
+            m_kv_only = m_table_schema.kv_only();
+        }
     }
 
     m_key_operator = GetRawKeyOperatorFromSchema(m_table_schema);
