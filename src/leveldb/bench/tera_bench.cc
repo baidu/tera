@@ -261,13 +261,8 @@ int main(int argc, char** argv) {
       FLAGS_cf_list = std::string(cf_list);
     } else if (sscanf(argv[i], "--start_key=%d%c", &n, &junk) == 1) {
       FLAGS_start_key = n;
-    } else if (sscanf(argv[i], "--random=%c", &junk) == 1) {
-      if (junk == 't') {
-        FLAGS_random_seed = time(NULL);
-      } else {
-        FLAGS_random_seed = 301;
-      }
-      
+    } else if (sscanf(argv[i], "--random=%d%c", &n, &junk) == 1) {
+      FLAGS_random_seed = n;
     } else {
       fprintf(stderr, "Invalid flag '%s'\n", argv[i]);
       exit(1);

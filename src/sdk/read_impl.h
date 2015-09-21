@@ -89,7 +89,8 @@ public:
 
     bool IsAsync();
 
-    bool Wait(int64_t abs_time_ms = 0);
+    void Wait();
+
     /// 执行异步回调
     void RunCallback();
     /// Get数量
