@@ -90,6 +90,8 @@ public:
 
     bool ParseFromString(const std::string& input);
 
+    bool ParseFromFile(const std::string& file);
+
     Node* GetRootNode() { return root_; }
 
     std::string FormatString();

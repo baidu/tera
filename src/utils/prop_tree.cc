@@ -6,6 +6,7 @@
 
 #include <stdlib.h>
 
+#include <fstream>
 #include <iostream>
 #include <limits>
 #include <sstream>
@@ -145,6 +146,21 @@ bool PropTree::ParseFromString(const std::string& input) {
     }
 
     return ParseNodeFromTokens(tokens, 1, &root_);
+}
+
+bool PropTree::ParseFromFile(const std::string& file) {
+    std::ifstream fin(file.c_str());
+    std::string input;
+    if (fin.good()) {
+        std::string str;
+        while (std::getline(fin, str)) {
+            input.append(str + "\n");
+        }
+    } else {
+        AddError("syntax error: input file error.");
+        return false;
+    }
+    return ParseFromString(input);
 }
 
 bool PropTree::ParseNodeFromTokens(std::deque<Tokenizer::Token>& tokens,
