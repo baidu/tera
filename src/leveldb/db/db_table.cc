@@ -126,6 +126,9 @@ Status DBTable::Shutdown1() {
 
     Log(options_.info_log, "[%s] wait bg garbage clean finish", dbname_.c_str());
     mutex_.Lock();
+    if (bg_schedule_gc_) {
+        env_->ReSchedule(bg_schedule_gc_id_, kDeleteLogUrgentScore);
+    }
     while (bg_schedule_gc_) {
         bg_cv_.Wait();
     }
@@ -213,6 +216,7 @@ Status DBTable::Init() {
 
     uint64_t min_log_sequence = kMaxSequenceNumber;
     std::vector<uint64_t> snapshot_sequence = options_.snapshots_sequence;
+    std::map<uint64_t, uint64_t> rollbacks = options_.rollbacks;
     for (std::set<uint32_t>::iterator it = options_.exist_lg_list->begin();
          it != options_.exist_lg_list->end() && s.ok(); ++it) {
         uint32_t i = *it;
@@ -222,6 +226,10 @@ Status DBTable::Init() {
         lg_edits.push_back(new VersionEdit);
         for (uint32_t i = 0; i < snapshot_sequence.size(); ++i) {
             impl->GetSnapshot(snapshot_sequence[i]);
+        }
+        std::map<uint64_t, uint64_t>::iterator rollback_it = rollbacks.begin();
+        for (; rollback_it != rollbacks.end(); ++rollback_it) {
+            impl->Rollback(rollback_it->first, rollback_it->second);
         }
 
         // recover SST
@@ -647,7 +655,15 @@ void DBTable::ReleaseSnapshot(uint64_t sequence_number) {
     for (; it != options_.exist_lg_list->end(); ++it) {
         lg_list_[*it]->ReleaseSnapshot(sequence_number);
     }
-    MutexLock lock(&mutex_);
+}
+
+const uint64_t DBTable::Rollback(uint64_t snapshot_seq, uint64_t rollback_point) {
+    std::set<uint32_t>::iterator it = options_.exist_lg_list->begin();
+    uint64_t rollback_seq = rollback_point == kMaxSequenceNumber ? last_sequence_ : rollback_point;;
+    for (; it != options_.exist_lg_list->end(); ++it) {
+        lg_list_[*it]->Rollback(snapshot_seq, rollback_seq);
+    }
+    return rollback_seq;
 }
 
 bool DBTable::GetProperty(const Slice& property, std::string* value) {
@@ -975,7 +991,7 @@ bool DBTable::MinorCompact() {
         ok = (ok && ret);
     }
     MutexLock lock(&mutex_);
-    ScheduleGarbageClean(20.0);
+    ScheduleGarbageClean(kDeleteLogScore);
     return ok;
 }
 
@@ -1044,7 +1060,7 @@ int DBTable::SwitchLog(bool blocked_switch) {
 
             // protect bg thread cv
             mutex_.Lock();
-            ScheduleGarbageClean(10.0);
+            ScheduleGarbageClean(kDeleteLogScore);
             mutex_.Unlock();
 
             if (blocked_switch) {
@@ -1078,11 +1094,11 @@ void DBTable::ScheduleGarbageClean(double score) {
         env_->ReSchedule(bg_schedule_gc_id_, score);
         bg_schedule_gc_score_ = score;
     } else {
-        Log(options_.info_log, "[%s] Schedule Garbage clean[%ld] score= %.2f",
-            dbname_.c_str(), bg_schedule_gc_id_, score);
         bg_schedule_gc_id_ = env_->Schedule(&DBTable::GarbageCleanWrapper, this, score);
         bg_schedule_gc_score_ = score;
         bg_schedule_gc_ = true;
+        Log(options_.info_log, "[%s] Schedule Garbage clean[%ld] score= %.2f",
+            dbname_.c_str(), bg_schedule_gc_id_, score);
     }
 }
 

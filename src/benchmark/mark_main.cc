@@ -31,7 +31,6 @@ DEFINE_int64(max_outflow, -1, "max_outflow");
 DEFINE_int64(max_rate, -1, "max_rate");
 DEFINE_bool(scan_streaming, false, "enable streaming scan");
 DEFINE_int64(batch_count, 1, "batch_count(sync)");
-DEFINE_bool(seq_write, false, "enable sequential write");
 DEFINE_int64(entry_limit, 0, "writing/reading speed limit");
 
 int mode = 0;
@@ -75,7 +74,8 @@ bool parse_row(const char* buffer, ssize_t size,
         delim = end;
     }
     row->assign(buffer, delim - buffer);
-    if (delim == end && mode != WRITE && (mode != MIX || *op != PUT)) {
+    if ((delim == end && mode != WRITE && (mode != MIX || *op != PUT)) ||
+        (delim == end && mode == DELETE)) {
         return true;
     }
 
@@ -357,6 +357,9 @@ void* print_proc(void* param) {
         case WRITE:
             print_statistic(adapter->GetWriteMarker());
             break;
+        case DELETE:
+            print_statistic(adapter->GetWriteMarker());
+            break;
         case READ:
             print_statistic(adapter->GetReadMarker());
             break;
@@ -377,6 +380,10 @@ void* print_proc(void* param) {
             switch (mode) {
             case WRITE:
                 std::cout << "[PUT MARKER]" << std::endl;
+                print_marker(adapter->GetWriteMarker());
+                break;
+            case DELETE:
+                std::cout << "[DEL MARKER]" << std::endl;
                 print_marker(adapter->GetWriteMarker());
                 break;
             case READ:
@@ -427,6 +434,9 @@ void print_summary_proc(Adapter* adapter, double duration) {
     case WRITE:
         print_summary(adapter->GetWriteMarker(), duration);
         break;
+    case DELETE:
+        print_summary(adapter->GetWriteMarker(), duration);
+        break;
     case READ:
         print_summary(adapter->GetReadMarker(), duration);
         break;
@@ -446,6 +456,10 @@ void print_summary_proc(Adapter* adapter, double duration) {
     switch (mode) {
     case WRITE:
         std::cout << "[PUT MARKER]" << std::endl;
+        print_marker(adapter->GetWriteMarker());
+        break;
+    case DELETE:
+        std::cout << "[DEL MARKER]" << std::endl;
         print_marker(adapter->GetWriteMarker());
         break;
     case READ:
@@ -478,9 +492,7 @@ int main(int argc, char** argv) {
         return -1;
     }
 
-    tera::TableOptions options;
-    options.sequential_write = FLAGS_seq_write;
-    tera::Table* table = client->OpenTable(FLAGS_tablename, options, &err);
+    tera::Table* table = client->OpenTable(FLAGS_tablename, &err);
     if (NULL == table) {
         std::cerr << "fail to open table: " << tera::strerr(err) << std::endl;
         return -1;
@@ -491,6 +503,8 @@ int main(int argc, char** argv) {
         mode = WRITE;
     } else if (FLAGS_mode.compare("r") == 0) {
         mode = READ;
+    } else if (FLAGS_mode.compare("d") == 0) {
+        mode = DELETE;
     } else if (FLAGS_mode.compare("s") == 0) {
         mode = SCAN;
         size_t delim = 0;
@@ -557,6 +571,10 @@ int main(int argc, char** argv) {
             opt = GET;
             finish = !get_next_row(NULL, &row, &column, &largest_ts, &smallest_ts, NULL);
             break;
+        case DELETE:
+            opt = DEL;
+            finish = !get_next_row(NULL, &row, &column, NULL, NULL, NULL);
+            break;
         case MIX:
             finish = !get_next_row(&opt, &row, &column, &largest_ts, &smallest_ts, &value);
             break;
@@ -572,7 +590,7 @@ int main(int argc, char** argv) {
 
         if (finish) {
             if (type == SYNC) {
-                if (mode == WRITE || mode == MIX) {
+                if (mode == WRITE || mode == DELETE || mode == MIX) {
                     adapter->CommitSyncWrite();
                 }
                 if (mode == READ || mode == MIX) {
@@ -594,6 +612,9 @@ int main(int argc, char** argv) {
                 adapter->CommitSyncWrite();
             }
             adapter->Read(row, column, largest_ts, smallest_ts);
+            break;
+        case DEL:
+            adapter->Delete(row, column);
             break;
         default:
             abort();

@@ -46,8 +46,11 @@ static std::string FLAGS_cf_list = "";
 // Seq mode start key
 static int FLAGS_start_key = 0;
 
-// Generate different data each time
-static int FLAGS_random_seed = 301;
+// Value generator's seed
+static int FLAGS_value_seed = 301;
+
+// Key generator's seed
+static int FLAGS_key_seed = 301;
 
 namespace leveldb {
 
@@ -63,7 +66,7 @@ class RandomGenerator {
     // We use a limited amount of data over and over again and ensure
     // that it is larger than the compression window (32KB), and also
     // large enough to serve all typical value sizes we want to write. 
-    Random rnd(FLAGS_random_seed);
+    Random rnd(FLAGS_value_seed);
     std::string piece;
     while (data_.size() < 1048576) {
       // Add a short fragment that is as compressible as specified
@@ -145,10 +148,10 @@ class Benchmark {
   : num_(FLAGS_num),
     reads_(FLAGS_reads < 0 ? FLAGS_num : FLAGS_reads),
     bytes_(0),
-    rand_(FLAGS_random_seed) {
+    rand_(FLAGS_key_seed) {
     tablet_rand_vector_ = new Random*[FLAGS_tablet_num];
     for (int i = 0; i < FLAGS_tablet_num; i++) {
-      tablet_rand_vector_[i] = new Random(FLAGS_random_seed);
+      tablet_rand_vector_[i] = new Random(FLAGS_key_seed);
     }
   }
 
@@ -261,13 +264,10 @@ int main(int argc, char** argv) {
       FLAGS_cf_list = std::string(cf_list);
     } else if (sscanf(argv[i], "--start_key=%d%c", &n, &junk) == 1) {
       FLAGS_start_key = n;
-    } else if (sscanf(argv[i], "--random=%c", &junk) == 1) {
-      if (junk == 't') {
-        FLAGS_random_seed = time(NULL);
-      } else {
-        FLAGS_random_seed = 301;
-      }
-      
+    } else if (sscanf(argv[i], "--value_seed=%d%c", &n, &junk) == 1) {
+      FLAGS_value_seed = n;
+    } else if (sscanf(argv[i], "--key_seed=%d%c", &n, &junk) == 1) {
+      FLAGS_key_seed = n;
     } else {
       fprintf(stderr, "Invalid flag '%s'\n", argv[i]);
       exit(1);

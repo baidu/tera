@@ -16,7 +16,6 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <limits>
 #include <sys/mman.h>
 #include <sys/stat.h>
 #ifdef OS_LINUX
@@ -590,9 +589,7 @@ class PosixEnv : public Env {
     return access(fname.c_str(), F_OK) == 0;
   }
 
-  virtual Status GetChildren(const std::string& dir,
-                             std::vector<std::string>* result,
-                             std::vector<int64_t>* ctime = NULL) {
+  virtual Status GetChildren(const std::string& dir, std::vector<std::string>* result) {
     posix_list_counter.Inc();
     result->clear();
     DIR* d = opendir(dir.c_str());
@@ -600,21 +597,12 @@ class PosixEnv : public Env {
       return IOError(dir, errno);
     }
     struct dirent* entry;
-    struct stat stat_buf;
     while ((entry = readdir(d)) != NULL) {
       if (strcmp(entry->d_name, ".") == 0 ||
           strcmp(entry->d_name, "..") == 0) {
         continue;
       }
       result->push_back(entry->d_name);
-      if (ctime != NULL) {
-        int ret = stat((dir + "/" + entry->d_name).c_str(), &stat_buf);
-        if (ret == 0) {
-          ctime->push_back(static_cast<int64_t>(stat_buf.st_ctime));
-        } else {
-          ctime->push_back(std::numeric_limits<int64_t>::max());
-        }
-      }
     }
     closedir(d);
     return Status::OK();

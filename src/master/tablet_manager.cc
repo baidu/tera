@@ -353,6 +353,19 @@ void Tablet::DelSnapshot(int32_t id) {
     snapshot_list->RemoveLast();
 }
 
+int32_t Tablet::AddRollback(uint64_t rollback_point) {
+    MutexLock lock(&m_mutex);
+    m_meta.add_rollback_points(rollback_point);
+    return m_meta.rollback_points_size() - 1;
+}
+
+void Tablet::ListRollback(std::vector<uint64_t>* rollback_points) {
+    MutexLock lock(&m_mutex);
+    for (int i = 0; i < m_meta.rollback_points_size(); i++) {
+        rollback_points->push_back(m_meta.rollback_points(i));
+    }
+}
+
 bool Tablet::IsBound() {
     TablePtr null_ptr;
     if (m_table != null_ptr) {
@@ -622,6 +635,18 @@ void Table::ListSnapshot(std::vector<uint64_t>* snapshots) {
     MutexLock lock(&m_mutex);
     *snapshots = m_snapshot_list;
 }
+
+int32_t Table::AddRollback(uint64_t snapshot_id) {
+    MutexLock lock(&m_mutex);
+    m_rollback_snapshots.push_back(snapshot_id);
+    return m_rollback_snapshots.size() - 1;
+}
+
+void Table::ListRollback(std::vector<uint64_t>* snapshots) {
+    MutexLock lock(&m_mutex);
+    *snapshots = m_rollback_snapshots;
+}
+
 void Table::AddDeleteTabletCount() {
     MutexLock lock(&m_mutex);
     m_deleted_tablet_num++;
@@ -650,6 +675,9 @@ void Table::ToMeta(TableMeta* meta) {
     meta->set_create_time(m_create_time);
     for (size_t i = 0; i < m_snapshot_list.size(); i++) {
         meta->add_snapshot_list(m_snapshot_list[i]);
+    }
+    for (size_t i = 0; i < m_rollback_snapshots.size(); ++i) {
+        meta->add_rollback_snapshot(m_rollback_snapshots[i]);
     }
 }
 
@@ -743,6 +771,10 @@ bool TabletManager::AddTable(const std::string& table_name,
     for (int32_t i = 0; i < meta.snapshot_list_size(); ++i) {
         (*table)->m_snapshot_list.push_back(meta.snapshot_list(i));
         LOG(INFO) << table_name << " add snapshot " << meta.snapshot_list(i);
+    }
+    for (int32_t i = 0; i < meta.rollback_snapshot_size(); ++i) {
+        (*table)->m_rollback_snapshots.push_back(meta.rollback_snapshot(i));
+        LOG(INFO) << table_name << " add rollback " << meta.rollback_snapshot(i);
     }
     (*table)->m_mutex.Unlock();
     return true;
@@ -1182,6 +1214,9 @@ void TabletManager::LoadTabletMeta(const std::string& key,
         } else {
             for (int i = 0; i < meta.snapshot_list_size(); ++i) {
                 tablet->AddSnapshot(meta.snapshot_list(i));
+            }
+            for (int i = 0 ; i < meta.rollback_points_size(); ++i) {
+                tablet->AddRollback(meta.rollback_points(i));
             }
             VLOG(5) << "load tablet record: " << tablet;
         }
