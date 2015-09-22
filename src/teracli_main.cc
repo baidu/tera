@@ -184,7 +184,7 @@ int32_t CreateOp(Client* client, int32_t argc, char** argv, ErrorCode* err) {
     TableDescriptor table_desc;
     std::vector<std::string> delimiters;
     std::string schema = argv[2];
-    if (!ParseSchema(schema, &table_desc)) {
+    if (!ParseTableSchema(schema, &table_desc)) {
         LOG(ERROR) << "fail to parse input table schema.";
         return -1;
     }
@@ -231,22 +231,13 @@ int32_t CreateByFileOp(Client* client, int32_t argc, char** argv, ErrorCode* err
         return -1;
     }
 
-    std::ifstream fin(argv[2]);
-    std::string schema;
-    std::vector<std::string> delimiters;
-    if (fin.good()) {
-        std::string str;
-        while (std::getline(fin, str)) {
-            schema.append(str + "\n");
-        }
-    }
-
     TableDescriptor table_desc;
-    if (!ParseSchema(schema, &table_desc)) {
+    if (!ParseTableSchemaFile(argv[2], &table_desc)) {
         LOG(ERROR) << "fail to parse input table schema.";
         return -1;
     }
 
+    std::vector<std::string> delimiters;
     if (argc == 4) {
         std::ifstream fin(argv[3]);
         if (fin.fail()) {

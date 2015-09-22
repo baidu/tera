@@ -666,6 +666,19 @@ bool UpdateTableDescriptor(PropTree& schema_tree,
 
 bool FillTableDescriptor(PropTree& schema_tree, TableDescriptor* table_desc) {
     PropTree::Node* table_node = schema_tree.GetRootNode();
+    if (table_desc->TableName() != "" &&
+        table_desc->TableName() != table_node->name_) {
+        LOG(ERROR) << "table name error: " << table_desc->TableName()
+            << ":" << table_node->name_;
+        return false;
+    }
+    table_desc->SetTableName(schema_tree.GetRootNode()->name_);
+    if (schema_tree.MaxDepth() != schema_tree.MinDepth() ||
+        schema_tree.MaxDepth() == 0 || schema_tree.MaxDepth() > 3) {
+        LOG(ERROR) << "schema error: " << schema_tree.FormatString();
+        return false;
+    }
+
     if (schema_tree.MaxDepth() == 1) {
         // kv mode, only have 1 locality group
         // e.g. table1<splitsize=1024, storage=flash>
@@ -781,7 +794,7 @@ bool FillTableDescriptor(PropTree& schema_tree, TableDescriptor* table_desc) {
     return true;
 }
 
-bool ParseSchema(const string& schema, TableDescriptor* table_desc) {
+bool ParseTableSchema(const string& schema, TableDescriptor* table_desc) {
     PropTree schema_tree;
     if (!schema_tree.ParseFromString(schema)) {
         LOG(ERROR) << schema_tree.State();
@@ -790,20 +803,22 @@ bool ParseSchema(const string& schema, TableDescriptor* table_desc) {
     }
 
     VLOG(10) << "table to create: " << schema_tree.FormatString();
+    if (FillTableDescriptor(schema_tree, table_desc) &&
+        CheckTableDescrptor(table_desc)) {
+        return true;
+    }
+    return false;
+}
 
-    if (table_desc->TableName() != "" &&
-        table_desc->TableName() != schema_tree.GetRootNode()->name_) {
-        LOG(ERROR) << "table name error: " << table_desc->TableName()
-            << ":" << schema_tree.GetRootNode()->name_;
+bool ParseTableSchemaFile(const string& file, TableDescriptor* table_desc) {
+    PropTree schema_tree;
+    if (!schema_tree.ParseFromFile(file)) {
+        LOG(ERROR) << schema_tree.State();
+        LOG(ERROR) << file;
         return false;
     }
-    table_desc->SetTableName(schema_tree.GetRootNode()->name_);
-    if (schema_tree.MaxDepth() != schema_tree.MinDepth() ||
-        schema_tree.MaxDepth() == 0 || schema_tree.MaxDepth() > 3) {
-        LOG(ERROR) << "schema error: " << schema_tree.FormatString();
-        return false;
-    }
 
+    VLOG(10) << "table to create: " << schema_tree.FormatString();
     if (FillTableDescriptor(schema_tree, table_desc) &&
         CheckTableDescrptor(table_desc)) {
         return true;
