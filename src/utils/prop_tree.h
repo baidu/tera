@@ -101,8 +101,13 @@ public:
     const std::string& State() { return state_; }
 
 private:
-    bool ParseFromTokens(std::deque<Tokenizer::Token>& tokens,
-                         int depth, Node** node);
+    bool ParseNodeFromTokens(std::deque<Tokenizer::Token>& tokens,
+                             int depth, Node** node);
+
+    bool ParsePropsFromTokens(std::deque<Tokenizer::Token>& tokens, Node* node);
+
+    bool ParseChildrenFromTokens(std::deque<Tokenizer::Token>& tokens,
+                                 int depth, Node* node);
 
     void FormatNode(const std::string& line_prefix, Node* node,
                     std::stringstream* ss);
