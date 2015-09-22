@@ -1,0 +1,12 @@
+table_test001 <rawkey=binary, splitsize=4096, mergesize=512> {
+    lg_index <storage=memory, compress=snappy, blocksize=4> {
+        update_flag <maxversions=1>
+    },
+    lg_props <storage=flash, blocksize=32> {
+        level,
+        weight
+    },
+    lg_raw <storage=disk, blocksize=128> {
+        data <maxversions=10>
+    }
+}
