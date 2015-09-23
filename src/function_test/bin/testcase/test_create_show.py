@@ -30,15 +30,11 @@ def test_create_table():
     common.print_debug_msg(2, "create table_test001 and create table_test002(kv), write and check")
 
     cmd = "cd ../; ./teracli createbyfile testcase/data/create_table_schema; cd testcase/"
-    print cmd
-    ret = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, shell=True)                     
-    nose.tools.assert_equal(ret.stderr.readlines(), [])   
+    common.exe_and_check_res(cmd)
 
     cmd = 'cd ../; ./teracli create "table_test002 <storage=flash, splitsize=2048, mergesize=128>"; \
            cd testcase/'
-    print cmd
-    ret = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, shell=True)                     
-    nose.tools.assert_equal(ret.stderr.readlines(), [])   
+    common.exe_and_check_res(cmd)
 
 
 def test_show_table():
@@ -49,54 +45,34 @@ def test_show_table():
     common.print_debug_msg(3, "show and show(x) table")    
 
     cmd = "cd ../; ./teracli show; cd testcase/"
-    print cmd
-    ret = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, shell=True)
-    nose.tools.assert_equal(ret.stderr.readlines(), [])
+    common.exe_and_check_res(cmd)
 
     cmd = "cd ../; ./teracli showx; cd testcase/"
-    print cmd
-    ret = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, shell=True)
-    nose.tools.assert_equal(ret.stderr.readlines(), [])
+    common.exe_and_check_res(cmd)
 
     cmd = "cd ../; ./teracli show table_test001; cd testcase/"
-    print cmd
-    ret = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, shell=True)
-    nose.tools.assert_equal(ret.stderr.readlines(), [])
+    common.exe_and_check_res(cmd)
 
     cmd = "cd ../; ./teracli show table_test002; cd testcase/"
-    print cmd
-    ret = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, shell=True)
-    nose.tools.assert_equal(ret.stderr.readlines(), [])
+    common.exe_and_check_res(cmd)
 
     cmd = "cd ../; ./teracli showx table_test001; cd testcase/"                                                 
-    print cmd                                                                                                   
-    ret = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, shell=True)
-    nose.tools.assert_equal(ret.stderr.readlines(), [])
+    common.exe_and_check_res(cmd)
 
     cmd = "cd ../; ./teracli showx table_test002; cd testcase/"                                                 
-    print cmd                                                                                                   
-    ret = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, shell=True)
-    nose.tools.assert_equal(ret.stderr.readlines(), [])
+    common.exe_and_check_res(cmd)
     
     cmd = "cd ../; ./teracli showschema table_test001; cd testcase/"                                            
-    print cmd                                                                                                   
-    ret = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, shell=True)
-    nose.tools.assert_equal(ret.stderr.readlines(), [])
+    common.exe_and_check_res(cmd)
 
     cmd = "cd ../; ./teracli showschema table_test002; cd testcase/"                                            
-    print cmd                                                                                                   
-    ret = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, shell=True)
-    nose.tools.assert_equal(ret.stderr.readlines(), [])
+    common.exe_and_check_res(cmd)
 
     cmd = "cd ../; ./teracli showschemax table_test001; cd testcase/"                                           
-    print cmd                                                                                                   
-    ret = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, shell=True)
-    nose.tools.assert_equal(ret.stderr.readlines(), [])
+    common.exe_and_check_res(cmd)
 
     cmd = "cd ../; ./teracli showschemax table_test002; cd testcase/"                                           
-    print cmd                                                                                                   
-    ret = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, shell=True)
-    nose.tools.assert_equal(ret.stderr.readlines(), [])
+    common.exe_and_check_res(cmd)
 
 
 def tearDown():

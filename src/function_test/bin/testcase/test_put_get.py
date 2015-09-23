@@ -34,14 +34,11 @@ def test_put_table():
     
     cmd = "cd ../; ./teracli put table_test001 test001key update_flag:test001q test001v; \
            cd testcase/"
-    print cmd
-    ret = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, shell=True)
-    nose.tools.assert_equal(ret.stderr.readlines(), [])
+    common.exe_and_check_res(cmd)
 
     cmd = "cd ../; ./teracli put table_test002 test002key test002v; cd testcase/"
-    print cmd
-    ret = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, shell=True)
-    nose.tools.assert_equal(ret.stderr.readlines(), [])
+    common.exe_and_check_res(cmd)
+
 
 def test_get_table():
     """
@@ -51,14 +48,11 @@ def test_get_table():
     common.print_debug_msg(3, "read data form table_test001 and table_test002")
 
     cmd = "cd ../; ./teracli get table_test001 test001key update_flag:test001q; cd testcase/"
-    print cmd
-    ret = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, shell=True)
-    nose.tools.assert_equal(ret.stderr.readlines(), [])
+    common.exe_and_check_res(cmd)
 
     cmd = "cd ../; ./teracli get table_test002 test002key; cd testcase/"
-    print cmd
-    ret = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, shell=True)
-    nose.tools.assert_equal(ret.stderr.readlines(), [])
+    common.exe_and_check_res(cmd)
+
 
 def tearDown():
     """

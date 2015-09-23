@@ -47,6 +47,16 @@ def table_prepare():
     nose.tools.assert_equal(ret.stderr.readlines(), [])
 
 
+def exe_and_check_res(cmd):
+    """
+    execute cmd and check result
+    """
+
+    print cmd
+    ret = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, shell=True)
+    nose.tools.assert_equal(ret.stderr.readlines(), [])
+
+
 def clear_env():
     """
     clear env
