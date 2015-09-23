@@ -53,10 +53,11 @@ public:
         FilterList filter_list;
         ColumnFamilyMap column_family_list;
         std::set<std::string> iter_cf_set;
+        int64_t timeout;
 
         ScanOptions()
             : max_versions(UINT32_MAX), max_size(UINT32_MAX),
-              ts_start(kOldestTs), ts_end(kLatestTs), snapshot_id(0)
+              ts_start(kOldestTs), ts_end(kLatestTs), snapshot_id(0), timeout(INT64_MAX)
         {}
     };
 

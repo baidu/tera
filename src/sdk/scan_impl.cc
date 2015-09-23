@@ -357,7 +357,7 @@ bool ResultStreamSyncImpl::Done(ErrorCode* err) {
 
         if (!_response->complete()) {
             KeyValuePair kv;
-            if (_response->has_stop_point() && (_response->stop_point()).key() != "") {
+            if (_response->has_stop_point() && _response->stop_point().key() != "") {
                 kv = _response->stop_point();
             } else {
                 kv = _response->results().key_values(_result_pos - 1);
@@ -473,6 +473,7 @@ ScanDescImpl::ScanDescImpl(const string& rowkey)
       _buf_size(65536),
       _is_async(FLAGS_tera_sdk_scan_async_enabled),
       _max_version(1),
+      _timeout(5000),
       _snapshot(0),
       _value_converter(&DefaultValueConverter) {
     SetStart(rowkey);
@@ -487,6 +488,7 @@ ScanDescImpl::ScanDescImpl(const ScanDescImpl& impl)
       _buf_size(impl._buf_size),
       _is_async(impl._is_async),
       _max_version(impl._max_version),
+      _timeout(impl._timeout),
       _snapshot(impl._snapshot),
       _table_schema(impl._table_schema) {
     _value_converter = impl.GetValueConverter();
@@ -548,6 +550,10 @@ void ScanDescImpl::AddColumn(const string& cf, const string& qualifier) {
 
 void ScanDescImpl::SetMaxVersions(int32_t versions) {
     _max_version = versions;
+}
+
+void ScanDescImpl::SetTimeOut(int64_t timeout) {
+    _timeout = timeout;
 }
 
 void ScanDescImpl::SetTimeRange(int64_t ts_end, int64_t ts_start) {
@@ -619,6 +625,10 @@ const tera::ColumnFamily* ScanDescImpl::GetColumnFamily(int32_t num) const {
 
 int32_t ScanDescImpl::GetMaxVersion() const {
     return _max_version;
+}
+
+int64_t ScanDescImpl::GetTimeOut() const {
+    return _timeout;
 }
 
 const tera::TimeRange* ScanDescImpl::GetTimerRange() const {

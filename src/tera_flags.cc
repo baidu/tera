@@ -163,7 +163,6 @@ DEFINE_string(tera_tabletnode_path_prefix, "../data/", "the path prefix for tabl
 DEFINE_int32(tera_tabletnode_block_cache_size, 2000, "the cache size of tablet (in MB)");
 DEFINE_int32(tera_tabletnode_table_cache_size, 1000, "the table cache size, means the max num of files keeping open in this tabletnode.");
 DEFINE_int32(tera_tabletnode_scan_pack_max_size, 10240, "the max size(KB) of the package for scan rpc");
-DEFINE_int32(tera_tabletnode_scan_timeout, 5000, "the timeout period (in ms) for tabletnode scan");
 
 DEFINE_int32(tera_asyncwriter_pending_limit, 10000, "the max pending data size (KB) in async writer");
 DEFINE_bool(tera_enable_level0_limit, true, "enable level0 limit");

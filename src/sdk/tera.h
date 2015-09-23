@@ -254,6 +254,8 @@ public:
     void AddColumn(const std::string& cf, const std::string& qualifier);
     /// 设置最多返回的版本数
     void SetMaxVersions(int32_t versions);
+    /// 设置scan的超时时间
+    void SetTimeOut(int64_t timeout);
     /// 设置返回版本的时间范围
     void SetTimeRange(int64_t ts_end, int64_t ts_start);
     /// 设置过滤表达式（仅支持AND）
