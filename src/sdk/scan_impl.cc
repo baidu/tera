@@ -356,7 +356,12 @@ bool ResultStreamSyncImpl::Done(ErrorCode* err) {
         }
 
         if (!_response->complete()) {
-            const KeyValuePair& kv = _response->results().key_values(_result_pos - 1);
+            KeyValuePair kv;
+            if (_response->has_stop_point() && (_response->stop_point()).key() != "") {
+                kv = _response->stop_point();
+            } else {
+                kv = _response->results().key_values(_result_pos - 1);
+            }
             if (_scan_desc_impl->IsKvOnlyTable()) {
                 _scan_desc_impl->SetStart(kv.key() + '\x1', kv.column_family(),
                                           kv.qualifier(), kv.timestamp());

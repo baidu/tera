@@ -19,7 +19,7 @@ message BytesList {
 }
 
 message KeyValuePair {
-    required bytes key = 1;
+    optional bytes key = 1;
     optional bytes value = 2;
     optional bool del = 3;
     optional bytes column_family = 4;

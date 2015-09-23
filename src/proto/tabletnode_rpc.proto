@@ -242,6 +242,7 @@ message ScanTabletResponse {
     optional RowResult results = 6;
     optional bytes end = 7;
     optional uint64 results_id = 8;
+    optional KeyValuePair stop_point = 9;
 }
 
 message RowReaderInfo {

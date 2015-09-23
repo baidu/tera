@@ -123,6 +123,7 @@ public:
                       const std::string& end_row_key,
                       const ScanOptions& scan_options,
                       RowResult* value_list,
+                      KeyValuePair* stop_point,
                       uint32_t* read_row_count,
                       uint32_t* read_bytes,
                       bool* is_complete,
@@ -210,10 +211,14 @@ private:
                       const ScanOptions& scan_options,
                       leveldb::Iterator* it,
                       RowResult* value_list,
+                      KeyValuePair* stop_point,
                       uint32_t* read_row_count,
                       uint32_t* read_bytes,
                       bool* is_complete,
                       StatusCode* status);
+
+    void MakeKvPair(leveldb::Slice key, leveldb::Slice col, leveldb::Slice qual,
+                    int64_t ts, leveldb::Slice value, KeyValuePair* kv);
 
 private:
     mutable Mutex m_mutex;
