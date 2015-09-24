@@ -355,22 +355,31 @@ bool ResultStreamSyncImpl::Done(ErrorCode* err) {
             return true;
         }
 
+        // Newer version of TS will return next_start_point when the opration is timeout
         if (!_response->complete()) {
-            KeyValuePair kv;
-            if (_response->has_stop_point() && _response->stop_point().key() != "") {
-                kv = _response->stop_point();
+            // Without next_start_point, kv is the last kv pair from last scan
+            if (_response->next_start_point().key() == "") {
+                const KeyValuePair& kv = _response->results().key_values(_result_pos - 1);
+                if (_scan_desc_impl->IsKvOnlyTable()) {
+                    _scan_desc_impl->SetStart(kv.key() + '\x1', kv.column_family(),
+                                              kv.qualifier(), kv.timestamp());
+                } else if (kv.timestamp() == 0) {
+                    _scan_desc_impl->SetStart(kv.key(), kv.column_family(),
+                                              kv.qualifier() + '\x1', kv.timestamp());
+                } else {
+                    _scan_desc_impl->SetStart(kv.key(), kv.column_family(),
+                                              kv.qualifier(), kv.timestamp() - 1);
+                }
+            // next_start_point is where the next scan should start
             } else {
-                kv = _response->results().key_values(_result_pos - 1);
-            }
-            if (_scan_desc_impl->IsKvOnlyTable()) {
-                _scan_desc_impl->SetStart(kv.key() + '\x1', kv.column_family(),
-                                          kv.qualifier(), kv.timestamp());
-            } else if (kv.timestamp() == 0) {
-                _scan_desc_impl->SetStart(kv.key(), kv.column_family(),
-                                          kv.qualifier() + '\x1', kv.timestamp());
-            } else {
-                _scan_desc_impl->SetStart(kv.key(), kv.column_family(),
-                                          kv.qualifier(), kv.timestamp() - 1);
+                const KeyValuePair& kv = _response->next_start_point();
+                if (_scan_desc_impl->IsKvOnlyTable()) {
+                    _scan_desc_impl->SetStart(kv.key(), kv.column_family(),
+                                              kv.qualifier(), kv.timestamp());
+                } else {
+                    _scan_desc_impl->SetStart(kv.key(), kv.column_family(),
+                                              kv.qualifier(), kv.timestamp());
+                }
             }
         } else {
             _scan_desc_impl->SetStart(tablet_end_key);
