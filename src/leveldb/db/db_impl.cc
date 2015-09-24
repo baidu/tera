@@ -820,6 +820,8 @@ void DBImpl::MaybeScheduleCompaction() {
   mutex_.AssertHeld();
   if (shutting_down_.Acquire_Load()) {
     // DB is being deleted; no more background compactions
+    Log(options_.info_log, "[%s] being deleted, no more compaction", dbname_.c_str());
+    return;
   } 
   if ((bg_compaction_scheduled_count_ < COMPACT_MAX + 1)
        && ((imm_ != NULL) && (imm_dump_ == false))) {

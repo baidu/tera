@@ -1785,7 +1785,6 @@ Compaction* VersionSet::PickMultiThreadCompaction() {
   }
 
   SetupOtherInputs(c);
-  c->SetInputsFilesBeingCompacted(true);
   std::ostringstream oss;
   for (size_t i = 0; i < c->inputs_[0].size(); i++) {
     oss << static_cast<uint32_t>(c->inputs_[0][i]->number & 0xffffffff) << " ";
@@ -1797,6 +1796,7 @@ Compaction* VersionSet::PickMultiThreadCompaction() {
   Log(options_->info_log, "pick %zd@%d + %zd@%d : %s", 
       c->inputs_[0].size(), c->level(),
       c->inputs_[1].size(), c->level()+1, oss.str().c_str());
+  c->SetInputsFilesBeingCompacted(true);
   return c;
 }
 
