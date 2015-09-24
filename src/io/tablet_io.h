@@ -87,7 +87,6 @@ public:
     StatCounter& GetCounter();
     // tablet
     virtual bool Load(const TableSchema& schema,
-                      const std::string& key_start, const std::string& key_end,
                       const std::string& path,
                       const std::vector<uint64_t>& parent_tablets,
                       std::map<uint64_t, uint64_t> snapshots,
