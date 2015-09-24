@@ -1436,9 +1436,11 @@ void TabletIO::SetupScanRowOptions(const ScanTabletRequest* request,
     if (request->has_buffer_limit()) {
         scan_options->max_size = request->buffer_limit();
     }
+    if (request->timeout()) {
+        scan_options->timeout = request->timeout();
+    }
 
     scan_options->snapshot_id = request->snapshot_id();
-    scan_options->timeout = request->timeout();
 }
 
 void TabletIO::SetupOptionsForLG() {
