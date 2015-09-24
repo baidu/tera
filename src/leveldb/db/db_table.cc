@@ -718,6 +718,7 @@ void DBTable::CompactRange(const Slice* begin, const Slice* end) {
     }
 }
 
+// @begin_num:  the 1st record(sequence number) should be recover
 Status DBTable::GatherLogFile(uint64_t begin_num,
                               std::vector<uint64_t>* logfiles) {
     std::vector<std::string> files;
@@ -735,17 +736,29 @@ Status DBTable::GatherLogFile(uint64_t begin_num,
         if (ParseFileName(files[i], &number, &type)
             && type == kLogFile && number >= begin_num) {
             logfiles->push_back(number);
-        } else if (type == kLogFile && number > 0) {
+        } else if (type == kLogFile && number > last_number) {
             last_number = number;
         }
     }
     std::sort(logfiles->begin(), logfiles->end());
     uint64_t first_log_num = logfiles->size() ? (*logfiles)[0] : 0;
-    Log(options_.info_log, "[%s] begin_seq= %lu, first log num= %lu, last num=%lu, log_num=%lu\n",
-        dbname_.c_str(), begin_num, first_log_num, last_number, logfiles->size());
-    if (last_number > 0 && first_log_num > begin_num) {
+    /*
+     *                                             @begin_num(not in sst)
+     *       |-> records alredy be dumped to sst <-|->   not be dumped        <-|
+     *range: [start -------------------------------------------------------- end]
+     *case 1:       ^         ^                     ^
+     *              001.log   last_number.log       first_log_num.log
+     *
+     *case 2:       ^         ^
+     *              001.log   last_number.log
+     */
+    if ((last_number > 0 && first_log_num > begin_num)   // case 1
+        || (last_number > 0 && logfiles->size() == 0)) { // case 2
         logfiles->push_back(last_number);
+        Log(options_.info_log, "[%s] add log file #%lu", dbname_.c_str(), last_number);
     }
+    Log(options_.info_log, "[%s] begin_seq= %lu, first log num= %lu, last num=%lu, log count=%lu\n",
+        dbname_.c_str(), begin_num, first_log_num, last_number, logfiles->size());
     std::sort(logfiles->begin(), logfiles->end());
     return s;
 }
