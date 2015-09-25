@@ -348,7 +348,7 @@ bool TabletIO::Split(std::string* split_key, StatusCode* status) {
     }
 
     uint64_t table_size = 0;
-    GetDataSize(NULL, &table_size, NULL, status);
+    GetDataSize(&table_size, NULL, status);
     if (table_size <= 0) {
         SetStatusCode(kTableNotSupport, status);
         MutexLock lock(&m_mutex);
@@ -499,8 +499,8 @@ bool TabletIO::SnapshotIDToSeq(uint64_t snapshot_id, uint64_t* snapshot_sequence
     return true;
 }
 
-bool TabletIO::GetDataSize(uint64_t* size, uint64_t* size_for_split,
-                           std::vector<uint64_t>* lgsize, StatusCode* status) {
+bool TabletIO::GetDataSize(uint64_t* size, std::vector<uint64_t>* lgsize,
+                           StatusCode* status) {
     {
         MutexLock lock(&m_mutex);
         if (m_status != kReady && m_status != kOnSplit
@@ -511,8 +511,8 @@ bool TabletIO::GetDataSize(uint64_t* size, uint64_t* size_for_split,
         m_db_ref_count++;
     }
 
-    m_db->GetApproximateSizes(size, size_for_split, lgsize);
-    VLOG(6) << "GetDataSize(" << m_tablet_path << ") : " << size;
+    m_db->GetApproximateSizes(size, lgsize);
+    VLOG(6) << "GetDataSize(" << m_tablet_path << ") : " << *size;
     {
         MutexLock lock(&m_mutex);
         m_db_ref_count--;
@@ -520,10 +520,6 @@ bool TabletIO::GetDataSize(uint64_t* size, uint64_t* size_for_split,
     if (size && *size == 0) {
         // return reserved buffer size
         *size = FLAGS_tera_tablet_write_block_size * 1024;
-    }
-    if (size_for_split && *size_for_split == 0) {
-        // return reserved buffer size
-        *size_for_split = FLAGS_tera_tablet_write_block_size * 1024;
     }
     return true;
 }

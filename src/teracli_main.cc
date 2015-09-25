@@ -909,12 +909,7 @@ int32_t ShowTabletList(const TabletMetaList& tablet_list, bool is_server_addr, b
             row.push_back(meta.path());
             row.push_back(StatusCodeToString(meta.status()));
 
-            uint64_t size;
-            if (meta.has_size()) {
-                size = meta.size();
-            } else {
-                size = meta.size_for_split();
-            }
+            uint64_t size = meta.size();
             std::string size_str =
                 utils::ConvertByteToString(size) +
                 "[";
@@ -958,12 +953,7 @@ int32_t ShowTabletList(const TabletMetaList& tablet_list, bool is_server_addr, b
             row.push_back(meta.path());
             row.push_back(StatusCodeToString(meta.status()));
 
-            uint64_t size;
-            if (meta.has_size()) {
-                size = meta.size();
-            } else {
-                size = meta.size_for_split();
-            }
+            uint64_t size = meta.size();
             row.push_back(utils::ConvertByteToString(size));
             row.push_back(DebugString(meta.key_range().key_start()).substr(0, 20));
             row.push_back(DebugString(meta.key_range().key_end()).substr(0, 20));
@@ -1023,11 +1013,7 @@ int32_t ShowAllTables(Client* client, bool is_x, bool show_all, ErrorCode* err) 
         std::vector<int64_t> lg_size;
         for (int32_t i = 0; i < tablet_list.meta_size(); ++i) {
             if (tablet_list.meta(i).table_name() == tablename) {
-                if (tablet_list.meta(i).has_size()) {
-                    size += tablet_list.meta(i).size();
-                } else {
-                    size += tablet_list.meta(i).size_for_split();
-                }
+                size += tablet_list.meta(i).size();
                 tablet++;
                 if (tablet_list.counter(i).is_on_busy()) {
                     busy++;
@@ -1941,11 +1927,11 @@ int32_t RenameOp(Client* client, int32_t argc, char** argv, ErrorCode* err) {
     std::string old_table_name = argv[2];
     std::string new_table_name = argv[3];
     if (!client->Rename(old_table_name, new_table_name, err)) {
-        LOG(ERROR) << "fail to rename table: " 
+        LOG(ERROR) << "fail to rename table: "
                    << old_table_name << " -> " << new_table_name << std::endl;
         return -1;
     }
-    std::cout << "rename OK: " << old_table_name 
+    std::cout << "rename OK: " << old_table_name
               << " -> " << new_table_name << std::endl;
     return 0;
 }

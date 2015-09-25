@@ -704,13 +704,9 @@ void DBTable::GetApproximateSizes(const Range* range, int n,
     }
 }
 
-void DBTable::GetApproximateSizes(uint64_t* size, uint64_t* size_under_level1,
-                                  std::vector<uint64_t>* lgsize) {
+void DBTable::GetApproximateSizes(uint64_t* size, std::vector<uint64_t>* lgsize) {
     if (size) {
         *size = 0;
-    }
-    if (size_under_level1) {
-        *size_under_level1 = 0;
     }
     if (lgsize) {
         lgsize->clear();
@@ -718,13 +714,10 @@ void DBTable::GetApproximateSizes(uint64_t* size, uint64_t* size_under_level1,
     std::set<uint32_t>::iterator it = options_.exist_lg_list->begin();
     for (; it != options_.exist_lg_list->end(); ++it) {
         uint32_t i = *it;
-        uint64_t size_tmp, size_under_l1;
-        lg_list_[i]->GetApproximateSizes(&size_tmp, &size_under_l1);
+        uint64_t size_tmp;
+        lg_list_[i]->GetApproximateSizes(&size_tmp);
         if (size) {
             *size += size_tmp;
-        }
-        if (size_under_level1) {
-            *size_under_level1 += size_under_l1;
         }
         if (lgsize) {
             lgsize->push_back(size_tmp);
@@ -981,9 +974,9 @@ bool DBTable::FindSplitKey(const std::string& start_key,
     MutexLock l(&mutex_);
     std::set<uint32_t>::iterator it = options_.exist_lg_list->begin();
     for (; it != options_.exist_lg_list->end(); ++it) {
-        uint64_t size_under_level1;
-        lg_list_[*it]->GetApproximateSizes(NULL, &size_under_level1);
-        size_of_lg[size_under_level1] = lg_list_[*it];
+        uint64_t size;
+        lg_list_[*it]->GetApproximateSizes(&size);
+        size_of_lg[size] = lg_list_[*it];
     }
     std::map<uint64_t, DBImpl*>::reverse_iterator biggest_it =
         size_of_lg.rbegin();

@@ -74,7 +74,7 @@ message TabletMeta {
     required KeyRange key_range = 3;
     optional string server_addr = 4;
     optional TabletStatus status = 5;
-    optional int64 size_for_split = 6;
+    optional int64 size = 6;
     optional bool compress = 7;     // for Compatible
     optional CompactStatus compact_status = 8 [default = kTableNotCompact];
     optional StoreMedium store_medium = 9 [default = DiskStore]; // for Compatible
@@ -82,7 +82,6 @@ message TabletMeta {
     repeated uint64 parent_tablets = 12;
     repeated int64 lg_size = 13;
     repeated uint64 rollback_points = 14;
-    optional int64 size = 15;
 }
 
 message TableMetaList {

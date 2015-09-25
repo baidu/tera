@@ -113,10 +113,8 @@ public:
                                      uint64_t* sizes);
     // tera-specific
     // size: db size, include mem, imm, all sst files
-    // size_under_level1: for tera split, only include sst files level>=1
     // lgsize: each lg size, include all storage
-    virtual void GetApproximateSizes(uint64_t* size, uint64_t* size_under_level1,
-                                     std::vector<uint64_t>* lgsize);
+    virtual void GetApproximateSizes(uint64_t* size, std::vector<uint64_t>* lgsize);
 
     // Compact the underlying storage for the key range [*begin,*end].
     // In particular, deleted and overwritten versions are discarded,

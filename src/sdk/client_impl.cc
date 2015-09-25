@@ -769,7 +769,7 @@ bool ClientImpl::Rename(const std::string& old_table_name,
         err->SetFailed(ErrorCode::kSystem, "failed to rename table");
         return false;
     }
-    LOG(INFO) << "rename table OK. " << old_table_name 
+    LOG(INFO) << "rename table OK. " << old_table_name
               << " -> " << new_table_name;
     return true;
 }
@@ -860,11 +860,7 @@ bool ClientImpl::ParseTabletEntry(const TabletMeta& meta, std::vector<TabletInfo
     tablet.start_key = meta.key_range().key_start();
     tablet.end_key = meta.key_range().key_end();
     tablet.server_addr = meta.server_addr();
-    if (meta.has_size()) {
-        tablet.data_size = meta.size();
-    } else {
-        tablet.data_size = meta.size_for_split();
-    }
+    tablet.data_size = meta.size();
     tablet.status = StatusCodeToString(meta.status());
 
     tablet_list->push_back(tablet);

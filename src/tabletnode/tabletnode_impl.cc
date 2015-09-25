@@ -869,7 +869,6 @@ void TabletNodeImpl::UpdateMetaTableAsync(const SplitTabletRequest* rpc_request,
     // first write 2nd half
     tablet_meta.set_path(leveldb::GetChildTabletPath(path, rpc_request->child_tablets(0)));
     tablet_meta.set_size(second_size);
-    tablet_meta.set_size_for_split(0);
     tablet_meta.mutable_key_range()->set_key_start(key_split);
     tablet_meta.mutable_key_range()->set_key_end(rpc_request->key_range().key_end());
     MakeMetaTableKeyValue(tablet_meta, &meta_key, &meta_value);
@@ -890,7 +889,6 @@ void TabletNodeImpl::UpdateMetaTableAsync(const SplitTabletRequest* rpc_request,
 
     tablet_meta.set_path(leveldb::GetChildTabletPath(path, rpc_request->child_tablets(1)));
     tablet_meta.set_size(first_size);
-    tablet_meta.set_size_for_split(0);
     tablet_meta.mutable_key_range()->set_key_start(rpc_request->key_range().key_start());
     tablet_meta.mutable_key_range()->set_key_end(key_split);
     MakeMetaTableKeyValue(tablet_meta, &meta_key, &meta_value);

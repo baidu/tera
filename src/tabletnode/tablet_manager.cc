@@ -127,10 +127,9 @@ void TabletManager::GetAllTabletMeta(std::vector<TabletMeta*>* tablet_meta_list)
         tablet_meta->mutable_key_range()->set_key_start(range.key_start);
         tablet_meta->mutable_key_range()->set_key_end(range.key_end);
         tablet_meta->set_status(TabletStatus(tablet_io->GetStatus()));
-        uint64_t size, size_for_split;
-        tablet_io->GetDataSize(&size, &size_for_split);
+        uint64_t size;
+        tablet_io->GetDataSize(&size);
         tablet_meta->set_size(size);
-        tablet_meta->set_size(size_for_split);
         tablet_meta->set_compact_status(tablet_io->GetCompactStatus());
         tablet_meta_list->push_back(tablet_meta);
         std::vector<uint64_t> snapshots;

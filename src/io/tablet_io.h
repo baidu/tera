@@ -101,8 +101,7 @@ public:
     virtual bool Compact(StatusCode* status = NULL);
     bool CompactMinor(StatusCode* status = NULL);
     bool Destroy(StatusCode* status = NULL);
-    virtual bool GetDataSize(uint64_t* size, uint64_t* size_for_split = NULL,
-                             std::vector<uint64_t>* lgsize = NULL,
+    virtual bool GetDataSize(uint64_t* size, std::vector<uint64_t>* lgsize = NULL,
                              StatusCode* status = NULL);
     virtual bool AddInheritedLiveFiles(std::vector<std::set<uint64_t> >* live);
 

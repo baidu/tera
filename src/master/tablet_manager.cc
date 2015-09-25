@@ -99,11 +99,6 @@ int64_t Tablet::GetDataSize() {
     return m_meta.size();
 }
 
-int64_t Tablet::GetDataSizeForSplit() {
-    MutexLock lock(&m_mutex);
-    return m_meta.size_for_split();
-}
-
 const std::string& Tablet::GetKeyStart() {
     MutexLock lock(&m_mutex);
     return m_meta.key_range().key_start();
@@ -217,10 +212,9 @@ void Tablet::SetCounter(const TabletCounter& counter) {
     m_average_counter.set_is_on_busy(counter.is_on_busy());
 }
 
-void Tablet::SetSize(const TabletMeta& meta) {
+void Tablet::UpdateSize(const TabletMeta& meta) {
     MutexLock lock(&m_mutex);
     m_meta.set_size(meta.size());
-    m_meta.set_size_for_split(meta.size_for_split());
     m_meta.mutable_lg_size()->CopyFrom(meta.lg_size());
 }
 
@@ -1393,7 +1387,6 @@ void TabletManager::PackTabletMeta(TabletMeta* meta,
     meta->set_server_addr(server_addr);
     meta->set_status(table_status);
     meta->set_size(data_size);
-    meta->set_size_for_split(data_size);
 
     KeyRange* key_range = meta->mutable_key_range();
     key_range->set_key_start(key_start);

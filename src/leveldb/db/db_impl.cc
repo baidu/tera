@@ -1680,10 +1680,9 @@ void DBImpl::GetApproximateSizes(const Range* range, int n, uint64_t* sizes) {
   }
 }
 
-void DBImpl::GetApproximateSizes(uint64_t* size, uint64_t* size_under_level1,
-                                 std::vector<uint64_t>* lgsize) {
+void DBImpl::GetApproximateSizes(uint64_t* size, std::vector<uint64_t>* lgsize) {
   MutexLock l(&mutex_);
-  versions_->current()->GetApproximateSizes(size, size_under_level1);
+  versions_->current()->GetApproximateSizes(size);
 
   // add mem&imm size
   if (size) {

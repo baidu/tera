@@ -174,10 +174,9 @@ void TabletNodeSysInfo::CollectTabletNodeInfo(TabletManager* tablet_manager,
         tablet_meta->mutable_key_range()->set_key_end(tablet_io->GetEndKey());
 
         std::vector<uint64_t> lgsize;
-        uint64_t size, size_for_split;
-        tablet_io->GetDataSize(&size, &size_for_split, &lgsize);
+        uint64_t size;
+        tablet_io->GetDataSize(&size, &lgsize);
         tablet_meta->set_size(size);
-        tablet_meta->set_size_for_split(size_for_split);
         for (size_t i = 0; i < lgsize.size(); ++i) {
             tablet_meta->add_lg_size(lgsize[i]);
         }
