@@ -354,7 +354,8 @@ bool TabletIO::Split(std::string* split_key, StatusCode* status) {
         m_db_ref_count++;
     }
 
-    int64_t table_size = GetDataSize(NULL, status);
+    uint64_t table_size = 0;
+    GetDataSize(&table_size, NULL, status);
     if (table_size <= 0) {
         SetStatusCode(kTableNotSupport, status);
         MutexLock lock(&m_mutex);
@@ -458,42 +459,6 @@ bool TabletIO::CompactMinor(StatusCode* status) {
     return true;
 }
 
-int64_t TabletIO::GetDataSize(const std::string& start_key,
-                              const std::string& end_key,
-                              StatusCode* status) {
-    {
-        MutexLock lock(&m_mutex);
-        if (m_status != kReady && m_status != kOnSplit
-            && m_status != kSplited && m_status != kUnLoading) {
-            SetStatusCode(m_status, status);
-            return -1;
-        }
-        m_db_ref_count++;
-    }
-
-    std::string raw_start_key = start_key;
-    if (!m_kv_only && !start_key.empty()) {
-        m_key_operator->EncodeTeraKey(start_key, "", "", kLatestTs,
-                                      leveldb::TKT_FORSEEK, &raw_start_key);
-    }
-    std::string raw_end_key = end_key;
-    if (!m_kv_only && !end_key.empty()) {
-        m_key_operator->EncodeTeraKey(end_key, "", "", kLatestTs,
-                                      leveldb::TKT_FORSEEK, &raw_end_key);
-    }
-
-    int64_t scope_size = m_db->GetScopeSize(raw_start_key, raw_end_key);
-    {
-        MutexLock lock(&m_mutex);
-        m_db_ref_count--;
-    }
-    if (scope_size == 0) {
-        // return reserved buffer size
-        return FLAGS_tera_tablet_write_block_size * 1024;
-    }
-    return scope_size;
-}
-
 bool TabletIO::AddInheritedLiveFiles(std::vector<std::set<uint64_t> >* live) {
     {
         MutexLock lock(&m_mutex);
@@ -541,29 +506,29 @@ bool TabletIO::SnapshotIDToSeq(uint64_t snapshot_id, uint64_t* snapshot_sequence
     return true;
 }
 
-int64_t TabletIO::GetDataSize(std::vector<uint64_t>* lgsize,
-                              StatusCode* status) {
+bool TabletIO::GetDataSize(uint64_t* size, std::vector<uint64_t>* lgsize,
+                           StatusCode* status) {
     {
         MutexLock lock(&m_mutex);
         if (m_status != kReady && m_status != kOnSplit
             && m_status != kSplited && m_status != kUnLoading) {
             SetStatusCode(m_status, status);
-            return -1;
+            return false;
         }
         m_db_ref_count++;
     }
 
-    int64_t scope_size = m_db->GetScopeSize(m_raw_start_key, m_raw_end_key, lgsize);
-    // VLOG(6) << "GetDataSize(" << m_tablet_path << ") : " << scope_size;
+    m_db->GetApproximateSizes(size, lgsize);
+    VLOG(6) << "GetDataSize(" << m_tablet_path << ") : " << *size;
     {
         MutexLock lock(&m_mutex);
         m_db_ref_count--;
     }
-    if (scope_size == 0) {
+    if (size && *size == 0) {
         // return reserved buffer size
-        return FLAGS_tera_tablet_write_block_size * 1024;
+        *size = FLAGS_tera_tablet_write_block_size * 1024;
     }
-    return scope_size;
+    return true;
 }
 
 bool TabletIO::Read(const leveldb::Slice& key, std::string* value,

@@ -328,7 +328,6 @@ void MasterImpl::RestoreUserTablet(const std::vector<TabletMeta>& report_meta_li
         const std::string& key_end = meta.key_range().key_end();
         const std::string& path = meta.path();
         const std::string& server_addr = meta.server_addr();
-        int64_t size = meta.table_size();
         CompactStatus compact_status = meta.compact_status();
 
         TabletPtr tablet;
@@ -345,7 +344,7 @@ void MasterImpl::RestoreUserTablet(const std::vector<TabletMeta>& report_meta_li
             UnloadTabletAsync(unknown_tablet, done);
         } else {
             tablet->SetStatus(kTableReady);
-            tablet->SetSize(size);
+            tablet->UpdateSize(meta);
             tablet->SetCompactStatus(compact_status);
         }
     }
@@ -462,10 +461,10 @@ bool MasterImpl::IsRootUser(const std::string& token) {
 }
 
 template <typename Request, typename Response, typename Callback>
-bool MasterImpl::HasTablePermission(const Request* request, Response* response, 
+bool MasterImpl::HasTablePermission(const Request* request, Response* response,
                                     Callback* done, TablePtr table, const char* operate) {
     // check permission
-    if (!FLAGS_tera_acl_enabled 
+    if (!FLAGS_tera_acl_enabled
         || IsRootUser(request->user_token())) {
         LOG(INFO) << "[acl] is acl enabled: " << FLAGS_tera_acl_enabled;
         return true;
@@ -546,7 +545,7 @@ void MasterImpl::FillAlias(const std::string& key, const std::string& value) {
     if (!meta.schema().alias().empty()) {
         MutexLock locker(&m_alias_mutex);
         m_alias[meta.schema().alias()] = meta.schema().name();
-        LOG(INFO) << "table alias:" << meta.schema().alias() 
+        LOG(INFO) << "table alias:" << meta.schema().alias()
                   << " -> " << meta.schema().name();
     }
 }
@@ -810,7 +809,7 @@ void MasterImpl::DeleteTable(const DeleteTableRequest* request,
             WriteClosure* closure =
                 NewClosure(this, &MasterImpl::DeleteTabletRecordCallback, tablet,
                            FLAGS_tera_master_impl_retry_times);
-            BatchWriteMetaTableAsync(boost::bind(&Tablet::ToMetaTableKeyValue, tablet, _1, _2), 
+            BatchWriteMetaTableAsync(boost::bind(&Tablet::ToMetaTableKeyValue, tablet, _1, _2),
                                      true, closure);
         }
     }
@@ -1807,7 +1806,7 @@ void MasterImpl::TabletNodeRecoveryCallback(std::string addr,
                 << ", path: " << meta.path()
                 << ", range: [" << DebugString(key_start)
                 << ", " << DebugString(key_end)
-                << "], size: " << meta.table_size()
+                << "], size: " << meta.size()
                 << ", addr: " << meta.server_addr();
             TabletPtr unload_tablet(new Tablet(meta));
             unload_tablet->SetStatus(kTableUnLoading);
@@ -1817,7 +1816,7 @@ void MasterImpl::TabletNodeRecoveryCallback(std::string addr,
             UnloadTabletAsync(unload_tablet, done);
         } else if (tablet->SetStatusIf(kTableReady, kTabletPending)
             || tablet->SetStatusIf(kTableReady, kTableOffLine)) {
-            tablet->SetSize(meta);
+            tablet->UpdateSize(meta);
             tablet->SetCompactStatus(meta.compact_status());
             ProcessReadyTablet(tablet);
             VLOG(8) << "[query] " << tablet;
@@ -3060,12 +3059,12 @@ void MasterImpl::QueryTabletNodeCallback(std::string addr, QueryRequest* request
             const std::string& table_name = meta.table_name();
             const std::string& key_start = meta.key_range().key_start();
             const std::string& key_end = meta.key_range().key_end();
-            
+
             tabletnode::TabletRange range(table_name, key_start, key_end);
             std::map<tabletnode::TabletRange, int>::iterator it = tablet_map.find(range);
             if (it != tablet_map.end()) {
                 LOG(WARNING) << "query found ts has more than one table_name+startkey item: "
-                    << table_name << ", " << DebugString(key_start) << ", " << DebugString(key_end); 
+                    << table_name << ", " << DebugString(key_start) << ", " << DebugString(key_end);
             } else {
                 tablet_map[range] = 1;
             }
@@ -3076,13 +3075,13 @@ void MasterImpl::QueryTabletNodeCallback(std::string addr, QueryRequest* request
                     << ", path: " << meta.path()
                     << ", range: [" << DebugString(key_start)
                     << ", " << DebugString(key_end)
-                    << "], size: " << meta.table_size()
+                    << "], size: " << meta.size()
                     << ", addr: " << meta.server_addr()
                     << ", status: " << meta.status();
             } else if (m_tablet_manager->FindTablet(table_name, key_start, &tablet)
                 && tablet->Verify(table_name, key_start, key_end, meta.path(),
                                   meta.server_addr())) {
-                tablet->SetSize(meta);
+                tablet->UpdateSize(meta);
                 tablet->SetCounter(counter);
                 tablet->SetCompactStatus(meta.compact_status());
                 ClearUnusedSnapshots(tablet, meta);
@@ -3092,7 +3091,7 @@ void MasterImpl::QueryTabletNodeCallback(std::string addr, QueryRequest* request
                     << ", path: " << meta.path()
                     << ", range: [" << DebugString(key_start)
                     << ", " << DebugString(key_end)
-                    << "], size: " << meta.table_size()
+                    << "], size: " << meta.size()
                     << ", addr: " << meta.server_addr();
             }
         }
@@ -3116,12 +3115,12 @@ void MasterImpl::QueryTabletNodeCallback(std::string addr, QueryRequest* request
         std::vector<TabletPtr>::iterator it;
         for (it = tablet_list.begin(); it != tablet_list.end(); ++it) {
             TabletPtr tablet = *it;
-            tabletnode::TabletRange range(tablet->GetTableName(), tablet->GetKeyStart(), 
+            tabletnode::TabletRange range(tablet->GetTableName(), tablet->GetKeyStart(),
                                           tablet->GetKeyEnd());
-            if ((tablet_map.find(range) == tablet_map.end()) && 
+            if ((tablet_map.find(range) == tablet_map.end()) &&
                 (tablet->SetStatusIf(kTableOffLine, kTableReady))) {
                 LOG(ERROR) << "master load tablet, but ts not: addr " << addr
-                           << ", " << tablet; 
+                           << ", " << tablet;
                 TryLoadTablet(tablet, addr);
                 continue;
             }
@@ -3208,11 +3207,11 @@ void MasterImpl::CollectTabletInfoCallback(std::string addr,
         // calculate data_size of tabletnode
         for (uint32_t i = 0; i < meta_num; i++) {
             const TabletMeta& meta = response->tabletmeta_list().meta(i);
-            state.m_data_size += meta.table_size();
+            state.m_data_size += meta.size();
             if (state.m_table_size.find(meta.table_name()) != state.m_table_size.end()) {
-                state.m_table_size[meta.table_name()] += meta.table_size();
+                state.m_table_size[meta.table_name()] += meta.size();
             } else {
-                state.m_table_size[meta.table_name()] = meta.table_size();
+                state.m_table_size[meta.table_name()] = meta.size();
             }
         }
         m_tabletnode_manager->UpdateTabletNode(addr, state);
@@ -3690,7 +3689,7 @@ void MasterImpl::MergeTabletAsyncPhase2(TabletPtr tablet_p1, TabletPtr tablet_p2
         leveldb::GetChildTabletPath(tablet_p1->GetPath(),
                                     tablet_p1->GetTable()->GetNextTabletNo());
     new_meta.set_path(new_path);
-    new_meta.set_table_size(tablet_p1->GetDataSize() + tablet_p2->GetDataSize());
+    new_meta.set_size(tablet_p1->GetDataSize() + tablet_p2->GetDataSize());
 
     Tablet tablet_c(new_meta, tablet_p1->GetTable());
     tablet_c.ToMetaTableKeyValue(&packed_key, &packed_value);
@@ -4873,7 +4872,7 @@ void MasterImpl::RenameTable(const RenameTableRequest* request,
             done->Run();
             return;
         } else if (new_alias.find("@") != std::string::npos) {
-            LOG(ERROR) << "Fail to rename, " 
+            LOG(ERROR) << "Fail to rename, "
                 << new_alias << "contains invalid chars: @";
             response->set_status(kInvalidArgument);
             done->Run();
