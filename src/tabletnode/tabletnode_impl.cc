@@ -1101,11 +1101,11 @@ void TabletNodeImpl::ReleaseMallocCache() {
 
 void TabletNodeImpl::EnableReleaseMallocCacheTimer(int32_t expand_factor) {
     assert(m_release_cache_timer_id == kInvalidTimerId);
-    boost::function<void ()> closure =
+    ThreadPool::Task task =
         boost::bind(&TabletNodeImpl::ReleaseMallocCache, this);
     int64_t timeout_period = expand_factor * 1000 *
         FLAGS_tera_tabletnode_tcm_cache_release_period;
-    m_release_cache_timer_id = m_thread_pool->DelayTask(timeout_period, closure);
+    m_release_cache_timer_id = m_thread_pool->DelayTask(timeout_period, task);
 }
 
 void TabletNodeImpl::DisableReleaseMallocCacheTimer() {

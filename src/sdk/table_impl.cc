@@ -407,10 +407,10 @@ void TableImpl::ScanCallBack(ScanTask* scan_task,
         ScanTabletAsync(scan_task, false);
     } else {
         scan_task->IncRetryTimes();
-        boost::function<void ()> retry_closure =
+        ThreadPool::Task retry_task =
             boost::bind(&TableImpl::ScanTabletAsync, this, scan_task, false);
         _thread_pool->DelayTask(
-            FLAGS_tera_sdk_retry_period * scan_task->RetryTimes(), retry_closure);
+            FLAGS_tera_sdk_retry_period * scan_task->RetryTimes(), retry_task);
     }
 }
 
@@ -488,9 +488,9 @@ void TableImpl::DistributeMutations(const std::vector<RowMutationImpl*>& mu_list
                 row_timeout = row_mutation->TimeOut() > 0 ? row_mutation->TimeOut() : _timeout;
             }
             if (row_timeout > 0) {
-                boost::function<void ()> closure =
+                ThreadPool::Task task =
                     boost::bind(&TableImpl::MutationTimeout, this, row_mutation->GetId());
-                _thread_pool->DelayTask(row_timeout, closure);
+                _thread_pool->DelayTask(row_timeout, task);
             }
         }
 
@@ -505,10 +505,10 @@ void TableImpl::DistributeMutations(const std::vector<RowMutationImpl*>& mu_list
             } else {
                 _cur_commit_pending_counter.Sub(row_mutation->MutationNum());
                 row_mutation->SetError(ErrorCode::kBusy, "pending too much mutations, try it later.");
-                boost::function<void ()> closure =
+                ThreadPool::Task task =
                     boost::bind(&TableImpl::BreakRequest, this, row_mutation->GetId());
                 row_mutation->DecRef();
-                _thread_pool->AddTask(closure);
+                _thread_pool->AddTask(task);
                 continue;
             }
         }
@@ -583,9 +583,9 @@ void TableImpl::PackMutations(const std::string& server_addr,
     if (it == _mutation_batch_map.end()) {
         mutation_batch = &_mutation_batch_map[server_addr];
         mutation_batch->row_id_list = new std::vector<int64_t>;
-        boost::function<void ()> closure =
+        ThreadPool::Task task =
             boost::bind(&TableImpl::MutationBatchTimeout, this, server_addr);
-        int64_t timer_id = _thread_pool->DelayTask(_write_commit_timeout, closure);
+        int64_t timer_id = _thread_pool->DelayTask(_write_commit_timeout, task);
         mutation_batch->timer_id = timer_id;
     } else {
         mutation_batch = &it->second;
@@ -766,9 +766,9 @@ void TableImpl::MutateCallBack(std::vector<int64_t>* mu_id_list,
     for (it = retry_times_list.begin(); it != retry_times_list.end(); ++it) {
         int64_t retry_interval =
             static_cast<int64_t>(pow(FLAGS_tera_sdk_delay_send_internal, it->first) * 1000);
-        boost::function<void ()> retry_closure =
+        ThreadPool::Task retry_task =
             boost::bind(&TableImpl::DistributeMutationsById, this, it->second);
-        _thread_pool->DelayTask(retry_interval, retry_closure);
+        _thread_pool->DelayTask(retry_interval, retry_task);
     }
 
     delete request;
@@ -849,9 +849,9 @@ void TableImpl::DistributeReaders(const std::vector<RowReaderImpl*>& row_reader_
                 row_timeout = row_reader->TimeOut() > 0 ? row_reader->TimeOut() : _timeout;
             }
             if (row_timeout >= 0) {
-                boost::function<void ()> closure =
+                ThreadPool::Task task =
                     boost::bind(&TableImpl::ReaderTimeout, this, row_reader->GetId());
-                _thread_pool->DelayTask(row_timeout, closure);
+                _thread_pool->DelayTask(row_timeout, task);
             }
         }
 
@@ -866,10 +866,10 @@ void TableImpl::DistributeReaders(const std::vector<RowReaderImpl*>& row_reader_
             } else {
                 _cur_reader_pending_counter.Dec();
                 row_reader->SetError(ErrorCode::kBusy, "pending too much readers, try it later.");
-                boost::function<void ()> closure =
+                ThreadPool::Task task =
                     boost::bind(&TableImpl::BreakRequest, this, row_reader->GetId());
                 row_reader->DecRef();
-                _thread_pool->AddTask(closure);
+                _thread_pool->AddTask(task);
                 continue;
             }
         }
@@ -916,9 +916,9 @@ void TableImpl::PackReaders(const std::string& server_addr,
     if (it == _reader_batch_map.end()) {
         reader_buffer = &_reader_batch_map[server_addr];
         reader_buffer->row_id_list = new std::vector<int64_t>;
-        boost::function<void ()> closure =
+        ThreadPool::Task task =
             boost::bind(&TableImpl::ReaderBatchTimeout, this, server_addr);
-        uint64_t timer_id = _thread_pool->DelayTask(_read_commit_timeout, closure);
+        uint64_t timer_id = _thread_pool->DelayTask(_read_commit_timeout, task);
         reader_buffer->timer_id = timer_id;
     } else {
         reader_buffer = &it->second;
@@ -1102,9 +1102,9 @@ void TableImpl::ReaderCallBack(std::vector<int64_t>* reader_id_list,
     for (it = retry_times_list.begin(); it != retry_times_list.end(); ++it) {
         int64_t retry_interval =
             static_cast<int64_t>(pow(FLAGS_tera_sdk_delay_send_internal, it->first) * 1000);
-        boost::function<void ()> retry_closure =
+        ThreadPool::Task retry_task =
             boost::bind(&TableImpl::DistributeReadersById, this, it->second);
-        _thread_pool->DelayTask(retry_interval, retry_closure);
+        _thread_pool->DelayTask(retry_interval, retry_task);
     }
 
     delete request;
@@ -1215,11 +1215,11 @@ bool TableImpl::GetTabletAddrOrScheduleUpdateMeta(const std::string& row,
         } else {
             VLOG(10) << "update meta in " << update_interval << " (ms) for key:" << row;
             node->status = DELAY_UPDATE;
-            boost::function<void ()> delay_closure =
+            ThreadPool::Task delay_task =
                 boost::bind(&TableImpl::DelayUpdateMeta, this,
                             node->meta.key_range().key_start(),
                             node->meta.key_range().key_end());
-            _thread_pool->DelayTask(update_interval, delay_closure);
+            _thread_pool->DelayTask(update_interval, delay_task);
         }
         return false;
     }
@@ -1332,10 +1332,10 @@ void TableImpl::ScanMetaTableAsync(const std::string& key_start, const std::stri
     if (meta_addr.empty()) {
         VLOG(6) << "root is empty";
 
-        boost::function<void ()> retry_closure =
+        ThreadPool::Task retry_task =
             boost::bind(&TableImpl::ScanMetaTableAsyncInLock, this, key_start, key_end,
                         expand_key_end, true);
-        _thread_pool->DelayTask(FLAGS_tera_sdk_update_meta_internal, retry_closure);
+        _thread_pool->DelayTask(FLAGS_tera_sdk_update_meta_internal, retry_task);
         return;
     }
 
@@ -1388,10 +1388,10 @@ void TableImpl::ScanMetaTableCallBack(std::string key_start,
             MutexLock lock(&_meta_mutex);
             GiveupUpdateTabletMeta(key_start, key_end);
         }
-        boost::function<void ()> retry_closure =
+        ThreadPool::Task retry_task =
             boost::bind(&TableImpl::ScanMetaTableAsyncInLock, this, key_start, key_end,
                         expand_key_end, true);
-        _thread_pool->DelayTask(FLAGS_tera_sdk_update_meta_internal, retry_closure);
+        _thread_pool->DelayTask(FLAGS_tera_sdk_update_meta_internal, retry_task);
         delete request;
         delete response;
         return;
@@ -1634,11 +1634,11 @@ void TableImpl::ScheduleUpdateMeta(const std::string& row,
             UpdateMetaAsync();
         } else {
             node->status = DELAY_UPDATE;
-            boost::function<void ()> delay_closure =
+            ThreadPool::Task delay_task =
                 boost::bind(&TableImpl::DelayUpdateMeta, this,
                             node->meta.key_range().key_start(),
                             node->meta.key_range().key_end());
-            _thread_pool->DelayTask(update_interval, delay_closure);
+            _thread_pool->DelayTask(update_interval, delay_task);
         }
     }
 }
@@ -1678,9 +1678,9 @@ void TableImpl::ReadTableMetaAsync(ErrorCode* ret_err, int32_t retry_times,
         } else {
             int64_t retry_interval =
                 static_cast<int64_t>(pow(FLAGS_tera_sdk_delay_send_internal, retry_times) * 1000);
-            boost::function<void ()> retry_closure =
+            ThreadPool::Task retry_task =
                 boost::bind(&TableImpl::ReadTableMetaAsync, this, ret_err, retry_times + 1, true);
-            _thread_pool->DelayTask(retry_interval, retry_closure);
+            _thread_pool->DelayTask(retry_interval, retry_task);
         }
         return;
     }
@@ -1766,9 +1766,9 @@ void TableImpl::ReadTableMetaCallBack(ErrorCode* ret_err,
     } else {
         int64_t retry_interval =
             static_cast<int64_t>(pow(FLAGS_tera_sdk_delay_send_internal, retry_times) * 1000);
-        boost::function<void ()> retry_closure =
+        ThreadPool::Task retry_task =
             boost::bind(&TableImpl::ReadTableMetaAsync, this, ret_err, retry_times + 1, true);
-        _thread_pool->DelayTask(retry_interval, retry_closure);
+        _thread_pool->DelayTask(retry_interval, retry_task);
     }
 
     delete request;
@@ -2068,13 +2068,13 @@ void TableImpl::DoDumpCookie() {
 
 void TableImpl::DumpCookie() {
     DoDumpCookie();
-    boost::function<void ()> closure = boost::bind(&TableImpl::DumpCookie, this);
-    _thread_pool->DelayTask(FLAGS_tera_sdk_cookie_update_interval * 1000, closure);
+    ThreadPool::Task task = boost::bind(&TableImpl::DumpCookie, this);
+    _thread_pool->DelayTask(FLAGS_tera_sdk_cookie_update_interval * 1000, task);
 }
 
 void TableImpl::EnableCookieUpdateTimer() {
-    boost::function<void ()> closure = boost::bind(&TableImpl::DumpCookie, this);
-    _thread_pool->DelayTask(FLAGS_tera_sdk_cookie_update_interval * 1000, closure);
+    ThreadPool::Task task = boost::bind(&TableImpl::DumpCookie, this);
+    _thread_pool->DelayTask(FLAGS_tera_sdk_cookie_update_interval * 1000, task);
 }
 
 std::string TableImpl::GetCookieFileName(const std::string& tablename,
@@ -2095,10 +2095,10 @@ std::string TableImpl::GetCookieFileName(const std::string& tablename,
 
 void TableImpl::DumpPerfCounterLogDelay() {
     DoDumpPerfCounterLog();
-    boost::function<void ()> closure =
+    ThreadPool::Task task =
         boost::bind(&TableImpl::DumpPerfCounterLogDelay, this);
     _perf_log_task_id =
-        _thread_pool->DelayTask(FLAGS_tera_sdk_perf_counter_log_interval * 1000, closure);
+        _thread_pool->DelayTask(FLAGS_tera_sdk_perf_counter_log_interval * 1000, task);
 }
 
 void TableImpl::DoDumpPerfCounterLog() {
