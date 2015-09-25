@@ -337,7 +337,6 @@ class TestState {
   port::CondVar state_cv_;
 };
 
-#if 0 // disable by taocipian for anqin disable caller, so callee is unused
 static void ConcurrentReader(void* arg) {
   TestState* state = reinterpret_cast<TestState*>(arg);
   Random rnd(state->seed_);
@@ -369,17 +368,12 @@ static void RunConcurrent(int run) {
     state.Wait(TestState::DONE);
   }
 }
-#endif
-
-#if 0 // disabled by anqin for thread blocking, need check!
 
 TEST(SkipTest, Concurrent1) { RunConcurrent(1); }
 TEST(SkipTest, Concurrent2) { RunConcurrent(2); }
 TEST(SkipTest, Concurrent3) { RunConcurrent(3); }
 TEST(SkipTest, Concurrent4) { RunConcurrent(4); }
 TEST(SkipTest, Concurrent5) { RunConcurrent(5); }
-
-#endif
 
 }  // namespace leveldb
 
