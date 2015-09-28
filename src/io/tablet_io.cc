@@ -570,7 +570,8 @@ StatusCode TabletIO::InitedScanInterator(const std::string& start_tera_key,
     *scan_it = m_db->NewIterator(read_option);
     TearDownIteratorOptions(&read_option);
 
-    VLOG(10) << "ll-scan: " << "startkey=[" << DebugString(start_key.ToString());
+    VLOG(10) << "ll-scan: " << "startkey=[" << DebugString(start_key.ToString()) << ":"
+             << DebugString(start_col.ToString()) << ":" << DebugString(start_qual.ToString());
     std::string start_seek_key;
     m_key_operator->EncodeTeraKey(start_key.ToString(), "", "", kLatestTs,
                                   leveldb::TKT_FORSEEK, &start_seek_key);
@@ -666,6 +667,17 @@ inline bool TabletIO::LowLevelScan(const std::string& start_tera_key,
 
         if (m_key_operator->Compare(it->key(), start_tera_key) < 0) {
             // skip out-of-range records
+            // keep record of version info to prevent dirty data
+            if (key.compare(last_key) == 0 &&
+                col.compare(last_col) == 0 &&
+                qual.compare(last_qual) == 0) {
+                ++version_num;
+            } else {
+                last_key.assign(key.data(), key.size());
+                last_col.assign(col.data(), col.size());
+                last_qual.assign(qual.data(), qual.size());
+                version_num = 1;
+            }
             it->Next();
             continue;
         }
