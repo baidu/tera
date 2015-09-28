@@ -200,6 +200,7 @@ class DBImpl : public DB {
   int64_t bg_schedule_id_;
   bool imm_dump_;
   int unscheduled_compactions_;
+  int max_background_compactions_;
 
   // Information for a manual compaction
   struct ManualCompaction {

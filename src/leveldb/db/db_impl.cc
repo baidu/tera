@@ -152,6 +152,7 @@ DBImpl::DBImpl(const Options& options, const std::string& dbname)
       bg_schedule_id_(0),
       imm_dump_(false),
       unscheduled_compactions_(0),
+      max_background_compactions_(10), // TODO(taocipian) configurable
       manual_compaction_(NULL),
       consecutive_compaction_errors_(0),
       flush_on_destroy_(false) {
@@ -814,22 +815,20 @@ void DBImpl::MaybeScheduleCompaction() {
 }
 #endif
 
-#define COMPACT_MAX 10
-
 void DBImpl::MaybeScheduleCompaction() {
   mutex_.AssertHeld();
   if (shutting_down_.Acquire_Load()) {
     // DB is being deleted; no more background compactions
     Log(options_.info_log, "[%s] being deleted, no more compaction", dbname_.c_str());
     return;
-  } 
-  if ((bg_compaction_scheduled_count_ < COMPACT_MAX + 1)
+  }
+  if ((bg_compaction_scheduled_count_ < max_background_compactions_ + 1)
        && ((imm_ != NULL) && (imm_dump_ == false))) {
     bg_compaction_scheduled_count_++;
     env_->Schedule(&DBImpl::BGWork, this, 100.0); // TODO BGWorkFlush
   }
-  while ((bg_compaction_scheduled_count_ < COMPACT_MAX)
-         && (unscheduled_compactions_ >= 0)) {
+  while ((bg_compaction_scheduled_count_ < max_background_compactions_)
+         && (unscheduled_compactions_ > 0)) {
     unscheduled_compactions_--;
     bg_compaction_scheduled_count_++;
     env_->Schedule(&DBImpl::BGWork, this, 35.0); // TODO BGWorkCompaction
@@ -844,8 +843,7 @@ void DBImpl::BackgroundCall() {
   Log(options_.info_log, "[%s] BackgroundCall, background-count:%d", 
           dbname_.c_str(), bg_compaction_scheduled_count_);
   MutexLock l(&mutex_);
-  //assert(bg_compaction_scheduled_);
-  assert(bg_compaction_scheduled_count_ >= 0);
+  assert(bg_compaction_scheduled_count_ > 0);
   if (!shutting_down_.Acquire_Load()) {
     Status s = BackgroundCompaction();
     if (s.ok()) {
@@ -876,9 +874,7 @@ void DBImpl::BackgroundCall() {
     }
   }
 
-  //bg_compaction_scheduled_ = false;
   bg_compaction_scheduled_count_--;
-
   // Previous compaction may have produced too many files in a level,
   // so reschedule another compaction if needed.
   MaybeScheduleCompaction();
@@ -909,7 +905,6 @@ Status DBImpl::BackgroundCompaction() {
         (m->end ? m->end->DebugString().c_str() : "(end)"),
         (m->done ? "(end)" : manual_end.DebugString().c_str()));
   } else {
-    //c = versions_->PickCompaction();
     c = versions_->PickMultiThreadCompaction();
     if (c != NULL) {
       SchedulePendingCompaction();
@@ -1112,11 +1107,14 @@ void DBImpl::SchedulePendingCompaction() {
    versions_->ScoreMatrix(amap);
    std::multimap<double, int>::reverse_iterator rit = amap.rbegin();
    if ((rit != amap.rend()) && (rit->first >= 1.0)) {
+     if ((rit->second == 0) && versions_->GetLevel0BeingCompacted()) {
+       Log(options_.info_log, "[debug] no concurrently compact on level0");
+     }
      unscheduled_compactions_++;
      MaybeScheduleCompaction();
      Log(options_.info_log, "[debug] another level:%d score:%lf", rit->second, rit->first);
    } else {
-     Log(options_.info_log, "[debug] there is no more");
+     Log(options_.info_log, "[debug] there is no more compaction to do");
    }
 }
 
@@ -1163,10 +1161,15 @@ Status DBImpl::DoCompactionWork(CompactionState* compact) {
     // Prioritize immutable compaction work
     if (has_imm_.NoBarrier_Load() != NULL) {
       mutex_.Lock();
-      if (bg_compaction_scheduled_count_ < COMPACT_MAX + 1
-          && imm_ != NULL && imm_dump_ == false) {
+      if ((bg_compaction_scheduled_count_ < max_background_compactions_ + 1)
+          && (imm_ != NULL && imm_dump_ == false)) {
         bg_compaction_scheduled_count_++;
         env_->Schedule(&DBImpl::BGWork, this, 100.0); // TODO BGWorkFlush
+      } else if (imm_ != NULL && imm_dump_ == false) {
+        Log(options_.info_log, "[%s] thread pool is busy, sync dump memtable",
+            dbname_.c_str());
+        CompactMemTable();
+        bg_cv_.SignalAll();  // Wakeup MakeRoomForWrite() if necessary
       }
       mutex_.Unlock();
     }
@@ -1642,13 +1645,11 @@ Status DBImpl::MakeRoomForWrite(bool force) {
       Log(options_.info_log, "[%s] Current memtable full; waiting...\n",
           dbname_.c_str());
       bg_cv_.Wait();
-      Log(options_.info_log, "ok Current memtable full; waiting...\n");
     } else if (versions_->NumLevelFiles(0) >= config::kL0_StopWritesTrigger) {
       // There are too many level-0 files.
       Log(options_.info_log, "[%s] Too many L0 files; waiting...\n",
           dbname_.c_str());
       bg_cv_.Wait();
-      Log(options_.info_log, "ok Too many L0 files; waiting...\n");
     } else {
       imm_ = mem_;
       has_imm_.Release_Store(imm_);

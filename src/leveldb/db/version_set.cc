@@ -1651,89 +1651,12 @@ Iterator* VersionSet::MakeInputIterator(Compaction* c) {
   return result;
 }
 
-bool VersionSet::FilesInCompaction(const std::vector<FileMetaData*>& files) {
-    for (unsigned int i = 0; i < files.size(); i++) {
-        if (files[i]->being_compacted) {
-            Log(options_->info_log, "[pick] file in compact #%d", 
-                static_cast<uint32_t>(files[i]->number & 0xffffffff));
-            return true;
-        }
-    }
-    return false;
-}
-
-bool VersionSet::RangeInCompaction(const InternalKey* smallest, 
-                                   const InternalKey* largest, 
-                                   int level) {
-  std::vector<FileMetaData*> inputs;
-  current_->GetOverlappingInputs(level, smallest, largest, &inputs);
-  return FilesInCompaction(inputs);
-}
-
-bool VersionSet::PickCompactionOnLevel(Compaction* c, int level) {
-    // TODO(taocipian) 
-    // concurrently compact level0 range
-    if ((level == 0) && (level0_being_compacted_ == true)) {
-        Log(options_->info_log, "level-0 being-compacted");
-        return false;
-    }
-    for (size_t i = 0; i < current_->files_[level].size(); i++) {
-      FileMetaData* f = current_->files_[level][i];
-      if (level == 1) {
-        Log(options_->info_log, "[pick] file #%d", 
-            static_cast<uint32_t>(f->number & 0xffffffff));
-      }
-        if (f->being_compacted) {
-            if (level == 1) {
-              Log(options_->info_log, "[pick] file being_compacted, #%d", 
-                  static_cast<uint32_t>(f->number & 0xffffffff));
-            }
-            continue;
-        }
-        if (RangeInCompaction(&f->smallest, &f->largest, level+1)) {
-            if (level == 1) {
-              Log(options_->info_log, "[pick] level-%d parent-range being_compacted, #%d", 
-                  level, static_cast<uint32_t>(f->number & 0xffffffff));
-            }
-            continue;
-        }
-        c->inputs_[0].push_back(f);
-        break;
-    }
-    if (c->inputs_[0].empty()) {
-        return false;
-    }
-    return true;
-}
-
-void VersionSet::ScoreMatrix(std::multimap<double, int>& amap) {
-  int level;
-  double score;
-  for (level = 0; level < config::kNumLevels-1; level++) {
-    if (level == 0) {
-      int num = 0;
-      for (size_t i = 0; i < current_->files_[level].size(); i++) {
-          if (!current_->files_[level][i]->being_compacted) {
-              num++;
-          }
-      }
-      Log(options_->info_log, "level-0 all:%zd, not-compacted:%d", 
-          current_->files_[level].size(), num);
-      score = num / static_cast<double>(config::kL0_CompactionTrigger);
-    } else {
-      const uint64_t level_bytes = TotalNotBeingCompactedFileSize(current_->files_[level]);
-      score = static_cast<double>(level_bytes) / MaxBytesForLevel(level);
-    }
-    amap.insert(std::pair<double, int>(score, level));
-  }
-}
-
 Compaction* VersionSet::PickMultiThreadCompaction() {
   Compaction* c = NULL;
   int level;
   bool found_compaction = false;
   double score;
-  std::multimap<double, int> amap;
+  std::multimap<double, int> amap; // (socre : level)
   ScoreMatrix(amap);
   std::multimap<double, int>::reverse_iterator rit;
   for (rit = amap.rbegin(); rit != amap.rend(); ++rit) {
@@ -1746,16 +1669,14 @@ Compaction* VersionSet::PickMultiThreadCompaction() {
     }
     c = new Compaction(level);
     if (PickCompactionOnLevel(c, level)) {
-      // there are file on level & level+1 to compact
+      // there are files on level & level+1 need to compacted
       found_compaction = true;
       break;
     }
     delete c;
   }
 
-  //Log(options_->info_log,"last level:%d, socre:%lf", level, score);
   if (!found_compaction) {
-    //Log(options_->info_log, "pick not found, last level:%d,score:%lf", level, score);
     return NULL;
   }
   c->input_version_ = current_;
@@ -1798,6 +1719,75 @@ Compaction* VersionSet::PickMultiThreadCompaction() {
       c->inputs_[1].size(), c->level()+1, oss.str().c_str());
   c->SetInputsFilesBeingCompacted(true);
   return c;
+}
+
+// return true if any one of a file in `files' is being compacted
+bool VersionSet::FilesInCompaction(const std::vector<FileMetaData*>& files) {
+    for (unsigned int i = 0; i < files.size(); i++) {
+        if (files[i]->being_compacted) {
+        //    Log(options_->info_log, "[pick] file in compact #%d", 
+        //        static_cast<uint32_t>(files[i]->number & 0xffffffff));
+            return true;
+        }
+    }
+    return false;
+}
+
+// return true if range[smallest, largest] at `level' is being compacted
+bool VersionSet::RangeInCompaction(const InternalKey* smallest, 
+                                   const InternalKey* largest, 
+                                   int level) {
+  std::vector<FileMetaData*> inputs;
+  current_->GetOverlappingInputs(level, smallest, largest, &inputs);
+  return FilesInCompaction(inputs);
+}
+
+bool VersionSet::PickCompactionOnLevel(Compaction* c, int level) {
+    // TODO(taocipian) concurrently compact level0 range
+    if ((level == 0) && (level0_being_compacted_ == true)) {
+        Log(options_->info_log, "level-0 being-compacted");
+        return false;
+    }
+    for (size_t i = 0; i < current_->files_[level].size(); i++) {
+      FileMetaData* f = current_->files_[level][i];
+        if (f->being_compacted) {
+            // itself is being compacted
+            continue;
+        }
+        if (RangeInCompaction(&f->smallest, &f->largest, level+1)) {
+            // it's parent files are being compacted
+            continue;
+        }
+        c->inputs_[0].push_back(f);
+        break;
+    }
+    if (c->inputs_[0].empty()) {
+        return false;
+    }
+    return true;
+}
+
+// calculate socre of every level, store result in `amap'
+void VersionSet::ScoreMatrix(std::multimap<double, int>& amap) {
+  int level;
+  double score;
+  for (level = 0; level < config::kNumLevels-1; level++) {
+    if (level == 0) {
+      int num = 0;
+      for (size_t i = 0; i < current_->files_[level].size(); i++) {
+          if (!current_->files_[level][i]->being_compacted) {
+              num++;
+          }
+      }
+      Log(options_->info_log, "level-0 all:%zd, not-compacted:%d", 
+          current_->files_[level].size(), num);
+      score = num / static_cast<double>(config::kL0_CompactionTrigger);
+    } else {
+      const uint64_t level_bytes = TotalNotBeingCompactedFileSize(current_->files_[level]);
+      score = static_cast<double>(level_bytes) / MaxBytesForLevel(level);
+    }
+    amap.insert(std::pair<double, int>(score, level));
+  }
 }
 
 Compaction* VersionSet::PickCompaction() {
@@ -2016,11 +2006,16 @@ Compaction::~Compaction() {
   }
 }
 
-void Compaction::SetInputsFilesBeingCompacted(bool mark) {
+void Compaction::SetInputsFilesBeingCompacted(bool new_mark) {
   for (int which = 0; which < 2; which++) {
     for (size_t i = 0; i < inputs_[which].size(); i++) {
-      assert(mark ? !inputs_[which][i]->being_compacted : inputs_[which][i]->being_compacted);
-      inputs_[which][i]->being_compacted = mark;
+      bool old_mark = inputs_[which][i]->being_compacted;
+      if (old_mark == new_mark) {
+        uint32_t file_no = static_cast<uint32_t>(inputs_[which][i]->number & 0xffffffff);
+        fprintf(stderr, "file_no:#%zd being_compacted status:%d", file_no, new_mark);
+        abort();
+      }
+      inputs_[which][i]->being_compacted = new_mark;
     }
   }
 }
