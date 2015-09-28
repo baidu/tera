@@ -526,31 +526,27 @@ void Version::GetOverlappingInputs(
   }
 }
 
-// tera-specific
-uint64_t Version::GetScopeSize(const Slice* smallest_user_key,
-                               const Slice* largest_user_key) {
-    // std::cerr << "start: [" << (smallest_user_key != NULL ? smallest_user_key->ToString() : "")
-    //    << "], end: [" << (largest_user_key != NULL ? largest_user_key->ToString() : "") << "]" << std::endl;
-    uint64_t total_size = 0;
-    const Comparator* user_cmp = vset_->icmp_.user_comparator();
-    for (int level = 1; level < config::kNumLevels; level++) {
-        const std::vector<FileMetaData*>& files = files_[level];
-        for (size_t i = 0; i < files.size(); i++) {
-            FileMetaData* file = files[i];
-            // std::cerr << "level: " << level << ", id: " << i
-            //     << ", num: " << file->number
-            //     << ", small: [" << file->smallest.user_key().ToString()
-            //     << "], largest: [" << file->largest.user_key().ToString()
-            //     << "], size: " << file->file_size << std::endl;
-            if (BeforeFile(user_cmp, largest_user_key, file)
-                || AfterFile(user_cmp, smallest_user_key, file)) {
-                continue;
-            }
-            total_size += files[i]->file_size;
-        }
-    }
+void Version::GetApproximateSizes(uint64_t* size, uint64_t* size_under_level1) {
+  uint64_t total_size = 0;
+  // calculate file size under level1
+  for (int level = 1; level < config::kNumLevels; level++) {
+      const std::vector<FileMetaData*>& files = files_[level];
+      for (size_t i = 0; i < files.size(); i++) {
+          total_size += files[i]->file_size;
+      }
+  }
+  if (size_under_level1) {
+    *size_under_level1 = total_size;
+  }
 
-    return total_size;
+  // calculate level0
+  const std::vector<FileMetaData*>& files = files_[0];
+  for (size_t i = 0; i < files.size(); i++) {
+      total_size += files[i]->file_size;
+  }
+  if (size) {
+    *size = total_size;
+  }
 }
 
 bool Version::FindSplitKey(const Slice* smallest_user_key,
@@ -558,9 +554,10 @@ bool Version::FindSplitKey(const Slice* smallest_user_key,
                            double ratio,
                            std::string* split_key) {
     assert(ratio >= 0 && ratio <= 1);
-    uint64_t total_size = GetScopeSize(smallest_user_key,
-                                       largest_user_key);
-    uint64_t want_split_size = static_cast<uint64_t>(total_size * ratio);
+    uint64_t size_under_level1;
+    GetApproximateSizes(NULL, &size_under_level1);
+
+    uint64_t want_split_size = static_cast<uint64_t>(size_under_level1 * ratio);
 
     const Comparator* user_cmp = vset_->icmp_.user_comparator();
     const FileMetaData* largest_file = NULL;

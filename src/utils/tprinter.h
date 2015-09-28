@@ -79,7 +79,8 @@ private:
     };
     typedef std::vector<Cell> Line;
 
-    // column format: "name<int>"
+    // column format: "name<int[,unit]>"
+    // e.g. "name<string>", "money<int,yuan>", "speed<int_1024,B>"
     bool ParseColType(const string& item, string* name, CellType* type);
     void FormatOneLine(Line& ori, std::vector<string>* dst);
     static string NumToStr(const double num);
