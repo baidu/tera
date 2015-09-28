@@ -113,6 +113,7 @@ std::string TabletIO::GetEndKey() const {
 }
 
 CompactStatus TabletIO::GetCompactStatus() const {
+    MutexLock lock(&m_mutex);
     return m_compact_status;
 }
 
@@ -128,6 +129,7 @@ bool TabletIO::Load(const TableSchema& schema,
                     const std::string& path,
                     const std::vector<uint64_t>& parent_tablets,
                     std::map<uint64_t, uint64_t> snapshots,
+                    std::map<uint64_t, uint64_t> rollbacks,
                     leveldb::Logger* logger,
                     leveldb::Cache* block_cache,
                     leveldb::TableCache* table_cache,
@@ -150,12 +152,19 @@ bool TabletIO::Load(const TableSchema& schema,
         // only prepare for kv-only mode, no need to set fields of it.
         m_table_schema.add_locality_groups();
     }
-    if (m_table_schema.column_families_size() == 0) {
-        // only prepare for kv-only mode, no need to set fields of it.
-        m_table_schema.add_column_families();
+
+    RawKey raw_key = m_table_schema.raw_key();
+    if (raw_key == TTLKv || raw_key == GeneralKv) {
         m_kv_only = true;
     } else {
-        m_kv_only = m_table_schema.kv_only();
+        // for compatible
+        if (m_table_schema.column_families_size() == 0) {
+            // only prepare for kv-only mode, no need to set fields of it.
+            m_table_schema.add_column_families();
+            m_kv_only = true;
+        } else {
+            m_kv_only = m_table_schema.kv_only();
+        }
     }
 
     m_key_operator = GetRawKeyOperatorFromSchema(m_table_schema);
@@ -223,14 +232,24 @@ bool TabletIO::Load(const TableSchema& schema,
     m_ldb_options.disable_wal = m_table_schema.disable_wal();
     SetupOptionsForLG();
 
-    m_tablet_path = FLAGS_tera_tabletnode_path_prefix + path;
+    std::string path_prefix = FLAGS_tera_tabletnode_path_prefix;
+    if (*path_prefix.rbegin() != '/') {
+        path_prefix.push_back('/');
+    }
+
+    m_tablet_path = path_prefix + path;
     LOG(INFO) << "[Load] Start Open " << m_tablet_path;
     // recover snapshot
-    std::map<uint64_t, uint64_t>::iterator it = snapshots.begin();
-    for (; it != snapshots.end(); ++it) {
+    for (std::map<uint64_t, uint64_t>::iterator it = snapshots.begin(); it != snapshots.end(); ++it) {
         id_to_snapshot_num_[it->first] = it->second;
         m_ldb_options.snapshots_sequence.push_back(it->second);
     }
+    // recover rollback
+    for (std::map<uint64_t, uint64_t>::iterator it = rollbacks.begin(); it != rollbacks.end(); ++it) {
+        rollbacks_[id_to_snapshot_num_[it->first]] = it->second;
+        m_ldb_options.rollbacks[id_to_snapshot_num_[it->first]] = it->second;
+    }
+
     leveldb::Status db_status = leveldb::DB::Open(m_ldb_options, m_tablet_path, &m_db);
 
     if (!db_status.ok()) {
@@ -554,6 +573,7 @@ bool TabletIO::Read(const leveldb::Slice& key, std::string* value,
             return false;
         }
     }
+    read_option.rollbacks = rollbacks_;
     leveldb::Status db_status = m_db->Get(read_option, key, value);
     if (!db_status.ok()) {
         // LOG(ERROR) << "fail to read value for key: " << key.data()
@@ -581,6 +601,7 @@ StatusCode TabletIO::InitedScanInterator(const std::string& start_tera_key,
             return kSnapshotNotExist;
         }
     }
+    read_option.rollbacks = rollbacks_;
     *scan_it = m_db->NewIterator(read_option);
     TearDownIteratorOptions(&read_option);
 
@@ -784,6 +805,7 @@ bool TabletIO::LowLevelSeek(const std::string& row_key,
             return false;
         }
     }
+    read_option.rollbacks = rollbacks_;
     leveldb::Iterator* it_data = m_db->NewIterator(read_option);
     TearDownIteratorOptions(&read_option);
 
@@ -1269,6 +1291,7 @@ bool TabletIO::Scan(const ScanOption& option, KeyValueList* kv_list,
             return false;
         }
     }
+    read_option.rollbacks = rollbacks_;
     // TTL-KV : m_key_operator::Compare会解RawKey([row_key | expire_timestamp])
     // 因此传递给Leveldb的Key一定要保证以expire_timestamp结尾.
     leveldb::CompactStrategy* strategy = NULL;
@@ -1690,9 +1713,7 @@ bool TabletIO::ReleaseSnapshot(uint64_t snapshot_id, StatusCode* status) {
         }
         m_db_ref_count++;
     }
-
     m_db->ReleaseSnapshot(id_to_snapshot_num_[snapshot_id]);
-
     MutexLock lock(&m_mutex);
     id_to_snapshot_num_.erase(snapshot_id);
     m_db_ref_count--;
@@ -1709,6 +1730,30 @@ void TabletIO::ListSnapshot(std::vector<uint64_t>* snapshot_id) {
         snapshot_id->push_back(it->first);
         VLOG(7) << m_tablet_path << " ListSnapshot: " << it->first << " - " << it->second;
     }
+}
+
+uint64_t TabletIO::Rollback(uint64_t snapshot_id, StatusCode* status) {
+    uint64_t sequence;
+    {
+        MutexLock lock(&m_mutex);
+        if (m_status != kReady) {
+            SetStatusCode(m_status, status);
+            return false;
+        }
+        std::map<uint64_t, uint64_t>::iterator it = id_to_snapshot_num_.find(snapshot_id);
+        if (it == id_to_snapshot_num_.end()) {
+            SetStatusCode(kSnapshotNotExist, status);
+            return false;
+        } else {
+            sequence = it->second;
+        }
+        m_db_ref_count++;
+    }
+    uint64_t rollback_point = m_db->Rollback(sequence);
+    MutexLock lock(&m_mutex);
+    rollbacks_[sequence] = rollback_point;
+    m_db_ref_count--;
+    return rollback_point;
 }
 
 uint32_t TabletIO::GetLGidByCFName(const std::string& cfname) {

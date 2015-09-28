@@ -4,6 +4,7 @@
 
 #include "io/tablet_io.h"
 #include "utils/timer.h"
+#include "utils/utils_cmd.h"
 
 #include "common/base/scoped_ptr.h"
 #include "common/base/string_format.h"
@@ -13,6 +14,7 @@
 #include "gtest/gtest.h"
 #include "leveldb/table_utils.h"
 #include "leveldb/raw_key_operator.h"
+#include "db/filename.h"
 
 #include "proto/status_code.pb.h"
 #include "proto/proto_helper.h"
@@ -23,6 +25,7 @@ DECLARE_int64(tera_tablet_living_period);
 DECLARE_string(tera_leveldb_env_type);
 
 DECLARE_int64(tera_tablet_write_buffer_size);
+DECLARE_string(log_dir);
 
 namespace tera {
 namespace io {
@@ -64,6 +67,7 @@ public:
     }
 
     std::map<uint64_t, uint64_t> empty_snaphsots_;
+    std::map<uint64_t, uint64_t> empty_rollback_;
     TableSchema schema_;
 };
 
@@ -71,9 +75,11 @@ TEST_F(TabletIOTest, General) {
     std::string tablet_path = working_dir + "general";
     std::string key_start = "";
     std::string key_end = "";
+    StatusCode status;
 
-    TabletIO tablet;
-    EXPECT_TRUE(tablet.Load(TableSchema(), key_start, key_end, tablet_path, std::vector<uint64_t>(), empty_snaphsots_));
+    TabletIO tablet(key_start, key_end);
+    EXPECT_TRUE(tablet.Load(TableSchema(), tablet_path, std::vector<uint64_t>(), 
+                            empty_snaphsots_, empty_rollback_, NULL, NULL, NULL, &status));
 
     std::string key = "555";
     std::string value = "value of 555";
@@ -93,17 +99,16 @@ TEST_F(TabletIOTest, Split) {
     std::string tablet_path = working_dir + "split_tablet";
     std::string key_start = "";
     std::string key_end = "";
+    StatusCode status;
 
-    TabletIO tablet;
-    EXPECT_TRUE(tablet.Load(TableSchema(), key_start, key_end, tablet_path, std::vector<uint64_t>(), empty_snaphsots_));
+    TabletIO tablet(key_start, key_end);
+    EXPECT_TRUE(tablet.Load(TableSchema(), tablet_path, std::vector<uint64_t>(), 
+                            empty_snaphsots_, empty_rollback_, NULL, NULL, NULL, &status));
 
     // prepare test data
     for (uint32_t i = 0; i < N; ++i) {
         std::string str = StringFormat("%011llu", i); // NumberToString(i);
         EXPECT_TRUE(tablet.WriteOne(str, str));
-//         if (i % 10 == 0) {
-//             LOG(INFO) << "already write: " << i;
-//         }
     }
 
     // for first tablet
@@ -112,37 +117,42 @@ TEST_F(TabletIOTest, Split) {
         << "]: size = " << tablet.GetDataSize();
 
     std::string split_key;
-//     EXPECT_TRUE(tablet.Split(&split_key));
+    EXPECT_TRUE(tablet.Split(&split_key, &status));
     LOG(INFO) << "split key = " << split_key;
 //     EXPECT_TRUE((split_key == "00000035473"));
     EXPECT_TRUE(tablet.Unload());
 
     // open tablet for other key scope
-
     key_start = "5000";
     key_end = "8000";
-    EXPECT_TRUE(tablet.Load(TableSchema(), key_start, key_end, tablet_path, std::vector<uint64_t>(), empty_snaphsots_));
+    TabletIO other_tablet(key_start, key_end);
+    EXPECT_TRUE(other_tablet.Load(TableSchema(), tablet_path, std::vector<uint64_t>(), 
+                            empty_snaphsots_, empty_rollback_, NULL, NULL, NULL, &status));
     LOG(INFO) << "table[" << key_start << ", " << key_end
-        << "]: size = " << tablet.GetDataSize();
+        << "]: size = " << other_tablet.GetDataSize();
     split_key.clear();
-    EXPECT_FALSE(tablet.Split(&split_key));
-    LOG(INFO) << "split key = " << split_key;
+    EXPECT_FALSE(other_tablet.Split(&split_key, &status));
+    LOG(INFO) << "split key = " << split_key << ", code " << StatusCodeToString(status);
     EXPECT_TRUE((split_key == ""));
-    EXPECT_TRUE(tablet.Unload());
+    EXPECT_TRUE(other_tablet.Unload());
 
     key_start = "";
     key_end = "5000";
-    EXPECT_TRUE(tablet.Load(TableSchema(), key_start, key_end, tablet_path, std::vector<uint64_t>(), empty_snaphsots_));
+    TabletIO l_tablet(key_start, key_end);
+    EXPECT_TRUE(l_tablet.Load(TableSchema(), tablet_path, std::vector<uint64_t>(), 
+                            empty_snaphsots_, empty_rollback_, NULL, NULL, NULL, &status));
     LOG(INFO) << "table[" << key_start << ", " << key_end
-        << "]: size = " << tablet.GetDataSize();
-    EXPECT_TRUE(tablet.Unload());
+        << "]: size = " << l_tablet.GetDataSize();
+    EXPECT_TRUE(l_tablet.Unload());
 
     key_start = "8000";
     key_end = "";
-    EXPECT_TRUE(tablet.Load(TableSchema(), key_start, key_end, tablet_path, std::vector<uint64_t>(), empty_snaphsots_));
+    TabletIO r_tablet(key_start, key_end);
+    EXPECT_TRUE(r_tablet.Load(TableSchema(), tablet_path, std::vector<uint64_t>(), 
+                            empty_snaphsots_, empty_rollback_, NULL, NULL, NULL, &status));
     LOG(INFO) << "table[" << key_start << ", " << key_end
-        << "]: size = " << tablet.GetDataSize();
-    EXPECT_TRUE(tablet.Unload());
+        << "]: size = " << r_tablet.GetDataSize();
+    EXPECT_TRUE(r_tablet.Unload());
 }
 
 TEST_F(TabletIOTest, SplitAndCheckSize) {
@@ -150,17 +160,16 @@ TEST_F(TabletIOTest, SplitAndCheckSize) {
     std::string tablet_path = working_dir + "split_tablet_check";
     std::string key_start = "";
     std::string key_end = "";
-
-    TabletIO tablet;
-    EXPECT_TRUE(tablet.Load(TableSchema(), key_start, key_end, tablet_path, std::vector<uint64_t>(), empty_snaphsots_));
+    StatusCode status;
+        
+    TabletIO tablet(key_start, key_end);
+    EXPECT_TRUE(tablet.Load(TableSchema(), tablet_path, std::vector<uint64_t>(), 
+                            empty_snaphsots_, empty_rollback_, NULL, NULL, NULL, &status));
 
     // prepare test data
     for (uint32_t i = 0; i < N; ++i) {
         std::string str = StringFormat("%011llu", i); // NumberToString(i);
         EXPECT_TRUE(tablet.WriteOne(str, str));
-//         if (i % 10 == 0) {
-//             LOG(INFO) << "already write: " << i;
-//         }
     }
 
     // for first tablet
@@ -169,7 +178,7 @@ TEST_F(TabletIOTest, SplitAndCheckSize) {
         << "]: size = " << tablet.GetDataSize();
 
     std::string split_key;
-//     EXPECT_TRUE(tablet.Split(&split_key));
+    EXPECT_TRUE(tablet.Split(&split_key));
     LOG(INFO) << "split key = " << split_key;
     LOG(INFO) << "table[" << key_start << ", " << split_key
         << "]: size = " << tablet.GetDataSize(key_start, split_key);
@@ -178,15 +187,19 @@ TEST_F(TabletIOTest, SplitAndCheckSize) {
     EXPECT_TRUE(tablet.Unload());
 
     // open from split key to check scope size
-    EXPECT_TRUE(tablet.Load(TableSchema(), key_start, split_key, tablet_path, std::vector<uint64_t>(), empty_snaphsots_));
+    TabletIO l_tablet(key_start, split_key);
+    EXPECT_TRUE(l_tablet.Load(TableSchema(), tablet_path, std::vector<uint64_t>(), 
+                            empty_snaphsots_, empty_rollback_, NULL, NULL, NULL, &status));
     LOG(INFO) << "table[" << key_start << ", " << split_key
-        << "]: size = " << tablet.GetDataSize();
-    EXPECT_TRUE(tablet.Unload());
+        << "]: size = " << l_tablet.GetDataSize();
+    EXPECT_TRUE(l_tablet.Unload());
 
-    EXPECT_TRUE(tablet.Load(TableSchema(), split_key, key_end, tablet_path, std::vector<uint64_t>(), empty_snaphsots_));
+    TabletIO r_tablet(split_key, key_end);
+    EXPECT_TRUE(r_tablet.Load(TableSchema(), tablet_path, std::vector<uint64_t>(), 
+                            empty_snaphsots_, empty_rollback_, NULL, NULL, NULL, &status));
     LOG(INFO) << "table[" << split_key << ", " << key_end
-        << "]: size = " << tablet.GetDataSize();
-    EXPECT_TRUE(tablet.Unload());
+        << "]: size = " << r_tablet.GetDataSize();
+    EXPECT_TRUE(r_tablet.Unload());
 
     LOG(INFO) << "SplitAndCheckSize() end ...";
 }
@@ -195,9 +208,11 @@ TEST_F(TabletIOTest, OverWrite) {
     std::string tablet_path = working_dir + "general_tablet";
     std::string key_start = "";
     std::string key_end = "";
+    StatusCode status;
 
-    TabletIO tablet;
-    EXPECT_TRUE(tablet.Load(TableSchema(), key_start, key_end, tablet_path, std::vector<uint64_t>(), empty_snaphsots_));
+    TabletIO tablet(key_start, key_end);
+    EXPECT_TRUE(tablet.Load(TableSchema(), tablet_path, std::vector<uint64_t>(), 
+                            empty_snaphsots_, empty_rollback_, NULL, NULL, NULL, &status));
 
     std::string key = "555";
     std::string value = "value of 555";
@@ -214,13 +229,16 @@ TEST_F(TabletIOTest, OverWrite) {
     EXPECT_TRUE(tablet.Unload());
 }
 
-TEST_F(TabletIOTest, DISABLED_Compact) {
+//TEST_F(TabletIOTest, DISABLED_Compact) {
+TEST_F(TabletIOTest, Compact) {
     std::string tablet_path = working_dir + "compact_tablet";
     std::string key_start = "";
     std::string key_end = "";
+    StatusCode status;
 
-    TabletIO tablet;
-    EXPECT_TRUE(tablet.Load(TableSchema(), key_start, key_end, tablet_path, std::vector<uint64_t>(), empty_snaphsots_));
+    TabletIO tablet(key_start, key_end);
+    EXPECT_TRUE(tablet.Load(TableSchema(), tablet_path, std::vector<uint64_t>(), 
+                            empty_snaphsots_, empty_rollback_, NULL, NULL, NULL, &status));
 
     // prepare test data
     for (int i = 0; i < 100; ++i) {
@@ -236,10 +254,12 @@ TEST_F(TabletIOTest, DISABLED_Compact) {
     // open another scope
     std::string new_key_start = StringFormat("%011llu", 5); // NumberToString(500);
     std::string new_key_end = StringFormat("%011llu", 50); // NumberToString(800);
-    EXPECT_TRUE(tablet.Load(TableSchema(), key_start, key_end, tablet_path, std::vector<uint64_t>(), empty_snaphsots_));
-    EXPECT_TRUE(tablet.Compact());
+    TabletIO new_tablet(new_key_start, new_key_end);
+    EXPECT_TRUE(new_tablet.Load(TableSchema(), tablet_path, std::vector<uint64_t>(), 
+                            empty_snaphsots_, empty_rollback_, NULL, NULL, NULL, &status));
+    EXPECT_TRUE(new_tablet.Compact(&status));
 
-    int64_t new_table_size = tablet.GetDataSize();
+    int64_t new_table_size = new_tablet.GetDataSize();
     LOG(INFO) << "table[" << new_key_start << ", " << new_key_end
         << "]: size = " << new_table_size;
 
@@ -247,23 +267,26 @@ TEST_F(TabletIOTest, DISABLED_Compact) {
         std::string key = StringFormat("%011llu", i); // NumberToString(i);
         std::string value;
         if (i >= 5 && i < 50) {
-            EXPECT_TRUE(tablet.Read(key, &value));
+            EXPECT_TRUE(new_tablet.Read(key, &value));
             EXPECT_EQ(key, value);
         } else {
-            EXPECT_FALSE(tablet.Read(key, &value));
+            EXPECT_FALSE(new_tablet.Read(key, &value));
         }
     }
 
-    EXPECT_TRUE(tablet.Unload());
+    EXPECT_TRUE(new_tablet.Unload());
 }
 
 TEST_F(TabletIOTest, LowLevelScan) {
     std::string tablet_path = working_dir + "llscan_tablet";
     std::string key_start = "";
     std::string key_end = "";
+    StatusCode status;
 
-    TabletIO tablet;
-    EXPECT_TRUE(tablet.Load(GetTableSchema(), key_start, key_end, tablet_path, std::vector<uint64_t>(), empty_snaphsots_));
+    TabletIO tablet(key_start, key_end);
+    EXPECT_TRUE(tablet.Load(GetTableSchema(), tablet_path, std::vector<uint64_t>(), 
+                            empty_snaphsots_, empty_rollback_, NULL, NULL, NULL, &status));
+
     std::string tkey1;
 
     // delete this key
@@ -334,17 +357,19 @@ TEST_F(TabletIOTest, LowLevelScan) {
     EXPECT_TRUE(tablet.Unload());
 }
 
-TEST_F(TabletIOTest, DISABLED_SplitToSubTable) {
+TEST_F(TabletIOTest, SplitToSubTable) {
     LOG(INFO) << "SplitToSubTable() begin ...";
-    std::string tablet_path = working_dir + "split_to_subtable";
+    std::string tablet_path = leveldb::GetTabletPathFromNum(working_dir, 1);
     std::string key_start = "";
     std::string key_end = "";
+    StatusCode status;
 
-    TabletIO tablet;
-    EXPECT_TRUE(tablet.Load(GetTableSchema(), key_start, key_end, tablet_path, std::vector<uint64_t>(), empty_snaphsots_));
+    TabletIO tablet(key_start, key_end);
+    EXPECT_TRUE(tablet.Load(TableSchema(), tablet_path, std::vector<uint64_t>(), 
+                            empty_snaphsots_, empty_rollback_, NULL, NULL, NULL, &status));
 
     // prepare test data
-    for (int i = 0; i < N; ++i) {
+    for (uint64_t i = 0; i < N; ++i) {
         std::string str = StringFormat("%011llu", i); // NumberToString(i);
         EXPECT_TRUE(tablet.WriteOne(str, str));
     }
@@ -362,41 +387,49 @@ TEST_F(TabletIOTest, DISABLED_SplitToSubTable) {
     LOG(INFO) << "table[" << split_key << ", " << key_end
         << "]: size = " << tablet.GetDataSize(split_key, key_end);
     EXPECT_TRUE(tablet.Unload());
-
+        
     // open from split key to check scope size
     std::string split_path_1;
     std::string split_path_2;
-    ASSERT_TRUE(leveldb::GetSplitPath(tablet_path, &split_path_1, &split_path_2));
+    split_path_1 = leveldb::GetTabletPathFromNum(working_dir, 2);
+    split_path_2 = leveldb::GetTabletPathFromNum(working_dir, 3);
+    //ASSERT_TRUE(leveldb::GetSplitPath(tablet_path, &split_path_1, &split_path_2));
+       LOG(INFO) << tablet_path << ", lpath " << split_path_1 << ", rpath " << split_path_2 << "\n"; 
+    std::vector<uint64_t> parent_tablet;
+    parent_tablet.push_back(1);
 
     // 1. load sub-table 1
-    EXPECT_TRUE(tablet.Load(GetTableSchema(), key_start, split_key, split_path_1, std::vector<uint64_t>(), empty_snaphsots_));
+    TabletIO l_tablet(key_start, split_key);
+    EXPECT_TRUE(l_tablet.Load(TableSchema(), split_path_1, parent_tablet, 
+                            empty_snaphsots_, empty_rollback_, NULL, NULL, NULL, &status));
     LOG(INFO) << "table[" << key_start << ", " << split_key
-        << "]: size = " << tablet.GetDataSize();
+        << "]: size = " << l_tablet.GetDataSize();
     // varify result
-    for (int i = 0; i < N / 3; ++i) {
+    for (uint64_t i = 0; i < 41087; ++i) {
         std::string key = StringFormat("%011llu", i);
         std::string value;
-        EXPECT_TRUE(tablet.Read(key, &value));
+        EXPECT_TRUE(l_tablet.Read(key, &value));
         ASSERT_EQ(key, value);
     }
-    EXPECT_TRUE(tablet.Unload());
-
+    EXPECT_TRUE(l_tablet.Unload());
+    
     // 2. load sub-table 2
-    EXPECT_TRUE(tablet.Load(GetTableSchema(), split_key, key_end, split_path_2, std::vector<uint64_t>(), empty_snaphsots_));
+    TabletIO r_tablet(split_key, key_end);
+    EXPECT_TRUE(r_tablet.Load(TableSchema(), split_path_2, parent_tablet, 
+                            empty_snaphsots_, empty_rollback_, NULL, NULL, NULL, &status));
     LOG(INFO) << "table[" << split_key << ", " << key_end
-        << "]: size = " << tablet.GetDataSize();
+        << "]: size = " << r_tablet.GetDataSize();
     // varify result
-    for (int i = N / 3; i < N; ++i) {
+    for (uint64_t i = 41087; i < N; ++i) {
         std::string key = StringFormat("%011llu", i);
         std::string value;
-        EXPECT_TRUE(tablet.Read(key, &value));
+        EXPECT_TRUE(r_tablet.Read(key, &value));
         ASSERT_EQ(key, value);
     }
-    EXPECT_TRUE(tablet.Unload());
-
+    EXPECT_TRUE(r_tablet.Unload());
+    
     LOG(INFO) << "SplitToSubTable() end ...";
 }
-
 } // namespace io
 } // namespace tera
 
@@ -406,6 +439,12 @@ int main(int argc, char** argv) {
     FLAGS_tera_tablet_write_buffer_size = 1;
     FLAGS_tera_leveldb_env_type = "local";
     ::google::InitGoogleLogging(argv[0]);
+    FLAGS_log_dir = "./log";
+    if (access(FLAGS_log_dir.c_str(), F_OK)) {
+        mkdir(FLAGS_log_dir.c_str(), 0777);
+    }
+    std::string pragram_name("tera");
+    tera::utils::SetupLog(pragram_name);
     ::google::ParseCommandLineFlags(&argc, &argv, true);
     ::testing::InitGoogleTest(&argc, argv);
     return RUN_ALL_TESTS();

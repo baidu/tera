@@ -32,6 +32,14 @@ class SequentialFile;
 class Slice;
 class WritableFile;
 
+enum ThreadPoolScore {
+   kDeleteLogUrgentScore = 100,
+   kDumpMemTableUrgentScore = 90,
+   kDumpMemTableScore = 60,
+   kDeleteLogScore = 50,
+   kManualCompactScore = 10,
+};
+
 class Env {
  public:
   Env() { }
@@ -85,8 +93,7 @@ class Env {
   // The names are relative to "dir".
   // Original contents of *results are dropped.
   virtual Status GetChildren(const std::string& dir,
-                             std::vector<std::string>* result,
-                             std::vector<int64_t>* ctime = NULL) = 0;
+                             std::vector<std::string>* result) = 0;
 
   // Delete the named file.
   virtual Status DeleteFile(const std::string& fname) = 0;
@@ -324,8 +331,8 @@ class EnvWrapper : public Env {
     return target_->NewWritableFile(f, r);
   }
   bool FileExists(const std::string& f) { return target_->FileExists(f); }
-  Status GetChildren(const std::string& dir, std::vector<std::string>* r, std::vector<int64_t>* ctime = NULL) {
-    return target_->GetChildren(dir, r, ctime);
+  Status GetChildren(const std::string& dir, std::vector<std::string>* r) {
+    return target_->GetChildren(dir, r);
   }
   Status DeleteFile(const std::string& f) { return target_->DeleteFile(f); }
   Status CreateDir(const std::string& d) { return target_->CreateDir(d); }

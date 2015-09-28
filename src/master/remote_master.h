@@ -30,6 +30,11 @@ public:
                      DelSnapshotResponse* response,
                      google::protobuf::Closure* done);
 
+    void Rollback(google::protobuf::RpcController* controller,
+                  const RollbackRequest* request,
+                  RollbackResponse* response,
+                  google::protobuf::Closure* done);
+
     void CreateTable(google::protobuf::RpcController* controller,
                      const CreateTableRequest* request,
                      CreateTableResponse* response,
@@ -80,6 +85,11 @@ public:
                  CmdCtrlResponse* response,
                  google::protobuf::Closure* done);
 
+    void RenameTable(google::protobuf::RpcController* controller,
+                const RenameTableRequest* request,
+                RenameTableResponse* response,
+                google::protobuf::Closure* done);
+
 private:
     void DoGetSnapshot(google::protobuf::RpcController* controller,
                        const GetSnapshotRequest* request,
@@ -89,6 +99,10 @@ private:
                        const DelSnapshotRequest* request,
                        DelSnapshotResponse* response,
                        google::protobuf::Closure* done);
+    void DoRollback(google::protobuf::RpcController* controller,
+                  const RollbackRequest* request,
+                  RollbackResponse* response,
+                  google::protobuf::Closure* done);
     void DoCreateTable(google::protobuf::RpcController* controller,
                        const CreateTableRequest* request,
                        CreateTableResponse* response,

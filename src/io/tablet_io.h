@@ -90,6 +90,7 @@ public:
                       const std::string& path,
                       const std::vector<uint64_t>& parent_tablets,
                       std::map<uint64_t, uint64_t> snapshots,
+                      std::map<uint64_t, uint64_t> rollbacks,
                       leveldb::Logger* logger = NULL,
                       leveldb::Cache* block_cache = NULL,
                       leveldb::TableCache* table_cache = NULL,
@@ -151,6 +152,8 @@ public:
                          StatusCode* status = NULL);
     bool ReleaseSnapshot(uint64_t snapshot_id,  StatusCode* status = NULL);
     void ListSnapshot(std::vector<uint64_t>* snapshot_id);
+
+    uint64_t Rollback(uint64_t snapshot_id, StatusCode* status);
 
     uint32_t GetLGidByCFName(const std::string& cfname);
 
@@ -231,6 +234,7 @@ private:
     TableSchema m_table_schema;
     bool m_kv_only;
     std::map<uint64_t, uint64_t> id_to_snapshot_num_;
+    std::map<uint64_t, uint64_t> rollbacks_;
 
     const leveldb::RawKeyOperator* m_key_operator;
 

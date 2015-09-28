@@ -82,6 +82,9 @@ public:
                          ReleaseSnapshotResponse* response,
                          google::protobuf::Closure* done);
 
+    void Rollback(const SnapshotRollbackRequest* request, SnapshotRollbackResponse* response,
+                  google::protobuf::Closure* done);
+
     void Query(const QueryRequest* request, QueryResponse* response,
                google::protobuf::Closure* done);
 

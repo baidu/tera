@@ -59,6 +59,10 @@ public:
     bool ReleaseSnapshot(const ReleaseSnapshotRequest* request,
                          ReleaseSnapshotResponse* response,
                          Closure<void, ReleaseSnapshotRequest*, ReleaseSnapshotResponse*, bool, int>* done = NULL);
+    bool Rollback(const SnapshotRollbackRequest* request,
+                  SnapshotRollbackResponse* response,
+                  Closure<void, SnapshotRollbackRequest*, SnapshotRollbackResponse*, bool, int>* done = NULL);
+
 
     bool Query(const QueryRequest* request,
                QueryResponse* response,
