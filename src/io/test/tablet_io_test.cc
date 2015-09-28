@@ -3,6 +3,9 @@
 // found in the LICENSE file.
 
 #include "io/tablet_io.h"
+
+#include <stdlib.h>
+
 #include "utils/timer.h"
 #include "utils/utils_cmd.h"
 
@@ -412,7 +415,7 @@ TEST_F(TabletIOTest, SplitToSubTable) {
     LOG(INFO) << "table[" << key_start << ", " << split_key
         << "]: size = " << size;
     // varify result
-    int split_key_num = std::atoi(split_key.c_str());
+    int split_key_num = atoi(split_key.c_str());
     LOG(INFO) << "split_key_num " << split_key_num;
     for (uint64_t i = 0; i < (uint64_t)split_key_num; ++i) {
         std::string key = StringFormat("%011llu", i);
