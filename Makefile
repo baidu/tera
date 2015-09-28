@@ -119,9 +119,9 @@ prop_tree_test: src/utils/test/prop_tree_test.o $(LIBRARY)
 tprinter_test: src/utils/test/tprinter_test.o $(LIBRARY)
 	$(CXX) -o $@ $^ $(LDFLAGS) 
 
-tablet_io_test: src/io/test/tablet_io_test.o src/leveldb/util/*.o src/leveldb/db/write_batch.o \
+tablet_io_test: src/io/test/tablet_io_test.o src/leveldb/db/write_batch.o \
 		src/tabletnode/tabletnode_sysinfo.o src/leveldb/db/db.o src/leveldb/db/filename.o \
-		$(LEVELDB_LIB) $(IO_OBJ) $(PROTO_OBJ) $(OTHER_OBJ) $(COMMON_OBJ)
+		$(IO_OBJ) $(PROTO_OBJ) $(OTHER_OBJ) $(COMMON_OBJ) $(LEVELDB_LIB)
 	$(CXX) -o $@ $^ $(LDFLAGS)
 
 $(ALL_OBJ): %.o: %.cc $(PROTO_OUT_H)
