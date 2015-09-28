@@ -103,7 +103,7 @@ struct Options {
 
   // If true, the database will be created if it is missing.
   // Default: false
-  bool create_if_missing;
+  // bool create_if_missing;
 
   // If true, an error is raised if the database already exists.
   // Default: false

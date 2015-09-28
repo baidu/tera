@@ -291,7 +291,6 @@ class DBTest {
       opts = *options;
     } else {
       opts = CurrentOptions();
-      opts.create_if_missing = true;
     }
     last_options_ = opts;
 
@@ -1419,7 +1418,6 @@ TEST(DBTest, CustomComparator) {
   };
   NumberComparator cmp;
   Options new_options = CurrentOptions();
-  new_options.create_if_missing = true;
   new_options.comparator = &cmp;
   new_options.filter_policy = NULL;     // Cannot use bloom filters
   new_options.write_buffer_size = 1000;  // Compact more often
@@ -1484,7 +1482,6 @@ TEST(DBTest, DBOpen_Options) {
   std::string dbname = test::TmpDir() + "/db_options_test";
   DestroyDB(dbname, Options());
 
-  // Does not exist, create_if_missing is default
   DB* db = NULL;
   Options opts;
   Status s = DB::Open(opts, dbname, &db);
@@ -1586,7 +1583,6 @@ TEST(DBTest, ManifestWriteError) {
     // Insert foo=>bar mapping
     Options options = CurrentOptions();
     options.env = env_;
-    options.create_if_missing = true;
     options.error_if_exists = false;
     DestroyAndReopen(&options);
     ASSERT_OK(Put("foo", "bar"));
@@ -2126,7 +2122,6 @@ void BM_LogAndApply(int iters, int num_base_files) {
 
   DB* db = NULL;
   Options opts;
-  opts.create_if_missing = true;
   Status s = DB::Open(opts, dbname, &db);
   ASSERT_OK(s);
   ASSERT_TRUE(db != NULL);

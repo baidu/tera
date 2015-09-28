@@ -44,9 +44,7 @@ class CorruptionTest {
     DestroyDB(dbname_, options_);
 
     db_ = NULL;
-    options_.create_if_missing = true;
     Reopen();
-    options_.create_if_missing = false;
   }
 
   ~CorruptionTest() {

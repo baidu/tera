@@ -193,7 +193,6 @@ bool TabletIO::Load(const TableSchema& schema,
     m_ldb_options.max_block_log_number = FLAGS_tera_tablet_max_block_log_number;
     m_ldb_options.write_log_time_out = FLAGS_tera_tablet_write_log_time_out;
     m_ldb_options.log_async_mode = FLAGS_tera_log_async_mode;
-    m_ldb_options.create_if_missing = true;
     m_ldb_options.info_log = logger;
     m_ldb_options.max_open_files = FLAGS_tera_memenv_table_cache_size;
 

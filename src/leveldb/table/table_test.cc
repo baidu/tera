@@ -394,7 +394,6 @@ class DBConstructor: public Constructor {
     Status status = DestroyDB(name, options);
     ASSERT_TRUE(status.ok()) << status.ToString();
 
-    options.create_if_missing = true;
     options.error_if_exists = true;
     options.write_buffer_size = 10000;  // Something small to force merging
     status = DB::Open(options, name, &db_);

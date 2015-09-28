@@ -188,7 +188,6 @@ TEST(MemEnvTest, LargeWrite) {
 
 TEST(MemEnvTest, DBTest) {
   Options options;
-  options.create_if_missing = true;
   options.env = env_;
   DB* db;
 

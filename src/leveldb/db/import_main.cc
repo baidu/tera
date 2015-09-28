@@ -165,7 +165,6 @@ int main(int argc, char* argv[]) {
         return -1;
     }
     leveldb::Options opts;
-    opts.create_if_missing = true;
     std::string dbname = argv[1];
     leveldb::DirectBuildDB(dbname, opts);
     return 0;
