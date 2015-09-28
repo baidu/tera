@@ -1,7 +1,9 @@
 #function test case运行方法
 
 ##准备工作
-安装python的nose框架
+安装python的nose框架,仅仅第一次需要执行
+
+* jumbo search nose
 
 ##运行
 * cd function_test

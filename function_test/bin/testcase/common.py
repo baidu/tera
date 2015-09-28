@@ -20,6 +20,16 @@ def print_debug_msg(sid=0, msg=""):
     print "@%d======================%s"%(sid, msg)
 
 
+def exe_and_check_res(cmd):
+    """
+    execute cmd and check result
+    """
+
+    print cmd
+    ret = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, shell=True)
+    nose.tools.assert_equal(ret.stderr.readlines(), [])
+
+
 def construct_env():
     """
     provide start env
@@ -37,24 +47,10 @@ def table_prepare():
 
     cmd = "cd ../; ./teracli createbyfile testcase/data/create_table_schema; \
            cd testcase/"
-    print cmd
-    ret = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, shell=True)
-    nose.tools.assert_equal(ret.stderr.readlines(), [])
+    exe_and_check_res(cmd)
 
     cmd = "cd ../; ./teracli create 'table_test002 <storage=flash, splitsize=2048, mergesize=128>'; cd testcase/"
-    print cmd
-    ret = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, shell=True)
-    nose.tools.assert_equal(ret.stderr.readlines(), [])
-
-
-def exe_and_check_res(cmd):
-    """
-    execute cmd and check result
-    """
-
-    print cmd
-    ret = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, shell=True)
-    nose.tools.assert_equal(ret.stderr.readlines(), [])
+    exe_and_check_res(cmd)
 
 
 def clear_env():
@@ -65,21 +61,13 @@ def clear_env():
     print_debug_msg(4, "delete table_test001 and table_test002, clear env")
 
     cmd = "cd ../; ./teracli disable table_test001; cd testcase/"    
-    print cmd
-    ret = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, shell=True)
-    nose.tools.assert_equal(ret.stderr.readlines(), [])
+    exe_and_check_res(cmd)   
 
     cmd = "cd ../; ./teracli drop table_test001; cd testcase/"                                                  
-    print cmd 
-    ret = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, shell=True)
-    nose.tools.assert_equal(ret.stderr.readlines(), [])
+    exe_and_check_res(cmd)
 
     cmd = "cd ../; ./teracli disable table_test002; cd testcase/"                                               
-    print cmd
-    ret = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, shell=True)
-    nose.tools.assert_equal(ret.stderr.readlines(), [])
+    exe_and_check_res(cmd)
 
     cmd = "cd ../; ./teracli drop table_test002; cd testcase/"                                                  
-    print cmd
-    ret = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, shell=True)
-    nose.tools.assert_equal(ret.stderr.readlines(), [])
+    exe_and_check_res(cmd)
