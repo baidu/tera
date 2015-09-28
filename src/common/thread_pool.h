@@ -77,7 +77,7 @@ public:
     }
 
     // Task definition.
-    typedef boost::function<void ()> Task;
+    typedef boost::function<void (int64_t)> Task;
 
     // Add a task to the thread pool.
     void AddTask(const Task& task) {
@@ -199,7 +199,7 @@ private:
                         latest_.erase(it);
                         running_task_id_ = bg_item.id;
                         mutex_.Unlock();
-                        task();
+                        task(bg_item.id);
                         task_cost_sum_ += timer::get_micros() - now_time;
                         task_count_++;
                         mutex_.Lock("ThreadProcRelock");
@@ -221,7 +221,7 @@ private:
                 schedule_cost_sum_ += start_time - exe_time;
                 schedule_count_++;
                 mutex_.Unlock();
-                task();
+                task(0);
                 int64_t finish_time = timer::get_micros();
                 task_cost_sum_ += finish_time - start_time;
                 task_count_++;

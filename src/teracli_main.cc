@@ -900,8 +900,9 @@ int32_t ShowTabletList(const TabletMetaList& tablet_list, bool is_server_addr, b
             row.push_back(meta.path());
             row.push_back(StatusCodeToString(meta.status()));
 
+            uint64_t size = meta.size();
             std::string size_str =
-                utils::ConvertByteToString(meta.table_size()) +
+                utils::ConvertByteToString(size) +
                 "[";
             for (int l = 0; l < meta.lg_size_size(); ++l) {
                 size_str += utils::ConvertByteToString(meta.lg_size(l));
@@ -942,7 +943,9 @@ int32_t ShowTabletList(const TabletMetaList& tablet_list, bool is_server_addr, b
             row.push_back(meta.server_addr());
             row.push_back(meta.path());
             row.push_back(StatusCodeToString(meta.status()));
-            row.push_back(utils::ConvertByteToString(meta.table_size()));
+
+            uint64_t size = meta.size();
+            row.push_back(utils::ConvertByteToString(size));
             row.push_back(DebugString(meta.key_range().key_start()).substr(0, 20));
             row.push_back(DebugString(meta.key_range().key_end()).substr(0, 20));
             printer.AddRow(row);
@@ -1001,7 +1004,7 @@ int32_t ShowAllTables(Client* client, bool is_x, bool show_all, ErrorCode* err) 
         std::vector<int64_t> lg_size;
         for (int32_t i = 0; i < tablet_list.meta_size(); ++i) {
             if (tablet_list.meta(i).table_name() == tablename) {
-                size += tablet_list.meta(i).table_size();
+                size += tablet_list.meta(i).size();
                 tablet++;
                 if (tablet_list.counter(i).is_on_busy()) {
                     busy++;
@@ -2152,7 +2155,7 @@ int32_t Meta2Op(Client *client, int32_t argc, char** argv) {
                 << meta.key_range().key_start() << ","
                 << meta.key_range().key_end() << "], "
                 << meta.path() << ", " << meta.server_addr() << ", "
-                << meta.table_size() << ", "
+                << meta.size() << ", "
                 << StatusCodeToString(meta.status()) << ", "
                 << StatusCodeToString(meta.compact_status()) << std::endl;
         }
@@ -2166,7 +2169,7 @@ int32_t Meta2Op(Client *client, int32_t argc, char** argv) {
                 << meta.key_range().key_start() << ","
                 << meta.key_range().key_end() << "], "
                 << meta.path() << ", " << meta.server_addr() << ", "
-                << meta.table_size() << ", "
+                << meta.size() << ", "
                 << StatusCodeToString(meta.status()) << ", "
                 << StatusCodeToString(meta.compact_status()) << std::endl;
             // ignore invalid tablet
