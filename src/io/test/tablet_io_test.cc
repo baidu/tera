@@ -6,21 +6,20 @@
 
 #include <stdlib.h>
 
-#include "utils/timer.h"
-#include "utils/utils_cmd.h"
+#include "gflags/gflags.h"
+#include "glog/logging.h"
+#include "gtest/gtest.h"
 
 #include "common/base/scoped_ptr.h"
 #include "common/base/string_format.h"
 #include "common/base/string_number.h"
-#include "gflags/gflags.h"
-#include "glog/logging.h"
-#include "gtest/gtest.h"
-#include "leveldb/table_utils.h"
-#include "leveldb/raw_key_operator.h"
 #include "db/filename.h"
-
-#include "proto/status_code.pb.h"
+#include "leveldb/raw_key_operator.h"
+#include "leveldb/table_utils.h"
 #include "proto/proto_helper.h"
+#include "proto/status_code.pb.h"
+#include "utils/timer.h"
+#include "utils/utils_cmd.h"
 
 DECLARE_string(tera_tabletnode_path_prefix);
 DECLARE_int32(tera_io_retry_max_times);
