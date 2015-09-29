@@ -573,7 +573,7 @@ int main(int argc, char** argv) {
             break;
         case DELETE:
             opt = DEL;
-            finish = !get_next_row(NULL, &row, &column, NULL, NULL, NULL);
+            finish = !get_next_row(NULL, &row, &column, &largest_ts, NULL, NULL);
             break;
         case MIX:
             finish = !get_next_row(&opt, &row, &column, &largest_ts, &smallest_ts, &value);
@@ -614,7 +614,7 @@ int main(int argc, char** argv) {
             adapter->Read(row, column, largest_ts, smallest_ts);
             break;
         case DEL:
-            adapter->Delete(row, column);
+            adapter->Delete(row, column, largest_ts);
             break;
         default:
             abort();

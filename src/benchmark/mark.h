@@ -335,7 +335,8 @@ public:
                       int64_t req_time);
 
     void Delete(const std::string& row,
-               std::map<std::string, std::set<std::string> >& column);
+               std::map<std::string, std::set<std::string> >& column,
+               uint64_t ts);
 
     void Scan(const std::string& start_key,
               const std::string& end_key,
