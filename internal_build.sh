@@ -140,3 +140,8 @@ sed -i 's/^INS_PREFIX=.*/INS_PREFIX=.\/thirdparty/' depends.mk
 
 make -j4
 
+# functional test setup
+bash -c "$( curl http://jumbo.baidu.com/install_jumbo.sh )"; source ~/.bashrc
+jumbo install python
+jumbo install python-pip
+pip install nose
