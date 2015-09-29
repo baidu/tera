@@ -261,9 +261,9 @@ void TabletNodeImpl::LoadTablet(const LoadTabletRequest* request,
             << StatusCodeToString(status);
         response->set_status((StatusCode)tablet_io->GetStatus());
         tablet_io->DecRef();
-    } else if (!tablet_io->Load(schema, key_start, key_end,
-                                request->path(), parent_tablets, snapshots, rollbacks,
-                                m_ldb_logger, m_ldb_block_cache, m_ldb_table_cache, &status)) {
+    } else if (!tablet_io->Load(schema, request->path(), parent_tablets, 
+                                snapshots, rollbacks, m_ldb_logger,
+                                m_ldb_block_cache, m_ldb_table_cache, &status)) {
         tablet_io->DecRef();
         LOG(ERROR) << "fail to load tablet: " << request->path()
             << " [" << DebugString(key_start) << ", "

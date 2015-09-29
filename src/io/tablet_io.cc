@@ -69,8 +69,10 @@ extern tera::Counter row_read_delay;
 namespace tera {
 namespace io {
 
-TabletIO::TabletIO()
+TabletIO::TabletIO(const std::string& key_start, const std::string& key_end)
     : m_async_writer(NULL),
+      m_start_key(key_start),
+      m_end_key(key_end),
       m_compact_status(kTableNotCompact),
       m_status(kNotInit),
       m_ref_count(1), m_db_ref_count(0), m_db(NULL),
@@ -124,8 +126,6 @@ TabletIO::StatCounter& TabletIO::GetCounter() {
 }
 
 bool TabletIO::Load(const TableSchema& schema,
-                    const std::string& key_start,
-                    const std::string& key_end,
                     const std::string& path,
                     const std::vector<uint64_t>& parent_tablets,
                     std::map<uint64_t, uint64_t> snapshots,
@@ -136,8 +136,7 @@ bool TabletIO::Load(const TableSchema& schema,
                     StatusCode* status) {
     {
         MutexLock lock(&m_mutex);
-        if (m_status == kReady && m_start_key == key_start
-            && m_end_key == key_end) {
+        if (m_status == kReady) {
             return true;
         } else if (m_status != kNotInit) {
             SetStatusCode(m_status, status);
@@ -170,19 +169,19 @@ bool TabletIO::Load(const TableSchema& schema,
 
     m_key_operator = GetRawKeyOperatorFromSchema(m_table_schema);
     // [m_raw_start_key, m_raw_end_key)
-    m_raw_start_key = key_start;
-    if (!m_kv_only && !key_start.empty()) {
-        m_key_operator->EncodeTeraKey(key_start, "", "", kLatestTs,
+    m_raw_start_key = m_start_key;
+    if (!m_kv_only && !m_start_key.empty()) {
+        m_key_operator->EncodeTeraKey(m_start_key, "", "", kLatestTs,
                                       leveldb::TKT_FORSEEK, &m_raw_start_key);
-    } else if (m_kv_only && m_table_schema.raw_key() == TTLKv && !key_start.empty()) {
-        m_key_operator->EncodeTeraKey(key_start, "", "", 0, leveldb::TKT_FORSEEK, &m_raw_start_key);
+    } else if (m_kv_only && m_table_schema.raw_key() == TTLKv && !m_start_key.empty()) {
+        m_key_operator->EncodeTeraKey(m_start_key, "", "", 0, leveldb::TKT_FORSEEK, &m_raw_start_key);
     }
-    m_raw_end_key = key_end;
-    if (!m_kv_only && !key_end.empty()) {
-        m_key_operator->EncodeTeraKey(key_end, "", "", kLatestTs,
+    m_raw_end_key = m_end_key;
+    if (!m_kv_only && !m_end_key.empty()) {
+        m_key_operator->EncodeTeraKey(m_end_key, "", "", kLatestTs,
                                       leveldb::TKT_FORSEEK, &m_raw_end_key);
-    } else if (m_kv_only && m_table_schema.raw_key() == TTLKv && !key_end.empty()) {
-        m_key_operator->EncodeTeraKey(key_end, "", "", 0, leveldb::TKT_FORSEEK, &m_raw_end_key);
+    } else if (m_kv_only && m_table_schema.raw_key() == TTLKv && !m_end_key.empty()) {
+        m_key_operator->EncodeTeraKey(m_end_key, "", "", 0, leveldb::TKT_FORSEEK, &m_raw_end_key);
     }
 
     m_ldb_options.key_start = m_raw_start_key;
@@ -265,9 +264,6 @@ bool TabletIO::Load(const TableSchema& schema,
 //         delete m_ldb_options.env;
         return false;
     }
-
-    m_start_key = key_start;
-    m_end_key = key_end;
 
     m_async_writer = new TabletWriter(this);
     m_async_writer->Start();
