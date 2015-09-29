@@ -1173,19 +1173,6 @@ Status DBImpl::DoCompactionWork(CompactionState* compact) {
       }
       mutex_.Unlock();
     }
-#if 0
-    // Prioritize immutable compaction work
-    if (has_imm_.NoBarrier_Load() != NULL) {
-      const uint64_t imm_start = env_->NowMicros();
-      mutex_.Lock();
-      if (imm_ != NULL) {
-        CompactMemTable();
-        bg_cv_.SignalAll();  // Wakeup MakeRoomForWrite() if necessary
-      }
-      mutex_.Unlock();
-      imm_micros += (env_->NowMicros() - imm_start);
-    }
-#endif 
 
     Slice key = input->key();
     if (compact->compaction->ShouldStopBefore(key) &&

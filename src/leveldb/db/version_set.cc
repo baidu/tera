@@ -2012,7 +2012,7 @@ void Compaction::SetInputsFilesBeingCompacted(bool new_mark) {
       bool old_mark = inputs_[which][i]->being_compacted;
       if (old_mark == new_mark) {
         uint32_t file_no = static_cast<uint32_t>(inputs_[which][i]->number & 0xffffffff);
-        fprintf(stderr, "file_no:#%zd being_compacted status:%d", file_no, new_mark);
+        fprintf(stderr, "file_no:#%08u being_compacted status:%d", file_no, new_mark);
         abort();
       }
       inputs_[which][i]->being_compacted = new_mark;
