@@ -43,7 +43,7 @@ DEFINE_int32(tera_client_batch_put_num, 1000, "num of each batch in batch put mo
 DEFINE_int32(tera_client_scan_package_size, 1024, "the package size (in KB) of each scan request");
 DEFINE_bool(tera_client_scan_async_enabled, false, "enable the streaming scan mode");
 
-DEFINE_int64(scan_timeout, 5000, "scan timeout");
+DEFINE_int64(scan_pack_interval, 5000, "scan timeout");
 DEFINE_int64(snapshot, 0, "read | scan snapshot");
 DEFINE_string(rollback_switch, "close", "Pandora's box, do not open");
 
@@ -828,7 +828,7 @@ int32_t ScanOp(Client* client, int32_t argc, char** argv, ErrorCode* err) {
     desc.SetEnd(end_rowkey);
     desc.SetBufferSize(FLAGS_tera_client_scan_package_size << 10);
     desc.SetAsync(FLAGS_tera_client_scan_async_enabled);
-    desc.SetTimeOut(FLAGS_scan_timeout);
+    desc.SetPackInterval(FLAGS_scan_pack_interval);
 
     if (argc == 5) {
         // scan all cells
