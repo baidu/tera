@@ -127,7 +127,7 @@ bool ClientImpl::CreateTable(const TableDescriptor& desc,
     CreateTableResponse response;
     request.set_sequence_id(0);
     std::string timestamp = tera::get_curtime_str_plain();
-    std::string internal_table_name = desc.TableName() + "@" + timestamp;
+    std::string internal_table_name = desc.TableName();
     request.set_table_name(internal_table_name);
     request.set_user_token(GetUserToken(_user_identity, _user_passcode));
 

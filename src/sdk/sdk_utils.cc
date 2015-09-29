@@ -62,14 +62,14 @@ string Switch2Str(bool enabled) {
     }
 }
 
-void ReplaceStringInPlace(std::string& subject, 
+void ReplaceStringInPlace(std::string& subject,
                           const std::string& search,
                           const std::string& replace) {
     size_t pos = 0;
     while ((pos = subject.find(search, pos)) != std::string::npos) {
         subject.replace(pos, search.length(), replace);
         pos += replace.length();
-    }   
+    }
 }
 
 void ShowTableSchema(const TableSchema& schema, bool is_x) {
@@ -862,6 +862,34 @@ bool BuildSchema(TableDescriptor* table_desc, string* schema) {
             }
         }
     }
+    return true;
+}
+
+bool ParseDelimiterFile(const string& filename, std::vector<string>* delims) {
+    std::ifstream fin(filename.c_str());
+    if (fin.fail()) {
+        LOG(ERROR) << "fail to read delimiter file: " << filename;
+        return false;
+    }
+
+    std::vector<string> delimiters;
+    string str;
+    while (fin >> str) {
+        delimiters.push_back(str);
+    }
+    bool is_delim_error = false;
+    for (size_t i = 1; i < delimiters.size() - 1; i++) {
+        if (delimiters[i] <= delimiters[i-1]) {
+            LOG(ERROR) << "delimiter error: line: " << i + 1
+                << ", [" << delimiters[i] << "]";
+            is_delim_error = true;
+        }
+    }
+    if (is_delim_error) {
+        LOG(ERROR) << "create table fail, delimiter error.";
+        return false;
+    }
+    delims->swap(delimiters);
     return true;
 }
 } // namespace tera

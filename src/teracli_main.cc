@@ -176,7 +176,7 @@ void UsageMore(const std::string& prg_name) {
        version\n\n";
 }
 int32_t CreateOp(Client* client, int32_t argc, char** argv, ErrorCode* err) {
-    if (argc < 2) {
+    if (argc < 3) {
         Usage(argv[0]);
         return -1;
     }
@@ -190,26 +190,8 @@ int32_t CreateOp(Client* client, int32_t argc, char** argv, ErrorCode* err) {
     }
     if (argc == 4) {
         // have tablet delimiters
-        std::string delim_file = argv[3];
-        std::ifstream fin(delim_file.c_str());
-        if (fin.fail()) {
-            LOG(ERROR) << "fail to read delimiter file: " << delim_file;
-            return -1;
-        }
-        std::string str;
-        while (fin >> str) {
-            delimiters.push_back(str);
-        }
-        bool is_delim_error = false;
-        for (size_t i = 1; i < delimiters.size() - 1; i++) {
-            if (delimiters[i] <= delimiters[i-1]) {
-                LOG(ERROR) << "delimiter error: line: " << i + 1
-                    << ", [" << delimiters[i] << "]";
-                is_delim_error = true;
-            }
-        }
-        if (is_delim_error) {
-            LOG(ERROR) << "create table fail, delimiter error.";
+        if (!ParseDelimiterFile(argv[3], &delimiters)) {
+            LOG(ERROR) << "fail to parse delimiter file.";
             return -1;
         }
     } else if (argc > 4) {
@@ -248,14 +230,10 @@ int32_t CreateByFileOp(Client* client, int32_t argc, char** argv, ErrorCode* err
     }
 
     if (argc == 4) {
-        std::ifstream fin(argv[3]);
-        if (fin.fail()) {
-            LOG(ERROR) << "fail to read delimiter file.";
+        // have tablet delimiters
+        if (!ParseDelimiterFile(argv[3], &delimiters)) {
+            LOG(ERROR) << "fail to parse delimiter file.";
             return -1;
-        }
-        std::string str;
-        while (fin >> str) {
-            delimiters.push_back(str);
         }
     }
     if (!client->CreateTable(table_desc, delimiters, err)) {
