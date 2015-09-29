@@ -7,6 +7,7 @@
 
 #include <pthread.h>
 #include <string>
+#include <common/mutex.h>
 
 namespace tera {
 namespace zk {
@@ -24,6 +25,8 @@ private:
     static void InitZkLogOnce();
 
     bool ReadZkNode(const std::string path, std::string* value);
+
+    mutable Mutex _mutex;
 
     std::string _master_addr;
     std::string _root_table_addr;
