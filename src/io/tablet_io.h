@@ -57,7 +57,7 @@ public:
 
         ScanOptions()
             : max_versions(UINT32_MAX), max_size(UINT32_MAX),
-              ts_start(kOldestTs), ts_end(kLatestTs), snapshot_id(0), timeout(UINT64_MAX / 2)
+              ts_start(kOldestTs), ts_end(kLatestTs), snapshot_id(0), timeout(INT64_MAX / 2)
         {}
     };
 
