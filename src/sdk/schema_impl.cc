@@ -185,9 +185,8 @@ void LGDescImpl::SetSstSize(int32_t sst_size) {
 }
 
 /// 表格名字仅允许使用字母、数字和下划线构造,长度不超过256
-TableDescImpl::TableDescImpl(const std::string& tb_name, bool is_kv)
+TableDescImpl::TableDescImpl(const std::string& tb_name)
     : _name(tb_name),
-      _kv_only(is_kv),
       _next_lg_id(0),
       _next_cf_id(0),
       _raw_key_type(kReadable),
@@ -203,7 +202,6 @@ TableDescImpl::TableDescImpl(TableDescImpl& desc) {
 
 TableDescImpl& TableDescImpl::operator=(const TableDescImpl& desc) {
     _name = desc._name;
-    _kv_only = desc._kv_only;
     _next_lg_id = desc._next_lg_id;
     _next_cf_id = desc._next_cf_id;
     int32_t lg_num = desc._lgs.size();
@@ -241,11 +239,6 @@ std::string TableDescImpl::TableName() const{
     return _name;
 }
 
-/// 设置为kv表（无列），建表完成后无法改变
-void TableDescImpl::SetKvOnly() {
-    _kv_only = true;
-}
-
 void TableDescImpl::SetAdminGroup(const std::string& name) {
     _admin_group = name;
 }
@@ -264,10 +257,6 @@ std::string TableDescImpl::Alias() const {
 
 /// 增加一个localitygroup
 LocalityGroupDescriptor* TableDescImpl::AddLocalityGroup(const std::string& lg_name) {
-    if (_kv_only && _lg_map.size() > 1) {
-        VLOG(5) << "kv table not support AddLocalityGroup";
-        return NULL;
-    }
     LGMap::iterator it = _lg_map.find(lg_name);
     if (it != _lg_map.end()) {
         return it->second;
@@ -280,9 +269,6 @@ LocalityGroupDescriptor* TableDescImpl::AddLocalityGroup(const std::string& lg_n
 }
 
 LocalityGroupDescriptor* TableDescImpl::DefaultLocalityGroup() {
-    if (!_kv_only) {
-        return NULL;
-    }
     return _lg_map.begin()->second;
 }
 
@@ -434,9 +420,5 @@ uint64_t TableDescImpl::Snapshot(int32_t id) const {
 /// Snapshot数量
 int32_t TableDescImpl::SnapshotNum() const {
     return _snapshots.size();
-}
-/// 是否为kv表
-bool TableDescImpl::IsKv() const {
-    return _kv_only;
 }
 } // namespace tera

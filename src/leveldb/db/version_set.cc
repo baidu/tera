@@ -586,6 +586,9 @@ bool Version::FindSplitKey(const Slice* smallest_user_key,
         split_size += files_[step_level][now_pos[step_level]]->file_size;
         now_pos[step_level] ++;
     }
+    if (largest_file == NULL) {
+            return false;
+    }
     *split_key = largest_file->largest.user_key().ToString();
     return true;
 }

@@ -269,6 +269,50 @@ void Adapter::ReadCallback(tera::RowReader* reader, size_t req_size,
     }
 }
 
+void Adapter::Delete(const std::string& row,
+                     std::map<std::string, std::set<std::string> >& column) {
+    tera::RowMutation* row_mu = m_table->NewRowMutation(row);
+    size_t req_size = row.size();
+
+    if (column.size() == 0) {
+        row_mu->DeleteRow();
+    } else {
+        std::map<std::string, std::set<std::string> >::iterator it;
+        for (it = column.begin(); it != column.end(); ++it) {
+            const std::string& family = it->first;
+            std::set<std::string>& qualifiers = it->second;
+            if (qualifiers.size() == 0) {
+                qualifiers.insert("");
+            }
+            std::set<std::string>::const_iterator it2;
+            for (it2 = qualifiers.begin(); it2 != qualifiers.end(); ++it2) {
+                const std::string& qualifier = *it2;
+                req_size += family.size() + qualifier.size();
+                row_mu->DeleteColumns(family, qualifier);
+            }
+        }
+    }
+
+    m_write_marker.CheckPending();
+    m_write_marker.CheckLimit();
+    m_write_marker.OnReceive(req_size);
+    m_pending_num.Inc();
+
+    if (type == ASYNC) {
+        int64_t req_time = Now();
+        Context* ctx = new Context(this, req_size, req_time);
+        row_mu->SetCallBack(sdk_write_callback);
+        row_mu->SetContext(ctx);
+        m_table->ApplyMutation(row_mu);
+    } else {
+        m_sync_mutations.push_back(row_mu);
+        m_sync_req_sizes.push_back(req_size);
+        if (m_sync_mutations.size() >= static_cast<unsigned long long>(FLAGS_batch_count)) {
+            CommitSyncWrite();
+        }
+    }
+}
+
 void Adapter::Scan(const std::string& start_key, const std::string& end_key,
                    const std::vector<std::string>& cf_list,
                    bool print, bool is_async) {

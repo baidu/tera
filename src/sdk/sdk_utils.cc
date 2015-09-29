@@ -50,6 +50,8 @@ string TableProp2Str(RawKey type) {
         return "binary";
     } else if (type == TTLKv) {
         return "ttlkv";
+    } else if (type == GeneralKv) {
+        return "kv";
     } else {
         return "";
     }
@@ -73,14 +75,19 @@ void ReplaceStringInPlace(std::string& subject,
     }
 }
 
-void ShowTableSchema(const TableSchema& schema, bool is_x) {
+void ShowTableSchema(const TableSchema& s, bool is_x) {
+    TableSchema schema = s;
     std::stringstream ss;
     std::string str;
     std::string table_alias = schema.name();
     if (!schema.alias().empty()) {
         table_alias = schema.alias();
     }
-    if (schema.kv_only()) {
+    if (schema.has_kv_only() && schema.kv_only()) {
+        schema.set_raw_key(GeneralKv);
+    }
+
+    if (schema.raw_key() == TTLKv || schema.raw_key() == GeneralKv) {
         const LocalityGroupSchema& lg_schema = schema.locality_groups(0);
         ss << "\n  " << table_alias << " <";
         if (is_x || schema.raw_key() != Readable) {
@@ -208,13 +215,17 @@ void TableDescToSchema(const TableDescriptor& desc, TableSchema* schema) {
         case kTTLKv:
             schema->set_raw_key(TTLKv);
             break;
+        case kGeneralKv:
+            schema->set_raw_key(GeneralKv);
+            // compat old code
+            schema->set_kv_only(true);
+            break;
         default:
             schema->set_raw_key(Readable);
             break;
     }
     schema->set_split_size(desc.SplitSize());
     schema->set_merge_size(desc.MergeSize());
-    schema->set_kv_only(desc.IsKv());
     schema->set_admin_group(desc.AdminGroup());
     schema->set_disable_wal(desc.IsWalDisabled());
     schema->set_alias(desc.Alias());
@@ -264,16 +275,23 @@ void TableDescToSchema(const TableDescriptor& desc, TableSchema* schema) {
 }
 
 void TableSchemaToDesc(const TableSchema& schema, TableDescriptor* desc) {
-    if (schema.kv_only()) {
-        desc->SetKvOnly();
-    }
-
     switch (schema.raw_key()) {
         case Binary:
             desc->SetRawKey(kBinary);
             break;
+        case TTLKv:
+            desc->SetRawKey(kTTLKv);
+            break;
+        case GeneralKv:
+            desc->SetRawKey(kGeneralKv);
+            break;
         default:
             desc->SetRawKey(kReadable);
+    }
+
+    // for compatibility
+    if (schema.kv_only()) {
+        desc->SetRawKey(kGeneralKv);
     }
 
     if (schema.has_split_size()) {
@@ -447,6 +465,8 @@ bool SetTableProperties(const string& name, const string& value,
             desc->SetRawKey(kBinary);
         } else if (value == "ttlkv") {
             desc->SetRawKey(kTTLKv);
+        } else if (value == "kv") {
+            desc->SetRawKey(kGeneralKv);
         } else {
             return false;
         }
@@ -617,7 +637,7 @@ bool UpdateTableDescriptor(PropTree& schema_tree,
         return false;
     }
     bool is_update_ok = false;
-    if (table_desc->IsKv()) {
+    if (table_desc->RawKey() == kTTLKv || table_desc->RawKey() == kGeneralKv) {
         if (schema_tree.MaxDepth() != 1) {
             LOG(ERROR) << "invalid schema for kv table: " << table_node->name_;
             return false;
@@ -647,10 +667,23 @@ bool UpdateTableDescriptor(PropTree& schema_tree,
 
 bool FillTableDescriptor(PropTree& schema_tree, TableDescriptor* table_desc) {
     PropTree::Node* table_node = schema_tree.GetRootNode();
+    if (table_desc->TableName() != "" &&
+        table_desc->TableName() != table_node->name_) {
+        LOG(ERROR) << "table name error: " << table_desc->TableName()
+            << ":" << table_node->name_;
+        return false;
+    }
+    table_desc->SetTableName(schema_tree.GetRootNode()->name_);
+    if (schema_tree.MaxDepth() != schema_tree.MinDepth() ||
+        schema_tree.MaxDepth() == 0 || schema_tree.MaxDepth() > 3) {
+        LOG(ERROR) << "schema error: " << schema_tree.FormatString();
+        return false;
+    }
+
     if (schema_tree.MaxDepth() == 1) {
         // kv mode, only have 1 locality group
         // e.g. table1<splitsize=1024, storage=flash>
-        table_desc->SetKvOnly();
+        table_desc->SetRawKey(kGeneralKv);
         LocalityGroupDescriptor* lg_desc;
         lg_desc = table_desc->AddLocalityGroup("kv");
         if (lg_desc == NULL) {
@@ -762,7 +795,7 @@ bool FillTableDescriptor(PropTree& schema_tree, TableDescriptor* table_desc) {
     return true;
 }
 
-bool ParseSchema(const string& schema, TableDescriptor* table_desc) {
+bool ParseTableSchema(const string& schema, TableDescriptor* table_desc) {
     PropTree schema_tree;
     if (!schema_tree.ParseFromString(schema)) {
         LOG(ERROR) << schema_tree.State();
@@ -771,20 +804,22 @@ bool ParseSchema(const string& schema, TableDescriptor* table_desc) {
     }
 
     VLOG(10) << "table to create: " << schema_tree.FormatString();
+    if (FillTableDescriptor(schema_tree, table_desc) &&
+        CheckTableDescrptor(table_desc)) {
+        return true;
+    }
+    return false;
+}
 
-    if (table_desc->TableName() != "" &&
-        table_desc->TableName() != schema_tree.GetRootNode()->name_) {
-        LOG(ERROR) << "table name error: " << table_desc->TableName()
-            << ":" << schema_tree.GetRootNode()->name_;
+bool ParseTableSchemaFile(const string& file, TableDescriptor* table_desc) {
+    PropTree schema_tree;
+    if (!schema_tree.ParseFromFile(file)) {
+        LOG(ERROR) << schema_tree.State();
+        LOG(ERROR) << file;
         return false;
     }
-    table_desc->SetTableName(schema_tree.GetRootNode()->name_);
-    if (schema_tree.MaxDepth() != schema_tree.MinDepth() ||
-        schema_tree.MaxDepth() == 0 || schema_tree.MaxDepth() > 3) {
-        LOG(ERROR) << "schema error: " << schema_tree.FormatString();
-        return false;
-    }
 
+    VLOG(10) << "table to create: " << schema_tree.FormatString();
     if (FillTableDescriptor(schema_tree, table_desc) &&
         CheckTableDescrptor(table_desc)) {
         return true;

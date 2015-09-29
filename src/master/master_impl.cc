@@ -1404,10 +1404,10 @@ void MasterImpl::QueryTabletNode() {
 
 void MasterImpl::ScheduleQueryTabletNode() {
     m_mutex.AssertHeld();
-    boost::function<void ()> closure =
+    ThreadPool::Task task =
         boost::bind(&MasterImpl::QueryTabletNode, this);
     m_query_tabletnode_timer_id = m_thread_pool->DelayTask(
-        FLAGS_tera_master_query_tabletnode_period, closure);
+        FLAGS_tera_master_query_tabletnode_period, task);
 }
 
 void MasterImpl::EnableQueryTabletNodeTimer() {
@@ -1431,10 +1431,10 @@ void MasterImpl::DisableQueryTabletNodeTimer() {
 
 void MasterImpl::ScheduleLoadBalance() {
     m_mutex.AssertHeld();
-    boost::function<void ()> closure =
+    ThreadPool::Task task =
         boost::bind(&MasterImpl::LoadBalance, this);
     m_load_balance_timer_id = m_thread_pool->DelayTask(
-        FLAGS_tera_master_load_balance_period, closure);
+        FLAGS_tera_master_load_balance_period, task);
 }
 
 void MasterImpl::EnableLoadBalanceTimer() {
@@ -1652,12 +1652,12 @@ void MasterImpl::ReleaseCacheWrapper() {
 
 void MasterImpl::EnableReleaseCacheTimer() {
     assert(m_release_cache_timer_id == kInvalidTimerId);
-    boost::function<void ()> closure =
+    ThreadPool::Task task =
         boost::bind(&MasterImpl::ReleaseCacheWrapper, this);
     int64_t timeout_period = 1000 *
         FLAGS_tera_master_cache_release_period;
     m_release_cache_timer_id = m_thread_pool->DelayTask(
-        timeout_period, closure);
+        timeout_period, task);
 }
 
 void MasterImpl::DisableReleaseCacheTimer() {
@@ -1781,9 +1781,9 @@ void MasterImpl::TabletNodeRecoveryCallback(std::string addr,
                 << " for " << fail_count << " times";
             TryKickTabletNode(addr);
         } else {
-            boost::function<void ()> closure =
+            ThreadPool::Task task =
                 boost::bind(&MasterImpl::RetryQueryNewTabletNode, this, addr);
-            m_thread_pool->DelayTask(FLAGS_tera_master_collect_info_retry_period, closure);
+            m_thread_pool->DelayTask(FLAGS_tera_master_collect_info_retry_period, task);
         }
         delete request;
         delete response;
@@ -1938,10 +1938,10 @@ void MasterImpl::DeleteTabletNode(const std::string& tabletnode_addr) {
         LOG(INFO) << "try move tablet " << FLAGS_tera_master_tabletnode_timeout
             << "(ms) later";
         MutexLock lock(&m_tabletnode_timer_mutex);
-        boost::function<void ()> closure =
+        ThreadPool::Task task =
             boost::bind(&MasterImpl::TryMovePendingTablets, this, tabletnode_addr);
         int64_t timer_id = m_thread_pool->DelayTask(
-            FLAGS_tera_master_tabletnode_timeout, closure);
+            FLAGS_tera_master_tabletnode_timeout, task);
         m_tabletnode_timer_id_map[tabletnode_addr] = timer_id;
     } else if (GetMasterStatus() == kIsRunning) {
         VLOG(5) << "MoveOffLineTablets: " << tabletnode_addr;
@@ -2345,10 +2345,10 @@ void MasterImpl::LoadTabletCallback(TabletPtr tablet, int32_t retry,
     }
 
     // retry
-    boost::function<void ()> closure =
+    ThreadPool::Task task =
         boost::bind(&MasterImpl::RetryLoadTablet, this, tablet, retry + 1);
     m_thread_pool->DelayTask(
-        FLAGS_tera_master_control_tabletnode_retry_period, closure);
+        FLAGS_tera_master_control_tabletnode_retry_period, task);
 }
 
 bool MasterImpl::UnloadTabletSync(const std::string& table_name,
@@ -2511,10 +2511,10 @@ void MasterImpl::UnloadTabletCallback(TabletPtr tablet, int32_t retry,
     }
 
     // retry
-    boost::function<void ()> closure =
+    ThreadPool::Task task =
         boost::bind(&MasterImpl::RetryUnloadTablet, this, tablet, retry - 1);
     m_thread_pool->DelayTask(
-        FLAGS_tera_master_control_tabletnode_retry_period, closure);
+        FLAGS_tera_master_control_tabletnode_retry_period, task);
 }
 
 void MasterImpl::DelSnapshot(const DelSnapshotRequest* request,
@@ -3236,11 +3236,11 @@ void MasterImpl::CollectTabletInfoCallback(std::string addr,
                 << " for " << fail_count << " times";
             TryKickTabletNode(addr);
         } else {
-            boost::function<void ()> closure =
+            ThreadPool::Task task =
                 boost::bind(&MasterImpl::RetryCollectTabletInfo, this, addr,
                             tablet_list, finish_counter, mutex);
             m_thread_pool->DelayTask(FLAGS_tera_master_collect_info_retry_period,
-                                     closure);
+                                     task);
             delete request;
             delete response;
             return;
@@ -3390,9 +3390,9 @@ void MasterImpl::TryLoadTablet(TabletPtr tablet, std::string server_addr) {
             tablet->SetAddrAndStatusIf(server_addr, kTabletPending, kTableOffLine);
             LOG(INFO) << "load tablet " << tablet << " on " << server_addr
                 << " " << FLAGS_tera_master_tabletnode_timeout << "(ms) later";
-            boost::function<void ()> closure =
+            ThreadPool::Task task =
                 boost::bind(&MasterImpl::TryMovePendingTablet, this, tablet);
-            m_thread_pool->DelayTask(FLAGS_tera_master_tabletnode_timeout, closure);
+            m_thread_pool->DelayTask(FLAGS_tera_master_tabletnode_timeout, task);
             return;
         } else if (GetMasterStatus() == kIsRunning) {
             LOG(WARNING) << "give up load " << tablet << " on " << server_addr
@@ -4786,10 +4786,10 @@ void MasterImpl::DumpStatToTable(const TabletNode& stat) {
 void MasterImpl::ScheduleTabletNodeGc() {
     m_mutex.AssertHeld();
     LOG(INFO) << "[gc] ScheduleTabletNodeGcTimer";
-    boost::function<void ()> closure =
+    ThreadPool::Task task =
         boost::bind(&MasterImpl::DoTabletNodeGc, this);
     m_gc_timer_id = m_thread_pool->DelayTask(
-        FLAGS_tera_master_gc_period, closure);
+        FLAGS_tera_master_gc_period, task);
 }
 
 void MasterImpl::EnableTabletNodeGcTimer() {

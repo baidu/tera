@@ -285,8 +285,7 @@ class MemoryEnv : public EnvWrapper {
     return file_map_.find(fname) != file_map_.end();
   }
 
-  virtual Status GetChildren(const std::string& dir,
-                             std::vector<std::string>* result, std::vector<int64_t>*) {
+  virtual Status GetChildren(const std::string& dir, std::vector<std::string>* result) {
     MutexLock lock(&mutex_);
     result->clear();
 

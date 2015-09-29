@@ -35,7 +35,8 @@ bool SetTableProperties(const string& name, const string& value,
 bool FillTableDescriptor(PropTree& schema_tree, TableDescriptor* desc);
 bool UpdateTableDescriptor(PropTree& schema_tree, TableDescriptor* table_desc, bool* is_update_lg_cf);
 
-bool ParseSchema(const string& schema, TableDescriptor* table_desc);
+bool ParseTableSchema(const string& schema, TableDescriptor* table_desc);
+bool ParseTableSchemaFile(const string& file, TableDescriptor* table_desc);
 
 bool ParseScanSchema(const string& schema, ScanDescriptor* desc);
 

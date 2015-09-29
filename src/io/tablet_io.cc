@@ -69,8 +69,10 @@ extern tera::Counter row_read_delay;
 namespace tera {
 namespace io {
 
-TabletIO::TabletIO()
+TabletIO::TabletIO(const std::string& key_start, const std::string& key_end)
     : m_async_writer(NULL),
+      m_start_key(key_start),
+      m_end_key(key_end),
       m_compact_status(kTableNotCompact),
       m_status(kNotInit),
       m_ref_count(1), m_db_ref_count(0), m_db(NULL),
@@ -124,8 +126,6 @@ TabletIO::StatCounter& TabletIO::GetCounter() {
 }
 
 bool TabletIO::Load(const TableSchema& schema,
-                    const std::string& key_start,
-                    const std::string& key_end,
                     const std::string& path,
                     const std::vector<uint64_t>& parent_tablets,
                     std::map<uint64_t, uint64_t> snapshots,
@@ -136,8 +136,7 @@ bool TabletIO::Load(const TableSchema& schema,
                     StatusCode* status) {
     {
         MutexLock lock(&m_mutex);
-        if (m_status == kReady && m_start_key == key_start
-            && m_end_key == key_end) {
+        if (m_status == kReady) {
             return true;
         } else if (m_status != kNotInit) {
             SetStatusCode(m_status, status);
@@ -153,29 +152,36 @@ bool TabletIO::Load(const TableSchema& schema,
         // only prepare for kv-only mode, no need to set fields of it.
         m_table_schema.add_locality_groups();
     }
-    if (m_table_schema.column_families_size() == 0) {
-        // only prepare for kv-only mode, no need to set fields of it.
-        m_table_schema.add_column_families();
+
+    RawKey raw_key = m_table_schema.raw_key();
+    if (raw_key == TTLKv || raw_key == GeneralKv) {
         m_kv_only = true;
     } else {
-        m_kv_only = m_table_schema.kv_only();
+        // for compatible
+        if (m_table_schema.column_families_size() == 0) {
+            // only prepare for kv-only mode, no need to set fields of it.
+            m_table_schema.add_column_families();
+            m_kv_only = true;
+        } else {
+            m_kv_only = m_table_schema.kv_only();
+        }
     }
 
     m_key_operator = GetRawKeyOperatorFromSchema(m_table_schema);
     // [m_raw_start_key, m_raw_end_key)
-    m_raw_start_key = key_start;
-    if (!m_kv_only && !key_start.empty()) {
-        m_key_operator->EncodeTeraKey(key_start, "", "", kLatestTs,
+    m_raw_start_key = m_start_key;
+    if (!m_kv_only && !m_start_key.empty()) {
+        m_key_operator->EncodeTeraKey(m_start_key, "", "", kLatestTs,
                                       leveldb::TKT_FORSEEK, &m_raw_start_key);
-    } else if (m_kv_only && m_table_schema.raw_key() == TTLKv && !key_start.empty()) {
-        m_key_operator->EncodeTeraKey(key_start, "", "", 0, leveldb::TKT_FORSEEK, &m_raw_start_key);
+    } else if (m_kv_only && m_table_schema.raw_key() == TTLKv && !m_start_key.empty()) {
+        m_key_operator->EncodeTeraKey(m_start_key, "", "", 0, leveldb::TKT_FORSEEK, &m_raw_start_key);
     }
-    m_raw_end_key = key_end;
-    if (!m_kv_only && !key_end.empty()) {
-        m_key_operator->EncodeTeraKey(key_end, "", "", kLatestTs,
+    m_raw_end_key = m_end_key;
+    if (!m_kv_only && !m_end_key.empty()) {
+        m_key_operator->EncodeTeraKey(m_end_key, "", "", kLatestTs,
                                       leveldb::TKT_FORSEEK, &m_raw_end_key);
-    } else if (m_kv_only && m_table_schema.raw_key() == TTLKv && !key_end.empty()) {
-        m_key_operator->EncodeTeraKey(key_end, "", "", 0, leveldb::TKT_FORSEEK, &m_raw_end_key);
+    } else if (m_kv_only && m_table_schema.raw_key() == TTLKv && !m_end_key.empty()) {
+        m_key_operator->EncodeTeraKey(m_end_key, "", "", 0, leveldb::TKT_FORSEEK, &m_raw_end_key);
     }
 
     m_ldb_options.key_start = m_raw_start_key;
@@ -258,9 +264,6 @@ bool TabletIO::Load(const TableSchema& schema,
 //         delete m_ldb_options.env;
         return false;
     }
-
-    m_start_key = key_start;
-    m_end_key = key_end;
 
     m_async_writer = new TabletWriter(this);
     m_async_writer->Start();
@@ -567,7 +570,8 @@ StatusCode TabletIO::InitedScanInterator(const std::string& start_tera_key,
     *scan_it = m_db->NewIterator(read_option);
     TearDownIteratorOptions(&read_option);
 
-    VLOG(10) << "ll-scan: " << "startkey=[" << DebugString(start_key.ToString());
+    VLOG(10) << "ll-scan: " << "startkey=[" << DebugString(start_key.ToString()) << ":"
+             << DebugString(start_col.ToString()) << ":" << DebugString(start_qual.ToString());
     std::string start_seek_key;
     m_key_operator->EncodeTeraKey(start_key.ToString(), "", "", kLatestTs,
                                   leveldb::TKT_FORSEEK, &start_seek_key);
@@ -663,6 +667,17 @@ inline bool TabletIO::LowLevelScan(const std::string& start_tera_key,
 
         if (m_key_operator->Compare(it->key(), start_tera_key) < 0) {
             // skip out-of-range records
+            // keep record of version info to prevent dirty data
+            if (key.compare(last_key) == 0 &&
+                col.compare(last_col) == 0 &&
+                qual.compare(last_qual) == 0) {
+                ++version_num;
+            } else {
+                last_key.assign(key.data(), key.size());
+                last_col.assign(col.data(), col.size());
+                last_qual.assign(qual.data(), qual.size());
+                version_num = 1;
+            }
             it->Next();
             continue;
         }
