@@ -235,6 +235,9 @@ int32_t CreateByFileOp(Client* client, int32_t argc, char** argv, ErrorCode* err
             LOG(ERROR) << "fail to parse delimiter file.";
             return -1;
         }
+    } else if (argc > 4) {
+        LOG(ERROR) << "too many args: " << argc;
+        return -1;
     }
     if (!client->CreateTable(table_desc, delimiters, err)) {
         LOG(ERROR) << "fail to create table, "

@@ -62,7 +62,8 @@ namespace tera {
 TableImpl::TableImpl(const std::string& table_name,
                      const std::string& zk_root_path,
                      const std::string& zk_addr_list,
-                     common::ThreadPool* thread_pool)
+                     common::ThreadPool* thread_pool,
+                     sdk::ClusterFinder* cluster)
     : _name(table_name),
       _last_sequence_id(0),
       _timeout(FLAGS_tera_sdk_timeout),
@@ -78,8 +79,13 @@ TableImpl::TableImpl(const std::string& table_name,
       _zk_root_path(zk_root_path),
       _zk_addr_list(zk_addr_list),
       _thread_pool(thread_pool),
-      _cluster(new sdk::ClusterFinder(zk_root_path, zk_addr_list)),
+      _cluster(cluster),
+      _cluster_private(false),
       _pending_timeout_ms(FLAGS_tera_rpc_timeout_period) {
+    if (_cluster == NULL) {
+        _cluster = new sdk::ClusterFinder(zk_root_path, zk_addr_list);
+        _cluster_private = true;
+    }
 }
 
 TableImpl::~TableImpl() {
@@ -87,8 +93,9 @@ TableImpl::~TableImpl() {
         DoDumpCookie();
     }
     _thread_pool->CancelTask(_perf_log_task_id);
-
-    delete _cluster;
+    if (_cluster_private) {
+        delete _cluster;
+    }
 }
 
 RowMutation* TableImpl::NewRowMutation(const std::string& row_key) {

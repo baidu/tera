@@ -99,7 +99,7 @@ public:
     bool Rename(const std::string& old_table_name,
                 const std::string& new_table_name,
                 ErrorCode* err);
-    
+
     std::string GetZkAddrList() { return _zk_addr_list; }
     std::string GetZkRootPath() { return _zk_root_path; }
 

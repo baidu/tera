@@ -6,6 +6,7 @@
 
 #include "sdk/sdk_utils.h"
 
+#include <fstream>
 #include <iostream>
 
 #include "common/base/string_ext.h"

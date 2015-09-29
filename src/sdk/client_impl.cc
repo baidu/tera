@@ -316,9 +316,8 @@ Table* ClientImpl::OpenTable(const std::string& table_name,
     }
     err->SetFailed(ErrorCode::kOK);
     TableImpl* table = new TableImpl(internal_table_name,
-                                     _zk_root_path,
-                                     _zk_addr_list,
-                                     &_thread_pool);
+                                     _zk_root_path, _zk_addr_list,
+                                     &_thread_pool, _cluster);
     if (table == NULL) {
         LOG(ERROR) << "fail to new TableImpl.";
         return NULL;
