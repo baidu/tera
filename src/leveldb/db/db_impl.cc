@@ -681,16 +681,6 @@ bool DBImpl::FindSplitKey(const std::string& start_key,
                                               ratio, split_key);
 }
 
-uint64_t DBImpl::GetScopeSize(const std::string& start_key,
-                              const std::string& end_key,
-                              std::vector<uint64_t>* lgsize) {
-    Slice start_slice(start_key);
-    Slice end_slice(end_key);
-    MutexLock l(&mutex_);
-    return versions_->current()->GetScopeSize(start_key.empty()?NULL:&start_slice,
-                                              end_key.empty()?NULL:&end_slice);
-}
-
 bool DBImpl::MinorCompact() {
     Status s = TEST_CompactMemTable();
     return s.ok();
@@ -1666,9 +1656,7 @@ bool DBImpl::GetProperty(const Slice& property, std::string* value) {
   return false;
 }
 
-void DBImpl::GetApproximateSizes(
-    const Range* range, int n,
-    uint64_t* sizes) {
+void DBImpl::GetApproximateSizes(const Range* range, int n, uint64_t* sizes) {
   // TODO(opt): better implementation
   Version* v;
   {
@@ -1689,6 +1677,21 @@ void DBImpl::GetApproximateSizes(
   {
     MutexLock l(&mutex_);
     v->Unref();
+  }
+}
+
+void DBImpl::GetApproximateSizes(uint64_t* size, std::vector<uint64_t>* lgsize) {
+  MutexLock l(&mutex_);
+  versions_->current()->GetApproximateSizes(size);
+
+  // add mem&imm size
+  if (size) {
+    if (mem_) {
+      size += mem_->ApproximateMemoryUsage();
+    }
+    if (imm_) {
+      size += imm_->ApproximateMemoryUsage();
+    }
   }
 }
 

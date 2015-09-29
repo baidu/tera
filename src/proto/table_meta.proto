@@ -74,7 +74,7 @@ message TabletMeta {
     required KeyRange key_range = 3;
     optional string server_addr = 4;
     optional TabletStatus status = 5;
-    optional int64 table_size = 6;
+    optional int64 size = 6;
     optional bool compress = 7;     // for Compatible
     optional CompactStatus compact_status = 8 [default = kTableNotCompact];
     optional StoreMedium store_medium = 9 [default = DiskStore]; // for Compatible

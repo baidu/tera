@@ -704,6 +704,27 @@ void DBTable::GetApproximateSizes(const Range* range, int n,
     }
 }
 
+void DBTable::GetApproximateSizes(uint64_t* size, std::vector<uint64_t>* lgsize) {
+    if (size) {
+        *size = 0;
+    }
+    if (lgsize) {
+        lgsize->clear();
+    }
+    std::set<uint32_t>::iterator it = options_.exist_lg_list->begin();
+    for (; it != options_.exist_lg_list->end(); ++it) {
+        uint32_t i = *it;
+        uint64_t size_tmp;
+        lg_list_[i]->GetApproximateSizes(&size_tmp);
+        if (size) {
+            *size += size_tmp;
+        }
+        if (lgsize) {
+            lgsize->push_back(size_tmp);
+        }
+    }
+}
+
 void DBTable::CompactRange(const Slice* begin, const Slice* end) {
     std::vector<LGCompactThread*> lg_threads;
     std::set<uint32_t>::iterator it = options_.exist_lg_list->begin();
@@ -718,6 +739,7 @@ void DBTable::CompactRange(const Slice* begin, const Slice* end) {
     }
 }
 
+// @begin_num:  the 1st record(sequence number) should be recover
 Status DBTable::GatherLogFile(uint64_t begin_num,
                               std::vector<uint64_t>* logfiles) {
     std::vector<std::string> files;
@@ -735,17 +757,29 @@ Status DBTable::GatherLogFile(uint64_t begin_num,
         if (ParseFileName(files[i], &number, &type)
             && type == kLogFile && number >= begin_num) {
             logfiles->push_back(number);
-        } else if (type == kLogFile && number > 0) {
+        } else if (type == kLogFile && number > last_number) {
             last_number = number;
         }
     }
     std::sort(logfiles->begin(), logfiles->end());
     uint64_t first_log_num = logfiles->size() ? (*logfiles)[0] : 0;
-    Log(options_.info_log, "[%s] begin_seq= %lu, first log num= %lu, last num=%lu, log_num=%lu\n",
-        dbname_.c_str(), begin_num, first_log_num, last_number, logfiles->size());
-    if (last_number > 0 && first_log_num > begin_num) {
+    /*
+     *                                             @begin_num(not in sst)
+     *       |-> records alredy be dumped to sst <-|->   not be dumped        <-|
+     *range: [start -------------------------------------------------------- end]
+     *case 1:       ^         ^                     ^
+     *              001.log   last_number.log       first_log_num.log
+     *
+     *case 2:       ^         ^
+     *              001.log   last_number.log
+     */
+    if ((last_number > 0 && first_log_num > begin_num)   // case 1
+        || (last_number > 0 && logfiles->size() == 0)) { // case 2
         logfiles->push_back(last_number);
+        Log(options_.info_log, "[%s] add log file #%lu", dbname_.c_str(), last_number);
     }
+    Log(options_.info_log, "[%s] begin_seq= %lu, first log num= %lu, last num=%lu, log count=%lu\n",
+        dbname_.c_str(), begin_num, first_log_num, last_number, logfiles->size());
     std::sort(logfiles->begin(), logfiles->end());
     return s;
 }
@@ -953,7 +987,8 @@ bool DBTable::FindSplitKey(const std::string& start_key,
     MutexLock l(&mutex_);
     std::set<uint32_t>::iterator it = options_.exist_lg_list->begin();
     for (; it != options_.exist_lg_list->end(); ++it) {
-        uint64_t size = lg_list_[*it]->GetScopeSize(start_key, end_key);
+        uint64_t size;
+        lg_list_[*it]->GetApproximateSizes(&size);
         size_of_lg[size] = lg_list_[*it];
     }
     std::map<uint64_t, DBImpl*>::reverse_iterator biggest_it =
@@ -963,24 +998,6 @@ bool DBTable::FindSplitKey(const std::string& start_key,
     }
     return biggest_it->second->FindSplitKey(start_key, end_key,
                                             ratio, split_key);
-}
-
-uint64_t DBTable::GetScopeSize(const std::string& start_key,
-                               const std::string& end_key,
-                               std::vector<uint64_t>* lgsize) {
-    uint64_t size = 0;
-    if (lgsize != NULL) {
-        lgsize->clear();
-    }
-    std::set<uint32_t>::iterator it = options_.exist_lg_list->begin();
-    for (; it != options_.exist_lg_list->end(); ++it) {
-        uint64_t lsize = lg_list_[*it]->GetScopeSize(start_key, end_key);
-        size += lsize;
-        if (lgsize != NULL) {
-            lgsize->push_back(lsize);
-        }
-    }
-    return size;
 }
 
 bool DBTable::MinorCompact() {

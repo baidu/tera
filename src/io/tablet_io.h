@@ -75,7 +75,7 @@ public:
     };
 
 public:
-    TabletIO();
+    TabletIO(const std::string& key_start, const std::string& key_end);
     virtual ~TabletIO();
 
     std::string GetTableName() const;
@@ -88,7 +88,6 @@ public:
     StatCounter& GetCounter();
     // tablet
     virtual bool Load(const TableSchema& schema,
-                      const std::string& key_start, const std::string& key_end,
                       const std::string& path,
                       const std::vector<uint64_t>& parent_tablets,
                       std::map<uint64_t, uint64_t> snapshots,
@@ -102,11 +101,8 @@ public:
     virtual bool Compact(StatusCode* status = NULL);
     bool CompactMinor(StatusCode* status = NULL);
     bool Destroy(StatusCode* status = NULL);
-    virtual int64_t GetDataSize(std::vector<uint64_t>* lgsize = NULL,
-                                StatusCode* status = NULL);
-    virtual int64_t GetDataSize(const std::string& start_key,
-                                const std::string& end_key,
-                                StatusCode* status = NULL);
+    virtual bool GetDataSize(uint64_t* size, std::vector<uint64_t>* lgsize = NULL,
+                             StatusCode* status = NULL);
     virtual bool AddInheritedLiveFiles(std::vector<std::set<uint64_t> >* live);
 
     bool IsBusy();
@@ -226,8 +222,8 @@ private:
     TabletWriter* m_async_writer;
 
     std::string m_tablet_path;
-    std::string m_start_key;
-    std::string m_end_key;
+    const std::string m_start_key;
+    const std::string m_end_key;
     std::string m_raw_start_key;
     std::string m_raw_end_key;
     CompactStatus m_compact_status;
