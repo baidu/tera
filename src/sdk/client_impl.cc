@@ -127,7 +127,7 @@ bool ClientImpl::CreateTable(const TableDescriptor& desc,
     CreateTableResponse response;
     request.set_sequence_id(0);
     std::string timestamp = tera::get_curtime_str_plain();
-    std::string internal_table_name = desc.TableName();
+    std::string internal_table_name = desc.TableName() + "@" + timestamp;
     request.set_table_name(internal_table_name);
     request.set_user_token(GetUserToken(_user_identity, _user_passcode));
 
@@ -282,8 +282,9 @@ bool ClientImpl::GetInternalTableName(const std::string& table_name, ErrorCode* 
     request.set_end("@~");
     if (!meta_client.ScanTablet(&request, &response)
           || response.status() != kTabletNodeOk) {
-         err->SetFailed(ErrorCode::kSystem, "system error");
-         return false;
+        LOG(ERROR) << "fail to scan meta: " << StatusCodeToString(response.status());
+        err->SetFailed(ErrorCode::kSystem, "system error");
+        return false;
     }
     err->SetFailed(ErrorCode::kOK);
     int32_t table_size = response.results().key_values_size();
@@ -311,7 +312,7 @@ Table* ClientImpl::OpenTable(const std::string& table_name,
                              ErrorCode* err) {
     std::string internal_table_name;
     if (!GetInternalTableName(table_name, err, &internal_table_name)) {
-        LOG(ERROR) << "faild to scan meta schema";
+        LOG(ERROR) << "fail to scan meta schema";
         return NULL;
     }
     err->SetFailed(ErrorCode::kOK);

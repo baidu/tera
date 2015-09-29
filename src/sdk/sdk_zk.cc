@@ -86,20 +86,18 @@ std::string ClusterFinder::RootTableAddr(bool update) {
         if (!zk::InsUtil::ReadNode(root_node, &root_table_addr)) {
             LOG(FATAL) << "fail to read ins meta node: " << root_node;
         }
-    }
-    else if (!FLAGS_tera_zk_enabled) {
+    } else if (!FLAGS_tera_zk_enabled) {
         // use local file system as a fake zk
         std::string root_node = FLAGS_tera_fake_zk_path_prefix + kRootTabletNodePath;
         if (!zk::FakeZkUtil::ReadNode(root_node, &root_table_addr)) {
             LOG(FATAL) << "fail to read fake master node: " << root_node;
         }
-    }
-    if (update || _root_table_addr == "") {
+    } else if (update || _root_table_addr == "") {
         if (!ReadZkNode(kRootTabletNodePath, &root_table_addr)) {
             root_table_addr = "";
         }
     }
-    if (!_root_table_addr.empty()) {
+    if (!root_table_addr.empty()) {
         MutexLock lock(&_mutex);
         _root_table_addr = root_table_addr;
     }
