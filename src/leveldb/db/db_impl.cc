@@ -830,7 +830,7 @@ void DBImpl::DeleteCompactTask(CompactTaskInfo *task) {
   mutex_.AssertHeld();
   std::set<CompactTaskInfo*>::iterator it = compact_set_.find(task);
   if (it == compact_set_.end()) {
-    fprintf(stderr, "[%s] cannot found task id:%ld\n", task->id);
+    fprintf(stderr, "[%s] cannot found task id:%ld\n", dbname_.c_str(), task->id);
     abort();
   }
   Log(options_.info_log, "[%s] delete task:%ld", dbname_.c_str(), task->id);

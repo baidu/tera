@@ -99,8 +99,8 @@ class DBImpl : public DB {
   struct CompactionState;
   struct Writer;
   struct CompactTaskInfo {
-      int64_t id;
-      class DBImpl *db;
+    int64_t id;
+    class DBImpl *db;
   };
 
   Iterator* NewInternalIterator(const ReadOptions&,
@@ -205,9 +205,11 @@ class DBImpl : public DB {
   int bg_compaction_scheduled_count_;
   double bg_compaction_score_;
   int64_t bg_schedule_id_;
+  // immemtable is being dumped?
   bool imm_dump_;
   int unscheduled_compactions_;
   int max_background_compactions_;
+  std::set<CompactTaskInfo*> compact_set_;
 
   // Information for a manual compaction
   struct ManualCompaction {
@@ -228,7 +230,6 @@ class DBImpl : public DB {
   // true if disable WAL
   bool flush_on_destroy_;
 
-  std::set<CompactTaskInfo*> compact_set_;
 
   // Per level compaction stats.  stats_[level] stores the stats for
   // compactions that produced data for the specified "level".

@@ -1745,24 +1745,24 @@ bool VersionSet::RangeInCompaction(const InternalKey* smallest,
 bool VersionSet::PickCompactionOnLevel(Compaction* c, int level) {
     // TODO(taocipian) concurrently compact level0 range
     if ((level == 0) && (level0_being_compacted_ == true)) {
-        Log(options_->info_log, "level-0 being-compacted");
-        return false;
+      Log(options_->info_log, "level-0 being-compacted");
+      return false;
     }
     for (size_t i = 0; i < current_->files_[level].size(); i++) {
       FileMetaData* f = current_->files_[level][i];
-        if (f->being_compacted) {
-            // itself is being compacted
-            continue;
-        }
-        if (RangeInCompaction(&f->smallest, &f->largest, level+1)) {
-            // it's parent files are being compacted
-            continue;
-        }
-        c->inputs_[0].push_back(f);
-        break;
+      if (f->being_compacted) {
+        // itself is being compacted
+        continue;
+      }
+      if (RangeInCompaction(&f->smallest, &f->largest, level+1)) {
+        // it's parent files are being compacted
+        continue;
+      }
+      c->inputs_[0].push_back(f);
+      break;
     }
     if (c->inputs_[0].empty()) {
-        return false;
+      return false;
     }
     return true;
 }
@@ -1775,9 +1775,9 @@ void VersionSet::ScoreMatrix(std::multimap<double, int>& amap) {
     if (level == 0) {
       int num = 0;
       for (size_t i = 0; i < current_->files_[level].size(); i++) {
-          if (!current_->files_[level][i]->being_compacted) {
-              num++;
-          }
+        if (!current_->files_[level][i]->being_compacted) {
+          num++;
+        }
       }
       Log(options_->info_log, "level-0 all:%zd, not-compacted:%d", 
           current_->files_[level].size(), num);
@@ -1859,7 +1859,7 @@ void VersionSet::SetupOtherInputs(Compaction* c) {
 
   // See if we can grow the number of inputs in "level" without
   // changing the number of "level+1" files we pick up.
-#if 0 // for multi-thread compaction: need more checks for correctness
+#if 0 // disabled for multi-thread compaction: maybe cause level+1 conflicts
   if (!c->inputs_[1].empty()) {
     std::vector<FileMetaData*> expanded0;
     current_->GetOverlappingInputs(level, &all_start, &all_limit, &expanded0);
@@ -1982,7 +1982,7 @@ Compaction* VersionSet::CompactRange(
   c->inputs_[0] = inputs;
   SetupOtherInputs(c);
 
-  c->SetInputsFilesBeingCompacted(true); // keng?
+  c->SetInputsFilesBeingCompacted(true);
   level0_being_compacted_ = (level == 0 ? true : false);
 
   return c;
