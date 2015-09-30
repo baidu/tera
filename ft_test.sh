@@ -10,7 +10,7 @@ cp test/*test*.py tmp/bin
 
 cd tmp/bin/
 sh launch_tera.sh
-nosetests -s -v test_data.py > test.log
+export PYTHONPATH=$PYTHONPATH:../../thirdparty/include/; ../../thirdparty/bin/nosetests -s -v test_data.py > ../log/test.log
 sh kill_tera.sh
 cd -
 

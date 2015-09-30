@@ -3,6 +3,8 @@ import filecmp
 import os
 import nose
 
+print nose.__file__
+
 tera_bench_binary = './tera_bench'
 tera_mark_binary = './tera_mark'
 teracli_binary = './teracli'
