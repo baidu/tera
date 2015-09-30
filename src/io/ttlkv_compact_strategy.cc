@@ -25,36 +25,22 @@ const char* KvCompactStrategy::Name() const {
 
 bool KvCompactStrategy::Drop(const leveldb::Slice& tera_key, uint64_t n,
                              const std::string& lower_bound) {
-    // If expire timestamp + schema's TTL <= time(NULL), Then Drop.
-    // Desc: 当前TTL的语义理解为：假设用户指定了key在03:10分过期，
-    // 同时Schema的TTL为+300(延后5分钟), 那么这个key将在03:15分过期.
-    //
-    // 这种语义下, 如果希望一个key提前过期, 只需要修改schema让TTL为负值
-    // 例如-300(提前5分钟), 那么这个key将在03:05分过期.
-    //
-    // 不过, 对于用户曾经插入的永不过期的key, 无论怎么调整schema的TTL都不会产生任何作用。
-
     leveldb::Slice row_key;
     int64_t expire_timestamp;
     raw_key_operator_->ExtractTeraKey(tera_key, &row_key, NULL, NULL,
             &expire_timestamp, NULL);
 
     int64_t now = get_micros() / 1000000;
-
-    int64_t final_expire_timestamp = expire_timestamp
-            + schema_.column_families(0).time_to_live();
-    if (final_expire_timestamp <= 0 /*上溢,永不过期*/
-    || final_expire_timestamp > now) {
+    if (expire_timestamp <= 0 /*上溢,永不过期*/
+    || expire_timestamp > now) {
         VLOG(11) << "[KvCompactStrategy-Not-Drop] row_key:[" << row_key.ToString()
             << "] expire_timestamp:[" << expire_timestamp
-            << "] now:[" << now << "] time_to_live=["
-            << schema_.column_families(0).time_to_live() << "]";
+            << "] now:[" << now << "]";
         return false;
     }
     VLOG(11) << "[KvCompactStrategy-Drop] row_key:[" << row_key.ToString()
         << "] expire_timestamp:[" << expire_timestamp
-        << "] now:[" << now << "] time_to_live=["
-        << schema_.column_families(0).time_to_live() << "]";
+        << "] now:[" << now << "]";
     return true;
 }
 
