@@ -232,6 +232,7 @@ message ScanTabletRequest {
     optional int64 session_id = 16;
     optional bool part_of_session = 17;
     optional int64 timestamp = 18 [default = 0];
+    optional int64 timeout = 19;
 }
 
 message ScanTabletResponse {
@@ -242,6 +243,7 @@ message ScanTabletResponse {
     optional RowResult results = 6;
     optional bytes end = 7;
     optional uint64 results_id = 8;
+    optional KeyValuePair next_start_point = 9;
 }
 
 message RowReaderInfo {

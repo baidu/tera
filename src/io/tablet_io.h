@@ -53,10 +53,11 @@ public:
         FilterList filter_list;
         ColumnFamilyMap column_family_list;
         std::set<std::string> iter_cf_set;
+        int64_t timeout;
 
         ScanOptions()
             : max_versions(UINT32_MAX), max_size(UINT32_MAX),
-              ts_start(kOldestTs), ts_end(kLatestTs), snapshot_id(0)
+              ts_start(kOldestTs), ts_end(kLatestTs), snapshot_id(0), timeout(INT64_MAX / 2)
         {}
     };
 
@@ -119,6 +120,7 @@ public:
                       const std::string& end_row_key,
                       const ScanOptions& scan_options,
                       RowResult* value_list,
+                      KeyValuePair* next_start_point,
                       uint32_t* read_row_count,
                       uint32_t* read_bytes,
                       bool* is_complete,
@@ -206,10 +208,14 @@ private:
                       const ScanOptions& scan_options,
                       leveldb::Iterator* it,
                       RowResult* value_list,
+                      KeyValuePair* next_start_point,
                       uint32_t* read_row_count,
                       uint32_t* read_bytes,
                       bool* is_complete,
                       StatusCode* status);
+
+    void MakeKvPair(leveldb::Slice key, leveldb::Slice col, leveldb::Slice qual,
+                    int64_t ts, leveldb::Slice value, KeyValuePair* kv);
 
 private:
     mutable Mutex m_mutex;
