@@ -98,6 +98,10 @@ class DBImpl : public DB {
   friend class DBTable;
   struct CompactionState;
   struct Writer;
+  struct CompactTaskInfo {
+      int64_t id;
+      class DBImpl *db;
+  };
 
   Iterator* NewInternalIterator(const ReadOptions&,
                                 SequenceNumber* latest_snapshot);
@@ -124,7 +128,7 @@ class DBImpl : public DB {
 
   void MaybeScheduleCompaction() EXCLUSIVE_LOCKS_REQUIRED(mutex_);
   static void BGWork(void* db);
-  void BackgroundCall();
+  void BackgroundCall(CompactTaskInfo* task);
   Status BackgroundCompaction() EXCLUSIVE_LOCKS_REQUIRED(mutex_);
   void CleanupCompaction(CompactionState* compact)
       EXCLUSIVE_LOCKS_REQUIRED(mutex_);
@@ -148,6 +152,9 @@ class DBImpl : public DB {
   uint64_t GetLastVerSequence();
   bool CheckMemTableCompaction(uint64_t last_sequence);
   MemTable* NewMemTable() const;
+  void AddCompactTask(double score);
+  void DeleteCompactTask(CompactTaskInfo* task);
+  void ReScheduleAllCompactTask(double score);
 
   // Constant after construction
   Env* const env_;
@@ -221,6 +228,7 @@ class DBImpl : public DB {
   // true if disable WAL
   bool flush_on_destroy_;
 
+  std::set<CompactTaskInfo*> compact_set_;
 
   // Per level compaction stats.  stats_[level] stores the stats for
   // compactions that produced data for the specified "level".

@@ -177,6 +177,7 @@ Status DBImpl::Shutdown1() {
   shutting_down_.Release_Store(this);  // Any non-NULL value is ok
 
   Log(options_.info_log, "[%s] wait bg compact finish", dbname_.c_str());
+  ReScheduleAllCompactTask(kDumpMemTableUrgentScore);
   while (bg_compaction_scheduled_count_ > 0) {
     bg_cv_.Wait();
   }
@@ -815,6 +816,38 @@ void DBImpl::MaybeScheduleCompaction() {
 }
 #endif
 
+void DBImpl::AddCompactTask(double score) {
+  mutex_.AssertHeld();
+  CompactTaskInfo *task = new CompactTaskInfo;
+  task->db = this;
+  task->id = env_->Schedule(&DBImpl::BGWork, task, score);
+  compact_set_.insert(task);
+  Log(options_.info_log, "[%s] add task:%ld", dbname_.c_str(), task->id);
+  bg_compaction_scheduled_count_++;
+}
+
+void DBImpl::DeleteCompactTask(CompactTaskInfo *task) {
+  mutex_.AssertHeld();
+  std::set<CompactTaskInfo*>::iterator it = compact_set_.find(task);
+  if (it == compact_set_.end()) {
+    fprintf(stderr, "[%s] cannot found task id:%ld\n", task->id);
+    abort();
+  }
+  Log(options_.info_log, "[%s] delete task:%ld", dbname_.c_str(), task->id);
+  delete task;
+  compact_set_.erase(task);
+  bg_compaction_scheduled_count_--;
+}
+
+void DBImpl::ReScheduleAllCompactTask(double score) {
+  mutex_.AssertHeld();
+  std::set<CompactTaskInfo*>::iterator it;
+  for (it = compact_set_.begin(); it != compact_set_.end(); ++it) {
+    env_->ReSchedule((*it)->id, score);
+    Log(options_.info_log, "[%s] reschedule task:%ld", dbname_.c_str(), (*it)->id);
+  }
+}
+
 void DBImpl::MaybeScheduleCompaction() {
   mutex_.AssertHeld();
   if (shutting_down_.Acquire_Load()) {
@@ -823,23 +856,22 @@ void DBImpl::MaybeScheduleCompaction() {
     return;
   }
   if ((bg_compaction_scheduled_count_ < max_background_compactions_ + 1)
-       && ((imm_ != NULL) && (imm_dump_ == false))) {
-    bg_compaction_scheduled_count_++;
-    env_->Schedule(&DBImpl::BGWork, this, 100.0); // TODO BGWorkFlush
+      && ((imm_ != NULL) && (imm_dump_ == false))) {
+    AddCompactTask(100.0);
   }
   while ((bg_compaction_scheduled_count_ < max_background_compactions_)
          && (unscheduled_compactions_ > 0)) {
     unscheduled_compactions_--;
-    bg_compaction_scheduled_count_++;
-    env_->Schedule(&DBImpl::BGWork, this, 35.0); // TODO BGWorkCompaction
+    AddCompactTask(35.0);
   }
 }
 
-void DBImpl::BGWork(void* db) {
-  reinterpret_cast<DBImpl*>(db)->BackgroundCall();
+void DBImpl::BGWork(void* task) {
+  CompactTaskInfo *c = reinterpret_cast<CompactTaskInfo*>(task);
+  c->db->BackgroundCall(c);
 }
 
-void DBImpl::BackgroundCall() {
+void DBImpl::BackgroundCall(CompactTaskInfo* task) {
   Log(options_.info_log, "[%s] BackgroundCall, background-count:%d", 
           dbname_.c_str(), bg_compaction_scheduled_count_);
   MutexLock l(&mutex_);
@@ -874,7 +906,7 @@ void DBImpl::BackgroundCall() {
     }
   }
 
-  bg_compaction_scheduled_count_--;
+  DeleteCompactTask(task);
   // Previous compaction may have produced too many files in a level,
   // so reschedule another compaction if needed.
   MaybeScheduleCompaction();
@@ -1163,8 +1195,7 @@ Status DBImpl::DoCompactionWork(CompactionState* compact) {
       mutex_.Lock();
       if ((bg_compaction_scheduled_count_ < max_background_compactions_ + 1)
           && (imm_ != NULL && imm_dump_ == false)) {
-        bg_compaction_scheduled_count_++;
-        env_->Schedule(&DBImpl::BGWork, this, 100.0); // TODO BGWorkFlush
+        AddCompactTask(100.0);
       } else if (imm_ != NULL && imm_dump_ == false) {
         Log(options_.info_log, "[%s] thread pool is busy, sync dump memtable",
             dbname_.c_str());
