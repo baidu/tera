@@ -1079,20 +1079,20 @@ Status DBImpl::DoCompactionWork(CompactionState* compact) {
 
   CompactStrategy* compact_strategy = NULL;
   if (options_.compact_strategy_factory) {
-     compact_strategy = options_.compact_strategy_factory->NewInstance();
-     if (snapshots_.empty()) {
+    compact_strategy = options_.compact_strategy_factory->NewInstance();
+    if (snapshots_.empty()) {
       compact_strategy->SetSnapshot(kMaxSequenceNumber);
-     } else {
+    } else {
       compact_strategy->SetSnapshot(*(snapshots_.begin()));
-     }
+    }
   }
 
   // Release mutex while we're actually doing the compaction work
   mutex_.Unlock();
 
   Log(options_.info_log,  "[%s] Compact strategy: %s",
-      dbname_.c_str(),
-      compact_strategy->Name());
+    dbname_.c_str(),
+    compact_strategy->Name());
 
   Iterator* input = versions_->MakeInputIterator(compact->compaction);
   input->SeekToFirst();

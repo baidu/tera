@@ -10,7 +10,6 @@
 #define STORAGE_LEVELDB_DB_BUILDER_H_
 
 #include <stdint.h>
-#include <set>
 
 #include "leveldb/status.h"
 
