@@ -3,11 +3,7 @@
 ##准备工作
 安装python的nose框架,仅仅第一次需要执行
 
-* jumbo search nose
-
 ##运行
-* cd function_test
-
-* sh -x build_tera.sh ft
+* 运行脚本
 
 * 验证结果
