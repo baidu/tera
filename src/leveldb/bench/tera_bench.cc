@@ -216,6 +216,8 @@ class Benchmark {
       snprintf(msg, sizeof(msg), "(%d ops)", num_entries);
       message_ = msg;
     }
+    char ts[10];
+    snprintf(ts, sizeof(ts), "%d", FLAGS_value_seed);
 
     // Write to database
     int i = FLAGS_start_key;
@@ -231,7 +233,7 @@ class Benchmark {
         fprintf(stdout, "%s\t%s\n", key, gen_.Generate(value_size).ToString().c_str());
       } else {
         for (size_t j = 0; j < cfs.size(); ++j) {
-          fprintf(stdout, "%s\t%s\t%s\t%s\n", key, gen_.Generate(value_size).ToString().c_str(), cfs[j].c_str(), "0");
+          fprintf(stdout, "%s\t%s\t%s\t%s\n", key, gen_.Generate(value_size).ToString().c_str(), cfs[j].c_str(), ts);
         }
       }
     }
