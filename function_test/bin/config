@@ -1,5 +1,0 @@
-# master 和 tabletnode 绑定的端口，以此开始
-PORT=7700
-
-# 启动的 tabletnode 个数
-TABLETNODE_NUM=3
