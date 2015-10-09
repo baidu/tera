@@ -1359,7 +1359,7 @@ void MasterImpl::QueryTabletNode() {
         m_stat_table = new TableImpl(tablename,
                                      FLAGS_tera_zk_root_path,
                                      FLAGS_tera_zk_addr_list,
-                                     m_thread_pool.get());
+                                     m_thread_pool.get(), NULL);
         FLAGS_tera_sdk_perf_counter_log_interval = 60;
         if (m_stat_table->OpenInternal(&err)) {
             m_is_stat_table = true;

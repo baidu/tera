@@ -282,8 +282,9 @@ bool ClientImpl::GetInternalTableName(const std::string& table_name, ErrorCode* 
     request.set_end("@~");
     if (!meta_client.ScanTablet(&request, &response)
           || response.status() != kTabletNodeOk) {
-         err->SetFailed(ErrorCode::kSystem, "system error");
-         return false;
+        LOG(ERROR) << "fail to scan meta: " << StatusCodeToString(response.status());
+        err->SetFailed(ErrorCode::kSystem, "system error");
+        return false;
     }
     err->SetFailed(ErrorCode::kOK);
     int32_t table_size = response.results().key_values_size();
@@ -311,14 +312,13 @@ Table* ClientImpl::OpenTable(const std::string& table_name,
                              ErrorCode* err) {
     std::string internal_table_name;
     if (!GetInternalTableName(table_name, err, &internal_table_name)) {
-        LOG(ERROR) << "faild to scan meta schema";
+        LOG(ERROR) << "fail to scan meta schema";
         return NULL;
     }
     err->SetFailed(ErrorCode::kOK);
     TableImpl* table = new TableImpl(internal_table_name,
-                                     _zk_root_path,
-                                     _zk_addr_list,
-                                     &_thread_pool);
+                                     _zk_root_path, _zk_addr_list,
+                                     &_thread_pool, _cluster);
     if (table == NULL) {
         LOG(ERROR) << "fail to new TableImpl.";
         return NULL;
