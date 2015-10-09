@@ -6,4 +6,12 @@
 ##运行
 * 运行脚本
 
+sh ft_test.sh
+
 * 验证结果
+
+cd tmp/log/test.log查看结果
+
+* 清空环境
+
+rm -rf tmp
