@@ -4,8 +4,6 @@ Use of this source code is governed by a BSD-style license that can be
 found in the LICENSE file.
 """
 
-import nose.tools
-import subprocess
 import common 
     
 def setUp():
@@ -23,11 +21,10 @@ def test_create_table():
 
     common.print_debug_msg(2, "create table_test001 and create table_test002(kv), write and check")
 
-    cmd = "cd ../; ./teracli createbyfile testcase/data/create_table_schema; cd testcase/"
+    cmd = "./teracli createbyfile testcase/data/create_table_schema"
     common.exe_and_check_res(cmd)
 
-    cmd = 'cd ../; ./teracli create "table_test002 <storage=flash, splitsize=2048, mergesize=128>"; \
-           cd testcase/'
+    cmd = './teracli create "table_test002 <storage=flash, splitsize=2048, mergesize=128>"'
     common.exe_and_check_res(cmd)
 
 
@@ -38,34 +35,34 @@ def test_show_table():
 
     common.print_debug_msg(3, "show and show(x) table")    
 
-    cmd = "cd ../; ./teracli show; cd testcase/"
+    cmd = "./teracli show"
     common.exe_and_check_res(cmd)
 
-    cmd = "cd ../; ./teracli showx; cd testcase/"
+    cmd = "./teracli showx"
     common.exe_and_check_res(cmd)
 
-    cmd = "cd ../; ./teracli show table_test001; cd testcase/"
+    cmd = "./teracli show table_test001"
     common.exe_and_check_res(cmd)
 
-    cmd = "cd ../; ./teracli show table_test002; cd testcase/"
+    cmd = "./teracli show table_test002"
     common.exe_and_check_res(cmd)
 
-    cmd = "cd ../; ./teracli showx table_test001; cd testcase/"                                                 
+    cmd = "./teracli showx table_test001"
     common.exe_and_check_res(cmd)
 
-    cmd = "cd ../; ./teracli showx table_test002; cd testcase/"                                                 
+    cmd = "./teracli showx table_test002"
     common.exe_and_check_res(cmd)
     
-    cmd = "cd ../; ./teracli showschema table_test001; cd testcase/"                                            
+    cmd = "./teracli showschema table_test001"
     common.exe_and_check_res(cmd)
 
-    cmd = "cd ../; ./teracli showschema table_test002; cd testcase/"                                            
+    cmd = "./teracli showschema table_test002"
     common.exe_and_check_res(cmd)
 
-    cmd = "cd ../; ./teracli showschemax table_test001; cd testcase/"                                           
+    cmd = "./teracli showschemax table_test001"
     common.exe_and_check_res(cmd)
 
-    cmd = "cd ../; ./teracli showschemax table_test002; cd testcase/"                                           
+    cmd = "./teracli showschemax table_test002"
     common.exe_and_check_res(cmd)
 
 

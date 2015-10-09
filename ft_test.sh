@@ -9,10 +9,12 @@ mkdir -p tmp/data
 cp -r test/testcase tmp/bin
 
 cd tmp/bin/
-sh launch_tera.sh
-export PYTHONPATH=$PYTHONPATH:../../thirdparty/include/; export PATH=$PATH:../../thirdparty/bin/ 
-cd testcase
-nosetests -s -v > ../../log/test.log
 sh kill_tera.sh
+sh launch_tera.sh
+sleep 3
 
+export PYTHONPATH=$PYTHONPATH:../../thirdparty/include/; export PATH=$PATH:../../thirdparty/bin/ 
+nosetests -s -v > ../log/test.log
+
+sh kill_tera.sh
 

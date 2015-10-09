@@ -12,8 +12,8 @@ DEPS_PREFIX=`pwd`/thirdparty
 DEPS_CONFIG="--prefix=${DEPS_PREFIX} --disable-shared --with-pic"
 
 export PATH=${DEPS_PREFIX}/bin:$PATH
-mkdir -p ${DEPS_SOURCE} ${DEPS_PREFIX}
 
+mkdir -p ${DEPS_SOURCE} ${DEPS_PREFIX}
 git clone --depth=1 http://gitlab.baidu.com/baidups/third.git ${DEPS_SOURCE}
 git clone --depth=1 http://gitlab.baidu.com/baidups/sofa-pbrpc.git ${DEPS_SOURCE}/sofa-pbrpc
 git clone --depth=1 http://gitlab.baidu.com/baidups/ins.git ${DEPS_SOURCE}/ins
