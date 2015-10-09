@@ -659,8 +659,9 @@ public:
     virtual bool IsTableEmpty(const std::string& table_name, ErrorCode* err) = 0;
 
     virtual bool GetSnapshot(const std::string& name, uint64_t* snapshot, ErrorCode* err) = 0;
-    virtual bool DelSnapshot(const std::string& name, uint64_t snapshot, ErrorCode* err) = 0;
-    virtual bool Rollback(const std::string& name, uint64_t snapshot, ErrorCode* err) = 0;
+    virtual bool DelSnapshot(const std::string& name, uint64_t snapshot,ErrorCode* err) = 0;
+    virtual bool Rollback(const std::string& name, uint64_t snapshot, 
+                          const std::string& rollback_name, ErrorCode* err) = 0;
 
     virtual bool CmdCtrl(const std::string& command,
                          const std::vector<std::string>& arg_list,

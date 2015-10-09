@@ -70,8 +70,7 @@ message LoadTabletRequest {
     repeated uint64 snapshots_id = 9;
     repeated uint64 snapshots_sequence = 10;
     repeated uint64 parent_tablets = 11;
-    repeated uint64 rollback_snapshots = 12;
-    repeated uint64 rollback_points = 13;
+    repeated Rollback rollbacks = 12;
 }
 
 message LoadTabletResponse {

@@ -230,11 +230,12 @@ void TabletNodeImpl::LoadTablet(const LoadTabletRequest* request,
     }
 
     // to recover rollbacks
-    assert(request->rollback_snapshots_size() == request->rollback_points_size());
     std::map<uint64_t, uint64_t> rollbacks;
-    int32_t num_of_rollbacks = request->rollback_snapshots_size();
+    int32_t num_of_rollbacks = request->rollbacks_size();
     for (int32_t i = 0; i < num_of_rollbacks; ++i) {
-        rollbacks[request->rollback_snapshots(i)] = request->rollback_points(i);
+        rollbacks[request->rollbacks(i).snapshot_id()] = request->rollbacks(i).rollback_point();
+        VLOG(10) << "load tablet with rollback " << request->rollbacks(i).snapshot_id()
+                 << "-" << request->rollbacks(i).rollback_point();
     }
 
     LOG(INFO) << "start load tablet, id: " << request->sequence_id()

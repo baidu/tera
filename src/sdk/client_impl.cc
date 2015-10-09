@@ -713,16 +713,24 @@ bool ClientImpl::DelSnapshot(const string& name, uint64_t snapshot, ErrorCode* e
     return false;
 }
 
-bool ClientImpl::Rollback(const string& name, uint64_t snapshot, ErrorCode* err) {
+bool ClientImpl::Rollback(const string& name, uint64_t snapshot, 
+                          const std::string& rollback_name, ErrorCode* err) {
     master::MasterClient master_client(_cluster->MasterAddr());
 
+    std::string internal_table_name;
+    if (!GetInternalTableName(name, err, &internal_table_name)) {
+        LOG(ERROR) << "faild to scan meta schema";
+        return false;
+    }
     RollbackRequest request;
     RollbackResponse response;
     request.set_sequence_id(0);
-    request.set_table_name(name);
+    request.set_table_name(internal_table_name);
     request.set_snapshot_id(snapshot);
+    request.set_rollback_name(rollback_name);
+    std::cout << name << " " << rollback_name << std::endl;
 
-    if (master_client.Rollback(&request, &response)) {
+    if (master_client.GetRollback(&request, &response)) {
         if (response.status() == kMasterOk) {
             std::cout << name << " rollback to snapshot sucessfully" << std::endl;
             return true;

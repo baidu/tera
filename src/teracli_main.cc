@@ -45,7 +45,8 @@ DEFINE_bool(tera_client_scan_async_enabled, false, "enable the streaming scan mo
 
 DEFINE_int64(scan_pack_interval, 5000, "scan timeout");
 DEFINE_int64(snapshot, 0, "read | scan snapshot");
-DEFINE_string(rollback_switch, "close", "Pandora's box, do not open");
+DEFINE_string(rollback_switch, "open", "Pandora's box, do not open");
+DEFINE_string(rollback_name, "", "rollback operation's name");
 
 volatile int32_t g_start_time = 0;
 volatile int32_t g_end_time = 0;
@@ -1768,7 +1769,7 @@ int32_t SnapshotOp(Client* client, int32_t argc, char** argv, ErrorCode* err) {
         }
         std::cout << "new snapshot: " << snapshot << std::endl;
     }  else if (FLAGS_rollback_switch == "open" && strcmp(argv[3], "rollback") == 0) {
-        if (!client->Rollback(tablename, FLAGS_snapshot, err)) {
+        if (!client->Rollback(tablename, FLAGS_snapshot, FLAGS_rollback_name, err)) {
             LOG(ERROR) << "fail to rollback to snapshot: " << err->GetReason();
             return -1;
         }
@@ -2123,6 +2124,10 @@ int32_t Meta2Op(Client *client, int32_t argc, char** argv) {
         const tera::TableMeta& meta = table_list.meta(i);
         if (op == "show") {
             std::cout << "table: " << meta.table_name() << std::endl;
+            int32_t rollback_size = meta.rollback_names_size();
+            for (int32_t rollback_i = 0; rollback_i < rollback_size; ++rollback_i) {
+                std::cout << "rollback_name: " << meta.rollback_names(rollback_i) << std::endl;
+            }
             int32_t lg_size = meta.schema().locality_groups_size();
             for (int32_t lg_id = 0; lg_id < lg_size; lg_id++) {
                 const tera::LocalityGroupSchema& lg =
@@ -2160,6 +2165,10 @@ int32_t Meta2Op(Client *client, int32_t argc, char** argv) {
                 << meta.size() << ", "
                 << StatusCodeToString(meta.status()) << ", "
                 << StatusCodeToString(meta.compact_status()) << std::endl;
+                int32_t rollback_size = meta.rollbacks_size();
+                for (int rollback_i = 0; rollback_i < rollback_size; ++rollback_i) {
+                    std::cout << " rollback:" << meta.rollbacks(rollback_i).name() << ", " <<  meta.rollbacks(rollback_i).snapshot_id() << ", " << meta.rollbacks(rollback_i).rollback_point() << std::endl;
+                }
         }
         if (op == "bak") {
             WriteTablet(meta, bak);

@@ -30,10 +30,10 @@ public:
                      DelSnapshotResponse* response,
                      google::protobuf::Closure* done);
 
-    void Rollback(google::protobuf::RpcController* controller,
-                  const RollbackRequest* request,
-                  RollbackResponse* response,
-                  google::protobuf::Closure* done);
+    void GetRollback(google::protobuf::RpcController* controller,
+                     const RollbackRequest* request,
+                     RollbackResponse* response,
+                     google::protobuf::Closure* done);
 
     void CreateTable(google::protobuf::RpcController* controller,
                      const CreateTableRequest* request,

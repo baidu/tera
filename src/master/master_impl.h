@@ -78,7 +78,7 @@ public:
                      DelSnapshotResponse* response,
                      google::protobuf::Closure* done);
 
-    void Rollback(const RollbackRequest* request,
+    void GetRollback(const RollbackRequest* request,
                   RollbackResponse* response,
                   google::protobuf::Closure* done);
 
@@ -193,6 +193,7 @@ private:
         const RollbackRequest* request;
         RollbackResponse* response;
         google::protobuf::Closure* done;
+        std::string rollback_name;
         TablePtr table;
         std::vector<TabletPtr> tablets;
         std::vector<uint64_t> rollback_points;
