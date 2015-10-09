@@ -407,11 +407,6 @@ void leveldb_options_set_filter_policy(
   opt->rep.filter_policy = policy;
 }
 
-void leveldb_options_set_create_if_missing(
-    leveldb_options_t* opt, unsigned char v) {
-  opt->rep.create_if_missing = v;
-}
-
 void leveldb_options_set_error_if_exists(
     leveldb_options_t* opt, unsigned char v) {
   opt->rep.error_if_exists = v;
