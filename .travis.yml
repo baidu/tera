@@ -55,4 +55,4 @@ script:
     - make -j4
     - sudo pip install nose
     - ./ft_test.sh
-    - nosetests
+    - cd tmp/bin; nosetests
