@@ -95,6 +95,8 @@ DECLARE_bool(tera_acl_enabled);
 DECLARE_string(tera_acl_root_token);
 DECLARE_string(tera_master_gc_strategy);
 
+DECLARE_bool(tera_master_clean_dirty_meta_manual);
+
 namespace tera {
 namespace master {
 
@@ -750,7 +752,8 @@ void MasterImpl::CreateTable(const CreateTableRequest* request,
     }
 
     // try clean meta
-    if (!CleanMetaForCreateTable(request->table_name())) {
+    if (FLAGS_tera_master_clean_dirty_meta_manual
+        && !CleanMetaForCreateTable(request->table_name())) {
         LOG(ERROR) << "Fail to create table: " << request->table_name()
             << ", cannot clean meta table";
         response->set_status(kTableExist);
