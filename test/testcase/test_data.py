@@ -23,7 +23,7 @@ def test_kv_random_write():
     common.run_tera_mark([(dump_file, False)], op='w', table_name='test', random='random',
                          value_size=100, num=5000, key_size=20)
     common.scan_table(table_name=table_name, file_path=scan_file, allversion=True)
-    nose.tools.assert_false(common.compare_files(dump_file, scan_file, need_sort=True))
+    nose.tools.assert_true(common.compare_files(dump_file, scan_file, need_sort=True))
 
 
 @nose.tools.with_setup(common.create_table, common.cleanup)
