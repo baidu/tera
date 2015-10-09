@@ -584,6 +584,7 @@ bool TabletIO::LowLevelScan(const std::string& start_tera_key,
                             const std::string& end_row_key,
                             const ScanOptions& scan_options,
                             RowResult* value_list,
+                            KeyValuePair* next_start_point,
                             uint32_t* read_row_count,
                             uint32_t* read_bytes,
                             bool* is_complete,
@@ -596,7 +597,7 @@ bool TabletIO::LowLevelScan(const std::string& start_tera_key,
     }
 
     bool ret = LowLevelScan(start_tera_key, end_row_key, scan_options, it,
-                            value_list, read_row_count, read_bytes,
+                            value_list, next_start_point, read_row_count, read_bytes,
                             is_complete, status);
     delete it;
     return ret;
@@ -607,6 +608,7 @@ inline bool TabletIO::LowLevelScan(const std::string& start_tera_key,
                             const ScanOptions& scan_options,
                             leveldb::Iterator* it,
                             RowResult* value_list,
+                            KeyValuePair* next_start_point,
                             uint32_t* read_row_count,
                             uint32_t* read_bytes,
                             bool* is_complete,
@@ -621,12 +623,17 @@ inline bool TabletIO::LowLevelScan(const std::string& start_tera_key,
     value_list->clear_key_values();
     *read_row_count = 0;
     *read_bytes = 0;
+    int64_t now_time = GetTimeStampInMs();
+    int64_t time_out = now_time + scan_options.timeout;
+    KeyValuePair next_start_kv_pair;
+    VLOG(9) << "ll-scan timeout set to be " << scan_options.timeout;
 
     for (; it->Valid();) {
         bool has_merged = false;
         std::string merged_value;
         m_counter.low_read_cell.Inc();
         *read_bytes += it->key().size() + it->value().size();
+        now_time = GetTimeStampInMs();
 
         leveldb::Slice tera_key = it->key();
         leveldb::Slice value = it->value();
@@ -637,6 +644,11 @@ inline bool TabletIO::LowLevelScan(const std::string& start_tera_key,
             LOG(WARNING) << "invalid tera key: " << DebugString(tera_key.ToString());
             it->Next();
             continue;
+        }
+        if (now_time > time_out) {
+            VLOG(9) << "ll-scan timeout. Mark next start key: " << DebugString(tera_key.ToString());
+            MakeKvPair(key, col, qual, ts, "", &next_start_kv_pair);
+            break;
         }
 
         VLOG(10) << "ll-scan: " << "tablet=[" << m_tablet_path
@@ -718,11 +730,7 @@ inline bool TabletIO::LowLevelScan(const std::string& start_tera_key,
         }
 
         KeyValuePair kv;
-        kv.set_key(key.data(), key.size());
-        kv.set_column_family(col.data(), col.size());
-        kv.set_qualifier(qual.data(), qual.size());
-        kv.set_timestamp(ts);
-        kv.set_value(value.data(), value.size());
+        MakeKvPair(key, col, qual, ts, value, &kv);
         row_buf.push_back(kv);
 
         // check scan buffer
@@ -754,12 +762,24 @@ inline bool TabletIO::LowLevelScan(const std::string& start_tera_key,
 
     // check if scan finished
     SetStatusCode(kTableOk, status);
-    if (buffer_size < scan_options.max_size) {
+    if (buffer_size < scan_options.max_size && now_time <= time_out) {
         *is_complete = true;
     } else {
+        if (now_time > time_out && next_start_point) {
+            next_start_point->CopyFrom(next_start_kv_pair);
+        }
         *is_complete = false;
     }
     return true;
+}
+
+void TabletIO::MakeKvPair(leveldb::Slice key, leveldb::Slice col, leveldb::Slice qual,
+                          int64_t ts, leveldb::Slice value, KeyValuePair* kv) {
+    kv->set_key(key.data(), key.size());
+    kv->set_column_family(col.data(), col.size());
+    kv->set_qualifier(qual.data(), qual.size());
+    kv->set_timestamp(ts);
+    kv->set_value(value.data(), value.size());
 }
 
 bool TabletIO::LowLevelSeek(const std::string& row_key,
@@ -1016,7 +1036,7 @@ bool TabletIO::ReadCells(const RowReaderInfo& row_reader, RowResult* value_list,
         uint32_t read_bytes = 0;
         bool is_complete = false;
         ret = LowLevelScan(start_tera_key, end_row_key, scan_options,
-                           value_list, &read_row_count, &read_bytes,
+                           value_list, NULL, &read_row_count, &read_bytes,
                            &is_complete, status);
     }
     m_counter.read_rows.Inc();
@@ -1166,8 +1186,8 @@ bool TabletIO::ScanRowsRestricted(const ScanTabletRequest* request,
     StatusCode status = kTabletNodeOk;
     bool ret = false;
     if (LowLevelScan(start_tera_key, end_row_key, scan_options,
-                     response->mutable_results(), &read_row_count, &read_bytes,
-                     &is_complete, &status)) {
+                     response->mutable_results(), response->mutable_next_start_point(),
+                     &read_row_count, &read_bytes, &is_complete, &status)) {
         response->set_complete(is_complete);
         m_counter.scan_rows.Add(read_row_count);
         m_counter.scan_size.Add(read_bytes);
@@ -1216,7 +1236,7 @@ bool TabletIO::ScanRowsStreaming(const ScanTabletRequest* request,
     while (status == kTabletNodeOk) {
         RowResult value_list;
         if (LowLevelScan(start_tera_key, end_row_key, scan_options, it,
-                         &value_list, &read_row_count, &read_bytes,
+                         &value_list, response->mutable_next_start_point(), &read_row_count, &read_bytes,
                          &is_complete, &status)) {
             m_counter.scan_rows.Add(read_row_count);
             m_counter.scan_size.Add(read_bytes);
@@ -1388,6 +1408,9 @@ void TabletIO::SetupScanRowOptions(const ScanTabletRequest* request,
     }
     if (request->has_buffer_limit()) {
         scan_options->max_size = request->buffer_limit();
+    }
+    if (request->timeout()) {
+        scan_options->timeout = request->timeout();
     }
 
     scan_options->snapshot_id = request->snapshot_id();
