@@ -520,7 +520,9 @@ bool MasterImpl::LoadMetaTable(const std::string& meta_tablet_addr,
             const KeyValuePair& record = response.results().key_values(i);
             last_record_key = record.key();
             char first_key_char = record.key()[0];
-            if (first_key_char == '@') {
+            if (first_key_char == '~') {
+                m_user_manager->LoadUserMeta(record.key(), record.value());
+            } else if (first_key_char == '@') {
                 m_tablet_manager->LoadTableMeta(record.key(), record.value());
                 FillAlias(record.key(), record.value());
             } else if (first_key_char > '@') {
@@ -581,7 +583,9 @@ bool MasterImpl::LoadMetaTableFromFile(const std::string& filename,
         }
 
         char first_key_char = key[0];
-        if (first_key_char == '@') {
+        if (first_key_char == '~') {
+            m_user_manager->LoadUserMeta(key, value);
+        } else if (first_key_char == '@') {
             m_tablet_manager->LoadTableMeta(key, value);
             FillAlias(key, value);
         } else if (first_key_char > '@') {
@@ -1225,9 +1229,10 @@ void MasterImpl::OperateUser(const OperateUserRequest* request,
         done->Run();
         return;
     }
+
     /*
      * for (change password), (add user to group), (delete user from group),
-     * we gets the original UserInfo(including token & group), 
+     * we get the original UserInfo(including token & group), 
      * do some modification according to the RPC request on the original UserInfo,
      * and rewrite it to meta table.
      */

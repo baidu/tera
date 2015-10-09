@@ -216,7 +216,9 @@ UserInfo UserManager::GetUserInfo(const std::string& user_name) {
     UserList::iterator it = m_all_users.find(user_name);
     if (it == m_all_users.end()) {
         LOG(INFO) << "[user-manager] user:" << user_name << " not found";        
-        return UserInfo();
+        UserInfo ui;
+        ui.set_user_name("(user_not_found)");
+        return ui;
     }
     return it->second->GetUserInfo();
 }
