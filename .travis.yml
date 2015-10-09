@@ -53,3 +53,4 @@ before_script:
 
 script:
     - make -j4
+    - sh ft_test.sh
