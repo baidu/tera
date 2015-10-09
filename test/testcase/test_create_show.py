@@ -1,13 +1,7 @@
-################################################################################
-#
-# Copyright (c) 2015 Baidu.com, Inc. All Rights Reserved
-#
-################################################################################
 """
-This module provide function test for create and show method.
-
-Authors: zhangmiao07(zhangmiao07@baidu.com)
-Date:    2015/09/18 17:23:06
+Copyright (c) 2015, Baidu.com, Inc. All Rights Reserved
+Use of this source code is governed by a BSD-style license that can be
+found in the LICENSE file.
 """
 
 import nose.tools
@@ -79,7 +73,5 @@ def tearDown():
     """
     clear env
     """
-
-    common.print_debug_msg(4, "delete table_test001 and table_test002, clear env")
 
     common.clear_env()

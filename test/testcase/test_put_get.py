@@ -1,13 +1,7 @@
-################################################################################
-#
-# Copyright (c) 2015 Baidu.com, Inc. All Rights Reserved
-#
-################################################################################
 """
-This module provide function test for put and get method.
-
-Authors: zhangmiao07(zhangmiao07@baidu.com)
-Date:    2015/09/18 17:23:06
+Copyright (c) 2015, Baidu.com, Inc. All Rights Reserved
+Use of this source code is governed by a BSD-style license that can be
+found in the LICENSE file.
 """
 
 import nose.tools
@@ -21,8 +15,15 @@ def setUp():
     set env
     """
     
-    common.construct_env()
-    common.table_prepare()
+    common.print_debug_msg(0, "start master, ts1, ts2, ts3, and status is ok")
+    common.print_debug_msg(1, "create test_table001 and test_table002(kv)")
+    cmd = "cd ../; ./teracli createbyfile testcase/data/create_table_schema; \
+           cd testcase/"
+    common.exe_and_check_res(cmd)
+
+    cmd = "cd ../; ./teracli create 'table_test002 <storage=flash, splitsize=2048, mergesize=128>'; \
+           cd testcase/"
+    common.exe_and_check_res(cmd)
 
 
 def test_put_table():
