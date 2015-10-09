@@ -2,6 +2,7 @@ language: cpp
 compiler: gcc
 install:
     - sudo apt-get install libboost-dev uuid-dev python-pip
+    - sudo pip install nose
 
     - wget https://github.com/google/protobuf/releases/download/v2.6.1/protobuf-2.6.1.tar.gz
     - tar xf protobuf-2.6.1.tar.gz
@@ -39,6 +40,8 @@ install:
     - git clone https://github.com/fxsjy/ins
     - (cd ins && PBRPC_PATH=../sofa-pbrpc/output/ make sdk )
 
+    - sudo ldconfig
+
 before_script:
     - sed -i 's/^SOFA_PBRPC_PREFIX=.*/SOFA_PBRPC_PREFIX=.\/sofa-pbrpc\/output/' depends.mk
     - sed -i 's/^PROTOBUF_PREFIX=.*/PROTOBUF_PREFIX=\/usr\/local/' depends.mk
@@ -53,6 +56,5 @@ before_script:
 
 script:
     - make -j4
-    - sudo pip install nose
     - ./ft_test.sh
     - cd tmp/bin; nosetests
