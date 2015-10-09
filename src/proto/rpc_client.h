@@ -137,7 +137,7 @@ protected:
             }
 
             // async call
-            boost::function<void ()> callback =
+            ThreadPool::Task callback =
                 boost::bind(&RpcClient::template UserCallback<Request, Response, Callback>,
                 request, response, closure, true,
                 (int)sofa::pbrpc::RPC_ERROR_RESOLVE_ADDRESS);
@@ -191,7 +191,7 @@ protected:
         }
 
         // async call
-        boost::function<void ()> done =
+        ThreadPool::Task done =
             boost::bind(&RpcClient::template UserCallback<Request, Response, Callback>,
             request, response, closure, failed, error);
         thread_pool->AddTask(done);

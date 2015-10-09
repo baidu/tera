@@ -270,7 +270,8 @@ void Adapter::ReadCallback(tera::RowReader* reader, size_t req_size,
 }
 
 void Adapter::Delete(const std::string& row,
-                     std::map<std::string, std::set<std::string> >& column) {
+                     std::map<std::string, std::set<std::string> >& column,
+                     uint64_t ts) {
     tera::RowMutation* row_mu = m_table->NewRowMutation(row);
     size_t req_size = row.size();
 
@@ -288,7 +289,7 @@ void Adapter::Delete(const std::string& row,
             for (it2 = qualifiers.begin(); it2 != qualifiers.end(); ++it2) {
                 const std::string& qualifier = *it2;
                 req_size += family.size() + qualifier.size();
-                row_mu->DeleteColumns(family, qualifier);
+                row_mu->DeleteColumn(family, qualifier, ts);
             }
         }
     }

@@ -80,7 +80,7 @@ void RemoteTabletNode::LoadTablet(google::protobuf::RpcController* controller,
                                   const LoadTabletRequest* request,
                                   LoadTabletResponse* response,
                                   google::protobuf::Closure* done) {
-    boost::function<void ()> callback =
+    ThreadPool::Task callback =
         boost::bind(&RemoteTabletNode::DoLoadTablet, this, controller,
                    request, response, done);
     m_ctrl_thread_pool->AddTask(callback);
@@ -90,7 +90,7 @@ void RemoteTabletNode::UnloadTablet(google::protobuf::RpcController* controller,
                                     const UnloadTabletRequest* request,
                                     UnloadTabletResponse* response,
                                     google::protobuf::Closure* done) {
-    boost::function<void ()> callback =
+    ThreadPool::Task callback =
         boost::bind(&RemoteTabletNode::DoUnloadTablet, this, controller,
                    request, response, done);
     m_ctrl_thread_pool->AddTask(callback);
@@ -145,7 +145,7 @@ void RemoteTabletNode::WriteTablet(google::protobuf::RpcController* controller,
         int64_t start_micros = get_micros();
         WriteRpcTimer* timer = new WriteRpcTimer(request, response, done, start_micros);
         RpcTimerList::Instance()->Push(timer);
-        boost::function<void ()> callback =
+        ThreadPool::Task callback =
             boost::bind(&RemoteTabletNode::DoWriteTablet, this,
                        controller, request, response, done, timer);
         m_write_thread_pool->AddTask(callback);
@@ -156,7 +156,7 @@ void RemoteTabletNode::GetSnapshot(google::protobuf::RpcController* controller,
                                   const SnapshotRequest* request,
                                   SnapshotResponse* response,
                                   google::protobuf::Closure* done) {
-    boost::function<void ()> callback =
+    ThreadPool::Task callback =
         boost::bind(&RemoteTabletNode::DoGetSnapshot, this, controller,
                     request, response, done);
     m_write_thread_pool->AddPriorityTask(callback);
@@ -166,7 +166,7 @@ void RemoteTabletNode::ReleaseSnapshot(google::protobuf::RpcController* controll
                                            const ReleaseSnapshotRequest* request,
                                            ReleaseSnapshotResponse* response,
                                            google::protobuf::Closure* done) {
-    boost::function<void ()> callback =
+    ThreadPool::Task callback =
     boost::bind(&RemoteTabletNode::DoReleaseSnapshot, this, controller,
                request, response, done);
     m_write_thread_pool->AddPriorityTask(callback);
@@ -176,7 +176,7 @@ void RemoteTabletNode::Rollback(google::protobuf::RpcController* controller,
                                 const SnapshotRollbackRequest* request,
                                 SnapshotRollbackResponse* response,
                                 google::protobuf::Closure* done) {
-    boost::function<void ()> callback =
+    ThreadPool::Task callback =
     boost::bind(&RemoteTabletNode::DoRollback, this, controller,
                request, response, done);
     m_write_thread_pool->AddPriorityTask(callback);
@@ -187,7 +187,7 @@ void RemoteTabletNode::Query(google::protobuf::RpcController* controller,
                              const QueryRequest* request,
                              QueryResponse* response,
                              google::protobuf::Closure* done) {
-    boost::function<void ()> callback =
+    ThreadPool::Task callback =
         boost::bind(&RemoteTabletNode::DoQuery, this, controller,
                    request, response, done);
     m_ctrl_thread_pool->AddPriorityTask(callback);
@@ -215,7 +215,7 @@ void RemoteTabletNode::SplitTablet(google::protobuf::RpcController* controller,
                                    const SplitTabletRequest* request,
                                    SplitTabletResponse* response,
                                    google::protobuf::Closure* done) {
-    boost::function<void ()> callback =
+    ThreadPool::Task callback =
         boost::bind(&RemoteTabletNode::DoSplitTablet, this, controller,
                     request, response, done);
     m_ctrl_thread_pool->AddTask(callback);
@@ -226,7 +226,7 @@ void RemoteTabletNode::CompactTablet(google::protobuf::RpcController* controller
                                    CompactTabletResponse* response,
                                    google::protobuf::Closure* done) {
     compact_pending_counter.Inc();
-    boost::function<void ()> callback =
+    ThreadPool::Task callback =
         boost::bind(&RemoteTabletNode::DoCompactTablet, this, controller,
                    request, response, done);
     m_compact_thread_pool->AddTask(callback);

@@ -117,6 +117,11 @@ sed -i "s|^PROTOC=.*|PROTOC=${DEPS_PREFIX}/bin/protoc|" Makefile
 BOOST_PATH=${DEPS_PREFIX}/boost_1_57_0 make -j4 install_sdk
 cd -
 
+# functional test: nose
+tar zxf nose.tar.gz
+mv nose ${DEPS_PREFIX}/include/
+mv ${DEPS_PREFIX}/include/nose/nosetests ${DEPS_PREFIX}/bin
+
 cd ${WORK_DIR}
 
 ########################################

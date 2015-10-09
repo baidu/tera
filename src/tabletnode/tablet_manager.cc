@@ -40,7 +40,7 @@ bool TabletManager::AddTablet(const std::string& table_name,
         SetStatusCode(kTableExist, status);
         return false;
     }
-    *tablet_io = m_tablet_list[tablet_range] = new io::TabletIO();
+    *tablet_io = m_tablet_list[tablet_range] = new io::TabletIO(key_start, key_end);
     (*tablet_io)->AddRef();
     return true;
 }
@@ -127,7 +127,9 @@ void TabletManager::GetAllTabletMeta(std::vector<TabletMeta*>* tablet_meta_list)
         tablet_meta->mutable_key_range()->set_key_start(range.key_start);
         tablet_meta->mutable_key_range()->set_key_end(range.key_end);
         tablet_meta->set_status(TabletStatus(tablet_io->GetStatus()));
-        tablet_meta->set_table_size(tablet_io->GetDataSize());
+        uint64_t size;
+        tablet_io->GetDataSize(&size);
+        tablet_meta->set_size(size);
         tablet_meta->set_compact_status(tablet_io->GetCompactStatus());
         tablet_meta_list->push_back(tablet_meta);
         std::vector<uint64_t> snapshots;

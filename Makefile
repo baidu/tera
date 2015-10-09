@@ -35,7 +35,7 @@ SERVER_SRC := src/tera_main.cc src/tera_entry.cc
 CLIENT_SRC := src/teracli_main.cc
 MONITOR_SRC := src/monitor/teramo_main.cc
 MARK_SRC := src/benchmark/mark.cc src/benchmark/mark_main.cc
-TEST_SRC := src/utils/test/prop_tree_test.cc src/utils/test/tprinter_test.cc
+TEST_SRC := src/utils/test/prop_tree_test.cc src/utils/test/tprinter_test.cc src/io/test/tablet_io_test.cc
 
 TEST_OUTPUT := test_output
 UNITTEST_OUTPUT := $(TEST_OUTPUT)/unittest
@@ -62,7 +62,7 @@ PROGRAM = tera_main teracli teramo
 LIBRARY = libtera.a
 JNILIBRARY = libjni_tera.so
 BENCHMARK = tera_bench tera_mark
-TEST = prop_tree_test tprinter_test
+TEST = prop_tree_test tprinter_test tablet_io_test
 
 .PHONY: all clean cleanall test
 
@@ -118,6 +118,10 @@ prop_tree_test: src/utils/test/prop_tree_test.o $(LIBRARY)
 
 tprinter_test: src/utils/test/tprinter_test.o $(LIBRARY)
 	$(CXX) -o $@ $^ $(LDFLAGS) 
+
+tablet_io_test: src/io/test/tablet_io_test.o src/tabletnode/tabletnode_sysinfo.o\
+		$(IO_OBJ) $(PROTO_OBJ) $(OTHER_OBJ) $(COMMON_OBJ) $(LEVELDB_LIB)
+	$(CXX) -o $@ $^ $(LDFLAGS)
 
 $(ALL_OBJ): %.o: %.cc $(PROTO_OUT_H)
 	$(CXX) $(CXXFLAGS) -c $< -o $@
