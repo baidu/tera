@@ -29,8 +29,8 @@ public:
         : _table(table),
           _client(client),
           _scanner(NULL) {
-        boost::function<void ()> closure = boost::bind(&TableImpl::PrintStatus, this);
-        _thread_pool.DelayTask(1000, closure);
+        ThreadPool::Task task = boost::bind(&TableImpl::PrintStatus, this);
+        _thread_pool.DelayTask(1000, task);
     }
 
     ~TableImpl() {
@@ -204,8 +204,8 @@ private:
             << ", pending size " << _s_pending_size.Get()
             << ", success " << _s_write_succ_num.Clear()
             << ", fail " << _s_write_fail_num.Clear();
-        boost::function<void ()> closure = boost::bind(&TableImpl::PrintStatus, this);
-        _thread_pool.DelayTask(1000, closure);
+        ThreadPool::Task task = boost::bind(&TableImpl::PrintStatus, this);
+        _thread_pool.DelayTask(1000, task);
     }
 
 private:

@@ -86,6 +86,8 @@ public:
 
     virtual bool DelSnapshot(const string& name, uint64_t snapshot, ErrorCode* err);
 
+    virtual bool Rollback(const string& name, uint64_t snapshot, ErrorCode* err);
+
     virtual bool CmdCtrl(const string& command,
                          const std::vector<string>& arg_list,
                          bool* bool_result,
@@ -112,7 +114,7 @@ public:
     bool Rename(const std::string& old_table_name,
                 const std::string& new_table_name,
                 ErrorCode* err);
-    
+
     std::string GetZkAddrList() { return _zk_addr_list; }
     std::string GetZkRootPath() { return _zk_root_path; }
 

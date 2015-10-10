@@ -372,8 +372,9 @@ bool ClientImpl::GetInternalTableName(const std::string& table_name, ErrorCode* 
     request.set_end("@~");
     if (!meta_client.ScanTablet(&request, &response)
           || response.status() != kTabletNodeOk) {
-         err->SetFailed(ErrorCode::kSystem, "system error");
-         return false;
+        LOG(ERROR) << "fail to scan meta: " << StatusCodeToString(response.status());
+        err->SetFailed(ErrorCode::kSystem, "system error");
+        return false;
     }
     err->SetFailed(ErrorCode::kOK);
     int32_t table_size = response.results().key_values_size();
@@ -401,14 +402,13 @@ Table* ClientImpl::OpenTable(const std::string& table_name,
                              ErrorCode* err) {
     std::string internal_table_name;
     if (!GetInternalTableName(table_name, err, &internal_table_name)) {
-        LOG(ERROR) << "faild to scan meta schema";
+        LOG(ERROR) << "fail to scan meta schema";
         return NULL;
     }
     err->SetFailed(ErrorCode::kOK);
     TableImpl* table = new TableImpl(internal_table_name,
-                                     _zk_root_path,
-                                     _zk_addr_list,
-                                     &_thread_pool);
+                                     _zk_root_path, _zk_addr_list,
+                                     &_thread_pool, _cluster);
     if (table == NULL) {
         LOG(ERROR) << "fail to new TableImpl.";
         return NULL;
@@ -756,10 +756,15 @@ bool ClientImpl::IsTableEmpty(const string& table_name, ErrorCode* err) {
 bool ClientImpl::GetSnapshot(const string& name, uint64_t* snapshot, ErrorCode* err) {
     master::MasterClient master_client(_cluster->MasterAddr());
 
+    std::string internal_table_name;
+    if (!GetInternalTableName(name, err, &internal_table_name)) {
+        LOG(ERROR) << "faild to scan meta schema";
+        return false;
+    }
     GetSnapshotRequest request;
     GetSnapshotResponse response;
     request.set_sequence_id(0);
-    request.set_table_name(name);
+    request.set_table_name(internal_table_name);
 
     if (master_client.GetSnapshot(&request, &response)) {
         if (response.status() == kMasterOk) {
@@ -776,10 +781,15 @@ bool ClientImpl::GetSnapshot(const string& name, uint64_t* snapshot, ErrorCode* 
 bool ClientImpl::DelSnapshot(const string& name, uint64_t snapshot, ErrorCode* err) {
     master::MasterClient master_client(_cluster->MasterAddr());
 
+    std::string internal_table_name;
+    if (!GetInternalTableName(name, err, &internal_table_name)) {
+        LOG(ERROR) << "faild to scan meta schema";
+        return false;
+    }
     DelSnapshotRequest request;
     DelSnapshotResponse response;
     request.set_sequence_id(0);
-    request.set_table_name(name);
+    request.set_table_name(internal_table_name);
     request.set_snapshot_id(snapshot);
 
     if (master_client.DelSnapshot(&request, &response)) {
@@ -790,6 +800,26 @@ bool ClientImpl::DelSnapshot(const string& name, uint64_t snapshot, ErrorCode* e
     }
     err->SetFailed(ErrorCode::kSystem, StatusCodeToString(response.status()));
     std::cout << name << " del snapshot failed";
+    return false;
+}
+
+bool ClientImpl::Rollback(const string& name, uint64_t snapshot, ErrorCode* err) {
+    master::MasterClient master_client(_cluster->MasterAddr());
+
+    RollbackRequest request;
+    RollbackResponse response;
+    request.set_sequence_id(0);
+    request.set_table_name(name);
+    request.set_snapshot_id(snapshot);
+
+    if (master_client.Rollback(&request, &response)) {
+        if (response.status() == kMasterOk) {
+            std::cout << name << " rollback to snapshot sucessfully" << std::endl;
+            return true;
+        }
+    }
+    err->SetFailed(ErrorCode::kSystem, StatusCodeToString(response.status()));
+    std::cout << name << " rollback to snapshot failed";
     return false;
 }
 
@@ -839,7 +869,7 @@ bool ClientImpl::Rename(const std::string& old_table_name,
         err->SetFailed(ErrorCode::kSystem, "failed to rename table");
         return false;
     }
-    LOG(INFO) << "rename table OK. " << old_table_name 
+    LOG(INFO) << "rename table OK. " << old_table_name
               << " -> " << new_table_name;
     return true;
 }
@@ -930,7 +960,7 @@ bool ClientImpl::ParseTabletEntry(const TabletMeta& meta, std::vector<TabletInfo
     tablet.start_key = meta.key_range().key_start();
     tablet.end_key = meta.key_range().key_end();
     tablet.server_addr = meta.server_addr();
-    tablet.data_size = meta.table_size();
+    tablet.data_size = meta.size();
     tablet.status = StatusCodeToString(meta.status());
 
     tablet_list->push_back(tablet);

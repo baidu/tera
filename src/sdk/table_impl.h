@@ -84,7 +84,8 @@ public:
     TableImpl(const std::string& table_name,
               const std::string& zk_root_path,
               const std::string& zk_addr_list,
-              ThreadPool* thread_pool);
+              ThreadPool* thread_pool,
+              sdk::ClusterFinder* cluster);
 
     virtual ~TableImpl();
 
@@ -402,7 +403,6 @@ private:
     master::MasterClient* _master_client;
     tabletnode::TabletNodeClient* _tabletnode_client;
 
-    // flags
     std::string _zk_root_path;
     std::string _zk_addr_list;
 
@@ -413,6 +413,7 @@ private:
     /// if there is _cluster,
     ///    we save master_addr & root_table_addr in _cluster, access zookeeper only once.
     sdk::ClusterFinder* _cluster;
+    bool _cluster_private;
 
     PerfCounter _perf_counter;  // calc time consumption, for performance analysis
     int64_t _perf_log_task_id;

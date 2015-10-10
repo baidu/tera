@@ -83,6 +83,8 @@ public:
     // use "snapshot" after this call.
     virtual void ReleaseSnapshot(uint64_t sequence_number);
 
+    virtual const uint64_t Rollback(uint64_t snapshot_seq, uint64_t rollback_point = kMaxSequenceNumber);
+
     // DB implementations can export properties about their state
     // via this method.  If "property" is a valid property understood by this
     // DB implementation, fills "*value" with its current value and returns
@@ -109,6 +111,10 @@ public:
     // The results may not include the sizes of recently written data.
     virtual void GetApproximateSizes(const Range* range, int n,
                                      uint64_t* sizes);
+    // tera-specific
+    // size: db size, include mem, imm, all sst files
+    // lgsize: each lg size, include all storage
+    virtual void GetApproximateSizes(uint64_t* size, std::vector<uint64_t>* lgsize);
 
     // Compact the underlying storage for the key range [*begin,*end].
     // In particular, deleted and overwritten versions are discarded,
@@ -127,10 +133,6 @@ public:
                               const std::string& end_key,
                               double ratio,
                               std::string* split_key);
-
-    virtual uint64_t GetScopeSize(const std::string& start_key,
-                                  const std::string& end_key,
-                                  std::vector<uint64_t>* lgsize);
 
     virtual bool MinorCompact();
 

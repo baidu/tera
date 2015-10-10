@@ -51,51 +51,55 @@ bool ClusterFinder::ReadZkNode(const std::string path, std::string* value) {
 }
 
 std::string ClusterFinder::MasterAddr(bool update) {
+    std::string master_addr;
     if (FLAGS_tera_ins_enabled) {
+        // ins
         std::string master_node =
             FLAGS_tera_ins_root_path + kMasterNodePath;
-        if (!zk::InsUtil::ReadNode(master_node, &_master_addr)) {
+        if (!zk::InsUtil::ReadNode(master_node, &master_addr)) {
             LOG(FATAL) << "fail to read ins master node: " << master_node;
         }
-        return _master_addr;
-    }
-    else if (!FLAGS_tera_zk_enabled) {
+    } else if (!FLAGS_tera_zk_enabled) {
         // use local file system as a fake zk
         std::string master_node =
             FLAGS_tera_fake_zk_path_prefix + kMasterLockPath + "/0";
-        if (!zk::FakeZkUtil::ReadNode(master_node, &_master_addr)) {
+        if (!zk::FakeZkUtil::ReadNode(master_node, &master_addr)) {
             LOG(FATAL) << "fail to read fake master node: " << master_node;
         }
-        return _master_addr;
-    }
-    if (update || _master_addr == "") {
-        if (!ReadZkNode(kMasterNodePath, &_master_addr)) {
-            _master_addr = "";
+    } else if (update || _master_addr == "") {
+        // zookeeper
+        if (!ReadZkNode(kMasterNodePath, &master_addr)) {
+            master_addr = "";
         }
+    }
+    if (!master_addr.empty()) {
+        MutexLock lock(&_mutex);
+        _master_addr = master_addr;
     }
     return _master_addr;
 }
 
 std::string ClusterFinder::RootTableAddr(bool update) {
+    std::string root_table_addr;
     if (FLAGS_tera_ins_enabled) {
         std::string root_node = FLAGS_tera_ins_root_path + kRootTabletNodePath;
-        if (!zk::InsUtil::ReadNode(root_node, &_root_table_addr)) {
+        if (!zk::InsUtil::ReadNode(root_node, &root_table_addr)) {
             LOG(FATAL) << "fail to read ins meta node: " << root_node;
         }
-        return _root_table_addr;
-    }
-    else if (!FLAGS_tera_zk_enabled) {
+    } else if (!FLAGS_tera_zk_enabled) {
         // use local file system as a fake zk
         std::string root_node = FLAGS_tera_fake_zk_path_prefix + kRootTabletNodePath;
-        if (!zk::FakeZkUtil::ReadNode(root_node, &_root_table_addr)) {
+        if (!zk::FakeZkUtil::ReadNode(root_node, &root_table_addr)) {
             LOG(FATAL) << "fail to read fake master node: " << root_node;
         }
-        return _root_table_addr;
-    }
-    if (update || _root_table_addr == "") {
-        if (!ReadZkNode(kRootTabletNodePath, &_root_table_addr)) {
-            _root_table_addr = "";
+    } else if (update || _root_table_addr == "") {
+        if (!ReadZkNode(kRootTabletNodePath, &root_table_addr)) {
+            root_table_addr = "";
         }
+    }
+    if (!root_table_addr.empty()) {
+        MutexLock lock(&_mutex);
+        _root_table_addr = root_table_addr;
     }
     return _root_table_addr;
 }

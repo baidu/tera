@@ -70,7 +70,7 @@ TEST(WriteBatchTest, Multiple) {
   batch.Delete(Slice("box"));
   batch.Put(Slice("baz"), Slice("boo"));
   WriteBatchInternal::SetSequence(&batch, 100);
-  ASSERT_EQ(100, WriteBatchInternal::Sequence(&batch));
+  ASSERT_EQ(100u, WriteBatchInternal::Sequence(&batch));
   ASSERT_EQ(3, WriteBatchInternal::Count(&batch));
   ASSERT_EQ("Put(baz, boo)@102"
             "Delete(box)@101"

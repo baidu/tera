@@ -82,6 +82,14 @@ bool TabletNodeClient::ReleaseSnapshot(const ReleaseSnapshotRequest* request,
                                 m_rpc_timeout, m_thread_pool);
 }
 
+bool TabletNodeClient::Rollback(const SnapshotRollbackRequest* request,
+                                SnapshotRollbackResponse* response,
+                                Closure<void, SnapshotRollbackRequest*, SnapshotRollbackResponse*, bool, int>* done) {
+    return SendMessageWithRetry(&TabletNodeServer::Stub::Rollback,
+                                request, response, done, "Rollback",
+                                m_rpc_timeout, m_thread_pool);
+}
+
 bool TabletNodeClient::Query(const QueryRequest* request,
                                   QueryResponse* response,
                                   Closure<void, QueryRequest*, QueryResponse*, bool, int>* done) {

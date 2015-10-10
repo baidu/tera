@@ -43,7 +43,9 @@ DEFINE_int32(tera_client_batch_put_num, 1000, "num of each batch in batch put mo
 DEFINE_int32(tera_client_scan_package_size, 1024, "the package size (in KB) of each scan request");
 DEFINE_bool(tera_client_scan_async_enabled, false, "enable the streaming scan mode");
 
+DEFINE_int64(scan_pack_interval, 5000, "scan timeout");
 DEFINE_int64(snapshot, 0, "read | scan snapshot");
+DEFINE_string(rollback_switch, "close", "Pandora's box, do not open");
 
 volatile int32_t g_start_time = 0;
 volatile int32_t g_end_time = 0;
@@ -177,7 +179,7 @@ void UsageMore(const std::string& prg_name) {
        version\n\n";
 }
 int32_t CreateOp(Client* client, int32_t argc, char** argv, ErrorCode* err) {
-    if (argc < 2) {
+    if (argc < 3) {
         Usage(argv[0]);
         return -1;
     }
@@ -185,32 +187,14 @@ int32_t CreateOp(Client* client, int32_t argc, char** argv, ErrorCode* err) {
     TableDescriptor table_desc;
     std::vector<std::string> delimiters;
     std::string schema = argv[2];
-    if (!ParseSchema(schema, &table_desc)) {
+    if (!ParseTableSchema(schema, &table_desc)) {
         LOG(ERROR) << "fail to parse input table schema.";
         return -1;
     }
     if (argc == 4) {
         // have tablet delimiters
-        std::string delim_file = argv[3];
-        std::ifstream fin(delim_file.c_str());
-        if (fin.fail()) {
-            LOG(ERROR) << "fail to read delimiter file: " << delim_file;
-            return -1;
-        }
-        std::string str;
-        while (fin >> str) {
-            delimiters.push_back(str);
-        }
-        bool is_delim_error = false;
-        for (size_t i = 1; i < delimiters.size() - 1; i++) {
-            if (delimiters[i] <= delimiters[i-1]) {
-                LOG(ERROR) << "delimiter error: line: " << i + 1
-                    << ", [" << delimiters[i] << "]";
-                is_delim_error = true;
-            }
-        }
-        if (is_delim_error) {
-            LOG(ERROR) << "create table fail, delimiter error.";
+        if (!ParseDelimiterFile(argv[3], &delimiters)) {
+            LOG(ERROR) << "fail to parse delimiter file.";
             return -1;
         }
     } else if (argc > 4) {
@@ -232,32 +216,22 @@ int32_t CreateByFileOp(Client* client, int32_t argc, char** argv, ErrorCode* err
         return -1;
     }
 
-    std::ifstream fin(argv[2]);
-    std::string schema;
-    std::vector<std::string> delimiters;
-    if (fin.good()) {
-        std::string str;
-        while (fin >> str) {
-            schema.append(str);
-        }
-    }
-
     TableDescriptor table_desc;
-    if (!ParseSchema(schema, &table_desc)) {
+    if (!ParseTableSchemaFile(argv[2], &table_desc)) {
         LOG(ERROR) << "fail to parse input table schema.";
         return -1;
     }
 
+    std::vector<std::string> delimiters;
     if (argc == 4) {
-        std::ifstream fin(argv[3]);
-        if (fin.fail()) {
-            LOG(ERROR) << "fail to read delimiter file.";
+        // have tablet delimiters
+        if (!ParseDelimiterFile(argv[3], &delimiters)) {
+            LOG(ERROR) << "fail to parse delimiter file.";
             return -1;
         }
-        std::string str;
-        while (fin >> str) {
-            delimiters.push_back(str);
-        }
+    } else if (argc > 4) {
+        LOG(ERROR) << "too many args: " << argc;
+        return -1;
     }
     if (!client->CreateTable(table_desc, delimiters, err)) {
         LOG(ERROR) << "fail to create table, "
@@ -828,6 +802,7 @@ int32_t ScanOp(Client* client, int32_t argc, char** argv, ErrorCode* err) {
     desc.SetEnd(end_rowkey);
     desc.SetBufferSize(FLAGS_tera_client_scan_package_size << 10);
     desc.SetAsync(FLAGS_tera_client_scan_async_enabled);
+    desc.SetPackInterval(FLAGS_scan_pack_interval);
 
     if (argc == 5) {
         // scan all cells
@@ -910,8 +885,9 @@ int32_t ShowTabletList(const TabletMetaList& tablet_list, bool is_server_addr, b
             row.push_back(meta.path());
             row.push_back(StatusCodeToString(meta.status()));
 
+            uint64_t size = meta.size();
             std::string size_str =
-                utils::ConvertByteToString(meta.table_size()) +
+                utils::ConvertByteToString(size) +
                 "[";
             for (int l = 0; l < meta.lg_size_size(); ++l) {
                 size_str += utils::ConvertByteToString(meta.lg_size(l));
@@ -952,7 +928,9 @@ int32_t ShowTabletList(const TabletMetaList& tablet_list, bool is_server_addr, b
             row.push_back(meta.server_addr());
             row.push_back(meta.path());
             row.push_back(StatusCodeToString(meta.status()));
-            row.push_back(utils::ConvertByteToString(meta.table_size()));
+
+            uint64_t size = meta.size();
+            row.push_back(utils::ConvertByteToString(size));
             row.push_back(DebugString(meta.key_range().key_start()).substr(0, 20));
             row.push_back(DebugString(meta.key_range().key_end()).substr(0, 20));
             printer.AddRow(row);
@@ -1011,7 +989,7 @@ int32_t ShowAllTables(Client* client, bool is_x, bool show_all, ErrorCode* err) 
         std::vector<int64_t> lg_size;
         for (int32_t i = 0; i < tablet_list.meta_size(); ++i) {
             if (tablet_list.meta(i).table_name() == tablename) {
-                size += tablet_list.meta(i).table_size();
+                size += tablet_list.meta(i).size();
                 tablet++;
                 if (tablet_list.counter(i).is_on_busy()) {
                     busy++;
@@ -1742,20 +1720,23 @@ int32_t SnapshotOp(Client* client, int32_t argc, char** argv, ErrorCode* err) {
     std::string tablename = argv[2];
     uint64_t snapshot = 0;
     if (argc == 5 && strcmp(argv[3], "del") == 0) {
-        std::stringstream is;
-        is << std::string(argv[4]);
-        is >> snapshot;
-        if (!client->DelSnapshot(tablename, snapshot, err)) {
-            LOG(ERROR) << "fail to del snapshot: " << snapshot << " ," << err->GetReason();
+        if (!client->DelSnapshot(tablename, FLAGS_snapshot, err)) {
+            LOG(ERROR) << "fail to del snapshot: " << FLAGS_snapshot << " ," << err->GetReason();
             return -1;
         }
         std::cout << "Del snapshot " << snapshot << std::endl;
-    } else if (strcmp(argv[3], "create") == 0 ) {
+    } else if (strcmp(argv[3], "create") == 0) {
         if (!client->GetSnapshot(tablename, &snapshot, err)) {
             LOG(ERROR) << "fail to get snapshot: " << err->GetReason();
             return -1;
         }
         std::cout << "new snapshot: " << snapshot << std::endl;
+    }  else if (FLAGS_rollback_switch == "open" && strcmp(argv[3], "rollback") == 0) {
+        if (!client->Rollback(tablename, FLAGS_snapshot, err)) {
+            LOG(ERROR) << "fail to rollback to snapshot: " << err->GetReason();
+            return -1;
+        }
+        std::cout << "rollback to snapshot: " << FLAGS_snapshot << std::endl;
     } else {
         Usage(argv[0]);
         return -1;
@@ -1903,11 +1884,11 @@ int32_t RenameOp(Client* client, int32_t argc, char** argv, ErrorCode* err) {
     std::string old_table_name = argv[2];
     std::string new_table_name = argv[3];
     if (!client->Rename(old_table_name, new_table_name, err)) {
-        LOG(ERROR) << "fail to rename table: " 
+        LOG(ERROR) << "fail to rename table: "
                    << old_table_name << " -> " << new_table_name << std::endl;
         return -1;
     }
-    std::cout << "rename OK: " << old_table_name 
+    std::cout << "rename OK: " << old_table_name
               << " -> " << new_table_name << std::endl;
     return 0;
 }
@@ -2142,7 +2123,7 @@ int32_t Meta2Op(Client *client, int32_t argc, char** argv) {
                 << meta.key_range().key_start() << ","
                 << meta.key_range().key_end() << "], "
                 << meta.path() << ", " << meta.server_addr() << ", "
-                << meta.table_size() << ", "
+                << meta.size() << ", "
                 << StatusCodeToString(meta.status()) << ", "
                 << StatusCodeToString(meta.compact_status()) << std::endl;
         }
@@ -2156,7 +2137,7 @@ int32_t Meta2Op(Client *client, int32_t argc, char** argv) {
                 << meta.key_range().key_start() << ","
                 << meta.key_range().key_end() << "], "
                 << meta.path() << ", " << meta.server_addr() << ", "
-                << meta.table_size() << ", "
+                << meta.size() << ", "
                 << StatusCodeToString(meta.status()) << ", "
                 << StatusCodeToString(meta.compact_status()) << std::endl;
             // ignore invalid tablet

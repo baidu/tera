@@ -19,7 +19,7 @@ message BytesList {
 }
 
 message KeyValuePair {
-    required bytes key = 1;
+    optional bytes key = 1;
     optional bytes value = 2;
     optional bool del = 3;
     optional bytes column_family = 4;
@@ -65,6 +65,7 @@ message TableMeta {
     optional TableSchema schema = 3;
     repeated uint64 snapshot_list = 4;
     optional uint64 create_time = 5;
+    repeated uint64 rollback_snapshot = 6;
 }
 
 message TabletMeta {
@@ -73,13 +74,14 @@ message TabletMeta {
     required KeyRange key_range = 3;
     optional string server_addr = 4;
     optional TabletStatus status = 5;
-    optional int64 table_size = 6;
+    optional int64 size = 6;
     optional bool compress = 7;     // for Compatible
     optional CompactStatus compact_status = 8 [default = kTableNotCompact];
     optional StoreMedium store_medium = 9 [default = DiskStore]; // for Compatible
     repeated uint64 snapshot_list = 11;
     repeated uint64 parent_tablets = 12;
     repeated int64 lg_size = 13;
+    repeated uint64 rollback_points = 14;
 }
 
 message TableMetaList {

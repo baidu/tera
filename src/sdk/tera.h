@@ -58,6 +58,7 @@ enum RawKeyType {
     kReadable = 0,
     kBinary = 1,
     kTTLKv = 2,
+    kGeneralKv = 3,
 };
 
 extern const int64_t kLatestTimestamp;
@@ -147,7 +148,7 @@ class TableDescImpl;
 class TableDescriptor {
 public:
     /// 表格名字仅允许使用字母、数字和下划线构造,长度不超过256；默认是非kv表
-    TableDescriptor(const std::string& tb_name = "", bool is_kv = false);
+    TableDescriptor(const std::string& tb_name = "");
 
     ~TableDescriptor();
 
@@ -196,9 +197,6 @@ public:
     uint64_t Snapshot(int32_t id) const;
     /// Snapshot数量
     int32_t SnapshotNum() const;
-    /// 是否为kv表
-    void SetKvOnly();
-    bool IsKv() const;
 
     /// acl
     void SetAdminGroup(const std::string& name);
@@ -256,6 +254,8 @@ public:
     void AddColumn(const std::string& cf, const std::string& qualifier);
     /// 设置最多返回的版本数
     void SetMaxVersions(int32_t versions);
+    /// 设置scan的超时时间
+    void SetPackInterval(int64_t timeout);
     /// 设置返回版本的时间范围
     void SetTimeRange(int64_t ts_end, int64_t ts_start);
     /// 设置过滤表达式（仅支持AND）
@@ -673,6 +673,7 @@ public:
 
     virtual bool GetSnapshot(const std::string& name, uint64_t* snapshot, ErrorCode* err) = 0;
     virtual bool DelSnapshot(const std::string& name, uint64_t snapshot, ErrorCode* err) = 0;
+    virtual bool Rollback(const std::string& name, uint64_t snapshot, ErrorCode* err) = 0;
 
     virtual bool CmdCtrl(const std::string& command,
                          const std::vector<std::string>& arg_list,

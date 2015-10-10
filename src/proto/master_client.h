@@ -29,6 +29,9 @@ public:
     virtual bool DelSnapshot(const DelSnapshotRequest* request,
                              DelSnapshotResponse* response);
 
+    virtual bool Rollback(const RollbackRequest* request,
+                          RollbackResponse* response);
+
     virtual bool CreateTable(const CreateTableRequest* request,
                              CreateTableResponse* response);
 
