@@ -110,6 +110,10 @@ bool ClientImpl::CheckReturnValue(StatusCode status, std::string& reason, ErrorC
             reason = "permission denied.";
             err->SetFailed(ErrorCode::kNoAuth, reason);
             break;
+        case kTabletReady:
+            reason = "tablet is ready.";
+            err->SetFailed(ErrorCode::kOK, reason);
+            break;
         default:
             reason = "tera master is not ready, please wait..";
             err->SetFailed(ErrorCode::kSystem, reason);
@@ -206,7 +210,6 @@ bool ClientImpl::DeleteTable(string name, ErrorCode* err) {
         if (CheckReturnValue(response.status(), reason, err)) {
             return true;
         }
-        LOG(ERROR) << reason << "| status: " << StatusCodeToString(response.status());
     } else {
         reason = "rpc fail to delete table: " + name;
         LOG(ERROR) << reason;

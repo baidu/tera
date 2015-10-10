@@ -308,7 +308,7 @@ int32_t DropOp(Client* client, int32_t argc, char** argv, ErrorCode* err) {
 
     std::string tablename = argv[2];
     if (!client->DeleteTable(tablename, err)) {
-        LOG(ERROR) << "fail to delete table";
+        LOG(ERROR) << "fail to delete table, " << err->GetReason();
         return -1;
     }
     return 0;
