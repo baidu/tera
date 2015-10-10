@@ -948,12 +948,17 @@ TEST(DBTest, RecoverWithLargeLog) {
   Options options = CurrentOptions();
   options.write_buffer_size = 100000;
   Reopen(&options);
-  ASSERT_EQ(NumTableFilesAtLevel(0), 3);
+  
+  // tera-leveldb will call MaybeScheduleCompaction() when Init(Recover),
+  // and 3 sst files cause level0's score to be 1.5,(kL0_CompactionTrigger == 2)
+  // so, compaction will happen, at the end, maybe 1 or 2 or 3 sst at level-0
+  ASSERT_EQ(2, config::kL0_CompactionTrigger);
+  ASSERT_GT(NumTableFilesAtLevel(0), 0);
   ASSERT_EQ(std::string(200000, '1'), Get("big1"));
   ASSERT_EQ(std::string(200000, '2'), Get("big2"));
   ASSERT_EQ(std::string(10, '3'), Get("small3"));
   ASSERT_EQ(std::string(10, '4'), Get("small4"));
-  ASSERT_GT(NumTableFilesAtLevel(0), 1);
+  ASSERT_GT(NumTableFilesAtLevel(0), 0);
 }
 
 TEST(DBTest, CompactionsGenerateMultipleFiles) {
@@ -1865,6 +1870,10 @@ class ModelDB: public DB {
       sizes[i] = 0;
     }
   }
+  virtual void GetApproximateSizes(uint64_t* size,
+                                   std::vector<uint64_t>* lgsize = NULL) {
+  }
+
   virtual void CompactRange(const Slice* start, const Slice* end) {
   }
 
