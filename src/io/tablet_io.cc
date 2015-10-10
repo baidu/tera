@@ -113,7 +113,6 @@ std::string TabletIO::GetEndKey() const {
 }
 
 CompactStatus TabletIO::GetCompactStatus() const {
-    MutexLock lock(&m_mutex);
     return m_compact_status;
 }
 
