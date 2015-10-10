@@ -160,7 +160,7 @@ void RemoteMaster::OperateUser(google::protobuf::RpcController* controller,
                                const OperateUserRequest* request,
                                OperateUserResponse* response,
                                google::protobuf::Closure* done) {
-    boost::function<void ()> callback =
+    ThreadPool::Task callback =
         boost::bind(&RemoteMaster::DoOperateUser, this, controller,
                     request, response, done);
     m_thread_pool->AddTask(callback);

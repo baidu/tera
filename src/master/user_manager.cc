@@ -129,12 +129,12 @@ void UserManager::SetupRootUser() {
 bool UserManager::IsUserNameValid(const std::string& user_name) {
     const size_t kLenMin = 2;
     const size_t kLenMax = 32;
-    if (user_name.length() < kLenMin || user_name.length() > kLenMax
+    if (user_name.length() < kLenMin || kLenMax < user_name.length()
         || !isalpha(user_name[0])) {
         return false;
     }
     for (size_t i = 0; i < user_name.length(); ++i) {
-        if (!isalnum(user_name[i])) { 
+        if (!isalnum(user_name[i]) && (user_name[i] != '_')) {
             return false;
         }
     }
