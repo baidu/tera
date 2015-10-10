@@ -139,15 +139,15 @@ enum UserOperateType {
 }
 
 message OperateUserRequest {
-    required uint64 sequence_id = 1;
+    optional uint64 sequence_id = 1;
     optional bytes user_token = 3; // token of which user call this request
-    required UserInfo user_info = 2; // operated user
-    required UserOperateType op_type = 4;
+    optional UserInfo user_info = 2; // operated user
+    optional UserOperateType op_type = 4;
 }
 
 message OperateUserResponse {
-    required uint64 sequence_id = 1;
-    required StatusCode status = 2;
+    optional uint64 sequence_id = 1;
+    optional StatusCode status = 2;
     optional UserInfo user_info = 3;
 }
 

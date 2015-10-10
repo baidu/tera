@@ -10,53 +10,54 @@ namespace tera {
 namespace master {
 
 User::User(const std::string& name, const UserInfo& user_info) 
-    : m_name(name), m_user_info(user_info) {}
+    : name_(name), user_info_(user_info) {}
 
-std::ostream& operator << (std::ostream& o, const User& user) {
-    MutexLock locker(&user.m_mutex);
-    o << "user:" << user.m_name
-      << ", token:" << user.m_user_info.token()
-      << ", group(" << user.m_user_info.group_name_size() << "):";
-    for (int i = 0; i < user.m_user_info.group_name_size(); ++i) {
-        o << user.m_user_info.group_name(i) << " ";
+std::string User::DebugString() {
+    MutexLock locker(&mutex_);
+    std::stringstream ss;
+    ss << "user:" << name_
+        << ", token:" << user_info_.token()
+        << ", group(" << user_info_.group_name_size() << "):";
+    for (int i = 0; i < user_info_.group_name_size(); ++i) {
+        ss << user_info_.group_name(i) << " ";
     }
-    return o;
+    return ss.str();
 }
 
 std::string User::GetUserName() {
-    MutexLock locker(&m_mutex);
-    return m_name;
+    MutexLock locker(&mutex_);
+    return name_;
 }
 
 UserInfo User::GetUserInfo() {
-    MutexLock locker(&m_mutex);
-    return m_user_info;
+    MutexLock locker(&mutex_);
+    return user_info_;
 }
 
 void User::SetUserInfo(const UserInfo& user_info) {
-    MutexLock locker(&m_mutex);
-    m_user_info.CopyFrom(user_info);
+    MutexLock locker(&mutex_);
+    user_info_.CopyFrom(user_info);
 }
 
 std::string User::GetToken() {
-    MutexLock locker(&m_mutex);
-    return m_user_info.token();
+    MutexLock locker(&mutex_);
+    return user_info_.token();
 }
 
 void User::ToMetaTableKeyValue(std::string* packed_key,
                                std::string* packed_value) {
-    MutexLock locker(&m_mutex);
-    *packed_key = '~' + m_name;
-    m_user_info.SerializeToString(packed_value);
+    MutexLock locker(&mutex_);
+    *packed_key = '~' + name_;
+    user_info_.SerializeToString(packed_value);
 }
 
 bool UserManager::AddUser(const std::string& user_name, const UserInfo& user_info) {
-    MutexLock locker(&m_mutex);
+    MutexLock locker(&mutex_);
     boost::shared_ptr<User> user(new User(user_name, user_info));
     user->SetUserInfo(user_info);
 
     std::pair<UserList::iterator, bool> ret =
-        m_all_users.insert(std::pair<std::string, UserPtr>(user_name, user));
+        all_users_.insert(std::pair<std::string, UserPtr>(user_name, user));
     if (ret.second) {
         LOG(INFO) << "[user-manager] add user: " << user_name << " success";
     } else {
@@ -66,21 +67,21 @@ bool UserManager::AddUser(const std::string& user_name, const UserInfo& user_inf
 }
 
 bool UserManager::DeleteUser(const std::string& user_name) {
-    MutexLock locker(&m_mutex);
-    UserList::iterator it = m_all_users.find(user_name);
-    if (it == m_all_users.end()) {
+    MutexLock locker(&mutex_);
+    UserList::iterator it = all_users_.find(user_name);
+    if (it == all_users_.end()) {
         LOG(INFO) << "[user-manager] delete user: " << user_name << " failed: user not found";
     } else {
-        m_all_users.erase(user_name);
+        all_users_.erase(user_name);
         LOG(INFO) << "[user-manager] delete user: " << user_name << " success";
     }
-    return it == m_all_users.end();
+    return it == all_users_.end();
 }
 
 bool UserManager::IsUserInGroup(const std::string& user_name, const std::string& group_name) {
-    MutexLock locker(&m_mutex);
-    UserList::iterator it = m_all_users.find(user_name);
-    if (it == m_all_users.end()) {
+    MutexLock locker(&mutex_);
+    UserList::iterator it = all_users_.find(user_name);
+    if (it == all_users_.end()) {
         return false;        
     }
     UserInfo user_info = it->second->GetUserInfo();
@@ -95,9 +96,9 @@ bool UserManager::IsUserInGroup(const std::string& user_name, const std::string&
 }
 
 bool UserManager::IsUserExist(const std::string& user_name) {
-    MutexLock locker(&m_mutex);
-    UserList::iterator it = m_all_users.find(user_name);
-    return it != m_all_users.end();
+    MutexLock locker(&mutex_);
+    UserList::iterator it = all_users_.find(user_name);
+    return it != all_users_.end();
 }
 
 void UserManager::LoadUserMeta(const std::string& key,
@@ -115,8 +116,8 @@ void UserManager::LoadUserMeta(const std::string& key,
 
 void UserManager::SetupRootUser() {
     // there is no races, so there is no lock
-    UserList::iterator it = m_all_users.find("root");
-    if (it == m_all_users.end()) {
+    UserList::iterator it = all_users_.find("root");
+    if (it == all_users_.end()) {
         UserInfo user_info;
         user_info.set_user_name("root");
         user_info.set_token("af6a89c2");
@@ -181,18 +182,18 @@ bool UserManager::IsValidForDeleteFromGroup(const std::string& token,
 }
 
 std::string UserManager::UserNameToToken(const std::string& user_name) {
-    MutexLock locker(&m_mutex);
-    UserList::iterator it = m_all_users.find(user_name);
-    if (it == m_all_users.end()) {
+    MutexLock locker(&mutex_);
+    UserList::iterator it = all_users_.find(user_name);
+    if (it == all_users_.end()) {
         return "#UnknownUser";        
     }
     return it->second->GetToken();
 }
 
 std::string UserManager::TokenToUserName(const std::string& token) {
-    MutexLock locker(&m_mutex);
-    for (UserList::const_iterator it = m_all_users.begin();
-         it != m_all_users.end(); ++it) {
+    MutexLock locker(&mutex_);
+    for (UserList::const_iterator it = all_users_.begin();
+         it != all_users_.end(); ++it) {
         if (token == it->second->GetToken()) {
             return it->second->GetUserName();
         }
@@ -201,9 +202,9 @@ std::string UserManager::TokenToUserName(const std::string& token) {
 }
 
 bool UserManager::SetUserInfo(const std::string& user_name, const UserInfo& user_info) {
-    MutexLock locker(&m_mutex);
-    UserList::iterator it = m_all_users.find(user_name);
-    if (it == m_all_users.end()) {
+    MutexLock locker(&mutex_);
+    UserList::iterator it = all_users_.find(user_name);
+    if (it == all_users_.end()) {
         LOG(INFO) << "[user-manager] user:" << user_name << " not found";        
         return false;
     }
@@ -212,9 +213,9 @@ bool UserManager::SetUserInfo(const std::string& user_name, const UserInfo& user
 }
 
 UserInfo UserManager::GetUserInfo(const std::string& user_name) {
-    MutexLock locker(&m_mutex);
-    UserList::iterator it = m_all_users.find(user_name);
-    if (it == m_all_users.end()) {
+    MutexLock locker(&mutex_);
+    UserList::iterator it = all_users_.find(user_name);
+    if (it == all_users_.end()) {
         LOG(INFO) << "[user-manager] user:" << user_name << " not found";        
         UserInfo ui;
         ui.set_user_name("(user_not_found)");
@@ -225,10 +226,10 @@ UserInfo UserManager::GetUserInfo(const std::string& user_name) {
 
 bool UserManager::DeleteGroupFromUserInfo(UserInfo& user_info,
                                           const std::string& group) {
-    MutexLock locker(&m_mutex);
+    MutexLock locker(&mutex_);
     std::string user_name = user_info.user_name();
-    UserList::iterator it = m_all_users.find(user_name);
-    if (it == m_all_users.end()) {
+    UserList::iterator it = all_users_.find(user_name);
+    if (it == all_users_.end()) {
         LOG(INFO) << "[user-manager] user:" << user_name << " not found";        
         return false;
     }
@@ -242,14 +243,6 @@ bool UserManager::DeleteGroupFromUserInfo(UserInfo& user_info,
         user_info.add_group_name(orig_user.group_name(i));
     }
     return true;
-}
-
-void UserManager::LogAll() {
-    MutexLock locker(&m_mutex);
-    for (UserList::const_iterator it = m_all_users.begin(); 
-         it != m_all_users.end(); ++it) {
-        LOG(INFO) << *it->second;        
-    }
 }
 
 } // namespace master

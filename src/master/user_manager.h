@@ -16,8 +16,6 @@ namespace tera {
 namespace master {
 
 class User {
-    friend std::ostream& operator << (std::ostream& o, const User& user);
-
 public:
     User(const std::string& name, const UserInfo& user_info);
     std::string GetUserName();
@@ -26,14 +24,15 @@ public:
     std::string GetToken();
     void ToMetaTableKeyValue(std::string* packed_key,
                              std::string* packed_value);
+    std::string DebugString();
 
 private:
     User(const User&) {}
     User& operator=(const User&) {return *this;}
 
-    mutable Mutex m_mutex;
-    std::string m_name;
-    UserInfo m_user_info;
+    mutable Mutex mutex_;
+    std::string name_;
+    UserInfo user_info_;
 };
 typedef boost::shared_ptr<User> UserPtr;
 
@@ -77,11 +76,10 @@ public:
     bool IsValidForDeleteFromGroup(const std::string& token, 
                                    const std::string& user_name, 
                                    const std::string& group_name);
-    void LogAll();
 private:
-    mutable Mutex m_mutex;
+    mutable Mutex mutex_;
     typedef std::map<std::string, UserPtr> UserList;
-    UserList m_all_users;
+    UserList all_users_;
 };
 
 } // namespace master

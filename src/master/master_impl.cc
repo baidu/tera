@@ -1213,7 +1213,7 @@ void MasterImpl::AddUserInfoToMetaCallback(UserPtr user_ptr,
     } else {
         LOG(ERROR) << "[user-manager] unknown operate type: " << op_type;
     }
-    m_user_manager->LogAll();// log user info, for debug in the future
+    LOG(INFO) << "[user-manager] " << user_ptr->DebugString();
 }
 
 void MasterImpl::OperateUser(const OperateUserRequest* request,
@@ -1228,7 +1228,13 @@ void MasterImpl::OperateUser(const OperateUserRequest* request,
         done->Run();
         return;
     }
-
+    if (!request->has_user_info()
+        || !request->user_info().has_user_name()
+        || !request->has_op_type()) {
+        response->set_status(kInvalidArgument);
+        done->Run();
+        return;
+    }
     /*
      * for (change password), (add user to group), (delete user from group),
      * we get the original UserInfo(including token & group), 
@@ -1237,7 +1243,8 @@ void MasterImpl::OperateUser(const OperateUserRequest* request,
      */
     UserInfo operated_user = request->user_info();
     std::string user_name = operated_user.user_name();
-    std::string token = request->user_token(); // who call this function
+    std::string token; // caller of this request
+    token = request->has_user_token() ? request->user_token() : "";
     UserOperateType op_type = request->op_type();
     bool is_delete = false;
     bool is_invalid = false;
@@ -1250,31 +1257,37 @@ void MasterImpl::OperateUser(const OperateUserRequest* request,
         if (!operated_user.has_user_name()
             || !m_user_manager->IsValidForDelete(token, user_name)) {
             is_invalid = true;
+        } else {
+            is_delete = true;
         }
-        is_delete = true;
     } else if (op_type == kChangePwd) {
         if (!operated_user.has_user_name() || !operated_user.has_token()
             || !m_user_manager->IsValidForChangepwd(token, user_name)) {
             is_invalid = true;
+        } else {
+            operated_user = m_user_manager->GetUserInfo(user_name);
+            operated_user.set_token(request->user_info().token());
         }
-        operated_user = m_user_manager->GetUserInfo(user_name);
-        operated_user.set_token(request->user_info().token());
     } else if (op_type == kAddToGroup) {
-        std::string group = request->user_info().group_name(0);
         if (!operated_user.has_user_name() || operated_user.group_name_size() != 1
-            || !m_user_manager->IsValidForAddToGroup(token, user_name, group) ) {
+            || !m_user_manager->IsValidForAddToGroup(token, user_name, 
+                                                     operated_user.group_name(0))) {
             is_invalid = true;
+        } else {
+            std::string group = operated_user.group_name(0);
+            operated_user = m_user_manager->GetUserInfo(user_name);
+            operated_user.add_group_name(group);
         }
-        operated_user = m_user_manager->GetUserInfo(user_name);
-        operated_user.add_group_name(group);
     } else if (op_type == kDeleteFromGroup) {
-        std::string group = request->user_info().group_name(0);
         if (!operated_user.has_user_name() || operated_user.group_name_size() != 1
-            || !m_user_manager->IsValidForDeleteFromGroup(token ,user_name, group)) {
+            || !m_user_manager->IsValidForDeleteFromGroup(token, user_name,
+                                                          operated_user.group_name(0))) {
             is_invalid = true;
+        } else {
+            std::string group = operated_user.group_name(0);
+            operated_user = m_user_manager->GetUserInfo(user_name);
+            m_user_manager->DeleteGroupFromUserInfo(operated_user, group);
         }
-        operated_user = m_user_manager->GetUserInfo(user_name);
-        m_user_manager->DeleteGroupFromUserInfo(operated_user, group);
     } else if (op_type == kShowUser) {
         UserInfo* user_info = response->mutable_user_info();
         *user_info = m_user_manager->GetUserInfo(user_name);
