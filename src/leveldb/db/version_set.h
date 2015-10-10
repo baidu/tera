@@ -19,6 +19,7 @@
 #ifndef STORAGE_LEVELDB_DB_VERSION_SET_H_
 #define STORAGE_LEVELDB_DB_VERSION_SET_H_
 
+#include <deque>
 #include <map>
 #include <set>
 #include <vector>
@@ -160,6 +161,15 @@ class Version {
   void operator=(const Version&);
 };
 
+struct ManifestWriter {
+    Status status;
+    bool done;
+    port::CondVar cv;
+
+    explicit ManifestWriter(port::Mutex* mu)
+        : done(false), cv(mu) {}
+};
+
 class VersionSet {
  public:
   VersionSet(const std::string& dbname,
@@ -227,6 +237,17 @@ class VersionSet {
   // Otherwise returns a pointer to a heap-allocated object that
   // describes the compaction.  Caller should delete the result.
   Compaction* PickCompaction();
+
+  Compaction* PickMultiThreadCompaction();
+  bool FilesInCompaction(const std::vector<FileMetaData*>& files);
+  void ScoreMatrix(std::multimap<double, int>& amap);
+
+  bool RangeInCompaction(const InternalKey* smallest, 
+                         const InternalKey* largest, 
+                         int level);
+  bool PickCompactionOnLevel(Compaction* c, int level);
+  void SetLevel0BeingCompacted(bool b) { level0_being_compacted_ = b; }
+  bool GetLevel0BeingCompacted() { return level0_being_compacted_; }
 
   // Return a compaction object for compacting the range [begin,end] in
   // the specified level.  Returns NULL if there is nothing in that
@@ -329,6 +350,8 @@ class VersionSet {
   // Per-level key at which the next compaction at that level should start.
   // Either an empty string, or a valid InternalKey.
   std::string compact_pointer_[config::kNumLevels];
+  bool level0_being_compacted_;
+  std::deque<ManifestWriter*> manifest_writers_;
 
   // No copying allowed
   VersionSet(const VersionSet&);
@@ -381,6 +404,8 @@ class Compaction {
   void set_drop_lower_bound(const std::string& lower_bound) {
     drop_lower_bound_ = lower_bound;
   }
+
+  void SetInputsFilesBeingCompacted(bool mark);
 
  private:
   friend class Version;
