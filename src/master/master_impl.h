@@ -405,14 +405,14 @@ private:
                                     WriteTabletRequest* request,
                                     WriteTabletResponse* response,
                                     bool failed, int error_code);
-    void DeleteTableRecordCallback(TablePtr table, int32_t retry_times,
-                                   WriteTabletRequest* request,
-                                   WriteTabletResponse* response,
-                                   bool failed, int error_code);
-    void DeleteTabletRecordCallback(TabletPtr tablet, int32_t retry_times,
-                                    WriteTabletRequest* request,
-                                    WriteTabletResponse* response,
-                                    bool failed, int error_code);
+    void DeleteTableCallback(TablePtr table,
+                             std::vector<TabletPtr> tablets,
+                             int32_t retry_times,
+                             DeleteTableResponse* rpc_response,
+                             google::protobuf::Closure* rpc_done,
+                             WriteTabletRequest* request,
+                             WriteTabletResponse* response,
+                             bool failed, int error_code);
 
     void ScanMetaTableAsync(const std::string& table_name,
                             const std::string& tablet_key_start,

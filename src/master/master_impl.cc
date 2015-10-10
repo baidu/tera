@@ -857,6 +857,20 @@ void MasterImpl::DeleteTable(const DeleteTableRequest* request,
         return;
     }
 
+    std::vector<TabletPtr> tablets;
+    table->GetTablet(&tablets);
+
+    // check if all tablet disable
+    for (uint32_t i = 0; i < tablets.size(); ++i) {
+        TabletPtr tablet = tablets[i];
+        if (tablet->GetStatus() != kTabletDisable) {
+            LOG(ERROR) << "fail to delete table: " << request->table_name()
+                << ", tablet status: " << StatusCodeToString(tablet->GetStatus());
+            response->set_status(kTabletReady);
+            done->Run();
+            return;
+        }
+    }
     TableStatus old_status;
     if (!table->SetStatus(kTableDeleting, &old_status)) {
         LOG(ERROR) << "fail to delete table: " << request->table_name()
@@ -865,27 +879,11 @@ void MasterImpl::DeleteTable(const DeleteTableRequest* request,
         done->Run();
         return;
     }
-    response->set_status(kMasterOk);
-    done->Run();
 
     WriteClosure* closure =
-        NewClosure(this, &MasterImpl::DeleteTableRecordCallback, table,
-                   FLAGS_tera_master_impl_retry_times);
-    BatchWriteMetaTableAsync(boost::bind(&Table::ToMetaTableKeyValue, table, _1, _2),
-                             true, closure);
-
-    std::vector<TabletPtr> tablet_meta_list;
-    table->GetTablet(&tablet_meta_list);
-    for (uint32_t i = 0; i < tablet_meta_list.size(); ++i) {
-        TabletPtr tablet = tablet_meta_list[i];
-        if (tablet->SetStatusIf(kTabletDeleting, kTabletDisable)) {
-            WriteClosure* closure =
-                NewClosure(this, &MasterImpl::DeleteTabletRecordCallback, tablet,
-                           FLAGS_tera_master_impl_retry_times);
-            BatchWriteMetaTableAsync(boost::bind(&Tablet::ToMetaTableKeyValue, tablet, _1, _2),
-                                     true, closure);
-        }
-    }
+        NewClosure(this, &MasterImpl::DeleteTableCallback, table, tablets,
+                   FLAGS_tera_master_impl_retry_times, response, done);
+    BatchWriteMetaTableAsync(table, tablets, true, closure);
 }
 
 void MasterImpl::DisableTable(const DisableTableRequest* request,
@@ -4338,10 +4336,14 @@ void MasterImpl::UpdateMetaForLoadCallback(TabletPtr tablet, int32_t retry_times
     LoadTabletAsync(tablet, done);
 }
 
-void MasterImpl::DeleteTableRecordCallback(TablePtr table, int32_t retry_times,
-                                           WriteTabletRequest* request,
-                                           WriteTabletResponse* response,
-                                           bool failed, int error_code) {
+void MasterImpl::DeleteTableCallback(TablePtr table,
+                                     std::vector<TabletPtr> tablets,
+                                     int32_t retry_times,
+                                     DeleteTableResponse* rpc_response,
+                                     google::protobuf::Closure* rpc_done,
+                                     WriteTabletRequest* request,
+                                     WriteTabletResponse* response,
+                                     bool failed, int error_code) {
     StatusCode status = response->status();
     if (!failed && status == kTabletNodeOk) {
         // all the row status should be the same
@@ -4352,20 +4354,21 @@ void MasterImpl::DeleteTableRecordCallback(TablePtr table, int32_t retry_times,
     delete response;
     if (failed || status != kTabletNodeOk) {
         if (failed) {
-            LOG(ERROR) << "fail to delete meta table record: "
+            LOG(ERROR) << "fail to delete table meta: "
                 << sofa::pbrpc::RpcErrorCodeToString(error_code) << ", " << table;
         } else {
-            LOG(ERROR) << "fail to delete meta table record: "
+            LOG(ERROR) << "fail to delete table meta: "
                 << StatusCodeToString(status) << ", " << table;
         }
         if (retry_times <= 0) {
             LOG(ERROR) << kSms << "abort delete meta table record, " << table;
+            rpc_response->set_status(kMetaTabletError);
+            rpc_done->Run();
         } else {
             WriteClosure* done =
-                NewClosure(this, &MasterImpl::DeleteTableRecordCallback,
-                           table, retry_times - 1);
-            SuspendMetaOperation(boost::bind(&Table::ToMetaTableKeyValue, table, _1, _2),
-                                 true, done);
+                NewClosure(this, &MasterImpl::DeleteTableCallback, table, tablets,
+                           retry_times - 1, rpc_response, rpc_done);
+            SuspendMetaOperation(table, tablets, true, done);
         }
         return;
     }
@@ -4374,43 +4377,15 @@ void MasterImpl::DeleteTableRecordCallback(TablePtr table, int32_t retry_times,
         MutexLock locker(&m_alias_mutex);
         m_alias.erase(table_alias);
     }
+    // clean tablet manager
+    for (uint32_t i = 0; i < tablets.size(); ++i) {
+        TabletPtr tablet = tablets[i];
+        tablet->SetStatus(kTableDeleted);
+        m_tablet_manager->DeleteTablet(tablet->GetTableName(), tablet->GetKeyStart());
+    }
     LOG(INFO) << "delete meta table record success, " << table;
-}
-
-void MasterImpl::DeleteTabletRecordCallback(TabletPtr tablet, int32_t retry_times,
-                                            WriteTabletRequest* request,
-                                            WriteTabletResponse* response,
-                                            bool failed, int error_code) {
-    StatusCode status = response->status();
-    if (!failed && status == kTabletNodeOk) {
-        // all the row status should be the same
-        CHECK_GT(response->row_status_list_size(), 0);
-        status = response->row_status_list(0);
-    }
-    delete request;
-    delete response;
-    if (failed || status != kTabletNodeOk) {
-        if (failed) {
-            LOG(ERROR) << "fail to delete meta tablet record: "
-                << sofa::pbrpc::RpcErrorCodeToString(error_code) << ", " << tablet;
-        } else {
-            LOG(ERROR) << "fail to delete meta tablet record: "
-                << StatusCodeToString(status) << ", " << tablet;
-        }
-        if (retry_times <= 0) {
-            LOG(ERROR) << kSms << "abort delete meta tablet record, " << tablet;
-        } else {
-            WriteClosure* done =
-                NewClosure(this, &MasterImpl::DeleteTabletRecordCallback,
-                           tablet, retry_times - 1);
-            SuspendMetaOperation(boost::bind(&Tablet::ToMetaTableKeyValue, tablet, _1, _2),
-                                 true, done);
-        }
-        return;
-    }
-    LOG(INFO) << "delete meta tablet record success, " << tablet;
-    tablet->SetStatus(kTableDeleted);
-    m_tablet_manager->DeleteTablet(tablet->GetTableName(), tablet->GetKeyStart());
+    rpc_response->set_status(kMasterOk);
+    rpc_done->Run();
 }
 
 void MasterImpl::ScanMetaTableAsync(const std::string& table_name,
@@ -4756,13 +4731,6 @@ void MasterImpl::ProcessOffLineTablet(TabletPtr tablet) {
     }
     tablet->SetStatusIf(kTabletDisable, kTableOffLine, kTableDisable)
         || tablet->SetStatusIf(kTabletDisable, kTableOffLine, kTableDeleting);
-    if (tablet->SetStatusIf(kTabletDeleting, kTabletDisable, kTableDeleting)) {
-        WriteClosure* done =
-            NewClosure(this, &MasterImpl::DeleteTabletRecordCallback, tablet,
-                       FLAGS_tera_master_meta_retry_times);
-        BatchWriteMetaTableAsync(boost::bind(&Tablet::ToMetaTableKeyValue, tablet, _1, _2),
-                                 true, done);
-    }
 }
 
 void MasterImpl::ProcessReadyTablet(TabletPtr tablet) {
