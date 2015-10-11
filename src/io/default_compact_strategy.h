@@ -29,6 +29,8 @@ public:
 
     virtual const char* Name() const;
 
+    virtual void SetSnapshot(uint64_t snapshot);
+
     virtual bool ScanMergedValue(leveldb::Iterator* it,
                                  std::string* merged_value,
                                  int64_t* merged_num = NULL);
@@ -64,7 +66,11 @@ private:
     int64_t m_del_col_ts;
     int64_t m_del_qual_ts;
     int64_t m_cur_ts;
+    uint64_t m_del_row_seq;
+    uint64_t m_del_col_seq;
+    uint64_t m_del_qual_seq;
     uint32_t m_version_num;
+    uint64_t m_snapshot;
     bool m_has_put;
 };
 

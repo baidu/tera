@@ -23,6 +23,10 @@ const char* KvCompactStrategy::Name() const {
     return "tera.TTLKvCompactStrategy";
 }
 
+void KvCompactStrategy::SetSnapshot(uint64_t snapshot) {
+    snapshot_ = snapshot;
+}
+
 bool KvCompactStrategy::Drop(const leveldb::Slice& tera_key, uint64_t n,
                              const std::string& lower_bound) {
     // If expire timestamp + schema's TTL <= time(NULL), Then Drop.
