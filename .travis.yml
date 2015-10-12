@@ -1,14 +1,16 @@
 language: cpp
 compiler: gcc
 install:
+    - git clone https://github.com/google/snappy
+    - ( cd snappy && sh ./autogen.sh && ./configure --with-pic && make -j4 && sudo make install )
+    - export LD_LIBRARY_PATH=/usr/local/lib:$LD_LIBRARY_PATH
+    - ( make -C src/leveldb; cd src/leveldb; make check )
+
     - sudo apt-get install libboost-dev uuid-dev
 
     - wget https://github.com/google/protobuf/releases/download/v2.6.1/protobuf-2.6.1.tar.gz
     - tar xf protobuf-2.6.1.tar.gz
     - ( cd protobuf-2.6.1 && ./configure --with-pic && make -j4 && sudo make install && sudo ldconfig )
-
-    - git clone https://github.com/google/snappy
-    - ( cd snappy && sh ./autogen.sh && ./configure --with-pic && make -j4 && sudo make install )
 
     - git clone https://github.com/BaiduPS/sofa-pbrpc
     - ( cd sofa-pbrpc && make -j4 && make install )
