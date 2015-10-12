@@ -1210,17 +1210,6 @@ void TabletManager::LoadTabletMeta(const std::string& key,
             LOG(ERROR) << "duplicate tablet in meta table: table=" << meta.table_name()
                 << " start=" << DebugString(meta.key_range().key_start());
             // TODO: try correct invalid record
-        } else {
-            /*
-            for (int i = 0; i < meta.snapshot_list_size(); ++i) {
-                tablet->AddSnapshot(meta.snapshot_list(i));
-            }
-            for (int i = 0 ; i < meta.rollbacks_size(); ++i) {
-                tablet->AddRollback(meta.rollbacks(i).name(), 
-                                    meta.rollbacks(i).snapshot_id(),
-                                    meta.rollbacks(i).rollback_point());
-            }*/
-            VLOG(5) << "load tablet record: " << tablet;
         }
     }
 }

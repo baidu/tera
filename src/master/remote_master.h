@@ -85,6 +85,11 @@ public:
                  CmdCtrlResponse* response,
                  google::protobuf::Closure* done);
 
+    void OperateUser(google::protobuf::RpcController* controller,
+                     const OperateUserRequest* request,
+                     OperateUserResponse* response,
+                     google::protobuf::Closure* done);
+
     void RenameTable(google::protobuf::RpcController* controller,
                 const RenameTableRequest* request,
                 RenameTableResponse* response,
@@ -153,6 +158,10 @@ private:
                    CmdCtrlResponse* response,
                    google::protobuf::Closure* done);
 
+    void DoOperateUser(google::protobuf::RpcController* controller,
+                       const OperateUserRequest* request,
+                       OperateUserResponse* response,
+                       google::protobuf::Closure* done);
 private:
     MasterImpl* m_master_impl;
     scoped_ptr<ThreadPool> m_thread_pool;

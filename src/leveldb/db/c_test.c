@@ -206,19 +206,7 @@ int main(int argc, char** argv) {
   leveldb_destroy_db(options, dbname, &err);
   Free(&err);
 
-  StartPhase("open_error");
-  db = leveldb_open(options, dbname, &err);
-  CheckCondition(err != NULL);
-  Free(&err);
-
-  StartPhase("leveldb_free");
-  db = leveldb_open(options, dbname, &err);
-  CheckCondition(err != NULL);
-  leveldb_free(err);
-  err = NULL;
-
   StartPhase("open");
-  leveldb_options_set_create_if_missing(options, 1);
   db = leveldb_open(options, dbname, &err);
   CheckNoError(err);
   CheckGet(db, roptions, "foo", NULL);
@@ -326,7 +314,6 @@ int main(int argc, char** argv) {
   StartPhase("repair");
   {
     leveldb_close(db);
-    leveldb_options_set_create_if_missing(options, 0);
     leveldb_options_set_error_if_exists(options, 0);
     leveldb_repair_db(options, dbname, &err);
     CheckNoError(err);
@@ -335,7 +322,6 @@ int main(int argc, char** argv) {
     CheckGet(db, roptions, "foo", NULL);
     CheckGet(db, roptions, "bar", NULL);
     CheckGet(db, roptions, "box", "c");
-    leveldb_options_set_create_if_missing(options, 1);
     leveldb_options_set_error_if_exists(options, 1);
   }
 

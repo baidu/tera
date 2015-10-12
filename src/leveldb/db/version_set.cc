@@ -1281,7 +1281,7 @@ Status VersionSet::Recover() {
       Log(options_->info_log, "[%s] recover manifest fail %s, %s\n",
           dbname_.c_str(), dscname[i].c_str(), s.ToString().c_str());
       ArchiveFile(env_, dscname[i]);
-      return Status::Corruption("recover manifest fail");
+      return Status::Corruption("recover manifest fail:" + s.ToString());
     }
   }
 

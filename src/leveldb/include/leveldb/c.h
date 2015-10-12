@@ -191,8 +191,6 @@ extern void leveldb_options_set_comparator(
 extern void leveldb_options_set_filter_policy(
     leveldb_options_t*,
     leveldb_filterpolicy_t*);
-extern void leveldb_options_set_create_if_missing(
-    leveldb_options_t*, unsigned char);
 extern void leveldb_options_set_error_if_exists(
     leveldb_options_t*, unsigned char);
 extern void leveldb_options_set_paranoid_checks(

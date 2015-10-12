@@ -28,7 +28,6 @@ MemTableOnLevelDB::MemTableOnLevelDB(const InternalKeyComparator& comparator,
     opts.compression = leveldb::kSnappyCompression;
     opts.write_buffer_size = write_buffer_size;
     opts.block_size = block_size;
-    opts.create_if_missing = true;
     opts.compact_strategy_factory = compact_strategy_factory;
     opts.comparator = comparator.user_comparator();
     opts.dump_mem_on_shutdown = false;
