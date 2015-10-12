@@ -1865,6 +1865,9 @@ class ModelDB: public DB {
       sizes[i] = 0;
     }
   }
+  virtual void GetApproximateSizes(uint64_t* size, 
+                                   std::vector<uint64_t>* lgsize = NULL) {
+  }
   virtual void CompactRange(const Slice* start, const Slice* end) {
   }
 
