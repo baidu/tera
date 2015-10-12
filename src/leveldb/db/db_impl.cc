@@ -523,9 +523,13 @@ Status DBImpl::WriteLevel0Table(MemTable* mem, VersionEdit* edit,
   uint64_t saved_size = 0;
   Status s;
   {
+    uint64_t smallest_snapshot = kMaxSequenceNumber;
+    if (!snapshots_.empty()) {
+      smallest_snapshot = *(snapshots_.begin());
+    }
     mutex_.Unlock();
     s = BuildTable(dbname_, env_, options_, table_cache_, iter, &meta,
-                   &saved_size);
+                   &saved_size, smallest_snapshot);
     mutex_.Lock();
   }
 
@@ -1073,16 +1077,22 @@ Status DBImpl::DoCompactionWork(CompactionState* compact) {
     compact->smallest_snapshot = *(snapshots_.begin());
   }
 
+  CompactStrategy* compact_strategy = NULL;
+  if (options_.compact_strategy_factory) {
+    compact_strategy = options_.compact_strategy_factory->NewInstance();
+    if (snapshots_.empty()) {
+      compact_strategy->SetSnapshot(kMaxSequenceNumber);
+    } else {
+      compact_strategy->SetSnapshot(*(snapshots_.begin()));
+    }
+  }
+
   // Release mutex while we're actually doing the compaction work
   mutex_.Unlock();
 
-  CompactStrategy* compact_strategy = NULL;
-  if (options_.compact_strategy_factory) {
-     compact_strategy = options_.compact_strategy_factory->NewInstance();
-  }
   Log(options_.info_log,  "[%s] Compact strategy: %s",
-      dbname_.c_str(),
-      compact_strategy->Name());
+    dbname_.c_str(),
+    compact_strategy->Name());
 
   Iterator* input = versions_->MakeInputIterator(compact->compaction);
   input->SeekToFirst();

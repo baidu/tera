@@ -68,9 +68,10 @@ public:
     virtual bool CmdCtrl(const CmdCtrlRequest* request,
                          CmdCtrlResponse* response);
 
+    virtual bool OperateUser(const OperateUserRequest* request,
+                             OperateUserResponse* response);
     virtual bool RenameTable(const RenameTableRequest* request, 
                              RenameTableResponse* response);
-
 private:
     int32_t m_rpc_timeout;
 };

@@ -143,6 +143,14 @@ bool MasterClient::CmdCtrl(const CmdCtrlRequest* request,
                                 "CmdCtrl", m_rpc_timeout);
 }
 
+bool MasterClient::OperateUser(const OperateUserRequest* request,
+                               OperateUserResponse* response) {
+    return SendMessageWithRetry(&MasterServer::Stub::OperateUser,
+                                request, response,
+                                (Closure<void, OperateUserRequest*, OperateUserResponse*, bool, int>*)NULL,
+                                "OperateUser", m_rpc_timeout);
+} 
+
 bool MasterClient::RenameTable(const RenameTableRequest* request, 
                                RenameTableResponse* response) {
     return SendMessageWithRetry(&MasterServer::Stub::RenameTable,

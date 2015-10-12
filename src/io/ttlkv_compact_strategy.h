@@ -32,9 +32,12 @@ public:
 
     virtual const char* Name() const;
 
+    virtual void SetSnapshot(uint64_t snapshot);
+
 private:
     TableSchema schema_;
     const leveldb::RawKeyOperator* raw_key_operator_;
+    uint64_t snapshot_;
 };
 
 class KvCompactStrategyFactory : public leveldb::CompactStrategyFactory {

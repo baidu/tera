@@ -837,7 +837,6 @@ class Benchmark {
   void Open() {
     assert(db_ == NULL);
     Options options;
-    options.create_if_missing = !FLAGS_use_existing_db;
     options.block_cache = cache_;
     options.write_buffer_size = FLAGS_write_buffer_size;
     options.max_open_files = FLAGS_open_files;
