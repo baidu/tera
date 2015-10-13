@@ -21,7 +21,6 @@
 #include "utils/crypt.h"
 #include "utils/utils_cmd.h"
 
-DECLARE_string(flagfile);
 DECLARE_string(tera_master_meta_table_name);
 DECLARE_string(tera_sdk_conf_file);
 DECLARE_string(tera_user_identity);
@@ -978,29 +977,56 @@ bool ClientImpl::ParseTabletEntry(const TabletMeta& meta, std::vector<TabletInfo
 static Mutex g_mutex;
 static bool g_is_glog_init = false;
 
+static int SpecifiedFlagfileCount(const std::string& confpath) {
+    int count = 0;
+    if (!confpath.empty()) {
+        count++;
+    }
+    if (!FLAGS_tera_sdk_conf_file.empty()) {
+        count++;
+    }
+    if (getenv("TERA_CONF")) {
+        count++;
+    }
+    return count;
+}
+
 static int InitFlags(const std::string& confpath, const std::string& log_prefix) {
     MutexLock locker(&g_mutex);
     // search conf file, priority:
-    //   user-specified > ./tera.flag > ../conf/tera.flag > env-var
-    if (!FLAGS_flagfile.empty()) {
-        // do nothing
-    } else if (!confpath.empty() && IsExist(confpath)) {
-        FLAGS_flagfile = confpath;
+    //   user-specified > ./tera.flag > ../conf/tera.flag
+    std::string flagfile("--flagfile=");
+    if (SpecifiedFlagfileCount(confpath) > 1) {
+        LOG(ERROR) << "should specify no more than one config file";
+        return -1;
+    }
+
+    if (!confpath.empty() && IsExist(confpath)){
+        flagfile += confpath;
+    } else if(!confpath.empty() && !IsExist(confpath)){
+        LOG(ERROR) << "specified config file(function argument) not found";
+        return -1;
     } else if (!FLAGS_tera_sdk_conf_file.empty() && IsExist(confpath)) {
-        FLAGS_flagfile = FLAGS_tera_sdk_conf_file;
+        flagfile += FLAGS_tera_sdk_conf_file;
+    } else if (!FLAGS_tera_sdk_conf_file.empty() && !IsExist(confpath)) {
+        LOG(ERROR) << "specified config file(FLAGS_tera_sdk_conf_file) not found";
+        return -1;
+    } else if (IsExist(utils::GetValueFromEnv("TERA_CONF"))) {
+        flagfile += utils::GetValueFromEnv("TERA_CONF");
+    } else if (getenv("TERA_CONF")) {
+        LOG(ERROR) << "specified config file(environment variable) not found";
+        return -1;
     } else if (IsExist("./tera.flag")) {
-        FLAGS_flagfile = "./tera.flag";
+        flagfile += "./tera.flag";
     } else if (IsExist("../conf/tera.flag")) {
-        FLAGS_flagfile = "../conf/tera.flag";
-    } else if (IsExist(utils::GetValueFromeEnv("TERA_CONF"))) {
-        FLAGS_flagfile = utils::GetValueFromeEnv("TERA_CONF");
+        flagfile += "../conf/tera.flag";
     } else {
-        LOG(ERROR) << "config file not found";
+        LOG(ERROR) << "hasn't specify the flagfile, but default config file not found";
         return -1;
     }
 
     // init user identity & role
-    std::string cur_identity = utils::GetValueFromeEnv("USER");
+    std::string cur_identity = utils::GetValueFromEnv("USER");
     if (cur_identity.empty()) {
         cur_identity = "other";
     }
@@ -1008,13 +1034,14 @@ static int InitFlags(const std::string& confpath, const std::string& log_prefix)
         FLAGS_tera_user_identity = cur_identity;
     }
 
-    int argc = 1;
-    char** argv = new char*[2];
-    argv[0] = (char*)"dummy";
-    argv[1] = NULL;
+    int argc = 2;
+    char** argv = new char*[3];
+    argv[0] = const_cast<char*>("dummy");
+    argv[1] = const_cast<char*>(flagfile.c_str());
+    argv[2] = NULL;
 
-    // the gflags will get flags from FLAGS_flagfile
-    ::google::ParseCommandLineFlags(&argc, &argv, true);
+    // the gflags will get flags from falgfile
+    ::google::ParseCommandLineFlags(&argc, &argv, false);
     if (!g_is_glog_init) {
         ::google::InitGoogleLogging(log_prefix.c_str());
         utils::SetupLog(log_prefix);
@@ -1023,7 +1050,7 @@ static int InitFlags(const std::string& confpath, const std::string& log_prefix)
     delete[] argv;
 
     LOG(INFO) << "USER = " << FLAGS_tera_user_identity;
-    LOG(INFO) << "Load config file: " << FLAGS_flagfile;
+    LOG(INFO) << "Load config file: " << flagfile;
     return 0;
 }
 

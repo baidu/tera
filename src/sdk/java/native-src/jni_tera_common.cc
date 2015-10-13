@@ -38,7 +38,7 @@ void InitFlags(std::string confpath) {
     }
 
     // init user identity & role
-    std::string cur_identity = tera::utils::GetValueFromeEnv("USER");
+    std::string cur_identity = tera::utils::GetValueFromEnv("USER");
     if (cur_identity.empty()) {
         cur_identity = "other";
     }

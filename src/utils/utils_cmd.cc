@@ -43,7 +43,7 @@ std::string GetCurrentLocationDir() {
     return current_dir;
 }
 
-std::string GetValueFromeEnv(const std::string& env_name) {
+std::string GetValueFromEnv(const std::string& env_name) {
     if (env_name.empty()) {
         return "";
     }
