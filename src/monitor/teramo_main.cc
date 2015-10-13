@@ -261,7 +261,7 @@ void InitFlags(int32_t argc, char** argv, const MonitorRequest& request) {
         if (!FLAGS_tera_sdk_conf_file.empty()) {
             found_path = FLAGS_tera_sdk_conf_file;
         } else {
-            found_path = utils::GetValueFromeEnv("tera_CONF");
+            found_path = utils::GetValueFromEnv("tera_CONF");
             if (!found_path.empty() || found_path == "") {
                 found_path = "tera.flag";
             }
