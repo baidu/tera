@@ -62,14 +62,14 @@ PROGRAM = tera_main teracli teramo
 LIBRARY = libtera.a
 JNILIBRARY = libjni_tera.so
 BENCHMARK = tera_bench tera_mark
-TEST = prop_tree_test tprinter_test tablet_io_test
+TESTS = prop_tree_test tprinter_test
 
 .PHONY: all clean cleanall test
 
-all: $(PROGRAM) $(LIBRARY) $(JNILIBRARY) $(BENCHMARK) $(TEST)
+all: $(PROGRAM) $(LIBRARY) $(JNILIBRARY) $(BENCHMARK) $(TESTS)
 	mkdir -p build/include build/lib build/bin build/log build/benchmark
 	mkdir -p $(UNITTEST_OUTPUT)
-	mv $(TEST) $(UNITTEST_OUTPUT)
+	mv $(TESTS) $(UNITTEST_OUTPUT)
 	cp $(PROGRAM) build/bin
 	cp $(LIBRARY) $(JNILIBRARY) build/lib
 	cp src/leveldb/tera_bench .
@@ -78,10 +78,15 @@ all: $(PROGRAM) $(LIBRARY) $(JNILIBRARY) $(BENCHMARK) $(TEST)
 	cp -r conf build
 	echo 'Done'
 
+check: $(TESTS)
+	( cd $(UNITTEST_OUTPUT); \
+	for t in $(TESTS); do echo "***** Running $$t"; ./$$t || exit 1; done )
+	$(MAKE) check -C src/leveldb 
+
 clean:
 	rm -rf $(ALL_OBJ) $(PROTO_OUT_CC) $(PROTO_OUT_H) $(TEST_OUTPUT)
 	$(MAKE) clean -C src/leveldb
-	rm -rf $(PROGRAM) $(LIBRARY) $(JNILIBRARY) $(BENCHMARK) $(TEST)
+	rm -rf $(PROGRAM) $(LIBRARY) $(JNILIBRARY) $(BENCHMARK) $(TESTS)
 
 cleanall:
 	$(MAKE) clean
