@@ -21,7 +21,7 @@
 #include "io/io_utils.h"
 #include "io/utils_leveldb.h"
 #include "master/master_impl.h"
-#include "proto/kv_helper.h"
+#include "proto/meta_helper.h"
 #include "proto/proto_helper.h"
 #include "proto/tabletnode_client.h"
 #include "types.h"
@@ -387,7 +387,7 @@ bool Tablet::Verify(const std::string& table_name, const std::string& key_start,
 void Tablet::ToMetaTableKeyValue(std::string* packed_key,
                                  std::string* packed_value) {
     MutexLock lock(&m_mutex);
-    MakeMetaTableKeyValue(m_meta, packed_key, packed_value);
+    MetaHelper::MakeEntryOfTablet(m_meta, packed_key, packed_value);
 }
 
 bool Tablet::CheckStatusSwitch(TabletStatus old_status,
@@ -660,7 +660,7 @@ void Table::ToMetaTableKeyValue(std::string* packed_key,
     MutexLock lock(&m_mutex);
     TableMeta meta;
     ToMeta(&meta);
-    MakeMetaTableKeyValue(meta, packed_key, packed_value);
+    MetaHelper::MakeEntryOfTable(meta, packed_key, packed_value);
 }
 
 void Table::ToMeta(TableMeta* meta) {
@@ -1172,7 +1172,7 @@ bool TabletManager::DumpMetaTableToFile(const std::string& filename,
 void TabletManager::LoadTableMeta(const std::string& key,
                                   const std::string& value) {
     TableMeta meta;
-    ParseMetaTableKeyValue(key, value, &meta);
+    MetaHelper::ParseEntryOfTable(value, &meta);
     TablePtr table;
     StatusCode ret_status = kTabletNodeOk;
     if (meta.table_name() == FLAGS_tera_master_meta_table_name) {
@@ -1189,7 +1189,7 @@ void TabletManager::LoadTableMeta(const std::string& key,
 void TabletManager::LoadTabletMeta(const std::string& key,
                                    const std::string& value) {
     TabletMeta meta;
-    ParseMetaTableKeyValue(key, value, &meta);
+    MetaHelper::ParseEntryOfTablet(value, &meta);
     TabletPtr tablet;
     StatusCode ret_status = kTabletNodeOk;
     if (meta.table_name() == FLAGS_tera_master_meta_table_name) {
@@ -1247,7 +1247,7 @@ bool TabletManager::ClearMetaTable(const std::string& meta_tablet_addr,
             Mutation* mutation = mu_seq->add_mutation_sequence();
             mutation->set_type(kDeleteRow);
         }
-        std::string next_record_key = NextKey(last_record_key);
+        std::string next_record_key = MetaHelper::NextKey(last_record_key);
         scan_request.set_start(next_record_key);
         scan_request.set_end("");
         scan_request.set_sequence_id(m_this_sequence_id->Inc());

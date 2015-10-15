@@ -23,7 +23,7 @@
 #include "leveldb/env_inmem.h"
 #include "leveldb/slog.h"
 #include "leveldb/table_utils.h"
-#include "proto/kv_helper.h"
+#include "proto/meta_helper.h"
 #include "proto/proto_helper.h"
 #include "proto/tabletnode_client.h"
 #include "tabletnode/tablet_manager.h"
@@ -261,7 +261,7 @@ void TabletNodeImpl::LoadTablet(const LoadTabletRequest* request,
             << StatusCodeToString(status);
         response->set_status((StatusCode)tablet_io->GetStatus());
         tablet_io->DecRef();
-    } else if (!tablet_io->Load(schema, request->path(), parent_tablets, 
+    } else if (!tablet_io->Load(schema, request->path(), parent_tablets,
                                 snapshots, rollbacks, m_ldb_logger,
                                 m_ldb_block_cache, m_ldb_table_cache, &status)) {
         tablet_io->DecRef();
@@ -871,7 +871,7 @@ void TabletNodeImpl::UpdateMetaTableAsync(const SplitTabletRequest* rpc_request,
     tablet_meta.set_size(second_size);
     tablet_meta.mutable_key_range()->set_key_start(key_split);
     tablet_meta.mutable_key_range()->set_key_end(rpc_request->key_range().key_end());
-    MakeMetaTableKeyValue(tablet_meta, &meta_key, &meta_value);
+    MetaHelper::MakeEntryOfTablet(tablet_meta, &meta_key, &meta_value);
     RowMutationSequence* mu_seq = request->add_row_list();
     mu_seq->set_row_key(meta_key);
     Mutation* mutation = mu_seq->add_mutation_sequence();
@@ -891,7 +891,7 @@ void TabletNodeImpl::UpdateMetaTableAsync(const SplitTabletRequest* rpc_request,
     tablet_meta.set_size(first_size);
     tablet_meta.mutable_key_range()->set_key_start(rpc_request->key_range().key_start());
     tablet_meta.mutable_key_range()->set_key_end(key_split);
-    MakeMetaTableKeyValue(tablet_meta, &meta_key, &meta_value);
+    MetaHelper::MakeEntryOfTablet(tablet_meta, &meta_key, &meta_value);
     mu_seq = request->add_row_list();
     mu_seq->set_row_key(meta_key);
     mutation = mu_seq->add_mutation_sequence();
