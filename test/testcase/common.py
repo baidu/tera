@@ -9,16 +9,14 @@ import filecmp
 import os
 import nose.tools
 
-tera_bench_binary = './tera_bench'
-tera_mark_binary = './tera_mark'
-teracli_binary = './teracli'
+from conf import const
 
 
 def print_debug_msg(sid=0, msg=""):
     """
     provide general print interface
     """
-    print "@%d======================%s"%(sid, msg)
+    print "@%d======================%s" % (sid, msg)
 
 
 def exe_and_check_res(cmd):
@@ -52,9 +50,11 @@ def clear_env():
 
 
 def cleanup():
-    ret = subprocess.Popen('./teracli disable test', stdout=subprocess.PIPE, stderr=subprocess.PIPE, shell=True)
+    ret = subprocess.Popen(const.teracli_binary + ' disable test',
+                           stdout=subprocess.PIPE, stderr=subprocess.PIPE, shell=True)
     print ''.join(ret.stdout.readlines())
-    ret = subprocess.Popen('./teracli drop test', stdout=subprocess.PIPE, stderr=subprocess.PIPE, shell=True)
+    ret = subprocess.Popen(const.teracli_binary + ' drop test',
+                           stdout=subprocess.PIPE, stderr=subprocess.PIPE, shell=True)
     print ''.join(ret.stdout.readlines())
 
     files = os.listdir('.')
@@ -63,19 +63,39 @@ def cleanup():
             os.remove(f)
 
 
+def cluster_op(op):
+    if op == 'kill':
+        print 'kill cluster'
+        ret = subprocess.Popen(const.kill_script, stdout=subprocess.PIPE, stderr=subprocess.PIPE, shell=True)
+        print ''.join(ret.stdout.readlines())
+    elif op == 'launch':
+        print 'launch cluster'
+        ret = subprocess.Popen(const.launch_script, stdout=subprocess.PIPE, stderr=subprocess.PIPE, shell=True)
+        print ''.join(ret.stdout.readlines())
+    else:
+        print 'unknown argument'
+        nose.tools.assert_true(False)
+
+
 def create_kv_table():
-    """
-    create kv table
-    :return:
-    """
+    print 'print kv table'
     cleanup()
-    ret = subprocess.Popen('./teracli create test', stdout=subprocess.PIPE, stderr=subprocess.PIPE, shell=True)
+    ret = subprocess.Popen(const.teracli_binary + ' create test', stdout=subprocess.PIPE, stderr=subprocess.PIPE, shell=True)
     print ''.join(ret.stdout.readlines())
 
 
-def create_table():
+def create_singleversion_table():
+    print 'print single version table'
     cleanup()
-    ret = subprocess.Popen('./teracli create "test{cf0<maxversions=20>, cf1<maxversions=20>}"',
+    ret = subprocess.Popen(const.teracli_binary + ' create "test{cf0, cf1}"',
+                           stdout=subprocess.PIPE, stderr=subprocess.PIPE, shell=True)
+    print ''.join(ret.stdout.readlines())
+
+
+def create_multiversion_table():
+    print 'print multi version table'
+    cleanup()
+    ret = subprocess.Popen(const.teracli_binary + ' create "test{cf0<maxversions=20>, cf1<maxversions=20>}"',
                            stdout=subprocess.PIPE, stderr=subprocess.PIPE, shell=True)
     print ''.join(ret.stdout.readlines())
 
@@ -90,7 +110,6 @@ def run_tera_mark(file_path, op, table_name, random, value_size, num, key_size, 
     :param value_size: value size in Bytes
     :param num: entry number
     :param key_size: key size in Bytes
-    :param is_append: append the data to an exists file
     :param cf: cf list, e.g. 'cf0:qual,cf1:flag'. Empty cf list for kv mode. Notice: no space in between
     :param key_seed: seed for random key generator
     :param value_seed: seed for random value generator
@@ -124,8 +143,8 @@ def run_tera_mark(file_path, op, table_name, random, value_size, num, key_size, 
                      """ --verify=false""".format(op=op, table_name=table_name)
 
     cmd = '{tera_bench} {bench_args} | awk {awk_args} | {tera_mark} {mark_args}'.format(
-        tera_bench=tera_bench_binary, bench_args=tera_bench_args, awk_args=awk_args,
-        tera_mark=tera_mark_binary, mark_args=tera_mark_args)
+        tera_bench=const.tera_bench_binary, bench_args=tera_bench_args, awk_args=awk_args,
+        tera_mark=const.tera_mark_binary, mark_args=tera_mark_args)
 
     print cmd
     ret = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, shell=True)
@@ -145,7 +164,7 @@ def run_tera_mark(file_path, op, table_name, random, value_size, num, key_size, 
             redirect_op += '>'
 
         dump_cmd = '{tera_bench} {tera_bench_args} | awk {awk_args} {redirect_op} {out}'.format(
-            tera_bench=tera_bench_binary, tera_bench_args=tera_bench_args,
+            tera_bench=const.tera_bench_binary, tera_bench_args=tera_bench_args,
             redirect_op=redirect_op, awk_args=awk_args, out=path)
         print dump_cmd
         ret = subprocess.Popen(dump_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, shell=True)
@@ -170,8 +189,8 @@ def scan_table(table_name, file_path, allversion, snapshot=0):
     if snapshot != 0:
         snapshot_args += '--snapshot={snapshot}'.format(snapshot=snapshot)
 
-    scan_cmd = '{teracli} {op} {table_name} "" "" {snapshot}> {out}'.format(
-        teracli=teracli_binary, op=allv, table_name=table_name, snapshot=snapshot_args, out=file_path)
+    scan_cmd = '{teracli} {op} {table_name} "" "" {snapshot} > {out}'.format(
+        teracli=const.teracli_binary, op=allv, table_name=table_name, snapshot=snapshot_args, out=file_path)
     print scan_cmd
     ret = subprocess.Popen(scan_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, shell=True)
     print ''.join(ret.stdout.readlines())
@@ -179,7 +198,7 @@ def scan_table(table_name, file_path, allversion, snapshot=0):
 
 def get_tablet_list(table_name):
     # TODO: need a more elegant & general way to obtain tablet info
-    show_cmd = '{teracli} show {table}'.format(teracli=teracli_binary, table=table_name)
+    show_cmd = '{teracli} show {table}'.format(teracli=const.teracli_binary, table=table_name)
     print show_cmd
     ret = subprocess.Popen(show_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, shell=True)
     tablet_info = ret.stdout.readlines()[5:]  # tablet info starts from the 6th line
@@ -194,7 +213,7 @@ def get_tablet_list(table_name):
 def compact_tablets(tablet_list):
     # TODO: compact may timeout
     for tablet in tablet_list:
-        compact_cmd = '{teracli} tablet compact {tablet}'.format(teracli=teracli_binary, tablet=tablet)
+        compact_cmd = '{teracli} tablet compact {tablet}'.format(teracli=const.teracli_binary, tablet=tablet)
         print compact_cmd
         ret = subprocess.Popen(compact_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, shell=True)
         print ''.join(ret.stdout.readlines())
@@ -207,7 +226,7 @@ def snapshot_op(table_name):
     :return: snapshot id on success, None otherwise
     """
     # TODO: delete snapshot
-    snapshot_cmd = '{teracli} snapshot {table_name} create'.format(teracli=teracli_binary, table_name=table_name)
+    snapshot_cmd = '{teracli} snapshot {table_name} create'.format(teracli=const.teracli_binary, table_name=table_name)
     print snapshot_cmd
     ret = subprocess.Popen(snapshot_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, shell=True)
     out = ret.stdout.readlines()
@@ -224,6 +243,18 @@ def snapshot_op(table_name):
     return None
 
 
+def rollback_op(table_name, snapshot, rollback_name):
+    """
+    Invoke rollback action
+    :param table_name: table name
+    :param snapshot: rollback to a specific snapshot
+    :return: None
+    """
+    rollback_cmd = '{teracli} snapshot {table_name} rollback --snapshot={snapshot} --rollback_name={rname}'.\
+        format(teracli=const.teracli_binary, table_name=table_name, snapshot=snapshot, rname=rollback_name)
+    print rollback_cmd
+    ret = subprocess.Popen(rollback_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, shell=True)
+    print ''.join(ret.stdout.readlines())
 
 
 def compare_files(file1, file2, need_sort):
@@ -241,7 +272,7 @@ def compare_files(file1, file2, need_sort):
         print ''.join(ret.stdout.readlines())
         os.rename(file1+'.sort', file1)
         os.rename(file2+'.sort', file2)
-    return filecmp.cmp(file1, file2)
+    return filecmp.cmp(file1, file2, shallow=False)
 
 
 def file_is_empty(file_path):
@@ -256,4 +287,3 @@ def file_is_empty(file_path):
 def cleanup_files(file_list):
     for file_path in file_list:
         os.remove(file_path)
-
