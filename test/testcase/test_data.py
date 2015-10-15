@@ -43,7 +43,7 @@ def test_table_random_write():
     nose.tools.assert_true(common.compare_files(dump_file, scan_file, need_sort=True))
 
 
-@nose.tools.with_setup(common.create_multiversion_table)
+@nose.tools.with_setup(common.create_multiversion_table, common.cleanup)
 def test_table_random_write_versions():
     """
     table write w/versions

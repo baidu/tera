@@ -78,14 +78,14 @@ def cluster_op(op):
 
 
 def create_kv_table():
-    print 'print kv table'
+    print 'create kv table'
     cleanup()
     ret = subprocess.Popen(const.teracli_binary + ' create test', stdout=subprocess.PIPE, stderr=subprocess.PIPE, shell=True)
     print ''.join(ret.stdout.readlines())
 
 
 def create_singleversion_table():
-    print 'print single version table'
+    print 'create single version table'
     cleanup()
     ret = subprocess.Popen(const.teracli_binary + ' create "test{cf0, cf1}"',
                            stdout=subprocess.PIPE, stderr=subprocess.PIPE, shell=True)
@@ -93,7 +93,7 @@ def create_singleversion_table():
 
 
 def create_multiversion_table():
-    print 'print multi version table'
+    print 'create multi version table'
     cleanup()
     ret = subprocess.Popen(const.teracli_binary + ' create "test{cf0<maxversions=20>, cf1<maxversions=20>}"',
                            stdout=subprocess.PIPE, stderr=subprocess.PIPE, shell=True)
