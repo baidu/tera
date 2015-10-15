@@ -130,7 +130,7 @@ def test_kv_snapshot_relaunch():
     nose.tools.assert_true(common.compare_files(dump_file2, scan_file2, need_sort=True))
 
 
-@nose.tools.with_setup(common.create_singleversion_table)
+@nose.tools.with_setup(common.create_singleversion_table, common.cleanup)
 def test_table_snapshot_relaunch():
     """
     table cluster relaunch
