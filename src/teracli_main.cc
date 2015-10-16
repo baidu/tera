@@ -2335,7 +2335,7 @@ int main(int argc, char* argv[]) {
 
     int ret = 0;
     ErrorCode error_code;
-    Client* client = Client::NewClient();
+    Client* client = Client::NewClient(FLAGS_flagfile, NULL);
 
     if (client == NULL) {
         LOG(ERROR) << "client instance not exist";

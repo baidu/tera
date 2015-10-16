@@ -8,7 +8,7 @@ install:
     - ( cd protobuf-2.6.1 && ./configure --with-pic && make -j4 && sudo make install && sudo ldconfig )
 
     - git clone https://github.com/google/snappy
-    - ( cd snappy && sh ./autogen.sh && ./configure --with-pic && make -j4 && sudo make install )
+    - ( cd snappy && sh ./autogen.sh && ./configure --with-pic && make -j4 && sudo make install && sudo ldconfig )
 
     - git clone https://github.com/BaiduPS/sofa-pbrpc
     - ( cd sofa-pbrpc && make -j4 && make install )
@@ -34,7 +34,7 @@ install:
 
     - wget https://googledrive.com/host/0B6NtGsLhIcf7MWxMMF9JdTN3UVk/gperftools-2.2.1.tar.gz
     - tar zxvf gperftools-2.2.1.tar.gz
-    - ( cd gperftools-2.2.1 && ./configure --with-pic && make -j4 && sudo make install )
+    - ( cd gperftools-2.2.1 && ./configure --with-pic && make -j4 && sudo make install && sudo ldconfig )
 
     - git clone https://github.com/fxsjy/ins
     - (cd ins && PBRPC_PATH=../sofa-pbrpc/output/ make sdk )
@@ -53,3 +53,4 @@ before_script:
 
 script:
     - make -j4
+    - make check

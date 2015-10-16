@@ -17,7 +17,7 @@ std::string GetBinaryLocationDir();
 
 std::string GetCurrentLocationDir();
 
-std::string GetValueFromeEnv(const std::string& env_name);
+std::string GetValueFromEnv(const std::string& env_name);
 
 std::string ConvertByteToString(const uint64_t size);
 
