@@ -186,6 +186,9 @@ private:
                           RowResult* value_list,
                           uint32_t* buffer_size);
 
+    bool FilterCell(const ScanOptions& scan_options, const std::string& col,
+                    const std::string& qual, int64_t ts);
+
     StatusCode InitedScanInterator(const std::string& start_tera_key,
                                    const ScanOptions& scan_options,
                                    leveldb::Iterator** scan_it);
