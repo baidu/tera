@@ -458,8 +458,6 @@ private:
     bool LoadMetaTablet(std::string* server_addr);
     void UnloadMetaTablet(const std::string& server_addr);
 
-    bool CleanMetaForCreateTable(const std::string& tablename);
-
     void AddTabletNode(const std::string& tabletnode_addr,
                        const std::string& tabletnode_id);
     void DeleteTabletNode(const std::string& tabletnode_addr);

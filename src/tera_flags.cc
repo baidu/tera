@@ -107,8 +107,6 @@ DEFINE_int32(tera_master_max_split_concurrency, 1, "the max concurrency of table
 DEFINE_int32(tera_master_max_load_concurrency, 5, "the max concurrency of tabletnode for load tablet");
 DEFINE_int32(tera_master_load_interval, 300, "the delay interval (in sec) for load tablet");
 
-DEFINE_bool(tera_master_clean_dirty_meta_manual, false, "clean dirty meta before create table");
-
 // load balance
 DEFINE_bool(tera_master_move_tablet_enabled, true, "enable master to auto move tablet");
 DEFINE_bool(tera_master_meta_isolate_enabled, false, "enable master to reserve a tabletnode for meta");

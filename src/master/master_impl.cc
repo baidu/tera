@@ -94,8 +94,6 @@ DECLARE_int64(tera_sdk_perf_counter_log_interval);
 DECLARE_bool(tera_acl_enabled);
 DECLARE_string(tera_master_gc_strategy);
 
-DECLARE_bool(tera_master_clean_dirty_meta_manual);
-
 namespace tera {
 namespace master {
 
@@ -459,67 +457,6 @@ void MasterImpl::UnloadMetaTablet(const std::string& server_addr) {
     }
 }
 
-bool MasterImpl::CleanMetaForCreateTable(const std::string& tablename) {
-    std::string meta_addr;
-    if (!m_tablet_manager->GetMetaTabletAddr(&meta_addr)) {
-        LOG(ERROR) << "fail to get meta addr.";
-        return false;
-    }
-
-    ScanTabletRequest request;
-    ScanTabletResponse response;
-    request.set_sequence_id(m_this_sequence_id.Inc());
-    request.set_table_name(FLAGS_tera_master_meta_table_name);
-    request.set_start(tablename + "#"); // 'tablename#' is the smallest key in meta
-    request.set_end(tablename + "$"); // '#'=43, '$'=44
-    tabletnode::TabletNodeClient meta_node_client(meta_addr);
-    while (meta_node_client.ScanTablet(&request, &response)) {
-        if (response.status() != kTabletNodeOk) {
-            LOG(ERROR) << "fail to scan meta table: "
-                << StatusCodeToString(response.status());
-            return false;
-        }
-
-        uint32_t record_size = response.results().key_values_size();
-        if (record_size <= 0) {
-            // have none dirty meta
-            return true;
-        }
-
-        // delete dirty meta record
-        WriteTabletRequest w_request;
-        WriteTabletResponse w_response;
-        w_request.set_sequence_id(m_this_sequence_id.Inc());
-        w_request.set_tablet_name(FLAGS_tera_master_meta_table_name);
-        w_request.set_is_sync(true);
-        w_request.set_is_instant(true);
-        std::string last_record_key;
-        for (uint32_t i = 0; i < record_size; i++) {
-            const KeyValuePair& record = response.results().key_values(i);
-            last_record_key = record.key();
-            CHECK(last_record_key.find(tablename + "#") == 0);
-            LOG(INFO) << "dirty meta exist, try delete it: " << last_record_key;
-            RowMutationSequence* mu_seq = w_request.add_row_list();
-            mu_seq->set_row_key(last_record_key);
-            Mutation* mutation = mu_seq->add_mutation_sequence();
-            mutation->set_type(kDeleteRow);
-        }
-
-        LOG(INFO) << "WriteMetaTableAsync id: " << w_request.sequence_id();
-        if (!meta_node_client.WriteTablet(&w_request, &w_response)) {
-            LOG(ERROR) << "fail to write meta table";
-            return false;
-        }
-
-        // fill next scan
-        std::string next_record_key = NextKey(last_record_key);
-        request.set_start(next_record_key);
-        request.set_sequence_id(m_this_sequence_id.Inc());
-        response.Clear();
-    }
-    return true;
-}
-
 bool MasterImpl::IsRootUser(const std::string& token) {
     return m_user_manager->UserNameToToken("root") == token;
 }
@@ -751,16 +688,6 @@ void MasterImpl::CreateTable(const CreateTableRequest* request,
     if (!io::MoveEnvDirToTrash(request->table_name())) {
         LOG(ERROR) << "Fail to create table: " << request->table_name()
             << ", cannot move old table dir to trash";
-        response->set_status(kTableExist);
-        done->Run();
-        return;
-    }
-
-    // try clean meta
-    if (FLAGS_tera_master_clean_dirty_meta_manual
-        && !CleanMetaForCreateTable(request->table_name())) {
-        LOG(ERROR) << "Fail to create table: " << request->table_name()
-            << ", cannot clean meta table";
         response->set_status(kTableExist);
         done->Run();
         return;
@@ -1308,7 +1235,7 @@ void MasterImpl::OperateUser(const OperateUserRequest* request,
     }
     /*
      * for (change password), (add user to group), (delete user from group),
-     * we get the original UserInfo(including token & group), 
+     * we get the original UserInfo(including token & group),
      * do some modification according to the RPC request on the original UserInfo,
      * and rewrite it to meta table.
      */
@@ -1341,7 +1268,7 @@ void MasterImpl::OperateUser(const OperateUserRequest* request,
         }
     } else if (op_type == kAddToGroup) {
         if (!operated_user.has_user_name() || operated_user.group_name_size() != 1
-            || !m_user_manager->IsValidForAddToGroup(token, user_name, 
+            || !m_user_manager->IsValidForAddToGroup(token, user_name,
                                                      operated_user.group_name(0))) {
             is_invalid = true;
         } else {
