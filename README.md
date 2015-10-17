@@ -49,3 +49,7 @@ sh ./build.sh
 
 #反馈与技术支持
 tera_dev@baidu.com
+
+#欢迎加入
+如果你热爱开源，热爱分布式技术，请将简历发送至： 
+dist-lab@baidu.com
