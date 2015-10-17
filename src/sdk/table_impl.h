@@ -194,6 +194,7 @@ public:
 
     uint64_t GetMaxMutationPendingNum() { return _max_commit_pending_num; }
     uint64_t GetMaxReaderPendingNum() { return _max_reader_pending_num; }
+    TableSchema GetTableSchema() { return  _table_schema; }
 
     struct PerfCounter {
         int64_t start_time;
