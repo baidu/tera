@@ -48,6 +48,7 @@ public:
                                   ScanTabletResponse* response) = 0;
     virtual void OnFinish(ScanTabletRequest* request,
                           ScanTabletResponse* response) = 0;
+    std::string GetNextStartPoint(const std::string& str);
 
 protected:
     tera::ScanDescImpl* _scan_desc_impl;

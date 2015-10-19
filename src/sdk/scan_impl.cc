@@ -11,6 +11,7 @@
 #include "common/base/string_ext.h"
 
 #include "proto/proto_helper.h"
+#include "proto/table_schema.pb.h"
 #include "sdk/table_impl.h"
 #include "sdk/filter_utils.h"
 #include "utils/atomic.h"
@@ -36,6 +37,29 @@ ResultStreamImpl::~ResultStreamImpl() {
 
 ScanDescImpl* ResultStreamImpl::GetScanDesc() {
     return _scan_desc_impl;
+}
+
+/*
+ * scan的时候，tabletnode攒满一个buffer就会返回给sdk，sdk再接着scan，
+ * 新的scan逻辑（tabletnode）在返回scan结果的同时，
+ * 还会告知sdk下次scan的启动点(start_point)，保证scan不重、不漏；
+ *
+ * 旧的scan逻辑（tabletnode）不会告知sdk下次scan时的启动点(start_point)，
+ * 这个启动点是sdk自己计算出来的：由上次scan结果的最后一条加上"某个最小值"。
+ *
+ * rawkey类型为Readble时，rawkey不能包含'\0'；
+ * rawkey类型为其它类型（如Binary）时，rawkey可以包含任意字符（包括'\0'）；
+ * (不建议新表继续使用Readble类型，未来可能不再支持)
+ *
+ * 综上，
+ * 对于rawkey类型为Readble的表来说，sdk计算下次scan的启动点时需要加'\x1'；
+ * 否则，加'\x0'（也就是'\0'）。
+ */
+std::string ResultStreamImpl::GetNextStartPoint(const std::string& str) {
+    const static std::string x0("\x0", 1);
+    const static std::string x1("\x1");
+    RawKey rawkey_type = _table_ptr->GetTableSchema().raw_key();
+    return rawkey_type == Readable ? str + x1 : str + x0;
 }
 
 ResultStreamAsyncImpl::ResultStreamAsyncImpl(TableImpl* table, ScanDescImpl* scan_desc_impl)
@@ -200,7 +224,7 @@ void ResultStreamAsyncImpl::RebuildStream(ScanTabletResponse* response) {
         const KeyValuePair& kv = response->results().key_values(last_result_pos);
         if (kv.timestamp() == 0) {
             _scan_desc_impl->SetStart(kv.key(), kv.column_family(),
-                                      kv.qualifier() + '\x1', kv.timestamp());
+                                      GetNextStartPoint(kv.qualifier()), kv.timestamp());
         } else {
             _scan_desc_impl->SetStart(kv.key(), kv.column_family(),
                                       kv.qualifier(), kv.timestamp() - 1);
@@ -361,11 +385,11 @@ bool ResultStreamSyncImpl::Done(ErrorCode* err) {
             if (_response->next_start_point().key() == "") {
                 const KeyValuePair& kv = _response->results().key_values(_result_pos - 1);
                 if (_scan_desc_impl->IsKvOnlyTable()) {
-                    _scan_desc_impl->SetStart(kv.key() + '\x1', kv.column_family(),
+                    _scan_desc_impl->SetStart(GetNextStartPoint(kv.key()), kv.column_family(),
                                               kv.qualifier(), kv.timestamp());
                 } else if (kv.timestamp() == 0) {
                     _scan_desc_impl->SetStart(kv.key(), kv.column_family(),
-                                              kv.qualifier() + '\x1', kv.timestamp());
+                                              GetNextStartPoint(kv.qualifier()), kv.timestamp());
                 } else {
                     _scan_desc_impl->SetStart(kv.key(), kv.column_family(),
                                               kv.qualifier(), kv.timestamp() - 1);
