@@ -8,6 +8,7 @@ import subprocess
 import filecmp
 import os
 import nose.tools
+import json
 
 from conf import const
 
@@ -210,29 +211,33 @@ def get_tablet_list(table_name):
     return tablet_paths
 
 
-def parse_showinfo():
+def parse_showinfo(table, filed):
     show_cmd = '{teracli} show'.format(teracli=const.teracli_binary)
     print show_cmd
     ret = subprocess.Popen(show_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, shell=True)
     table_info = ret.stdout.readlines()[2:-1]
-    retinfo = []
+    retinfo = {}
     for line in table_info:
-        pertable = {}
         line = line.strip("\n")
         line_list = line.split(" ")
         list_ret = [line_list[i] for i in range(len(line_list)) if line_list[i] != ""]
 
-        pertable[list_ret[1]] = {}
-        pertable[list_ret[1]]["status"] = list_ret[2]
-        pertable[list_ret[1]]["size"] = list_ret[3]
-        pertable[list_ret[1]]["lg_size"] = list_ret[4]
-        pertable[list_ret[1]]["tablet"] = list_ret[5]
-        pertable[list_ret[1]]["busy"] = list_ret[6]
+        retinfo[list_ret[1]] = {}
+        retinfo[list_ret[1]]["status"] = list_ret[2]
+        retinfo[list_ret[1]]["size"] = list_ret[3]
+        retinfo[list_ret[1]]["lg_size"] = list_ret[4]
+        retinfo[list_ret[1]]["tablet"] = list_ret[5]
+        retinfo[list_ret[1]]["busy"] = list_ret[6]
 
-        retinfo.append(pertable)
+    #return retinfo
+    
+    print json.dumps(retinfo)
 
-    return retinfo
-
+    for table_name in retinfo:
+        if table_name == table:
+            print retinfo[table_name][filed]
+            return retinfo[table_name][filed]
+            
 
 def compact_tablets(tablet_list):
     # TODO: compact may timeout
