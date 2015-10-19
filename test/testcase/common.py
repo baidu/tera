@@ -211,10 +211,9 @@ def get_tablet_list(table_name):
     return tablet_paths
 
 
-def parse_showinfo(table, filed):
+def parse_showinfo():
     '''
-    if you want get the size of table 'test',
-    then you can call this function, ret = parse_showinfo('test', 'size')
+    if you want to get show info, you can call this function to return with a dict
     '''
     show_cmd = '{teracli} show'.format(teracli=const.teracli_binary)
     print show_cmd
@@ -232,16 +231,10 @@ def parse_showinfo(table, filed):
         retinfo[list_ret[1]]["lg_size"] = list_ret[4]
         retinfo[list_ret[1]]["tablet"] = list_ret[5]
         retinfo[list_ret[1]]["busy"] = list_ret[6]
-
-    #return retinfo
     
     print json.dumps(retinfo)
+    return retinfo
 
-    for table_name in retinfo:
-        if table_name == table:
-            print retinfo[table_name][filed]
-            return retinfo[table_name][filed]
-            
 
 def compact_tablets(tablet_list):
     # TODO: compact may timeout
