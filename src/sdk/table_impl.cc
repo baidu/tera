@@ -2092,10 +2092,10 @@ void TableImpl::DumpCookie(int64_t task_id) {
     }
     DoDumpCookie();
     ThreadPool::Task task = boost::bind(&TableImpl::DumpCookie, this, _1);
-    task_id =
-        _thread_pool->DelayTask(FLAGS_tera_sdk_cookie_update_interval * 1000, task);
     {
         MutexLock lock(&_delay_task_id_mutex);
+        task_id =
+            _thread_pool->DelayTask(FLAGS_tera_sdk_cookie_update_interval * 1000, task);
         _delay_task_ids.insert(task_id);
     }
 }
@@ -2138,10 +2138,12 @@ void TableImpl::DumpPerfCounterLogDelay(int64_t task_id) {
     ThreadPool::Task task =
         boost::bind(&TableImpl::DumpPerfCounterLogDelay, this, _1);
 
-    int64_t t_id =
-        _thread_pool->DelayTask(FLAGS_tera_sdk_perf_counter_log_interval * 1000, task);
-    MutexLock lock(&_delay_task_id_mutex);
-    _delay_task_ids.insert(t_id);
+    {
+        MutexLock lock(&_delay_task_id_mutex);
+        int64_t t_id =
+            _thread_pool->DelayTask(FLAGS_tera_sdk_perf_counter_log_interval * 1000, task);
+        _delay_task_ids.insert(t_id);
+    }
 }
 
 void TableImpl::DoDumpPerfCounterLog() {
