@@ -107,6 +107,7 @@ public:
     void ListSnapshot(std::vector<uint64_t>* snapshot);
     void DelSnapshot(int32_t id);
     int32_t AddRollback(std::string name, uint64_t snapshot_id, uint64_t rollback_point);
+    int32_t UpdateRollback(std::string name, uint64_t snapshot_id, uint64_t rollback_point);
     void ListRollback(std::vector<Rollback>* rollbacks);
 
     // is belong to a table?
@@ -177,6 +178,7 @@ public:
     void ListSnapshot(std::vector<uint64_t>* snapshots);
     int32_t AddRollback(std::string rollback_name);
     void ListRollback(std::vector<std::string>* rollback_names);
+    int32_t GetRollbackSize() {return m_rollback_names.size() - 1;}
     void AddDeleteTabletCount();
     bool NeedDelete();
     void ToMetaTableKeyValue(std::string* packed_key = NULL,

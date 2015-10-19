@@ -3003,15 +3003,71 @@ void MasterImpl::GetRollback(const RollbackRequest* request,
         return;
     }
 
+    std::vector<TabletPtr> tablets;
+    table->GetTablet(&tablets);
+    // write memory and meta with default rollback_point
+    int sid = table->AddRollback(request->rollback_name());
+    for (uint32_t i = 0; i < tablets.size(); ++i) {
+        int tsid = tablets[i]->AddRollback(request->rollback_name(), request->snapshot_id(),
+                                           leveldb::kMaxSequenceNumber);
+        assert(sid == tsid);
+    }
+    WriteClosure* closure =
+        NewClosure(this, &MasterImpl::AddDefaultRollbackCallback, table, tablets,
+                   FLAGS_tera_master_meta_retry_times, request, response, done);
+    BatchWriteMetaTableAsync(table, tablets, false, closure);
+}
+
+void MasterImpl::AddDefaultRollbackCallback(TablePtr table,
+                                            std::vector<TabletPtr> tablets,
+                                            int32_t retry_times,
+                                            const RollbackRequest* rpc_request,
+                                            RollbackResponse* rpc_response,
+                                            google::protobuf::Closure* rpc_done,
+                                            WriteTabletRequest* request,
+                                            WriteTabletResponse* response,
+                                            bool failed, int error_code) {
+    StatusCode status = response->status();
+    if (!failed && status == kTabletNodeOk) {
+        // all the row status should be the same
+        CHECK_GT(response->row_status_list_size(), 0);
+        status = response->row_status_list(0);
+    }
+    delete request;
+    delete response;
+    if (failed || status != kTabletNodeOk) {
+        if (failed) {
+            LOG(WARNING) << "fail to write rollback to meta: "
+                << sofa::pbrpc::RpcErrorCodeToString(error_code) << ", "
+                << tablets[0] << "...";
+        } else {
+            LOG(WARNING) << "fail to write rollback to meta: "
+                << StatusCodeToString(status) << ", " << tablets[0] << "...";
+        }
+        if (retry_times <= 0) {
+            rpc_response->set_status(kMetaTabletError);
+            rpc_done->Run();
+        } else {
+            WriteClosure* done =
+                NewClosure(this, &MasterImpl::AddDefaultRollbackCallback, table,
+                           tablets, retry_times - 1, rpc_request, rpc_response,
+                           rpc_done);
+            SuspendMetaOperation(table, tablets, false, done);
+        }
+        return;
+    }
+    LOG(INFO) << "Add default rollback " << rpc_request->rollback_name() << " to "
+        << rpc_request->table_name() << " done";
+
     RollbackTask* task = new RollbackTask;
     table->GetTablet(&task->tablets);
 
     assert(task->tablets.size());
 
     task->rollback_points.resize(task->tablets.size());
-    task->request = request;
-    task->response = response;
-    task->done = done;
+    task->request = rpc_request;
+    task->response = rpc_response;
+    task->done = rpc_done;
     task->table = table;
     task->task_num = 0;
     task->finish_num = 0;
@@ -3022,13 +3078,13 @@ void MasterImpl::GetRollback(const RollbackRequest* request,
         ++task->task_num;
         RollbackClosure* closure =
             NewClosure(this, &MasterImpl::RollbackCallback, static_cast<int32_t>(i), task);
-        RollbackAsync(tablet, request->snapshot_id(), 3000, closure);
+        RollbackAsync(tablet, rpc_request->snapshot_id(), 3000, closure);
     }
     if (task->task_num == 0) {
-        LOG(WARNING) << "fail to rollback to snapshot: " << request->table_name()
+        LOG(WARNING) << "fail to rollback to snapshot: " << rpc_request->table_name()
             << ", all tables kTabletNodeOffLine";
         response->set_status(kTabletNodeOffLine);
-        done->Run();
+        rpc_done->Run();
         return;
     }
 }
@@ -3076,11 +3132,11 @@ void MasterImpl::RollbackCallback(int32_t tablet_id, RollbackTask* task,
     } else {
         task->rollback_points[tablet_id] = master_response->rollback_point();
         LOG(INFO) << "MasterImpl rollback all tablet done";
-        int sid = task->table->AddRollback(task->request->rollback_name());
+        int sid = task->table->GetRollbackSize();
         for (uint32_t i = 0; i < task->tablets.size(); ++i) {
-            int tsid = task->tablets[i]->AddRollback(task->request->rollback_name(),
-                                                     master_request->snapshot_id(),
-                                                     task->rollback_points[i]);
+            int tsid = task->tablets[i]->UpdateRollback(task->request->rollback_name(),
+                                                        master_request->snapshot_id(),
+                                                        task->rollback_points[i]);
             assert(sid == tsid);
         }
         WriteClosure* closure =
@@ -3133,7 +3189,7 @@ void MasterImpl::AddRollbackCallback(TablePtr table,
         return;
     }
     LOG(INFO) << "Rollback " << rpc_request->rollback_name() << " to " << rpc_request->table_name()
-        << ", write meta " << rpc_request->snapshot_id() << " done";
+        << ", write meta with snpashot_id " << rpc_request->snapshot_id() << " done";
     rpc_response->set_status(kMasterOk);
     rpc_done->Run();
 }
