@@ -13,8 +13,7 @@ namespace io {
 DefaultCompactStrategy::DefaultCompactStrategy(const TableSchema& schema)
     : m_schema(schema),
       m_raw_key_operator(GetRawKeyOperatorFromSchema(m_schema)),
-      m_last_key(""), m_last_col(""), m_last_qual(""), m_last_ts(0),
-      m_del_row_ts(-1), m_del_col_ts(-1), m_del_qual_ts(-1), m_cur_ts(-1),
+      m_last_ts(-1), m_del_row_ts(-1), m_del_col_ts(-1), m_del_qual_ts(-1), m_cur_ts(-1),
       m_del_row_seq(0), m_del_col_seq(0), m_del_qual_seq(0), m_version_num(0),
       m_snapshot(leveldb::kMaxSequenceNumber) {
     // build index
@@ -144,7 +143,8 @@ bool DefaultCompactStrategy::Drop(const Slice& tera_key, uint64_t n,
         }
     }
 
-    if (IsAtomicOP(type) && m_has_put) { // drop ADDs which is later than Put
+    if (IsAtomicOP(type) && m_has_put) {
+        // drop ADDs which is later than Put
         return true;
     }
     return false;
