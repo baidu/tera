@@ -212,6 +212,10 @@ def get_tablet_list(table_name):
 
 
 def parse_showinfo(table, filed):
+    '''
+    if you want get the size of table 'test',
+    then you can call this function, ret = parse_showinfo('test', 'size')
+    '''
     show_cmd = '{teracli} show'.format(teracli=const.teracli_binary)
     print show_cmd
     ret = subprocess.Popen(show_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, shell=True)
