@@ -342,7 +342,7 @@ private:
                                bool failed, int error_code);
     bool RestoreCookie();
     void EnableCookieUpdateTimer();
-    void DumpCookie();
+    void DumpCookie(int64_t task_id);
     void DoDumpCookie();
     std::string GetCookieFileName(const std::string& tablename,
                                   const std::string& zk_addr,
@@ -353,7 +353,7 @@ private:
     void DeleteLegacyCookieLockFile(const std::string& lock_file, int timeout_seconds);
     void CloseAndRemoveCookieLockFile(int lock_fd, const std::string& cookie_lock_file);
 
-    void DumpPerfCounterLogDelay();
+    void DumpPerfCounterLogDelay(int64_t task_id);
     void DoDumpPerfCounterLog();
 
 private:
@@ -407,6 +407,8 @@ private:
     std::string _zk_addr_list;
 
     ThreadPool* _thread_pool;
+    mutable Mutex _delay_task_id_mutex;
+    std::set<int64_t> _delay_task_ids;
     /// _cluster could cache the master_addr & root_table_addr.
     /// if there is no _cluster,
     ///    we have to access zookeeper whenever we need master_addr or root_table_addr.
@@ -416,7 +418,6 @@ private:
     bool _cluster_private;
 
     PerfCounter _perf_counter;  // calc time consumption, for performance analysis
-    int64_t _perf_log_task_id;
 
     /// read request will contain this member,
     /// so tabletnodes can drop the read-request that timeouted

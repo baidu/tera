@@ -92,7 +92,15 @@ TableImpl::~TableImpl() {
     if (FLAGS_tera_sdk_cookie_enabled) {
         DoDumpCookie();
     }
-    _thread_pool->CancelTask(_perf_log_task_id);
+    {
+        // cancel all delay tasks
+        MutexLock lock(&_delay_task_id_mutex);
+        std::set<int64_t>::iterator it = _delay_task_ids.begin();
+        for (; it != _delay_task_ids.end(); ++it) {
+            _thread_pool->CancelTask(*it);
+        }
+        _delay_task_ids.clear();
+    }
     if (_cluster_private) {
         delete _cluster;
     }
@@ -449,7 +457,7 @@ bool TableImpl::OpenInternal(ErrorCode* err) {
         EnableCookieUpdateTimer();
     }
     if (FLAGS_tera_sdk_perf_counter_enabled) {
-        DumpPerfCounterLogDelay();
+        DumpPerfCounterLogDelay(0);
     }
     return true;
 }
@@ -2074,15 +2082,32 @@ void TableImpl::DoDumpCookie() {
     LOG(INFO) << "[SDK COOKIE] update local cookie success: " << cookie_file;
 }
 
-void TableImpl::DumpCookie() {
+void TableImpl::DumpCookie(int64_t task_id) {
+    {
+        MutexLock lock(&_delay_task_id_mutex);
+        if (_delay_task_ids.erase(task_id) == 0) {
+            // this task has been canceled
+            return;
+        }
+    }
     DoDumpCookie();
-    ThreadPool::Task task = boost::bind(&TableImpl::DumpCookie, this);
-    _thread_pool->DelayTask(FLAGS_tera_sdk_cookie_update_interval * 1000, task);
+    ThreadPool::Task task = boost::bind(&TableImpl::DumpCookie, this, _1);
+    task_id =
+        _thread_pool->DelayTask(FLAGS_tera_sdk_cookie_update_interval * 1000, task);
+    {
+        MutexLock lock(&_delay_task_id_mutex);
+        _delay_task_ids.insert(task_id);
+    }
 }
 
 void TableImpl::EnableCookieUpdateTimer() {
-    ThreadPool::Task task = boost::bind(&TableImpl::DumpCookie, this);
-    _thread_pool->DelayTask(FLAGS_tera_sdk_cookie_update_interval * 1000, task);
+    ThreadPool::Task task = boost::bind(&TableImpl::DumpCookie, this, _1);
+    int64_t task_id =
+        _thread_pool->DelayTask(FLAGS_tera_sdk_cookie_update_interval * 1000, task);
+    {
+        MutexLock lock(&_delay_task_id_mutex);
+        _delay_task_ids.insert(task_id);
+    }
 }
 
 std::string TableImpl::GetCookieFileName(const std::string& tablename,
@@ -2101,12 +2126,22 @@ std::string TableImpl::GetCookieFileName(const std::string& tablename,
     return fname.str();
 }
 
-void TableImpl::DumpPerfCounterLogDelay() {
+void TableImpl::DumpPerfCounterLogDelay(int64_t task_id) {
+    {
+        MutexLock lock(&_delay_task_id_mutex);
+        if (_delay_task_ids.erase(task_id) == 0) {
+            // this task has been canceled
+            return;
+        }
+    }
     DoDumpPerfCounterLog();
     ThreadPool::Task task =
-        boost::bind(&TableImpl::DumpPerfCounterLogDelay, this);
-    _perf_log_task_id =
+        boost::bind(&TableImpl::DumpPerfCounterLogDelay, this, _1);
+
+    int64_t t_id =
         _thread_pool->DelayTask(FLAGS_tera_sdk_perf_counter_log_interval * 1000, task);
+    MutexLock lock(&_delay_task_id_mutex);
+    _delay_task_ids.insert(t_id);
 }
 
 void TableImpl::DoDumpPerfCounterLog() {
