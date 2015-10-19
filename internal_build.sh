@@ -13,12 +13,13 @@ DEPS_CONFIG="--prefix=${DEPS_PREFIX} --disable-shared --with-pic"
 FLAG_DIR=`pwd`/.build
 
 export PATH=${DEPS_PREFIX}/bin:$PATH
-
-rm -rf ${DEPS_SOURCE}
 mkdir -p ${DEPS_SOURCE} ${DEPS_PREFIX} ${FLAG_DIR}
-git clone --depth=1 http://gitlab.baidu.com/baidups/third.git ${DEPS_SOURCE}
-git clone --depth=1 http://gitlab.baidu.com/baidups/sofa-pbrpc.git ${DEPS_SOURCE}/sofa-pbrpc
-git clone --depth=1 http://gitlab.baidu.com/baidups/ins.git ${DEPS_SOURCE}/ins
+
+if [ ! -f "${FLAG_DIR}/dl_third" ] || [ ! -d "${DEPS_SOURCE}/.git" ]; then
+    rm -rf ${DEPS_SOURCE}
+    git clone --depth=1 http://gitlab.baidu.com/baidups/third.git ${DEPS_SOURCE}
+    touch "${FLAG_DIR}/dl_third"
+fi
 
 cd ${DEPS_SOURCE}
 
@@ -61,6 +62,8 @@ fi
 if [ ! -f "${FLAG_DIR}/sofa-pbrpc_1_0_0" ] \
     || [ ! -f "${DEPS_PREFIX}/lib/libsofa-pbrpc.a" ] \
     || [ ! -d "${DEPS_PREFIX}/include/sofa/pbrpc" ]; then
+    rm -rf sofa-pbrpc
+    git clone --depth=1 http://gitlab.baidu.com/baidups/sofa-pbrpc.git sofa-pbrpc
     cd sofa-pbrpc
     sed -i '/BOOST_HEADER_DIR=/ d' depends.mk
     sed -i '/PROTOBUF_DIR=/ d' depends.mk
@@ -167,6 +170,8 @@ fi
 if [ ! -f "${FLAG_DIR}/ins" ] \
     || [ ! -f "${DEPS_PREFIX}/lib/libins_sdk.a" ] \
     || [ ! -f "${DEPS_PREFIX}/include/ins_sdk.h" ]; then
+    rm -rf ins
+    git clone --depth=1 http://gitlab.baidu.com/baidups/ins.git ins
     cd ins
     sed -i "s|^PREFIX=.*|PREFIX=${DEPS_PREFIX}|" Makefile
     sed -i "s|^PROTOC=.*|PROTOC=${DEPS_PREFIX}/bin/protoc|" Makefile
