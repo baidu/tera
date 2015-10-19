@@ -8,6 +8,7 @@ import subprocess
 import filecmp
 import os
 import nose.tools
+import json
 
 from conf import const
 
@@ -210,6 +211,31 @@ def get_tablet_list(table_name):
     return tablet_paths
 
 
+def parse_showinfo():
+    '''
+    if you want to get show info, you can call this function to return with a dict
+    '''
+    show_cmd = '{teracli} show'.format(teracli=const.teracli_binary)
+    print show_cmd
+    ret = subprocess.Popen(show_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, shell=True)
+    table_info = ret.stdout.readlines()[2:-1]
+    retinfo = {}
+    for line in table_info:
+        line = line.strip("\n")
+        line_list = line.split(" ")
+        list_ret = [line_list[i] for i in range(len(line_list)) if line_list[i] != ""]
+
+        retinfo[list_ret[1]] = {}
+        retinfo[list_ret[1]]["status"] = list_ret[2]
+        retinfo[list_ret[1]]["size"] = list_ret[3]
+        retinfo[list_ret[1]]["lg_size"] = list_ret[4]
+        retinfo[list_ret[1]]["tablet"] = list_ret[5]
+        retinfo[list_ret[1]]["busy"] = list_ret[6]
+    
+    print json.dumps(retinfo)
+    return retinfo
+
+
 def compact_tablets(tablet_list):
     # TODO: compact may timeout
     for tablet in tablet_list:
@@ -273,3 +299,4 @@ def file_is_empty(file_path):
 def cleanup_files(file_list):
     for file_path in file_list:
         os.remove(file_path)
+
