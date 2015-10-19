@@ -18,6 +18,11 @@ def print_debug_msg(sid=0, msg=""):
     """
     print "@%d======================%s" % (sid, msg)
 
+def execute_and_check_returncode(cmd, code):
+    print(cmd)
+    ret = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, shell=True)
+    ret.communicate()
+    nose.tools.assert_equal(ret.returncode, code)
 
 def exe_and_check_res(cmd):
     """
@@ -37,7 +42,7 @@ def clear_env():
     print_debug_msg(4, "delete table_test001 and table_test002, clear env")
 
     cmd = "./teracli disable table_test001"
-    exe_and_check_res(cmd)   
+    exe_and_check_res(cmd)
 
     cmd = "./teracli drop table_test001"
     exe_and_check_res(cmd)
