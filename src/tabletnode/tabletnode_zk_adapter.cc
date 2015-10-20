@@ -107,7 +107,7 @@ bool TabletNodeZkAdapter::GetRootTableAddr(std::string* root_table_addr) {
     return true;
 }
 
-bool TabletNodeZkAdapter::Register(std::string session_id, int* zk_errno) {
+bool TabletNodeZkAdapter::Register(const std::string& session_id, int* zk_errno) {
     // create serve node
     std::string node_path = kTsListPath + "/" + session_id + "#";
     std::string node_value = m_server_addr;
