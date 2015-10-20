@@ -54,9 +54,11 @@ def cleanup():
     ret = subprocess.Popen(const.teracli_binary + ' disable test',
                            stdout=subprocess.PIPE, stderr=subprocess.PIPE, shell=True)
     print ''.join(ret.stdout.readlines())
+    print ''.join(ret.stderr.readlines())
     ret = subprocess.Popen(const.teracli_binary + ' drop test',
                            stdout=subprocess.PIPE, stderr=subprocess.PIPE, shell=True)
     print ''.join(ret.stdout.readlines())
+    print ''.join(ret.stderr.readlines())
 
     files = os.listdir('.')
     for f in files:
@@ -69,10 +71,12 @@ def cluster_op(op):
         print 'kill cluster'
         ret = subprocess.Popen(const.kill_script, stdout=subprocess.PIPE, stderr=subprocess.PIPE, shell=True)
         print ''.join(ret.stdout.readlines())
+        print ''.join(ret.stderr.readlines())
     elif op == 'launch':
         print 'launch cluster'
         ret = subprocess.Popen(const.launch_script, stdout=subprocess.PIPE, stderr=subprocess.PIPE, shell=True)
         print ''.join(ret.stdout.readlines())
+        print ''.join(ret.stderr.readlines())
     else:
         print 'unknown argument'
         nose.tools.assert_true(False)
@@ -83,6 +87,7 @@ def create_kv_table():
     cleanup()
     ret = subprocess.Popen(const.teracli_binary + ' create test', stdout=subprocess.PIPE, stderr=subprocess.PIPE, shell=True)
     print ''.join(ret.stdout.readlines())
+    print ''.join(ret.stderr.readlines())
 
 
 def create_singleversion_table():
@@ -91,6 +96,7 @@ def create_singleversion_table():
     ret = subprocess.Popen(const.teracli_binary + ' create "test{cf0, cf1}"',
                            stdout=subprocess.PIPE, stderr=subprocess.PIPE, shell=True)
     print ''.join(ret.stdout.readlines())
+    print ''.join(ret.stderr.readlines())
 
 
 def create_multiversion_table():
@@ -99,6 +105,23 @@ def create_multiversion_table():
     ret = subprocess.Popen(const.teracli_binary + ' create "test{cf0<maxversions=20>, cf1<maxversions=20>}"',
                            stdout=subprocess.PIPE, stderr=subprocess.PIPE, shell=True)
     print ''.join(ret.stdout.readlines())
+    print ''.join(ret.stderr.readlines())
+
+
+def createbyfile(schema, deli=''):
+    """
+    This function creates a table according to a specified schema
+    :param schema: schema file path
+    :param deli: deli file path
+    :return: None
+    """
+
+    cleanup()
+    create_cmd = '{teracli} createbyfile {schema} {deli}'.format(teracli=const.teracli_binary, schema=schema, deli=deli)
+    print create_cmd
+    ret = subprocess.Popen(create_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, shell=True)
+    print ''.join(ret.stdout.readlines())
+    print ''.join(ret.stderr.readlines())
 
 
 def run_tera_mark(file_path, op, table_name, random, value_size, num, key_size, cf='', key_seed=1, value_seed=1):
@@ -150,6 +173,7 @@ def run_tera_mark(file_path, op, table_name, random, value_size, num, key_size, 
     print cmd
     ret = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, shell=True)
     print ''.join(ret.stdout.readlines())
+    print ''.join(ret.stderr.readlines())
 
     # write/append data to a file for comparison
     for path, is_append in file_path:
@@ -170,6 +194,7 @@ def run_tera_mark(file_path, op, table_name, random, value_size, num, key_size, 
         print dump_cmd
         ret = subprocess.Popen(dump_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, shell=True)
         print ''.join(ret.stdout.readlines())
+        print ''.join(ret.stderr.readlines())
 
 
 def scan_table(table_name, file_path, allversion, snapshot=0):
@@ -195,6 +220,7 @@ def scan_table(table_name, file_path, allversion, snapshot=0):
     print scan_cmd
     ret = subprocess.Popen(scan_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, shell=True)
     print ''.join(ret.stdout.readlines())
+    print ''.join(ret.stderr.readlines())
 
 
 def get_tablet_list(table_name):
@@ -243,6 +269,7 @@ def compact_tablets(tablet_list):
         print compact_cmd
         ret = subprocess.Popen(compact_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, shell=True)
         print ''.join(ret.stdout.readlines())
+        print ''.join(ret.stderr.readlines())
 
 
 def snapshot_op(table_name):
@@ -282,6 +309,7 @@ def compare_files(file1, file2, need_sort):
         print sort_cmd
         ret = subprocess.Popen(sort_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, shell=True)
         print ''.join(ret.stdout.readlines())
+        print ''.join(ret.stderr.readlines())
         os.rename(file1+'.sort', file1)
         os.rename(file2+'.sort', file2)
     return filecmp.cmp(file1, file2)
