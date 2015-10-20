@@ -296,19 +296,19 @@ FakeTabletNodeZkAdapter::FakeTabletNodeZkAdapter(TabletNodeImpl* tabletnode_impl
 }
 
 void FakeTabletNodeZkAdapter::Init() {
-    std::string session_id;
-    if (!Register(&session_id)) {
+    // get session
+    m_tabletnode_impl->SetSessionId(FLAGS_tera_tabletnode_port);
+    m_tabletnode_impl->SetTabletNodeStatus(TabletNodeImpl::kIsRunning);
+
+    if (!Register(m_tabletnode_impl->GetSessionId())) {
         LOG(FATAL) << "fail to create fake serve-node.";
     }
-    LOG(INFO) << "create fake serve-node success: " << session_id;
-    m_tabletnode_impl->SetSessionId(session_id);
-    m_tabletnode_impl->SetTabletNodeStatus(TabletNodeImpl::kIsRunning);
+    LOG(INFO) << "create fake serve-node success: " << m_tabletnode_impl->GetSessionId();
 }
 
-bool FakeTabletNodeZkAdapter::Register(std::string* session_id, int* zk_code) {
+bool FakeTabletNodeZkAdapter::Register(const std::string& session_id, int* zk_code) {
     MutexLock locker(&m_mutex);
-    *session_id = FLAGS_tera_tabletnode_port + "#007";
-    std::string node_name = m_fake_path + kTsListPath + "/" + *session_id;
+    std::string node_name = m_fake_path + kTsListPath + "/" + session_id;
 
     if (!zk::FakeZkUtil::WriteNode(node_name, m_server_addr)) {
         LOG(FATAL) << "fake zk error: " << node_name
