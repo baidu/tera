@@ -41,6 +41,17 @@ void TabletNodeZkAdapter::Init() {
     }
     LOG(INFO) << "init zk success";
 
+    // enter running state
+    int64_t session_id_int = 0;
+    if (!GetSessionId(&session_id_int, &zk_errno)) {
+        LOG(ERROR) << "get session id fail : " << zk::ZkErrnoToString(zk_errno);
+        return;
+    }
+    char session_id_str[32];
+    sprintf(session_id_str, "%016lx", session_id_int);
+    m_tabletnode_impl->SetSessionId(session_id_str);
+    m_tabletnode_impl->SetTabletNodeStatus(TabletNodeImpl::kIsRunning);
+
     // create my node
     std::string session_id;
     while (!Register(&session_id, &zk_errno)) {
@@ -91,10 +102,6 @@ void TabletNodeZkAdapter::Init() {
     if (!root_tablet_addr.empty()) {
         m_tabletnode_impl->SetRootTabletAddr(root_tablet_addr);
     }
-
-    // enter running state
-    m_tabletnode_impl->SetSessionId(session_id);
-    m_tabletnode_impl->SetTabletNodeStatus(TabletNodeImpl::kIsRunning);
 }
 
 bool TabletNodeZkAdapter::GetRootTableAddr(std::string* root_table_addr) {
