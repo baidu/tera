@@ -100,6 +100,21 @@ def create_multiversion_table():
     print ''.join(ret.stdout.readlines())
 
 
+def createbyfile(schema, deli=''):
+    """
+    This function creates a table according to a specified schema
+    :param schema: schema file path
+    :param deli: deli file path
+    :return: None
+    """
+
+    cleanup()
+    create_cmd = '{teracli} createbyfile {schema} {deli}'.format(teracli=const.teracli_binary, schema=schema, deli=deli)
+    print create_cmd
+    ret = subprocess.Popen(create_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, shell=True)
+    print ''.join(ret.stdout.readlines())
+
+
 def run_tera_mark(file_path, op, table_name, random, value_size, num, key_size, cf='', key_seed=1, value_seed=1):
     """
     This function provide means to write data into Tera and dump a copy into a specified file at the same time.
