@@ -273,7 +273,7 @@ private:
                                const std::vector<TabletPtr>& tablet_list,
                                const std::string& table_name = "");
 
-    void GetSnapshotAsync(TabletPtr tablet, int32_t timeout,
+    void GetSnapshotAsync(TabletPtr tablet, int64_t snapshot_id, int32_t timeout,
                           SnapshotClosure* done);
     void GetSnapshotCallback(int32_t tablet_id, SnapshotTask* task,
                              SnapshotRequest* master_request,

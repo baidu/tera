@@ -357,6 +357,10 @@ private:
     void DumpPerfCounterLogDelay();
     void DoDumpPerfCounterLog();
 
+    void DelayTaskWrapper(ThreadPool::Task task, int64_t task_id);
+    int64_t AddDelayTask(int64_t delay_time, ThreadPool::Task task);
+    void ClearDelayTask();
+
 private:
     TableImpl(const TableImpl&);
     void operator=(const TableImpl&);
@@ -408,6 +412,8 @@ private:
     std::string _zk_addr_list;
 
     ThreadPool* _thread_pool;
+    mutable Mutex _delay_task_id_mutex;
+    std::set<int64_t> _delay_task_ids;
     /// _cluster could cache the master_addr & root_table_addr.
     /// if there is no _cluster,
     ///    we have to access zookeeper whenever we need master_addr or root_table_addr.
@@ -417,7 +423,6 @@ private:
     bool _cluster_private;
 
     PerfCounter _perf_counter;  // calc time consumption, for performance analysis
-    int64_t _perf_log_task_id;
 
     /// read request will contain this member,
     /// so tabletnodes can drop the read-request that timeouted
