@@ -73,6 +73,10 @@ def cluster_op(op):
         print 'launch cluster'
         ret = subprocess.Popen(const.launch_script, stdout=subprocess.PIPE, stderr=subprocess.PIPE, shell=True)
         print ''.join(ret.stdout.readlines())
+    elif op == 'launch_ts_first':
+        print 'launch cluster'
+        ret = subprocess.Popen(const.launch_ts_first_script, stdout=subprocess.PIPE, stderr=subprocess.PIPE, shell=True)
+        print ''.join(ret.stdout.readlines())
     else:
         print 'unknown argument'
         nose.tools.assert_true(False)

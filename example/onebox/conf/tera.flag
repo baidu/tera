@@ -1,15 +1,18 @@
-# 指定各种路径，onebox中无需修改
+# common
 --log_dir=../log
---tera_tabletnode_path_prefix=../data/
---tera_zk_lib_log_path=../log/zk.log
+--v=6
+--logbufsecs=0
 
-# 指定使用本地文件系统
---tera_leveldb_env_type=local
+# master
+--tera_master_port=1100
+--tera_master_split_tablet_size=2048
 
-## 是否使用zk
-# 指定使用非zk模式, 但只能本机访问tera
---tera_zk_enabled=false
-# 指定使用zk, 可以跨服务使用, 配置相应地址和路径即可
-#--tera_zk_enabled=true
-#--tera_zk_addr_list=localhost:2181
-#--tera_zk_root_path=/tera
+# tablet node
+--tera_tabletnode_port=2200
+--tera_tabletnode_path_prefix=${dfs_prefix}
+--tera_tabletnode_cache_paths=${local_path}
+
+# zk
+--tera_zk_addr_list=${zk_addr}
+--tera_zk_root_path=${zk_root}
+--tera_zk_timeout=10000
