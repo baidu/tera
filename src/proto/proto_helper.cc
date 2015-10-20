@@ -137,8 +137,6 @@ std::string StatusCodeToString(int32_t status) {
     //// TabletStatus ////
     case kTableNotInit:
         return "kTableNotInit";
-    case kTableDeleted:
-        return "kTableDeleted";
     case kTableOffLine:
         return "kTableOffLine";
     case kTableReady:
@@ -163,8 +161,6 @@ std::string StatusCodeToString(int32_t status) {
         return "kTableUnLoadFail";
     case kTableOnMerge:
         return "kTableOnMerge";
-    case kTabletDeleting:
-        return "kTabletDeleting";
     case kTabletDisable:
         return "kTabletDisable";
     case kTabletPending:

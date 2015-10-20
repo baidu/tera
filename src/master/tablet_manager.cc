@@ -392,10 +392,6 @@ void Tablet::ToMetaTableKeyValue(std::string* packed_key,
 
 bool Tablet::CheckStatusSwitch(TabletStatus old_status,
                                TabletStatus new_status) {
-    if (new_status == kTableDeleted) {
-        return true;
-    }
-
     switch (old_status) {
     case kTableNotInit:
         if (new_status == kTableReady         // tablet is loaded when master up
@@ -480,12 +476,9 @@ bool Tablet::CheckStatusSwitch(TabletStatus old_status,
         }
         break;
     case kTabletDisable:
-        if (new_status == kTabletDeleting
-            || new_status == kTableOffLine) {
+        if (new_status == kTableOffLine) {
             return true;
         }
-        break;
-    case kTabletDeleting:
         break;
     default:
         break;
@@ -590,6 +583,10 @@ bool Table::CheckStatusSwitch(TableStatus old_status,
         break;
     // table is in the process of deleting
     case kTableDeleting:
+        if (new_status == kTableDisable         // begin to enable table
+            || new_status == kTableDeleting) {  // begin to delete table
+            return true;
+        }
         break;
     default:
         break;

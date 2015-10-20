@@ -789,20 +789,6 @@ void MasterImpl::DeleteTable(const DeleteTableRequest* request,
         return;
     }
 
-    std::vector<TabletPtr> tablets;
-    table->GetTablet(&tablets);
-
-    // check if all tablet disable
-    for (uint32_t i = 0; i < tablets.size(); ++i) {
-        TabletPtr tablet = tablets[i];
-        if (tablet->GetStatus() != kTabletDisable) {
-            LOG(ERROR) << "fail to delete table: " << request->table_name()
-                << ", tablet status: " << StatusCodeToString(tablet->GetStatus());
-            response->set_status(kTabletReady);
-            done->Run();
-            return;
-        }
-    }
     TableStatus old_status;
     if (!table->SetStatus(kTableDeleting, &old_status)) {
         LOG(ERROR) << "fail to delete table: " << request->table_name()
@@ -810,6 +796,22 @@ void MasterImpl::DeleteTable(const DeleteTableRequest* request,
         response->set_status(static_cast<StatusCode>(old_status));
         done->Run();
         return;
+    }
+
+    std::vector<TabletPtr> tablets;
+    table->GetTablet(&tablets);
+
+    // check if all tablet disable
+    for (uint32_t i = 0; i < tablets.size(); ++i) {
+        TabletPtr tablet = tablets[i];
+        if (tablet->GetStatus() != kTabletDisable) {
+            CHECK(table->SetStatus(old_status));
+            LOG(ERROR) << "fail to delete table: " << request->table_name()
+                << ", tablet status: " << StatusCodeToString(tablet->GetStatus());
+            response->set_status(kTabletReady);
+            done->Run();
+            return;
+        }
     }
 
     WriteClosure* closure =
@@ -3996,8 +3998,6 @@ void MasterImpl::MergeTabletWriteMetaCallback(TabletMeta new_meta,
     }
 
     TabletPtr tablet_c;
-    tablet_p1->SetStatus(kTableDeleted);
-    tablet_p2->SetStatus(kTableDeleted);
     if (tablet_p1->GetKeyStart() == new_meta.key_range().key_start()) {
         m_tablet_manager->DeleteTablet(tablet_p1->GetTableName(), tablet_p1->GetKeyStart());
         m_tablet_manager->AddTablet(new_meta, TableSchema(), &tablet_c);
@@ -4119,7 +4119,6 @@ void MasterImpl::AddMetaCallback(TablePtr table,
         }
         if (retry_times <= 0) {
             for(size_t i = 0; i < tablets.size(); i++) {
-                tablets[i]->SetStatus(kTableDeleted);
                 m_tablet_manager->DeleteTablet(tablets[i]->GetTableName(),
                     tablets[i]->GetKeyStart());
             }
@@ -4461,7 +4460,6 @@ void MasterImpl::DeleteTableCallback(TablePtr table,
     // clean tablet manager
     for (uint32_t i = 0; i < tablets.size(); ++i) {
         TabletPtr tablet = tablets[i];
-        tablet->SetStatus(kTableDeleted);
         m_tablet_manager->DeleteTablet(tablet->GetTableName(), tablet->GetKeyStart());
     }
     LOG(INFO) << "delete meta table record success, " << table;
@@ -4587,7 +4585,6 @@ void MasterImpl::ScanMetaCallbackForSplit(TabletPtr tablet,
     m_tablet_manager->AddTablet(second_meta, TableSchema(), &second_tablet);
 
     // delete old tablet
-    tablet->SetStatus(kTableDeleted);
     m_tablet_manager->DeleteTablet(tablet->GetTableName(), tablet->GetKeyStart());
 
     // update first child tablet meta
@@ -4810,13 +4807,11 @@ void MasterImpl::ProcessOffLineTablet(TabletPtr tablet) {
     if (!tablet->IsBound()) {
         return;
     }
-    tablet->SetStatusIf(kTabletDisable, kTableOffLine, kTableDisable)
-        || tablet->SetStatusIf(kTabletDisable, kTableOffLine, kTableDeleting);
+    tablet->SetStatusIf(kTabletDisable, kTableOffLine, kTableDisable);
 }
 
 void MasterImpl::ProcessReadyTablet(TabletPtr tablet) {
-    if (tablet->SetStatusIf(kTableUnLoading, kTableReady, kTableDisable)
-        || tablet->SetStatusIf(kTableUnLoading, kTableReady, kTableDeleting)) {
+    if (tablet->SetStatusIf(kTableUnLoading, kTableReady, kTableDisable)) {
         UnloadClosure* done =
             NewClosure(this, &MasterImpl::UnloadTabletCallback, tablet,
                        FLAGS_tera_master_impl_retry_times);
