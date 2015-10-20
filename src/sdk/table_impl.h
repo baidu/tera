@@ -356,6 +356,10 @@ private:
     void DumpPerfCounterLogDelay(int64_t task_id);
     void DoDumpPerfCounterLog();
 
+    void DelayTaskWrapper(ThreadPool::Task task, int64_t task_id);
+    int64_t AddDelayTask(int64_t delay_time, ThreadPool::Task task);
+    void ClearDelayTask();
+
 private:
     TableImpl(const TableImpl&);
     void operator=(const TableImpl&);
