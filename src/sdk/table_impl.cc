@@ -449,7 +449,7 @@ bool TableImpl::OpenInternal(ErrorCode* err) {
         EnableCookieUpdateTimer();
     }
     if (FLAGS_tera_sdk_perf_counter_enabled) {
-        DumpPerfCounterLogDelay(0);
+        DumpPerfCounterLogDelay();
     }
     return true;
 }
@@ -2074,14 +2074,14 @@ void TableImpl::DoDumpCookie() {
     LOG(INFO) << "[SDK COOKIE] update local cookie success: " << cookie_file;
 }
 
-void TableImpl::DumpCookie(int64_t task_id) {
+void TableImpl::DumpCookie() {
     DoDumpCookie();
-    ThreadPool::Task task = boost::bind(&TableImpl::DumpCookie, this, _1);
+    ThreadPool::Task task = boost::bind(&TableImpl::DumpCookie, this);
     AddDelayTask(FLAGS_tera_sdk_cookie_update_interval * 1000, task);
 }
 
 void TableImpl::EnableCookieUpdateTimer() {
-    ThreadPool::Task task = boost::bind(&TableImpl::DumpCookie, this, _1);
+    ThreadPool::Task task = boost::bind(&TableImpl::DumpCookie, this);
     AddDelayTask(FLAGS_tera_sdk_cookie_update_interval * 1000, task);
 }
 
@@ -2101,10 +2101,10 @@ std::string TableImpl::GetCookieFileName(const std::string& tablename,
     return fname.str();
 }
 
-void TableImpl::DumpPerfCounterLogDelay(int64_t task_id) {
+void TableImpl::DumpPerfCounterLogDelay() {
     DoDumpPerfCounterLog();
     ThreadPool::Task task =
-        boost::bind(&TableImpl::DumpPerfCounterLogDelay, this, _1);
+        boost::bind(&TableImpl::DumpPerfCounterLogDelay, this);
     AddDelayTask(FLAGS_tera_sdk_perf_counter_log_interval * 1000, task);
 }
 

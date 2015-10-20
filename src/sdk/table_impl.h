@@ -342,7 +342,7 @@ private:
                                bool failed, int error_code);
     bool RestoreCookie();
     void EnableCookieUpdateTimer();
-    void DumpCookie(int64_t task_id);
+    void DumpCookie();
     void DoDumpCookie();
     std::string GetCookieFileName(const std::string& tablename,
                                   const std::string& zk_addr,
@@ -353,7 +353,7 @@ private:
     void DeleteLegacyCookieLockFile(const std::string& lock_file, int timeout_seconds);
     void CloseAndRemoveCookieLockFile(int lock_fd, const std::string& cookie_lock_file);
 
-    void DumpPerfCounterLogDelay(int64_t task_id);
+    void DumpPerfCounterLogDelay();
     void DoDumpPerfCounterLog();
 
     void DelayTaskWrapper(ThreadPool::Task task, int64_t task_id);
