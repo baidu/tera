@@ -53,8 +53,7 @@ void TabletNodeZkAdapter::Init() {
     m_tabletnode_impl->SetTabletNodeStatus(TabletNodeImpl::kIsRunning);
 
     // create my node
-    std::string session_id;
-    while (!Register(&session_id, &zk_errno)) {
+    while (!Register(m_tabletnode_impl->GetSessionId(), &zk_errno)) {
         LOG(ERROR) << "fail to create serve-node : " << zk::ZkErrnoToString(zk_errno);
         ThisThread::Sleep(FLAGS_tera_zk_retry_period);
     }
@@ -108,18 +107,9 @@ bool TabletNodeZkAdapter::GetRootTableAddr(std::string* root_table_addr) {
     return true;
 }
 
-bool TabletNodeZkAdapter::Register(std::string* session_id, int* zk_errno) {
-    // get session id
-    int64_t session_id_int = 0;
-    if (!GetSessionId(&session_id_int, zk_errno)) {
-        LOG(ERROR) << "get session id fail : " << zk::ZkErrnoToString(*zk_errno);
-        return false;
-    }
-    char session_id_str[32];
-    sprintf(session_id_str, "%016lx", session_id_int);
-
+bool TabletNodeZkAdapter::Register(std::string session_id, int* zk_errno) {
     // create serve node
-    std::string node_path = kTsListPath + "/" + session_id_str + "#";
+    std::string node_path = kTsListPath + "/" + session_id + "#";
     std::string node_value = m_server_addr;
     std::string ret_node_path;
     if (!CreateSequentialEphemeralNode(node_path, node_value, &ret_node_path,
@@ -127,10 +117,10 @@ bool TabletNodeZkAdapter::Register(std::string* session_id, int* zk_errno) {
         LOG(ERROR) << "create serve node fail";
         return false;
     }
-    LOG(INFO) << "create serve node success";
     m_serve_node_path = ret_node_path;
-    *session_id = zk::ZooKeeperUtil::GetNodeName(m_serve_node_path.c_str());
-    m_kick_node_path = kKickPath + "/" + *session_id;
+    m_kick_node_path = kKickPath + "/" + zk::ZooKeeperUtil::GetNodeName(m_serve_node_path.c_str());
+    LOG(INFO) << "create serve node success, node_path " << node_path << ", " << ret_node_path
+        << ", " << m_serve_node_path << ", " << m_kick_node_path;
     SetZkAdapterCode(zk::ZE_OK, zk_errno);
     return true;
 }

@@ -38,7 +38,7 @@ public:
     virtual bool GetRootTableAddr(std::string* root_table_addr);
 
 private:
-    bool Register(std::string* session_id, int* zk_code);
+    bool Register(std::string session_id, int* zk_code);
     bool Unregister(int* zk_code);
 
     bool WatchMaster(std::string* master, int* zk_code);
