@@ -348,17 +348,40 @@ void Tablet::DelSnapshot(int32_t id) {
     snapshot_list->RemoveLast();
 }
 
-int32_t Tablet::AddRollback(uint64_t rollback_point) {
+int32_t Tablet::AddRollback(std::string name, uint64_t snapshot_id, uint64_t rollback_point) {
     MutexLock lock(&m_mutex);
-    m_meta.add_rollback_points(rollback_point);
-    return m_meta.rollback_points_size() - 1;
+    Rollback rollback;
+    rollback.set_name(name);
+    rollback.set_snapshot_id(snapshot_id);
+    rollback.set_rollback_point(rollback_point);
+    m_meta.add_rollbacks()->CopyFrom(rollback);
+    return m_meta.rollbacks_size() - 1;
 }
 
-void Tablet::ListRollback(std::vector<uint64_t>* rollback_points) {
+void Tablet::ListRollback(std::vector<Rollback>* rollbacks) {
     MutexLock lock(&m_mutex);
-    for (int i = 0; i < m_meta.rollback_points_size(); i++) {
-        rollback_points->push_back(m_meta.rollback_points(i));
+    for (int i = 0; i < m_meta.rollbacks_size(); i++) {
+        rollbacks->push_back(m_meta.rollbacks(i));
+        VLOG(11) << "rollback " << m_meta.path() << ": " << m_meta.rollbacks(i).ShortDebugString();
     }
+}
+
+int32_t Tablet::UpdateRollback(std::string name, uint64_t snapshot_id, uint64_t rollback_point) {
+    MutexLock lock(&m_mutex);
+    bool has_rollback_name = false;
+    for (int32_t i = 0; i < m_meta.rollbacks_size(); ++i) {
+        Rollback* cur_rollback = m_meta.mutable_rollbacks(i);
+        if (cur_rollback->name() == name) {
+            has_rollback_name = true;
+            assert(cur_rollback->snapshot_id() == snapshot_id);
+            cur_rollback->set_rollback_point(rollback_point);
+        }
+    }
+    for (int i = 0; i < m_meta.rollbacks_size(); i++) {
+        VLOG(11) << "rollback " << m_meta.path() << ": " << m_meta.rollbacks(i).ShortDebugString();
+    }
+    assert(has_rollback_name);
+    return m_meta.rollbacks_size() - 1;
 }
 
 bool Tablet::IsBound() {
@@ -628,15 +651,15 @@ void Table::ListSnapshot(std::vector<uint64_t>* snapshots) {
     *snapshots = m_snapshot_list;
 }
 
-int32_t Table::AddRollback(uint64_t snapshot_id) {
+int32_t Table::AddRollback(std::string rollback_name) {
     MutexLock lock(&m_mutex);
-    m_rollback_snapshots.push_back(snapshot_id);
-    return m_rollback_snapshots.size() - 1;
+    m_rollback_names.push_back(rollback_name);
+    return m_rollback_names.size() - 1;
 }
 
-void Table::ListRollback(std::vector<uint64_t>* snapshots) {
+void Table::ListRollback(std::vector<std::string>* rollback_names) {
     MutexLock lock(&m_mutex);
-    *snapshots = m_rollback_snapshots;
+    *rollback_names = m_rollback_names;
 }
 
 void Table::AddDeleteTabletCount() {
@@ -668,8 +691,8 @@ void Table::ToMeta(TableMeta* meta) {
     for (size_t i = 0; i < m_snapshot_list.size(); i++) {
         meta->add_snapshot_list(m_snapshot_list[i]);
     }
-    for (size_t i = 0; i < m_rollback_snapshots.size(); ++i) {
-        meta->add_rollback_snapshot(m_rollback_snapshots[i]);
+    for (size_t i = 0; i < m_rollback_names.size(); ++i) {
+        meta->add_rollback_names(m_rollback_names[i]);
     }
 }
 
@@ -764,9 +787,9 @@ bool TabletManager::AddTable(const std::string& table_name,
         (*table)->m_snapshot_list.push_back(meta.snapshot_list(i));
         LOG(INFO) << table_name << " add snapshot " << meta.snapshot_list(i);
     }
-    for (int32_t i = 0; i < meta.rollback_snapshot_size(); ++i) {
-        (*table)->m_rollback_snapshots.push_back(meta.rollback_snapshot(i));
-        LOG(INFO) << table_name << " add rollback " << meta.rollback_snapshot(i);
+    for (int32_t i = 0; i < meta.rollback_names_size(); ++i) {
+        (*table)->m_rollback_names.push_back(meta.rollback_names(i));
+        LOG(INFO) << table_name << " add rollback " << meta.rollback_names(i);
     }
     (*table)->m_mutex.Unlock();
     return true;

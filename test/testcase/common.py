@@ -87,7 +87,7 @@ def cluster_op(op):
 
 
 def create_kv_table():
-    print 'print kv table'
+    print 'create kv table'
     cleanup()
     ret = subprocess.Popen(const.teracli_binary + ' create test', stdout=subprocess.PIPE, stderr=subprocess.PIPE, shell=True)
     print ''.join(ret.stdout.readlines())
@@ -95,7 +95,7 @@ def create_kv_table():
 
 
 def create_singleversion_table():
-    print 'print single version table'
+    print 'create single version table'
     cleanup()
     ret = subprocess.Popen(const.teracli_binary + ' create "test{cf0, cf1}"',
                            stdout=subprocess.PIPE, stderr=subprocess.PIPE, shell=True)
@@ -104,7 +104,7 @@ def create_singleversion_table():
 
 
 def create_multiversion_table():
-    print 'print multi version table'
+    print 'create multi version table'
     cleanup()
     ret = subprocess.Popen(const.teracli_binary + ' create "test{cf0<maxversions=20>, cf1<maxversions=20>}"',
                            stdout=subprocess.PIPE, stderr=subprocess.PIPE, shell=True)
@@ -126,6 +126,21 @@ def createbyfile(schema, deli=''):
     ret = subprocess.Popen(create_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, shell=True)
     print ''.join(ret.stdout.readlines())
     print ''.join(ret.stderr.readlines())
+
+
+def createbyfile(schema, deli=''):
+    """
+    This function creates a table according to a specified schema
+    :param schema: schema file path
+    :param deli: deli file path
+    :return: None
+    """
+
+    cleanup()
+    create_cmd = '{teracli} createbyfile {schema} {deli}'.format(teracli=const.teracli_binary, schema=schema, deli=deli)
+    print create_cmd
+    ret = subprocess.Popen(create_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, shell=True)
+    print ''.join(ret.stdout.readlines())
 
 
 def run_tera_mark(file_path, op, table_name, random, value_size, num, key_size, cf='', key_seed=1, value_seed=1):
@@ -300,6 +315,20 @@ def snapshot_op(table_name):
     return None
 
 
+def rollback_op(table_name, snapshot, rollback_name):
+    """
+    Invoke rollback action
+    :param table_name: table name
+    :param snapshot: rollback to a specific snapshot
+    :return: None
+    """
+    rollback_cmd = '{teracli} snapshot {table_name} rollback --snapshot={snapshot} --rollback_name={rname}'.\
+        format(teracli=const.teracli_binary, table_name=table_name, snapshot=snapshot, rname=rollback_name)
+    print rollback_cmd
+    ret = subprocess.Popen(rollback_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, shell=True)
+    print ''.join(ret.stdout.readlines())
+
+
 def compare_files(file1, file2, need_sort):
     """
     This function compares two files.
@@ -316,7 +345,7 @@ def compare_files(file1, file2, need_sort):
         print ''.join(ret.stderr.readlines())
         os.rename(file1+'.sort', file1)
         os.rename(file2+'.sort', file2)
-    return filecmp.cmp(file1, file2)
+    return filecmp.cmp(file1, file2, shallow=False)
 
 
 def file_is_empty(file_path):
