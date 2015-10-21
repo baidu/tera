@@ -3004,6 +3004,20 @@ void MasterImpl::GetRollback(const RollbackRequest* request,
         return;
     }
 
+    bool rollback_exist, rollback_done;
+    table->GetRollbackStatus(request->rollback_name(), &rollback_exist, &rollback_done);
+    if (rollback_exist) {
+        if (rollback_done) {
+            LOG(INFO) << "rollback " << request->rollback_name() << " already exists and done";
+            response->set_done(true);
+            done->Run();
+            return;
+        } else {
+            LOG(INFO) << "rollback " << request->rollback_name()
+                << " already exists but has not complete yet";
+        }
+    }
+
     std::vector<TabletPtr> tablets;
     table->GetTablet(&tablets);
     // write memory and meta with default rollback_point
@@ -3192,6 +3206,7 @@ void MasterImpl::AddRollbackCallback(TablePtr table,
     LOG(INFO) << "Rollback " << rpc_request->rollback_name() << " to " << rpc_request->table_name()
         << ", write meta with snpashot_id " << rpc_request->snapshot_id() << " done";
     rpc_response->set_status(kMasterOk);
+    rpc_response->set_done(true);
     rpc_done->Run();
 }
 

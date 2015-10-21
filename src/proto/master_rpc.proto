@@ -203,8 +203,9 @@ message RollbackRequest {
 }
 
 message RollbackResponse {
-    optional StatusCode status = 1;
-    optional uint64 sequence_id = 2;
+    optional uint64 sequence_id = 1;
+    optional StatusCode status = 2;
+    optional bool done = 3;
 }
 
 // admin

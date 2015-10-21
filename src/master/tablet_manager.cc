@@ -658,6 +658,32 @@ void Table::ListRollback(std::vector<std::string>* rollback_names) {
     *rollback_names = m_rollback_names;
 }
 
+void Table::GetRollbackStatus(std::string rollback_name, bool* exists, bool* done) {
+    MutexLock lock(&m_mutex);
+    std::vector<std::string>::iterator it =
+        std::find(m_rollback_names.begin(), m_rollback_names.end(), rollback_name);
+    if (it == m_rollback_names.end()) {
+        *exists = false;
+        *done = false;
+    } else {
+        *exists = true;
+        Table::TabletList::iterator it = m_tablets_list.begin();
+        for (; it != m_tablets_list.end(); ++it) {
+            TabletPtr tablet = it->second;
+            int32_t rollback_size = tablet->m_meta.rollbacks_size();
+            for (int32_t i = 0; i < rollback_size; ++i) {
+                if (tablet->m_meta.rollbacks(i).name() == rollback_name &&
+                    tablet->m_meta.rollbacks(i).rollback_point() == leveldb::kMaxSequenceNumber) {
+                    LOG(INFO) << "rollabck tablet " << tablet->m_meta.path() << " has not complete yet";
+                    *done = false;
+                    return;
+                }
+            }
+        }
+        *done = true;
+    }
+}
+
 void Table::AddDeleteTabletCount() {
     MutexLock lock(&m_mutex);
     m_deleted_tablet_num++;

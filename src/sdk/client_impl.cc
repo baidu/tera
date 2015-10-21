@@ -824,8 +824,13 @@ bool ClientImpl::Rollback(const string& name, uint64_t snapshot,
 
     if (master_client.GetRollback(&request, &response)) {
         if (response.status() == kMasterOk) {
-            std::cout << name << " rollback to snapshot sucessfully" << std::endl;
-            return true;
+            if (response.done()) {
+                std::cout << name << " rollback to snapshot sucessfully" << std::endl;
+                return true;
+            } else {
+                std::cout << name << " rollback has not complete yet" << std::endl;
+                return false;
+            }
         }
     }
     err->SetFailed(ErrorCode::kSystem, StatusCodeToString(response.status()));

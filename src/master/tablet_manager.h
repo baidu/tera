@@ -179,6 +179,7 @@ public:
     int32_t AddRollback(std::string rollback_name);
     void ListRollback(std::vector<std::string>* rollback_names);
     int32_t GetRollbackSize() {return m_rollback_names.size() - 1;}
+    void GetRollbackStatus(std::string rollbaack_name, bool* exists, bool* done);
     void AddDeleteTabletCount();
     bool NeedDelete();
     void ToMetaTableKeyValue(std::string* packed_key = NULL,
