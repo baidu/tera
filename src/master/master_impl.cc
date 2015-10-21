@@ -92,6 +92,7 @@ DECLARE_bool(tera_ins_enabled);
 DECLARE_int64(tera_sdk_perf_counter_log_interval);
 
 DECLARE_bool(tera_acl_enabled);
+DECLARE_bool(tera_only_root_create_table);
 DECLARE_string(tera_master_gc_strategy);
 
 namespace tera {
@@ -462,17 +463,19 @@ bool MasterImpl::IsRootUser(const std::string& token) {
     return m_user_manager->UserNameToToken("root") == token;
 }
 
+// user is admin or user is in admin_group
 bool MasterImpl::CheckUserPermissionOnTable(const std::string& token, TablePtr table) {
    std::string group_name = table->GetSchema().admin_group();
    std::string user_name = m_user_manager->TokenToUserName(token);
-   return m_user_manager->IsUserInGroup(user_name, group_name);
+   return (m_user_manager->IsUserInGroup(user_name, group_name)
+           || (table->GetSchema().admin() == m_user_manager->TokenToUserName(token)));
 }
 
 template <typename Request>
 bool MasterImpl::HasPermissionOnTable(const Request* request, TablePtr table) {
     if (!FLAGS_tera_acl_enabled
         || IsRootUser(request->user_token())
-        || table->GetSchema().admin_group() == ""
+        || ((table->GetSchema().admin_group() == "") && (table->GetSchema().admin() == ""))
         || (request->has_user_token()
             && CheckUserPermissionOnTable(request->user_token(), table))) {
         return true;
@@ -680,11 +683,13 @@ void MasterImpl::CreateTable(const CreateTableRequest* request,
             done->Run();
             return;
         }
-        if (FLAGS_tera_acl_enabled && !IsRootUser(request->user_token())) {
-            response->set_sequence_id(request->sequence_id());
-            response->set_status(kNotPermission);
-            done->Run();
-            return;
+        if (FLAGS_tera_acl_enabled
+            && !IsRootUser(request->user_token())
+            && FLAGS_tera_only_root_create_table) {
+                response->set_sequence_id(request->sequence_id());
+                response->set_status(kNotPermission);
+                done->Run();
+                return;
         }
         if (!request->schema().alias().empty()) {
             bool alias_exist = false;
