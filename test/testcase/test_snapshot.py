@@ -8,6 +8,7 @@ import nose
 import time
 
 import common
+from conf import const
 
 
 @nose.tools.with_setup(common.create_singleversion_table, common.cleanup)
@@ -164,3 +165,25 @@ def test_table_snapshot_relaunch():
     common.scan_table(table_name=table_name, file_path=scan_file2, allversion=True, snapshot=0)
     nose.tools.assert_true(common.compare_files(dump_file1, scan_file1, need_sort=True))
     nose.tools.assert_true(common.compare_files(dump_file2, scan_file2, need_sort=True))
+
+
+@nose.tools.with_setup(None, common.cleanup)
+def test_kv_snapshot_multitablets():
+    """
+    kv snapshot w/multi tablets
+    1. test_kv_snapshot_relaunch()
+    :return:
+    """
+    common.createbyfile(schema=const.data_path + 'kv.schema', deli=const.data_path + 'deli.10')
+    test_kv_snapshot_relaunch()
+
+
+@nose.tools.with_setup(None, common.cleanup)
+def test_table_snapshot_multitablets():
+    """
+    table snapshot w/multi tablets
+    1. test_tablev_snapshot_relaunch()
+    :return:
+    """
+    common.createbyfile(schema=const.data_path + 'table.schema', deli=const.data_path + 'deli.10')
+    test_table_snapshot_relaunch()
