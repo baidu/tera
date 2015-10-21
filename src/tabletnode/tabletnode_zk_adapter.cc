@@ -357,13 +357,20 @@ static void InsOnMetaChange(const galaxy::ins::sdk::WatchParam& param,
 void InsTabletNodeZkAdapter::Init() {
     std::string root_path = FLAGS_tera_ins_root_path;
     galaxy::ins::sdk::SDKError err;
+    // create session
     m_ins_sdk = new galaxy::ins::sdk::InsSDK(FLAGS_tera_ins_addr_list);
-    std::string lock_key = root_path + kTsListPath + "/" + m_server_addr;
-    CHECK(m_ins_sdk->Lock(lock_key, &err)) << "register fail";
+    
+    // get session id
     std::string session_id = m_ins_sdk->GetSessionID();
-    LOG(INFO) << "create ts-node success: " << session_id;
     m_tabletnode_impl->SetSessionId(session_id);
     m_tabletnode_impl->SetTabletNodeStatus(TabletNodeImpl::kIsRunning);
+
+    // create node
+    std::string lock_key = root_path + kTsListPath + "/" + m_server_addr;
+    CHECK(m_ins_sdk->Lock(lock_key, &err)) << "register fail";
+    LOG(INFO) << "create ts-node success: " << session_id;
+        
+    // create watch node
     std::string kick_key = root_path + kKickPath + "/" + session_id;
     CHECK(m_ins_sdk->Watch(kick_key, &InsOnKick, this, &err)) << "watch kick fail";
     CHECK(m_ins_sdk->Watch(lock_key, &InsOnLockChange, this, &err))
