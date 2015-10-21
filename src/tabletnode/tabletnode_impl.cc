@@ -204,7 +204,8 @@ void TabletNodeImpl::LoadTablet(const LoadTabletRequest* request,
                                 LoadTabletResponse* response,
                                 google::protobuf::Closure* done) {
     response->set_sequence_id(request->sequence_id());
-    if (!request->has_session_id() || request->session_id() != GetSessionId()) {
+    if (!request->has_session_id() ||
+        request->session_id().compare(0, GetSessionId().size(), GetSessionId())) {
         LOG(WARNING) << "load session id not match: "
             << request->session_id() << ", " << GetSessionId();
         response->set_status(kIllegalAccess);
