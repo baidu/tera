@@ -10,3 +10,6 @@
 # 指定使用非zk模式, 但只能本机访问tera
 --tera_zk_enabled=false
 # 指定使用zk, 可以跨服务使用, 配置相应地址和路径即可
+#--tera_zk_enabled=true
+#--tera_zk_addr_list=localhost:2181
+#--tera_zk_root_path=/tera
