@@ -1230,7 +1230,7 @@ int ZooKeeperAdapter::GetWrapper(const std::string& path, bool is_watch,
         }
         buffer[buffer_len] = '\0';
         *value = buffer;
-        LOG(INFO) << "zoo_get success";
+        VLOG(10) << "zoo_get success";
     } else {
         LOG(WARNING) << "zoo_get fail : " << zerror(ret);
     }

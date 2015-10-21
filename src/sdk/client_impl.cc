@@ -109,6 +109,10 @@ bool ClientImpl::CheckReturnValue(StatusCode status, std::string& reason, ErrorC
             reason = "permission denied.";
             err->SetFailed(ErrorCode::kNoAuth, reason);
             break;
+        case kTabletReady:
+            reason = "tablet is ready.";
+            err->SetFailed(ErrorCode::kOK, reason);
+            break;
         default:
             reason = "tera master is not ready, please wait..";
             err->SetFailed(ErrorCode::kSystem, reason);
@@ -205,7 +209,6 @@ bool ClientImpl::DeleteTable(string name, ErrorCode* err) {
         if (CheckReturnValue(response.status(), reason, err)) {
             return true;
         }
-        LOG(ERROR) << reason << "| status: " << StatusCodeToString(response.status());
     } else {
         reason = "rpc fail to delete table: " + name;
         LOG(ERROR) << reason;
@@ -977,9 +980,6 @@ static int SpecifiedFlagfileCount(const std::string& confpath) {
     if (!FLAGS_tera_sdk_conf_file.empty()) {
         count++;
     }
-    if (getenv("TERA_CONF")) {
-        count++;
-    }
     return count;
 }
 
@@ -1003,15 +1003,12 @@ static int InitFlags(const std::string& confpath, const std::string& log_prefix)
     } else if (!FLAGS_tera_sdk_conf_file.empty() && !IsExist(confpath)) {
         LOG(ERROR) << "specified config file(FLAGS_tera_sdk_conf_file) not found";
         return -1;
-    } else if (IsExist(utils::GetValueFromEnv("TERA_CONF"))) {
-        flagfile += utils::GetValueFromEnv("TERA_CONF");
-    } else if (getenv("TERA_CONF")) {
-        LOG(ERROR) << "specified config file(environment variable) not found";
-        return -1;
     } else if (IsExist("./tera.flag")) {
         flagfile += "./tera.flag";
     } else if (IsExist("../conf/tera.flag")) {
         flagfile += "../conf/tera.flag";
+    } else if (IsExist(utils::GetValueFromEnv("TERA_CONF"))) {
+        flagfile += utils::GetValueFromEnv("TERA_CONF");
     } else {
         LOG(ERROR) << "hasn't specify the flagfile, but default config file not found";
         return -1;
