@@ -292,7 +292,7 @@ int32_t DropOp(Client* client, int32_t argc, char** argv, ErrorCode* err) {
 
     std::string tablename = argv[2];
     if (!client->DeleteTable(tablename, err)) {
-        LOG(ERROR) << "fail to delete table";
+        LOG(ERROR) << "fail to delete table, " << err->GetReason();
         return -1;
     }
     return 0;
@@ -2246,7 +2246,7 @@ int32_t Meta2Op(Client *client, int32_t argc, char** argv) {
     return 0;
 }
 
-static int32_t CreateUser(Client* client, const std::string& user, 
+static int32_t CreateUser(Client* client, const std::string& user,
                           const std::string& password, ErrorCode* err) {
     if (!client->CreateUser(user, password, err)) {
         LOG(ERROR) << "fail to create user: " << user
@@ -2265,7 +2265,7 @@ static int32_t DeleteUser(Client* client, const std::string& user, ErrorCode* er
     return 0;
 }
 
-static int32_t ChangePwd(Client* client, const std::string& user, 
+static int32_t ChangePwd(Client* client, const std::string& user,
                          const std::string& password, ErrorCode* err) {
     if (!client->ChangePwd(user, password, err)) {
         LOG(ERROR) << "fail to update user: " << user
@@ -2285,7 +2285,7 @@ static int32_t ShowUser(Client* client, const std::string& user, ErrorCode* err)
     if (user_infos.size() < 1) {
         return -1;
     }
-    std::cout << "user:" << user_infos[0] 
+    std::cout << "user:" << user_infos[0]
         << "\ngroups (" << user_infos.size() - 1 << "):";
     for (size_t i = 1; i < user_infos.size(); ++i) {
         std::cout << user_infos[i] << " ";
@@ -2294,7 +2294,7 @@ static int32_t ShowUser(Client* client, const std::string& user, ErrorCode* err)
     return 0;
 }
 
-static int32_t AddUserToGroup(Client* client, const std::string& user, 
+static int32_t AddUserToGroup(Client* client, const std::string& user,
                                 const std::string& group, ErrorCode* err) {
     if (!client->AddUserToGroup(user, group, err)) {
         LOG(ERROR) << "fail to add user: " << user
@@ -2304,7 +2304,7 @@ static int32_t AddUserToGroup(Client* client, const std::string& user,
     return 0;
 }
 
-static int32_t DeleteUserFromGroup(Client* client, const std::string& user, 
+static int32_t DeleteUserFromGroup(Client* client, const std::string& user,
                                      const std::string& group, ErrorCode* err) {
     if (!client->DeleteUserFromGroup(user, group, err)) {
         LOG(ERROR) << "fail to delete user: " << user
