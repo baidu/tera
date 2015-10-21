@@ -255,12 +255,22 @@ def parse_showinfo():
         line_list = line.split(" ")
         list_ret = [line_list[i] for i in range(len(line_list)) if line_list[i] != ""]
 
+        list_len = len(list_ret)
+
         retinfo[list_ret[1]] = {}
         retinfo[list_ret[1]]["status"] = list_ret[2]
         retinfo[list_ret[1]]["size"] = list_ret[3]
-        retinfo[list_ret[1]]["lg_size"] = list_ret[4]
-        retinfo[list_ret[1]]["tablet"] = list_ret[5]
-        retinfo[list_ret[1]]["busy"] = list_ret[6]
+        #retinfo[list_ret[1]]["lg_size"] = list_ret[4]
+        ret_lg_size = {}
+        #if list_len != 7:
+        #    for i in range(4, list_len - 2):
+        #        ret_lg_size[i - 4] = list_ret[i]
+        #    retinfo[list_ret[1]]["lg_size"] = ret_lg_size
+        for i in range(4, list_len - 2):
+             ret_lg_size[i - 4] = list_ret[i]
+        retinfo[list_ret[1]]["lg_size"] = ret_lg_size
+        retinfo[list_ret[1]]["tablet"] = list_ret[list_len - 2]
+        retinfo[list_ret[1]]["busy"] = list_ret[list_len - 1]
     
     print json.dumps(retinfo)
     return retinfo

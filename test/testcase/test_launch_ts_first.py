@@ -19,11 +19,15 @@ def test_launch_ts_first():
     time.sleep(10)
     ret = subprocess.Popen('./teracli show', stdout=subprocess.PIPE, stderr=subprocess.PIPE, shell=True)
     print ''.join(ret.stdout.readlines())
+    retinfo1 = common.parse_showinfo()
+    nose.tools.assert_true(len(retinfo1) != 0)
     
     time.sleep(12)
     common.cluster_op('kill')
     common.cluster_op('launch_ts_first')
     ret = subprocess.Popen('./teracli show', stdout=subprocess.PIPE, stderr=subprocess.PIPE, shell=True)
     print ''.join(ret.stdout.readlines())
+    retinfo2 = common.parse_showinfo()
+    nose.tools.assert_true(len(retinfo2) != 0)
 
 
