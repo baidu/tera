@@ -74,7 +74,7 @@ private:
 };
 
 /// new flash env
-Env* NewFlashEnv(Env* base_env, Logger* logger);
+Env* NewFlashEnv(Env* base_env);
 }  // namespace leveldb
 
 #endif  //__LEVELDB_ENV_FLASH_H_
