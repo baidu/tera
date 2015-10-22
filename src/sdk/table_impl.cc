@@ -283,7 +283,7 @@ ResultStream* TableImpl::Scan(const ScanDescriptor& desc, ErrorCode* err) {
     ResultStream * results = NULL;
     if (desc.IsAsync() && !_table_schema.kv_only()) {
         VLOG(6) << "activate async-scan";
-        results = new ResultStreamAsyncImpl(this, impl);
+        results = new ResultStreamBatchImpl(this, impl);
     } else {
         VLOG(6) << "activate sync-scan";
         results = new ResultStreamSyncImpl(this, impl);
