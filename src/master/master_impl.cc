@@ -92,6 +92,7 @@ DECLARE_bool(tera_ins_enabled);
 DECLARE_int64(tera_sdk_perf_counter_log_interval);
 
 DECLARE_bool(tera_acl_enabled);
+DECLARE_bool(tera_only_root_create_table);
 DECLARE_string(tera_master_gc_strategy);
 
 namespace tera {
@@ -155,6 +156,7 @@ bool MasterImpl::Init() {
         m_zk_adapter.reset(new FakeMasterZkAdapter(this, m_local_addr));
     }
 
+    LOG(INFO) << "[acl] " << (FLAGS_tera_acl_enabled ? "enabled" : "disabled");
     SetMasterStatus(kIsSecondary);
     m_thread_pool->AddTask(boost::bind(&MasterImpl::InitAsync, this));
     return true;
@@ -461,16 +463,37 @@ bool MasterImpl::IsRootUser(const std::string& token) {
     return m_user_manager->UserNameToToken("root") == token;
 }
 
-template <typename Request, typename Response, typename Callback>
-bool MasterImpl::HasTablePermission(const Request* request, Response* response,
-                                    Callback* done, TablePtr table, const char* operate) {
-    // check permission
+// user is admin or user is in admin_group
+bool MasterImpl::CheckUserPermissionOnTable(const std::string& token, TablePtr table) {
+   std::string group_name = table->GetSchema().admin_group();
+   std::string user_name = m_user_manager->TokenToUserName(token);
+   return (m_user_manager->IsUserInGroup(user_name, group_name)
+           || (table->GetSchema().admin() == m_user_manager->TokenToUserName(token)));
+}
+
+template <typename Request>
+bool MasterImpl::HasPermissionOnTable(const Request* request, TablePtr table) {
     if (!FLAGS_tera_acl_enabled
-        || IsRootUser(request->user_token())) {
-        LOG(INFO) << "[acl] is acl enabled: " << FLAGS_tera_acl_enabled;
+        || IsRootUser(request->user_token())
+        || ((table->GetSchema().admin_group() == "") && (table->GetSchema().admin() == ""))
+        || (request->has_user_token()
+            && CheckUserPermissionOnTable(request->user_token(), table))) {
+        return true;
+
+    }
+    return false;
+}
+
+template <typename Request, typename Response, typename Callback>
+bool MasterImpl::HasPermissionOrReturn(const Request* request, Response* response,
+                                       Callback* done, TablePtr table, const char* operate) {
+    // check permission
+    if (HasPermissionOnTable(request, table)) {
         return true;
     } else {
-        LOG(INFO) << "[acl] fail to " << operate;
+        std::string token = request->has_user_token() ? request->user_token() : "";
+        LOG(INFO) << "[acl] " << m_user_manager->TokenToUserName(token)
+                  << ":" << token << " fail to " << operate;
         response->set_sequence_id(request->sequence_id());
         response->set_status(kNotPermission);
         done->Run();
@@ -660,11 +683,13 @@ void MasterImpl::CreateTable(const CreateTableRequest* request,
             done->Run();
             return;
         }
-        if (FLAGS_tera_acl_enabled && !IsRootUser(request->user_token())) {
-            response->set_sequence_id(request->sequence_id());
-            response->set_status(kNotPermission);
-            done->Run();
-            return;
+        if (FLAGS_tera_acl_enabled
+            && !IsRootUser(request->user_token())
+            && FLAGS_tera_only_root_create_table) {
+                response->set_sequence_id(request->sequence_id());
+                response->set_status(kNotPermission);
+                done->Run();
+                return;
         }
         if (!request->schema().alias().empty()) {
             bool alias_exist = false;
@@ -785,7 +810,7 @@ void MasterImpl::DeleteTable(const DeleteTableRequest* request,
         done->Run();
         return;
     }
-    if (!HasTablePermission(request, response, done, table, "delete table")) {
+    if (!HasPermissionOrReturn(request, response, done, table, "delete table")) {
         return;
     }
 
@@ -797,27 +822,27 @@ void MasterImpl::DeleteTable(const DeleteTableRequest* request,
         done->Run();
         return;
     }
-    response->set_status(kMasterOk);
-    done->Run();
 
-    WriteClosure* closure =
-        NewClosure(this, &MasterImpl::DeleteTableRecordCallback, table,
-                   FLAGS_tera_master_impl_retry_times);
-    BatchWriteMetaTableAsync(boost::bind(&Table::ToMetaTableKeyValue, table, _1, _2),
-                             true, closure);
+    std::vector<TabletPtr> tablets;
+    table->GetTablet(&tablets);
 
-    std::vector<TabletPtr> tablet_meta_list;
-    table->GetTablet(&tablet_meta_list);
-    for (uint32_t i = 0; i < tablet_meta_list.size(); ++i) {
-        TabletPtr tablet = tablet_meta_list[i];
-        if (tablet->SetStatusIf(kTabletDeleting, kTabletDisable)) {
-            WriteClosure* closure =
-                NewClosure(this, &MasterImpl::DeleteTabletRecordCallback, tablet,
-                           FLAGS_tera_master_impl_retry_times);
-            BatchWriteMetaTableAsync(boost::bind(&Tablet::ToMetaTableKeyValue, tablet, _1, _2),
-                                     true, closure);
+    // check if all tablet disable
+    for (uint32_t i = 0; i < tablets.size(); ++i) {
+        TabletPtr tablet = tablets[i];
+        if (tablet->GetStatus() != kTabletDisable) {
+            CHECK(table->SetStatus(old_status));
+            LOG(ERROR) << "fail to delete table: " << request->table_name()
+                << ", tablet status: " << StatusCodeToString(tablet->GetStatus());
+            response->set_status(kTabletReady);
+            done->Run();
+            return;
         }
     }
+
+    WriteClosure* closure =
+        NewClosure(this, &MasterImpl::DeleteTableCallback, table, tablets,
+                   FLAGS_tera_master_impl_retry_times, response, done);
+    BatchWriteMetaTableAsync(table, tablets, true, closure);
 }
 
 void MasterImpl::DisableTable(const DisableTableRequest* request,
@@ -841,7 +866,7 @@ void MasterImpl::DisableTable(const DisableTableRequest* request,
         done->Run();
         return;
     }
-    if (!HasTablePermission(request, response, done, table, "disable table")) {
+    if (!HasPermissionOrReturn(request, response, done, table, "disable table")) {
         return;
     }
 
@@ -900,7 +925,7 @@ void MasterImpl::EnableTable(const EnableTableRequest* request,
         done->Run();
         return;
     }
-    if (!HasTablePermission(request, response, done, table, "enable table")) {
+    if (!HasPermissionOrReturn(request, response, done, table, "enable table")) {
         return;
     }
 
@@ -951,7 +976,7 @@ void MasterImpl::UpdateTable(const UpdateTableRequest* request,
         done->Run();
         return;
     }
-    if (!HasTablePermission(request, response, done, table, "update table")) {
+    if (!HasPermissionOrReturn(request, response, done, table, "update table")) {
         return;
     }
 
@@ -1073,11 +1098,19 @@ void MasterImpl::ShowTables(const ShowTablesRequest* request,
         TableMetaList* table_meta_list = response->mutable_table_meta_list();
         for (uint32_t i = 0; i < table_list.size(); ++i) {
             TablePtr table = table_list[i];
+            // if a user has NO permission on a table,
+            // he/she should not notice this table
+            if (!HasPermissionOnTable(request, table)) {
+                continue;
+            }
             table->ToMeta(table_meta_list->add_meta());
         }
         TabletMetaList* tablet_meta_list = response->mutable_tablet_meta_list();
         for (uint32_t i = 0; i < tablet_list.size(); ++i) {
             TabletPtr tablet = tablet_list[i];
+            if (!HasPermissionOnTable(request, tablet->GetTable())) {
+                continue;
+            }
             TabletMeta meta;
             tablet->ToMeta(&meta);
             tablet_meta_list->add_meta()->CopyFrom(meta);
@@ -1127,6 +1160,9 @@ void MasterImpl::ShowTabletNodes(const ShowTabletNodesRequest* request,
         std::vector<TabletPtr> tablet_list;
         m_tablet_manager->FindTablet(request->addr(), &tablet_list);
         for (size_t i = 0; i < tablet_list.size(); ++i) {
+            if (!HasPermissionOnTable(request, tablet_list[i]->GetTable())) {
+                continue;
+            }
             TabletMeta* meta = response->mutable_tabletmeta_list()->add_meta();
             TabletCounter* counter = response->mutable_tabletmeta_list()->add_counter();
             tablet_list[i]->ToMeta(meta);
@@ -1237,7 +1273,7 @@ void MasterImpl::OperateUser(const OperateUserRequest* request,
     }
     /*
      * for (change password), (add user to group), (delete user from group),
-     * we get the original UserInfo(including token & group), 
+     * we get the original UserInfo(including token & group),
      * do some modification according to the RPC request on the original UserInfo,
      * and rewrite it to meta table.
      */
@@ -1270,7 +1306,7 @@ void MasterImpl::OperateUser(const OperateUserRequest* request,
         }
     } else if (op_type == kAddToGroup) {
         if (!operated_user.has_user_name() || operated_user.group_name_size() != 1
-            || !m_user_manager->IsValidForAddToGroup(token, user_name, 
+            || !m_user_manager->IsValidForAddToGroup(token, user_name,
                                                      operated_user.group_name(0))) {
             is_invalid = true;
         } else {
@@ -2384,14 +2420,13 @@ void MasterImpl::LoadTabletAsync(TabletPtr tablet, LoadClosure* done, uint64_t) 
         request->add_snapshots_id(snapshot_id[i]);
         request->add_snapshots_sequence(snapshot_seq[i]);
     }
-    std::vector<uint64_t> rollback_snapshots;
-    std::vector<uint64_t> rollback_points;
-    table->ListRollback(&rollback_snapshots);
-    tablet->ListRollback(&rollback_points);
-    assert(rollback_snapshots.size() == rollback_points.size());
-    for (uint32_t i = 0; i < rollback_snapshots.size(); ++i) {
-        request->add_rollback_snapshots(rollback_snapshots[i]);
-        request->add_rollback_points(rollback_points[i]);
+    std::vector<std::string> rollback_names;
+    std::vector<Rollback> rollbacks;
+    table->ListRollback(&rollback_names);
+    tablet->ListRollback(&rollbacks);
+    assert(rollback_names.size() == rollbacks.size());
+    for (uint32_t i = 0; i < rollbacks.size(); ++i) {
+        request->add_rollbacks()->CopyFrom(rollbacks[i]);
     }
 
     TabletMeta meta;
@@ -2818,6 +2853,7 @@ void MasterImpl::GetSnapshot(const GetSnapshotRequest* request,
     task->finish_num = 0;
     task->aborted = false;
     MutexLock lock(&task->mutex);
+    int64_t snapshot_id = get_micros();
     for (uint32_t i = 0; i < task->tablets.size(); ++i) {
         TabletPtr tablet = task->tablets[i];
         if (!tablet->SetStatusIf(kTabletOnSnapshot, kTableReady)) {
@@ -2830,7 +2866,7 @@ void MasterImpl::GetSnapshot(const GetSnapshotRequest* request,
         ++task->task_num;
         SnapshotClosure* closure =
             NewClosure(this, &MasterImpl::GetSnapshotCallback, static_cast<int32_t>(i), task);
-        GetSnapshotAsync(tablet, 3000, closure);
+        GetSnapshotAsync(tablet, snapshot_id, 3000, closure);
     }
     if (task->task_num == 0) {
         LOG(WARNING) << "fail to create snapshot: " << request->table_name()
@@ -2841,7 +2877,7 @@ void MasterImpl::GetSnapshot(const GetSnapshotRequest* request,
     }
 }
 
-void MasterImpl::GetSnapshotAsync(TabletPtr tablet, int32_t timeout,
+void MasterImpl::GetSnapshotAsync(TabletPtr tablet, int64_t snapshot_id, int32_t timeout,
                                   SnapshotClosure* done) {
 
     std::string addr = tablet->GetServerAddr();
@@ -2851,7 +2887,7 @@ void MasterImpl::GetSnapshotAsync(TabletPtr tablet, int32_t timeout,
     SnapshotResponse* response = new SnapshotResponse;
     request->set_sequence_id(m_this_sequence_id.Inc());
     request->set_table_name(tablet->GetTableName());
-    request->set_snapshot_id(get_micros());
+    request->set_snapshot_id(snapshot_id);
     request->mutable_key_range()->set_key_start(tablet->GetKeyStart());
     request->mutable_key_range()->set_key_end(tablet->GetKeyEnd());
 
@@ -2980,9 +3016,9 @@ void MasterImpl::ReleaseSnapshotCallback(ReleaseSnapshotRequest* request,
     /// 删掉删不掉无所谓, 不计较~
 }
 
-void MasterImpl::Rollback(const RollbackRequest* request,
-                          RollbackResponse* response,
-                          google::protobuf::Closure* done) {
+void MasterImpl::GetRollback(const RollbackRequest* request,
+                             RollbackResponse* response,
+                             google::protobuf::Closure* done) {
     LOG(INFO) << "MasterImpl Rollback";
     response->set_sequence_id(request->sequence_id());
 
@@ -3016,6 +3052,7 @@ void MasterImpl::Rollback(const RollbackRequest* request,
     task->table = table;
     task->task_num = 0;
     task->finish_num = 0;
+    task->aborted = false;
     MutexLock lock(&task->mutex);
     for (uint32_t i = 0; i < task->tablets.size(); ++i) {
         TabletPtr tablet = task->tablets[i];
@@ -3076,18 +3113,21 @@ void MasterImpl::RollbackCallback(int32_t tablet_id, RollbackTask* task,
     } else {
         task->rollback_points[tablet_id] = master_response->rollback_point();
         LOG(INFO) << "MasterImpl rollback all tablet done";
-        int sid = task->table->AddRollback(master_request->snapshot_id());
+        int sid = task->table->AddRollback(task->request->rollback_name());
         for (uint32_t i = 0; i < task->tablets.size(); ++i) {
-            int tsid = task->tablets[i]->AddRollback(task->rollback_points[i]);
+            int tsid = task->tablets[i]->AddRollback(task->request->rollback_name(),
+                                                     master_request->snapshot_id(),
+                                                     task->rollback_points[i]);
             assert(sid == tsid);
         }
         WriteClosure* closure =
             NewClosure(this, &MasterImpl::AddRollbackCallback,
-                    task->table, task->tablets,
-                    FLAGS_tera_master_meta_retry_times,
-                    task->request, task->response, task->done);
+                       task->table, task->tablets,
+                       FLAGS_tera_master_meta_retry_times,
+                       task->request, task->response, task->done);
         BatchWriteMetaTableAsync(task->table, task->tablets, false, closure);
     }
+    task->mutex.Unlock();
     delete task;
 }
 
@@ -3129,7 +3169,7 @@ void MasterImpl::AddRollbackCallback(TablePtr table,
         }
         return;
     }
-    LOG(INFO) << "Rollback " << rpc_request->table_name()
+    LOG(INFO) << "Rollback " << rpc_request->rollback_name() << " to " << rpc_request->table_name()
         << ", write meta " << rpc_request->snapshot_id() << " done";
     rpc_response->set_status(kMasterOk);
     rpc_done->Run();
@@ -3998,8 +4038,6 @@ void MasterImpl::MergeTabletWriteMetaCallback(TabletMeta new_meta,
     }
 
     TabletPtr tablet_c;
-    tablet_p1->SetStatus(kTableDeleted);
-    tablet_p2->SetStatus(kTableDeleted);
     if (tablet_p1->GetKeyStart() == new_meta.key_range().key_start()) {
         m_tablet_manager->DeleteTablet(tablet_p1->GetTableName(), tablet_p1->GetKeyStart());
         m_tablet_manager->AddTablet(new_meta, TableSchema(), &tablet_c);
@@ -4121,7 +4159,6 @@ void MasterImpl::AddMetaCallback(TablePtr table,
         }
         if (retry_times <= 0) {
             for(size_t i = 0; i < tablets.size(); i++) {
-                tablets[i]->SetStatus(kTableDeleted);
                 m_tablet_manager->DeleteTablet(tablets[i]->GetTableName(),
                     tablets[i]->GetKeyStart());
             }
@@ -4419,10 +4456,14 @@ void MasterImpl::UpdateMetaForLoadCallback(TabletPtr tablet, int32_t retry_times
     LoadTabletAsync(tablet, done);
 }
 
-void MasterImpl::DeleteTableRecordCallback(TablePtr table, int32_t retry_times,
-                                           WriteTabletRequest* request,
-                                           WriteTabletResponse* response,
-                                           bool failed, int error_code) {
+void MasterImpl::DeleteTableCallback(TablePtr table,
+                                     std::vector<TabletPtr> tablets,
+                                     int32_t retry_times,
+                                     DeleteTableResponse* rpc_response,
+                                     google::protobuf::Closure* rpc_done,
+                                     WriteTabletRequest* request,
+                                     WriteTabletResponse* response,
+                                     bool failed, int error_code) {
     StatusCode status = response->status();
     if (!failed && status == kTabletNodeOk) {
         // all the row status should be the same
@@ -4433,20 +4474,21 @@ void MasterImpl::DeleteTableRecordCallback(TablePtr table, int32_t retry_times,
     delete response;
     if (failed || status != kTabletNodeOk) {
         if (failed) {
-            LOG(ERROR) << "fail to delete meta table record: "
+            LOG(ERROR) << "fail to delete table meta: "
                 << sofa::pbrpc::RpcErrorCodeToString(error_code) << ", " << table;
         } else {
-            LOG(ERROR) << "fail to delete meta table record: "
+            LOG(ERROR) << "fail to delete table meta: "
                 << StatusCodeToString(status) << ", " << table;
         }
         if (retry_times <= 0) {
             LOG(ERROR) << kSms << "abort delete meta table record, " << table;
+            rpc_response->set_status(kMetaTabletError);
+            rpc_done->Run();
         } else {
             WriteClosure* done =
-                NewClosure(this, &MasterImpl::DeleteTableRecordCallback,
-                           table, retry_times - 1);
-            SuspendMetaOperation(boost::bind(&Table::ToMetaTableKeyValue, table, _1, _2),
-                                 true, done);
+                NewClosure(this, &MasterImpl::DeleteTableCallback, table, tablets,
+                           retry_times - 1, rpc_response, rpc_done);
+            SuspendMetaOperation(table, tablets, true, done);
         }
         return;
     }
@@ -4455,43 +4497,14 @@ void MasterImpl::DeleteTableRecordCallback(TablePtr table, int32_t retry_times,
         MutexLock locker(&m_alias_mutex);
         m_alias.erase(table_alias);
     }
+    // clean tablet manager
+    for (uint32_t i = 0; i < tablets.size(); ++i) {
+        TabletPtr tablet = tablets[i];
+        m_tablet_manager->DeleteTablet(tablet->GetTableName(), tablet->GetKeyStart());
+    }
     LOG(INFO) << "delete meta table record success, " << table;
-}
-
-void MasterImpl::DeleteTabletRecordCallback(TabletPtr tablet, int32_t retry_times,
-                                            WriteTabletRequest* request,
-                                            WriteTabletResponse* response,
-                                            bool failed, int error_code) {
-    StatusCode status = response->status();
-    if (!failed && status == kTabletNodeOk) {
-        // all the row status should be the same
-        CHECK_GT(response->row_status_list_size(), 0);
-        status = response->row_status_list(0);
-    }
-    delete request;
-    delete response;
-    if (failed || status != kTabletNodeOk) {
-        if (failed) {
-            LOG(ERROR) << "fail to delete meta tablet record: "
-                << sofa::pbrpc::RpcErrorCodeToString(error_code) << ", " << tablet;
-        } else {
-            LOG(ERROR) << "fail to delete meta tablet record: "
-                << StatusCodeToString(status) << ", " << tablet;
-        }
-        if (retry_times <= 0) {
-            LOG(ERROR) << kSms << "abort delete meta tablet record, " << tablet;
-        } else {
-            WriteClosure* done =
-                NewClosure(this, &MasterImpl::DeleteTabletRecordCallback,
-                           tablet, retry_times - 1);
-            SuspendMetaOperation(boost::bind(&Tablet::ToMetaTableKeyValue, tablet, _1, _2),
-                                 true, done);
-        }
-        return;
-    }
-    LOG(INFO) << "delete meta tablet record success, " << tablet;
-    tablet->SetStatus(kTableDeleted);
-    m_tablet_manager->DeleteTablet(tablet->GetTableName(), tablet->GetKeyStart());
+    rpc_response->set_status(kMasterOk);
+    rpc_done->Run();
 }
 
 void MasterImpl::ScanMetaTableAsync(const std::string& table_name,
@@ -4612,7 +4625,6 @@ void MasterImpl::ScanMetaCallbackForSplit(TabletPtr tablet,
     m_tablet_manager->AddTablet(second_meta, TableSchema(), &second_tablet);
 
     // delete old tablet
-    tablet->SetStatus(kTableDeleted);
     m_tablet_manager->DeleteTablet(tablet->GetTableName(), tablet->GetKeyStart());
 
     // update first child tablet meta
@@ -4835,20 +4847,11 @@ void MasterImpl::ProcessOffLineTablet(TabletPtr tablet) {
     if (!tablet->IsBound()) {
         return;
     }
-    tablet->SetStatusIf(kTabletDisable, kTableOffLine, kTableDisable)
-        || tablet->SetStatusIf(kTabletDisable, kTableOffLine, kTableDeleting);
-    if (tablet->SetStatusIf(kTabletDeleting, kTabletDisable, kTableDeleting)) {
-        WriteClosure* done =
-            NewClosure(this, &MasterImpl::DeleteTabletRecordCallback, tablet,
-                       FLAGS_tera_master_meta_retry_times);
-        BatchWriteMetaTableAsync(boost::bind(&Tablet::ToMetaTableKeyValue, tablet, _1, _2),
-                                 true, done);
-    }
+    tablet->SetStatusIf(kTabletDisable, kTableOffLine, kTableDisable);
 }
 
 void MasterImpl::ProcessReadyTablet(TabletPtr tablet) {
-    if (tablet->SetStatusIf(kTableUnLoading, kTableReady, kTableDisable)
-        || tablet->SetStatusIf(kTableUnLoading, kTableReady, kTableDeleting)) {
+    if (tablet->SetStatusIf(kTableUnLoading, kTableReady, kTableDisable)) {
         UnloadClosure* done =
             NewClosure(this, &MasterImpl::UnloadTabletCallback, tablet,
                        FLAGS_tera_master_impl_retry_times);

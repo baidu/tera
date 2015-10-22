@@ -79,7 +79,7 @@ public:
                      DelSnapshotResponse* response,
                      google::protobuf::Closure* done);
 
-    void Rollback(const RollbackRequest* request,
+    void GetRollback(const RollbackRequest* request,
                   RollbackResponse* response,
                   google::protobuf::Closure* done);
 
@@ -122,7 +122,7 @@ public:
     void RenameTable(const RenameTableRequest* request,
                      RenameTableResponse* response,
                      google::protobuf::Closure* done);
-    
+
     void CmdCtrl(const CmdCtrlRequest* request,
                  CmdCtrlResponse* response);
     void OperateUser(const OperateUserRequest* request,
@@ -273,7 +273,7 @@ private:
                                const std::vector<TabletPtr>& tablet_list,
                                const std::string& table_name = "");
 
-    void GetSnapshotAsync(TabletPtr tablet, int32_t timeout,
+    void GetSnapshotAsync(TabletPtr tablet, int64_t snapshot_id, int32_t timeout,
                           SnapshotClosure* done);
     void GetSnapshotCallback(int32_t tablet_id, SnapshotTask* task,
                              SnapshotRequest* master_request,
@@ -417,14 +417,14 @@ private:
                                     WriteTabletRequest* request,
                                     WriteTabletResponse* response,
                                     bool failed, int error_code);
-    void DeleteTableRecordCallback(TablePtr table, int32_t retry_times,
-                                   WriteTabletRequest* request,
-                                   WriteTabletResponse* response,
-                                   bool failed, int error_code);
-    void DeleteTabletRecordCallback(TabletPtr tablet, int32_t retry_times,
-                                    WriteTabletRequest* request,
-                                    WriteTabletResponse* response,
-                                    bool failed, int error_code);
+    void DeleteTableCallback(TablePtr table,
+                             std::vector<TabletPtr> tablets,
+                             int32_t retry_times,
+                             DeleteTableResponse* rpc_response,
+                             google::protobuf::Closure* rpc_done,
+                             WriteTabletRequest* request,
+                             WriteTabletResponse* response,
+                             bool failed, int error_code);
 
     void ScanMetaTableAsync(const std::string& table_name,
                             const std::string& tablet_key_start,
@@ -487,7 +487,7 @@ private:
                               bool is_delete, WriteClosure* done);
     void SuspendMetaOperation(std::vector<ToMetaFunc> meta_entries,
                               bool is_delete, WriteClosure* done);
-    
+
     void SuspendMetaOperation(const std::string& table_name,
                               const std::string& tablet_key_start,
                               const std::string& tablet_key_end,
@@ -516,9 +516,15 @@ private:
 
     bool IsRootUser(const std::string& token);
 
+    bool CheckUserPermissionOnTable(const std::string& token, TablePtr table);
+
+    template <typename Request>
+    bool HasPermissionOnTable(const Request* request, TablePtr table);
+
     template <typename Request, typename Response, typename Callback>
-    bool HasTablePermission(const Request* request, Response* response, 
-                            Callback* done, TablePtr table, const char* operate);
+    bool HasPermissionOrReturn(const Request* request, Response* response,
+                               Callback* done, TablePtr table, const char* operate);
+
     void FillAlias(const std::string& key, const std::string& value);
 private:
     mutable Mutex m_status_mutex;

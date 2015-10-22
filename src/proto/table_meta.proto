@@ -32,6 +32,12 @@ message TabletLocation {
     required string server_addr = 2;
 }
 
+message Rollback {
+    optional string name = 1;
+    optional uint64 snapshot_id = 2;
+    optional uint64 rollback_point = 3;
+}
+
 message ScanOption {
     optional KeyRange key_range = 1;
     optional int32 max_version = 2;
@@ -65,7 +71,7 @@ message TableMeta {
     optional TableSchema schema = 3;
     repeated uint64 snapshot_list = 4;
     optional uint64 create_time = 5;
-    repeated uint64 rollback_snapshot = 6;
+    repeated string rollback_names = 6;
 }
 
 message TabletMeta {
@@ -81,7 +87,7 @@ message TabletMeta {
     repeated uint64 snapshot_list = 11;
     repeated uint64 parent_tablets = 12;
     repeated int64 lg_size = 13;
-    repeated uint64 rollback_points = 14;
+    repeated Rollback rollbacks = 14;
 }
 
 message TableMetaList {

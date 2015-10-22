@@ -39,12 +39,12 @@ bool MasterClient::DelSnapshot(const DelSnapshotRequest* request,
                                 "DelSnapshot", m_rpc_timeout);
 }
 
-bool MasterClient::Rollback(const RollbackRequest* request,
-                            RollbackResponse* response) {
-    return SendMessageWithRetry(&MasterServer::Stub::Rollback,
+bool MasterClient::GetRollback(const RollbackRequest* request,
+                               RollbackResponse* response) {
+    return SendMessageWithRetry(&MasterServer::Stub::GetRollback,
                                 request, response,
                                 (Closure<void, RollbackRequest*, RollbackResponse*, bool, int>*)NULL,
-                                "Rollback", m_rpc_timeout);
+                                "GetRollback", m_rpc_timeout);
 }
 
 bool MasterClient::CreateTable(const CreateTableRequest* request,
