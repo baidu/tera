@@ -174,8 +174,9 @@ void ResultStreamBatchImpl::ScanSessionReset() {
     mu_.Lock();
 }
 
-void ResultStreamBatchImpl::ClearAndScanNextSlot(ScanSlot* slot, bool scan_next) {
+void ResultStreamBatchImpl::ClearAndScanNextSlot(bool scan_next) {
     mu_.AssertHeld();
+    ScanSlot* slot = &(sliding_window_[sliding_window_idx_]);
     slot->cell_.Clear();
     slot->state_ = SCANSLOT_INVALID;
     next_idx_ = 0;
@@ -207,13 +208,13 @@ bool ResultStreamBatchImpl::Done(ErrorCode* error) {
 
         // current slot finish and session not finish, scan next slot
         if (!session_done_) {
-            ClearAndScanNextSlot(slot, true);
+            ClearAndScanNextSlot(true);
             continue;
         }
 
         // session finish, read rest data
         if (session_data_idx_ != session_last_idx_) {
-            ClearAndScanNextSlot(slot, false);
+            ClearAndScanNextSlot(false);
             continue;
         }
 

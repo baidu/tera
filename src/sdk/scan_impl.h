@@ -88,8 +88,7 @@ public:
     void OnFinish(ScanTabletRequest* request,
                   ScanTabletResponse* response); // scan callback
 private:
-    struct ScanSlot;
-    void ClearAndScanNextSlot(ScanSlot* slot, bool scan_next);
+    void ClearAndScanNextSlot(bool scan_next);
     void ScanSessionReset();
 
 private:
