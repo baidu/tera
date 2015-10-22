@@ -79,7 +79,7 @@ public:
                      DelSnapshotResponse* response,
                      google::protobuf::Closure* done);
 
-    void Rollback(const RollbackRequest* request,
+    void GetRollback(const RollbackRequest* request,
                   RollbackResponse* response,
                   google::protobuf::Closure* done);
 

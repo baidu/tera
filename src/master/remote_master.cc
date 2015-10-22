@@ -46,10 +46,10 @@ void RemoteMaster::DelSnapshot(google::protobuf::RpcController* controller,
     m_thread_pool->AddTask(callback);
 }
 
-void RemoteMaster::Rollback(google::protobuf::RpcController* controller,
-                            const RollbackRequest* request,
-                            RollbackResponse* response,
-                            google::protobuf::Closure* done) {
+void RemoteMaster::GetRollback(google::protobuf::RpcController* controller,
+                               const RollbackRequest* request,
+                               RollbackResponse* response,
+                               google::protobuf::Closure* done) {
     ThreadPool::Task callback =
         boost::bind(&RemoteMaster::DoRollback, this, controller,
                     request, response, done);
@@ -187,11 +187,11 @@ void RemoteMaster::DoDelSnapshot(google::protobuf::RpcController* controller,
 }
 
 void RemoteMaster::DoRollback(google::protobuf::RpcController* controller,
-                            const RollbackRequest* request,
-                            RollbackResponse* response,
-                            google::protobuf::Closure* done) {
+                             const RollbackRequest* request,
+                             RollbackResponse* response,
+                             google::protobuf::Closure* done) {
     LOG(INFO) << "accept RPC (Rollback)";
-    m_master_impl->Rollback(request, response, done);
+    m_master_impl->GetRollback(request, response, done);
     LOG(INFO) << "finish RPC (Rollback)";
 }
 
