@@ -16,51 +16,81 @@ def setUp():
     common.print_debug_msg(1, "setup()")
 
 def test_create_user():
-    cmd = "./teracli user create z1 z1pwd" + const.user_root_flag_suffix
+    cmd = "./teracli user create z1 z1pwd --flagfile=" + const.user_root_flag_path
+    common.execute_and_check_returncode(cmd, 0)
+    # man grep, exit status is 0 if selected lines are found
+    cmd = "./teracli user show z1|grep -e 'user:z1'"
     common.execute_and_check_returncode(cmd, 0)
 
     # user already exists
-    cmd = "./teracli user create z1 z1pwd" + const.user_root_flag_suffix
+    cmd = "./teracli user create z1 z1pwd --flagfile=" + const.user_root_flag_path
     common.execute_and_check_returncode(cmd, 255)
 
 def test_change_pwd():
-    cmd = "./teracli  user changepwd z1 z1pw2" + const.user_root_flag_suffix
+    cmd = "./teracli user changepwd root rootpassword --flagfile=" + const.user_root_flag_path
+    common.execute_and_check_returncode(cmd, 0)
+    #now, using old password can not get root permission
+    cmd = "./teracli user create dummy dummypwd --flagfile=" + const.user_root_flag_path
+    common.execute_and_check_returncode(cmd, 255)
+
+    #update flag file
+    cmd = ("sed -i 's/^--tera_user_passcode=.*/--tera_user_passcode=rootpassword/' "
+           + const.user_root_flag_path)
+    common.execute_and_check_returncode(cmd, 0)
+    #now, using new password should work
+    cmd = "./teracli user changepwd root helloroot --flagfile=" + const.user_root_flag_path
+    common.execute_and_check_returncode(cmd, 0)
+    #restore the original root password in flag file
+    cmd = ("sed -i 's/^--tera_user_passcode=.*/--tera_user_passcode=helloroot/' "
+           + const.user_root_flag_path)
     common.execute_and_check_returncode(cmd, 0)
 
     # user not found
-    cmd = "./teracli  user changepwd oops z1pw2" + const.user_root_flag_suffix
+    cmd = "./teracli user changepwd oops z1pw2 --flagfile=" + const.user_root_flag_path
     common.execute_and_check_returncode(cmd, 255)
 
 def test_addtogroup():
-    cmd = "./teracli  user addtogroup z1 z1g" + const.user_root_flag_suffix
+    cmd = "./teracli user addtogroup z1 z1g --flagfile=" + const.user_root_flag_path
+    common.execute_and_check_returncode(cmd, 0)
+    cmd = "./teracli user show z1|grep -e 'groups .*z1g'"
     common.execute_and_check_returncode(cmd, 0)
 
     # user not found
-    cmd = "./teracli  user addtogroup z2 z1g" + const.user_root_flag_suffix
+    cmd = "./teracli user addtogroup z2 z1g --flagfile=" + const.user_root_flag_path
     common.execute_and_check_returncode(cmd, 255)
 
     # user already in group
-    cmd = "./teracli  user addtogroup z1 z1g" + const.user_root_flag_suffix
+    cmd = "./teracli user addtogroup z1 z1g --flagfile=" + const.user_root_flag_path
     common.execute_and_check_returncode(cmd, 255)
 
 def test_deletefromgroup():
-    cmd = "./teracli  user deletefromgroup z1 z1g" + const.user_root_flag_suffix
+    cmd = "./teracli user deletefromgroup z1 z1g --flagfile=" + const.user_root_flag_path
     common.execute_and_check_returncode(cmd, 0)
+    cmd = "./teracli meta2 show|grep  -e 'groups .*z1g'"
+    common.execute_and_check_returncode(cmd, 1)
 
     # user not found
-    cmd = "./teracli  user deletefromgroup z2 z1g" + const.user_root_flag_suffix
+    cmd = "./teracli user deletefromgroup z2 z1g --flagfile=" + const.user_root_flag_path
     common.execute_and_check_returncode(cmd, 255)
 
     # user not in group
-    cmd = "./teracli  user deletefromgroup z1 z1g" + const.user_root_flag_suffix
+    cmd = "./teracli user deletefromgroup z1 z1g --flagfile=" + const.user_root_flag_path
     common.execute_and_check_returncode(cmd, 255)
 
 def test_delete_user():
-    cmd = "./teracli  user delete z1" + const.user_root_flag_suffix
+    cmd = "./teracli user delete z1 --flagfile=" + const.user_root_flag_path
+    common.execute_and_check_returncode(cmd, 0)
+    cmd = "./teracli user show z1|grep -e 'user:z1'"
+    common.execute_and_check_returncode(cmd, 1)
+
+    # can not delete root
+    cmd = "./teracli user delete root --flagfile=" + const.user_root_flag_path
+    common.execute_and_check_returncode(cmd, 255)
+    cmd = "./teracli user show root|grep  -e 'user:root'"
     common.execute_and_check_returncode(cmd, 0)
 
     # user not found
-    cmd = "./teracli  user delete z1" + const.user_root_flag_suffix
+    cmd = "./teracli user delete z1 --flagfile=" + const.user_root_flag_path
     common.execute_and_check_returncode(cmd, 255)
 
 def tearDown():

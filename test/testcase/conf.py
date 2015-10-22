@@ -13,6 +13,6 @@ class Const:
         self.kill_script = './kill_tera.sh'
         self.launch_script = './launch_tera.sh'
         self.data_path = 'testcase/data/'
-        self.user_root_flag_suffix = ' --flagfile=../conf/tera.flag.root'
+        self.user_root_flag_path = './testcase/data/tera.flag.root'
 
 const = Const()
