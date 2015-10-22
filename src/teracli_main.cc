@@ -46,6 +46,7 @@ DEFINE_bool(tera_client_scan_async_enabled, false, "enable the streaming scan mo
 DEFINE_int64(scan_pack_interval, 5000, "scan timeout");
 DEFINE_int64(snapshot, 0, "read | scan snapshot");
 DEFINE_string(rollback_switch, "close", "Pandora's box, do not open");
+DEFINE_string(rollback_name, "", "rollback operation's name");
 
 volatile int32_t g_start_time = 0;
 volatile int32_t g_end_time = 0;
@@ -291,7 +292,7 @@ int32_t DropOp(Client* client, int32_t argc, char** argv, ErrorCode* err) {
 
     std::string tablename = argv[2];
     if (!client->DeleteTable(tablename, err)) {
-        LOG(ERROR) << "fail to delete table";
+        LOG(ERROR) << "fail to delete table, " << err->GetReason();
         return -1;
     }
     return 0;
@@ -1732,7 +1733,14 @@ int32_t SnapshotOp(Client* client, int32_t argc, char** argv, ErrorCode* err) {
         }
         std::cout << "new snapshot: " << snapshot << std::endl;
     }  else if (FLAGS_rollback_switch == "open" && strcmp(argv[3], "rollback") == 0) {
-        if (!client->Rollback(tablename, FLAGS_snapshot, err)) {
+        if (FLAGS_snapshot == 0) {
+            std::cerr << "missing or invalid --snapshot option" << std::endl;
+            return -1;
+        } else if (FLAGS_rollback_name == "") {
+            std::cerr << "missing or invalid --rollback_name option" << std::endl;
+            return -1;
+        }
+        if (!client->Rollback(tablename, FLAGS_snapshot, FLAGS_rollback_name, err)) {
             LOG(ERROR) << "fail to rollback to snapshot: " << err->GetReason();
             return -1;
         }
@@ -2238,7 +2246,7 @@ int32_t Meta2Op(Client *client, int32_t argc, char** argv) {
     return 0;
 }
 
-static int32_t CreateUser(Client* client, const std::string& user, 
+static int32_t CreateUser(Client* client, const std::string& user,
                           const std::string& password, ErrorCode* err) {
     if (!client->CreateUser(user, password, err)) {
         LOG(ERROR) << "fail to create user: " << user
@@ -2257,7 +2265,7 @@ static int32_t DeleteUser(Client* client, const std::string& user, ErrorCode* er
     return 0;
 }
 
-static int32_t ChangePwd(Client* client, const std::string& user, 
+static int32_t ChangePwd(Client* client, const std::string& user,
                          const std::string& password, ErrorCode* err) {
     if (!client->ChangePwd(user, password, err)) {
         LOG(ERROR) << "fail to update user: " << user
@@ -2277,7 +2285,7 @@ static int32_t ShowUser(Client* client, const std::string& user, ErrorCode* err)
     if (user_infos.size() < 1) {
         return -1;
     }
-    std::cout << "user:" << user_infos[0] 
+    std::cout << "user:" << user_infos[0]
         << "\ngroups (" << user_infos.size() - 1 << "):";
     for (size_t i = 1; i < user_infos.size(); ++i) {
         std::cout << user_infos[i] << " ";
@@ -2286,7 +2294,7 @@ static int32_t ShowUser(Client* client, const std::string& user, ErrorCode* err)
     return 0;
 }
 
-static int32_t AddUserToGroup(Client* client, const std::string& user, 
+static int32_t AddUserToGroup(Client* client, const std::string& user,
                                 const std::string& group, ErrorCode* err) {
     if (!client->AddUserToGroup(user, group, err)) {
         LOG(ERROR) << "fail to add user: " << user
@@ -2296,7 +2304,7 @@ static int32_t AddUserToGroup(Client* client, const std::string& user,
     return 0;
 }
 
-static int32_t DeleteUserFromGroup(Client* client, const std::string& user, 
+static int32_t DeleteUserFromGroup(Client* client, const std::string& user,
                                      const std::string& group, ErrorCode* err) {
     if (!client->DeleteUserFromGroup(user, group, err)) {
         LOG(ERROR) << "fail to delete user: " << user

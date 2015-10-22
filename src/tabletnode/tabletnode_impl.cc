@@ -204,7 +204,8 @@ void TabletNodeImpl::LoadTablet(const LoadTabletRequest* request,
                                 LoadTabletResponse* response,
                                 google::protobuf::Closure* done) {
     response->set_sequence_id(request->sequence_id());
-    if (!request->has_session_id() || request->session_id() != GetSessionId()) {
+    if (!request->has_session_id() ||
+        request->session_id().compare(0, GetSessionId().size(), GetSessionId())) {
         LOG(WARNING) << "load session id not match: "
             << request->session_id() << ", " << GetSessionId();
         response->set_status(kIllegalAccess);
@@ -230,11 +231,12 @@ void TabletNodeImpl::LoadTablet(const LoadTabletRequest* request,
     }
 
     // to recover rollbacks
-    assert(request->rollback_snapshots_size() == request->rollback_points_size());
     std::map<uint64_t, uint64_t> rollbacks;
-    int32_t num_of_rollbacks = request->rollback_snapshots_size();
+    int32_t num_of_rollbacks = request->rollbacks_size();
     for (int32_t i = 0; i < num_of_rollbacks; ++i) {
-        rollbacks[request->rollback_snapshots(i)] = request->rollback_points(i);
+        rollbacks[request->rollbacks(i).snapshot_id()] = request->rollbacks(i).rollback_point();
+        VLOG(10) << "load tablet with rollback " << request->rollbacks(i).snapshot_id()
+                 << "-" << request->rollbacks(i).rollback_point();
     }
 
     LOG(INFO) << "start load tablet, id: " << request->sequence_id()
