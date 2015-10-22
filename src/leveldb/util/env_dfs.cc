@@ -490,11 +490,6 @@ Status DfsEnv::UnlockFile(FileLock* lock)
     return Status::OK();
 }
 
-Status DfsEnv::NewLogger(const std::string& fname, Logger** result)
-{
-    return IOError(fname, errno);
-}
-
 static bool inited = false;
 static port::Mutex mutex;
 static Env* dfs_env;
