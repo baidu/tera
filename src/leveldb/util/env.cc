@@ -25,6 +25,8 @@ WritableFile::~WritableFile() {
 Logger::~Logger() {
 }
 
+Logger* Logger::default_logger = NULL;
+
 FileLock::~FileLock() {
 }
 

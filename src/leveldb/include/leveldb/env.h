@@ -272,12 +272,13 @@ class Logger {
   // Write an entry to the log file with the specified format.
   virtual void Logv(const char* format, va_list ap) = 0;
 
+  static Logger* default_logger;
+
  private:
   // No copying allowed
   Logger(const Logger&);
   void operator=(const Logger&);
 };
-
 
 // Identifies a locked file.
 class FileLock {
@@ -370,6 +371,9 @@ class EnvWrapper : public Env {
     return target_->NewLogger(fname, result);
   }
   virtual void SetLogger(Logger* logger) {
+    if (!Logger::default_logger) {
+      Logger::default_logger = logger;
+    }
     return target_->SetLogger(logger);
   }
   uint64_t NowMicros() {
