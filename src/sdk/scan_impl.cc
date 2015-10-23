@@ -11,6 +11,7 @@
 #include "common/base/string_ext.h"
 
 #include "proto/proto_helper.h"
+#include "proto/table_schema.pb.h"
 #include "sdk/table_impl.h"
 #include "sdk/filter_utils.h"
 #include "utils/atomic.h"
@@ -36,6 +37,29 @@ ResultStreamImpl::~ResultStreamImpl() {
 
 ScanDescImpl* ResultStreamImpl::GetScanDesc() {
     return _scan_desc_impl;
+}
+
+/*
+ * scan的时候，tabletnode攒满一个buffer就会返回给sdk，sdk再接着scan，
+ * 新的scan逻辑（tabletnode）在返回scan结果的同时，
+ * 还会告知sdk下次scan的启动点(start_point)，保证scan不重、不漏；
+ *
+ * 旧的scan逻辑（tabletnode）不会告知sdk下次scan时的启动点(start_point)，
+ * 这个启动点是sdk自己计算出来的：由上次scan结果的最后一条加上"某个最小值"。
+ *
+ * rawkey类型为Readble时，rawkey不能包含'\0'；
+ * rawkey类型为其它类型（如Binary）时，rawkey可以包含任意字符（包括'\0'）；
+ * (不建议新表继续使用Readble类型，未来可能不再支持)
+ *
+ * 综上，
+ * 对于rawkey类型为Readble的表来说，sdk计算下次scan的启动点时需要加'\x1'；
+ * 否则，加'\x0'（也就是'\0'）。
+ */
+std::string ResultStreamImpl::GetNextStartPoint(const std::string& str) {
+    const static std::string x0("\x0", 1);
+    const static std::string x1("\x1");
+    RawKey rawkey_type = _table_ptr->GetTableSchema().raw_key();
+    return rawkey_type == Readable ? str + x1 : str + x0;
 }
 
 ResultStreamAsyncImpl::ResultStreamAsyncImpl(TableImpl* table, ScanDescImpl* scan_desc_impl)
@@ -200,7 +224,7 @@ void ResultStreamAsyncImpl::RebuildStream(ScanTabletResponse* response) {
         const KeyValuePair& kv = response->results().key_values(last_result_pos);
         if (kv.timestamp() == 0) {
             _scan_desc_impl->SetStart(kv.key(), kv.column_family(),
-                                      kv.qualifier() + '\x1', kv.timestamp());
+                                      GetNextStartPoint(kv.qualifier()), kv.timestamp());
         } else {
             _scan_desc_impl->SetStart(kv.key(), kv.column_family(),
                                       kv.qualifier(), kv.timestamp() - 1);
@@ -355,17 +379,31 @@ bool ResultStreamSyncImpl::Done(ErrorCode* err) {
             return true;
         }
 
+        // Newer version of TS will return next_start_point when the opration is timeout
         if (!_response->complete()) {
-            const KeyValuePair& kv = _response->results().key_values(_result_pos - 1);
-            if (_scan_desc_impl->IsKvOnlyTable()) {
-                _scan_desc_impl->SetStart(kv.key() + '\x1', kv.column_family(),
-                                          kv.qualifier(), kv.timestamp());
-            } else if (kv.timestamp() == 0) {
-                _scan_desc_impl->SetStart(kv.key(), kv.column_family(),
-                                          kv.qualifier() + '\x1', kv.timestamp());
+            // Without next_start_point, kv is the last kv pair from last scan
+            if (_response->next_start_point().key() == "") {
+                const KeyValuePair& kv = _response->results().key_values(_result_pos - 1);
+                if (_scan_desc_impl->IsKvOnlyTable()) {
+                    _scan_desc_impl->SetStart(GetNextStartPoint(kv.key()), kv.column_family(),
+                                              kv.qualifier(), kv.timestamp());
+                } else if (kv.timestamp() == 0) {
+                    _scan_desc_impl->SetStart(kv.key(), kv.column_family(),
+                                              GetNextStartPoint(kv.qualifier()), kv.timestamp());
+                } else {
+                    _scan_desc_impl->SetStart(kv.key(), kv.column_family(),
+                                              kv.qualifier(), kv.timestamp() - 1);
+                }
+            // next_start_point is where the next scan should start
             } else {
-                _scan_desc_impl->SetStart(kv.key(), kv.column_family(),
-                                          kv.qualifier(), kv.timestamp() - 1);
+                const KeyValuePair& kv = _response->next_start_point();
+                if (_scan_desc_impl->IsKvOnlyTable()) {
+                    _scan_desc_impl->SetStart(kv.key(), kv.column_family(),
+                                              kv.qualifier(), kv.timestamp());
+                } else {
+                    _scan_desc_impl->SetStart(kv.key(), kv.column_family(),
+                                              kv.qualifier(), kv.timestamp());
+                }
             }
         } else {
             _scan_desc_impl->SetStart(tablet_end_key);
@@ -468,6 +506,7 @@ ScanDescImpl::ScanDescImpl(const string& rowkey)
       _buf_size(65536),
       _is_async(FLAGS_tera_sdk_scan_async_enabled),
       _max_version(1),
+      _pack_interval(5000),
       _snapshot(0),
       _value_converter(&DefaultValueConverter) {
     SetStart(rowkey);
@@ -482,6 +521,7 @@ ScanDescImpl::ScanDescImpl(const ScanDescImpl& impl)
       _buf_size(impl._buf_size),
       _is_async(impl._is_async),
       _max_version(impl._max_version),
+      _pack_interval(impl._pack_interval),
       _snapshot(impl._snapshot),
       _table_schema(impl._table_schema) {
     _value_converter = impl.GetValueConverter();
@@ -543,6 +583,10 @@ void ScanDescImpl::AddColumn(const string& cf, const string& qualifier) {
 
 void ScanDescImpl::SetMaxVersions(int32_t versions) {
     _max_version = versions;
+}
+
+void ScanDescImpl::SetPackInterval(int64_t interval) {
+    _pack_interval = interval;
 }
 
 void ScanDescImpl::SetTimeRange(int64_t ts_end, int64_t ts_start) {
@@ -614,6 +658,10 @@ const tera::ColumnFamily* ScanDescImpl::GetColumnFamily(int32_t num) const {
 
 int32_t ScanDescImpl::GetMaxVersion() const {
     return _max_version;
+}
+
+int64_t ScanDescImpl::GetPackInterval() const {
+    return _pack_interval;
 }
 
 const tera::TimeRange* ScanDescImpl::GetTimerRange() const {

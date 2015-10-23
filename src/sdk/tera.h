@@ -58,6 +58,7 @@ enum RawKeyType {
     kReadable = 0,
     kBinary = 1,
     kTTLKv = 2,
+    kGeneralKv = 3,
 };
 
 extern const int64_t kLatestTimestamp;
@@ -147,7 +148,7 @@ class TableDescImpl;
 class TableDescriptor {
 public:
     /// 表格名字仅允许使用字母、数字和下划线构造,长度不超过256；默认是非kv表
-    TableDescriptor(const std::string& tb_name = "", bool is_kv = false);
+    TableDescriptor(const std::string& tb_name = "");
 
     ~TableDescriptor();
 
@@ -196,13 +197,14 @@ public:
     uint64_t Snapshot(int32_t id) const;
     /// Snapshot数量
     int32_t SnapshotNum() const;
-    /// 是否为kv表
-    void SetKvOnly();
-    bool IsKv() const;
 
     /// acl
     void SetAdminGroup(const std::string& name);
     std::string AdminGroup() const;
+
+    /// alias
+    void SetAlias(const std::string& alias);
+    std::string Alias() const;
 
 private:
     TableDescriptor(const TableDescriptor&);
@@ -252,6 +254,8 @@ public:
     void AddColumn(const std::string& cf, const std::string& qualifier);
     /// 设置最多返回的版本数
     void SetMaxVersions(int32_t versions);
+    /// 设置scan的超时时间
+    void SetPackInterval(int64_t timeout);
     /// 设置返回版本的时间范围
     void SetTimeRange(int64_t ts_end, int64_t ts_start);
     /// 设置过滤表达式（仅支持AND）
@@ -499,12 +503,6 @@ struct TabletInfo {
     std::string status;
 };
 
-struct TableOptions {
-    bool sequential_write;
-
-    TableOptions();
-};
-
 /// 表接口
 class Table {
 public:
@@ -636,11 +634,21 @@ public:
     virtual bool DisableTable(std::string name, ErrorCode* err) = 0;
     /// 恢复表格服务
     virtual bool EnableTable(std::string name, ErrorCode* err) = 0;
+
+    /// acl
+    virtual bool CreateUser(const std::string& user,
+                            const std::string& password, ErrorCode* err) = 0;
+    virtual bool DeleteUser(const std::string& user, ErrorCode* err) = 0;
+    virtual bool ChangePwd(const std::string& user,
+                           const std::string& password, ErrorCode* err) = 0;
+    virtual bool ShowUser(const std::string& user, std::vector<std::string>& user_groups, 
+                          ErrorCode* err) = 0;
+    virtual bool AddUserToGroup(const std::string& user,
+                                const std::string& group, ErrorCode* err) = 0;
+    virtual bool DeleteUserFromGroup(const std::string& user,
+                                     const std::string& group, ErrorCode* err) = 0;
     /// 打开表格, 失败返回NULL
     virtual Table* OpenTable(const std::string& table_name, ErrorCode* err) = 0;
-    virtual Table* OpenTable(const std::string& table_name,
-                             const TableOptions& options,
-                             ErrorCode* err) = 0;
     /// 获取表格分布信息
     virtual bool GetTabletLocation(const std::string& table_name,
                                    std::vector<TabletInfo>* tablets,
@@ -664,14 +672,18 @@ public:
     virtual bool IsTableEmpty(const std::string& table_name, ErrorCode* err) = 0;
 
     virtual bool GetSnapshot(const std::string& name, uint64_t* snapshot, ErrorCode* err) = 0;
-    virtual bool DelSnapshot(const std::string& name, uint64_t snapshot, ErrorCode* err) = 0;
+    virtual bool DelSnapshot(const std::string& name, uint64_t snapshot,ErrorCode* err) = 0;
+    virtual bool Rollback(const std::string& name, uint64_t snapshot, 
+                          const std::string& rollback_name, ErrorCode* err) = 0;
 
     virtual bool CmdCtrl(const std::string& command,
                          const std::vector<std::string>& arg_list,
                          bool* bool_result,
                          std::string* str_result,
                          ErrorCode* err) = 0;
-
+    virtual bool Rename(const std::string& old_table_name,
+                        const std::string& new_table_name,
+                        ErrorCode* err) = 0 ;
     Client() {}
     virtual ~Client() {}
 

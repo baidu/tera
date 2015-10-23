@@ -113,7 +113,7 @@ TEST(PropTreeTest, ParseFromString) {
     EXPECT_TRUE(pt.ParseFromString(input));
 
     input = "root{}";
-    EXPECT_TRUE(pt.ParseFromString(input));
+    EXPECT_FALSE(pt.ParseFromString(input));
 
     input = "root{child1}";
     EXPECT_TRUE(pt.ParseFromString(input));
@@ -128,6 +128,12 @@ TEST(PropTreeTest, ParseFromString) {
 
     input = "root{child1{child11, child12}, child2{child21},}";
     EXPECT_TRUE(pt.ParseFromString(input));
+    EXPECT_EQ(pt.GetRootNode()->children_.size(), 2u);
+    EXPECT_EQ(pt.MaxDepth(), 3);
+    EXPECT_EQ(pt.MinDepth(), 3);
+
+    input = "root:hahh{child1{child11, child12}, child2{child21},}";
+    EXPECT_FALSE(pt.ParseFromString(input));
     // LOG(ERROR) << pt.FormatString();
 
     input = "root{child1<prop1 = value1, prop2 = value2>, child2,}";
@@ -138,7 +144,7 @@ TEST(PropTreeTest, ParseFromString) {
                     child11<prop4=value4>, \
                     child12<prop5=value5>, \
                 }, \
-                child2 \
+                child2, \
              }";
     EXPECT_TRUE(pt.ParseFromString(input));
     EXPECT_EQ(pt.GetRootNode()->children_.size(), 2u);

@@ -39,6 +39,14 @@ bool MasterClient::DelSnapshot(const DelSnapshotRequest* request,
                                 "DelSnapshot", m_rpc_timeout);
 }
 
+bool MasterClient::GetRollback(const RollbackRequest* request,
+                               RollbackResponse* response) {
+    return SendMessageWithRetry(&MasterServer::Stub::GetRollback,
+                                request, response,
+                                (Closure<void, RollbackRequest*, RollbackResponse*, bool, int>*)NULL,
+                                "GetRollback", m_rpc_timeout);
+}
+
 bool MasterClient::CreateTable(const CreateTableRequest* request,
                                CreateTableResponse* response) {
     return SendMessageWithRetry(&MasterServer::Stub::CreateTable,
@@ -133,6 +141,23 @@ bool MasterClient::CmdCtrl(const CmdCtrlRequest* request,
                                 request, response,
                                 (Closure<void, CmdCtrlRequest*, CmdCtrlResponse*, bool, int>*)NULL,
                                 "CmdCtrl", m_rpc_timeout);
+}
+
+bool MasterClient::OperateUser(const OperateUserRequest* request,
+                               OperateUserResponse* response) {
+    return SendMessageWithRetry(&MasterServer::Stub::OperateUser,
+                                request, response,
+                                (Closure<void, OperateUserRequest*, OperateUserResponse*, bool, int>*)NULL,
+                                "OperateUser", m_rpc_timeout);
+} 
+
+bool MasterClient::RenameTable(const RenameTableRequest* request, 
+                               RenameTableResponse* response) {
+    return SendMessageWithRetry(&MasterServer::Stub::RenameTable,
+                                request, response,
+                                (Closure<void, RenameTableRequest*, 
+                                         RenameTableResponse*, bool, int>*)NULL,
+                                "RenameTable", m_rpc_timeout);
 }
 
 } // namespace master

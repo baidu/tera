@@ -226,10 +226,14 @@ class TableConstructor: public Constructor {
  public:
   TableConstructor(const Comparator* cmp)
       : Constructor(cmp),
+        db_opt_(new Options()),
         source_(NULL), table_(NULL) {
+        db_opt_->comparator = cmp;
   }
   ~TableConstructor() {
     Reset();
+    delete db_opt_; // cannot delete db_opt_ in `Reset()',
+    db_opt_ = NULL; // not only ~Tableconstructor() but also FinishImpl() will call Reset()
   }
   virtual Status FinishImpl(const Options& options, const KVMap& data) {
     Reset();
@@ -255,7 +259,7 @@ class TableConstructor: public Constructor {
   }
 
   virtual Iterator* NewIterator() const {
-    return table_->NewIterator(ReadOptions());
+    return table_->NewIterator(ReadOptions(db_opt_));
   }
 
   uint64_t ApproximateOffsetOf(const Slice& key) const {
@@ -270,6 +274,7 @@ class TableConstructor: public Constructor {
     source_ = NULL;
   }
 
+  Options* db_opt_;
   StringSource* source_;
   Table* table_;
 
@@ -389,7 +394,6 @@ class DBConstructor: public Constructor {
     Status status = DestroyDB(name, options);
     ASSERT_TRUE(status.ok()) << status.ToString();
 
-    options.create_if_missing = true;
     options.error_if_exists = true;
     options.write_buffer_size = 10000;  // Something small to force merging
     status = DB::Open(options, name, &db_);

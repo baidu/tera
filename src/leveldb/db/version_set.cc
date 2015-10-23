@@ -526,31 +526,27 @@ void Version::GetOverlappingInputs(
   }
 }
 
-// tera-specific
-uint64_t Version::GetScopeSize(const Slice* smallest_user_key,
-                               const Slice* largest_user_key) {
-    // std::cerr << "start: [" << (smallest_user_key != NULL ? smallest_user_key->ToString() : "")
-    //    << "], end: [" << (largest_user_key != NULL ? largest_user_key->ToString() : "") << "]" << std::endl;
-    uint64_t total_size = 0;
-    const Comparator* user_cmp = vset_->icmp_.user_comparator();
-    for (int level = 1; level < config::kNumLevels; level++) {
-        const std::vector<FileMetaData*>& files = files_[level];
-        for (size_t i = 0; i < files.size(); i++) {
-            FileMetaData* file = files[i];
-            // std::cerr << "level: " << level << ", id: " << i
-            //     << ", num: " << file->number
-            //     << ", small: [" << file->smallest.user_key().ToString()
-            //     << "], largest: [" << file->largest.user_key().ToString()
-            //     << "], size: " << file->file_size << std::endl;
-            if (BeforeFile(user_cmp, largest_user_key, file)
-                || AfterFile(user_cmp, smallest_user_key, file)) {
-                continue;
-            }
-            total_size += files[i]->file_size;
-        }
-    }
+void Version::GetApproximateSizes(uint64_t* size, uint64_t* size_under_level1) {
+  uint64_t total_size = 0;
+  // calculate file size under level1
+  for (int level = 1; level < config::kNumLevels; level++) {
+      const std::vector<FileMetaData*>& files = files_[level];
+      for (size_t i = 0; i < files.size(); i++) {
+          total_size += files[i]->file_size;
+      }
+  }
+  if (size_under_level1) {
+    *size_under_level1 = total_size;
+  }
 
-    return total_size;
+  // calculate level0
+  const std::vector<FileMetaData*>& files = files_[0];
+  for (size_t i = 0; i < files.size(); i++) {
+      total_size += files[i]->file_size;
+  }
+  if (size) {
+    *size = total_size;
+  }
 }
 
 bool Version::FindSplitKey(const Slice* smallest_user_key,
@@ -558,9 +554,10 @@ bool Version::FindSplitKey(const Slice* smallest_user_key,
                            double ratio,
                            std::string* split_key) {
     assert(ratio >= 0 && ratio <= 1);
-    uint64_t total_size = GetScopeSize(smallest_user_key,
-                                       largest_user_key);
-    uint64_t want_split_size = static_cast<uint64_t>(total_size * ratio);
+    uint64_t size_under_level1;
+    GetApproximateSizes(NULL, &size_under_level1);
+
+    uint64_t want_split_size = static_cast<uint64_t>(size_under_level1 * ratio);
 
     const Comparator* user_cmp = vset_->icmp_.user_comparator();
     const FileMetaData* largest_file = NULL;
@@ -588,6 +585,9 @@ bool Version::FindSplitKey(const Slice* smallest_user_key,
         }
         split_size += files_[step_level][now_pos[step_level]]->file_size;
         now_pos[step_level] ++;
+    }
+    if (largest_file == NULL) {
+            return false;
     }
     *split_key = largest_file->largest.user_key().ToString();
     return true;
@@ -999,26 +999,24 @@ Status VersionSet::LogAndApply(VersionEdit* edit, port::Mutex* mu) {
     force_switch_manifest_ = false;
     last_switch_manifest_ = env_->NowMicros();
   }
-  // Initialize new descriptor log file if necessary by creating
-  // a temporary file that contains a snapshot of the current version.
+
   std::string new_manifest_file;
   Status s;
-  if (descriptor_log_ == NULL) {
-    // No reason to unlock *mu here since we only hit this path in the
-    // first call to LogAndApply (when opening the database).
-    assert(descriptor_file_ == NULL);
-    new_manifest_file = DescriptorFileName(dbname_, manifest_file_number_);
-    edit->SetNextFile(next_file_number_);
-    s = env_->NewWritableFile(new_manifest_file, &descriptor_file_);
-    if (s.ok()) {
-      descriptor_log_ = new log::Writer(descriptor_file_);
-      s = WriteSnapshot(descriptor_log_);
-    }
-  }
-
   // Unlock during expensive MANIFEST log write
   {
     mu->Unlock();
+    if (descriptor_log_ == NULL) {
+      // Initialize new descriptor log file if necessary by creating
+      // a temporary file that contains a snapshot of the current version.
+      assert(descriptor_file_ == NULL);
+      new_manifest_file = DescriptorFileName(dbname_, manifest_file_number_);
+      edit->SetNextFile(manifest_file_number_ + 1);
+      s = env_->NewWritableFile(new_manifest_file, &descriptor_file_);
+      if (s.ok()) {
+        descriptor_log_ = new log::Writer(descriptor_file_);
+        s = WriteSnapshot(descriptor_log_);
+      }
+    }
 
     // Write new record to MANIFEST log
     if (s.ok()) {
@@ -1281,7 +1279,7 @@ Status VersionSet::Recover() {
       Log(options_->info_log, "[%s] recover manifest fail %s, %s\n",
           dbname_.c_str(), dscname[i].c_str(), s.ToString().c_str());
       ArchiveFile(env_, dscname[i]);
-      return Status::Corruption("recover manifest fail");
+      return Status::Corruption("recover manifest fail:" + s.ToString());
     }
   }
 

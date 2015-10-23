@@ -110,8 +110,7 @@ class Version {
   int NumFiles(int level) const { return files_[level].size(); }
 
   // tera-specific
-  uint64_t GetScopeSize(const Slice* smallest_user_key = NULL,
-                        const Slice* largest_user_key = NULL);
+  void GetApproximateSizes(uint64_t* size, uint64_t* size_under_level1 = NULL);
   bool FindSplitKey(const Slice* smallest_user_key,
                     const Slice* largest_user_key,
                     double ratio,

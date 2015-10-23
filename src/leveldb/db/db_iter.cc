@@ -51,12 +51,14 @@ class DBIter: public Iterator {
   };
 
   DBIter(const std::string* dbname, Env* env,
-         const Comparator* cmp, Iterator* iter, SequenceNumber s)
+         const Comparator* cmp, Iterator* iter, SequenceNumber s,
+         const std::map<uint64_t, uint64_t>& rollbacks)
       : dbname_(dbname),
         env_(env),
         user_comparator_(cmp),
         iter_(iter),
         sequence_(s),
+        rollbacks_(rollbacks),
         direction_(kForward),
         valid_(false) {
   }
@@ -109,6 +111,7 @@ class DBIter: public Iterator {
   const Comparator* const user_comparator_;
   Iterator* const iter_;
   SequenceNumber const sequence_;
+  const std::map<uint64_t, uint64_t> rollbacks_;
 
   Status status_;
   std::string saved_key_;     // == current key when direction_==kReverse
@@ -162,7 +165,7 @@ void DBIter::FindNextUserEntry(bool skipping, std::string* skip) {
   assert(direction_ == kForward);
   do {
     ParsedInternalKey ikey;
-    if (ParseKey(&ikey) && ikey.sequence <= sequence_) {
+    if (ParseKey(&ikey) && ikey.sequence <= sequence_ && !RollbackDrop(ikey.sequence, rollbacks_)) {
       switch (ikey.type) {
         case kTypeDeletion:
           // Arrange to skip all upcoming entries for this key since
@@ -296,8 +299,9 @@ Iterator* NewDBIterator(
     Env* env,
     const Comparator* user_key_comparator,
     Iterator* internal_iter,
-    const SequenceNumber& sequence) {
-  return new DBIter(dbname, env, user_key_comparator, internal_iter, sequence);
+    const SequenceNumber& sequence,
+    const std::map<uint64_t, uint64_t>& rollbacks) {
+  return new DBIter(dbname, env, user_key_comparator, internal_iter, sequence, rollbacks);
 }
 
 }  // namespace leveldb

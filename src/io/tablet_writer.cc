@@ -35,8 +35,6 @@ TabletWriter::TabletWriter(TabletIO* tablet_io)
       m_tablet_busy(false) {
     m_active_buffer = new WriteTaskBuffer;
     m_sealed_buffer = new WriteTaskBuffer;
-    m_seq_write_session_lru_list.next = &m_seq_write_session_lru_list;
-    m_seq_write_session_lru_list.prev = &m_seq_write_session_lru_list;
 }
 
 TabletWriter::~TabletWriter() {
@@ -132,19 +130,6 @@ void TabletWriter::Write(const WriteTabletRequest* request,
             last_print = now_time;
         }
         code = kTabletNodeIsBusy;
-    } else if (request->session_id() > 0) {
-        std::map<uint64_t, SeqWriteSession*>::iterator it =
-                m_seq_write_session_sequence.find(request->session_id());
-        uint64_t last_sequence = 0;
-        if (it != m_seq_write_session_sequence.end()) {
-            SeqWriteSession* session = it->second;
-            last_sequence = session->sequence;
-        }
-        if (request->sequence_id() < last_sequence + 1) {
-            code = kSequenceTooSmall;
-        } else if (request->sequence_id() > last_sequence + 1) {
-            code = kSequenceTooLarge;
-        }
     }
 
     if (code != kTabletNodeOk) {
@@ -167,26 +152,6 @@ void TabletWriter::Write(const WriteTabletRequest* request,
         return;
     }
 
-    // LOG(INFO) << "push task";
-    if (request->session_id() > 0) {
-        std::map<uint64_t, SeqWriteSession*>::iterator it =
-                m_seq_write_session_sequence.find(request->session_id());
-        SeqWriteSession* session = NULL;
-        if (it != m_seq_write_session_sequence.end()) {
-            session = it->second;
-            session->next->prev = session->prev;
-            session->prev->next = session->next;
-        } else {
-            session = m_seq_write_session_sequence[request->session_id()] =
-                new SeqWriteSession;
-        }
-        session->sequence = request->sequence_id();
-        session->access_time = GetTimeStampInMs();
-        session->next = &m_seq_write_session_lru_list;
-        session->prev = m_seq_write_session_lru_list.prev;
-        session->next->prev = session;
-        session->prev->next = session;
-    }
     m_active_buffer->push_back(task);
     m_active_buffer_size += request_size;
     m_active_buffer_instant |= request->is_instant();
@@ -217,48 +182,9 @@ void TabletWriter::DoWork() {
         // 否则 flush
         VLOG(7) << "write data, sleep_duration: " << sleep_duration;
 
-        // save smallest sequence of every session
-        std::map<uint64_t, uint64_t> buffer_sessions;
-        size_t task_num = m_sealed_buffer->size();
-        for (size_t i = task_num; i > 0; --i) {
-            const WriteTask& task = (*m_sealed_buffer)[i - 1];
-            if (task.request->session_id() > 0) {
-                buffer_sessions[task.request->session_id()] =
-                    task.request->sequence_id();
-            }
-        }
-
-        StatusCode status = FlushToDiskBatch(m_sealed_buffer);
+        FlushToDiskBatch(m_sealed_buffer);
         m_sealed_buffer->clear();
         m_sync_timestamp = GetTimeStampInMs();
-
-        if (status != kTableOk && buffer_sessions.size() > 0) {
-            MutexLock lock(&m_task_mutex);
-            size_t task_num = m_active_buffer->size();
-            size_t hole = 0;
-            for (size_t i = 0; i < task_num; ++i) {
-                const WriteTask& task = (*m_active_buffer)[i];
-                if (buffer_sessions.find(task.request->session_id()) != buffer_sessions.end()) {
-                    FinishTask(task, kSequenceTooLarge);
-                } else {
-                    if (i != hole) {
-                        (*m_active_buffer)[hole] = (*m_active_buffer)[i];
-                    }
-                    ++hole;
-                }
-            }
-            m_active_buffer->resize(hole);
-
-            std::map<uint64_t, uint64_t>::iterator it = buffer_sessions.begin();
-            for (; it != buffer_sessions.end(); ++it) {
-                std::map<uint64_t, SeqWriteSession*>::iterator it2 =
-                    m_seq_write_session_sequence.find(it->first);
-                if (it2 != m_seq_write_session_sequence.end()) {
-                    SeqWriteSession* session = it2->second;
-                    session->sequence = it->second - 1;
-                }
-            }
-        }
     }
     LOG(INFO) << "AsyncWriter::DoWork done";
     m_worker_done_event.Set();
@@ -271,17 +197,6 @@ bool TabletWriter::SwapActiveBuffer(bool force) {
     }
 
     MutexLock lock(&m_task_mutex);
-    // delete timeout sessions
-    while (m_seq_write_session_lru_list.next != &m_seq_write_session_lru_list) {
-        SeqWriteSession* session = m_seq_write_session_lru_list.next;
-        if (session->access_time + kSeqWriteSessionTimeout > GetTimeStampInMs()) {
-            break;
-        }
-        session->next->prev = session->prev;
-        session->prev->next = session->next;
-        delete session;
-    }
-
     if (m_active_buffer->size() <= 0) {
         return false;
     }
