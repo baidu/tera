@@ -204,7 +204,6 @@ private:
         int task_num;
         int finish_num;
         mutable Mutex mutex;
-        bool aborted;
     };
 
     void SafeModeCmdCtrl(const CmdCtrlRequest* request,
@@ -303,9 +302,7 @@ private:
                                     RollbackResponse* rpc_response, google::protobuf::Closure* rpc_done,
                                     WriteTabletRequest* request, WriteTabletResponse* response,
                                     bool failed, int error_code);
-    void ApplyRollbackTask(TablePtr table, const std::vector<TabletPtr>& tablets, const RollbackRequest* rpc_request,
-                          RollbackResponse* rpc_response, google::protobuf::Closure* rpc_done,
-                          RollbackTask* task);
+    void ApplyRollbackTask(RollbackTask* task);
     void RollbackAsync(TabletPtr tablet, uint64_t snapshot_id,
                         int32_t timeout, RollbackClosure* done);
     void RollbackCallback(int32_t tablet_id, RollbackTask* task,
@@ -314,6 +311,7 @@ private:
                           bool failed, int error_code);
     void AddRollbackCallback(TablePtr table,
                              std::vector<TabletPtr> tablets,
+                             bool no_more_retry,
                              int32_t retry_times,
                              const RollbackRequest* rpc_request,
                              RollbackResponse* rpc_response,

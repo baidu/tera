@@ -139,6 +139,7 @@ bool ClientImpl::CreateTable(const TableDescriptor& desc,
     TableDescToSchema(desc, schema);
     schema->set_alias(desc.TableName());
     schema->set_name(internal_table_name);
+    schema->set_admin(_user_identity);
     // add delimiter
     size_t delim_num = tablet_delim.size();
     for (size_t i = 0; i < delim_num; ++i) {
@@ -336,7 +337,7 @@ bool ClientImpl::ChangePwd(const std::string& user,
     return OperateUser(updated_user, kChangePwd, null, err);
 }
 
-bool ClientImpl::ShowUser(const std::string& user, std::vector<std::string>& user_groups, 
+bool ClientImpl::ShowUser(const std::string& user, std::vector<std::string>& user_groups,
                           ErrorCode* err) {
     UserInfo user_info;
     user_info.set_user_name(user);
@@ -1025,15 +1026,6 @@ static int InitFlags(const std::string& confpath, const std::string& log_prefix)
     } else {
         LOG(ERROR) << "hasn't specify the flagfile, but default config file not found";
         return -1;
-    }
-
-    // init user identity & role
-    std::string cur_identity = utils::GetValueFromEnv("USER");
-    if (cur_identity.empty()) {
-        cur_identity = "other";
-    }
-    if (FLAGS_tera_user_identity.empty()) {
-        FLAGS_tera_user_identity = cur_identity;
     }
 
     int argc = 2;

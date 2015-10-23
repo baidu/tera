@@ -3079,19 +3079,7 @@ void MasterImpl::AddDefaultRollbackCallback(TablePtr table,
         << rpc_request->table_name() << " done";
 
     RollbackTask* task = new RollbackTask;
-    std::vector<TabletPtr> rollback_tablets;
-    table->GetRollbackTablets(rpc_request->rollback_name(), &rollback_tablets);
-    ApplyRollbackTask(table, rollback_tablets, rpc_request, rpc_response, rpc_done, task);
-    
-}
-
-void MasterImpl::ApplyRollbackTask(TablePtr table, const std::vector<TabletPtr>& tablets,
-                                   const RollbackRequest* rpc_request,
-                                   RollbackResponse* rpc_response,
-                                   google::protobuf::Closure* rpc_done,
-                                   RollbackTask* task) {
-    // table->GetRollbackTablets(rpc_request->rollback_name(), &task->tablets);
-    task->tablets = tablets;
+    table->GetTablet(&task->tablets);
     assert(task->tablets.size());
     if (task->tablets.size() == 0) {
         ///////////////// TODO ///////////////////
@@ -3104,21 +3092,27 @@ void MasterImpl::ApplyRollbackTask(TablePtr table, const std::vector<TabletPtr>&
     task->table = table;
     task->task_num = 0;
     task->finish_num = 0;
-    task->aborted = false;
+    ApplyRollbackTask(task);
+    
+}
 
+void MasterImpl::ApplyRollbackTask(RollbackTask* task) {
     MutexLock lock(&task->mutex);
     for (uint32_t i = 0; i < task->tablets.size(); ++i) {
         TabletPtr tablet = task->tablets[i];
         ++task->task_num;
         TabletStatus status = tablet->GetStatus();
         if (status == kTableReady) {
+            VLOG(1) << "rollback tablet ready: " << i;
             RollbackClosure* closure =
                 NewClosure(this, &MasterImpl::RollbackCallback, static_cast<int32_t>(i), task);
-            RollbackAsync(tablet, rpc_request->snapshot_id(), 3000, closure);
+            RollbackAsync(tablet, task->request->snapshot_id(), 3000, closure);
         } else if (status == kTableOnLoad) {
+            VLOG(1) << "rollback tablet onload: " << i;
             task->retry[i] = true;
             RollbackCallback(i, task, NULL, NULL, false, 0);
         } else {
+            VLOG(1) << "rollback tablet other: " << StatusCodeToString(status);
             RollbackCallback(i, task, NULL, NULL, false, 0);
         }
     }
@@ -3137,8 +3131,7 @@ void MasterImpl::RollbackAsync(TabletPtr tablet, uint64_t snapshot_id,
     request->mutable_key_range()->set_key_start(tablet->GetKeyStart());
     request->mutable_key_range()->set_key_end(tablet->GetKeyEnd());
 
-    VLOG(10) << "RollbackAsync id: " << request->sequence_id() << ", "
-        << "server: " << addr;
+    VLOG(10) << "RollbackAsync id: " << snapshot_id << ", " << "server: " << addr;
     node_client.Rollback(request, response, done);
 }
 
@@ -3146,29 +3139,37 @@ void MasterImpl::RollbackCallback(int32_t tablet_id, RollbackTask* task,
                                   SnapshotRollbackRequest* master_request,
                                   SnapshotRollbackResponse* master_response,
                                   bool failed, int error_code) {
-    task->mutex.Lock();
+    MutexLock lock(&task->mutex);
     ++task->finish_num;
     if (task->finish_num != task->task_num) {
         if (!failed && master_response && master_response->status() == kTabletNodeOk) {
                 task->rollback_points[tablet_id] = master_response->rollback_point();
-            VLOG(6) << "MasterImpl Rollback id= " << tablet_id
+            VLOG(6) << "MasterImpl Rollback tablet id= " << tablet_id
                 << " finish_num= " << task->finish_num
                 << ". Return " << master_response->rollback_point();
         } else {
             // rpc failed or tablet not ready, do not update rollback_point
+            VLOG(1) << "MasterImpl Rollback tablet id= " << tablet_id
+                << " finish_num= " << task->finish_num
+                << ". Failed";
         }
         return;
     }
 
     if (!failed && master_response && master_response->status() == kTabletNodeOk) {
+        VLOG(6) << "MasterImpl Rollback tablet id= " << tablet_id
+                << " finish_num= " << task->finish_num
+                << ". Return " << master_response->rollback_point();
         task->rollback_points[tablet_id] = master_response->rollback_point();
     } else {
+        VLOG(1) << "MasterImpl Rollback tablet id= " << tablet_id
+                << " finish_num= " << task->finish_num
+                << ". Failed";
         // rpc failed or tablet not ready, do not update rollback_point
     }
     std::vector<TabletPtr> retry_tablets;
     int sid = task->table->GetRollbackSize();
     for (uint32_t i = 0; i < task->tablets.size(); ++i) {
-        // update only if the tablet was ready
         if (!task->retry[i]) {
             int tsid = task->tablets[i]->UpdateRollback(task->request->rollback_name(),
                                                         task->request->snapshot_id(),
@@ -3178,14 +3179,33 @@ void MasterImpl::RollbackCallback(int32_t tablet_id, RollbackTask* task,
             retry_tablets.push_back(task->tablets[i]);
         }
     }
+
+    /////////////// TODO 重试逻辑 /////////////////////
+    if (retry_tablets.size() != 0) {
+        RollbackTask* retry_task = new RollbackTask;
+        retry_task->tablets = retry_tablets;
+
+        assert(retry_task->tablets.size());
+        if (retry_task->tablets.size() == 0) {
+            ////////////// TODO ////////////////////
+        }
+        retry_task->rollback_points.resize(retry_task->tablets.size(), leveldb::kMaxSequenceNumber);
+        retry_task->retry.resize(retry_task->tablets.size(), false);
+        retry_task->request = task->request;
+        retry_task->response = task->response;
+        retry_task->done = task->done;
+        retry_task->table = task->table;
+        retry_task->task_num = 0;
+        retry_task->finish_num = 0;
+    }
+
     WriteClosure* closure =
         NewClosure(this, &MasterImpl::AddRollbackCallback,
-                   task->table, task->tablets,
+                   task->table, task->tablets, retry_tablets.size() == 0,
                    FLAGS_tera_master_meta_retry_times,
                    task->request, task->response, task->done);
     BatchWriteMetaTableAsync(task->table, task->tablets, false, closure);
 
-    /////////////// TODO 重试逻辑 /////////////////////
     LOG(INFO) << "MasterImpl rollback all tablet done";
     task->mutex.Unlock();
     delete task;
@@ -3193,6 +3213,7 @@ void MasterImpl::RollbackCallback(int32_t tablet_id, RollbackTask* task,
 
 void MasterImpl::AddRollbackCallback(TablePtr table,
                                      std::vector<TabletPtr> tablets,
+                                     bool no_more_retry,
                                      int32_t retry_times,
                                      const RollbackRequest* rpc_request,
                                      RollbackResponse* rpc_response,

@@ -36,7 +36,7 @@ message ColumnFamilySchema {
     repeated int64 acl = 5;
     optional int32 max_versions = 6 [default = 1];
     optional int32 min_versions = 7 [default = 1];
-    optional int32 time_to_live = 8 [default = 0]; // 单位:秒(0:不过期, <0:提前过期, >0:延后过期) 
+    optional int32 time_to_live = 8 [default = 0]; // 单位:秒(0:不过期, <0:提前过期, >0:延后过期)
     optional int64 disk_quota = 9;
     optional string type = 10;
 }
@@ -44,7 +44,7 @@ message ColumnFamilySchema {
 message TableSchema {
     optional int32 id = 1;
     optional string name = 2;
-    optional int32 owner = 3;
+    optional int32 owner = 3; // deprecated
     repeated int32 acl = 4;
     repeated ColumnFamilySchema column_families = 5;
     repeated LocalityGroupSchema locality_groups = 6;
@@ -52,8 +52,9 @@ message TableSchema {
     optional int64 split_size = 8; // MB
     optional int64 merge_size = 10; // MB
     optional bool disable_wal = 11 [default = false];
-    optional string admin_group = 12; // users in admin_group can admin this table 
+    optional string admin_group = 12; // users in admin_group can admin this table
     optional string alias = 13; // table alias
+    optional string admin = 14;
 
     // deprecated, instead by raw_key GeneralKv
     optional bool kv_only = 9 [default = false];

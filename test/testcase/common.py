@@ -77,6 +77,10 @@ def cluster_op(op):
         ret = subprocess.Popen(const.launch_script, stdout=subprocess.PIPE, stderr=subprocess.PIPE, shell=True)
         print ''.join(ret.stdout.readlines())
         print ''.join(ret.stderr.readlines())
+    elif op == 'launch_ts_first':
+        print 'launch cluster'
+        ret = subprocess.Popen(const.launch_ts_first_script, stdout=subprocess.PIPE, stderr=subprocess.PIPE, shell=True)
+        print ''.join(ret.stdout.readlines())
     else:
         print 'unknown argument'
         nose.tools.assert_true(False)
@@ -252,13 +256,13 @@ def parse_showinfo():
         line = line.strip("\n")
         line_list = line.split(" ")
         list_ret = [line_list[i] for i in range(len(line_list)) if line_list[i] != ""]
-
+        
         retinfo[list_ret[1]] = {}
         retinfo[list_ret[1]]["status"] = list_ret[2]
         retinfo[list_ret[1]]["size"] = list_ret[3]
-        retinfo[list_ret[1]]["lg_size"] = list_ret[4]
-        retinfo[list_ret[1]]["tablet"] = list_ret[5]
-        retinfo[list_ret[1]]["busy"] = list_ret[6]
+        retinfo[list_ret[1]]["lg_size"] = [list_ret[j] for j in range(4, len(list_ret) - 2)]
+        retinfo[list_ret[1]]["tablet"] = list_ret[len(list_ret) - 2]
+        retinfo[list_ret[1]]["busy"] = list_ret[len(list_ret) - 1]
     
     print json.dumps(retinfo)
     return retinfo
