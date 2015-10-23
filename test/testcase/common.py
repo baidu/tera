@@ -94,6 +94,15 @@ def create_kv_table():
     print ''.join(ret.stderr.readlines())
 
 
+def create_ttlkv_table():
+    print 'print ttlkv table'
+    cleanup()
+    ret = subprocess.Popen(const.teracli_binary + ' create "test<rawkey=ttlkv>"', stdout=subprocess.PIPE, \
+                           stderr=subprocess.PIPE, shell=True)
+    print ''.join(ret.stdout.readlines())
+    print ''.join(ret.stderr.readlines()) 
+
+
 def create_singleversion_table():
     print 'create single version table'
     cleanup()
