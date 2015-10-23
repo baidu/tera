@@ -180,6 +180,7 @@ public:
     void ListRollback(std::vector<std::string>* rollback_names);
     int32_t GetRollbackSize() {return m_rollback_names.size() - 1;}
     void GetRollbackStatus(std::string rollbaack_name, bool* exists, bool* done);
+    void GetRollbackTablets(const std::string& rollback_name, std::vector<TabletPtr>* tablet_list);
     void AddDeleteTabletCount();
     bool NeedDelete();
     void ToMetaTableKeyValue(std::string* packed_key = NULL,

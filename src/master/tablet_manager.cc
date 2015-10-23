@@ -362,6 +362,7 @@ void Tablet::ListRollback(std::vector<Rollback>* rollbacks) {
     MutexLock lock(&m_mutex);
     for (int i = 0; i < m_meta.rollbacks_size(); i++) {
         rollbacks->push_back(m_meta.rollbacks(i));
+        VLOG(11) << "rollback " << m_meta.path() << ": " << m_meta.rollbacks(i).ShortDebugString();
     }
 }
 
@@ -369,13 +370,16 @@ int32_t Tablet::UpdateRollback(std::string name, uint64_t snapshot_id, uint64_t 
      MutexLock lock(&m_mutex);
      bool has_rollback_name = false;
      for (int32_t i = 0; i < m_meta.rollbacks_size(); ++i) {
-        Rollback cur_rollback = m_meta.rollbacks(i);
-        if (cur_rollback.name() == name) {
+        Rollback* cur_rollback = m_meta.mutable_rollbacks(i);
+        if (cur_rollback->name() == name) {
             has_rollback_name = true;
-            assert(cur_rollback.snapshot_id() == snapshot_id);
-            cur_rollback.set_rollback_point(rollback_point);
+            assert(cur_rollback->snapshot_id() == snapshot_id);
+            cur_rollback->set_rollback_point(rollback_point);
         }
      }
+    for (int i = 0; i < m_meta.rollbacks_size(); i++) {
+        VLOG(11) << "rollback " << m_meta.path() << ": " << m_meta.rollbacks(i).ShortDebugString();
+    }
      assert(has_rollback_name);
      return m_meta.rollbacks_size() - 1;
 }
@@ -681,6 +685,21 @@ void Table::GetRollbackStatus(std::string rollback_name, bool* exists, bool* don
             }
         }
         *done = true;
+    }
+}
+
+void Table::GetRollbackTablets(const std::string& rollback_name, std::vector<TabletPtr>* tablet_list) {
+    MutexLock lock(&m_mutex);
+    Table::TabletList::iterator it = m_tablets_list.begin();
+    for (; it != m_tablets_list.end(); ++it) {
+        TabletPtr tablet = it->second;
+        int32_t rollback_size = tablet->m_meta.rollbacks_size();
+        for (int32_t i = 0; i < rollback_size; ++i) {
+            if (tablet->m_meta.rollbacks(i).name() == rollback_name &&
+                tablet->m_meta.rollbacks(i).rollback_point() == leveldb::kMaxSequenceNumber) {
+                tablet_list->push_back(tablet);
+            }
+        }
     }
 }
 

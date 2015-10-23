@@ -199,6 +199,7 @@ private:
         google::protobuf::Closure* done;
         TablePtr table;
         std::vector<TabletPtr> tablets;
+        std::vector<bool> retry;
         std::vector<uint64_t> rollback_points;
         int task_num;
         int finish_num;
@@ -302,6 +303,9 @@ private:
                                     RollbackResponse* rpc_response, google::protobuf::Closure* rpc_done,
                                     WriteTabletRequest* request, WriteTabletResponse* response,
                                     bool failed, int error_code);
+    void ApplyRollbackTask(TablePtr table, const std::vector<TabletPtr>& tablets, const RollbackRequest* rpc_request,
+                          RollbackResponse* rpc_response, google::protobuf::Closure* rpc_done,
+                          RollbackTask* task);
     void RollbackAsync(TabletPtr tablet, uint64_t snapshot_id,
                         int32_t timeout, RollbackClosure* done);
     void RollbackCallback(int32_t tablet_id, RollbackTask* task,
