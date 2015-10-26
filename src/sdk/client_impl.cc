@@ -808,7 +808,7 @@ bool ClientImpl::DelSnapshot(const string& name, uint64_t snapshot, ErrorCode* e
     return false;
 }
 
-bool ClientImpl::Rollback(const string& name, uint64_t snapshot, 
+bool ClientImpl::Rollback(const string& name, uint64_t snapshot,
                           const std::string& rollback_name, ErrorCode* err) {
     master::MasterClient master_client(_cluster->MasterAddr());
 
