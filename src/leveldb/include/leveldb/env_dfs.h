@@ -55,8 +55,6 @@ public:
 
     virtual Status UnlockFile(FileLock* lock);
 
-    virtual Status NewLogger(const std::string& fname, Logger** result);
-
     virtual Env* CacheEnv() { return this; }
 
     static uint64_t gettid() {

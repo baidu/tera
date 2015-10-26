@@ -25,6 +25,16 @@ WritableFile::~WritableFile() {
 Logger::~Logger() {
 }
 
+Logger* Logger::default_logger_ = NULL;
+
+void Logger::SetDefaultLogger(Logger* logger) {
+  default_logger_ = logger;
+}
+
+Logger* Logger::DefaultLogger() {
+  return default_logger_;
+}
+
 FileLock::~FileLock() {
 }
 
@@ -33,6 +43,16 @@ void Log(Logger* info_log, const char* format, ...) {
     va_list ap;
     va_start(ap, format);
     info_log->Logv(format, ap);
+    va_end(ap);
+  }
+}
+
+void Log(const char* format, ...) {
+  Logger* l = Logger::DefaultLogger();
+  if (l != NULL) {
+    va_list ap;
+    va_start(ap, format);
+    l->Logv(format, ap);
     va_end(ap);
   }
 }
