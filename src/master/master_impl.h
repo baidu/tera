@@ -79,7 +79,7 @@ public:
                      DelSnapshotResponse* response,
                      google::protobuf::Closure* done);
 
-    void Rollback(const RollbackRequest* request,
+    void GetRollback(const RollbackRequest* request,
                   RollbackResponse* response,
                   google::protobuf::Closure* done);
 
@@ -516,9 +516,15 @@ private:
 
     bool IsRootUser(const std::string& token);
 
+    bool CheckUserPermissionOnTable(const std::string& token, TablePtr table);
+
+    template <typename Request>
+    bool HasPermissionOnTable(const Request* request, TablePtr table);
+
     template <typename Request, typename Response, typename Callback>
-    bool HasTablePermission(const Request* request, Response* response,
-                            Callback* done, TablePtr table, const char* operate);
+    bool HasPermissionOrReturn(const Request* request, Response* response,
+                               Callback* done, TablePtr table, const char* operate);
+
     void FillAlias(const std::string& key, const std::string& value);
 private:
     mutable Mutex m_status_mutex;

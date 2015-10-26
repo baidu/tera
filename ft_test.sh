@@ -10,6 +10,7 @@ cp build/benchmark/tera_mark tmp/bin
 mkdir -p tmp/log
 mkdir -p tmp/data
 cp -r test/testcase tmp/bin
+cp -r test/testcase/shell_script/* tmp/bin
 
 cd tmp/bin/
 sh kill_tera.sh

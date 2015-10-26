@@ -106,8 +106,8 @@ public:
     int32_t AddSnapshot(uint64_t snapshot);
     void ListSnapshot(std::vector<uint64_t>* snapshot);
     void DelSnapshot(int32_t id);
-    int32_t AddRollback(uint64_t rollback_point);
-    void ListRollback(std::vector<uint64_t>* rollback_points);
+    int32_t AddRollback(std::string name, uint64_t snapshot_id, uint64_t rollback_point);
+    void ListRollback(std::vector<Rollback>* rollbacks);
 
     // is belong to a table?
     bool IsBound();
@@ -175,8 +175,8 @@ public:
     int32_t AddSnapshot(uint64_t snapshot);
     int32_t DelSnapshot(uint64_t snapshot);
     void ListSnapshot(std::vector<uint64_t>* snapshots);
-    int32_t AddRollback(uint64_t rollback_snapshot);
-    void ListRollback(std::vector<uint64_t>* rollback_snapshots);
+    int32_t AddRollback(std::string rollback_name);
+    void ListRollback(std::vector<std::string>* rollback_names);
     void AddDeleteTabletCount();
     bool NeedDelete();
     void ToMetaTableKeyValue(std::string* packed_key = NULL,
@@ -195,7 +195,7 @@ private:
     std::string m_name;
     TableSchema m_schema;
     std::vector<uint64_t> m_snapshot_list;
-    std::vector<uint64_t> m_rollback_snapshots;
+    std::vector<std::string> m_rollback_names;
     TableStatus m_status;
     uint32_t m_deleted_tablet_num;
     uint64_t m_max_tablet_no;

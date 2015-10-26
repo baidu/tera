@@ -77,7 +77,7 @@ leveldb::Env* LeveldbMemEnv() {
     return mem_env;
 }
 
-leveldb::Env* LeveldbFlashEnv(leveldb::Logger* l) {
+leveldb::Env* LeveldbFlashEnv() {
     static Mutex mutex;
     static leveldb::Env* flash_env = NULL;
     MutexLock locker(&mutex);
@@ -85,7 +85,7 @@ leveldb::Env* LeveldbFlashEnv(leveldb::Logger* l) {
         return flash_env;
     }
     leveldb::Env* base_env = LeveldbBaseEnv();
-    flash_env = leveldb::NewFlashEnv(base_env, l);
+    flash_env = leveldb::NewFlashEnv(base_env);
     return flash_env;
 }
 

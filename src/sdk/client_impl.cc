@@ -139,6 +139,7 @@ bool ClientImpl::CreateTable(const TableDescriptor& desc,
     TableDescToSchema(desc, schema);
     schema->set_alias(desc.TableName());
     schema->set_name(internal_table_name);
+    schema->set_admin(_user_identity);
     // add delimiter
     size_t delim_num = tablet_delim.size();
     for (size_t i = 0; i < delim_num; ++i) {
@@ -336,7 +337,7 @@ bool ClientImpl::ChangePwd(const std::string& user,
     return OperateUser(updated_user, kChangePwd, null, err);
 }
 
-bool ClientImpl::ShowUser(const std::string& user, std::vector<std::string>& user_groups, 
+bool ClientImpl::ShowUser(const std::string& user, std::vector<std::string>& user_groups,
                           ErrorCode* err) {
     UserInfo user_info;
     user_info.set_user_name(user);
@@ -586,9 +587,11 @@ bool ClientImpl::ShowTablesInfo(TableMetaList* table_list,
                 tablet_list->add_meta()->CopyFrom(response.tablet_meta_list().meta(i));
                 tablet_list->add_counter()->CopyFrom(response.tablet_meta_list().counter(i));
                 if (i == response.tablet_meta_list().meta_size() - 1 ) {
+                    std::string prev_table_name = start_table_name;
                     start_table_name = response.tablet_meta_list().meta(i).table_name();
                     std::string last_key = response.tablet_meta_list().meta(i).key_range().key_start();
-                    if (last_key <= start_tablet_key) {
+                    if (prev_table_name > start_table_name
+                        || (prev_table_name == start_table_name && last_key <= start_tablet_key)) {
                         LOG(WARNING) << "the master has older version";
                         has_more = false;
                         break;
@@ -805,16 +808,24 @@ bool ClientImpl::DelSnapshot(const string& name, uint64_t snapshot, ErrorCode* e
     return false;
 }
 
-bool ClientImpl::Rollback(const string& name, uint64_t snapshot, ErrorCode* err) {
+bool ClientImpl::Rollback(const string& name, uint64_t snapshot, 
+                          const std::string& rollback_name, ErrorCode* err) {
     master::MasterClient master_client(_cluster->MasterAddr());
 
+    std::string internal_table_name;
+    if (!GetInternalTableName(name, err, &internal_table_name)) {
+        LOG(ERROR) << "faild to scan meta schema";
+        return false;
+    }
     RollbackRequest request;
     RollbackResponse response;
     request.set_sequence_id(0);
-    request.set_table_name(name);
+    request.set_table_name(internal_table_name);
     request.set_snapshot_id(snapshot);
+    request.set_rollback_name(rollback_name);
+    std::cout << name << " " << rollback_name << std::endl;
 
-    if (master_client.Rollback(&request, &response)) {
+    if (master_client.GetRollback(&request, &response)) {
         if (response.status() == kMasterOk) {
             std::cout << name << " rollback to snapshot sucessfully" << std::endl;
             return true;
@@ -1012,15 +1023,6 @@ static int InitFlags(const std::string& confpath, const std::string& log_prefix)
     } else {
         LOG(ERROR) << "hasn't specify the flagfile, but default config file not found";
         return -1;
-    }
-
-    // init user identity & role
-    std::string cur_identity = utils::GetValueFromEnv("USER");
-    if (cur_identity.empty()) {
-        cur_identity = "other";
-    }
-    if (FLAGS_tera_user_identity.empty()) {
-        FLAGS_tera_user_identity = cur_identity;
     }
 
     int argc = 2;
