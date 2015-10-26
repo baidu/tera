@@ -178,13 +178,13 @@ Status SetCurrentFile(Env* env, const std::string& dbname,
   if (s.ok()) {
     s = env->RenameFile(tmp, CurrentFileName(dbname));
   } else {
-    Log(Logger::default_logger, "[dfs error] open dbtmp[%s] error, status[%s].\n",
+    Log("[dfs error] open dbtmp[%s] error, status[%s].\n",
         tmp.c_str(), s.ToString().c_str());
   }
   if (!s.ok()) {
     env->DeleteFile(tmp);
   } else {
-    Log(Logger::default_logger, "[dfs error] rename CURRENT[%s] error, status[%s].\n",
+    Log("[dfs error] rename CURRENT[%s] error, status[%s].\n",
         tmp.c_str(), s.ToString().c_str());
   }
   return s;

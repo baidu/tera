@@ -48,12 +48,11 @@ Status CopyToLocal(const std::string& local_fname, Env* env,
     if (s.ok() && fsize == local_size) {
         return s;
     }
-    Log(Logger::default_logger,
-        "[env_flash] local file mismatch, expect %lu, actual %lu, delete %s\n",
+    Log("[env_flash] local file mismatch, expect %lu, actual %lu, delete %s\n",
         fsize, local_size, local_fname.c_str());
     Env::Default()->DeleteFile(local_fname);
 
-//    Log(Logger::default_logger, "[env_flash] open dfs_file %s\n", fname.c_str());
+//    Log("[env_flash] open dfs_file %s\n", fname.c_str());
     SequentialFile* dfs_file = NULL;
     s = env->NewSequentialFile(fname, &dfs_file);
     if (!s.ok()) {
@@ -66,12 +65,12 @@ Status CopyToLocal(const std::string& local_fname, Env* env,
         }
     }
 
-//    Log(Logger::default_logger, "[env_flash] open local %s\n", local_fname.c_str());
+//    Log("[env_flash] open local %s\n", local_fname.c_str());
     WritableFile* local_file = NULL;
     s = Env::Default()->NewWritableFile(local_fname, &local_file);
     if (!s.ok()) {
         if (!vanish_allowed) {
-            Log(Logger::default_logger, "[env_flash] local env error, exit: %s\n",
+            Log("[env_flash] local env error, exit: %s\n",
                 local_fname.c_str());
             exit(-1);
         }
@@ -93,8 +92,7 @@ Status CopyToLocal(const std::string& local_fname, Env* env,
         uint64_t time_used = env->NowMicros() - time_s;
         //if (time_used > 200000) {
         if (true) {
-            Log(Logger::default_logger,
-                "[env_flash] copy %s to local used %llu ms\n",
+            Log("[env_flash] copy %s to local used %llu ms\n",
                 fname.c_str(), static_cast<unsigned long long>(time_used) / 1000);
         }
         return s;
@@ -167,7 +165,7 @@ public:
         Status copy_status = CopyToLocal(local_fname, dfs_env, fname, fsize,
                                          vanish_allowed);
         if (!copy_status.ok()) {
-            Log(Logger::default_logger, "[env_flash] copy to local fail [%s]: %s\n",
+            Log("[env_flash] copy to local fail [%s]: %s\n",
                 copy_status.ToString().c_str(), local_fname.c_str());
             // no flash file, use dfs file
             dfs_env->NewRandomAccessFile(fname, &dfs_file_);
@@ -178,8 +176,7 @@ public:
         if (s.ok()) {
             return;
         }
-        Log(Logger::default_logger,
-            "[env_flash] local file exists, but open for RandomAccess fail: %s\n",
+        Log("[env_flash] local file exists, but open for RandomAccess fail: %s\n",
             local_fname.c_str());
         Env::Default()->DeleteFile(local_fname);
         dfs_env->NewRandomAccessFile(fname, &dfs_file_);
@@ -230,8 +227,7 @@ public:
         }
         s = posix_env->NewWritableFile(local_fname_, &flash_file_);
         if (!s.ok()) {
-            Log(Logger::default_logger,
-                "[env_flash] Open local flash file for write fail: %s\n",
+            Log("[env_flash] Open local flash file for write fail: %s\n",
                 local_fname_.c_str());
         }
     }
@@ -443,7 +439,7 @@ void FlashEnv::SetFlashPath(const std::string& path, bool vanish_allowed) {
             if (!vanish_allowed
                 && !Env::Default()->FileExists(flash_paths_.back())
                 && !Env::Default()->CreateDir(flash_paths_.back()).ok()) {
-                Log(Logger::default_logger, "[env_flash] cannot access cache dir: %s\n",
+                Log("[env_flash] cannot access cache dir: %s\n",
                     flash_paths_.back().c_str());
                 exit(-1);
             }
