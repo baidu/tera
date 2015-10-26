@@ -262,7 +262,7 @@ def parse_showinfo():
         retinfo[list_ret[1]]["lg_size"] = list_ret[4]
         retinfo[list_ret[1]]["tablet"] = list_ret[5]
         retinfo[list_ret[1]]["busy"] = list_ret[6]
-    
+
     print json.dumps(retinfo)
     return retinfo
 
@@ -333,3 +333,11 @@ def cleanup_files(file_list):
     for file_path in file_list:
         os.remove(file_path)
 
+def check_show_user_result(cmd, should_contain, substr):
+    print(cmd)
+    ret = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, shell=True)
+    stdoutdata = ret.communicate()[0]
+    if should_contain:
+        nose.tools.assert_true(stdoutdata.find(substr) != -1)
+    else:
+        nose.tools.assert_true(stdoutdata.find(substr) == -1)

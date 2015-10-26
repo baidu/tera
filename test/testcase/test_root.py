@@ -18,9 +18,9 @@ def setUp():
 def test_create_user():
     cmd = "./teracli user create z1 z1pwd --flagfile=" + const.user_root_flag_path
     common.execute_and_check_returncode(cmd, 0)
-    # man grep, exit status is 0 if selected lines are found
-    cmd = "./teracli user show z1|grep -e 'user:z1'"
-    common.execute_and_check_returncode(cmd, 0)
+
+    cmd = "./teracli user show z1"
+    common.check_show_user_result(cmd, True, "z1")
 
     # user already exists
     cmd = "./teracli user create z1 z1pwd --flagfile=" + const.user_root_flag_path
@@ -52,7 +52,9 @@ def test_change_pwd():
 def test_addtogroup():
     cmd = "./teracli user addtogroup z1 z1g --flagfile=" + const.user_root_flag_path
     common.execute_and_check_returncode(cmd, 0)
-    cmd = "./teracli user show z1|grep -e 'groups .*z1g'"
+
+    cmd = "./teracli user show z1"
+    common.check_show_user_result(cmd, True, "z1g")
     common.execute_and_check_returncode(cmd, 0)
 
     # user not found
@@ -66,8 +68,8 @@ def test_addtogroup():
 def test_deletefromgroup():
     cmd = "./teracli user deletefromgroup z1 z1g --flagfile=" + const.user_root_flag_path
     common.execute_and_check_returncode(cmd, 0)
-    cmd = "./teracli meta2 show|grep  -e 'groups .*z1g'"
-    common.execute_and_check_returncode(cmd, 1)
+    cmd = "./teracli user show z1"
+    common.check_show_user_result(cmd, False, "z1g")
 
     # user not found
     cmd = "./teracli user deletefromgroup z2 z1g --flagfile=" + const.user_root_flag_path
@@ -80,14 +82,14 @@ def test_deletefromgroup():
 def test_delete_user():
     cmd = "./teracli user delete z1 --flagfile=" + const.user_root_flag_path
     common.execute_and_check_returncode(cmd, 0)
-    cmd = "./teracli user show z1|grep -e 'user:z1'"
-    common.execute_and_check_returncode(cmd, 1)
+    cmd = "./teracli user show z1"
+    common.check_show_user_result(cmd, False, "z1")
 
     # can not delete root
     cmd = "./teracli user delete root --flagfile=" + const.user_root_flag_path
     common.execute_and_check_returncode(cmd, 255)
-    cmd = "./teracli user show root|grep  -e 'user:root'"
-    common.execute_and_check_returncode(cmd, 0)
+    cmd = "./teracli user show root"
+    common.check_show_user_result(cmd, True, "root")
 
     # user not found
     cmd = "./teracli user delete z1 --flagfile=" + const.user_root_flag_path
