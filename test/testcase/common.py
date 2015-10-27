@@ -354,8 +354,8 @@ def cleanup_files(file_list):
 def check_show_user_result(cmd, should_contain, substr):
     print(cmd)
     ret = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, shell=True)
-    stdoutdata = ret.communicate()[0]
+    stdoutdata = ''.join(ret.stdout.readlines())
     if should_contain:
-        nose.tools.assert_true(stdoutdata.find(substr) != -1)
+        nose.tools.assert_true(substr in stdoutdata)
     else:
-        nose.tools.assert_true(stdoutdata.find(substr) == -1)
+        nose.tools.assert_true(substr not in stdoutdata)
