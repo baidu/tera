@@ -108,7 +108,7 @@ void AsyncWriter::BlockLogNumInc() {
   MutexLock lock(&log_mutex);
   ++block_log_number;
 }
-  
+
 
 void* AsyncWriter::ThreadFunc(void* arg) {
   static_cast<AsyncWriter*>(arg)->ThreadFuncCall();

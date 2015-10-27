@@ -67,7 +67,7 @@ public:
     /// Returns DfsFile handler on success, NULL on error.WithTime
     virtual DfsFile* OpenFile(const std::string& filename, int32_t flags) = 0;
     /// Returns Dfs handler on success, NULL on error.
-    static Dfs* NewDfs(const std::string& so_path, const std::string& conf); 
+    static Dfs* NewDfs(const std::string& so_path, const std::string& conf);
 private:
     Dfs(const Dfs&);
     void operator=(const Dfs&);

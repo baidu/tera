@@ -263,7 +263,7 @@ void TabletNodeImpl::LoadTablet(const LoadTabletRequest* request,
             << StatusCodeToString(status);
         response->set_status((StatusCode)tablet_io->GetStatus());
         tablet_io->DecRef();
-    } else if (!tablet_io->Load(schema, request->path(), parent_tablets, 
+    } else if (!tablet_io->Load(schema, request->path(), parent_tablets,
                                 snapshots, rollbacks, m_ldb_logger,
                                 m_ldb_block_cache, m_ldb_table_cache, &status)) {
         tablet_io->DecRef();

@@ -20,7 +20,7 @@ class SnapshotList;
 class SnapshotImpl : public Snapshot {
  public:
   SequenceNumber number_;  // const after creation
-  
+
  private:
   friend class SnapshotList;
 

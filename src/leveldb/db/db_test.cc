@@ -948,7 +948,7 @@ TEST(DBTest, RecoverWithLargeLog) {
   Options options = CurrentOptions();
   options.write_buffer_size = 100000;
   Reopen(&options);
-  
+
   // tera-leveldb will call MaybeScheduleCompaction() when Init(Recover),
   // and 3 sst files cause level0's score to be 1.5,(kL0_CompactionTrigger == 2)
   // so, compaction will happen, at the end, maybe 1 or 2 or 3 sst at level-0
