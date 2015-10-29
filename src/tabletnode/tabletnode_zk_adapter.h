@@ -27,6 +27,8 @@ public:
     virtual ~TabletNodeZkAdapterBase() {};
     virtual void Init() = 0;
     virtual bool GetRootTableAddr(std::string* root_table_addr) = 0;
+    virtual bool WatchTableNode(const std::string& path,
+                                bool* is_exist, int* zk_errno) = 0;
 };
 
 class TabletNodeZkAdapter : public TabletNodeZkAdapterBase {
@@ -36,6 +38,8 @@ public:
     virtual ~TabletNodeZkAdapter();
     virtual void Init();
     virtual bool GetRootTableAddr(std::string* root_table_addr);
+    virtual bool WatchTableNode(const std::string& path,
+                                bool* is_exist, int* zk_errno);
 
 private:
     bool Register(const std::string& session_id, int* zk_code);
@@ -55,6 +59,8 @@ private:
     void OnRootNodeDeleted();
     void OnRootNodeChanged(const std::string& root_tablet_addr);
 
+    void OnTableNodeChanged(const std::string& path,
+                            const std::string& value);
     virtual void OnChildrenChanged(const std::string& path,
                                    const std::vector<std::string>& name_list,
                                    const std::vector<std::string>& data_list);
@@ -79,6 +85,8 @@ public:
     virtual ~FakeTabletNodeZkAdapter() {}
     virtual void Init();
     virtual bool GetRootTableAddr(std::string* root_table_addr);
+    virtual bool WatchTableNode(const std::string& path,
+                                bool* is_exist, int* zk_errno);
 
 private:
     bool Register(const std::string& session_id, int* zk_code = NULL);
@@ -109,9 +117,13 @@ public:
     virtual ~InsTabletNodeZkAdapter() {}
     virtual void Init();
     virtual bool GetRootTableAddr(std::string* root_table_addr);
+    virtual bool WatchTableNode(const std::string& path,
+                                bool* is_exist, int* zk_errno);
     void OnKickMarkCreated();
     void OnLockChange(std::string session_id, bool deleted);
     void OnMetaChange(std::string meta_addr, bool deleted);
+    void OnTableChange(const std::string& path, bool deleted);
+
 private:
     virtual void OnChildrenChanged(const std::string& path,
                                    const std::vector<std::string>& name_list,
@@ -122,7 +134,6 @@ private:
     virtual void OnNodeDeleted(const std::string& path) {}
     virtual void OnWatchFailed(const std::string& path, int watch_type, int err) {}
     virtual void OnSessionTimeout() {}
-
 private:
     mutable Mutex m_mutex;
     TabletNodeImpl * m_tabletnode_impl;

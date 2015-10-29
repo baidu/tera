@@ -34,6 +34,9 @@ public:
     virtual bool MarkSafeMode() = 0;
     virtual bool UnmarkSafeMode() = 0;
     virtual bool UpdateRootTabletNode(const std::string& root_tablet_addr) = 0;
+    virtual bool WriteTableNode(const std::string& table_name,
+                                const std::string& table_schema) = 0;
+    virtual bool DeleteTableNode(const std::string& table_name) = 0;
 };
 
 class MasterZkAdapter : public MasterZkAdapterBase {
@@ -50,6 +53,9 @@ public:
     virtual bool MarkSafeMode();
     virtual bool UnmarkSafeMode();
     virtual bool UpdateRootTabletNode(const std::string& root_tablet_addr);
+    virtual bool WriteTableNode(const std::string& table_name,
+                                const std::string& table_schema);
+    virtual bool DeleteTableNode(const std::string& table_name);
 
 protected:
     bool Setup();
@@ -86,6 +92,14 @@ protected:
                                int err);
     virtual void OnSessionTimeout();
 
+    virtual bool WriteNodeWithRetry(const std::string& path,
+                                    const std::string& value);
+    virtual bool CheckExistWithRetry(const std::string& zk_path);
+    virtual bool CreateIfNotExistWithRetry(const std::string& path,
+                                       const std::string& value);
+    virtual bool UpdatePersistentNodeWithCreate(const std::string& zk_path,
+                                                const std::string& value);
+    virtual bool DeleteNodeWithRetry(const std::string& path);
 private:
     mutable Mutex m_mutex;
     MasterImpl * m_master_impl;
@@ -112,7 +126,9 @@ public:
     virtual bool MarkSafeMode();
     virtual bool UnmarkSafeMode();
     virtual bool UpdateRootTabletNode(const std::string& root_tablet_addr);
-
+    virtual bool WriteTableNode(const std::string& table_name,
+                                const std::string& table_schema);
+    virtual bool DeleteTableNode(const std::string& table_name);
 private:
     virtual void OnChildrenChanged(const std::string& path,
                                    const std::vector<std::string>& name_list,
@@ -147,6 +163,9 @@ public:
     virtual bool MarkSafeMode() {return true;}
     virtual bool UnmarkSafeMode() {return true;}
     virtual bool UpdateRootTabletNode(const std::string& root_tablet_addr);
+    virtual bool WriteTableNode(const std::string& table_name,
+                                const std::string& table_schema);
+    virtual bool DeleteTableNode(const std::string& table_name);
     void RefreshTabletNodeList();
     void OnLockChange(std::string session_id, bool deleted);
     void OnSessionTimeout();

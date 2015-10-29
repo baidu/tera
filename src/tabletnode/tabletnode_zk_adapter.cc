@@ -147,6 +147,21 @@ bool TabletNodeZkAdapter::WatchKickMark(bool* is_exist, int* zk_errno) {
     return CheckAndWatchExist(m_kick_node_path, is_exist, zk_errno);
 }
 
+bool TabletNodeZkAdapter::WatchTableNode(const std::string& table_name,
+                                         bool* is_exist, int* zk_errno) {
+    if (!CheckAndWatchExist(kTablePath + "/" + table_name, is_exist, zk_errno)) {
+        LOG(INFO) << "[acl] CheckAndWatchExist() failed";
+        return false;
+    }
+    if (!*is_exist) {
+        LOG(INFO) << "[acl] not exist:" << table_name;
+        return true;
+    }
+    std::string value;
+    bool ret = ReadAndWatchNode(kTablePath + "/" + table_name, &value, zk_errno);
+    return ret;
+}
+
 bool TabletNodeZkAdapter::WatchSelfNode(bool* is_exist, int* zk_errno) {
     return CheckAndWatchExist(m_serve_node_path, is_exist, zk_errno);
 }
@@ -245,10 +260,17 @@ void TabletNodeZkAdapter::OnChildrenChanged(const std::string& path,
     LOG(ERROR) << "unexpected children event on path : " << path;
 }
 
+void TabletNodeZkAdapter::OnTableNodeChanged(const std::string& path,
+                                             const std::string& value) {
+    LOG(INFO) << "[acl] table schema is changed :" << path;
+}
+
 void TabletNodeZkAdapter::OnNodeValueChanged(const std::string& path,
                                              const std::string& value) {
     if (path.compare(kRootTabletNodePath) == 0) {
         OnRootNodeChanged(value);
+    } else if (path.compare(0, kTablePath.size(), kTablePath) == 0) {
+        OnTableNodeChanged(path, value);
     } else {
         LOG(ERROR) << "unexpected value event on path : " << path;
     }
@@ -317,6 +339,11 @@ bool FakeTabletNodeZkAdapter::Register(const std::string& session_id, int* zk_co
     return true;
 }
 
+bool FakeTabletNodeZkAdapter::WatchTableNode(const std::string& path,
+                                             bool* is_exist, int* zk_errno) {
+    return false;
+}
+
 bool FakeTabletNodeZkAdapter::GetRootTableAddr(std::string* root_table_addr) {
     MutexLock locker(&m_mutex);
     std::string root_table = m_fake_path + kRootTabletNodePath;
@@ -330,26 +357,26 @@ bool FakeTabletNodeZkAdapter::GetRootTableAddr(std::string* root_table_addr) {
 InsTabletNodeZkAdapter::InsTabletNodeZkAdapter(TabletNodeImpl* tabletnode_impl,
                                                const std::string& server_addr)
     : m_tabletnode_impl(tabletnode_impl), m_server_addr(server_addr) {
-    
+
 }
 
-static void InsOnKick(const galaxy::ins::sdk::WatchParam& param, 
+static void InsOnKick(const galaxy::ins::sdk::WatchParam& param,
                       galaxy::ins::sdk::SDKError error) {
     LOG(INFO) << "recv kick event" ;
     InsTabletNodeZkAdapter* ins_adp = static_cast<InsTabletNodeZkAdapter*>(param.context);
     ins_adp->OnKickMarkCreated();
 }
 
-static void InsOnLockChange(const galaxy::ins::sdk::WatchParam& param, 
+static void InsOnLockChange(const galaxy::ins::sdk::WatchParam& param,
                            galaxy::ins::sdk::SDKError error) {
     LOG(INFO) << "recv lock change event" ;
     InsTabletNodeZkAdapter* ins_adp = static_cast<InsTabletNodeZkAdapter*>(param.context);
     ins_adp->OnLockChange(param.value, param.deleted);
 }
 
-static void InsOnMetaChange(const galaxy::ins::sdk::WatchParam& param, 
+static void InsOnMetaChange(const galaxy::ins::sdk::WatchParam& param,
                             galaxy::ins::sdk::SDKError error) {
-    LOG(INFO) << "recv meta change event" ;
+    LOG(INFO) << "recv meta change event";
     InsTabletNodeZkAdapter* ins_adp = static_cast<InsTabletNodeZkAdapter*>(param.context);
     ins_adp->OnMetaChange(param.value, param.deleted);
 }
@@ -359,7 +386,7 @@ void InsTabletNodeZkAdapter::Init() {
     galaxy::ins::sdk::SDKError err;
     // create session
     m_ins_sdk = new galaxy::ins::sdk::InsSDK(FLAGS_tera_ins_addr_list);
-    
+
     // get session id
     std::string session_id = m_ins_sdk->GetSessionID();
     m_tabletnode_impl->SetSessionId(session_id);
@@ -369,7 +396,7 @@ void InsTabletNodeZkAdapter::Init() {
     std::string lock_key = root_path + kTsListPath + "/" + m_server_addr;
     CHECK(m_ins_sdk->Lock(lock_key, &err)) << "register fail";
     LOG(INFO) << "create ts-node success: " << session_id;
-        
+
     // create watch node
     std::string kick_key = root_path + kKickPath + "/" + session_id;
     CHECK(m_ins_sdk->Watch(kick_key, &InsOnKick, this, &err)) << "watch kick fail";
@@ -378,6 +405,27 @@ void InsTabletNodeZkAdapter::Init() {
     std::string meta_table = root_path + kRootTabletNodePath;
     CHECK(m_ins_sdk->Watch(meta_table, &InsOnMetaChange, this, &err))
           << "watch meta table fail";
+}
+
+static void InsOnTableChange(const galaxy::ins::sdk::WatchParam& param,
+                           galaxy::ins::sdk::SDKError error) {
+    InsTabletNodeZkAdapter* ins_adp = static_cast<InsTabletNodeZkAdapter*>(param.context);
+    ins_adp->OnTableChange(param.key, param.deleted);
+}
+
+void InsTabletNodeZkAdapter::OnTableChange(const std::string& path, bool deleted) {
+    LOG(INFO) << "[acl] table schema is changed:" << path;
+    galaxy::ins::sdk::SDKError err;
+    if (!m_ins_sdk->Watch(path, &InsOnTableChange, this, &err)) {
+        LOG(ERROR) << "[acl] watch failed:" << path;
+    }
+}
+
+bool InsTabletNodeZkAdapter::WatchTableNode(const std::string& table_name,
+                                            bool* is_exist, int* zk_errno) {
+    galaxy::ins::sdk::SDKError err;
+    std::string path = FLAGS_tera_ins_root_path + kTablePath + "/" + table_name;
+    return m_ins_sdk->Watch(path, &InsOnTableChange, this, &err);
 }
 
 void InsTabletNodeZkAdapter::OnMetaChange(std::string meta_addr, bool deleted) {
@@ -392,7 +440,7 @@ void InsTabletNodeZkAdapter::OnMetaChange(std::string meta_addr, bool deleted) {
           << "watch meta table fail";
     if (!cur_meta.empty()) {
         MutexLock locker(&m_mutex);
-        m_tabletnode_impl->SetRootTabletAddr(cur_meta);        
+        m_tabletnode_impl->SetRootTabletAddr(cur_meta);
     }
 }
 
