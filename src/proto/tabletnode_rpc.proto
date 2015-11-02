@@ -76,6 +76,7 @@ message LoadTabletRequest {
 message LoadTabletResponse {
     required StatusCode status = 1;
     required uint64 sequence_id = 2;
+    repeated Rollback rollbacks = 3;
 }
 
 message UnloadTabletRequest {

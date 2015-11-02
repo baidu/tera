@@ -319,6 +319,12 @@ private:
                              WriteTabletRequest* request,
                              WriteTabletResponse* response,
                              bool failed, int error_code);
+    void LoadRollbackCallback(TabletPtr tablet, int32_t retry_times,
+                              LoadTabletResponse* rpc_response,
+                              WriteTabletRequest* request,
+                              WriteTabletResponse* response,
+                              bool failed, int error_code);
+    void RestoreRollback();
     void ScheduleQueryTabletNode();
     void QueryTabletNode();
     void QueryTabletNodeAsync(std::string addr, int32_t timeout,

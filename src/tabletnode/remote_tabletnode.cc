@@ -320,7 +320,7 @@ void RemoteTabletNode::DoRollback(google::protobuf::RpcController* controller,
                                   google::protobuf::Closure* done) {
     uint64_t id = request->sequence_id();
     LOG(INFO) << "accept RPC (Rollback) id: " << id;
-    m_tabletnode_impl->Rollback(request, response, done);
+    m_tabletnode_impl->GetRollback(request, response, done);
     LOG(INFO) << "finish RPC (Rollback) id: " << id;
 }
 

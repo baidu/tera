@@ -14,6 +14,7 @@
 #include "proto/master_rpc.pb.h"
 #include "proto/tabletnode.pb.h"
 #include "proto/tabletnode_rpc.pb.h"
+#include "proto/table_meta.pb.h"
 #include "tabletnode/rpc_compactor.h"
 #include "tabletnode/tabletnode_sysinfo.h"
 #include "utils/rpc_timer_list.h"
@@ -82,7 +83,7 @@ public:
                          ReleaseSnapshotResponse* response,
                          google::protobuf::Closure* done);
 
-    void Rollback(const SnapshotRollbackRequest* request, SnapshotRollbackResponse* response,
+    void GetRollback(const SnapshotRollbackRequest* request, SnapshotRollbackResponse* response,
                   google::protobuf::Closure* done);
 
     void Query(const QueryRequest* request, QueryResponse* response,

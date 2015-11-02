@@ -1730,7 +1730,7 @@ void TabletIO::ListSnapshot(std::vector<uint64_t>* snapshot_id) {
     }
 }
 
-uint64_t TabletIO::Rollback(uint64_t snapshot_id, StatusCode* status) {
+uint64_t TabletIO::GetRollback(uint64_t snapshot_id, StatusCode* status) {
     uint64_t sequence;
     {
         MutexLock lock(&m_mutex);
