@@ -19,6 +19,11 @@ def print_debug_msg(sid=0, msg=""):
     """
     print "@%d======================%s" % (sid, msg)
 
+def execute_and_check_returncode(cmd, code):
+    print(cmd)
+    ret = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, shell=True)
+    ret.communicate()
+    nose.tools.assert_equal(ret.returncode, code)
 
 def exe_and_check_res(cmd):
     """
@@ -38,7 +43,7 @@ def clear_env():
     print_debug_msg(4, "delete table_test001 and table_test002, clear env")
 
     cmd = "./teracli disable table_test001"
-    exe_and_check_res(cmd)   
+    exe_and_check_res(cmd)
 
     cmd = "./teracli drop table_test001"
     exe_and_check_res(cmd)
@@ -254,14 +259,14 @@ def parse_showinfo():
         line = line.strip("\n")
         line_list = line.split(" ")
         list_ret = [line_list[i] for i in range(len(line_list)) if line_list[i] != ""]
-        
+
         retinfo[list_ret[1]] = {}
         retinfo[list_ret[1]]["status"] = list_ret[2]
         retinfo[list_ret[1]]["size"] = list_ret[3]
         retinfo[list_ret[1]]["lg_size"] = [list_ret[j] for j in range(4, len(list_ret) - 2)]
         retinfo[list_ret[1]]["tablet"] = list_ret[len(list_ret) - 2]
         retinfo[list_ret[1]]["busy"] = list_ret[len(list_ret) - 1]
-    
+
     print json.dumps(retinfo)
     return retinfo
 
@@ -346,3 +351,11 @@ def cleanup_files(file_list):
     for file_path in file_list:
         os.remove(file_path)
 
+def check_show_user_result(cmd, should_contain, substr):
+    print(cmd)
+    ret = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, shell=True)
+    stdoutdata = ''.join(ret.stdout.readlines())
+    if should_contain:
+        nose.tools.assert_true(substr in stdoutdata)
+    else:
+        nose.tools.assert_true(substr not in stdoutdata)
