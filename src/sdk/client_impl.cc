@@ -587,9 +587,11 @@ bool ClientImpl::ShowTablesInfo(TableMetaList* table_list,
                 tablet_list->add_meta()->CopyFrom(response.tablet_meta_list().meta(i));
                 tablet_list->add_counter()->CopyFrom(response.tablet_meta_list().counter(i));
                 if (i == response.tablet_meta_list().meta_size() - 1 ) {
+                    std::string prev_table_name = start_table_name;
                     start_table_name = response.tablet_meta_list().meta(i).table_name();
                     std::string last_key = response.tablet_meta_list().meta(i).key_range().key_start();
-                    if (last_key <= start_tablet_key) {
+                    if (prev_table_name > start_table_name
+                        || (prev_table_name == start_table_name && last_key <= start_tablet_key)) {
                         LOG(WARNING) << "the master has older version";
                         has_more = false;
                         break;
@@ -806,7 +808,7 @@ bool ClientImpl::DelSnapshot(const string& name, uint64_t snapshot, ErrorCode* e
     return false;
 }
 
-bool ClientImpl::Rollback(const string& name, uint64_t snapshot, 
+bool ClientImpl::Rollback(const string& name, uint64_t snapshot,
                           const std::string& rollback_name, ErrorCode* err) {
     master::MasterClient master_client(_cluster->MasterAddr());
 

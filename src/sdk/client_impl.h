@@ -54,7 +54,7 @@ public:
     virtual bool DeleteUser(const std::string& user, ErrorCode* err);
     virtual bool ChangePwd(const std::string& user,
                            const std::string& password, ErrorCode* err);
-    virtual bool ShowUser(const std::string& user, std::vector<std::string>& user_groups, 
+    virtual bool ShowUser(const std::string& user, std::vector<std::string>& user_groups,
                           ErrorCode* err);
     virtual bool AddUserToGroup(const std::string& user,
                                 const std::string& group, ErrorCode* err);

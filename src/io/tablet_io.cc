@@ -1456,7 +1456,7 @@ void TabletIO::SetupOptionsForLG() {
             m_mem_store_activated = true;
         } else if (store == FlashStore) {
             if (!FLAGS_tera_tabletnode_cache_enabled) {
-                m_ldb_options.env = lg_info->env = LeveldbFlashEnv(m_ldb_options.info_log);
+                m_ldb_options.env = lg_info->env = LeveldbFlashEnv();
             } else {
                 LOG(INFO) << "activate block-level Cache store";
                 m_ldb_options.env = lg_info->env = leveldb::EnvThreeLevelCache();

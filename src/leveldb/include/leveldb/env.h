@@ -272,12 +272,16 @@ class Logger {
   // Write an entry to the log file with the specified format.
   virtual void Logv(const char* format, va_list ap) = 0;
 
+  // Default Logger can be used anywhere
+  static void SetDefaultLogger(Logger* logger);
+  static Logger* DefaultLogger();
+
  private:
   // No copying allowed
   Logger(const Logger&);
   void operator=(const Logger&);
+  static Logger* default_logger_;
 };
-
 
 // Identifies a locked file.
 class FileLock {
@@ -294,6 +298,11 @@ class FileLock {
 extern void Log(Logger* info_log, const char* format, ...)
 #   if defined(__GNUC__) || defined(__clang__)
     __attribute__((__format__ (__printf__, 2, 3)))
+#   endif
+    ;
+extern void Log(const char* format, ...)
+#   if defined(__GNUC__) || defined(__clang__)
+    __attribute__((__format__ (__printf__, 1, 2)))
 #   endif
     ;
 
@@ -370,6 +379,7 @@ class EnvWrapper : public Env {
     return target_->NewLogger(fname, result);
   }
   virtual void SetLogger(Logger* logger) {
+    Logger::SetDefaultLogger(logger);
     return target_->SetLogger(logger);
   }
   uint64_t NowMicros() {

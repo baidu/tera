@@ -173,6 +173,9 @@ void UsageMore(const std::string& prg_name) {
        meta2    [check|bak|show|repair]                                     \n\
                 operate meta table.                                         \n\
                                                                             \n\
+       findmaster                                                           \n\
+                find the address of master                                  \n\
+                                                                            \n\
        findts   <tablename> <rowkey>                                        \n\
                 find the specify tabletnode serving 'rowkey'.               \n\
                                                                             \n\
@@ -1964,6 +1967,16 @@ int32_t CompactOp(int32_t argc, char** argv) {
     return 0;
 }
 
+int32_t FindMasterOp(Client* client, int32_t argc, char** argv, ErrorCode* err) {
+    if (argc != 2) {
+        UsageMore(argv[0]);
+        return -1;
+    }
+    tera::sdk::ClusterFinder finder(FLAGS_tera_zk_root_path, FLAGS_tera_zk_addr_list);
+    std::cout << "master addr:< " << finder.MasterAddr() << " >\n";
+    return 0;
+}
+
 int32_t FindTsOp(Client* client, int32_t argc, char** argv, ErrorCode* err) {
     if (argc != 4) {
         UsageMore(argv[0]);
@@ -2425,6 +2438,9 @@ int main(int argc, char* argv[]) {
         ret = MetaOp(client, argc, argv, &error_code);
     } else if (cmd == "compact") {
         ret = CompactOp(argc, argv);
+    } else if (cmd == "findmaster") {
+        // get master addr(hostname:port)
+        ret = FindMasterOp(client, argc, argv, &error_code);
     } else if (cmd == "findts") {
         // get tabletnode addr from a key
         ret = FindTsOp(client, argc, argv, &error_code);
