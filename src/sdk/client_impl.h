@@ -140,6 +140,9 @@ private:
     bool CheckReturnValue(StatusCode status, std::string& reason, ErrorCode* err);
     bool GetInternalTableName(const std::string& table_name, ErrorCode* err,
                               std::string* internal_table_name);
+
+    /// show all tables info: `table_name' should be an empty string
+    /// show a single table info: `table_name' should be the table name
     bool DoShowTablesInfo(TableMetaList* table_list,
                           TabletMetaList* tablet_list,
                           const string& table_name,
