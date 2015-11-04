@@ -17,8 +17,8 @@ sh kill_tera.sh
 sh launch_tera.sh
 sleep 2
 
-export PYTHONPATH=$PYTHONPATH:../../thirdparty/include/; export PATH=$PATH:../../thirdparty/bin/ 
-nosetests -s -v testcase/test_rollback.py> ../log/test.log
+export PYTHONPATH=$PYTHONPATH:../../thirdparty/include/; export PATH=$PATH:../../thirdparty/bin/
+nosetests -s -v > ../log/test.log
 
 sh kill_tera.sh
 

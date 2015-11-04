@@ -2544,8 +2544,10 @@ void MasterImpl::LoadRollbackCallback(TabletPtr tablet, int32_t retry_times,
             WriteClosure* done =
                 NewClosure(this, &MasterImpl::LoadRollbackCallback, tablet,
                            retry_times - 1, rpc_response);
-            SuspendMetaOperation(boost::bind(&Tablet::ToMetaTableKeyValue, tablet, _1, _2), false, done);
+            SuspendMetaOperation(boost::bind(&Tablet::ToMetaTableKeyValue, tablet, _1, _2),
+                                 false, done);
         }
+        delete rpc_response;
         return;
     }
     for (int32_t i = 0; i < rpc_response->rollbacks_size(); ++i) {
@@ -3290,7 +3292,6 @@ void MasterImpl::AddRollbackCallback(TablePtr table,
                 << StatusCodeToString(status) << ", " << tablets[0] << "...";
         }
         if (retry_times <= 0) {
-            ///////// set rollback to default /////////////////
             ////////// TODO ///////////
             rpc_response->set_status(kMetaTabletError);
             if (rpc_done) {

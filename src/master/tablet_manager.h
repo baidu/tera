@@ -106,9 +106,9 @@ public:
     int32_t AddSnapshot(uint64_t snapshot);
     void ListSnapshot(std::vector<uint64_t>* snapshot);
     void DelSnapshot(int32_t id);
-    int32_t AddRollback(const std::string& name, const uint64_t snapshot_id, const uint64_t rollback_point);
+    int32_t AddRollback(const std::string& name, uint64_t snapshot_id, uint64_t rollback_point);
     int32_t DelRollback(const std::string& name);
-    int32_t UpdateRollback(const std::string& name, const uint64_t snapshot_id, const uint64_t rollback_point);
+    int32_t UpdateRollback(const std::string& name, uint64_t snapshot_id, uint64_t rollback_point);
     void ListRollback(std::vector<Rollback>* rollbacks);
 
     // is belong to a table?

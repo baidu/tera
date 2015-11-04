@@ -348,7 +348,7 @@ void Tablet::DelSnapshot(int32_t id) {
     snapshot_list->RemoveLast();
 }
 
-int32_t Tablet::AddRollback(const std::string& name, const uint64_t snapshot_id, const uint64_t rollback_point) {
+int32_t Tablet::AddRollback(const std::string& name, uint64_t snapshot_id, uint64_t rollback_point) {
     MutexLock lock(&m_mutex);
     Rollback rollback;
     rollback.set_name(name);
@@ -383,7 +383,7 @@ void Tablet::ListRollback(std::vector<Rollback>* rollbacks) {
     }
 }
 
-int32_t Tablet::UpdateRollback(const std::string& name, const uint64_t snapshot_id, const uint64_t rollback_point) {
+int32_t Tablet::UpdateRollback(const std::string& name, uint64_t snapshot_id, uint64_t rollback_point) {
      MutexLock lock(&m_mutex);
      bool has_rollback_name = false;
      for (int32_t i = 0; i < m_meta.rollbacks_size(); ++i) {
