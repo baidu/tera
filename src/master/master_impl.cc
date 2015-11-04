@@ -3265,7 +3265,7 @@ void MasterImpl::QueryTabletNodeCallback(std::string addr, QueryRequest* request
 
             TabletPtr tablet;
             if (meta.status() != kTableReady) {
-                VLOG(30) << "non-ready tablet: " << meta.table_name()
+                VLOG(3) << "non-ready tablet: " << meta.table_name()
                     << ", path: " << meta.path()
                     << ", range: [" << DebugString(key_start)
                     << ", " << DebugString(key_end)
@@ -3279,14 +3279,15 @@ void MasterImpl::QueryTabletNodeCallback(std::string addr, QueryRequest* request
                 tablet->SetCounter(counter);
                 tablet->SetCompactStatus(meta.compact_status());
                 ClearUnusedSnapshots(tablet, meta);
-                VLOG(30) << "[query] " << tablet;
+                VLOG(3) << "[query] " << tablet;
             } else {
-                VLOG(30) << "fail to match tablet: " << meta.table_name()
+                VLOG(3) << "fail to match tablet: " << meta.table_name()
                     << ", path: " << meta.path()
                     << ", range: [" << DebugString(key_start)
                     << ", " << DebugString(key_end)
                     << "], size: " << meta.size()
-                    << ", addr: " << meta.server_addr();
+                    << ", addr: " << meta.server_addr()
+                    << ", tablet: " << tablet;
             }
         }
 
