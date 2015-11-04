@@ -1697,10 +1697,10 @@ void DBImpl::GetApproximateSizes(uint64_t* size, std::vector<uint64_t>* lgsize) 
   // add mem&imm size
   if (size) {
     if (mem_) {
-      size += mem_->ApproximateMemoryUsage();
+      *size += mem_->ApproximateMemoryUsage();
     }
     if (imm_) {
-      size += imm_->ApproximateMemoryUsage();
+      *size += imm_->ApproximateMemoryUsage();
     }
   }
 }
