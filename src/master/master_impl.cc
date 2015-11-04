@@ -92,6 +92,7 @@ DECLARE_bool(tera_ins_enabled);
 DECLARE_int64(tera_sdk_perf_counter_log_interval);
 
 DECLARE_bool(tera_acl_enabled);
+DECLARE_bool(tera_only_root_create_table);
 DECLARE_string(tera_master_gc_strategy);
 
 namespace tera {
@@ -155,6 +156,7 @@ bool MasterImpl::Init() {
         m_zk_adapter.reset(new FakeMasterZkAdapter(this, m_local_addr));
     }
 
+    LOG(INFO) << "[acl] " << (FLAGS_tera_acl_enabled ? "enabled" : "disabled");
     SetMasterStatus(kIsSecondary);
     m_thread_pool->AddTask(boost::bind(&MasterImpl::InitAsync, this));
     return true;
@@ -462,16 +464,37 @@ bool MasterImpl::IsRootUser(const std::string& token) {
     return m_user_manager->UserNameToToken("root") == token;
 }
 
-template <typename Request, typename Response, typename Callback>
-bool MasterImpl::HasTablePermission(const Request* request, Response* response,
-                                    Callback* done, TablePtr table, const char* operate) {
-    // check permission
+// user is admin or user is in admin_group
+bool MasterImpl::CheckUserPermissionOnTable(const std::string& token, TablePtr table) {
+   std::string group_name = table->GetSchema().admin_group();
+   std::string user_name = m_user_manager->TokenToUserName(token);
+   return (m_user_manager->IsUserInGroup(user_name, group_name)
+           || (table->GetSchema().admin() == m_user_manager->TokenToUserName(token)));
+}
+
+template <typename Request>
+bool MasterImpl::HasPermissionOnTable(const Request* request, TablePtr table) {
     if (!FLAGS_tera_acl_enabled
-        || IsRootUser(request->user_token())) {
-        LOG(INFO) << "[acl] is acl enabled: " << FLAGS_tera_acl_enabled;
+        || IsRootUser(request->user_token())
+        || ((table->GetSchema().admin_group() == "") && (table->GetSchema().admin() == ""))
+        || (request->has_user_token()
+            && CheckUserPermissionOnTable(request->user_token(), table))) {
+        return true;
+
+    }
+    return false;
+}
+
+template <typename Request, typename Response, typename Callback>
+bool MasterImpl::HasPermissionOrReturn(const Request* request, Response* response,
+                                       Callback* done, TablePtr table, const char* operate) {
+    // check permission
+    if (HasPermissionOnTable(request, table)) {
         return true;
     } else {
-        LOG(INFO) << "[acl] fail to " << operate;
+        std::string token = request->has_user_token() ? request->user_token() : "";
+        LOG(INFO) << "[acl] " << m_user_manager->TokenToUserName(token)
+                  << ":" << token << " fail to " << operate;
         response->set_sequence_id(request->sequence_id());
         response->set_status(kNotPermission);
         done->Run();
@@ -661,11 +684,13 @@ void MasterImpl::CreateTable(const CreateTableRequest* request,
             done->Run();
             return;
         }
-        if (FLAGS_tera_acl_enabled && !IsRootUser(request->user_token())) {
-            response->set_sequence_id(request->sequence_id());
-            response->set_status(kNotPermission);
-            done->Run();
-            return;
+        if (FLAGS_tera_acl_enabled
+            && !IsRootUser(request->user_token())
+            && FLAGS_tera_only_root_create_table) {
+                response->set_sequence_id(request->sequence_id());
+                response->set_status(kNotPermission);
+                done->Run();
+                return;
         }
         if (!request->schema().alias().empty()) {
             bool alias_exist = false;
@@ -786,7 +811,7 @@ void MasterImpl::DeleteTable(const DeleteTableRequest* request,
         done->Run();
         return;
     }
-    if (!HasTablePermission(request, response, done, table, "delete table")) {
+    if (!HasPermissionOrReturn(request, response, done, table, "delete table")) {
         return;
     }
 
@@ -842,7 +867,7 @@ void MasterImpl::DisableTable(const DisableTableRequest* request,
         done->Run();
         return;
     }
-    if (!HasTablePermission(request, response, done, table, "disable table")) {
+    if (!HasPermissionOrReturn(request, response, done, table, "disable table")) {
         return;
     }
 
@@ -901,7 +926,7 @@ void MasterImpl::EnableTable(const EnableTableRequest* request,
         done->Run();
         return;
     }
-    if (!HasTablePermission(request, response, done, table, "enable table")) {
+    if (!HasPermissionOrReturn(request, response, done, table, "enable table")) {
         return;
     }
 
@@ -952,7 +977,7 @@ void MasterImpl::UpdateTable(const UpdateTableRequest* request,
         done->Run();
         return;
     }
-    if (!HasTablePermission(request, response, done, table, "update table")) {
+    if (!HasPermissionOrReturn(request, response, done, table, "update table")) {
         return;
     }
 
@@ -1074,11 +1099,19 @@ void MasterImpl::ShowTables(const ShowTablesRequest* request,
         TableMetaList* table_meta_list = response->mutable_table_meta_list();
         for (uint32_t i = 0; i < table_list.size(); ++i) {
             TablePtr table = table_list[i];
+            // if a user has NO permission on a table,
+            // he/she should not notice this table
+            if (!HasPermissionOnTable(request, table)) {
+                continue;
+            }
             table->ToMeta(table_meta_list->add_meta());
         }
         TabletMetaList* tablet_meta_list = response->mutable_tablet_meta_list();
         for (uint32_t i = 0; i < tablet_list.size(); ++i) {
             TabletPtr tablet = tablet_list[i];
+            if (!HasPermissionOnTable(request, tablet->GetTable())) {
+                continue;
+            }
             TabletMeta meta;
             tablet->ToMeta(&meta);
             tablet_meta_list->add_meta()->CopyFrom(meta);
@@ -1128,6 +1161,9 @@ void MasterImpl::ShowTabletNodes(const ShowTabletNodesRequest* request,
         std::vector<TabletPtr> tablet_list;
         m_tablet_manager->FindTablet(request->addr(), &tablet_list);
         for (size_t i = 0; i < tablet_list.size(); ++i) {
+            if (!HasPermissionOnTable(request, tablet_list[i]->GetTable())) {
+                continue;
+            }
             TabletMeta* meta = response->mutable_tabletmeta_list()->add_meta();
             TabletCounter* counter = response->mutable_tabletmeta_list()->add_counter();
             tablet_list[i]->ToMeta(meta);
@@ -3460,12 +3496,13 @@ void MasterImpl::QueryTabletNodeCallback(std::string addr, QueryRequest* request
                 ClearUnusedSnapshots(tablet, meta);
                 VLOG(30) << "[query] " << tablet;
             } else {
-                VLOG(30) << "fail to match tablet: " << meta.table_name()
+                LOG(WARNING) << "fail to match tablet: " << meta.table_name()
                     << ", path: " << meta.path()
                     << ", range: [" << DebugString(key_start)
                     << ", " << DebugString(key_end)
                     << "], size: " << meta.size()
-                    << ", addr: " << meta.server_addr();
+                    << ", addr: " << meta.server_addr()
+                    << ", tablet: " << tablet;
             }
         }
 

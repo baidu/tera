@@ -98,7 +98,12 @@ std::string TabletIO::GetTableName() const {
 
 std::string TabletIO::GetTablePath() const {
     if (!m_tablet_path.empty()) {
-        return m_tablet_path.substr(FLAGS_tera_tabletnode_path_prefix.size());
+        std::string path =
+            m_tablet_path.substr(FLAGS_tera_tabletnode_path_prefix.size());
+        if (path.at(0) == '/') {
+            path = path.substr(1);
+        }
+        return path;
     } else {
         return m_tablet_path;
     }
@@ -1482,7 +1487,6 @@ void TabletIO::SetupOptionsForLG() {
                 << ", buffer_size:" << lg_info->memtable_ldb_write_buffer_size
                 << ", block_size:"  << lg_info->memtable_ldb_block_size;
         }
-        LOG(INFO) << ", sst_size: " << lg_schema.sst_size() << " Bytes.";
         lg_info->sst_size = lg_schema.sst_size();
         m_ldb_options.sst_size = lg_schema.sst_size();
         exist_lg_list->insert(lg_i);

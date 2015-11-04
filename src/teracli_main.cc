@@ -45,7 +45,7 @@ DEFINE_bool(tera_client_scan_async_enabled, false, "enable the streaming scan mo
 
 DEFINE_int64(scan_pack_interval, 5000, "scan timeout");
 DEFINE_int64(snapshot, 0, "read | scan snapshot");
-DEFINE_string(rollback_switch, "open", "Pandora's box, do not open");
+DEFINE_string(rollback_switch, "close", "Pandora's box, do not open");
 DEFINE_string(rollback_name, "", "rollback operation's name");
 
 volatile int32_t g_start_time = 0;
@@ -2110,12 +2110,6 @@ int32_t Meta2Op(Client *client, int32_t argc, char** argv) {
         const tera::TableMeta& meta = table_list.meta(i);
         if (op == "show") {
             std::cout << "table: " << meta.table_name() << std::endl;
-            std::cout << " rollbacks: ";
-            int32_t rollback_num = meta.rollback_names_size();
-            for (int32_t ri = 0; ri < rollback_num; ++ri) {
-                std::cout << meta.rollback_names(ri) << " ";
-            }
-            std::cout << std::endl;
             int32_t lg_size = meta.schema().locality_groups_size();
             for (int32_t lg_id = 0; lg_id < lg_size; lg_id++) {
                 const tera::LocalityGroupSchema& lg =
@@ -2153,12 +2147,6 @@ int32_t Meta2Op(Client *client, int32_t argc, char** argv) {
                 << meta.size() << ", "
                 << StatusCodeToString(meta.status()) << ", "
                 << StatusCodeToString(meta.compact_status()) << std::endl;
-            std::cout << " rollback: ";
-            int32_t rollback_num = meta.rollbacks_size();
-            for (int32_t ri = 0; ri < rollback_num; ++ri) {
-                std::cout << meta.rollbacks(ri).name() << "-" << meta.rollbacks(ri).snapshot_id() << "-" << meta.rollbacks(ri).rollback_point() << " ";
-            }
-            std::cout << std::endl;
         }
         if (op == "bak") {
             WriteTablet(meta, bak);
@@ -2271,7 +2259,7 @@ int32_t Meta2Op(Client *client, int32_t argc, char** argv) {
     return 0;
 }
 
-static int32_t CreateUser(Client* client, const std::string& user, 
+static int32_t CreateUser(Client* client, const std::string& user,
                           const std::string& password, ErrorCode* err) {
     if (!client->CreateUser(user, password, err)) {
         LOG(ERROR) << "fail to create user: " << user
@@ -2290,7 +2278,7 @@ static int32_t DeleteUser(Client* client, const std::string& user, ErrorCode* er
     return 0;
 }
 
-static int32_t ChangePwd(Client* client, const std::string& user, 
+static int32_t ChangePwd(Client* client, const std::string& user,
                          const std::string& password, ErrorCode* err) {
     if (!client->ChangePwd(user, password, err)) {
         LOG(ERROR) << "fail to update user: " << user
@@ -2310,7 +2298,7 @@ static int32_t ShowUser(Client* client, const std::string& user, ErrorCode* err)
     if (user_infos.size() < 1) {
         return -1;
     }
-    std::cout << "user:" << user_infos[0] 
+    std::cout << "user:" << user_infos[0]
         << "\ngroups (" << user_infos.size() - 1 << "):";
     for (size_t i = 1; i < user_infos.size(); ++i) {
         std::cout << user_infos[i] << " ";
@@ -2319,7 +2307,7 @@ static int32_t ShowUser(Client* client, const std::string& user, ErrorCode* err)
     return 0;
 }
 
-static int32_t AddUserToGroup(Client* client, const std::string& user, 
+static int32_t AddUserToGroup(Client* client, const std::string& user,
                                 const std::string& group, ErrorCode* err) {
     if (!client->AddUserToGroup(user, group, err)) {
         LOG(ERROR) << "fail to add user: " << user
@@ -2329,7 +2317,7 @@ static int32_t AddUserToGroup(Client* client, const std::string& user,
     return 0;
 }
 
-static int32_t DeleteUserFromGroup(Client* client, const std::string& user, 
+static int32_t DeleteUserFromGroup(Client* client, const std::string& user,
                                      const std::string& group, ErrorCode* err) {
     if (!client->DeleteUserFromGroup(user, group, err)) {
         LOG(ERROR) << "fail to delete user: " << user

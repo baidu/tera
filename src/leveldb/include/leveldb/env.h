@@ -379,7 +379,6 @@ class EnvWrapper : public Env {
     return target_->NewLogger(fname, result);
   }
   virtual void SetLogger(Logger* logger) {
-    Logger::SetDefaultLogger(logger);
     return target_->SetLogger(logger);
   }
   uint64_t NowMicros() {
