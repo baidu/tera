@@ -122,7 +122,7 @@ typedef enum _jobjectType {
      JNIInvalidRefType    = 0,
      JNILocalRefType      = 1,
      JNIGlobalRefType     = 2,
-     JNIWeakGlobalRefType = 3 
+     JNIWeakGlobalRefType = 3
 } jobjectRefType;
 
 
