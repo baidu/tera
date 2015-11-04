@@ -964,12 +964,10 @@ Status VersionSet::LogAndApply(VersionEdit* edit, port::Mutex* mu) {
   }
 
   edit->SetNextFile(next_file_number_);
+
   if (edit->HasLastSequence()) {
     Log(options_->info_log, "[%s] LogLastSequence %lu",
         dbname_.c_str(), edit->GetLastSequence());
-  }
-
-  if (edit->HasLastSequence()) {
     assert(edit->GetLastSequence() >= last_sequence_);
   } else {
     edit->SetLastSequence(last_sequence_);
@@ -999,26 +997,27 @@ Status VersionSet::LogAndApply(VersionEdit* edit, port::Mutex* mu) {
     force_switch_manifest_ = false;
     last_switch_manifest_ = env_->NowMicros();
   }
-  // Initialize new descriptor log file if necessary by creating
-  // a temporary file that contains a snapshot of the current version.
+
   std::string new_manifest_file;
   Status s;
-  if (descriptor_log_ == NULL) {
-    // No reason to unlock *mu here since we only hit this path in the
-    // first call to LogAndApply (when opening the database).
-    assert(descriptor_file_ == NULL);
-    new_manifest_file = DescriptorFileName(dbname_, manifest_file_number_);
-    edit->SetNextFile(next_file_number_);
-    s = env_->NewWritableFile(new_manifest_file, &descriptor_file_);
-    if (s.ok()) {
-      descriptor_log_ = new log::Writer(descriptor_file_);
-      s = WriteSnapshot(descriptor_log_);
-    }
-  }
-
   // Unlock during expensive MANIFEST log write
   {
     mu->Unlock();
+    if (descriptor_log_ == NULL) {
+      // Initialize new descriptor log file if necessary by creating
+      // a temporary file that contains a snapshot of the current version.
+      assert(descriptor_file_ == NULL);
+      new_manifest_file = DescriptorFileName(dbname_, manifest_file_number_);
+      edit->SetNextFile(manifest_file_number_ + 1);
+      s = env_->NewWritableFile(new_manifest_file, &descriptor_file_);
+      if (s.ok()) {
+        descriptor_log_ = new log::Writer(descriptor_file_);
+        s = WriteSnapshot(descriptor_log_);
+      } else {
+        Log(options_->info_log, "[%s][dfs error] open MANIFEST[%s] error, status[%s].\n",
+            dbname_.c_str(), new_manifest_file.c_str(), s.ToString().c_str());
+      }
+    }
 
     // Write new record to MANIFEST log
     if (s.ok()) {
@@ -1029,7 +1028,7 @@ Status VersionSet::LogAndApply(VersionEdit* edit, port::Mutex* mu) {
         s = descriptor_file_->Sync();
       }
       if (!s.ok()) {
-        Log(options_->info_log, "[%s] MANIFEST write: %s\n",
+        Log(options_->info_log, "[%s][dfs error] MANIFEST sync error: %s\n",
             dbname_.c_str(), s.ToString().c_str());
         if (ManifestContains(record)) {
           Log(options_->info_log,
@@ -1046,8 +1045,11 @@ Status VersionSet::LogAndApply(VersionEdit* edit, port::Mutex* mu) {
     if (s.ok() && !new_manifest_file.empty()) {
       s = SetCurrentFile(env_, dbname_, manifest_file_number_);
       if (s.ok()) {
-          Log(options_->info_log, "[%s] set CURRENT to %llu\n",
-              dbname_.c_str(), static_cast<unsigned long long>(manifest_file_number_));
+        Log(options_->info_log, "[%s] set CURRENT to %llu\n",
+            dbname_.c_str(), static_cast<unsigned long long>(manifest_file_number_));
+      } else {
+        Log(options_->info_log, "[%s][dfs error] set CURRENT error: %s\n",
+            dbname_.c_str(), s.ToString().c_str());
       }
       // No need to double-check MANIFEST in case of error since it
       // will be discarded below.
@@ -1072,7 +1074,7 @@ Status VersionSet::LogAndApply(VersionEdit* edit, port::Mutex* mu) {
       env_->DeleteFile(new_manifest_file);
     }
     force_switch_manifest_ = true;
-    Log(options_->info_log, "[%s] set force_switch_manifest", dbname_.c_str());
+    Log(options_->info_log, "[%s][dfs error] set force_switch_manifest", dbname_.c_str());
   }
 
   return s;

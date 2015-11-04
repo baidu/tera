@@ -41,9 +41,19 @@ void TabletNodeZkAdapter::Init() {
     }
     LOG(INFO) << "init zk success";
 
+    // enter running state
+    int64_t session_id_int = 0;
+    if (!GetSessionId(&session_id_int, &zk_errno)) {
+        LOG(ERROR) << "get session id fail : " << zk::ZkErrnoToString(zk_errno);
+        return;
+    }
+    char session_id_str[32];
+    sprintf(session_id_str, "%016lx", session_id_int);
+    m_tabletnode_impl->SetSessionId(session_id_str);
+    m_tabletnode_impl->SetTabletNodeStatus(TabletNodeImpl::kIsRunning);
+
     // create my node
-    std::string session_id;
-    while (!Register(&session_id, &zk_errno)) {
+    while (!Register(m_tabletnode_impl->GetSessionId(), &zk_errno)) {
         LOG(ERROR) << "fail to create serve-node : " << zk::ZkErrnoToString(zk_errno);
         ThisThread::Sleep(FLAGS_tera_zk_retry_period);
     }
@@ -91,28 +101,15 @@ void TabletNodeZkAdapter::Init() {
     if (!root_tablet_addr.empty()) {
         m_tabletnode_impl->SetRootTabletAddr(root_tablet_addr);
     }
-
-    // enter running state
-    m_tabletnode_impl->SetSessionId(session_id);
-    m_tabletnode_impl->SetTabletNodeStatus(TabletNodeImpl::kIsRunning);
 }
 
 bool TabletNodeZkAdapter::GetRootTableAddr(std::string* root_table_addr) {
     return true;
 }
 
-bool TabletNodeZkAdapter::Register(std::string* session_id, int* zk_errno) {
-    // get session id
-    int64_t session_id_int = 0;
-    if (!GetSessionId(&session_id_int, zk_errno)) {
-        LOG(ERROR) << "get session id fail : " << zk::ZkErrnoToString(*zk_errno);
-        return false;
-    }
-    char session_id_str[32];
-    sprintf(session_id_str, "%016lx", session_id_int);
-
+bool TabletNodeZkAdapter::Register(const std::string& session_id, int* zk_errno) {
     // create serve node
-    std::string node_path = kTsListPath + "/" + session_id_str + "#";
+    std::string node_path = kTsListPath + "/" + session_id + "#";
     std::string node_value = m_server_addr;
     std::string ret_node_path;
     if (!CreateSequentialEphemeralNode(node_path, node_value, &ret_node_path,
@@ -120,10 +117,10 @@ bool TabletNodeZkAdapter::Register(std::string* session_id, int* zk_errno) {
         LOG(ERROR) << "create serve node fail";
         return false;
     }
-    LOG(INFO) << "create serve node success";
     m_serve_node_path = ret_node_path;
-    *session_id = zk::ZooKeeperUtil::GetNodeName(m_serve_node_path.c_str());
-    m_kick_node_path = kKickPath + "/" + *session_id;
+    m_kick_node_path = kKickPath + "/" + zk::ZooKeeperUtil::GetNodeName(m_serve_node_path.c_str());
+    LOG(INFO) << "create serve node success, node_path " << node_path << ", " << ret_node_path
+        << ", " << m_serve_node_path << ", " << m_kick_node_path;
     SetZkAdapterCode(zk::ZE_OK, zk_errno);
     return true;
 }
@@ -299,19 +296,19 @@ FakeTabletNodeZkAdapter::FakeTabletNodeZkAdapter(TabletNodeImpl* tabletnode_impl
 }
 
 void FakeTabletNodeZkAdapter::Init() {
-    std::string session_id;
-    if (!Register(&session_id)) {
+    // get session
+    m_tabletnode_impl->SetSessionId(FLAGS_tera_tabletnode_port);
+    m_tabletnode_impl->SetTabletNodeStatus(TabletNodeImpl::kIsRunning);
+
+    if (!Register(m_tabletnode_impl->GetSessionId())) {
         LOG(FATAL) << "fail to create fake serve-node.";
     }
-    LOG(INFO) << "create fake serve-node success: " << session_id;
-    m_tabletnode_impl->SetSessionId(session_id);
-    m_tabletnode_impl->SetTabletNodeStatus(TabletNodeImpl::kIsRunning);
+    LOG(INFO) << "create fake serve-node success: " << m_tabletnode_impl->GetSessionId();
 }
 
-bool FakeTabletNodeZkAdapter::Register(std::string* session_id, int* zk_code) {
+bool FakeTabletNodeZkAdapter::Register(const std::string& session_id, int* zk_code) {
     MutexLock locker(&m_mutex);
-    *session_id = FLAGS_tera_tabletnode_port + "#007";
-    std::string node_name = m_fake_path + kTsListPath + "/" + *session_id;
+    std::string node_name = m_fake_path + kTsListPath + "/" + session_id;
 
     if (!zk::FakeZkUtil::WriteNode(node_name, m_server_addr)) {
         LOG(FATAL) << "fake zk error: " << node_name
@@ -333,24 +330,24 @@ bool FakeTabletNodeZkAdapter::GetRootTableAddr(std::string* root_table_addr) {
 InsTabletNodeZkAdapter::InsTabletNodeZkAdapter(TabletNodeImpl* tabletnode_impl,
                                                const std::string& server_addr)
     : m_tabletnode_impl(tabletnode_impl), m_server_addr(server_addr) {
-    
+
 }
 
-static void InsOnKick(const galaxy::ins::sdk::WatchParam& param, 
+static void InsOnKick(const galaxy::ins::sdk::WatchParam& param,
                       galaxy::ins::sdk::SDKError error) {
     LOG(INFO) << "recv kick event" ;
     InsTabletNodeZkAdapter* ins_adp = static_cast<InsTabletNodeZkAdapter*>(param.context);
     ins_adp->OnKickMarkCreated();
 }
 
-static void InsOnLockChange(const galaxy::ins::sdk::WatchParam& param, 
+static void InsOnLockChange(const galaxy::ins::sdk::WatchParam& param,
                            galaxy::ins::sdk::SDKError error) {
     LOG(INFO) << "recv lock change event" ;
     InsTabletNodeZkAdapter* ins_adp = static_cast<InsTabletNodeZkAdapter*>(param.context);
     ins_adp->OnLockChange(param.value, param.deleted);
 }
 
-static void InsOnMetaChange(const galaxy::ins::sdk::WatchParam& param, 
+static void InsOnMetaChange(const galaxy::ins::sdk::WatchParam& param,
                             galaxy::ins::sdk::SDKError error) {
     LOG(INFO) << "recv meta change event" ;
     InsTabletNodeZkAdapter* ins_adp = static_cast<InsTabletNodeZkAdapter*>(param.context);
@@ -360,13 +357,20 @@ static void InsOnMetaChange(const galaxy::ins::sdk::WatchParam& param,
 void InsTabletNodeZkAdapter::Init() {
     std::string root_path = FLAGS_tera_ins_root_path;
     galaxy::ins::sdk::SDKError err;
+    // create session
     m_ins_sdk = new galaxy::ins::sdk::InsSDK(FLAGS_tera_ins_addr_list);
-    std::string lock_key = root_path + kTsListPath + "/" + m_server_addr;
-    CHECK(m_ins_sdk->Lock(lock_key, &err)) << "register fail";
+
+    // get session id
     std::string session_id = m_ins_sdk->GetSessionID();
-    LOG(INFO) << "create ts-node success: " << session_id;
     m_tabletnode_impl->SetSessionId(session_id);
     m_tabletnode_impl->SetTabletNodeStatus(TabletNodeImpl::kIsRunning);
+
+    // create node
+    std::string lock_key = root_path + kTsListPath + "/" + m_server_addr;
+    CHECK(m_ins_sdk->Lock(lock_key, &err)) << "register fail";
+    LOG(INFO) << "create ts-node success: " << session_id;
+
+    // create watch node
     std::string kick_key = root_path + kKickPath + "/" + session_id;
     CHECK(m_ins_sdk->Watch(kick_key, &InsOnKick, this, &err)) << "watch kick fail";
     CHECK(m_ins_sdk->Watch(lock_key, &InsOnLockChange, this, &err))
@@ -388,7 +392,7 @@ void InsTabletNodeZkAdapter::OnMetaChange(std::string meta_addr, bool deleted) {
           << "watch meta table fail";
     if (!cur_meta.empty()) {
         MutexLock locker(&m_mutex);
-        m_tabletnode_impl->SetRootTabletAddr(cur_meta);        
+        m_tabletnode_impl->SetRootTabletAddr(cur_meta);
     }
 }
 

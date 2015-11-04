@@ -42,27 +42,27 @@ class AsyncWriter {
   // to do the actual work
   void AddRecord(const Slice& slice);
   void Sync(bool sync_or_flush = true);
-  
+
   // wait_sec can be:
   // positive (wait for wait_sec seconds),
   // or 0 (do not wait),
   // or negative (wait until the function returns)
   Status WaitDone(int32_t wait_sec);
-  
-  // Makes the async calls stop waiting and 
+
+  // Makes the async calls stop waiting and
   // automaticly delete this object.
-  // 'is_blocked' indicates whether current writter 
-  // is blocked so the destructor knows whether it 
+  // 'is_blocked' indicates whether current writter
+  // is blocked so the destructor knows whether it
   // should decrease 'block_log_number'
   void Stop(bool is_blocked);
-  
+
   static void BlockLogNumInc();
   static int BlockLogNum() { return block_log_number; }
 
  private:
   static void* ThreadFunc(void* arg);
   void ThreadFuncCall();
-  
+
   bool async_mode_;
   Writer writer_;
   WritableFile* dest_;
@@ -75,7 +75,7 @@ class AsyncWriter {
   bool stop_;
   bool blocked_;    // whether the current writter blocked
   Status s_;
-  
+
   static int block_log_number;
   static port::Mutex log_mutex;
 

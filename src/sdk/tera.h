@@ -641,7 +641,7 @@ public:
     virtual bool DeleteUser(const std::string& user, ErrorCode* err) = 0;
     virtual bool ChangePwd(const std::string& user,
                            const std::string& password, ErrorCode* err) = 0;
-    virtual bool ShowUser(const std::string& user, std::vector<std::string>& user_groups, 
+    virtual bool ShowUser(const std::string& user, std::vector<std::string>& user_groups,
                           ErrorCode* err) = 0;
     virtual bool AddUserToGroup(const std::string& user,
                                 const std::string& group, ErrorCode* err) = 0;
@@ -672,8 +672,9 @@ public:
     virtual bool IsTableEmpty(const std::string& table_name, ErrorCode* err) = 0;
 
     virtual bool GetSnapshot(const std::string& name, uint64_t* snapshot, ErrorCode* err) = 0;
-    virtual bool DelSnapshot(const std::string& name, uint64_t snapshot, ErrorCode* err) = 0;
-    virtual bool Rollback(const std::string& name, uint64_t snapshot, ErrorCode* err) = 0;
+    virtual bool DelSnapshot(const std::string& name, uint64_t snapshot,ErrorCode* err) = 0;
+    virtual bool Rollback(const std::string& name, uint64_t snapshot,
+                          const std::string& rollback_name, ErrorCode* err) = 0;
 
     virtual bool CmdCtrl(const std::string& command,
                          const std::vector<std::string>& arg_list,

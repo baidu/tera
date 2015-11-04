@@ -8,6 +8,7 @@ import subprocess
 import filecmp
 import os
 import nose.tools
+import json
 
 from conf import const
 
@@ -18,6 +19,11 @@ def print_debug_msg(sid=0, msg=""):
     """
     print "@%d======================%s" % (sid, msg)
 
+def execute_and_check_returncode(cmd, code):
+    print(cmd)
+    ret = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, shell=True)
+    ret.communicate()
+    nose.tools.assert_equal(ret.returncode, code)
 
 def exe_and_check_res(cmd):
     """
@@ -37,7 +43,7 @@ def clear_env():
     print_debug_msg(4, "delete table_test001 and table_test002, clear env")
 
     cmd = "./teracli disable table_test001"
-    exe_and_check_res(cmd)   
+    exe_and_check_res(cmd)
 
     cmd = "./teracli drop table_test001"
     exe_and_check_res(cmd)
@@ -53,9 +59,11 @@ def cleanup():
     ret = subprocess.Popen(const.teracli_binary + ' disable test',
                            stdout=subprocess.PIPE, stderr=subprocess.PIPE, shell=True)
     print ''.join(ret.stdout.readlines())
+    print ''.join(ret.stderr.readlines())
     ret = subprocess.Popen(const.teracli_binary + ' drop test',
                            stdout=subprocess.PIPE, stderr=subprocess.PIPE, shell=True)
     print ''.join(ret.stdout.readlines())
+    print ''.join(ret.stderr.readlines())
 
     files = os.listdir('.')
     for f in files:
@@ -68,9 +76,15 @@ def cluster_op(op):
         print 'kill cluster'
         ret = subprocess.Popen(const.kill_script, stdout=subprocess.PIPE, stderr=subprocess.PIPE, shell=True)
         print ''.join(ret.stdout.readlines())
+        print ''.join(ret.stderr.readlines())
     elif op == 'launch':
         print 'launch cluster'
         ret = subprocess.Popen(const.launch_script, stdout=subprocess.PIPE, stderr=subprocess.PIPE, shell=True)
+        print ''.join(ret.stdout.readlines())
+        print ''.join(ret.stderr.readlines())
+    elif op == 'launch_ts_first':
+        print 'launch cluster'
+        ret = subprocess.Popen(const.launch_ts_first_script, stdout=subprocess.PIPE, stderr=subprocess.PIPE, shell=True)
         print ''.join(ret.stdout.readlines())
     else:
         print 'unknown argument'
@@ -78,26 +92,45 @@ def cluster_op(op):
 
 
 def create_kv_table():
-    print 'print kv table'
+    print 'create kv table'
     cleanup()
     ret = subprocess.Popen(const.teracli_binary + ' create test', stdout=subprocess.PIPE, stderr=subprocess.PIPE, shell=True)
     print ''.join(ret.stdout.readlines())
+    print ''.join(ret.stderr.readlines())
 
 
 def create_singleversion_table():
-    print 'print single version table'
+    print 'create single version table'
     cleanup()
     ret = subprocess.Popen(const.teracli_binary + ' create "test{cf0, cf1}"',
                            stdout=subprocess.PIPE, stderr=subprocess.PIPE, shell=True)
     print ''.join(ret.stdout.readlines())
+    print ''.join(ret.stderr.readlines())
 
 
 def create_multiversion_table():
-    print 'print multi version table'
+    print 'create multi version table'
     cleanup()
     ret = subprocess.Popen(const.teracli_binary + ' create "test{cf0<maxversions=20>, cf1<maxversions=20>}"',
                            stdout=subprocess.PIPE, stderr=subprocess.PIPE, shell=True)
     print ''.join(ret.stdout.readlines())
+    print ''.join(ret.stderr.readlines())
+
+
+def createbyfile(schema, deli=''):
+    """
+    This function creates a table according to a specified schema
+    :param schema: schema file path
+    :param deli: deli file path
+    :return: None
+    """
+
+    cleanup()
+    create_cmd = '{teracli} createbyfile {schema} {deli}'.format(teracli=const.teracli_binary, schema=schema, deli=deli)
+    print create_cmd
+    ret = subprocess.Popen(create_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, shell=True)
+    print ''.join(ret.stdout.readlines())
+    print ''.join(ret.stderr.readlines())
 
 
 def run_tera_mark(file_path, op, table_name, random, value_size, num, key_size, cf='', key_seed=1, value_seed=1):
@@ -149,6 +182,7 @@ def run_tera_mark(file_path, op, table_name, random, value_size, num, key_size, 
     print cmd
     ret = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, shell=True)
     print ''.join(ret.stdout.readlines())
+    print ''.join(ret.stderr.readlines())
 
     # write/append data to a file for comparison
     for path, is_append in file_path:
@@ -169,6 +203,7 @@ def run_tera_mark(file_path, op, table_name, random, value_size, num, key_size, 
         print dump_cmd
         ret = subprocess.Popen(dump_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, shell=True)
         print ''.join(ret.stdout.readlines())
+        print ''.join(ret.stderr.readlines())
 
 
 def scan_table(table_name, file_path, allversion, snapshot=0):
@@ -194,6 +229,7 @@ def scan_table(table_name, file_path, allversion, snapshot=0):
     print scan_cmd
     ret = subprocess.Popen(scan_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, shell=True)
     print ''.join(ret.stdout.readlines())
+    print ''.join(ret.stderr.readlines())
 
 
 def get_tablet_list(table_name):
@@ -210,6 +246,31 @@ def get_tablet_list(table_name):
     return tablet_paths
 
 
+def parse_showinfo():
+    '''
+    if you want to get show info, you can call this function to return with a dict
+    '''
+    show_cmd = '{teracli} show'.format(teracli=const.teracli_binary)
+    print show_cmd
+    ret = subprocess.Popen(show_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, shell=True)
+    table_info = ret.stdout.readlines()[2:-1]
+    retinfo = {}
+    for line in table_info:
+        line = line.strip("\n")
+        line_list = line.split(" ")
+        list_ret = [line_list[i] for i in range(len(line_list)) if line_list[i] != ""]
+
+        retinfo[list_ret[1]] = {}
+        retinfo[list_ret[1]]["status"] = list_ret[2]
+        retinfo[list_ret[1]]["size"] = list_ret[3]
+        retinfo[list_ret[1]]["lg_size"] = [list_ret[j] for j in range(4, len(list_ret) - 2)]
+        retinfo[list_ret[1]]["tablet"] = list_ret[len(list_ret) - 2]
+        retinfo[list_ret[1]]["busy"] = list_ret[len(list_ret) - 1]
+
+    print json.dumps(retinfo)
+    return retinfo
+
+
 def compact_tablets(tablet_list):
     # TODO: compact may timeout
     for tablet in tablet_list:
@@ -217,6 +278,7 @@ def compact_tablets(tablet_list):
         print compact_cmd
         ret = subprocess.Popen(compact_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, shell=True)
         print ''.join(ret.stdout.readlines())
+        print ''.join(ret.stderr.readlines())
 
 
 def snapshot_op(table_name):
@@ -243,6 +305,20 @@ def snapshot_op(table_name):
     return None
 
 
+def rollback_op(table_name, snapshot, rollback_name):
+    """
+    Invoke rollback action
+    :param table_name: table name
+    :param snapshot: rollback to a specific snapshot
+    :return: None
+    """
+    rollback_cmd = '{teracli} snapshot {table_name} rollback --snapshot={snapshot} --rollback_name={rname}'.\
+        format(teracli=const.teracli_binary, table_name=table_name, snapshot=snapshot, rname=rollback_name)
+    print rollback_cmd
+    ret = subprocess.Popen(rollback_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, shell=True)
+    print ''.join(ret.stdout.readlines())
+
+
 def compare_files(file1, file2, need_sort):
     """
     This function compares two files.
@@ -256,9 +332,10 @@ def compare_files(file1, file2, need_sort):
         print sort_cmd
         ret = subprocess.Popen(sort_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, shell=True)
         print ''.join(ret.stdout.readlines())
+        print ''.join(ret.stderr.readlines())
         os.rename(file1+'.sort', file1)
         os.rename(file2+'.sort', file2)
-    return filecmp.cmp(file1, file2)
+    return filecmp.cmp(file1, file2, shallow=False)
 
 
 def file_is_empty(file_path):
@@ -273,3 +350,12 @@ def file_is_empty(file_path):
 def cleanup_files(file_list):
     for file_path in file_list:
         os.remove(file_path)
+
+def check_show_user_result(cmd, should_contain, substr):
+    print(cmd)
+    ret = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, shell=True)
+    stdoutdata = ''.join(ret.stdout.readlines())
+    if should_contain:
+        nose.tools.assert_true(substr in stdoutdata)
+    else:
+        nose.tools.assert_true(substr not in stdoutdata)

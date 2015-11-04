@@ -109,6 +109,10 @@ bool ClientImpl::CheckReturnValue(StatusCode status, std::string& reason, ErrorC
             reason = "permission denied.";
             err->SetFailed(ErrorCode::kNoAuth, reason);
             break;
+        case kTabletReady:
+            reason = "tablet is ready.";
+            err->SetFailed(ErrorCode::kOK, reason);
+            break;
         default:
             reason = "tera master is not ready, please wait..";
             err->SetFailed(ErrorCode::kSystem, reason);
@@ -135,6 +139,7 @@ bool ClientImpl::CreateTable(const TableDescriptor& desc,
     TableDescToSchema(desc, schema);
     schema->set_alias(desc.TableName());
     schema->set_name(internal_table_name);
+    schema->set_admin(_user_identity);
     // add delimiter
     size_t delim_num = tablet_delim.size();
     for (size_t i = 0; i < delim_num; ++i) {
@@ -205,7 +210,6 @@ bool ClientImpl::DeleteTable(string name, ErrorCode* err) {
         if (CheckReturnValue(response.status(), reason, err)) {
             return true;
         }
-        LOG(ERROR) << reason << "| status: " << StatusCodeToString(response.status());
     } else {
         reason = "rpc fail to delete table: " + name;
         LOG(ERROR) << reason;
@@ -333,7 +337,7 @@ bool ClientImpl::ChangePwd(const std::string& user,
     return OperateUser(updated_user, kChangePwd, null, err);
 }
 
-bool ClientImpl::ShowUser(const std::string& user, std::vector<std::string>& user_groups, 
+bool ClientImpl::ShowUser(const std::string& user, std::vector<std::string>& user_groups,
                           ErrorCode* err) {
     UserInfo user_info;
     user_info.set_user_name(user);
@@ -507,43 +511,24 @@ bool ClientImpl::ShowTablesInfo(const string& name,
                                 TableMeta* meta,
                                 TabletMetaList* tablet_list,
                                 ErrorCode* err) {
-    if (meta == NULL || tablet_list == NULL) {
-        return false;
+    TableMetaList table_list;
+    bool result = DoShowTablesInfo(&table_list, tablet_list, name, err);
+    if (result) {
+        meta->CopyFrom(table_list.meta(0));
     }
-    tablet_list->Clear();
-    std::string internal_table_name;
-    if (!GetInternalTableName(name, err, &internal_table_name)) {
-        LOG(ERROR) << "faild to scan meta schema";
-        return false;
-    }
-    master::MasterClient master_client(_cluster->MasterAddr());
-
-    ShowTablesRequest request;
-    ShowTablesResponse response;
-    request.set_sequence_id(0);
-    request.set_start_table_name(internal_table_name);
-    request.set_max_table_num(1);
-    request.set_user_token(GetUserToken(_user_identity, _user_passcode));
-
-    if (master_client.ShowTables(&request, &response) &&
-        response.status() == kMasterOk) {
-        if (response.table_meta_list().meta_size() == 0) {
-            return false;
-        } else if (response.table_meta_list().meta(0).table_name() != internal_table_name) {
-            return false;
-        }
-        meta->CopyFrom(response.table_meta_list().meta(0));
-        tablet_list->CopyFrom(response.tablet_meta_list());
-        return true;
-    }
-    LOG(ERROR) << "fail to show table info: " << name;
-    err->SetFailed(ErrorCode::kSystem, StatusCodeToString(response.status()));
-    return false;
+    return result;
 }
 
 bool ClientImpl::ShowTablesInfo(TableMetaList* table_list,
                                 TabletMetaList* tablet_list,
                                 ErrorCode* err) {
+    return DoShowTablesInfo(table_list, tablet_list, "", err);
+}
+
+bool ClientImpl::DoShowTablesInfo(TableMetaList* table_list,
+                                  TabletMetaList* tablet_list,
+                                  const string& table_name,
+                                  ErrorCode* err) {
     if (table_list == NULL || tablet_list == NULL) {
         return false;
     }
@@ -552,7 +537,7 @@ bool ClientImpl::ShowTablesInfo(TableMetaList* table_list,
 
     master::MasterClient master_client(_cluster->MasterAddr());
     std::string start_tablet_key;
-    std::string start_table_name;
+    std::string start_table_name = table_name;
     bool has_more = true;
     bool has_error = false;
     bool table_meta_copied = false;
@@ -560,6 +545,9 @@ bool ClientImpl::ShowTablesInfo(TableMetaList* table_list,
     while(has_more && !has_error) {
         ShowTablesRequest request;
         ShowTablesResponse response;
+        if (!table_name.empty()) {
+            request.set_max_table_num(1);
+        }
         request.set_start_table_name(start_table_name);
         request.set_start_tablet_key(start_tablet_key);
         request.set_max_tablet_num(FLAGS_tera_sdk_show_max_num); //tablets be fetched at most in one RPC
@@ -583,9 +571,11 @@ bool ClientImpl::ShowTablesInfo(TableMetaList* table_list,
                 tablet_list->add_meta()->CopyFrom(response.tablet_meta_list().meta(i));
                 tablet_list->add_counter()->CopyFrom(response.tablet_meta_list().counter(i));
                 if (i == response.tablet_meta_list().meta_size() - 1 ) {
+                    std::string prev_table_name = start_table_name;
                     start_table_name = response.tablet_meta_list().meta(i).table_name();
                     std::string last_key = response.tablet_meta_list().meta(i).key_range().key_start();
-                    if (last_key <= start_tablet_key) {
+                    if (prev_table_name > start_table_name
+                        || (prev_table_name == start_table_name && last_key <= start_tablet_key)) {
                         LOG(WARNING) << "the master has older version";
                         has_more = false;
                         break;
@@ -608,17 +598,18 @@ bool ClientImpl::ShowTablesInfo(TableMetaList* table_list,
 
     if (has_error) {
         LOG(ERROR) << "fail to show table info.";
-        err->SetFailed(ErrorCode::kSystem, err_msg);
+        if (err != NULL) {
+            err->SetFailed(ErrorCode::kSystem, err_msg);
+        }
         return false;
     }
     return true;
 }
 
-
 bool ClientImpl::ShowTabletNodesInfo(const string& addr,
-                                    TabletNodeInfo* info,
-                                    TabletMetaList* tablet_list,
-                                    ErrorCode* err) {
+                                     TabletNodeInfo* info,
+                                     TabletMetaList* tablet_list,
+                                     ErrorCode* err) {
     if (info == NULL || tablet_list == NULL) {
         return false;
     }
@@ -649,7 +640,7 @@ bool ClientImpl::ShowTabletNodesInfo(const string& addr,
 }
 
 bool ClientImpl::ShowTabletNodesInfo(std::vector<TabletNodeInfo>* infos,
-                                    ErrorCode* err) {
+                                     ErrorCode* err) {
     if (infos == NULL) {
         return false;
     }
@@ -802,16 +793,24 @@ bool ClientImpl::DelSnapshot(const string& name, uint64_t snapshot, ErrorCode* e
     return false;
 }
 
-bool ClientImpl::Rollback(const string& name, uint64_t snapshot, ErrorCode* err) {
+bool ClientImpl::Rollback(const string& name, uint64_t snapshot,
+                          const std::string& rollback_name, ErrorCode* err) {
     master::MasterClient master_client(_cluster->MasterAddr());
 
+    std::string internal_table_name;
+    if (!GetInternalTableName(name, err, &internal_table_name)) {
+        LOG(ERROR) << "faild to scan meta schema";
+        return false;
+    }
     RollbackRequest request;
     RollbackResponse response;
     request.set_sequence_id(0);
-    request.set_table_name(name);
+    request.set_table_name(internal_table_name);
     request.set_snapshot_id(snapshot);
+    request.set_rollback_name(rollback_name);
+    std::cout << name << " " << rollback_name << std::endl;
 
-    if (master_client.Rollback(&request, &response)) {
+    if (master_client.GetRollback(&request, &response)) {
         if (response.status() == kMasterOk) {
             std::cout << name << " rollback to snapshot sucessfully" << std::endl;
             return true;
@@ -977,9 +976,6 @@ static int SpecifiedFlagfileCount(const std::string& confpath) {
     if (!FLAGS_tera_sdk_conf_file.empty()) {
         count++;
     }
-    if (getenv("TERA_CONF")) {
-        count++;
-    }
     return count;
 }
 
@@ -1003,27 +999,15 @@ static int InitFlags(const std::string& confpath, const std::string& log_prefix)
     } else if (!FLAGS_tera_sdk_conf_file.empty() && !IsExist(confpath)) {
         LOG(ERROR) << "specified config file(FLAGS_tera_sdk_conf_file) not found";
         return -1;
-    } else if (IsExist(utils::GetValueFromEnv("TERA_CONF"))) {
-        flagfile += utils::GetValueFromEnv("TERA_CONF");
-    } else if (getenv("TERA_CONF")) {
-        LOG(ERROR) << "specified config file(environment variable) not found";
-        return -1;
     } else if (IsExist("./tera.flag")) {
         flagfile += "./tera.flag";
     } else if (IsExist("../conf/tera.flag")) {
         flagfile += "../conf/tera.flag";
+    } else if (IsExist(utils::GetValueFromEnv("TERA_CONF"))) {
+        flagfile += utils::GetValueFromEnv("TERA_CONF");
     } else {
         LOG(ERROR) << "hasn't specify the flagfile, but default config file not found";
         return -1;
-    }
-
-    // init user identity & role
-    std::string cur_identity = utils::GetValueFromEnv("USER");
-    if (cur_identity.empty()) {
-        cur_identity = "other";
-    }
-    if (FLAGS_tera_user_identity.empty()) {
-        FLAGS_tera_user_identity = cur_identity;
     }
 
     int argc = 2;

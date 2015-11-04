@@ -12,5 +12,8 @@ class Const:
         self.teracli_binary = './teracli'
         self.kill_script = './kill_tera.sh'
         self.launch_script = './launch_tera.sh'
+        self.launch_ts_first_script = './launch_ts_first.sh'
+        self.data_path = 'testcase/data/'
+        self.user_root_flag_path = './testcase/data/tera.flag.root'
 
 const = Const()

@@ -189,7 +189,7 @@ TableDescImpl::TableDescImpl(const std::string& tb_name)
     : _name(tb_name),
       _next_lg_id(0),
       _next_cf_id(0),
-      _raw_key_type(kReadable),
+      _raw_key_type(kBinary),
       _split_size(FLAGS_tera_master_split_tablet_size),
       _merge_size(FLAGS_tera_master_merge_tablet_size),
       _disable_wal(false) {
