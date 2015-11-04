@@ -98,7 +98,12 @@ std::string TabletIO::GetTableName() const {
 
 std::string TabletIO::GetTablePath() const {
     if (!m_tablet_path.empty()) {
-        return m_tablet_path.substr(FLAGS_tera_tabletnode_path_prefix.size());
+        std::string path =
+            m_tablet_path.substr(FLAGS_tera_tabletnode_path_prefix.size());
+        if (path.at(0) == '/') {
+            path = path.substr(1);
+        }
+        return path;
     } else {
         return m_tablet_path;
     }
