@@ -115,7 +115,7 @@ public:
         file_ = fs->OpenFile(filename_, RDONLY);
         // assert(hfile_ != NULL);
         if (file_ == NULL) {
-            fprintf(stderr, "[env_dfs]: open file fail: %s\n", filename_.c_str());
+            Log("[env_dfs]: open file fail: %s\n", filename_.c_str());
         }
         now_pos = 0;
     }
@@ -225,7 +225,7 @@ public:
         dfs_open_counter.Inc();
         file_ = fs_->OpenFile(filename_, WRONLY);
         if (file_ == NULL) {
-            fprintf(stderr, "[env_dfs]: open file for write fail: %s\n", fname.c_str());
+            Log("[env_dfs]: open file for write fail: %s\n", fname.c_str());
         }
     }
     virtual ~DfsWritableFile() {
@@ -279,7 +279,7 @@ public:
         tera::Counter dfs_sync_counter;
         uint64_t t = EnvDfs()->NowMicros();
         if (file_->Sync() == -1) {
-            fprintf(stderr, "dfs sync fail: %s\n", filename_.c_str());
+            Log("[env_dfs] dfs sync fail: %s\n", filename_.c_str());
             s = IOError(filename_, errno);
         }
         uint64_t diff = EnvDfs()->NowMicros() - t;
@@ -287,7 +287,7 @@ public:
         if (diff > 2000000) {
             char buf[128];
             get_time_str(buf, 128);
-            fprintf(stderr, "%s dfs sync for %s use %.2fms\n",
+            Log("[env_dfs] %s dfs sync for %s use %.2fms\n",
                 buf, filename_.c_str(), diff / 1000.0);
         }
         return s;
@@ -378,8 +378,7 @@ Status DfsEnv::GetChildren(const std::string& path, std::vector<std::string>* re
         tera::AutoCounter ac(&dfs_exists_hang_counter, "Exists", path.c_str());
         dfs_exists_counter.Inc();
         if (0 != dfs_->Exists(path)) {
-            fprintf(stderr, "GetChildren call with path not exists: %s\n",
-                    path.data());
+            Log("GetChildren call with path not exists: %s\n", path.data());
             return Status::IOError("Path not exist", path);
         }
     }
@@ -485,11 +484,6 @@ Status DfsEnv::LockFile(const std::string& fname, FileLock** lock)
 Status DfsEnv::UnlockFile(FileLock* lock)
 {
     return Status::OK();
-}
-
-Status DfsEnv::NewLogger(const std::string& fname, Logger** result)
-{
-    return IOError(fname, errno);
 }
 
 static bool inited = false;

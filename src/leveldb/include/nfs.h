@@ -419,11 +419,11 @@ int Create(const char* path);
  */
 int Unlink(const char* path);
 
-/** 
+/**
  * @brief GetInode from NFSFILE
- * 
+ *
  * @param file NFSFILE ptr
- * 
+ *
  * @return   uint64_t inode
  */
 uint64_t GetInode(const NFSFILE* file);
