@@ -3203,6 +3203,108 @@ void MasterImpl::ClearUnusedSnapshots(TabletPtr tablet, const TabletMeta& meta) 
     }
 }
 
+void MasterImpl::UpdateSchemaCallback(TabletPtr tablet,
+                                      UpdateSchemaRequest* request,
+                                      UpdateSchemaResponse* response,
+                                      bool rpc_failed, int status_code) {
+    StatusCode status = response->status();
+    delete request;
+    delete response;
+
+    // fail
+    if (rpc_failed || (status != kTabletNodeOk)) {
+        if (rpc_failed) {
+            LOG(WARNING) << "fail to update schema: "
+                << sofa::pbrpc::RpcErrorCodeToString(status_code)
+                << ": " << tablet;
+        } else {
+            LOG(WARNING) << "fail to update schema: " << StatusCodeToString(status)
+                << ": " << tablet;
+        }
+        return;
+    }
+    tablet->SetSchemaUpdated(true);
+    LOG(INFO) << "update schema...done" << ": " << tablet;
+}
+
+void MasterImpl::NoticeTabletNodeSchemaUpdatedAsync(TabletPtr tablet,
+                                                    UpdateSchemaClosure* done) {
+    tabletnode::TabletNodeClient node_client(tablet->GetServerAddr(),
+                                             FLAGS_tera_master_collect_info_timeout);
+    UpdateSchemaRequest* request = new UpdateSchemaRequest;
+    UpdateSchemaResponse* response = new UpdateSchemaResponse;
+
+    request->set_sequence_id(m_this_sequence_id.Inc());
+    request->mutable_schema()->CopyFrom(tablet->GetSchema());
+
+    VLOG(20) << "NoticeTabletNodeSchemaUpdatedAsync id: " << request->sequence_id()
+             << ", tablet:" << tablet;
+    node_client.UpdateSchema(request, response, done);
+}
+
+void MasterImpl::SetTableAndTabletsSchemaUpdated(TablePtr table, bool flag) {
+    table->SetSchemaUpdated(flag);
+    std::vector<TabletPtr> tablet_list;
+    StatusCode status;
+    if (!m_tablet_manager->FindTable(table->GetTableName(), &tablet_list, &status)) {
+        LOG(ERROR) << "[update] failed to find tablets list";
+        return;
+    }
+    std::vector<TabletPtr>::iterator it;
+    for (it = tablet_list.begin(); it != tablet_list.end(); ++it) {
+        (*it)->SetSchemaUpdated(flag);
+    }
+}
+
+void MasterImpl::PollUntilSchemaUpdated(TablePtr table,
+                                        google::protobuf::Closure* rpc_done) {
+    std::vector<TabletPtr> tablet_list;
+    StatusCode status;
+    if (!m_tablet_manager->FindTable(table->GetTableName(), &tablet_list, &status)) {
+        LOG(ERROR) << "[update] failed to find tablets list";
+        return;
+    }
+    std::vector<TabletPtr>::iterator it;
+    for (it = tablet_list.begin(); it != tablet_list.end(); ++it) {
+        if (!(*it)->GetSchemaUpdated()) {
+            LOG(INFO) << "[update] not synced:" << (*it);
+            ThreadPool::Task task =
+                boost::bind(&MasterImpl::PollUntilSchemaUpdated, this,
+                            table, rpc_done);
+            m_thread_pool->DelayTask(500, task);
+            return;
+        }
+    }
+    LOG(INFO) << "[update] ok & done:" << table;
+    // new schema synced to all tablets/ts
+    table->SetSchemaUpdated(true);
+    rpc_done->Run();
+}
+
+void MasterImpl::NoticeTabletNodeSchemaUpdated(TabletPtr tablet) {
+    UpdateSchemaClosure* done =
+        NewClosure(this, &MasterImpl::UpdateSchemaCallback, tablet);
+    NoticeTabletNodeSchemaUpdatedAsync(tablet, done);
+}
+
+void MasterImpl::NoticeTabletNodeSchemaUpdated(TablePtr table) {
+    std::vector<TabletPtr> tablet_list;
+    StatusCode status;
+    if (!m_tablet_manager->FindTable(table->GetTableName(), &tablet_list, &status)) {
+        LOG(INFO) << "[update] failed to find tablets list";
+        return;
+    }
+    std::vector<TabletPtr>::iterator it;
+    for (it = tablet_list.begin(); it != tablet_list.end(); ++it) {
+        if ((*it)->GetStatus() != kTableReady) {
+            continue;
+        }
+        UpdateSchemaClosure* done =
+            NewClosure(this, &MasterImpl::UpdateSchemaCallback, *it);
+        NoticeTabletNodeSchemaUpdatedAsync(*it, done);
+    }
+}
+
 void MasterImpl::QueryTabletNodeAsync(std::string addr, int32_t timeout,
                                       bool is_gc, QueryClosure* done) {
     tabletnode::TabletNodeClient node_client(addr, timeout);
@@ -4267,6 +4369,7 @@ void MasterImpl::UpdateTableRecordForEnableCallback(TablePtr table, int32_t retr
     rpc_done->Run();
 }
 
+
 void MasterImpl::UpdateTableRecordForUpdateCallback(TablePtr table, int32_t retry_times,
                                                     UpdateTableResponse* rpc_response,
                                                     google::protobuf::Closure* rpc_done,
@@ -4302,9 +4405,18 @@ void MasterImpl::UpdateTableRecordForUpdateCallback(TablePtr table, int32_t retr
         }
         return;
     }
-    LOG(INFO) << "update meta table success, " << table;
     rpc_response->set_status(kMasterOk);
-    rpc_done->Run();
+
+    // TODO some update operator is master-only
+    if ((table->GetStatus() != kTableDisable)
+        && ((table->GetSchema().admin_group() != ""))) {
+        SetTableAndTabletsSchemaUpdated(table, false);
+        NoticeTabletNodeSchemaUpdated(table);
+        PollUntilSchemaUpdated(table, rpc_done);
+    } else {
+        LOG(INFO) << "[update] meta table success, " << table;
+        rpc_done->Run();
+    }
 }
 
 void MasterImpl::UpdateTableRecordForRenameCallback(TablePtr table, int32_t retry_times,
@@ -4856,7 +4968,9 @@ void MasterImpl::ProcessReadyTablet(TabletPtr tablet) {
             NewClosure(this, &MasterImpl::UnloadTabletCallback, tablet,
                        FLAGS_tera_master_impl_retry_times);
         UnloadTabletAsync(tablet, done);
+        return;
     }
+    NoticeTabletNodeSchemaUpdated(tablet);
 }
 
 bool MasterImpl::CreateStatTable() {

@@ -232,6 +232,16 @@ void RemoteTabletNode::CompactTablet(google::protobuf::RpcController* controller
     m_compact_thread_pool->AddTask(callback);
 }
 
+void RemoteTabletNode::UpdateSchema(google::protobuf::RpcController* controller,
+                                    const UpdateSchemaRequest* request,
+                                    UpdateSchemaResponse* response,
+                                    google::protobuf::Closure* done) {
+    ThreadPool::Task callback =
+        boost::bind(&RemoteTabletNode::DoUpdateSchema, this, controller,
+                   request, response, done);
+    m_ctrl_thread_pool->AddTask(callback);
+}
+
 std::string RemoteTabletNode::ProfilingLog() {
     return "ctrl " + m_ctrl_thread_pool->ProfilingLog()
         + " read " + m_read_thread_pool->ProfilingLog()
@@ -356,6 +366,16 @@ void RemoteTabletNode::DoCompactTablet(google::protobuf::RpcController* controll
     compact_pending_counter.Dec();
     m_tabletnode_impl->CompactTablet(request, response, done);
     LOG(INFO) << "finish RPC (CompactTablet) id: " << id;
+}
+
+void RemoteTabletNode::DoUpdateSchema(google::protobuf::RpcController* controller,
+                                       const UpdateSchemaRequest* request,
+                                       UpdateSchemaResponse* response,
+                                       google::protobuf::Closure* done) {
+    uint64_t id = request->sequence_id();
+    LOG(INFO) << "accept RPC (UpdateSchema) id: " << id;
+    m_tabletnode_impl->UpdateSchema(request, response, done);
+    LOG(INFO) << "finish RPC (UpdateSchema) id: " << id;
 }
 
 void RemoteTabletNode::DoScheduleRpc(RpcSchedule* rpc_schedule) {

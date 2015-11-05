@@ -60,6 +60,10 @@ public:
                        CompactTabletResponse* response,
                        google::protobuf::Closure* done);
 
+    void UpdateSchema(const UpdateSchemaRequest* request,
+                      UpdateSchemaResponse* response,
+                      google::protobuf::Closure* done);
+
     void ReadTablet(int64_t start_micros,
                     const ReadTabletRequest* request,
                     ReadTabletResponse* response,

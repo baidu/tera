@@ -380,6 +380,15 @@ void TabletNodeImpl::CompactTablet(const CompactTabletRequest* request,
     done->Run();
 }
 
+void TabletNodeImpl::UpdateSchema(const UpdateSchemaRequest* request,
+                                  UpdateSchemaResponse* response,
+                                  google::protobuf::Closure* done) {
+    LOG(INFO) << "update schema: receive cmd";
+    response->set_sequence_id(request->sequence_id());
+    response->set_status(kTabletNodeOk);
+    done->Run();
+}
+
 void TabletNodeImpl::ReadTablet(int64_t start_micros,
                                 const ReadTabletRequest* request,
                                 ReadTabletResponse* response,

@@ -58,12 +58,10 @@ std::ostream& operator << (std::ostream& o, const TabletPtr& tablet) {
     return o;
 }
 
-Tablet::Tablet() {}
-
-Tablet::Tablet(const TabletMeta& meta) : m_meta(meta) {}
+Tablet::Tablet(const TabletMeta& meta) : m_meta(meta), m_schema_updated(true) {}
 
 Tablet::Tablet(const TabletMeta& meta, TablePtr table)
-    : m_meta(meta), m_table(table) {}
+    : m_meta(meta), m_table(table), m_schema_updated(true) {}
 
 Tablet::~Tablet() {
     m_table.reset();
@@ -394,6 +392,20 @@ void Tablet::ToMetaTableKeyValue(std::string* packed_key,
     MakeMetaTableKeyValue(m_meta, packed_key, packed_value);
 }
 
+bool Tablet::GetSchemaUpdated() {
+    MutexLock lock(&m_mutex);
+    return m_schema_updated;
+}
+
+void Tablet::SetSchemaUpdated(bool flag) {
+    MutexLock lock(&m_mutex);
+    if (flag == m_schema_updated) {
+        LOG(ERROR) << "[update] error on :" << *this;
+        abort();
+    }
+    m_schema_updated = flag;
+}
+
 bool Tablet::CheckStatusSwitch(TabletStatus old_status,
                                TabletStatus new_status) {
     switch (old_status) {
@@ -511,7 +523,8 @@ Table::Table(const std::string& table_name)
       m_status(kTableEnable),
       m_deleted_tablet_num(0),
       m_max_tablet_no(0),
-      m_create_time((int64_t)time(NULL)) {
+      m_create_time((int64_t)time(NULL)),
+      m_schema_updated(true) {
 }
 
 bool Table::FindTablet(const std::string& key_start, TabletPtr* tablet) {
@@ -721,6 +734,15 @@ bool Table::GetTabletsForGc(std::set<uint64_t>* live_tablets,
         return false;
     }
     return true;
+}
+
+void Table::SetSchemaUpdated(bool flag) {
+    MutexLock lock(&m_mutex);
+    if (flag == m_schema_updated) {
+        LOG(ERROR) << "[update] error on :" << *this;
+        abort();
+    }
+    m_schema_updated = flag;
 }
 
 TabletManager::TabletManager(Counter* sequence_id,

@@ -60,6 +60,16 @@ message QueryResponse {
     repeated InheritedLiveFiles inh_live_files = 5;
 }
 
+message UpdateSchemaRequest {
+    optional uint64 sequence_id = 1;
+    optional TableSchema schema = 2;
+}
+
+message UpdateSchemaResponse {
+    optional uint64 sequence_id = 1;
+    optional StatusCode status = 2;
+}
+
 message LoadTabletRequest {
     required uint64 sequence_id = 1;
     required string tablet_name = 2;
@@ -325,6 +335,8 @@ service TabletNodeServer {
     rpc Rollback(SnapshotRollbackRequest) returns(SnapshotRollbackResponse);
 
     rpc SplitTablet(SplitTabletRequest) returns(SplitTabletResponse);
+
+    rpc UpdateSchema(UpdateSchemaRequest) returns(UpdateSchemaResponse);
 }
 option cc_generic_services = true;
 

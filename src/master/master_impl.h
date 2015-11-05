@@ -146,6 +146,7 @@ private:
     typedef Closure<void, SnapshotRollbackRequest*, SnapshotRollbackResponse*, bool, int> RollbackClosure;
     typedef Closure<void, ReleaseSnapshotRequest*, ReleaseSnapshotResponse*, bool, int> DelSnapshotClosure;
     typedef Closure<void, QueryRequest*, QueryResponse*, bool, int> QueryClosure;
+    typedef Closure<void, UpdateSchemaRequest*, UpdateSchemaResponse*, bool, int> UpdateSchemaClosure;
     typedef Closure<void, LoadTabletRequest*, LoadTabletResponse*, bool, int> LoadClosure;
     typedef Closure<void, UnloadTabletRequest*, UnloadTabletResponse*, bool, int> UnloadClosure;
     typedef Closure<void, SplitTabletRequest*, SplitTabletResponse*, bool, int> SplitClosure;
@@ -444,6 +445,18 @@ private:
                                       WriteTabletRequest* request,
                                       WriteTabletResponse* response,
                                       bool failed, int error_code);
+
+    void UpdateSchemaCallback(TabletPtr tablet,
+                              UpdateSchemaRequest* request,
+                              UpdateSchemaResponse* response,
+                              bool rpc_failed, int status_code);
+    void NoticeTabletNodeSchemaUpdatedAsync(TabletPtr tablet,
+                                            UpdateSchemaClosure* done);
+    void NoticeTabletNodeSchemaUpdated(TablePtr table);
+    void NoticeTabletNodeSchemaUpdated(TabletPtr tablet);
+    void SetTableAndTabletsSchemaUpdated(TablePtr table, bool flag);
+    void PollUntilSchemaUpdated(TablePtr table,
+                                google::protobuf::Closure* rpc_done);
 
     // load metabale to master memory
     bool LoadMetaTable(const std::string& meta_tablet_addr,

@@ -76,6 +76,10 @@ public:
                        CompactTabletResponse* response,
                        Closure<void, CompactTabletRequest*, CompactTabletResponse*, bool, int>* done = NULL);
 
+    bool UpdateSchema(const UpdateSchemaRequest* request,
+                      UpdateSchemaResponse* response,
+                      Closure<void, UpdateSchemaRequest*, UpdateSchemaResponse*, bool, int>* done = NULL);
+
 private:
     int32_t m_rpc_timeout;
     static ThreadPool* m_thread_pool;
