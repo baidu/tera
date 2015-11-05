@@ -1489,6 +1489,7 @@ void TabletIO::SetupOptionsForLG() {
         }
         lg_info->sst_size = lg_schema.sst_size();
         m_ldb_options.sst_size = lg_schema.sst_size();
+        lg_info->write_buffer_size = lg_schema.sst_size() * 4;
         exist_lg_list->insert(lg_i);
         (*lg_info_list)[lg_i] = lg_info;
     }

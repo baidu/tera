@@ -41,10 +41,11 @@ static int64_t ExpandedCompactionByteSizeLimit(int target_file_size) {
     return 25 * target_file_size;
 }
 
-static double MaxBytesForLevel(int level) {
+static double MaxBytesForLevel(int level, int sst_size) {
   // Note: the result for level zero is not really used since we set
   // the level-0 compaction threshold based on number of files.
-  double result = 40 * 1048576.0;  // Result for both level-0 and level-1
+  // double result = 40 * 1048576.0;  // Result for both level-0 and level-1
+  double result = 5 * sst_size;  // Result for both level-0 and level-1
   while (level > 1) {
     result *= 10;
     level--;
@@ -1361,7 +1362,8 @@ void VersionSet::Finalize(Version* v) {
     } else {
       // Compute the ratio of current size to size limit.
       const uint64_t level_bytes = TotalFileSize(v->files_[level]);
-      score = static_cast<double>(level_bytes) / MaxBytesForLevel(level);
+      score = static_cast<double>(level_bytes)
+          / MaxBytesForLevel(level, options_->sst_size);
     }
 
     if (score > best_score) {
