@@ -50,29 +50,55 @@ Copyright 2015, Baidu, Inc.
     1. table的ID是table name，tablet的ID是start key，user的ID是user name
 
 ###流程
-####tablet load
+####load tablet
   1. 修改内存tablet结构，status改为onload，addr改为新tabletnode
   1. 更新meta table中的addr
   1. 命令ts执行load操作
   1. 修改内存tablet结构，status改为ready
 
-####tablet unload
+####unload tablet
   1. 修改内存tablet结构体，status改为unloading
   1. 更新meta table
   1. 命令ts执行unload操作
   1. 修改内存tablet结构体，status改为offline
 
-####tablet split
+####split tablet
   1. 修改内存tablet结构体，status改为onsplit
   1. 更新meta table
   1. 命令ts执行split操作
   1. 删除内存tablet结构，增加两个新tablet结构
   1. 删除meta table中的tablet项，增加两个新的tablet项
 
-####tablet merge
+####merge tablet
 
-####表格创建、删除、停用、启用、更新
-  1. 修改内存meta
+####create table
+  1. 增加内存table和tablet结构体
+  2. 在meta table中插入table和tablet项
+  3. 命令ts执行load tablet
+
+####enable table
+  1. 将table status改为enabled
+  2. 持久化到meta table
+  3. 对table的所有tablet，命令ts执行load
+
+####disable table
+  1. 将table status改为disabled
+  2. 持久化到meta table
+  3. 对table的所有tablet，命令ts执行unload
+
+####drop table
+  1. 将table status改为deleted
+  2. 删除meta table中的对应的table和tablet项
+  3. 将table和tablet结构体删除
+
+####update table schema
+  1.修改table schema
+  2. 持久化到meta table
+  3. 命令ts更新schema
+    * 对于支持热更新的schema，命令ts更新schema
+    * 对于其它schema，先命令ts执行unload，再命令ts以新schema执行load
+
+
     * create: 增加table、tablet结构
     * drop: 删除table、tablet结构
     * disable/enable: 修改table status
