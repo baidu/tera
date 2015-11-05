@@ -55,17 +55,20 @@ Copyright 2015, Baidu, Inc.
   1. 更新meta table中的addr
   1. 命令ts执行load操作
   1. 修改内存tablet结构，status改为ready
+
 ####tablet unload
   1. 修改内存tablet结构体，status改为unloading
   1. 更新meta table
   1. 命令ts执行unload操作
   1. 修改内存tablet结构体，status改为offline
+
 ####tablet split
   1. 修改内存tablet结构体，status改为onsplit
   1. 更新meta table
   1. 命令ts执行split操作
   1. 删除内存tablet结构，增加两个新tablet结构
   1. 删除meta table中的tablet项，增加两个新的tablet项
+
 ####tablet merge
 
 ####表格创建、删除、停用、启用、更新
