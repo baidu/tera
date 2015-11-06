@@ -1212,7 +1212,9 @@ TEST(DBTest, HiddenValuesAreRemoved) {
     Put("pastfoo2", "v2");        // Advance sequence number one more
 
     ASSERT_OK(dbfull()->TEST_CompactMemTable());
-    ASSERT_GT(NumTableFilesAtLevel(0), 0);
+    // tera-leveldb:kL0_CompactionTrigger == 2, compact will happen
+    // google-leveldb:kL0_CompactionTrigger == 4, there is no compaction
+    // ASSERT_GT(NumTableFilesAtLevel(0), 0);
 
     ASSERT_EQ(big, Get("foo", snapshot));
     ASSERT_TRUE(Between(Size("", "pastfoo"), 50000, 60000));
