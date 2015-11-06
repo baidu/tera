@@ -24,7 +24,6 @@ Copyright 2015, Baidu, Inc.
 * 高可用
   * 多点备份
 * 轻量、高性能
-  * 元数据全内存存储
   * 胜任千台以上规模集群的管理
 * 松耦合
   * 不参与读写逻辑
@@ -98,7 +97,8 @@ Copyright 2015, Baidu, Inc.
     * 对于支持热更新的schema，命令ts更新schema
     * 对于其它schema，先命令ts执行unload，再命令ts以新schema执行load
 
-
+####表格操作
+  1. 修改内存元数据
     * create: 增加table、tablet结构
     * drop: 删除table、tablet结构
     * disable/enable: 修改table status
@@ -112,9 +112,3 @@ Copyright 2015, Baidu, Inc.
     * create/enable: load
     * disable: unload
   4. 发送response
-####权限
-####节点管理
-  
-####负载均衡
-
- * 
