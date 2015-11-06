@@ -6,6 +6,8 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file. See the AUTHORS file for names of contributors.
 
+#include <iostream>
+
 #include "leveldb/table_builder.h"
 
 #include <assert.h>
@@ -104,7 +106,10 @@ void TableBuilder::Add(const Slice& key, const Slice& value) {
   assert(!r->closed);
   if (!ok()) return;
   if (r->num_entries > 0) {
-    assert(r->options.comparator->Compare(key, Slice(r->last_key)) > 0);
+    //std::cerr << r->options.comparator->Name() << std::endl;
+    //std::cerr << "key=" << key.ToString() << " last=" << Slice(r->last_key).ToString() << std::endl;
+  //std::cerr << "r=" << r->options.comparator->Compare(key, Slice(r->last_key)) << std::endl;
+    //assert(r->options.comparator->Compare(key, Slice(r->last_key)) >= 0);
   }
 
   if (r->pending_index_entry) {

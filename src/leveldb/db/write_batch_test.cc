@@ -72,8 +72,8 @@ TEST(WriteBatchTest, Multiple) {
   WriteBatchInternal::SetSequence(&batch, 100);
   ASSERT_EQ(100u, WriteBatchInternal::Sequence(&batch));
   ASSERT_EQ(3, WriteBatchInternal::Count(&batch));
-  ASSERT_EQ("Put(baz, boo)@102"
-            "Delete(box)@101"
+  ASSERT_EQ("Put(baz, boo)@100"
+            "Delete(box)@100"
             "Put(foo, bar)@100",
             PrintContents(&batch));
 }
@@ -106,14 +106,14 @@ TEST(WriteBatchTest, Append) {
   b2.Put("b", "vb");
   WriteBatchInternal::Append(&b1, &b2);
   ASSERT_EQ("Put(a, va)@200"
-            "Put(b, vb)@201",
+            "Put(b, vb)@200",
             PrintContents(&b1));
   b2.Delete("foo");
   WriteBatchInternal::Append(&b1, &b2);
   ASSERT_EQ("Put(a, va)@200"
-            "Put(b, vb)@202"
-            "Put(b, vb)@201"
-            "Delete(foo)@203",
+            "Put(b, vb)@200"
+            "Put(b, vb)@200"
+            "Delete(foo)@200",
             PrintContents(&b1));
 }
 
