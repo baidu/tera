@@ -18,7 +18,7 @@
 #include "common/base/string_number.h"
 #include "common/file/file_path.h"
 #include "io/coding.h"
-#include "proto/kv_helper.h"
+#include "proto/meta_helper.h"
 #include "proto/proto_helper.h"
 #include "proto/tabletnode.pb.h"
 #include "proto/tabletnode_client.h"
@@ -2017,13 +2017,13 @@ void WriteToStream(std::ofstream& ofs,
 
 void WriteTable(const TableMeta& meta, std::ofstream& ofs) {
     std::string key, value;
-    MakeMetaTableKeyValue(meta, &key, &value);
+    MetaHelper::MakeEntryOfTable(meta, &key, &value);
     WriteToStream(ofs, key, value);
 }
 
 void WriteTablet(const TabletMeta& meta, std::ofstream& ofs) {
     std::string key, value;
-    MakeMetaTableKeyValue(meta, &key, &value);
+    MetaHelper::MakeEntryOfTablet(meta, &key, &value);
     WriteToStream(ofs, key, value);
 }
 
@@ -2075,18 +2075,18 @@ int32_t Meta2Op(Client *client, int32_t argc, char** argv) {
         for (int32_t i = 0; i < record_size; i++) {
             const tera::KeyValuePair& record = response.results().key_values(i);
             last_record_key = record.key();
-            char first_key_char = record.key()[0];
-            if (first_key_char == '~') {
+            MetaEntryType type = MetaHelper::GetMetaEntryType(record.key());
+            if (type == kMetaEntryTable) {
+                MetaHelper::ParseEntryOfTable(record.value(), table_list.add_meta());
+            } else if (type == kMetaEntryTablet) {
+                MetaHelper::ParseEntryOfTablet(record.value(), tablet_list.add_meta());
+            } else if (type == kMetaEntryUser) {
                 std::cout << "(user: " << record.key().substr(1) << ")" << std::endl;
-            } else if (first_key_char == '@') {
-                ParseMetaTableKeyValue(record.key(), record.value(), table_list.add_meta());
-            } else if (first_key_char > '@') {
-                ParseMetaTableKeyValue(record.key(), record.value(), tablet_list.add_meta());
             } else {
                 std::cerr << "invalid record: " << record.key();
             }
         }
-        std::string next_record_key = tera::NextKey(last_record_key);
+        std::string next_record_key = tera::MetaHelper::NextKey(last_record_key);
         request.set_start(next_record_key);
         request.set_end("");
         request.set_sequence_id(seq_id++);

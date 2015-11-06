@@ -21,7 +21,7 @@
 #include "common/file/recordio/record_io.h"
 
 #include "io/coding.h"
-#include "proto/kv_helper.h"
+#include "proto/meta_helper.h"
 #include "proto/proto_helper.h"
 #include "proto/tabletnode_client.h"
 #include "sdk/mutate_impl.h"
@@ -1353,9 +1353,9 @@ void TableImpl::ScanMetaTableAsync(const std::string& key_start, const std::stri
     ScanTabletResponse* response = new ScanTabletResponse;
     request->set_sequence_id(_last_sequence_id++);
     request->set_table_name(FLAGS_tera_master_meta_table_name);
-    MetaTableScanRange(_name, key_start, expand_key_end,
-                       request->mutable_start(),
-                       request->mutable_end());
+    MetaHelper::MetaTableScanRange(_name, key_start, expand_key_end,
+                                   request->mutable_start(),
+                                   request->mutable_end());
     request->set_buffer_limit(FLAGS_tera_sdk_update_meta_buffer_limit);
     request->set_round_down(true);
 
@@ -1411,7 +1411,7 @@ void TableImpl::ScanMetaTableCallBack(std::string key_start,
         const KeyValuePair& kv = scan_result.key_values(i);
 
         TabletMeta meta;
-        ParseMetaTableKeyValue(kv.key(), kv.value(), &meta);
+        MetaHelper::ParseEntryOfTablet(kv.value(), &meta);
 
         if (i == 0) {
             return_start = meta.key_range().key_start();
@@ -1699,7 +1699,7 @@ void TableImpl::ReadTableMetaAsync(ErrorCode* ret_err, int32_t retry_times,
     request->set_sequence_id(_last_sequence_id++);
     request->set_tablet_name(FLAGS_tera_master_meta_table_name);
     RowReaderInfo* row_info = request->add_row_info_list();
-    MakeMetaTableKey(_name, row_info->mutable_key());
+    MetaHelper::MakeEntryKeyOfTable(_name, row_info->mutable_key());
 
     Closure<void, ReadTabletRequest*, ReadTabletResponse*, bool, int>* done =
         NewClosure(this, &TableImpl::ReadTableMetaCallBack, ret_err, retry_times);
@@ -1757,7 +1757,7 @@ void TableImpl::ReadTableMetaCallBack(ErrorCode* ret_err,
     if (err == kTabletNodeOk) {
         TableMeta table_meta;
         const KeyValuePair& kv = response->detail().row_result(0).key_values(0);
-        ParseMetaTableKeyValue(kv.key(), kv.value(), &table_meta);
+        MetaHelper::ParseEntryOfTable(kv.value(), &table_meta);
         _table_schema.CopyFrom(table_meta.schema());
         _create_time = table_meta.create_time();
         ret_err->SetFailed(ErrorCode::kOK);

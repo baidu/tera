@@ -19,8 +19,8 @@
 #include "leveldb/status.h"
 #include "master/master_zk_adapter.h"
 #include "master/workload_scheduler.h"
-#include "proto/kv_helper.h"
 #include "proto/master_client.h"
+#include "proto/meta_helper.h"
 #include "proto/proto_helper.h"
 #include "proto/tabletnode_client.h"
 #include "utils/string_util.h"
@@ -541,19 +541,20 @@ bool MasterImpl::LoadMetaTable(const std::string& meta_tablet_addr,
         for (uint32_t i = 0; i < record_size; i++) {
             const KeyValuePair& record = response.results().key_values(i);
             last_record_key = record.key();
-            char first_key_char = record.key()[0];
-            if (first_key_char == '~') {
-                m_user_manager->LoadUserMeta(record.key(), record.value());
-            } else if (first_key_char == '@') {
+            MetaEntryType type = MetaHelper::GetMetaEntryType(record.key());
+            if (type == kMetaEntryTable) {
                 m_tablet_manager->LoadTableMeta(record.key(), record.value());
                 FillAlias(record.key(), record.value());
-            } else if (first_key_char > '@') {
+            } else if (type == kMetaEntryTablet) {
                 m_tablet_manager->LoadTabletMeta(record.key(), record.value());
+            } else if (type == kMetaEntryUser) {
+                m_user_manager->LoadUserMeta(record.key(), record.value());
             } else {
-                continue;
+                LOG(ERROR) << "[meta-helper] unknow meta entry:" << record.key()
+                           << ", " << record.value();
             }
         }
-        std::string next_record_key = NextKey(last_record_key);
+        std::string next_record_key = MetaHelper::NextKey(last_record_key);
         request.set_start(next_record_key);
         request.set_end("");
         request.set_sequence_id(m_this_sequence_id.Inc());
@@ -567,7 +568,7 @@ bool MasterImpl::LoadMetaTable(const std::string& meta_tablet_addr,
 
 void MasterImpl::FillAlias(const std::string& key, const std::string& value) {
     TableMeta meta;
-    ParseMetaTableKeyValue(key, value, &meta);
+    MetaHelper::ParseEntryOfTable(value, &meta);
     if (!meta.schema().alias().empty()) {
         MutexLock locker(&m_alias_mutex);
         m_alias[meta.schema().alias()] = meta.schema().name();
@@ -577,7 +578,7 @@ void MasterImpl::FillAlias(const std::string& key, const std::string& value) {
 }
 
 bool MasterImpl::LoadMetaTableFromFile(const std::string& filename,
-                                          StatusCode* ret_status) {
+                                       StatusCode* ret_status) {
     m_tablet_manager->ClearTableList();
     std::ifstream ifs(filename.c_str(), std::ofstream::binary);
     if (!ifs.is_open()) {
@@ -603,19 +604,18 @@ bool MasterImpl::LoadMetaTableFromFile(const std::string& filename,
                       schema, kTableNotInit, 0, &meta_tablet);
             return true;
         }
-
-        char first_key_char = key[0];
-        if (first_key_char == '~') {
-            m_user_manager->LoadUserMeta(key, value);
-        } else if (first_key_char == '@') {
+        MetaEntryType type = MetaHelper::GetMetaEntryType(key);
+        if (type == kMetaEntryTable) {
             m_tablet_manager->LoadTableMeta(key, value);
             FillAlias(key, value);
-        } else if (first_key_char > '@') {
+        } else if (type == kMetaEntryTablet) {
             m_tablet_manager->LoadTabletMeta(key, value);
+        } else if (type == kMetaEntryUser) {
+            m_user_manager->LoadUserMeta(key, value);
         } else {
-            continue;
+            LOG(ERROR) << "[meta-helper] unknow meta entry:" << key
+                       << ", " << value;
         }
-
         count++;
     }
     m_tablet_manager->ClearTableList();
@@ -4523,8 +4523,8 @@ void MasterImpl::ScanMetaTableAsync(const std::string& table_name,
     request->set_sequence_id(m_this_sequence_id.Inc());
     request->set_table_name(FLAGS_tera_master_meta_table_name);
     std::string scan_key_start, scan_key_end;
-    MetaTableScanRange(table_name, tablet_key_start, tablet_key_end,
-                       &scan_key_start, &scan_key_end);
+    MetaHelper::MetaTableScanRange(table_name, tablet_key_start, tablet_key_end,
+                                   &scan_key_start, &scan_key_end);
     request->set_start(scan_key_start);
     request->set_end(scan_key_end);
 
@@ -4577,8 +4577,7 @@ void MasterImpl::ScanMetaCallbackForSplit(TabletPtr tablet,
 
     const KeyValuePair& first_record = response->results().key_values(0);
     TabletMeta first_meta;
-    ParseMetaTableKeyValue(first_record.key(), first_record.value(),
-                           &first_meta);
+    MetaHelper::ParseEntryOfTablet(first_record.value(), &first_meta);
     const std::string& first_key_start = first_meta.key_range().key_start();
     const std::string& first_key_end = first_meta.key_range().key_end();
 
@@ -4603,8 +4602,7 @@ void MasterImpl::ScanMetaCallbackForSplit(TabletPtr tablet,
 
     const KeyValuePair& second_record = response->results().key_values(1);
     TabletMeta second_meta;
-    ParseMetaTableKeyValue(second_record.key(), second_record.value(),
-                           &second_meta);
+    MetaHelper::ParseEntryOfTablet(second_record.value(), &second_meta);
     const std::string& second_key_start = second_meta.key_range().key_start();
     const std::string& second_key_end = second_meta.key_range().key_end();
 

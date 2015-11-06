@@ -10,8 +10,8 @@
 
 #include "common/file/file_path.h"
 #include "common/mutex.h"
-#include "proto/kv_helper.h"
 #include "proto/master_client.h"
+#include "proto/meta_helper.h"
 #include "proto/proto_helper.h"
 #include "proto/table_meta.pb.h"
 #include "proto/tabletnode_client.h"
@@ -385,17 +385,14 @@ bool ClientImpl::GetInternalTableName(const std::string& table_name, ErrorCode* 
         const KeyValuePair& record = response.results().key_values(i);
         const string& key = record.key();
         const string& value = record.value();
-        if (key[0] == '@') {
+        MetaEntryType type = MetaHelper::GetMetaEntryType(key);
+        if (kMetaEntryTable == type) {
             TableMeta meta;
-            ParseMetaTableKeyValue(key, value, &meta);
+            MetaHelper::ParseEntryOfTable(value, &meta);
             if (meta.schema().alias() == table_name) {
                 *internal_table_name =  meta.table_name();
                 break;
             }
-        } else if (key[0] > '@') {
-            break;
-        } else {
-            continue;
         }
     }
     return true;
@@ -922,7 +919,7 @@ bool ClientImpl::ListInternal(std::vector<TableInfo>* table_list,
             const tera::TabletMeta& meta = tablet_meta_list.meta(tablet_meta_list.meta_size()-1);
             const string& last_key = meta.key_range().key_start();
             request.set_start_table_name(meta.table_name());
-            request.set_start_tablet_key(tera::NextKey(last_key));
+            request.set_start_tablet_key(tera::MetaHelper::NextKey(last_key));
             request.set_sequence_id(sequence_id++);
         }
     }
