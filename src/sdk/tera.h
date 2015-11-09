@@ -12,6 +12,7 @@
 #include <string>
 #include <vector>
 
+#pragma GCC visibility push(default)
 namespace tera {
 
 /// 操作错误码
@@ -692,4 +693,6 @@ private:
     void operator=(const Client&);
 };
 } // namespace tera
+#pragma GCC visibility pop
+
 #endif  // TERA_TERA_H_

@@ -7,11 +7,11 @@ OPT ?= -g2 -Wall -Werror        # (B) Debug mode, w/ full line-level debugging s
 CC = cc
 CXX = g++
 
-SHARED_CFLAGS = -fPIC
-SHARED_LDFLAGS = -shared -Wl,-soname -Wl,
+SHARED_CFLAGS = -fPIC -fvisibility=hidden
+SHARED_LDFLAGS = -shared -Wl,--exclude-libs,ALL
 
 INCPATH += -I./src -I./include -I./src/leveldb/include -I./src/leveldb \
-		   -I./src/sdk/java/native-src $(DEPS_INCPATH) 
+           -I./src/sdk/java/native-src $(DEPS_INCPATH) 
 CFLAGS += $(OPT) $(SHARED_CFLAGS) $(INCPATH)
 CXXFLAGS += $(OPT) $(SHARED_CFLAGS) $(INCPATH)
 LDFLAGS += -rdynamic $(DEPS_LDPATH) $(DEPS_LDFLAGS) -lpthread -lrt -lz -ldl
@@ -60,13 +60,14 @@ LEVELDB_LIB := src/leveldb/libleveldb.a
 
 PROGRAM = tera_main teracli teramo
 LIBRARY = libtera.a
+DLIBRARY = libtera.so
 JNILIBRARY = libjni_tera.so
 BENCHMARK = tera_bench tera_mark
 TESTS = prop_tree_test tprinter_test
 
 .PHONY: all clean cleanall test
 
-all: $(PROGRAM) $(LIBRARY) $(JNILIBRARY) $(BENCHMARK) $(TESTS)
+all: $(PROGRAM) $(LIBRARY) $(DLIBRARY) $(JNILIBRARY) $(BENCHMARK) $(TESTS)
 	mkdir -p build/include build/lib build/bin build/log build/benchmark
 	mkdir -p $(UNITTEST_OUTPUT)
 	mv $(TESTS) $(UNITTEST_OUTPUT)
@@ -100,6 +101,10 @@ tera_main: $(SERVER_OBJ) $(LEVELDB_LIB) $(MASTER_OBJ) $(TABLETNODE_OBJ) \
 libtera.a: $(SDK_OBJ) $(PROTO_OBJ) $(OTHER_OBJ) $(COMMON_OBJ)
 	$(AR) -rs $@ $(SDK_OBJ) $(PROTO_OBJ) $(OTHER_OBJ) $(COMMON_OBJ)
 
+libtera.so: $(SDK_OBJ) $(PROTO_OBJ) $(OTHER_OBJ) $(COMMON_OBJ)
+	$(CXX) -o $@ $(SDK_OBJ) $(PROTO_OBJ) $(OTHER_OBJ) $(COMMON_OBJ) $(SHARED_LDFLAGS) \
+	-Xlinker "-(" $(LDFLAGS) -Xlinker "-)"
+
 teracli: $(CLIENT_OBJ) $(LIBRARY)
 	$(CXX) -o $@ $(CLIENT_OBJ) $(LIBRARY) $(LDFLAGS)
 
@@ -110,7 +115,7 @@ tera_mark: $(MARK_OBJ) $(LIBRARY) $(LEVELDB_LIB)
 	$(CXX) -o $@ $(MARK_OBJ) $(LIBRARY) $(LEVELDB_LIB) $(LDFLAGS)
  
 libjni_tera.so: $(JNI_TERA_OBJ) $(LIBRARY) 
-	$(CXX) -shared $(JNI_TERA_OBJ) -Xlinker "-(" $(LIBRARY) $(LDFLAGS) -Xlinker "-)" -o $@ 
+	$(CXX) -o $@ $(JNI_TERA_OBJ) $(SHARED_LDFLAGS) -Xlinker "-(" $(LIBRARY) $(LDFLAGS) -Xlinker "-)"
 
 src/leveldb/libleveldb.a: FORCE
 	$(MAKE) -C src/leveldb

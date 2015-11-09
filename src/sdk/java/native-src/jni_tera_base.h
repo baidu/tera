@@ -4,6 +4,7 @@
 
 #ifndef _Included_com_baidu_tera_client_TeraBase
 #define _Included_com_baidu_tera_client_TeraBase
+#pragma GCC visibility push(default)
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -34,4 +35,5 @@ JNIEXPORT void JNICALL Java_com_baidu_tera_client_TeraBase_nativeVlog
 #ifdef __cplusplus
 }
 #endif
+#pragma GCC visibility pop
 #endif

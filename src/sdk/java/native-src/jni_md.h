@@ -12,6 +12,8 @@
 #define JNIIMPORT
 #define JNICALL
 
+#pragma GCC visibility push(default)
+
 typedef int jint;
 #ifdef _LP64 /* 64-bit Solaris */
 typedef long jlong;
@@ -20,5 +22,7 @@ typedef long long jlong;
 #endif
 
 typedef signed char jbyte;
+
+#pragma GCC visibility pop
 
 #endif /* !_JAVASOFT_JNI_MD_H_ */
