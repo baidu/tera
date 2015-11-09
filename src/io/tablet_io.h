@@ -189,8 +189,11 @@ private:
     bool FilterCell(const ScanOptions& scan_options, const std::string& col,
                     const std::string& qual, int64_t ts);
 
-    StatusCode InitedScanInterator(const std::string& start_tera_key,
-                                   const ScanOptions& scan_options,
+    void SeekIterator(const std::string& row, const std::string& col,
+                      const std::string& qual, int64_t ts,
+                      leveldb::Iterator* scan_it);
+
+    StatusCode InitedScanInterator(const ScanOptions& scan_options,
                                    leveldb::Iterator** scan_it);
 
     bool ScanRowsRestricted(const ScanTabletRequest* request,
