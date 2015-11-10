@@ -5,7 +5,7 @@
 #include "master/gc_strategy.h"
 
 #include <gflags/gflags.h>
-#include <boost/lexical_cast.hpp> 
+#include <boost/lexical_cast.hpp>
 
 #include "db/filename.h"
 #include "io/utils_leveldb.h"
@@ -286,7 +286,7 @@ void IncrementalGcStrategy::ProcessQueryCallbackForGc(QueryResponse* response) {
         if (m_live_tablet_files[table_name].find(tablet_number) == m_live_tablet_files[table_name].end()) continue;
         m_live_tablet_files[table_name][tablet_number].m_ready_time = get_micros() / 1000000;
     }
-    
+
     // insert live files
     for (int table = 0; table < response->inh_live_files_size(); ++table) {
         InheritedLiveFiles live_files = response->inh_live_files(table);

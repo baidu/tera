@@ -3281,12 +3281,13 @@ void MasterImpl::QueryTabletNodeCallback(std::string addr, QueryRequest* request
                 ClearUnusedSnapshots(tablet, meta);
                 VLOG(30) << "[query] " << tablet;
             } else {
-                VLOG(30) << "fail to match tablet: " << meta.table_name()
+                LOG(WARNING) << "fail to match tablet: " << meta.table_name()
                     << ", path: " << meta.path()
                     << ", range: [" << DebugString(key_start)
                     << ", " << DebugString(key_end)
                     << "], size: " << meta.size()
-                    << ", addr: " << meta.server_addr();
+                    << ", addr: " << meta.server_addr()
+                    << ", tablet: " << tablet;
             }
         }
 

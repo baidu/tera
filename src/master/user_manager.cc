@@ -9,7 +9,7 @@
 namespace tera {
 namespace master {
 
-User::User(const std::string& name, const UserInfo& user_info) 
+User::User(const std::string& name, const UserInfo& user_info)
     : name_(name), user_info_(user_info) {}
 
 std::string User::DebugString() {
@@ -82,7 +82,7 @@ bool UserManager::IsUserInGroup(const std::string& user_name, const std::string&
     MutexLock locker(&mutex_);
     UserList::iterator it = all_users_.find(user_name);
     if (it == all_users_.end()) {
-        return false;        
+        return false;
     }
     UserInfo user_info = it->second->GetUserInfo();
     for (int i = 0; i < user_info.group_name_size(); ++i) {
@@ -142,41 +142,41 @@ bool UserManager::IsUserNameValid(const std::string& user_name) {
     return true;
 }
 
-bool UserManager::IsValidForCreate(const std::string& token, 
+bool UserManager::IsValidForCreate(const std::string& token,
                                    const std::string& user_name) {
     LOG(INFO) << "[user-manager] " << user_name << ", " << token;
-    return IsUserNameValid(user_name) 
+    return IsUserNameValid(user_name)
            && !IsUserExist(user_name)
            && TokenToUserName(token) == "root";
 }
 
-bool UserManager::IsValidForDelete(const std::string& token, 
+bool UserManager::IsValidForDelete(const std::string& token,
                                    const std::string& user_name) {
     LOG(INFO) << "[user-manager] " << user_name << ", " << token;
-    return IsUserExist(user_name) 
+    return IsUserExist(user_name)
            && user_name != "root"
            && TokenToUserName(token) == "root";
 }
 
-bool UserManager::IsValidForChangepwd(const std::string& token, 
+bool UserManager::IsValidForChangepwd(const std::string& token,
                                       const std::string& user_name) {
     LOG(INFO) << "[user-manager] " << user_name << ", " << token << ", who call:" << TokenToUserName(token);
     return IsUserExist(user_name)
            && (TokenToUserName(token) == "root" || TokenToUserName(token) == user_name);
 }
 
-bool UserManager::IsValidForAddToGroup(const std::string& token, 
-                                       const std::string& user_name, 
+bool UserManager::IsValidForAddToGroup(const std::string& token,
+                                       const std::string& user_name,
                                        const std::string& group_name) {
-    return IsUserExist(user_name) 
+    return IsUserExist(user_name)
            && !IsUserInGroup(user_name, group_name)
            && TokenToUserName(token) == "root";
 }
 
-bool UserManager::IsValidForDeleteFromGroup(const std::string& token, 
-                                            const std::string& user_name, 
+bool UserManager::IsValidForDeleteFromGroup(const std::string& token,
+                                            const std::string& user_name,
                                             const std::string& group_name) {
-    return IsUserExist(user_name) 
+    return IsUserExist(user_name)
            && IsUserInGroup(user_name, group_name)
            && (TokenToUserName(token) == "root" || TokenToUserName(token) == user_name);
 }
@@ -185,7 +185,7 @@ std::string UserManager::UserNameToToken(const std::string& user_name) {
     MutexLock locker(&mutex_);
     UserList::iterator it = all_users_.find(user_name);
     if (it == all_users_.end()) {
-        return "#UnknownUser";        
+        return "#UnknownUser";
     }
     return it->second->GetToken();
 }
@@ -205,18 +205,18 @@ bool UserManager::SetUserInfo(const std::string& user_name, const UserInfo& user
     MutexLock locker(&mutex_);
     UserList::iterator it = all_users_.find(user_name);
     if (it == all_users_.end()) {
-        LOG(INFO) << "[user-manager] user:" << user_name << " not found";        
+        LOG(INFO) << "[user-manager] user:" << user_name << " not found";
         return false;
     }
     it->second->SetUserInfo(user_info);
-    return true; 
+    return true;
 }
 
 UserInfo UserManager::GetUserInfo(const std::string& user_name) {
     MutexLock locker(&mutex_);
     UserList::iterator it = all_users_.find(user_name);
     if (it == all_users_.end()) {
-        LOG(INFO) << "[user-manager] user:" << user_name << " not found";        
+        LOG(INFO) << "[user-manager] user:" << user_name << " not found";
         UserInfo ui;
         ui.set_user_name("(user_not_found)");
         return ui;
@@ -230,7 +230,7 @@ bool UserManager::DeleteGroupFromUserInfo(UserInfo& user_info,
     std::string user_name = user_info.user_name();
     UserList::iterator it = all_users_.find(user_name);
     if (it == all_users_.end()) {
-        LOG(INFO) << "[user-manager] user:" << user_name << " not found";        
+        LOG(INFO) << "[user-manager] user:" << user_name << " not found";
         return false;
     }
     user_info.clear_group_name();

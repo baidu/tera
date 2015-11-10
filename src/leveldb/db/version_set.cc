@@ -41,10 +41,11 @@ static int64_t ExpandedCompactionByteSizeLimit(int target_file_size) {
     return 25 * target_file_size;
 }
 
-static double MaxBytesForLevel(int level) {
+static double MaxBytesForLevel(int level, int sst_size) {
   // Note: the result for level zero is not really used since we set
   // the level-0 compaction threshold based on number of files.
-  double result = 40 * 1048576.0;  // Result for both level-0 and level-1
+  // double result = 40 * 1048576.0;  // Result for both level-0 and level-1
+  double result = 5 * sst_size;  // Result for both level-0 and level-1
   while (level > 1) {
     result *= 10;
     level--;
@@ -964,12 +965,10 @@ Status VersionSet::LogAndApply(VersionEdit* edit, port::Mutex* mu) {
   }
 
   edit->SetNextFile(next_file_number_);
+
   if (edit->HasLastSequence()) {
     Log(options_->info_log, "[%s] LogLastSequence %lu",
         dbname_.c_str(), edit->GetLastSequence());
-  }
-
-  if (edit->HasLastSequence()) {
     assert(edit->GetLastSequence() >= last_sequence_);
   } else {
     edit->SetLastSequence(last_sequence_);
@@ -1015,6 +1014,9 @@ Status VersionSet::LogAndApply(VersionEdit* edit, port::Mutex* mu) {
       if (s.ok()) {
         descriptor_log_ = new log::Writer(descriptor_file_);
         s = WriteSnapshot(descriptor_log_);
+      } else {
+        Log(options_->info_log, "[%s][dfs error] open MANIFEST[%s] error, status[%s].\n",
+            dbname_.c_str(), new_manifest_file.c_str(), s.ToString().c_str());
       }
     }
 
@@ -1027,7 +1029,7 @@ Status VersionSet::LogAndApply(VersionEdit* edit, port::Mutex* mu) {
         s = descriptor_file_->Sync();
       }
       if (!s.ok()) {
-        Log(options_->info_log, "[%s] MANIFEST write: %s\n",
+        Log(options_->info_log, "[%s][dfs error] MANIFEST sync error: %s\n",
             dbname_.c_str(), s.ToString().c_str());
         if (ManifestContains(record)) {
           Log(options_->info_log,
@@ -1044,8 +1046,11 @@ Status VersionSet::LogAndApply(VersionEdit* edit, port::Mutex* mu) {
     if (s.ok() && !new_manifest_file.empty()) {
       s = SetCurrentFile(env_, dbname_, manifest_file_number_);
       if (s.ok()) {
-          Log(options_->info_log, "[%s] set CURRENT to %llu\n",
-              dbname_.c_str(), static_cast<unsigned long long>(manifest_file_number_));
+        Log(options_->info_log, "[%s] set CURRENT to %llu\n",
+            dbname_.c_str(), static_cast<unsigned long long>(manifest_file_number_));
+      } else {
+        Log(options_->info_log, "[%s][dfs error] set CURRENT error: %s\n",
+            dbname_.c_str(), s.ToString().c_str());
       }
       // No need to double-check MANIFEST in case of error since it
       // will be discarded below.
@@ -1070,7 +1075,7 @@ Status VersionSet::LogAndApply(VersionEdit* edit, port::Mutex* mu) {
       env_->DeleteFile(new_manifest_file);
     }
     force_switch_manifest_ = true;
-    Log(options_->info_log, "[%s] set force_switch_manifest", dbname_.c_str());
+    Log(options_->info_log, "[%s][dfs error] set force_switch_manifest", dbname_.c_str());
   }
 
   return s;
@@ -1357,7 +1362,8 @@ void VersionSet::Finalize(Version* v) {
     } else {
       // Compute the ratio of current size to size limit.
       const uint64_t level_bytes = TotalFileSize(v->files_[level]);
-      score = static_cast<double>(level_bytes) / MaxBytesForLevel(level);
+      score = static_cast<double>(level_bytes)
+          / MaxBytesForLevel(level, options_->sst_size);
     }
 
     if (score > best_score) {
