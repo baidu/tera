@@ -92,6 +92,7 @@ all: $(LIBRARY) $(PROGRAMS)
 
 check: all $(TESTS)
 	for t in $(TESTS); do echo "***** Running $$t"; ./$$t || exit 1; done
+
 test: $(TESTS)
 
 clean:
