@@ -1351,7 +1351,6 @@ Status DBImpl::Get(const ReadOptions& options,
   {
     mutex_.Unlock();
     // First look in the memtable, then in the immutable memtable (if any).
-    //std::cerr << "Lookup=" << key.ToString() << ":" << snapshot << ":" << mem->GetLastInternalSeq() <<  std::endl;
     LookupKey lkey(key, snapshot, mem->GetLastInternalSeq());
     if (mem->Get(lkey, value, options.rollbacks, &s)) {
       // Done

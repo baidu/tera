@@ -29,8 +29,6 @@ class Comparator {
   //   > 0 iff "a" > "b"
   virtual int Compare(const Slice& a, const Slice& b) const = 0;
 
-  virtual int CompareWithInternalSeq(const Slice& akey, const Slice& bkey) const {return 0;};
-
   // The name of the comparator.  Used to check for comparator
   // mismatches (i.e., a DB created with one comparator is
   // accessed using a different comparator.

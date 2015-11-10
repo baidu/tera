@@ -28,14 +28,11 @@
 //
 // ... prev vs. next pointer ordering ...
 
-#include <iostream>
 #include <assert.h>
 #include <stdlib.h>
 #include "port/port.h"
 #include "util/arena.h"
 #include "util/random.h"
-#include "leveldb/slice.h"
-#include "util/coding.h"
 
 namespace leveldb {
 
@@ -259,14 +256,6 @@ int SkipList<Key,Comparator>::RandomHeight() {
 template<typename Key, class Comparator>
 bool SkipList<Key,Comparator>::KeyIsAfterNode(const Key& key, Node* n) const {
   // NULL n is considered infinite
-  if (n) {
-    /*
-    uint32_t len;
-    const char* p = (char*)key;
-    p = GetVarint32Ptr(p, p + 5, &len);
-    */
-    //std::cerr << "KeyIsAfterNode:" << len << std::endl;
-  }
   return (n != NULL) && (compare_(n->key, key) < 0);
 }
 
@@ -379,12 +368,6 @@ void SkipList<Key,Comparator>::Insert(const Key& key) {
     x->NoBarrier_SetNext(i, prev[i]->NoBarrier_Next(i));
     prev[i]->SetNext(i, x);
   }
-  /*
-  uint32_t len;
-  const char* p = (char*)x->key;
-  p = GetVarint32Ptr(p, p + 5, &len);
-  */
-  //std::cerr << "skipsize:" << len << std::endl;
 }
 
 template<typename Key, class Comparator>

@@ -6,7 +6,6 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file. See the AUTHORS file for names of contributors.
 
-#include <iostream>
 #include <stdio.h>
 #include "db/dbformat.h"
 #include "port/port.h"
@@ -53,7 +52,6 @@ const char* InternalKeyComparator::Name() const {
 }
 
 int InternalKeyComparator::Compare(const Slice& akey, const Slice& bkey) const {
-  //std::cerr << "InternalKeyComparator::Compare\n";
   // Order by:
   //    increasing user key (according to user-supplied comparator)
   //    decreasing sequence number
@@ -67,42 +65,32 @@ int InternalKeyComparator::Compare(const Slice& akey, const Slice& bkey) const {
     } else if (anum < bnum) {
       r = +1;
     }
-    //std::cerr << "Compare akey=" << akey.ToString() << " asize=" << akey.size() << " bkey=" << bkey.ToString() << " bsize=" << bkey.size()
-      //<< " anum=" << anum << " bnum=" << bnum << std::endl;
   }
   return r;
 }
 
 int InternalKeyComparator::CompareWithInternalSeq(const Slice& akey, const Slice& bkey) const {
-  //std::cerr << "CompareWithInternalSeq:" << akey.ToString() << " asize=" << akey.size() << " bkey=" << bkey.ToString() << " bsize=" << bkey.size() << std::endl;
   // Order by:
   //    increasing user key (according to user-supplied comparator)
   //    decreasing sequence number
   //    decreasing type (though sequence# should be enough to disambiguate)
   int r = user_comparator_->Compare(ExtractUserKeyWithInternalSeq(akey), ExtractUserKeyWithInternalSeq(bkey));
-  if (r != 0) {
-    //std::cerr << "Diff akey=" << ExtractUserKeyWithInternalSeq(akey).ToString() << " bkey=" << ExtractUserKeyWithInternalSeq(bkey).ToString() << std::endl;
-  }
   if (r == 0) {
     const uint64_t anum = DecodeFixed64(akey.data() + akey.size() - 16) >> 8;
     const uint64_t bnum = DecodeFixed64(bkey.data() + bkey.size() - 16) >> 8;
-    //std::cerr << "anum=" << anum << " bnum=" << bnum << std::endl;
     if (anum > bnum) {
-      //std::cerr << "-1\n";
       r = -1;
     } else if (anum < bnum) {
-      //std::cerr << "+1\n";
       r = +1;
     } else {
       const uint64_t a_internal_seq = DecodeFixed64(akey.data() + akey.size() - 8);
       const uint64_t b_internal_seq = DecodeFixed64(bkey.data() + bkey.size() - 8);
-      //std::cerr << "a_internal_seq=" << a_internal_seq << " b_internal_seq=" << b_internal_seq << std::endl;
       if (a_internal_seq > b_internal_seq) {
         r = -1;
       } else if (a_internal_seq < b_internal_seq) {
         r = +1;
       } else {
-        // r = 0;
+        r = 0;
       }
     }
   }
@@ -162,26 +150,6 @@ bool InternalFilterPolicy::KeyMayMatch(const Slice& key, const Slice& f) const {
   return user_policy_->KeyMayMatch(ExtractUserKey(key), f);
 }
 
-LookupKey::LookupKey(const Slice& user_key, SequenceNumber s) {
-  size_t usize = user_key.size();
-  size_t needed = usize + 13;  // A conservative estimate
-  char* dst;
-  if (needed <= sizeof(space_)) {
-    dst = space_;
-  } else {
-    dst = new char[needed];
-  }
-  start_ = dst;
-  dst = EncodeVarint32(dst, usize + 8);
-  kstart_ = dst;
-  memcpy(dst, user_key.data(), usize);
-  dst += usize;
-  EncodeFixed64(dst, PackSequenceAndType(s, kValueTypeForSeek));
-  dst += 8;
-  end_ = dst;
-  has_internal_seq_ = false;
-}
-
 LookupKey::LookupKey(const Slice& user_key, SequenceNumber s, SequenceNumber internal_seq) {
   size_t usize = user_key.size();
   size_t needed = usize + 13 + 8;  // A conservative estimate
@@ -201,7 +169,6 @@ LookupKey::LookupKey(const Slice& user_key, SequenceNumber s, SequenceNumber int
   EncodeFixed64(dst, internal_seq);
   dst += 8;
   end_ = dst;
-  has_internal_seq_ = true;
 }
 
 }  // namespace leveldb

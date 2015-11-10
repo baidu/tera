@@ -8,7 +8,6 @@
 
 #include "leveldb/c.h"
 
-#include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
 #include "leveldb/cache.h"
@@ -542,7 +541,6 @@ void leveldb_readoptions_set_snapshot(
     leveldb_readoptions_t* opt,
     const leveldb_snapshot_t* snap) {
   opt->rep.snapshot = (snap ? snap->rep : leveldb::kMaxSequenceNumber);
-  printf("snap=%lu\n", opt->rep.snapshot);
 }
 
 leveldb_writeoptions_t* leveldb_writeoptions_create() {

@@ -9,7 +9,6 @@
 #ifndef STORAGE_LEVELDB_DB_FORMAT_H_
 #define STORAGE_LEVELDB_DB_FORMAT_H_
 
-#include <iostream>
 #include <stdio.h>
 #include "leveldb/comparator.h"
 #include "leveldb/db.h"
@@ -121,7 +120,7 @@ class InternalKeyComparator : public Comparator {
   explicit InternalKeyComparator(const Comparator* c) : user_comparator_(c) { }
   virtual const char* Name() const;
   virtual int Compare(const Slice& a, const Slice& b) const;
-  virtual int InternalKeyComparator::CompareWithInternalSeq(const Slice& akey, const Slice& bkey) const;
+  virtual int CompareWithInternalSeq(const Slice& akey, const Slice& bkey) const;
   virtual void FindShortestSeparator(
       std::string* start,
       const Slice& limit) const;
@@ -175,7 +174,6 @@ class InternalKey {
 
 inline int InternalKeyComparator::Compare(
     const InternalKey& a, const InternalKey& b) const {
-  //std::cerr << "InternalKeyComparator::Compare()\n";
   return Compare(a.Encode(), b.Encode());
 }
 
@@ -206,7 +204,6 @@ class LookupKey {
  public:
   // Initialize *this for looking up user_key at a snapshot with
   // the specified sequence number.
-  LookupKey(const Slice& user_key, SequenceNumber sequence);
   LookupKey(const Slice& user_key, SequenceNumber sequence, SequenceNumber internal_seq);
 
   ~LookupKey();
@@ -215,22 +212,10 @@ class LookupKey {
   Slice memtable_key() const { return Slice(start_, end_ - start_); }
 
   // Return an internal key (suitable for passing to an internal iterator)
-  Slice internal_key() const {
-    if (has_internal_seq_) {
-      return Slice(kstart_, end_ - kstart_ - 8);
-    } else {
-      return Slice(kstart_, end_ - kstart_);
-    }
-  }
+  Slice internal_key() const { return Slice(kstart_, end_ - kstart_ - 8); }
 
   // Return the user key
-  Slice user_key() const {
-    if (has_internal_seq_) {
-      return Slice(kstart_, end_ - kstart_ - 8 - 8);
-    } else {
-      return Slice(kstart_, end_ - kstart_ - 8);
-    }
-  }
+  Slice user_key() const { return Slice(kstart_, end_ - kstart_ - 8 - 8); }
 
  private:
   // We construct a char array of the form:
@@ -244,7 +229,6 @@ class LookupKey {
   const char* kstart_;
   const char* end_;
   char space_[200];      // Avoid allocation for short keys
-  bool has_internal_seq_;
 
   // No copying allowed
   LookupKey(const LookupKey&);

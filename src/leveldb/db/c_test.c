@@ -135,7 +135,6 @@ static const char* CmpName(void* arg) {
 
 // Custom filter policy
 static unsigned char fake_filter_result = 1;
-
 static void FilterDestroy(void* arg) { }
 static const char* FilterName(void* arg) {
   return "TestFilter";
@@ -150,7 +149,6 @@ static char* FilterCreate(
   memcpy(result, "fake", 4);
   return result;
 }
-
 unsigned char FilterKeyMatch(
     void* arg,
     const char* key, size_t length,
@@ -226,7 +224,6 @@ int main(int argc, char** argv) {
   leveldb_compact_range(db, "a", 1, "z", 1);
   CheckGet(db, roptions, "foo", "hello");
 
-
   StartPhase("writebatch");
   {
     leveldb_writebatch_t* wb = leveldb_writebatch_create();
@@ -295,9 +292,7 @@ int main(int argc, char** argv) {
   StartPhase("property");
   {
     char* prop = leveldb_property_value(db, "nosuchprop");
-
 /*    CheckCondition(prop == NULL);*/
-
     prop = leveldb_property_value(db, "leveldb.stats");
     CheckCondition(prop != NULL);
     Free(&prop);
@@ -329,6 +324,7 @@ int main(int argc, char** argv) {
     CheckGet(db, roptions, "box", "c");
     leveldb_options_set_error_if_exists(options, 1);
   }
+
   StartPhase("filter");
   for (run = 0; run < 2; run++) {
     // First run uses custom filter, second run uses bloom filter
