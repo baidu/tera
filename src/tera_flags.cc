@@ -36,7 +36,7 @@ DEFINE_int32(tera_tablet_max_block_log_number, 50, "max number of unsed log file
 DEFINE_int64(tera_tablet_write_log_time_out, 5, "max time(sec) to wait for log writing or sync");
 DEFINE_bool(tera_log_async_mode, true, "enable async mode for log writing and sync");
 DEFINE_int64(tera_tablet_log_file_size, 32, "the log file size (in MB) for tablet");
-DEFINE_int64(tera_tablet_write_buffer_size, 32, "the buffer size (in MB) for tablet write buffer");
+DEFINE_int64(tera_tablet_max_write_buffer_size, 32, "the buffer size (in MB) for tablet write buffer");
 DEFINE_int64(tera_tablet_write_block_size, 4, "the block size (in KB) for teblet write block");
 DEFINE_int64(tera_tablet_living_period, -1, "the living period of tablet");
 DEFINE_int32(tera_tablet_flush_log_num, 100000, "the max log number before flush memtable");
