@@ -33,7 +33,7 @@
 
 DECLARE_string(tera_leveldb_env_type);
 DECLARE_int64(tera_tablet_log_file_size);
-DECLARE_int64(tera_tablet_write_buffer_size);
+DECLARE_int64(tera_tablet_max_write_buffer_size);
 DECLARE_int64(tera_tablet_write_block_size);
 DECLARE_int32(tera_tablet_level0_file_limit);
 DECLARE_int32(tera_tablet_max_block_log_number);
@@ -190,7 +190,6 @@ bool TabletIO::Load(const TableSchema& schema,
 
     m_ldb_options.key_start = m_raw_start_key;
     m_ldb_options.key_end = m_raw_end_key;
-    m_ldb_options.write_buffer_size = FLAGS_tera_tablet_write_buffer_size * 1024 * 1024;
     m_ldb_options.l0_slowdown_writes_trigger = FLAGS_tera_tablet_level0_file_limit;
     m_ldb_options.block_size = FLAGS_tera_tablet_write_block_size * 1024;
     m_ldb_options.max_block_log_number = FLAGS_tera_tablet_max_block_log_number;
@@ -1489,7 +1488,13 @@ void TabletIO::SetupOptionsForLG() {
         }
         lg_info->sst_size = lg_schema.sst_size();
         m_ldb_options.sst_size = lg_schema.sst_size();
-        lg_info->write_buffer_size = lg_schema.sst_size() * 4;
+        // FLAGS_tera_tablet_write_buffer_size is the max buffer size
+        int64_t max_size = FLAGS_tera_tablet_max_write_buffer_size * 1024 * 1024;
+        if (lg_schema.sst_size() * 4 < max_size) {
+            lg_info->write_buffer_size = lg_schema.sst_size() * 4;
+        } else {
+            lg_info->write_buffer_size = max_size;
+        }
         exist_lg_list->insert(lg_i);
         (*lg_info_list)[lg_i] = lg_info;
     }
