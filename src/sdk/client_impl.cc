@@ -19,6 +19,7 @@
 #include "sdk/sdk_utils.h"
 #include "sdk/sdk_zk.h"
 #include "utils/crypt.h"
+#include "utils/string_util.h"
 #include "utils/utils_cmd.h"
 
 DECLARE_string(tera_master_meta_table_name);
@@ -124,6 +125,12 @@ bool ClientImpl::CheckReturnValue(StatusCode status, std::string& reason, ErrorC
 bool ClientImpl::CreateTable(const TableDescriptor& desc,
                              const std::vector<string>& tablet_delim,
                              ErrorCode* err) {
+    if (!IsValidTableName(desc.TableName())) {
+        if (err != NULL) {
+            err->SetFailed(ErrorCode::kBadParam, " invalid tablename ");
+        }
+        return false;
+    }
     master::MasterClient master_client(_cluster->MasterAddr());
 
     CreateTableRequest request;
