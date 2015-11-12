@@ -5,16 +5,16 @@
 #       automatically config this for you.
 ################################################################
 
-SOFA_PBRPC_PREFIX=./thirdparty
-PROTOBUF_PREFIX=./thirdparty
-SNAPPY_PREFIX=./thirdparty
-ZOOKEEPER_PREFIX=./thirdparty
-GFLAGS_PREFIX=./thirdparty
-GLOG_PREFIX=./thirdparty
-GTEST_PREFIX=./thirdparty
-GPERFTOOLS_PREFIX=./thirdparty
-INS_PREFIX=./thirdparty
-BOOST_INCDIR=./thirdparty/boost_1_57_0
+SOFA_PBRPC_PREFIX=/home/huangjunhui/open-search-arch/tera/thirdparty
+PROTOBUF_PREFIX=/home/huangjunhui/open-search-arch/tera/thirdparty
+SNAPPY_PREFIX=/home/huangjunhui/open-search-arch/tera/thirdparty
+ZOOKEEPER_PREFIX=/home/huangjunhui/open-search-arch/tera/thirdparty
+GFLAGS_PREFIX=/home/huangjunhui/open-search-arch/tera/thirdparty
+GLOG_PREFIX=/home/huangjunhui/open-search-arch/tera/thirdparty
+GTEST_PREFIX=/home/huangjunhui/open-search-arch/tera/thirdparty
+GPERFTOOLS_PREFIX=/home/huangjunhui/open-search-arch/tera/thirdparty
+INS_PREFIX=/home/huangjunhui/open-search-arch/tera/thirdparty
+BOOST_INCDIR=/home/huangjunhui/open-search-arch/tera/thirdparty/boost_1_57_0
 
 SOFA_PBRPC_INCDIR = $(SOFA_PBRPC_PREFIX)/include
 PROTOBUF_INCDIR = $(PROTOBUF_PREFIX)/include
