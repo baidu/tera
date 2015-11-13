@@ -136,15 +136,13 @@ Status WriteBatch::SeperateLocalityGroup(std::vector<WriteBatch*>* lg_bw) const 
     }
   }
 
-  uint64_t last_sequence = WriteBatchInternal::Sequence(this)
-                           + WriteBatchInternal::Count(this) - 1;
+  uint64_t batch_sequence = WriteBatchInternal::Sequence(this);
   for (uint32_t i = 0; i < lg_bw->size(); ++i) {
     if ((*lg_bw)[i] == NULL) {
       (*lg_bw)[i] = new WriteBatch();
       WriteBatchInternal::SetCount((*lg_bw)[i], 0);
     }
-    int c = WriteBatchInternal::Count((*lg_bw)[i]);
-    WriteBatchInternal::SetSequence((*lg_bw)[i], last_sequence - c + 1);
+    WriteBatchInternal::SetSequence((*lg_bw)[i], batch_sequence);
   }
   if (found != WriteBatchInternal::Count(this)) {
     return Status::Corruption("WriteBatch has wrong count");

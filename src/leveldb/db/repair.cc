@@ -271,8 +271,8 @@ class Repairer {
             mem_ = new MemTable(icmp_);
             mem_->Ref();
         }
-        assert(batch_seq > max_sequence_);
-        max_sequence_ = batch_seq + WriteBatchInternal::Count(batch) - 1;
+        assert(batch_seq >= max_sequence_);
+        max_sequence_ = batch_seq;
         return WriteBatchInternal::InsertInto(batch, mem_);
     }
     bool HasMemTable() const {
@@ -610,11 +610,10 @@ private:
             }
             WriteBatchInternal::SetContents(&batch, record);
             uint64_t batch_seq = WriteBatchInternal::Sequence(&batch);
-            uint64_t batch_count = WriteBatchInternal::Count(&batch);
+            int batch_count = WriteBatchInternal::Count(&batch);
             if (batch_seq <= last_sequence_) {
-                Log(options_.info_log, "[%s] duplicate record, ignore %llu ~ %llu",
-                    dbname_.c_str(), static_cast<unsigned long long>(batch_seq),
-                    static_cast<unsigned long long>(batch_seq + batch_count - 1));
+                Log(options_.info_log, "[%s] duplicate record, ignore %llu count %d",
+                    dbname_.c_str(), static_cast<unsigned long long>(batch_seq), batch_count);
                 continue;
             }
 

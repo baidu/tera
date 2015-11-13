@@ -31,14 +31,6 @@ TESTUTIL = ./util/testutil.o
 TESTHARNESS = ./util/testharness.o $(TESTUTIL)
 
 TESTS = \
-	arena_test \
-	bloom_test \
-	c_test \
-	cache_test \
-	coding_test \
-	table_utils_test \
-	corruption_test \
-	crc32c_test \
 	db_test \
 	dbformat_test \
 	env_test \
