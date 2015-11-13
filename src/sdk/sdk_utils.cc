@@ -353,31 +353,37 @@ void TableSchemaToDesc(const TableSchema& schema, TableDescriptor* desc) {
 
 bool SetCfProperties(const string& name, const string& value,
                      ColumnFamilyDescriptor* desc) {
+    if (desc == NULL) {
+        return false;
+    }
     if (name == "ttl") {
-        int32_t ttl = atoi(value.c_str());
-        if (ttl < 0){
+        int32_t ttl;
+        if (!StringToNumber(value, &ttl) || (ttl < 0)) {
             return false;
         }
         desc->SetTimeToLive(ttl);
     } else if (name == "maxversions") {
-        int32_t versions = atol(value.c_str());
-        if (versions <= 0){
+        int32_t versions;
+        if (!StringToNumber(value, &versions) || (versions <= 0)) {
             return false;
         }
         desc->SetMaxVersions(versions);
     } else if (name == "minversions") {
-        int32_t versions = atol(value.c_str());
-        if (versions <= 0){
+        int32_t versions;
+        if (!StringToNumber(value, &versions) || (versions <= 0)) {
             return false;
         }
         desc->SetMinVersions(versions);
     } else if (name == "diskquota") {
-        int64_t quota = atol(value.c_str());
-        if (quota <= 0){
+        int64_t quota;
+        if (!StringToNumber(value, &quota) || (quota <= 0)) {
             return false;
         }
         desc->SetDiskQuota(quota);
     } else if (name == "type") {
+        if (value != "bytes") {
+            return false;
+        }
         desc->SetType(value);
     }else {
         return false;
@@ -387,6 +393,9 @@ bool SetCfProperties(const string& name, const string& value,
 
 bool SetLgProperties(const string& name, const string& value,
                      LocalityGroupDescriptor* desc) {
+    if (desc == NULL) {
+        return false;
+    }
     if (name == "compress") {
         if (value == "none") {
             desc->SetCompress(kNoneCompress);
@@ -406,8 +415,8 @@ bool SetLgProperties(const string& name, const string& value,
             return false;
         }
     } else if (name == "blocksize") {
-        int blocksize = atoi(value.c_str());
-        if (blocksize <= 0){
+        int blocksize;
+        if (!StringToNumber(value, &blocksize) || (blocksize <= 0)){
             return false;
         }
         desc->SetBlockSize(blocksize);
@@ -420,21 +429,21 @@ bool SetLgProperties(const string& name, const string& value,
             return false;
         }
     } else if (name == "memtable_ldb_write_buffer_size") {
-        int32_t buffer_size = atoi(value.c_str()); //KB
-        if (buffer_size <= 0) {
+        int32_t buffer_size; //KB
+        if (!StringToNumber(value, &buffer_size) || (buffer_size <= 0)) {
             return false;
         }
         desc->SetMemtableLdbWriteBufferSize(buffer_size);
     } else if (name == "memtable_ldb_block_size") {
-        int32_t block_size = atoi(value.c_str()); //KB
-        if (block_size <= 0) {
+        int32_t block_size; //KB
+        if (!StringToNumber(value, &block_size) || (block_size <= 0)) {
             return false;
         }
         desc->SetMemtableLdbBlockSize(block_size);
     } else if (name == "sst_size") {
         const int32_t SST_SIZE_MAX = 1024; // MB
-        int32_t sst_size = atoi(value.c_str());
-        if ( (sst_size <= 0) || (sst_size > SST_SIZE_MAX) ) {
+        int32_t sst_size;
+        if (!StringToNumber(value, &sst_size) || (sst_size <= 0) || (sst_size > SST_SIZE_MAX) ) {
             return false;
         }
         desc->SetSstSize(sst_size<<20); // display in MB, store in Bytes.
@@ -458,6 +467,9 @@ bool IsValidGroupName(const string& name) {
 
 bool SetTableProperties(const string& name, const string& value,
                         TableDescriptor* desc) {
+    if (desc == NULL) {
+        return false;
+    }
     if (name == "rawkey") {
         if (value == "readable") {
             desc->SetRawKey(kReadable);
@@ -471,14 +483,14 @@ bool SetTableProperties(const string& name, const string& value,
             return false;
         }
     } else if (name == "splitsize") {
-        int splitsize = atoi(value.c_str());
-        if (splitsize < 0) { // splitsize == 0 : split closed
+        int splitsize; // MB
+        if (!StringToNumber(value, &splitsize) || (splitsize < 0)) {
             return false;
         }
         desc->SetSplitSize(splitsize);
     } else if (name == "mergesize") {
-        int mergesize = atoi(value.c_str());
-        if (mergesize < 0) { // mergesize == 0 : merge closed
+        int mergesize; // MB
+        if (!StringToNumber(value, &mergesize) || (mergesize < 0)) { // mergesize == 0 : merge closed
             return false;
         }
         desc->SetMergeSize(mergesize);
