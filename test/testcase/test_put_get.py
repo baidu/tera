@@ -10,7 +10,7 @@ def setUp():
     """
     set env
     """
-    
+
     common.print_debug_msg(0, "start master, ts1, ts2, ts3, and status is ok")
     common.print_debug_msg(1, "create test_table001 and test_table002(kv)")
     cmd = "./teracli createbyfile testcase/data/create_table_schema"
@@ -26,7 +26,7 @@ def test_put_table():
     """
 
     common.print_debug_msg(2, "put one data to table_test001 and table_test002")
-    
+
     cmd = "./teracli put table_test001 test001key update_flag:test001q test001v"
     common.exe_and_check_res(cmd)
 

@@ -88,6 +88,7 @@ Options InitOptionsLG(const Options& options, uint32_t lg_id) {
     opt.memtable_ldb_write_buffer_size = lg_info->memtable_ldb_write_buffer_size;
     opt.memtable_ldb_block_size = lg_info->memtable_ldb_block_size;
     opt.sst_size = lg_info->sst_size;
+    opt.write_buffer_size = lg_info->write_buffer_size;
     return opt;
 }
 
@@ -755,7 +756,8 @@ Status DBTable::GatherLogFile(uint64_t begin_num,
         type = kUnknown;
         number = 0;
         if (ParseFileName(files[i], &number, &type)
-            && type == kLogFile && number >= begin_num) {
+            && type == kLogFile
+            && number >= begin_num) {
             logfiles->push_back(number);
         } else if (type == kLogFile && number > last_number) {
             last_number = number;
@@ -935,17 +937,21 @@ void DBTable::DeleteObsoleteFiles(uint64_t seq_no) {
     std::vector<std::string> filenames;
     env_->GetChildren(dbname_, &filenames);
     std::sort(filenames.begin(), filenames.end());
-    Log(options_.info_log, "[%s] will delete obsolete file num: %u [seq < %llu]",
-        dbname_.c_str(), static_cast<uint32_t>(filenames.size()),
-        static_cast<unsigned long long>(seq_no));
     uint64_t number;
     FileType type;
     std::string last_file;
+    uint64_t keep_log_num = 0;
+    uint64_t delete_log_num = 0;
     for (size_t i = 0; i < filenames.size(); ++i) {
         bool deleted = false;
         if (ParseFileName(filenames[i], &number, &type)
-            && type == kLogFile && number < seq_no) {
-            deleted = true;
+            && type == kLogFile) {
+            if (number < seq_no) {
+                deleted = true;
+                delete_log_num++;
+            } else {
+                keep_log_num++;
+            }
         }
         if (deleted) {
             Log(options_.info_log, "[%s] Delete type=%s #%llu",
@@ -958,6 +964,11 @@ void DBTable::DeleteObsoleteFiles(uint64_t seq_no) {
             last_file = filenames[i];
         }
     }
+    Log(options_.info_log, "[%s] delete obsolete log: %u, keep: %u, [seq < %llu]",
+        dbname_.c_str(),
+        static_cast<uint32_t>(delete_log_num),
+        static_cast<uint32_t>(keep_log_num),
+        static_cast<unsigned long long>(seq_no));
 }
 
 void DBTable::ArchiveFile(const std::string& fname) {
@@ -1134,7 +1145,7 @@ void DBTable::BackgroundGarbageClean() {
 }
 
 void DBTable::GarbageClean() {
-    uint64_t min_last_seq = -1U;
+    uint64_t min_last_seq = -1ULL;
     bool found = false;
     std::set<uint32_t>::iterator it = options_.exist_lg_list->begin();
     for (; it != options_.exist_lg_list->end(); ++it) {

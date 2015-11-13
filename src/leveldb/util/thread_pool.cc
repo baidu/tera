@@ -66,7 +66,7 @@ int64_t ThreadPool::Schedule(void (*function)(void*), void* arg,
     pthread_create(&t, NULL, &ThreadPool::BGThreadWrapper, this);
     bg_threads_.push_back(t);
   }
-  
+
   int64_t now_time = static_cast<int64_t>(Env::Default()->NowMicros() / 1000);
   int64_t exe_time = (wait_time_millisec == 0) ? 0 : now_time + wait_time_millisec;
   BGItem bg_item = {arg, function, priority, ++last_item_id_, exe_time};
@@ -84,7 +84,7 @@ void ThreadPool::ReSchedule(int64_t id, double priority, int64_t wait_time_milli
   BGItem& bg_item = it->second;
   int64_t now_time = static_cast<int64_t>(Env::Default()->NowMicros() / 1000);
   int64_t exe_time = 0;
-  // set exe_time to 0 if 
+  // set exe_time to 0 if
   // the task is already in pri_queue or need to push into pri_queue
   if (bg_item.exe_time != 0 && wait_time_millisec != 0) {
     exe_time = now_time + wait_time_millisec;
@@ -92,7 +92,7 @@ void ThreadPool::ReSchedule(int64_t id, double priority, int64_t wait_time_milli
   if (IsLatest(bg_item, priority, exe_time)) {
     return;
   }
-  
+
   bg_item.exe_time = exe_time;
   bg_item.priority = priority;
   PutInQueue(bg_item, exe_time);
@@ -184,7 +184,7 @@ void ThreadPool::PutInQueue(BGItem& bg_item, int64_t wait_time_millisec) {
     time_queue_.push(bg_item);
     timer_cv_.Signal();
   }
-  latest_[bg_item.id] = bg_item;  
+  latest_[bg_item.id] = bg_item;
 }
 
 bool ThreadPool::IsLatest(const BGItem& latest, double priority, int64_t exe_time) {

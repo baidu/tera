@@ -8,6 +8,10 @@ teracli命令行工具使用手册
 
 其中，table-schema是一个描述表格结构的字符串,语法详见[PropTree](https://github.com/BaiduPS/tera/blob/master/doc/prop_tree.md)
 
+表名规范：首字符为字母（大小写均可），
+有效字符包括大小写的英文字母(a-zA-Z)、数字(0-9)、下划线(`_`)、连字符(`-`)、点(`.`)。
+1 <= 有效长度 <= 512.
+
 Tera支持在建立表格时预分配若干tablet，tablet分隔的key写在tablet-delimiter-file中，按“\n”分隔。
 
 如果表格schema比较复杂，可以将其写入文件中，通过createbyfile命令进行创建。

@@ -1,5 +1,6 @@
 *.o
 *.a
+*.pyc
 
 #protobuf auto-gen code
 src/proto/*.pb.*
