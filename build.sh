@@ -10,7 +10,7 @@ WORK_DIR=$(cd $(dirname $0); pwd)
 DEPS_SOURCE=$WORK_DIR/thirdsrc
 DEPS_PREFIX=$WORK_DIR/thirdparty
 DEPS_CONFIG="--prefix=${DEPS_PREFIX} --disable-shared --with-pic"
-FLAG_DIR=$WORK_DIR/build
+FLAG_DIR=$WORK_DIR/.build
 
 export PATH=${DEPS_PREFIX}/bin:$PATH
 mkdir -p ${DEPS_SOURCE} ${DEPS_PREFIX} ${FLAG_DIR}
