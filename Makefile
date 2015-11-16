@@ -15,6 +15,7 @@ INCPATH += -I./src -I./include -I./src/leveldb/include -I./src/leveldb \
 CFLAGS += $(OPT) $(SHARED_CFLAGS) $(INCPATH)
 CXXFLAGS += $(OPT) $(SHARED_CFLAGS) $(INCPATH)
 LDFLAGS += -rdynamic $(DEPS_LDPATH) $(DEPS_LDFLAGS) -lpthread -lrt -lz -ldl
+SO_LDFLAGS += -rdynamic $(DEPS_LDPATH) $(SO_DEPS_LDFLAGS) -lpthread -lrt -lz -ldl
 
 PROTO_FILES := $(wildcard src/proto/*.proto)
 PROTO_OUT_CC := $(PROTO_FILES:.proto=.pb.cc)
@@ -102,8 +103,8 @@ libtera.a: $(SDK_OBJ) $(PROTO_OBJ) $(OTHER_OBJ) $(COMMON_OBJ)
 	$(AR) -rs $@ $(SDK_OBJ) $(PROTO_OBJ) $(OTHER_OBJ) $(COMMON_OBJ)
 
 libtera.so: $(SDK_OBJ) $(PROTO_OBJ) $(OTHER_OBJ) $(COMMON_OBJ)
-	$(CXX) -o $@ $(SDK_OBJ) $(PROTO_OBJ) $(OTHER_OBJ) $(COMMON_OBJ) $(SHARED_LDFLAGS) \
-	-Xlinker "-(" $(LDFLAGS) -Xlinker "-)"
+	$(CXX) -o $@ $(SDK_OBJ) $(PROTO_OBJ) $(OTHER_OBJ) $(COMMON_OBJ) \
+	$(SHARED_LDFLAGS) $(SO_LDFLAGS)
 
 teracli: $(CLIENT_OBJ) $(LIBRARY)
 	$(CXX) -o $@ $(CLIENT_OBJ) $(LIBRARY) $(LDFLAGS)
@@ -115,7 +116,7 @@ tera_mark: $(MARK_OBJ) $(LIBRARY) $(LEVELDB_LIB)
 	$(CXX) -o $@ $(MARK_OBJ) $(LIBRARY) $(LEVELDB_LIB) $(LDFLAGS)
  
 libjni_tera.so: $(JNI_TERA_OBJ) $(LIBRARY) 
-	$(CXX) -o $@ $(JNI_TERA_OBJ) $(SHARED_LDFLAGS) -Xlinker "-(" $(LIBRARY) $(LDFLAGS) -Xlinker "-)"
+	$(CXX) -o $@ $(JNI_TERA_OBJ) $(SHARED_LDFLAGS) $(LIBRARY) $(SO_LDFLAGS)
 
 src/leveldb/libleveldb.a: FORCE
 	$(MAKE) -C src/leveldb
