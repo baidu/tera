@@ -13,7 +13,7 @@ c) 单元格维度，每个单元格保留若干版本
 2. 在Tera中，一个表既可以划分为多个Tablet，也可以划分为多个LocalityGroup，这两者的关系是什么？  
 a) Tablet包含LocalityGroup，表格先被划分为若干个Tablet， 每个Tabelt又被划分为若干个LocalityGroup  
 b) Localitygroup包含Tablet，表格先被划分为若干个LocalityGroup，每个LocalityGroup又被换分为若干个Tablet  
-c) 两着互不包含  
+c) 两者互不包含  
 
 # 后续的任务
 在你完成第一个任务后，请将解答通过邮件发至tera_dev@baidu.com，  

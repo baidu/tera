@@ -7,6 +7,15 @@
 
 #include <string>
 
-std::string DebugString(const std::string& src);
+namespace tera {
+
+    extern const size_t kNameLenMin;
+    extern const size_t kNameLenMax;
+
+    std::string DebugString(const std::string& src);
+    bool IsValidName(const std::string& str);
+    bool IsValidTableName(const std::string& str);
+
+} // namespace tera
 
 #endif  // TERA_UTIL_STRING_UTIL_H_
