@@ -11,7 +11,7 @@ SHARED_CFLAGS = -fPIC
 SHARED_LDFLAGS = -shared -Wl,-soname -Wl,
 
 INCPATH += -I./src -I./include -I./src/leveldb/include -I./src/leveldb \
-		   -I./src/sdk/java/native-src $(DEPS_INCPATH) 
+		   -I./src/sdk/java/native-src $(DEPS_INCPATH)
 CFLAGS += $(OPT) $(SHARED_CFLAGS) $(INCPATH)
 CXXFLAGS += $(OPT) $(SHARED_CFLAGS) $(INCPATH)
 LDFLAGS += -rdynamic $(DEPS_LDPATH) $(DEPS_LDFLAGS) -lpthread -lrt -lz -ldl
@@ -62,7 +62,7 @@ PROGRAM = tera_main teracli teramo
 LIBRARY = libtera.a
 JNILIBRARY = libjni_tera.so
 BENCHMARK = tera_bench tera_mark
-TESTS = prop_tree_test tprinter_test
+TESTS = prop_tree_test tprinter_test string_util_test
 
 .PHONY: all clean cleanall test
 
@@ -81,7 +81,7 @@ all: $(PROGRAM) $(LIBRARY) $(JNILIBRARY) $(BENCHMARK) $(TESTS)
 check: $(TESTS)
 	( cd $(UNITTEST_OUTPUT); \
 	for t in $(TESTS); do echo "***** Running $$t"; ./$$t || exit 1; done )
-	$(MAKE) check -C src/leveldb 
+	$(MAKE) check -C src/leveldb
 
 clean:
 	rm -rf $(ALL_OBJ) $(PROTO_OUT_CC) $(PROTO_OUT_H) $(TEST_OUTPUT)
@@ -108,9 +108,9 @@ teramo: $(MONITOR_OBJ) $(LIBRARY)
 
 tera_mark: $(MARK_OBJ) $(LIBRARY) $(LEVELDB_LIB)
 	$(CXX) -o $@ $(MARK_OBJ) $(LIBRARY) $(LEVELDB_LIB) $(LDFLAGS)
- 
-libjni_tera.so: $(JNI_TERA_OBJ) $(LIBRARY) 
-	$(CXX) -shared $(JNI_TERA_OBJ) -Xlinker "-(" $(LIBRARY) $(LDFLAGS) -Xlinker "-)" -o $@ 
+
+libjni_tera.so: $(JNI_TERA_OBJ) $(LIBRARY)
+	$(CXX) -shared $(JNI_TERA_OBJ) -Xlinker "-(" $(LIBRARY) $(LDFLAGS) -Xlinker "-)" -o $@
 
 src/leveldb/libleveldb.a: FORCE
 	$(MAKE) -C src/leveldb
@@ -119,10 +119,13 @@ tera_bench:
 
 # unit test
 prop_tree_test: src/utils/test/prop_tree_test.o $(LIBRARY)
-	$(CXX) -o $@ $^ $(LDFLAGS) 
+	$(CXX) -o $@ $^ $(LDFLAGS)
 
 tprinter_test: src/utils/test/tprinter_test.o $(LIBRARY)
-	$(CXX) -o $@ $^ $(LDFLAGS) 
+	$(CXX) -o $@ $^ $(LDFLAGS)
+
+string_util_test: src/utils/test/string_util_test.o $(LIBRARY)
+	$(CXX) -o $@ $^ $(LDFLAGS)
 
 tablet_io_test: src/io/test/tablet_io_test.o src/tabletnode/tabletnode_sysinfo.o\
 		$(IO_OBJ) $(PROTO_OBJ) $(OTHER_OBJ) $(COMMON_OBJ) $(LEVELDB_LIB)
@@ -139,8 +142,8 @@ FORCE:
 
 .PHONY: proto
 proto: $(PROTO_OUT_CC) $(PROTO_OUT_H)
- 
+
 %.pb.cc %.pb.h: %.proto
 	$(PROTOC) --proto_path=./src/proto/ --proto_path=$(PROTOBUF_INCDIR) \
                   --proto_path=$(SOFA_PBRPC_INCDIR) \
-                  --cpp_out=./src/proto/ $< 
+                  --cpp_out=./src/proto/ $<
