@@ -29,6 +29,10 @@ lib.tera_table_put.argtypes = [c_void_p, c_char_p, c_uint64, c_char_p,
                                POINTER(c_char_p)]
 lib.tera_table_put.restype = c_bool
 
+lib.tera_table_delete.argtypes = [c_void_p, c_char_p, c_uint64,
+                                  c_char_p, c_char_p, c_uint64]
+lib.tera_table_delete.restype = None
+
 NULL = 0
 
 
@@ -73,6 +77,12 @@ class Table(object):
         )
         if not result:
             raise TeraSdkException("put record failed:" + err.value)
+
+    def Delete(self, rowkey, cf, qu):
+        lib.tera_table_delete(
+            self.table, rowkey, c_uint64(len(rowkey)),
+            cf, qu, c_uint64(len(qu))
+        )
 
 
 class TeraSdkException(Exception):
