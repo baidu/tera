@@ -118,14 +118,24 @@ bool MoveEnvDirToTrash(const std::string& tablename) {
     return true;
 }
 
-bool DeleteEnvDir(const std::string& subdir) {
+bool DeleteEnvDir(const std::string& dir) {
     leveldb::Env* env = LeveldbBaseEnv();
-    std::string dir_name = FLAGS_tera_tabletnode_path_prefix + "/" + subdir;
-    if (!env->DeleteDir(dir_name).ok()) {
-        LOG(ERROR) << "fail to delete dir in file system, dir: " << dir_name;
-        return false;
+    leveldb::Status s;
+    s = env->DeleteDir(dir);
+    if (s.ok()) {
+        LOG(INFO) << "delete dir in file system, dir: " << dir;
+        return true;
     }
-    LOG(INFO) << "delete dir in file system, dir: " << dir_name;
+    // file system do not support delete dir, try delete recursively
+    std::vector<std::string> children;
+    s = env->GetChildren(dir, &children);
+    if (!s.ok()) {
+      return false;
+    }
+    for (size_t i = 0; i < children.size(); ++i) {
+      std::string c_dir = dir + '/' + children[i];
+      DeleteEnvDir(c_dir);
+    }
     return true;
 }
 } // namespace io
