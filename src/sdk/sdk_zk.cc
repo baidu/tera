@@ -10,7 +10,7 @@
 #include "types.h"
 #include "zk/zk_adapter.h"
 
-DECLARE_string(tera_zk_lib_log_path);
+DECLARE_string(tera_zk_lib_log_file);
 DECLARE_string(tera_fake_zk_path_prefix);
 DECLARE_bool(tera_zk_enabled);
 DECLARE_bool(tera_ins_enabled);
@@ -27,7 +27,7 @@ ClusterFinder::ClusterFinder(std::string zk_root_path, const std::string& zk_add
 }
 
 void ClusterFinder::InitZkLogOnce() {
-    zk::ZooKeeperLightAdapter::SetLibraryLogOutput(FLAGS_tera_zk_lib_log_path);
+    zk::ZooKeeperLightAdapter::SetLibraryLogOutput(FLAGS_tera_zk_lib_log_file);
 }
 
 bool ClusterFinder::ReadZkNode(const std::string path, std::string* value) {
