@@ -514,12 +514,22 @@ bool ClientImpl::List(std::vector<TableInfo>* table_list, ErrorCode* err) {
                         0, err);
 }
 
+// show exactly one table
 bool ClientImpl::ShowTablesInfo(const string& name,
                                 TableMeta* meta,
                                 TabletMetaList* tablet_list,
                                 ErrorCode* err) {
     TableMetaList table_list;
-    bool result = DoShowTablesInfo(&table_list, tablet_list, name, err);
+    std::string internal_table_name;
+    if (!GetInternalTableName(name, err, &internal_table_name)) {
+        LOG(ERROR) << "faild to scan meta schema";
+        return false;
+    }
+    bool result = DoShowTablesInfo(&table_list, tablet_list, internal_table_name, err);
+    if ((table_list.meta_size() == 0)
+        || (table_list.meta(0).table_name() != internal_table_name)) {
+        return false;
+    }
     if (result) {
         meta->CopyFrom(table_list.meta(0));
     }
@@ -544,7 +554,7 @@ bool ClientImpl::DoShowTablesInfo(TableMetaList* table_list,
 
     master::MasterClient master_client(_cluster->MasterAddr());
     std::string start_tablet_key;
-    std::string start_table_name = table_name;
+    std::string start_table_name = table_name; // maybe a empty string
     bool has_more = true;
     bool has_error = false;
     bool table_meta_copied = false;
