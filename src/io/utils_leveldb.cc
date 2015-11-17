@@ -89,6 +89,11 @@ leveldb::Env* LeveldbFlashEnv() {
     return flash_env;
 }
 
+std::string GetTrashDir() {
+    const std::string trash("#trash");
+    return FLAGS_tera_tabletnode_path_prefix + "/" + trash;
+}
+
 bool MoveEnvDirToTrash(const std::string& tablename) {
     leveldb::Env* env = LeveldbBaseEnv();
     std::string src_dir = FLAGS_tera_tabletnode_path_prefix + "/" + tablename;
@@ -96,8 +101,7 @@ bool MoveEnvDirToTrash(const std::string& tablename) {
         return true;
     }
 
-    const std::string trash("#trash");
-    std::string trash_dir = FLAGS_tera_tabletnode_path_prefix + "/" + trash;
+    std::string trash_dir = GetTrashDir();
     if (!env->FileExists(trash_dir)) {
         if (!env->CreateDir(trash_dir).ok()) {
             LOG(ERROR) << "fail to create trash dir: " << trash_dir;
@@ -118,23 +122,45 @@ bool MoveEnvDirToTrash(const std::string& tablename) {
     return true;
 }
 
+void CleanTrashDir() {
+    leveldb::Env* env = LeveldbBaseEnv();
+    std::string trash_dir = GetTrashDir();
+    std::vector<std::string> children;
+    leveldb::Status s;
+    s = env->GetChildren(trash_dir, &children);
+    if (!s.ok()) {
+        return;
+    }
+    for (size_t i = 0; i < children.size(); ++i) {
+        std::string c_dir = trash_dir + '/' + children[i];
+        DeleteEnvDir(c_dir);
+        LOG(INFO) << "[gc] clean trash dir: " << c_dir;
+    }
+    return;
+}
+
 bool DeleteEnvDir(const std::string& dir) {
     leveldb::Env* env = LeveldbBaseEnv();
     leveldb::Status s;
-    s = env->DeleteDir(dir);
-    if (s.ok()) {
-        LOG(INFO) << "delete dir in file system, dir: " << dir;
+    if (env->DeleteDir(dir).ok() || env->DeleteFile(dir).ok()) {
+        LOG(INFO) << "[gc] delete dir in file system, dir: " << dir;
         return true;
     }
+
     // file system do not support delete dir, try delete recursively
     std::vector<std::string> children;
     s = env->GetChildren(dir, &children);
     if (!s.ok()) {
-      return false;
+        LOG(ERROR) << "[gc] fail to get children, dir: " << dir;
+        return false;
     }
     for (size_t i = 0; i < children.size(); ++i) {
-      std::string c_dir = dir + '/' + children[i];
-      DeleteEnvDir(c_dir);
+        std::string c_dir = dir + '/' + children[i];
+        DeleteEnvDir(c_dir);
+    }
+    if (env->DeleteDir(dir).ok()) {
+        LOG(INFO) << "[gc] delete dir in file system, dir: " << dir;
+        return true;
     }
     return true;
 }

@@ -4977,6 +4977,10 @@ void MasterImpl::DoTabletNodeGc() {
             return;
         }
     }
+
+    LOG(INFO) << "[gc] try clean trash dir.";
+    io::CleanTrashDir();
+
     bool need_gc = gc_strategy->PreQuery();
 
     MutexLock lock(&m_mutex);
