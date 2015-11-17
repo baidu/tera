@@ -47,6 +47,14 @@ bool IsValidTableName(const std::string& str) {
     return IsValidName(str);
 }
 
+bool IsValidGroupName(const std::string& str) {
+    return IsValidName(str);
+}
+
+bool IsValidUserName(const std::string& str) {
+    return IsValidName(str);
+}
+
 const size_t kNameLenMin = 1;
 const size_t kNameLenMax = 512;
 
