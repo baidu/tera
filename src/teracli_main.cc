@@ -1862,7 +1862,7 @@ int32_t TabletOp(Client* client, int32_t argc, char** argv, ErrorCode* err) {
 
     if (op == "compact") {
         return CompactTabletOp(client, argc, argv, err);
-    } else if (op != "move" && op != "split") {
+    } else if (op != "move" && op != "split" && op != "merge") {
         UsageMore(argv[0]);
         return -1;
     }

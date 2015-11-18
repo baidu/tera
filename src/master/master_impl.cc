@@ -1423,6 +1423,13 @@ void MasterImpl::TabletCmdCtrl(const CmdCtrlRequest* request,
         }
         TrySplitTablet(tablet);
         response->set_status(kMasterOk);
+    } else if (request->arg_list(0) == "merge") {
+        if (request->arg_list_size() > 3) {
+            response->set_status(kInvalidArgument);
+            return;
+        }
+        TryMergeTablet(tablet);
+        response->set_status(kMasterOk);
     } else {
         response->set_status(kInvalidArgument);
     }

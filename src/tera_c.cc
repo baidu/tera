@@ -13,6 +13,7 @@
 using tera::Client;
 using tera::Table;
 using tera::ErrorCode;
+using tera::RowMutation;
 
 extern "C" {
 
@@ -92,6 +93,16 @@ bool tera_table_put(tera_table_t* table,
         return false;
     }
     return result;
+}
+
+void tera_table_delete(tera_table_t* table, const char* row_key, uint64_t keylen,
+                       const char* family, const char* qualifier, uint64_t qulen) {
+    ErrorCode err;
+    std::string key_str(row_key, keylen);
+    std::string qu_str(qualifier, qulen);
+    RowMutation* mutation = table->rep->NewRowMutation(key_str);
+    mutation->DeleteColumn(family, qu_str);
+    table->rep->ApplyMutation(mutation);
 }
 
 }  // end extern "C"
