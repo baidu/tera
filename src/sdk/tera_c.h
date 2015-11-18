@@ -28,6 +28,9 @@ extern bool tera_table_put(tera_table_t* table,
                            uint64_t qulen, const char* value, uint64_t vallen,
                            char** errptr);
 
+void tera_table_delete(tera_table_t* table, const char* row_key, uint64_t keylen,
+                       const char* family, const char* qualifier, uint64_t qulen);
+
 #ifdef __cplusplus
 }  /* end extern "C" */
 #endif
