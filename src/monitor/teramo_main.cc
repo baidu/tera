@@ -39,7 +39,7 @@ using namespace tera;
 using std::string;
 
 void FillTabletNodeStat(const TabletNodeInfo& info, TabletNodeStat* stat) {
-    stat->set_time_stamp(info.time_stamp());
+    stat->set_timestamp(info.timestamp());
     stat->set_load(info.load());
     stat->set_tablet_total(info.tablet_total());
     stat->set_tablet_onbusy(info.tablet_onbusy());
@@ -86,14 +86,14 @@ void FillTabletNodeStats(std::list<string>& raw_stats, TabletNodeStats* stat_lis
         TabletNodeInfo info;
         info.ParseFromString(*it);
         if (last_timestamp != 0) {
-            while ((int64_t)info.time_stamp() - last_timestamp > interval * 3 / 2) {
+            while ((int64_t)info.timestamp() - last_timestamp > interval * 3 / 2) {
                 last_timestamp += interval;
                 FillTabletNodeStat(TabletNodeInfo(), stat);
-                stat->set_time_stamp(last_timestamp);
+                stat->set_timestamp(last_timestamp);
                 stat = stat_list->add_stat();
             }
         }
-        last_timestamp = info.time_stamp();
+        last_timestamp = info.timestamp();
         FillTabletNodeStat(info, stat);
     }
     if (stat_list->stat_size() > 0) {
@@ -357,7 +357,7 @@ void PrintResponse(const MonitorResponse& response) {
             }
             ts_count++;
             total += stat_list.stat(i).write_rows();
-            t_time += stat_list.stat(i).time_stamp();
+            t_time += stat_list.stat(i).timestamp();
         }
         printf("%20lu%10lu%14ld%6d\n",
                 t_time / ts_count, total / ts_count, total, ts_count);
