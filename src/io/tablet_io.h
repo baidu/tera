@@ -167,6 +167,9 @@ public:
     int32_t DecRef();
     int32_t GetRef() const;
 
+    static void FindAverageKey(const std::string& start, const std::string& end,
+                               std::string* res);
+
 private:
     friend class TabletWriter;
     bool WriteWithoutLock(const std::string& key, const std::string& value,
