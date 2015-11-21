@@ -1176,6 +1176,7 @@ int32_t ShowTabletNodesInfo(Client* client, bool is_x, ErrorCode* err) {
         return -1;
     }
 
+    int64_t now = common::timer::get_micros();
     int cols;
     TPrinter printer;
     if (is_x) {
@@ -1197,7 +1198,12 @@ int32_t ShowTabletNodesInfo(Client* client, bool is_x, ErrorCode* err) {
             row.clear();
             row.push_back(NumberToString(i));
             row.push_back(infos[i].addr());
-            row.push_back(infos[i].status_m());
+            if (now - infos[i].time_stamp() > 120 * 1000000) {
+                // tabletnode status timeout
+                row.push_back("kZombie");
+            } else {
+                row.push_back(infos[i].status_m());
+            }
             row.push_back(utils::ConvertByteToString(infos[i].load()));
             row.push_back(NumberToString(infos[i].tablet_total()));
             row.push_back(NumberToString(infos[i].low_read_cell()));
@@ -1231,7 +1237,11 @@ int32_t ShowTabletNodesInfo(Client* client, bool is_x, ErrorCode* err) {
             row.clear();
             row.push_back(NumberToString(i));
             row.push_back(infos[i].addr());
-            row.push_back(infos[i].status_m());
+            if (now - infos[i].time_stamp() > 120 * 1000000) {
+                row.push_back("kZombie");
+            } else {
+                row.push_back(infos[i].status_m());
+            }
             row.push_back(utils::ConvertByteToString(infos[i].load()));
             row.push_back(NumberToString(infos[i].tablet_total()));
             row.push_back(NumberToString(infos[i].tablet_onload()));
