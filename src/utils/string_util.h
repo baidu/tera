@@ -15,6 +15,8 @@ namespace tera {
     std::string DebugString(const std::string& src);
     bool IsValidName(const std::string& str);
     bool IsValidTableName(const std::string& str);
+    bool IsValidGroupName(const std::string& name);
+    bool IsValidUserName(const std::string& name);
 
 } // namespace tera
 

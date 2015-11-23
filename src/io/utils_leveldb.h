@@ -24,7 +24,11 @@ leveldb::Env* LeveldbMemEnv();
 // return the flash env leveldb used, singleton
 leveldb::Env* LeveldbFlashEnv();
 
+std::string GetTrashDir();
+
 bool MoveEnvDirToTrash(const std::string& subdir);
+
+void CleanTrashDir();
 
 bool DeleteEnvDir(const std::string& subdir);
 
