@@ -129,11 +129,11 @@ class CorruptionTest {
     uint64_t number;
     FileType type;
     std::string fname;
-    int picked_number = -1;
+    uint64_t picked_number = 0;
     for (size_t i = 0; i < filenames.size(); i++) {
       if (ParseFileName(filenames[i], &number, &type) &&
           type == filetype &&
-          int(number) > picked_number) {  // Pick latest file
+          uint64_t(number) > picked_number) {  // Pick latest file
         fname = db_path + "/" + filenames[i];
         picked_number = number;
       }
