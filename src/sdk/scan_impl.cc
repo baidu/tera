@@ -113,14 +113,13 @@ void ResultStreamBatchImpl::OnFinish(ScanTabletRequest* request,
     MutexLock mutex(&mu_);
     // check session id
     if (request->session_id() != (int64_t)session_id_) {
-        LOG(WARNING) << "session_id not match, " << request->session_id()
-            << ", " << session_id_;
-        return;
+        LOG(WARNING) << "session_id not match, " << request->session_id() << ", " << session_id_;
     } else if ((response->results_id() < session_data_idx_) ||
                (response->results_id() >= session_data_idx_ +
                     FLAGS_tera_sdk_max_parallel_scan_req)) {
-        LOG(WARNING) << "ScanCallback session_id " << session_id_ <<", stale result_id " << response->results_id()
-            << ", session_data_idx " << session_data_idx_;
+        if (response->results_id() != UINT64_MAX)
+            LOG(WARNING) << "ScanCallback session_id " << session_id_ <<", stale result_id " << response->results_id()
+                << ", session_data_idx " << session_data_idx_;
     } else if (response->status() != kTabletNodeOk) {
         // rpc or ts error, session broken and report error
         session_error_ = response->status();
@@ -159,7 +158,6 @@ ResultStreamBatchImpl::~ResultStreamBatchImpl() {
     ref_count_--;
     VLOG(28) << "before wait scan task finsh, ref_count " << ref_count_;
     while (ref_count_ != 0) { cv_.Wait();}
-    VLOG(28) << "after wait scan task finsh, ref_count " << ref_count_;
 }
 
 void ResultStreamBatchImpl::ScanSessionReset() {
@@ -171,7 +169,7 @@ void ResultStreamBatchImpl::ScanSessionReset() {
     session_error_ = kTabletNodeOk;
     part_of_session_ = false;
     session_data_idx_ = 0;
-    session_last_idx_ = (1 << 30);
+    session_last_idx_ = UINT32_MAX;
     sliding_window_idx_= 0;
     next_idx_ = 0;
 
@@ -227,9 +225,9 @@ bool ResultStreamBatchImpl::Done(ErrorCode* error) {
 
         // wait current slot valid
         ScanSlot* slot = &(sliding_window_[sliding_window_idx_]);
-        VLOG(28) << "sliding_window_idx_ " << sliding_window_idx_;
+        VLOG(50) << "sliding_window_idx_ " << sliding_window_idx_;
         while(slot->state_ == SCANSLOT_INVALID) { cv_.Wait(); }
-        VLOG(28) << "next_idx_ " << next_idx_ << ", kv.size() " << slot->cell_.key_values_size();
+        VLOG(50) << "next_idx_ " << next_idx_ << ", kv.size() " << slot->cell_.key_values_size();
         if (next_idx_ < slot->cell_.key_values_size()) { break; }
 
         VLOG(28) << "session_done_ " << session_done_ << ", session_data_idx_ "
