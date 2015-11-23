@@ -14,6 +14,7 @@
 #include "common/file/file_path.h"
 #include "gflags/gflags.h"
 #include "glog/logging.h"
+#include "utils/string_util.h"
 
 #include "sdk/filter_utils.h"
 
@@ -109,6 +110,9 @@ void ShowTableSchema(const TableSchema& s, bool is_x) {
         if (is_x && schema.admin_group() != "") {
             ss << "admin_group=" << schema.admin_group() << ",";
         }
+        if (is_x && schema.admin() != "") {
+            ss << "admin=" << schema.admin() << ",";
+        }
         ss << "\b>\n" << "  (kv mode)\n";
         str = ss.str();
         ReplaceStringInPlace(str, ",\b", "");
@@ -126,6 +130,9 @@ void ShowTableSchema(const TableSchema& s, bool is_x) {
     }
     if (is_x && schema.admin_group() != "") {
         ss << "admin_group=" << schema.admin_group() << ",";
+    }
+    if (is_x && schema.admin() != "") {
+        ss << "admin=" << schema.admin() << ",";
     }
     if (is_x || schema.disable_wal()) {
         ss << "wal=" << Switch2Str(!schema.disable_wal()) << ",";
@@ -227,6 +234,7 @@ void TableDescToSchema(const TableDescriptor& desc, TableSchema* schema) {
     schema->set_split_size(desc.SplitSize());
     schema->set_merge_size(desc.MergeSize());
     schema->set_admin_group(desc.AdminGroup());
+    schema->set_admin(desc.Admin());
     schema->set_disable_wal(desc.IsWalDisabled());
     schema->set_alias(desc.Alias());
     // add lg
@@ -302,6 +310,9 @@ void TableSchemaToDesc(const TableSchema& schema, TableDescriptor* desc) {
     }
     if (schema.has_admin_group()) {
         desc->SetAdminGroup(schema.admin_group());
+    }
+    if (schema.has_admin()) {
+        desc->SetAdmin(schema.admin());
     }
     if (schema.has_disable_wal() && schema.disable_wal()) {
         desc->DisableWal();
@@ -453,18 +464,6 @@ bool SetLgProperties(const string& name, const string& value,
     return true;
 }
 
-bool IsValidGroupName(const string& name) {
-    const size_t len = name.length();
-    for (size_t i = 0; i < len; ++i) {
-        if (!isalnum(name[i]) && (name[i] != '_')) {
-            return false;
-        }
-    }
-    const size_t kLenMin = 2;
-    const size_t kLenMax = 32;
-    return (kLenMin <= len) && (len <= kLenMax);
-}
-
 bool SetTableProperties(const string& name, const string& value,
                         TableDescriptor* desc) {
     if (desc == NULL) {
@@ -499,6 +498,11 @@ bool SetTableProperties(const string& name, const string& value,
             return false;
         }
         desc->SetAdminGroup(value);
+    } else if (name == "admin") {
+        if (!IsValidUserName(value)) {
+            return false;
+        }
+        desc->SetAdmin(value);
     } else if (name == "wal") {
         if (value == "on") {
             // do nothing

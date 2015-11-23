@@ -11,6 +11,7 @@
 #include <iostream>
 
 #include <algorithm>
+#include <math.h>
 #include <stdio.h>
 #include "db/filename.h"
 #include "db/log_reader.h"
@@ -1357,8 +1358,11 @@ void VersionSet::Finalize(Version* v) {
       // file size is small (perhaps because of a small write-buffer
       // setting, or very high compression ratios, or lots of
       // overwrites/deletions).
-      score = v->files_[level].size() /
-          static_cast<double>(config::kL0_CompactionTrigger);
+      //
+      // (3) More level0 files means write hotspot.
+      // We give lower score to avoid too much level0 compaction.
+      score = sqrt(v->files_[level].size() /
+          static_cast<double>(config::kL0_CompactionTrigger));
     } else {
       // Compute the ratio of current size to size limit.
       const uint64_t level_bytes = TotalFileSize(v->files_[level]);

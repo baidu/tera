@@ -146,7 +146,6 @@ bool ClientImpl::CreateTable(const TableDescriptor& desc,
     TableDescToSchema(desc, schema);
     schema->set_alias(desc.TableName());
     schema->set_name(internal_table_name);
-    schema->set_admin(_user_identity);
     // add delimiter
     size_t delim_num = tablet_delim.size();
     for (size_t i = 0; i < delim_num; ++i) {

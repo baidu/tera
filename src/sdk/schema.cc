@@ -135,8 +135,16 @@ void TableDescriptor::SetAdminGroup(const std::string& name) {
     return _impl->SetAdminGroup(name);
 }
 
+void TableDescriptor::SetAdmin(const std::string& name) {
+    return _impl->SetAdmin(name);
+}
+
 std::string TableDescriptor::AdminGroup() const {
     return _impl->AdminGroup();
+}
+
+std::string TableDescriptor::Admin() const {
+    return _impl->Admin();
 }
 
 void TableDescriptor::SetAlias(const std::string& alias) {

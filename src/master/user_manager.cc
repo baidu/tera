@@ -4,7 +4,8 @@
 
 #include "user_manager.h"
 
-#include <glog/logging.h>
+#include "glog/logging.h"
+#include "utils/string_util.h"
 
 namespace tera {
 namespace master {
@@ -127,25 +128,10 @@ void UserManager::SetupRootUser() {
     LOG(INFO) << "[user-manager] root restored";
 }
 
-bool UserManager::IsUserNameValid(const std::string& user_name) {
-    const size_t kLenMin = 2;
-    const size_t kLenMax = 32;
-    if (user_name.length() < kLenMin || kLenMax < user_name.length()
-        || !isalpha(user_name[0])) {
-        return false;
-    }
-    for (size_t i = 0; i < user_name.length(); ++i) {
-        if (!isalnum(user_name[i]) && (user_name[i] != '_')) {
-            return false;
-        }
-    }
-    return true;
-}
-
 bool UserManager::IsValidForCreate(const std::string& token,
                                    const std::string& user_name) {
     LOG(INFO) << "[user-manager] " << user_name << ", " << token;
-    return IsUserNameValid(user_name)
+    return IsValidUserName(user_name)
            && !IsUserExist(user_name)
            && TokenToUserName(token) == "root";
 }
