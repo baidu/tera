@@ -134,24 +134,35 @@ void CleanTrashDir() {
     for (size_t i = 0; i < children.size(); ++i) {
         std::string c_dir = trash_dir + '/' + children[i];
         DeleteEnvDir(c_dir);
-        LOG(INFO) << "[gc] clean trash dir: " << c_dir;
     }
     return;
 }
 
 bool DeleteEnvDir(const std::string& dir) {
+    static bool is_support_rmdir = true;
+
     leveldb::Env* env = LeveldbBaseEnv();
     leveldb::Status s;
-    if (env->DeleteDir(dir).ok() || env->DeleteFile(dir).ok()) {
-        LOG(INFO) << "[gc] delete dir in file system, dir: " << dir;
+    if (env->DeleteFile(dir).ok()) {
+        LOG(INFO) << "[gc] delete file in file system, dir: " << dir;
         return true;
+    }
+    if (is_support_rmdir) {
+        if (env->DeleteDir(dir).ok()) {
+            LOG(INFO) << "[gc] delete dir in file system, dir: " << dir;
+            return true;
+        } else {
+            is_support_rmdir = false;
+            LOG(INFO) << "[gc] file system not supoort rmdir.";
+        }
     }
 
     // file system do not support delete dir, try delete recursively
     std::vector<std::string> children;
     s = env->GetChildren(dir, &children);
     if (!s.ok()) {
-        LOG(ERROR) << "[gc] fail to get children, dir: " << dir;
+        LOG(ERROR) << "[gc] fail to get children, dir: " << dir
+            << ", status: " << s.ToString();
         return false;
     }
     for (size_t i = 0; i < children.size(); ++i) {
