@@ -1089,7 +1089,8 @@ int32_t ShowSingleTable(Client* client, const string& table_name,
     }
 
     std::cout << std::endl;
-    std::cout << "create time: " << table_meta.create_time() << std::endl;
+    std::cout << "create time: "
+        << common::timer::get_time_str(table_meta.create_time()) << std::endl;
     std::cout << std::endl;
     ShowTabletList(tablet_list, true, is_x);
     std::cout << std::endl;
@@ -1108,7 +1109,10 @@ int32_t ShowSingleTabletNodeInfo(Client* client, const string& addr,
 
     std::cout << "\nTabletNode Info:\n";
     std::cout << "  address:  " << info.addr() << std::endl;
-    std::cout << "  status:   " << info.status_m() << "\n\n";
+    std::cout << "  status:   " << info.status_m() << std::endl;
+    std::cout << "  update time:   "
+        << common::timer::get_time_str(info.timestamp() / 1000000) << "\n\n";
+
     int cols = 5;
     TPrinter printer(cols, "workload", "tablets", "load", "busy", "split");
     std::vector<string> row;
