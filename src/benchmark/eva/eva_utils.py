@@ -41,29 +41,47 @@ def table_manipulate(tablename, op, schema):
             # lg schema
             lg_str = lg + '<'
             temp = []
-            for k, v in lg_schema.iteritems():
-                if k != 'cf':
-                    temp.append(k+'='+v)
-            lg_str += ','.join(temp)
-            lg_str += '>{\n'
+            if type(lg_schema) == dict:
+                for k, v in lg_schema.iteritems():
+                    if k != 'cf':
+                        temp.append(k+'='+v)
+                lg_str += ','.join(temp)
+                lg_str += '>{\n'
 
-            # cf schema
-            cf_list = lg_schema['cf']
-            total_cf_list.append(cf_list)
-            comp = cf_list.split(',')
-            total_cf_number += len(comp)
-            cf_list = []
-            for cf in comp:
-                try:
-                    cf, qualifier = cf.split(':')
-                except:
-                    pass
-                finally:
-                    cf_list.append(cf)
-            cf_list = list(set(cf_list))
-            lg_str += ','.join(cf_list)
-            lg_str += '}\n'
-            lg_schemas_list.append(lg_str)
+                # cf schema
+                cf_list = lg_schema['cf']
+                total_cf_list.append(cf_list)
+                comp = cf_list.split(',')
+                total_cf_number += len(comp)
+                cf_list = []
+                for cf in comp:
+                    try:
+                        cf, qualifier = cf.split(':')
+                    except:
+                        pass
+                    finally:
+                        cf_list.append(cf)
+                cf_list = list(set(cf_list))
+                lg_str += ','.join(cf_list)
+                lg_str += '}\n'
+                lg_schemas_list.append(lg_str)
+            else:
+                cf_list = schema['cf']
+                total_cf_list.append(cf_list)
+                comp = cf_list.split(',')
+                total_cf_number += len(comp)
+                cf_list = []
+                cf_str = ''
+                for cf in comp:
+                    try:
+                        cf, qualifier = cf.split(':')
+                    except:
+                        pass
+                    finally:
+                        cf_list.append(cf)
+                cf_list = list(set(cf_list))
+                cf_str += ','.join(cf_list)
+                lg_schemas_list.append(cf_str)
         fp.write(',\n'.join(lg_schemas_list) + '}\n')
         if op == conf.CF:
             return total_cf_number, ','.join(total_cf_list)

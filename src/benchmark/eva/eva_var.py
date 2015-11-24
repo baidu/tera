@@ -4,6 +4,8 @@ class CONF:
         self.TABLET_NUM = 'tablet_number'
         self.KEY_SIZE = 'key_size(B)'  # Bytes
         self.VALUE_SIZE = 'value_sizeB(B)'  # Bytes
+        self.KEY_SEED = 'key_seed'
+        self.VALUE_SEED = 'value_seed'
         self.ENTRY_SIZE = 'entry_size(B)'  # Bytes
         self.ENTRY_NUM = 'entry_number(M)'  # MB
         self.LG_NUM = 'lg_number'
@@ -26,6 +28,7 @@ class CONF:
         self.TS_NUMBER = 'ts_number'
 
         self.g_test_conf = {self.TABLE_NAME: '', self.TABLET_NUM: 0, self.KEY_SIZE: 20, self.VALUE_SIZE: 1024,
+                            self.KEY_SEED: '', self.VALUE_SEED: '',
                             self.ENTRY_SIZE: 20 + 1024, self.ENTRY_NUM: 0, self.LG_NUM: 0, self.CF_NUM: 1, self.CF: '',
                             self.KV: None, self.WRITE_SPEED_LIMIT: 0, self.READ_SPEED_LIMIT: 0, self.MODE: '',
                             self.SCAN_BUFFER: 0, self.TS_NUMBER: 0, self.SPLIT_SIZE: 0, self.SCHEMA: ''}

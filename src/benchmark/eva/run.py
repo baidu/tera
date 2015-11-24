@@ -26,6 +26,12 @@ def parse_input():
         if pre == conf.VALUE_SIZE:
             conf.g_test_conf[conf.VALUE_SIZE] = int(post)
             bench_cmd_prefix += '--value_size={vs} '.format(vs=post)
+        if pre == conf.KEY_SEED:
+            conf.g_test_conf[conf.KEY_SEED] = int(post)
+            bench_cmd_prefix += '--key_seed={ks} '.format(ks=post)
+        if pre == conf.VALUE_SEED:
+            conf.g_test_conf[conf.VALUE_SEED] = int(post)
+            bench_cmd_prefix += '--value_seed={vs} '.format(vs=post)
         if pre == conf.MODE:
             conf.g_test_conf[conf.MODE] = post
             if post == conf.MODE_SEQ_WRITE:
