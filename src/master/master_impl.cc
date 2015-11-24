@@ -4985,9 +4985,6 @@ void MasterImpl::DoTabletNodeGc() {
         }
     }
 
-    LOG(INFO) << "[gc] try clean trash dir.";
-    io::CleanTrashDir();
-
     bool need_gc = gc_strategy->PreQuery();
 
     MutexLock lock(&m_mutex);
@@ -5004,6 +5001,10 @@ void MasterImpl::DoTabletNodeGc() {
 
 void MasterImpl::DoTabletNodeGcPhase2() {
     gc_strategy->PostQuery();
+
+    LOG(INFO) << "[gc] try clean trash dir.";
+    io::CleanTrashDir();
+
     MutexLock lock(&m_mutex);
     if (m_gc_enabled) {
         ScheduleTabletNodeGc();
