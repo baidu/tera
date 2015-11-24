@@ -269,7 +269,32 @@ void RemoteTabletNode::DoReadTablet(google::protobuf::RpcController* controller,
     VLOG(8) << "accept RPC (ReadTablet)";
     int32_t row_num = request->row_info_list_size();
     read_pending_counter.Sub(row_num);
-    m_tabletnode_impl->ReadTablet(start_micros, request, response, done, timer);
+
+    bool is_read_timeout = false;
+    if (request->has_client_timeout_ms()) {
+        int64_t read_timeout = request->client_timeout_ms() * 1000; // ms -> us
+        int64_t detal = get_micros() - start_micros;
+        if (detal > read_timeout) {
+            VLOG(5) << "timeout, drop read request for:" << request->tablet_name()
+                << ", detal(in us):" << detal
+                << ", read_timeout(in us):" << read_timeout;
+            is_read_timeout = true;
+        }
+    }
+
+    if (!is_read_timeout) {
+        m_tabletnode_impl->ReadTablet(start_micros, request, response, done);
+    } else {
+        response->set_sequence_id(request->sequence_id());
+        response->set_success_num(0);
+        response->set_status(kTableIsBusy);
+        done->Run();
+    }
+
+    if (NULL != timer) {
+        RpcTimerList::Instance()->Erase(timer);
+        delete timer;
+    }
     VLOG(8) << "finish RPC (ReadTablet)";
 }
 
@@ -368,19 +393,6 @@ void RemoteTabletNode::DoScheduleRpc(RpcSchedule* rpc_schedule) {
     case RPC_READ: {
         ReadRpc* read_rpc = (ReadRpc*)rpc;
         table_name = read_rpc->request->tablet_name();
-        if (read_rpc->request->has_client_timeout_ms()) {
-            int64_t read_timeout = read_rpc->request->client_timeout_ms() * 1000; // ms -> us
-            int64_t detal = get_micros() - read_rpc->start_micros;
-            if (detal > read_timeout) {
-                VLOG(5) << "timeout, drop read request for:" << table_name
-                    << ", detal(in us):" << detal << ", read_timeout(in us):" << read_timeout;
-                read_rpc->response->set_sequence_id(read_rpc->request->sequence_id());
-                read_rpc->response->set_success_num(0);
-                read_rpc->response->set_status(kTableIsBusy);
-                read_rpc->done->Run();
-                break;
-            }
-        }
         DoReadTablet(read_rpc->controller, read_rpc->start_micros,
                      read_rpc->request, read_rpc->response,
                      read_rpc->done,read_rpc->timer);
