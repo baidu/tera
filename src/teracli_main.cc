@@ -164,6 +164,7 @@ void UsageMore(const std::string& prg_name) {
                         move a tablet to target tabletnode                  \n\
                 compact <tablet_path>                                       \n\
                 split   <tablet_path>                                       \n\
+                merge   <tablet_path>                                       \n\
                                                                             \n\
        safemode [get|enter|leave]                                           \n\
                                                                             \n\
@@ -1089,7 +1090,8 @@ int32_t ShowSingleTable(Client* client, const string& table_name,
     }
 
     std::cout << std::endl;
-    std::cout << "create time: " << table_meta.create_time() << std::endl;
+    std::cout << "create time: "
+        << common::timer::get_time_str(table_meta.create_time()) << std::endl;
     std::cout << std::endl;
     ShowTabletList(tablet_list, true, is_x);
     std::cout << std::endl;
@@ -1108,7 +1110,10 @@ int32_t ShowSingleTabletNodeInfo(Client* client, const string& addr,
 
     std::cout << "\nTabletNode Info:\n";
     std::cout << "  address:  " << info.addr() << std::endl;
-    std::cout << "  status:   " << info.status_m() << "\n\n";
+    std::cout << "  status:   " << info.status_m() << std::endl;
+    std::cout << "  update time:   "
+        << common::timer::get_time_str(info.timestamp() / 1000000) << "\n\n";
+
     int cols = 5;
     TPrinter printer(cols, "workload", "tablets", "load", "busy", "split");
     std::vector<string> row;
@@ -1176,6 +1181,7 @@ int32_t ShowTabletNodesInfo(Client* client, bool is_x, ErrorCode* err) {
         return -1;
     }
 
+    int64_t now = common::timer::get_micros();
     int cols;
     TPrinter printer;
     if (is_x) {
@@ -1197,7 +1203,12 @@ int32_t ShowTabletNodesInfo(Client* client, bool is_x, ErrorCode* err) {
             row.clear();
             row.push_back(NumberToString(i));
             row.push_back(infos[i].addr());
-            row.push_back(infos[i].status_m());
+            if (now - infos[i].timestamp() > 120 * 1000000) {
+                // tabletnode status timeout
+                row.push_back("kZombie");
+            } else {
+                row.push_back(infos[i].status_m());
+            }
             row.push_back(utils::ConvertByteToString(infos[i].load()));
             row.push_back(NumberToString(infos[i].tablet_total()));
             row.push_back(NumberToString(infos[i].low_read_cell()));
@@ -1231,7 +1242,11 @@ int32_t ShowTabletNodesInfo(Client* client, bool is_x, ErrorCode* err) {
             row.clear();
             row.push_back(NumberToString(i));
             row.push_back(infos[i].addr());
-            row.push_back(infos[i].status_m());
+            if (now - infos[i].timestamp() > 120 * 1000000) {
+                row.push_back("kZombie");
+            } else {
+                row.push_back(infos[i].status_m());
+            }
             row.push_back(utils::ConvertByteToString(infos[i].load()));
             row.push_back(NumberToString(infos[i].tablet_total()));
             row.push_back(NumberToString(infos[i].tablet_onload()));
@@ -1862,7 +1877,7 @@ int32_t TabletOp(Client* client, int32_t argc, char** argv, ErrorCode* err) {
 
     if (op == "compact") {
         return CompactTabletOp(client, argc, argv, err);
-    } else if (op != "move" && op != "split") {
+    } else if (op != "move" && op != "split" && op != "merge") {
         UsageMore(argv[0]);
         return -1;
     }

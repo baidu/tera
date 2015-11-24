@@ -1423,6 +1423,13 @@ void MasterImpl::TabletCmdCtrl(const CmdCtrlRequest* request,
         }
         TrySplitTablet(tablet);
         response->set_status(kMasterOk);
+    } else if (request->arg_list(0) == "merge") {
+        if (request->arg_list_size() > 3) {
+            response->set_status(kInvalidArgument);
+            return;
+        }
+        TryMergeTablet(tablet);
+        response->set_status(kMasterOk);
     } else {
         response->set_status(kInvalidArgument);
     }
@@ -4977,6 +4984,10 @@ void MasterImpl::DoTabletNodeGc() {
             return;
         }
     }
+
+    LOG(INFO) << "[gc] try clean trash dir.";
+    io::CleanTrashDir();
+
     bool need_gc = gc_strategy->PreQuery();
 
     MutexLock lock(&m_mutex);

@@ -14,12 +14,16 @@
 namespace common {
 namespace timer {
 
-static inline std::string get_curtime_str() {
+static inline std::string get_time_str(int64_t timestamp) {
     struct tm tt;
     char buf[20];
-    time_t t = time(NULL);
+    time_t t = timestamp;
     strftime(buf, 20, "%Y%m%d-%H:%M:%S", localtime_r(&t, &tt));
     return std::string(buf, 17);
+}
+
+static inline std::string get_curtime_str() {
+    return get_time_str(time(NULL));
 }
 
 static inline int64_t get_micros() {
