@@ -164,6 +164,7 @@ void UsageMore(const std::string& prg_name) {
                         move a tablet to target tabletnode                  \n\
                 compact <tablet_path>                                       \n\
                 split   <tablet_path>                                       \n\
+                merge   <tablet_path>                                       \n\
                                                                             \n\
        safemode [get|enter|leave]                                           \n\
                                                                             \n\
