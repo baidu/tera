@@ -167,7 +167,7 @@ public:
     int32_t DecRef();
     int32_t GetRef() const;
 
-    static void FindAverageKey(const std::string& start, const std::string& end,
+    static bool FindAverageKey(const std::string& start, const std::string& end,
                                std::string* res);
 
 private:

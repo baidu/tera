@@ -449,40 +449,53 @@ TEST_F(TabletIOTest, FindAverageKey) {
 
     start = "abc";
     end = "abe";
-    TabletIO::FindAverageKey(start, end, &ave);
+    ASSERT_TRUE(TabletIO::FindAverageKey(start, end, &ave));
     ASSERT_EQ(ave, "abd");
 
     start = "helloa";
     end = "hellob";
-    TabletIO::FindAverageKey(start, end, &ave);
-    ASSERT_EQ(ave, "helloa@");
+    ASSERT_TRUE(TabletIO::FindAverageKey(start, end, &ave));
+    ASSERT_EQ(ave, "helloa_");
 
     start = "a";
     end = "b";
-    TabletIO::FindAverageKey(start, end, &ave);
-    ASSERT_EQ(ave, "a@");
+    ASSERT_TRUE(TabletIO::FindAverageKey(start, end, &ave));
+    ASSERT_EQ(ave, "a_");
 
     start = "a";
     // b(0x62), 1(0x31)
     end = "ab";
-    TabletIO::FindAverageKey(start, end, &ave);
+    ASSERT_TRUE(TabletIO::FindAverageKey(start, end, &ave));
     ASSERT_EQ(ave, "a1");
 
-    // @(0x40)
+    // _(0x5F)
     start = "a\x10";
     end = "b";
-    TabletIO::FindAverageKey(start, end, &ave);
+    ASSERT_TRUE(TabletIO::FindAverageKey(start, end, &ave));
     ASSERT_EQ(ave, "a\x88");
 
     start = "";
+    end = "";
+    ASSERT_TRUE(TabletIO::FindAverageKey(start, end, &ave));
+    ASSERT_EQ(ave, "_");
+
+    start = "";
     end = "b";
-    TabletIO::FindAverageKey(start, end, &ave);
+    ASSERT_TRUE(TabletIO::FindAverageKey(start, end, &ave));
     ASSERT_EQ(ave, "1");
 
     start = "b";
     end = "";
-    TabletIO::FindAverageKey(start, end, &ave);
+    ASSERT_TRUE(TabletIO::FindAverageKey(start, end, &ave));
     ASSERT_EQ(ave, "\xb1");
+
+    start = "";
+    end = "\x1";
+    ASSERT_FALSE(TabletIO::FindAverageKey(start, end, &ave));
+
+    start = "";
+    end = std::string("\x0", 1);
+    ASSERT_FALSE(TabletIO::FindAverageKey(start, end, &ave));
 }
 } // namespace io
 } // namespace tera

@@ -339,8 +339,8 @@ bool TabletIO::Unload(StatusCode* status) {
 
 // Find average string from input string
 // E.g. "abc" & "abe" return "abd"
-//      "a" & "b" return "a0x7f"
-void TabletIO::FindAverageKey(const std::string& start, const std::string& end,
+//      "a" & "b" return "a_"
+bool TabletIO::FindAverageKey(const std::string& start, const std::string& end,
                              std::string* res) {
     std::string ave;
     int ave_len = start.size() < end.size() ? start.size() : end.size();
@@ -351,19 +351,23 @@ void TabletIO::FindAverageKey(const std::string& start, const std::string& end,
     if (ave > start) {
         // find success
         *res = ave;
-        return;
+        return true;
     }
     if (start.size() == end.size()) {
-        // a~b, here we use '@'(0x40), not '0x80', visible char
-        ave.append(1, '@');
+        // a~b, here we use '_'(0x5F), not '0x80', visible char
+        ave.append(1, '_');
     } else if (start.size() < end.size()) {
         char c = (end[ave.size()]) / 2;
+        if (c == '\x0') {
+            return false;
+        }
         ave.append(1, c);
     } else {
-        char c = (char)(((uint32_t)start[ave.size()] + 0x100) / 2);
+        char c = static_cast<char>((start[ave.size()] + 0x100) / 2);
         ave.append(1, c);
     }
     *res = ave;
+    return true;
 }
 
 bool TabletIO::Split(std::string* split_key, StatusCode* status) {
@@ -395,12 +399,18 @@ bool TabletIO::Split(std::string* split_key, StatusCode* status) {
         }
     }
 
-    if (key_split.empty()) {
-        // could not find split_key, use average key
-        FindAverageKey(m_start_key, m_end_key, split_key);
-        assert(m_start_key < *split_key && *split_key < m_end_key);
-    } else {
+    if (!key_split.empty()) {
+        // find split key successfully
         *split_key = key_split.ToString();
+    } else if (FindAverageKey(m_start_key, m_end_key, split_key)) {
+        // could not find split_key, use average key
+    } else {
+        // could not find split key
+        SetStatusCode(kTableNotSupport, status);
+        MutexLock lock(&m_mutex);
+        m_status = kReady;
+        m_db_ref_count--;
+        return false;
     }
 
     VLOG(5) << "start: [" << DebugString(m_start_key)
