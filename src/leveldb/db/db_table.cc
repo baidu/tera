@@ -989,9 +989,7 @@ void DBTable::ArchiveFile(const std::string& fname) {
 }
 
 // tera-specific
-bool DBTable::FindSplitKey(const std::string& start_key,
-                           const std::string& end_key,
-                           double ratio,
+bool DBTable::FindSplitKey(double ratio,
                            std::string* split_key) {
     // sort by lg size
     std::map<uint64_t, DBImpl*> size_of_lg;
@@ -1007,8 +1005,7 @@ bool DBTable::FindSplitKey(const std::string& start_key,
     if (biggest_it == size_of_lg.rend()) {
         return false;
     }
-    return biggest_it->second->FindSplitKey(start_key, end_key,
-                                            ratio, split_key);
+    return biggest_it->second->FindSplitKey(ratio, split_key);
 }
 
 bool DBTable::MinorCompact() {

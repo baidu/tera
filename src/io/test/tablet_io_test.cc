@@ -26,7 +26,7 @@ DECLARE_int32(tera_io_retry_max_times);
 DECLARE_int64(tera_tablet_living_period);
 DECLARE_string(tera_leveldb_env_type);
 
-DECLARE_int64(tera_tablet_write_buffer_size);
+DECLARE_int64(tera_tablet_max_write_buffer_size);
 DECLARE_string(log_dir);
 
 namespace tera {
@@ -135,9 +135,9 @@ TEST_F(TabletIOTest, Split) {
     LOG(INFO) << "table[" << key_start << ", " << key_end
         << "]: size = " << size;
     split_key.clear();
-    EXPECT_FALSE(other_tablet.Split(&split_key, &status));
+    EXPECT_TRUE(other_tablet.Split(&split_key, &status));
     LOG(INFO) << "split key = " << split_key << ", code " << StatusCodeToString(status);
-    EXPECT_TRUE((split_key == ""));
+    EXPECT_EQ(split_key, "6000");
     EXPECT_TRUE(other_tablet.Unload());
 
     key_start = "";
@@ -443,13 +443,67 @@ TEST_F(TabletIOTest, SplitToSubTable) {
 
     LOG(INFO) << "SplitToSubTable() end ...";
 }
+
+TEST_F(TabletIOTest, FindAverageKey) {
+    std::string start, end, ave;
+
+    start = "abc";
+    end = "abe";
+    ASSERT_TRUE(TabletIO::FindAverageKey(start, end, &ave));
+    ASSERT_EQ(ave, "abd");
+
+    start = "helloa";
+    end = "hellob";
+    ASSERT_TRUE(TabletIO::FindAverageKey(start, end, &ave));
+    ASSERT_EQ(ave, "helloa_");
+
+    start = "a";
+    end = "b";
+    ASSERT_TRUE(TabletIO::FindAverageKey(start, end, &ave));
+    ASSERT_EQ(ave, "a_");
+
+    start = "a";
+    // b(0x62), 1(0x31)
+    end = "ab";
+    ASSERT_TRUE(TabletIO::FindAverageKey(start, end, &ave));
+    ASSERT_EQ(ave, "a1");
+
+    // _(0x5F)
+    start = "a\x10";
+    end = "b";
+    ASSERT_TRUE(TabletIO::FindAverageKey(start, end, &ave));
+    ASSERT_EQ(ave, "a\x88");
+
+    start = "";
+    end = "";
+    ASSERT_TRUE(TabletIO::FindAverageKey(start, end, &ave));
+    ASSERT_EQ(ave, "_");
+
+    start = "";
+    end = "b";
+    ASSERT_TRUE(TabletIO::FindAverageKey(start, end, &ave));
+    ASSERT_EQ(ave, "1");
+
+    start = "b";
+    end = "";
+    ASSERT_TRUE(TabletIO::FindAverageKey(start, end, &ave));
+    ASSERT_EQ(ave, "\xb1");
+
+    start = "";
+    end = "\x1";
+    ASSERT_FALSE(TabletIO::FindAverageKey(start, end, &ave));
+
+    start = "";
+    end = std::string("\x0", 1);
+    ASSERT_FALSE(TabletIO::FindAverageKey(start, end, &ave));
+}
 } // namespace io
 } // namespace tera
 
 int main(int argc, char** argv) {
     FLAGS_tera_io_retry_max_times = 1;
     FLAGS_tera_tablet_living_period = 0;
-    FLAGS_tera_tablet_write_buffer_size = 1;
+    FLAGS_tera_tablet_max_write_buffer_size = 1;
     FLAGS_tera_leveldb_env_type = "local";
     ::google::InitGoogleLogging(argv[0]);
     FLAGS_log_dir = "./log";

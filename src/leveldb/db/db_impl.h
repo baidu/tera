@@ -56,10 +56,7 @@ class DBImpl : public DB {
 
   // tera-specific
   virtual bool BusyWrite();
-  bool FindSplitKey(const std::string& start_key,
-                    const std::string& end_key,
-                    double ratio,
-                    std::string* split_key);
+  bool FindSplitKey(double ratio, std::string* split_key);
 
   // Add all sst files inherited from other tablets
   virtual void AddInheritedLiveFiles(std::vector<std::set<uint64_t> >* live);
