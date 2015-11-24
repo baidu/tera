@@ -12,6 +12,7 @@
 
 #include "proto/proto_helper.h"
 #include "proto/table_schema.pb.h"
+#include "sdk/sdk_utils.h"
 #include "sdk/table_impl.h"
 #include "sdk/filter_utils.h"
 #include "utils/atomic.h"
@@ -362,7 +363,7 @@ bool ResultStreamSyncImpl::Done(ErrorCode* err) {
         /// scan failed
         if (_response->status() != kTabletNodeOk) {
             if (err) {
-                err->SetFailed(ErrorCode::kSystem,
+                err->SetFailed(StatusCodeToErrorCodeType(_response->status()),
                                StatusCodeToString(_response->status()));
             }
             return true;

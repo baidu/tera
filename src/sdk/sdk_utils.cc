@@ -14,6 +14,7 @@
 #include "common/file/file_path.h"
 #include "gflags/gflags.h"
 #include "glog/logging.h"
+#include "proto/status_code.pb.h"
 #include "utils/string_util.h"
 
 #include "sdk/filter_utils.h"
@@ -944,4 +945,28 @@ bool ParseDelimiterFile(const string& filename, std::vector<string>* delims) {
     delims->swap(delimiters);
     return true;
 }
+
+tera::ErrorCode::ErrorCodeType StatusCodeToErrorCodeType(StatusCode err) {
+    switch (err) {
+    case kMasterOk:
+    case kTabletNodeOk:
+        return ErrorCode::kOK;
+    case kKeyNotExist:
+    case kSnapshotNotExist:
+        return ErrorCode::kNotFound;
+    case kMasterIsBusy:
+    case kTabletNodeIsBusy:
+        return ErrorCode::kTooBusy;
+    case kIOError:
+        return ErrorCode::kIOError;
+    case kRPCError:
+    case kServerError:
+    case kClientError:
+    case kConnectError:
+        return ErrorCode::kNetworkError;
+    default:
+        return ErrorCode::kUnavailable;
+    }
+}
+
 } // namespace tera
