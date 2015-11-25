@@ -1234,7 +1234,7 @@ bool TabletIO::ScanRowsStreaming(const ScanTabletRequest* request,
     while (status == kTabletNodeOk) {
         RowResult value_list;
         if (LowLevelScan(start_tera_key, end_row_key, scan_options, it,
-                         &value_list, response->mutable_next_start_point(), &read_row_count, &read_bytes,
+                         &value_list, NULL, &read_row_count, &read_bytes,
                          &is_complete, &status)) {
             m_counter.scan_rows.Add(read_row_count);
             m_counter.scan_size.Add(read_bytes);
