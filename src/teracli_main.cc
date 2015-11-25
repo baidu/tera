@@ -824,7 +824,6 @@ int32_t ScanOp(Client* client, int32_t argc, char** argv, ErrorCode* err) {
     desc.SetSnapshot(FLAGS_snapshot);
     if ((result_stream = table->Scan(desc, err)) == NULL) {
         LOG(ERROR) << "fail to scan records from table: " << tablename;
-        delete result_stream;
         return -1;
     }
     g_start_time = time(NULL);
