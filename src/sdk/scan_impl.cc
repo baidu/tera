@@ -240,6 +240,11 @@ bool ResultStreamBatchImpl::Done(ErrorCode* error) {
                 error->SetFailed(ErrorCode::kSystem, StatusCodeToString(session_error_));
                 return true;
             }
+            if (ref_count_ == 1) {
+                // ts refuse scan...
+                LOG(WARNING) << "ts refuse scan, scan later...\n";
+                return true;
+            }
             cv_.Wait();
         }
         if (next_idx_ < slot->cell_.key_values_size()) { break; }

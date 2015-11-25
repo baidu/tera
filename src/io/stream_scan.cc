@@ -29,7 +29,6 @@ StreamScan::~StreamScan() {
     MutexLock lock(&m_mutex);
     m_shutdown = true;
     m_push_event.Set();
-
     DropTask();
 }
 
