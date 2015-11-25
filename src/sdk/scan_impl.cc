@@ -132,8 +132,10 @@ void ResultStreamBatchImpl::OnFinish(ScanTabletRequest* request,
                 << ", session_data_idx " << session_data_idx_
                 << ", stale result_id " << response->results_id()
                 << ", response " << (uint64_t)response;
+            session_done_ = true;
+            // TODO: ts state no known
+            session_error_ = kRPCTimeout;
         }
-        session_error_ = kRPCTimeout;
     } else { // scan success, cache result
         int32_t slot_idx = ((response->results_id() - session_data_idx_)
                             + sliding_window_idx_) % FLAGS_tera_sdk_max_parallel_scan_req;
