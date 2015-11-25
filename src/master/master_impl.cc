@@ -5003,7 +5003,10 @@ void MasterImpl::DoTabletNodeGcPhase2() {
     gc_strategy->PostQuery();
 
     LOG(INFO) << "[gc] try clean trash dir.";
+    int64_t start = common::timer::get_micros();
     io::CleanTrashDir();
+    int64_t cost = (common::timer::get_micros() - start) / 1000;
+    LOG(INFO) << "[gc] clean trash dir done, cost: " << cost << "ms.";
 
     MutexLock lock(&m_mutex);
     if (m_gc_enabled) {
