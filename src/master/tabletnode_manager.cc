@@ -188,7 +188,10 @@ bool TabletNode::TrySplit(TabletPtr tablet) {
         ++m_onsplit_count;
         return true;
     }
-    m_wait_split_list.push_back(tablet);
+    if (std::find(m_wait_split_list.begin(), m_wait_split_list.end(), tablet) ==
+        m_wait_split_list.end()) {
+        m_wait_split_list.push_back(tablet);
+    }
     return false;
 }
 
@@ -419,6 +422,7 @@ bool TabletNodeManager::ScheduleTabletNode(Scheduler* scheduler, const std::stri
 
     TabletNodePtr null_ptr, meta_node;
     std::vector<TabletNodePtr> candidates;
+    std::vector<TabletNodePtr> slow_candidates;
 
     TabletNodeList::const_iterator it = m_tabletnode_list.begin();
     for (; it != m_tabletnode_list.end(); ++it) {
@@ -431,9 +435,6 @@ bool TabletNodeManager::ScheduleTabletNode(Scheduler* scheduler, const std::stri
             meta_node = tablet_node;
             continue;
         }
-        if (tablet_node->m_average_counter.m_read_pending > 100) {
-            continue;
-        }
         if (is_move) {
             if (!tablet_node->MayLoadNow()) {
                 continue;
@@ -442,7 +443,14 @@ bool TabletNodeManager::ScheduleTabletNode(Scheduler* scheduler, const std::stri
                 continue;
             }
         }
-        candidates.push_back(tablet_node);
+        if (tablet_node->m_average_counter.m_read_pending < 100) {
+            candidates.push_back(tablet_node);
+        } else {
+            slow_candidates.push_back(tablet_node);
+        }
+    }
+    if (candidates.size() == 0) {
+        candidates = slow_candidates;
     }
     if (candidates.size() == 0) {
         if (meta_node != null_ptr) {

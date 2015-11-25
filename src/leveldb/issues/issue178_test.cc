@@ -17,7 +17,7 @@
 
 namespace {
 
-const int kNumKeys = 1100000;
+const size_t kNumKeys = 1100000;
 
 std::string Key1(int i) {
   char buf[100];
@@ -41,7 +41,6 @@ TEST(Issue178, Test) {
   // specific scenario.
   leveldb::DB* db;
   leveldb::Options db_options;
-  db_options.create_if_missing = true;
   db_options.compression = leveldb::kNoCompression;
   ASSERT_OK(leveldb::DB::Open(db_options, dbpath, &db));
 

@@ -36,8 +36,7 @@ public:
 
     virtual bool FileExists(const std::string& fname);
 
-    virtual Status GetChildren(const std::string& path,
-            std::vector<std::string>* result, std::vector<int64_t>* ctime = NULL);
+    virtual Status GetChildren(const std::string& path, std::vector<std::string>* result);
 
     virtual Status DeleteFile(const std::string& fname);
 
@@ -75,7 +74,7 @@ private:
 };
 
 /// new flash env
-Env* NewFlashEnv(Env* base_env, Logger* logger);
+Env* NewFlashEnv(Env* base_env);
 }  // namespace leveldb
 
 #endif  //__LEVELDB_ENV_FLASH_H_

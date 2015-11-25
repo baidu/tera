@@ -69,7 +69,7 @@ TEST(CounterTest, Basic) {
     Counter counter;
     ThreadPool* pool = new ThreadPool(thread_num);
     for (int i = 0; i < thread_num / 4; ++i) {
-        boost::function<void ()> callback = 
+        boost::function<void ()> callback =
             boost::bind(&callback_add, &counter);
         pool->AddTask(callback);
 
@@ -98,8 +98,8 @@ TEST(CounterTest, Basic) {
 TEST(CounterTest, Clear) {
     Counter counter;
     ThreadPool* pool = new ThreadPool(thread_num);
-    for (int i = 0; i < thread_num / 3; ++i) {        
-        boost::function<void ()> callback = 
+    for (int i = 0; i < thread_num / 3; ++i) {
+        boost::function<void ()> callback =
             boost::bind(&callback_add, &counter);
         pool->AddTask(callback);
 

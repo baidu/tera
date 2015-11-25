@@ -38,7 +38,7 @@ public:
     virtual bool GetRootTableAddr(std::string* root_table_addr);
 
 private:
-    bool Register(std::string* session_id, int* zk_code);
+    bool Register(const std::string& session_id, int* zk_code);
     bool Unregister(int* zk_code);
 
     bool WatchMaster(std::string* master, int* zk_code);
@@ -81,7 +81,7 @@ public:
     virtual bool GetRootTableAddr(std::string* root_table_addr);
 
 private:
-    bool Register(std::string* session_id, int* zk_code = NULL);
+    bool Register(const std::string& session_id, int* zk_code = NULL);
     virtual void OnChildrenChanged(const std::string& path,
                                    const std::vector<std::string>& name_list,
                                    const std::vector<std::string>& data_list) {}

@@ -298,7 +298,7 @@ TEST(LogTest, MarginalTrailer2) {
   ASSERT_EQ(BigString("foo", n), Read());
   ASSERT_EQ("bar", Read());
   ASSERT_EQ("EOF", Read());
-  ASSERT_EQ(0, DroppedBytes());
+  ASSERT_EQ(0u, DroppedBytes());
   ASSERT_EQ("", ReportMessage());
 }
 
@@ -351,7 +351,7 @@ TEST(LogTest, BadRecordType) {
   IncrementByte(6, 100);
   FixChecksum(0, 3);
   ASSERT_EQ("EOF", Read());
-  ASSERT_EQ(3, DroppedBytes());
+  ASSERT_EQ(3u, DroppedBytes());
   ASSERT_EQ("OK", MatchError("unknown record type"));
 }
 
@@ -375,7 +375,7 @@ TEST(LogTest, ChecksumMismatch) {
   Write("foo");
   IncrementByte(0, 10);
   ASSERT_EQ("EOF", Read());
-  ASSERT_EQ(10, DroppedBytes());
+  ASSERT_EQ(10u, DroppedBytes());
   ASSERT_EQ("OK", MatchError("checksum mismatch"));
 }
 
@@ -384,7 +384,7 @@ TEST(LogTest, UnexpectedMiddleType) {
   SetByte(6, kMiddleType);
   FixChecksum(0, 3);
   ASSERT_EQ("EOF", Read());
-  ASSERT_EQ(3, DroppedBytes());
+  ASSERT_EQ(3u, DroppedBytes());
   ASSERT_EQ("OK", MatchError("missing start"));
 }
 
@@ -393,7 +393,7 @@ TEST(LogTest, UnexpectedLastType) {
   SetByte(6, kLastType);
   FixChecksum(0, 3);
   ASSERT_EQ("EOF", Read());
-  ASSERT_EQ(3, DroppedBytes());
+  ASSERT_EQ(3u, DroppedBytes());
   ASSERT_EQ("OK", MatchError("missing start"));
 }
 
@@ -404,7 +404,7 @@ TEST(LogTest, UnexpectedFullType) {
   FixChecksum(0, 3);
   ASSERT_EQ("bar", Read());
   ASSERT_EQ("EOF", Read());
-  ASSERT_EQ(3, DroppedBytes());
+  ASSERT_EQ(3u, DroppedBytes());
   ASSERT_EQ("OK", MatchError("partial record without end"));
 }
 
@@ -415,7 +415,7 @@ TEST(LogTest, UnexpectedFirstType) {
   FixChecksum(0, 3);
   ASSERT_EQ(BigString("bar", 100000), Read());
   ASSERT_EQ("EOF", Read());
-  ASSERT_EQ(3, DroppedBytes());
+  ASSERT_EQ(3u, DroppedBytes());
   ASSERT_EQ("OK", MatchError("partial record without end"));
 }
 
@@ -431,13 +431,13 @@ TEST(LogTest, ErrorJoinsRecords) {
   Write("correct");
 
   // Wipe the middle block
-  for (int offset = kBlockSize; offset < 2*kBlockSize; offset++) {
+  for (uint32_t offset = kBlockSize; offset < 2*kBlockSize; offset++) {
     SetByte(offset, 'x');
   }
 
   ASSERT_EQ("correct", Read());
   ASSERT_EQ("EOF", Read());
-  const int dropped = DroppedBytes();
+  const uint32_t dropped = DroppedBytes();
   ASSERT_LE(dropped, 2*kBlockSize + 100);
   ASSERT_GE(dropped, 2*kBlockSize);
 }

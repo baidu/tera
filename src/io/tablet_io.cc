@@ -33,7 +33,7 @@
 
 DECLARE_string(tera_leveldb_env_type);
 DECLARE_int64(tera_tablet_log_file_size);
-DECLARE_int64(tera_tablet_write_buffer_size);
+DECLARE_int64(tera_tablet_max_write_buffer_size);
 DECLARE_int64(tera_tablet_write_block_size);
 DECLARE_int32(tera_tablet_level0_file_limit);
 DECLARE_int32(tera_tablet_max_block_log_number);
@@ -69,8 +69,10 @@ extern tera::Counter row_read_delay;
 namespace tera {
 namespace io {
 
-TabletIO::TabletIO()
+TabletIO::TabletIO(const std::string& key_start, const std::string& key_end)
     : m_async_writer(NULL),
+      m_start_key(key_start),
+      m_end_key(key_end),
       m_compact_status(kTableNotCompact),
       m_status(kNotInit),
       m_ref_count(1), m_db_ref_count(0), m_db(NULL),
@@ -96,7 +98,12 @@ std::string TabletIO::GetTableName() const {
 
 std::string TabletIO::GetTablePath() const {
     if (!m_tablet_path.empty()) {
-        return m_tablet_path.substr(FLAGS_tera_tabletnode_path_prefix.size());
+        std::string path =
+            m_tablet_path.substr(FLAGS_tera_tabletnode_path_prefix.size());
+        if (path.at(0) == '/') {
+            path = path.substr(1);
+        }
+        return path;
     } else {
         return m_tablet_path;
     }
@@ -123,19 +130,17 @@ TabletIO::StatCounter& TabletIO::GetCounter() {
 }
 
 bool TabletIO::Load(const TableSchema& schema,
-                    const std::string& key_start,
-                    const std::string& key_end,
                     const std::string& path,
                     const std::vector<uint64_t>& parent_tablets,
                     std::map<uint64_t, uint64_t> snapshots,
+                    std::map<uint64_t, uint64_t> rollbacks,
                     leveldb::Logger* logger,
                     leveldb::Cache* block_cache,
                     leveldb::TableCache* table_cache,
                     StatusCode* status) {
     {
         MutexLock lock(&m_mutex);
-        if (m_status == kReady && m_start_key == key_start
-            && m_end_key == key_end) {
+        if (m_status == kReady) {
             return true;
         } else if (m_status != kNotInit) {
             SetStatusCode(m_status, status);
@@ -151,40 +156,45 @@ bool TabletIO::Load(const TableSchema& schema,
         // only prepare for kv-only mode, no need to set fields of it.
         m_table_schema.add_locality_groups();
     }
-    if (m_table_schema.column_families_size() == 0) {
-        // only prepare for kv-only mode, no need to set fields of it.
-        m_table_schema.add_column_families();
+
+    RawKey raw_key = m_table_schema.raw_key();
+    if (raw_key == TTLKv || raw_key == GeneralKv) {
         m_kv_only = true;
     } else {
-        m_kv_only = m_table_schema.kv_only();
+        // for compatible
+        if (m_table_schema.column_families_size() == 0) {
+            // only prepare for kv-only mode, no need to set fields of it.
+            m_table_schema.add_column_families();
+            m_kv_only = true;
+        } else {
+            m_kv_only = m_table_schema.kv_only();
+        }
     }
 
     m_key_operator = GetRawKeyOperatorFromSchema(m_table_schema);
     // [m_raw_start_key, m_raw_end_key)
-    m_raw_start_key = key_start;
-    if (!m_kv_only && !key_start.empty()) {
-        m_key_operator->EncodeTeraKey(key_start, "", "", kLatestTs,
+    m_raw_start_key = m_start_key;
+    if (!m_kv_only && !m_start_key.empty()) {
+        m_key_operator->EncodeTeraKey(m_start_key, "", "", kLatestTs,
                                       leveldb::TKT_FORSEEK, &m_raw_start_key);
-    } else if (m_kv_only && m_table_schema.raw_key() == TTLKv && !key_start.empty()) {
-        m_key_operator->EncodeTeraKey(key_start, "", "", 0, leveldb::TKT_FORSEEK, &m_raw_start_key);
+    } else if (m_kv_only && m_table_schema.raw_key() == TTLKv && !m_start_key.empty()) {
+        m_key_operator->EncodeTeraKey(m_start_key, "", "", 0, leveldb::TKT_FORSEEK, &m_raw_start_key);
     }
-    m_raw_end_key = key_end;
-    if (!m_kv_only && !key_end.empty()) {
-        m_key_operator->EncodeTeraKey(key_end, "", "", kLatestTs,
+    m_raw_end_key = m_end_key;
+    if (!m_kv_only && !m_end_key.empty()) {
+        m_key_operator->EncodeTeraKey(m_end_key, "", "", kLatestTs,
                                       leveldb::TKT_FORSEEK, &m_raw_end_key);
-    } else if (m_kv_only && m_table_schema.raw_key() == TTLKv && !key_end.empty()) {
-        m_key_operator->EncodeTeraKey(key_end, "", "", 0, leveldb::TKT_FORSEEK, &m_raw_end_key);
+    } else if (m_kv_only && m_table_schema.raw_key() == TTLKv && !m_end_key.empty()) {
+        m_key_operator->EncodeTeraKey(m_end_key, "", "", 0, leveldb::TKT_FORSEEK, &m_raw_end_key);
     }
 
     m_ldb_options.key_start = m_raw_start_key;
     m_ldb_options.key_end = m_raw_end_key;
-    m_ldb_options.write_buffer_size = FLAGS_tera_tablet_write_buffer_size * 1024 * 1024;
     m_ldb_options.l0_slowdown_writes_trigger = FLAGS_tera_tablet_level0_file_limit;
     m_ldb_options.block_size = FLAGS_tera_tablet_write_block_size * 1024;
     m_ldb_options.max_block_log_number = FLAGS_tera_tablet_max_block_log_number;
     m_ldb_options.write_log_time_out = FLAGS_tera_tablet_write_log_time_out;
     m_ldb_options.log_async_mode = FLAGS_tera_log_async_mode;
-    m_ldb_options.create_if_missing = true;
     m_ldb_options.info_log = logger;
     m_ldb_options.max_open_files = FLAGS_tera_memenv_table_cache_size;
 
@@ -224,14 +234,24 @@ bool TabletIO::Load(const TableSchema& schema,
     m_ldb_options.disable_wal = m_table_schema.disable_wal();
     SetupOptionsForLG();
 
-    m_tablet_path = FLAGS_tera_tabletnode_path_prefix + path;
+    std::string path_prefix = FLAGS_tera_tabletnode_path_prefix;
+    if (*path_prefix.rbegin() != '/') {
+        path_prefix.push_back('/');
+    }
+
+    m_tablet_path = path_prefix + path;
     LOG(INFO) << "[Load] Start Open " << m_tablet_path;
     // recover snapshot
-    std::map<uint64_t, uint64_t>::iterator it = snapshots.begin();
-    for (; it != snapshots.end(); ++it) {
+    for (std::map<uint64_t, uint64_t>::iterator it = snapshots.begin(); it != snapshots.end(); ++it) {
         id_to_snapshot_num_[it->first] = it->second;
         m_ldb_options.snapshots_sequence.push_back(it->second);
     }
+    // recover rollback
+    for (std::map<uint64_t, uint64_t>::iterator it = rollbacks.begin(); it != rollbacks.end(); ++it) {
+        rollbacks_[id_to_snapshot_num_[it->first]] = it->second;
+        m_ldb_options.rollbacks[id_to_snapshot_num_[it->first]] = it->second;
+    }
+
     leveldb::Status db_status = leveldb::DB::Open(m_ldb_options, m_tablet_path, &m_db);
 
     if (!db_status.ok()) {
@@ -246,9 +266,6 @@ bool TabletIO::Load(const TableSchema& schema,
 //         delete m_ldb_options.env;
         return false;
     }
-
-    m_start_key = key_start;
-    m_end_key = key_end;
 
     m_async_writer = new TabletWriter(this);
     m_async_writer->Start();
@@ -320,6 +337,39 @@ bool TabletIO::Unload(StatusCode* status) {
     return true;
 }
 
+// Find average string from input string
+// E.g. "abc" & "abe" return "abd"
+//      "a" & "b" return "a_"
+bool TabletIO::FindAverageKey(const std::string& start, const std::string& end,
+                             std::string* res) {
+    std::string ave;
+    int ave_len = start.size() < end.size() ? start.size() : end.size();
+    for (int i = 0; i < ave_len; ++i) {
+        char c = (char)(((uint32_t)start[i] + end[i]) / 2);
+        ave.append(1, c);
+    }
+    if (ave > start) {
+        // find success
+        *res = ave;
+        return true;
+    }
+    if (start.size() == end.size()) {
+        // a~b, here we use '_'(0x5F), not '0x80', visible char
+        ave.append(1, '_');
+    } else if (start.size() < end.size()) {
+        char c = (end[ave.size()]) / 2;
+        if (c == '\x0') {
+            return false;
+        }
+        ave.append(1, c);
+    } else {
+        char c = static_cast<char>((start[ave.size()] + 0x100) / 2);
+        ave.append(1, c);
+    }
+    *res = ave;
+    return true;
+}
+
 bool TabletIO::Split(std::string* split_key, StatusCode* status) {
     {
         MutexLock lock(&m_mutex);
@@ -335,58 +385,37 @@ bool TabletIO::Split(std::string* split_key, StatusCode* status) {
         m_db_ref_count++;
     }
 
-    int64_t table_size = GetDataSize(NULL, status);
-    if (table_size <= 0) {
-        SetStatusCode(kTableNotSupport, status);
-        MutexLock lock(&m_mutex);
-        m_status = kReady;
-        m_db_ref_count--;
-        return false;
-    }
-
     std::string raw_split_key;
-    if (!m_db->FindSplitKey(m_raw_start_key, m_raw_end_key, 0.5,
-                            &raw_split_key)) {
-        VLOG(5) << "fail to find split key";
+    leveldb::Slice key_split;
+    if (m_db->FindSplitKey(0.5, &raw_split_key)) {
+        if ((m_table_schema.raw_key() == GeneralKv)
+            || (m_kv_only && m_table_schema.raw_key() == Readable)) {
+            key_split = raw_split_key;
+        } else { // Table && TTL-KV
+            if (!m_key_operator->ExtractTeraKey(raw_split_key, &key_split,
+                                                NULL, NULL, NULL, NULL)) {
+                VLOG(5) << "fail to extract split key";
+            }
+        }
+    }
+
+    if (!key_split.empty()) {
+        // find split key successfully
+        *split_key = key_split.ToString();
+    } else if (FindAverageKey(m_start_key, m_end_key, split_key)) {
+        // could not find split_key, use average key
+    } else {
+        // could not find split key
         SetStatusCode(kTableNotSupport, status);
         MutexLock lock(&m_mutex);
         m_status = kReady;
         m_db_ref_count--;
         return false;
-    }
-
-    leveldb::Slice key_split;
-
-    if (m_kv_only && m_table_schema.raw_key() == Readable) {
-        key_split = raw_split_key;
-    } else { // Table && TTL-KV
-        leveldb::Slice cf_split;
-        leveldb::Slice qu_split;
-        if (!m_key_operator->ExtractTeraKey(raw_split_key, &key_split,
-                                            &cf_split, &qu_split, NULL, NULL)) {
-            VLOG(5) << "fail to extract split key";
-            SetStatusCode(kTableNotSupport, status);
-            MutexLock lock(&m_mutex);
-            m_status = kReady;
-            m_db_ref_count--;
-            return false;
-        }
     }
 
     VLOG(5) << "start: [" << DebugString(m_start_key)
         << "], end: [" << DebugString(m_end_key)
-        << "], split: [" << DebugString(key_split.ToString()) << "]";
-
-    if (key_split.empty() || key_split.ToString() <= m_start_key
-        || (!m_end_key.empty() && key_split.ToString() >= m_end_key)) {
-        SetStatusCode(kTableNotSupport, status);
-        MutexLock lock(&m_mutex);
-        m_status = kReady;
-        m_db_ref_count--;
-        return false;
-    }
-
-    *split_key = key_split.ToString();
+        << "], split: [" << DebugString(*split_key) << "]";
 
     {
         MutexLock lock(&m_mutex);
@@ -439,42 +468,6 @@ bool TabletIO::CompactMinor(StatusCode* status) {
     return true;
 }
 
-int64_t TabletIO::GetDataSize(const std::string& start_key,
-                              const std::string& end_key,
-                              StatusCode* status) {
-    {
-        MutexLock lock(&m_mutex);
-        if (m_status != kReady && m_status != kOnSplit
-            && m_status != kSplited && m_status != kUnLoading) {
-            SetStatusCode(m_status, status);
-            return -1;
-        }
-        m_db_ref_count++;
-    }
-
-    std::string raw_start_key = start_key;
-    if (!m_kv_only && !start_key.empty()) {
-        m_key_operator->EncodeTeraKey(start_key, "", "", kLatestTs,
-                                      leveldb::TKT_FORSEEK, &raw_start_key);
-    }
-    std::string raw_end_key = end_key;
-    if (!m_kv_only && !end_key.empty()) {
-        m_key_operator->EncodeTeraKey(end_key, "", "", kLatestTs,
-                                      leveldb::TKT_FORSEEK, &raw_end_key);
-    }
-
-    int64_t scope_size = m_db->GetScopeSize(raw_start_key, raw_end_key);
-    {
-        MutexLock lock(&m_mutex);
-        m_db_ref_count--;
-    }
-    if (scope_size == 0) {
-        // return reserved buffer size
-        return FLAGS_tera_tablet_write_block_size * 1024;
-    }
-    return scope_size;
-}
-
 bool TabletIO::AddInheritedLiveFiles(std::vector<std::set<uint64_t> >* live) {
     {
         MutexLock lock(&m_mutex);
@@ -522,29 +515,29 @@ bool TabletIO::SnapshotIDToSeq(uint64_t snapshot_id, uint64_t* snapshot_sequence
     return true;
 }
 
-int64_t TabletIO::GetDataSize(std::vector<uint64_t>* lgsize,
-                              StatusCode* status) {
+bool TabletIO::GetDataSize(uint64_t* size, std::vector<uint64_t>* lgsize,
+                           StatusCode* status) {
     {
         MutexLock lock(&m_mutex);
         if (m_status != kReady && m_status != kOnSplit
             && m_status != kSplited && m_status != kUnLoading) {
             SetStatusCode(m_status, status);
-            return -1;
+            return false;
         }
         m_db_ref_count++;
     }
 
-    int64_t scope_size = m_db->GetScopeSize(m_raw_start_key, m_raw_end_key, lgsize);
-    // VLOG(6) << "GetDataSize(" << m_tablet_path << ") : " << scope_size;
+    m_db->GetApproximateSizes(size, lgsize);
+    VLOG(6) << "GetDataSize(" << m_tablet_path << ") : " << *size;
     {
         MutexLock lock(&m_mutex);
         m_db_ref_count--;
     }
-    if (scope_size == 0) {
+    if (size && *size == 0) {
         // return reserved buffer size
-        return FLAGS_tera_tablet_write_block_size * 1024;
+        *size = FLAGS_tera_tablet_write_block_size * 1024;
     }
-    return scope_size;
+    return true;
 }
 
 bool TabletIO::Read(const leveldb::Slice& key, std::string* value,
@@ -558,6 +551,7 @@ bool TabletIO::Read(const leveldb::Slice& key, std::string* value,
             return false;
         }
     }
+    read_option.rollbacks = rollbacks_;
     leveldb::Status db_status = m_db->Get(read_option, key, value);
     if (!db_status.ok()) {
         // LOG(ERROR) << "fail to read value for key: " << key.data()
@@ -585,10 +579,12 @@ StatusCode TabletIO::InitedScanInterator(const std::string& start_tera_key,
             return kSnapshotNotExist;
         }
     }
+    read_option.rollbacks = rollbacks_;
     *scan_it = m_db->NewIterator(read_option);
     TearDownIteratorOptions(&read_option);
 
-    VLOG(10) << "ll-scan: " << "startkey=[" << DebugString(start_key.ToString());
+    VLOG(10) << "ll-scan: " << "startkey=[" << DebugString(start_key.ToString()) << ":"
+             << DebugString(start_col.ToString()) << ":" << DebugString(start_qual.ToString());
     std::string start_seek_key;
     m_key_operator->EncodeTeraKey(start_key.ToString(), "", "", kLatestTs,
                                   leveldb::TKT_FORSEEK, &start_seek_key);
@@ -601,6 +597,7 @@ bool TabletIO::LowLevelScan(const std::string& start_tera_key,
                             const std::string& end_row_key,
                             const ScanOptions& scan_options,
                             RowResult* value_list,
+                            KeyValuePair* next_start_point,
                             uint32_t* read_row_count,
                             uint32_t* read_bytes,
                             bool* is_complete,
@@ -613,7 +610,7 @@ bool TabletIO::LowLevelScan(const std::string& start_tera_key,
     }
 
     bool ret = LowLevelScan(start_tera_key, end_row_key, scan_options, it,
-                            value_list, read_row_count, read_bytes,
+                            value_list, next_start_point, read_row_count, read_bytes,
                             is_complete, status);
     delete it;
     return ret;
@@ -624,6 +621,7 @@ inline bool TabletIO::LowLevelScan(const std::string& start_tera_key,
                             const ScanOptions& scan_options,
                             leveldb::Iterator* it,
                             RowResult* value_list,
+                            KeyValuePair* next_start_point,
                             uint32_t* read_row_count,
                             uint32_t* read_bytes,
                             bool* is_complete,
@@ -638,12 +636,17 @@ inline bool TabletIO::LowLevelScan(const std::string& start_tera_key,
     value_list->clear_key_values();
     *read_row_count = 0;
     *read_bytes = 0;
+    int64_t now_time = GetTimeStampInMs();
+    int64_t time_out = now_time + scan_options.timeout;
+    KeyValuePair next_start_kv_pair;
+    VLOG(9) << "ll-scan timeout set to be " << scan_options.timeout;
 
     for (; it->Valid();) {
         bool has_merged = false;
         std::string merged_value;
         m_counter.low_read_cell.Inc();
         *read_bytes += it->key().size() + it->value().size();
+        now_time = GetTimeStampInMs();
 
         leveldb::Slice tera_key = it->key();
         leveldb::Slice value = it->value();
@@ -654,6 +657,11 @@ inline bool TabletIO::LowLevelScan(const std::string& start_tera_key,
             LOG(WARNING) << "invalid tera key: " << DebugString(tera_key.ToString());
             it->Next();
             continue;
+        }
+        if (now_time > time_out) {
+            VLOG(9) << "ll-scan timeout. Mark next start key: " << DebugString(tera_key.ToString());
+            MakeKvPair(key, col, qual, ts, "", &next_start_kv_pair);
+            break;
         }
 
         VLOG(10) << "ll-scan: " << "tablet=[" << m_tablet_path
@@ -684,6 +692,17 @@ inline bool TabletIO::LowLevelScan(const std::string& start_tera_key,
 
         if (m_key_operator->Compare(it->key(), start_tera_key) < 0) {
             // skip out-of-range records
+            // keep record of version info to prevent dirty data
+            if (key.compare(last_key) == 0 &&
+                col.compare(last_col) == 0 &&
+                qual.compare(last_qual) == 0) {
+                ++version_num;
+            } else {
+                last_key.assign(key.data(), key.size());
+                last_col.assign(col.data(), col.size());
+                last_qual.assign(qual.data(), qual.size());
+                version_num = 1;
+            }
             it->Next();
             continue;
         }
@@ -724,11 +743,7 @@ inline bool TabletIO::LowLevelScan(const std::string& start_tera_key,
         }
 
         KeyValuePair kv;
-        kv.set_key(key.data(), key.size());
-        kv.set_column_family(col.data(), col.size());
-        kv.set_qualifier(qual.data(), qual.size());
-        kv.set_timestamp(ts);
-        kv.set_value(value.data(), value.size());
+        MakeKvPair(key, col, qual, ts, value, &kv);
         row_buf.push_back(kv);
 
         // check scan buffer
@@ -760,12 +775,24 @@ inline bool TabletIO::LowLevelScan(const std::string& start_tera_key,
 
     // check if scan finished
     SetStatusCode(kTableOk, status);
-    if (buffer_size < scan_options.max_size) {
+    if (buffer_size < scan_options.max_size && now_time <= time_out) {
         *is_complete = true;
     } else {
+        if (now_time > time_out && next_start_point) {
+            next_start_point->CopyFrom(next_start_kv_pair);
+        }
         *is_complete = false;
     }
     return true;
+}
+
+void TabletIO::MakeKvPair(leveldb::Slice key, leveldb::Slice col, leveldb::Slice qual,
+                          int64_t ts, leveldb::Slice value, KeyValuePair* kv) {
+    kv->set_key(key.data(), key.size());
+    kv->set_column_family(col.data(), col.size());
+    kv->set_qualifier(qual.data(), qual.size());
+    kv->set_timestamp(ts);
+    kv->set_value(value.data(), value.size());
 }
 
 bool TabletIO::LowLevelSeek(const std::string& row_key,
@@ -788,6 +815,7 @@ bool TabletIO::LowLevelSeek(const std::string& row_key,
             return false;
         }
     }
+    read_option.rollbacks = rollbacks_;
     leveldb::Iterator* it_data = m_db->NewIterator(read_option);
     TearDownIteratorOptions(&read_option);
 
@@ -1021,7 +1049,7 @@ bool TabletIO::ReadCells(const RowReaderInfo& row_reader, RowResult* value_list,
         uint32_t read_bytes = 0;
         bool is_complete = false;
         ret = LowLevelScan(start_tera_key, end_row_key, scan_options,
-                           value_list, &read_row_count, &read_bytes,
+                           value_list, NULL, &read_row_count, &read_bytes,
                            &is_complete, status);
     }
     m_counter.read_rows.Inc();
@@ -1171,8 +1199,8 @@ bool TabletIO::ScanRowsRestricted(const ScanTabletRequest* request,
     StatusCode status = kTabletNodeOk;
     bool ret = false;
     if (LowLevelScan(start_tera_key, end_row_key, scan_options,
-                     response->mutable_results(), &read_row_count, &read_bytes,
-                     &is_complete, &status)) {
+                     response->mutable_results(), response->mutable_next_start_point(),
+                     &read_row_count, &read_bytes, &is_complete, &status)) {
         response->set_complete(is_complete);
         m_counter.scan_rows.Add(read_row_count);
         m_counter.scan_size.Add(read_bytes);
@@ -1221,7 +1249,7 @@ bool TabletIO::ScanRowsStreaming(const ScanTabletRequest* request,
     while (status == kTabletNodeOk) {
         RowResult value_list;
         if (LowLevelScan(start_tera_key, end_row_key, scan_options, it,
-                         &value_list, &read_row_count, &read_bytes,
+                         &value_list, response->mutable_next_start_point(), &read_row_count, &read_bytes,
                          &is_complete, &status)) {
             m_counter.scan_rows.Add(read_row_count);
             m_counter.scan_size.Add(read_bytes);
@@ -1273,6 +1301,7 @@ bool TabletIO::Scan(const ScanOption& option, KeyValueList* kv_list,
             return false;
         }
     }
+    read_option.rollbacks = rollbacks_;
     // TTL-KV : m_key_operator::Compare会解RawKey([row_key | expire_timestamp])
     // 因此传递给Leveldb的Key一定要保证以expire_timestamp结尾.
     leveldb::CompactStrategy* strategy = NULL;
@@ -1393,6 +1422,9 @@ void TabletIO::SetupScanRowOptions(const ScanTabletRequest* request,
     if (request->has_buffer_limit()) {
         scan_options->max_size = request->buffer_limit();
     }
+    if (request->timeout()) {
+        scan_options->timeout = request->timeout();
+    }
 
     scan_options->snapshot_id = request->snapshot_id();
 }
@@ -1439,7 +1471,7 @@ void TabletIO::SetupOptionsForLG() {
             m_mem_store_activated = true;
         } else if (store == FlashStore) {
             if (!FLAGS_tera_tabletnode_cache_enabled) {
-                m_ldb_options.env = lg_info->env = LeveldbFlashEnv(m_ldb_options.info_log);
+                m_ldb_options.env = lg_info->env = LeveldbFlashEnv();
             } else {
                 LOG(INFO) << "activate block-level Cache store";
                 m_ldb_options.env = lg_info->env = leveldb::EnvThreeLevelCache();
@@ -1465,9 +1497,15 @@ void TabletIO::SetupOptionsForLG() {
                 << ", buffer_size:" << lg_info->memtable_ldb_write_buffer_size
                 << ", block_size:"  << lg_info->memtable_ldb_block_size;
         }
-        LOG(INFO) << ", sst_size: " << lg_schema.sst_size() << " Bytes.";
         lg_info->sst_size = lg_schema.sst_size();
         m_ldb_options.sst_size = lg_schema.sst_size();
+        // FLAGS_tera_tablet_write_buffer_size is the max buffer size
+        int64_t max_size = FLAGS_tera_tablet_max_write_buffer_size * 1024 * 1024;
+        if (lg_schema.sst_size() * 4 < max_size) {
+            lg_info->write_buffer_size = lg_schema.sst_size() * 4;
+        } else {
+            lg_info->write_buffer_size = max_size;
+        }
         exist_lg_list->insert(lg_i);
         (*lg_info_list)[lg_i] = lg_info;
     }
@@ -1694,9 +1732,7 @@ bool TabletIO::ReleaseSnapshot(uint64_t snapshot_id, StatusCode* status) {
         }
         m_db_ref_count++;
     }
-
     m_db->ReleaseSnapshot(id_to_snapshot_num_[snapshot_id]);
-
     MutexLock lock(&m_mutex);
     id_to_snapshot_num_.erase(snapshot_id);
     m_db_ref_count--;
@@ -1713,6 +1749,30 @@ void TabletIO::ListSnapshot(std::vector<uint64_t>* snapshot_id) {
         snapshot_id->push_back(it->first);
         VLOG(7) << m_tablet_path << " ListSnapshot: " << it->first << " - " << it->second;
     }
+}
+
+uint64_t TabletIO::Rollback(uint64_t snapshot_id, StatusCode* status) {
+    uint64_t sequence;
+    {
+        MutexLock lock(&m_mutex);
+        if (m_status != kReady) {
+            SetStatusCode(m_status, status);
+            return false;
+        }
+        std::map<uint64_t, uint64_t>::iterator it = id_to_snapshot_num_.find(snapshot_id);
+        if (it == id_to_snapshot_num_.end()) {
+            SetStatusCode(kSnapshotNotExist, status);
+            return false;
+        } else {
+            sequence = it->second;
+        }
+        m_db_ref_count++;
+    }
+    uint64_t rollback_point = m_db->Rollback(sequence);
+    MutexLock lock(&m_mutex);
+    rollbacks_[sequence] = rollback_point;
+    m_db_ref_count--;
+    return rollback_point;
 }
 
 uint32_t TabletIO::GetLGidByCFName(const std::string& cfname) {

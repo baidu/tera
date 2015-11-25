@@ -6,7 +6,6 @@
 #include <errno.h>
 #include <fcntl.h>
 #include <stdlib.h>
-#include <limits>
 
 #include "nfs.h"
 #include "nfs_wrapper.h"
@@ -301,8 +300,7 @@ int32_t Nfs::Copy(const std::string& from, const std::string& to) {
   return -1;
 }
 int32_t Nfs::ListDirectory(const std::string& path,
-                           std::vector<std::string>* result,
-                           std::vector<int64_t>* ctime) {
+                           std::vector<std::string>* result) {
   nfs::NFSDIR* dir = (*nfsOpendir)(path.c_str());
   if (NULL == dir) {
     fprintf(stderr, "Opendir %s fail\n", path.c_str());
@@ -310,19 +308,10 @@ int32_t Nfs::ListDirectory(const std::string& path,
     return -1;
   }
   struct ::dirent* dir_info = NULL;
-  struct stat stat_buf;
   while (NULL != (dir_info = (*nfsReaddir)(dir))) {
     const char* pathname = dir_info->d_name;
     if (strcmp(pathname, ".") != 0 && strcmp(pathname, "..") != 0) {
       result->push_back(pathname);
-      if (ctime != NULL) {
-          int ret = (*nfsStat)((path + "/" + pathname).c_str(), &stat_buf);
-          if (ret == 0) {
-            ctime->push_back(static_cast<int64_t>(stat_buf.st_ctime));
-          } else {
-            ctime->push_back(std::numeric_limits<int64_t>::max());
-          }
-      }
     }
   }
   if (0 != (*nfsGetErrno)()) {

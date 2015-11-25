@@ -45,7 +45,6 @@
 namespace leveldb {
 
 const int kNumNonTableCacheFiles = 10;
-const double kVeryHighScore = 1000.0;
 
 // Information kept for every waiting writer
 struct DBImpl::Writer {
@@ -175,7 +174,7 @@ Status DBImpl::Shutdown1() {
 
   Log(options_.info_log, "[%s] wait bg compact finish", dbname_.c_str());
   if (bg_compaction_scheduled_) {
-    env_->ReSchedule(bg_schedule_id_, kVeryHighScore);
+    env_->ReSchedule(bg_schedule_id_, kDumpMemTableUrgentScore);
   }
   while (bg_compaction_scheduled_) {
     bg_cv_.Wait();
@@ -385,7 +384,17 @@ bool DBImpl::IsDbExist() {
     uint64_t number;
     FileType type;
     if (ParseFileName(files[i], &number, &type) && type == kDescriptorFile) {
-      is_manifest_exist = true;
+      std::string dscname = dbname_ + "/" + files[i];
+      uint64_t fsize = 0;
+      env_->GetFileSize(dscname, &fsize);
+      if (fsize == 0) {
+        // if CURRENT file not exist, empty MANIFEST is dangerous, delete it
+        Log(options_.info_log, "[%s] delete empty manifest: %s.",
+            dbname_.c_str(), dscname.c_str());
+        ArchiveFile(env_, dscname);
+      } else {
+        is_manifest_exist = true;
+      }
     }
   }
   if (is_manifest_exist) {
@@ -524,9 +533,13 @@ Status DBImpl::WriteLevel0Table(MemTable* mem, VersionEdit* edit,
   uint64_t saved_size = 0;
   Status s;
   {
+    uint64_t smallest_snapshot = kMaxSequenceNumber;
+    if (!snapshots_.empty()) {
+      smallest_snapshot = *(snapshots_.begin());
+    }
     mutex_.Unlock();
     s = BuildTable(dbname_, env_, options_, table_cache_, iter, &meta,
-                   &saved_size);
+                   &saved_size, smallest_snapshot);
     mutex_.Lock();
   }
 
@@ -670,26 +683,9 @@ Status DBImpl::TEST_CompactMemTable() {
 
 // tera-specific
 
-bool DBImpl::FindSplitKey(const std::string& start_key,
-                          const std::string& end_key,
-                          double ratio,
-                          std::string* split_key) {
-    Slice start_slice(start_key);
-    Slice end_slice(end_key);
+bool DBImpl::FindSplitKey(double ratio, std::string* split_key) {
     MutexLock l(&mutex_);
-    return versions_->current()->FindSplitKey(start_key.empty()?NULL:&start_slice,
-                                              end_key.empty()?NULL:&end_slice,
-                                              ratio, split_key);
-}
-
-uint64_t DBImpl::GetScopeSize(const std::string& start_key,
-                              const std::string& end_key,
-                              std::vector<uint64_t>* lgsize) {
-    Slice start_slice(start_key);
-    Slice end_slice(end_key);
-    MutexLock l(&mutex_);
-    return versions_->current()->GetScopeSize(start_key.empty()?NULL:&start_slice,
-                                              end_key.empty()?NULL:&end_slice);
+    return versions_->current()->FindSplitKey(ratio, split_key);
 }
 
 bool DBImpl::MinorCompact() {
@@ -782,10 +778,10 @@ void DBImpl::MaybeScheduleCompaction() {
   } else {
     double score = versions_->CompactionScore();
     if (manual_compaction_ != NULL) {
-        score = 10.0;
+        score = kManualCompactScore;
     }
     if (imm_ != NULL) {
-        score = 100.0;
+        score = kDumpMemTableScore;
     }
     if (score > 0) {
         if (bg_compaction_scheduled_ && score <= bg_compaction_score_) {
@@ -1084,16 +1080,22 @@ Status DBImpl::DoCompactionWork(CompactionState* compact) {
     compact->smallest_snapshot = *(snapshots_.begin());
   }
 
+  CompactStrategy* compact_strategy = NULL;
+  if (options_.compact_strategy_factory) {
+    compact_strategy = options_.compact_strategy_factory->NewInstance();
+    if (snapshots_.empty()) {
+      compact_strategy->SetSnapshot(kMaxSequenceNumber);
+    } else {
+      compact_strategy->SetSnapshot(*(snapshots_.begin()));
+    }
+  }
+
   // Release mutex while we're actually doing the compaction work
   mutex_.Unlock();
 
-  CompactStrategy* compact_strategy = NULL;
-  if (options_.compact_strategy_factory) {
-     compact_strategy = options_.compact_strategy_factory->NewInstance();
-  }
   Log(options_.info_log,  "[%s] Compact strategy: %s",
-      dbname_.c_str(),
-      compact_strategy->Name());
+    dbname_.c_str(),
+    compact_strategy->Name());
 
   Iterator* input = versions_->MakeInputIterator(compact->compaction);
   input->SeekToFirst();
@@ -1142,7 +1144,9 @@ Status DBImpl::DoCompactionWork(CompactionState* compact) {
         last_sequence_for_key = kMaxSequenceNumber;
       }
 
-      if (last_sequence_for_key <= compact->smallest_snapshot) {
+      if (RollbackDrop(ikey.sequence, rollbacks_)) {
+        drop = true;
+      } else if (last_sequence_for_key <= compact->smallest_snapshot) {
         // Hidden by an newer entry for same user key
         drop = true;    // (A)
       } else if (ikey.type == kTypeDeletion &&
@@ -1351,9 +1355,9 @@ Status DBImpl::Get(const ReadOptions& options,
     mutex_.Unlock();
     // First look in the memtable, then in the immutable memtable (if any).
     LookupKey lkey(key, snapshot);
-    if (mem->Get(lkey, value, &s)) {
+    if (mem->Get(lkey, value, options.rollbacks, &s)) {
       // Done
-    } else if (imm != NULL && imm->Get(lkey, value, &s)) {
+    } else if (imm != NULL && imm->Get(lkey, value, options.rollbacks, &s)) {
       // Done
     } else {
       s = current->Get(options, lkey, value, &stats);
@@ -1377,15 +1381,12 @@ Iterator* DBImpl::NewIterator(const ReadOptions& options) {
   return NewDBIterator(
       &dbname_, env_, user_comparator(), internal_iter,
       (options.snapshot != kMaxSequenceNumber
-       ? options.snapshot : latest_snapshot));
+       ? options.snapshot : latest_snapshot),
+       options.rollbacks);
 }
 
 const uint64_t DBImpl::GetSnapshot(uint64_t last_sequence) {
   MutexLock l(&mutex_);
-  if (last_sequence == kMaxSequenceNumber) {
-    snapshots_.insert(GetLastSequence(false));
-    return GetLastSequence(false);
-  }
   snapshots_.insert(last_sequence);
   return last_sequence;
 }
@@ -1395,6 +1396,13 @@ void DBImpl::ReleaseSnapshot(uint64_t sequence_number) {
   std::multiset<uint64_t>::iterator it = snapshots_.find(sequence_number);
   assert(it != snapshots_.end());
   snapshots_.erase(it);
+}
+
+const uint64_t DBImpl::Rollback(uint64_t snapshot_seq, uint64_t rollback_point) {
+  MutexLock l(&mutex_);
+  assert(rollback_point >= snapshot_seq);
+  rollbacks_[snapshot_seq] = rollback_point;
+  return rollback_point;
 }
 
 // Convenience methods
@@ -1661,9 +1669,7 @@ bool DBImpl::GetProperty(const Slice& property, std::string* value) {
   return false;
 }
 
-void DBImpl::GetApproximateSizes(
-    const Range* range, int n,
-    uint64_t* sizes) {
+void DBImpl::GetApproximateSizes(const Range* range, int n, uint64_t* sizes) {
   // TODO(opt): better implementation
   Version* v;
   {
@@ -1684,6 +1690,21 @@ void DBImpl::GetApproximateSizes(
   {
     MutexLock l(&mutex_);
     v->Unref();
+  }
+}
+
+void DBImpl::GetApproximateSizes(uint64_t* size, std::vector<uint64_t>* lgsize) {
+  MutexLock l(&mutex_);
+  versions_->current()->GetApproximateSizes(size);
+
+  // add mem&imm size
+  if (size) {
+    if (mem_) {
+      *size += mem_->ApproximateMemoryUsage();
+    }
+    if (imm_) {
+      *size += imm_->ApproximateMemoryUsage();
+    }
   }
 }
 

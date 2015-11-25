@@ -43,7 +43,10 @@ DEFINE_int32(tera_client_batch_put_num, 1000, "num of each batch in batch put mo
 DEFINE_int32(tera_client_scan_package_size, 1024, "the package size (in KB) of each scan request");
 DEFINE_bool(tera_client_scan_async_enabled, false, "enable the streaming scan mode");
 
+DEFINE_int64(scan_pack_interval, 5000, "scan timeout");
 DEFINE_int64(snapshot, 0, "read | scan snapshot");
+DEFINE_string(rollback_switch, "close", "Pandora's box, do not open");
+DEFINE_string(rollback_name, "", "rollback operation's name");
 
 volatile int32_t g_start_time = 0;
 volatile int32_t g_end_time = 0;
@@ -90,6 +93,9 @@ void Usage(const std::string& prg_name) {
                     e.g. tablename{lg0{cf0<op=del>}}                        \n\
                                                                             \n\
        enable/disable/drop  <tablename>                                     \n\
+                                                                            \n\
+       rename   <old table name> <new table name>                           \n\
+                rename table's name                                         \n\
                                                                             \n\
        put      <tablename> <rowkey> [<columnfamily:qualifier>] <value>     \n\
                                                                             \n\
@@ -138,10 +144,12 @@ void Usage(const std::string& prg_name) {
                 show all tabletnodes or single tabletnode info.             \n\
                 (show more detail when using suffix \"x\")                  \n\
                                                                             \n\
-       hash username password                                               \n\
-                calculate the hash of username & password                   \n\
-                username & password used in client flag file                \n\
-                hash used in master flag file                               \n\
+       user create    username password                                     \n\
+       user changepwd username new-password                                 \n\
+       user show      username                                              \n\
+       user delete    username                                              \n\
+       user addtogroup      username groupname                              \n\
+       user deletefromgroup username groupname                              \n\
                                                                             \n\
        version\n\n";
 }
@@ -156,6 +164,7 @@ void UsageMore(const std::string& prg_name) {
                         move a tablet to target tabletnode                  \n\
                 compact <tablet_path>                                       \n\
                 split   <tablet_path>                                       \n\
+                merge   <tablet_path>                                       \n\
                                                                             \n\
        safemode [get|enter|leave]                                           \n\
                                                                             \n\
@@ -165,13 +174,17 @@ void UsageMore(const std::string& prg_name) {
        meta2    [check|bak|show|repair]                                     \n\
                 operate meta table.                                         \n\
                                                                             \n\
+       findmaster                                                           \n\
+                find the address of master                                  \n\
+                                                                            \n\
        findts   <tablename> <rowkey>                                        \n\
                 find the specify tabletnode serving 'rowkey'.               \n\
+                                                                            \n\
                                                                             \n\
        version\n\n";
 }
 int32_t CreateOp(Client* client, int32_t argc, char** argv, ErrorCode* err) {
-    if (argc < 2) {
+    if (argc < 3) {
         Usage(argv[0]);
         return -1;
     }
@@ -179,32 +192,14 @@ int32_t CreateOp(Client* client, int32_t argc, char** argv, ErrorCode* err) {
     TableDescriptor table_desc;
     std::vector<std::string> delimiters;
     std::string schema = argv[2];
-    if (!ParseSchema(schema, &table_desc)) {
+    if (!ParseTableSchema(schema, &table_desc)) {
         LOG(ERROR) << "fail to parse input table schema.";
         return -1;
     }
     if (argc == 4) {
         // have tablet delimiters
-        std::string delim_file = argv[3];
-        std::ifstream fin(delim_file.c_str());
-        if (fin.fail()) {
-            LOG(ERROR) << "fail to read delimiter file: " << delim_file;
-            return -1;
-        }
-        std::string str;
-        while (fin >> str) {
-            delimiters.push_back(str);
-        }
-        bool is_delim_error = false;
-        for (size_t i = 1; i < delimiters.size() - 1; i++) {
-            if (delimiters[i] <= delimiters[i-1]) {
-                LOG(ERROR) << "delimiter error: line: " << i + 1
-                    << ", [" << delimiters[i] << "]";
-                is_delim_error = true;
-            }
-        }
-        if (is_delim_error) {
-            LOG(ERROR) << "create table fail, delimiter error.";
+        if (!ParseDelimiterFile(argv[3], &delimiters)) {
+            LOG(ERROR) << "fail to parse delimiter file.";
             return -1;
         }
     } else if (argc > 4) {
@@ -226,32 +221,22 @@ int32_t CreateByFileOp(Client* client, int32_t argc, char** argv, ErrorCode* err
         return -1;
     }
 
-    std::ifstream fin(argv[2]);
-    std::string schema;
-    std::vector<std::string> delimiters;
-    if (fin.good()) {
-        std::string str;
-        while (fin >> str) {
-            schema.append(str);
-        }
-    }
-
     TableDescriptor table_desc;
-    if (!ParseSchema(schema, &table_desc)) {
+    if (!ParseTableSchemaFile(argv[2], &table_desc)) {
         LOG(ERROR) << "fail to parse input table schema.";
         return -1;
     }
 
+    std::vector<std::string> delimiters;
     if (argc == 4) {
-        std::ifstream fin(argv[3]);
-        if (fin.fail()) {
-            LOG(ERROR) << "fail to read delimiter file.";
+        // have tablet delimiters
+        if (!ParseDelimiterFile(argv[3], &delimiters)) {
+            LOG(ERROR) << "fail to parse delimiter file.";
             return -1;
         }
-        std::string str;
-        while (fin >> str) {
-            delimiters.push_back(str);
-        }
+    } else if (argc > 4) {
+        LOG(ERROR) << "too many args: " << argc;
+        return -1;
     }
     if (!client->CreateTable(table_desc, delimiters, err)) {
         LOG(ERROR) << "fail to create table, "
@@ -311,7 +296,7 @@ int32_t DropOp(Client* client, int32_t argc, char** argv, ErrorCode* err) {
 
     std::string tablename = argv[2];
     if (!client->DeleteTable(tablename, err)) {
-        LOG(ERROR) << "fail to delete table";
+        LOG(ERROR) << "fail to delete table, " << err->GetReason();
         return -1;
     }
     return 0;
@@ -822,6 +807,7 @@ int32_t ScanOp(Client* client, int32_t argc, char** argv, ErrorCode* err) {
     desc.SetEnd(end_rowkey);
     desc.SetBufferSize(FLAGS_tera_client_scan_package_size << 10);
     desc.SetAsync(FLAGS_tera_client_scan_async_enabled);
+    desc.SetPackInterval(FLAGS_scan_pack_interval);
 
     if (argc == 5) {
         // scan all cells
@@ -904,8 +890,9 @@ int32_t ShowTabletList(const TabletMetaList& tablet_list, bool is_server_addr, b
             row.push_back(meta.path());
             row.push_back(StatusCodeToString(meta.status()));
 
+            uint64_t size = meta.size();
             std::string size_str =
-                utils::ConvertByteToString(meta.table_size()) +
+                utils::ConvertByteToString(size) +
                 "[";
             for (int l = 0; l < meta.lg_size_size(); ++l) {
                 size_str += utils::ConvertByteToString(meta.lg_size(l));
@@ -946,7 +933,9 @@ int32_t ShowTabletList(const TabletMetaList& tablet_list, bool is_server_addr, b
             row.push_back(meta.server_addr());
             row.push_back(meta.path());
             row.push_back(StatusCodeToString(meta.status()));
-            row.push_back(utils::ConvertByteToString(meta.table_size()));
+
+            uint64_t size = meta.size();
+            row.push_back(utils::ConvertByteToString(size));
             row.push_back(DebugString(meta.key_range().key_start()).substr(0, 20));
             row.push_back(DebugString(meta.key_range().key_end()).substr(0, 20));
             printer.AddRow(row);
@@ -982,6 +971,10 @@ int32_t ShowAllTables(Client* client, bool is_x, bool show_all, ErrorCode* err) 
     }
     for (int32_t table_no = 0; table_no < table_list.meta_size(); ++table_no) {
         std::string tablename = table_list.meta(table_no).table_name();
+        std::string table_alias = tablename;
+        if (!table_list.meta(table_no).schema().alias().empty()) {
+            table_alias = table_list.meta(table_no).schema().alias();
+        }
         TableStatus status = table_list.meta(table_no).status();
         int64_t size = 0;
         uint32_t tablet = 0;
@@ -1001,7 +994,7 @@ int32_t ShowAllTables(Client* client, bool is_x, bool show_all, ErrorCode* err) 
         std::vector<int64_t> lg_size;
         for (int32_t i = 0; i < tablet_list.meta_size(); ++i) {
             if (tablet_list.meta(i).table_name() == tablename) {
-                size += tablet_list.meta(i).table_size();
+                size += tablet_list.meta(i).size();
                 tablet++;
                 if (tablet_list.counter(i).is_on_busy()) {
                     busy++;
@@ -1049,7 +1042,7 @@ int32_t ShowAllTables(Client* client, bool is_x, bool show_all, ErrorCode* err) 
         if (is_x) {
             printer.AddRow(cols,
                            NumberToString(table_no).data(),
-                           tablename.data(),
+                           table_alias.data(),
                            StatusCodeToString(status).data(),
                            utils::ConvertByteToString(size).data(),
                            lg_size_str.data(),
@@ -1069,7 +1062,7 @@ int32_t ShowAllTables(Client* client, bool is_x, bool show_all, ErrorCode* err) 
         } else {
             printer.AddRow(cols,
                            NumberToString(table_no).data(),
-                           tablename.data(),
+                           table_alias.data(),
                            StatusCodeToString(status).data(),
                            utils::ConvertByteToString(size).data(),
                            lg_size_str.data(),
@@ -1097,7 +1090,8 @@ int32_t ShowSingleTable(Client* client, const string& table_name,
     }
 
     std::cout << std::endl;
-    std::cout << "create time: " << table_meta.create_time() << std::endl;
+    std::cout << "create time: "
+        << common::timer::get_time_str(table_meta.create_time()) << std::endl;
     std::cout << std::endl;
     ShowTabletList(tablet_list, true, is_x);
     std::cout << std::endl;
@@ -1116,7 +1110,10 @@ int32_t ShowSingleTabletNodeInfo(Client* client, const string& addr,
 
     std::cout << "\nTabletNode Info:\n";
     std::cout << "  address:  " << info.addr() << std::endl;
-    std::cout << "  status:   " << info.status_m() << "\n\n";
+    std::cout << "  status:   " << info.status_m() << std::endl;
+    std::cout << "  update time:   "
+        << common::timer::get_time_str(info.timestamp() / 1000000) << "\n\n";
+
     int cols = 5;
     TPrinter printer(cols, "workload", "tablets", "load", "busy", "split");
     std::vector<string> row;
@@ -1184,6 +1181,7 @@ int32_t ShowTabletNodesInfo(Client* client, bool is_x, ErrorCode* err) {
         return -1;
     }
 
+    int64_t now = common::timer::get_micros();
     int cols;
     TPrinter printer;
     if (is_x) {
@@ -1205,7 +1203,12 @@ int32_t ShowTabletNodesInfo(Client* client, bool is_x, ErrorCode* err) {
             row.clear();
             row.push_back(NumberToString(i));
             row.push_back(infos[i].addr());
-            row.push_back(infos[i].status_m());
+            if (now - infos[i].timestamp() > 120 * 1000000) {
+                // tabletnode status timeout
+                row.push_back("kZombie");
+            } else {
+                row.push_back(infos[i].status_m());
+            }
             row.push_back(utils::ConvertByteToString(infos[i].load()));
             row.push_back(NumberToString(infos[i].tablet_total()));
             row.push_back(NumberToString(infos[i].low_read_cell()));
@@ -1239,7 +1242,11 @@ int32_t ShowTabletNodesInfo(Client* client, bool is_x, ErrorCode* err) {
             row.clear();
             row.push_back(NumberToString(i));
             row.push_back(infos[i].addr());
-            row.push_back(infos[i].status_m());
+            if (now - infos[i].timestamp() > 120 * 1000000) {
+                row.push_back("kZombie");
+            } else {
+                row.push_back(infos[i].status_m());
+            }
             row.push_back(utils::ConvertByteToString(infos[i].load()));
             row.push_back(NumberToString(infos[i].tablet_total()));
             row.push_back(NumberToString(infos[i].tablet_onload()));
@@ -1723,25 +1730,6 @@ int32_t GetRandomNumKey(int32_t key_size,std::string *p_key){
     return 0;
 }
 
-int32_t HashOp(Client* client, int32_t argc, char** argv, ErrorCode* err) {
-    if (argc != 4) {
-      Usage(argv[0]);
-      return -1;
-    }
-
-    std::string user = argv[2];
-    std::string password = argv[3];
-    std::string hash;
-    if (GetHashString(user + ":" + password, 0, &hash) != 0) {
-        std::cout << "invalid arguments" << std::endl;
-        return -1;
-    }
-    std::cout << "password hash:" << hash << ", place it in master flag file."
-        << " and place password(not hash) in client flag file" << std::endl;
-
-    return 0;
-}
-
 int32_t SnapshotOp(Client* client, int32_t argc, char** argv, ErrorCode* err) {
     if (argc < 4) {
       Usage(argv[0]);
@@ -1751,20 +1739,30 @@ int32_t SnapshotOp(Client* client, int32_t argc, char** argv, ErrorCode* err) {
     std::string tablename = argv[2];
     uint64_t snapshot = 0;
     if (argc == 5 && strcmp(argv[3], "del") == 0) {
-        std::stringstream is;
-        is << std::string(argv[4]);
-        is >> snapshot;
-        if (!client->DelSnapshot(tablename, snapshot, err)) {
-            LOG(ERROR) << "fail to del snapshot: " << snapshot << " ," << err->GetReason();
+        if (!client->DelSnapshot(tablename, FLAGS_snapshot, err)) {
+            LOG(ERROR) << "fail to del snapshot: " << FLAGS_snapshot << " ," << err->GetReason();
             return -1;
         }
         std::cout << "Del snapshot " << snapshot << std::endl;
-    } else if (strcmp(argv[3], "create") == 0 ) {
+    } else if (strcmp(argv[3], "create") == 0) {
         if (!client->GetSnapshot(tablename, &snapshot, err)) {
             LOG(ERROR) << "fail to get snapshot: " << err->GetReason();
             return -1;
         }
         std::cout << "new snapshot: " << snapshot << std::endl;
+    }  else if (FLAGS_rollback_switch == "open" && strcmp(argv[3], "rollback") == 0) {
+        if (FLAGS_snapshot == 0) {
+            std::cerr << "missing or invalid --snapshot option" << std::endl;
+            return -1;
+        } else if (FLAGS_rollback_name == "") {
+            std::cerr << "missing or invalid --rollback_name option" << std::endl;
+            return -1;
+        }
+        if (!client->Rollback(tablename, FLAGS_snapshot, FLAGS_rollback_name, err)) {
+            LOG(ERROR) << "fail to rollback to snapshot: " << err->GetReason();
+            return -1;
+        }
+        std::cout << "rollback to snapshot: " << FLAGS_snapshot << std::endl;
     } else {
         Usage(argv[0]);
         return -1;
@@ -1879,7 +1877,7 @@ int32_t TabletOp(Client* client, int32_t argc, char** argv, ErrorCode* err) {
 
     if (op == "compact") {
         return CompactTabletOp(client, argc, argv, err);
-    } else if (op != "move" && op != "split") {
+    } else if (op != "move" && op != "split" && op != "merge") {
         UsageMore(argv[0]);
         return -1;
     }
@@ -1900,6 +1898,24 @@ int32_t TabletOp(Client* client, int32_t argc, char** argv, ErrorCode* err) {
     }
     std::cout << op << " tablet " << tablet_id << " success" << std::endl;
 
+    return 0;
+}
+
+int32_t RenameOp(Client* client, int32_t argc, char** argv, ErrorCode* err) {
+    if (argc != 4 ) {
+        Usage(argv[0]);
+        return -1;
+    }
+    std::vector<std::string> arg_list;
+    std::string old_table_name = argv[2];
+    std::string new_table_name = argv[3];
+    if (!client->Rename(old_table_name, new_table_name, err)) {
+        LOG(ERROR) << "fail to rename table: "
+                   << old_table_name << " -> " << new_table_name << std::endl;
+        return -1;
+    }
+    std::cout << "rename OK: " << old_table_name
+              << " -> " << new_table_name << std::endl;
     return 0;
 }
 
@@ -1963,6 +1979,16 @@ int32_t CompactOp(int32_t argc, char** argv) {
 
     std::cout << "compact tablet success, data size: "
         << response.compact_size() << std::endl;
+    return 0;
+}
+
+int32_t FindMasterOp(Client* client, int32_t argc, char** argv, ErrorCode* err) {
+    if (argc != 2) {
+        UsageMore(argv[0]);
+        return -1;
+    }
+    tera::sdk::ClusterFinder finder(FLAGS_tera_zk_root_path, FLAGS_tera_zk_addr_list);
+    std::cout << "master addr:< " << finder.MasterAddr() << " >\n";
     return 0;
 }
 
@@ -2065,7 +2091,9 @@ int32_t Meta2Op(Client *client, int32_t argc, char** argv) {
             const tera::KeyValuePair& record = response.results().key_values(i);
             last_record_key = record.key();
             char first_key_char = record.key()[0];
-            if (first_key_char == '@') {
+            if (first_key_char == '~') {
+                std::cout << "(user: " << record.key().substr(1) << ")" << std::endl;
+            } else if (first_key_char == '@') {
                 ParseMetaTableKeyValue(record.key(), record.value(), table_list.add_meta());
             } else if (first_key_char > '@') {
                 ParseMetaTableKeyValue(record.key(), record.value(), tablet_list.add_meta());
@@ -2131,7 +2159,7 @@ int32_t Meta2Op(Client *client, int32_t argc, char** argv) {
                 << meta.key_range().key_start() << ","
                 << meta.key_range().key_end() << "], "
                 << meta.path() << ", " << meta.server_addr() << ", "
-                << meta.table_size() << ", "
+                << meta.size() << ", "
                 << StatusCodeToString(meta.status()) << ", "
                 << StatusCodeToString(meta.compact_status()) << std::endl;
         }
@@ -2145,7 +2173,7 @@ int32_t Meta2Op(Client *client, int32_t argc, char** argv) {
                 << meta.key_range().key_start() << ","
                 << meta.key_range().key_end() << "], "
                 << meta.path() << ", " << meta.server_addr() << ", "
-                << meta.table_size() << ", "
+                << meta.size() << ", "
                 << StatusCodeToString(meta.status()) << ", "
                 << StatusCodeToString(meta.compact_status()) << std::endl;
             // ignore invalid tablet
@@ -2246,6 +2274,93 @@ int32_t Meta2Op(Client *client, int32_t argc, char** argv) {
     return 0;
 }
 
+static int32_t CreateUser(Client* client, const std::string& user,
+                          const std::string& password, ErrorCode* err) {
+    if (!client->CreateUser(user, password, err)) {
+        LOG(ERROR) << "fail to create user: " << user
+            << ", " << strerr(*err);
+        return -1;
+    }
+    return 0;
+}
+
+static int32_t DeleteUser(Client* client, const std::string& user, ErrorCode* err) {
+    if (!client->DeleteUser(user, err)) {
+        LOG(ERROR) << "fail to delete user: " << user
+            << ", " << strerr(*err);
+        return -1;
+    }
+    return 0;
+}
+
+static int32_t ChangePwd(Client* client, const std::string& user,
+                         const std::string& password, ErrorCode* err) {
+    if (!client->ChangePwd(user, password, err)) {
+        LOG(ERROR) << "fail to update user: " << user
+            << ", " << strerr(*err);
+        return -1;
+    }
+    return 0;
+}
+
+static int32_t ShowUser(Client* client, const std::string& user, ErrorCode* err) {
+    std::vector<std::string> user_infos;
+    if (!client->ShowUser(user, user_infos, err)) {
+        LOG(ERROR) << "fail to show user: " << user
+            << ", " << strerr(*err);
+        return -1;
+    }
+    if (user_infos.size() < 1) {
+        return -1;
+    }
+    std::cout << "user:" << user_infos[0]
+        << "\ngroups (" << user_infos.size() - 1 << "):";
+    for (size_t i = 1; i < user_infos.size(); ++i) {
+        std::cout << user_infos[i] << " ";
+    }
+    std::cout << std::endl;
+    return 0;
+}
+
+static int32_t AddUserToGroup(Client* client, const std::string& user,
+                                const std::string& group, ErrorCode* err) {
+    if (!client->AddUserToGroup(user, group, err)) {
+        LOG(ERROR) << "fail to add user: " << user
+            << " to group:" << group << strerr(*err);
+        return -1;
+    }
+    return 0;
+}
+
+static int32_t DeleteUserFromGroup(Client* client, const std::string& user,
+                                     const std::string& group, ErrorCode* err) {
+    if (!client->DeleteUserFromGroup(user, group, err)) {
+        LOG(ERROR) << "fail to delete user: " << user
+            << " from group: " << group << strerr(*err);
+        return -1;
+    }
+    return 0;
+}
+
+int32_t UserOp(Client* client, int32_t argc, char** argv, ErrorCode* err) {
+    std::string op = argv[2];
+    if ((argc == 5) && (op == "create")) {
+        return CreateUser(client, argv[3], argv[4], err);
+    } else if ((argc == 5) && (op == "changepwd")) {
+        return ChangePwd(client, argv[3], argv[4], err);
+    } else if ((argc == 4) && (op == "show")) {
+        return ShowUser(client, argv[3], err);
+    } else if ((argc == 4) && (op == "delete")) {
+        return DeleteUser(client, argv[3], err);
+    } else if ((argc == 5) && (op == "addtogroup")) {
+        return AddUserToGroup(client, argv[3], argv[4], err);
+    } else if ((argc == 5) && (op == "deletefromgroup")) {
+        return DeleteUserFromGroup(client, argv[3], argv[4], err);
+    }
+    Usage(argv[0]);
+    return -1;
+}
+
 int main(int argc, char* argv[]) {
     ::google::ParseCommandLineFlags(&argc, &argv, true);
 
@@ -2256,7 +2371,7 @@ int main(int argc, char* argv[]) {
 
     int ret = 0;
     ErrorCode error_code;
-    Client* client = Client::NewClient();
+    Client* client = Client::NewClient(FLAGS_flagfile, NULL);
 
     if (client == NULL) {
         LOG(ERROR) << "client instance not exist";
@@ -2320,21 +2435,26 @@ int main(int argc, char* argv[]) {
         ret = SafeModeOp(client, argc, argv, &error_code);
     } else if (cmd == "tablet") {
         ret = TabletOp(client, argc, argv, &error_code);
+    } else if (cmd == "rename") {
+        ret = RenameOp(client, argc, argv, &error_code);
     } else if (cmd == "meta") {
         ret = MetaOp(client, argc, argv, &error_code);
     } else if (cmd == "compact") {
         ret = CompactOp(argc, argv);
+    } else if (cmd == "findmaster") {
+        // get master addr(hostname:port)
+        ret = FindMasterOp(client, argc, argv, &error_code);
     } else if (cmd == "findts") {
         // get tabletnode addr from a key
         ret = FindTsOp(client, argc, argv, &error_code);
     } else if (cmd == "meta2") {
         ret = Meta2Op(client, argc, argv);
+    } else if (cmd == "user") {
+        ret = UserOp(client, argc, argv, &error_code);
     } else if (cmd == "version") {
         PrintSystemVersion();
     } else if (cmd == "snapshot") {
         ret = SnapshotOp(client, argc, argv, &error_code);
-    } else if (cmd == "hash") {
-        ret = HashOp(client, argc, argv, &error_code);
     } else if (cmd == "help") {
         Usage(argv[0]);
     } else if (cmd == "helpmore") {

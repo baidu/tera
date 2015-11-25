@@ -82,7 +82,7 @@ JNIEXPORT jboolean NativeCreateTable(JNIEnv *env, jobject jobj,
         return JNI_FALSE;
     }
     tera::TableDescriptor desc(tablename);
-    if (!ParseSchema(tableschema, &desc)) {
+    if (!ParseTableSchema(tableschema, &desc)) {
         msg = "failed to parse input table schema.";
         SendErrorJ(env, jobj, msg);
         return JNI_FALSE;

@@ -48,6 +48,7 @@ public:
                                   ScanTabletResponse* response) = 0;
     virtual void OnFinish(ScanTabletRequest* request,
                           ScanTabletResponse* response) = 0;
+    std::string GetNextStartPoint(const std::string& str);
 
 protected:
     tera::ScanDescImpl* _scan_desc_impl;
@@ -180,6 +181,8 @@ public:
 
     void SetMaxVersions(int32_t versions);
 
+    void SetPackInterval(int64_t timeout);
+
     void SetTimeRange(int64_t ts_end, int64_t ts_start);
 
     bool SetFilterString(const std::string& filter_string);
@@ -219,6 +222,8 @@ public:
 
     int32_t GetMaxVersion() const;
 
+    int64_t GetPackInterval() const;
+
     uint64_t GetSnapshot() const;
 
     int64_t GetBufferSize() const;
@@ -247,6 +252,7 @@ private:
     int64_t _buf_size;
     bool _is_async;
     int32_t _max_version;
+    int64_t _pack_interval;
     uint64_t _snapshot;
     std::string _filter_string;
     FilterList _filter_list;

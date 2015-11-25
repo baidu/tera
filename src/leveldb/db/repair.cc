@@ -248,7 +248,7 @@ class Repairer {
     Iterator* iter = mem_->NewIterator();
     uint64_t saved_bytes = 0;
     status = BuildTable(dbname_, env_, options_, table_cache_,
-                        iter, &meta, &saved_bytes);
+                        iter, &meta, &saved_bytes, kMaxSequenceNumber);
     delete iter;
     mem_->Unref();
     mem_ = NULL;
@@ -285,7 +285,7 @@ class Repairer {
         Iterator* iter = mem_->NewIterator();
         uint64_t saved_bytes = 0;
         Status status = BuildTable(dbname_, env_, options_, table_cache_,
-                                   iter, &meta, &saved_bytes);
+                                   iter, &meta, &saved_bytes, kMaxSequenceNumber);
         delete iter;
         mem_->Unref();
         mem_ = NULL;

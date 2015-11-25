@@ -88,6 +88,7 @@ Options InitOptionsLG(const Options& options, uint32_t lg_id) {
     opt.memtable_ldb_write_buffer_size = lg_info->memtable_ldb_write_buffer_size;
     opt.memtable_ldb_block_size = lg_info->memtable_ldb_block_size;
     opt.sst_size = lg_info->sst_size;
+    opt.write_buffer_size = lg_info->write_buffer_size;
     return opt;
 }
 
@@ -126,6 +127,9 @@ Status DBTable::Shutdown1() {
 
     Log(options_.info_log, "[%s] wait bg garbage clean finish", dbname_.c_str());
     mutex_.Lock();
+    if (bg_schedule_gc_) {
+        env_->ReSchedule(bg_schedule_gc_id_, kDeleteLogUrgentScore);
+    }
     while (bg_schedule_gc_) {
         bg_cv_.Wait();
     }
@@ -213,6 +217,7 @@ Status DBTable::Init() {
 
     uint64_t min_log_sequence = kMaxSequenceNumber;
     std::vector<uint64_t> snapshot_sequence = options_.snapshots_sequence;
+    std::map<uint64_t, uint64_t> rollbacks = options_.rollbacks;
     for (std::set<uint32_t>::iterator it = options_.exist_lg_list->begin();
          it != options_.exist_lg_list->end() && s.ok(); ++it) {
         uint32_t i = *it;
@@ -222,6 +227,10 @@ Status DBTable::Init() {
         lg_edits.push_back(new VersionEdit);
         for (uint32_t i = 0; i < snapshot_sequence.size(); ++i) {
             impl->GetSnapshot(snapshot_sequence[i]);
+        }
+        std::map<uint64_t, uint64_t>::iterator rollback_it = rollbacks.begin();
+        for (; rollback_it != rollbacks.end(); ++rollback_it) {
+            impl->Rollback(rollback_it->first, rollback_it->second);
         }
 
         // recover SST
@@ -647,7 +656,15 @@ void DBTable::ReleaseSnapshot(uint64_t sequence_number) {
     for (; it != options_.exist_lg_list->end(); ++it) {
         lg_list_[*it]->ReleaseSnapshot(sequence_number);
     }
-    MutexLock lock(&mutex_);
+}
+
+const uint64_t DBTable::Rollback(uint64_t snapshot_seq, uint64_t rollback_point) {
+    std::set<uint32_t>::iterator it = options_.exist_lg_list->begin();
+    uint64_t rollback_seq = rollback_point == kMaxSequenceNumber ? last_sequence_ : rollback_point;;
+    for (; it != options_.exist_lg_list->end(); ++it) {
+        lg_list_[*it]->Rollback(snapshot_seq, rollback_seq);
+    }
+    return rollback_seq;
 }
 
 bool DBTable::GetProperty(const Slice& property, std::string* value) {
@@ -688,6 +705,27 @@ void DBTable::GetApproximateSizes(const Range* range, int n,
     }
 }
 
+void DBTable::GetApproximateSizes(uint64_t* size, std::vector<uint64_t>* lgsize) {
+    if (size) {
+        *size = 0;
+    }
+    if (lgsize) {
+        lgsize->clear();
+    }
+    std::set<uint32_t>::iterator it = options_.exist_lg_list->begin();
+    for (; it != options_.exist_lg_list->end(); ++it) {
+        uint32_t i = *it;
+        uint64_t size_tmp;
+        lg_list_[i]->GetApproximateSizes(&size_tmp);
+        if (size) {
+            *size += size_tmp;
+        }
+        if (lgsize) {
+            lgsize->push_back(size_tmp);
+        }
+    }
+}
+
 void DBTable::CompactRange(const Slice* begin, const Slice* end) {
     std::vector<LGCompactThread*> lg_threads;
     std::set<uint32_t>::iterator it = options_.exist_lg_list->begin();
@@ -702,6 +740,7 @@ void DBTable::CompactRange(const Slice* begin, const Slice* end) {
     }
 }
 
+// @begin_num:  the 1st record(sequence number) should be recover
 Status DBTable::GatherLogFile(uint64_t begin_num,
                               std::vector<uint64_t>* logfiles) {
     std::vector<std::string> files;
@@ -717,19 +756,32 @@ Status DBTable::GatherLogFile(uint64_t begin_num,
         type = kUnknown;
         number = 0;
         if (ParseFileName(files[i], &number, &type)
-            && type == kLogFile && number >= begin_num) {
+            && type == kLogFile
+            && number >= begin_num) {
             logfiles->push_back(number);
-        } else if (type == kLogFile && number > 0) {
+        } else if (type == kLogFile && number > last_number) {
             last_number = number;
         }
     }
     std::sort(logfiles->begin(), logfiles->end());
     uint64_t first_log_num = logfiles->size() ? (*logfiles)[0] : 0;
-    Log(options_.info_log, "[%s] begin_seq= %lu, first log num= %lu, last num=%lu, log_num=%lu\n",
-        dbname_.c_str(), begin_num, first_log_num, last_number, logfiles->size());
-    if (last_number > 0 && first_log_num > begin_num) {
+    /*
+     *                                             @begin_num(not in sst)
+     *       |-> records alredy be dumped to sst <-|->   not be dumped        <-|
+     *range: [start -------------------------------------------------------- end]
+     *case 1:       ^         ^                     ^
+     *              001.log   last_number.log       first_log_num.log
+     *
+     *case 2:       ^         ^
+     *              001.log   last_number.log
+     */
+    if ((last_number > 0 && first_log_num > begin_num)   // case 1
+        || (last_number > 0 && logfiles->size() == 0)) { // case 2
         logfiles->push_back(last_number);
+        Log(options_.info_log, "[%s] add log file #%lu", dbname_.c_str(), last_number);
     }
+    Log(options_.info_log, "[%s] begin_seq= %lu, first log num= %lu, last num=%lu, log count=%lu\n",
+        dbname_.c_str(), begin_num, first_log_num, last_number, logfiles->size());
     std::sort(logfiles->begin(), logfiles->end());
     return s;
 }
@@ -885,17 +937,21 @@ void DBTable::DeleteObsoleteFiles(uint64_t seq_no) {
     std::vector<std::string> filenames;
     env_->GetChildren(dbname_, &filenames);
     std::sort(filenames.begin(), filenames.end());
-    Log(options_.info_log, "[%s] will delete obsolete file num: %u [seq < %llu]",
-        dbname_.c_str(), static_cast<uint32_t>(filenames.size()),
-        static_cast<unsigned long long>(seq_no));
     uint64_t number;
     FileType type;
     std::string last_file;
+    uint64_t keep_log_num = 0;
+    uint64_t delete_log_num = 0;
     for (size_t i = 0; i < filenames.size(); ++i) {
         bool deleted = false;
         if (ParseFileName(filenames[i], &number, &type)
-            && type == kLogFile && number < seq_no) {
-            deleted = true;
+            && type == kLogFile) {
+            if (number < seq_no) {
+                deleted = true;
+                delete_log_num++;
+            } else {
+                keep_log_num++;
+            }
         }
         if (deleted) {
             Log(options_.info_log, "[%s] Delete type=%s #%llu",
@@ -908,6 +964,11 @@ void DBTable::DeleteObsoleteFiles(uint64_t seq_no) {
             last_file = filenames[i];
         }
     }
+    Log(options_.info_log, "[%s] delete obsolete log: %u, keep: %u, [seq < %llu]",
+        dbname_.c_str(),
+        static_cast<uint32_t>(delete_log_num),
+        static_cast<uint32_t>(keep_log_num),
+        static_cast<unsigned long long>(seq_no));
 }
 
 void DBTable::ArchiveFile(const std::string& fname) {
@@ -928,16 +989,15 @@ void DBTable::ArchiveFile(const std::string& fname) {
 }
 
 // tera-specific
-bool DBTable::FindSplitKey(const std::string& start_key,
-                           const std::string& end_key,
-                           double ratio,
+bool DBTable::FindSplitKey(double ratio,
                            std::string* split_key) {
     // sort by lg size
     std::map<uint64_t, DBImpl*> size_of_lg;
     MutexLock l(&mutex_);
     std::set<uint32_t>::iterator it = options_.exist_lg_list->begin();
     for (; it != options_.exist_lg_list->end(); ++it) {
-        uint64_t size = lg_list_[*it]->GetScopeSize(start_key, end_key);
+        uint64_t size;
+        lg_list_[*it]->GetApproximateSizes(&size);
         size_of_lg[size] = lg_list_[*it];
     }
     std::map<uint64_t, DBImpl*>::reverse_iterator biggest_it =
@@ -945,26 +1005,7 @@ bool DBTable::FindSplitKey(const std::string& start_key,
     if (biggest_it == size_of_lg.rend()) {
         return false;
     }
-    return biggest_it->second->FindSplitKey(start_key, end_key,
-                                            ratio, split_key);
-}
-
-uint64_t DBTable::GetScopeSize(const std::string& start_key,
-                               const std::string& end_key,
-                               std::vector<uint64_t>* lgsize) {
-    uint64_t size = 0;
-    if (lgsize != NULL) {
-        lgsize->clear();
-    }
-    std::set<uint32_t>::iterator it = options_.exist_lg_list->begin();
-    for (; it != options_.exist_lg_list->end(); ++it) {
-        uint64_t lsize = lg_list_[*it]->GetScopeSize(start_key, end_key);
-        size += lsize;
-        if (lgsize != NULL) {
-            lgsize->push_back(lsize);
-        }
-    }
-    return size;
+    return biggest_it->second->FindSplitKey(ratio, split_key);
 }
 
 bool DBTable::MinorCompact() {
@@ -975,7 +1016,7 @@ bool DBTable::MinorCompact() {
         ok = (ok && ret);
     }
     MutexLock lock(&mutex_);
-    ScheduleGarbageClean(20.0);
+    ScheduleGarbageClean(kDeleteLogScore);
     return ok;
 }
 
@@ -1044,7 +1085,7 @@ int DBTable::SwitchLog(bool blocked_switch) {
 
             // protect bg thread cv
             mutex_.Lock();
-            ScheduleGarbageClean(10.0);
+            ScheduleGarbageClean(kDeleteLogScore);
             mutex_.Unlock();
 
             if (blocked_switch) {
@@ -1078,11 +1119,11 @@ void DBTable::ScheduleGarbageClean(double score) {
         env_->ReSchedule(bg_schedule_gc_id_, score);
         bg_schedule_gc_score_ = score;
     } else {
-        Log(options_.info_log, "[%s] Schedule Garbage clean[%ld] score= %.2f",
-            dbname_.c_str(), bg_schedule_gc_id_, score);
         bg_schedule_gc_id_ = env_->Schedule(&DBTable::GarbageCleanWrapper, this, score);
         bg_schedule_gc_score_ = score;
         bg_schedule_gc_ = true;
+        Log(options_.info_log, "[%s] Schedule Garbage clean[%ld] score= %.2f",
+            dbname_.c_str(), bg_schedule_gc_id_, score);
     }
 }
 
@@ -1101,7 +1142,7 @@ void DBTable::BackgroundGarbageClean() {
 }
 
 void DBTable::GarbageClean() {
-    uint64_t min_last_seq = -1U;
+    uint64_t min_last_seq = -1ULL;
     bool found = false;
     std::set<uint32_t>::iterator it = options_.exist_lg_list->begin();
     for (; it != options_.exist_lg_list->end(); ++it) {

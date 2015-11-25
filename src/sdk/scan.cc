@@ -31,6 +31,10 @@ void ScanDescriptor::SetMaxVersions(int32_t versions) {
     _impl->SetMaxVersions(versions);
 }
 
+void ScanDescriptor::SetPackInterval(int64_t interval) {
+    _impl->SetPackInterval(interval);
+}
+
 void ScanDescriptor::SetTimeRange(int64_t ts_end, int64_t ts_start) {
     _impl->SetTimeRange(ts_end, ts_start);
 }

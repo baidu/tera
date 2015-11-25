@@ -123,9 +123,9 @@ TEST(BloomTest, VaryingLengths) {
   int mediocre_filters = 0;
   int good_filters = 0;
 
-  for (int length = 1; length <= 10000; length = NextLength(length)) {
+  for (size_t length = 1; length <= 10000; length = NextLength(length)) {
     Reset();
-    for (int i = 0; i < length; i++) {
+    for (size_t i = 0; i < length; i++) {
       Add(Key(i, buffer));
     }
     Build();
@@ -133,7 +133,7 @@ TEST(BloomTest, VaryingLengths) {
     ASSERT_LE(FilterSize(), (length * 10 / 8) + 40) << length;
 
     // All added keys must match
-    for (int i = 0; i < length; i++) {
+    for (size_t i = 0; i < length; i++) {
       ASSERT_TRUE(Matches(Key(i, buffer)))
           << "Length " << length << "; key " << i;
     }
@@ -141,8 +141,8 @@ TEST(BloomTest, VaryingLengths) {
     // Check false positive rate
     double rate = FalsePositiveRate();
     if (kVerbose >= 1) {
-      fprintf(stderr, "False positives: %5.2f%% @ length = %6d ; bytes = %6d\n",
-              rate*100.0, length, static_cast<int>(FilterSize()));
+      fprintf(stderr, "False positives: %5.2f%% @ length = %6zd ; bytes = %6zd\n",
+              rate*100.0, length, FilterSize());
     }
     ASSERT_LE(rate, 0.02);   // Must not be over 2%
     if (rate > 0.0125) mediocre_filters++;  // Allowed, but not too often

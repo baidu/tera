@@ -43,7 +43,7 @@ std::string GetCurrentLocationDir() {
     return current_dir;
 }
 
-std::string GetValueFromeEnv(const std::string& env_name) {
+std::string GetValueFromEnv(const std::string& env_name) {
     if (env_name.empty()) {
         return "";
     }
@@ -59,11 +59,11 @@ std::string GetValueFromeEnv(const std::string& env_name) {
 std::string ConvertByteToString(const uint64_t size) {
     std::string hight_unit;
     double min_size;
-    const uint64_t kKB = 1024;
-    const uint64_t kMB = kKB * 1024;
-    const uint64_t kGB = kMB * 1024;
-    const uint64_t kTB = kGB * 1024;
-    const uint64_t kPB = kTB * 1024;
+    const uint64_t kKB = 1 << 10;
+    const uint64_t kMB = kKB << 10;
+    const uint64_t kGB = kMB << 10;
+    const uint64_t kTB = kGB << 10;
+    const uint64_t kPB = kTB << 10;
 
     if (size == 0) {
         return "0";

@@ -12,7 +12,7 @@ DEFINE_string(tera_role, "", "the role of tera running binary, should be one of 
 DEFINE_string(tera_user_identity, "", "the identity of tera user");
 DEFINE_string(tera_user_passcode, "", "the passcode of tera user");
 DEFINE_bool(tera_acl_enabled, false, "enable access control");
-DEFINE_string(tera_acl_root_token, "", "the token of root user");
+DEFINE_bool(tera_only_root_create_table, false, "only the root user can create table");
 
 DEFINE_int64(tera_heartbeat_retry_period_factor, 1, "the heartbeat period factor when retry send heartbeat");
 DEFINE_int32(tera_heartbeat_retry_times, 5, "the max retry times when fail to send report request");
@@ -36,7 +36,7 @@ DEFINE_int32(tera_tablet_max_block_log_number, 50, "max number of unsed log file
 DEFINE_int64(tera_tablet_write_log_time_out, 5, "max time(sec) to wait for log writing or sync");
 DEFINE_bool(tera_log_async_mode, true, "enable async mode for log writing and sync");
 DEFINE_int64(tera_tablet_log_file_size, 32, "the log file size (in MB) for tablet");
-DEFINE_int64(tera_tablet_write_buffer_size, 32, "the buffer size (in MB) for tablet write buffer");
+DEFINE_int64(tera_tablet_max_write_buffer_size, 32, "the buffer size (in MB) for tablet write buffer");
 DEFINE_int64(tera_tablet_write_block_size, 4, "the block size (in KB) for teblet write block");
 DEFINE_int64(tera_tablet_living_period, -1, "the living period of tablet");
 DEFINE_int32(tera_tablet_flush_log_num, 100000, "the max log number before flush memtable");
@@ -83,7 +83,6 @@ DEFINE_int32(tera_master_connect_timeout_period, 5000, "the timeout period (in m
 DEFINE_int32(tera_master_query_tabletnode_period, 10000, "the period (in ms) for query tabletnode status" );
 DEFINE_int32(tera_master_common_retry_period, 1000, "the period (in ms) for common operation" );
 DEFINE_int32(tera_master_meta_retry_times, 5, "the max retry times when master read/write meta");
-//DEFINE_int32(tera_master_meta_retry_period, 1000, "the retry period (in ms) for master read/write meta" );
 DEFINE_bool(tera_master_meta_recovery_enabled, false, "whether recovery meta tablet at startup");
 DEFINE_string(tera_master_meta_recovery_file, "../data/meta.bak", "path of meta table recovery file");
 
@@ -104,10 +103,6 @@ DEFINE_int64(tera_master_split_tablet_size, 512, "the size (in MB) of tablet to 
 DEFINE_bool(tera_master_merge_enabled, false, "enable the auto-merge tablet");
 DEFINE_int64(tera_master_merge_tablet_size, 0, "the size (in MB) of tablet to trigger merge");
 DEFINE_string(tera_master_gc_strategy, "default", "gc strategy, [default, incremental]");
-
-// deprecated
-DEFINE_int64(tera_master_merge_size_threshold, 10, "the size (in MB) of tablet to trigger merge");
-DEFINE_int64(tera_master_merge_timer_period, 180, "the actived time (in sec) for merge timer");
 
 DEFINE_int32(tera_master_max_split_concurrency, 1, "the max concurrency of tabletnode for split tablet");
 DEFINE_int32(tera_master_max_load_concurrency, 5, "the max concurrency of tabletnode for load tablet");
@@ -171,7 +166,7 @@ DEFINE_int32(tera_tabletnode_scan_pack_max_size, 10240, "the max size(KB) of the
 
 DEFINE_int32(tera_asyncwriter_pending_limit, 10000, "the max pending data size (KB) in async writer");
 DEFINE_bool(tera_enable_level0_limit, true, "enable level0 limit");
-DEFINE_int32(tera_tablet_level0_file_limit, 20, "the max level0 file num before write busy");
+DEFINE_int32(tera_tablet_level0_file_limit, 20000, "the max level0 file num before write busy");
 DEFINE_int32(tera_asyncwriter_sync_interval, 100, "the interval (in ms) to sync write buffer to disk");
 DEFINE_int32(tera_asyncwriter_sync_size_threshold, 1024, "force sync per X KB");
 DEFINE_int32(tera_asyncwriter_batch_size, 1024, "write batch to leveldb per X KB");
@@ -202,6 +197,7 @@ DEFINE_int32(tera_tabletnode_gc_log_level, 15, "the vlog level [0 - 16] for cach
 
 DEFINE_bool(tera_tabletnode_tcm_cache_release_enabled, true, "enable the timer to release tcmalloc cache");
 DEFINE_int32(tera_tabletnode_tcm_cache_release_period, 180, "the period (in sec) to try release tcmalloc cache");
+DEFINE_int64(tera_tabletnode_tcm_cache_size, 838860800, "TCMALLOC_MAX_TOTAL_THREAD_CACHE_BYTES");
 
 ///////// SDK  /////////
 DEFINE_string(tera_sdk_impl_type, "tera", "the activated type of SDK impl");
@@ -226,12 +222,13 @@ DEFINE_int32(tera_sdk_rpc_max_pending_buffer_size, 200, "max pending buffer size
 DEFINE_int32(tera_sdk_rpc_work_thread_num, 8, "thread num of sdk rpc client");
 DEFINE_int32(tera_sdk_update_meta_internal, 10000, "the sdk update meta table internal time(ms)");
 DEFINE_int32(tera_sdk_check_timer_internal, 100, "the sdk check the resend quest queue internal time");
-DEFINE_int32(tera_sdk_sync_wait_timeout, 60000, "timeout of wait in sync reader&mutation mode");
+DEFINE_int32(tera_sdk_timeout, 60000, "timeout of wait in sync reader&mutation mode");
 DEFINE_int32(tera_sdk_delay_send_internal, 2, "the sdk resend the request internal time(s)");
 DEFINE_int32(tera_sdk_scan_buffer_limit, 2048000, "the pack size limit for scan operation");
 DEFINE_bool(tera_sdk_write_sync, false, "sync flag for write");
 DEFINE_int32(tera_sdk_batch_size, 100, "batch_size");
-DEFINE_int32(tera_sdk_batch_send_interval, 100, "batch send interval time");
+DEFINE_int32(tera_sdk_write_send_interval, 100, "write batch send interval time");
+DEFINE_int32(tera_sdk_read_send_interval, 10, "read batch send interval time");
 DEFINE_int64(tera_sdk_max_mutation_pending_num, INT64_MAX, "default number of pending mutations in async put op");
 DEFINE_int64(tera_sdk_max_reader_pending_num, INT64_MAX, "default number of pending readers in async get op");
 DEFINE_bool(tera_sdk_async_blocking_enabled, true, "enable blocking when async writing and reading");
@@ -248,8 +245,6 @@ DEFINE_int64(tera_sdk_perf_counter_log_interval, 1, "the interval of performance
 DEFINE_bool(tera_sdk_scan_async_enabled, false, "enable async scan");
 DEFINE_int64(tera_sdk_scan_async_cache_size, 16, "the max buffer size (in MB) for cached scan results");
 DEFINE_int32(tera_sdk_scan_async_parallel_max_num, 500, "the max number of concurrent task sending");
-
-DEFINE_bool(tera_sdk_pend_request_while_scan_meta_enabled, true, "pend request util meta-scan operation finished");
 
 DEFINE_string(tera_ins_addr_list, "", "the ins cluster addr. e.g. abc.com:1234,abb.com:1234");
 DEFINE_string(tera_ins_root_path, "", "root path on ins. e.g /ps/sandbox");

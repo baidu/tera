@@ -133,12 +133,10 @@ private:
 class TableDescImpl {
 public:
     /// 表格名字仅允许使用字母、数字和下划线构造,长度不超过256
-    TableDescImpl(const std::string& tb_name, bool is_kv);
+    TableDescImpl(const std::string& tb_name);
     ~TableDescImpl();
     void SetTableName(const std::string& name);
     std::string TableName() const;
-    /// 设置为kv表（无列），建表完成后无法改变
-    void SetKvOnly();
     /// 增加一个localitygroup
     LocalityGroupDescriptor* AddLocalityGroup(const std::string& lg_name);
     /// 获取默认localitygroup，仅用于kv表
@@ -180,11 +178,15 @@ public:
     uint64_t Snapshot(int32_t id) const;
     /// Snapshot数量
     int32_t SnapshotNum() const;
-    /// 是否为kv表
-    bool IsKv() const;
 
     void SetAdminGroup(const std::string& name);
     std::string AdminGroup() const;
+
+    void SetAdmin(const std::string& name);
+    std::string Admin() const;
+
+    void SetAlias(const std::string& alias);
+    std::string Alias() const;
 
 private:
     typedef std::map<std::string, LGDescImpl*> LGMap;
@@ -205,6 +207,8 @@ private:
     int64_t         _merge_size;
     bool            _disable_wal;
     std::string     _admin_group;
+    std::string     _admin;
+    std::string     _alias;
 };
 
 } // namespace tera

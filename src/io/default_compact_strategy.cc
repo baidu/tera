@@ -12,7 +12,10 @@ namespace io {
 
 DefaultCompactStrategy::DefaultCompactStrategy(const TableSchema& schema)
     : m_schema(schema),
-      m_raw_key_operator(GetRawKeyOperatorFromSchema(m_schema)) {
+      m_raw_key_operator(GetRawKeyOperatorFromSchema(m_schema)),
+      m_last_ts(-1), m_del_row_ts(-1), m_del_col_ts(-1), m_del_qual_ts(-1), m_cur_ts(-1),
+      m_del_row_seq(0), m_del_col_seq(0), m_del_qual_seq(0), m_version_num(0),
+      m_snapshot(leveldb::kMaxSequenceNumber) {
     // build index
     for (int32_t i = 0; i < m_schema.column_families_size(); ++i) {
         const std::string name = m_schema.column_families(i).name();
@@ -26,6 +29,11 @@ DefaultCompactStrategy::~DefaultCompactStrategy() {}
 
 const char* DefaultCompactStrategy::Name() const {
     return "tera.DefaultCompactStrategy";
+}
+
+void DefaultCompactStrategy::SetSnapshot(uint64_t snapshot) {
+    VLOG(11) << "tera.DefaultCompactStrategy: set snapshot to " << snapshot;
+    m_snapshot = snapshot;
 }
 
 bool DefaultCompactStrategy::Drop(const Slice& tera_key, uint64_t n,
@@ -64,17 +72,21 @@ bool DefaultCompactStrategy::Drop(const Slice& tera_key, uint64_t n,
         switch (type) {
             case leveldb::TKT_DEL:
                 m_del_row_ts = ts;
+                m_del_row_seq = n;
             case leveldb::TKT_DEL_COLUMN:
                 m_del_col_ts = ts;
+                m_del_col_seq = n;
             case leveldb::TKT_DEL_QUALIFIERS: {
                 m_del_qual_ts = ts;
-                if (CheckCompactLowerBound(key, lower_bound)) {
+                m_del_qual_seq = n;
+                if (CheckCompactLowerBound(key, lower_bound) && m_snapshot == leveldb::kMaxSequenceNumber) {
+                    VLOG(15) << "tera.DefaultCompactStrategy: can drop delete row tag";
                     return true;
                 }
             }
             default:;
         }
-    } else if (m_del_row_ts >= ts) {
+    } else if (m_del_row_ts >= ts && m_del_row_seq <= m_snapshot) {
         // skip deleted row and the same row_del mark
         return true;
     } else if (col.compare(m_last_col) != 0) {
@@ -88,15 +100,18 @@ bool DefaultCompactStrategy::Drop(const Slice& tera_key, uint64_t n,
         switch (type) {
             case leveldb::TKT_DEL_COLUMN:
                 m_del_col_ts = ts;
+                m_del_col_seq = n;
             case leveldb::TKT_DEL_QUALIFIERS: {
                 m_del_qual_ts = ts;
-                if (CheckCompactLowerBound(key, lower_bound)) {
+                m_del_qual_seq = n;
+                if (CheckCompactLowerBound(key, lower_bound) && m_snapshot == leveldb::kMaxSequenceNumber) {
+                  VLOG(15) << "tera.DefaultCompactStrategy: can drop delete col tag";
                   return true;
                 }
             }
             default:;
         }
-    } else if (m_del_col_ts > ts) {
+    } else if (m_del_col_ts > ts && m_del_col_seq <= m_snapshot) {
         // skip deleted column family
         return true;
     } else if (qual.compare(m_last_qual) != 0) {
@@ -107,24 +122,29 @@ bool DefaultCompactStrategy::Drop(const Slice& tera_key, uint64_t n,
         m_has_put = false;
         if (type == leveldb::TKT_DEL_QUALIFIERS) {
             m_del_qual_ts = ts;
-            if (CheckCompactLowerBound(key, lower_bound)) {
+            m_del_qual_seq = n;
+            if (CheckCompactLowerBound(key, lower_bound) && m_snapshot == leveldb::kMaxSequenceNumber) {
+              VLOG(15) << "tera.DefaultCompactStrategy: can drop delete qualifier tag";
               return true;
             }
         }
-    } else if (m_del_qual_ts > ts) {
+    } else if (m_del_qual_ts > ts && m_del_qual_seq <= m_snapshot) {
         // skip deleted qualifier
         return true;
     }
 
     if (type == leveldb::TKT_VALUE) {
         m_has_put = true;
-        if (++m_version_num > static_cast<uint32_t>(m_schema.column_families(cf_id).max_versions())) {
-            // drop out-of-range version
-            return true;
+        if (n <= m_snapshot) {
+            if (++m_version_num > static_cast<uint32_t>(m_schema.column_families(cf_id).max_versions())) {
+                // drop out-of-range version
+                return true;
+            }
         }
     }
 
-    if (IsAtomicOP(type) && m_has_put) { // drop ADDs which is later than Put
+    if (IsAtomicOP(type) && m_has_put) {
+        // drop ADDs which is later than Put
         return true;
     }
     return false;

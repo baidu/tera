@@ -37,7 +37,7 @@ public:
 
     bool CheckDelete(const std::string& fname, std::vector<std::string>* flags);
 
-    virtual Status GetChildren(const std::string& path, std::vector<std::string>* result, std::vector<int64_t>* ctime = NULL);
+    virtual Status GetChildren(const std::string& path, std::vector<std::string>* result);
 
     virtual Status DeleteFile(const std::string& fname);
 
@@ -54,8 +54,6 @@ public:
     virtual Status LockFile(const std::string& fname, FileLock** lock);
 
     virtual Status UnlockFile(FileLock* lock);
-
-    virtual Status NewLogger(const std::string& fname, Logger** result);
 
     virtual Env* CacheEnv() { return this; }
 

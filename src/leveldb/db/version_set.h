@@ -110,12 +110,8 @@ class Version {
   int NumFiles(int level) const { return files_[level].size(); }
 
   // tera-specific
-  uint64_t GetScopeSize(const Slice* smallest_user_key = NULL,
-                        const Slice* largest_user_key = NULL);
-  bool FindSplitKey(const Slice* smallest_user_key,
-                    const Slice* largest_user_key,
-                    double ratio,
-                    std::string* split_key);
+  void GetApproximateSizes(uint64_t* size, uint64_t* size_under_level1 = NULL);
+  bool FindSplitKey(double ratio, std::string* split_key);
 
   // Return a human readable string that describes this version's contents.
   std::string DebugString() const;
