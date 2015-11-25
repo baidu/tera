@@ -127,16 +127,16 @@ void TabletNodeSysInfo::AddExtraInfo(const std::string& name, int64_t value) {
 
 void TabletNodeSysInfo::SetCurrentTime() {
     MutexLock lock(&m_mutex);
-    m_info.set_time_stamp(get_micros());
+    m_info.set_timestamp(get_micros());
 }
 
 int64_t TabletNodeSysInfo::GetTimeStamp() {
-    return m_info.time_stamp();
+    return m_info.timestamp();
 }
 
 void TabletNodeSysInfo::SetTimeStamp(int64_t ts) {
     MutexLock lock(&m_mutex);
-    m_info.set_time_stamp(ts);
+    m_info.set_timestamp(ts);
 }
 
 void TabletNodeSysInfo::CollectTabletNodeInfo(TabletManager* tablet_manager,

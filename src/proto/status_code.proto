@@ -96,12 +96,10 @@ enum StatusCode {
     
     kTableStatusEnable = 1000;
     kTableStatusDisable = 1001;
-    kTableStatusDeleting = 1002;
 }
 
 enum TabletStatus {
     kTableNotInit = 41;
-    kTableDeleted = 53;
     kTableOffLine = 57;
     kTableReady = 42;
     kTableUnLoad = 49;
@@ -116,7 +114,6 @@ enum TabletStatus {
     kTableUnLoading2 = 68;
     kTableUnLoadFail = 62;
     kTableOnMerge = 50;
-    kTabletDeleting = 63;
     kTabletDisable = 64;
     kTabletPending = 65;
     kTabletOnSnapshot = 66;

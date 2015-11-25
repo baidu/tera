@@ -795,6 +795,7 @@ class PosixEnv : public Env {
     }
   }
   virtual void SetLogger(Logger* logger) {
+    Logger::SetDefaultLogger(logger);
     info_log_ = logger;
     thread_pool_.SetLogger(logger);
   }

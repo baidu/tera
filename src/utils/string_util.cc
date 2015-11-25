@@ -6,6 +6,8 @@
 
 #include <stdint.h>
 
+namespace tera {
+
 bool IsVisible(char c) {
     return (c >= 0x20 && c <= 0x7E);
 }
@@ -40,3 +42,37 @@ std::string DebugString(const std::string& src) {
 
     return dst.substr(0, j);
 }
+
+bool IsValidTableName(const std::string& str) {
+    return IsValidName(str);
+}
+
+bool IsValidGroupName(const std::string& str) {
+    return IsValidName(str);
+}
+
+bool IsValidUserName(const std::string& str) {
+    return IsValidName(str);
+}
+
+const size_t kNameLenMin = 1;
+const size_t kNameLenMax = 512;
+
+bool IsValidName(const std::string& str) {
+    if (str.size() < kNameLenMin || kNameLenMax < str.size()) {
+        return false;
+    }
+    if (!(isupper(str[0]) || islower(str[0]))) {
+        return false;
+    }
+    for (size_t i = 0; i < str.size(); ++i) {
+        char c = str[i];
+        if (!(isdigit(c) || isupper(c) || islower(c)
+              || (c == '_') || (c == '.') || (c == '-'))) {
+            return false;
+        }
+    }
+    return true;
+}
+
+} // namespace tera

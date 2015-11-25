@@ -40,14 +40,14 @@ class UserManager {
 public:
     // load a user meta entry(memtable) into user_manager(memory)
     void LoadUserMeta(const std::string& key,
-                      const std::string& value); 
+                      const std::string& value);
 
     // setups root user if root not found in metatable after master init
     // e.g. the tera cluster first starts.
     void SetupRootUser();
 
     // valid user name:
-    // 1. kLenMin <= user_name.length() <= kLenMax 
+    // 1. kLenMin <= user_name.length() <= kLenMax
     // 2. first char of user_name is alphabet
     // 3. contains only alphabet or digit
     bool IsUserNameValid(const std::string& user_name);
@@ -70,11 +70,11 @@ public:
     bool IsValidForCreate(const std::string& token, const std::string& user_name);
     bool IsValidForDelete(const std::string& token, const std::string& user_name);
     bool IsValidForChangepwd(const std::string& token, const std::string& user_name);
-    bool IsValidForAddToGroup(const std::string& token, 
-                              const std::string& user_name, 
+    bool IsValidForAddToGroup(const std::string& token,
+                              const std::string& user_name,
                               const std::string& group_name);
-    bool IsValidForDeleteFromGroup(const std::string& token, 
-                                   const std::string& user_name, 
+    bool IsValidForDeleteFromGroup(const std::string& token,
+                                   const std::string& user_name,
                                    const std::string& group_name);
 private:
     mutable Mutex mutex_;

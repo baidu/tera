@@ -33,7 +33,7 @@
 
 DECLARE_string(tera_leveldb_env_type);
 DECLARE_int64(tera_tablet_log_file_size);
-DECLARE_int64(tera_tablet_write_buffer_size);
+DECLARE_int64(tera_tablet_max_write_buffer_size);
 DECLARE_int64(tera_tablet_write_block_size);
 DECLARE_int32(tera_tablet_level0_file_limit);
 DECLARE_int32(tera_tablet_max_block_log_number);
@@ -98,7 +98,12 @@ std::string TabletIO::GetTableName() const {
 
 std::string TabletIO::GetTablePath() const {
     if (!m_tablet_path.empty()) {
-        return m_tablet_path.substr(FLAGS_tera_tabletnode_path_prefix.size());
+        std::string path =
+            m_tablet_path.substr(FLAGS_tera_tabletnode_path_prefix.size());
+        if (path.at(0) == '/') {
+            path = path.substr(1);
+        }
+        return path;
     } else {
         return m_tablet_path;
     }
@@ -185,7 +190,6 @@ bool TabletIO::Load(const TableSchema& schema,
 
     m_ldb_options.key_start = m_raw_start_key;
     m_ldb_options.key_end = m_raw_end_key;
-    m_ldb_options.write_buffer_size = FLAGS_tera_tablet_write_buffer_size * 1024 * 1024;
     m_ldb_options.l0_slowdown_writes_trigger = FLAGS_tera_tablet_level0_file_limit;
     m_ldb_options.block_size = FLAGS_tera_tablet_write_block_size * 1024;
     m_ldb_options.max_block_log_number = FLAGS_tera_tablet_max_block_log_number;
@@ -333,6 +337,39 @@ bool TabletIO::Unload(StatusCode* status) {
     return true;
 }
 
+// Find average string from input string
+// E.g. "abc" & "abe" return "abd"
+//      "a" & "b" return "a_"
+bool TabletIO::FindAverageKey(const std::string& start, const std::string& end,
+                             std::string* res) {
+    std::string ave;
+    int ave_len = start.size() < end.size() ? start.size() : end.size();
+    for (int i = 0; i < ave_len; ++i) {
+        char c = (char)(((uint32_t)start[i] + end[i]) / 2);
+        ave.append(1, c);
+    }
+    if (ave > start) {
+        // find success
+        *res = ave;
+        return true;
+    }
+    if (start.size() == end.size()) {
+        // a~b, here we use '_'(0x5F), not '0x80', visible char
+        ave.append(1, '_');
+    } else if (start.size() < end.size()) {
+        char c = (end[ave.size()]) / 2;
+        if (c == '\x0') {
+            return false;
+        }
+        ave.append(1, c);
+    } else {
+        char c = static_cast<char>((start[ave.size()] + 0x100) / 2);
+        ave.append(1, c);
+    }
+    *res = ave;
+    return true;
+}
+
 bool TabletIO::Split(std::string* split_key, StatusCode* status) {
     {
         MutexLock lock(&m_mutex);
@@ -348,59 +385,37 @@ bool TabletIO::Split(std::string* split_key, StatusCode* status) {
         m_db_ref_count++;
     }
 
-    uint64_t table_size = 0;
-    GetDataSize(&table_size, NULL, status);
-    if (table_size <= 0) {
-        SetStatusCode(kTableNotSupport, status);
-        MutexLock lock(&m_mutex);
-        m_status = kReady;
-        m_db_ref_count--;
-        return false;
-    }
-
     std::string raw_split_key;
-    if (!m_db->FindSplitKey(m_raw_start_key, m_raw_end_key, 0.5,
-                            &raw_split_key)) {
-        VLOG(5) << "fail to find split key";
+    leveldb::Slice key_split;
+    if (m_db->FindSplitKey(0.5, &raw_split_key)) {
+        if ((m_table_schema.raw_key() == GeneralKv)
+            || (m_kv_only && m_table_schema.raw_key() == Readable)) {
+            key_split = raw_split_key;
+        } else { // Table && TTL-KV
+            if (!m_key_operator->ExtractTeraKey(raw_split_key, &key_split,
+                                                NULL, NULL, NULL, NULL)) {
+                VLOG(5) << "fail to extract split key";
+            }
+        }
+    }
+
+    if (!key_split.empty()) {
+        // find split key successfully
+        *split_key = key_split.ToString();
+    } else if (FindAverageKey(m_start_key, m_end_key, split_key)) {
+        // could not find split_key, use average key
+    } else {
+        // could not find split key
         SetStatusCode(kTableNotSupport, status);
         MutexLock lock(&m_mutex);
         m_status = kReady;
         m_db_ref_count--;
         return false;
-    }
-
-    leveldb::Slice key_split;
-
-    if (m_kv_only && m_table_schema.raw_key() == Readable) {
-        key_split = raw_split_key;
-    } else { // Table && TTL-KV
-        leveldb::Slice cf_split;
-        leveldb::Slice qu_split;
-        if (!m_key_operator->ExtractTeraKey(raw_split_key, &key_split,
-                                            &cf_split, &qu_split, NULL, NULL)) {
-            VLOG(5) << "fail to extract split key";
-            SetStatusCode(kTableNotSupport, status);
-            MutexLock lock(&m_mutex);
-            m_status = kReady;
-            m_db_ref_count--;
-            return false;
-        }
     }
 
     VLOG(5) << "start: [" << DebugString(m_start_key)
         << "], end: [" << DebugString(m_end_key)
-        << "], split: [" << DebugString(key_split.ToString()) << "]";
-
-    if (key_split.empty() || key_split.ToString() <= m_start_key
-        || (!m_end_key.empty() && key_split.ToString() >= m_end_key)) {
-        SetStatusCode(kTableNotSupport, status);
-        MutexLock lock(&m_mutex);
-        m_status = kReady;
-        m_db_ref_count--;
-        return false;
-    }
-
-    *split_key = key_split.ToString();
+        << "], split: [" << DebugString(*split_key) << "]";
 
     {
         MutexLock lock(&m_mutex);
@@ -1456,7 +1471,7 @@ void TabletIO::SetupOptionsForLG() {
             m_mem_store_activated = true;
         } else if (store == FlashStore) {
             if (!FLAGS_tera_tabletnode_cache_enabled) {
-                m_ldb_options.env = lg_info->env = LeveldbFlashEnv(m_ldb_options.info_log);
+                m_ldb_options.env = lg_info->env = LeveldbFlashEnv();
             } else {
                 LOG(INFO) << "activate block-level Cache store";
                 m_ldb_options.env = lg_info->env = leveldb::EnvThreeLevelCache();
@@ -1482,9 +1497,15 @@ void TabletIO::SetupOptionsForLG() {
                 << ", buffer_size:" << lg_info->memtable_ldb_write_buffer_size
                 << ", block_size:"  << lg_info->memtable_ldb_block_size;
         }
-        LOG(INFO) << ", sst_size: " << lg_schema.sst_size() << " Bytes.";
         lg_info->sst_size = lg_schema.sst_size();
         m_ldb_options.sst_size = lg_schema.sst_size();
+        // FLAGS_tera_tablet_write_buffer_size is the max buffer size
+        int64_t max_size = FLAGS_tera_tablet_max_write_buffer_size * 1024 * 1024;
+        if (lg_schema.sst_size() * 4 < max_size) {
+            lg_info->write_buffer_size = lg_schema.sst_size() * 4;
+        } else {
+            lg_info->write_buffer_size = max_size;
+        }
         exist_lg_list->insert(lg_i);
         (*lg_info_list)[lg_i] = lg_info;
     }

@@ -79,6 +79,7 @@ DECLARE_string(tera_local_addr);
 DECLARE_bool(tera_ins_enabled);
 
 DECLARE_bool(tera_io_cache_path_vanish_allowed);
+DECLARE_int64(tera_tabletnode_tcm_cache_size);
 
 extern tera::Counter range_error_counter;
 extern tera::Counter rand_read_delay;
@@ -132,6 +133,12 @@ TabletNodeImpl::TabletNodeImpl(const TabletNodeInfo& tabletnode_info,
         LOG(INFO) << "enable tcmalloc cache release timer";
         EnableReleaseMallocCacheTimer();
     }
+    const char* tcm_property = "tcmalloc.max_total_thread_cache_bytes";
+    MallocExtension::instance()->SetNumericProperty(
+        tcm_property, FLAGS_tera_tabletnode_tcm_cache_size);
+    size_t tcm_t;
+    CHECK(MallocExtension::instance()->GetNumericProperty(tcm_property, &tcm_t));
+    LOG(INFO) << tcm_property << "=" << tcm_t;
 }
 
 TabletNodeImpl::~TabletNodeImpl() {
@@ -231,11 +238,12 @@ void TabletNodeImpl::LoadTablet(const LoadTabletRequest* request,
     }
 
     // to recover rollbacks
-    assert(request->rollback_snapshots_size() == request->rollback_points_size());
     std::map<uint64_t, uint64_t> rollbacks;
-    int32_t num_of_rollbacks = request->rollback_snapshots_size();
+    int32_t num_of_rollbacks = request->rollbacks_size();
     for (int32_t i = 0; i < num_of_rollbacks; ++i) {
-        rollbacks[request->rollback_snapshots(i)] = request->rollback_points(i);
+        rollbacks[request->rollbacks(i).snapshot_id()] = request->rollbacks(i).rollback_point();
+        VLOG(10) << "load tablet with rollback " << request->rollbacks(i).snapshot_id()
+                 << "-" << request->rollbacks(i).rollback_point();
     }
 
     LOG(INFO) << "start load tablet, id: " << request->sequence_id()
@@ -262,7 +270,7 @@ void TabletNodeImpl::LoadTablet(const LoadTabletRequest* request,
             << StatusCodeToString(status);
         response->set_status((StatusCode)tablet_io->GetStatus());
         tablet_io->DecRef();
-    } else if (!tablet_io->Load(schema, request->path(), parent_tablets, 
+    } else if (!tablet_io->Load(schema, request->path(), parent_tablets,
                                 snapshots, rollbacks, m_ldb_logger,
                                 m_ldb_block_cache, m_ldb_table_cache, &status)) {
         tablet_io->DecRef();
@@ -375,8 +383,7 @@ void TabletNodeImpl::CompactTablet(const CompactTabletRequest* request,
 void TabletNodeImpl::ReadTablet(int64_t start_micros,
                                 const ReadTabletRequest* request,
                                 ReadTabletResponse* response,
-                                google::protobuf::Closure* done,
-                                ReadRpcTimer* timer) {
+                                google::protobuf::Closure* done) {
     int32_t row_num = request->row_info_list_size();
     uint64_t snapshot_id = request->snapshot_id() == 0 ? 0 : request->snapshot_id();
     uint32_t read_success_num = 0;
@@ -408,11 +415,6 @@ void TabletNodeImpl::ReadTablet(int64_t start_micros,
     response->set_success_num(read_success_num);
     response->set_status(kTabletNodeOk);
     done->Run();
-
-    if (NULL != timer) {
-        RpcTimerList::Instance()->Erase(timer);
-        delete timer;
-    }
 
     int64_t now_ms = get_micros();
     int64_t used_ms =  now_ms - start_micros;

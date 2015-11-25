@@ -177,8 +177,13 @@ Status SetCurrentFile(Env* env, const std::string& dbname,
   Status s = WriteStringToFileSync(env, contents.ToString() + "\n", tmp);
   if (s.ok()) {
     s = env->RenameFile(tmp, CurrentFileName(dbname));
+  } else {
+    Log("[%s][dfs error] open dbtmp[%s] error, status[%s].\n",
+        dbname.c_str(), tmp.c_str(), s.ToString().c_str());
   }
   if (!s.ok()) {
+    Log("[%s][dfs error] rename CURRENT[%s] error, status[%s].\n",
+        dbname.c_str(), tmp.c_str(), s.ToString().c_str());
     env->DeleteFile(tmp);
   }
   return s;

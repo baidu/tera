@@ -11,6 +11,7 @@
 #include <iostream>
 
 #include <algorithm>
+#include <math.h>
 #include <stdio.h>
 #include "db/filename.h"
 #include "db/log_reader.h"
@@ -30,21 +31,22 @@ namespace leveldb {
 
 // Maximum bytes of overlaps in grandparent (i.e., level+2) before we
 // stop building a single file in a level->level+1 compaction.
-static int64_t MaxGrandParentOverlapBytes(int target_file_size) {
+static int64_t MaxGrandParentOverlapBytes(int64_t target_file_size) {
     return 10 * target_file_size;
 }
 
 // Maximum number of bytes in all compacted files.  We avoid expanding
 // the lower level file set of a compaction if it would make the
 // total compaction cover more than this many bytes.
-static int64_t ExpandedCompactionByteSizeLimit(int target_file_size) {
+static int64_t ExpandedCompactionByteSizeLimit(int64_t target_file_size) {
     return 25 * target_file_size;
 }
 
-static double MaxBytesForLevel(int level) {
+static double MaxBytesForLevel(int level, int sst_size) {
   // Note: the result for level zero is not really used since we set
   // the level-0 compaction threshold based on number of files.
-  double result = 40 * 1048576.0;  // Result for both level-0 and level-1
+  // double result = 40 * 1048576.0;  // Result for both level-0 and level-1
+  double result = 5 * sst_size;  // Result for both level-0 and level-1
   while (level > 1) {
     result *= 10;
     level--;
@@ -52,7 +54,7 @@ static double MaxBytesForLevel(int level) {
   return result;
 }
 
-static uint64_t MaxFileSizeForLevel(int level, int target_file_size) {
+static uint64_t MaxFileSizeForLevel(int level, int64_t target_file_size) {
   if (level == 2) {
     return 2 * target_file_size;
   } else if(level > 2) {
@@ -549,9 +551,7 @@ void Version::GetApproximateSizes(uint64_t* size, uint64_t* size_under_level1) {
   }
 }
 
-bool Version::FindSplitKey(const Slice* smallest_user_key,
-                           const Slice* largest_user_key,
-                           double ratio,
+bool Version::FindSplitKey(double ratio,
                            std::string* split_key) {
     assert(ratio >= 0 && ratio <= 1);
     uint64_t size_under_level1;
@@ -964,12 +964,10 @@ Status VersionSet::LogAndApply(VersionEdit* edit, port::Mutex* mu) {
   }
 
   edit->SetNextFile(next_file_number_);
+
   if (edit->HasLastSequence()) {
     Log(options_->info_log, "[%s] LogLastSequence %lu",
         dbname_.c_str(), edit->GetLastSequence());
-  }
-
-  if (edit->HasLastSequence()) {
     assert(edit->GetLastSequence() >= last_sequence_);
   } else {
     edit->SetLastSequence(last_sequence_);
@@ -1015,6 +1013,9 @@ Status VersionSet::LogAndApply(VersionEdit* edit, port::Mutex* mu) {
       if (s.ok()) {
         descriptor_log_ = new log::Writer(descriptor_file_);
         s = WriteSnapshot(descriptor_log_);
+      } else {
+        Log(options_->info_log, "[%s][dfs error] open MANIFEST[%s] error, status[%s].\n",
+            dbname_.c_str(), new_manifest_file.c_str(), s.ToString().c_str());
       }
     }
 
@@ -1027,7 +1028,7 @@ Status VersionSet::LogAndApply(VersionEdit* edit, port::Mutex* mu) {
         s = descriptor_file_->Sync();
       }
       if (!s.ok()) {
-        Log(options_->info_log, "[%s] MANIFEST write: %s\n",
+        Log(options_->info_log, "[%s][dfs error] MANIFEST sync error: %s\n",
             dbname_.c_str(), s.ToString().c_str());
         if (ManifestContains(record)) {
           Log(options_->info_log,
@@ -1044,8 +1045,11 @@ Status VersionSet::LogAndApply(VersionEdit* edit, port::Mutex* mu) {
     if (s.ok() && !new_manifest_file.empty()) {
       s = SetCurrentFile(env_, dbname_, manifest_file_number_);
       if (s.ok()) {
-          Log(options_->info_log, "[%s] set CURRENT to %llu\n",
-              dbname_.c_str(), static_cast<unsigned long long>(manifest_file_number_));
+        Log(options_->info_log, "[%s] set CURRENT to %llu\n",
+            dbname_.c_str(), static_cast<unsigned long long>(manifest_file_number_));
+      } else {
+        Log(options_->info_log, "[%s][dfs error] set CURRENT error: %s\n",
+            dbname_.c_str(), s.ToString().c_str());
       }
       // No need to double-check MANIFEST in case of error since it
       // will be discarded below.
@@ -1070,7 +1074,7 @@ Status VersionSet::LogAndApply(VersionEdit* edit, port::Mutex* mu) {
       env_->DeleteFile(new_manifest_file);
     }
     force_switch_manifest_ = true;
-    Log(options_->info_log, "[%s] set force_switch_manifest", dbname_.c_str());
+    Log(options_->info_log, "[%s][dfs error] set force_switch_manifest", dbname_.c_str());
   }
 
   return s;
@@ -1352,12 +1356,16 @@ void VersionSet::Finalize(Version* v) {
       // file size is small (perhaps because of a small write-buffer
       // setting, or very high compression ratios, or lots of
       // overwrites/deletions).
-      score = v->files_[level].size() /
-          static_cast<double>(config::kL0_CompactionTrigger);
+      //
+      // (3) More level0 files means write hotspot.
+      // We give lower score to avoid too much level0 compaction.
+      score = sqrt(v->files_[level].size() /
+          static_cast<double>(config::kL0_CompactionTrigger));
     } else {
       // Compute the ratio of current size to size limit.
       const uint64_t level_bytes = TotalFileSize(v->files_[level]);
-      score = static_cast<double>(level_bytes) / MaxBytesForLevel(level);
+      score = static_cast<double>(level_bytes)
+          / MaxBytesForLevel(level, options_->sst_size);
     }
 
     if (score > best_score) {

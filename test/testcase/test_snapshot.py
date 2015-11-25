@@ -158,6 +158,7 @@ def test_table_snapshot_relaunch():
     common.scan_table(table_name=table_name, file_path=scan_file2, allversion=True, snapshot=0)
     nose.tools.assert_true(common.compare_files(dump_file1, scan_file1, need_sort=True))
     nose.tools.assert_true(common.compare_files(dump_file2, scan_file2, need_sort=True))
+
     common.cluster_op('kill')
     common.cluster_op('launch')
     time.sleep(2)
