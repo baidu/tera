@@ -117,7 +117,7 @@ void ResultStreamBatchImpl::OnFinish(ScanTabletRequest* request,
     } else if ((response->results_id() < session_data_idx_) ||
                (response->results_id() >= session_data_idx_ +
                     FLAGS_tera_sdk_max_parallel_scan_req)) {
-        if (response->results_id() != UINT64_MAX)
+        if (response->results_id() != 0xffffffffffffffff)
             LOG(WARNING) << "ScanCallback session_id " << session_id_
                 << ", session_data_idx " << session_data_idx_
                 << ", stale result_id " << response->results_id()
