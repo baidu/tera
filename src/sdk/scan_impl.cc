@@ -223,7 +223,6 @@ bool ResultStreamBatchImpl::Done(ErrorCode* error) {
         //  2. ts not available, or
         //  3. rpc not available, or
         ScanSlot* slot = &(sliding_window_[sliding_window_idx_]);
-        VLOG(10) << "sliding_window_idx_ " << sliding_window_idx_;
         while(slot->state_ == SCANSLOT_INVALID) {
             // stale results_id, re-enable another scan req
             while (ref_count_ < FLAGS_tera_sdk_max_parallel_scan_req + 1) {
@@ -240,7 +239,6 @@ bool ResultStreamBatchImpl::Done(ErrorCode* error) {
             }
             cv_.Wait();
         }
-        VLOG(10) << "next_idx_ " << next_idx_ << ", kv.size() " << slot->cell_.key_values_size();
         if (next_idx_ < slot->cell_.key_values_size()) { break; }
 
         VLOG(28) << "session_done_ " << session_done_ << ", session_data_idx_ "
