@@ -652,6 +652,7 @@ public:
                                      const std::string& group, ErrorCode* err) = 0;
     /// 打开表格, 失败返回NULL
     virtual Table* OpenTable(const std::string& table_name, ErrorCode* err) = 0;
+    virtual void CloseTable(const std::string& table_name) = 0;
     /// 获取表格分布信息
     virtual bool GetTabletLocation(const std::string& table_name,
                                    std::vector<TabletInfo>* tablets,
