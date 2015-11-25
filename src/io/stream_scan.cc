@@ -128,7 +128,6 @@ void StreamScanManager::PushTask(const ScanTabletRequest* request,
                                  bool* is_first) {
     VLOG(10) << "push task for session id: " << request->session_id()
         << ", sequence id: " << request->sequence_id();
-    //response->set_results_id(0xffffffffffffffff);
     StreamScan* scan = NULL;
     {
         MutexLock lock(&m_mutex);
