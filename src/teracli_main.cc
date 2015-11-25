@@ -682,17 +682,30 @@ int32_t GetOp(Client* client, int32_t argc, char** argv, ErrorCode* err) {
     std::string qualifier = "";
     std::string value;
     if (argc == 4) {
-        // use table as kv
+        // use table as kv or get row
+        RowReader* reader = table->NewRowReader(rowkey);
+        table->Get(reader);
+        while (!reader->Done()) {
+            std::cout << DebugString(reader->RowName()) << "\t"
+                << DebugString(reader->Family()) << "\t"
+                << DebugString(reader->Qualifier()) << "\t"
+                << reader->Timestamp() << "\t"
+                << DebugString(reader->Value()) << std::endl;
+            reader->Next();
+        }
+        delete reader;
     } else if (argc == 5) {
         ParseCfQualifier(argv[4], &columnfamily, &qualifier);
+        if (!table->Get(rowkey, columnfamily, qualifier, &value, err, FLAGS_snapshot)) {
+            LOG(ERROR) << "fail to get record from table: " << tablename;
+            return -1;
+        }
+        std::cout << DebugString(rowkey) << "\t"
+            << DebugString(columnfamily) << "\t"
+            << DebugString(qualifier) << "\t"
+            << DebugString(value) << std::endl;
     }
 
-    if (!table->Get(rowkey, columnfamily, qualifier, &value, err, FLAGS_snapshot)) {
-        LOG(ERROR) << "fail to get record from table: " << tablename;
-        return -1;
-    }
-
-    std::cout << value << std::endl;
     delete table;
     return 0;
 }
@@ -835,10 +848,11 @@ int32_t ScanOp(Client* client, int32_t argc, char** argv, ErrorCode* err) {
         g_total_size += len;
         g_key_num ++;
         g_cur_batch_num ++;
-        std::cout << result_stream->RowName() << ":"
-           << result_stream->ColumnName() << ":"
-           << result_stream->Timestamp() << ":"
-           << result_stream->Value() << std::endl;
+        std::cout << DebugString(result_stream->RowName()) << "\t"
+            << DebugString(result_stream->Family()) << "\t"
+            << DebugString(result_stream->Qualifier()) << "\t"
+            << result_stream->Timestamp() << "\t"
+            << DebugString(result_stream->Value()) << std::endl;
         result_stream->Next();
         if (g_cur_batch_num >= FLAGS_tera_client_batch_put_num) {
             int32_t time_cur=time(NULL);
