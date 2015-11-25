@@ -551,9 +551,7 @@ void Version::GetApproximateSizes(uint64_t* size, uint64_t* size_under_level1) {
   }
 }
 
-bool Version::FindSplitKey(const Slice* smallest_user_key,
-                           const Slice* largest_user_key,
-                           double ratio,
+bool Version::FindSplitKey(double ratio,
                            std::string* split_key) {
     assert(ratio >= 0 && ratio <= 1);
     uint64_t size_under_level1;

@@ -337,6 +337,39 @@ bool TabletIO::Unload(StatusCode* status) {
     return true;
 }
 
+// Find average string from input string
+// E.g. "abc" & "abe" return "abd"
+//      "a" & "b" return "a_"
+bool TabletIO::FindAverageKey(const std::string& start, const std::string& end,
+                             std::string* res) {
+    std::string ave;
+    int ave_len = start.size() < end.size() ? start.size() : end.size();
+    for (int i = 0; i < ave_len; ++i) {
+        char c = (char)(((uint32_t)start[i] + end[i]) / 2);
+        ave.append(1, c);
+    }
+    if (ave > start) {
+        // find success
+        *res = ave;
+        return true;
+    }
+    if (start.size() == end.size()) {
+        // a~b, here we use '_'(0x5F), not '0x80', visible char
+        ave.append(1, '_');
+    } else if (start.size() < end.size()) {
+        char c = (end[ave.size()]) / 2;
+        if (c == '\x0') {
+            return false;
+        }
+        ave.append(1, c);
+    } else {
+        char c = static_cast<char>((start[ave.size()] + 0x100) / 2);
+        ave.append(1, c);
+    }
+    *res = ave;
+    return true;
+}
+
 bool TabletIO::Split(std::string* split_key, StatusCode* status) {
     {
         MutexLock lock(&m_mutex);
@@ -352,59 +385,37 @@ bool TabletIO::Split(std::string* split_key, StatusCode* status) {
         m_db_ref_count++;
     }
 
-    uint64_t table_size = 0;
-    GetDataSize(&table_size, NULL, status);
-    if (table_size <= 0) {
-        SetStatusCode(kTableNotSupport, status);
-        MutexLock lock(&m_mutex);
-        m_status = kReady;
-        m_db_ref_count--;
-        return false;
-    }
-
     std::string raw_split_key;
-    if (!m_db->FindSplitKey(m_raw_start_key, m_raw_end_key, 0.5,
-                            &raw_split_key)) {
-        VLOG(5) << "fail to find split key";
+    leveldb::Slice key_split;
+    if (m_db->FindSplitKey(0.5, &raw_split_key)) {
+        if ((m_table_schema.raw_key() == GeneralKv)
+            || (m_kv_only && m_table_schema.raw_key() == Readable)) {
+            key_split = raw_split_key;
+        } else { // Table && TTL-KV
+            if (!m_key_operator->ExtractTeraKey(raw_split_key, &key_split,
+                                                NULL, NULL, NULL, NULL)) {
+                VLOG(5) << "fail to extract split key";
+            }
+        }
+    }
+
+    if (!key_split.empty()) {
+        // find split key successfully
+        *split_key = key_split.ToString();
+    } else if (FindAverageKey(m_start_key, m_end_key, split_key)) {
+        // could not find split_key, use average key
+    } else {
+        // could not find split key
         SetStatusCode(kTableNotSupport, status);
         MutexLock lock(&m_mutex);
         m_status = kReady;
         m_db_ref_count--;
         return false;
-    }
-
-    leveldb::Slice key_split;
-
-    if (m_kv_only && m_table_schema.raw_key() == Readable) {
-        key_split = raw_split_key;
-    } else { // Table && TTL-KV
-        leveldb::Slice cf_split;
-        leveldb::Slice qu_split;
-        if (!m_key_operator->ExtractTeraKey(raw_split_key, &key_split,
-                                            &cf_split, &qu_split, NULL, NULL)) {
-            VLOG(5) << "fail to extract split key";
-            SetStatusCode(kTableNotSupport, status);
-            MutexLock lock(&m_mutex);
-            m_status = kReady;
-            m_db_ref_count--;
-            return false;
-        }
     }
 
     VLOG(5) << "start: [" << DebugString(m_start_key)
         << "], end: [" << DebugString(m_end_key)
-        << "], split: [" << DebugString(key_split.ToString()) << "]";
-
-    if (key_split.empty() || key_split.ToString() <= m_start_key
-        || (!m_end_key.empty() && key_split.ToString() >= m_end_key)) {
-        SetStatusCode(kTableNotSupport, status);
-        MutexLock lock(&m_mutex);
-        m_status = kReady;
-        m_db_ref_count--;
-        return false;
-    }
-
-    *split_key = key_split.ToString();
+        << "], split: [" << DebugString(*split_key) << "]";
 
     {
         MutexLock lock(&m_mutex);

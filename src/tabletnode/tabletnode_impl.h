@@ -63,8 +63,7 @@ public:
     void ReadTablet(int64_t start_micros,
                     const ReadTabletRequest* request,
                     ReadTabletResponse* response,
-                    google::protobuf::Closure* done,
-                    ReadRpcTimer* timer = NULL);
+                    google::protobuf::Closure* done);
 
     void WriteTablet(const WriteTabletRequest* request,
                      WriteTabletResponse* response,

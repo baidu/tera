@@ -1879,9 +1879,7 @@ class ModelDB: public DB {
   virtual void CompactRange(const Slice* start, const Slice* end) {
   }
 
-  virtual bool FindSplitKey(const std::string& start_key,
-                            const std::string& end_key,
-                            double ratio,
+  virtual bool FindSplitKey(double ratio,
                             std::string* split_key) {
       return false;
   }
