@@ -114,19 +114,26 @@ void ResultStreamBatchImpl::OnFinish(ScanTabletRequest* request,
     // check session id
     if (request->session_id() != (int64_t)session_id_) {
         LOG(WARNING) << "session_id not match, " << request->session_id() << ", " << session_id_;
-    } else if ((response->results_id() < session_data_idx_) ||
-               (response->results_id() >= session_data_idx_ +
-                    FLAGS_tera_sdk_max_parallel_scan_req)) {
-        if (response->results_id() != 0xffffffffffffffff)
-            LOG(WARNING) << "ScanCallback session_id " << session_id_
-                << ", session_data_idx " << session_data_idx_
-                << ", stale result_id " << response->results_id()
-                << ", response " << (uint64_t)response;
     } else if (response->status() != kTabletNodeOk) {
         // rpc or ts error, session broken and report error
         session_error_ = response->status();
         LOG(WARNING) << "session_id " <<session_id_ <<", broken " << StatusCodeToString(session_error_);
         session_done_ = true;
+    } else if ((response->results_id() == 0) &&
+               (response->results().key_values_size() == 0) &&
+               request->part_of_session()) {
+        // handle old ts, results_id not init
+        VLOG(28) << "batch scan old ts";
+    } else if ((response->results_id() < session_data_idx_) ||
+               (response->results_id() >= session_data_idx_ +
+                    FLAGS_tera_sdk_max_parallel_scan_req)) {
+        if (response->results_id() != 0xffffffffffffffff) {
+            LOG(WARNING) << "ScanCallback session_id " << session_id_
+                << ", session_data_idx " << session_data_idx_
+                << ", stale result_id " << response->results_id()
+                << ", response " << (uint64_t)response;
+        }
+        session_error_ = kRPCTimeout;
     } else { // scan success, cache result
         int32_t slot_idx = ((response->results_id() - session_data_idx_)
                             + sliding_window_idx_) % FLAGS_tera_sdk_max_parallel_scan_req;
@@ -225,12 +232,6 @@ bool ResultStreamBatchImpl::Done(ErrorCode* error) {
         ScanSlot* slot = &(sliding_window_[sliding_window_idx_]);
         while(slot->state_ == SCANSLOT_INVALID) {
             // stale results_id, re-enable another scan req
-            while (ref_count_ < FLAGS_tera_sdk_max_parallel_scan_req + 1) {
-                ref_count_++;
-                mu_.Unlock();
-                _table_ptr->ScanTabletAsync(this);
-                mu_.Lock();
-            }
             if (session_error_ != kTabletNodeOk) {
                 // TODO: kKeyNotInRange, do reset session
                 LOG(WARNING) << "scan done: session error " << StatusCodeToString(session_error_);
