@@ -70,6 +70,10 @@ bool MasterZkAdapter::Init(std::string* root_tablet_addr,
         return false;
     }
 
+    if (!CreateIfNotExistWithRetry(kTablePath, "")) {
+        LOG(ERROR) << "[acl] create table node failed";
+    }
+
     return true;
 }
 
@@ -133,6 +137,46 @@ bool MasterZkAdapter::UnlockMasterLock() {
     }
     LOG(INFO) << "release master-lock success";
     return true;
+}
+
+bool MasterZkAdapter::CreateIfNotExistWithRetry(const std::string& path,
+                                                const std::string& value) {
+    bool is_exist = CheckExistWithRetry(path);
+    if (!is_exist) {
+        int32_t retry_count = 0;
+        int zk_errno = zk::ZE_OK;
+        while (!CreatePersistentNode(path, value, &zk_errno)
+               && zk_errno != zk::ZE_EXIST) {
+            if (retry_count++ >= FLAGS_tera_zk_retry_max_times) {
+                LOG(ERROR) << "fail to create node [" << path << "]";
+                return false;
+            }
+            LOG(ERROR) << "retry create in "
+                << FLAGS_tera_zk_retry_period << " ms, retry=" << retry_count;
+            ThisThread::Sleep(FLAGS_tera_zk_retry_period);
+            zk_errno = zk::ZE_OK;
+        }
+        return (zk_errno == zk::ZE_OK);
+    }
+    LOG(INFO) << "node already exists:" << path;
+    return true;
+}
+
+bool MasterZkAdapter::CheckExistWithRetry(const std::string& zk_path) {
+    int32_t retry_count = 0;
+    int zk_errno = zk::ZE_OK;
+    bool is_exist;
+    while (!CheckExist(zk_path, &is_exist, &zk_errno)) {
+        if (retry_count++ >= FLAGS_tera_zk_retry_max_times) {
+            LOG(ERROR) << "fail to check node:" << zk_path << " exist";
+            return false;
+        }
+        LOG(ERROR) << "retry check node:" << zk_path << " exist in "
+            << FLAGS_tera_zk_retry_period << " ms, retry=" << retry_count;
+        ThisThread::Sleep(FLAGS_tera_zk_retry_period);
+        zk_errno = zk::ZE_OK;
+    }
+    return is_exist;
 }
 
 bool MasterZkAdapter::CreateMasterNode() {
@@ -229,6 +273,68 @@ bool MasterZkAdapter::UnmarkSafeMode() {
         zk_errno = zk::ZE_OK;
     }
     LOG(INFO) << "unmark safemode success";
+    return true;
+}
+
+bool MasterZkAdapter::WriteTableNode(const std::string& table_name,
+                                     const std::string& table_schema) {
+    std::string path = kTablePath + "/" + table_name;
+    return UpdatePersistentNodeWithCreate(path, table_schema);
+}
+
+bool MasterZkAdapter::UpdatePersistentNodeWithCreate(const std::string& path,
+                                                     const std::string& value) {
+    MutexLock lock(&m_mutex);
+    if (WriteNodeWithRetry(path, value)) {
+        return true;
+    }
+    // maybe not exist, so try to create it
+    return CreateIfNotExistWithRetry(path, value);
+}
+
+bool MasterZkAdapter::WriteNodeWithRetry(const std::string& path,
+                                         const std::string& value) {
+    int32_t retry_count = 0;
+    int zk_errno = zk::ZE_OK;
+    while (!WriteNode(path, value, &zk_errno)
+           && zk_errno != zk::ZE_NOT_EXIST) {
+        if (retry_count++ >= FLAGS_tera_zk_retry_max_times) {
+            break;
+        }
+        LOG(ERROR) << "retry write node:" << path <<" in "
+            << FLAGS_tera_zk_retry_period << " ms, retry=" << retry_count;
+        ThisThread::Sleep(FLAGS_tera_zk_retry_period);
+        zk_errno = zk::ZE_OK;
+    }
+    if (zk_errno == zk::ZE_OK) {
+        LOG(INFO) << "write node success:" << path;
+        return true;
+    }
+    LOG(INFO) << "write node failed:" << path;
+    return false;
+}
+
+bool MasterZkAdapter::DeleteTableNode(const std::string& table_name) {
+    std::string path = kTablePath + "/" + table_name;
+    return DeleteNodeWithRetry(path);
+}
+
+bool MasterZkAdapter::DeleteNodeWithRetry(const std::string& path) {
+    LOG(INFO) << "try to delete node:" << path;
+    int32_t retry_count = 0;
+    int zk_errno = zk::ZE_OK;
+    while (!DeleteNode(path, &zk_errno)
+        && zk_errno != zk::ZE_NOT_EXIST) {
+        if (retry_count++ >= FLAGS_tera_zk_retry_max_times) {
+            LOG(ERROR) << "fail to delete node";
+            return false;
+        }
+        LOG(ERROR) << "retry delete node in "
+            << FLAGS_tera_zk_retry_period << " ms, retry=" << retry_count;
+        ThisThread::Sleep(FLAGS_tera_zk_retry_period);
+        zk_errno = zk::ZE_OK;
+    }
+    LOG(INFO) << "delete node success";
     return true;
 }
 
@@ -578,6 +684,15 @@ bool FakeMasterZkAdapter::UnmarkSafeMode() {
     return true;
 }
 
+bool FakeMasterZkAdapter::WriteTableNode(const std::string& table_name,
+                                         const std::string& table_schema) {
+    return false;
+}
+
+bool FakeMasterZkAdapter::DeleteTableNode(const std::string& table_name) {
+    return false;
+}
+
 bool FakeMasterZkAdapter::UpdateRootTabletNode(const std::string& root_tablet_addr) {
     std::string root_table = m_fake_path + kRootTabletNodePath;
     if (!zk::FakeZkUtil::WriteNode(root_table, root_tablet_addr)) {
@@ -715,6 +830,19 @@ bool InsMasterZkAdapter::KickTabletServer(const std::string& ts_host,
     galaxy::ins::sdk::SDKError err;
     bool ret = m_ins_sdk->Put(kick_path + "/" + ts_zk_id, ts_host, &err);
     return ret;
+}
+
+bool InsMasterZkAdapter::WriteTableNode(const std::string& table_name,
+                                        const std::string& table_schema) {
+    std::string path = FLAGS_tera_ins_root_path + kTablePath + "/" + table_name;
+    galaxy::ins::sdk::SDKError err;
+    return m_ins_sdk->Put(path, table_schema, &err);
+}
+
+bool InsMasterZkAdapter::DeleteTableNode(const std::string& table_name) {
+    std::string path = FLAGS_tera_ins_root_path + kTablePath + "/" + table_name;
+    galaxy::ins::sdk::SDKError err;
+    return m_ins_sdk->Delete(path, &err);
 }
 
 bool InsMasterZkAdapter::UpdateRootTabletNode(const std::string& root_tablet_addr) {

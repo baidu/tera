@@ -291,6 +291,16 @@ void TabletNodeImpl::LoadTablet(const LoadTabletRequest* request,
         response->set_status(kTabletNodeOk);
     }
 
+    if ((schema.admin() != "") || (schema.admin_group().size() != 0)) {
+        bool is_exist;
+        int zk_errno;
+        if (m_zk_adapter->WatchTableNode(request->tablet_name(), &is_exist, &zk_errno)) {
+            LOG(INFO) << "[acl] watch success:" << request->tablet_name();
+        } else {
+            LOG(ERROR) << "[acl] zk_errno:" << zk::ZkErrnoToString(zk_errno);
+        }
+    }
+
     LOG(INFO) << "load tablet: " << request->path() << " ["
         << DebugString(key_start) << ", " << DebugString(key_end) << "]";
     done->Run();
@@ -328,6 +338,8 @@ bool TabletNodeImpl::UnloadTablet(const std::string& tablet_name,
             << "], status: " << StatusCodeToString(*status);
     }
     *status = kTabletNodeOk;
+
+    // TODO(taocipian) delete table node watch
     return true;
 }
 

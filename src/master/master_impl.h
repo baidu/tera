@@ -526,6 +526,8 @@ private:
                                Callback* done, TablePtr table, const char* operate);
 
     void FillAlias(const std::string& key, const std::string& value);
+    void WriteTableNode(const TableSchema& schema);
+    void PutTableSchemaToZk(const std::string& key, const std::string& value);
 private:
     mutable Mutex m_status_mutex;
     MasterStatus m_status;

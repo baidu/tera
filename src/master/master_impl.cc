@@ -547,6 +547,7 @@ bool MasterImpl::LoadMetaTable(const std::string& meta_tablet_addr,
             } else if (first_key_char == '@') {
                 m_tablet_manager->LoadTableMeta(record.key(), record.value());
                 FillAlias(record.key(), record.value());
+                PutTableSchemaToZk(record.key(), record.value());
             } else if (first_key_char > '@') {
                 m_tablet_manager->LoadTabletMeta(record.key(), record.value());
             } else {
@@ -563,6 +564,23 @@ bool MasterImpl::LoadMetaTable(const std::string& meta_tablet_addr,
     LOG(ERROR) << "fail to load meta table: " << StatusCodeToString(kRPCError);
     m_tablet_manager->ClearTableList();
     return false;
+}
+
+void MasterImpl::PutTableSchemaToZk(const std::string& key, const std::string& value) {
+    TableMeta meta;
+    ParseMetaTableKeyValue(key, value, &meta);
+    WriteTableNode(meta.schema());
+}
+
+void MasterImpl::WriteTableNode(const TableSchema& schema) {
+    if ((schema.admin() == "") && (schema.admin_group().size() == 0)) {
+        return;
+    }
+    std::string schema_str;
+    schema.SerializeToString(&schema_str);
+    if (!m_zk_adapter->WriteTableNode(schema.name(), schema_str)) {
+        LOG(ERROR) << "[acl] write node:" << schema.name() << " failed";
+    }
 }
 
 void MasterImpl::FillAlias(const std::string& key, const std::string& value) {
@@ -4181,6 +4199,8 @@ void MasterImpl::AddMetaCallback(TablePtr table,
         return;
     }
 
+    WriteTableNode(table->GetSchema());
+
     rpc_response->set_status(kMasterOk);
     rpc_done->Run();
     LOG(INFO) << "create table " << tablets[0]->GetTableName() << " success";
@@ -4309,6 +4329,9 @@ void MasterImpl::UpdateTableRecordForUpdateCallback(TablePtr table, int32_t retr
         }
         return;
     }
+
+    WriteTableNode(table->GetSchema());
+
     LOG(INFO) << "update meta table success, " << table;
     rpc_response->set_status(kMasterOk);
     rpc_done->Run();
@@ -4510,6 +4533,11 @@ void MasterImpl::DeleteTableCallback(TablePtr table,
         m_tablet_manager->DeleteTablet(tablet->GetTableName(), tablet->GetKeyStart());
     }
     LOG(INFO) << "delete meta table record success, " << table;
+
+    if (!m_zk_adapter->DeleteTableNode(table->GetTableName())) {
+        LOG(ERROR) << "[acl] delete node:" << table->GetTableName() << " failed";
+    }
+
     rpc_response->set_status(kMasterOk);
     rpc_done->Run();
 }

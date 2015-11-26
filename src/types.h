@@ -27,6 +27,7 @@ const std::string kTsListPath = "/ts";
 const std::string kKickPath = "/kick";
 const std::string kRootTabletNodePath = "/root_table";
 const std::string kSafeModeNodePath = "/safemode";
+const std::string kTablePath = "/table";
 const std::string kSms = "[SMS] ";
 const std::string kMail = "[MAIL] ";
 const int64_t kLatestTs = INT64_MAX;
