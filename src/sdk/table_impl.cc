@@ -281,7 +281,7 @@ ResultStream* TableImpl::Scan(const ScanDescriptor& desc, ErrorCode* err) {
         }
     }
     ResultStream * results = NULL;
-    if (desc.IsAsync() && !_table_schema.kv_only()) {
+    if (desc.IsAsync() && (_table_schema.raw_key() != GeneralKv)) {
         VLOG(6) << "activate async-scan";
         results = new ResultStreamBatchImpl(this, impl);
     } else {
