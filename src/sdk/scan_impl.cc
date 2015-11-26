@@ -20,7 +20,7 @@
 DECLARE_bool(tera_sdk_scan_async_enabled);
 DECLARE_int64(tera_sdk_scan_async_cache_size);
 DECLARE_int32(tera_sdk_scan_async_parallel_max_num);
-DECLARE_int32(tera_sdk_max_parallel_scan_req);
+DECLARE_int32(tera_sdk_max_batch_scan_req);
 
 namespace tera {
 
@@ -70,7 +70,7 @@ ResultStreamBatchImpl::ResultStreamBatchImpl(TableImpl* table, ScanDescImpl* sca
     : ResultStreamImpl(table, scan_desc),
     cv_(&mu_), ref_count_(1) {
     // do something startup
-    sliding_window_.resize(FLAGS_tera_sdk_max_parallel_scan_req);
+    sliding_window_.resize(FLAGS_tera_sdk_max_batch_scan_req);
     session_end_key_ = _scan_desc_impl->GetStartRowKey();
     mu_.Lock();
     ScanSessionReset();
@@ -126,8 +126,8 @@ void ResultStreamBatchImpl::OnFinish(ScanTabletRequest* request,
         VLOG(28) << "batch scan old ts";
     } else if ((response->results_id() < session_data_idx_) ||
                (response->results_id() >= session_data_idx_ +
-                    FLAGS_tera_sdk_max_parallel_scan_req)) {
-        if (response->results_id() != 0xffffffffffffffff) {
+                    FLAGS_tera_sdk_max_batch_scan_req)) {
+        if (response->results_id() != std::numeric_limits<unsigned long>::max()) {
             LOG(WARNING) << "ScanCallback session_id " << session_id_
                 << ", session_data_idx " << session_data_idx_
                 << ", stale result_id " << response->results_id()
@@ -138,7 +138,7 @@ void ResultStreamBatchImpl::OnFinish(ScanTabletRequest* request,
         }
     } else { // scan success, cache result
         int32_t slot_idx = ((response->results_id() - session_data_idx_)
-                            + sliding_window_idx_) % FLAGS_tera_sdk_max_parallel_scan_req;
+                            + sliding_window_idx_) % FLAGS_tera_sdk_max_batch_scan_req;
         VLOG(28) << "scan suc, session_id " << session_id_ << ", slot_idx " << slot_idx << ", result_id " << response->results_id()
             << ", session_data_idx_ " << session_data_idx_
             << ", sliding_window_idx_ " << sliding_window_idx_
@@ -191,13 +191,13 @@ void ResultStreamBatchImpl::ScanSessionReset() {
         it->cell_.Clear();
     }
 
-    ref_count_ += FLAGS_tera_sdk_max_parallel_scan_req;
+    ref_count_ += FLAGS_tera_sdk_max_batch_scan_req;
     _scan_desc_impl->SetStart(session_end_key_);
     VLOG(28) << "scan session reset, start key " << session_end_key_
         << ", ref_count " << ref_count_;
     mu_.Unlock();
     // do io, release lock
-    for (int32_t i = 0; i < FLAGS_tera_sdk_max_parallel_scan_req; i++) {
+    for (int32_t i = 0; i < FLAGS_tera_sdk_max_batch_scan_req; i++) {
         _table_ptr->ScanTabletAsync(this);
         part_of_session_ = true;
     }
@@ -211,7 +211,7 @@ void ResultStreamBatchImpl::ClearAndScanNextSlot(bool scan_next) {
     slot->state_ = SCANSLOT_INVALID;
     next_idx_ = 0;
     session_data_idx_++;
-    sliding_window_idx_ = (sliding_window_idx_ + 1) % FLAGS_tera_sdk_max_parallel_scan_req;
+    sliding_window_idx_ = (sliding_window_idx_ + 1) % FLAGS_tera_sdk_max_batch_scan_req;
     VLOG(28) << "session_id " << session_id_ << ", session_data_idx_ " << session_data_idx_ << ", sliding_window_idx_ "
         << sliding_window_idx_ << ", ref_count_ " << ref_count_;
     if (scan_next) {
