@@ -293,7 +293,7 @@ std::string ResultStreamBatchImpl::Qualifier() const {
 std::string ResultStreamBatchImpl::ColumnName() const {
     const std::string& cf = Family();
     const std::string& qu = Qualifier();
-    return (cf == "") ? ("") : ((qu == "") ? cf : (qu + ":" + cf));
+    return cf + ":" + qu;
 }
 int64_t ResultStreamBatchImpl::Timestamp() const {
     const KeyValuePair& row = sliding_window_[sliding_window_idx_].cell_.key_values(next_idx_);
