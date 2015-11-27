@@ -48,10 +48,12 @@ public:
                google::protobuf::Closure* done,
                const std::vector<int32_t>* index_list,
                Counter* done_counter, WriteRpcTimer* timer = NULL);
-    /// 初略计算一个request的数据大小
-    static uint64_t CountRequestSize(const WriteTabletRequest& request,
-                                     const std::vector<int32_t>& index_list,
-                                     bool kv_only);
+    /// 粗略计算一个request的数据大小
+    void CountRequestSize(const WriteTabletRequest& request,
+                              const std::vector<int32_t>& index_list,
+                              bool kv_only, uint64_t* table_size,
+                              std::map<uint32_t, uint64_t>* lg_size);
+
     /// 把一个request打到一个leveldbbatch里去, request是原子的, batch也是, so ..
     bool BatchRequest(const WriteTabletRequest& request,
                       const std::vector<int32_t>& index_list,

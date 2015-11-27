@@ -475,6 +475,16 @@ void TabletNodeImpl::WriteTablet(const WriteTabletRequest* request,
         return;
     }
 
+    for (it = req_index_map.begin(); it != req_index_map.end(); ++it) {
+        io::TabletIO* tablet_io = it->first;
+        std::vector<int32_t>* index_list = it->second;
+        if (!tablet_io->HasRoomForWrite(request, index_list)) {
+            response->set_status(kTableNotSupport);
+            done->Run();
+            return;
+        }
+    }
+
     // reserve response status list space
     response->set_status(kTabletNodeOk);
     response->mutable_row_status_list()->Reserve(row_num);
