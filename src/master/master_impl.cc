@@ -3293,8 +3293,7 @@ void MasterImpl::QueryTabletNodeCallback(std::string addr, QueryRequest* request
                     << ", range: [" << DebugString(key_start)
                     << ", " << DebugString(key_end)
                     << "], size: " << meta.size()
-                    << ", addr: " << meta.server_addr()
-                    << ", tablet: " << tablet;
+                    << ", addr: " << meta.server_addr();
             }
         }
 
