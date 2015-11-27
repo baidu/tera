@@ -129,9 +129,7 @@ public:
     virtual void CompactRange(const Slice* begin, const Slice* end);
 
     // tera-specific
-    virtual bool FindSplitKey(const std::string& start_key,
-                              const std::string& end_key,
-                              double ratio,
+    virtual bool FindSplitKey(double ratio,
                               std::string* split_key);
 
     virtual bool MinorCompact();

@@ -18,7 +18,7 @@ message MonitorRequest {
 }
 
 message TabletNodeStat {
-    optional uint64 time_stamp = 1;
+    optional uint64 timestamp = 1;
     optional uint64 load = 2;
     optional uint32 tablet_total = 3;
     optional uint32 tablet_onbusy = 4;

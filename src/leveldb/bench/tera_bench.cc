@@ -65,7 +65,7 @@ class RandomGenerator {
   RandomGenerator() {
     // We use a limited amount of data over and over again and ensure
     // that it is larger than the compression window (32KB), and also
-    // large enough to serve all typical value sizes we want to write. 
+    // large enough to serve all typical value sizes we want to write.
     Random rnd(FLAGS_value_seed);
     std::string piece;
     while (data_.size() < 1048576) {
@@ -176,7 +176,7 @@ class Benchmark {
       }
       cfs.push_back(buffer.substr(start_index));
     }
-    
+
     const char* benchmarks = FLAGS_benchmarks;
     while (benchmarks != NULL) {
       const char* sep = strchr(benchmarks, ',');

@@ -20,7 +20,7 @@ class ThreadPool {
 public:
   ThreadPool();
   ~ThreadPool();
-  
+
   // A task will be put in queue and being processed by background thread
   // Return value is the task's id number
   int64_t Schedule(void (*function)(void*), void* arg, double priority,
@@ -33,7 +33,7 @@ public:
   int GetThreadNumber();
   void SetLogger(Logger* info_log) { info_log_ = info_log; }
 
-private:  
+private:
   struct BGItem {
     void* arg;
     void (*function)(void*);
@@ -54,7 +54,7 @@ private:
   typedef std::priority_queue<BGItem> BGQueue;
   typedef std::vector<pthread_t> ThreadVector;
   typedef std::map<int64_t, BGItem> BGMap;
-  
+
   void Timer();
   void BGThread();
   void PutInQueue(BGItem& bg_item, int64_t wait_time_millisec);
@@ -62,17 +62,17 @@ private:
 
   static void* TimerWrapper(void* arg);
   static void* BGThreadWrapper(void* arg);
-  
+
   int total_threads_limit_;
   bool exit_all_threads_;
   int64_t last_item_id_;
   int active_number_;
-  
+
   Logger* info_log_;
   port::Mutex mutex_;
   port::CondVar timer_cv_;
   port::CondVar work_cv_;
-  
+
   pthread_t timer_id_;
   ThreadVector bg_threads_;
   BGQueue pri_queue_;

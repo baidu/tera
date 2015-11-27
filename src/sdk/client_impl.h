@@ -54,7 +54,7 @@ public:
     virtual bool DeleteUser(const std::string& user, ErrorCode* err);
     virtual bool ChangePwd(const std::string& user,
                            const std::string& password, ErrorCode* err);
-    virtual bool ShowUser(const std::string& user, std::vector<std::string>& user_groups, 
+    virtual bool ShowUser(const std::string& user, std::vector<std::string>& user_groups,
                           ErrorCode* err);
     virtual bool AddUserToGroup(const std::string& user,
                                 const std::string& group, ErrorCode* err);
@@ -140,6 +140,13 @@ private:
     bool CheckReturnValue(StatusCode status, std::string& reason, ErrorCode* err);
     bool GetInternalTableName(const std::string& table_name, ErrorCode* err,
                               std::string* internal_table_name);
+
+    /// show all tables info: `table_name' should be an empty string
+    /// show a single table info: `table_name' should be the table name
+    bool DoShowTablesInfo(TableMetaList* table_list,
+                          TabletMetaList* tablet_list,
+                          const string& table_name,
+                          ErrorCode* err);
 private:
     ClientImpl(const ClientImpl&);
     void operator=(const ClientImpl&);

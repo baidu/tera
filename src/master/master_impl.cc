@@ -1423,6 +1423,13 @@ void MasterImpl::TabletCmdCtrl(const CmdCtrlRequest* request,
         }
         TrySplitTablet(tablet);
         response->set_status(kMasterOk);
+    } else if (request->arg_list(0) == "merge") {
+        if (request->arg_list_size() > 3) {
+            response->set_status(kInvalidArgument);
+            return;
+        }
+        TryMergeTablet(tablet);
+        response->set_status(kMasterOk);
     } else {
         response->set_status(kInvalidArgument);
     }
@@ -3281,7 +3288,7 @@ void MasterImpl::QueryTabletNodeCallback(std::string addr, QueryRequest* request
                 ClearUnusedSnapshots(tablet, meta);
                 VLOG(30) << "[query] " << tablet;
             } else {
-                VLOG(30) << "fail to match tablet: " << meta.table_name()
+                LOG(WARNING) << "fail to match tablet: " << meta.table_name()
                     << ", path: " << meta.path()
                     << ", range: [" << DebugString(key_start)
                     << ", " << DebugString(key_end)
@@ -4976,6 +4983,7 @@ void MasterImpl::DoTabletNodeGc() {
             return;
         }
     }
+
     bool need_gc = gc_strategy->PreQuery();
 
     MutexLock lock(&m_mutex);
@@ -4992,6 +5000,10 @@ void MasterImpl::DoTabletNodeGc() {
 
 void MasterImpl::DoTabletNodeGcPhase2() {
     gc_strategy->PostQuery();
+
+    LOG(INFO) << "[gc] try clean trash dir.";
+    io::CleanTrashDir();
+
     MutexLock lock(&m_mutex);
     if (m_gc_enabled) {
         ScheduleTabletNodeGc();

@@ -79,6 +79,7 @@ DECLARE_string(tera_local_addr);
 DECLARE_bool(tera_ins_enabled);
 
 DECLARE_bool(tera_io_cache_path_vanish_allowed);
+DECLARE_int64(tera_tabletnode_tcm_cache_size);
 
 extern tera::Counter range_error_counter;
 extern tera::Counter rand_read_delay;
@@ -132,6 +133,12 @@ TabletNodeImpl::TabletNodeImpl(const TabletNodeInfo& tabletnode_info,
         LOG(INFO) << "enable tcmalloc cache release timer";
         EnableReleaseMallocCacheTimer();
     }
+    const char* tcm_property = "tcmalloc.max_total_thread_cache_bytes";
+    MallocExtension::instance()->SetNumericProperty(
+        tcm_property, FLAGS_tera_tabletnode_tcm_cache_size);
+    size_t tcm_t;
+    CHECK(MallocExtension::instance()->GetNumericProperty(tcm_property, &tcm_t));
+    LOG(INFO) << tcm_property << "=" << tcm_t;
 }
 
 TabletNodeImpl::~TabletNodeImpl() {
@@ -263,7 +270,7 @@ void TabletNodeImpl::LoadTablet(const LoadTabletRequest* request,
             << StatusCodeToString(status);
         response->set_status((StatusCode)tablet_io->GetStatus());
         tablet_io->DecRef();
-    } else if (!tablet_io->Load(schema, request->path(), parent_tablets, 
+    } else if (!tablet_io->Load(schema, request->path(), parent_tablets,
                                 snapshots, rollbacks, m_ldb_logger,
                                 m_ldb_block_cache, m_ldb_table_cache, &status)) {
         tablet_io->DecRef();
@@ -376,8 +383,7 @@ void TabletNodeImpl::CompactTablet(const CompactTabletRequest* request,
 void TabletNodeImpl::ReadTablet(int64_t start_micros,
                                 const ReadTabletRequest* request,
                                 ReadTabletResponse* response,
-                                google::protobuf::Closure* done,
-                                ReadRpcTimer* timer) {
+                                google::protobuf::Closure* done) {
     int32_t row_num = request->row_info_list_size();
     uint64_t snapshot_id = request->snapshot_id() == 0 ? 0 : request->snapshot_id();
     uint32_t read_success_num = 0;
@@ -410,11 +416,6 @@ void TabletNodeImpl::ReadTablet(int64_t start_micros,
     response->set_status(kTabletNodeOk);
     done->Run();
 
-    if (NULL != timer) {
-        RpcTimerList::Instance()->Erase(timer);
-        delete timer;
-    }
-
     int64_t now_ms = get_micros();
     int64_t used_ms =  now_ms - start_micros;
     if (used_ms <= 0) {
@@ -434,6 +435,15 @@ void TabletNodeImpl::WriteTablet(const WriteTabletRequest* request,
     std::map<io::TabletIO*, std::vector<int32_t>* >::iterator it;
 
     int32_t row_num = request->row_list_size();
+    // check arguments
+    for (int32_t i = 0; i < row_num; i++) {
+        const RowMutationSequence& mu_seq = request->row_list(i);
+        if (mu_seq.row_key().size() >= 64 * 1024) { // 64KB
+            response->set_status(kTableNotSupport);
+            done->Run();
+            return;
+        }
+    }
     if (request->row_list_size() > 0) {
         for (int32_t i = 0; i < row_num; i++) {
             io::TabletIO* tablet_io = m_tablet_manager->GetTablet(

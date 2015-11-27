@@ -948,7 +948,7 @@ TEST(DBTest, RecoverWithLargeLog) {
   Options options = CurrentOptions();
   options.write_buffer_size = 100000;
   Reopen(&options);
-  
+
   // tera-leveldb will call MaybeScheduleCompaction() when Init(Recover),
   // and 3 sst files cause level0's score to be 1.5,(kL0_CompactionTrigger == 2)
   // so, compaction will happen, at the end, maybe 1 or 2 or 3 sst at level-0
@@ -1212,7 +1212,9 @@ TEST(DBTest, HiddenValuesAreRemoved) {
     Put("pastfoo2", "v2");        // Advance sequence number one more
 
     ASSERT_OK(dbfull()->TEST_CompactMemTable());
-    ASSERT_GT(NumTableFilesAtLevel(0), 0);
+    // tera-leveldb:kL0_CompactionTrigger == 2, compact will happen
+    // google-leveldb:kL0_CompactionTrigger == 4, there is no compaction
+    // ASSERT_GT(NumTableFilesAtLevel(0), 0);
 
     ASSERT_EQ(big, Get("foo", snapshot));
     ASSERT_TRUE(Between(Size("", "pastfoo"), 50000, 60000));
@@ -1877,9 +1879,7 @@ class ModelDB: public DB {
   virtual void CompactRange(const Slice* start, const Slice* end) {
   }
 
-  virtual bool FindSplitKey(const std::string& start_key,
-                            const std::string& end_key,
-                            double ratio,
+  virtual bool FindSplitKey(double ratio,
                             std::string* split_key) {
       return false;
   }
