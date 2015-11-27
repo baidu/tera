@@ -1,7 +1,8 @@
 {
-  "table_name": "test"
+  "table_name": "test",
   "read_speed_limit(/TS*Qps)": "0", 
-  "random": "f", 
+  "key_seed": "10",
+  "value_seed": "10", 
   "value_sizeB(B)": "100", 
   "mode": "rw", 
   "scan_buffer(M)": "0", 
