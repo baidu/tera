@@ -61,6 +61,14 @@ ClientImpl::ClientImpl(const std::string& user_identity,
 }
 
 ClientImpl::~ClientImpl() {
+    {
+        MutexLock l(&_open_table_mutex);
+        while (!_open_tables.empty()) {
+            OpenTableMap::iterator it = _open_tables.begin();
+            delete it->second.first;
+            _open_tables.erase(it);
+        }
+    }
     delete _cluster;
 }
 

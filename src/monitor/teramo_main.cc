@@ -250,7 +250,6 @@ int FillResponse(const MonitorRequest& request, MonitorResponse* response) {
         response->set_errmsg("cmd error");
         return -1;
     }
-    delete table;
     delete client;
     return 0;
 }
