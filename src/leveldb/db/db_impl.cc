@@ -683,16 +683,9 @@ Status DBImpl::TEST_CompactMemTable() {
 
 // tera-specific
 
-bool DBImpl::FindSplitKey(const std::string& start_key,
-                          const std::string& end_key,
-                          double ratio,
-                          std::string* split_key) {
-    Slice start_slice(start_key);
-    Slice end_slice(end_key);
+bool DBImpl::FindSplitKey(double ratio, std::string* split_key) {
     MutexLock l(&mutex_);
-    return versions_->current()->FindSplitKey(start_key.empty()?NULL:&start_slice,
-                                              end_key.empty()?NULL:&end_slice,
-                                              ratio, split_key);
+    return versions_->current()->FindSplitKey(ratio, split_key);
 }
 
 bool DBImpl::MinorCompact() {

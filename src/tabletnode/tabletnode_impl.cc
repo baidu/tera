@@ -383,8 +383,7 @@ void TabletNodeImpl::CompactTablet(const CompactTabletRequest* request,
 void TabletNodeImpl::ReadTablet(int64_t start_micros,
                                 const ReadTabletRequest* request,
                                 ReadTabletResponse* response,
-                                google::protobuf::Closure* done,
-                                ReadRpcTimer* timer) {
+                                google::protobuf::Closure* done) {
     int32_t row_num = request->row_info_list_size();
     uint64_t snapshot_id = request->snapshot_id() == 0 ? 0 : request->snapshot_id();
     uint32_t read_success_num = 0;
@@ -416,11 +415,6 @@ void TabletNodeImpl::ReadTablet(int64_t start_micros,
     response->set_success_num(read_success_num);
     response->set_status(kTabletNodeOk);
     done->Run();
-
-    if (NULL != timer) {
-        RpcTimerList::Instance()->Erase(timer);
-        delete timer;
-    }
 
     int64_t now_ms = get_micros();
     int64_t used_ms =  now_ms - start_micros;

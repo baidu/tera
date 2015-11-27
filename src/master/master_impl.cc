@@ -3293,8 +3293,7 @@ void MasterImpl::QueryTabletNodeCallback(std::string addr, QueryRequest* request
                     << ", range: [" << DebugString(key_start)
                     << ", " << DebugString(key_end)
                     << "], size: " << meta.size()
-                    << ", addr: " << meta.server_addr()
-                    << ", tablet: " << tablet;
+                    << ", addr: " << meta.server_addr();
             }
         }
 
@@ -4985,9 +4984,6 @@ void MasterImpl::DoTabletNodeGc() {
         }
     }
 
-    LOG(INFO) << "[gc] try clean trash dir.";
-    io::CleanTrashDir();
-
     bool need_gc = gc_strategy->PreQuery();
 
     MutexLock lock(&m_mutex);
@@ -5004,6 +5000,10 @@ void MasterImpl::DoTabletNodeGc() {
 
 void MasterImpl::DoTabletNodeGcPhase2() {
     gc_strategy->PostQuery();
+
+    LOG(INFO) << "[gc] try clean trash dir.";
+    io::CleanTrashDir();
+
     MutexLock lock(&m_mutex);
     if (m_gc_enabled) {
         ScheduleTabletNodeGc();

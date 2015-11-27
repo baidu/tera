@@ -374,19 +374,11 @@ Status DfsEnv::CopyFile(const std::string& from, const std::string& to) {
 
 Status DfsEnv::GetChildren(const std::string& path, std::vector<std::string>* result)
 {
-    {
-        tera::AutoCounter ac(&dfs_exists_hang_counter, "Exists", path.c_str());
-        dfs_exists_counter.Inc();
-        if (0 != dfs_->Exists(path)) {
-            Log("GetChildren call with path not exists: %s\n", path.data());
-            return Status::IOError("Path not exist", path);
-        }
-    }
-
     tera::AutoCounter ac(&dfs_list_hang_counter, "ListDirectory", path.c_str());
     dfs_list_counter.Inc();
     if (0 != dfs_->ListDirectory(path, result)) {
-        abort();
+        Log("GetChildren call with path not exists: %s\n", path.data());
+        return Status::IOError("Path not exist", path);
     }
     return Status::OK();
 }
