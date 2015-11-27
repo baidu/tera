@@ -140,7 +140,10 @@ def run_test():
     common.g_exit = True
     common.g_query_event.set()
     common.g_query_thread.join()
+    compute_write_main(total_time)
 
+
+def compute_write_main(total_time):
     try:
         eva_utils.compute_ts_stat()
         eva_utils.compute_stat()
@@ -253,7 +256,7 @@ def run_read_test():
 
 
 def handler(signum, frame):
-    common.g_exit = true
+    common.g_exit = True
 
 
 def main():
