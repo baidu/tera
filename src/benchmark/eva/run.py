@@ -1,3 +1,9 @@
+# Copyright (c) 2015, Baidu.com, Inc. All Rights Reserved
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+#!/usr/bin/env pythons
+
 import sys
 import subprocess
 import time
@@ -59,7 +65,7 @@ def parse_input():
         elif pre == 'random':
             bench_cmd_prefix += '--random=' + post + ' '
         elif pre == conf.ENTRY_NUM:
-            num = float(post) * 1000000
+            num = float(post) * common.MEGA
             bench_cmd_prefix += '--num=' + str(int(num)) + ' '
             conf.g_test_conf[conf.ENTRY_NUM] = int(num)
         elif pre == conf.SCAN_BUFFER:
@@ -73,7 +79,7 @@ def parse_input():
             conf.g_test_conf[conf.STEP] = post
 
     conf.g_test_conf[conf.ENTRY_SIZE] = conf.g_test_conf[conf.KEY_SIZE] + conf.g_test_conf[conf.VALUE_SIZE]
-    conf.g_test_conf[conf.WRITE_SPEED_LIMIT] = int(float(conf.g_speed_limit) / conf.g_test_conf[conf.TABLET_NUM] * 1024 * 1024 / conf.g_test_conf[conf.ENTRY_SIZE])
+    conf.g_test_conf[conf.WRITE_SPEED_LIMIT] = int(round(float(conf.g_speed_limit) / conf.g_test_conf[conf.TABLET_NUM] * common.MEGA / conf.g_test_conf[conf.ENTRY_SIZE]))
     conf.g_test_conf[conf.READ_SPEED_LIMIT] = int(float(conf.g_test_conf[conf.READ_SPEED_LIMIT]) / conf.g_test_conf[conf.TABLET_NUM])
     conf.g_test_conf[conf.CF_NUM], conf.g_test_conf[conf.CF] = \
         eva_utils.table_manipulate(conf.g_test_conf[conf.TABLE_NAME], conf.CF, conf.g_test_conf[conf.SCHEMA])
@@ -81,10 +87,16 @@ def parse_input():
         bench_cmd_prefix += '--cf=' + conf.g_test_conf[conf.CF] + ' '
     if conf.g_test_conf[conf.STEP] == 'True':
         bench_cmd_prefix += '--key_step=' + str(common.RANDOM_MAX / conf.g_test_conf[conf.ENTRY_NUM]) + ' '
-    else:
-        print conf.g_test_conf[conf.STEP], type(conf.g_test_conf[conf.STEP])
-    print bench_cmd_prefix
     conf.TERA_BENCH = bench_cmd_prefix
+    conf.g_datasize = (conf.g_test_conf[conf.CF_NUM] * conf.g_test_conf[conf.TABLET_NUM] *
+                          conf.g_test_conf[conf.ENTRY_NUM] * conf.g_test_conf[conf.ENTRY_SIZE])
+    if conf.g_test_conf[conf.MODE] == conf.MODE_SEQ_WRITE or conf.g_test_conf[conf.MODE] == conf.MODE_RAND_WRITE:
+        print 'time: ', get_time_form((conf.g_datasize >> 20) / float(conf.g_speed_limit))
+    else:
+        print 'time: ', get_time_form(conf.g_test_conf[conf.ENTRY_NUM] /
+                                      conf.g_test_conf[conf.READ_SPEED_LIMIT])
+    conf.g_datasize = get_data_size(conf.g_datasize)
+    print conf.g_datasize
     common.g_logger.info('running tera_mark: ' + str(conf.g_test_conf))
 
 
@@ -114,7 +126,7 @@ def run_test():
         wait_list, kill_list = run_read_test()
 
     count = 0
-    wait_num = conf.g_test_conf[conf.TABLET_NUM] * 2 / 3
+    wait_num = conf.g_test_conf[conf.TABLET_NUM] * 2 / 3 + 1
     while count < wait_num:
         count = 0
         for ret in wait_list:
@@ -131,10 +143,8 @@ def run_test():
 
     for ret in kill_list:
         ret.kill()
-    total_time = int(end_time - start_time)
-    hours = total_time / 3600
-    mins = (total_time % 3600) / 60
-    total_time = str(hours) + 'h' + str(mins) + 'm'
+
+    total_time = get_time_form(end_time - start_time)
 
     common.g_logger.info('done running test: ' + total_time)
     common.g_exit = True
@@ -151,10 +161,9 @@ def compute_write_main(total_time):
         common.g_logger.error(traceback.print_exc())
 
     mail = open(common.MAIL_PATH, 'a')
-    desp = 'data_size={datasize}G key_size={ks}B value_size={vs}B lg_number={lg} cf_number={cf} running_time={t}'.format(
-        datasize=conf.g_test_conf[conf.CF_NUM] * conf.g_test_conf[conf.TABLET_NUM] *
-                 conf.g_test_conf[conf.ENTRY_NUM] * conf.g_test_conf[conf.ENTRY_SIZE] / 1000000000,
-        ks=conf.g_test_conf[conf.KEY_SIZE], vs=conf.g_test_conf[conf.VALUE_SIZE], lg=conf.g_test_conf[conf.LG_NUM],
+    desp = 'data_size={datasize} key_size={ks} value_size={vs} lg_number={lg} cf_number={cf} running_time={t}'.format(
+        datasize=conf.g_datasize, ks=get_data_size(conf.g_test_conf[conf.KEY_SIZE]),
+        vs=get_data_size(conf.g_test_conf[conf.VALUE_SIZE]), lg=conf.g_test_conf[conf.LG_NUM],
         cf=conf.g_test_conf[conf.CF_NUM], t=total_time)
     if conf.g_test_conf[conf.MODE] == conf.MODE_SEQ_WRITE or conf.g_test_conf[conf.MODE] == conf.MODE_RAND_WRITE:
         desp += ' write_speed={ws}/TS*M schema={s}'.format(
@@ -257,6 +266,34 @@ def run_read_test():
 
 def handler(signum, frame):
     common.g_exit = True
+
+
+def get_data_size(size):
+    size = int(size)
+    post_fix = ['B', 'K', 'M', 'G', 'T']
+    sizes = []
+    tmp = size
+    try:
+        for i in range(len(post_fix)):
+            sizes.append(tmp % 1024)
+            tmp >>= 10
+            if tmp == 0:
+                break
+
+        if len(sizes) <= 1:
+            return str(sizes[0]) + post_fix[0]
+        else:
+            largest = len(sizes) - 1
+            size = sizes[largest] + float(sizes[largest - 1]) / 1024
+            return '%03.2f' %  size + post_fix[largest]
+    except:
+        common.g_logger.info(traceback.print_exc())
+
+def get_time_form(total_time):
+    total_time = int(total_time)
+    hours = total_time / 3600
+    mins = (total_time % 3600) / 60
+    return str(hours) + 'h' + str(mins) + 'm'
 
 
 def main():
