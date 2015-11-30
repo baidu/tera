@@ -1797,17 +1797,17 @@ const leveldb::RawKeyOperator* TabletIO::GetRawKeyOperator() {
     return m_key_operator;
 }
 
-void TabletIO::GetAndClearCounter(TabletCounter* counter, int64_t interval) {
-    counter->set_low_read_cell(m_counter.low_read_cell.Clear() * 1000000 / interval);
-    counter->set_scan_rows(m_counter.scan_rows.Clear() * 1000000 / interval);
-    counter->set_scan_kvs(m_counter.scan_kvs.Clear() * 1000000 / interval);
-    counter->set_scan_size(m_counter.scan_size.Clear() * 1000000 / interval);
-    counter->set_read_rows(m_counter.read_rows.Clear() * 1000000 / interval);
-    counter->set_read_kvs(m_counter.read_kvs.Clear() * 1000000 / interval);
-    counter->set_read_size(m_counter.read_size.Clear() * 1000000 / interval);
-    counter->set_write_rows(m_counter.write_rows.Clear() * 1000000 / interval);
-    counter->set_write_kvs(m_counter.write_kvs.Clear() * 1000000 / interval);
-    counter->set_write_size(m_counter.write_size.Clear() * 1000000 / interval);
+void TabletIO::GetAndClearCounter(TabletCounter* counter) {
+    counter->set_low_read_cell(m_counter.low_read_cell.Clear());
+    counter->set_scan_rows(m_counter.scan_rows.Clear());
+    counter->set_scan_kvs(m_counter.scan_kvs.Clear());
+    counter->set_scan_size(m_counter.scan_size.Clear());
+    counter->set_read_rows(m_counter.read_rows.Clear());
+    counter->set_read_kvs(m_counter.read_kvs.Clear());
+    counter->set_read_size(m_counter.read_size.Clear());
+    counter->set_write_rows(m_counter.write_rows.Clear());
+    counter->set_write_kvs(m_counter.write_kvs.Clear());
+    counter->set_write_size(m_counter.write_size.Clear());
     counter->set_is_on_busy(IsBusy());
 }
 
