@@ -18,6 +18,7 @@
 #include "sdk/table_impl.h"
 #include "sdk/sdk_utils.h"
 #include "sdk/sdk_zk.h"
+#include "utils/config_utils.h"
 #include "utils/crypt.h"
 #include "utils/string_util.h"
 #include "utils/utils_cmd.h"
@@ -999,47 +1000,40 @@ static int InitFlags(const std::string& confpath, const std::string& log_prefix)
     MutexLock locker(&g_mutex);
     // search conf file, priority:
     //   user-specified > ./tera.flag > ../conf/tera.flag
-    std::string flagfile("--flagfile=");
+    std::string flagfile;
     if (SpecifiedFlagfileCount(confpath) > 1) {
         LOG(ERROR) << "should specify no more than one config file";
         return -1;
     }
 
     if (!confpath.empty() && IsExist(confpath)){
-        flagfile += confpath;
+        flagfile = confpath;
     } else if(!confpath.empty() && !IsExist(confpath)){
         LOG(ERROR) << "specified config file(function argument) not found";
         return -1;
     } else if (!FLAGS_tera_sdk_conf_file.empty() && IsExist(confpath)) {
-        flagfile += FLAGS_tera_sdk_conf_file;
+        flagfile = FLAGS_tera_sdk_conf_file;
     } else if (!FLAGS_tera_sdk_conf_file.empty() && !IsExist(confpath)) {
         LOG(ERROR) << "specified config file(FLAGS_tera_sdk_conf_file) not found";
         return -1;
     } else if (IsExist("./tera.flag")) {
-        flagfile += "./tera.flag";
+        flagfile = "./tera.flag";
     } else if (IsExist("../conf/tera.flag")) {
-        flagfile += "../conf/tera.flag";
+        flagfile = "../conf/tera.flag";
     } else if (IsExist(utils::GetValueFromEnv("TERA_CONF"))) {
-        flagfile += utils::GetValueFromEnv("TERA_CONF");
+        flagfile = utils::GetValueFromEnv("TERA_CONF");
     } else {
         LOG(ERROR) << "hasn't specify the flagfile, but default config file not found";
         return -1;
     }
 
-    int argc = 2;
-    char** argv = new char*[3];
-    argv[0] = const_cast<char*>("dummy");
-    argv[1] = const_cast<char*>(flagfile.c_str());
-    argv[2] = NULL;
+    utils::LoadFlagFile(flagfile);
 
-    // the gflags will get flags from falgfile
-    ::google::ParseCommandLineFlags(&argc, &argv, false);
     if (!g_is_glog_init) {
         ::google::InitGoogleLogging(log_prefix.c_str());
         utils::SetupLog(log_prefix);
         g_is_glog_init = true;
     }
-    delete[] argv;
 
     LOG(INFO) << "USER = " << FLAGS_tera_user_identity;
     LOG(INFO) << "Load config file: " << flagfile;
