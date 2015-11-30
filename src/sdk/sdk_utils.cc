@@ -929,8 +929,9 @@ bool ParseDelimiterFile(const string& filename, std::vector<string>* delims) {
     while (fin >> str) {
         delimiters.push_back(str);
     }
+
     bool is_delim_error = false;
-    for (size_t i = 1; i < delimiters.size() - 1; i++) {
+    for (size_t i = 1; i < delimiters.size(); i++) {
         if (delimiters[i] <= delimiters[i-1]) {
             LOG(ERROR) << "delimiter error: line: " << i + 1
                 << ", [" << delimiters[i] << "]";
