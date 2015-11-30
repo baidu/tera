@@ -161,7 +161,7 @@ public:
     void SetStatus(TabletStatus status);
     TabletStatus GetStatus();
 
-    void GetAndClearCounter(TabletCounter* counter, int64_t interval);
+    void GetAndClearCounter(TabletCounter* counter);
 
     int32_t AddRef();
     int32_t DecRef();

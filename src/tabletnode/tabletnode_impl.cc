@@ -435,6 +435,15 @@ void TabletNodeImpl::WriteTablet(const WriteTabletRequest* request,
     std::map<io::TabletIO*, std::vector<int32_t>* >::iterator it;
 
     int32_t row_num = request->row_list_size();
+    // check arguments
+    for (int32_t i = 0; i < row_num; i++) {
+        const RowMutationSequence& mu_seq = request->row_list(i);
+        if (mu_seq.row_key().size() >= 64 * 1024) { // 64KB
+            response->set_status(kTableNotSupport);
+            done->Run();
+            return;
+        }
+    }
     if (request->row_list_size() > 0) {
         for (int32_t i = 0; i < row_num; i++) {
             io::TabletIO* tablet_io = m_tablet_manager->GetTablet(

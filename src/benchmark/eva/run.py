@@ -4,6 +4,7 @@ import time
 import threading
 import traceback
 import json
+import signal
 
 from bin import eva_var
 from bin import eva_utils
@@ -68,6 +69,8 @@ def parse_input():
         elif pre == conf.SCHEMA:
             conf.g_test_conf[conf.SCHEMA] = post
             conf.g_test_conf[conf.LG_NUM] = len(post)
+        elif pre == conf.STEP:
+            conf.g_test_conf[conf.STEP] = post
 
     conf.g_test_conf[conf.ENTRY_SIZE] = conf.g_test_conf[conf.KEY_SIZE] + conf.g_test_conf[conf.VALUE_SIZE]
     conf.g_test_conf[conf.WRITE_SPEED_LIMIT] = int(float(conf.g_speed_limit) / conf.g_test_conf[conf.TABLET_NUM] * 1024 * 1024 / conf.g_test_conf[conf.ENTRY_SIZE])
@@ -75,7 +78,12 @@ def parse_input():
     conf.g_test_conf[conf.CF_NUM], conf.g_test_conf[conf.CF] = \
         eva_utils.table_manipulate(conf.g_test_conf[conf.TABLE_NAME], conf.CF, conf.g_test_conf[conf.SCHEMA])
     if conf.g_test_conf[conf.CF] != '':
-        bench_cmd_prefix += '--cf=' + conf.g_test_conf[conf.CF]
+        bench_cmd_prefix += '--cf=' + conf.g_test_conf[conf.CF] + ' '
+    if conf.g_test_conf[conf.STEP] == 'True':
+        bench_cmd_prefix += '--key_step=' + str(common.RANDOM_MAX / conf.g_test_conf[conf.ENTRY_NUM]) + ' '
+    else:
+        print conf.g_test_conf[conf.STEP], type(conf.g_test_conf[conf.STEP])
+    print bench_cmd_prefix
     conf.TERA_BENCH = bench_cmd_prefix
     common.g_logger.info('running tera_mark: ' + str(conf.g_test_conf))
 
@@ -91,6 +99,7 @@ def work():
 
 
 def run_test():
+    common.g_query_thread.setDaemon(True)
     common.g_query_thread.start()
     common.g_logger.info('running tera_mark with {n} tablets'.format(n=conf.g_test_conf[conf.TABLET_NUM]))
     wait_list = []
@@ -131,7 +140,10 @@ def run_test():
     common.g_exit = True
     common.g_query_event.set()
     common.g_query_thread.join()
+    compute_write_main(total_time)
 
+
+def compute_write_main(total_time):
     try:
         eva_utils.compute_ts_stat()
         eva_utils.compute_stat()
@@ -215,12 +227,12 @@ def run_read_test():
 
             global bench_cmd
             if conf.g_test_conf[conf.KV] is True:
-                tera_bench = './tera_bench --value_size={vs} --compression_ratio=1 --random=t --key_size={ks} --benchmarks=random --num=10000000'.\
+                tera_bench = './tera_bench --value_size={vs} --compression_ratio=1 --key_seed=111 --value_seed=111 --key_size={ks} --benchmarks=random --num=10000000'.\
                     format(ks=conf.g_test_conf[conf.KEY_SIZE], vs=conf.g_test_conf[conf.VALUE_SIZE])
                 bench_cmd = tera_bench + " | awk -F '\t' '{print \"" + prefix + """\"$1"\t"$2}' """
             else:
-                tera_bench = './tera_bench --value_size=1024 --compression_ratio=1 --random=t --key_size=16 --benchmarks=random --cf={cf} --num=10000000'.\
-                    format(cf=conf.g_test_conf[conf.CF])
+                tera_bench = './tera_bench --value_size={vs} --compression_ratio=1 --key_seed=111 --value_seed=111 --key_size={ks} --benchmarks=random --cf={cf} --num=10000000'.\
+                    format(cf=conf.g_test_conf[conf.CF], ks=conf.g_test_conf[conf.KEY_SIZE], vs=conf.g_test_conf[conf.VALUE_SIZE])
                 bench_cmd = tera_bench + " | awk -F '\t' '{print \"" + prefix + """\"$1"\t"$2"\t"$3"\t"$4}' """
             cmd = '{bench} | ./tera_mark --mode=w --tablename={name} --type=async --verify=false --entry_limit={limit}'.\
                 format(bench=bench_cmd, name=conf.g_test_conf[conf.TABLE_NAME], limit=str(conf.g_test_conf[conf.WRITE_SPEED_LIMIT]))
@@ -243,7 +255,13 @@ def run_read_test():
     return read_ret_list, write_ret_list
 
 
+def handler(signum, frame):
+    common.g_exit = True
+
+
 def main():
+    signal.signal(signal.SIGINT, handler)
+    signal.signal(signal.SIGTERM, handler)
     eva_utils.init()
     parse_input()
     work()
