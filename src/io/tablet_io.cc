@@ -1451,6 +1451,7 @@ void TabletIO::SetupOptionsForLG() {
     std::map<uint32_t, leveldb::LG_info*>* lg_info_list =
         new std::map<uint32_t, leveldb::LG_info*>;
 
+    int64_t triggered_log_size = 0;
     for (int32_t lg_i = 0; lg_i < m_table_schema.locality_groups_size();
          ++lg_i) {
         if (m_table_schema.locality_groups(lg_i).is_del()) {
@@ -1506,6 +1507,7 @@ void TabletIO::SetupOptionsForLG() {
         } else {
             lg_info->write_buffer_size = max_size;
         }
+        triggered_log_size += lg_info->write_buffer_size;
         exist_lg_list->insert(lg_i);
         (*lg_info_list)[lg_i] = lg_info;
     }
@@ -1514,8 +1516,7 @@ void TabletIO::SetupOptionsForLG() {
         delete exist_lg_list;
     } else {
         m_ldb_options.exist_lg_list = exist_lg_list;
-        m_ldb_options.flush_triggered_log_size = (exist_lg_list->size() + 1)
-                                               * m_ldb_options.write_buffer_size;
+        m_ldb_options.flush_triggered_log_size = triggered_log_size * 2;
     }
     if (lg_info_list->size() == 0) {
         delete lg_info_list;
