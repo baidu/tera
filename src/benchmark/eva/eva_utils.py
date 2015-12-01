@@ -249,7 +249,7 @@ def write_email(fp, desp):
     doc = Document()
     email = doc.createElement('email')
     doc.appendChild(email)
-    write_title(email, doc, 'h3', common.EMAIL_BLOCK_TITLE)
+    write_title(email, doc, 'h3', common.EMAIL_BLOCK_TITLE + ' ' + time.strftime('%Y-%m-%d-%H-%M-%S'))
     write_title(email, doc, 'h4', desp)
     print conf.g_test_conf
     global performance

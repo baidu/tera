@@ -91,13 +91,14 @@ def parse_input():
     conf.g_datasize = (conf.g_test_conf[conf.CF_NUM] * conf.g_test_conf[conf.TABLET_NUM] *
                           conf.g_test_conf[conf.ENTRY_NUM] * conf.g_test_conf[conf.ENTRY_SIZE])
     if conf.g_test_conf[conf.MODE] == conf.MODE_SEQ_WRITE or conf.g_test_conf[conf.MODE] == conf.MODE_RAND_WRITE:
-        print 'time: ', get_time_form((conf.g_datasize >> 20) / float(conf.g_speed_limit))
+        print '\t%-25s' % 'estimated running time:', get_time_form((conf.g_datasize >> 20) / float(conf.g_speed_limit))
     else:
-        print 'time: ', get_time_form(conf.g_test_conf[conf.ENTRY_NUM] /
+        print '\t%-25s' % 'estimated running time:', get_time_form(conf.g_test_conf[conf.ENTRY_NUM] /
                                       conf.g_test_conf[conf.READ_SPEED_LIMIT])
     conf.g_datasize = get_data_size(conf.g_datasize)
-    print conf.g_datasize
-    common.g_logger.info('running tera_mark: ' + str(conf.g_test_conf))
+    print '\t%-25s' % 'user data size:', conf.g_datasize
+    if common.g_logger is not None:
+        common.g_logger.info('running tera_mark: ' + str(conf.g_test_conf))
 
 
 def work():
