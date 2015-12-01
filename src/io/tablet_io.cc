@@ -528,7 +528,7 @@ bool TabletIO::GetDataSize(uint64_t* size, std::vector<uint64_t>* lgsize,
     }
 
     m_db->GetApproximateSizes(size, lgsize);
-    VLOG(6) << "GetDataSize(" << m_tablet_path << ") : " << *size;
+    VLOG(10) << "GetDataSize(" << m_tablet_path << ") : " << *size;
     {
         MutexLock lock(&m_mutex);
         m_db_ref_count--;
