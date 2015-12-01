@@ -202,6 +202,9 @@ int32_t Hdfs::ListDirectory(const std::string& path,
                             std::vector<std::string>* result) {
   int numEntries = 0;
   hdfsFileInfo* pHdfsFileInfo = 0;
+  if (0 != Exists(path)) {
+    return -1;
+  }
   pHdfsFileInfo = (*hdfsListDirectory)((hdfsFS)fs_, path.c_str(), &numEntries);
   if (numEntries >= 0) {
     for (int i = 0; i < numEntries; i++) {
