@@ -170,6 +170,8 @@ public:
     static bool FindAverageKey(const std::string& start, const std::string& end,
                                std::string* res);
 
+    bool HasRoomForWrite(const WriteTabletRequest* request,
+                         const std::vector<int32_t>* index_list);
 private:
     friend class TabletWriter;
     bool WriteWithoutLock(const std::string& key, const std::string& value,

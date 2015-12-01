@@ -63,6 +63,7 @@ DECLARE_int32(tera_memenv_block_cache_size);
 DECLARE_bool(tera_tablet_use_memtable_on_leveldb);
 DECLARE_int64(tera_tablet_memtable_ldb_write_buffer_size);
 DECLARE_int64(tera_tablet_memtable_ldb_block_size);
+DECLARE_int64(tera_tablet_lg_memory_store_size);
 
 extern tera::Counter row_read_delay;
 
@@ -1096,6 +1097,27 @@ bool TabletIO::WriteOne(const std::string& key, const std::string& value,
     leveldb::WriteBatch batch;
     batch.Put(key, value);
     return WriteBatch(&batch, false, sync, status);
+}
+
+// if there is room for every locality group(memory store), return true.
+// otherwise, return false for keep away from OOM(out-of-memory)
+bool TabletIO::HasRoomForWrite(const WriteTabletRequest* request,
+                               const std::vector<int32_t>* index_list) {
+    uint64_t table_size = 0;
+    std::vector<uint64_t> lg_size;
+    GetDataSize(&table_size, &lg_size);
+    std::map<uint32_t, uint64_t> request_lg_size; // lg id -> request lg size
+    m_async_writer->CountRequestSize(*request, *index_list, m_kv_only, NULL, &request_lg_size);
+    std::map<uint32_t, uint64_t>::const_iterator it;
+    for (int32_t i = 0; i < m_table_schema.locality_groups_size(); ++i) {
+        const LocalityGroupSchema& lg_schema = m_table_schema.locality_groups(i);
+        if ((lg_schema.store_type() == MemoryStore)
+            && (static_cast<int64_t>(request_lg_size[i] + lg_size[i]) >
+                FLAGS_tera_tablet_lg_memory_store_size * 1024 * 1024 * 1024)) { // GB -> Bytes
+            return false;
+        }
+    }
+    return true;
 }
 
 bool TabletIO::Write(const WriteTabletRequest* request,

@@ -43,6 +43,7 @@ DEFINE_int32(tera_tablet_flush_log_num, 100000, "the max log number before flush
 DEFINE_bool(tera_tablet_use_memtable_on_leveldb, false, "enable memtable based on in-memory leveldb");
 DEFINE_int64(tera_tablet_memtable_ldb_write_buffer_size, 1000, "the buffer size(in KB) for memtable on leveldb");
 DEFINE_int64(tera_tablet_memtable_ldb_block_size, 4, "the block size (in KB) for memtable on leveldb");
+DEFINE_int64(tera_tablet_lg_memory_store_size, 5, "the max size (in GB) of every memory storage lg");
 DEFINE_int64(tera_tablet_ldb_sst_size, 8, "the sstable file size (in MB) on leveldb");
 DEFINE_bool(tera_sync_log, true, "flush all in-memory parts of log file to stable storage");
 DEFINE_bool(tera_io_cache_path_vanish_allowed, false, "if true, allow cache path not exist");

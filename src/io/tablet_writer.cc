@@ -74,10 +74,16 @@ void TabletWriter::Stop() {
     LOG(INFO) << "tablet writer is stopped";
 }
 
-uint64_t TabletWriter::CountRequestSize(const WriteTabletRequest& request,
-                                        const std::vector<int32_t>& index_list,
-                                        bool kv_only) {
-    uint64_t data_size = 0;
+void TabletWriter::CountRequestSize(const WriteTabletRequest& request,
+                                    const std::vector<int32_t>& index_list,
+                                    bool kv_only, uint64_t* request_size,
+                                    std::map<uint32_t, uint64_t>* request_lg_size) {
+    if (request_size != NULL) {
+        *request_size = 0;
+    }
+    if (request_lg_size != NULL) {
+        request_lg_size->clear();
+    }
     int32_t index_num = index_list.size();
 
     for (int32_t i = 0; i < index_num; i++) {
@@ -85,16 +91,29 @@ uint64_t TabletWriter::CountRequestSize(const WriteTabletRequest& request,
         const RowMutationSequence& mu_seq = request.row_list(index);
         int32_t mu_num = mu_seq.mutation_sequence_size();
         for (int32_t j = 0; j < mu_num; j++) {
+            uint64_t mu_size = 0;
             const Mutation& mu = mu_seq.mutation_sequence(j);
-            data_size += mu_seq.row_key().size() + mu.value().size();
+            if ((mu.type() == kDeleteColumn)
+                || (mu.type() == kDeleteColumns)
+                || (mu.type() == kDeleteFamily)
+                || (mu.type() == kDeleteRow)) {
+                continue;
+            }
+            mu_size += mu_seq.row_key().size() + mu.value().size();
             if (!kv_only) {
-                data_size += mu.family().size()
+                mu_size += mu.family().size()
                     + mu.qualifier().size()
                     + sizeof(mu.timestamp());
+                uint32_t lg_id = m_tablet->GetLGidByCFName(mu.family());
+                if (request_lg_size != NULL) {
+                    (*request_lg_size)[lg_id] += mu_size;
+                }
+            }
+            if (request_size != NULL) {
+                *request_size += mu_size;
             }
         }
     }
-    return data_size;
 }
 
 void TabletWriter::Write(const WriteTabletRequest* request,
@@ -104,8 +123,8 @@ void TabletWriter::Write(const WriteTabletRequest* request,
                          Counter* done_counter, WriteRpcTimer* timer) {
     static uint32_t last_print = time(NULL);
     const uint64_t MAX_PENDING_SIZE = FLAGS_tera_asyncwriter_pending_limit * 1024UL;
-    uint64_t request_size = CountRequestSize(*request, *index_list,
-                                             m_tablet->KvOnly());
+    uint64_t request_size = 0;
+    CountRequestSize(*request, *index_list, m_tablet->KvOnly(), &request_size, NULL);
     WriteTask task;
     task.request = request;
     task.response = response;
