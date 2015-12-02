@@ -102,6 +102,12 @@ public:
     virtual int Compare(const Slice& key1, const Slice& key2) const {
         return key1.compare(key2);
     }
+
+    virtual void FindSuccessor(const std::string& row_key,
+                               std::string* successor_key) const {
+        *successor_key = row_key;
+        successor_key->push_back('\x1');
+    }
 };
 
 /**
@@ -228,6 +234,12 @@ public:
         Slice ts_type2(data2 + size2 - 12, 8);
         return ts_type1.compare(ts_type2);
     }
+
+    virtual void FindSuccessor(const std::string& row_key,
+                               std::string* successor_key) const {
+        *successor_key = row_key;
+        successor_key->push_back('\x0');
+    }
 };
 
 // support KV-pair with TTL, Key's format :
@@ -274,6 +286,12 @@ public:
             }
         }
         return r;
+    }
+
+    virtual void FindSuccessor(const std::string& row_key,
+                               std::string* successor_key) const {
+        *successor_key = row_key;
+        successor_key->push_back('\x0');
     }
 };
 

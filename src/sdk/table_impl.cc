@@ -358,6 +358,8 @@ void TableImpl::CommitScan(ScanTask* scan_task,
         tera::ColumnFamily* column_family = request->add_cf_list();
         column_family->CopyFrom(*(impl->GetColumnFamily(i)));
     }
+    // set qualifier range
+    impl->SetQualifierRange(request);
 
     request->set_timestamp(common::timer::get_micros());
     Closure<void, ScanTabletRequest*, ScanTabletResponse*, bool, int>* done =

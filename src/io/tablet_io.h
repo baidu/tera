@@ -44,11 +44,13 @@ public:
         kUnLoading2 = kTabletUnLoading2
     };
     typedef std::map< std::string, std::set<std::string> > ColumnFamilyMap;
+    typedef std::map< std::string, std::pair<std::string, std::string> > QualifierRange;
     struct ScanOptions {
         uint32_t max_versions;
         uint32_t max_size;
         int64_t ts_start;
         int64_t ts_end;
+        QualifierRange qu_range;// {cf, <qu_start, qu_end>}
         uint64_t snapshot_id;
         FilterList filter_list;
         ColumnFamilyMap column_family_list;
@@ -219,6 +221,11 @@ private:
 
     void MakeKvPair(leveldb::Slice key, leveldb::Slice col, leveldb::Slice qual,
                     int64_t ts, leveldb::Slice value, KeyValuePair* kv);
+
+
+    void SeekIterator(const std::string& row, const std::string& col,
+                      const std::string& qual, int64_t ts,
+                      leveldb::Iterator* scan_it);
 
 private:
     mutable Mutex m_mutex;

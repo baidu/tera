@@ -562,6 +562,21 @@ bool TabletIO::Read(const leveldb::Slice& key, std::string* value,
     return true;
 }
 
+void TabletIO::SeekIterator(const std::string& row, const std::string& col,
+                            const std::string& qual, int64_t ts,
+                            leveldb::Iterator* scan_it) {
+    std::string seek_key;
+    m_key_operator->EncodeTeraKey(row, col, qual, ts, leveldb::TKT_FORSEEK,
+                                  &seek_key);
+
+    VLOG(10) << "ll-scan: " << "seek to " << DebugString(row) << ":"
+             << DebugString(col) << ":" << DebugString(qual)
+             << std::hex << ts;
+
+    scan_it->Seek(seek_key);
+    VLOG(10) << "ll-scan: seek done";
+}
+
 StatusCode TabletIO::InitedScanInterator(const std::string& start_tera_key,
                                          const ScanOptions& scan_options,
                                          leveldb::Iterator** scan_it) {
@@ -586,6 +601,7 @@ StatusCode TabletIO::InitedScanInterator(const std::string& start_tera_key,
     VLOG(10) << "ll-scan: " << "startkey=[" << DebugString(start_key.ToString()) << ":"
              << DebugString(start_col.ToString()) << ":" << DebugString(start_qual.ToString());
     std::string start_seek_key;
+
     m_key_operator->EncodeTeraKey(start_key.ToString(), "", "", kLatestTs,
                                   leveldb::TKT_FORSEEK, &start_seek_key);
     (*scan_it)->Seek(start_seek_key);
@@ -639,6 +655,7 @@ inline bool TabletIO::LowLevelScan(const std::string& start_tera_key,
     int64_t now_time = GetTimeStampInMs();
     int64_t time_out = now_time + scan_options.timeout;
     KeyValuePair next_start_kv_pair;
+    std::string scan_cf, scan_qu_start, scan_qu_end;
     VLOG(9) << "ll-scan timeout set to be " << scan_options.timeout;
 
     for (; it->Valid();) {
@@ -658,11 +675,6 @@ inline bool TabletIO::LowLevelScan(const std::string& start_tera_key,
             it->Next();
             continue;
         }
-        if (now_time > time_out) {
-            VLOG(9) << "ll-scan timeout. Mark next start key: " << DebugString(tera_key.ToString());
-            MakeKvPair(key, col, qual, ts, "", &next_start_kv_pair);
-            break;
-        }
 
         VLOG(10) << "ll-scan: " << "tablet=[" << m_tablet_path
             << "] key=[" << DebugString(key.ToString())
@@ -673,6 +685,59 @@ inline bool TabletIO::LowLevelScan(const std::string& start_tera_key,
         if (end_row_key.size() && key.compare(end_row_key) >= 0) {
             // scan finished
             break;
+        }
+
+        if (now_time > time_out) {
+            VLOG(9) << "ll-scan timeout. Mark next start key: " << DebugString(tera_key.ToString());
+            MakeKvPair(key, col, qual, ts, "", &next_start_kv_pair);
+            break;
+        }
+
+        // qualifier range seek
+        if (scan_options.qu_range.size()) {
+            QualifierRange::const_iterator qu_it;
+            qu_it = scan_options.qu_range.lower_bound(col.ToString());
+            if (qu_it == scan_options.qu_range.end()) {
+                // seek to next key
+                std::string next_key;
+                m_key_operator->FindSuccessor(key.ToString(), &next_key);
+                SeekIterator(next_key, "", "", kLatestTs, it);
+                continue;
+            } else {
+                leveldb::Slice scan_cf = qu_it->first;
+                if (scan_cf.compare(col) > 0) {
+                    // seek to next cf
+                    SeekIterator(key.ToString(), scan_cf.ToString(), "", kLatestTs, it);
+                    continue;
+                }
+                // check qualifier range wether match or not
+                leveldb::Slice scan_qu_start, scan_qu_end;
+                const std::pair<std::string, std::string>& scan_qu_range = qu_it->second;
+                scan_qu_start = scan_qu_range.first;
+                scan_qu_end = scan_qu_range.second;
+                // qualifier range not match
+                if (scan_qu_start.compare(qual) > 0) {
+                    // seek to start qual
+                    SeekIterator(key.ToString(), scan_cf.ToString(), scan_qu_start.ToString(), kLatestTs, it);
+                    continue;
+                } else if (scan_qu_end.compare(qual) < 0) {
+                    // seek to next cf
+                    ++qu_it;
+                    if (qu_it == scan_options.qu_range.end()) {
+                        // seek to next key
+                        std::string next_key;
+                        m_key_operator->FindSuccessor(key.ToString(), &next_key);
+                        SeekIterator(next_key, "", "", kLatestTs, it);
+                        continue;
+                    } else {
+                        scan_cf = qu_it->first;
+                        // seek to next cf
+                        SeekIterator(key.ToString(), scan_cf.ToString(), "", kLatestTs, it);
+                        continue;
+                    }
+                }
+                // qualifier range match
+            }
         }
 
         const std::set<std::string>& cf_set = scan_options.iter_cf_set;
@@ -1424,6 +1489,15 @@ void TabletIO::SetupScanRowOptions(const ScanTabletRequest* request,
     }
     if (request->timeout()) {
         scan_options->timeout = request->timeout();
+    }
+    // setup qualifier range
+    if (request->qu_range_size()) {
+        for (uint32_t i = 0; i < (uint32_t)request->qu_range_size(); i++) {
+            const ScanQualifierRange& range = request->qu_range(i);
+            scan_options->qu_range.insert(
+                   std::pair<std::string, std::pair<std::string, std::string> >(range.cf(),
+                            std::pair<std::string, std::string>(range.qu_start(), range.qu_end())));
+        }
     }
 
     scan_options->snapshot_id = request->snapshot_id();
