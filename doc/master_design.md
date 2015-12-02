@@ -48,6 +48,31 @@ Copyright 2015, Baidu, Inc.
     * table的ID是table name，tablet的ID是start key，user的ID是user name
 
 ###流程
+####启动(startup)
+  1. 内存status设为secondary
+  1. 在名字服务(name service)的master目录下创建实节点，key是自增整数，value是本机地址
+  1. 获取master目录下的所有实节点
+  1. 判断key最小的节点value是否为本机地址
+    * 若为本机地址，将内存status设为running，启动路程完成
+    * 若不是本机地址，监视(watch)master目录的改变，进入等待，当zk通知master目录发送改变后，重新执行最后两步
+
+####初始化(initial)
+  1. 确认内存status为running
+  1. 获取名字服务的ts目录下的实节点列表，并监视目录的改变
+  1. 命令各节点汇报各级状态，等待汇报全部完成
+  1. 若汇报结果中没有meta tablet， 选择一个ts，命令其加载meta tablet，并等待加载完成
+  1. 在名字服务的根目录下创建虚节点，key是"root_table"，value是ts地址
+  1. 向meta tablet所在的ts发送扫描命令，扫描meta tablet的全部内容
+  1. 将扫描结果中的tablet全部添加到内存tablet_manager结构体中
+  1. 将扫描结果中的tablet与汇报结果中的tablet做对比，不一致的tablet以扫描结果为准
+    * 对于多于的tablet，命令所在ts将其卸载
+    * 对于缺少的tablet，选择一个ts，命令其加载
+    * 对于所在ts有误的tablet，将其迁移到正确的ts上
+  1. 启动多项定时任务
+    * 每隔一段时间获取ts最新状态
+    * 每隔一段时间清理垃圾数据文件
+    * 每隔一段时间进行ts间的tablet负载均衡
+
 ####加载子表(load tablet)
   1. 确定内存tablet结构的status是offline
   1. 修改内存tablet结构，status改为onload，addr改为新tabletnode
@@ -71,6 +96,7 @@ Copyright 2015, Baidu, Inc.
   1. 删除meta table中的tablet项，增加两个新的tablet项
 
 ####合并子表(merge tablets)
+  TODO
 
 ####创建表格(create table)
   1. 在内存tablet_manager中增加对应的table和tablet结构体，status设为offline
@@ -112,8 +138,14 @@ Copyright 2015, Baidu, Inc.
   1. 判断当前运行模式
     * 如果是安全模式，则退出流程
     * 如果是普通模式，则继续将status改为onkick
-  1. 在zk的kick目录下创建虚节点，key和value分别是故障节点的session ID和地址
+  1. 在名字服务的kick目录下创建虚节点，key和value分别是故障节点的session ID和地址
 
-###算法
-####
+####节点状态更新
+  1. 每隔一定时间命令全部存活节点汇报各自状态
+  1. 将获取到的状态保存到tabletnode结构体中
 
+####垃圾清理
+  TODO
+  
+####负载均衡
+  TODO
