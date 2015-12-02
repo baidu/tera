@@ -633,6 +633,7 @@ inline bool TabletIO::LowLevelScan(const std::string& start_tera_key,
     std::string last_key, last_col, last_qual;
     uint32_t buffer_size = 0;
     uint32_t version_num = 1;
+    uint64_t nr_scan_round = 0;
     value_list->clear_key_values();
     *read_row_count = 0;
     *read_bytes = 0;
@@ -658,6 +659,20 @@ inline bool TabletIO::LowLevelScan(const std::string& start_tera_key,
             it->Next();
             continue;
         }
+
+        // stream scan Resume Scan Context, will not affect SYNC scan
+        if ((nr_scan_round++ == 0) && (scan_options.version_num > 0)) {
+            last_key.assign(key.data(), key.size());
+            last_col.assign(col.data(), col.size());
+            last_qual.assign(qual.data(), qual.size());
+            version_num = scan_options.version_num;
+            VLOG(10) << "stream scan, resume scan context, version_num " << version_num
+                << ", key " << DebugString(key.ToString()) << ", col " << DebugString(col.ToString())
+                << ", qual " << DebugString(qual.ToString());
+            it->Next();
+            continue;
+        }
+
         if (now_time > time_out) {
             VLOG(9) << "ll-scan timeout. Mark next start key: " << DebugString(tera_key.ToString());
             MakeKvPair(key, col, qual, ts, "", &next_start_kv_pair);
@@ -690,6 +705,7 @@ inline bool TabletIO::LowLevelScan(const std::string& start_tera_key,
             continue;
         }
 
+        // only use for sync scan, not available for stream scan
         if (m_key_operator->Compare(it->key(), start_tera_key) < 0) {
             // skip out-of-range records
             // keep record of version info to prevent dirty data
@@ -707,6 +723,7 @@ inline bool TabletIO::LowLevelScan(const std::string& start_tera_key,
             continue;
         }
 
+        // begin to scan next row
         if (key.compare(last_key) != 0) {
             *read_row_count += 1;
             ProcessRowBuffer(row_buf, scan_options, value_list, &buffer_size);
@@ -743,11 +760,15 @@ inline bool TabletIO::LowLevelScan(const std::string& start_tera_key,
         }
 
         KeyValuePair kv;
+        (const_cast<ScanOptions&>(scan_options)).version_num = version_num;
         MakeKvPair(key, col, qual, ts, value, &kv);
         row_buf.push_back(kv);
 
         // check scan buffer
         if (buffer_size >= scan_options.max_size) {
+            VLOG(10) << "stream scan, break scan context, version_num " << version_num
+                << ", key " << DebugString(key.ToString()) << ", col " << DebugString(col.ToString())
+                << ", qual " << DebugString(qual.ToString());
             break;
         }
 
@@ -1258,11 +1279,7 @@ bool TabletIO::ScanRowsStreaming(const ScanTabletRequest* request,
             if (!scan_stream->PushData(data_id, value_list)) {
                 break;
             }
-
             data_id++;
-            if (it->Valid()) {
-                it->Next();
-            }
         }
         scan_stream->SetStatusCode(status);
         if (is_complete) {
@@ -1425,7 +1442,7 @@ void TabletIO::SetupScanRowOptions(const ScanTabletRequest* request,
     if (request->timeout()) {
         scan_options->timeout = request->timeout();
     }
-
+    scan_options->version_num = 0;
     scan_options->snapshot_id = request->snapshot_id();
 }
 
