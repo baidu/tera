@@ -655,7 +655,6 @@ inline bool TabletIO::LowLevelScan(const std::string& start_tera_key,
     int64_t now_time = GetTimeStampInMs();
     int64_t time_out = now_time + scan_options.timeout;
     KeyValuePair next_start_kv_pair;
-    std::string scan_cf, scan_qu_start, scan_qu_end;
     VLOG(9) << "ll-scan timeout set to be " << scan_options.timeout;
 
     for (; it->Valid();) {
