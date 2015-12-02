@@ -654,6 +654,7 @@ inline bool TabletIO::LowLevelScan(const std::string& start_tera_key,
     *read_bytes = 0;
     int64_t now_time = GetTimeStampInMs();
     int64_t time_out = now_time + scan_options.timeout;
+    bool has_filter = scan_options.filter_list.filter_size() > 0;
     KeyValuePair next_start_kv_pair;
     VLOG(9) << "ll-scan timeout set to be " << scan_options.timeout;
 
@@ -773,8 +774,10 @@ inline bool TabletIO::LowLevelScan(const std::string& start_tera_key,
 
         if (key.compare(last_key) != 0) {
             *read_row_count += 1;
-            ProcessRowBuffer(row_buf, scan_options, value_list, &buffer_size);
-            row_buf.clear();
+            if (has_filter) {
+                ProcessRowBuffer(row_buf, scan_options, value_list, &buffer_size);
+                row_buf.clear();
+            }
         }
 
         // max version filter
@@ -808,7 +811,13 @@ inline bool TabletIO::LowLevelScan(const std::string& start_tera_key,
 
         KeyValuePair kv;
         MakeKvPair(key, col, qual, ts, value, &kv);
-        row_buf.push_back(kv);
+        if (!has_filter) {
+            if (!FilterCell(scan_options, col.ToString(), qual.ToString(), ts)) {
+                buffer_size += key.size() + col.size() + qual.size() + sizeof(ts) + value.size();
+            }
+        } else {
+            row_buf.push_back(kv);
+        }
 
         // check scan buffer
         if (buffer_size >= scan_options.max_size) {
@@ -821,8 +830,9 @@ inline bool TabletIO::LowLevelScan(const std::string& start_tera_key,
     }
 
     // process the last row of tablet
-    ProcessRowBuffer(row_buf, scan_options, value_list, &buffer_size);
-
+    if (has_filter) {
+        ProcessRowBuffer(row_buf, scan_options, value_list, &buffer_size);
+    }
     leveldb::Status it_status;
     if (!it->Valid()) {
         it_status = it->status();
@@ -1750,29 +1760,36 @@ void TabletIO::ProcessRowBuffer(std::list<KeyValuePair>& row_buf,
         const std::string& value = it->value();
         int64_t ts = it->timestamp();
 
-        // skip unnecessary columns and qualifiers
-        if (scan_options.column_family_list.size() > 0) {
-            ColumnFamilyMap::const_iterator it =
-                scan_options.column_family_list.find(col);
-            if (it != scan_options.column_family_list.end()) {
-                const std::set<std::string>& qual_list = it->second;
-                if (qual_list.size() > 0 && qual_list.end() == qual_list.find(qual)) {
-                    continue;
-                }
-            } else {
-                continue;
-            }
-        }
-        // time range filter
-        if (ts < scan_options.ts_start || ts > scan_options.ts_end) {
+        if (FilterCell(scan_options, col, qual, ts)) {
             continue;
         }
-
         value_list->add_key_values()->CopyFrom(*it);
-
         *buffer_size += key.size() + col.size() + qual.size()
             + sizeof(ts) + value.size();
     }
+}
+
+bool TabletIO::FilterCell(const ScanOptions& scan_options,
+                          const std::string& col,
+                          const std::string& qual, int64_t ts) {
+    // skip unnecessary columns and qualifiers
+    if (scan_options.column_family_list.size() > 0) {
+        ColumnFamilyMap::const_iterator it =
+            scan_options.column_family_list.find(col);
+        if (it != scan_options.column_family_list.end()) {
+            const std::set<std::string>& qual_list = it->second;
+            if (qual_list.size() > 0 && qual_list.end() == qual_list.find(qual)) {
+                return true;
+            }
+        } else {
+            return true;
+        }
+    }
+    // time range filter
+    if (ts < scan_options.ts_start || ts > scan_options.ts_end) {
+        return true;
+    }
+    return false;
 }
 
 uint64_t TabletIO::GetSnapshot(uint64_t id, uint64_t snapshot_sequence,
