@@ -875,9 +875,8 @@ bool TabletIO::LowLevelSeek(const std::string& row_key,
                 compact_strategy->ScanDrop(it_data->key(), 0);
             }
         } else {
-            VLOG(10) << "ll-seek fail, error iterator.";
-            SetStatusCode(kKeyNotExist, &s);
-            break;
+            VLOG(10) << "ll-seek fail, not found.";
+            continue;
         }
 
         if (qu_set.empty()) {
