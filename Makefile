@@ -24,6 +24,7 @@ MASTER_SRC := $(wildcard src/master/*.cc)
 TABLETNODE_SRC := $(wildcard src/tabletnode/*.cc)
 IO_SRC := $(wildcard src/io/*.cc)
 SDK_SRC := $(wildcard src/sdk/*.cc)
+HTTP_SRC := $(wildcard src/sdk/http/*.cc)
 PROTO_SRC := $(filter-out %.pb.cc, $(wildcard src/proto/*.cc)) $(PROTO_OUT_CC)
 JNI_TERA_SRC := $(wildcard src/sdk/java/native-src/*.cc)
 VERSION_SRC := src/version.cc
@@ -54,6 +55,7 @@ CLIENT_OBJ := $(CLIENT_SRC:.cc=.o)
 TERA_C_OBJ := $(TERA_C_SRC:.cc=.o)
 MONITOR_OBJ := $(MONITOR_SRC:.cc=.o)
 MARK_OBJ := $(MARK_SRC:.cc=.o)
+HTTP_OBJ := $(HTTP_SRC:.cc=.o)
 TEST_OBJ := $(TEST_SRC:.cc=.o)
 ALL_OBJ := $(MASTER_OBJ) $(TABLETNODE_OBJ) $(IO_OBJ) $(SDK_OBJ) $(PROTO_OBJ) \
            $(JNI_TERA_OBJ) $(OTHER_OBJ) $(COMMON_OBJ) $(SERVER_OBJ) $(CLIENT_OBJ) \
@@ -90,7 +92,7 @@ check: $(TESTS)
 clean:
 	rm -rf $(ALL_OBJ) $(PROTO_OUT_CC) $(PROTO_OUT_H) $(TEST_OUTPUT)
 	$(MAKE) clean -C src/leveldb
-	rm -rf $(PROGRAM) $(LIBRARY) $(TERA_C_SO) $(JNILIBRARY) $(BENCHMARK) $(TESTS)
+	rm -rf $(PROGRAM) $(LIBRARY) $(TERA_C_SO) $(JNILIBRARY) $(BENCHMARK) $(TESTS) terahttp
 
 cleanall:
 	$(MAKE) clean
@@ -116,6 +118,9 @@ teramo: $(MONITOR_OBJ) $(LIBRARY)
 
 tera_mark: $(MARK_OBJ) $(LIBRARY) $(LEVELDB_LIB)
 	$(CXX) -o $@ $(MARK_OBJ) $(LIBRARY) $(LEVELDB_LIB) $(LDFLAGS)
+
+terahttp: $(HTTP_OBJ) $(PROTO_OBJ) $(LIBRARY)
+	$(CXX) -o $@ $(HTTP_OBJ) $(PROTO_OBJ) $(LIBRARY) $(LDFLAGS)
 
 libjni_tera.so: $(JNI_TERA_OBJ) $(LIBRARY)
 	$(CXX) -shared $(JNI_TERA_OBJ) -Xlinker "-(" $(LIBRARY) $(LDFLAGS) -Xlinker "-)" -o $@
