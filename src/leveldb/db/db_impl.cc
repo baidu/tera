@@ -487,8 +487,7 @@ Status DBImpl::Recover(VersionEdit* edit) {
       std::string path = RealDbName(dbname_, *it_tablet);
       Log(options_.info_log, "[%s] GetChildren(%s)", dbname_.c_str(), path.c_str());
       std::vector<std::string> filenames;
-      s = env_->GetChildren(path, &filenames);
-      if (!s.ok()) {
+      if (!env_->GetChildren(path, &filenames).ok()) {
         Log(options_.info_log, "[%s] GetChildren(%s) fail: %s",
             dbname_.c_str(), path.c_str(), s.ToString().c_str());
         continue;
