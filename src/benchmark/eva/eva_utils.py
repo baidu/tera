@@ -1,3 +1,9 @@
+# Copyright (c) 2015, Baidu.com, Inc. All Rights Reserved
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+#!/usr/bin/env pythons
+
 import subprocess
 import time
 import os
@@ -243,7 +249,7 @@ def write_email(fp, desp):
     doc = Document()
     email = doc.createElement('email')
     doc.appendChild(email)
-    write_title(email, doc, 'h3', common.EMAIL_BLOCK_TITLE)
+    write_title(email, doc, 'h3', common.EMAIL_BLOCK_TITLE + ' ' + time.strftime('%Y-%m-%d-%H-%M-%S'))
     write_title(email, doc, 'h4', desp)
     print conf.g_test_conf
     global performance
