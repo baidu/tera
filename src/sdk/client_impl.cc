@@ -35,6 +35,7 @@ DECLARE_int32(tera_sdk_retry_period);
 DECLARE_int32(tera_sdk_thread_min_num);
 DECLARE_int32(tera_sdk_thread_max_num);
 DECLARE_bool(tera_sdk_rpc_limit_enabled);
+DECLARE_bool(tera_sdk_table_rename_enabled);
 DECLARE_int32(tera_sdk_rpc_limit_max_inflow);
 DECLARE_int32(tera_sdk_rpc_limit_max_outflow);
 DECLARE_int32(tera_sdk_rpc_max_pending_buffer_size);
@@ -137,7 +138,12 @@ bool ClientImpl::CreateTable(const TableDescriptor& desc,
     CreateTableResponse response;
     request.set_sequence_id(0);
     std::string timestamp = tera::get_curtime_str_plain();
-    std::string internal_table_name = desc.TableName() + "@" + timestamp;
+    std::string internal_table_name;
+    if (FLAGS_tera_sdk_table_rename_enabled) {
+        internal_table_name = desc.TableName() + "@" + timestamp;
+    } else {
+        internal_table_name = desc.TableName();
+    }
     request.set_table_name(internal_table_name);
     request.set_user_token(GetUserToken(_user_identity, _user_passcode));
 
@@ -533,6 +539,36 @@ bool ClientImpl::ShowTablesInfo(const string& name,
         meta->CopyFrom(table_list.meta(0));
     }
     return result;
+}
+
+// only get table info from master, faster
+bool ClientImpl::ShowTablesInfo(TableMetaList* table_list,
+                                ErrorCode* err) {
+    if (table_list == NULL) {
+        return false;
+    }
+    table_list->Clear();
+
+    master::MasterClient master_client(_cluster->MasterAddr());
+    std::string err_msg;
+    ShowTablesRequest request;
+    ShowTablesResponse response;
+    request.set_max_table_num(FLAGS_tera_sdk_show_max_num);
+    request.set_max_tablet_num(0);
+    request.set_sequence_id(0);
+    request.set_user_token(GetUserToken(_user_identity, _user_passcode));
+    if (master_client.ShowTablesFast(&request, &response) &&
+        response.status() == kMasterOk) {
+        table_list->CopyFrom(response.table_meta_list());
+    } else {
+        err_msg = StatusCodeToString(response.status());
+        LOG(ERROR) << "fail to show table info, " << err_msg;
+        if (err != NULL) {
+            err->SetFailed(ErrorCode::kSystem, err_msg);
+        }
+        return false;
+    }
+    return true;
 }
 
 bool ClientImpl::ShowTablesInfo(TableMetaList* table_list,

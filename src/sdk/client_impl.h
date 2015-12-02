@@ -101,6 +101,9 @@ public:
                         ErrorCode* err);
 
     bool ShowTablesInfo(TableMetaList* table_list,
+                        ErrorCode* err);
+
+    bool ShowTablesInfo(TableMetaList* table_list,
                         TabletMetaList* tablet_list,
                         ErrorCode* err);
 

@@ -111,6 +111,14 @@ bool MasterClient::ShowTables(const ShowTablesRequest* request,
                                 "ShowTables", m_rpc_timeout);
 }
 
+bool MasterClient::ShowTablesFast(const ShowTablesRequest* request,
+                                  ShowTablesResponse* response) {
+    return SendMessageWithRetry(&MasterServer::Stub::ShowTablesFast,
+                                request, response,
+                                (Closure<void, ShowTablesRequest*, ShowTablesResponse*, bool, int>*)NULL,
+                                "ShowTablesFast", m_rpc_timeout);
+}
+
 bool MasterClient::ShowTabletNodes(const ShowTabletNodesRequest* request,
                                    ShowTabletNodesResponse* response) {
     return SendMessageWithRetry(&MasterServer::Stub::ShowTabletNodes,

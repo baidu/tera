@@ -56,6 +56,9 @@ public:
     virtual bool ShowTables(const ShowTablesRequest* request,
                             ShowTablesResponse* response);
 
+    virtual bool ShowTablesFast(const ShowTablesRequest* request,
+                                ShowTablesResponse* response);
+
     virtual bool ShowTabletNodes(const ShowTabletNodesRequest* request,
                                  ShowTabletNodesResponse* response);
 
@@ -72,6 +75,7 @@ public:
                              OperateUserResponse* response);
     virtual bool RenameTable(const RenameTableRequest* request,
                              RenameTableResponse* response);
+
 private:
     int32_t m_rpc_timeout;
 };
