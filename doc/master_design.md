@@ -99,29 +99,21 @@ Copyright 2015, Baidu, Inc.
     * 对于支持热更新的schema，命令ts更新schema
     * 对于其它schema，先命令ts执行unload，再命令ts以新schema执行load
 
-####新节点加入
-  1. 收到zk通知，获取新节点地址
-  1. 在内存tabletnode_manager中增加对应的tabletnode结构体，status设为ready
+####节点存活检测
+  1. 收到zk通知，获取节点列表
+  1. 与内存tabletnode_manager对比，得到新节点和死节点地址
+    * 对于新节点，在内存tabletnode_manager中增加对应的tabletnode结构体，status设为ready
+    * 对于死节点，从tablet_manager中获取该节点管理的tablet列表
+      将这些tablet的status改为offline，从tabletnode_manager中删除对应的tabletnode结构体
 
-####死节点退出
-  1. 收到zk通知，获取死节点地址
-  1. 从tablet_manager中获取该节点管理的tablet列表
-  1. 将这些tablet的status改为offline
-  1. 从内存tabletnode_manager中删除对应的tabletnode结构体
+####故障节点剔除
+  1. 识别故障节点，确认其对应的tabletnode结构体的status为ready
+  1. 将tabletnode结构体的status改为waitkick
+  1. 判断当前运行模式
+    * 如果是安全模式，则退出流程
+    * 如果是普通模式，则继续将status改为onkick
+  1. 在zk的kick目录下创建虚节点，key和value分别是故障节点的session ID和地址
 
-####慢节点剔除
-####表格操作
-  1. 修改内存元数据
-    * create: 增加table、tablet结构
-    * drop: 删除table、tablet结构
-    * disable/enable: 修改table status
-    * update: 修改table schema
-  2. 更新持久化meta
-    * create: 增加table、tablet项
-    * drop: 删除table、tablet项
-    * disable/enable: 修改table status
-    * update: 修改table schema
-  3. 命令tabletserver执行相应操作
-    * create/enable: load
-    * disable: unload
-  4. 发送response
+###算法
+####
+
