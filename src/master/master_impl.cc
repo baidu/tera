@@ -5127,7 +5127,7 @@ void MasterImpl::RenameTable(const RenameTableRequest* request,
 }
 
 void MasterImpl::RefreshTableCounter() {
-    LOG(INFO) << "RefreshTableCounter.";
+    int64_t start = get_micros();
     std::vector<TablePtr> table_list;
     m_tablet_manager->ShowTable(&table_list, NULL);
     for (uint32_t i = 0; i < table_list.size(); ++i) {
@@ -5139,6 +5139,8 @@ void MasterImpl::RefreshTableCounter() {
         boost::bind(&MasterImpl::RefreshTableCounter, this);
     m_query_tabletnode_timer_id = m_thread_pool->DelayTask(
         FLAGS_tera_master_query_tabletnode_period, task);
+    LOG(INFO) << "RefreshTableCounter, cost: "
+        << ((get_micros() - start) / 1000) << "ms.";
 }
 } // namespace master
 } // namespace tera
