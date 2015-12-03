@@ -1223,7 +1223,7 @@ int32_t ShowTabletNodesInfo(Client* client, bool is_x, ErrorCode* err) {
             row.clear();
             row.push_back(NumberToString(i));
             row.push_back(infos[i].addr());
-            if (now - infos[i].timestamp() > 120 * 1000000) {
+            if (now - infos[i].timestamp() > 600 * 1000000) {
                 // tabletnode status timeout
                 row.push_back("kZombie");
             } else {
@@ -1262,7 +1262,7 @@ int32_t ShowTabletNodesInfo(Client* client, bool is_x, ErrorCode* err) {
             row.clear();
             row.push_back(NumberToString(i));
             row.push_back(infos[i].addr());
-            if (now - infos[i].timestamp() > 120 * 1000000) {
+            if (now - infos[i].timestamp() > 600 * 1000000) {
                 row.push_back("kZombie");
             } else {
                 row.push_back(infos[i].status_m());
