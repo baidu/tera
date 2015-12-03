@@ -75,11 +75,6 @@ public:
                     ShowTablesResponse* response,
                     google::protobuf::Closure* done);
 
-    void ShowTablesFast(google::protobuf::RpcController* controller,
-                        const ShowTablesRequest* request,
-                        ShowTablesResponse* response,
-                        google::protobuf::Closure* done);
-
     void ShowTabletNodes(google::protobuf::RpcController* controller,
                          const ShowTabletNodesRequest* request,
                          ShowTabletNodesResponse* response,
@@ -152,11 +147,6 @@ private:
                       const ShowTablesRequest* request,
                       ShowTablesResponse* response,
                       google::protobuf::Closure* done);
-
-    void DoShowTablesFast(google::protobuf::RpcController* controller,
-                          const ShowTablesRequest* request,
-                          ShowTablesResponse* response,
-                          google::protobuf::Closure* done);
 
     void DoShowTabletNodes(google::protobuf::RpcController* controller,
                            const ShowTabletNodesRequest* request,

@@ -115,9 +115,9 @@ public:
                     ShowTablesResponse* response,
                     google::protobuf::Closure* done);
 
-    void ShowTablesFast(const ShowTablesRequest* request,
-                        ShowTablesResponse* response,
-                        google::protobuf::Closure* done);
+    void ShowTablesBrief(const ShowTablesRequest* request,
+                         ShowTablesResponse* response,
+                         google::protobuf::Closure* done);
 
     void ShowTabletNodes(const ShowTabletNodesRequest* request,
                          ShowTabletNodesResponse* response,

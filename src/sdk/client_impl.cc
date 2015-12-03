@@ -541,36 +541,6 @@ bool ClientImpl::ShowTablesInfo(const string& name,
     return result;
 }
 
-// only get table info from master, faster
-bool ClientImpl::ShowTablesInfo(TableMetaList* table_list,
-                                ErrorCode* err) {
-    if (table_list == NULL) {
-        return false;
-    }
-    table_list->Clear();
-
-    master::MasterClient master_client(_cluster->MasterAddr());
-    std::string err_msg;
-    ShowTablesRequest request;
-    ShowTablesResponse response;
-    request.set_max_table_num(FLAGS_tera_sdk_show_max_num);
-    request.set_max_tablet_num(0);
-    request.set_sequence_id(0);
-    request.set_user_token(GetUserToken(_user_identity, _user_passcode));
-    if (master_client.ShowTablesFast(&request, &response) &&
-        response.status() == kMasterOk) {
-        table_list->CopyFrom(response.table_meta_list());
-    } else {
-        err_msg = StatusCodeToString(response.status());
-        LOG(ERROR) << "fail to show table info, " << err_msg;
-        if (err != NULL) {
-            err->SetFailed(ErrorCode::kSystem, err_msg);
-        }
-        return false;
-    }
-    return true;
-}
-
 bool ClientImpl::ShowTablesInfo(TableMetaList* table_list,
                                 TabletMetaList* tablet_list,
                                 ErrorCode* err) {
@@ -605,8 +575,19 @@ bool ClientImpl::DoShowTablesInfo(TableMetaList* table_list,
         request.set_max_tablet_num(FLAGS_tera_sdk_show_max_num); //tablets be fetched at most in one RPC
         request.set_sequence_id(0);
         request.set_user_token(GetUserToken(_user_identity, _user_passcode));
+
+        if (table_name == "") {
+            // show all table brief
+            request.set_all_brief(true);
+        }
         if (master_client.ShowTables(&request, &response) &&
             response.status() == kMasterOk) {
+            if (tablet_list == NULL && response.all_brief()) {
+                // show all table brief
+                table_list->CopyFrom(response.table_meta_list());
+                return true;
+            }
+
             if (response.table_meta_list().meta_size() == 0) {
                 has_error = true;
                 err_msg = StatusCodeToString(response.status());

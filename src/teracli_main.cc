@@ -42,7 +42,6 @@ DECLARE_string(tera_zk_root_path);
 DEFINE_int32(tera_client_batch_put_num, 1000, "num of each batch in batch put mode");
 DEFINE_int32(tera_client_scan_package_size, 1024, "the package size (in KB) of each scan request");
 DEFINE_bool(tera_client_scan_async_enabled, false, "enable the streaming scan mode");
-DEFINE_bool(tera_client_fast_show_enabled, false, "enable fast show mode");
 
 DEFINE_int64(scan_pack_interval, 5000, "scan timeout");
 DEFINE_int64(snapshot, 0, "read | scan snapshot");
@@ -1022,16 +1021,9 @@ int32_t ShowAllTables(Client* client, bool is_x, bool show_all, ErrorCode* err) 
     TableMetaList table_list;
     TabletMetaList tablet_list;
     tera::ClientImpl* client_impl = static_cast<tera::ClientImpl*>(client);
-    if (FLAGS_tera_client_fast_show_enabled) {
-        if (!client_impl->ShowTablesInfo(&table_list, err)) {
-            LOG(ERROR) << "fail to get meta data from tera.";
-            return -1;
-        }
-    } else {
-        if (!client_impl->ShowTablesInfo(&table_list, &tablet_list, err)) {
-            LOG(ERROR) << "fail to get meta data from tera.";
-            return -1;
-        }
+    if (!client_impl->ShowTablesInfo(&table_list, &tablet_list, err)) {
+        LOG(ERROR) << "fail to get meta data from tera.";
+        return -1;
     }
 
     TPrinter printer;
@@ -1055,7 +1047,7 @@ int32_t ShowAllTables(Client* client, bool is_x, bool show_all, ErrorCode* err) 
             table_alias = table_list.meta(table_no).schema().alias();
         }
         TableCounter counter;
-        if (FLAGS_tera_client_fast_show_enabled) {
+        if (table_list.counter_size() > 0) {
             counter = table_list.counter(table_no);
         } else {
             SetTableCounter(table_alias, tablet_list, &counter);

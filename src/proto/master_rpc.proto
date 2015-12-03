@@ -98,6 +98,8 @@ message ShowTablesRequest {
     optional uint32 max_table_num = 4;
     optional uint32 max_tablet_num = 5;
     optional bytes user_token = 6;
+
+    optional bool all_brief = 7;
 }
 
 message ShowTablesResponse {
@@ -106,6 +108,8 @@ message ShowTablesResponse {
     optional TabletMetaList tablet_meta_list = 3;
     optional TableMetaList table_meta_list = 4;
     optional bool is_more = 5;
+
+    optional bool all_brief = 7;
 }
 
 message ShowTabletNodesRequest {
@@ -256,7 +260,5 @@ service MasterServer {
     rpc CmdCtrl(CmdCtrlRequest) returns(CmdCtrlResponse);
     rpc OperateUser(OperateUserRequest) returns(OperateUserResponse);
     rpc RenameTable(RenameTableRequest) returns (RenameTableResponse);
-
-    rpc ShowTablesFast(ShowTablesRequest) returns(ShowTablesResponse);
 }
 option cc_generic_services = true;

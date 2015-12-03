@@ -136,16 +136,6 @@ void RemoteMaster::ShowTables(google::protobuf::RpcController* controller,
     m_thread_pool->AddTask(callback);
 }
 
-void RemoteMaster::ShowTablesFast(google::protobuf::RpcController* controller,
-                                  const ShowTablesRequest* request,
-                                  ShowTablesResponse* response,
-                                  google::protobuf::Closure* done) {
-    ThreadPool::Task callback =
-        boost::bind(&RemoteMaster::DoShowTablesFast, this, controller,
-                    request, response, done);
-    m_thread_pool->AddTask(callback);
-}
-
 void RemoteMaster::ShowTabletNodes(google::protobuf::RpcController* controller,
                                    const ShowTabletNodesRequest* request,
                                    ShowTabletNodesResponse* response,
@@ -273,7 +263,11 @@ void RemoteMaster::DoShowTables(google::protobuf::RpcController* controller,
                                 ShowTablesResponse* response,
                                 google::protobuf::Closure* done) {
     LOG(INFO) << "accept RPC (ShowTables)";
-    m_master_impl->ShowTables(request, response, done);
+    if (request->has_all_brief() && request->all_brief()) {
+        m_master_impl->ShowTablesBrief(request, response, done);
+    } else {
+        m_master_impl->ShowTables(request, response, done);
+    }
     LOG(INFO) << "finish RPC (ShowTables)";
 }
 
@@ -313,15 +307,6 @@ void RemoteMaster::RenameTable(google::protobuf::RpcController* controller,
     LOG(INFO) << "accept RPC (RenameTable)";
     m_master_impl->RenameTable(request, response, done);
     LOG(INFO) << "finish RPC (RenameTable)";
-}
-
-void RemoteMaster::DoShowTablesFast(google::protobuf::RpcController* controller,
-                                    const ShowTablesRequest* request,
-                                    ShowTablesResponse* response,
-                                    google::protobuf::Closure* done) {
-    LOG(INFO) << "accept RPC (ShowTablesFast)";
-    m_master_impl->ShowTablesFast(request, response, done);
-    LOG(INFO) << "finish RPC (ShowTablesFast)";
 }
 
 } // namespace master
