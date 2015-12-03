@@ -536,6 +536,7 @@ ScanDescImpl::ScanDescImpl(const ScanDescImpl& impl)
     for (int32_t i = 0; i < impl.GetSizeofColumnFamilyList(); ++i) {
         _cf_list.push_back(new tera::ColumnFamily(*(impl.GetColumnFamily(i))));
     }
+    _qu_range = impl._qu_range;
 }
 
 ScanDescImpl::~ScanDescImpl() {
@@ -593,12 +594,14 @@ void ScanDescImpl::AddQualifierRange(const std::string& cf,
                            const std::string& qu_start,
                            const std::string& qu_end) {
     if (cf.size()) {
+        VLOG(12) << "add qual, " << cf << ":" << qu_start << ":" << qu_end;
         _qu_range.insert(std::pair<std::string,
                 std::pair<std::string, std::string> >(cf, std::pair<std::string, std::string>(qu_start, qu_end)));
     }
 }
 
 void ScanDescImpl::SetQualifierRange(ScanTabletRequest* request) {
+    VLOG(12) << "qu_range size " << _qu_range.size();
     std::map<std::string, std::pair<std::string, std::string> >::iterator it = _qu_range.begin();
     for (; it != _qu_range.end(); ++it) {
         ScanQualifierRange* qu_range = request->add_qu_range();
@@ -606,6 +609,7 @@ void ScanDescImpl::SetQualifierRange(ScanTabletRequest* request) {
         const std::pair<std::string, std::string>& range = it->second;
         qu_range->set_qu_start(range.first);
         qu_range->set_qu_end(range.second);
+        VLOG(12) << "set qual " << qu_range->DebugString();
     }
 }
 

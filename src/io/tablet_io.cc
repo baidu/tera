@@ -656,7 +656,7 @@ inline bool TabletIO::LowLevelScan(const std::string& start_tera_key,
     int64_t time_out = now_time + scan_options.timeout;
     bool has_filter = scan_options.filter_list.filter_size() > 0;
     KeyValuePair next_start_kv_pair;
-    VLOG(9) << "ll-scan timeout set to be " << scan_options.timeout;
+    VLOG(9) << "ll-scan timeout set to be " << scan_options.timeout << ", has filter " << has_filter;
 
     for (; it->Valid();) {
         bool has_merged = false;
@@ -695,6 +695,7 @@ inline bool TabletIO::LowLevelScan(const std::string& start_tera_key,
 
         // qualifier range seek
         if (scan_options.qu_range.size()) {
+            VLOG(10) << "filter by qualifier, size " << scan_options.qu_range.size();
             QualifierRange::const_iterator qu_it;
             qu_it = scan_options.qu_range.lower_bound(col.ToString());
             if (qu_it == scan_options.qu_range.end()) {
@@ -702,12 +703,14 @@ inline bool TabletIO::LowLevelScan(const std::string& start_tera_key,
                 std::string next_key;
                 m_key_operator->FindSuccessor(key.ToString(), &next_key);
                 SeekIterator(next_key, "", "", kLatestTs, it);
+                VLOG(10) << "seek to next_key " << DebugString(next_key);
                 continue;
             } else {
                 leveldb::Slice scan_cf = qu_it->first;
                 if (scan_cf.compare(col) > 0) {
                     // seek to next cf
                     SeekIterator(key.ToString(), scan_cf.ToString(), "", kLatestTs, it);
+                    VLOG(10) << "seek to next cf " << DebugString(scan_cf.ToString());
                     continue;
                 }
                 // check qualifier range wether match or not
@@ -813,6 +816,7 @@ inline bool TabletIO::LowLevelScan(const std::string& start_tera_key,
         MakeKvPair(key, col, qual, ts, value, &kv);
         if (!has_filter) {
             if (!FilterCell(scan_options, col.ToString(), qual.ToString(), ts)) {
+                value_list->add_key_values()->CopyFrom(kv);
                 buffer_size += key.size() + col.size() + qual.size() + sizeof(ts) + value.size();
             }
         } else {
