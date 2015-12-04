@@ -601,7 +601,6 @@ void ScanDescImpl::AddQualifierRange(const std::string& cf,
 }
 
 void ScanDescImpl::SetQualifierRange(ScanTabletRequest* request) {
-    VLOG(12) << "qu_range size " << _qu_range.size();
     std::map<std::string, std::pair<std::string, std::string> >::iterator it = _qu_range.begin();
     for (; it != _qu_range.end(); ++it) {
         ScanQualifierRange* qu_range = request->add_qu_range();
