@@ -35,6 +35,7 @@ DECLARE_int32(tera_sdk_retry_period);
 DECLARE_int32(tera_sdk_thread_min_num);
 DECLARE_int32(tera_sdk_thread_max_num);
 DECLARE_bool(tera_sdk_rpc_limit_enabled);
+DECLARE_bool(tera_sdk_table_rename_enabled);
 DECLARE_int32(tera_sdk_rpc_limit_max_inflow);
 DECLARE_int32(tera_sdk_rpc_limit_max_outflow);
 DECLARE_int32(tera_sdk_rpc_max_pending_buffer_size);
@@ -137,7 +138,12 @@ bool ClientImpl::CreateTable(const TableDescriptor& desc,
     CreateTableResponse response;
     request.set_sequence_id(0);
     std::string timestamp = tera::get_curtime_str_plain();
-    std::string internal_table_name = desc.TableName() + "@" + timestamp;
+    std::string internal_table_name;
+    if (FLAGS_tera_sdk_table_rename_enabled) {
+        internal_table_name = desc.TableName() + "@" + timestamp;
+    } else {
+        internal_table_name = desc.TableName();
+    }
     request.set_table_name(internal_table_name);
     request.set_user_token(GetUserToken(_user_identity, _user_passcode));
 
@@ -569,8 +575,19 @@ bool ClientImpl::DoShowTablesInfo(TableMetaList* table_list,
         request.set_max_tablet_num(FLAGS_tera_sdk_show_max_num); //tablets be fetched at most in one RPC
         request.set_sequence_id(0);
         request.set_user_token(GetUserToken(_user_identity, _user_passcode));
+
+        if (table_name == "") {
+            // show all table brief
+            request.set_all_brief(true);
+        }
         if (master_client.ShowTables(&request, &response) &&
             response.status() == kMasterOk) {
+            if (tablet_list == NULL && response.all_brief()) {
+                // show all table brief
+                table_list->CopyFrom(response.table_meta_list());
+                return true;
+            }
+
             if (response.table_meta_list().meta_size() == 0) {
                 has_error = true;
                 err_msg = StatusCodeToString(response.status());
