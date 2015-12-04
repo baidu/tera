@@ -156,7 +156,7 @@ public:
         uint32_t len = DecodeBigEndain32(tera_key.data() + tera_key.size() - sizeof(uint32_t));
         int key_len = static_cast<int>(len >> 16);
         int family_len = strlen(tera_key.data() + key_len);
-        int qualifier_len = static_cast<int>(len & 0x00FF);
+        int qualifier_len = static_cast<int>(len & 0xFFFF);
 
         if (key_len + family_len + qualifier_len + 1 +
             sizeof(uint64_t) + sizeof(uint32_t) != tera_key.size()) {

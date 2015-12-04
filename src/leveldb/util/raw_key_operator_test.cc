@@ -4,13 +4,13 @@
 
 #include"leveldb/raw_key_operator.h"
 
-#include <time.h>
+#include <sys/time.h>
+#include <iostream>
 
-#include "utils/timer.h"
-#include "gtest/gtest.h"
+#include "util/testharness.h"
 
-using namespace leveldb;
-using namespace tera;
+namespace leveldb {
+
 void print_bytes(const char* str, int len) {
     for (int i = 0; i < len; ++i) {
         printf("%x ", str[i]);
@@ -18,7 +18,15 @@ void print_bytes(const char* str, int len) {
     printf("\n");
 }
 
-TEST(TestReadableRawKeyOperator, EncodeTeraKey) {
+int64_t get_micros() {
+    struct timeval tv;
+    gettimeofday(&tv, NULL);
+    return static_cast<int64_t>(tv.tv_sec) * 1000000 + tv.tv_usec;
+}
+
+class RawKeyOperatorTest {};
+
+TEST(RawKeyOperatorTest, ReadableEncodeTeraKey) {
     const RawKeyOperator* key_operator = ReadableRawKeyOperator();
     std::string key("row_key");
     std::string column("column");
@@ -33,21 +41,21 @@ TEST(TestReadableRawKeyOperator, EncodeTeraKey) {
     key_operator->EncodeTeraKey(key, column, qualifier, timestamp,
                                 TKT_DEL, &tera_key2);
 
-    int len = key.size() + column.size() + qualifier.size() + sizeof(timestamp) + 3;
-    EXPECT_EQ(tera_key1.size(), len);
+    size_t len = key.size() + column.size() + qualifier.size() + sizeof(timestamp) + 3;
+    ASSERT_EQ(tera_key1.size(), len);
 
     std::string raw1("row_key\0column\0qualifier\0\xFE\xFD\xFC\xFB\xFA\xF9\xF8\x05", len);
-    EXPECT_TRUE(tera_key1 == raw1);
+    ASSERT_TRUE(tera_key1 == raw1);
 //    print_bytes(tera_key1.data(), tera_key1.size());
 //    print_bytes(raw1.data(), raw1.size());
 
     std::string raw2("row_key\0column\0qualifier\0\xFE\xFD\xFC\xFB\xFA\xF9\xF8\x01", len);
-    EXPECT_TRUE(tera_key2 == raw2);
+    ASSERT_TRUE(tera_key2 == raw2);
 
-    EXPECT_TRUE(tera_key1.compare(tera_key2) > 0);
+    ASSERT_TRUE(tera_key1.compare(tera_key2) > 0);
 }
 
-TEST(TestReadableRawKeyOperator, ExtractTeraKey) {
+TEST(RawKeyOperatorTest, ReadableExtractTeraKey) {
     const RawKeyOperator* key_operator = ReadableRawKeyOperator();
     std::string tera_key1;
     std::string row_key1 = "row";
@@ -62,17 +70,17 @@ TEST(TestReadableRawKeyOperator, ExtractTeraKey) {
     Slice qualifier2;
     int64_t timestamp2;
     TeraKeyType type2;
-    EXPECT_TRUE(key_operator->ExtractTeraKey(tera_key1, &row_key2, &column2,
+    ASSERT_TRUE(key_operator->ExtractTeraKey(tera_key1, &row_key2, &column2,
                                            &qualifier2, &timestamp2, &type2));
 
-    EXPECT_EQ(row_key1, row_key2);
-    EXPECT_EQ(column1, column2);
-    EXPECT_EQ(qualifier1, qualifier2);
-    EXPECT_EQ(timestamp1, timestamp2);
-    EXPECT_EQ(type2, TKT_VALUE);
+    ASSERT_EQ(row_key1, row_key2.ToString());
+    ASSERT_EQ(column1, column2.ToString());
+    ASSERT_EQ(qualifier1, qualifier2.ToString());
+    ASSERT_EQ(timestamp1, timestamp2);
+    ASSERT_EQ(type2, TKT_VALUE);
 }
 
-TEST(TestBinaryRawKeyOperator, EncodeTeraKey) {
+TEST(RawKeyOperatorTest, BinaryEncodeTeraKey) {
     const RawKeyOperator* key_operator = BinaryRawKeyOperator();
     std::string key("row_key");
     std::string column("column");
@@ -87,22 +95,22 @@ TEST(TestBinaryRawKeyOperator, EncodeTeraKey) {
     key_operator->EncodeTeraKey(key, column, qualifier, timestamp,
                                 TKT_DEL, &tera_key2);
 
-    int len = key.size() + column.size() + qualifier.size() + sizeof(timestamp) + 5;
-    EXPECT_EQ(tera_key1.size(), len);
+    size_t len = key.size() + column.size() + qualifier.size() + sizeof(timestamp) + 5;
+    ASSERT_EQ(tera_key1.size(), len);
 
     std::string raw1("row_keycolumn\0qualifier\xFE\xFD\xFC\xFB\xFA\xF9\xF8\x5\x0\x7\x0\x9", len);
-    EXPECT_TRUE(tera_key1 == raw1);
+    ASSERT_TRUE(tera_key1 == raw1);
 //    print_bytes(tera_key1.data(), tera_key1.size());
 //    print_bytes(raw1.data(), raw1.size());
 
     std::string raw2("row_keycolumn\0qualifier\xFE\xFD\xFC\xFB\xFA\xF9\xF8\x01\x0\x7\x0\x9", len);
-    EXPECT_TRUE(tera_key2 == raw2);
+    ASSERT_TRUE(tera_key2 == raw2);
 
-    EXPECT_TRUE(tera_key1.compare(tera_key2) > 0);
+    ASSERT_TRUE(tera_key1.compare(tera_key2) > 0);
 
 }
 
-TEST(TestBinaryRawKeyOperator, ExtractTeraKey) {
+TEST(RawKeyOperatorTest, BinaryExtractTeraKey) {
     const RawKeyOperator* key_operator = BinaryRawKeyOperator();
     std::string tera_key1;
     std::string row_key1 = "row";
@@ -116,17 +124,51 @@ TEST(TestBinaryRawKeyOperator, ExtractTeraKey) {
     Slice qualifier2;
     int64_t timestamp2;
     TeraKeyType type2;
-    EXPECT_TRUE(key_operator->ExtractTeraKey(tera_key1, &row_key2, &column2,
+    ASSERT_TRUE(key_operator->ExtractTeraKey(tera_key1, &row_key2, &column2,
                                            &qualifier2, &timestamp2, &type2));
 
-    EXPECT_EQ(row_key1, row_key2);
-    EXPECT_EQ(column1, column2);
-    EXPECT_EQ(qualifier1, qualifier2);
-    EXPECT_EQ(timestamp2, 0);
-    EXPECT_EQ(type2, TKT_VALUE);
+    ASSERT_EQ(row_key1, row_key2.ToString());
+    ASSERT_EQ(column1, column2.ToString());
+    ASSERT_EQ(qualifier1, qualifier2.ToString());
+    ASSERT_EQ(timestamp2, 0);
+    ASSERT_EQ(type2, TKT_VALUE);
 }
 
-TEST(TestBinaryRawKeyOperator, Compare) {
+void GenTestString(int64_t len, std::string* output) {
+    for (int i = 0; i < len; ++i) {
+        output->append("a");
+    }
+}
+
+TEST(RawKeyOperatorTest, TestBigRow) {
+    const RawKeyOperator* key_operator = BinaryRawKeyOperator();
+    std::string test_str_60K;
+    GenTestString(60000, &test_str_60K);
+
+    std::string tera_key1;
+    std::string row_key1 = test_str_60K;
+    std::string column1 = test_str_60K;
+    std::string qualifier1 = test_str_60K;
+    key_operator->EncodeTeraKey(row_key1, column1,qualifier1,
+                                0, TKT_VALUE, &tera_key1);
+    ASSERT_EQ(tera_key1.size(), 180013u);
+
+    Slice row_key2;
+    Slice column2;
+    Slice qualifier2;
+    int64_t timestamp2;
+    TeraKeyType type2;
+    ASSERT_TRUE(key_operator->ExtractTeraKey(tera_key1, &row_key2, &column2,
+                                             &qualifier2, &timestamp2, &type2));
+
+    ASSERT_EQ(row_key1, row_key2.ToString());
+    ASSERT_EQ(column1, column2.ToString());
+    ASSERT_EQ(qualifier1, qualifier2.ToString());
+    ASSERT_EQ(timestamp2, 0);
+    ASSERT_EQ(type2, TKT_VALUE);
+}
+
+TEST(RawKeyOperatorTest, Compare) {
     const RawKeyOperator* key_operator = BinaryRawKeyOperator();
     std::string tera_key1, tera_key2;
     std::string key1, key2;
@@ -148,7 +190,7 @@ TEST(TestBinaryRawKeyOperator, Compare) {
     ts2 = 0;
     type2 = TKT_VALUE;
     key_operator->EncodeTeraKey(key2, column2, qualifier2, ts2, type2, &tera_key2);
-    EXPECT_EQ(key_operator->Compare(tera_key1, tera_key2), 0);
+    ASSERT_EQ(key_operator->Compare(tera_key1, tera_key2), 0);
 
     key2 = "row1";
     column2 = "column";
@@ -156,7 +198,7 @@ TEST(TestBinaryRawKeyOperator, Compare) {
     ts2 = 0;
     type2 = TKT_VALUE;
     key_operator->EncodeTeraKey(key2, column2, qualifier2, ts2, type2, &tera_key2);
-    EXPECT_LT(key_operator->Compare(tera_key1, tera_key2), 0);
+    ASSERT_LT(key_operator->Compare(tera_key1, tera_key2), 0);
 
     key2 = "ro";
     column2 = "column";
@@ -164,7 +206,7 @@ TEST(TestBinaryRawKeyOperator, Compare) {
     ts2 = 0;
     type2 = TKT_VALUE;
     key_operator->EncodeTeraKey(key2, column2, qualifier2, ts2, type2, &tera_key2);
-    EXPECT_GT(key_operator->Compare(tera_key1, tera_key2), 0);
+    ASSERT_GT(key_operator->Compare(tera_key1, tera_key2), 0);
 
     key2 = "row";
     column2 = "columny";
@@ -172,7 +214,7 @@ TEST(TestBinaryRawKeyOperator, Compare) {
     ts2 = 0;
     type2 = TKT_VALUE;
     key_operator->EncodeTeraKey(key2, column2, qualifier2, ts2, type2, &tera_key2);
-    EXPECT_LT(key_operator->Compare(tera_key1, tera_key2), 0);
+    ASSERT_LT(key_operator->Compare(tera_key1, tera_key2), 0);
 
     key2 = "row";
     column2 = "column";
@@ -180,7 +222,7 @@ TEST(TestBinaryRawKeyOperator, Compare) {
     ts2 = 0;
     type2 = TKT_VALUE;
     key_operator->EncodeTeraKey(key2, column2, qualifier2, ts2, type2, &tera_key2);
-    EXPECT_LT(key_operator->Compare(tera_key1, tera_key2), 0);
+    ASSERT_LT(key_operator->Compare(tera_key1, tera_key2), 0);
 
     key2 = "row";
     column2 = "column";
@@ -188,7 +230,7 @@ TEST(TestBinaryRawKeyOperator, Compare) {
     ts2 = 1;
     type2 = TKT_VALUE;
     key_operator->EncodeTeraKey(key2, column2, qualifier2, ts2, type2, &tera_key2);
-    EXPECT_GT(key_operator->Compare(tera_key1, tera_key2), 0);
+    ASSERT_GT(key_operator->Compare(tera_key1, tera_key2), 0);
 
     key2 = "row";
     column2 = "column";
@@ -196,7 +238,7 @@ TEST(TestBinaryRawKeyOperator, Compare) {
     ts2 = 0;
     type2 = TKT_DEL;
     key_operator->EncodeTeraKey(key2, column2, qualifier2, ts2, type2, &tera_key2);
-    EXPECT_GT(key_operator->Compare(tera_key1, tera_key2), 0);
+    ASSERT_GT(key_operator->Compare(tera_key1, tera_key2), 0);
 
     //
     type1 = TKT_DEL_COLUMN;
@@ -208,7 +250,7 @@ TEST(TestBinaryRawKeyOperator, Compare) {
     ts2 = 0;
     type2 = TKT_VALUE;
     key_operator->EncodeTeraKey(key2, column2, qualifier2, ts2, type2, &tera_key2);
-    EXPECT_LT(key_operator->Compare(tera_key1, tera_key2), 0);
+    ASSERT_LT(key_operator->Compare(tera_key1, tera_key2), 0);
 
     key2 = "row";
     column2 = "column";
@@ -216,7 +258,7 @@ TEST(TestBinaryRawKeyOperator, Compare) {
     ts2 = 1;
     type2 = TKT_VALUE;
     key_operator->EncodeTeraKey(key2, column2, qualifier2, ts2, type2, &tera_key2);
-    EXPECT_GT(key_operator->Compare(tera_key1, tera_key2), 0);
+    ASSERT_GT(key_operator->Compare(tera_key1, tera_key2), 0);
 }
 
 void EncodeTeraKeyPerformanceTest(const RawKeyOperator* key_operator,
@@ -227,16 +269,16 @@ void EncodeTeraKeyPerformanceTest(const RawKeyOperator* key_operator,
                                    TeraKeyType type,
                                    const std::string& desc) {
     std::string tera_key;
-    int64_t start = tera::get_micros();
+    int64_t start = get_micros();
     for (int i = 0; i < 10000000; ++i) {
         key_operator->EncodeTeraKey(row, col, qual, ts, type, &tera_key);
     }
-    int64_t end = tera::get_micros();
+    int64_t end = get_micros();
     std::cout << "[Encode TeraKey Performance ("
         << desc << ")] cost: " << (end - start) / 1000 << "ms\n";
 }
 
-TEST(TestBinaryRawKeyOperator, DISABLED_EncodeTeraKeyPerformace) {
+TEST(RawKeyOperatorTest, EncodeTeraKeyPerformace) {
     const RawKeyOperator* keyop_bin = BinaryRawKeyOperator();
     std::string tera_key, row, col, qual;
     int64_t ts;
@@ -262,16 +304,16 @@ void ExtractTeraKeyPerformanceTest(const RawKeyOperator* key_operator,
     Slice row, col, qual;
     int64_t ts;
     TeraKeyType type;
-    int64_t start = tera::get_micros();
+    int64_t start = get_micros();
     for (int i = 0; i < 10000000; ++i) {
         key_operator->ExtractTeraKey(key, &row, &col, &qual, &ts, &type);
     }
-    int64_t end = tera::get_micros();
+    int64_t end = get_micros();
     std::cout << "[Extract TeraKey Performance ("
         << desc << ")] cost: " << (end - start) / 1000 << "ms\n";
 }
 
-TEST(TestBinaryRawKeyOperator, DISABLED_ExtractTeraKeyPerformace) {
+TEST(RawKeyOperatorTest, ExtractTeraKeyPerformace) {
     const RawKeyOperator* keyop_bin = BinaryRawKeyOperator();
     std::string tera_key, row, col, qual;
     row = "row";
@@ -294,16 +336,16 @@ void ComparePerformanceTest(const RawKeyOperator* key_operator,
                      const std::string& key1,
                      const std::string& key2,
                      const std::string& desc) {
-    int64_t start = tera::get_micros();
+    int64_t start = get_micros();
     for (int i = 0; i < 10000000; ++i) {
         key_operator->Compare(key1, key2);
     }
-    int64_t end = tera::get_micros();
+    int64_t end = get_micros();
     std::cout << "[Compare Performance ("
         << desc << ")] cost: " << (end - start) / 1000 << "ms\n";
 }
 
-TEST(TestBinaryRawKeyOperator, DISABLED_ComparePerformace) {
+TEST(RawKeyOperatorTest, ComparePerformace) {
     const RawKeyOperator* keyop_bin = BinaryRawKeyOperator();
     const RawKeyOperator* keyop_read = ReadableRawKeyOperator();
     std::string tera_key1, tera_key2;
@@ -311,7 +353,7 @@ TEST(TestBinaryRawKeyOperator, DISABLED_ComparePerformace) {
     std::string column1, column2;
     std::string qualifier1, qualifier2;
     int64_t ts1, ts2;
-    TeraKeyType type1, type2;
+    TeraKeyType type1;
 
     key1 = "rowrowrowrowrowrowrowrowrowrowrowrowrowrowrowrow";
     column1 = "columncolumncolumncolumn";
@@ -375,10 +417,10 @@ TEST(TestBinaryRawKeyOperator, DISABLED_ComparePerformace) {
     keyop_read->EncodeTeraKey(key2, column2, qualifier2, ts1, type1, &tera_key2);
     ComparePerformanceTest(keyop_read, tera_key1, tera_key2, "readable short");
 }
+}  // namespace leveldb
 
 int main(int argc, char* argv[]) {
-    ::testing::InitGoogleTest(&argc, argv);
-    return RUN_ALL_TESTS();
+    return leveldb::test::RunAllTests();
 }
 
 /* vim: set expandtab ts=4 sw=4 sts=4 tw=100: */
