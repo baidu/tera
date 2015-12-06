@@ -1122,6 +1122,7 @@ Status VersionSet::ReadCurrentFile(uint64_t tablet, std::string* dscname ) {
     if (manifest_set.size() < 1) {
       Log(options_->info_log, "[%s] none available manifest file.",
           dbname_.c_str());
+      ArchiveFile(env_, CurrentFileName(pdbname));
       return Status::Corruption("DB has none available manifest file.");
     }
     // select the largest manifest number
@@ -1219,7 +1220,9 @@ Status VersionSet::Recover() {
     log::Reader reader(files[i], &reporter, true/*checksum*/, 0/*initial_offset*/);
     Slice record;
     std::string scratch;
+    int64_t record_num = 0;
     while (reader.ReadRecord(&record, &scratch) && s.ok()) {
+      record_num++;
       VersionEdit edit;
       s = edit.DecodeFrom(record);
       if (s.ok()) {
@@ -1272,6 +1275,11 @@ Status VersionSet::Recover() {
       }
     }
     delete files[i];
+    if (record_num == 0) {
+      // empty manifest, delete it
+      ArchiveFile(env_, dscname[i]);
+      return Status::Corruption("empty manifest:" + s.ToString());
+    }
     if (s.ok()) {
       Version* v = new Version(this);
       builder.SaveTo(v);

@@ -52,6 +52,9 @@ static int FLAGS_value_seed = 301;
 // Key generator's seed
 static int FLAGS_key_seed = 301;
 
+// Key step, used in seq key generation
+static int FLAGS_key_step = 1;
+
 namespace leveldb {
 
 // Helper for quickly generating random data.
@@ -221,8 +224,8 @@ class Benchmark {
 
     // Write to database
     int i = FLAGS_start_key;
-    int end_key = i + num_entries;
-    for (; i < end_key; i++)
+    int end_key = i + num_entries * FLAGS_key_step;
+    for (; i < end_key; i += FLAGS_key_step)
     {
       const int t = rand_.Next() % FLAGS_tablet_num;
       const int k = (order == SEQUENTIAL) ? i : (tablet_rand_vector_[t]->Next());
@@ -270,6 +273,8 @@ int main(int argc, char** argv) {
       FLAGS_value_seed = n;
     } else if (sscanf(argv[i], "--key_seed=%d%c", &n, &junk) == 1) {
       FLAGS_key_seed = n;
+    } else if (sscanf(argv[i], "--key_step=%d%c", &n, &junk) == 1) {
+      FLAGS_key_step = n;
     } else {
       fprintf(stderr, "Invalid flag '%s'\n", argv[i]);
       exit(1);
