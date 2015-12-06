@@ -5137,5 +5137,9 @@ void MasterImpl::RefreshTableCounter() {
     LOG(INFO) << "RefreshTableCounter, cost: "
         << ((get_micros() - start) / 1000) << "ms.";
 }
+
+std::string MasterImpl::ProfilingLog() {
+    return m_thread_pool->ProfilingLog();
+}
 } // namespace master
 } // namespace tera
