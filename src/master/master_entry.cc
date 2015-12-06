@@ -52,7 +52,7 @@ bool MasterEntry::StartServer() {
     return true;
 }
 
-bool TabletNodeEntry::Run() {
+bool MasterEntry::Run() {
     static int64_t timer_ticks = 0;
     ++timer_ticks;
 
