@@ -1737,6 +1737,10 @@ uint32_t MasterImpl::LoadBalance(Scheduler* scheduler,
         node_tablet_list[tablet->GetServerAddr()].push_back(tablet);
     }
 
+    if (!scheduler->NeedSchedule(tabletnode_list, table_name)) {
+        return 0;
+    }
+
     // descending sort the node according to workload,
     // so that the node with heaviest workload will be scheduled first
     scheduler->DescendingSort(tabletnode_list, table_name);
