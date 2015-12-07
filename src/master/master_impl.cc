@@ -108,6 +108,7 @@ MasterImpl::MasterImpl()
       m_load_scheduler(new LoadScheduler),
       m_release_cache_timer_id(kInvalidTimerId),
       m_query_enabled(false),
+      m_last_query_time(0),
       m_query_tabletnode_timer_id(kInvalidTimerId),
       m_load_balance_enabled(false),
       m_thread_pool(new ThreadPool(FLAGS_tera_master_impl_thread_max_num)),
@@ -1634,10 +1635,18 @@ void MasterImpl::QueryTabletNode() {
 
 void MasterImpl::ScheduleQueryTabletNode() {
     m_mutex.AssertHeld();
+    int64_t cur_time = get_micros();
+    int schedule_delay = cur_time - m_last_query_time;
+    m_last_query_time = cur_time;
+    if (schedule_delay > FLAGS_tera_master_query_tabletnode_period) {
+        schedule_delay = FLAGS_tera_master_query_tabletnode_period;
+    } else if (schedule_delay <= 0) {
+        schedule_delay = 1;
+    }
+
     ThreadPool::Task task =
         boost::bind(&MasterImpl::QueryTabletNode, this);
-    m_query_tabletnode_timer_id = m_thread_pool->DelayTask(
-        FLAGS_tera_master_query_tabletnode_period, task);
+    m_query_tabletnode_timer_id = m_thread_pool->DelayTask(schedule_delay, task);
 }
 
 void MasterImpl::EnableQueryTabletNodeTimer() {
