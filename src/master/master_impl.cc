@@ -110,7 +110,6 @@ MasterImpl::MasterImpl()
       m_query_enabled(false),
       m_query_tabletnode_timer_id(kInvalidTimerId),
       m_load_balance_enabled(false),
-      m_load_balance_timer_id(kInvalidTimerId),
       m_thread_pool(new ThreadPool(FLAGS_tera_master_impl_thread_max_num)),
       m_is_stat_table(false),
       m_stat_table(NULL),
@@ -402,7 +401,7 @@ void MasterImpl::RestoreUserTablet(const std::vector<TabletMeta>& report_meta_li
     m_tablet_manager->Init();
     EnableQueryTabletNodeTimer();
     EnableTabletNodeGcTimer();
-    EnableLoadBalanceTimer();
+    EnableLoadBalance();
     RefreshTableCounter();
 }
 
@@ -1661,29 +1660,25 @@ void MasterImpl::DisableQueryTabletNodeTimer() {
 }
 
 void MasterImpl::ScheduleLoadBalance() {
-    m_mutex.AssertHeld();
+    {
+        MutexLock locker(&m_mutex);
+        if (!m_load_balance_enabled) {
+            return;
+        }
+    }
+
     ThreadPool::Task task =
         boost::bind(&MasterImpl::LoadBalance, this);
-    m_load_balance_timer_id = m_thread_pool->DelayTask(
-        FLAGS_tera_master_load_balance_period, task);
+    m_thread_pool->AddTask(task);
 }
 
-void MasterImpl::EnableLoadBalanceTimer() {
+void MasterImpl::EnableLoadBalance() {
     MutexLock locker(&m_mutex);
-    if (m_load_balance_timer_id == kInvalidTimerId) {
-        ScheduleLoadBalance();
-    }
     m_load_balance_enabled = true;
 }
 
-void MasterImpl::DisableLoadBalanceTimer() {
+void MasterImpl::DisableLoadBalance() {
     MutexLock locker(&m_mutex);
-    if (m_load_balance_timer_id != kInvalidTimerId) {
-        bool non_block = true;
-        if (m_thread_pool->CancelTask(m_load_balance_timer_id, non_block)) {
-            m_load_balance_timer_id = kInvalidTimerId;
-        }
-    }
     m_load_balance_enabled = false;
 }
 
@@ -1691,7 +1686,6 @@ void MasterImpl::LoadBalance() {
     {
         MutexLock locker(&m_mutex);
         if (!m_load_balance_enabled) {
-            m_load_balance_timer_id = kInvalidTimerId;
             return;
         }
     }
@@ -1703,15 +1697,14 @@ void MasterImpl::LoadBalance() {
     std::vector<TabletNodePtr> all_node_list;
     m_tabletnode_manager->GetAllTabletNodeInfo(&all_node_list);
 
-    uint32_t max_move_num = all_node_list.size();
-    // uint32_t max_round_num = std::numeric_limits<uint32_t>::max();
+    uint32_t max_move_num = all_node_list.size() / 20 + 1;
 
-    // descending sort the node according to workload,
-    // so that the node with heaviest workload will be scheduled first
-    if (m_load_balance_count.Inc() % 10 == 0 && FLAGS_tera_master_load_balance_qps_policy_enabled) {
-        max_move_num -= LoadBalance(m_load_scheduler.get(), max_move_num, 1,
-                                    all_node_list, all_tablet_list);
-    } else if (FLAGS_tera_master_load_balance_table_grained) {
+    // Run qps-based-sheduler first, then size-based-scheduler
+    // If read_pending occured, process it first
+    max_move_num -= LoadBalance(m_load_scheduler.get(), max_move_num, 1,
+                                all_node_list, all_tablet_list);
+
+    if (FLAGS_tera_master_load_balance_table_grained) {
         for (size_t i = 0; i < all_table_list.size(); ++i) {
             TablePtr table = all_table_list[i];
             if (table->GetStatus() != kTableEnable) {
@@ -1730,13 +1723,6 @@ void MasterImpl::LoadBalance() {
         max_move_num -= LoadBalance(m_size_scheduler.get(), max_move_num, 3,
                                     all_node_list, all_tablet_list);
     }
-
-    MutexLock locker(&m_mutex);
-    if (m_load_balance_enabled) {
-        ScheduleLoadBalance();
-    } else {
-        m_load_balance_timer_id = kInvalidTimerId;
-    }
 }
 
 uint32_t MasterImpl::LoadBalance(Scheduler* scheduler,
@@ -1751,6 +1737,8 @@ uint32_t MasterImpl::LoadBalance(Scheduler* scheduler,
         node_tablet_list[tablet->GetServerAddr()].push_back(tablet);
     }
 
+    // descending sort the node according to workload,
+    // so that the node with heaviest workload will be scheduled first
     scheduler->DescendingSort(tabletnode_list, table_name);
 
     uint32_t round_count = 0;
@@ -2234,7 +2222,7 @@ bool MasterImpl::EnterSafeMode(StatusCode* status) {
     m_tablet_manager->Stop();
     DisableQueryTabletNodeTimer();
     DisableTabletNodeGcTimer();
-    DisableLoadBalanceTimer();
+    DisableLoadBalance();
     return true;
 }
 
@@ -2267,7 +2255,7 @@ bool MasterImpl::LeaveSafeMode(StatusCode* status) {
     m_tablet_manager->Init();
     EnableQueryTabletNodeTimer();
     EnableTabletNodeGcTimer();
-    EnableLoadBalanceTimer();
+    EnableLoadBalance();
 
     std::vector<TabletNodePtr> node_array;
     m_tabletnode_manager->GetAllTabletNodeInfo(&node_array);
@@ -3397,6 +3385,8 @@ void MasterImpl::QueryTabletNodeCallback(std::string addr, QueryRequest* request
                 m_query_tabletnode_timer_id = kInvalidTimerId;
             }
         }
+
+        ScheduleLoadBalance();
 
         if (request->is_gc_query()) {
             DoTabletNodeGcPhase2();

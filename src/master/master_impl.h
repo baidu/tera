@@ -237,8 +237,8 @@ private:
     void ReleaseCacheWrapper();
     void EnableReleaseCacheTimer();
     void DisableReleaseCacheTimer();
-    void EnableLoadBalanceTimer();
-    void DisableLoadBalanceTimer();
+    void EnableLoadBalance();
+    void DisableLoadBalance();
 
     void InitAsync();
 
@@ -555,7 +555,6 @@ private:
 
     bool m_load_balance_enabled;
     int64_t m_load_balance_timer_id;
-    Counter m_load_balance_count;
 
     scoped_ptr<ThreadPool> m_thread_pool;
     AutoResetEvent m_query_event;
