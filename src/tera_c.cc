@@ -14,11 +14,15 @@ using tera::Client;
 using tera::Table;
 using tera::ErrorCode;
 using tera::RowMutation;
+using tera::ScanDescriptor;
+using tera::ResultStream;
 
 extern "C" {
 
 struct tera_client_t { Client* rep; };
 struct tera_table_t { Table* rep; };
+struct tera_scan_descriptor_t { ScanDescriptor* rep; };
+struct tera_result_stream_t { ResultStream* rep; };
 
 static bool SaveError(char** errptr, const ErrorCode& s) {
   assert(errptr != NULL);
@@ -104,5 +108,127 @@ void tera_table_delete(tera_table_t* table, const char* row_key, uint64_t keylen
     mutation->DeleteColumn(family, qu_str);
     table->rep->ApplyMutation(mutation);
 }
+
+tera_result_stream_t* tera_table_scan(tera_table_t* table,
+                                      const tera_scan_descriptor_t* desc,
+                                      char** errptr) {
+    ErrorCode err;
+    tera_result_stream_t* result = new tera_result_stream_t;
+    result->rep = table->rep->Scan(*desc->rep, &err);
+    if (SaveError(errptr, err)) {
+        return NULL;
+    }
+    return result;
+}
+
+tera_scan_descriptor_t* tera_scan_descriptor(const char* start_key, uint64_t keylen) {
+    std::string key(start_key, keylen);
+    tera_scan_descriptor_t* result = new tera_scan_descriptor_t;
+    result->rep = new ScanDescriptor(key);
+    return result;
+}
+
+void tera_scan_descriptor_add_column(tera_scan_descriptor_t* desc, const char* cf,
+                                     const char* qualifier, uint64_t qulen) {
+    std::string qu(qualifier, qulen);
+    desc->rep->AddColumn(cf, qu);
+}
+
+void tera_scan_descriptor_add_column_family(tera_scan_descriptor_t* desc, const char* cf) {
+    desc->rep->AddColumnFamily(cf);
+}
+
+bool tera_scan_descriptor_is_async(tera_scan_descriptor_t* desc) {
+    return desc->rep->IsAsync();
+}
+
+void tera_scan_descriptor_set_is_async(tera_scan_descriptor_t* desc, bool is_async) {
+    desc->rep->SetAsync(is_async);
+}
+
+void tera_scan_descriptor_set_buffer_size(tera_scan_descriptor_t* desc, int64_t size) {
+    desc->rep->SetBufferSize(size);
+}
+
+void tera_scan_descriptor_set_end(tera_scan_descriptor_t* desc, const char* end_key, uint64_t keylen) {
+    std::string key(end_key, keylen);
+    desc->rep->SetEnd(key);
+}
+
+void tera_scan_descriptor_set_filter_string(tera_scan_descriptor_t* desc, const char* filter_string) {
+    desc->rep->SetFilterString(filter_string);
+}
+
+void tera_scan_descriptor_set_pack_interval(tera_scan_descriptor_t* desc, int64_t interval) {
+    desc->rep->SetPackInterval(interval);
+}
+
+void tera_scan_descriptor_set_max_versions(tera_scan_descriptor_t* desc, int32_t versions) {
+    desc->rep->SetMaxVersions(versions);
+}
+
+void tera_scan_descriptor_set_snapshot(tera_scan_descriptor_t* desc, uint64_t snapshot_id) {
+    desc->rep->SetSnapshot(snapshot_id);
+}
+
+// NOTE: arguments order is different from C++ sdk(tera.h)
+void tera_scan_descriptor_set_time_range(tera_scan_descriptor_t* desc, int64_t ts_start, int64_t ts_end) {
+    desc->rep->SetTimeRange(ts_end, ts_start);
+}
+
+bool tera_result_stream_done(tera_result_stream_t* stream, char** errptr) {
+    ErrorCode err;
+    if (!stream->rep->Done(&err)) {
+        SaveError(errptr, err);
+        return false;
+    }
+    return true;
+}
+
+bool tera_result_stream_look_up(tera_result_stream_t* stream, const char* row_key, uint64_t len) {
+    std::string key(row_key, len);
+    return stream->rep->LookUp(key);
+}
+
+int64_t tera_result_stream_timestamp(tera_result_stream_t* stream) {
+    int64_t ts = stream->rep->Timestamp();
+    //fprintf(stderr, "%lld\n", ts);
+    return ts;
+}
+
+void tera_result_stream_qualifier(tera_result_stream_t* stream, char** str, uint64_t* strlen) {
+    std::string val = stream->rep->Qualifier();
+    *str = CopyString(val);
+    *strlen = val.size();
+}
+
+void tera_result_stream_column_name(tera_result_stream_t* stream, char** str, uint64_t* strlen) {
+    std::string val = stream->rep->ColumnName();
+    *str = CopyString(val);
+    *strlen = val.size();
+}
+
+void tera_result_stream_family(tera_result_stream_t* stream, char** str, uint64_t* strlen) {
+    std::string val = stream->rep->Family();
+    *str = CopyString(val);
+    *strlen = val.size();
+}
+
+void tera_result_stream_next(tera_result_stream_t* stream) {
+    stream->rep->Next();
+}
+
+void tera_result_stream_row_name(tera_result_stream_t* stream, char** str, uint64_t* strlen) {
+    std::string val = stream->rep->RowName();
+    *str = CopyString(val);
+    *strlen = val.size();
+}
+
+void tera_result_stream_value(tera_result_stream_t* stream, char** str, uint64_t* strlen) {
+    std::string val = stream->rep->Value();
+    *str = CopyString(val);
+    *strlen = val.size();
+}
+
 
 }  // end extern "C"
