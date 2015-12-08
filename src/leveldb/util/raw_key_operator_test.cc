@@ -363,7 +363,7 @@ TEST(RawKeyOperatorTest, ComparePerformace) {
     key2 = "row";
     column2 = "column";
     qualifier2 = "qualifier";
-    ts1 = 987654321;
+    ts2 = 987654321;
 
     keyop_bin->EncodeTeraKey(key1, column1, qualifier1, ts1, type1, &tera_key1);
     keyop_bin->EncodeTeraKey(key2, column2, qualifier2, ts2, type1, &tera_key2);
