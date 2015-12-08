@@ -18,7 +18,9 @@ namespace tera {
 namespace master {
 
 BatchGcStrategy::BatchGcStrategy (boost::shared_ptr<TabletManager> tablet_manager)
-	  : m_tablet_manager(tablet_manager) {}
+    : m_tablet_manager(tablet_manager),
+      m_file_total_num(0),
+      m_file_delete_num(0) {}
 
 bool BatchGcStrategy::PreQuery () {
     int64_t start_ts = get_micros();
@@ -42,10 +44,11 @@ bool BatchGcStrategy::PreQuery () {
         }
     }
 
+    m_file_total_num = 0;
     CollectDeadTabletsFiles();
 
-    LOG(INFO) << "[gc] DoTabletNodeGc: collect all files, cost: "
-        << (get_micros() - start_ts) / 1000 << "ms.";
+    LOG(INFO) << "[gc] DoTabletNodeGc: collect all files, total:" << m_file_total_num
+        << ", cost: " << (get_micros() - start_ts) / 1000 << "ms.";
 
     if (m_gc_tablets.size() == 0) {
         LOG(INFO) << "[gc] do not need gc this time.";
@@ -69,10 +72,11 @@ void BatchGcStrategy::PostQuery () {
         return;
     }
 
+    m_file_delete_num = 0;
     int64_t start_ts = get_micros();
     DeleteObsoleteFiles();
-    LOG(INFO) << "[gc] DoTabletNodeGcPhase2 finished, cost:"
-        << (get_micros() - start_ts) / 1000 << "ms.";
+    LOG(INFO) << "[gc] DoTabletNodeGcPhase2 finished, total:" << m_file_delete_num
+        << ", cost:" << (get_micros() - start_ts) / 1000 << "ms.";
 }
 
 void BatchGcStrategy::ProcessQueryCallbackForGc(QueryResponse* response) {
@@ -165,6 +169,7 @@ void BatchGcStrategy::CollectSingleDeadTablet(const std::string& tablename, uint
             env->DeleteDir(lg_path);
             continue;
         }
+        m_file_total_num += files.size();
         for (size_t f = 0; f < files.size(); ++f) {
             std::string file_path = lg_path + "/" + files[f];
             type = leveldb::kUnknown;
@@ -205,6 +210,7 @@ void BatchGcStrategy::DeleteObsoleteFiles() {
                 std::string file_path = leveldb::BuildTableFilePath(tablepath, lg, *it);
                 LOG(INFO) << "[gc] delete trash table file: " << file_path;
                 env->DeleteFile(file_path);
+                m_file_delete_num++;
             }
         }
     }
