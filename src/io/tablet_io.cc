@@ -399,30 +399,30 @@ bool TabletIO::Split(std::string* split_key, StatusCode* status) {
         }
     }
 
+    split_key->clear();
     if (!key_split.empty()) {
-        // find split key successfully
         *split_key = key_split.ToString();
-    } else if (FindAverageKey(m_start_key, m_end_key, split_key)) {
-        // could not find split_key, use average key
     } else {
-        // could not find split key
-        SetStatusCode(kTableNotSupport, status);
-        MutexLock lock(&m_mutex);
-        m_status = kReady;
-        m_db_ref_count--;
-        return false;
+        // could not find split_key, try calc average key
+        FindAverageKey(m_start_key, m_end_key, split_key);
     }
 
     VLOG(5) << "start: [" << DebugString(m_start_key)
         << "], end: [" << DebugString(m_end_key)
         << "], split: [" << DebugString(*split_key) << "]";
 
-    {
-        MutexLock lock(&m_mutex);
+    MutexLock lock(&m_mutex);
+    m_db_ref_count--;
+    if (*split_key != ""
+        && *split_key != m_start_key
+        && *split_key != m_end_key) {
         m_status = kSplited;
-        m_db_ref_count--;
+        return true;
+    } else {
+        SetStatusCode(kTableNotSupport, status);
+        m_status = kReady;
+        return false;
     }
-    return true;
 }
 
 bool TabletIO::Compact(StatusCode* status) {
