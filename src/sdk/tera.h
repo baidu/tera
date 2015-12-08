@@ -259,6 +259,10 @@ public:
     void SetMaxVersions(int32_t versions);
     /// 设置scan的超时时间
     void SetPackInterval(int64_t timeout);
+    /// set qu range search
+    void AddQualifierRange(const std::string& cf,
+                           const std::string& qu_start,
+                           const std::string& qu_end);
     /// 设置返回版本的时间范围
     void SetTimeRange(int64_t ts_end, int64_t ts_start);
     /// 设置过滤表达式（仅支持AND）

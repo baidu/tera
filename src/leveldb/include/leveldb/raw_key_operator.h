@@ -42,6 +42,9 @@ public:
                                 TeraKeyType* type) const = 0;
     virtual int Compare(const Slice& key1,
                         const Slice& key2) const = 0;
+
+    virtual void FindSuccessor(const std::string& row_key,
+                               std::string* successor_key) const = 0;
 };
 
 const RawKeyOperator* ReadableRawKeyOperator();
