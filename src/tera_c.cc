@@ -4,30 +4,31 @@
 
 #include "sdk/tera_c.h"
 
-#include <iostream>
-#include <map>
-
 #include <assert.h>
 #include <stdlib.h>
 #include <string.h>
 
+#include <iostream>
+#include <map>
+
 #include "common/mutex.h"
+
 #include "sdk/tera.h"
 
 using tera::Client;
-using tera::Table;
 using tera::ErrorCode;
+using tera::ResultStream;
 using tera::RowMutation;
 using tera::ScanDescriptor;
-using tera::ResultStream;
+using tera::Table;
 
 extern "C" {
 
-struct tera_client_t { Client* rep; };
-struct tera_table_t { Table* rep; };
-struct tera_row_mutation_t { RowMutation* rep; };
+struct tera_client_t          { Client*         rep; };
+struct tera_result_stream_t   { ResultStream*   rep; };
+struct tera_row_mutation_t    { RowMutation*    rep; };
 struct tera_scan_descriptor_t { ScanDescriptor* rep; };
-struct tera_result_stream_t { ResultStream* rep; };
+struct tera_table_t           { Table*          rep; };
 
 static bool SaveError(char** errptr, const ErrorCode& s) {
   assert(errptr != NULL);
@@ -49,7 +50,7 @@ static char* CopyString(const std::string& str) {
 }
 
 //           <RowMutation*, <tera_row_mutation_t*, user_callback> >
-typedef std::map<int64_t, std::pair<int64_t, int64_t> > mutation_callback_map_t;
+typedef std::map<void*, std::pair<void*, void*> > mutation_callback_map_t;
 static mutation_callback_map_t g_mutation_callback_map;
 static Mutex g_mutation_mutex;
 
@@ -147,17 +148,17 @@ void tera_row_mutation_delete_column(tera_row_mutation_t* mu, const char* cf,
 
 void tera_row_mutation_callback_stub(RowMutation* mu) {
     MutexLock locker(&g_mutation_mutex);
-    int64_t sdk_mu = (int64_t)mu; // C++ sdk RowMutation*
+    void* sdk_mu = mu; // C++ sdk RowMutation*
     mutation_callback_map_t::iterator it = g_mutation_callback_map.find(sdk_mu);
     assert (it != g_mutation_callback_map.end());
 
-    std::pair<int64_t, int64_t> apair = it->second;
-    int64_t c_mu = apair.first; // C tera_row_mutation_t*
+    std::pair<void*, void*> apair = it->second;
+    void* c_mu = apair.first; // C tera_row_mutation_t*
     MutationCallbackType callback = (MutationCallbackType)apair.second;
 
     g_mutation_mutex.Unlock();
     // users use C tera_row_mutation_t* to construct it's own object
-    callback((void*)c_mu);
+    callback(c_mu);
     g_mutation_mutex.Lock();
 
     g_mutation_callback_map.erase(it);
@@ -165,9 +166,9 @@ void tera_row_mutation_callback_stub(RowMutation* mu) {
 
 void tera_row_mutation_set_callback(tera_row_mutation_t* mu, MutationCallbackType callback) {
     MutexLock locker(&g_mutation_mutex);
-    g_mutation_callback_map.insert( std::pair<int64_t, std::pair<int64_t, int64_t> >(
-        (int64_t)mu->rep,
-        std::pair<int64_t, int64_t>((int64_t)mu, (int64_t)callback))
+    g_mutation_callback_map.insert( std::pair<void*, std::pair<void*, void*> >(
+        mu->rep,
+        std::pair<void*, void*>(mu, (void*)callback))
     );
     mu->rep->SetCallBack(tera_row_mutation_callback_stub);
 }
