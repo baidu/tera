@@ -1,5 +1,6 @@
 #!/usr/bin/env python
 
+from ctypes import CFUNCTYPE
 from ctypes import POINTER
 from ctypes import byref
 from ctypes import c_bool
@@ -51,10 +52,68 @@ class Client(object):
             raise TeraSdkException("open table failed:" + err.value)
         return table
 
+MUTATION_CALLBACK = CFUNCTYPE(None, c_void_p)
+
+lib.tera_row_mutation_put.argtypes = [c_void_p, c_char_p,
+                                      c_char_p, c_uint64,
+                                      c_char_p, c_uint64]
+lib.tera_row_mutation_put.restype = None
+
+
+lib.tera_row_mutation.argtypes = [c_void_p, c_char_p, c_uint64]
+lib.tera_row_mutation.restype = c_void_p
+
+lib.tera_row_mutation_set_callback.argtypes = [c_void_p, MUTATION_CALLBACK]
+lib.tera_row_mutation_set_callback.restype = None
+
+lib.tera_row_mutation_delete_column.argtypes = [c_void_p, c_char_p,
+                                                c_char_p, c_uint64]
+lib.tera_row_mutation_delete_column.restype = None
+
+
+class RowMutation(object):
+    def __init__(self, mutation):
+        self.mutation = mutation
+
+    def Put(self, cf, qu, value):
+        lib.tera_row_mutation_put(self.mutation, cf,
+                                  qu, c_uint64(len(qu)),
+                                  value, c_uint64(len(value)))
+
+    def DeleteColumn(self, cf, qu):
+        lib.tera_row_mutation_delete_column(self.mutation, cf,
+                                            qu, c_uint64(len(qu)))
+
+    def SetCallback(self, callback):
+        lib.tera_row_mutation_set_callback(self.mutation, callback)
+
+    def RowKey(self):
+        value = POINTER(c_ubyte)()
+        vallen = c_uint64()
+        lib.tera_row_mutation_rowkey(self.mutation,
+                                     byref(value), byref(vallen))
+        return string_at(value, long(vallen.value))
+
+lib.tera_table_apply_mutation.argtypes = [c_void_p, c_void_p]
+lib.tera_table_apply_mutation.restype = None
+
+lib.tera_table_is_put_finished.argtypes = [c_void_p]
+lib.tera_table_is_put_finished.restype = c_bool
+
 
 class Table(object):
     def __init__(self):
         pass
+
+    def NewRowMutation(self, rowkey):
+        return RowMutation(lib.tera_row_mutation(self.table, rowkey,
+                                                 c_uint64(len(rowkey))))
+
+    def ApplyMutation(self, mutation):
+        return lib.tera_table_apply_mutation(self.table, mutation.mutation)
+
+    def IsPutFinished(self):
+        return lib.tera_table_is_put_finished(self.table)
 
     def Get(self, rowkey, cf, qu, snapshot):
         err = c_char_p()
