@@ -5148,10 +5148,13 @@ void MasterImpl::RefreshTableCounter() {
     // use same interval with query because table counter changed after query
     ThreadPool::Task task =
         boost::bind(&MasterImpl::RefreshTableCounter, this);
-    m_query_tabletnode_timer_id = m_thread_pool->DelayTask(
-        FLAGS_tera_master_query_tabletnode_period, task);
+    m_thread_pool->DelayTask( FLAGS_tera_master_query_tabletnode_period, task);
     LOG(INFO) << "RefreshTableCounter, cost: "
         << ((get_micros() - start) / 1000) << "ms.";
+}
+
+std::string MasterImpl::ProfilingLog() {
+    return m_thread_pool->ProfilingLog();
 }
 } // namespace master
 } // namespace tera
