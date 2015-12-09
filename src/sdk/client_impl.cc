@@ -457,17 +457,23 @@ Table* ClientImpl::OpenTable(const std::string& table_name,
     }
 }
 
-void ClientImpl::CloseTable(const std::string& table_name) {
+void ClientImpl::CloseTable(Table*& table_handle) {
+    std::string table_name;
+    if (table_handle) {
+        table_name = table_handle->GetName();
+    } else {
+        return;
+    }
     MutexLock l(&_open_table_mutex);
     OpenTableMap::iterator it = _open_tables.find(table_name);
     if (it == _open_tables.end()) {
-        return;
+        LOG(ERROR) << "close fail: table not found [" << table_name << "].";
     }
-
     if (--it->second.second <= 0) {
         delete it->second.first;
         _open_tables.erase(it);
     }
+    table_handle = NULL;
 }
 
 bool ClientImpl::GetTabletLocation(const string& table_name,

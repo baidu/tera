@@ -66,7 +66,7 @@ public:
 
     virtual Table* OpenTable(const string& table_name, ErrorCode* err);
 
-    virtual void CloseTable(const string& table_name);
+    virtual void CloseTable(Table*& table_handle);
 
     virtual bool GetTabletLocation(const string& table_name,
                                    std::vector<TabletInfo>* tablets,
