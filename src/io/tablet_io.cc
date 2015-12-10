@@ -425,7 +425,7 @@ bool TabletIO::Split(std::string* split_key, StatusCode* status) {
     return true;
 }
 
-bool TabletIO::Compact(StatusCode* status) {
+bool TabletIO::Compact(int lg_no, StatusCode* status) {
     {
         MutexLock lock(&m_mutex);
         if (m_status != kReady) {
@@ -439,7 +439,7 @@ bool TabletIO::Compact(StatusCode* status) {
         m_db_ref_count++;
     }
     CHECK_NOTNULL(m_db);
-    m_db->CompactRange(NULL, NULL);
+    m_db->CompactRange(NULL, NULL, lg_no);
 
     {
         MutexLock lock(&m_mutex);

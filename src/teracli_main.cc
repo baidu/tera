@@ -1863,19 +1863,32 @@ int32_t CompactTabletOp(Client* client, int32_t argc, char** argv, ErrorCode* er
         return -1;
     }
 
-    std::string tablet_path = argv[3];
-    std::string::size_type pos = tablet_path.find('/');
-    if (pos == std::string::npos) {
-        LOG(ERROR) << "tablet path error, format [tablename/tabletname]: " << tablet_path;
-        return -1;
+    std::vector<std::string> subs;
+    std::string table, tablet, tablet_path;
+    int lg = -1;
+    SplitString(argv[3], "/", &subs);
+    if (subs.size() == 2) {
+        table = subs[0];
+        tablet = subs[1];
+        tablet_path = table + "/" + tablet;
+    } else if (subs.size() == 3) {
+        table = subs[0];
+        tablet = subs[1];
+        tablet_path = table + "/" + tablet;
+        if (!StringToNumber(subs[2], &lg)) {
+            LOG(ERROR) << "lg no error: " << subs[2];
+            return -5;
+        }
+    } else if (subs.size() != 2 && subs.size() != 3) {
+        LOG(ERROR) << "tablet path error, format [table/tablet] "
+            << "or [table/tablet/lg]: " << tablet_path;
+        return -2;
     }
-    std::string tablename = tablet_path.substr(0, pos);
-    std::string tabletname = tablet_path.substr(pos + 1);
 
     std::vector<TabletInfo> tablet_list;
-    if (!client->GetTabletLocation(tablename, &tablet_list, err)) {
+    if (!client->GetTabletLocation(table, &tablet_list, err)) {
         LOG(ERROR) << "fail to list tablet info";
-        return -1;
+        return -3;
     }
 
     std::vector<TabletInfo>::iterator tablet_it = tablet_list.begin();
@@ -1886,7 +1899,7 @@ int32_t CompactTabletOp(Client* client, int32_t argc, char** argv, ErrorCode* er
     }
     if (tablet_it == tablet_list.end()) {
         LOG(ERROR) << "fail to find tablet: " << tablet_path;
-        return -1;
+        return -4;
     }
 
     CompactTabletRequest request;
@@ -1897,12 +1910,16 @@ int32_t CompactTabletOp(Client* client, int32_t argc, char** argv, ErrorCode* er
     request.mutable_key_range()->set_key_end(tablet_it->end_key);
     tabletnode::TabletNodeClient tabletnode_client(tablet_it->server_addr, 3600000);
 
-    std::cerr << "try compact tablet: " << tablet_it->path
-        << " on " << tabletnode_client.GetConnectAddr() << std::endl;
+    std::cout << "try compact tablet: " << tablet_it->path;
+    if (lg >= 0) {
+        request.set_lg_no(lg);
+        std::cout << " lg " << lg;
+    }
+    std::cout << " on " << tabletnode_client.GetConnectAddr() << std::endl;
     if (!tabletnode_client.CompactTablet(&request, &response)) {
-        LOG(ERROR) << "no response from [" << tabletnode_client.GetConnectAddr()
-            << "]";
-        return -1;
+        LOG(ERROR) << "no response from ["
+            << tabletnode_client.GetConnectAddr() << "]";
+        return -7;
     }
 
     if (response.status() != kTabletNodeOk) {
@@ -1918,7 +1935,7 @@ int32_t CompactTabletOp(Client* client, int32_t argc, char** argv, ErrorCode* er
     }
 
     std::cerr << "compact tablet success, data size: "
-        << response.compact_size() << std::endl;
+        << utils::ConvertByteToString(response.compact_size()) << std::endl;
     return 0;
 }
 
