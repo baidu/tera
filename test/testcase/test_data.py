@@ -8,6 +8,22 @@ import nose
 
 import common
 
+@nose.tools.with_setup(common.create_singleversion_table, common.cleanup)
+def test_async_scan():
+    """
+    batch scan
+    1. write data set 1
+    2. scan & compare
+    :return: None
+    """
+    table_name = 'test'
+    dump_file = 'dump.out'
+    scan_file = 'scan.out'
+    common.run_tera_mark([(dump_file, False)], op='w', table_name=table_name, cf='cf0:q,cf1:q', random='random',
+                         key_seed=1, value_seed=10, value_size=100, num=10000, key_size=20)
+    common.batch_scan_table(table_name=table_name, file_path=scan_file, allversion=False)
+    nose.tools.assert_true(common.compare_files(dump_file, scan_file, need_sort=True))
+
 
 @nose.tools.with_setup(common.create_kv_table, common.cleanup)
 def test_kv_random_write():

@@ -12,7 +12,6 @@ import json
 
 from conf import const
 
-
 def print_debug_msg(sid=0, msg=""):
     """
     provide general print interface
@@ -204,6 +203,27 @@ def run_tera_mark(file_path, op, table_name, random, value_size, num, key_size, 
         ret = subprocess.Popen(dump_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, shell=True)
         print ''.join(ret.stdout.readlines())
         print ''.join(ret.stderr.readlines())
+
+
+def batch_scan_table(table_name, file_path, allversion, snapshot=0):
+    allv = ''
+    if allversion is True:
+        allv += 'scanallv'
+    else:
+        allv += 'scan'
+
+    snapshot_args = ''
+    if snapshot != 0:
+        snapshot_args += '--snapshot={snapshot}'.format(snapshot=snapshot)
+
+    async_flag = '--tera_sdk_scan_async_enabled=true --tera_client_scan_async_enabled=true'
+
+    scan_cmd = '{teracli} {flags} {op} {table_name} "" "" {snapshot} > {out}'.format(
+        teracli=const.teracli_binary, flags=async_flag, op=allv, table_name=table_name, snapshot=snapshot_args, out=file_path)
+    print scan_cmd
+    ret = subprocess.Popen(scan_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, shell=True)
+    print ''.join(ret.stdout.readlines())
+    print ''.join(ret.stderr.readlines())
 
 
 def scan_table(table_name, file_path, allversion, snapshot=0):
