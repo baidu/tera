@@ -8,21 +8,27 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include <iostream>
+#include <map>
+
+#include "common/mutex.h"
+
 #include "sdk/tera.h"
 
 using tera::Client;
-using tera::Table;
 using tera::ErrorCode;
+using tera::ResultStream;
 using tera::RowMutation;
 using tera::ScanDescriptor;
-using tera::ResultStream;
+using tera::Table;
 
 extern "C" {
 
-struct tera_client_t { Client* rep; };
-struct tera_table_t { Table* rep; };
+struct tera_client_t          { Client*         rep; };
+struct tera_result_stream_t   { ResultStream*   rep; };
+struct tera_row_mutation_t    { RowMutation*    rep; };
 struct tera_scan_descriptor_t { ScanDescriptor* rep; };
-struct tera_result_stream_t { ResultStream* rep; };
+struct tera_table_t           { Table*          rep; };
 
 static bool SaveError(char** errptr, const ErrorCode& s) {
   assert(errptr != NULL);
@@ -42,6 +48,12 @@ static char* CopyString(const std::string& str) {
   memcpy(result, str.data(), sizeof(char) * str.size());
   return result;
 }
+
+//           <RowMutation*, <tera_row_mutation_t*, user_callback> >
+typedef std::map<void*, std::pair<void*, void*> > mutation_callback_map_t;
+static mutation_callback_map_t g_mutation_callback_map;
+static Mutex g_mutation_mutex;
+
 
 tera_client_t* tera_client_open(const char* conf_path, const char* log_prefix, char** errptr) {
     ErrorCode err;
@@ -107,6 +119,64 @@ void tera_table_delete(tera_table_t* table, const char* row_key, uint64_t keylen
     RowMutation* mutation = table->rep->NewRowMutation(key_str);
     mutation->DeleteColumn(family, qu_str);
     table->rep->ApplyMutation(mutation);
+}
+
+tera_row_mutation_t* tera_row_mutation(tera_table_t* table, const char* row_key, uint64_t keylen) {
+    tera_row_mutation_t* result = new tera_row_mutation_t;
+    result->rep = table->rep->NewRowMutation(std::string(row_key, keylen));
+    return result;
+}
+
+void tera_table_apply_mutation(tera_table_t* table, tera_row_mutation_t* mutation) {
+    table->rep->ApplyMutation(mutation->rep);
+}
+
+bool tera_table_is_put_finished(tera_table_t* table) {
+    return table->rep->IsPutFinished();
+}
+
+void tera_row_mutation_put(tera_row_mutation_t* mu, const char* cf,
+                           const char* qu, uint64_t qulen,
+                           const char* val, uint64_t vallen) {
+    mu->rep->Put(cf, std::string(qu, qulen), std::string(val, vallen));
+}
+
+void tera_row_mutation_delete_column(tera_row_mutation_t* mu, const char* cf,
+                                     const char* qu, uint64_t qulen) {
+    mu->rep->DeleteColumn(cf, std::string(qu, qulen));
+}
+
+void tera_row_mutation_callback_stub(RowMutation* mu) {
+    MutexLock locker(&g_mutation_mutex);
+    void* sdk_mu = mu; // C++ sdk RowMutation*
+    mutation_callback_map_t::iterator it = g_mutation_callback_map.find(sdk_mu);
+    assert (it != g_mutation_callback_map.end());
+
+    std::pair<void*, void*> apair = it->second;
+    void* c_mu = apair.first; // C tera_row_mutation_t*
+    MutationCallbackType callback = (MutationCallbackType)apair.second;
+
+    g_mutation_mutex.Unlock();
+    // users use C tera_row_mutation_t* to construct it's own object
+    callback(c_mu);
+    g_mutation_mutex.Lock();
+
+    g_mutation_callback_map.erase(it);
+}
+
+void tera_row_mutation_set_callback(tera_row_mutation_t* mu, MutationCallbackType callback) {
+    MutexLock locker(&g_mutation_mutex);
+    g_mutation_callback_map.insert( std::pair<void*, std::pair<void*, void*> >(
+        mu->rep,
+        std::pair<void*, void*>(mu, (void*)callback))
+    );
+    mu->rep->SetCallBack(tera_row_mutation_callback_stub);
+}
+
+void tera_row_mutation_rowkey(tera_row_mutation_t* mu, char** val, uint64_t* vallen) {
+    std::string row = mu->rep->RowKey();
+    *val = CopyString(row);
+    *vallen = row.size();
 }
 
 tera_result_stream_t* tera_table_scan(tera_table_t* table,
@@ -229,6 +299,5 @@ void tera_result_stream_value(tera_result_stream_t* stream, char** str, uint64_t
     *str = CopyString(val);
     *strlen = val.size();
 }
-
 
 }  // end extern "C"
