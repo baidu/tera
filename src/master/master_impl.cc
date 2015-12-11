@@ -111,7 +111,8 @@ MasterImpl::MasterImpl()
       m_load_scheduler(new LoadScheduler),
       m_release_cache_timer_id(kInvalidTimerId),
       m_query_enabled(false),
-      m_last_query_time(0),
+      m_last_schedule_query_time(0),
+      m_start_query_time(0),
       m_query_tabletnode_timer_id(kInvalidTimerId),
       m_load_balance_enabled(false),
       m_thread_pool(new ThreadPool(FLAGS_tera_master_impl_thread_max_num)),
@@ -1594,9 +1595,11 @@ void MasterImpl::QueryTabletNode() {
         }
     }
 
+    m_start_query_time = get_micros();
     std::vector<TabletNodePtr> tabletnode_array;
     m_tabletnode_manager->GetAllTabletNodeInfo(&tabletnode_array);
-    LOG(INFO) << "query tabletnodes: " << tabletnode_array.size();
+    LOG(INFO) << "query tabletnodes: " << tabletnode_array.size()
+        << ", id " << m_query_tabletnode_timer_id;
 
     if (FLAGS_tera_master_stat_table_enabled && !m_is_stat_table) {
         CreateStatTable();
@@ -1650,14 +1653,17 @@ void MasterImpl::QueryTabletNode() {
 
 void MasterImpl::ScheduleQueryTabletNode() {
     m_mutex.AssertHeld();
-    int64_t cur_time = get_micros();
-    int schedule_delay = cur_time - m_last_query_time;
-    m_last_query_time = cur_time;
-    if (schedule_delay > FLAGS_tera_master_query_tabletnode_period) {
-        schedule_delay = FLAGS_tera_master_query_tabletnode_period;
-    } else if (schedule_delay <= 0) {
+    int64_t cur_time = get_micros() / 1000;
+    int schedule_delay =
+        FLAGS_tera_master_query_tabletnode_period + m_last_schedule_query_time - cur_time;
+    m_last_schedule_query_time = cur_time;
+    if (schedule_delay <= 0) {
         schedule_delay = 1;
+    } else if (schedule_delay > FLAGS_tera_master_query_tabletnode_period) {
+        schedule_delay = FLAGS_tera_master_query_tabletnode_period;
     }
+
+    LOG(INFO) << "schedule query tabletnodes after " << schedule_delay << "ms.";
 
     ThreadPool::Task task =
         boost::bind(&MasterImpl::QueryTabletNode, this);
@@ -3405,6 +3411,9 @@ void MasterImpl::QueryTabletNodeCallback(std::string addr, QueryRequest* request
     }
 
     if (0 == m_query_pending_count.Dec()) {
+        LOG(INFO) << "query tabletnodes finish, id "
+            << m_query_tabletnode_timer_id
+            << ", cost " << (get_micros() - m_start_query_time) / 1000 << "ms." ;
         {
             MutexLock locker(&m_mutex);
             if (m_query_enabled) {

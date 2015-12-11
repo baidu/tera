@@ -396,6 +396,17 @@ bool Tablet::Verify(const std::string& table_name, const std::string& key_start,
         || m_meta.path() != path
         || m_meta.server_addr() != server_addr) {
         SetStatusCode(kTableInvalidArg, ret_status);
+        LOG(WARNING) << "tablet verify failed ["
+            << m_meta.table_name() << ","
+            << m_meta.key_range().key_start() << ","
+            << m_meta.key_range().key_end() << ","
+            << m_meta.path() << ","
+            << m_meta.server_addr() << "] vs ["
+            << table_name << ","
+            << key_start << ","
+            << key_end << ","
+            << path << ","
+            << server_addr << "].";
         return false;
     }
     return true;
