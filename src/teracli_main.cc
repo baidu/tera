@@ -180,6 +180,9 @@ void UsageMore(const std::string& prg_name) {
        findts   <tablename> <rowkey>                                        \n\
                 find the specify tabletnode serving 'rowkey'.               \n\
                                                                             \n\
+       reload config hostname:port                                          \n\
+                notify master | ts reload flag file                         \n\
+                *** at your own risk ***                                    \n\
                                                                             \n\
        version\n\n";
 }
@@ -1822,6 +1825,38 @@ int32_t SafeModeOp(Client* client, int32_t argc, char** argv, ErrorCode* err) {
     return 0;
 }
 
+int32_t ReloadConfigOp(Client* client, int32_t argc, char** argv, ErrorCode* err) {
+    if ((argc != 4) || (std::string(argv[2]) != "config")) {
+        UsageMore(argv[0]);
+        return -1;
+    }
+    std::string addr(argv[3]);
+
+    tera::sdk::ClusterFinder finder(FLAGS_tera_zk_root_path, FLAGS_tera_zk_addr_list);
+    if (finder.MasterAddr() == addr) {
+        // master
+        std::vector<std::string> arg_list;
+        if (!client->CmdCtrl("reload config", arg_list, NULL, NULL, err)) {
+            LOG(ERROR) << "fail to reload config: " << addr;
+            return -1;
+        }
+    } else {
+        // tabletnode
+        TsCmdCtrlRequest request;
+        TsCmdCtrlResponse response;
+        request.set_sequence_id(0);
+        request.set_command("reload config");
+        tabletnode::TabletNodeClient tabletnode_client(addr, 3600000);
+        if (!tabletnode_client.CmdCtrl(&request, &response)
+            || (response.status() != kTabletNodeOk)) {
+            LOG(ERROR) << "fail to reload config: " << addr;
+            return -1;
+        }
+    }
+    std::cout << "reload config success" << std::endl;
+    return 0;
+}
+
 int32_t CompactTabletOp(Client* client, int32_t argc, char** argv, ErrorCode* err) {
     if (argc != 4) {
         UsageMore(argv[0]);
@@ -2471,6 +2506,8 @@ int main(int argc, char* argv[]) {
         ret = Meta2Op(client, argc, argv);
     } else if (cmd == "user") {
         ret = UserOp(client, argc, argv, &error_code);
+    } else if (cmd == "reload") {
+        ret = ReloadConfigOp(client, argc, argv, &error_code);
     } else if (cmd == "version") {
         PrintSystemVersion();
     } else if (cmd == "snapshot") {

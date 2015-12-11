@@ -57,6 +57,8 @@ private:
     mutable Mutex m_gc_mutex;
     std::map<std::string, GcTabletSet> m_gc_tablets;
     std::map<std::string, GcFileSet> m_gc_live_files;
+    int64_t m_file_total_num;
+    int64_t m_file_delete_num;
 };
 
 class IncrementalGcStrategy : public GcStrategy{
