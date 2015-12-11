@@ -1,7 +1,7 @@
 # 指定各种路径，onebox中无需修改
 --log_dir=../log
 --tera_tabletnode_path_prefix=../data/
---tera_zk_lib_log_path=../log/zk.log
+--tera_zk_lib_log_file=../log/zk.log
 
 # 指定使用本地文件系统
 --tera_leveldb_env_type=local
