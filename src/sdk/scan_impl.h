@@ -59,6 +59,70 @@ private:
     void operator=(const ResultStreamImpl&);
 };
 
+///////////////////////////////////////
+/////    high performance scan    /////
+///////////////////////////////////////
+class ResultStreamBatchImpl : public ResultStreamImpl {
+public:
+    // user interface
+    ResultStreamBatchImpl(TableImpl* table, ScanDescImpl* scan_desc);
+    virtual ~ResultStreamBatchImpl();
+
+    bool LookUp(const std::string& row_key); // TODO: result maybe search like a map
+    bool Done(ErrorCode* err);// wait until slot become valid
+    void Next(); // get next kv in RowResult
+
+    std::string RowName() const; // get row key
+    std::string Family() const; // get cf
+    std::string Qualifier() const;// get qu
+    std::string ColumnName() const; // get cf:qu
+    int64_t Timestamp() const; // get ts
+    std::string Value() const; // get value
+
+public:
+    // TableImpl interface
+    void GetRpcHandle(ScanTabletRequest** request,
+                      ScanTabletResponse** response); // alloc resource for scan session
+    void ReleaseRpcHandle(ScanTabletRequest* request,
+                          ScanTabletResponse* response); // free resource for scan session
+    void OnFinish(ScanTabletRequest* request,
+                  ScanTabletResponse* response); // scan callback
+private:
+    void ClearAndScanNextSlot(bool scan_next);
+    void ScanSessionReset();
+
+private:
+    mutable Mutex mu_;
+    CondVar cv_;
+
+    int32_t ref_count_; // use for scan_imple destory
+
+    // session control
+    uint64_t session_id_; // client and ts use session id to finish channel negotiation
+    bool session_done_; // session is finish
+    StatusCode session_error_; // if error occur during scan, set error code.
+    uint32_t session_data_idx_; // current result id wait
+    bool part_of_session_; // TODO, should be deleted
+    std::string session_end_key_;
+    uint32_t session_last_idx_; // if session done, point to the last data_idx
+
+    // sliding window control
+    enum ScanSlotState {
+        SCANSLOT_INVALID = 0, // init state
+        SCANSLOT_VALID = 1, // slot can be read
+    };
+    typedef struct ScanSlot {
+        uint64_t state_; // ScanSlotState
+        RowResult cell_; // kv result
+    } ScanSlot;
+    std::vector<ScanSlot> sliding_window_; // scan_slot buffer
+    int32_t sliding_window_idx_; // current slot index
+    int32_t next_idx_; // offset in sliding_window[cur_buffer_idx]
+};
+
+/////////////////////////////
+/////    stream scan    /////
+/////////////////////////////
 class ResultStreamAsyncImpl : public ResultStreamImpl {
 public:
     ResultStreamAsyncImpl(TableImpl* table, ScanDescImpl* scan_desc_impl);

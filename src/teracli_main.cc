@@ -852,6 +852,7 @@ int32_t ScanOp(Client* client, int32_t argc, char** argv, ErrorCode* err) {
             g_last_time = time_cur;
         }
     }
+    delete result_stream;
     if (err->GetType() != ErrorCode::kOK) {
         LOG(ERROR) << "fail to finish scan: " << err->GetReason();
         return -1;
