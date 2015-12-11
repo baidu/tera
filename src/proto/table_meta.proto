@@ -65,6 +65,24 @@ message TabletCounter {
     optional bool is_on_busy = 15 [default = false];
 }
 
+message TableCounter {
+    optional int64 lread = 1;
+    optional int64 scan_rows = 2;
+    optional int64 scan_max = 3;
+    optional int64 scan_size = 4;
+    optional int64 read_rows = 5;
+    optional int64 read_max = 6;
+    optional int64 read_size = 7;
+    optional int64 write_rows = 8;
+    optional int64 write_max = 9;
+    optional int64 write_size = 10;
+
+    optional int64 tablet_num = 20;
+    optional int64 notready_num = 21;
+    optional int64 size = 22;
+    repeated int64 lg_size = 23;
+}
+
 message TableMeta {
     optional string table_name = 1;
     optional TableStatus status = 2;
@@ -92,6 +110,7 @@ message TabletMeta {
 
 message TableMetaList {
     repeated TableMeta meta = 1;
+    repeated TableCounter counter = 2;
 }
 
 message TabletMetaList {

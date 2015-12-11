@@ -414,8 +414,9 @@ Status DBTable::Write(const WriteOptions& options, WriteBatch* my_batch) {
             log_->AddRecord(slice);
             s = log_->WaitDone(wait_sec);
             if (s.IsTimeOut()) {
-                Log(options_.info_log, "[%s] AddRecord time out %lu",
-                    dbname_.c_str(), current_log_size_);
+                Log(options_.info_log, "[%s] AddRecord time out, current log size: %lu, "
+                    "record size: %lu, wait_sec: %u",
+                    dbname_.c_str(), current_log_size_, slice.size(), wait_sec);
                 int ret = SwitchLog(true);
                 if (ret == 0) {
                     continue;

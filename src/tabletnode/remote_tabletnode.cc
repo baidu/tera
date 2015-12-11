@@ -193,6 +193,15 @@ void RemoteTabletNode::Query(google::protobuf::RpcController* controller,
     m_ctrl_thread_pool->AddPriorityTask(callback);
 }
 
+void RemoteTabletNode::CmdCtrl(google::protobuf::RpcController* controller,
+                               const TsCmdCtrlRequest* request,
+                               TsCmdCtrlResponse* response,
+                               google::protobuf::Closure* done) {
+    ThreadPool::Task callback =
+        boost::bind(&RemoteTabletNode::DoCmdCtrl, this, controller,
+                    request, response, done);
+    m_ctrl_thread_pool->AddPriorityTask(callback);
+}
 
 void RemoteTabletNode::ScanTablet(google::protobuf::RpcController* controller,
                                   const ScanTabletRequest* request,
@@ -359,6 +368,18 @@ void RemoteTabletNode::DoQuery(google::protobuf::RpcController* controller,
     LOG(INFO) << "accept RPC (Query) id: " << id;
     m_tabletnode_impl->Query(request, response, done);
     LOG(INFO) << "finish RPC (Query) id: " << id
+        << ", cost " << (get_micros() - start_micros) / 1000 << "ms.";
+}
+
+void RemoteTabletNode::DoCmdCtrl(google::protobuf::RpcController* controller,
+                                 const TsCmdCtrlRequest* request,
+                                 TsCmdCtrlResponse* response,
+                                 google::protobuf::Closure* done) {
+    uint64_t id = request->sequence_id();
+    int64_t start_micros = get_micros();
+    LOG(INFO) << "accept RPC (CmdCtrl) id: " << id;
+    m_tabletnode_impl->CmdCtrl(request, response, done);
+    LOG(INFO) << "finish RPC (CmdCtrl) id: " << id
         << ", cost " << (get_micros() - start_micros) / 1000 << "ms.";
 }
 

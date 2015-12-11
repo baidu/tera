@@ -263,7 +263,11 @@ void RemoteMaster::DoShowTables(google::protobuf::RpcController* controller,
                                 ShowTablesResponse* response,
                                 google::protobuf::Closure* done) {
     LOG(INFO) << "accept RPC (ShowTables)";
-    m_master_impl->ShowTables(request, response, done);
+    if (request->has_all_brief() && request->all_brief()) {
+        m_master_impl->ShowTablesBrief(request, response, done);
+    } else {
+        m_master_impl->ShowTables(request, response, done);
+    }
     LOG(INFO) << "finish RPC (ShowTables)";
 }
 

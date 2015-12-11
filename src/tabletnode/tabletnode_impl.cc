@@ -29,6 +29,7 @@
 #include "tabletnode/tablet_manager.h"
 #include "tabletnode/tabletnode_zk_adapter.h"
 #include "types.h"
+#include "utils/config_utils.h"
 #include "utils/counter.h"
 #include "utils/string_util.h"
 #include "utils/timer.h"
@@ -80,6 +81,8 @@ DECLARE_bool(tera_ins_enabled);
 
 DECLARE_bool(tera_io_cache_path_vanish_allowed);
 DECLARE_int64(tera_tabletnode_tcm_cache_size);
+
+DECLARE_string(flagfile);
 
 extern tera::Counter range_error_counter;
 extern tera::Counter rand_read_delay;
@@ -435,6 +438,15 @@ void TabletNodeImpl::WriteTablet(const WriteTabletRequest* request,
     std::map<io::TabletIO*, std::vector<int32_t>* >::iterator it;
 
     int32_t row_num = request->row_list_size();
+    // check arguments
+    for (int32_t i = 0; i < row_num; i++) {
+        const RowMutationSequence& mu_seq = request->row_list(i);
+        if (mu_seq.row_key().size() >= 64 * 1024) { // 64KB
+            response->set_status(kTableNotSupport);
+            done->Run();
+            return;
+        }
+    }
     if (request->row_list_size() > 0) {
         for (int32_t i = 0; i < row_num; i++) {
             io::TabletIO* tablet_io = m_tablet_manager->GetTablet(
@@ -624,6 +636,24 @@ void TabletNodeImpl::Rollback(const SnapshotRollbackRequest* request, SnapshotRo
             << ", " << DebugString(tablet_io->GetEndKey()) << "]";
     }
     tablet_io->DecRef();
+    done->Run();
+}
+
+void TabletNodeImpl::CmdCtrl(const TsCmdCtrlRequest* request,
+                             TsCmdCtrlResponse* response,
+                             google::protobuf::Closure* done) {
+    response->set_sequence_id(request->sequence_id());
+    if (request->command() == "reload config") {
+        if (utils::LoadFlagFile(FLAGS_flagfile)) {
+            LOG(INFO) << "[reload config] done";
+            response->set_status(kTabletNodeOk);
+        } else {
+            LOG(ERROR) << "[reload config] config file not found";
+            response->set_status(kInvalidArgument);
+        }
+    } else {
+        response->set_status(kInvalidArgument);
+    }
     done->Run();
 }
 

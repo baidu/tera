@@ -528,7 +528,7 @@ bool TabletIO::GetDataSize(uint64_t* size, std::vector<uint64_t>* lgsize,
     }
 
     m_db->GetApproximateSizes(size, lgsize);
-    VLOG(6) << "GetDataSize(" << m_tablet_path << ") : " << *size;
+    VLOG(10) << "GetDataSize(" << m_tablet_path << ") : " << *size;
     {
         MutexLock lock(&m_mutex);
         m_db_ref_count--;
@@ -896,9 +896,8 @@ bool TabletIO::LowLevelSeek(const std::string& row_key,
                 compact_strategy->ScanDrop(it_data->key(), 0);
             }
         } else {
-            VLOG(10) << "ll-seek fail, error iterator.";
-            SetStatusCode(kKeyNotExist, &s);
-            break;
+            VLOG(10) << "ll-seek fail, not found.";
+            continue;
         }
 
         if (qu_set.empty()) {
@@ -1468,6 +1467,7 @@ void TabletIO::SetupOptionsForLG() {
     std::map<uint32_t, leveldb::LG_info*>* lg_info_list =
         new std::map<uint32_t, leveldb::LG_info*>;
 
+    int64_t triggered_log_size = 0;
     for (int32_t lg_i = 0; lg_i < m_table_schema.locality_groups_size();
          ++lg_i) {
         if (m_table_schema.locality_groups(lg_i).is_del()) {
@@ -1523,6 +1523,7 @@ void TabletIO::SetupOptionsForLG() {
         } else {
             lg_info->write_buffer_size = max_size;
         }
+        triggered_log_size += lg_info->write_buffer_size;
         exist_lg_list->insert(lg_i);
         (*lg_info_list)[lg_i] = lg_info;
     }
@@ -1531,8 +1532,7 @@ void TabletIO::SetupOptionsForLG() {
         delete exist_lg_list;
     } else {
         m_ldb_options.exist_lg_list = exist_lg_list;
-        m_ldb_options.flush_triggered_log_size = (exist_lg_list->size() + 1)
-                                               * m_ldb_options.write_buffer_size;
+        m_ldb_options.flush_triggered_log_size = triggered_log_size * 2;
     }
     if (lg_info_list->size() == 0) {
         delete lg_info_list;
@@ -1814,17 +1814,17 @@ const leveldb::RawKeyOperator* TabletIO::GetRawKeyOperator() {
     return m_key_operator;
 }
 
-void TabletIO::GetAndClearCounter(TabletCounter* counter, int64_t interval) {
-    counter->set_low_read_cell(m_counter.low_read_cell.Clear() * 1000000 / interval);
-    counter->set_scan_rows(m_counter.scan_rows.Clear() * 1000000 / interval);
-    counter->set_scan_kvs(m_counter.scan_kvs.Clear() * 1000000 / interval);
-    counter->set_scan_size(m_counter.scan_size.Clear() * 1000000 / interval);
-    counter->set_read_rows(m_counter.read_rows.Clear() * 1000000 / interval);
-    counter->set_read_kvs(m_counter.read_kvs.Clear() * 1000000 / interval);
-    counter->set_read_size(m_counter.read_size.Clear() * 1000000 / interval);
-    counter->set_write_rows(m_counter.write_rows.Clear() * 1000000 / interval);
-    counter->set_write_kvs(m_counter.write_kvs.Clear() * 1000000 / interval);
-    counter->set_write_size(m_counter.write_size.Clear() * 1000000 / interval);
+void TabletIO::GetAndClearCounter(TabletCounter* counter) {
+    counter->set_low_read_cell(m_counter.low_read_cell.Clear());
+    counter->set_scan_rows(m_counter.scan_rows.Clear());
+    counter->set_scan_kvs(m_counter.scan_kvs.Clear());
+    counter->set_scan_size(m_counter.scan_size.Clear());
+    counter->set_read_rows(m_counter.read_rows.Clear());
+    counter->set_read_kvs(m_counter.read_kvs.Clear());
+    counter->set_read_size(m_counter.read_size.Clear());
+    counter->set_write_rows(m_counter.write_rows.Clear());
+    counter->set_write_kvs(m_counter.write_kvs.Clear());
+    counter->set_write_size(m_counter.write_size.Clear());
     counter->set_is_on_busy(IsBusy());
 }
 

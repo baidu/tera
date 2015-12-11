@@ -150,7 +150,9 @@ public:
                 s = IOError(filename_, errno);
             }
         }
-        dfs_read_size_counter.Add(bytes_read);
+        if (bytes_read > 0) {
+            dfs_read_size_counter.Add(bytes_read);
+        }
         return s;
     }
 
@@ -165,7 +167,9 @@ public:
         if (bytes_read < 0) {
             s = IOError(filename_, errno);
         }
-        dfs_read_size_counter.Add(bytes_read);
+        if (bytes_read > 0) {
+            dfs_read_size_counter.Add(bytes_read);
+        }
         return s;
     }
 

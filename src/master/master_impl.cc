@@ -23,6 +23,7 @@
 #include "proto/master_client.h"
 #include "proto/proto_helper.h"
 #include "proto/tabletnode_client.h"
+#include "utils/config_utils.h"
 #include "utils/string_util.h"
 #include "utils/timer.h"
 #include "utils/utils_cmd.h"
@@ -94,6 +95,8 @@ DECLARE_int64(tera_sdk_perf_counter_log_interval);
 DECLARE_bool(tera_acl_enabled);
 DECLARE_bool(tera_only_root_create_table);
 DECLARE_string(tera_master_gc_strategy);
+
+DECLARE_string(flagfile);
 
 namespace tera {
 namespace master {
@@ -403,6 +406,7 @@ void MasterImpl::RestoreUserTablet(const std::vector<TabletMeta>& report_meta_li
     EnableQueryTabletNodeTimer();
     EnableTabletNodeGcTimer();
     EnableLoadBalanceTimer();
+    RefreshTableCounter();
 }
 
 void MasterImpl::LoadAllOffLineTablet() {
@@ -1126,6 +1130,39 @@ void MasterImpl::ShowTables(const ShowTablesRequest* request,
     done->Run();
 }
 
+void MasterImpl::ShowTablesBrief(const ShowTablesRequest* request,
+                                ShowTablesResponse* response,
+                                google::protobuf::Closure* done) {
+    response->set_sequence_id(request->sequence_id());
+    MasterStatus master_status = GetMasterStatus();
+    if (master_status != kIsRunning && master_status != kIsReadonly) {
+        LOG(ERROR) << "master is not ready, m_status = "
+            << StatusCodeToString(master_status);
+        response->set_status(static_cast<StatusCode>(master_status));
+        done->Run();
+        return;
+    }
+
+    std::vector<TablePtr> table_list;
+    m_tablet_manager->ShowTable(&table_list, NULL);
+
+    TableMetaList* table_meta_list = response->mutable_table_meta_list();
+    for (uint32_t i = 0; i < table_list.size(); ++i) {
+        TablePtr table = table_list[i];
+        // if a user has NO permission on a table,
+        // he/she should not notice this table
+        if (!HasPermissionOnTable(request, table)) {
+            continue;
+        }
+        table->ToMeta(table_meta_list->add_meta());
+        table_meta_list->add_counter()->CopyFrom(table->GetCounter());
+    }
+
+    response->set_all_brief(true);
+    response->set_status(kMasterOk);
+    done->Run();
+}
+
 void MasterImpl::ShowTabletNodes(const ShowTabletNodesRequest* request,
                                  ShowTabletNodesResponse* response,
                                  google::protobuf::Closure* done) {
@@ -1193,6 +1230,8 @@ void MasterImpl::CmdCtrl(const CmdCtrlRequest* request,
         TabletCmdCtrl(request, response);
     } else if (request->command() == "meta") {
         MetaCmdCtrl(request, response);
+    } else if (request->command() == "reload config") {
+        ReloadConfig(response);
     } else {
         response->set_status(kInvalidArgument);
     }
@@ -1371,6 +1410,16 @@ void MasterImpl::SafeModeCmdCtrl(const CmdCtrlRequest* request,
         response->set_bool_result(kIsReadonly == GetMasterStatus());
         response->set_status(kMasterOk);
     } else {
+        response->set_status(kInvalidArgument);
+    }
+}
+
+void MasterImpl::ReloadConfig(CmdCtrlResponse* response) {
+    if (utils::LoadFlagFile(FLAGS_flagfile)) {
+        LOG(INFO) << "[reload config] done";
+        response->set_status(kMasterOk);
+    } else {
+        LOG(ERROR) << "[reload config] config file not found";
         response->set_status(kInvalidArgument);
     }
 }
@@ -3293,8 +3342,7 @@ void MasterImpl::QueryTabletNodeCallback(std::string addr, QueryRequest* request
                     << ", range: [" << DebugString(key_start)
                     << ", " << DebugString(key_end)
                     << "], size: " << meta.size()
-                    << ", addr: " << meta.server_addr()
-                    << ", tablet: " << tablet;
+                    << ", addr: " << meta.server_addr();
             }
         }
 
@@ -4906,7 +4954,7 @@ void MasterImpl::DumpStatCallBack(RowMutation* mutation) {
     VLOG(15) << "dump stat success:" << mutation->RowKey();
     const ErrorCode& error_code = mutation->GetError();
     if (error_code.GetType() != ErrorCode::kOK) {
-        LOG(ERROR) << "exception occured, reason:" << error_code.GetReason();
+        VLOG(15) << "exception occured, reason:" << error_code.GetReason();
     }
     delete mutation;
 }
@@ -5003,7 +5051,10 @@ void MasterImpl::DoTabletNodeGcPhase2() {
     gc_strategy->PostQuery();
 
     LOG(INFO) << "[gc] try clean trash dir.";
+    int64_t start = common::timer::get_micros();
     io::CleanTrashDir();
+    int64_t cost = (common::timer::get_micros() - start) / 1000;
+    LOG(INFO) << "[gc] clean trash dir done, cost: " << cost << "ms.";
 
     MutexLock lock(&m_mutex);
     if (m_gc_enabled) {
@@ -5086,5 +5137,24 @@ void MasterImpl::RenameTable(const RenameTableRequest* request,
                              false, closure);
 }
 
+void MasterImpl::RefreshTableCounter() {
+    int64_t start = get_micros();
+    std::vector<TablePtr> table_list;
+    m_tablet_manager->ShowTable(&table_list, NULL);
+    for (uint32_t i = 0; i < table_list.size(); ++i) {
+        table_list[i]->RefreshCounter();
+    }
+
+    // use same interval with query because table counter changed after query
+    ThreadPool::Task task =
+        boost::bind(&MasterImpl::RefreshTableCounter, this);
+    m_thread_pool->DelayTask( FLAGS_tera_master_query_tabletnode_period, task);
+    LOG(INFO) << "RefreshTableCounter, cost: "
+        << ((get_micros() - start) / 1000) << "ms.";
+}
+
+std::string MasterImpl::ProfilingLog() {
+    return m_thread_pool->ProfilingLog();
+}
 } // namespace master
 } // namespace tera

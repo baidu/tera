@@ -296,6 +296,16 @@ message MergeTabletResponse {
     required uint64 sequence_id = 2;
 }
 
+message TsCmdCtrlRequest {
+    required uint64 sequence_id = 1;
+    required string command = 2;
+}
+
+message TsCmdCtrlResponse {
+    required uint64 sequence_id = 1;
+    required StatusCode status = 2;
+}
+
 // RPC interface
 
 service TabletNodeServer {
@@ -325,6 +335,6 @@ service TabletNodeServer {
     rpc Rollback(SnapshotRollbackRequest) returns(SnapshotRollbackResponse);
 
     rpc SplitTablet(SplitTabletRequest) returns(SplitTabletResponse);
+    rpc CmdCtrl(TsCmdCtrlRequest) returns(TsCmdCtrlResponse);
 }
 option cc_generic_services = true;
-

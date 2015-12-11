@@ -158,8 +158,8 @@ void ThreadPool::BGThread() {
       void* arg = bg_item.arg;
       latest_.erase(it);
       mutex_.Unlock();
-      Log(info_log_, "[ThreadPool] Do thread id = %ld score = %.2f",
-          bg_item.id, bg_item.priority);
+      Log(info_log_, "[ThreadPool(%d/%d)] Do thread id = %ld score = %.2f",
+          active_number_, total_threads_limit_, bg_item.id, bg_item.priority);
       (*function)(arg);
       mutex_.Lock();
     }
