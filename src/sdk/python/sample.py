@@ -46,6 +46,7 @@ def my_mu_callback(raw_mu):
 def scan(table):
     from TeraSdk import ScanDescriptor
     scan_desc = ScanDescriptor("")
+    scan_desc.SetBufferSize(1024 * 1024)  # 1MB
     stream = table.Scan(scan_desc)
     while not stream.Done():
         row = stream.RowName()
