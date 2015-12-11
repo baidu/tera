@@ -609,7 +609,7 @@ Status DBImpl::CompactMemTable() {
   return s;
 }
 
-void DBImpl::CompactRange(const Slice* begin, const Slice* end) {
+void DBImpl::CompactRange(const Slice* begin, const Slice* end, int lg_no) {
   int max_level_with_files = 1;
   {
     MutexLock l(&mutex_);

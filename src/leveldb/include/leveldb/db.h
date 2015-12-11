@@ -157,7 +157,7 @@ class DB {
   // end==NULL is treated as a key after all keys in the database.
   // Therefore the following call will compact the entire database:
   //    db->CompactRange(NULL, NULL);
-  virtual void CompactRange(const Slice* begin, const Slice* end) = 0;
+  virtual void CompactRange(const Slice* begin, const Slice* end, int lg_no = -1) = 0;
 
   // tera-specific
   // Too busy to write

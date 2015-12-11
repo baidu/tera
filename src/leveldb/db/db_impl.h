@@ -50,7 +50,7 @@ class DBImpl : public DB {
   virtual void GetApproximateSizes(const Range* range, int n, uint64_t* sizes);
   // lgsize not used in db_impl, just for interface compatable
   virtual void GetApproximateSizes(uint64_t* size, std::vector<uint64_t>* lgsize = NULL);
-  virtual void CompactRange(const Slice* begin, const Slice* end);
+  virtual void CompactRange(const Slice* begin, const Slice* end, int lg_no = -1);
 
   void AddBoundLogSize(uint64_t size);
 
