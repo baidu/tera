@@ -224,8 +224,9 @@ void ResultStreamBatchImpl::ClearAndScanNextSlot(bool scan_next) {
 }
 
 bool ResultStreamBatchImpl::Done(ErrorCode* error) {
-    if (error)
+    if (error) {
         error->SetFailed(ErrorCode::kOK);
+    }
     MutexLock mutex(&mu_);
     while (1) {
         // not wait condition:
@@ -238,8 +239,9 @@ bool ResultStreamBatchImpl::Done(ErrorCode* error) {
             if (session_error_ != kTabletNodeOk) {
                 // TODO: kKeyNotInRange, do reset session
                 LOG(WARNING) << "scan done: session error " << StatusCodeToString(session_error_);
-                if (error)
+                if (error) {
                     error->SetFailed(ErrorCode::kSystem, StatusCodeToString(session_error_));
+                }
                 return true;
             }
             if (ref_count_ == 1) {
