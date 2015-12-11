@@ -5133,10 +5133,10 @@ void MasterImpl::RefreshTableCounter() {
         table_list[i]->RefreshCounter();
     }
 
-    // use same interval with query because table counter changed after query
-    ThreadPool::Task task =
-        boost::bind(&MasterImpl::RefreshTableCounter, this);
-    m_thread_pool->DelayTask( FLAGS_tera_master_query_tabletnode_period, task);
+    // Set refresh interval as  query-interval / 2, because each table counter
+    // changed after query callback reached.
+    ThreadPool::Task task = boost::bind(&MasterImpl::RefreshTableCounter, this);
+    m_thread_pool->DelayTask(FLAGS_tera_master_query_tabletnode_period / 2, task);
     LOG(INFO) << "RefreshTableCounter, cost: "
         << ((get_micros() - start) / 1000) << "ms.";
 }
