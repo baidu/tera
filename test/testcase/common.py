@@ -205,33 +205,13 @@ def run_tera_mark(file_path, op, table_name, random, value_size, num, key_size, 
         print ''.join(ret.stderr.readlines())
 
 
-def batch_scan_table(table_name, file_path, allversion, snapshot=0):
-    allv = ''
-    if allversion is True:
-        allv += 'scanallv'
-    else:
-        allv += 'scan'
-
-    snapshot_args = ''
-    if snapshot != 0:
-        snapshot_args += '--snapshot={snapshot}'.format(snapshot=snapshot)
-
-    async_flag = '--tera_sdk_scan_async_enabled=true --tera_client_scan_async_enabled=true'
-
-    scan_cmd = '{teracli} {flags} {op} {table_name} "" "" {snapshot} > {out}'.format(
-        teracli=const.teracli_binary, flags=async_flag, op=allv, table_name=table_name, snapshot=snapshot_args, out=file_path)
-    print scan_cmd
-    ret = subprocess.Popen(scan_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, shell=True)
-    print ''.join(ret.stdout.readlines())
-    print ''.join(ret.stderr.readlines())
-
-
-def scan_table(table_name, file_path, allversion, snapshot=0):
+def scan_table(table_name, file_path, allversion, snapshot=0, is_async=False):
     """
     This function scans the table and write the output into file_path
     :param table_name: table name
     :param file_path: write scan output into file_path
     :param allversion: [True | False]
+    :param is_async: True for batch scan
     """
 
     allv = ''
@@ -239,13 +219,18 @@ def scan_table(table_name, file_path, allversion, snapshot=0):
         allv += 'scanallv'
     else:
         allv += 'scan'
-
+    
+    if is_async is True:
+        async_flag = '--tera_sdk_scan_async_enabled=true --v=30 --tera_client_scan_async_enabled=true'
+    else:
+        async_flag = '--tera_sdk_scan_async_enabled=false'
+        
     snapshot_args = ''
     if snapshot != 0:
         snapshot_args += '--snapshot={snapshot}'.format(snapshot=snapshot)
-
-    scan_cmd = '{teracli} {op} {table_name} "" "" {snapshot} > {out}'.format(
-        teracli=const.teracli_binary, op=allv, table_name=table_name, snapshot=snapshot_args, out=file_path)
+    
+    scan_cmd = '{teracli} {flags} {op} {table_name} "" "" {snapshot} > {out}'.format(
+        teracli=const.teracli_binary, flags=async_flag, op=allv, table_name=table_name, snapshot=snapshot_args, out=file_path)
     print scan_cmd
     ret = subprocess.Popen(scan_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, shell=True)
     print ''.join(ret.stdout.readlines())
