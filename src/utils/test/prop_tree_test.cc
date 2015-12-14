@@ -36,7 +36,7 @@ TEST(TokenizerTest, ConsumeUselessChars) {
     input = "  # this is a comment;\n hello";
     t.Reset(input);
     t.ConsumeUselessChars();
-    ASSERT_EQ(t.origin_[t.cur_pos_], 'h');
+    ASSERT_EQ(t.origin_[t.cur_pos_], 'y');
 }
 
 TEST(TokenizerTest, Next) {

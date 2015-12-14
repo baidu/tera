@@ -1,4 +1,4 @@
-[Tera - 高性能、可伸缩的结构化数据库](http://github.com/baidu/tera)
+ [Tera - 高性能、可伸缩的结构化数据库](http://github.com/baidu/tera)
 ====
 [![Build Status](https://travis-ci.org/baidu/tera.svg)](https://travis-ci.org/baidu/tera)
 
