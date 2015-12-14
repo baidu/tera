@@ -687,6 +687,12 @@ bool DBImpl::FindSplitKey(double ratio, std::string* split_key) {
     return versions_->current()->FindSplitKey(ratio, split_key);
 }
 
+bool DBImpl::FindKeyRange(std::string* smallest_key,
+                          std::string* largest_key) {
+    MutexLock l(&mutex_);
+    return versions_->current()->FindKeyRange(smallest_key, largest_key);
+}
+
 bool DBImpl::MinorCompact() {
     Status s = TEST_CompactMemTable();
     return s.ok();

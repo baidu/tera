@@ -1884,6 +1884,10 @@ class ModelDB: public DB {
       return false;
   }
 
+  virtual bool FindKeyRange(std::string* smallest_key, std::string* largest_key) {
+      return false;
+  }
+
   virtual uint64_t GetScopeSize(const std::string& start_key,
                                 const std::string& end_key,
                                 std::vector<uint64_t>* lgsize = NULL) {

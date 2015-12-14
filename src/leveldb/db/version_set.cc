@@ -551,8 +551,7 @@ void Version::GetApproximateSizes(uint64_t* size, uint64_t* size_under_level1) {
   }
 }
 
-bool Version::FindSplitKey(double ratio,
-                           std::string* split_key) {
+bool Version::FindSplitKey(double ratio, std::string* split_key) {
     assert(ratio >= 0 && ratio <= 1);
     uint64_t size_under_level1;
     GetApproximateSizes(NULL, &size_under_level1);
@@ -590,6 +589,10 @@ bool Version::FindSplitKey(double ratio,
             return false;
     }
     *split_key = largest_file->largest.user_key().ToString();
+    return true;
+}
+
+bool Version::FindKeyRange(std::string* smallest_key, std::string* largest_key) {
     return true;
 }
 

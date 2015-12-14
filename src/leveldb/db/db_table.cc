@@ -1009,6 +1009,28 @@ bool DBTable::FindSplitKey(double ratio,
     return biggest_it->second->FindSplitKey(ratio, split_key);
 }
 
+bool DBTable::FindKeyRange(std::string* smallest_key, std::string* largest_key) {
+    if (smallest_key && largest_key) {
+        smallest_key->clear();
+        largest_key->clear();
+    } else {
+        return false;
+    }
+    MutexLock l(&mutex_);
+    std::string sk, lk;
+    std::set<uint32_t>::iterator it = options_.exist_lg_list->begin();
+    for (; it != options_.exist_lg_list->end(); ++it) {
+        lg_list_[*it]->FindKeyRange(&sk, &lk);
+        if (smallest_key->empty() || sk < *smallest_key) {
+            *smallest_key = sk;
+        }
+        if (largest_key->empty() || lk > *largest_key) {
+            *largest_key = lk;
+        }
+    }
+    return true;
+}
+
 bool DBTable::MinorCompact() {
     bool ok = true;
     std::set<uint32_t>::iterator it = options_.exist_lg_list->begin();
