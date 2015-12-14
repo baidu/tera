@@ -33,7 +33,7 @@ Options::Options()
       enable_strategy_when_get(false),
       compact_strategy_factory(NULL),
       log_file_size(2 << 20),
-      log_async_mode(true),
+      log_async_mode(false),
       max_block_log_number(50),
       write_log_time_out(5),
       flush_triggered_log_num(100000),
