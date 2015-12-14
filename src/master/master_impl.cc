@@ -61,13 +61,13 @@ DECLARE_int32(tera_master_collect_info_retry_times);
 DECLARE_int32(tera_master_control_tabletnode_retry_period);
 DECLARE_int32(tera_master_load_balance_period);
 DECLARE_bool(tera_master_load_balance_table_grained);
-DECLARE_bool(tera_master_load_balance_qps_policy_enabled);
 DECLARE_int32(tera_master_load_rpc_timeout);
 DECLARE_int32(tera_master_unload_rpc_timeout);
 DECLARE_int32(tera_master_split_rpc_timeout);
 DECLARE_int32(tera_master_tabletnode_timeout);
 DECLARE_bool(tera_master_move_tablet_enabled);
 DECLARE_int32(tera_master_load_slow_retry_times);
+DECLARE_int32(tera_master_max_move_concurrency);
 
 DECLARE_int32(tera_max_pre_assign_tablet_num);
 DECLARE_int64(tera_tablet_write_block_size);
@@ -1727,7 +1727,7 @@ void MasterImpl::LoadBalance() {
     std::vector<TabletNodePtr> all_node_list;
     m_tabletnode_manager->GetAllTabletNodeInfo(&all_node_list);
 
-    uint32_t max_move_num = all_node_list.size() / 20 + 1;
+    uint32_t max_move_num = FLAGS_tera_master_max_move_concurrency;
 
     // Run qps-based-sheduler first, then size-based-scheduler
     // If read_pending occured, process it first
@@ -1778,7 +1778,7 @@ uint32_t MasterImpl::LoadBalance(Scheduler* scheduler,
     uint32_t round_count = 0;
     uint32_t total_move_count = 0;
     while (round_count < max_round_num) {
-        LOG(INFO) << "LoadBalance (" << scheduler->Name() << ") " << table_name
+        VLOG(10) << "LoadBalance (" << scheduler->Name() << ") " << table_name
                   << " round " << round_count << " start";
 
         uint32_t round_move_count = 0;
@@ -1793,7 +1793,7 @@ uint32_t MasterImpl::LoadBalance(Scheduler* scheduler,
             ++node_it;
         }
 
-        LOG(INFO) << "LoadBalance (" << scheduler->Name() << ") " << table_name
+        VLOG(10) << "LoadBalance (" << scheduler->Name() << ") " << table_name
                   << " round " << round_count << " move " << round_move_count;
 
         round_count++;

@@ -315,6 +315,8 @@ private:
     MasterImpl* m_master_impl;
 };
 
+int64_t CounterWeightedSum(int64_t a1, int64_t a2);
+
 } // namespace master
 } // namespace tera
 
