@@ -63,6 +63,14 @@ ClientImpl::ClientImpl(const std::string& user_identity,
 }
 
 ClientImpl::~ClientImpl() {
+    {
+        MutexLock l(&_open_table_mutex);
+        while (!_open_tables.empty()) {
+            OpenTableMap::iterator it = _open_tables.begin();
+            delete it->second.first;
+            _open_tables.erase(it);
+        }
+    }
     delete _cluster;
 }
 
@@ -416,6 +424,14 @@ bool ClientImpl::GetInternalTableName(const std::string& table_name, ErrorCode* 
 
 Table* ClientImpl::OpenTable(const std::string& table_name,
                              ErrorCode* err) {
+    {
+        MutexLock l(&_open_table_mutex);
+        OpenTableMap::iterator it = _open_tables.find(table_name);
+        if (it != _open_tables.end()) {
+            it->second.second++;
+            return it->second.first;
+        }
+    }
     std::string internal_table_name;
     if (!GetInternalTableName(table_name, err, &internal_table_name)) {
         LOG(ERROR) << "fail to scan meta schema";
@@ -433,7 +449,38 @@ Table* ClientImpl::OpenTable(const std::string& table_name,
         delete table;
         return NULL;
     }
-    return table;
+    {
+        MutexLock l(&_open_table_mutex);
+        OpenTableMap::iterator it = _open_tables.find(table_name);
+        if (it != _open_tables.end()) {
+            // this table opened by another thread
+            delete table;
+            it->second.second++;
+            return it->second.first;
+        } else {
+            _open_tables[table_name] = std::make_pair(table, 1);
+            return table;
+        }
+    }
+}
+
+void ClientImpl::CloseTable(Table*& table_handle) {
+    std::string table_name;
+    if (table_handle) {
+        table_name = table_handle->GetName();
+    } else {
+        return;
+    }
+    MutexLock l(&_open_table_mutex);
+    OpenTableMap::iterator it = _open_tables.find(table_name);
+    if (it == _open_tables.end()) {
+        LOG(ERROR) << "close fail: table not found [" << table_name << "].";
+    }
+    if (--it->second.second <= 0) {
+        delete it->second.first;
+        _open_tables.erase(it);
+    }
+    table_handle = NULL;
 }
 
 bool ClientImpl::GetTabletLocation(const string& table_name,

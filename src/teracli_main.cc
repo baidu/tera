@@ -378,7 +378,6 @@ int32_t PutInt64Op(Client* client, int32_t argc, char** argv, ErrorCode* err) {
         LOG(ERROR) << "fail to put record to table: " << tablename;
         return -1;
     }
-    delete table;
     return 0;
 }
 
@@ -418,7 +417,6 @@ int32_t PutCounterOp(Client* client, int32_t argc, char** argv, ErrorCode* err) 
         LOG(ERROR) << "fail to put record to table: " << tablename;
         return -1;
     }
-    delete table;
     return 0;
 }
 
@@ -451,7 +449,6 @@ int32_t PutOp(Client* client, int32_t argc, char** argv, ErrorCode* err) {
         LOG(ERROR) << "fail to put record to table: " << tablename;
         return -1;
     }
-    delete table;
     return 0;
 }
 
@@ -519,7 +516,6 @@ int32_t AppendOp(Client* client, int32_t argc, char** argv, ErrorCode* err) {
         LOG(ERROR) << "fail to append record to table: " << tablename;
         return -1;
     }
-    delete table;
     return 0;
 }
 
@@ -552,7 +548,6 @@ int32_t PutIfAbsentOp(Client* client, int32_t argc, char** argv, ErrorCode* err)
         LOG(ERROR) << "fail to put record to table: " << tablename;
         return -1;
     }
-    delete table;
     return 0;
 }
 
@@ -590,7 +585,6 @@ int32_t AddOp(Client* client, int32_t argc, char** argv, ErrorCode* err) {
         LOG(ERROR) << "fail to add record to table: " << tablename;
         return -1;
     }
-    delete table;
     return 0;
 }
 
@@ -628,7 +622,6 @@ int32_t AddInt64Op(Client* client, int32_t argc, char** argv, ErrorCode* err) {
         LOG(ERROR) << "fail to add record to table: " << tablename;
         return -1;
     }
-    delete table;
     return 0;
 }
 
@@ -662,7 +655,6 @@ int32_t GetInt64Op(Client* client, int32_t argc, char** argv, ErrorCode* err) {
     }
 
     std::cout << value << std::endl;
-    delete table;
     return 0;
 }
 
@@ -685,18 +677,30 @@ int32_t GetOp(Client* client, int32_t argc, char** argv, ErrorCode* err) {
     std::string qualifier = "";
     std::string value;
     if (argc == 4) {
-        // use table as kv
+        // use table as kv or get row
+        RowReader* reader = table->NewRowReader(rowkey);
+        table->Get(reader);
+        while (!reader->Done()) {
+            std::cout << DebugString(reader->RowName()) << "\t"
+                << DebugString(reader->Family()) << "\t"
+                << DebugString(reader->Qualifier()) << "\t"
+                << reader->Timestamp() << "\t"
+                << DebugString(reader->Value()) << std::endl;
+            reader->Next();
+        }
+        delete reader;
     } else if (argc == 5) {
         ParseCfQualifier(argv[4], &columnfamily, &qualifier);
+        if (!table->Get(rowkey, columnfamily, qualifier, &value, err, FLAGS_snapshot)) {
+            LOG(ERROR) << "fail to get record from table: " << tablename;
+            return -1;
+        }
+        std::cout << DebugString(rowkey) << "\t"
+            << DebugString(columnfamily) << "\t"
+            << DebugString(qualifier) << "\t"
+            << DebugString(value) << std::endl;
     }
 
-    if (!table->Get(rowkey, columnfamily, qualifier, &value, err, FLAGS_snapshot)) {
-        LOG(ERROR) << "fail to get record from table: " << tablename;
-        return -1;
-    }
-
-    std::cout << value << std::endl;
-    delete table;
     return 0;
 }
 
@@ -736,7 +740,6 @@ int32_t GetCounterOp(Client* client, int32_t argc, char** argv, ErrorCode* err) 
     } else {
         std::cout << counter << std::endl;
     }
-    delete table;
     return 0;
 }
 
@@ -784,7 +787,6 @@ int32_t DeleteOp(Client* client, int32_t argc, char** argv, ErrorCode* err) {
     }
     table->ApplyMutation(mutation);
 
-    delete table;
     return 0;
 }
 
@@ -838,10 +840,11 @@ int32_t ScanOp(Client* client, int32_t argc, char** argv, ErrorCode* err) {
         g_total_size += len;
         g_key_num ++;
         g_cur_batch_num ++;
-        std::cout << result_stream->RowName() << ":"
-           << result_stream->ColumnName() << ":"
-           << result_stream->Timestamp() << ":"
-           << result_stream->Value() << std::endl;
+        std::cout << DebugString(result_stream->RowName()) << "\t"
+            << DebugString(result_stream->Family()) << "\t"
+            << DebugString(result_stream->Qualifier()) << "\t"
+            << result_stream->Timestamp() << "\t"
+            << DebugString(result_stream->Value()) << std::endl;
         result_stream->Next();
         if (g_cur_batch_num >= FLAGS_tera_client_batch_put_num) {
             int32_t time_cur=time(NULL);
@@ -861,7 +864,6 @@ int32_t ScanOp(Client* client, int32_t argc, char** argv, ErrorCode* err) {
     g_used_time = g_end_time - g_start_time;
     LOG(INFO) << "Scan done " << g_key_num << " keys " << g_key_num/(g_used_time?g_used_time:1)
             <<" keys/S " << g_total_size/1024.0/1024/(g_used_time?g_used_time:1) << " MB/S ";
-    delete table;
     return 0;
 }
 
@@ -1418,7 +1420,6 @@ int32_t BatchPutOp(Client* client, int32_t argc, char** argv, ErrorCode* err) {
     g_end_time = time(NULL);
     g_used_time = g_end_time-g_start_time;
     LOG(INFO) << "Write done,write_key_num=" << g_key_num << " used_time=" << g_used_time <<std::endl;
-    delete table;
     return 0;
 }
 
@@ -1478,7 +1479,6 @@ int32_t BatchPutInt64Op(Client* client, int32_t argc, char** argv, ErrorCode* er
     g_end_time = time(NULL);
     g_used_time = g_end_time-g_start_time;
     LOG(INFO) << "Write done,write_key_num=" << g_key_num << " used_time=" << g_used_time <<std::endl;
-    delete table;
     return 0;
 }
 
@@ -1605,7 +1605,6 @@ int32_t BatchGetOp(Client* client, int32_t argc, char** argv, ErrorCode* err) {
     g_end_time = time(NULL);
     g_used_time = g_end_time-g_start_time;
     LOG(INFO) << "Read done,write_key_num=" << g_key_num << " used_time=" << g_used_time <<std::endl;
-    delete table;
     return 0;
 }
 
@@ -1735,7 +1734,6 @@ int32_t BatchGetInt64Op(Client* client, int32_t argc, char** argv, ErrorCode* er
     g_end_time = time(NULL);
     g_used_time = g_end_time-g_start_time;
     LOG(INFO) << "Read done,write_key_num=" << g_key_num << " used_time=" << g_used_time <<std::endl;
-    delete table;
     return 0;
 }
 
@@ -2087,7 +2085,6 @@ int32_t FindTsOp(Client* client, int32_t argc, char** argv, ErrorCode* err) {
         return -1;
     }
     std::cout << meta.server_addr() << "/" << meta.path() << std::endl;
-    delete table;
 
     return 0;
 }

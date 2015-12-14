@@ -9,6 +9,7 @@
 #include "proto/master_rpc.pb.h"
 #include "proto/tabletnode_client.h"
 #include "sdk/sdk_zk.h"
+#include "sdk/table_impl.h"
 #include "sdk/tera.h"
 #include "utils/timer.h"
 
@@ -64,6 +65,8 @@ public:
                      std::vector<std::string>& user_groups, ErrorCode* err);
 
     virtual Table* OpenTable(const string& table_name, ErrorCode* err);
+
+    virtual void CloseTable(Table*& table_handle);
 
     virtual bool GetTabletLocation(const string& table_name,
                                    std::vector<TabletInfo>* tablets,
@@ -163,6 +166,10 @@ private:
     /// if there is _cluster,
     ///    we save master_addr & root_table_addr in _cluster, access zookeeper only once.
     sdk::ClusterFinder* _cluster;
+
+    mutable Mutex _open_table_mutex;
+    typedef std::map<std::string, std::pair<TableImpl*, int64_t> > OpenTableMap;
+    OpenTableMap _open_tables;
 };
 
 } // namespace tera
