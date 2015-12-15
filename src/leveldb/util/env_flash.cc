@@ -178,41 +178,32 @@ public:
           flash_file_check_interval_micros_(kFlashFileCheckIntervalMicros),
           read_dfs_count_(0) {
 
-        if (!flash_env_->ForceReadFromCache()) {
-            if (flash_env_->FlashFileIdentical(fname, fsize)) {
-                Status s = flash_env_->CacheEnv()->NewRandomAccessFile(local_fname_, &flash_file_);
-                if (s.ok()) {
-                    return;
-                }
-                Log("[env_flash] local file exists, but open for RandomAccess fail: %s\n",
-                    local_fname_.c_str());
-            } else {
-                Log("[env_flash] local file not exists: %s\n", local_fname_.c_str());
+        // copy file to cache if force read from cache
+        if (flash_env_->ForceReadFromCache()) {
+            Status copy_status = CopyToLocal(local_fname_, flash_env_->BaseEnv(), fname, fsize,
+                                             flash_env_->VanishAllowed());
+            if (!copy_status.ok()) {
+                Log("[env_flash] copy to local fail [%s]: %s\n",
+                    copy_status.ToString().c_str(), local_fname_.c_str());
             }
-            flash_env_->ScheduleUpdateFlash(fname, fsize, 1);
-            flash_env_->BaseEnv()->NewRandomAccessFile(fname, &dfs_file_);
-            flash_file_last_check_micros_ = Env::Default()->NowMicros();
-            return;
         }
 
-        // copy from dfs with seq read
-        Status copy_status = CopyToLocal(local_fname_, flash_env_->BaseEnv(), fname, fsize,
-                                         flash_env_->VanishAllowed());
-        if (!copy_status.ok()) {
-            Log("[env_flash] copy to local fail [%s]: %s\n",
-                copy_status.ToString().c_str(), local_fname_.c_str());
-            // no flash file, use dfs file
-            flash_env_->BaseEnv()->NewRandomAccessFile(fname, &dfs_file_);
-            return;
+        // if cache file is identical with dfs file, use cache file
+        if (flash_env_->FlashFileIdentical(fname, fsize)) {
+            Status s = flash_env_->CacheEnv()->NewRandomAccessFile(local_fname_, &flash_file_);
+            if (s.ok()) {
+                return;
+            }
+            Log("[env_flash] local file check pass, but open for RandomAccess fail [%s]: %s\n",
+                s.ToString().c_str(), local_fname_.c_str());
+        } else {
+            Log("[env_flash] local file check fail: %s\n", local_fname_.c_str());
         }
-        Status s = flash_env_->CacheEnv()->NewRandomAccessFile(local_fname_, &flash_file_);
-        if (s.ok()) {
-            return;
-        }
-        Log("[env_flash] local file exists, but open for RandomAccess fail: %s\n",
-            local_fname_.c_str());
-        flash_env_->CacheEnv()->DeleteFile(local_fname_);
+
+        // else, use dfs file
+        flash_env_->ScheduleUpdateFlash(fname, fsize, 1);
         flash_env_->BaseEnv()->NewRandomAccessFile(fname, &dfs_file_);
+        flash_file_last_check_micros_ = Env::Default()->NowMicros();
     }
     ~FlashRandomAccessFile() {
         delete dfs_file_;
@@ -220,7 +211,7 @@ public:
     }
     Status Read(uint64_t offset, size_t n, Slice* result, char* scratch) const {
         bool use_flash = false;
-        if (!flash_env_->ForceReadFromCache()) {
+        {
             MutexLock l(&mutex_);
             // evenry 30 seconds, check if flash file is identical to dfs file.
             // if so, try open flash file;
@@ -251,11 +242,8 @@ public:
             } else {
                 ++read_dfs_count_;
             }
-        } else {
-            if (flash_file_ != NULL) {
-                use_flash = true;
-            }
         }
+
         if (use_flash) {
             Status read_status = flash_file_->Read(offset, n, result, scratch);
             if (read_status.ok()) {
