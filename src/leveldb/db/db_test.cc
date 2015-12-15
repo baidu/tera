@@ -1876,7 +1876,7 @@ class ModelDB: public DB {
                                    std::vector<uint64_t>* lgsize = NULL) {
   }
 
-  virtual void CompactRange(const Slice* start, const Slice* end) {
+  virtual void CompactRange(const Slice* start, const Slice* end, int lg_no) {
   }
 
   virtual bool FindSplitKey(double ratio,

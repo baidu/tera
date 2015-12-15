@@ -46,6 +46,7 @@ public:
     typedef std::map< std::string, std::set<std::string> > ColumnFamilyMap;
     struct ScanOptions {
         uint32_t max_versions;
+        uint32_t version_num; // restore version_num for stream scan
         uint32_t max_size;
         int64_t ts_start;
         int64_t ts_end;
@@ -98,7 +99,7 @@ public:
                       StatusCode* status = NULL);
     virtual bool Unload(StatusCode* status = NULL);
     virtual bool Split(std::string* split_key, StatusCode* status = NULL);
-    virtual bool Compact(StatusCode* status = NULL);
+    virtual bool Compact(int lg_no = -1, StatusCode* status = NULL);
     bool CompactMinor(StatusCode* status = NULL);
     bool Destroy(StatusCode* status = NULL);
     virtual bool GetDataSize(uint64_t* size, std::vector<uint64_t>* lgsize = NULL,

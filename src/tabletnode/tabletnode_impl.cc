@@ -367,7 +367,11 @@ void TabletNodeImpl::CompactTablet(const CompactTabletRequest* request,
         << " [" << DebugString(tablet_io->GetStartKey())
         << ", " << DebugString(tablet_io->GetEndKey()) << "]";
 
-    tablet_io->Compact(&status);
+    if (request->has_lg_no() && request->lg_no() >= 0) {
+        tablet_io->Compact(request->lg_no(), &status);
+    } else {
+        tablet_io->Compact(-1, &status);
+    }
     CompactStatus compact_status = tablet_io->GetCompactStatus();
     response->set_status(status);
     response->set_compact_status(compact_status);
