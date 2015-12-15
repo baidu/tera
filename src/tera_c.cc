@@ -255,11 +255,6 @@ bool tera_result_stream_done(tera_result_stream_t* stream, char** errptr) {
     return true;
 }
 
-bool tera_result_stream_look_up(tera_result_stream_t* stream, const char* row_key, uint64_t len) {
-    std::string key(row_key, len);
-    return stream->rep->LookUp(key);
-}
-
 int64_t tera_result_stream_timestamp(tera_result_stream_t* stream) {
     int64_t ts = stream->rep->Timestamp();
     //fprintf(stderr, "%lld\n", ts);
