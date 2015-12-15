@@ -221,6 +221,8 @@ private:
     void MakeKvPair(leveldb::Slice key, leveldb::Slice col, leveldb::Slice qual,
                     int64_t ts, leveldb::Slice value, KeyValuePair* kv);
 
+    bool ParseRowKey(const std::string& tera_key, std::string* row_key);
+
 private:
     mutable Mutex m_mutex;
     TabletWriter* m_async_writer;
