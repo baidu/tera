@@ -418,7 +418,11 @@ Table* ClientImpl::OpenTable(const std::string& table_name,
                              ErrorCode* err) {
     std::string internal_table_name;
     if (!GetInternalTableName(table_name, err, &internal_table_name)) {
-        LOG(ERROR) << "fail to scan meta schema";
+        std::string reason = "fail to scan meta schema";
+        if (err != NULL) {
+            err->SetFailed(ErrorCode::kBadParam, reason);
+        }
+        LOG(ERROR) << reason;
         return NULL;
     }
     err->SetFailed(ErrorCode::kOK);
@@ -426,7 +430,11 @@ Table* ClientImpl::OpenTable(const std::string& table_name,
                                      _zk_root_path, _zk_addr_list,
                                      &_thread_pool, _cluster);
     if (table == NULL) {
-        LOG(ERROR) << "fail to new TableImpl.";
+        std::string reason = "fail to new TableImpl";
+        if (err != NULL) {
+            err->SetFailed(ErrorCode::kBadParam, reason);
+        }
+        LOG(ERROR) << reason;
         return NULL;
     }
     if (!table->OpenInternal(err)) {
@@ -1059,6 +1067,10 @@ static int InitFlags(const std::string& confpath, const std::string& log_prefix)
 
 Client* Client::NewClient(const string& confpath, const string& log_prefix, ErrorCode* err) {
     if (InitFlags(confpath, log_prefix) != 0) {
+        if (err != NULL) {
+            std::string reason = "init tera flag failed";
+            err->SetFailed(ErrorCode::kBadParam, reason);
+        }
         return NULL;
     }
     return new ClientImpl(FLAGS_tera_user_identity,
