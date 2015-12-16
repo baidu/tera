@@ -333,14 +333,20 @@ int32_t DisableOp(Client* client, int32_t argc, char** argv, ErrorCode* err) {
     return 0;
 }
 
-void ParseCfQualifier(const std::string& input, std::string* columnfamily, std::string* qualifier) {
+void ParseCfQualifier(const std::string& input, std::string* columnfamily,
+                      std::string* qualifier, bool *has_qualifier = NULL) {
     std::string::size_type pos = input.find(":", 0);
     if (pos != std::string::npos) {
         *columnfamily = input.substr(0, pos);
         *qualifier = input.substr(pos + 1);
+        if (has_qualifier) {
+            *has_qualifier = true;
+        }
     } else {
         *columnfamily = input;
-        *qualifier = "";
+        if (has_qualifier) {
+            *has_qualifier = false;
+        }
     }
 }
 
@@ -684,18 +690,28 @@ int32_t GetOp(Client* client, int32_t argc, char** argv, ErrorCode* err) {
     std::string columnfamily = "";
     std::string qualifier = "";
     std::string value;
+    RowReader* reader = table->NewRowReader(rowkey);
     if (argc == 4) {
-        // use table as kv
+        // use table as kv or get row
     } else if (argc == 5) {
-        ParseCfQualifier(argv[4], &columnfamily, &qualifier);
+        bool has_qu;
+        ParseCfQualifier(argv[4], &columnfamily, &qualifier, &has_qu);
+        if (has_qu) {
+            reader->AddColumn(columnfamily, qualifier);
+        } else {
+            reader->AddColumnFamily(columnfamily);
+        }
     }
-
-    if (!table->Get(rowkey, columnfamily, qualifier, &value, err, FLAGS_snapshot)) {
-        LOG(ERROR) << "fail to get record from table: " << tablename;
-        return -1;
+    table->Get(reader);
+    while (!reader->Done()) {
+        std::cout << DebugString(reader->RowName()) << "\t"
+            << DebugString(reader->Family()) << "\t"
+            << DebugString(reader->Qualifier()) << "\t"
+            << reader->Timestamp() << "\t"
+            << DebugString(reader->Value()) << std::endl;
+        reader->Next();
     }
-
-    std::cout << value << std::endl;
+    delete reader;
     delete table;
     return 0;
 }
@@ -838,10 +854,11 @@ int32_t ScanOp(Client* client, int32_t argc, char** argv, ErrorCode* err) {
         g_total_size += len;
         g_key_num ++;
         g_cur_batch_num ++;
-        std::cout << result_stream->RowName() << ":"
-           << result_stream->ColumnName() << ":"
-           << result_stream->Timestamp() << ":"
-           << result_stream->Value() << std::endl;
+        std::cout << DebugString(result_stream->RowName()) << "\t"
+            << DebugString(result_stream->Family()) << "\t"
+            << DebugString(result_stream->Qualifier()) << "\t"
+            << result_stream->Timestamp() << "\t"
+            << DebugString(result_stream->Value()) << std::endl;
         result_stream->Next();
         if (g_cur_batch_num >= FLAGS_tera_client_batch_put_num) {
             int32_t time_cur=time(NULL);
