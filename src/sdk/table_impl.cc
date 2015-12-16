@@ -281,9 +281,9 @@ ResultStream* TableImpl::Scan(const ScanDescriptor& desc, ErrorCode* err) {
         }
     }
     ResultStream * results = NULL;
-    if (desc.IsAsync() && !_table_schema.kv_only()) {
+    if (desc.IsAsync() && (_table_schema.raw_key() != GeneralKv)) {
         VLOG(6) << "activate async-scan";
-        results = new ResultStreamAsyncImpl(this, impl);
+        results = new ResultStreamBatchImpl(this, impl);
     } else {
         VLOG(6) << "activate sync-scan";
         results = new ResultStreamSyncImpl(this, impl);
@@ -2019,10 +2019,10 @@ void TableImpl::DoDumpCookie() {
     int lock_fd = open(cookie_lock_file.c_str(), O_WRONLY | O_CREAT | O_EXCL, 0644);
     if (lock_fd == -1) {
         int errno_saved = errno;
-        LOG(INFO) << "[SDK COOKIE] faild to create cookie-lock-file" << cookie_lock_file
-                   << ". reason: " << strerror(errno_saved)
-                   << ". If reason is \"File exists\", means lock is held by another process"
-                   << "otherwise, IO error";
+        if (errno != EEXIST) {
+            LOG(INFO) << "[SDK COOKIE] failed to create cookie-lock-file: " << cookie_lock_file
+                      << ". reason: " << strerror(errno_saved);
+        }
         return;
     }
 

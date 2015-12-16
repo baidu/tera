@@ -1,15 +1,17 @@
 {
-  "table_name": "test"
-  "read_speed_limit(/TS*Qps)": "0", 
-  "random": "f", 
-  "value_sizeB(B)": "100", 
-  "mode": "rw", 
-  "scan_buffer(M)": "0", 
-  "tablet_number": "60", 
-  "ts_number": "3", 
-  "key_size(B)": "100", 
-  "write_speed_limit(/TS*M)": "60", 
-  "entry_number(M)": "10",
-  "split_size": 102400,
-  "table_schema": {"lg0": {"storage": "flash", "cf": "cf0:q"}, "lg1": {"storage": "disk", "cf": "cf1:q1,cf1:q2,cf2:q"}}
+  "table_name": "test",
+  "read_speed_limit(Qps)": "0",
+  "value_sizeB(B)": "102400",
+  "mode": "rw",
+  "key_seed": "10",
+  "value_seed": "10",
+  "step": "False",
+  "scan_buffer(M)": "0",
+  "tablet_number": "1",
+  "ts_number": "1",
+  "key_size(B)": "15",
+  "write_speed_limit(M)": "3",
+  "entry_number(M)": "0.1",
+  "split_size": 1024000,
+  "table_schema": {"lg0": {"storage": "disk", "cf": "cf0:q"}}
 }

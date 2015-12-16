@@ -157,13 +157,15 @@ class DB {
   // end==NULL is treated as a key after all keys in the database.
   // Therefore the following call will compact the entire database:
   //    db->CompactRange(NULL, NULL);
-  virtual void CompactRange(const Slice* begin, const Slice* end) = 0;
+  virtual void CompactRange(const Slice* begin, const Slice* end, int lg_no = -1) = 0;
 
   // tera-specific
   // Too busy to write
   virtual bool BusyWrite() = 0;
 
   virtual bool FindSplitKey(double ratio, std::string* split_key) = 0;
+  virtual bool FindKeyRange(std::string* smallest_key = NULL,
+                            std::string* largest_key = NULL) = 0;
 
   virtual bool MinorCompact() = 0;
 

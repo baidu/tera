@@ -52,6 +52,16 @@ bool MasterEntry::StartServer() {
     return true;
 }
 
+bool MasterEntry::Run() {
+    static int64_t timer_ticks = 0;
+    ++timer_ticks;
+
+    LOG(INFO) << "[ThreadPool schd/task/cnt] " << m_master_impl->ProfilingLog();
+
+    ThisThread::Sleep(1000);
+    return true;
+}
+
 void MasterEntry::ShutdownServer() {
     m_rpc_server->Stop();
     m_master_impl.reset();

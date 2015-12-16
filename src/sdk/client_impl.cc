@@ -18,6 +18,7 @@
 #include "sdk/table_impl.h"
 #include "sdk/sdk_utils.h"
 #include "sdk/sdk_zk.h"
+#include "utils/config_utils.h"
 #include "utils/crypt.h"
 #include "utils/string_util.h"
 #include "utils/utils_cmd.h"
@@ -35,6 +36,7 @@ DECLARE_int32(tera_sdk_retry_period);
 DECLARE_int32(tera_sdk_thread_min_num);
 DECLARE_int32(tera_sdk_thread_max_num);
 DECLARE_bool(tera_sdk_rpc_limit_enabled);
+DECLARE_bool(tera_sdk_table_rename_enabled);
 DECLARE_int32(tera_sdk_rpc_limit_max_inflow);
 DECLARE_int32(tera_sdk_rpc_limit_max_outflow);
 DECLARE_int32(tera_sdk_rpc_max_pending_buffer_size);
@@ -137,7 +139,12 @@ bool ClientImpl::CreateTable(const TableDescriptor& desc,
     CreateTableResponse response;
     request.set_sequence_id(0);
     std::string timestamp = tera::get_curtime_str_plain();
-    std::string internal_table_name = desc.TableName() + "@" + timestamp;
+    std::string internal_table_name;
+    if (FLAGS_tera_sdk_table_rename_enabled) {
+        internal_table_name = desc.TableName() + "@" + timestamp;
+    } else {
+        internal_table_name = desc.TableName();
+    }
     request.set_table_name(internal_table_name);
     request.set_user_token(GetUserToken(_user_identity, _user_passcode));
 
@@ -569,8 +576,19 @@ bool ClientImpl::DoShowTablesInfo(TableMetaList* table_list,
         request.set_max_tablet_num(FLAGS_tera_sdk_show_max_num); //tablets be fetched at most in one RPC
         request.set_sequence_id(0);
         request.set_user_token(GetUserToken(_user_identity, _user_passcode));
+
+        if (table_name == "") {
+            // show all table brief
+            request.set_all_brief(true);
+        }
         if (master_client.ShowTables(&request, &response) &&
             response.status() == kMasterOk) {
+            if (tablet_list == NULL && response.all_brief()) {
+                // show all table brief
+                table_list->CopyFrom(response.table_meta_list());
+                return true;
+            }
+
             if (response.table_meta_list().meta_size() == 0) {
                 has_error = true;
                 err_msg = StatusCodeToString(response.status());
@@ -999,47 +1017,40 @@ static int InitFlags(const std::string& confpath, const std::string& log_prefix)
     MutexLock locker(&g_mutex);
     // search conf file, priority:
     //   user-specified > ./tera.flag > ../conf/tera.flag
-    std::string flagfile("--flagfile=");
+    std::string flagfile;
     if (SpecifiedFlagfileCount(confpath) > 1) {
         LOG(ERROR) << "should specify no more than one config file";
         return -1;
     }
 
     if (!confpath.empty() && IsExist(confpath)){
-        flagfile += confpath;
+        flagfile = confpath;
     } else if(!confpath.empty() && !IsExist(confpath)){
         LOG(ERROR) << "specified config file(function argument) not found";
         return -1;
     } else if (!FLAGS_tera_sdk_conf_file.empty() && IsExist(confpath)) {
-        flagfile += FLAGS_tera_sdk_conf_file;
+        flagfile = FLAGS_tera_sdk_conf_file;
     } else if (!FLAGS_tera_sdk_conf_file.empty() && !IsExist(confpath)) {
         LOG(ERROR) << "specified config file(FLAGS_tera_sdk_conf_file) not found";
         return -1;
     } else if (IsExist("./tera.flag")) {
-        flagfile += "./tera.flag";
+        flagfile = "./tera.flag";
     } else if (IsExist("../conf/tera.flag")) {
-        flagfile += "../conf/tera.flag";
+        flagfile = "../conf/tera.flag";
     } else if (IsExist(utils::GetValueFromEnv("TERA_CONF"))) {
-        flagfile += utils::GetValueFromEnv("TERA_CONF");
+        flagfile = utils::GetValueFromEnv("TERA_CONF");
     } else {
         LOG(ERROR) << "hasn't specify the flagfile, but default config file not found";
         return -1;
     }
 
-    int argc = 2;
-    char** argv = new char*[3];
-    argv[0] = const_cast<char*>("dummy");
-    argv[1] = const_cast<char*>(flagfile.c_str());
-    argv[2] = NULL;
+    utils::LoadFlagFile(flagfile);
 
-    // the gflags will get flags from falgfile
-    ::google::ParseCommandLineFlags(&argc, &argv, false);
     if (!g_is_glog_init) {
         ::google::InitGoogleLogging(log_prefix.c_str());
         utils::SetupLog(log_prefix);
         g_is_glog_init = true;
     }
-    delete[] argv;
 
     LOG(INFO) << "USER = " << FLAGS_tera_user_identity;
     LOG(INFO) << "Load config file: " << flagfile;

@@ -414,8 +414,9 @@ Status DBTable::Write(const WriteOptions& options, WriteBatch* my_batch) {
             log_->AddRecord(slice);
             s = log_->WaitDone(wait_sec);
             if (s.IsTimeOut()) {
-                Log(options_.info_log, "[%s] AddRecord time out %lu",
-                    dbname_.c_str(), current_log_size_);
+                Log(options_.info_log, "[%s] AddRecord time out, current log size: %lu, "
+                    "record size: %lu, wait_sec: %u",
+                    dbname_.c_str(), current_log_size_, slice.size(), wait_sec);
                 int ret = SwitchLog(true);
                 if (ret == 0) {
                     continue;
@@ -726,13 +727,16 @@ void DBTable::GetApproximateSizes(uint64_t* size, std::vector<uint64_t>* lgsize)
     }
 }
 
-void DBTable::CompactRange(const Slice* begin, const Slice* end) {
+void DBTable::CompactRange(const Slice* begin, const Slice* end, int lg_no) {
     std::vector<LGCompactThread*> lg_threads;
     std::set<uint32_t>::iterator it = options_.exist_lg_list->begin();
     for (; it != options_.exist_lg_list->end(); ++it) {
-        LGCompactThread* thread = new LGCompactThread(*it, lg_list_[*it], begin, end);
-        lg_threads.push_back(thread);
-        thread->Start();
+        LGCompactThread* thread;
+        if ((lg_no >= 0 && static_cast<int>(*it) == lg_no) || lg_no < 0) {
+            thread = new LGCompactThread(*it, lg_list_[*it], begin, end);
+            lg_threads.push_back(thread);
+            thread->Start();
+        }
     }
     for (uint32_t i = 0; i < lg_threads.size(); ++i) {
         lg_threads[i]->Join();
@@ -1006,6 +1010,28 @@ bool DBTable::FindSplitKey(double ratio,
         return false;
     }
     return biggest_it->second->FindSplitKey(ratio, split_key);
+}
+
+bool DBTable::FindKeyRange(std::string* smallest_key, std::string* largest_key) {
+    if (smallest_key && largest_key) {
+        smallest_key->clear();
+        largest_key->clear();
+    } else {
+        return false;
+    }
+    MutexLock l(&mutex_);
+    std::string sk, lk;
+    std::set<uint32_t>::iterator it = options_.exist_lg_list->begin();
+    for (; it != options_.exist_lg_list->end(); ++it) {
+        lg_list_[*it]->FindKeyRange(&sk, &lk);
+        if (smallest_key->empty() || sk < *smallest_key) {
+            *smallest_key = sk;
+        }
+        if (largest_key->empty() || lk > *largest_key) {
+            *largest_key = lk;
+        }
+    }
+    return true;
 }
 
 bool DBTable::MinorCompact() {
