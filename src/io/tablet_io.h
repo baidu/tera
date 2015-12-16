@@ -57,7 +57,7 @@ public:
         int64_t timeout;
 
         ScanOptions()
-            : max_versions(UINT32_MAX), max_size(UINT32_MAX),
+            : max_versions(UINT32_MAX), version_num(0), max_size(UINT32_MAX),
               ts_start(kOldestTs), ts_end(kLatestTs), snapshot_id(0), timeout(INT64_MAX / 2)
         {}
     };
