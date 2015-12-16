@@ -854,10 +854,11 @@ int32_t ScanOp(Client* client, int32_t argc, char** argv, ErrorCode* err) {
         g_total_size += len;
         g_key_num ++;
         g_cur_batch_num ++;
-        std::cout << result_stream->RowName() << ":"
-           << result_stream->ColumnName() << ":"
-           << result_stream->Timestamp() << ":"
-           << result_stream->Value() << std::endl;
+        std::cout << DebugString(result_stream->RowName()) << "\t"
+            << DebugString(result_stream->Family()) << "\t"
+            << DebugString(result_stream->Qualifier()) << "\t"
+            << result_stream->Timestamp() << "\t"
+            << DebugString(result_stream->Value()) << std::endl;
         result_stream->Next();
         if (g_cur_batch_num >= FLAGS_tera_client_batch_put_num) {
             int32_t time_cur=time(NULL);
