@@ -45,7 +45,7 @@ tera开发者黄俊辉的串讲文档
 ## tera 数据模型与leveldb的数据模型的映射关系
 - tera是表格的数据模型，leveldb是kv的数据模型，tera是基于leveldb的存储系统，所以这里涉及到表格数据转换成kv结构的问题；
 - tera的表格至少有一个LG，一个LG有一个或多个CF，一个LG对应一个leveldb的对象；
-- leveldb的Key结构是|user\_key|sequence(7Bytes)|type(1Bytes)|，排序方法是首先user\_key升序，然后sequence降序，最后type降序。其中user_key是用户key序列化后值，sequence是操作的时间顺序，type是操作类型（写入或删除）；
+- leveldb的Key结构是|user\_key|sequence(7Bytes)|type(1Bytes)|，排序方法是首先user\_key升序，然后sequence降序，最后type降序。其中user\_key是用户key序列化后值，sequence是操作的时间顺序，type是操作类型（写入或删除）；
 - 在tera里，有四种key类型：
  - Readable: rowkey，qualifier都是字符串类型，没有\0；
  - Binary: rowkey或qualifier包含\0字符，规定cf不能包含\0；
@@ -57,7 +57,7 @@ tera开发者黄俊辉的串讲文档
  - TTLKv: [rowkey(rlen)|expire\_timestamp(4B)]
  - GeneralKv: user\_key == key
  - 写操作时，不同LG的数据是写到同一个log文件的，为提高恢复的效率，需要把LG的id和上面序列化生成的tera\_key一起写到日志中，具体格式是：
-  [9(4B)|//LG\_ID//|lg_id|klen|tera\_key]
+  [9(4B)|//LG\_ID//|lg\_id|klen|tera\_key]
 
 ## tera meta 表结构
  - meta表是tera的核心表，维护了整个系统当前有哪些表，每个表的模式，每个tablet的信息，每个CF的访问控制信息；
@@ -88,7 +88,7 @@ tera开发者黄俊辉的串讲文档
 - TS收到split请求后，需要在Tablet里找一个中间的key对其一分为二，具体找的方法是：
  1. 在Tablet里所有的LG中找一个数据量最大的，在这个LG里找待分裂的split\_key；
  2. 获取LG除level-0外的所有level的数据量大小总和size，确定分裂的数据量大小0.5*Size；
- 3. 从level-1到level-6，找一个largest key最小sst，把这个sst的大小累加到split_size，如果达到要求则执行步骤4，否则继续这一步骤的流程；
+ 3. 从level-1到level-6，找一个largest key最小sst，把这个sst的大小累加到split\_size，如果达到要求则执行步骤4，否则继续这一步骤的流程；
  4. split\_key就是步骤3得到的最后一个largest key；
  5. 对于普通KV类型的key，上述split\_key就是最终所要的key，对于表格类型需要从中提取出rowkey作为split\_key；
 - tablet的分裂只是修改了元信息，没有发生真实数据的移动，为实现这点leveldb需要做什么？
@@ -108,14 +108,13 @@ tera开发者黄俊辉的串讲文档
 ## tablet 读数据流程
 ![tablet合并](../resources/images/understanding_tablet_read.png)
 
-1. 遍历Tablet请求的每一行，根据tablet_name，start\_key找到对应的TabletIO的句柄；
+1. 遍历Tablet请求的每一行，根据tablet\_name，start\_key找到对应的TabletIO的句柄；
 2. 调用TabletIO的ReadCells，并保存结果；
  1. 如果只是kv类型，调用DBTable的Get，即调用leveldb的Get，其它类型进入步骤2；
  2. 如果请求里有一个qualifier为空，即没有指定qualifier，则不能执行seek，即需要调用scan操作，否则调用seek；
   - 新建一个迭代器，该迭代器内部包含了tablet里所有LG的迭代器；
   - 指定row\_key, cf="", qualifier="", type=TKT\_FORSEEK, timestamp=INT64\_MAX, 把迭代器移动行首；
   - 先遍历cf，然后在每个cf里遍历qualifier，调用ScanDrop检查是否需要跳过当前的记录，如果记录是有用的，则检查是否是原子操作，如果是就合并该key的所有value，如果不是原子操作，当前value就是最终需要的；
- 
 3. 返回结果；
 
 ## tablet 写数据流程
@@ -130,11 +129,12 @@ tera开发者黄俊辉的串讲文档
  - 封装的原因：原生的leveldb，一个db就有一个log文件。但是，在tera里一个tablet对应一个log文件，即多个db的数据会写到一log文件，所以需要在log文件里区分每个db的数据；
 3. 调用TabletIO::WriteBatch，进入步骤4；
 4. 调用DBTable::Write，使用RecordWriter封装数据，然后放到队列std::deque&lt;RecordWriter\*>尾端，等待前面的数据写完成，然后依次执行如下步骤；
- 1. 调用DBTable::GroupWriteBatch，把std::deque&lt;RecordWriter*>里的数据追加到WriteBatch实例，这里不会追加需要同步的数据。同时，这里限制一次批量写的数据量，默认是1M；
- 2. 检查是否需要切换日志文件；
- 3. 数据追加到log文件里，如果写日志超时（默认5s），切换日志文件；写日志成功后，执行sync操作，等待sync操作完成，如果sync超时，切换日志文件，重新执行这一步骤；
- 4. 对每个lg获取最后一次写的快照；
- 5. 把步骤2生成的WriteBatch分到不同的lg上，对每一个lg调用DBImpl::Write操作，把数据写入memtable
+ 1. 调用DBTable::GroupWriteBatch，把std::deque&lt;RecordWriter*>里的数据追加到WriteBatch实例，如果队列头的数据是不需要sync日志的，但是当前的数据是需要sync，则结束追加数据。同时，这里限制一次批量写的数据量，默认是1M；
+ 2. 如果force\_switch\_log\_或日志大小超过阈值32M（tera\_tablet\_log\_file\_size），生成新日志文件；
+ 3. 数据追加到log文件里，如果写日志超时（默认5s，tera\_tablet\_write\_log\_time\_out），切换日志文件；写日志成功后，执行sync操作，等待sync操作完成，如果sync超时，切换日志文件，重新执行这一步骤；
+ 4. 对每个lg保存最后一次写的快照序；
+ 5. 把步骤2生成的WriteBatch分到不同的lg上，对每一个lg调用DBImpl::Write操作，把数据写入memtable；
+ 6. 释放最后一次提交的快照；更新最后一次提交的序号commit\_snapshot\_，这样读操作就能读到最新的数据；
 
 ## tera compact的触发条件
 1. 用户通过SDK向TS发送compact请求；
@@ -145,13 +145,13 @@ tera开发者黄俊辉的串讲文档
 ## tera compact的流程
 1. 计算compact的分数的方法：
  - 对level-0来说，score=当前level-0的文件个数/2；
- - 对其它level来说，score=当前level的总字节大小/每个level配置的字节上限；(默认sst文件的大小是tera_tablet\_ldb\_sst\_size=8M，level-1上限是5*8M=40M，接下来的level是10倍的关系)
+ - 对其它level来说，score=当前level的总字节大小/每个level配置的字节上限；(默认sst文件的大小是tera\_tablet\_ldb\_sst\_size=8M，level-1上限是5*8M=40M，接下来的level是10倍的关系)
 2. compact操作对磁盘IO的读写压力比较大，所以每个TS同时compact线程数是有限制的，默认tera\_tabletnode\_compact\_thread\_num=10。分数越高，compact的优先级越高；
 3. compact的输入是level上的一个或若干没有重合的sst或者若干个有重合的sst文件（只有level为0时，才可能有多个重合的sst），以及level+1上的若干个与之有重合的sst文件，输出是level+1上多个新sst文件。具体参与compact文件的选择：
  - level上参与compact的文件是轮询的（由compact\_pointer\_变量保存下一个需要compact的sst文件），轮询结束则从头开始选第一个文件；
  - level+1上选sst落在[begin, end]范围内的文件，即是有重合的文件；
  - 选定level+1上的文件后，基于level和level+1的merge后的[smallest, largest]范围在level上找出所有重叠的文件数，然后得到更新的范围[smallest, largest]，拿这个范围在level+1上找出所有重叠的文件数，如果level+1在扩展前和扩展后的文件个数相同，则用扩展后的两组文件作为compact的输入，否则用上面两个步骤得到的两组文件作为compact输入；
- - level+2上选sst落在level和level+1的merge后的[smallest, largest]范围内的文件，由std::vector<FileMetaData*> grandparents_保存；这个变量主要是用来判断是否需要生成新sst、判断compact操作是否可以通过简单的move操作完成的依据；
+ - level+2上选sst落在level和level+1的merge后的[smallest, largest]范围内的文件，由std::vector<FileMetaData*> grandparents\_保存；这个变量主要是用来判断是否需要生成新sst、判断compact操作是否可以通过简单的move操作完成的依据；
 4. 选定compact的文件后，就进入真正compact操作。如果不是人工触发的compact，且检查发现可以通过简单的move文件完成compact的，则直接调用LogAndApply在manifest文件里记录这种变化：level+1有这个文件，level没有这个文件；对其它情况，进入步骤5；
 5. 对生成需要compact的两组sst文件，生成一个迭代器，遍历迭代器：
  - 如果immutable memtable有数据，则优先dump当前immutable memtable的数据到level-0的sst上。这样做是为了避免因为compact，导致前端写数据堵塞；
