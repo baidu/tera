@@ -96,7 +96,7 @@ tera开发者黄俊辉的串讲文档
  2. TS收到需要Load命令后，如果parent\_tablets的个数为1，则认为这个tablet是分裂而来的，通过读取父tablet的CURRENT文件，在自己的DB目录下生成MANIFEST；
  3. 通过MANIFEST文件，tablet就知道自己有哪些sst文件，每个sst属于哪一级，以及每个sst的最小最大值；
  4. 对于原来的tablet的sst文件，leveldb是不会移动到自己DB目录下的，后面compact操作生成的新文件会保存到自己的DB目录；
- 5. TS无法知道什么时候应该删除父tablet的sst文件，因为虽然自己没有用父tablet的sst文件了，但是可能由另一个分裂出来的tablet使用，这个只能由master定时向TS发送GC请求，收集需要删除的tablet文件。
+ 5. TS无法知道什么时候应该删除父tablet的sst文件，因为虽然自己没有用父tablet的sst文件了，但是可能由另一个分裂出来的tablet使用，这个只能由master定时向TS发送GC请求，收集仍然在用的sst文件，同时，master通过list命令得到tablet下所有的文件，两者的diff就是需要删除的文件。
 
 ## tablet 合并流程
 ![tablet合并](../resources/images/understanding_tablet_merge.png)
