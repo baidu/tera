@@ -29,7 +29,8 @@ class AsyncWriter {
   enum Mode {
     kNoAction,
     kAddRecord,
-    kSync
+    kSync,
+    kFlush
   };
   // Create a writer that will append data to "*dest".
   // "*dest" must be initially empty.

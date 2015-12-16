@@ -1884,6 +1884,10 @@ class ModelDB: public DB {
       return false;
   }
 
+  virtual bool FindKeyRange(std::string* smallest_key, std::string* largest_key) {
+      return false;
+  }
+
   virtual uint64_t GetScopeSize(const std::string& start_key,
                                 const std::string& end_key,
                                 std::vector<uint64_t>* lgsize = NULL) {
@@ -2173,6 +2177,34 @@ void BM_LogAndApply(int iters, int num_base_files) {
   fprintf(stderr,
           "BM_LogAndApply/%-6s   %8d iters : %9u us (%7.0f us / iter)\n",
           buf, iters, us, ((float)us) / iters);
+}
+
+TEST(DBTest, FindKeyRange) {
+  Options options = CurrentOptions();
+  options.write_buffer_size = 1000;
+  options.env = env_;
+  Reopen(&options);
+  ASSERT_OK(Put("a", "v1"));
+  ASSERT_OK(Put("b", "v1"));
+  ASSERT_OK(Put("c", "v1"));
+  ASSERT_OK(Put("d", "v1"));
+  ASSERT_OK(Put("e", "v1"));
+  ASSERT_OK(Put("f", "v1"));
+  Reopen(&options);
+  ASSERT_OK(Put("c", "v1"));
+  ASSERT_OK(Put("d", "v1"));
+  ASSERT_OK(Put("e", "v1"));
+  ASSERT_OK(Put("world", "v1"));
+  ASSERT_OK(Put("zoozoozoo", "v1"));
+  Reopen(&options);
+  ASSERT_OK(Put("e", "v1"));
+  ASSERT_OK(Put("f", "v1"));
+  ASSERT_OK(Put("hello", "v1"));
+  Reopen(&options);
+  std::string sk, lk;
+  db_->FindKeyRange(&sk, &lk);
+  ASSERT_EQ(sk, "a");
+  ASSERT_EQ(lk, "zoozoozoo");
 }
 
 }  // namespace leveldb

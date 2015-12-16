@@ -370,6 +370,22 @@ bool TabletIO::FindAverageKey(const std::string& start, const std::string& end,
     return true;
 }
 
+bool TabletIO::ParseRowKey(const std::string& tera_key, std::string* row_key) {
+    leveldb::Slice row;
+    if ((m_table_schema.raw_key() == GeneralKv)
+        || (m_kv_only && m_table_schema.raw_key() == Readable)) {
+        row = tera_key;
+    } else { // Table && TTL-KV
+        if (!m_key_operator->ExtractTeraKey(tera_key, &row,
+                                            NULL, NULL, NULL, NULL)) {
+            VLOG(5) << "fail to extract split key";
+            return false;
+        }
+    }
+    *row_key = row.ToString();
+    return true;
+}
+
 bool TabletIO::Split(std::string* split_key, StatusCode* status) {
     {
         MutexLock lock(&m_mutex);
@@ -386,25 +402,28 @@ bool TabletIO::Split(std::string* split_key, StatusCode* status) {
     }
 
     std::string raw_split_key;
-    leveldb::Slice key_split;
+    split_key->clear();
     if (m_db->FindSplitKey(0.5, &raw_split_key)) {
-        if ((m_table_schema.raw_key() == GeneralKv)
-            || (m_kv_only && m_table_schema.raw_key() == Readable)) {
-            key_split = raw_split_key;
-        } else { // Table && TTL-KV
-            if (!m_key_operator->ExtractTeraKey(raw_split_key, &key_split,
-                                                NULL, NULL, NULL, NULL)) {
-                VLOG(5) << "fail to extract split key";
-            }
-        }
+        ParseRowKey(raw_split_key, split_key);
     }
 
-    split_key->clear();
-    if (!key_split.empty()) {
-        *split_key = key_split.ToString();
-    } else {
+    if (split_key->empty() || *split_key == m_end_key) {
         // could not find split_key, try calc average key
-        FindAverageKey(m_start_key, m_end_key, split_key);
+        std::string smallest_key, largest_key;
+        CHECK(m_db->FindKeyRange(&smallest_key, &largest_key));
+
+        std::string srow_key, lrow_key;
+        if (!smallest_key.empty()) {
+            ParseRowKey(smallest_key, &srow_key);
+        } else {
+            srow_key = m_start_key;
+        }
+        if (!largest_key.empty()) {
+            ParseRowKey(largest_key, &lrow_key);
+        } else {
+            lrow_key = m_end_key;
+        }
+        FindAverageKey(srow_key, lrow_key, split_key);
     }
 
     VLOG(5) << "start: [" << DebugString(m_start_key)

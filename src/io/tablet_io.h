@@ -57,7 +57,7 @@ public:
         int64_t timeout;
 
         ScanOptions()
-            : max_versions(UINT32_MAX), max_size(UINT32_MAX),
+            : max_versions(UINT32_MAX), version_num(0), max_size(UINT32_MAX),
               ts_start(kOldestTs), ts_end(kLatestTs), snapshot_id(0), timeout(INT64_MAX / 2)
         {}
     };
@@ -220,6 +220,8 @@ private:
 
     void MakeKvPair(leveldb::Slice key, leveldb::Slice col, leveldb::Slice qual,
                     int64_t ts, leveldb::Slice value, KeyValuePair* kv);
+
+    bool ParseRowKey(const std::string& tera_key, std::string* row_key);
 
     bool ScanWithFilter(const ScanOptions& scan_options);
     bool IsCompleteRow(const std::list<KeyValuePair>& row_buf,

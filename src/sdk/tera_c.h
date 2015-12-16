@@ -70,7 +70,6 @@ void tera_scan_descriptor_set_time_range(tera_scan_descriptor_t* desc, int64_t t
 
 // scan result stream
 bool tera_result_stream_done(tera_result_stream_t* stream, char** errptr);
-bool tera_result_stream_look_up(tera_result_stream_t* stream, const char* str, uint64_t strlen);
 int64_t tera_result_stream_timestamp(tera_result_stream_t* stream);
 void tera_result_stream_column_name(tera_result_stream_t* stream, char** str, uint64_t* strlen);
 void tera_result_stream_family(tera_result_stream_t* stream, char** str, uint64_t* strlen);
