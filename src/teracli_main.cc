@@ -672,6 +672,66 @@ int32_t GetInt64Op(Client* client, int32_t argc, char** argv, ErrorCode* err) {
     return 0;
 }
 
+struct RowReaderParam {
+    Mutex mu_;
+    CondVar cond_;
+    volatile bool finish_;
+
+    RowReaderParam() : cond_(&mu_), finish_(false) {}
+};
+void RowReadOpCallback(RowReader* reader) {
+    RowReaderParam* param = (RowReaderParam*)reader->GetContext();
+    param->mu_.Lock();
+    param->finish_ = true;
+    param->cond_.Signal();
+    param->mu_.Unlock();
+}
+// usage: ./teracli readrow tablename rowkey
+int32_t RowReadOp(Client* client, int32_t argc, char** argv, ErrorCode* err) {
+    // parse param
+    if (argc != 4) {
+        LOG(ERROR) << "args number error: " << argc << ", need 4.";
+        Usage(argv[0]);
+        return -1;
+    }
+    std::string tablename = argv[2];
+    std::string rowkey = argv[3];
+
+    Table* table = NULL;
+    if ((table = client->OpenTable(tablename, err)) == NULL) {
+        LOG(ERROR) << "fail to open table";
+        return -1;
+    }
+    RowReader* rowreader = table->NewRowReader(rowkey);
+    if (rowreader == NULL) {
+        LOG(ERROR) << "cannot alloc rowreader";
+        return -1;
+    }
+    RowReaderParam* param = new RowReaderParam;
+    rowreader->SetContext(param);
+    rowreader->SetCallBack(RowReadOpCallback);
+    table->Get(rowreader);
+
+    param->mu_.Lock();
+    while (!param->finish_) {
+        param->cond_.Wait();
+    }
+    param->mu_.Unlock();
+
+    while (!rowreader->Done()) {
+        std::cout << rowreader->RowName() << ":"
+            << rowreader->ColumnName() << ":"
+            << rowreader->Timestamp() << ":"
+            << rowreader->Value() << std::endl;
+        rowreader->Next();
+    }
+
+    delete rowreader;
+    delete param;
+    delete table;
+    return 0;
+}
+
 int32_t GetOp(Client* client, int32_t argc, char** argv, ErrorCode* err) {
     if (argc != 4 && argc != 5) {
         LOG(ERROR) << "args number error: " << argc << ", need 5 | 6.";
@@ -2505,6 +2565,8 @@ int main(int argc, char* argv[]) {
         ret = AppendOp(client, argc, argv, &error_code);
     } else if (cmd == "get") {
         ret = GetOp(client, argc, argv, &error_code);
+    } else if (cmd == "rowread") {
+        ret = RowReadOp(client, argc, argv, &error_code);
     } else if (cmd == "getint64") {
         ret = GetInt64Op(client, argc, argv, &error_code);
     } else if (cmd == "get_counter") {

@@ -9,6 +9,24 @@ import nose
 import common
 
 
+@nose.tools.with_setup(common.create_singleversion_table)
+def test_rowreader_lowlevelscan():
+    """
+    table rowreader_lowlevelscan
+    1. write data set 1
+    2. scan & compare
+    :return: None
+    """
+    table_name = 'test'
+    dump_file = 'dump.out'
+    scan_file = 'scan.out'
+    common.run_tera_mark([(dump_file, False)], op='w', table_name=table_name, 
+                         cf='cf0:q00,cf0:q01,cf0:q02,cf1:q00,cf1:q01,cf1:q02', random='seq',
+                         key_seed=1, value_seed=10, value_size=64, num=10, key_size=20)
+    common.rowread_table(table_name=table_name, file_path=scan_file)
+    nose.tools.assert_true(common.compare_files(dump_file, scan_file, need_sort=False))
+
+
 @nose.tools.with_setup(common.create_kv_table, common.cleanup)
 def test_kv_random_write():
     """
