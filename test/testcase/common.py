@@ -151,7 +151,7 @@ def rowread_table(table_name, file_path):
     ret = subprocess.Popen(awk_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, shell=True)
     ret.communicate()
     
-    rowread_cmd = 'while read line; do {teracli} rowread {table_name} $line; done < {out1} > {output}'.format(
+    rowread_cmd = 'while read line; do {teracli} get {table_name} $line; done < {out1} > {output}'.format(
             teracli=const.teracli_binary, table_name=table_name, out1=tmpfile2, output=file_path)
     ret = subprocess.Popen(rowread_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, shell=True)
     ret.communicate()
