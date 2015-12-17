@@ -704,11 +704,10 @@ int32_t GetOp(Client* client, int32_t argc, char** argv, ErrorCode* err) {
     }
     table->Get(reader);
     while (!reader->Done()) {
-        std::cout << DebugString(reader->RowName()) << "\t"
-            << DebugString(reader->Family()) << "\t"
-            << DebugString(reader->Qualifier()) << "\t"
-            << reader->Timestamp() << "\t"
-            << DebugString(reader->Value()) << std::endl;
+        std::cout << reader->RowName() << ":"
+           << reader->ColumnName() << ":"
+           << reader->Timestamp() << ":"
+           << reader->Value() << std::endl;
         reader->Next();
     }
     delete reader;

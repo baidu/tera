@@ -1,5 +1,6 @@
-set -x
+set -x -e
 
+rm -rf tmp
 mkdir tmp
 cp -r example/onebox/* tmp
 cp build/bin/teracli tmp/bin
@@ -18,7 +19,6 @@ sh launch_tera.sh
 sleep 2
 
 export PYTHONPATH=$PYTHONPATH:../../thirdparty/include/; export PATH=$PATH:../../thirdparty/bin/
-nosetests -s -v > ../log/test.log
+nosetests -s -v -x > ../log/test.log
 
 sh kill_tera.sh
-
