@@ -534,7 +534,7 @@ void Version::GetApproximateSizes(uint64_t* size, uint64_t* size_under_level1) {
   for (int level = 1; level < config::kNumLevels; level++) {
     const std::vector<FileMetaData*>& files = files_[level];
     for (size_t i = 0; i < files.size(); i++) {
-      total_size += files[i]->file_size;
+      total_size += files[i]->data_size;
     }
   }
   if (size_under_level1) {
@@ -544,7 +544,7 @@ void Version::GetApproximateSizes(uint64_t* size, uint64_t* size_under_level1) {
   // calculate level0
   const std::vector<FileMetaData*>& files = files_[0];
   for (size_t i = 0; i < files.size(); i++) {
-    total_size += files[i]->file_size;
+    total_size += files[i]->data_size;
   }
   if (size) {
     *size = total_size;
@@ -582,7 +582,7 @@ bool Version::FindSplitKey(double ratio, std::string* split_key) {
     if (largest_file == NULL) {
       return false;
     }
-    split_size += files_[step_level][now_pos[step_level]]->file_size;
+    split_size += files_[step_level][now_pos[step_level]]->data_size;
     now_pos[step_level] ++;
   }
   if (largest_file == NULL) {
@@ -638,6 +638,8 @@ std::string Version::DebugString() const {
       AppendNumberTo(&r, files[i]->number);
       r.push_back(':');
       AppendNumberTo(&r, files[i]->file_size);
+      r.push_back(':');
+      AppendNumberTo(&r, files[i]->data_size);
       r.append("[");
       r.append(files[i]->smallest.DebugString());
       r.append(" .. ");
@@ -770,7 +772,7 @@ class VersionSetBuilder {
          ++iter) {
       const int level = iter->first;
       FileMetaData f = iter->second;
-      ModifyFileMetaKeyRange(&f);
+      ModifyFileMeta(&f);
       levels_[level].deleted_files.push_back(f);
     }
 
@@ -779,7 +781,7 @@ class VersionSetBuilder {
     while (it != edit->new_files_.end()) {
       const int level = it->first;
       FileMetaData& f_new = it->second;
-      if (!ModifyFileMetaKeyRange(&f_new)) {
+      if (!ModifyFileMeta(&f_new)) {
         // File is out-of-range, erase from edit
         it = edit->new_files_.erase(it);
         continue;
@@ -877,9 +879,10 @@ class VersionSetBuilder {
     f->refs++;
     files->push_back(f);
   }
-  // modify key range of file meta
-  // return false if file out of tablet range
-  bool ModifyFileMetaKeyRange(FileMetaData* f) {
+  // Modify key range & data_size of file meta
+  // Return false if file out of tablet range
+  bool ModifyFileMeta(FileMetaData* f) {
+    // Try modify key range
     if (!vset_->db_key_start_.user_key().empty() &&
         vset_->icmp_.Compare(f->smallest, vset_->db_key_start_) < 0) {
       if (vset_->icmp_.Compare(f->largest, vset_->db_key_start_) > 0) {
@@ -911,6 +914,35 @@ class VersionSetBuilder {
         // file out of tablet range, skip it;
         return false;
       }
+    }
+
+    // Try modify data_size in file meta
+    // data_size = largest_key_offset - smallest_key_offset
+    if (f->largest_fake || f->smallest_fake) {
+      uint64_t s_offset = 0;
+      uint64_t l_offset = f->file_size;
+      Table* tableptr;
+      Iterator* iter =
+          vset_->table_cache_->NewIterator(
+              ReadOptions(vset_->options_), vset_->dbname_,
+              f->number, f->file_size, "", "", &tableptr);
+      if (tableptr == NULL) {
+      } else if (f->smallest_fake) {
+        s_offset = tableptr->ApproximateOffsetOf(f->smallest.Encode());
+      } else if (f->largest_fake) {
+        l_offset = tableptr->ApproximateOffsetOf(f->largest.Encode());
+      }
+      f->data_size = l_offset - s_offset;
+      Log(vset_->options_->info_log,
+          "[%s] reset file data_size: %s, from %llu to %llu\n",
+          vset_->dbname_.c_str(),
+          TableFileName(vset_->dbname_, f->number).c_str(),
+          static_cast<unsigned long long>(f->file_size),
+          static_cast<unsigned long long>(f->data_size));
+      delete iter;
+    } else {
+      // do not need modify
+      f->data_size = f->file_size;
     }
     return true;
   }
