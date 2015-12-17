@@ -163,12 +163,13 @@ tera开发者黄俊辉的串讲文档
 ## 业界的进展
 tera 是一个类似bigtable，hbase的NoSQL系统，所以可以借鉴这些系统的优点。目前hbase的进展主要是在可用性上。
 
-- hbase基于timeline一致性为读操作提供高可用，99.9%提升到99.99%，[参考链接](http://hortonworks.com/blog/apache-hbase-high-availability-next-level/)；
+- hbase基于timeline一致性为读操作提供高可用，99.9%提升到99.99%，[hbase ha介绍](http://hortonworks.com/blog/apache-hbase-high-availability-next-level/)，[hbase官方文档](https://hbase.apache.org/book.html#_timeline_consistency)；
  - 一个tablet只能由一个主ts写，但可以由多个从和主ts读；
  - 从ts实时tail主ts更新的日志文件，更新自己的memtable数据；
- - 客户端请求时通过指定一致性的要求（STRONG或TIMELINE）决定读请求到主ts还是从ts；
-- facebook开发HydraBase进一步提供高可用，99.99%提升到99.999%，[参考链接](https://code.facebook.com/posts/321111638043166/hydrabase-the-evolution-of-hbase-facebook/)；
+ - 客户端可以在读请求里指定一致性的要求：STRONG或TIMELINE，STRONG是hbase默认的行为读写都到主ts上，如果是TIMELINE，则sdk先请求主ts，如果超过阈值（默认10毫秒）没有返回，则向所有的从ts发送读请求，第一个响应结果作为最终的值；
+ - sdk提供Result.isStale()接口，表示结果是否来自主ts，即值为false，则是来自主ts的，数据肯定是最新的；
+- facebook开发HydraBase进一步提供高可用，99.99%提升到99.999%，[facebook官方blog](https://code.facebook.com/posts/321111638043166/hydrabase-the-evolution-of-hbase-facebook/)；
  - 解决跨机架、跨机房的容灾；
  - 基于RAFT实现副本的一致性；
 
-另外，mongodb是近年比较流行的NoSQL系统，其功能越来越强大！在最新3.2版增加了内存存储引擎、数据加密、支持与第三方BI连接，[参考链接](https://www.mongodb.com/mongodb-3.2)
+另外，mongodb是近年比较流行的NoSQL系统，其功能越来越强大！在最新3.2版增加了内存存储引擎、数据加密、支持与第三方BI连接，[mongodb新功能介绍](https://www.mongodb.com/mongodb-3.2)
