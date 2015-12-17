@@ -18,7 +18,9 @@ sh launch_tera.sh
 sleep 2
 
 export PYTHONPATH=$PYTHONPATH:../../thirdparty/include/; export PATH=$PATH:../../thirdparty/bin/
-nosetests -s -v > ../log/test.log
+nosetests -s -v -x > ../log/test.log
+RET=$?
 
 sh kill_tera.sh
+return $RET
 
