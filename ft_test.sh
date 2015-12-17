@@ -1,4 +1,4 @@
-set -x
+set -x -e
 
 rm -rf tmp
 mkdir tmp
@@ -20,8 +20,5 @@ sleep 2
 
 export PYTHONPATH=$PYTHONPATH:../../thirdparty/include/; export PATH=$PATH:../../thirdparty/bin/
 nosetests -s -v -x > ../log/test.log
-RET=$?
 
 sh kill_tera.sh
-return $RET
-
