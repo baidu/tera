@@ -222,6 +222,8 @@ private:
                     int64_t ts, leveldb::Slice value, KeyValuePair* kv);
 
     bool ParseRowKey(const std::string& tera_key, std::string* row_key);
+    bool ShouldFilterRowBuffer(std::list<KeyValuePair>& row_buf,
+                               const ScanOptions& scan_options);
 
     bool ScanWithFilter(const ScanOptions& scan_options);
     bool IsCompleteRow(const std::list<KeyValuePair>& row_buf,
