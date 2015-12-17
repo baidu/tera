@@ -1,5 +1,6 @@
 set -x
 
+rm -rf tmp
 mkdir tmp
 cp -r example/onebox/* tmp
 cp build/bin/teracli tmp/bin
