@@ -164,6 +164,9 @@ tera开发者黄俊辉的串讲文档
 tera 是一个类似bigtable，hbase的NoSQL系统，所以可以借鉴这些系统的优点。目前hbase的进展主要是在可用性上。
 
 - hbase基于timeline一致性为读操作提供高可用，99.9%提升到99.99%，[参考链接](http://hortonworks.com/blog/apache-hbase-high-availability-next-level/)；
+ - 一个tablet只能由一个主ts写，但可以由多个从和主ts读；
+ - 从ts实时tail主ts更新的日志文件，更新自己的memtable数据；
+ - 客户端请求时通过指定一致性的要求（STRONG或TIMELINE）决定读请求到主ts还是从ts；
 - facebook开发HydraBase进一步提供高可用，99.99%提升到99.999%，[参考链接](https://code.facebook.com/posts/321111638043166/hydrabase-the-evolution-of-hbase-facebook/)；
  - 解决跨机架、跨机房的容灾；
  - 基于RAFT实现副本的一致性；
