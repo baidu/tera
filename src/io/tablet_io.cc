@@ -635,60 +635,13 @@ bool TabletIO::LowLevelScan(const std::string& start_tera_key,
     return ret;
 }
 
-static bool CheckValue(const KeyValuePair& kv, const Filter& filter) {
-    int64_t v1 = *(int64_t*)kv.value().c_str();
-    int64_t v2 = *(int64_t*)filter.ref_value().c_str();
-    BinCompOp op = filter.bin_comp_op();
-    switch (op) {
-    case EQ:
-        return v1 == v2;
-        break;
-    case NE:
-        return v1 != v2;
-        break;
-    case LT:
-        return v1 < v2;
-        break;
-    case LE:
-        return v1 <= v2;
-        break;
-    case GT:
-        return v1 > v2;
-        break;
-    case GE:
-        return v1 >= v2;
-        break;
-    default:
-        LOG(ERROR) << "illegal compare operator: " << op;
-    }
-    return false;
-}
-
-static bool CheckCell(const KeyValuePair& kv, const Filter& filter) {
-    switch (filter.type()) {
-    case BinComp: {
-        if (filter.field() == ValueFilter) {
-            if (!CheckValue(kv, filter)) {
-                return false;
-            }
-        } else {
-            LOG(ERROR) << "only support value-compare.";
-        }
-        break;
-    }
-    default: {
-        LOG(ERROR) << "only support compare.";
-        break;
-    }}
-    return true;
-}
 
 bool TabletIO::ScanWithFilter(const ScanOptions& scan_options) {
     return scan_options.filter_list.filter_size() != 0;
 }
 
 // 检测`row_buf'中的数据是否为一整行，`row_buf'为空是整行的特例，也返回true
-// 通过 leveldb::Iterator* it 执行 Next() 往后看一个cell，
+// 从LowLevelScan的for()循环中跳出时，leveldb::Iterator* it 指向第一个不在row_buf中的cell
 // 如果这个cell的rowkey和row_buf中的数据rowkey相同，
 // 则说明`row_buf'中的数据不是一整行，返回false
 // `row_buf'自身的逻辑保证了其中的所有cell必定属于同一行(row)
@@ -700,22 +653,26 @@ bool TabletIO::IsCompleteRow(const std::list<KeyValuePair>& row_buf,
         return true;
     }
     leveldb::Slice origin_cell = it->key();
-    it->Next();
+    leveldb::Slice cur_cell = it->key();
     for (; it->Valid();) {
-        leveldb::Slice next_cell = it->key();
+        cur_cell = it->key();
         leveldb::Slice row;
-        if (!m_key_operator->ExtractTeraKey(next_cell, &row,
+        if (!m_key_operator->ExtractTeraKey(cur_cell, &row,
                                             NULL, NULL, NULL, NULL)) {
-            LOG(ERROR) << "[filter] invalid tera key: " << DebugString(next_cell.ToString());
+            LOG(ERROR) << "[filter] invalid tera key: " << DebugString(cur_cell.ToString());
             it->Next();
             continue;
         }
-        it->Seek(origin_cell);
+        if (cur_cell.compare(origin_cell) != 0) {
+            it->Seek(origin_cell);
+        }
         bool res = row.compare(row_buf.begin()->key()) == 0;
         VLOG(9) << "[filter] " << ( res ? "NOT " : "") << "complete row";
         return !res;
     }
-    it->Seek(origin_cell);
+    if (cur_cell.compare(origin_cell) != 0) {
+        it->Seek(origin_cell);
+    }
     VLOG(9) << "[filter] reach the end, row_buf is complete row";
     return true;
 }
@@ -737,8 +694,10 @@ bool TabletIO::ShouldFilterRow(const ScanOptions& scan_options,
 
     int filter_num = scan_options.filter_list.filter_size();
 
-    // TODO(taocipian) collects all target cf and sorts them,
-    // then Seek() to the 1st cf, Next() to the rest
+    // TODO(taocipian)
+    // 0). some target cf maybe already in row_buf
+    // 1). collects all target cf and sorts them,
+    //     then Seek() to the 1st cf, Next() to the rest
     for (int i = 0; i < filter_num; ++i) {
         const Filter& filter = scan_options.filter_list.filter(i);
         // 针对用户指定了过滤条件的每一列，seek过去看看是否符合
@@ -775,7 +734,6 @@ bool TabletIO::ShouldFilterRow(const ScanOptions& scan_options,
             VLOG(9) << "[filter] target cf check passed";
             break;
         }
-        VLOG(9) << "[filter] target cf not found:" << target_cf;
     }
     it->Seek(origin_cell);
     VLOG(9) << "[filter] this row check passed";
