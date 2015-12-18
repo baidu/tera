@@ -103,7 +103,7 @@ class ResultStream(object):
         vallen = c_uint64()
         lib.tera_result_stream_row_name(self.stream,
                                         byref(value), byref(vallen))
-        return string_at(value, long(vallen.value))
+        return copy_string_to_user(value, long(vallen.value))
 
     def Family(self):
         """
@@ -113,7 +113,7 @@ class ResultStream(object):
         value = POINTER(c_ubyte)()
         vallen = c_uint64()
         lib.tera_result_stream_family(self.stream, byref(value), byref(vallen))
-        return string_at(value, long(vallen.value))
+        return copy_string_to_user(value, long(vallen.value))
 
     def Qualifier(self):
         """
@@ -124,7 +124,7 @@ class ResultStream(object):
         vallen = c_uint64()
         lib.tera_result_stream_qualifier(self.stream,
                                          byref(value), byref(vallen))
-        return string_at(value, long(vallen.value))
+        return copy_string_to_user(value, long(vallen.value))
 
     def ColumnName(self):
         """
@@ -135,7 +135,7 @@ class ResultStream(object):
         vallen = c_uint64()
         lib.tera_result_stream_column_name(self.stream,
                                            byref(value), byref(vallen))
-        return string_at(value, long(vallen.value))
+        return copy_string_to_user(value, long(vallen.value))
 
     def Value(self):
         """
@@ -145,7 +145,7 @@ class ResultStream(object):
         value = POINTER(c_ubyte)()
         vallen = c_uint64()
         lib.tera_result_stream_value(self.stream, byref(value), byref(vallen))
-        return string_at(value, long(vallen.value))
+        return copy_string_to_user(value, long(vallen.value))
 
     def Timestamp(self):
         """
@@ -167,8 +167,8 @@ class Client(object):
         """
         err = c_char_p()
         self.client = lib.tera_client_open(conf_path, log_prefix, byref(err))
-        if self.client == NULL:
-            raise TeraSdkException("open client failed:" + err.value)
+        if self.client is None:
+            raise TeraSdkException("open client failed:" + str(err.value))
 
     def OpenTable(self, name):
         """ 打开名为<name>的表
@@ -181,11 +181,10 @@ class Client(object):
             TeraSdkException: 打开table时出错
         """
         err = c_char_p()
-        table = Table()
-        table.table = lib.tera_table_open(self.client, name, byref(err))
-        if table.table == NULL:
+        table_ptr = lib.tera_table_open(self.client, name, byref(err))
+        if table_ptr is None:
             raise TeraSdkException("open table failed:" + err.value)
-        return table
+        return Table(table_ptr)
 
 
 MUTATION_CALLBACK = CFUNCTYPE(None, c_void_p)
@@ -234,7 +233,7 @@ class RowMutation(object):
         vallen = c_uint64()
         lib.tera_row_mutation_rowkey(self.mutation,
                                      byref(value), byref(vallen))
-        return string_at(value, long(vallen.value))
+        return copy_string_to_user(value, long(vallen.value))
 
     def SetCallback(self, callback):
         """ 设置回调
@@ -251,8 +250,8 @@ class Table(object):
     """ 对表格的所有增删查改操作由此发起
         通过Client.OpenTable()获取一个Table对象
     """
-    def __init__(self):
-        pass
+    def __init__(self, table):
+        self.table = table
 
     def NewRowMutation(self, rowkey):
         """ 生成一个对 rowkey 的RowMutation对象
@@ -302,7 +301,7 @@ class Table(object):
         )
         if not result:
             raise TeraSdkException("get record failed:" + err.value)
-        return string_at(value, long(vallen.value))
+        return copy_string_to_user(value, long(vallen.value))
 
     def Put(self, rowkey, cf, qu, value):
         """ 同步put一个cell的值
@@ -350,7 +349,7 @@ class Table(object):
             desc.desc,
             byref(err)
         )
-        if stream == NULL:
+        if stream is None:
             raise TeraSdkException("scan failed:" + err.value)
         return ResultStream(stream)
 
@@ -450,7 +449,7 @@ def init_function_prototype():
     lib.tera_client_open.restype = c_void_p
 
     lib.tera_table_open.argtypes = [c_void_p, c_char_p, POINTER(c_char_p)]
-    lib.tera_table_open.restyep = c_void_p
+    lib.tera_table_open.restype = c_void_p
 
     ################
     # row_mutation #
@@ -501,7 +500,15 @@ def init_function_prototype():
     lib.tera_row_mutation.restype = c_void_p
 
 
+def copy_string_to_user(value, size):
+    result = string_at(value, size)
+    libc = cdll.LoadLibrary('libc.so.6')
+    libc.free.argtypes = [c_void_p]
+    libc.free.restype = None
+    libc.free(value)
+    return result
+
+
 lib = cdll.LoadLibrary('./libtera_c.so')
-NULL = 0
 
 init_function_prototype()
