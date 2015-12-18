@@ -59,7 +59,8 @@ tera_client_t* tera_client_open(const char* conf_path, const char* log_prefix, c
     ErrorCode err;
     tera_client_t* result = new tera_client_t;
     result->rep = Client::NewClient(conf_path, log_prefix, &err);
-    if (SaveError(errptr, err)) {
+    if (SaveError(errptr, err) || !result->rep) {
+        delete result;
         return NULL;
     }
     return result;
@@ -69,7 +70,8 @@ tera_table_t* tera_table_open(tera_client_t* client, const char* table_name, cha
     ErrorCode err;
     tera_table_t* result = new tera_table_t;
     result->rep = client->rep->OpenTable(table_name, &err);
-    if (SaveError(errptr, err)) {
+    if (SaveError(errptr, err) || !result->rep) {
+        delete result;
         return NULL;
     }
     return result;

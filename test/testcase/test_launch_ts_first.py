@@ -5,10 +5,11 @@ found in the LICENSE file.
 """
 
 import nose
-import common 
+import common
 import time
 import subprocess
 
+@nose.tools.nottest
 @nose.tools.with_setup()
 def test_launch_ts_first():
     """
@@ -21,7 +22,7 @@ def test_launch_ts_first():
     print ''.join(ret.stdout.readlines())
     retinfo1 = common.parse_showinfo()
     nose.tools.assert_true(len(retinfo1) != 0)
-    
+
     time.sleep(12)
     common.cluster_op('kill')
     common.cluster_op('launch_ts_first')
@@ -29,5 +30,4 @@ def test_launch_ts_first():
     print ''.join(ret.stdout.readlines())
     retinfo2 = common.parse_showinfo()
     nose.tools.assert_true(len(retinfo2) != 0)
-
 
