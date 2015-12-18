@@ -6,6 +6,7 @@
 
 #include <stdlib.h>
 
+#include <fstream>
 #include <iostream>
 #include <limits>
 #include <sstream>
@@ -116,6 +117,7 @@ bool PropTree::ParseFromString(const std::string& input) {
             } else if (token.text == ">") {
                 if (angle_braket_diff <= 0) {
                     AddError("syntax error: \">\" should be after \"<\".");
+                    return false;
                 }
                 angle_braket_diff--;
             } else if (token.text == "{") {
@@ -123,11 +125,16 @@ bool PropTree::ParseFromString(const std::string& input) {
             } else if (token.text == "}") {
                 if (brace_diff <= 0) {
                     AddError("syntax error: \"}\" should be after \"{\".");
+                    return false;
                 }
                 brace_diff--;
             }
         }
         tokens.push_back(token);
+    }
+    if (tokens.size() == 0) {
+        AddError("syntax error: input string empty.");
+        return false;
     }
     if (angle_braket_diff != 0) {
         AddError("syntax error: \"<\" and \">\" are not matching.");
@@ -138,11 +145,26 @@ bool PropTree::ParseFromString(const std::string& input) {
         return false;
     }
 
-    return ParseFromTokens(tokens, 1, &root_);
+    return ParseNodeFromTokens(tokens, 1, &root_);
 }
 
-bool PropTree::ParseFromTokens(std::deque<Tokenizer::Token>& tokens,
-                               int depth, Node** node) {
+bool PropTree::ParseFromFile(const std::string& file) {
+    std::ifstream fin(file.c_str());
+    std::string input;
+    if (fin.good()) {
+        std::string str;
+        while (std::getline(fin, str)) {
+            input.append(str + "\n");
+        }
+    } else {
+        AddError("syntax error: input file error.");
+        return false;
+    }
+    return ParseFromString(input);
+}
+
+bool PropTree::ParseNodeFromTokens(std::deque<Tokenizer::Token>& tokens,
+                                   int depth, Node** node) {
     if (tokens.size() == 0) {
         return true;
     }
@@ -158,85 +180,15 @@ bool PropTree::ParseFromTokens(std::deque<Tokenizer::Token>& tokens,
     tokens.pop_front();
 
     // get all props and pop them out from token queue
-    if (tokens.size() > 0 && tokens.front().text == "<") {
-        tokens.pop_front(); // pop "<"
-        while (tokens.size() > 3 && tokens.front().text != ">") {
-            if (tokens.front().text == ",") {
-                // reach a comma, discard it
-                tokens.pop_front();
-            }
-            std::string prop_name = tokens.front().text;
-            tokens.pop_front();
-            std::string eq = tokens.front().text;
-            tokens.pop_front();
-            std::string prop_value = tokens.front().text;
-            tokens.pop_front();
-            if (eq != "=" || prop_name == ">" || prop_value == ">") {
-                AddError("syntax error: property format error: "
-                         + prop_name + eq + prop_value);
-                return false;
-            }
-            node_t->properties_[prop_name] = prop_value;
-        }
-        if (tokens.front().text != ">") {
-            AddError("syntax error: property format error: " + tokens.front().text);
-            return false;
-        }
-        tokens.pop_front();  // pop ">"
-    } else {
-        // none property
+    if (!ParsePropsFromTokens(tokens, node_t)) {
+        return false;
     }
 
     // get all children from token queue
-    if (tokens.size() > 2) {
-        if (tokens.front().text != "{" || tokens.back().text != "}") {
-            AddError("syntax error: child node format error: " + node_t->name_
-                     + tokens.front().text + " " + tokens.back().text);
-            return false;
-        }
-        tokens.pop_front();  // pop "{"
-        tokens.pop_back();  // pop "}"
-        if (tokens.back().text == ",") {
-            // discard the last ","
-            tokens.pop_back();
-        }
-
-        std::deque<Tokenizer::Token> child_tokens;
-        int is_inner_comma = 0;
-        while (tokens.size() > 0) {
-            child_tokens.push_back(tokens.front());
-            std::string tokentext = tokens.front().text;
-            tokens.pop_front();
-
-            if (tokentext == "<" || tokentext == "{") {
-                is_inner_comma++;
-            } else if (tokentext == ">" || tokentext == "}") {
-                is_inner_comma--;
-            } else if (tokentext == "," && is_inner_comma == 0) {
-                child_tokens.pop_back();  // pop the last ","
-                node_t->children_.push_back(new Node);
-                node_t->children_.back()->mother_ = node_t;
-                if (!ParseFromTokens(child_tokens, depth + 1,
-                                     &node_t->children_.back())) {
-                    return false;
-                }
-                child_tokens.clear();
-            }
-        }
-        // parse the last child
-        node_t->children_.push_back(new Node);
-        node_t->children_.back()->mother_ = node_t;
-        if (!ParseFromTokens(child_tokens, depth + 1,
-                             &node_t->children_.back())) {
-            return false;
-        }
-    } else if (tokens.size() == 0 || tokens.size() == 2 ||
-               (tokens.size() == 1 && tokens.front().text == ",")) {
-        // none child
-    } else {
-        // never reach here
-        abort();
+    if (!ParseChildrenFromTokens(tokens, depth, node_t)) {
+        return false;
     }
+
     if (node_t->children_.size() == 0) {
         // this is a leaf node
         if (depth > max_depth_) {
@@ -245,6 +197,96 @@ bool PropTree::ParseFromTokens(std::deque<Tokenizer::Token>& tokens,
         if (depth < min_depth_) {
             min_depth_ = depth;
         }
+    }
+
+    // check rest tokens
+    if (tokens.size() != 0) {
+        AddError("syntax error: \"" + tokens.front().text + "\"");
+        return false;
+    }
+    return true;
+}
+
+bool PropTree::ParsePropsFromTokens(std::deque<Tokenizer::Token>& tokens,
+                                    Node* node) {
+    if (tokens.size() <= 2 || tokens.front().text != "<") {
+        // have none properties
+        return true;
+    }
+
+    tokens.pop_front(); // pop "<"
+    while (tokens.size() > 3 && tokens.front().text != ">") {
+        if (tokens.front().text == ",") {
+            // reach a comma, discard it
+            tokens.pop_front();
+        }
+        std::string prop_name = tokens.front().text;
+        tokens.pop_front();
+        std::string eq = tokens.front().text;
+        tokens.pop_front();
+        std::string prop_value = tokens.front().text;
+        tokens.pop_front();
+        if (eq != "=" || prop_name == ">" || prop_value == ">") {
+            AddError("syntax error: property format error: "
+                     + prop_name + eq + prop_value);
+            return false;
+        }
+        node->properties_[prop_name] = prop_value;
+    }
+    if (tokens.front().text != ">") {
+        AddError("syntax error: property format error: " + tokens.front().text);
+        return false;
+    }
+    tokens.pop_front();  // pop ">"
+    return true;
+}
+
+bool PropTree::ParseChildrenFromTokens(std::deque<Tokenizer::Token>& tokens,
+                                       int depth, Node* node) {
+    if (tokens.size() <= 2) {
+        // have none child
+        return true;
+    }
+    if (tokens.front().text != "{" || tokens.back().text != "}") {
+        AddError("syntax error: child node format error: " + node->name_
+                 + tokens.front().text + " " + tokens.back().text);
+        return false;
+    }
+    tokens.pop_front();  // pop "{"
+    tokens.pop_back();   // pop "}"
+    if (tokens.back().text == ",") {
+        // discard the last ","
+        tokens.pop_back();
+    }
+
+    std::deque<Tokenizer::Token> child_tokens;
+    int is_inner_comma = 0;
+    while (tokens.size() > 0) {
+        child_tokens.push_back(tokens.front());
+        std::string tokentext = tokens.front().text;
+        tokens.pop_front();
+
+        if (tokentext == "<" || tokentext == "{") {
+            is_inner_comma++;
+        } else if (tokentext == ">" || tokentext == "}") {
+            is_inner_comma--;
+        } else if (tokentext == "," && is_inner_comma == 0) {
+            child_tokens.pop_back();  // pop the last ","
+            node->children_.push_back(new Node);
+            node->children_.back()->mother_ = node;
+            if (!ParseNodeFromTokens(child_tokens, depth + 1,
+                                     &node->children_.back())) {
+                return false;
+            }
+            child_tokens.clear();
+        }
+    }
+    // parse the last child
+    node->children_.push_back(new Node);
+    node->children_.back()->mother_ = node;
+    if (!ParseNodeFromTokens(child_tokens, depth + 1,
+                         &node->children_.back())) {
+        return false;
     }
     return true;
 }

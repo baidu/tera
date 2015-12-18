@@ -34,7 +34,8 @@ extern Status BuildTable(const std::string& dbname,
                          TableCache* table_cache,
                          Iterator* iter,
                          FileMetaData* meta,
-                         uint64_t* saved_size);
+                         uint64_t* saved_size,
+                         uint64_t smallest_snapshot);
 
 }  // namespace leveldb
 

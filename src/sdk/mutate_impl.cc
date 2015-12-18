@@ -12,13 +12,11 @@ RowMutationImpl::RowMutationImpl(TableImpl* table, const std::string& row_key)
     : SdkTask(SdkTask::MUTATION),
       _table(table),
       _row_key(row_key),
-      _refs(0),
       _callback(NULL),
       _timeout_ms(0),
       _retry_times(0),
       _finish(false),
-      _finish_cond(&_finish_mutex),
-      _sequence(0) {
+      _finish_cond(&_finish_mutex) {
 }
 
 RowMutationImpl::~RowMutationImpl() {
@@ -339,27 +337,11 @@ void RowMutationImpl::SetError(ErrorCode::ErrorCodeType err,
 }
 
 /// 等待结束
-bool RowMutationImpl::Wait(int64_t abs_time_ms) {
-    int64_t timeout = -1;
-    if (abs_time_ms > 0) {
-        timeout = abs_time_ms - GetTimeStampInMs();
-        if (timeout < 0) {
-            timeout = 0;
-        }
-    }
-
+void RowMutationImpl::Wait() {
     MutexLock lock(&_finish_mutex);
-    while (!_finish && timeout != 0) {
-        _finish_cond.TimeWait(timeout);
-        if (abs_time_ms > 0) {
-            timeout = abs_time_ms - GetTimeStampInMs();
-            if (timeout < 0) {
-                timeout = 0;
-            }
-        }
+    while (!_finish) {
+        _finish_cond.Wait();
     }
-
-    return _finish;
 }
 
 void RowMutationImpl::RunCallback() {
@@ -370,28 +352,6 @@ void RowMutationImpl::RunCallback() {
         _finish = true;
         _finish_cond.Signal();
     }
-}
-
-void RowMutationImpl::Ref() {
-    MutexLock lock(&_mutex);
-    ++_refs;
-}
-
-void RowMutationImpl::Unref() {
-    MutexLock lock(&_mutex);
-    --_refs;
-    CHECK(_refs >= 0);
-    if (_refs == 0) {
-        delete this;
-    }
-}
-
-void RowMutationImpl::SetSequenceId(uint64_t sequence) {
-    _sequence = sequence;
-}
-
-uint64_t RowMutationImpl::SequenceId() {
-    return _sequence;
 }
 
 RowMutation::Mutation& RowMutationImpl::AddMutation() {

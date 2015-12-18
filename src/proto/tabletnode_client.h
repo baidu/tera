@@ -59,6 +59,10 @@ public:
     bool ReleaseSnapshot(const ReleaseSnapshotRequest* request,
                          ReleaseSnapshotResponse* response,
                          Closure<void, ReleaseSnapshotRequest*, ReleaseSnapshotResponse*, bool, int>* done = NULL);
+    bool Rollback(const SnapshotRollbackRequest* request,
+                  SnapshotRollbackResponse* response,
+                  Closure<void, SnapshotRollbackRequest*, SnapshotRollbackResponse*, bool, int>* done = NULL);
+
 
     bool Query(const QueryRequest* request,
                QueryResponse* response,
@@ -71,6 +75,9 @@ public:
     bool CompactTablet(const CompactTabletRequest* request,
                        CompactTabletResponse* response,
                        Closure<void, CompactTabletRequest*, CompactTabletResponse*, bool, int>* done = NULL);
+    bool CmdCtrl(const TsCmdCtrlRequest* request,
+                 TsCmdCtrlResponse* response,
+                 Closure<void, TsCmdCtrlRequest*, TsCmdCtrlResponse*, bool, int>* done = NULL);
 
 private:
     int32_t m_rpc_timeout;

@@ -96,7 +96,20 @@ const std::string& Tablet::GetPath() {
 
 int64_t Tablet::GetDataSize() {
     MutexLock lock(&m_mutex);
-    return m_meta.table_size();
+    return m_meta.size();
+}
+
+void Tablet::GetDataSize(int64_t* size, std::vector<int64_t>* lg_size) {
+    MutexLock lock(&m_mutex);
+    if (size) {
+        *size = m_meta.size();
+    }
+    if (lg_size) {
+        lg_size->clear();
+        for (int64_t i = 0; i < m_meta.lg_size_size(); ++i) {
+            lg_size->push_back(m_meta.lg_size(i));
+        }
+    }
 }
 
 const std::string& Tablet::GetKeyStart() {
@@ -212,14 +225,9 @@ void Tablet::SetCounter(const TabletCounter& counter) {
     m_average_counter.set_is_on_busy(counter.is_on_busy());
 }
 
-void Tablet::SetSize(int64_t table_size) {
+void Tablet::UpdateSize(const TabletMeta& meta) {
     MutexLock lock(&m_mutex);
-    m_meta.set_table_size(table_size);
-}
-
-void Tablet::SetSize(const TabletMeta& meta) {
-    MutexLock lock(&m_mutex);
-    m_meta.set_table_size(meta.table_size());
+    m_meta.set_size(meta.size());
     m_meta.mutable_lg_size()->CopyFrom(meta.lg_size());
 }
 
@@ -353,6 +361,23 @@ void Tablet::DelSnapshot(int32_t id) {
     snapshot_list->RemoveLast();
 }
 
+int32_t Tablet::AddRollback(std::string name, uint64_t snapshot_id, uint64_t rollback_point) {
+    MutexLock lock(&m_mutex);
+    Rollback rollback;
+    rollback.set_name(name);
+    rollback.set_snapshot_id(snapshot_id);
+    rollback.set_rollback_point(rollback_point);
+    m_meta.add_rollbacks()->CopyFrom(rollback);
+    return m_meta.rollbacks_size() - 1;
+}
+
+void Tablet::ListRollback(std::vector<Rollback>* rollbacks) {
+    MutexLock lock(&m_mutex);
+    for (int i = 0; i < m_meta.rollbacks_size(); i++) {
+        rollbacks->push_back(m_meta.rollbacks(i));
+    }
+}
+
 bool Tablet::IsBound() {
     TablePtr null_ptr;
     if (m_table != null_ptr) {
@@ -384,10 +409,6 @@ void Tablet::ToMetaTableKeyValue(std::string* packed_key,
 
 bool Tablet::CheckStatusSwitch(TabletStatus old_status,
                                TabletStatus new_status) {
-    if (new_status == kTableDeleted) {
-        return true;
-    }
-
     switch (old_status) {
     case kTableNotInit:
         if (new_status == kTableReady         // tablet is loaded when master up
@@ -472,12 +493,9 @@ bool Tablet::CheckStatusSwitch(TabletStatus old_status,
         }
         break;
     case kTabletDisable:
-        if (new_status == kTabletDeleting
-            || new_status == kTableOffLine) {
+        if (new_status == kTableOffLine) {
             return true;
         }
-        break;
-    case kTabletDeleting:
         break;
     default:
         break;
@@ -582,6 +600,10 @@ bool Table::CheckStatusSwitch(TableStatus old_status,
         break;
     // table is in the process of deleting
     case kTableDeleting:
+        if (new_status == kTableDisable         // begin to enable table
+            || new_status == kTableDeleting) {  // begin to delete table
+            return true;
+        }
         break;
     default:
         break;
@@ -597,6 +619,11 @@ const TableSchema& Table::GetSchema() {
 void Table::SetSchema(const TableSchema& schema) {
     MutexLock lock(&m_mutex);
     m_schema.CopyFrom(schema);
+}
+
+const TableCounter& Table::GetCounter() {
+    MutexLock lock(&m_mutex);
+    return m_counter;
 }
 
 int32_t Table::AddSnapshot(uint64_t snapshot) {
@@ -622,6 +649,18 @@ void Table::ListSnapshot(std::vector<uint64_t>* snapshots) {
     MutexLock lock(&m_mutex);
     *snapshots = m_snapshot_list;
 }
+
+int32_t Table::AddRollback(std::string rollback_name) {
+    MutexLock lock(&m_mutex);
+    m_rollback_names.push_back(rollback_name);
+    return m_rollback_names.size() - 1;
+}
+
+void Table::ListRollback(std::vector<std::string>* rollback_names) {
+    MutexLock lock(&m_mutex);
+    *rollback_names = m_rollback_names;
+}
+
 void Table::AddDeleteTabletCount() {
     MutexLock lock(&m_mutex);
     m_deleted_tablet_num++;
@@ -650,6 +689,9 @@ void Table::ToMeta(TableMeta* meta) {
     meta->set_create_time(m_create_time);
     for (size_t i = 0; i < m_snapshot_list.size(); i++) {
         meta->add_snapshot_list(m_snapshot_list[i]);
+    }
+    for (size_t i = 0; i < m_rollback_names.size(); ++i) {
+        meta->add_rollback_names(m_rollback_names[i]);
     }
 }
 
@@ -699,6 +741,85 @@ bool Table::GetTabletsForGc(std::set<uint64_t>* live_tablets,
     return true;
 }
 
+void Table::RefreshCounter() {
+    MutexLock lock(&m_mutex);
+    int64_t size = 0;
+    int64_t tablet_num = 0;
+    int64_t notready = 0;
+    int64_t lread = 0;
+    int64_t read = 0;
+    int64_t rmax = 0;
+    int64_t rspeed = 0;
+    int64_t write = 0;
+    int64_t wmax = 0;
+    int64_t wspeed = 0;
+    int64_t scan = 0;
+    int64_t smax = 0;
+    int64_t sspeed = 0;
+    size_t lg_num = 0;
+    std::vector<int64_t> lg_size;
+
+    std::vector<TabletPtr> tablet_list;
+    Table::TabletList::iterator it = m_tablets_list.begin();
+    for (; it != m_tablets_list.end(); ++it) {
+        tablet_num++;
+        TabletPtr tablet = it->second;
+        if (tablet->GetStatus() != kTableReady) {
+            notready++;
+        }
+        int64_t size_tmp;
+        std::vector<int64_t> lg_size_tmp;
+        tablet->GetDataSize(&size_tmp, &lg_size_tmp);
+
+        size += size_tmp;
+        if (lg_num == 0) {
+            lg_num = lg_size_tmp.size();
+            lg_size.resize(lg_num, 0);
+        }
+        for (size_t l = 0; l < lg_num; ++l) {
+            if (lg_size_tmp.size() > l) {
+                lg_size[l] += lg_size_tmp[l];
+            }
+        }
+
+        const TabletCounter& counter = tablet->GetCounter();
+        lread += counter.low_read_cell();
+        read += counter.read_rows();
+        if (counter.read_rows() > rmax) {
+            rmax = counter.read_rows();
+        }
+        rspeed += counter.read_size();
+        write += counter.write_rows();
+        if (counter.write_rows() > wmax) {
+            wmax = counter.write_rows();
+        }
+        wspeed += counter.write_size();
+        scan += counter.scan_rows();
+        if (counter.scan_rows() > smax) {
+            smax = counter.scan_rows();
+        }
+        sspeed += counter.scan_size();
+    }
+
+    m_counter.set_size(size);
+    m_counter.set_tablet_num(tablet_num);
+    m_counter.set_notready_num(notready);
+    m_counter.set_lread(lread);
+    m_counter.set_read_rows(read);
+    m_counter.set_read_max(rmax);
+    m_counter.set_read_size(rspeed);
+    m_counter.set_write_rows(write);
+    m_counter.set_write_max(wmax);
+    m_counter.set_write_size(wspeed);
+    m_counter.set_scan_rows(scan);
+    m_counter.set_scan_max(smax);
+    m_counter.set_scan_size(sspeed);
+    m_counter.clear_lg_size();
+    for (size_t l = 0; l < lg_num; ++l) {
+        m_counter.add_lg_size(lg_size[l]);
+    }
+}
+
 TabletManager::TabletManager(Counter* sequence_id,
                              MasterImpl* master_impl,
                              ThreadPool* thread_pool)
@@ -743,6 +864,10 @@ bool TabletManager::AddTable(const std::string& table_name,
     for (int32_t i = 0; i < meta.snapshot_list_size(); ++i) {
         (*table)->m_snapshot_list.push_back(meta.snapshot_list(i));
         LOG(INFO) << table_name << " add snapshot " << meta.snapshot_list(i);
+    }
+    for (int32_t i = 0; i < meta.rollback_names_size(); ++i) {
+        (*table)->m_rollback_names.push_back(meta.rollback_names(i));
+        LOG(INFO) << table_name << " add rollback " << meta.rollback_names(i);
     }
     (*table)->m_mutex.Unlock();
     return true;
@@ -1179,11 +1304,6 @@ void TabletManager::LoadTabletMeta(const std::string& key,
             LOG(ERROR) << "duplicate tablet in meta table: table=" << meta.table_name()
                 << " start=" << DebugString(meta.key_range().key_start());
             // TODO: try correct invalid record
-        } else {
-            for (int i = 0; i < meta.snapshot_list_size(); ++i) {
-                tablet->AddSnapshot(meta.snapshot_list(i));
-            }
-            VLOG(5) << "load tablet record: " << tablet;
         }
     }
 }
@@ -1356,54 +1476,11 @@ void TabletManager::PackTabletMeta(TabletMeta* meta,
     meta->set_path(path);
     meta->set_server_addr(server_addr);
     meta->set_status(table_status);
-    meta->set_table_size(data_size);
+    meta->set_size(data_size);
 
     KeyRange* key_range = meta->mutable_key_range();
     key_range->set_key_start(key_start);
     key_range->set_key_end(key_end);
-}
-
-void TabletManager::UpdateTabletMeta(TabletMeta* new_meta,
-                                     const TabletMeta& old_meta,
-                                     const std::string* key_end,
-                                     const std::string* path,
-                                     const std::string* server_addr,
-                                     const TabletStatus* table_status,
-                                     int64_t* table_size,
-                                     const CompactStatus* compact_status) {
-    new_meta->set_table_name(old_meta.table_name());
-    if (NULL != path) {
-        new_meta->set_path(*path);
-    } else {
-        new_meta->set_path(old_meta.path());
-    }
-    if (NULL != server_addr) {
-        new_meta->set_server_addr(*server_addr);
-    } else {
-        new_meta->set_server_addr(old_meta.server_addr());
-    }
-    if (NULL != table_status) {
-        new_meta->set_status(*table_status);
-    } else {
-        new_meta->set_status(old_meta.status());
-    }
-    if (NULL != table_size) {
-        new_meta->set_table_size(*table_size);
-    } else {
-        new_meta->set_table_size(old_meta.table_size());
-    }
-    if (NULL != compact_status) {
-        new_meta->set_compact_status(*compact_status);
-    } else {
-        new_meta->set_compact_status(old_meta.compact_status());
-    }
-    KeyRange* key_range = new_meta->mutable_key_range();
-    key_range->set_key_start(old_meta.key_range().key_start());
-    if (NULL != key_end) {
-        key_range->set_key_end(*key_end);
-    } else {
-        key_range->set_key_end(old_meta.key_range().key_end());
-    }
 }
 
 bool TabletManager::GetMetaTabletAddr(std::string* addr) {

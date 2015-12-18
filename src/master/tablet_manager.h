@@ -67,6 +67,8 @@ public:
     const std::string& GetServerAddr();
     const std::string& GetPath();
     int64_t GetDataSize();
+    void GetDataSize(int64_t* size, std::vector<int64_t>* lg_size);
+
     const std::string& GetKeyStart();
     const std::string& GetKeyEnd();
     const KeyRange& GetKeyRange();
@@ -81,9 +83,7 @@ public:
     bool IsBusy();
     std::string DebugString();
 
-
-    void SetSize(int64_t table_size);
-    void SetSize(const TabletMeta& meta);
+    void UpdateSize(const TabletMeta& meta);
     void SetCounter(const TabletCounter& counter);
     void SetCompactStatus(CompactStatus compact_status);
     void SetAddr(const std::string& server_addr);
@@ -107,6 +107,9 @@ public:
     int32_t AddSnapshot(uint64_t snapshot);
     void ListSnapshot(std::vector<uint64_t>* snapshot);
     void DelSnapshot(int32_t id);
+    int32_t AddRollback(std::string name, uint64_t snapshot_id, uint64_t rollback_point);
+    void ListRollback(std::vector<Rollback>* rollbacks);
+
     // is belong to a table?
     bool IsBound();
 
@@ -170,9 +173,12 @@ public:
     bool CheckStatusSwitch(TableStatus old_status, TableStatus new_status);
     const TableSchema& GetSchema();
     void SetSchema(const TableSchema& schema);
+    const TableCounter& GetCounter();
     int32_t AddSnapshot(uint64_t snapshot);
     int32_t DelSnapshot(uint64_t snapshot);
     void ListSnapshot(std::vector<uint64_t>* snapshots);
+    int32_t AddRollback(std::string rollback_name);
+    void ListRollback(std::vector<std::string>* rollback_names);
     void AddDeleteTabletCount();
     bool NeedDelete();
     void ToMetaTableKeyValue(std::string* packed_key = NULL,
@@ -181,6 +187,7 @@ public:
     uint64_t GetNextTabletNo();
     bool GetTabletsForGc(std::set<uint64_t>* live_tablets,
                          std::set<uint64_t>* dead_tablets);
+    void RefreshCounter();
 
 private:
     Table(const Table&) {}
@@ -191,10 +198,12 @@ private:
     std::string m_name;
     TableSchema m_schema;
     std::vector<uint64_t> m_snapshot_list;
+    std::vector<std::string> m_rollback_names;
     TableStatus m_status;
     uint32_t m_deleted_tablet_num;
     uint64_t m_max_tablet_no;
     int64_t m_create_time;
+    TableCounter m_counter;
 };
 
 class TabletManager {
@@ -280,12 +289,6 @@ private:
                         const std::string& server_addr = "",
                         const TabletStatus& table_status = kTableNotInit,
                         int64_t data_size = 0);
-
-    void UpdateTabletMeta(TabletMeta* new_meta, const TabletMeta& old_meta,
-                          const std::string* key_end, const std::string* path,
-                          const std::string* server_addr,
-                          const TabletStatus* table_status, int64_t* table_size,
-                          const CompactStatus* compact_status);
 
     bool CheckStatusSwitch(TabletStatus old_status, TabletStatus new_status);
 

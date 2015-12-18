@@ -72,7 +72,7 @@ TEST(EnvPosixTest, RunMany) {
 
   Env::Default()->SleepForMicroseconds(kDelayMicros);
   void* cur = last_id.Acquire_Load();
-  ASSERT_EQ(4, reinterpret_cast<uintptr_t>(cur));
+  ASSERT_EQ(4u, reinterpret_cast<uintptr_t>(cur));
   delete env;
 }
 

@@ -11,6 +11,7 @@
 #include "common/base/string_ext.h"
 
 #include "proto/proto_helper.h"
+#include "proto/table_schema.pb.h"
 #include "sdk/table_impl.h"
 #include "sdk/filter_utils.h"
 #include "utils/atomic.h"
@@ -19,6 +20,7 @@
 DECLARE_bool(tera_sdk_scan_async_enabled);
 DECLARE_int64(tera_sdk_scan_async_cache_size);
 DECLARE_int32(tera_sdk_scan_async_parallel_max_num);
+DECLARE_int32(tera_sdk_max_batch_scan_req);
 
 namespace tera {
 
@@ -38,6 +40,277 @@ ScanDescImpl* ResultStreamImpl::GetScanDesc() {
     return _scan_desc_impl;
 }
 
+/*
+ * scan的时候，tabletnode攒满一个buffer就会返回给sdk，sdk再接着scan，
+ * 新的scan逻辑（tabletnode）在返回scan结果的同时，
+ * 还会告知sdk下次scan的启动点(start_point)，保证scan不重、不漏；
+ *
+ * 旧的scan逻辑（tabletnode）不会告知sdk下次scan时的启动点(start_point)，
+ * 这个启动点是sdk自己计算出来的：由上次scan结果的最后一条加上"某个最小值"。
+ *
+ * rawkey类型为Readble时，rawkey不能包含'\0'；
+ * rawkey类型为其它类型（如Binary）时，rawkey可以包含任意字符（包括'\0'）；
+ * (不建议新表继续使用Readble类型，未来可能不再支持)
+ *
+ * 综上，
+ * 对于rawkey类型为Readble的表来说，sdk计算下次scan的启动点时需要加'\x1'；
+ * 否则，加'\x0'（也就是'\0'）。
+ */
+std::string ResultStreamImpl::GetNextStartPoint(const std::string& str) {
+    const static std::string x0("\x0", 1);
+    const static std::string x1("\x1");
+    RawKey rawkey_type = _table_ptr->GetTableSchema().raw_key();
+    return rawkey_type == Readable ? str + x1 : str + x0;
+}
+
+///////////////////////////////////////
+/////    high performance scan    /////
+///////////////////////////////////////
+ResultStreamBatchImpl::ResultStreamBatchImpl(TableImpl* table, ScanDescImpl* scan_desc)
+    : ResultStreamImpl(table, scan_desc),
+    cv_(&mu_), ref_count_(1) {
+    // do something startup
+    sliding_window_.resize(FLAGS_tera_sdk_max_batch_scan_req);
+    session_end_key_ = _scan_desc_impl->GetStartRowKey();
+    mu_.Lock();
+    ScanSessionReset();
+    mu_.Unlock();
+}
+
+void ResultStreamBatchImpl::GetRpcHandle(ScanTabletRequest** request_ptr,
+                                         ScanTabletResponse** response_ptr) {
+    *request_ptr = new ScanTabletRequest;
+    *response_ptr = new ScanTabletResponse;
+
+    MutexLock mutex(&mu_);
+    (*request_ptr)->set_part_of_session(part_of_session_);
+    (*request_ptr)->set_session_id((int64_t)session_id_);
+    VLOG(28) << "Get rpc handle, part_of_session_ " << part_of_session_
+        << ", session_id_ " << session_id_ << ", response " << (uint64_t)(*response_ptr);
+}
+
+// insure table_impl no more use scan_impl
+void ResultStreamBatchImpl::ReleaseRpcHandle(ScanTabletRequest* request,
+                                             ScanTabletResponse* response) {
+    delete request;
+    delete response;
+
+    MutexLock mutex(&mu_);
+    ref_count_--;
+    VLOG(28) << "release rpc handle and wakeup, ref_count_ " << ref_count_;
+    cv_.Signal();
+}
+
+// scan request callback trigger:
+//      1. drop resp condition:
+//          1.1. stale session_id
+//          1.2. stale result_id
+//      2. handle session broken:
+//          2.1. stop scan, and report error to user
+//      3. scan success, notify user to consume result
+void ResultStreamBatchImpl::OnFinish(ScanTabletRequest* request,
+                                     ScanTabletResponse* response) {
+    MutexLock mutex(&mu_);
+    // check session id
+    if (request->session_id() != (int64_t)session_id_) {
+        LOG(WARNING) << "session_id not match, " << request->session_id() << ", " << session_id_;
+    } else if (response->status() != kTabletNodeOk) {
+        // rpc or ts error, session broken and report error
+        session_error_ = response->status();
+        LOG(WARNING) << "session_id " <<session_id_ <<", broken " << StatusCodeToString(session_error_);
+        session_done_ = true;
+    } else if ((response->results_id() == 0) &&
+               (response->results().key_values_size() == 0) &&
+               request->part_of_session()) {
+        // handle old ts, results_id not init
+        VLOG(28) << "batch scan old ts";
+    } else if ((response->results_id() < session_data_idx_) ||
+               (response->results_id() >= session_data_idx_ +
+                    FLAGS_tera_sdk_max_batch_scan_req)) {
+        if (response->results_id() != std::numeric_limits<unsigned long>::max()) {
+            LOG(WARNING) << "ScanCallback session_id " << session_id_
+                << ", session_data_idx " << session_data_idx_
+                << ", stale result_id " << response->results_id()
+                << ", response " << (uint64_t)response;
+            session_done_ = true;
+            // TODO: ts state no known
+            session_error_ = kRPCTimeout;
+        }
+    } else { // scan success, cache result
+        int32_t slot_idx = ((response->results_id() - session_data_idx_)
+                            + sliding_window_idx_) % FLAGS_tera_sdk_max_batch_scan_req;
+        VLOG(28) << "scan suc, session_id " << session_id_ << ", slot_idx " << slot_idx << ", result_id " << response->results_id()
+            << ", session_data_idx_ " << session_data_idx_
+            << ", sliding_window_idx_ " << sliding_window_idx_
+            << ", resp.kv.size() " << response->results().key_values_size();
+        ScanSlot* slot = &(sliding_window_[slot_idx]);
+        if (slot->state_ == SCANSLOT_INVALID) {
+            slot->state_ = SCANSLOT_VALID;
+            slot->cell_ = response->results();
+            VLOG(28) << "cache scan result, session_id " << session_id_ << ", slot_idx " << slot_idx
+                << ", kv.size() " << slot->cell_.key_values_size()
+                << ", resp.kv.size() " << response->results().key_values_size();
+        }
+        if (response->complete()) {
+            session_last_idx_ = (session_last_idx_ > response->results_id()) ?
+                                    response->results_id(): session_last_idx_;
+            session_end_key_ = response->end();
+            VLOG(28) << "scan complete: session_id " << session_id_ << ", session_end_key " << session_end_key_
+                << ", session_last_idx " << session_last_idx_;
+            session_done_ = true;
+        }
+    }
+    return;
+}
+
+ResultStreamBatchImpl::~ResultStreamBatchImpl() {
+    // do something cleanup
+    MutexLock mutex(&mu_);
+    ref_count_--;
+    VLOG(28) << "before wait scan task finsh, ref_count " << ref_count_;
+    while (ref_count_ != 0) { cv_.Wait();}
+}
+
+void ResultStreamBatchImpl::ScanSessionReset() {
+    mu_.AssertHeld();
+    // reset session parameter
+    uint64_t tid = (uint64_t)pthread_self();
+    session_id_ = ((tid << 48) | ((uint64_t)get_micros())) & (0x7ffffffffffff);
+    session_done_ = false;
+    session_error_ = kTabletNodeOk;
+    part_of_session_ = false;
+    session_data_idx_ = 0;
+    session_last_idx_ = UINT32_MAX;
+    sliding_window_idx_= 0;
+    next_idx_ = 0;
+
+    // set all slot invalid
+    std::vector<ScanSlot>::iterator it = sliding_window_.begin();
+    for (; it != sliding_window_.end(); ++it) {
+        it->state_ = SCANSLOT_INVALID;
+        it->cell_.Clear();
+    }
+
+    ref_count_ += FLAGS_tera_sdk_max_batch_scan_req;
+    _scan_desc_impl->SetStart(session_end_key_);
+    VLOG(28) << "scan session reset, start key " << session_end_key_
+        << ", ref_count " << ref_count_;
+    mu_.Unlock();
+    // do io, release lock
+    for (int32_t i = 0; i < FLAGS_tera_sdk_max_batch_scan_req; i++) {
+        _table_ptr->ScanTabletAsync(this);
+        part_of_session_ = true;
+    }
+    mu_.Lock();
+}
+
+void ResultStreamBatchImpl::ClearAndScanNextSlot(bool scan_next) {
+    mu_.AssertHeld();
+    ScanSlot* slot = &(sliding_window_[sliding_window_idx_]);
+    slot->cell_.Clear();
+    slot->state_ = SCANSLOT_INVALID;
+    next_idx_ = 0;
+    session_data_idx_++;
+    sliding_window_idx_ = (sliding_window_idx_ + 1) % FLAGS_tera_sdk_max_batch_scan_req;
+    VLOG(28) << "session_id " << session_id_ << ", session_data_idx_ " << session_data_idx_ << ", sliding_window_idx_ "
+        << sliding_window_idx_ << ", ref_count_ " << ref_count_;
+    if (scan_next) {
+        ref_count_++;
+        mu_.Unlock();
+        _table_ptr->ScanTabletAsync(this);
+        mu_.Lock();
+    }
+    return;
+}
+
+bool ResultStreamBatchImpl::Done(ErrorCode* error) {
+    if (error) {
+        error->SetFailed(ErrorCode::kOK);
+    }
+    MutexLock mutex(&mu_);
+    while (1) {
+        // not wait condition:
+        //  1. current slot valid, or
+        //  2. ts not available, or
+        //  3. rpc not available, or
+        ScanSlot* slot = &(sliding_window_[sliding_window_idx_]);
+        while(slot->state_ == SCANSLOT_INVALID) {
+            // stale results_id, re-enable another scan req
+            if (session_error_ != kTabletNodeOk) {
+                // TODO: kKeyNotInRange, do reset session
+                LOG(WARNING) << "scan done: session error " << StatusCodeToString(session_error_);
+                if (error) {
+                    error->SetFailed(ErrorCode::kSystem, StatusCodeToString(session_error_));
+                }
+                return true;
+            }
+            if (ref_count_ == 1) {
+                // ts refuse scan...
+                LOG(WARNING) << "ts refuse scan, scan later...\n";
+                return true;
+            }
+            cv_.Wait();
+        }
+        if (next_idx_ < slot->cell_.key_values_size()) { break; }
+
+        VLOG(28) << "session_done_ " << session_done_ << ", session_data_idx_ "
+            << session_data_idx_ << ", session_last_idx_ " << session_last_idx_;
+        // current slot finish and session not finish, scan next slot
+        if (!session_done_) {
+            ClearAndScanNextSlot(true);
+            continue;
+        }
+
+        // session finish, read rest data
+        if (session_data_idx_ != session_last_idx_) {
+            ClearAndScanNextSlot(false);
+            continue;
+        }
+
+        // scan finish, exit
+        const string& scan_end_key = _scan_desc_impl->GetEndRowKey();
+        if (session_end_key_ == "" || (scan_end_key != "" && session_end_key_ >= scan_end_key)) {
+            VLOG(28) << "scan done, scan_end_key " << scan_end_key << ", session_end_key " << session_end_key_;
+            return true;
+        }
+
+        // scan next tablet
+        ScanSessionReset();
+    }
+    return false;
+}
+
+void ResultStreamBatchImpl::Next() { next_idx_++; }
+bool ResultStreamBatchImpl::LookUp(const std::string& row_key) { return true;}
+std::string ResultStreamBatchImpl::RowName() const {
+    const KeyValuePair& row = sliding_window_[sliding_window_idx_].cell_.key_values(next_idx_);
+    return row.has_key() ? row.key(): "";
+}
+std::string ResultStreamBatchImpl::Family() const {
+    const KeyValuePair& row = sliding_window_[sliding_window_idx_].cell_.key_values(next_idx_);
+    return row.has_column_family() ? row.column_family(): "";
+}
+std::string ResultStreamBatchImpl::Qualifier() const {
+    const KeyValuePair& row = sliding_window_[sliding_window_idx_].cell_.key_values(next_idx_);
+    return row.has_qualifier() ? row.qualifier(): "";
+}
+std::string ResultStreamBatchImpl::ColumnName() const {
+    const std::string& cf = Family();
+    const std::string& qu = Qualifier();
+    return cf + ":" + qu;
+}
+int64_t ResultStreamBatchImpl::Timestamp() const {
+    const KeyValuePair& row = sliding_window_[sliding_window_idx_].cell_.key_values(next_idx_);
+    return row.has_timestamp() ? row.timestamp(): 0;
+}
+std::string ResultStreamBatchImpl::Value() const {
+    const KeyValuePair& row = sliding_window_[sliding_window_idx_].cell_.key_values(next_idx_);
+    return row.has_value() ? row.value(): "";
+}
+
+/////////////////////////////
+/////    stream scan    /////
+/////////////////////////////
 ResultStreamAsyncImpl::ResultStreamAsyncImpl(TableImpl* table, ScanDescImpl* scan_desc_impl)
     : ResultStreamImpl(table, scan_desc_impl),
       _session_id(get_micros()), _stopped(false), _part_of_session(false), _invoked_count(0),
@@ -200,7 +473,7 @@ void ResultStreamAsyncImpl::RebuildStream(ScanTabletResponse* response) {
         const KeyValuePair& kv = response->results().key_values(last_result_pos);
         if (kv.timestamp() == 0) {
             _scan_desc_impl->SetStart(kv.key(), kv.column_family(),
-                                      kv.qualifier() + '\x1', kv.timestamp());
+                                      GetNextStartPoint(kv.qualifier()), kv.timestamp());
         } else {
             _scan_desc_impl->SetStart(kv.key(), kv.column_family(),
                                       kv.qualifier(), kv.timestamp() - 1);
@@ -355,17 +628,31 @@ bool ResultStreamSyncImpl::Done(ErrorCode* err) {
             return true;
         }
 
+        // Newer version of TS will return next_start_point when the opration is timeout
         if (!_response->complete()) {
-            const KeyValuePair& kv = _response->results().key_values(_result_pos - 1);
-            if (_scan_desc_impl->IsKvOnlyTable()) {
-                _scan_desc_impl->SetStart(kv.key() + '\x1', kv.column_family(),
-                                          kv.qualifier(), kv.timestamp());
-            } else if (kv.timestamp() == 0) {
-                _scan_desc_impl->SetStart(kv.key(), kv.column_family(),
-                                          kv.qualifier() + '\x1', kv.timestamp());
+            // Without next_start_point, kv is the last kv pair from last scan
+            if (_response->next_start_point().key() == "") {
+                const KeyValuePair& kv = _response->results().key_values(_result_pos - 1);
+                if (_scan_desc_impl->IsKvOnlyTable()) {
+                    _scan_desc_impl->SetStart(GetNextStartPoint(kv.key()), kv.column_family(),
+                                              kv.qualifier(), kv.timestamp());
+                } else if (kv.timestamp() == 0) {
+                    _scan_desc_impl->SetStart(kv.key(), kv.column_family(),
+                                              GetNextStartPoint(kv.qualifier()), kv.timestamp());
+                } else {
+                    _scan_desc_impl->SetStart(kv.key(), kv.column_family(),
+                                              kv.qualifier(), kv.timestamp() - 1);
+                }
+            // next_start_point is where the next scan should start
             } else {
-                _scan_desc_impl->SetStart(kv.key(), kv.column_family(),
-                                          kv.qualifier(), kv.timestamp() - 1);
+                const KeyValuePair& kv = _response->next_start_point();
+                if (_scan_desc_impl->IsKvOnlyTable()) {
+                    _scan_desc_impl->SetStart(kv.key(), kv.column_family(),
+                                              kv.qualifier(), kv.timestamp());
+                } else {
+                    _scan_desc_impl->SetStart(kv.key(), kv.column_family(),
+                                              kv.qualifier(), kv.timestamp());
+                }
             }
         } else {
             _scan_desc_impl->SetStart(tablet_end_key);
@@ -468,6 +755,7 @@ ScanDescImpl::ScanDescImpl(const string& rowkey)
       _buf_size(65536),
       _is_async(FLAGS_tera_sdk_scan_async_enabled),
       _max_version(1),
+      _pack_interval(5000),
       _snapshot(0),
       _value_converter(&DefaultValueConverter) {
     SetStart(rowkey);
@@ -482,6 +770,7 @@ ScanDescImpl::ScanDescImpl(const ScanDescImpl& impl)
       _buf_size(impl._buf_size),
       _is_async(impl._is_async),
       _max_version(impl._max_version),
+      _pack_interval(impl._pack_interval),
       _snapshot(impl._snapshot),
       _table_schema(impl._table_schema) {
     _value_converter = impl.GetValueConverter();
@@ -543,6 +832,10 @@ void ScanDescImpl::AddColumn(const string& cf, const string& qualifier) {
 
 void ScanDescImpl::SetMaxVersions(int32_t versions) {
     _max_version = versions;
+}
+
+void ScanDescImpl::SetPackInterval(int64_t interval) {
+    _pack_interval = interval;
 }
 
 void ScanDescImpl::SetTimeRange(int64_t ts_end, int64_t ts_start) {
@@ -614,6 +907,10 @@ const tera::ColumnFamily* ScanDescImpl::GetColumnFamily(int32_t num) const {
 
 int32_t ScanDescImpl::GetMaxVersion() const {
     return _max_version;
+}
+
+int64_t ScanDescImpl::GetPackInterval() const {
+    return _pack_interval;
 }
 
 const tera::TimeRange* ScanDescImpl::GetTimerRange() const {

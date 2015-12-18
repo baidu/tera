@@ -87,16 +87,6 @@ private:
     bool m_active_buffer_instant;      ///< active_buffer包含instant请求
     uint64_t m_active_buffer_size;      ///< active_buffer的数据大小
     bool m_tablet_busy;                 ///< tablet处于忙碌状态
-
-    const static int64_t kSeqWriteSessionTimeout = 3600 * 1000; // 1 hour
-    struct SeqWriteSession {
-        uint64_t sequence;
-        int64_t access_time;
-        SeqWriteSession* prev;
-        SeqWriteSession* next;
-    };
-    std::map<uint64_t, SeqWriteSession*> m_seq_write_session_sequence;
-    SeqWriteSession m_seq_write_session_lru_list;
 };
 
 } // namespace tabletnode

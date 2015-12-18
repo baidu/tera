@@ -35,7 +35,8 @@ bool SetTableProperties(const string& name, const string& value,
 bool FillTableDescriptor(PropTree& schema_tree, TableDescriptor* desc);
 bool UpdateTableDescriptor(PropTree& schema_tree, TableDescriptor* table_desc, bool* is_update_lg_cf);
 
-bool ParseSchema(const string& schema, TableDescriptor* table_desc);
+bool ParseTableSchema(const string& schema, TableDescriptor* table_desc);
+bool ParseTableSchemaFile(const string& file, TableDescriptor* table_desc);
 
 bool ParseScanSchema(const string& schema, ScanDescriptor* desc);
 
@@ -43,5 +44,7 @@ typedef std::pair<string, string> Property;
 typedef std::vector<Property> PropertyList;
 
 bool BuildSchema(TableDescriptor* table_desc, string* schema);
+
+bool ParseDelimiterFile(const string& filename, std::vector<string>* delims);
 } // namespace tera
 #endif // TERA_SDK_SDK_UTILS_H_

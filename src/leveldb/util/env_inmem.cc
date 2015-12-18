@@ -233,10 +233,9 @@ bool InMemoryEnv::FileExists(const std::string& fname)
 }
 
 //
-Status InMemoryEnv::GetChildren(const std::string& path,
-        std::vector<std::string>* result, std::vector<int64_t>* ctime)
+Status InMemoryEnv::GetChildren(const std::string& path, std::vector<std::string>* result)
 {
-    return dfs_env_->GetChildren(path, result, ctime);
+    return dfs_env_->GetChildren(path, result);
 }
 
 Status InMemoryEnv::DeleteFile(const std::string& fname)

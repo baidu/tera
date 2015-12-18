@@ -342,7 +342,7 @@ class Benchmark {
       bool write_sync = false;
       if (name == Slice("fillseq")) {
         Write(write_sync, SEQUENTIAL, FRESH, num_, FLAGS_value_size, 1);
-        
+
       } else if (name == Slice("fillrandom")) {
         Write(write_sync, RANDOM, FRESH, num_, FLAGS_value_size, 1);
         DBSynchronize(db_);

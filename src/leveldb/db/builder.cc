@@ -25,7 +25,8 @@ Status BuildTable(const std::string& dbname,
                   TableCache* table_cache,
                   Iterator* iter,
                   FileMetaData* meta,
-                  uint64_t* saved_size) {
+                  uint64_t* saved_size,
+                  uint64_t smallest_snapshot) {
   Status s;
   meta->file_size = 0;
   iter->SeekToFirst();
@@ -37,10 +38,12 @@ Status BuildTable(const std::string& dbname,
     if (!s.ok()) {
       return s;
     }
+    SequenceNumber snapshot = smallest_snapshot;
 
     CompactStrategy* compact_strategy = NULL;
     if (options.compact_strategy_factory) {
       compact_strategy = options.compact_strategy_factory->NewInstance();
+      compact_strategy->SetSnapshot(snapshot);
     }
 
     // meta->smallest和meta->largest的范围可以向两侧伸长,但如果比实际范围小就是bug.
@@ -56,6 +59,7 @@ Status BuildTable(const std::string& dbname,
       const uint64_t tag = DecodeFixed64(entry + key.size() - 8);
       const uint64_t sequence_id = tag >> 8;
       bool has_atom_merged = false;
+
       // type==kTypeValue, 且drop==true的记录可以被丢弃,
       // 其他记录均正常进入Memtable compact SST流程.
       if (static_cast<ValueType>(tag & 0xff) == kTypeValue && compact_strategy) {

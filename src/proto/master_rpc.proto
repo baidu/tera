@@ -98,6 +98,8 @@ message ShowTablesRequest {
     optional uint32 max_table_num = 4;
     optional uint32 max_tablet_num = 5;
     optional bytes user_token = 6;
+
+    optional bool all_brief = 7;
 }
 
 message ShowTablesResponse {
@@ -106,6 +108,8 @@ message ShowTablesResponse {
     optional TabletMetaList tablet_meta_list = 3;
     optional TableMetaList table_meta_list = 4;
     optional bool is_more = 5;
+
+    optional bool all_brief = 7;
 }
 
 message ShowTabletNodesRequest {
@@ -120,6 +124,35 @@ message ShowTabletNodesResponse {
     required uint64 sequence_id = 2;
     repeated TabletNodeInfo tabletnode_info = 3;
     optional TabletMetaList tabletmeta_list = 4;
+}
+
+// acl
+message UserInfo {
+    required string user_name = 1;
+    repeated string group_name = 2;
+    optional string token = 3;
+}
+
+enum UserOperateType {
+    kCreateUser = 1;
+    kDeleteUser = 2;
+    kChangePwd = 3;
+    kShowUser = 4;
+    kAddToGroup = 5;
+    kDeleteFromGroup = 6;
+}
+
+message OperateUserRequest {
+    optional uint64 sequence_id = 1;
+    optional bytes user_token = 3; // token of which user call this request
+    optional UserInfo user_info = 2; // operated user
+    optional UserOperateType op_type = 4;
+}
+
+message OperateUserResponse {
+    optional uint64 sequence_id = 1;
+    optional StatusCode status = 2;
+    optional UserInfo user_info = 3;
 }
 
 // Tablet node
@@ -166,6 +199,18 @@ message DelSnapshotResponse {
     optional uint64 sequence_id = 2;
 }
 
+message RollbackRequest {
+    optional uint64 sequence_id = 1;
+    optional string table_name = 2;
+    optional uint64 snapshot_id = 3;
+    optional string rollback_name = 4;
+}
+
+message RollbackResponse {
+    optional StatusCode status = 1;
+    optional uint64 sequence_id = 2;
+}
+
 // admin
 
 message CmdCtrlRequest {
@@ -181,11 +226,23 @@ message CmdCtrlResponse {
     optional string str_result = 4;
 }
 
+message RenameTableRequest {
+    required uint64 sequence_id = 1;
+    required string old_table_name = 2;
+    required string new_table_name = 3;
+}
+
+message RenameTableResponse {
+    required uint64 sequence_id = 1;
+    required StatusCode status = 2;
+}
+
 // RPC interface
 
 service MasterServer {
     rpc GetSnapshot(GetSnapshotRequest) returns(GetSnapshotResponse);
     rpc DelSnapshot(DelSnapshotRequest) returns(DelSnapshotResponse);
+    rpc GetRollback(RollbackRequest) returns (RollbackResponse);
     rpc CreateTable(CreateTableRequest) returns(CreateTableResponse);
     rpc DeleteTable(DeleteTableRequest) returns (DeleteTableResponse);
     rpc DisableTable(DisableTableRequest) returns (DisableTableResponse);
@@ -201,5 +258,7 @@ service MasterServer {
     rpc Report(ReportRequest) returns(ReportResponse);
 
     rpc CmdCtrl(CmdCtrlRequest) returns(CmdCtrlResponse);
+    rpc OperateUser(OperateUserRequest) returns(OperateUserResponse);
+    rpc RenameTable(RenameTableRequest) returns (RenameTableResponse);
 }
 option cc_generic_services = true;

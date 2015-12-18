@@ -169,6 +169,9 @@ int32_t Hdfs::GetFileSize(const std::string& filename, uint64_t* size) {
   return -1;
 }
 int32_t Hdfs::Rename(const std::string& from, const std::string& to) {
+  // Hdfs not support rename to an exist path, so we delete target path first.
+  // But this may cause Rename not a atomic operation.
+  (*hdfsDelete)((hdfsFS)fs_, to.c_str());
   return (*hdfsRename)((hdfsFS)fs_, from.c_str(), to.c_str());
 }
 
@@ -196,10 +199,12 @@ int32_t Hdfs::Copy(const std::string& from, const std::string& to) {
 }
 
 int32_t Hdfs::ListDirectory(const std::string& path,
-                            std::vector<std::string>* result,
-                            std::vector<int64_t>* ctime) {
+                            std::vector<std::string>* result) {
   int numEntries = 0;
   hdfsFileInfo* pHdfsFileInfo = 0;
+  if (0 != Exists(path)) {
+    return -1;
+  }
   pHdfsFileInfo = (*hdfsListDirectory)((hdfsFS)fs_, path.c_str(), &numEntries);
   if (numEntries >= 0) {
     for (int i = 0; i < numEntries; i++) {
@@ -207,9 +212,6 @@ int32_t Hdfs::ListDirectory(const std::string& path,
       char* filename = rindex(pathname, '/');
       if (filename != NULL) {
         result->push_back(filename + 1);
-        if (ctime != NULL) {
-            ctime->push_back(static_cast<int64_t>(pHdfsFileInfo[i].mLastMod));
-        }
       }
     }
     if (pHdfsFileInfo != NULL) {

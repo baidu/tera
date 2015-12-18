@@ -8,7 +8,7 @@
 
 ## 体验之前：
 * **Tera编译通过**（以生成tera_main, teracli两个二进制文件为准）
-* 注：由于Tera通过zookeeper进行寻址，onebox模式下，只能在单机访问Tera
+* onebox模式下，默认使用单机模拟zk，只能在单机访问Tera，如果需要通过网络访问，需要将zk配置修改为真实zk址
 
 ## 准备工作
 1. 将编译生成的tera_main, teracli两个二进制文件放入example/onebox/bin.
@@ -82,17 +82,19 @@
 
 读出一条数据：
 
-`./teracli get hello row_first`
+`./teracli get hello_kv row_first`
 
 `./teracli get hello_table row_first "cf1:qu"`
 
 卸载表格：
 
-`./teracli disable hello`
+`./teracli disable hello_kv`
+`./teracli disable hello_table`
 
 删除表格：
 
-`./teracli drop hello`
+`./teracli drop hello_kv`
+`./teracli drop hello_table`
 
 ## 写在最后
 Tera onebox模式可以体验几乎所有的功能特性，希望通过上面的介绍可以让大家对Tera有一个初步的认识。

@@ -82,6 +82,14 @@ bool TabletNodeClient::ReleaseSnapshot(const ReleaseSnapshotRequest* request,
                                 m_rpc_timeout, m_thread_pool);
 }
 
+bool TabletNodeClient::Rollback(const SnapshotRollbackRequest* request,
+                                SnapshotRollbackResponse* response,
+                                Closure<void, SnapshotRollbackRequest*, SnapshotRollbackResponse*, bool, int>* done) {
+    return SendMessageWithRetry(&TabletNodeServer::Stub::Rollback,
+                                request, response, done, "Rollback",
+                                m_rpc_timeout, m_thread_pool);
+}
+
 bool TabletNodeClient::Query(const QueryRequest* request,
                                   QueryResponse* response,
                                   Closure<void, QueryRequest*, QueryResponse*, bool, int>* done) {
@@ -103,6 +111,14 @@ bool TabletNodeClient::CompactTablet(const CompactTabletRequest* request,
                                           Closure<void, CompactTabletRequest*, CompactTabletResponse*, bool, int>* done) {
     return SendMessageWithRetry(&TabletNodeServer::Stub::CompactTablet,
                                 request, response, done, "CompactTablet",
+                                m_rpc_timeout, m_thread_pool);
+}
+
+bool TabletNodeClient::CmdCtrl(const TsCmdCtrlRequest* request,
+                               TsCmdCtrlResponse* response,
+                               Closure<void, TsCmdCtrlRequest*, TsCmdCtrlResponse*, bool, int>* done) {
+    return SendMessageWithRetry(&TabletNodeServer::Stub::CmdCtrl,
+                                request, response, done, "TsCmdCtrl",
                                 m_rpc_timeout, m_thread_pool);
 }
 

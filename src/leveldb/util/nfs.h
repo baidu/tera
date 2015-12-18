@@ -47,7 +47,7 @@ public:
   int32_t GetFileSize(const std::string& filename, uint64_t* size);
   int32_t Rename(const std::string& from, const std::string& to);
   int32_t Copy(const std::string& from, const std::string& to);
-  int32_t ListDirectory(const std::string& path, std::vector<std::string>* result, std::vector<int64_t>* ctime);
+  int32_t ListDirectory(const std::string& path, std::vector<std::string>* result);
   DfsFile* OpenFile(const std::string& filename, int32_t flags);
 private:
   Nfs();

@@ -63,8 +63,7 @@ public:
     void ReadTablet(int64_t start_micros,
                     const ReadTabletRequest* request,
                     ReadTabletResponse* response,
-                    google::protobuf::Closure* done,
-                    ReadRpcTimer* timer = NULL);
+                    google::protobuf::Closure* done);
 
     void WriteTablet(const WriteTabletRequest* request,
                      WriteTabletResponse* response,
@@ -81,6 +80,12 @@ public:
     void ReleaseSnapshot(const ReleaseSnapshotRequest* request,
                          ReleaseSnapshotResponse* response,
                          google::protobuf::Closure* done);
+
+    void Rollback(const SnapshotRollbackRequest* request, SnapshotRollbackResponse* response,
+                  google::protobuf::Closure* done);
+
+    void CmdCtrl(const TsCmdCtrlRequest* request, TsCmdCtrlResponse* response,
+                 google::protobuf::Closure* done);
 
     void Query(const QueryRequest* request, QueryResponse* response,
                google::protobuf::Closure* done);

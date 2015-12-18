@@ -74,6 +74,8 @@ struct LG_info {
 
   int32_t sst_size;
 
+  int32_t write_buffer_size;
+
   // Other LG properties
   // ...
 
@@ -85,7 +87,8 @@ struct LG_info {
         use_memtable_on_leveldb(false),
         memtable_ldb_write_buffer_size(1 << 20),
         memtable_ldb_block_size(kDefaultBlockSize),
-        sst_size(kDefaultSstSize) {}
+        sst_size(kDefaultSstSize),
+        write_buffer_size(32 << 20) {}
 };
 
 // Options to control the behavior of a database (passed to DB::Open)
@@ -103,7 +106,7 @@ struct Options {
 
   // If true, the database will be created if it is missing.
   // Default: false
-  bool create_if_missing;
+  // bool create_if_missing;
 
   // If true, an error is raised if the database already exists.
   // Default: false
@@ -210,6 +213,7 @@ struct Options {
   std::string key_end;
 
   std::vector<uint64_t> snapshots_sequence;
+  std::map<uint64_t, uint64_t> rollbacks;
 
   std::set<uint32_t>* exist_lg_list;
   std::map<uint32_t, LG_info*>* lg_info_list;
@@ -308,6 +312,8 @@ struct ReadOptions {
   // snapshot of the state at the beginning of this read operation.
   // Default: NULL
   uint64_t snapshot;
+
+  std::map<uint64_t, uint64_t> rollbacks;
 
   // The "target_lgs" specifies the target locality groups
   // which is hit during the read operation. If NULL, all

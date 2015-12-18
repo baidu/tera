@@ -46,6 +46,7 @@ public:
     typedef std::map< std::string, std::set<std::string> > ColumnFamilyMap;
     struct ScanOptions {
         uint32_t max_versions;
+        uint32_t version_num; // restore version_num for stream scan
         uint32_t max_size;
         int64_t ts_start;
         int64_t ts_end;
@@ -53,10 +54,11 @@ public:
         FilterList filter_list;
         ColumnFamilyMap column_family_list;
         std::set<std::string> iter_cf_set;
+        int64_t timeout;
 
         ScanOptions()
-            : max_versions(UINT32_MAX), max_size(UINT32_MAX),
-              ts_start(kOldestTs), ts_end(kLatestTs), snapshot_id(0)
+            : max_versions(UINT32_MAX), version_num(0), max_size(UINT32_MAX),
+              ts_start(kOldestTs), ts_end(kLatestTs), snapshot_id(0), timeout(INT64_MAX / 2)
         {}
     };
 
@@ -74,7 +76,7 @@ public:
     };
 
 public:
-    TabletIO();
+    TabletIO(const std::string& key_start, const std::string& key_end);
     virtual ~TabletIO();
 
     std::string GetTableName() const;
@@ -87,24 +89,21 @@ public:
     StatCounter& GetCounter();
     // tablet
     virtual bool Load(const TableSchema& schema,
-                      const std::string& key_start, const std::string& key_end,
                       const std::string& path,
                       const std::vector<uint64_t>& parent_tablets,
                       std::map<uint64_t, uint64_t> snapshots,
+                      std::map<uint64_t, uint64_t> rollbacks,
                       leveldb::Logger* logger = NULL,
                       leveldb::Cache* block_cache = NULL,
                       leveldb::TableCache* table_cache = NULL,
                       StatusCode* status = NULL);
     virtual bool Unload(StatusCode* status = NULL);
     virtual bool Split(std::string* split_key, StatusCode* status = NULL);
-    virtual bool Compact(StatusCode* status = NULL);
+    virtual bool Compact(int lg_no = -1, StatusCode* status = NULL);
     bool CompactMinor(StatusCode* status = NULL);
     bool Destroy(StatusCode* status = NULL);
-    virtual int64_t GetDataSize(std::vector<uint64_t>* lgsize = NULL,
-                                StatusCode* status = NULL);
-    virtual int64_t GetDataSize(const std::string& start_key,
-                                const std::string& end_key,
-                                StatusCode* status = NULL);
+    virtual bool GetDataSize(uint64_t* size, std::vector<uint64_t>* lgsize = NULL,
+                             StatusCode* status = NULL);
     virtual bool AddInheritedLiveFiles(std::vector<std::set<uint64_t> >* live);
 
     bool IsBusy();
@@ -122,6 +121,7 @@ public:
                       const std::string& end_row_key,
                       const ScanOptions& scan_options,
                       RowResult* value_list,
+                      KeyValuePair* next_start_point,
                       uint32_t* read_row_count,
                       uint32_t* read_bytes,
                       bool* is_complete,
@@ -153,6 +153,8 @@ public:
     bool ReleaseSnapshot(uint64_t snapshot_id,  StatusCode* status = NULL);
     void ListSnapshot(std::vector<uint64_t>* snapshot_id);
 
+    uint64_t Rollback(uint64_t snapshot_id, StatusCode* status);
+
     uint32_t GetLGidByCFName(const std::string& cfname);
 
     const leveldb::RawKeyOperator* GetRawKeyOperator();
@@ -160,11 +162,14 @@ public:
     void SetStatus(TabletStatus status);
     TabletStatus GetStatus();
 
-    void GetAndClearCounter(TabletCounter* counter, int64_t interval);
+    void GetAndClearCounter(TabletCounter* counter);
 
     int32_t AddRef();
     int32_t DecRef();
     int32_t GetRef() const;
+
+    static bool FindAverageKey(const std::string& start, const std::string& end,
+                               std::string* res);
 
 private:
     friend class TabletWriter;
@@ -207,18 +212,24 @@ private:
                       const ScanOptions& scan_options,
                       leveldb::Iterator* it,
                       RowResult* value_list,
+                      KeyValuePair* next_start_point,
                       uint32_t* read_row_count,
                       uint32_t* read_bytes,
                       bool* is_complete,
                       StatusCode* status);
+
+    void MakeKvPair(leveldb::Slice key, leveldb::Slice col, leveldb::Slice qual,
+                    int64_t ts, leveldb::Slice value, KeyValuePair* kv);
+
+    bool ParseRowKey(const std::string& tera_key, std::string* row_key);
 
 private:
     mutable Mutex m_mutex;
     TabletWriter* m_async_writer;
 
     std::string m_tablet_path;
-    std::string m_start_key;
-    std::string m_end_key;
+    const std::string m_start_key;
+    const std::string m_end_key;
     std::string m_raw_start_key;
     std::string m_raw_end_key;
     CompactStatus m_compact_status;
@@ -232,6 +243,7 @@ private:
     TableSchema m_table_schema;
     bool m_kv_only;
     std::map<uint64_t, uint64_t> id_to_snapshot_num_;
+    std::map<uint64_t, uint64_t> rollbacks_;
 
     const leveldb::RawKeyOperator* m_key_operator;
 

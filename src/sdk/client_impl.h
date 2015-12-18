@@ -6,6 +6,7 @@
 #define TERA_SDK_CLIENT_IMPL_
 
 #include "common/thread_pool.h"
+#include "proto/master_rpc.pb.h"
 #include "proto/tabletnode_client.h"
 #include "sdk/sdk_zk.h"
 #include "sdk/tera.h"
@@ -48,11 +49,21 @@ public:
 
     virtual bool EnableTable(string name, ErrorCode* err);
 
-    virtual Table* OpenTable(const string& table_name, ErrorCode* err);
+    virtual bool CreateUser(const std::string& user,
+                            const std::string& password, ErrorCode* err);
+    virtual bool DeleteUser(const std::string& user, ErrorCode* err);
+    virtual bool ChangePwd(const std::string& user,
+                           const std::string& password, ErrorCode* err);
+    virtual bool ShowUser(const std::string& user, std::vector<std::string>& user_groups,
+                          ErrorCode* err);
+    virtual bool AddUserToGroup(const std::string& user,
+                                const std::string& group, ErrorCode* err);
+    virtual bool DeleteUserFromGroup(const std::string& user,
+                                     const std::string& group, ErrorCode* err);
+    bool OperateUser(UserInfo& operated_user, UserOperateType type,
+                     std::vector<std::string>& user_groups, ErrorCode* err);
 
-    virtual Table* OpenTable(const std::string& table_name,
-                             const TableOptions& options,
-                             ErrorCode* err);
+    virtual Table* OpenTable(const string& table_name, ErrorCode* err);
 
     virtual bool GetTabletLocation(const string& table_name,
                                    std::vector<TabletInfo>* tablets,
@@ -74,6 +85,9 @@ public:
     virtual bool GetSnapshot(const string& name, uint64_t* snapshot, ErrorCode* err);
 
     virtual bool DelSnapshot(const string& name, uint64_t snapshot, ErrorCode* err);
+
+    virtual bool Rollback(const string& name, uint64_t snapshot,
+                          const std::string& rollback_name, ErrorCode* err);
 
     virtual bool CmdCtrl(const string& command,
                          const std::vector<string>& arg_list,
@@ -98,6 +112,10 @@ public:
     bool ShowTabletNodesInfo(std::vector<TabletNodeInfo>* infos,
                              ErrorCode* err);
 
+    bool Rename(const std::string& old_table_name,
+                const std::string& new_table_name,
+                ErrorCode* err);
+
     std::string GetZkAddrList() { return _zk_addr_list; }
     std::string GetZkRootPath() { return _zk_root_path; }
 
@@ -117,8 +135,18 @@ private:
                           std::vector<TabletInfo>* tablet_list);
 
     std::string GetUserToken(const std::string& user, const std::string& password);
-
+    void DoShowUser(OperateUserResponse& response,
+                    std::vector<std::string>& user_groups);
     bool CheckReturnValue(StatusCode status, std::string& reason, ErrorCode* err);
+    bool GetInternalTableName(const std::string& table_name, ErrorCode* err,
+                              std::string* internal_table_name);
+
+    /// show all tables info: `table_name' should be an empty string
+    /// show a single table info: `table_name' should be the table name
+    bool DoShowTablesInfo(TableMetaList* table_list,
+                          TabletMetaList* tablet_list,
+                          const string& table_name,
+                          ErrorCode* err);
 private:
     ClientImpl(const ClientImpl&);
     void operator=(const ClientImpl&);

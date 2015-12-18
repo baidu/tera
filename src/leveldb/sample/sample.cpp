@@ -11,7 +11,6 @@ int main()
     leveldb::DB* db;
     leveldb::Status status;
     leveldb::Options options;
-    options.create_if_missing = true;
     //options.error_if_exists = true;
     status = leveldb::DB::Open(options, ".db", &db);
     if (!status.ok()) {

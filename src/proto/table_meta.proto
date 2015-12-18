@@ -19,7 +19,7 @@ message BytesList {
 }
 
 message KeyValuePair {
-    required bytes key = 1;
+    optional bytes key = 1;
     optional bytes value = 2;
     optional bool del = 3;
     optional bytes column_family = 4;
@@ -30,6 +30,12 @@ message KeyValuePair {
 message TabletLocation {
     required KeyRange key_range = 1;
     required string server_addr = 2;
+}
+
+message Rollback {
+    optional string name = 1;
+    optional uint64 snapshot_id = 2;
+    optional uint64 rollback_point = 3;
 }
 
 message ScanOption {
@@ -59,12 +65,31 @@ message TabletCounter {
     optional bool is_on_busy = 15 [default = false];
 }
 
+message TableCounter {
+    optional int64 lread = 1;
+    optional int64 scan_rows = 2;
+    optional int64 scan_max = 3;
+    optional int64 scan_size = 4;
+    optional int64 read_rows = 5;
+    optional int64 read_max = 6;
+    optional int64 read_size = 7;
+    optional int64 write_rows = 8;
+    optional int64 write_max = 9;
+    optional int64 write_size = 10;
+
+    optional int64 tablet_num = 20;
+    optional int64 notready_num = 21;
+    optional int64 size = 22;
+    repeated int64 lg_size = 23;
+}
+
 message TableMeta {
     optional string table_name = 1;
     optional TableStatus status = 2;
     optional TableSchema schema = 3;
     repeated uint64 snapshot_list = 4;
     optional uint64 create_time = 5;
+    repeated string rollback_names = 6;
 }
 
 message TabletMeta {
@@ -73,17 +98,19 @@ message TabletMeta {
     required KeyRange key_range = 3;
     optional string server_addr = 4;
     optional TabletStatus status = 5;
-    optional int64 table_size = 6;
+    optional int64 size = 6;
     optional bool compress = 7;     // for Compatible
     optional CompactStatus compact_status = 8 [default = kTableNotCompact];
     optional StoreMedium store_medium = 9 [default = DiskStore]; // for Compatible
     repeated uint64 snapshot_list = 11;
     repeated uint64 parent_tablets = 12;
     repeated int64 lg_size = 13;
+    repeated Rollback rollbacks = 14;
 }
 
 message TableMetaList {
     repeated TableMeta meta = 1;
+    repeated TableCounter counter = 2;
 }
 
 message TabletMetaList {

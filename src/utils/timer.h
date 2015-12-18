@@ -18,10 +18,24 @@ static inline std::string get_curtime_str() {
     return std::string(buf, 17);
 }
 
+static inline std::string get_curtime_str_plain() {
+    struct tm tt;
+    char buf[20];
+    time_t t = time(NULL);
+    strftime(buf, 20, "%Y%m%d%H%M%S", localtime_r(&t, &tt));
+    return std::string(buf);
+}
+
 static inline int64_t get_micros() {
     struct timeval tv;
     gettimeofday(&tv, NULL);
     return static_cast<int64_t>(tv.tv_sec) * 1000000 + tv.tv_usec;
+}
+
+static inline int64_t get_millis() {
+    struct timeval tv;
+    gettimeofday(&tv, NULL);
+    return static_cast<int64_t>(tv.tv_sec) * 1000 + tv.tv_usec / 1000;
 }
 
 static inline int64_t get_unique_micros(int64_t ref) {
@@ -39,7 +53,7 @@ static inline int64_t GetTimeStampInUs() {
 }
 
 static inline int64_t GetTimeStampInMs() {
-    return get_micros() / 1000;
+    return get_millis();
 }
 
 }  // namespace tera
