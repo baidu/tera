@@ -23,6 +23,7 @@
 #include "proto/master_client.h"
 #include "proto/proto_helper.h"
 #include "proto/tabletnode_client.h"
+#include "utils/config_utils.h"
 #include "utils/string_util.h"
 #include "utils/timer.h"
 #include "utils/utils_cmd.h"
@@ -94,6 +95,8 @@ DECLARE_int64(tera_sdk_perf_counter_log_interval);
 DECLARE_bool(tera_acl_enabled);
 DECLARE_bool(tera_only_root_create_table);
 DECLARE_string(tera_master_gc_strategy);
+
+DECLARE_string(flagfile);
 
 namespace tera {
 namespace master {
@@ -1227,6 +1230,8 @@ void MasterImpl::CmdCtrl(const CmdCtrlRequest* request,
         TabletCmdCtrl(request, response);
     } else if (request->command() == "meta") {
         MetaCmdCtrl(request, response);
+    } else if (request->command() == "reload config") {
+        ReloadConfig(response);
     } else {
         response->set_status(kInvalidArgument);
     }
@@ -1405,6 +1410,16 @@ void MasterImpl::SafeModeCmdCtrl(const CmdCtrlRequest* request,
         response->set_bool_result(kIsReadonly == GetMasterStatus());
         response->set_status(kMasterOk);
     } else {
+        response->set_status(kInvalidArgument);
+    }
+}
+
+void MasterImpl::ReloadConfig(CmdCtrlResponse* response) {
+    if (utils::LoadFlagFile(FLAGS_flagfile)) {
+        LOG(INFO) << "[reload config] done";
+        response->set_status(kMasterOk);
+    } else {
+        LOG(ERROR) << "[reload config] config file not found";
         response->set_status(kInvalidArgument);
     }
 }
@@ -5133,10 +5148,13 @@ void MasterImpl::RefreshTableCounter() {
     // use same interval with query because table counter changed after query
     ThreadPool::Task task =
         boost::bind(&MasterImpl::RefreshTableCounter, this);
-    m_query_tabletnode_timer_id = m_thread_pool->DelayTask(
-        FLAGS_tera_master_query_tabletnode_period, task);
+    m_thread_pool->DelayTask( FLAGS_tera_master_query_tabletnode_period, task);
     LOG(INFO) << "RefreshTableCounter, cost: "
         << ((get_micros() - start) / 1000) << "ms.";
+}
+
+std::string MasterImpl::ProfilingLog() {
+    return m_thread_pool->ProfilingLog();
 }
 } // namespace master
 } // namespace tera

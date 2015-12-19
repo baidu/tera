@@ -112,6 +112,7 @@ class Version {
   // tera-specific
   void GetApproximateSizes(uint64_t* size, uint64_t* size_under_level1 = NULL);
   bool FindSplitKey(double ratio, std::string* split_key);
+  bool FindKeyRange(std::string* smallest_key, std::string* largest_key);
 
   // Return a human readable string that describes this version's contents.
   std::string DebugString() const;

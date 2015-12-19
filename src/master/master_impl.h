@@ -145,6 +145,8 @@ public:
     bool GetMetaTabletAddr(std::string* addr);
     void TryLoadTablet(TabletPtr tablet, std::string addr = "");
 
+    std::string ProfilingLog();
+
 private:
     typedef Closure<void, SnapshotRequest*, SnapshotResponse*, bool, int> SnapshotClosure;
     typedef Closure<void, SnapshotRollbackRequest*, SnapshotRollbackResponse*, bool, int> RollbackClosure;
@@ -212,6 +214,7 @@ private:
 
     void SafeModeCmdCtrl(const CmdCtrlRequest* request,
                          CmdCtrlResponse* response);
+    void ReloadConfig(CmdCtrlResponse* response);
     void TabletCmdCtrl(const CmdCtrlRequest* request,
                        CmdCtrlResponse* response);
     void MetaCmdCtrl(const CmdCtrlRequest* request,

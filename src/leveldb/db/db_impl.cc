@@ -609,7 +609,7 @@ Status DBImpl::CompactMemTable() {
   return s;
 }
 
-void DBImpl::CompactRange(const Slice* begin, const Slice* end) {
+void DBImpl::CompactRange(const Slice* begin, const Slice* end, int lg_no) {
   int max_level_with_files = 1;
   {
     MutexLock l(&mutex_);
@@ -685,6 +685,12 @@ Status DBImpl::TEST_CompactMemTable() {
 bool DBImpl::FindSplitKey(double ratio, std::string* split_key) {
     MutexLock l(&mutex_);
     return versions_->current()->FindSplitKey(ratio, split_key);
+}
+
+bool DBImpl::FindKeyRange(std::string* smallest_key,
+                          std::string* largest_key) {
+    MutexLock l(&mutex_);
+    return versions_->current()->FindKeyRange(smallest_key, largest_key);
 }
 
 bool DBImpl::MinorCompact() {

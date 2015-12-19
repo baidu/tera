@@ -22,6 +22,7 @@ public:
     ~MasterEntry();
 
     bool StartServer();
+    bool Run();
     void ShutdownServer();
 
 private:
