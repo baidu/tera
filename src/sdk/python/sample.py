@@ -4,7 +4,7 @@
 sample of using Tera Python SDK
 """
 
-from TeraSdk import Client, RowMutation, MUTATION_CALLBACK
+from TeraSdk import Client, RowMutation, MUTATION_CALLBACK, TeraSdkException
 import time
 
 
@@ -12,14 +12,33 @@ def main():
     """
     REQUIRES: tera.flag in current work directory; table `oops' was created
     """
-    client = Client("./tera.flag", "pysdk")
-    table = client.OpenTable("oops")
+    try:
+        client = Client("./tera.flag", "pysdk")
+    except TeraSdkException as e:
+        print(e.reason)
+        return
+    try:
+        table = client.OpenTable("oops2")
+    except TeraSdkException as e:
+        print(e.reason)
+        return
 
     # sync put
-    table.Put("row_sync", "cf0", "qu_sync", "value_sync")
+    try:
+        table.Put("row_sync", "cf0", "qu_sync", "value_sync")
+    except TeraSdkException as e:
+        print(e.reason)
+        return
 
     # sync get
-    print(table.Get("row_sync", "cf0", "qu_sync", 0))
+    try:
+        print(table.Get("row_sync", "cf0", "qu_sync", 0))
+    except TeraSdkException as e:
+        print(e.reason)
+        if "not found" in e.reason:
+            pass
+        else:
+            return
 
     # scan (stream)
     scan(table)
@@ -47,7 +66,12 @@ def scan(table):
     from TeraSdk import ScanDescriptor
     scan_desc = ScanDescriptor("")
     scan_desc.SetBufferSize(1024 * 1024)  # 1MB
-    stream = table.Scan(scan_desc)
+    try:
+        stream = table.Scan(scan_desc)
+    except TeraSdkException as e:
+        print(e.reason)
+        return
+
     while not stream.Done():
         row = stream.RowName()
         column = stream.ColumnName()

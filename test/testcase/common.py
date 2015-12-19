@@ -132,6 +132,34 @@ def createbyfile(schema, deli=''):
     print ''.join(ret.stderr.readlines())
 
 
+def rowread_table(table_name, file_path):
+    allv = 'scan'
+    
+    tmpfile = 'tmp.file'
+    scan_cmd = '{teracli} {op} {table_name} "" "" > {out}'.format(
+        teracli=const.teracli_binary, op=allv, table_name=table_name, out=tmpfile)
+    print scan_cmd
+    ret = subprocess.Popen(scan_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, shell=True)
+    ret.communicate()
+
+    tmpfile2 = 'tmp.file2'
+    awk_args = ''
+    awk_args += """-F ':' '{print $1}'"""
+    awk_cmd = 'awk {args} {out} |sort -u > {out1}'.format(
+            args=awk_args, out=tmpfile, out1=tmpfile2)
+    print awk_cmd
+    ret = subprocess.Popen(awk_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, shell=True)
+    ret.communicate()
+    
+    rowread_cmd = 'while read line; do {teracli} get {table_name} $line; done < {out1} > {output}'.format(
+            teracli=const.teracli_binary, table_name=table_name, out1=tmpfile2, output=file_path)
+    ret = subprocess.Popen(rowread_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, shell=True)
+    ret.communicate()
+
+    #ret = subprocess.Popen('rm -rf tmp.file tmp.file2', stdout=subprocess.PIPE, stderr=subprocess.PIPE, shell=True)
+    #ret.communicate()
+
+
 def run_tera_mark(file_path, op, table_name, random, value_size, num, key_size, cf='', key_seed=1, value_seed=1):
     """
     This function provide means to write data into Tera and dump a copy into a specified file at the same time.
