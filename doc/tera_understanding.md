@@ -108,7 +108,7 @@ tera开发者黄俊辉的串讲文档
 ## tablet 读数据流程
 ![tablet合并](../resources/images/understanding_tablet_read.png)
 
-1. 遍历Tablet请求的每一行，根据tablet\_name，start\_key找到对应的TabletIO的句柄；
+1. 遍历Tablet请求的每一行（客户端可能一次请求读多行），根据tablet\_name，row\_key找到对应的TabletIO的句柄；
 2. 调用TabletIO的ReadCells，并保存结果；
  1. 如果只是kv类型，调用DBTable的Get，即调用leveldb的Get，其它类型进入步骤2；
  2. 如果请求里有一个qualifier为空，即没有指定qualifier，则不能执行seek，即需要调用scan操作，否则调用seek；
@@ -116,6 +116,35 @@ tera开发者黄俊辉的串讲文档
   - 指定row\_key, cf="", qualifier="", type=TKT\_FORSEEK, timestamp=INT64\_MAX, 把迭代器移动行首；
   - 先遍历cf，然后在每个cf里遍历qualifier，调用ScanDrop检查是否需要跳过当前的记录，如果记录是有用的，则检查是否是原子操作，如果是就合并该key的所有value，如果不是原子操作，当前value就是最终需要的；
 3. 返回结果；
+
+## 迭代器的实现
+![迭代器类图](../resources/images/understanding_iter_class.png)
+
+1. ts读数据、扫描表格（同步扫描或流式扫描）、compaction的功能都需要借助迭代器实现；
+2. 在tera系统里，一个tablet的数据由多个leveldb存储，一个leveldb又有多个level，而且数据又分版本，所以在读某行数据或扫描表格时，需要打开表格所有的lg，一个一个地遍历并检查是否有效。为简化代码实现，tera系统借鉴了原生leveldb的作法，对外只暴露一个迭代器，这个迭代器的seek，next，prev等操作由内部一组迭代器协同完成；
+3. DBTable通过NewIterator函数完成所有lg的迭代器的初始化，然后调用NewMergingIterator函数得到MergingIterator，后面通过这个迭代器就能遍历记录；
+4. lg迭代器的初始化则通过DBImpl::NewIterator完成，这个函数调用NewInternalIterator完成对memtable和immutable，以及TwoLevelIterator迭代器的初始化，这些迭代器由MergingIterator封装，然后赋值给DBIter；
+5. TwoLevelIterator迭代器是遍历sst文件内部数据的，包含一个index_iter_和data_iter_, index_iter_是sst索引的迭代器，data_iter_初始为空，在seek到记录后，通过InitDataBlock初始化；
+
+## 迭代器遍历过程
+1. MergingIterator遍历过程
+ 1. 图中总共有5个迭代器，绿色填充颜色的key表示当前每个迭代器的位置，其中current指向2|19|1（userkey|sequence|type），方向是forward，sequence number是全局唯一且递增，key的排序方式是按userkey升序，sequence降序，type降序；
+ 2. 求next：
+  - 如果当前的方向是forward，则current移动到下一个位置，即5|18|1，然后，在5个迭代器中找key最小值，在5|18|1，3|16|1，2|12|1，4|10|0，4|7|1中key最小的是2|12|1，所以把current指向2|12|1，然后返回；继续求next：移动current到下一个位置，因2|12|1是最后一个所以此时current指向null，在5|18|1，3|16|1，null，4|10|0，4|7|1中找key最小的，即3|16|1（null被认为是最大），如图中next-1和next-2分别指示的位置；
+  - 如果当前的方向是reverse，则需要把除current外的所有迭代器移动到key后面的一个位置，确保current指向的是当前所有迭代器中key最小值的位置，并修改方向为forward，接下来的步骤同上；
+ 3. 求prev：
+  - 假设当前的方向是forward，则需要把除current外的所有迭代器移动到key前面的一个位置，确保current指向的是当前所有迭代器中key最大值的位置，并修改为reverse，所以iter\_2根据key 2|19|1 seek到3|16|1，然后iter\_2取prev得null，iter\_3 找seek失败，因为没有>= 2|19|1的key，所以iter\_3移动到最后2|12|1的位置，iter\_4 seek到3|11|1取prev得null，iter\_5 seek到4|7|1取prev得null；
+  - 在上面得到的2|19|1，null，2|12|1，null，null（null被认为是最小）中找key最大的，即为2|19|1，移动iter\_1到前一个位置1|20|0，在1|20|0和2|12|1取最大值，即2|12|1；继续求prev：移动current到前一个位置2|13|1，在1|20|0和2|13|1取最大值，即2|13|1，如图中prev-1和prev-2指示的位置；
+  - 如果当前的方向是reverse，则current向后移动一个位置，然后在所有迭代器中找key最大的；
+![合并迭代器](../resources/images/understanding_merge_iter.png)
+
+2. DBIter遍历过程
+ 1. DBIter包含了一个MergingIterator，因此可以看成一个已经有序的遍历，DBIter需要做一些版本相关的处理，假设当前处于current 指向5|5|1位置，方向为forward；
+ 2. next: 方向为forward, 首先next到5|4|0, 由于这个数据的type是delete, 跳过所有user_key为5的节点，到6|12|1，该entry的type不是delete，即为next；如果当前是reverse，则检查当前迭代器是否有效，无效则把迭代器移到第一个key的位置，否则移动下一个，接下来流程同一前面；
+ 3. prev: 方向为reverse，首先prev到3|7|1，保存key值3，一直向前找到key值3的开头3|8|0，由于这个数据的type是delete，继续向前，key 2为delete也跳过，找到2|13|1，即为prev；如果当前forward，则一直取prev直到key发生变化，然后设置为reverse，接下来流程同前面，如果取prev过程中发现迭代器失效，则直接返回；**TODO**
+![DBIter迭代器](../resources/images/understanding_db_iter.png)
+
+3. LowLevelScan遍历过程
 
 ## tablet 写数据流程
 1. 预处理待写的数据，生成由TabletIO到index的映射；
@@ -169,7 +198,10 @@ tera 是一个类似bigtable，hbase的NoSQL系统，所以可以借鉴这些系
  - 客户端可以在读请求里指定一致性的要求：STRONG或TIMELINE，STRONG是hbase默认的行为读写都到主ts上，如果是TIMELINE，则sdk先请求主ts，如果超过阈值（默认10毫秒）没有返回，则向所有的从ts发送读请求，第一个响应结果作为最终的值；
  - sdk提供Result.isStale()接口，表示结果是否来自主ts，即值为false，则是来自主ts的，数据肯定是最新的；
 - facebook开发HydraBase进一步提供高可用，99.99%提升到99.999%，[facebook官方blog](https://code.facebook.com/posts/321111638043166/hydrabase-the-evolution-of-hbase-facebook/)；
- - 解决跨机架、跨机房的容灾；
- - 基于RAFT实现副本的一致性；
+ - 项目的目标是缩短ts节点挂掉后，tablet的恢复时间，支持跨机架、跨机房的容灾；
+ - 解决上面问题，没有采用master-slave的原因：（1）这种模式是基于集群为单位的故障转移（failover），意味着机器利用率不高；（2）在转移期间会导致服务中断；（3）如果集群是异步复制的，则有可能会导致数据丢失；
+ - 一个tablet由若干个ts管理，这些ts形成一个quorum，每个quorum有一个ts负责处理客户端的读写请求；
+ - 在一个含2F+1个节点的quorum，最多允许F个节点出现故障。quorum同步更新WAL，但只要绝大多数ts完成WAL的更新就能保证一致性；
+ - quorum的成员要么是active，要么witness模式，active模式的成员会写数据到HDFS，并且会执行数据持久化和compaction。witness成员只会参与复制WAL，但是当leader ts故障时winness可以升级了leader；
 
 另外，mongodb是近年比较流行的NoSQL系统，其功能越来越强大！在最新3.2版增加了内存存储引擎、数据加密、支持与第三方BI连接，[mongodb新功能介绍](https://www.mongodb.com/mongodb-3.2)
