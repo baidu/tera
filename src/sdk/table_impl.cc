@@ -273,13 +273,6 @@ bool TableImpl::Get(const std::string& row_key, const std::string& family,
 ResultStream* TableImpl::Scan(const ScanDescriptor& desc, ErrorCode* err) {
     ScanDescImpl * impl = desc.GetImpl();
     impl->SetTableSchema(_table_schema);
-    if (impl->GetFilterString() != "") {
-        MutexLock lock(&_table_meta_mutex);
-        if (!impl->ParseFilterString()) {
-            // fail to parse filter string
-            return NULL;
-        }
-    }
     ResultStream * results = NULL;
     if (desc.IsAsync() && (_table_schema.raw_key() != GeneralKv)) {
         VLOG(6) << "activate async-scan";

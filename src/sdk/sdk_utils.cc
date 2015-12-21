@@ -843,44 +843,6 @@ bool ParseTableSchemaFile(const string& file, TableDescriptor* table_desc) {
     return false;
 }
 
-bool ParseScanSchema(const string& schema, ScanDescriptor* desc) {
-    std::vector<string> cfs;
-    string schema_in;
-    string cf, col;
-    string::size_type pos;
-    if ((pos = schema.find("SELECT ")) != 0) {
-        LOG(ERROR) << "illegal scan expression: should be begin with \"SELECT\"";
-        return false;
-    }
-    if ((pos = schema.find(" WHERE ")) != string::npos) {
-        schema_in = schema.substr(7, pos - 7);
-        string filter_str = schema.substr(pos + 7, schema.size() - pos - 7);
-        desc->SetFilterString(filter_str);
-    } else {
-        schema_in = schema.substr(7);
-    }
-
-    schema_in = RemoveInvisibleChar(schema_in);
-    if (schema_in == "*") {
-        return true;
-    }
-    SplitString(schema_in, ",", &cfs);
-    for (size_t i = 0; i < cfs.size(); ++i) {
-        if ((pos = cfs[i].find(":", 0)) == string::npos) {
-            // add columnfamily
-            desc->AddColumnFamily(cfs[i]);
-            VLOG(10) << "add cf: " << cfs[i] << " to scan descriptor";
-        } else {
-            // add column
-            cf = cfs[i].substr(0, pos);
-            col = cfs[i].substr(pos + 1);
-            desc->AddColumn(cf, col);
-            VLOG(10) << "add column: " << cf << ":" << col << " to scan descriptor";
-        }
-    }
-    return true;
-}
-
 bool BuildSchema(TableDescriptor* table_desc, string* schema) {
     // build schema string from table descriptor
     if (schema == NULL) {
