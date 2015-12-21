@@ -1039,9 +1039,10 @@ int32_t ShowAllTables(Client* client, bool is_x, bool show_all, ErrorCode* err) 
                        "rmax", "rspeed", "write", "wmax", "wspeed",
                        "scan", "smax", "sspeed");
     } else {
-        cols = 6;
+        cols = 7;
         printer.Reset(cols,
-                       " ", "tablename", "status", "size", "lg_size", "tablet");
+                       " ", "tablename", "status", "size", "lg_size",
+                       "tablet", "notready");
     }
     for (int32_t table_no = 0; table_no < table_list.meta_size(); ++table_no) {
         std::string tablename = table_list.meta(table_no).table_name();
@@ -1064,6 +1065,12 @@ int32_t ShowAllTables(Client* client, bool is_x, bool show_all, ErrorCode* err) 
             }
         }
         lg_size_str += "";
+        int64_t notready;
+        if (status == kTableDisable) {
+            notready = 0;
+        } else {
+            notready = counter.notready_num();
+        }
         if (is_x) {
             printer.AddRow(cols,
                            NumberToString(table_no).data(),
@@ -1072,7 +1079,7 @@ int32_t ShowAllTables(Client* client, bool is_x, bool show_all, ErrorCode* err) 
                            utils::ConvertByteToString(counter.size()).data(),
                            lg_size_str.data(),
                            NumberToString(counter.tablet_num()).data(),
-                           NumberToString(counter.notready_num()).data(),
+                           NumberToString(notready).data(),
                            utils::ConvertByteToString(counter.lread()).data(),
                            utils::ConvertByteToString(counter.read_rows()).data(),
                            utils::ConvertByteToString(counter.read_max()).data(),
@@ -1090,7 +1097,8 @@ int32_t ShowAllTables(Client* client, bool is_x, bool show_all, ErrorCode* err) 
                            StatusCodeToString(status).data(),
                            utils::ConvertByteToString(counter.size()).data(),
                            lg_size_str.data(),
-                           NumberToString(counter.tablet_num()).data());
+                           NumberToString(counter.tablet_num()).data(),
+                           NumberToString(notready).data());
         }
     }
     printer.Print();
