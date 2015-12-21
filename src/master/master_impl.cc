@@ -1660,10 +1660,11 @@ void MasterImpl::ScheduleQueryTabletNode() {
     if (schedule_delay <= 0) {
         schedule_delay = 1;
     } else if (schedule_delay > FLAGS_tera_master_query_tabletnode_period) {
-        schedule_delay = FLAGS_tera_master_query_tabletnode_period;
     }
 
     LOG(INFO) << "schedule query tabletnodes after " << schedule_delay << "ms.";
+
+    schedule_delay = FLAGS_tera_master_query_tabletnode_period;
 
     ThreadPool::Task task =
         boost::bind(&MasterImpl::QueryTabletNode, this);
@@ -3286,6 +3287,7 @@ void MasterImpl::QueryTabletNodeAsync(std::string addr, int32_t timeout,
 void MasterImpl::QueryTabletNodeCallback(std::string addr, QueryRequest* request,
                                          QueryResponse* response, bool failed,
                                          int error_code) {
+    int64_t start_query = get_micros();
     TabletNodePtr node;
     if (!m_tabletnode_manager->FindTabletNode(addr, &node)) {
         LOG(WARNING) << "fail to query: server down, id: "
@@ -3338,10 +3340,19 @@ void MasterImpl::QueryTabletNodeCallback(std::string addr, QueryRequest* request
             } else if (m_tablet_manager->FindTablet(table_name, key_start, &tablet)
                 && tablet->Verify(table_name, key_start, key_end, meta.path(),
                                   meta.server_addr())) {
-                tablet->UpdateSize(meta);
-                tablet->SetCounter(counter);
-                tablet->SetCompactStatus(meta.compact_status());
-                ClearUnusedSnapshots(tablet, meta);
+                if (tablet->GetTable()->GetStatus() == kTableDisable) {
+                    tablet->SetStatus(kTableUnLoading);
+                    UnloadClosure* done =
+                        NewClosure(this, &MasterImpl::UnloadTabletCallback, tablet,
+                                   FLAGS_tera_master_impl_retry_times);
+                    UnloadTabletAsync(tablet, done);
+                    LOG(INFO) << "Unload disable tablet: " << tablet->GetPath();
+                } else {
+                    tablet->UpdateSize(meta);
+                    tablet->SetCounter(counter);
+                    tablet->SetCompactStatus(meta.compact_status());
+                    ClearUnusedSnapshots(tablet, meta);
+                }
                 VLOG(30) << "[query] " << tablet;
             } else {
                 LOG(WARNING) << "fail to match tablet: " << meta.table_name()
@@ -3352,6 +3363,9 @@ void MasterImpl::QueryTabletNodeCallback(std::string addr, QueryRequest* request
                     << ", addr: " << meta.server_addr();
             }
         }
+        LOG(INFO) << "query tabletnode finish " << addr
+            << ", id " << m_query_tabletnode_timer_id
+            << ", umeta cost " << (get_micros() - start_query) / 1000 << "ms.";
 
         // update tabletnode info
         timeval update_time;
@@ -3402,6 +3416,9 @@ void MasterImpl::QueryTabletNodeCallback(std::string addr, QueryRequest* request
         if (FLAGS_tera_master_stat_table_enabled && m_stat_table) {
             DumpStatToTable(state);
         }
+        LOG(INFO) << "query tabletnode finish " << addr
+            << ", id " << m_query_tabletnode_timer_id
+            << ", unode cost " << (get_micros() - start_query) / 1000 << "ms.";
         VLOG(20) << "query tabletnode [" << addr << "], m_status: "
             << StatusCodeToString(state.m_report_status);
     }
@@ -3433,6 +3450,9 @@ void MasterImpl::QueryTabletNodeCallback(std::string addr, QueryRequest* request
 
     delete request;
     delete response;
+    LOG(INFO) << "query tabletnode finish " << addr
+        << ", id " << m_query_tabletnode_timer_id
+        << ", callback cost " << (get_micros() - start_query) / 1000 << "ms.";
 }
 
 void MasterImpl::CollectTabletInfoCallback(std::string addr,
@@ -3635,6 +3655,11 @@ void MasterImpl::TryLoadTablet(TabletPtr tablet, std::string server_addr) {
     if (table_name == FLAGS_tera_master_meta_table_name) {
         CHECK(tablet->GetPath() == FLAGS_tera_master_meta_table_path);
         m_zk_adapter->UpdateRootTabletNode("");
+    }
+
+    if (tablet->GetTable()->GetStatus() == kTableDisable) {
+        LOG(INFO) << "LoadTablet skip disable tablet: " << tablet->GetPath();
+        return;
     }
 
     if (!tablet->GetExpectServerAddr().empty()) {

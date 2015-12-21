@@ -962,6 +962,11 @@ void TabletManager::FindTablet(const std::string& server_addr,
     for (; it != m_all_tables.end(); ++it) {
         Table& table = *it->second;
         table.m_mutex.Lock();
+        if (table.m_status == kTableDisable) {
+            LOG(INFO) << "FindTablet skip disable table: " << table.m_name;
+            table.m_mutex.Unlock();
+            continue;
+        }
         Table::TabletList::iterator it2 = table.m_tablets_list.begin();
         for (; it2 != table.m_tablets_list.end(); ++it2) {
             TabletPtr tablet = it2->second;
