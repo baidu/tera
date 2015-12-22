@@ -963,7 +963,7 @@ void TabletManager::FindTablet(const std::string& server_addr,
         Table& table = *it->second;
         table.m_mutex.Lock();
         if (table.m_status == kTableDisable) {
-            LOG(INFO) << "FindTablet skip disable table: " << table.m_name;
+            VLOG(10) << "FindTablet skip disable table: " << table.m_name;
             table.m_mutex.Unlock();
             continue;
         }

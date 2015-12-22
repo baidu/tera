@@ -553,7 +553,6 @@ private:
     Counter m_this_sequence_id;
 
     bool m_query_enabled;
-    int64_t m_last_schedule_query_time;
     int64_t m_start_query_time;
     int64_t m_query_tabletnode_timer_id;
     Counter m_query_pending_count;
