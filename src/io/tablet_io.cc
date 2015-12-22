@@ -820,6 +820,7 @@ inline bool TabletIO::LowLevelScan(const std::string& start_tera_key,
     } else {
         if (now_time > time_out && next_start_point) {
             next_start_point->CopyFrom(next_start_kv_pair);
+            SetStatusCode(kTabletTimeout, status);
         }
         *is_complete = false;
     }
