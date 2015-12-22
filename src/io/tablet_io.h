@@ -141,7 +141,7 @@ public:
                        Counter* done_counter, WriteRpcTimer* timer = NULL,
                        StatusCode* status = NULL);
 
-    virtual bool Scan(const ScanOption& option, KeyValueList* kv_list,
+    virtual bool Scan(const ScanOption& option, KeyValueList* kv_list, KeyValuePair* next_start_point,
                       bool* complete, StatusCode* status = NULL);
 
     virtual bool ScanRows(const ScanTabletRequest* request,

@@ -41,13 +41,14 @@ message Rollback {
 message ScanOption {
     optional KeyRange key_range = 1;
     optional int32 max_version = 2;
-    optional int64 size_limit = 3; 
+    optional int64 size_limit = 3;
     optional bytes start = 4;
     optional bytes end = 5;
     optional string start_family = 6;
     optional bytes start_qualifier = 7;
     optional uint64 snapshot_id = 8;
     optional bool round_down = 9;
+    optional int64 timeout = 10;
 }
 
 message TabletCounter {
