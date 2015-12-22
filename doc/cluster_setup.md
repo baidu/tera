@@ -25,6 +25,8 @@ Tera集群搭建
 2. 配置hdfs
   1. 创建一个hdfs目录作为tera的数据根目录
   2. 修改目录属性，对tera集群所有节点开放读写权限
+3. 让Tera找到hdfs
+  1. Tera使用libhdfs.so与hdfs通讯，所以要将hadoop客户端里libhdfs.so的路径配置在环境变量LD_LIBRARY_PATH中，让tera在启动时能找到它。
 
 ### 搭建步骤
 1. 构建tera

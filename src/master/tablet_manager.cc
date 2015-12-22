@@ -99,6 +99,19 @@ int64_t Tablet::GetDataSize() {
     return m_meta.size();
 }
 
+void Tablet::GetDataSize(int64_t* size, std::vector<int64_t>* lg_size) {
+    MutexLock lock(&m_mutex);
+    if (size) {
+        *size = m_meta.size();
+    }
+    if (lg_size) {
+        lg_size->clear();
+        for (int64_t i = 0; i < m_meta.lg_size_size(); ++i) {
+            lg_size->push_back(m_meta.lg_size(i));
+        }
+    }
+}
+
 const std::string& Tablet::GetKeyStart() {
     MutexLock lock(&m_mutex);
     return m_meta.key_range().key_start();
@@ -608,6 +621,11 @@ void Table::SetSchema(const TableSchema& schema) {
     m_schema.CopyFrom(schema);
 }
 
+const TableCounter& Table::GetCounter() {
+    MutexLock lock(&m_mutex);
+    return m_counter;
+}
+
 int32_t Table::AddSnapshot(uint64_t snapshot) {
     MutexLock lock(&m_mutex);
     m_snapshot_list.push_back(snapshot);
@@ -721,6 +739,85 @@ bool Table::GetTabletsForGc(std::set<uint64_t>* live_tablets,
         return false;
     }
     return true;
+}
+
+void Table::RefreshCounter() {
+    MutexLock lock(&m_mutex);
+    int64_t size = 0;
+    int64_t tablet_num = 0;
+    int64_t notready = 0;
+    int64_t lread = 0;
+    int64_t read = 0;
+    int64_t rmax = 0;
+    int64_t rspeed = 0;
+    int64_t write = 0;
+    int64_t wmax = 0;
+    int64_t wspeed = 0;
+    int64_t scan = 0;
+    int64_t smax = 0;
+    int64_t sspeed = 0;
+    size_t lg_num = 0;
+    std::vector<int64_t> lg_size;
+
+    std::vector<TabletPtr> tablet_list;
+    Table::TabletList::iterator it = m_tablets_list.begin();
+    for (; it != m_tablets_list.end(); ++it) {
+        tablet_num++;
+        TabletPtr tablet = it->second;
+        if (tablet->GetStatus() != kTableReady) {
+            notready++;
+        }
+        int64_t size_tmp;
+        std::vector<int64_t> lg_size_tmp;
+        tablet->GetDataSize(&size_tmp, &lg_size_tmp);
+
+        size += size_tmp;
+        if (lg_num == 0) {
+            lg_num = lg_size_tmp.size();
+            lg_size.resize(lg_num, 0);
+        }
+        for (size_t l = 0; l < lg_num; ++l) {
+            if (lg_size_tmp.size() > l) {
+                lg_size[l] += lg_size_tmp[l];
+            }
+        }
+
+        const TabletCounter& counter = tablet->GetCounter();
+        lread += counter.low_read_cell();
+        read += counter.read_rows();
+        if (counter.read_rows() > rmax) {
+            rmax = counter.read_rows();
+        }
+        rspeed += counter.read_size();
+        write += counter.write_rows();
+        if (counter.write_rows() > wmax) {
+            wmax = counter.write_rows();
+        }
+        wspeed += counter.write_size();
+        scan += counter.scan_rows();
+        if (counter.scan_rows() > smax) {
+            smax = counter.scan_rows();
+        }
+        sspeed += counter.scan_size();
+    }
+
+    m_counter.set_size(size);
+    m_counter.set_tablet_num(tablet_num);
+    m_counter.set_notready_num(notready);
+    m_counter.set_lread(lread);
+    m_counter.set_read_rows(read);
+    m_counter.set_read_max(rmax);
+    m_counter.set_read_size(rspeed);
+    m_counter.set_write_rows(write);
+    m_counter.set_write_max(wmax);
+    m_counter.set_write_size(wspeed);
+    m_counter.set_scan_rows(scan);
+    m_counter.set_scan_max(smax);
+    m_counter.set_scan_size(sspeed);
+    m_counter.clear_lg_size();
+    for (size_t l = 0; l < lg_num; ++l) {
+        m_counter.add_lg_size(lg_size[l]);
+    }
 }
 
 TabletManager::TabletManager(Counter* sequence_id,

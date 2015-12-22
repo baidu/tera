@@ -12,7 +12,6 @@ import json
 
 from conf import const
 
-
 def print_debug_msg(sid=0, msg=""):
     """
     provide general print interface
@@ -133,6 +132,34 @@ def createbyfile(schema, deli=''):
     print ''.join(ret.stderr.readlines())
 
 
+def rowread_table(table_name, file_path):
+    allv = 'scan'
+    
+    tmpfile = 'tmp.file'
+    scan_cmd = '{teracli} {op} {table_name} "" "" > {out}'.format(
+        teracli=const.teracli_binary, op=allv, table_name=table_name, out=tmpfile)
+    print scan_cmd
+    ret = subprocess.Popen(scan_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, shell=True)
+    ret.communicate()
+
+    tmpfile2 = 'tmp.file2'
+    awk_args = ''
+    awk_args += """-F ':' '{print $1}'"""
+    awk_cmd = 'awk {args} {out} |sort -u > {out1}'.format(
+            args=awk_args, out=tmpfile, out1=tmpfile2)
+    print awk_cmd
+    ret = subprocess.Popen(awk_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, shell=True)
+    ret.communicate()
+    
+    rowread_cmd = 'while read line; do {teracli} get {table_name} $line; done < {out1} > {output}'.format(
+            teracli=const.teracli_binary, table_name=table_name, out1=tmpfile2, output=file_path)
+    ret = subprocess.Popen(rowread_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, shell=True)
+    ret.communicate()
+
+    #ret = subprocess.Popen('rm -rf tmp.file tmp.file2', stdout=subprocess.PIPE, stderr=subprocess.PIPE, shell=True)
+    #ret.communicate()
+
+
 def run_tera_mark(file_path, op, table_name, random, value_size, num, key_size, cf='', key_seed=1, value_seed=1):
     """
     This function provide means to write data into Tera and dump a copy into a specified file at the same time.
@@ -206,12 +233,13 @@ def run_tera_mark(file_path, op, table_name, random, value_size, num, key_size, 
         print ''.join(ret.stderr.readlines())
 
 
-def scan_table(table_name, file_path, allversion, snapshot=0):
+def scan_table(table_name, file_path, allversion, snapshot=0, is_async=False):
     """
     This function scans the table and write the output into file_path
     :param table_name: table name
     :param file_path: write scan output into file_path
     :param allversion: [True | False]
+    :param is_async: True for batch scan
     """
 
     allv = ''
@@ -219,13 +247,18 @@ def scan_table(table_name, file_path, allversion, snapshot=0):
         allv += 'scanallv'
     else:
         allv += 'scan'
-
+    
+    if is_async is True:
+        async_flag = '--tera_sdk_scan_async_enabled=true --v=30 --tera_client_scan_async_enabled=true'
+    else:
+        async_flag = '--tera_sdk_scan_async_enabled=false'
+        
     snapshot_args = ''
     if snapshot != 0:
         snapshot_args += '--snapshot={snapshot}'.format(snapshot=snapshot)
-
-    scan_cmd = '{teracli} {op} {table_name} "" "" {snapshot} > {out}'.format(
-        teracli=const.teracli_binary, op=allv, table_name=table_name, snapshot=snapshot_args, out=file_path)
+    
+    scan_cmd = '{teracli} {flags} {op} {table_name} "" "" {snapshot} > {out}'.format(
+        teracli=const.teracli_binary, flags=async_flag, op=allv, table_name=table_name, snapshot=snapshot_args, out=file_path)
     print scan_cmd
     ret = subprocess.Popen(scan_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, shell=True)
     print ''.join(ret.stdout.readlines())

@@ -266,7 +266,7 @@ TEST_F(TabletIOTest, Compact) {
     TabletIO new_tablet(new_key_start, new_key_end);
     EXPECT_TRUE(new_tablet.Load(TableSchema(), tablet_path, std::vector<uint64_t>(),
                             empty_snaphsots_, empty_rollback_, NULL, NULL, NULL, &status));
-    EXPECT_TRUE(new_tablet.Compact(&status));
+    EXPECT_TRUE(new_tablet.Compact(0, &status));
 
     uint64_t new_table_size = 0;
     new_tablet.GetDataSize(&new_table_size, NULL, &status);

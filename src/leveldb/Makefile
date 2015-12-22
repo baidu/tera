@@ -51,7 +51,8 @@ TESTS = \
 	table_test \
 	version_edit_test \
 	version_set_test \
-	write_batch_test
+	write_batch_test \
+	raw_key_operator_test
 
 PROGRAMS = db_bench tera_bench leveldbutil db_import
 BENCHMARKS = db_bench_sqlite3 db_bench_tree_db
@@ -180,6 +181,9 @@ version_set_test: db/version_set_test.o $(LIBOBJECTS) $(TESTHARNESS)
 
 write_batch_test: db/write_batch_test.o $(LIBOBJECTS) $(TESTHARNESS)
 	$(CXX) db/write_batch_test.o $(LIBOBJECTS) $(TESTHARNESS) -o $@ $(LIBS) $(LDFLAGS)
+
+raw_key_operator_test: util/raw_key_operator_test.o $(LIBOBJECTS) $(TESTHARNESS)
+	$(CXX) util/raw_key_operator_test.o $(LIBOBJECTS) $(TESTHARNESS) -o $@ $(LIBS) $(LDFLAGS)
 
 $(MEMENVLIBRARY) : $(MEMENVOBJECTS)
 	rm -f $@

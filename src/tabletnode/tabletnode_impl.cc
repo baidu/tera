@@ -29,6 +29,7 @@
 #include "tabletnode/tablet_manager.h"
 #include "tabletnode/tabletnode_zk_adapter.h"
 #include "types.h"
+#include "utils/config_utils.h"
 #include "utils/counter.h"
 #include "utils/string_util.h"
 #include "utils/timer.h"
@@ -80,6 +81,8 @@ DECLARE_bool(tera_ins_enabled);
 
 DECLARE_bool(tera_io_cache_path_vanish_allowed);
 DECLARE_int64(tera_tabletnode_tcm_cache_size);
+
+DECLARE_string(flagfile);
 
 extern tera::Counter range_error_counter;
 extern tera::Counter rand_read_delay;
@@ -364,7 +367,11 @@ void TabletNodeImpl::CompactTablet(const CompactTabletRequest* request,
         << " [" << DebugString(tablet_io->GetStartKey())
         << ", " << DebugString(tablet_io->GetEndKey()) << "]";
 
-    tablet_io->Compact(&status);
+    if (request->has_lg_no() && request->lg_no() >= 0) {
+        tablet_io->Compact(request->lg_no(), &status);
+    } else {
+        tablet_io->Compact(-1, &status);
+    }
     CompactStatus compact_status = tablet_io->GetCompactStatus();
     response->set_status(status);
     response->set_compact_status(compact_status);
@@ -633,6 +640,24 @@ void TabletNodeImpl::Rollback(const SnapshotRollbackRequest* request, SnapshotRo
             << ", " << DebugString(tablet_io->GetEndKey()) << "]";
     }
     tablet_io->DecRef();
+    done->Run();
+}
+
+void TabletNodeImpl::CmdCtrl(const TsCmdCtrlRequest* request,
+                             TsCmdCtrlResponse* response,
+                             google::protobuf::Closure* done) {
+    response->set_sequence_id(request->sequence_id());
+    if (request->command() == "reload config") {
+        if (utils::LoadFlagFile(FLAGS_flagfile)) {
+            LOG(INFO) << "[reload config] done";
+            response->set_status(kTabletNodeOk);
+        } else {
+            LOG(ERROR) << "[reload config] config file not found";
+            response->set_status(kInvalidArgument);
+        }
+    } else {
+        response->set_status(kInvalidArgument);
+    }
     done->Run();
 }
 
