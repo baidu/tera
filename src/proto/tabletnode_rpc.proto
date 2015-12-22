@@ -93,6 +93,7 @@ message CompactTabletRequest {
     required uint64 sequence_id = 1;
     required string tablet_name = 2;
     required KeyRange key_range = 3;
+    optional int32  lg_no = 4;
 }
 
 message CompactTabletResponse {
