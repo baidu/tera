@@ -1087,10 +1087,12 @@ int32_t ShowAllTables(Client* client, bool is_x, bool show_all, ErrorCode* err) 
         for (int l = 0; l < counter.lg_size_size(); ++l) {
             lg_size_str += utils::ConvertByteToString(counter.lg_size(l));
             if (l < counter.lg_size_size() - 1) {
-                lg_size_str += " ";
+                lg_size_str += ",";
             }
         }
-        lg_size_str += "";
+        if (lg_size_str.empty()) {
+            lg_size_str = "-";
+        }
         int64_t notready;
         if (status == kTableDisable) {
             notready = 0;
