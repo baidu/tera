@@ -275,6 +275,8 @@ class VersionSet {
   };
   const char* LevelSummary(LevelSummaryStorage* scratch) const;
 
+  double CompactionScore();
+
  private:
   friend class Compaction;
   friend class Version;
