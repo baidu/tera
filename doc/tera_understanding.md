@@ -36,7 +36,7 @@ tera开发者黄俊辉的串讲文档
  1. 管理一系列tablet，一般有10~1000个tablet；
  2. 处理client发过来的tablet读写请求；
 4. client
- 1. 通过zookeeper上的meta信息，找到meta table所有的TS地址；
+ 1. 通过zookeeper上root_table节点，找到meta table所在的TS地址；
  2. 读写请求直接与TS交互；
  3. 对表的创建、修改、删除，对快照的操作直接与master交互；
 5. 分布式文件系统
@@ -75,7 +75,7 @@ tera开发者黄俊辉的串讲文档
  2. MasterImpl::CollectAllTabletInfo，向所有在线的ts发送query请求，获取已经加载的tabletlist列表;
  3. MasterImpl::RestoreMetaTablet，遍历tabletlist，如果meta表被多个ts加载或加载不完全，则要求所有已经加载meta表的ts卸载。如果卸载失败，则强制踢出该ts。然后，选一个管理数据量最小的ts加载meta表，保存meta表的地址meta\_tablet\_addr。如果前面已经正确加载了meta表，则直接保存meta表的地址meta\_tablet\_addr；如果开启从本地文件恢复meta表的标记，则调用LoadMetaTableFromFile把meta表的数据加载到本地内存，同时，要求已经加载meta表的ts清空meta数据，然后用本地内存的数据同步到meta表里，操作结束则返回; 如果没有开启恢复meta表，则调用LoadMetaTable把meta表的数据同步到master的内存;
  4. MasterImpl::LoadMetaTable，通过向ts发送scan请求扫描meta表，如果row的首字符是'~'，则是用户相关的元信息执行UserManager::LoadUserMeta，如果是'@'，则是表格相关的元信息执行TabletManager::LoadTableMeta，如果是>@，则是tablet相关的元信息执行TabletManager::LoadTabletMeta;
- 5. 在zk上更新meta表所有ts的地址;
+ 5. 更新zk上root_table节点的值，即meta表所在ts的地址;
  6. MasterImpl::RestoreUserTablet，遍历所有tablets，如果没有加载，则找一个ts加载；如果能正常工作的ts占比小于0.9阈值时，则master进入安全模式，否则启动定时任务:QueryTablet, TabletNodeGc, LoadBalance，并进入服务状态;
 2. 注册RPC服务，并启动。
 
