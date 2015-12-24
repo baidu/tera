@@ -1046,6 +1046,16 @@ int32_t ShowAllTables(Client* client, bool is_x, bool show_all, ErrorCode* err) 
     }
 
     TPrinter printer;
+    int64_t sum_size = 0;
+    int64_t sum_tablet = 0;
+    int64_t sum_notready = 0;
+    int64_t sum_lread = 0;
+    int64_t sum_read = 0;
+    int64_t sum_rspeed = 0;
+    int64_t sum_write = 0;
+    int64_t sum_wspeed = 0;
+    int64_t sum_scan = 0;
+    int64_t sum_sspeed = 0;
     int cols;
     if (is_x) {
         cols = 17;
@@ -1077,16 +1087,28 @@ int32_t ShowAllTables(Client* client, bool is_x, bool show_all, ErrorCode* err) 
         for (int l = 0; l < counter.lg_size_size(); ++l) {
             lg_size_str += utils::ConvertByteToString(counter.lg_size(l));
             if (l < counter.lg_size_size() - 1) {
-                lg_size_str += " ";
+                lg_size_str += ",";
             }
         }
-        lg_size_str += "";
+        if (lg_size_str.empty()) {
+            lg_size_str = "-";
+        }
         int64_t notready;
         if (status == kTableDisable) {
             notready = 0;
         } else {
             notready = counter.notready_num();
         }
+        sum_size += counter.size();
+        sum_tablet += counter.tablet_num();
+        sum_notready += notready;
+        sum_lread += counter.lread();
+        sum_read += counter.read_rows();
+        sum_rspeed += counter.read_size();
+        sum_write += counter.write_rows();
+        sum_wspeed += counter.write_size();
+        sum_scan += counter.scan_rows();
+        sum_sspeed += counter.scan_size();
         if (is_x) {
             printer.AddRow(cols,
                            NumberToString(table_no).data(),
@@ -1116,6 +1138,35 @@ int32_t ShowAllTables(Client* client, bool is_x, bool show_all, ErrorCode* err) 
                            NumberToString(counter.tablet_num()).data(),
                            NumberToString(notready).data());
         }
+    }
+    if (is_x) {
+        printer.AddRow(cols,
+                       "-",
+                       "total",
+                       "-",
+                       utils::ConvertByteToString(sum_size).data(),
+                       "-",
+                       NumberToString(sum_tablet).data(),
+                       NumberToString(sum_notready).data(),
+                       utils::ConvertByteToString(sum_lread).data(),
+                       utils::ConvertByteToString(sum_read).data(),
+                       "-",
+                       (utils::ConvertByteToString(sum_rspeed) + "B/s").data(),
+                       utils::ConvertByteToString(sum_write).data(),
+                       "-",
+                       (utils::ConvertByteToString(sum_wspeed) + "B/s").data(),
+                       utils::ConvertByteToString(sum_scan).data(),
+                       "-",
+                       (utils::ConvertByteToString(sum_sspeed) + "B/s").data());
+    } else {
+        printer.AddRow(cols,
+                       "-",
+                       "total",
+                       "-",
+                       utils::ConvertByteToString(sum_size).data(),
+                       "-",
+                       NumberToString(sum_tablet).data(),
+                       NumberToString(sum_notready).data());
     }
     printer.Print();
     std::cout << std::endl;
