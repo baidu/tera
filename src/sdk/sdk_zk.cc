@@ -56,8 +56,11 @@ std::string ClusterFinder::MasterAddr(bool update) {
         // ins
         std::string master_node =
             FLAGS_tera_ins_root_path + kMasterNodePath;
-        if (!zk::InsUtil::ReadNode(master_node, &master_addr)) {
-            LOG(FATAL) << "fail to read ins master node: " << master_node;
+        if (update || _master_addr == "") {
+            if (!zk::InsUtil::ReadNode(master_node, &master_addr)) {
+                LOG(WARNING) << "fail to read ins master node: " << master_node;
+                master_addr = "";
+            }
         }
     } else if (!FLAGS_tera_zk_enabled) {
         // use local file system as a fake zk
@@ -83,8 +86,11 @@ std::string ClusterFinder::RootTableAddr(bool update) {
     std::string root_table_addr;
     if (FLAGS_tera_ins_enabled) {
         std::string root_node = FLAGS_tera_ins_root_path + kRootTabletNodePath;
-        if (!zk::InsUtil::ReadNode(root_node, &root_table_addr)) {
-            LOG(FATAL) << "fail to read ins meta node: " << root_node;
+        if (update || _root_table_addr == "") {
+            if (!zk::InsUtil::ReadNode(root_node, &root_table_addr)) {
+                root_table_addr = "";
+                LOG(WARNING) << "fail to read ins meta node: " << root_node;
+            }
         }
     } else if (!FLAGS_tera_zk_enabled) {
         // use local file system as a fake zk
