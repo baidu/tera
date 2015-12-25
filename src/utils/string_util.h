@@ -18,6 +18,7 @@ namespace tera {
     bool IsValidGroupName(const std::string& name);
     bool IsValidUserName(const std::string& name);
 
+    bool IsValidColumnFamilyName(const std::string& str);
 } // namespace tera
 
 #endif  // TERA_UTIL_STRING_UTIL_H_

@@ -127,10 +127,7 @@ bool ClientImpl::CheckReturnValue(StatusCode status, std::string& reason, ErrorC
 bool ClientImpl::CreateTable(const TableDescriptor& desc,
                              const std::vector<string>& tablet_delim,
                              ErrorCode* err) {
-    if (!IsValidTableName(desc.TableName())) {
-        if (err != NULL) {
-            err->SetFailed(ErrorCode::kBadParam, " invalid tablename ");
-        }
+    if (!CheckTableDescrptor(desc, err)) {
         return false;
     }
     master::MasterClient master_client(_cluster->MasterAddr());

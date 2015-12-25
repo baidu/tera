@@ -186,6 +186,7 @@ void UsageMore(const std::string& prg_name) {
                                                                             \n\
        version\n\n";
 }
+
 int32_t CreateOp(Client* client, int32_t argc, char** argv, ErrorCode* err) {
     if (argc < 3) {
         Usage(argv[0]);
@@ -195,7 +196,7 @@ int32_t CreateOp(Client* client, int32_t argc, char** argv, ErrorCode* err) {
     TableDescriptor table_desc;
     std::vector<std::string> delimiters;
     std::string schema = argv[2];
-    if (!ParseTableSchema(schema, &table_desc)) {
+    if (!ParseTableSchema(schema, &table_desc, err)) {
         LOG(ERROR) << "fail to parse input table schema.";
         return -1;
     }
@@ -225,7 +226,7 @@ int32_t CreateByFileOp(Client* client, int32_t argc, char** argv, ErrorCode* err
     }
 
     TableDescriptor table_desc;
-    if (!ParseTableSchemaFile(argv[2], &table_desc)) {
+    if (!ParseTableSchemaFile(argv[2], &table_desc, err)) {
         LOG(ERROR) << "fail to parse input table schema.";
         return -1;
     }
@@ -271,7 +272,7 @@ int32_t UpdateOp(Client* client, int32_t argc, char** argv, ErrorCode* err) {
 
     // if try to update lg or cf, need to disable table
     bool is_update_lg_cf = false;
-    if (!UpdateTableDescriptor(schema_tree, table_desc, &is_update_lg_cf )) {
+    if (!UpdateTableDescriptor(schema_tree, table_desc, &is_update_lg_cf, err)) {
         LOG(ERROR) << "[update] update failed";
         return -1;
     }
