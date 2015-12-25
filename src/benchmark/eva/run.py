@@ -22,6 +22,8 @@ common = eva_var.common
 
 def parse_input():
     conf_file = sys.argv[1]
+    if len(sys.argv) == 3:
+        conf.g_web_report = False
     conf_dict = json.load(open(conf_file, 'r'))
     bench_cmd_prefix = './tera_bench --compression_ratio=1 '
     for pre, post in conf_dict.iteritems():
@@ -77,6 +79,9 @@ def parse_input():
             conf.g_test_conf[conf.LG_NUM] = len(post)
         elif pre == conf.STEP:
             conf.g_test_conf[conf.STEP] = post
+        elif pre == 'web_report_type':
+            conf.g_web_report_type = post
+
 
     conf.g_test_conf[conf.ENTRY_SIZE] = conf.g_test_conf[conf.KEY_SIZE] + conf.g_test_conf[conf.VALUE_SIZE]
     conf.g_test_conf[conf.WRITE_SPEED_LIMIT] = int(round(float(conf.g_speed_limit) / conf.g_test_conf[conf.TABLET_NUM] * common.MEGA / conf.g_test_conf[conf.ENTRY_SIZE]))
@@ -99,7 +104,6 @@ def parse_input():
     print '\t%-25s' % 'user data size:', conf.g_datasize
     if common.g_logger is not None:
         common.g_logger.info('running tera_mark: ' + str(conf.g_test_conf))
-
 
 def work():
     try:
@@ -162,26 +166,28 @@ def compute_write_main(total_time):
         common.g_logger.error(traceback.print_exc())
 
     mail = open(common.MAIL_PATH, 'a')
-    desp = 'data_size={datasize} key_size={ks} value_size={vs} lg_number={lg} cf_number={cf} running_time={t}'.format(
+    web = None
+    if conf.g_web_report_type != '' and conf.g_web_report:
+        web = open(common.WEB_PATH, 'a')
+    desp = 'data={datasize} key={ks} value={vs} lg={lg} cf={cf} run_time={t}'.format(
         datasize=conf.g_datasize, ks=get_data_size(conf.g_test_conf[conf.KEY_SIZE]),
         vs=get_data_size(conf.g_test_conf[conf.VALUE_SIZE]), lg=conf.g_test_conf[conf.LG_NUM],
-        cf=conf.g_test_conf[conf.CF_NUM], t=total_time)
+        cf=conf.g_test_conf[conf.CF_NUM], t=total_time, e=str(common.g_force_exit))
     if conf.g_test_conf[conf.MODE] == conf.MODE_SEQ_WRITE or conf.g_test_conf[conf.MODE] == conf.MODE_RAND_WRITE:
-        desp += ' write_speed={ws}/TS*M schema={s}'.format(
+        desp += 'write_speed={ws}/TS*M schema={s}'.format(
             ws=int(conf.g_speed_limit) / int(conf.g_test_conf[conf.TS_NUMBER]),
             s=json.dumps(conf.g_test_conf[conf.SCHEMA], separators=(',', ':')))
     elif conf.g_test_conf[conf.MODE] == conf.MODE_READ:
-        desp += ' write_speed={ws}/TS*M read_speed={rs}/TS*Qps schema={s}'.format(
+        desp += 'write_speed={ws}/TS*M read_speed={rs}/TS*Qps schema={s}'.format(
             ws=int(conf.g_speed_limit) / int(conf.g_test_conf[conf.TS_NUMBER]),
             rs=int(int(conf.g_test_conf[conf.READ_SPEED_LIMIT]) * int(conf.g_test_conf[conf.TABLET_NUM]) /
                    int(conf.g_test_conf[conf.TS_NUMBER])),
             s=json.dumps(conf.g_test_conf[conf.SCHEMA], separators=(',', ':')))
     elif conf.g_test_conf[conf.MODE] == conf.MODE_SCAN:
-        desp += ' write_speed={ws}/TS*M scan_buffer={buffer}/M'.format(
+        desp += 'write_speed={ws}/TS*M scan_buffer={buffer}/M'.format(
             ws=int(conf.g_speed_limit) / int(conf.g_test_conf[conf.TS_NUMBER]),
             buffer=float(conf.g_test_conf[conf.SCAN_BUFFER])/common.MEGA)
-    eva_utils.write_email(mail, desp)
-    mail.close()
+    eva_utils.write_email(mail, web, desp)
 
 
 def run_write_test():
@@ -266,6 +272,7 @@ def run_read_test():
 
 
 def handler(signum, frame):
+    common.g_force_exit = True
     common.g_exit = True
 
 
