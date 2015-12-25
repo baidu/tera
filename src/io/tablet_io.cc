@@ -1744,7 +1744,7 @@ uint64_t TabletIO::GetSnapshot(uint64_t id, uint64_t snapshot_sequence,
         MutexLock lock(&m_mutex);
         if (m_status != kReady) {
             SetStatusCode(m_status, status);
-            return false;
+            return 0;
         }
         m_db_ref_count++;
     }
