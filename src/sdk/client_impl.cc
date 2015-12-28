@@ -447,19 +447,18 @@ Table* ClientImpl::OpenTable(const std::string& table_name,
 bool ClientImpl::GetTabletLocation(const string& table_name,
                                    std::vector<TabletInfo>* tablets,
                                    ErrorCode* err) {
-    std::vector<TableInfo> table_list;
-    std::string internal_table_name;
-    if (!GetInternalTableName(table_name, err, &internal_table_name)) {
-        LOG(ERROR) << "faild to scan meta schema";
+    TableMeta table_meta;
+    TabletMetaList tablet_list;
+
+    if (!ShowTablesInfo(table_name, &table_meta, &tablet_list, err)) {
+        LOG(ERROR) << "table not exist: " << table_name;
         return false;
     }
-    ListInternal(&table_list, tablets, internal_table_name, "", 1,
-                 FLAGS_tera_sdk_show_max_num, err);
-    if (table_list.size() > 0
-        && table_list[0].table_desc->TableName() == internal_table_name) {
-        return true;
+
+    for (int i = 0; i < tablet_list.meta_size(); ++i) {
+        ParseTabletEntry(tablet_list.meta(i), tablets);
     }
-    return false;
+    return true;
 }
 
 TableDescriptor* ClientImpl::GetTableDescriptor(const string& table_name,
