@@ -2647,11 +2647,7 @@ void MasterImpl::UnloadTabletCallback(TabletPtr tablet, int32_t retry,
     StatusCode status = response->status();
     delete request;
     delete response;
-    if (tablet->GetStatus() == kTableOffLine
-        || tablet->GetStatus() == kTabletDisable) {
-        // tablet already unload, skip it.
-        return;
-    }
+
     CHECK(tablet->GetStatus() == kTableUnLoading
           || tablet->GetStatus() == kTableOnLoad
           || tablet->GetStatus() == kTableOnSplit);
@@ -3339,12 +3335,16 @@ void MasterImpl::QueryTabletNodeCallback(std::string addr, QueryRequest* request
                 && tablet->Verify(table_name, key_start, key_end, meta.path(),
                                   meta.server_addr())) {
                 if (tablet->GetTable()->GetStatus() == kTableDisable) {
-                    tablet->SetStatus(kTableUnLoading);
-                    UnloadClosure* done =
-                        NewClosure(this, &MasterImpl::UnloadTabletCallback, tablet,
-                                   FLAGS_tera_master_impl_retry_times);
-                    UnloadTabletAsync(tablet, done);
-                    LOG(INFO) << "Unload disable tablet: " << tablet->GetPath();
+                    if (tablet->SetStatusIf(kTableUnLoading, kTableReady)) {
+                        UnloadClosure* done =
+                            NewClosure(this, &MasterImpl::UnloadTabletCallback, tablet,
+                                       FLAGS_tera_master_impl_retry_times);
+                        UnloadTabletAsync(tablet, done);
+                        LOG(INFO) << "Unload disable tablet: " << tablet->GetPath();
+                    } else {
+                        LOG(INFO) << "Discard disable tablet: " << tablet->GetPath()
+                            << ", status: " << tablet->GetStatus();
+                    }
                 } else {
                     tablet->UpdateSize(meta);
                     tablet->SetCounter(counter);
