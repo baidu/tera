@@ -1,6 +1,7 @@
 language: cpp
 compiler: gcc
 install:
+    - sudo apt-get update
     - sudo apt-get install libboost-dev uuid-dev
 
     - wget https://github.com/google/protobuf/releases/download/v2.6.1/protobuf-2.6.1.tar.gz
@@ -13,9 +14,9 @@ install:
     - git clone https://github.com/BaiduPS/sofa-pbrpc
     - ( cd sofa-pbrpc && make -j4 && make install )
 
-    - wget http://www.us.apache.org/dist/zookeeper/stable/zookeeper-3.4.6.tar.gz
-    - tar zxvf zookeeper-3.4.6.tar.gz
-    - ( cd zookeeper-3.4.6/src/c && ./configure --disable-shared --with-pic && make -j4 && sudo make install )
+    - wget http://www.us.apache.org/dist/zookeeper/stable/zookeeper-3.4.7.tar.gz
+    - tar zxvf zookeeper-3.4.7.tar.gz
+    - ( cd zookeeper-3.4.7/src/c && ./configure --disable-shared --with-pic && make -j4 && sudo make install )
 
     - wget https://github.com/gflags/gflags/archive/v2.1.2.tar.gz
     - tar xf v2.1.2.tar.gz

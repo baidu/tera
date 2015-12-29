@@ -1,7 +1,6 @@
 [Tera - 高性能、可伸缩的结构化数据库](http://github.com/baidu/tera)
 ====
-[![Build Status](https://travis-ci.org/baidu/tera.svg)](https://travis-ci.org/baidu/tera)
-
+[![Build Status](http://220.181.7.231/buildStatus/icon?job=tera_master_build)](http://220.181.7.231/job/tera_master_build/)  
 Copyright 2015, Baidu, Inc.
 
 #Overview
@@ -30,8 +29,8 @@ map\<RowKey, map\<ColummnFamily:Qualifier, map\<Timestamp, Value> > > <br>
 
 #系统依赖
  * 使用分布式文件系统（HDFS、NFS等）持久化数据与元信息
- * 使用zookeeper选主与协调
- * 使用Sofa-pbrpc实现跨进程通信
+ * 使用分布式协调服务（[Nexus](https://github.com/baidu/ins/)或者[zookeeper](http://zookeeper.apache.org/)）选主与协调
+ * 使用[Sofa-pbrpc](https://github.com/baidu/sofa-pbrpc/)实现跨进程通信
 
 #系统构建
 sh ./build.sh  
@@ -43,9 +42,9 @@ sh ./build.sh
 
 [通过docker体验Tera](https://github.com/baidu/tera/blob/master/example/docker)
 
-[主要API使用方法](https://github.com/baidu/tera/wiki/%E4%B8%BB%E8%A6%81API%E4%BD%BF%E7%94%A8%E6%96%B9%E6%B3%95)
+[SDK 开发入门](https://github.com/baidu/tera/blob/master/doc/sdk_dev_guide.md)
 
-[命令行工具使用手册](https://github.com/baidu/tera/blob/master/doc/teracli.md)
+[teracli 使用手册](https://github.com/baidu/tera/blob/master/doc/teracli.md)
 
 #反馈与技术支持
 tera_dev@baidu.com

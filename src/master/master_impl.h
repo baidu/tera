@@ -115,6 +115,10 @@ public:
                     ShowTablesResponse* response,
                     google::protobuf::Closure* done);
 
+    void ShowTablesBrief(const ShowTablesRequest* request,
+                         ShowTablesResponse* response,
+                         google::protobuf::Closure* done);
+
     void ShowTabletNodes(const ShowTabletNodesRequest* request,
                          ShowTabletNodesResponse* response,
                          google::protobuf::Closure* done);
@@ -140,6 +144,8 @@ public:
 
     bool GetMetaTabletAddr(std::string* addr);
     void TryLoadTablet(TabletPtr tablet, std::string addr = "");
+
+    std::string ProfilingLog();
 
 private:
     typedef Closure<void, SnapshotRequest*, SnapshotResponse*, bool, int> SnapshotClosure;
@@ -208,6 +214,7 @@ private:
 
     void SafeModeCmdCtrl(const CmdCtrlRequest* request,
                          CmdCtrlResponse* response);
+    void ReloadConfig(CmdCtrlResponse* response);
     void TabletCmdCtrl(const CmdCtrlRequest* request,
                        CmdCtrlResponse* response);
     void MetaCmdCtrl(const CmdCtrlRequest* request,
@@ -526,6 +533,7 @@ private:
                                Callback* done, TablePtr table, const char* operate);
 
     void FillAlias(const std::string& key, const std::string& value);
+    void RefreshTableCounter();
 private:
     mutable Mutex m_status_mutex;
     MasterStatus m_status;

@@ -66,7 +66,11 @@ void AsyncWriter::Sync(bool sync_or_flush) {
     finished_ = true;
   } else {
     MutexLock lock(&mutex_);
-    mode_ = AsyncWriter::kSync;
+    if (sync_or_flush) {
+      mode_ = AsyncWriter::kSync;
+    } else {
+      mode_ = AsyncWriter::kFlush;
+    }
     finished_ = false;
     can_work_.Signal();
   }
@@ -133,6 +137,10 @@ void AsyncWriter::ThreadFuncCall() {
     } else if (mode_ == kSync) {
       mutex_.Unlock();
       s_ = dest_->Sync();
+      mutex_.Lock();
+    } else if (mode_ == kFlush) {
+      mutex_.Unlock();
+      s_ = dest_->Flush();
       mutex_.Lock();
     }
     finished_ = true;

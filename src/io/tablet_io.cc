@@ -337,6 +337,55 @@ bool TabletIO::Unload(StatusCode* status) {
     return true;
 }
 
+// Find average string from input string
+// E.g. "abc" & "abe" return "abd"
+//      "a" & "b" return "a_"
+bool TabletIO::FindAverageKey(const std::string& start, const std::string& end,
+                             std::string* res) {
+    std::string ave;
+    int ave_len = start.size() < end.size() ? start.size() : end.size();
+    for (int i = 0; i < ave_len; ++i) {
+        char c = (char)(((uint32_t)start[i] + end[i]) / 2);
+        ave.append(1, c);
+    }
+    if (ave > start) {
+        // find success
+        *res = ave;
+        return true;
+    }
+    if (start.size() == end.size()) {
+        // a~b, here we use '_'(0x5F), not '0x80', visible char
+        ave.append(1, '_');
+    } else if (start.size() < end.size()) {
+        char c = (end[ave.size()]) / 2;
+        if (c == '\x0') {
+            return false;
+        }
+        ave.append(1, c);
+    } else {
+        char c = static_cast<char>((start[ave.size()] + 0x100) / 2);
+        ave.append(1, c);
+    }
+    *res = ave;
+    return true;
+}
+
+bool TabletIO::ParseRowKey(const std::string& tera_key, std::string* row_key) {
+    leveldb::Slice row;
+    if ((m_table_schema.raw_key() == GeneralKv)
+        || (m_kv_only && m_table_schema.raw_key() == Readable)) {
+        row = tera_key;
+    } else { // Table && TTL-KV
+        if (!m_key_operator->ExtractTeraKey(tera_key, &row,
+                                            NULL, NULL, NULL, NULL)) {
+            VLOG(5) << "fail to extract split key";
+            return false;
+        }
+    }
+    *row_key = row.ToString();
+    return true;
+}
+
 bool TabletIO::Split(std::string* split_key, StatusCode* status) {
     {
         MutexLock lock(&m_mutex);
@@ -352,69 +401,50 @@ bool TabletIO::Split(std::string* split_key, StatusCode* status) {
         m_db_ref_count++;
     }
 
-    uint64_t table_size = 0;
-    GetDataSize(&table_size, NULL, status);
-    if (table_size <= 0) {
-        SetStatusCode(kTableNotSupport, status);
-        MutexLock lock(&m_mutex);
-        m_status = kReady;
-        m_db_ref_count--;
-        return false;
-    }
-
     std::string raw_split_key;
-    if (!m_db->FindSplitKey(m_raw_start_key, m_raw_end_key, 0.5,
-                            &raw_split_key)) {
-        VLOG(5) << "fail to find split key";
-        SetStatusCode(kTableNotSupport, status);
-        MutexLock lock(&m_mutex);
-        m_status = kReady;
-        m_db_ref_count--;
-        return false;
+    split_key->clear();
+    if (m_db->FindSplitKey(0.5, &raw_split_key)) {
+        ParseRowKey(raw_split_key, split_key);
     }
 
-    leveldb::Slice key_split;
+    if (split_key->empty() || *split_key == m_end_key) {
+        // could not find split_key, try calc average key
+        std::string smallest_key, largest_key;
+        CHECK(m_db->FindKeyRange(&smallest_key, &largest_key));
 
-    if (m_kv_only && m_table_schema.raw_key() == Readable) {
-        key_split = raw_split_key;
-    } else { // Table && TTL-KV
-        leveldb::Slice cf_split;
-        leveldb::Slice qu_split;
-        if (!m_key_operator->ExtractTeraKey(raw_split_key, &key_split,
-                                            &cf_split, &qu_split, NULL, NULL)) {
-            VLOG(5) << "fail to extract split key";
-            SetStatusCode(kTableNotSupport, status);
-            MutexLock lock(&m_mutex);
-            m_status = kReady;
-            m_db_ref_count--;
-            return false;
+        std::string srow_key, lrow_key;
+        if (!smallest_key.empty()) {
+            ParseRowKey(smallest_key, &srow_key);
+        } else {
+            srow_key = m_start_key;
         }
+        if (!largest_key.empty()) {
+            ParseRowKey(largest_key, &lrow_key);
+        } else {
+            lrow_key = m_end_key;
+        }
+        FindAverageKey(srow_key, lrow_key, split_key);
     }
 
     VLOG(5) << "start: [" << DebugString(m_start_key)
         << "], end: [" << DebugString(m_end_key)
-        << "], split: [" << DebugString(key_split.ToString()) << "]";
+        << "], split: [" << DebugString(*split_key) << "]";
 
-    if (key_split.empty() || key_split.ToString() <= m_start_key
-        || (!m_end_key.empty() && key_split.ToString() >= m_end_key)) {
+    MutexLock lock(&m_mutex);
+    m_db_ref_count--;
+    if (*split_key != ""
+        && *split_key != m_start_key
+        && *split_key != m_end_key) {
+        m_status = kSplited;
+        return true;
+    } else {
         SetStatusCode(kTableNotSupport, status);
-        MutexLock lock(&m_mutex);
         m_status = kReady;
-        m_db_ref_count--;
         return false;
     }
-
-    *split_key = key_split.ToString();
-
-    {
-        MutexLock lock(&m_mutex);
-        m_status = kSplited;
-        m_db_ref_count--;
-    }
-    return true;
 }
 
-bool TabletIO::Compact(StatusCode* status) {
+bool TabletIO::Compact(int lg_no, StatusCode* status) {
     {
         MutexLock lock(&m_mutex);
         if (m_status != kReady) {
@@ -428,7 +458,7 @@ bool TabletIO::Compact(StatusCode* status) {
         m_db_ref_count++;
     }
     CHECK_NOTNULL(m_db);
-    m_db->CompactRange(NULL, NULL);
+    m_db->CompactRange(NULL, NULL, lg_no);
 
     {
         MutexLock lock(&m_mutex);
@@ -517,7 +547,7 @@ bool TabletIO::GetDataSize(uint64_t* size, std::vector<uint64_t>* lgsize,
     }
 
     m_db->GetApproximateSizes(size, lgsize);
-    VLOG(6) << "GetDataSize(" << m_tablet_path << ") : " << *size;
+    VLOG(10) << "GetDataSize(" << m_tablet_path << ") : " << *size;
     {
         MutexLock lock(&m_mutex);
         m_db_ref_count--;
@@ -622,6 +652,7 @@ inline bool TabletIO::LowLevelScan(const std::string& start_tera_key,
     std::string last_key, last_col, last_qual;
     uint32_t buffer_size = 0;
     uint32_t version_num = 1;
+    uint64_t nr_scan_round = 0;
     value_list->clear_key_values();
     *read_row_count = 0;
     *read_bytes = 0;
@@ -647,6 +678,20 @@ inline bool TabletIO::LowLevelScan(const std::string& start_tera_key,
             it->Next();
             continue;
         }
+
+        // stream scan Resume Scan Context, will not affect SYNC scan
+        if ((nr_scan_round++ == 0) && (scan_options.version_num > 0)) {
+            last_key.assign(key.data(), key.size());
+            last_col.assign(col.data(), col.size());
+            last_qual.assign(qual.data(), qual.size());
+            version_num = scan_options.version_num;
+            VLOG(10) << "stream scan, resume scan context, version_num " << version_num
+                << ", key " << DebugString(key.ToString()) << ", col " << DebugString(col.ToString())
+                << ", qual " << DebugString(qual.ToString());
+            it->Next();
+            continue;
+        }
+
         if (now_time > time_out) {
             VLOG(9) << "ll-scan timeout. Mark next start key: " << DebugString(tera_key.ToString());
             MakeKvPair(key, col, qual, ts, "", &next_start_kv_pair);
@@ -679,6 +724,7 @@ inline bool TabletIO::LowLevelScan(const std::string& start_tera_key,
             continue;
         }
 
+        // only use for sync scan, not available for stream scan
         if (m_key_operator->Compare(it->key(), start_tera_key) < 0) {
             // skip out-of-range records
             // keep record of version info to prevent dirty data
@@ -696,6 +742,7 @@ inline bool TabletIO::LowLevelScan(const std::string& start_tera_key,
             continue;
         }
 
+        // begin to scan next row
         if (key.compare(last_key) != 0) {
             *read_row_count += 1;
             ProcessRowBuffer(row_buf, scan_options, value_list, &buffer_size);
@@ -732,11 +779,15 @@ inline bool TabletIO::LowLevelScan(const std::string& start_tera_key,
         }
 
         KeyValuePair kv;
+        (const_cast<ScanOptions&>(scan_options)).version_num = version_num;
         MakeKvPair(key, col, qual, ts, value, &kv);
         row_buf.push_back(kv);
 
         // check scan buffer
         if (buffer_size >= scan_options.max_size) {
+            VLOG(10) << "stream scan, break scan context, version_num " << version_num
+                << ", key " << DebugString(key.ToString()) << ", col " << DebugString(col.ToString())
+                << ", qual " << DebugString(qual.ToString());
             break;
         }
 
@@ -864,9 +915,8 @@ bool TabletIO::LowLevelSeek(const std::string& row_key,
                 compact_strategy->ScanDrop(it_data->key(), 0);
             }
         } else {
-            VLOG(10) << "ll-seek fail, error iterator.";
-            SetStatusCode(kKeyNotExist, &s);
-            break;
+            VLOG(10) << "ll-seek fail, not found.";
+            continue;
         }
 
         if (qu_set.empty()) {
@@ -1238,7 +1288,7 @@ bool TabletIO::ScanRowsStreaming(const ScanTabletRequest* request,
     while (status == kTabletNodeOk) {
         RowResult value_list;
         if (LowLevelScan(start_tera_key, end_row_key, scan_options, it,
-                         &value_list, response->mutable_next_start_point(), &read_row_count, &read_bytes,
+                         &value_list, NULL, &read_row_count, &read_bytes,
                          &is_complete, &status)) {
             m_counter.scan_rows.Add(read_row_count);
             m_counter.scan_size.Add(read_bytes);
@@ -1247,11 +1297,7 @@ bool TabletIO::ScanRowsStreaming(const ScanTabletRequest* request,
             if (!scan_stream->PushData(data_id, value_list)) {
                 break;
             }
-
             data_id++;
-            if (it->Valid()) {
-                it->Next();
-            }
         }
         scan_stream->SetStatusCode(status);
         if (is_complete) {
@@ -1414,7 +1460,7 @@ void TabletIO::SetupScanRowOptions(const ScanTabletRequest* request,
     if (request->timeout()) {
         scan_options->timeout = request->timeout();
     }
-
+    scan_options->version_num = 0;
     scan_options->snapshot_id = request->snapshot_id();
 }
 
@@ -1440,6 +1486,7 @@ void TabletIO::SetupOptionsForLG() {
     std::map<uint32_t, leveldb::LG_info*>* lg_info_list =
         new std::map<uint32_t, leveldb::LG_info*>;
 
+    int64_t triggered_log_size = 0;
     for (int32_t lg_i = 0; lg_i < m_table_schema.locality_groups_size();
          ++lg_i) {
         if (m_table_schema.locality_groups(lg_i).is_del()) {
@@ -1495,6 +1542,7 @@ void TabletIO::SetupOptionsForLG() {
         } else {
             lg_info->write_buffer_size = max_size;
         }
+        triggered_log_size += lg_info->write_buffer_size;
         exist_lg_list->insert(lg_i);
         (*lg_info_list)[lg_i] = lg_info;
     }
@@ -1503,8 +1551,7 @@ void TabletIO::SetupOptionsForLG() {
         delete exist_lg_list;
     } else {
         m_ldb_options.exist_lg_list = exist_lg_list;
-        m_ldb_options.flush_triggered_log_size = (exist_lg_list->size() + 1)
-                                               * m_ldb_options.write_buffer_size;
+        m_ldb_options.flush_triggered_log_size = triggered_log_size * 2;
     }
     if (lg_info_list->size() == 0) {
         delete lg_info_list;
@@ -1697,7 +1744,7 @@ uint64_t TabletIO::GetSnapshot(uint64_t id, uint64_t snapshot_sequence,
         MutexLock lock(&m_mutex);
         if (m_status != kReady) {
             SetStatusCode(m_status, status);
-            return false;
+            return 0;
         }
         m_db_ref_count++;
     }
@@ -1786,17 +1833,17 @@ const leveldb::RawKeyOperator* TabletIO::GetRawKeyOperator() {
     return m_key_operator;
 }
 
-void TabletIO::GetAndClearCounter(TabletCounter* counter, int64_t interval) {
-    counter->set_low_read_cell(m_counter.low_read_cell.Clear() * 1000000 / interval);
-    counter->set_scan_rows(m_counter.scan_rows.Clear() * 1000000 / interval);
-    counter->set_scan_kvs(m_counter.scan_kvs.Clear() * 1000000 / interval);
-    counter->set_scan_size(m_counter.scan_size.Clear() * 1000000 / interval);
-    counter->set_read_rows(m_counter.read_rows.Clear() * 1000000 / interval);
-    counter->set_read_kvs(m_counter.read_kvs.Clear() * 1000000 / interval);
-    counter->set_read_size(m_counter.read_size.Clear() * 1000000 / interval);
-    counter->set_write_rows(m_counter.write_rows.Clear() * 1000000 / interval);
-    counter->set_write_kvs(m_counter.write_kvs.Clear() * 1000000 / interval);
-    counter->set_write_size(m_counter.write_size.Clear() * 1000000 / interval);
+void TabletIO::GetAndClearCounter(TabletCounter* counter) {
+    counter->set_low_read_cell(m_counter.low_read_cell.Clear());
+    counter->set_scan_rows(m_counter.scan_rows.Clear());
+    counter->set_scan_kvs(m_counter.scan_kvs.Clear());
+    counter->set_scan_size(m_counter.scan_size.Clear());
+    counter->set_read_rows(m_counter.read_rows.Clear());
+    counter->set_read_kvs(m_counter.read_kvs.Clear());
+    counter->set_read_size(m_counter.read_size.Clear());
+    counter->set_write_rows(m_counter.write_rows.Clear());
+    counter->set_write_kvs(m_counter.write_kvs.Clear());
+    counter->set_write_size(m_counter.write_size.Clear());
     counter->set_is_on_busy(IsBusy());
 }
 
