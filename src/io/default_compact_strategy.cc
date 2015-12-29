@@ -355,7 +355,8 @@ bool DefaultCompactStrategy::ScanDrop(const Slice& tera_key, uint64_t n) {
             static_cast<uint32_t>(m_schema.column_families(cf_id).max_versions())) {
             // drop out-of-range version
             VLOG(20) << "drop true: " << key.ToString()
-                << ", version: " << m_version_num;
+                << ", version: " << m_version_num << ", max: "
+                << m_schema.column_families(cf_id).max_versions();
             return true;
         }
     }

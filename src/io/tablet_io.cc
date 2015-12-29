@@ -949,6 +949,13 @@ bool TabletIO::LowLevelSeek(const std::string& row_key,
                     break;
                 }
 
+                // version filter
+                if (++version_num > scan_options.max_versions) {
+                    VLOG(10) << "current version_num:" << version_num
+                             << ", max:" << scan_options.max_versions;
+                    break;
+                }
+
                 // skip qu delete mark
                 if (compact_strategy->ScanDrop(it_data->key(), 0)) {
                     VLOG(10) << "ll-seek: scan drop " << "tablet=[" << m_tablet_path
@@ -956,11 +963,6 @@ bool TabletIO::LowLevelSeek(const std::string& row_key,
                         << "] qu=[" << qu_name << "]";
                     it_data->Next();
                     continue;
-                }
-
-                // version filter
-                if (++version_num > scan_options.max_versions) {
-                    break;
                 }
 
                 KeyValuePair* kv = value_list->add_key_values();
