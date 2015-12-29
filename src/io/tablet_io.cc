@@ -1403,7 +1403,6 @@ bool TabletIO::Scan(const ScanOption& option, KeyValueList* kv_list, KeyValuePai
             }
         }
     }
-
     if (!it->Valid()) {
         *complete = true;
     } else if (now_time > timeout && next_start_point) {
