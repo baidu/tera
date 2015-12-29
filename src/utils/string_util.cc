@@ -75,4 +75,17 @@ bool IsValidName(const std::string& str) {
     return true;
 }
 
+bool IsValidColumnFamilyName(const std::string& str) {
+    if ((64 * 1024 - 1) < str.size()) { // [0, 64KB)
+        return false;
+    }
+    for (size_t i = 0; i < str.size(); ++i) {
+        char c = str[i];
+        if (!isprint(c)) {
+            return false;
+        }
+    }
+    return true;
+}
+
 } // namespace tera
