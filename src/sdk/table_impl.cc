@@ -817,7 +817,21 @@ void TableImpl::MutationTimeout(int64_t mutation_id) {
 
 bool TableImpl::GetTabletLocation(std::vector<TabletInfo>* tablets,
                                   ErrorCode* err) {
-    return false;
+    MutexLock lock(&_meta_mutex);
+    tablets->resize(_tablet_meta_list.size());
+    std::map<std::string, TabletMetaNode>::iterator it = _tablet_meta_list.begin();
+    std::vector<TabletInfo>::iterator result_it = tablets->begin();
+    for (; it != _tablet_meta_list.end(); ++it, ++result_it) {
+        TabletMeta& meta = it->second.meta;
+        result_it->table_name = meta.table_name();
+        result_it->path = meta.path();
+        result_it->server_addr = meta.server_addr();
+        result_it->start_key = meta.key_range().key_start();
+        result_it->end_key = meta.key_range().key_end();
+        result_it->data_size = meta.size();
+        result_it->status = meta.status();
+    }
+    return true;
 }
 
 bool TableImpl::GetDescriptor(TableDescriptor* desc, ErrorCode* err) {
