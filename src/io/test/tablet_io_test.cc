@@ -5,6 +5,7 @@
 #include "io/tablet_io.h"
 
 #include <stdlib.h>
+#include <iostream>
 
 #include "gflags/gflags.h"
 #include "glog/logging.h"
@@ -495,6 +496,15 @@ TEST_F(TabletIOTest, FindAverageKey) {
     start = "";
     end = std::string("\x0", 1);
     ASSERT_FALSE(TabletIO::FindAverageKey(start, end, &ave));
+
+    start = "000000000000001480186993";
+    end   = "000000000000002147352684";
+    std::string expect
+          = "000000000000001263264783_";
+    TabletIO::FindAverageKey(start, end, &ave);
+    std::cerr << start << "-" << end << "-" << expect << "-" << ave << std::endl;
+    //ASSERT_TRUE(expect != ave);
+    ASSERT_NE(expect, ave);
 }
 } // namespace io
 } // namespace tera

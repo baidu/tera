@@ -156,6 +156,7 @@ private:
     Status DeleteLogFile(const std::vector<uint64_t>& log_numbers);
     void DeleteObsoleteFiles(uint64_t seq_no = -1U);
     void ArchiveFile(const std::string& filepath);
+    uint64_t GetNewSequenceNumber();
 
     // return 0: switch log successed
     // return 1: cannot switch log right now
@@ -187,6 +188,7 @@ private:
     log::AsyncWriter* log_;
     bool force_switch_log_;
     uint64_t last_sequence_;
+    uint64_t last_timestamp_;
     size_t current_log_size_;
 
     std::deque<RecordWriter*> writers_;

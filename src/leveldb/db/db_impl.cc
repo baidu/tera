@@ -1716,10 +1716,13 @@ uint64_t DBImpl::GetLastSequence(bool is_locked) {
   }
   uint64_t retval;
   if (mem_->GetLastSequence() > 0) {
+    Log(options_.info_log, "[%s] LL: mem seq=%lu", dbname_.c_str(), mem_->GetLastSequence());
     retval = mem_->GetLastSequence();
   } else if (imm_ != NULL && imm_->GetLastSequence()) {
+    Log(options_.info_log, "[%s] LL: imm seq=%lu", dbname_.c_str(), imm_->GetLastSequence());
     retval = imm_->GetLastSequence();
   } else {
+    Log(options_.info_log, "[%s] LL: version seq=%lu", dbname_.c_str(), versions_->LastSequence());
     retval = versions_->LastSequence();
   }
   if (is_locked) {
