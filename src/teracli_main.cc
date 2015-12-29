@@ -14,6 +14,7 @@
 #include <gflags/gflags.h>
 #include <glog/logging.h>
 
+#include "common/thread_pool.h"
 #include "common/base/string_ext.h"
 #include "common/base/string_number.h"
 #include "common/file/file_path.h"
@@ -47,6 +48,9 @@ DEFINE_int64(scan_pack_interval, 5000, "scan timeout");
 DEFINE_int64(snapshot, 0, "read | scan snapshot");
 DEFINE_string(rollback_switch, "close", "Pandora's box, do not open");
 DEFINE_string(rollback_name, "", "rollback operation's name");
+
+DEFINE_int32(lg, -1, "locality group number.");
+DEFINE_int32(concurrency, 1, "concurrency for compact table.");
 
 volatile int32_t g_start_time = 0;
 volatile int32_t g_end_time = 0;
@@ -165,6 +169,10 @@ void UsageMore(const std::string& prg_name) {
                 compact <tablet_path>                                       \n\
                 split   <tablet_path>                                       \n\
                 merge   <tablet_path>                                       \n\
+                                                                            \n\
+       compact  <tablename> [--lg=] [--concurrency=]                        \n\
+                run manual compaction on a table, support only compact a    \n\
+                localitygroup.                                              \n\
                                                                             \n\
        safemode [get|enter|leave]                                           \n\
                                                                             \n\
@@ -1932,6 +1940,49 @@ int32_t ReloadConfigOp(Client* client, int32_t argc, char** argv, ErrorCode* err
     return 0;
 }
 
+int32_t CompactTablet(TabletInfo& tablet, int lg) {
+    CompactTabletRequest request;
+    CompactTabletResponse response;
+    request.set_sequence_id(0);
+    request.set_tablet_name(tablet.table_name);
+    request.mutable_key_range()->set_key_start(tablet.start_key);
+    request.mutable_key_range()->set_key_end(tablet.end_key);
+    tabletnode::TabletNodeClient tabletnode_client(tablet.server_addr, 60000);
+
+    std::string path;
+    if (lg >= 0) {
+        request.set_lg_no(lg);
+        path = tablet.path + "/" + NumberToString(lg);
+    } else {
+        path = tablet.path;
+    }
+
+    std::cout << "try compact tablet: " << path
+        << " on " << tabletnode_client.GetConnectAddr() << std::endl;
+
+    if (!tabletnode_client.CompactTablet(&request, &response)) {
+        LOG(ERROR) << "no response from ["
+            << tabletnode_client.GetConnectAddr() << "]";
+        return -7;
+    }
+
+    if (response.status() != kTabletNodeOk) {
+        LOG(ERROR) << "fail to compact tablet: " << path
+            << ", status: " << StatusCodeToString(response.status());
+        return -1;
+    }
+
+    if (response.compact_status() != kTableCompacted) {
+        LOG(ERROR) << "fail to compact tablet: " << path
+            << ", status: " << StatusCodeToString(response.compact_status());
+        return -1;
+    }
+
+    std::cout << "compact tablet success: " << path << ", data size: "
+        << utils::ConvertByteToString(response.compact_size()) << std::endl;
+    return 0;
+}
+
 int32_t CompactTabletOp(Client* client, int32_t argc, char** argv, ErrorCode* err) {
     if (argc != 4) {
         UsageMore(argv[0]);
@@ -1973,45 +2024,12 @@ int32_t CompactTabletOp(Client* client, int32_t argc, char** argv, ErrorCode* er
         }
     }
     if (tablet_it == tablet_list.end()) {
-        LOG(ERROR) << "fail to find tablet: " << tablet_path;
+        LOG(ERROR) << "fail to find tablet: " << tablet_path
+            << ", total tablets: " << tablet_list.size();
         return -4;
     }
 
-    CompactTabletRequest request;
-    CompactTabletResponse response;
-    request.set_sequence_id(0);
-    request.set_tablet_name(tablet_it->table_name);
-    request.mutable_key_range()->set_key_start(tablet_it->start_key);
-    request.mutable_key_range()->set_key_end(tablet_it->end_key);
-    tabletnode::TabletNodeClient tabletnode_client(tablet_it->server_addr, 3600000);
-
-    std::cout << "try compact tablet: " << tablet_it->path;
-    if (lg >= 0) {
-        request.set_lg_no(lg);
-        std::cout << " lg " << lg;
-    }
-    std::cout << " on " << tabletnode_client.GetConnectAddr() << std::endl;
-    if (!tabletnode_client.CompactTablet(&request, &response)) {
-        LOG(ERROR) << "no response from ["
-            << tabletnode_client.GetConnectAddr() << "]";
-        return -7;
-    }
-
-    if (response.status() != kTabletNodeOk) {
-        LOG(ERROR) << "fail to compact table, status: "
-            << StatusCodeToString(response.status());
-        return -1;
-    }
-
-    if (response.compact_status() != kTableCompacted) {
-        LOG(ERROR) << "fail to compact table, status: "
-            << StatusCodeToString(response.compact_status());
-        return -1;
-    }
-
-    std::cerr << "compact tablet success, data size: "
-        << utils::ConvertByteToString(response.compact_size()) << std::endl;
-    return 0;
+    return CompactTablet(*tablet_it, lg);
 }
 
 int32_t TabletOp(Client* client, int32_t argc, char** argv, ErrorCode* err) {
@@ -2092,40 +2110,38 @@ int32_t MetaOp(Client* client, int32_t argc, char** argv, ErrorCode* err) {
     return 0;
 }
 
-int32_t CompactOp(int32_t argc, char** argv) {
-    if (argc != 6) {
+int32_t CompactOp(Client* client, int32_t argc, char** argv, ErrorCode* err) {
+    if (argc != 3) {
         UsageMore(argv[0]);
         return -1;
     }
 
-    CompactTabletRequest request;
-    CompactTabletResponse response;
-    request.set_sequence_id(0);
-    request.set_tablet_name(argv[2]);
-    request.mutable_key_range()->set_key_start(argv[3]);
-    request.mutable_key_range()->set_key_end(argv[4]);
-    tabletnode::TabletNodeClient client(argv[5]); // do not retry
-
-    if (!client.CompactTablet(&request, &response)) {
-        std::cerr << "rpc fail to connect [" << client.GetConnectAddr()
-            << "] to compact table" << std::endl;
-        return -1;
+    std::string tablename = argv[2];
+    std::vector<TabletInfo> tablet_list;
+    if (!client->GetTabletLocation(tablename, &tablet_list, err)) {
+        LOG(ERROR) << "fail to list tablets info: " << tablename;
+        return -3;
     }
 
-    if (response.status() != kTabletNodeOk) {
-        std::cerr << "fail to compact table, status: "
-            << StatusCodeToString(response.status()) << std::endl;
-        return -1;
+    int conc = FLAGS_concurrency;
+    if (conc <= 0 || conc > 1000) {
+        LOG(ERROR) << "compact concurrency illegal: " << conc;
     }
 
-    if (response.compact_status() != kTableCompacted) {
-        std::cerr << "fail to compact table, status: "
-            << StatusCodeToString(response.compact_status()) << std::endl;
-        return -1;
+    ThreadPool thread_pool(conc);
+    std::vector<TabletInfo>::iterator tablet_it = tablet_list.begin();
+    for (; tablet_it != tablet_list.end(); ++tablet_it) {
+        ThreadPool::Task task =
+                boost::bind(&CompactTablet, *tablet_it, FLAGS_lg);
+        thread_pool.AddTask(task);
     }
-
-    std::cout << "compact tablet success, data size: "
-        << response.compact_size() << std::endl;
+    while (thread_pool.PendingNum() > 0) {
+        std::cerr << common::timer::get_time_str(time(NULL)) << " "
+            << thread_pool.PendingNum()
+            << " tablets waiting for compact ..." << std::endl;
+        sleep(5);
+    }
+    thread_pool.Stop(true);
     return 0;
 }
 
@@ -2587,7 +2603,7 @@ int main(int argc, char* argv[]) {
     } else if (cmd == "meta") {
         ret = MetaOp(client, argc, argv, &error_code);
     } else if (cmd == "compact") {
-        ret = CompactOp(argc, argv);
+        ret = CompactOp(client, argc, argv, &error_code);
     } else if (cmd == "findmaster") {
         // get master addr(hostname:port)
         ret = FindMasterOp(client, argc, argv, &error_code);
