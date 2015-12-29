@@ -106,6 +106,7 @@ DEFINE_string(tera_master_gc_strategy, "default", "gc strategy, [default, increm
 
 DEFINE_int32(tera_master_max_split_concurrency, 1, "the max concurrency of tabletnode for split tablet");
 DEFINE_int32(tera_master_max_load_concurrency, 5, "the max concurrency of tabletnode for load tablet");
+DEFINE_int32(tera_master_max_move_concurrency, 50, "the max concurrency for move tablet");
 DEFINE_int32(tera_master_load_interval, 300, "the delay interval (in sec) for load tablet");
 
 // load balance
@@ -114,8 +115,7 @@ DEFINE_bool(tera_master_meta_isolate_enabled, false, "enable master to reserve a
 DEFINE_int32(tera_master_load_balance_period, 10000, "the period (in ms) for load balance policy execute");
 DEFINE_bool(tera_master_load_balance_table_grained, true, "whether the load balance policy only consider the specified table");
 DEFINE_double(tera_master_load_balance_size_ratio_trigger, 1.2, "ratio of heaviest node size to lightest to trigger load balance");
-DEFINE_bool(tera_master_load_balance_qps_policy_enabled, false, "enable QPS load balance");
-DEFINE_int32(tera_master_load_balance_accumulate_query_times, 10, "summarize how many queries to make QPS load-balance decision");
+DEFINE_int32(tera_master_load_balance_read_pending_threshold, 5000, "read pending threshold in QPS load-balance decision");
 
 DEFINE_double(tera_safemode_tablet_locality_ratio, 0.9, "the tablet locality ratio threshold of safemode");
 DEFINE_bool(tera_master_kick_tabletnode_enabled, true, "enable master to kick tabletnode");

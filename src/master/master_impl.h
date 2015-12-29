@@ -240,8 +240,8 @@ private:
     void ReleaseCacheWrapper();
     void EnableReleaseCacheTimer();
     void DisableReleaseCacheTimer();
-    void EnableLoadBalanceTimer();
-    void DisableLoadBalanceTimer();
+    void EnableLoadBalance();
+    void DisableLoadBalance();
 
     void InitAsync();
 
@@ -553,12 +553,12 @@ private:
     Counter m_this_sequence_id;
 
     bool m_query_enabled;
+    int64_t m_start_query_time;
     int64_t m_query_tabletnode_timer_id;
     Counter m_query_pending_count;
 
     bool m_load_balance_enabled;
     int64_t m_load_balance_timer_id;
-    Counter m_load_balance_count;
 
     scoped_ptr<ThreadPool> m_thread_pool;
     AutoResetEvent m_query_event;

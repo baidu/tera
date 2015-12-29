@@ -33,7 +33,6 @@ DECLARE_string(tera_master_meta_table_name);
 DECLARE_bool(tera_zk_enabled);
 
 DECLARE_int32(tera_master_impl_retry_times);
-DECLARE_int32(tera_master_load_balance_accumulate_query_times);
 DECLARE_int32(tera_tabletnode_connect_retry_period);
 
 DECLARE_bool(tera_delete_obsolete_tabledir_enabled);
@@ -180,49 +179,28 @@ std::string Tablet::DebugString() {
 
 void Tablet::SetCounter(const TabletCounter& counter) {
     MutexLock lock(&m_mutex);
-
-    m_accumu_counter.low_read_cell += counter.low_read_cell();
-    m_accumu_counter.scan_rows += counter.scan_rows();
-    m_accumu_counter.scan_kvs += counter.scan_kvs();
-    m_accumu_counter.scan_size += counter.scan_size();
-    m_accumu_counter.read_rows += counter.read_rows();
-    m_accumu_counter.read_kvs += counter.read_kvs();
-    m_accumu_counter.read_size += counter.read_size();
-    m_accumu_counter.write_rows += counter.write_rows();
-    m_accumu_counter.write_kvs += counter.write_kvs();
-    m_accumu_counter.write_size += counter.write_size();
-
-    uint64_t counter_size = m_counter_list.size();
-    const uint64_t max_counter_size = FLAGS_tera_master_load_balance_accumulate_query_times;
-    if (counter_size >= max_counter_size) {
-        CHECK_EQ(counter_size, max_counter_size);
-        TabletCounter& earliest_counter = m_counter_list.front();
-        m_accumu_counter.low_read_cell -= earliest_counter.low_read_cell();
-        m_accumu_counter.scan_rows -= earliest_counter.scan_rows();
-        m_accumu_counter.scan_kvs -= earliest_counter.scan_kvs();
-        m_accumu_counter.scan_size -= earliest_counter.scan_size();
-        m_accumu_counter.read_rows -= earliest_counter.read_rows();
-        m_accumu_counter.read_kvs -= earliest_counter.read_kvs();
-        m_accumu_counter.read_size -= earliest_counter.read_size();
-        m_accumu_counter.write_rows -= earliest_counter.write_rows();
-        m_accumu_counter.write_kvs -= earliest_counter.write_kvs();
-        m_accumu_counter.write_size -= earliest_counter.write_size();
-        m_counter_list.pop_front();
-    }
-    m_counter_list.push_back(counter);
-
-    counter_size = m_counter_list.size();
-    m_average_counter.set_low_read_cell(m_accumu_counter.low_read_cell / counter_size);
-    m_average_counter.set_scan_rows(m_accumu_counter.scan_rows / counter_size);
-    m_average_counter.set_scan_kvs(m_accumu_counter.scan_kvs / counter_size);
-    m_average_counter.set_scan_size(m_accumu_counter.scan_size / counter_size);
-    m_average_counter.set_read_rows(m_accumu_counter.read_rows / counter_size);
-    m_average_counter.set_read_kvs(m_accumu_counter.read_kvs / counter_size);
-    m_average_counter.set_read_size(m_accumu_counter.read_size / counter_size);
-    m_average_counter.set_write_rows(m_accumu_counter.write_rows / counter_size);
-    m_average_counter.set_write_kvs(m_accumu_counter.write_kvs / counter_size);
-    m_average_counter.set_write_size(m_accumu_counter.write_size / counter_size);
-    m_average_counter.set_is_on_busy(counter.is_on_busy());
+    m_average_counter.set_low_read_cell(
+        CounterWeightedSum(counter.low_read_cell(), m_average_counter.low_read_cell()));
+    m_average_counter.set_scan_rows(
+        CounterWeightedSum(counter.scan_rows(), m_average_counter.scan_rows()));
+    m_average_counter.set_scan_kvs(
+        CounterWeightedSum(counter.scan_kvs(), m_average_counter.scan_kvs()));
+    m_average_counter.set_scan_size(
+        CounterWeightedSum(counter.scan_size(), m_average_counter.scan_size()));
+    m_average_counter.set_read_rows(
+        CounterWeightedSum(counter.read_rows(), m_average_counter.read_rows()));
+    m_average_counter.set_read_kvs(
+        CounterWeightedSum(counter.read_kvs(), m_average_counter.read_kvs()));
+    m_average_counter.set_read_size(
+        CounterWeightedSum(counter.read_size(), m_average_counter.read_size()));
+    m_average_counter.set_write_rows(
+        CounterWeightedSum(counter.write_rows(), m_average_counter.write_rows()));
+    m_average_counter.set_write_kvs(
+        CounterWeightedSum(counter.write_kvs(), m_average_counter.write_kvs()));
+    m_average_counter.set_write_size(
+        CounterWeightedSum(counter.write_size(), m_average_counter.write_size()));
+    m_average_counter.set_is_on_busy(
+        CounterWeightedSum(counter.is_on_busy(), m_average_counter.is_on_busy()));
 }
 
 void Tablet::UpdateSize(const TabletMeta& meta) {
@@ -396,6 +374,17 @@ bool Tablet::Verify(const std::string& table_name, const std::string& key_start,
         || m_meta.path() != path
         || m_meta.server_addr() != server_addr) {
         SetStatusCode(kTableInvalidArg, ret_status);
+        LOG(WARNING) << "tablet verify failed ["
+            << m_meta.table_name() << ","
+            << m_meta.key_range().key_start() << ","
+            << m_meta.key_range().key_end() << ","
+            << m_meta.path() << ","
+            << m_meta.server_addr() << "] vs ["
+            << table_name << ","
+            << key_start << ","
+            << key_end << ","
+            << path << ","
+            << server_addr << "].";
         return false;
     }
     return true;
@@ -973,6 +962,11 @@ void TabletManager::FindTablet(const std::string& server_addr,
     for (; it != m_all_tables.end(); ++it) {
         Table& table = *it->second;
         table.m_mutex.Lock();
+        if (table.m_status == kTableDisable) {
+            VLOG(10) << "FindTablet skip disable table: " << table.m_name;
+            table.m_mutex.Unlock();
+            continue;
+        }
         Table::TabletList::iterator it2 = table.m_tablets_list.begin();
         for (; it2 != table.m_tablets_list.end(); ++it2) {
             TabletPtr tablet = it2->second;
@@ -1649,6 +1643,12 @@ double TabletManager::OfflineTabletRatio() {
         return 0;
     }
     return (double)offline_tablet_count / tablet_count;
+}
+
+int64_t CounterWeightedSum(int64_t a1, int64_t a2) {
+    const int64_t w1 = 2;
+    const int64_t w2 = 1;
+    return (a1 * w1 + a2 * w2) / (w1 + w2);
 }
 
 } // namespace master
