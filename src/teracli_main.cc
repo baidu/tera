@@ -80,7 +80,6 @@ void Usage(const std::string& prg_name) {
                     tablename <splitsize=1024, storage=memory, ...>         \n\
               - simple mode schema:                                         \n\
                     tablename{cf1, cf2, cf3, ...}                           \n\
-                                                                            \n\
        createbyfile   <schema_file> [<delimiter_file>]                      \n\
                                                                             \n\
        update <schema>                                                      \n\
@@ -95,12 +94,10 @@ void Usage(const std::string& prg_name) {
                     e.g. tablename{lg0{cf0<ttl=250>,new_cf<op=add,ttl=233>}}\n\
                 - delete cf                                                 \n\
                     e.g. tablename{lg0{cf0<op=del>}}                        \n\
-                                                                            \n\
        enable/disable/drop  <tablename>                                     \n\
                                                                             \n\
        rename   <old table name> <new table name>                           \n\
                 rename table's name                                         \n\
-                                                                            \n\
        put      <tablename> <rowkey> [<columnfamily:qualifier>] <value>     \n\
                                                                             \n\
        put-ttl  <tablename> <rowkey> [<columnfamily:qualifier>] <value> <ttl(second)>    \n\
@@ -112,25 +109,21 @@ void Usage(const std::string& prg_name) {
        scan[allv] <tablename> <startkey> <endkey> [<\"cf1|cf2\">]           \n\
                 scan table from startkey to endkey.                         \n\
                 (return all qulifier version when using suffix \"allv\")    \n\
-                                                                            \n\
        delete[1v] <tablename> <rowkey> [<columnfamily:qualifier>]           \n\
                 delete row/columnfamily/qualifiers.                         \n\
                 (only delete latest version when using suffix \"1v\")       \n\
-                                                                            \n\
        put_counter <tablename> <rowkey> [<columnfamily:qualifier>] <integer(int64_t)>   \n\
                                                                             \n\
        get_counter <tablename> <rowkey> [<columnfamily:qualifier>]          \n\
                                                                             \n\
        add      <tablename> <rowkey> <columnfamily:qualifier>   delta       \n\
                 add 'delta'(int64_t) to specified cell                      \n\
-                                                                            \n\
        putint64 <tablename> <rowkey> [<columnfamily:qualifier>] <integer(int64_t)>       \n\
                                                                             \n\
        getint64 <tablename> <rowkey> [<columnfamily:qualifier>]             \n\
                                                                             \n\
        addint64 <tablename> <rowkey> <columnfamily:qualifier>  delta        \n\
                 add 'delta'(int64_t) to specified cell                      \n\
-                                                                            \n\
        append   <tablename> <rowkey> [<columnfamily:qualifier>] <value>     \n\
                                                                             \n\
        batchput <tablename> <input file>                                    \n\
@@ -140,21 +133,18 @@ void Usage(const std::string& prg_name) {
        show[x]  [<tablename>]                                               \n\
                 show table list or tablets info.                            \n\
                 (show more detail when using suffix \"x\")                  \n\
-                                                                            \n\
        showschema[x] <tablename>                                            \n\
                 show table schema (show more detail when using suffix \"x\")\n\
-                                                                            \n\
        showts[x] [<tabletnode addr>]                                        \n\
                 show all tabletnodes or single tabletnode info.             \n\
                 (show more detail when using suffix \"x\")                  \n\
-                                                                            \n\
-       user create    username password                                     \n\
-       user changepwd username new-password                                 \n\
-       user show      username                                              \n\
-       user delete    username                                              \n\
-       user addtogroup      username groupname                              \n\
-       user deletefromgroup username groupname                              \n\
-                                                                            \n\
+       user     <operation> <params>                                        \n\
+                create          <username> <password>                       \n\
+                changepwd       <username> <new-password>                   \n\
+                show            <username>                                  \n\
+                delete          <username>                                  \n\
+                addtogroup      <username> <groupname>                      \n\
+                deletefromgroup <username> <groupname>                      \n\
        version\n\n";
 }
 
@@ -163,35 +153,24 @@ void UsageMore(const std::string& prg_name) {
     std::cout << "       " << prg_name << "  OPERATION  [OPTION...] \n\n";
     std::cout << "DESCRIPTION \n\
        tablet   <operation> <params>                                        \n\
-           - operation                                                      \n\
                 move    <tablet_path> <target_addr>                         \n\
-                        move a tablet to target tabletnode                  \n\
                 compact <tablet_path>                                       \n\
                 split   <tablet_path>                                       \n\
                 merge   <tablet_path>                                       \n\
-                                                                            \n\
        compact  <tablename> [--lg=] [--concurrency=]                        \n\
                 run manual compaction on a table, support only compact a    \n\
                 localitygroup.                                              \n\
-                                                                            \n\
        safemode [get|enter|leave]                                           \n\
                                                                             \n\
-       meta     [backup|check|repair]                                       \n\
-                backup metatable in master memory                           \n\
-                                                                            \n\
-       meta2    [check|backup|show|repair]                                     \n\
-                operate meta table.                                         \n\
-                                                                            \n\
+       meta[2]  [backup|check|repair|show]                                  \n\
+                meta for master memory, meta2 for meta table.               \n\
        findmaster                                                           \n\
                 find the address of master                                  \n\
-                                                                            \n\
        findts   <tablename> <rowkey>                                        \n\
                 find the specify tabletnode serving 'rowkey'.               \n\
-                                                                            \n\
        reload config hostname:port                                          \n\
                 notify master | ts reload flag file                         \n\
                 *** at your own risk ***                                    \n\
-                                                                            \n\
        version\n\n";
 }
 
@@ -2355,6 +2334,10 @@ int32_t MetaOp(Client* client, int32_t argc, char** argv, ErrorCode* err) {
 
     std::string op = argv[2];
     if (op == "backup") {
+        if (argc < 4) {
+            LOG(ERROR) << "need backup file name.";
+            return -1;
+        }
         std::string filename = argv[3];
         std::vector<std::string> arg_list;
         arg_list.push_back(op);
