@@ -176,10 +176,10 @@ void UsageMore(const std::string& prg_name) {
                                                                             \n\
        safemode [get|enter|leave]                                           \n\
                                                                             \n\
-       meta     [backup]                                                    \n\
+       meta     [backup|check|repair]                                       \n\
                 backup metatable in master memory                           \n\
                                                                             \n\
-       meta2    [check|bak|show|repair]                                     \n\
+       meta2    [check|backup|show|repair]                                     \n\
                 operate meta table.                                         \n\
                                                                             \n\
        findmaster                                                           \n\
@@ -1049,7 +1049,7 @@ int32_t ShowAllTables(Client* client, bool is_x, bool show_all, ErrorCode* err) 
     TableMetaList table_list;
     TabletMetaList tablet_list;
     tera::ClientImpl* client_impl = static_cast<tera::ClientImpl*>(client);
-    if (!client_impl->ShowTablesInfo(&table_list, &tablet_list, err)) {
+    if (!client_impl->ShowTablesInfo(&table_list, &tablet_list, !show_all, err)) {
         LOG(ERROR) << "fail to get meta data from tera.";
         return -1;
     }
@@ -2085,32 +2085,6 @@ int32_t RenameOp(Client* client, int32_t argc, char** argv, ErrorCode* err) {
     return 0;
 }
 
-int32_t MetaOp(Client* client, int32_t argc, char** argv, ErrorCode* err) {
-    if (argc != 4 && argc != 5) {
-        UsageMore(argv[0]);
-        return -1;
-    }
-
-    std::string op = argv[2];
-    if (op != "backup") {
-        UsageMore(argv[0]);
-        return -1;
-    }
-
-    std::string filename = argv[3];
-
-    std::vector<std::string> arg_list;
-    arg_list.push_back(op);
-    arg_list.push_back(filename);
-    if (!client->CmdCtrl("meta", arg_list, NULL, NULL, err)) {
-        LOG(ERROR) << "fail to " << op << " meta";
-        return -1;
-    }
-    std::cout << op << " tablet success" << std::endl;
-
-    return 0;
-}
-
 int32_t CompactOp(Client* client, int32_t argc, char** argv, ErrorCode* err) {
     if (argc != 3) {
         UsageMore(argv[0]);
@@ -2206,73 +2180,8 @@ void WriteTablet(const TabletMeta& meta, std::ofstream& ofs) {
     WriteToStream(ofs, key, value);
 }
 
-int32_t Meta2Op(Client *client, int32_t argc, char** argv) {
-    if (argc < 3) {
-        UsageMore(argv[0]);
-        return -1;
-    }
-
-    std::string op = argv[2];
-    if (op != "check" && op != "show" && op != "bak" && op != "repair") {
-        UsageMore(argv[0]);
-        return -1;
-    }
-
-    // get meta address
-    tera::sdk::ClusterFinder finder(FLAGS_tera_zk_root_path, FLAGS_tera_zk_addr_list);
-    std::string meta_tablet_addr = finder.RootTableAddr();
-    if (meta_tablet_addr.empty()) {
-        std::cerr << "read root addr from zk fail";
-        return -1;
-    }
-
-    // scan meta
-    uint64_t seq_id = 0;
-    tera::TableMetaList table_list;
-    tera::TabletMetaList tablet_list;
-    tera::ScanTabletRequest request;
-    tera::ScanTabletResponse response;
-    request.set_sequence_id(seq_id++);
-    request.set_table_name(FLAGS_tera_master_meta_table_name);
-    request.set_start("");
-    request.set_end("");
-    tera::tabletnode::TabletNodeClient meta_node_client(meta_tablet_addr);
-    while (meta_node_client.ScanTablet(&request, &response)) {
-        if (response.status() != tera::kTabletNodeOk) {
-            std::cerr << "fail to load meta table: "
-                << StatusCodeToString(response.status()) << std::endl;
-            return -1;
-        }
-        int32_t record_size = response.results().key_values_size();
-        if (record_size <= 0) {
-            std::cout << "scan meta table success" << std::endl;
-            break;
-        }
-        std::cerr << "scan meta table: " << record_size << " records" << std::endl;
-
-        std::string last_record_key;
-        for (int32_t i = 0; i < record_size; i++) {
-            const tera::KeyValuePair& record = response.results().key_values(i);
-            last_record_key = record.key();
-            char first_key_char = record.key()[0];
-            if (first_key_char == '~') {
-                std::cout << "(user: " << record.key().substr(1) << ")" << std::endl;
-            } else if (first_key_char == '@') {
-                ParseMetaTableKeyValue(record.key(), record.value(), table_list.add_meta());
-            } else if (first_key_char > '@') {
-                ParseMetaTableKeyValue(record.key(), record.value(), tablet_list.add_meta());
-            } else {
-                std::cerr << "invalid record: " << record.key();
-            }
-        }
-        std::string next_record_key = tera::NextKey(last_record_key);
-        request.set_start(next_record_key);
-        request.set_end("");
-        request.set_sequence_id(seq_id++);
-        response.Clear();
-    }
-
-    // process meta
+int32_t ProcessMeta(const std::string& op, const TableMetaList& table_list,
+                    const TabletMetaList& tablet_list) {
     int32_t table_num = table_list.meta_size();
     int32_t tablet_num = tablet_list.meta_size();
     if (table_num == 0 && tablet_num == 0) {
@@ -2281,7 +2190,7 @@ int32_t Meta2Op(Client *client, int32_t argc, char** argv) {
     }
 
     std::ofstream bak;
-    if (op == "bak" || op == "repair") {
+    if (op == "backup" || op == "repair") {
         bak.open("meta.bak", std::ofstream::trunc|std::ofstream::binary);
     }
 
@@ -2309,7 +2218,7 @@ int32_t Meta2Op(Client *client, int32_t argc, char** argv) {
                     << cf.time_to_live() << ")" << std::endl;
             }
         }
-        if (op == "bak" || op == "repair") {
+        if (op == "backup" || op == "repair") {
             WriteTable(meta, bak);
         }
     }
@@ -2327,7 +2236,7 @@ int32_t Meta2Op(Client *client, int32_t argc, char** argv) {
                 << StatusCodeToString(meta.status()) << ", "
                 << StatusCodeToString(meta.compact_status()) << std::endl;
         }
-        if (op == "bak") {
+        if (op == "backup") {
             WriteTablet(meta, bak);
         }
         // check self range
@@ -2432,10 +2341,113 @@ int32_t Meta2Op(Client *client, int32_t argc, char** argv) {
             table_start = meta.key_range().key_end().empty();
         }
     }
-    if (op == "bak" || op == "repair") {
+    if (op == "backup" || op == "repair") {
         bak.close();
     }
     return 0;
+}
+
+int32_t MetaOp(Client* client, int32_t argc, char** argv, ErrorCode* err) {
+    if (argc != 4 && argc != 3) {
+        UsageMore(argv[0]);
+        return -1;
+    }
+
+    std::string op = argv[2];
+    if (op == "backup") {
+        std::string filename = argv[3];
+        std::vector<std::string> arg_list;
+        arg_list.push_back(op);
+        arg_list.push_back(filename);
+        if (!client->CmdCtrl("meta", arg_list, NULL, NULL, err)) {
+            LOG(ERROR) << "fail to " << op << " meta";
+            return -5;
+        }
+    } else if (op == "check" || op == "repair" || op == "show") {
+        TableMetaList table_list;
+        TabletMetaList tablet_list;
+        tera::ClientImpl* client_impl = static_cast<tera::ClientImpl*>(client);
+        if (!client_impl->ShowTablesInfo(&table_list, &tablet_list, false, err)) {
+            LOG(ERROR) << "fail to get meta data from tera.";
+            return -3;
+        }
+        ProcessMeta(op, table_list, tablet_list);
+    } else {
+        UsageMore(argv[0]);
+        return -2;
+    }
+
+    std::cout << op << " tablet success" << std::endl;
+    return 0;
+}
+
+int32_t Meta2Op(Client *client, int32_t argc, char** argv) {
+    if (argc < 3) {
+        UsageMore(argv[0]);
+        return -1;
+    }
+
+    std::string op = argv[2];
+    if (op != "check" && op != "show" && op != "backup" && op != "repair") {
+        UsageMore(argv[0]);
+        return -1;
+    }
+
+    // get meta address
+    tera::sdk::ClusterFinder finder(FLAGS_tera_zk_root_path, FLAGS_tera_zk_addr_list);
+    std::string meta_tablet_addr = finder.RootTableAddr();
+    if (meta_tablet_addr.empty()) {
+        std::cerr << "read root addr from zk fail";
+        return -1;
+    }
+
+    // scan meta
+    uint64_t seq_id = 0;
+    tera::TableMetaList table_list;
+    tera::TabletMetaList tablet_list;
+    tera::ScanTabletRequest request;
+    tera::ScanTabletResponse response;
+    request.set_sequence_id(seq_id++);
+    request.set_table_name(FLAGS_tera_master_meta_table_name);
+    request.set_start("");
+    request.set_end("");
+    tera::tabletnode::TabletNodeClient meta_node_client(meta_tablet_addr);
+    while (meta_node_client.ScanTablet(&request, &response)) {
+        if (response.status() != tera::kTabletNodeOk) {
+            std::cerr << "fail to load meta table: "
+                << StatusCodeToString(response.status()) << std::endl;
+            return -1;
+        }
+        int32_t record_size = response.results().key_values_size();
+        if (record_size <= 0) {
+            std::cout << "scan meta table success" << std::endl;
+            break;
+        }
+        std::cerr << "scan meta table: " << record_size << " records" << std::endl;
+
+        std::string last_record_key;
+        for (int32_t i = 0; i < record_size; i++) {
+            const tera::KeyValuePair& record = response.results().key_values(i);
+            last_record_key = record.key();
+            char first_key_char = record.key()[0];
+            if (first_key_char == '~') {
+                std::cout << "(user: " << record.key().substr(1) << ")" << std::endl;
+            } else if (first_key_char == '@') {
+                ParseMetaTableKeyValue(record.key(), record.value(), table_list.add_meta());
+            } else if (first_key_char > '@') {
+                ParseMetaTableKeyValue(record.key(), record.value(), tablet_list.add_meta());
+            } else {
+                std::cerr << "invalid record: " << record.key();
+            }
+        }
+        std::string next_record_key = tera::NextKey(last_record_key);
+        request.set_start(next_record_key);
+        request.set_end("");
+        request.set_sequence_id(seq_id++);
+        response.Clear();
+    }
+
+    return ProcessMeta(op, table_list, tablet_list);
 }
 
 static int32_t CreateUser(Client* client, const std::string& user,
