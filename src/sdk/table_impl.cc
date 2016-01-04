@@ -109,15 +109,29 @@ RowReader* TableImpl::NewRowReader(const std::string& row_key) {
 }
 
 void TableImpl::ApplyMutation(RowMutation* row_mu) {
+    if (row_mu->GetError().GetType() != ErrorCode::kOK) {
+        ThreadPool::Task task =
+            boost::bind(&RowMutationImpl::RunCallback,
+                        static_cast<RowMutationImpl*>(row_mu));
+        _thread_pool->AddTask(task);
+        return;
+    }
     std::vector<RowMutationImpl*> mu_list;
     mu_list.push_back(static_cast<RowMutationImpl*>(row_mu));
     DistributeMutations(mu_list, true);
 }
 
 void TableImpl::ApplyMutation(const std::vector<RowMutation*>& row_mutations) {
-    std::vector<RowMutationImpl*> mu_list(row_mutations.size());
+    std::vector<RowMutationImpl*> mu_list;
     for (uint32_t i = 0; i < row_mutations.size(); i++) {
-        mu_list[i] = static_cast<RowMutationImpl*>(row_mutations[i]);
+        if (row_mutations[i]->GetError().GetType() != ErrorCode::kOK) {
+            ThreadPool::Task task =
+                boost::bind(&RowMutationImpl::RunCallback,
+                            static_cast<RowMutationImpl*>(row_mutations[i]));
+            _thread_pool->AddTask(task);
+            continue;
+        }
+        mu_list.push_back(static_cast<RowMutationImpl*>(row_mutations[i]));
     }
     DistributeMutations(mu_list, true);
 }

@@ -12,6 +12,8 @@ mkdir -p tmp/log
 mkdir -p tmp/data
 cp -r test/testcase tmp/bin
 cp -r test/testcase/shell_script/* tmp/bin
+cp src/sdk/python/TeraSdk.py tmp/bin/testcase
+cp build/lib/libtera_c.so tmp/bin
 
 cd tmp/bin/
 sh kill_tera.sh
