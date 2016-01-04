@@ -535,7 +535,8 @@ bool ClientImpl::ShowTablesInfo(const string& name,
         LOG(ERROR) << "faild to scan meta schema";
         return false;
     }
-    bool result = DoShowTablesInfo(&table_list, tablet_list, internal_table_name, err);
+    bool result = DoShowTablesInfo(&table_list, tablet_list, internal_table_name,
+                                   false, err);
     if ((table_list.meta_size() == 0)
         || (table_list.meta(0).table_name() != internal_table_name)) {
         return false;
@@ -548,13 +549,15 @@ bool ClientImpl::ShowTablesInfo(const string& name,
 
 bool ClientImpl::ShowTablesInfo(TableMetaList* table_list,
                                 TabletMetaList* tablet_list,
+                                bool is_brief,
                                 ErrorCode* err) {
-    return DoShowTablesInfo(table_list, tablet_list, "", err);
+    return DoShowTablesInfo(table_list, tablet_list, "", is_brief, err);
 }
 
 bool ClientImpl::DoShowTablesInfo(TableMetaList* table_list,
                                   TabletMetaList* tablet_list,
                                   const string& table_name,
+                                  bool is_brief,
                                   ErrorCode* err) {
     if (table_list == NULL || tablet_list == NULL) {
         return false;
@@ -580,11 +583,8 @@ bool ClientImpl::DoShowTablesInfo(TableMetaList* table_list,
         request.set_max_tablet_num(FLAGS_tera_sdk_show_max_num); //tablets be fetched at most in one RPC
         request.set_sequence_id(0);
         request.set_user_token(GetUserToken(_user_identity, _user_passcode));
+        request.set_all_brief(is_brief);
 
-        if (table_name == "") {
-            // show all table brief
-            request.set_all_brief(true);
-        }
         if (master_client.ShowTables(&request, &response) &&
             response.status() == kMasterOk) {
             if (tablet_list == NULL && response.all_brief()) {

@@ -80,7 +80,6 @@ void Usage(const std::string& prg_name) {
                     tablename <splitsize=1024, storage=memory, ...>         \n\
               - simple mode schema:                                         \n\
                     tablename{cf1, cf2, cf3, ...}                           \n\
-                                                                            \n\
        createbyfile   <schema_file> [<delimiter_file>]                      \n\
                                                                             \n\
        update <schema>                                                      \n\
@@ -95,12 +94,10 @@ void Usage(const std::string& prg_name) {
                     e.g. tablename{lg0{cf0<ttl=250>,new_cf<op=add,ttl=233>}}\n\
                 - delete cf                                                 \n\
                     e.g. tablename{lg0{cf0<op=del>}}                        \n\
-                                                                            \n\
        enable/disable/drop  <tablename>                                     \n\
                                                                             \n\
        rename   <old table name> <new table name>                           \n\
                 rename table's name                                         \n\
-                                                                            \n\
        put      <tablename> <rowkey> [<columnfamily:qualifier>] <value>     \n\
                                                                             \n\
        put-ttl  <tablename> <rowkey> [<columnfamily:qualifier>] <value> <ttl(second)>    \n\
@@ -112,25 +109,21 @@ void Usage(const std::string& prg_name) {
        scan[allv] <tablename> <startkey> <endkey> [<\"cf1|cf2\">]           \n\
                 scan table from startkey to endkey.                         \n\
                 (return all qulifier version when using suffix \"allv\")    \n\
-                                                                            \n\
        delete[1v] <tablename> <rowkey> [<columnfamily:qualifier>]           \n\
                 delete row/columnfamily/qualifiers.                         \n\
                 (only delete latest version when using suffix \"1v\")       \n\
-                                                                            \n\
        put_counter <tablename> <rowkey> [<columnfamily:qualifier>] <integer(int64_t)>   \n\
                                                                             \n\
        get_counter <tablename> <rowkey> [<columnfamily:qualifier>]          \n\
                                                                             \n\
        add      <tablename> <rowkey> <columnfamily:qualifier>   delta       \n\
                 add 'delta'(int64_t) to specified cell                      \n\
-                                                                            \n\
        putint64 <tablename> <rowkey> [<columnfamily:qualifier>] <integer(int64_t)>       \n\
                                                                             \n\
        getint64 <tablename> <rowkey> [<columnfamily:qualifier>]             \n\
                                                                             \n\
        addint64 <tablename> <rowkey> <columnfamily:qualifier>  delta        \n\
                 add 'delta'(int64_t) to specified cell                      \n\
-                                                                            \n\
        append   <tablename> <rowkey> [<columnfamily:qualifier>] <value>     \n\
                                                                             \n\
        batchput <tablename> <input file>                                    \n\
@@ -140,21 +133,18 @@ void Usage(const std::string& prg_name) {
        show[x]  [<tablename>]                                               \n\
                 show table list or tablets info.                            \n\
                 (show more detail when using suffix \"x\")                  \n\
-                                                                            \n\
        showschema[x] <tablename>                                            \n\
                 show table schema (show more detail when using suffix \"x\")\n\
-                                                                            \n\
        showts[x] [<tabletnode addr>]                                        \n\
                 show all tabletnodes or single tabletnode info.             \n\
                 (show more detail when using suffix \"x\")                  \n\
-                                                                            \n\
-       user create    username password                                     \n\
-       user changepwd username new-password                                 \n\
-       user show      username                                              \n\
-       user delete    username                                              \n\
-       user addtogroup      username groupname                              \n\
-       user deletefromgroup username groupname                              \n\
-                                                                            \n\
+       user     <operation> <params>                                        \n\
+                create          <username> <password>                       \n\
+                changepwd       <username> <new-password>                   \n\
+                show            <username>                                  \n\
+                delete          <username>                                  \n\
+                addtogroup      <username> <groupname>                      \n\
+                deletefromgroup <username> <groupname>                      \n\
        version\n\n";
 }
 
@@ -163,35 +153,24 @@ void UsageMore(const std::string& prg_name) {
     std::cout << "       " << prg_name << "  OPERATION  [OPTION...] \n\n";
     std::cout << "DESCRIPTION \n\
        tablet   <operation> <params>                                        \n\
-           - operation                                                      \n\
                 move    <tablet_path> <target_addr>                         \n\
-                        move a tablet to target tabletnode                  \n\
                 compact <tablet_path>                                       \n\
                 split   <tablet_path>                                       \n\
                 merge   <tablet_path>                                       \n\
-                                                                            \n\
        compact  <tablename> [--lg=] [--concurrency=]                        \n\
                 run manual compaction on a table, support only compact a    \n\
                 localitygroup.                                              \n\
-                                                                            \n\
        safemode [get|enter|leave]                                           \n\
                                                                             \n\
-       meta     [backup]                                                    \n\
-                backup metatable in master memory                           \n\
-                                                                            \n\
-       meta2    [check|bak|show|repair]                                     \n\
-                operate meta table.                                         \n\
-                                                                            \n\
+       meta[2]  [backup|check|repair|show]                                  \n\
+                meta for master memory, meta2 for meta table.               \n\
        findmaster                                                           \n\
                 find the address of master                                  \n\
-                                                                            \n\
        findts   <tablename> <rowkey>                                        \n\
                 find the specify tabletnode serving 'rowkey'.               \n\
-                                                                            \n\
        reload config hostname:port                                          \n\
                 notify master | ts reload flag file                         \n\
                 *** at your own risk ***                                    \n\
-                                                                            \n\
        version\n\n";
 }
 
@@ -1049,7 +1028,7 @@ int32_t ShowAllTables(Client* client, bool is_x, bool show_all, ErrorCode* err) 
     TableMetaList table_list;
     TabletMetaList tablet_list;
     tera::ClientImpl* client_impl = static_cast<tera::ClientImpl*>(client);
-    if (!client_impl->ShowTablesInfo(&table_list, &tablet_list, err)) {
+    if (!client_impl->ShowTablesInfo(&table_list, &tablet_list, !show_all, err)) {
         LOG(ERROR) << "fail to get meta data from tera.";
         return -1;
     }
@@ -2085,32 +2064,6 @@ int32_t RenameOp(Client* client, int32_t argc, char** argv, ErrorCode* err) {
     return 0;
 }
 
-int32_t MetaOp(Client* client, int32_t argc, char** argv, ErrorCode* err) {
-    if (argc != 4 && argc != 5) {
-        UsageMore(argv[0]);
-        return -1;
-    }
-
-    std::string op = argv[2];
-    if (op != "backup") {
-        UsageMore(argv[0]);
-        return -1;
-    }
-
-    std::string filename = argv[3];
-
-    std::vector<std::string> arg_list;
-    arg_list.push_back(op);
-    arg_list.push_back(filename);
-    if (!client->CmdCtrl("meta", arg_list, NULL, NULL, err)) {
-        LOG(ERROR) << "fail to " << op << " meta";
-        return -1;
-    }
-    std::cout << op << " tablet success" << std::endl;
-
-    return 0;
-}
-
 int32_t CompactOp(Client* client, int32_t argc, char** argv, ErrorCode* err) {
     if (argc != 3) {
         UsageMore(argv[0]);
@@ -2206,73 +2159,8 @@ void WriteTablet(const TabletMeta& meta, std::ofstream& ofs) {
     WriteToStream(ofs, key, value);
 }
 
-int32_t Meta2Op(Client *client, int32_t argc, char** argv) {
-    if (argc < 3) {
-        UsageMore(argv[0]);
-        return -1;
-    }
-
-    std::string op = argv[2];
-    if (op != "check" && op != "show" && op != "bak" && op != "repair") {
-        UsageMore(argv[0]);
-        return -1;
-    }
-
-    // get meta address
-    tera::sdk::ClusterFinder finder(FLAGS_tera_zk_root_path, FLAGS_tera_zk_addr_list);
-    std::string meta_tablet_addr = finder.RootTableAddr();
-    if (meta_tablet_addr.empty()) {
-        std::cerr << "read root addr from zk fail";
-        return -1;
-    }
-
-    // scan meta
-    uint64_t seq_id = 0;
-    tera::TableMetaList table_list;
-    tera::TabletMetaList tablet_list;
-    tera::ScanTabletRequest request;
-    tera::ScanTabletResponse response;
-    request.set_sequence_id(seq_id++);
-    request.set_table_name(FLAGS_tera_master_meta_table_name);
-    request.set_start("");
-    request.set_end("");
-    tera::tabletnode::TabletNodeClient meta_node_client(meta_tablet_addr);
-    while (meta_node_client.ScanTablet(&request, &response)) {
-        if (response.status() != tera::kTabletNodeOk) {
-            std::cerr << "fail to load meta table: "
-                << StatusCodeToString(response.status()) << std::endl;
-            return -1;
-        }
-        int32_t record_size = response.results().key_values_size();
-        if (record_size <= 0) {
-            std::cout << "scan meta table success" << std::endl;
-            break;
-        }
-        std::cerr << "scan meta table: " << record_size << " records" << std::endl;
-
-        std::string last_record_key;
-        for (int32_t i = 0; i < record_size; i++) {
-            const tera::KeyValuePair& record = response.results().key_values(i);
-            last_record_key = record.key();
-            char first_key_char = record.key()[0];
-            if (first_key_char == '~') {
-                std::cout << "(user: " << record.key().substr(1) << ")" << std::endl;
-            } else if (first_key_char == '@') {
-                ParseMetaTableKeyValue(record.key(), record.value(), table_list.add_meta());
-            } else if (first_key_char > '@') {
-                ParseMetaTableKeyValue(record.key(), record.value(), tablet_list.add_meta());
-            } else {
-                std::cerr << "invalid record: " << record.key();
-            }
-        }
-        std::string next_record_key = tera::NextKey(last_record_key);
-        request.set_start(next_record_key);
-        request.set_end("");
-        request.set_sequence_id(seq_id++);
-        response.Clear();
-    }
-
-    // process meta
+int32_t ProcessMeta(const std::string& op, const TableMetaList& table_list,
+                    const TabletMetaList& tablet_list) {
     int32_t table_num = table_list.meta_size();
     int32_t tablet_num = tablet_list.meta_size();
     if (table_num == 0 && tablet_num == 0) {
@@ -2281,7 +2169,7 @@ int32_t Meta2Op(Client *client, int32_t argc, char** argv) {
     }
 
     std::ofstream bak;
-    if (op == "bak" || op == "repair") {
+    if (op == "backup" || op == "repair") {
         bak.open("meta.bak", std::ofstream::trunc|std::ofstream::binary);
     }
 
@@ -2309,7 +2197,7 @@ int32_t Meta2Op(Client *client, int32_t argc, char** argv) {
                     << cf.time_to_live() << ")" << std::endl;
             }
         }
-        if (op == "bak" || op == "repair") {
+        if (op == "backup" || op == "repair") {
             WriteTable(meta, bak);
         }
     }
@@ -2327,7 +2215,7 @@ int32_t Meta2Op(Client *client, int32_t argc, char** argv) {
                 << StatusCodeToString(meta.status()) << ", "
                 << StatusCodeToString(meta.compact_status()) << std::endl;
         }
-        if (op == "bak") {
+        if (op == "backup") {
             WriteTablet(meta, bak);
         }
         // check self range
@@ -2432,10 +2320,117 @@ int32_t Meta2Op(Client *client, int32_t argc, char** argv) {
             table_start = meta.key_range().key_end().empty();
         }
     }
-    if (op == "bak" || op == "repair") {
+    if (op == "backup" || op == "repair") {
         bak.close();
     }
     return 0;
+}
+
+int32_t MetaOp(Client* client, int32_t argc, char** argv, ErrorCode* err) {
+    if (argc != 4 && argc != 3) {
+        UsageMore(argv[0]);
+        return -1;
+    }
+
+    std::string op = argv[2];
+    if (op == "backup") {
+        if (argc < 4) {
+            LOG(ERROR) << "need backup file name.";
+            return -1;
+        }
+        std::string filename = argv[3];
+        std::vector<std::string> arg_list;
+        arg_list.push_back(op);
+        arg_list.push_back(filename);
+        if (!client->CmdCtrl("meta", arg_list, NULL, NULL, err)) {
+            LOG(ERROR) << "fail to " << op << " meta";
+            return -5;
+        }
+    } else if (op == "check" || op == "repair" || op == "show") {
+        TableMetaList table_list;
+        TabletMetaList tablet_list;
+        tera::ClientImpl* client_impl = static_cast<tera::ClientImpl*>(client);
+        if (!client_impl->ShowTablesInfo(&table_list, &tablet_list, false, err)) {
+            LOG(ERROR) << "fail to get meta data from tera.";
+            return -3;
+        }
+        ProcessMeta(op, table_list, tablet_list);
+    } else {
+        UsageMore(argv[0]);
+        return -2;
+    }
+
+    std::cout << op << " tablet success" << std::endl;
+    return 0;
+}
+
+int32_t Meta2Op(Client *client, int32_t argc, char** argv) {
+    if (argc < 3) {
+        UsageMore(argv[0]);
+        return -1;
+    }
+
+    std::string op = argv[2];
+    if (op != "check" && op != "show" && op != "backup" && op != "repair") {
+        UsageMore(argv[0]);
+        return -1;
+    }
+
+    // get meta address
+    tera::sdk::ClusterFinder finder(FLAGS_tera_zk_root_path, FLAGS_tera_zk_addr_list);
+    std::string meta_tablet_addr = finder.RootTableAddr();
+    if (meta_tablet_addr.empty()) {
+        std::cerr << "read root addr from zk fail";
+        return -1;
+    }
+
+    // scan meta
+    uint64_t seq_id = 0;
+    tera::TableMetaList table_list;
+    tera::TabletMetaList tablet_list;
+    tera::ScanTabletRequest request;
+    tera::ScanTabletResponse response;
+    request.set_sequence_id(seq_id++);
+    request.set_table_name(FLAGS_tera_master_meta_table_name);
+    request.set_start("");
+    request.set_end("");
+    tera::tabletnode::TabletNodeClient meta_node_client(meta_tablet_addr);
+    while (meta_node_client.ScanTablet(&request, &response)) {
+        if (response.status() != tera::kTabletNodeOk) {
+            std::cerr << "fail to load meta table: "
+                << StatusCodeToString(response.status()) << std::endl;
+            return -1;
+        }
+        int32_t record_size = response.results().key_values_size();
+        if (record_size <= 0) {
+            std::cout << "scan meta table success" << std::endl;
+            break;
+        }
+        std::cerr << "scan meta table: " << record_size << " records" << std::endl;
+
+        std::string last_record_key;
+        for (int32_t i = 0; i < record_size; i++) {
+            const tera::KeyValuePair& record = response.results().key_values(i);
+            last_record_key = record.key();
+            char first_key_char = record.key()[0];
+            if (first_key_char == '~') {
+                std::cout << "(user: " << record.key().substr(1) << ")" << std::endl;
+            } else if (first_key_char == '@') {
+                ParseMetaTableKeyValue(record.key(), record.value(), table_list.add_meta());
+            } else if (first_key_char > '@') {
+                ParseMetaTableKeyValue(record.key(), record.value(), tablet_list.add_meta());
+            } else {
+                std::cerr << "invalid record: " << record.key();
+            }
+        }
+        std::string next_record_key = tera::NextKey(last_record_key);
+        request.set_start(next_record_key);
+        request.set_end("");
+        request.set_sequence_id(seq_id++);
+        response.Clear();
+    }
+
+    return ProcessMeta(op, table_list, tablet_list);
 }
 
 static int32_t CreateUser(Client* client, const std::string& user,
