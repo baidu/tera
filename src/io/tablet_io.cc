@@ -525,6 +525,22 @@ bool TabletIO::IsBusy() {
     return is_busy;
 }
 
+bool TabletIO::WorkLoad(double* write_workload) {
+    {
+        MutexLock lock(&m_mutex);
+        if (m_status != kReady) {
+            return false;
+        }
+        m_db_ref_count++;
+    }
+    m_db->WorkLoad(write_workload);
+    {
+        MutexLock lock(&m_mutex);
+        m_db_ref_count--;
+    }
+    return true;
+}
+
 bool TabletIO::SnapshotIDToSeq(uint64_t snapshot_id, uint64_t* snapshot_sequence) {
     std::map<uint64_t, uint64_t>::iterator it = id_to_snapshot_num_.find(snapshot_id);
     if (it == id_to_snapshot_num_.end()) {
@@ -1845,6 +1861,9 @@ void TabletIO::GetAndClearCounter(TabletCounter* counter) {
     counter->set_write_kvs(m_counter.write_kvs.Clear());
     counter->set_write_size(m_counter.write_size.Clear());
     counter->set_is_on_busy(IsBusy());
+    double write_workload = 0;
+    WorkLoad(&write_workload);
+    counter->set_write_workload(write_workload);
 }
 
 int32_t TabletIO::AddRef() {
