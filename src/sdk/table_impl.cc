@@ -410,15 +410,15 @@ void TableImpl::ScanCallBack(ScanTask* scan_task,
         _task_pool.PopTask(scan_task->GetId());
         CHECK_EQ(scan_task->GetRef(), 2);
         delete scan_task;
-    } else if (err == kKeyNotInRange) {
-        scan_task->IncRetryTimes();
-        ScanTabletAsync(scan_task, false);
     } else {
         scan_task->IncRetryTimes();
         ThreadPool::Task retry_task =
             boost::bind(&TableImpl::ScanTabletAsync, this, scan_task, false);
-        _thread_pool->DelayTask(
-            FLAGS_tera_sdk_retry_period * scan_task->RetryTimes(), retry_task);
+        CHECK(scan_task->RetryTimes() > 0);
+        int64_t retry_interval =
+            static_cast<int64_t>(pow(FLAGS_tera_sdk_delay_send_internal,
+                                     scan_task->RetryTimes() - 1) * 1000);
+        _thread_pool->DelayTask(retry_interval, retry_task);
     }
 }
 
