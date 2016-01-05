@@ -20,6 +20,7 @@
 #include "proto/status_code.pb.h"
 #include "utils/timer.h"
 #include "utils/utils_cmd.h"
+#include "io/tablet_scanner.h"
 
 DECLARE_string(tera_tabletnode_path_prefix);
 DECLARE_int32(tera_io_retry_max_times);
@@ -317,19 +318,19 @@ TEST_F(TabletIOTest, LowLevelScan) {
     uint32_t read_row_count = 0;
     uint32_t read_bytes = 0;
     bool is_complete = false;
-    EXPECT_TRUE(tablet.LowLevelScan(start_tera_key, "", TabletIO::ScanOptions(),
+    EXPECT_TRUE(tablet.LowLevelScan(start_tera_key, "", tera::io::ScanOptions(),
                                     &value_list, &next_start_point, &read_row_count, &read_bytes, &is_complete, NULL));
     EXPECT_EQ(value_list.key_values_size(), 1);
 
     tablet.GetRawKeyOperator()->EncodeTeraKey("row", "", "", get_micros(), leveldb::TKT_DEL, &tkey1);
     tablet.WriteOne(tkey1, "lala" , false, NULL);
-    EXPECT_TRUE(tablet.LowLevelScan(start_tera_key, "", TabletIO::ScanOptions(),
+    EXPECT_TRUE(tablet.LowLevelScan(start_tera_key, "", tera::io::ScanOptions(),
                                     &value_list, &next_start_point, &read_row_count, &read_bytes, &is_complete, NULL));
     EXPECT_EQ(value_list.key_values_size(), 0);
 
     tablet.GetRawKeyOperator()->EncodeTeraKey("row", "column", "2a", get_micros(), leveldb::TKT_VALUE, &tkey1);
     tablet.WriteOne(tkey1, "lala" , false, NULL);
-    EXPECT_TRUE(tablet.LowLevelScan(start_tera_key, "", TabletIO::ScanOptions(),
+    EXPECT_TRUE(tablet.LowLevelScan(start_tera_key, "", tera::io::ScanOptions(),
                                     &value_list, &next_start_point, &read_row_count, &read_bytes, &is_complete, NULL));
     EXPECT_EQ(value_list.key_values_size(), 1);
 
@@ -351,7 +352,7 @@ TEST_F(TabletIOTest, LowLevelScan) {
     tablet.WriteOne(tkey1, "lala", false, NULL);
     tablet.GetRawKeyOperator()->EncodeTeraKey("row", "", "", 0, leveldb::TKT_FORSEEK, &start_tera_key);
     end_row_key = std::string("row1\0", 5);
-    TabletIO::ScanOptions scan_options;
+    tera::io::ScanOptions scan_options;
     EXPECT_TRUE(tablet.LowLevelScan(start_tera_key, end_row_key, scan_options,
                                     &value_list, &next_start_point, &read_row_count, &read_bytes, &is_complete, NULL));
     EXPECT_EQ(value_list.key_values_size(), 5);

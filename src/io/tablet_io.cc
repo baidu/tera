@@ -318,6 +318,7 @@ bool TabletIO::Unload(StatusCode* status) {
         LOG(INFO) << "[Unload] shutdown1 failed, keep log " << m_tablet_path;
     }
 
+    m_tablet_scanner.DestroyScanCache();
     delete m_db;
     m_db = NULL;
 
@@ -1210,7 +1211,7 @@ bool TabletIO::ScanRows(const ScanTabletRequest* request,
         response->set_status(status);
         done->Run();
     } else if (request->has_session_id() && request->session_id() > 0) {
-        success = ScanRowsStreaming(request, response, done);
+        success = HandleScan(request, response, done);
     } else {
         success = ScanRowsRestricted(request, response, done);
     }
@@ -1249,6 +1250,40 @@ bool TabletIO::ScanRowsRestricted(const ScanTabletRequest* request,
     response->set_status(status);
     done->Run();
     return ret;
+}
+
+bool TabletIO::HandleScan(const ScanTabletRequest* request,
+                          ScanTabletResponse* response,
+                          google::protobuf::Closure* done) {
+    // concurrency control, ensure only one scanner step init leveldb::Iterator
+    ScanContext* context = m_tablet_scanner.GetScanContext(this, request, response, done);
+    if (context == NULL) {
+        return true;
+    }
+
+    // first rpc init iterator and scan parameter
+    if (context->m_it == NULL) {
+        std::string start_tera_key;
+        std::string end_row_key;
+        SetupScanInternalTeraKey(request, &(context->m_start_tera_key), &(context->m_end_row_key));
+        SetupScanRowOptions(request, &(context->m_scan_options));
+        context->m_ret_code = InitedScanInterator(context->m_start_tera_key, context->m_scan_options,
+                                      &(context->m_it));
+    }
+    // schedule scan context
+    return m_tablet_scanner.ReleaseScanContext(context);
+}
+
+void TabletIO::ProcessScan(ScanContext* context) {
+    uint32_t nr_rows_scan = 0;
+    uint32_t nr_size_scan = 0;
+    if (LowLevelScan(context->m_start_tera_key, context->m_end_row_key,
+                     context->m_scan_options, context->m_it,
+                     &context->m_result, NULL, &nr_rows_scan, &nr_size_scan,
+                     &context->m_complete, &context->m_ret_code)) {
+        m_counter.scan_rows.Add(nr_rows_scan);
+        m_counter.scan_size.Add(nr_size_scan);
+    }
 }
 
 bool TabletIO::ScanRowsStreaming(const ScanTabletRequest* request,

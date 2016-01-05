@@ -26,11 +26,15 @@
 #include "types.h"
 #include "utils/counter.h"
 #include "utils/rpc_timer_list.h"
+#include "io/tablet_scanner.h"
 
 namespace tera {
 namespace io {
 
 class TabletWriter;
+struct ScanOptions;
+struct ScanContext;
+class ScanContextManager;
 
 class TabletIO {
 public:
@@ -42,24 +46,6 @@ public:
         kSplited = kTabletSplited,
         kUnLoading = kTabletUnLoading,
         kUnLoading2 = kTabletUnLoading2
-    };
-    typedef std::map< std::string, std::set<std::string> > ColumnFamilyMap;
-    struct ScanOptions {
-        uint32_t max_versions;
-        uint32_t version_num; // restore version_num for stream scan
-        uint32_t max_size;
-        int64_t ts_start;
-        int64_t ts_end;
-        uint64_t snapshot_id;
-        FilterList filter_list;
-        ColumnFamilyMap column_family_list;
-        std::set<std::string> iter_cf_set;
-        int64_t timeout;
-
-        ScanOptions()
-            : max_versions(UINT32_MAX), version_num(0), max_size(UINT32_MAX),
-              ts_start(kOldestTs), ts_end(kLatestTs), snapshot_id(0), timeout(INT64_MAX / 2)
-        {}
     };
 
     struct StatCounter {
@@ -170,9 +156,11 @@ public:
 
     static bool FindAverageKey(const std::string& start, const std::string& end,
                                std::string* res);
+    void ProcessScan(ScanContext* context);
 
 private:
     friend class TabletWriter;
+    friend struct ScanConextManager;
     bool WriteWithoutLock(const std::string& key, const std::string& value,
                           bool sync = false, StatusCode* status = NULL);
 //     int64_t GetDataSizeWithoutLock(StatusCode* status = NULL);
@@ -197,6 +185,11 @@ private:
     bool ScanRowsRestricted(const ScanTabletRequest* request,
                             ScanTabletResponse* response,
                             google::protobuf::Closure* done);
+    // tablet scanner
+    bool HandleScan(const ScanTabletRequest* request,
+                    ScanTabletResponse* response,
+                    google::protobuf::Closure* done);
+    // discard it
     bool ScanRowsStreaming(const ScanTabletRequest* request,
                            ScanTabletResponse* response,
                            google::protobuf::Closure* done);
@@ -226,6 +219,7 @@ private:
 private:
     mutable Mutex m_mutex;
     TabletWriter* m_async_writer;
+    ScanContextManager m_tablet_scanner;
 
     std::string m_tablet_path;
     const std::string m_start_key;
