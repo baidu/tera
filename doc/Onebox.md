@@ -8,7 +8,7 @@
 
 ## 体验之前：
 * **Tera编译通过**（以生成tera_main, teracli两个二进制文件为准）
-* 注：由于Tera通过zookeeper进行寻址，onebox模式下，只能在单机访问Tera
+* onebox模式下，默认使用单机模拟zk，只能在单机访问Tera，如果需要通过网络访问，需要将zk配置修改为真实zk址
 
 ## 准备工作
 1. 将编译生成的tera_main, teracli两个二进制文件放入example/onebox/bin.

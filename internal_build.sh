@@ -212,5 +212,6 @@ sed -i 's/^INS_PREFIX=.*/INS_PREFIX=.\/thirdparty/' depends.mk
 # build tera
 ########################################
 
+make clean
 make -j4
 

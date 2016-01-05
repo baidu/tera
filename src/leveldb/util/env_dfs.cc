@@ -150,7 +150,9 @@ public:
                 s = IOError(filename_, errno);
             }
         }
-        dfs_read_size_counter.Add(bytes_read);
+        if (bytes_read > 0) {
+            dfs_read_size_counter.Add(bytes_read);
+        }
         return s;
     }
 
@@ -165,7 +167,9 @@ public:
         if (bytes_read < 0) {
             s = IOError(filename_, errno);
         }
-        dfs_read_size_counter.Add(bytes_read);
+        if (bytes_read > 0) {
+            dfs_read_size_counter.Add(bytes_read);
+        }
         return s;
     }
 
@@ -285,10 +289,8 @@ public:
         uint64_t diff = EnvDfs()->NowMicros() - t;
         dfs_sync_delay_counter.Add(diff);
         if (diff > 2000000) {
-            char buf[128];
-            get_time_str(buf, 128);
-            Log("[env_dfs] %s dfs sync for %s use %.2fms\n",
-                buf, filename_.c_str(), diff / 1000.0);
+            Log("[env_dfs] dfs sync for %s use %.2fms\n",
+                filename_.c_str(), diff / 1000.0);
         }
         return s;
     }
@@ -374,19 +376,11 @@ Status DfsEnv::CopyFile(const std::string& from, const std::string& to) {
 
 Status DfsEnv::GetChildren(const std::string& path, std::vector<std::string>* result)
 {
-    {
-        tera::AutoCounter ac(&dfs_exists_hang_counter, "Exists", path.c_str());
-        dfs_exists_counter.Inc();
-        if (0 != dfs_->Exists(path)) {
-            Log("GetChildren call with path not exists: %s\n", path.data());
-            return Status::IOError("Path not exist", path);
-        }
-    }
-
     tera::AutoCounter ac(&dfs_list_hang_counter, "ListDirectory", path.c_str());
     dfs_list_counter.Inc();
     if (0 != dfs_->ListDirectory(path, result)) {
-        abort();
+        Log("GetChildren call with path not exists: %s\n", path.data());
+        return Status::IOError("Path not exist", path);
     }
     return Status::OK();
 }

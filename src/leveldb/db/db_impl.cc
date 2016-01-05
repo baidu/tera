@@ -384,7 +384,17 @@ bool DBImpl::IsDbExist() {
     uint64_t number;
     FileType type;
     if (ParseFileName(files[i], &number, &type) && type == kDescriptorFile) {
-      is_manifest_exist = true;
+      std::string dscname = dbname_ + "/" + files[i];
+      uint64_t fsize = 0;
+      env_->GetFileSize(dscname, &fsize);
+      if (fsize == 0) {
+        // if CURRENT file not exist, empty MANIFEST is dangerous, delete it
+        Log(options_.info_log, "[%s] delete empty manifest: %s.",
+            dbname_.c_str(), dscname.c_str());
+        ArchiveFile(env_, dscname);
+      } else {
+        is_manifest_exist = true;
+      }
     }
   }
   if (is_manifest_exist) {
@@ -433,10 +443,14 @@ bool DBImpl::IsDbExist() {
 Status DBImpl::Recover(VersionEdit* edit) {
   mutex_.AssertHeld();
 
-  // Ignore error from CreateDir since the creation of the DB is
-  // committed only when the descriptor is created, and this directory
-  // may already exist from a previous failed creation attempt.
-  env_->CreateDir(dbname_);
+  if (!env_->FileExists(dbname_)) {
+    Status s = env_->CreateDir(dbname_);
+    if (!s.ok()) {
+      Log(options_.info_log, "[%s] fail to create db: %s",
+          dbname_.c_str(), s.ToString().c_str());
+      return s;
+    }
+  }
   assert(db_lock_ == NULL);
   Status s = env_->LockFile(LockFileName(dbname_), &db_lock_);
   if (!s.ok()) {
@@ -477,8 +491,7 @@ Status DBImpl::Recover(VersionEdit* edit) {
       std::string path = RealDbName(dbname_, *it_tablet);
       Log(options_.info_log, "[%s] GetChildren(%s)", dbname_.c_str(), path.c_str());
       std::vector<std::string> filenames;
-      s = env_->GetChildren(path, &filenames);
-      if (!s.ok()) {
+      if (!env_->GetChildren(path, &filenames).ok()) {
         Log(options_.info_log, "[%s] GetChildren(%s) fail: %s",
             dbname_.c_str(), path.c_str(), s.ToString().c_str());
         continue;
@@ -600,7 +613,7 @@ Status DBImpl::CompactMemTable() {
   return s;
 }
 
-void DBImpl::CompactRange(const Slice* begin, const Slice* end) {
+void DBImpl::CompactRange(const Slice* begin, const Slice* end, int lg_no) {
   int max_level_with_files = 1;
   {
     MutexLock l(&mutex_);
@@ -673,16 +686,15 @@ Status DBImpl::TEST_CompactMemTable() {
 
 // tera-specific
 
-bool DBImpl::FindSplitKey(const std::string& start_key,
-                          const std::string& end_key,
-                          double ratio,
-                          std::string* split_key) {
-    Slice start_slice(start_key);
-    Slice end_slice(end_key);
+bool DBImpl::FindSplitKey(double ratio, std::string* split_key) {
     MutexLock l(&mutex_);
-    return versions_->current()->FindSplitKey(start_key.empty()?NULL:&start_slice,
-                                              end_key.empty()?NULL:&end_slice,
-                                              ratio, split_key);
+    return versions_->current()->FindSplitKey(ratio, split_key);
+}
+
+bool DBImpl::FindKeyRange(std::string* smallest_key,
+                          std::string* largest_key) {
+    MutexLock l(&mutex_);
+    return versions_->current()->FindKeyRange(smallest_key, largest_key);
 }
 
 bool DBImpl::MinorCompact() {
@@ -1697,10 +1709,10 @@ void DBImpl::GetApproximateSizes(uint64_t* size, std::vector<uint64_t>* lgsize) 
   // add mem&imm size
   if (size) {
     if (mem_) {
-      size += mem_->ApproximateMemoryUsage();
+      *size += mem_->ApproximateMemoryUsage();
     }
     if (imm_) {
-      size += imm_->ApproximateMemoryUsage();
+      *size += imm_->ApproximateMemoryUsage();
     }
   }
 }

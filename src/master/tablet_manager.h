@@ -67,6 +67,7 @@ public:
     const std::string& GetServerAddr();
     const std::string& GetPath();
     int64_t GetDataSize();
+    void GetDataSize(int64_t* size, std::vector<int64_t>* lg_size);
 
     const std::string& GetKeyStart();
     const std::string& GetKeyEnd();
@@ -176,6 +177,7 @@ public:
     bool CheckStatusSwitch(TableStatus old_status, TableStatus new_status);
     const TableSchema& GetSchema();
     void SetSchema(const TableSchema& schema);
+    const TableCounter& GetCounter();
     int32_t AddSnapshot(uint64_t snapshot);
     int32_t DelSnapshot(uint64_t snapshot);
     void ListSnapshot(std::vector<uint64_t>* snapshots);
@@ -190,6 +192,7 @@ public:
     bool GetTabletsForGc(std::set<uint64_t>* live_tablets,
                          std::set<uint64_t>* dead_tablets);
     void SetSchemaUpdated(bool flag);
+    void RefreshCounter();
 
 private:
     Table(const Table&) {}
@@ -205,6 +208,7 @@ private:
     uint32_t m_deleted_tablet_num;
     uint64_t m_max_tablet_no;
     int64_t m_create_time;
+    TableCounter m_counter;
     bool m_schema_updated; // is schema synced to all ts(all tablets)
 };
 
@@ -316,6 +320,8 @@ private:
     Counter* m_this_sequence_id;
     MasterImpl* m_master_impl;
 };
+
+int64_t CounterWeightedSum(int64_t a1, int64_t a2);
 
 } // namespace master
 } // namespace tera

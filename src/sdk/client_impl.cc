@@ -18,7 +18,9 @@
 #include "sdk/table_impl.h"
 #include "sdk/sdk_utils.h"
 #include "sdk/sdk_zk.h"
+#include "utils/config_utils.h"
 #include "utils/crypt.h"
+#include "utils/string_util.h"
 #include "utils/utils_cmd.h"
 
 DECLARE_string(tera_master_meta_table_name);
@@ -34,6 +36,7 @@ DECLARE_int32(tera_sdk_retry_period);
 DECLARE_int32(tera_sdk_thread_min_num);
 DECLARE_int32(tera_sdk_thread_max_num);
 DECLARE_bool(tera_sdk_rpc_limit_enabled);
+DECLARE_bool(tera_sdk_table_rename_enabled);
 DECLARE_int32(tera_sdk_rpc_limit_max_inflow);
 DECLARE_int32(tera_sdk_rpc_limit_max_outflow);
 DECLARE_int32(tera_sdk_rpc_max_pending_buffer_size);
@@ -124,13 +127,21 @@ bool ClientImpl::CheckReturnValue(StatusCode status, std::string& reason, ErrorC
 bool ClientImpl::CreateTable(const TableDescriptor& desc,
                              const std::vector<string>& tablet_delim,
                              ErrorCode* err) {
+    if (!CheckTableDescrptor(desc, err)) {
+        return false;
+    }
     master::MasterClient master_client(_cluster->MasterAddr());
 
     CreateTableRequest request;
     CreateTableResponse response;
     request.set_sequence_id(0);
     std::string timestamp = tera::get_curtime_str_plain();
-    std::string internal_table_name = desc.TableName() + "@" + timestamp;
+    std::string internal_table_name;
+    if (FLAGS_tera_sdk_table_rename_enabled) {
+        internal_table_name = desc.TableName() + "@" + timestamp;
+    } else {
+        internal_table_name = desc.TableName();
+    }
     request.set_table_name(internal_table_name);
     request.set_user_token(GetUserToken(_user_identity, _user_passcode));
 
@@ -139,7 +150,6 @@ bool ClientImpl::CreateTable(const TableDescriptor& desc,
     TableDescToSchema(desc, schema);
     schema->set_alias(desc.TableName());
     schema->set_name(internal_table_name);
-    schema->set_admin(_user_identity);
     // add delimiter
     size_t delim_num = tablet_delim.size();
     for (size_t i = 0; i < delim_num; ++i) {
@@ -405,7 +415,11 @@ Table* ClientImpl::OpenTable(const std::string& table_name,
                              ErrorCode* err) {
     std::string internal_table_name;
     if (!GetInternalTableName(table_name, err, &internal_table_name)) {
-        LOG(ERROR) << "fail to scan meta schema";
+        std::string reason = "fail to scan meta schema";
+        if (err != NULL) {
+            err->SetFailed(ErrorCode::kBadParam, reason);
+        }
+        LOG(ERROR) << reason;
         return NULL;
     }
     err->SetFailed(ErrorCode::kOK);
@@ -413,7 +427,11 @@ Table* ClientImpl::OpenTable(const std::string& table_name,
                                      _zk_root_path, _zk_addr_list,
                                      &_thread_pool, _cluster);
     if (table == NULL) {
-        LOG(ERROR) << "fail to new TableImpl.";
+        std::string reason = "fail to new TableImpl";
+        if (err != NULL) {
+            err->SetFailed(ErrorCode::kBadParam, reason);
+        }
+        LOG(ERROR) << reason;
         return NULL;
     }
     if (!table->OpenInternal(err)) {
@@ -426,19 +444,18 @@ Table* ClientImpl::OpenTable(const std::string& table_name,
 bool ClientImpl::GetTabletLocation(const string& table_name,
                                    std::vector<TabletInfo>* tablets,
                                    ErrorCode* err) {
-    std::vector<TableInfo> table_list;
-    std::string internal_table_name;
-    if (!GetInternalTableName(table_name, err, &internal_table_name)) {
-        LOG(ERROR) << "faild to scan meta schema";
+    TableMeta table_meta;
+    TabletMetaList tablet_list;
+
+    if (!ShowTablesInfo(table_name, &table_meta, &tablet_list, err)) {
+        LOG(ERROR) << "table not exist: " << table_name;
         return false;
     }
-    ListInternal(&table_list, tablets, internal_table_name, "", 1,
-                 FLAGS_tera_sdk_show_max_num, err);
-    if (table_list.size() > 0
-        && table_list[0].table_desc->TableName() == internal_table_name) {
-        return true;
+
+    for (int i = 0; i < tablet_list.meta_size(); ++i) {
+        ParseTabletEntry(tablet_list.meta(i), tablets);
     }
-    return false;
+    return true;
 }
 
 TableDescriptor* ClientImpl::GetTableDescriptor(const string& table_name,
@@ -507,12 +524,23 @@ bool ClientImpl::List(std::vector<TableInfo>* table_list, ErrorCode* err) {
                         0, err);
 }
 
+// show exactly one table
 bool ClientImpl::ShowTablesInfo(const string& name,
                                 TableMeta* meta,
                                 TabletMetaList* tablet_list,
                                 ErrorCode* err) {
     TableMetaList table_list;
-    bool result = DoShowTablesInfo(&table_list, tablet_list, name, err);
+    std::string internal_table_name;
+    if (!GetInternalTableName(name, err, &internal_table_name)) {
+        LOG(ERROR) << "faild to scan meta schema";
+        return false;
+    }
+    bool result = DoShowTablesInfo(&table_list, tablet_list, internal_table_name,
+                                   false, err);
+    if ((table_list.meta_size() == 0)
+        || (table_list.meta(0).table_name() != internal_table_name)) {
+        return false;
+    }
     if (result) {
         meta->CopyFrom(table_list.meta(0));
     }
@@ -521,13 +549,15 @@ bool ClientImpl::ShowTablesInfo(const string& name,
 
 bool ClientImpl::ShowTablesInfo(TableMetaList* table_list,
                                 TabletMetaList* tablet_list,
+                                bool is_brief,
                                 ErrorCode* err) {
-    return DoShowTablesInfo(table_list, tablet_list, "", err);
+    return DoShowTablesInfo(table_list, tablet_list, "", is_brief, err);
 }
 
 bool ClientImpl::DoShowTablesInfo(TableMetaList* table_list,
                                   TabletMetaList* tablet_list,
                                   const string& table_name,
+                                  bool is_brief,
                                   ErrorCode* err) {
     if (table_list == NULL || tablet_list == NULL) {
         return false;
@@ -537,7 +567,7 @@ bool ClientImpl::DoShowTablesInfo(TableMetaList* table_list,
 
     master::MasterClient master_client(_cluster->MasterAddr());
     std::string start_tablet_key;
-    std::string start_table_name = table_name;
+    std::string start_table_name = table_name; // maybe a empty string
     bool has_more = true;
     bool has_error = false;
     bool table_meta_copied = false;
@@ -553,8 +583,16 @@ bool ClientImpl::DoShowTablesInfo(TableMetaList* table_list,
         request.set_max_tablet_num(FLAGS_tera_sdk_show_max_num); //tablets be fetched at most in one RPC
         request.set_sequence_id(0);
         request.set_user_token(GetUserToken(_user_identity, _user_passcode));
+        request.set_all_brief(is_brief);
+
         if (master_client.ShowTables(&request, &response) &&
             response.status() == kMasterOk) {
+            if (tablet_list == NULL && response.all_brief()) {
+                // show all table brief
+                table_list->CopyFrom(response.table_meta_list());
+                return true;
+            }
+
             if (response.table_meta_list().meta_size() == 0) {
                 has_error = true;
                 err_msg = StatusCodeToString(response.status());
@@ -983,47 +1021,40 @@ static int InitFlags(const std::string& confpath, const std::string& log_prefix)
     MutexLock locker(&g_mutex);
     // search conf file, priority:
     //   user-specified > ./tera.flag > ../conf/tera.flag
-    std::string flagfile("--flagfile=");
+    std::string flagfile;
     if (SpecifiedFlagfileCount(confpath) > 1) {
         LOG(ERROR) << "should specify no more than one config file";
         return -1;
     }
 
     if (!confpath.empty() && IsExist(confpath)){
-        flagfile += confpath;
+        flagfile = confpath;
     } else if(!confpath.empty() && !IsExist(confpath)){
         LOG(ERROR) << "specified config file(function argument) not found";
         return -1;
     } else if (!FLAGS_tera_sdk_conf_file.empty() && IsExist(confpath)) {
-        flagfile += FLAGS_tera_sdk_conf_file;
+        flagfile = FLAGS_tera_sdk_conf_file;
     } else if (!FLAGS_tera_sdk_conf_file.empty() && !IsExist(confpath)) {
         LOG(ERROR) << "specified config file(FLAGS_tera_sdk_conf_file) not found";
         return -1;
     } else if (IsExist("./tera.flag")) {
-        flagfile += "./tera.flag";
+        flagfile = "./tera.flag";
     } else if (IsExist("../conf/tera.flag")) {
-        flagfile += "../conf/tera.flag";
+        flagfile = "../conf/tera.flag";
     } else if (IsExist(utils::GetValueFromEnv("TERA_CONF"))) {
-        flagfile += utils::GetValueFromEnv("TERA_CONF");
+        flagfile = utils::GetValueFromEnv("TERA_CONF");
     } else {
         LOG(ERROR) << "hasn't specify the flagfile, but default config file not found";
         return -1;
     }
 
-    int argc = 2;
-    char** argv = new char*[3];
-    argv[0] = const_cast<char*>("dummy");
-    argv[1] = const_cast<char*>(flagfile.c_str());
-    argv[2] = NULL;
+    utils::LoadFlagFile(flagfile);
 
-    // the gflags will get flags from falgfile
-    ::google::ParseCommandLineFlags(&argc, &argv, false);
     if (!g_is_glog_init) {
         ::google::InitGoogleLogging(log_prefix.c_str());
         utils::SetupLog(log_prefix);
         g_is_glog_init = true;
     }
-    delete[] argv;
 
     LOG(INFO) << "USER = " << FLAGS_tera_user_identity;
     LOG(INFO) << "Load config file: " << flagfile;
@@ -1032,6 +1063,10 @@ static int InitFlags(const std::string& confpath, const std::string& log_prefix)
 
 Client* Client::NewClient(const string& confpath, const string& log_prefix, ErrorCode* err) {
     if (InitFlags(confpath, log_prefix) != 0) {
+        if (err != NULL) {
+            std::string reason = "init tera flag failed";
+            err->SetFailed(ErrorCode::kBadParam, reason);
+        }
         return NULL;
     }
     return new ClientImpl(FLAGS_tera_user_identity,

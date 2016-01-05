@@ -121,5 +121,14 @@ bool TabletNodeClient::UpdateSchema(const UpdateSchemaRequest* request,
                                 request, response, done, "UpdateSchema",
                                 m_rpc_timeout, m_thread_pool);
 }
+
+bool TabletNodeClient::CmdCtrl(const TsCmdCtrlRequest* request,
+                               TsCmdCtrlResponse* response,
+                               Closure<void, TsCmdCtrlRequest*, TsCmdCtrlResponse*, bool, int>* done) {
+    return SendMessageWithRetry(&TabletNodeServer::Stub::CmdCtrl,
+                                request, response, done, "TsCmdCtrl",
+                                m_rpc_timeout, m_thread_pool);
+}
+
 } // namespace tabletnode
 } // namespace tera

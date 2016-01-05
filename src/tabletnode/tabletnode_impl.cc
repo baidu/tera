@@ -29,6 +29,7 @@
 #include "tabletnode/tablet_manager.h"
 #include "tabletnode/tabletnode_zk_adapter.h"
 #include "types.h"
+#include "utils/config_utils.h"
 #include "utils/counter.h"
 #include "utils/string_util.h"
 #include "utils/timer.h"
@@ -80,6 +81,8 @@ DECLARE_bool(tera_ins_enabled);
 
 DECLARE_bool(tera_io_cache_path_vanish_allowed);
 DECLARE_int64(tera_tabletnode_tcm_cache_size);
+
+DECLARE_string(flagfile);
 
 extern tera::Counter range_error_counter;
 extern tera::Counter rand_read_delay;
@@ -364,7 +367,11 @@ void TabletNodeImpl::CompactTablet(const CompactTabletRequest* request,
         << " [" << DebugString(tablet_io->GetStartKey())
         << ", " << DebugString(tablet_io->GetEndKey()) << "]";
 
-    tablet_io->Compact(&status);
+    if (request->has_lg_no() && request->lg_no() >= 0) {
+        tablet_io->Compact(request->lg_no(), &status);
+    } else {
+        tablet_io->Compact(-1, &status);
+    }
     CompactStatus compact_status = tablet_io->GetCompactStatus();
     response->set_status(status);
     response->set_compact_status(compact_status);
@@ -392,8 +399,7 @@ void TabletNodeImpl::UpdateSchema(const UpdateSchemaRequest* request,
 void TabletNodeImpl::ReadTablet(int64_t start_micros,
                                 const ReadTabletRequest* request,
                                 ReadTabletResponse* response,
-                                google::protobuf::Closure* done,
-                                ReadRpcTimer* timer) {
+                                google::protobuf::Closure* done) {
     int32_t row_num = request->row_info_list_size();
     uint64_t snapshot_id = request->snapshot_id() == 0 ? 0 : request->snapshot_id();
     uint32_t read_success_num = 0;
@@ -426,11 +432,6 @@ void TabletNodeImpl::ReadTablet(int64_t start_micros,
     response->set_status(kTabletNodeOk);
     done->Run();
 
-    if (NULL != timer) {
-        RpcTimerList::Instance()->Erase(timer);
-        delete timer;
-    }
-
     int64_t now_ms = get_micros();
     int64_t used_ms =  now_ms - start_micros;
     if (used_ms <= 0) {
@@ -450,6 +451,25 @@ void TabletNodeImpl::WriteTablet(const WriteTabletRequest* request,
     std::map<io::TabletIO*, std::vector<int32_t>* >::iterator it;
 
     int32_t row_num = request->row_list_size();
+    // check arguments
+    for (int32_t i = 0; i < row_num; i++) {
+        const RowMutationSequence& mu_seq = request->row_list(i);
+        if (mu_seq.row_key().size() >= 64 * 1024) { // 64KB
+            response->set_status(kTableNotSupport);
+            done->Run();
+            return;
+        }
+        int32_t mu_num = mu_seq.mutation_sequence_size();
+        for (int32_t k = 0; k < mu_num; k++) {
+            const Mutation& mu = mu_seq.mutation_sequence(k);
+            if ((mu.qualifier().size() >= 64 * 1024)          // 64KB
+                || (mu.value().size() >= 32 * 1024 * 1024)) { // 32MB
+                response->set_status(kTableNotSupport);
+                done->Run();
+                return;
+            }
+        }
+    }
     if (request->row_list_size() > 0) {
         for (int32_t i = 0; i < row_num; i++) {
             io::TabletIO* tablet_io = m_tablet_manager->GetTablet(
@@ -639,6 +659,24 @@ void TabletNodeImpl::Rollback(const SnapshotRollbackRequest* request, SnapshotRo
             << ", " << DebugString(tablet_io->GetEndKey()) << "]";
     }
     tablet_io->DecRef();
+    done->Run();
+}
+
+void TabletNodeImpl::CmdCtrl(const TsCmdCtrlRequest* request,
+                             TsCmdCtrlResponse* response,
+                             google::protobuf::Closure* done) {
+    response->set_sequence_id(request->sequence_id());
+    if (request->command() == "reload config") {
+        if (utils::LoadFlagFile(FLAGS_flagfile)) {
+            LOG(INFO) << "[reload config] done";
+            response->set_status(kTabletNodeOk);
+        } else {
+            LOG(ERROR) << "[reload config] config file not found";
+            response->set_status(kInvalidArgument);
+        }
+    } else {
+        response->set_status(kInvalidArgument);
+    }
     done->Run();
 }
 

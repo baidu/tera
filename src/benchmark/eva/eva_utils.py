@@ -1,8 +1,15 @@
+# Copyright (c) 2015, Baidu.com, Inc. All Rights Reserved
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+#!/usr/bin/env pythons
+
 import subprocess
 import time
 import os
 import logging
 from xml.dom.minidom import Document
+import urllib
 
 from bin import eva_var
 
@@ -41,29 +48,47 @@ def table_manipulate(tablename, op, schema):
             # lg schema
             lg_str = lg + '<'
             temp = []
-            for k, v in lg_schema.iteritems():
-                if k != 'cf':
-                    temp.append(k+'='+v)
-            lg_str += ','.join(temp)
-            lg_str += '>{\n'
+            if type(lg_schema) == dict:
+                for k, v in lg_schema.iteritems():
+                    if k != 'cf':
+                        temp.append(k+'='+v)
+                lg_str += ','.join(temp)
+                lg_str += '>{\n'
 
-            # cf schema
-            cf_list = lg_schema['cf']
-            total_cf_list.append(cf_list)
-            comp = cf_list.split(',')
-            total_cf_number += len(comp)
-            cf_list = []
-            for cf in comp:
-                try:
-                    cf, qualifier = cf.split(':')
-                except:
-                    pass
-                finally:
-                    cf_list.append(cf)
-            cf_list = list(set(cf_list))
-            lg_str += ','.join(cf_list)
-            lg_str += '}\n'
-            lg_schemas_list.append(lg_str)
+                # cf schema
+                cf_list = lg_schema['cf']
+                total_cf_list.append(cf_list)
+                comp = cf_list.split(',')
+                total_cf_number += len(comp)
+                cf_list = []
+                for cf in comp:
+                    try:
+                        cf, qualifier = cf.split(':')
+                    except:
+                        pass
+                    finally:
+                        cf_list.append(cf)
+                cf_list = list(set(cf_list))
+                lg_str += ','.join(cf_list)
+                lg_str += '}\n'
+                lg_schemas_list.append(lg_str)
+            else:
+                cf_list = schema['cf']
+                total_cf_list.append(cf_list)
+                comp = cf_list.split(',')
+                total_cf_number += len(comp)
+                cf_list = []
+                cf_str = ''
+                for cf in comp:
+                    try:
+                        cf, qualifier = cf.split(':')
+                    except:
+                        pass
+                    finally:
+                        cf_list.append(cf)
+                cf_list = list(set(cf_list))
+                cf_str += ','.join(cf_list)
+                lg_schemas_list.append(cf_str)
         fp.write(',\n'.join(lg_schemas_list) + '}\n')
         if op == conf.CF:
             return total_cf_number, ','.join(total_cf_list)
@@ -221,12 +246,13 @@ def write_table(email, doc, contents):
     email.appendChild(table)
 
 performance = None
-def write_email(fp, desp):
+def write_email(mail_fp, web_fp, desp):
     doc = Document()
     email = doc.createElement('email')
     doc.appendChild(email)
-    write_title(email, doc, 'h3', common.EMAIL_BLOCK_TITLE)
+    write_title(email, doc, 'h3', common.EMAIL_BLOCK_TITLE + ' ' + time.strftime('%Y-%m-%d-%H-%M-%S'))
     write_title(email, doc, 'h4', desp)
+    write_title(email, doc, 'h4', 'force_exit=' + str(common.g_force_exit))
     print conf.g_test_conf
     global performance
     if conf.g_test_conf[conf.MODE] == conf.MODE_SEQ_WRITE or conf.g_test_conf[conf.MODE] == conf.MODE_RAND_WRITE:
@@ -234,11 +260,23 @@ def write_email(fp, desp):
                        ('write amplification', '%4.2f' % stat.g_stat[stat.WRITE_AMP]),
                        ('CPU usage', '%4.2f' % stat.g_stat[stat.CPU]),
                        ('Memory(G)', '%4.2f' % (stat.g_stat[stat.MEM]/1024.0)))
+        s = urllib.urlencode({'ts': time.strftime('%Y-%m-%d'),
+                              'speed': '%6.3f' % stat.g_stat[stat.WRITE],
+                              'amp': '%4.2f' % stat.g_stat[stat.WRITE_AMP],
+                              'op': 'rw', 'type': conf.g_web_report_type})
+        if web_fp:
+            web_fp.write(s + '\n')
     elif conf.g_test_conf[conf.MODE] == conf.MODE_READ:
         performance = (('read Qps(/s)', '%6.2f' % stat.g_stat[stat.READ_ROWS]),
                        ('read amplification', '%4.2f' % stat.g_stat[stat.READ_AMP]),
                        ('CPU usage', '%4.2f' % stat.g_stat[stat.CPU]),
                        ('Memory(G)', '%4.2f' % (stat.g_stat[stat.MEM]/1024.0)))
+        s = urllib.urlencode({'ts': time.strftime('%Y-%m-%d'),
+                              'speed': '%6.2f' % stat.g_stat[stat.READ_ROWS],
+                              'amp': '%4.2f' % stat.g_stat[stat.READ_AMP],
+                              'op': 'r', 'type': conf.g_web_report_type})
+        if web_fp:
+            web_fp.write(s + '\n')
     elif conf.g_test_conf[conf.MODE] == conf.MODE_SCAN:
         performance = (('scan throughput(M)', '%6.3f' % stat.g_stat[stat.SCAN]),
                        ('scan amplification', '%4.2f' % stat.g_stat[stat.SCAN_AMP]),
@@ -255,8 +293,11 @@ def write_email(fp, desp):
     write_table(email, doc, (('Read/Write Performance', performance),
                              ('Tablet Servers', ts_tuple),
                              ('Tablets/TS', tablets_tuple)))
-    fp.write(doc.toprettyxml(indent=' '))
-    fp.close()
+    mail_fp.write(doc.toprettyxml(indent=' '))
+    mail_fp.close()
+
+    if web_fp:
+        web_fp.close()
 
 
 def send_email():

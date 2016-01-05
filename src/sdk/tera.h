@@ -202,6 +202,9 @@ public:
     void SetAdminGroup(const std::string& name);
     std::string AdminGroup() const;
 
+    void SetAdmin(const std::string& name);
+    std::string Admin() const;
+
     /// alias
     void SetAlias(const std::string& alias);
     std::string Alias() const;

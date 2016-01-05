@@ -75,6 +75,9 @@ public:
     bool CompactTablet(const CompactTabletRequest* request,
                        CompactTabletResponse* response,
                        Closure<void, CompactTabletRequest*, CompactTabletResponse*, bool, int>* done = NULL);
+    bool CmdCtrl(const TsCmdCtrlRequest* request,
+                 TsCmdCtrlResponse* response,
+                 Closure<void, TsCmdCtrlRequest*, TsCmdCtrlResponse*, bool, int>* done = NULL);
 
     bool UpdateSchema(const UpdateSchemaRequest* request,
                       UpdateSchemaResponse* response,

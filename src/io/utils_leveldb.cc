@@ -89,6 +89,11 @@ leveldb::Env* LeveldbFlashEnv() {
     return flash_env;
 }
 
+std::string GetTrashDir() {
+    const std::string trash("#trash");
+    return FLAGS_tera_tabletnode_path_prefix + "/" + trash;
+}
+
 bool MoveEnvDirToTrash(const std::string& tablename) {
     leveldb::Env* env = LeveldbBaseEnv();
     std::string src_dir = FLAGS_tera_tabletnode_path_prefix + "/" + tablename;
@@ -96,8 +101,7 @@ bool MoveEnvDirToTrash(const std::string& tablename) {
         return true;
     }
 
-    const std::string trash("#trash");
-    std::string trash_dir = FLAGS_tera_tabletnode_path_prefix + "/" + trash;
+    std::string trash_dir = GetTrashDir();
     if (!env->FileExists(trash_dir)) {
         if (!env->CreateDir(trash_dir).ok()) {
             LOG(ERROR) << "fail to create trash dir: " << trash_dir;
@@ -118,14 +122,57 @@ bool MoveEnvDirToTrash(const std::string& tablename) {
     return true;
 }
 
-bool DeleteEnvDir(const std::string& subdir) {
+void CleanTrashDir() {
     leveldb::Env* env = LeveldbBaseEnv();
-    std::string dir_name = FLAGS_tera_tabletnode_path_prefix + "/" + subdir;
-    if (!env->DeleteDir(dir_name).ok()) {
-        LOG(ERROR) << "fail to delete dir in file system, dir: " << dir_name;
+    std::string trash_dir = GetTrashDir();
+    std::vector<std::string> children;
+    leveldb::Status s;
+    s = env->GetChildren(trash_dir, &children);
+    if (!s.ok()) {
+        return;
+    }
+    for (size_t i = 0; i < children.size(); ++i) {
+        std::string c_dir = trash_dir + '/' + children[i];
+        DeleteEnvDir(c_dir);
+    }
+    return;
+}
+
+bool DeleteEnvDir(const std::string& dir) {
+    static bool is_support_rmdir = true;
+
+    leveldb::Env* env = LeveldbBaseEnv();
+    leveldb::Status s;
+    if (env->DeleteFile(dir).ok()) {
+        LOG(INFO) << "[gc] delete file in file system, dir: " << dir;
+        return true;
+    }
+    if (is_support_rmdir) {
+        if (env->DeleteDir(dir).ok()) {
+            LOG(INFO) << "[gc] delete dir in file system, dir: " << dir;
+            return true;
+        } else {
+            is_support_rmdir = false;
+            LOG(INFO) << "[gc] file system not supoort rmdir.";
+        }
+    }
+
+    // file system do not support delete dir, try delete recursively
+    std::vector<std::string> children;
+    s = env->GetChildren(dir, &children);
+    if (!s.ok()) {
+        LOG(ERROR) << "[gc] fail to get children, dir: " << dir
+            << ", status: " << s.ToString();
         return false;
     }
-    LOG(INFO) << "delete dir in file system, dir: " << dir_name;
+    for (size_t i = 0; i < children.size(); ++i) {
+        std::string c_dir = dir + '/' + children[i];
+        DeleteEnvDir(c_dir);
+    }
+    if (env->DeleteDir(dir).ok()) {
+        LOG(INFO) << "[gc] delete dir in file system, dir: " << dir;
+        return true;
+    }
     return true;
 }
 } // namespace io

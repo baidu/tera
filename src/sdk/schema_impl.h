@@ -182,6 +182,9 @@ public:
     void SetAdminGroup(const std::string& name);
     std::string AdminGroup() const;
 
+    void SetAdmin(const std::string& name);
+    std::string Admin() const;
+
     void SetAlias(const std::string& alias);
     std::string Alias() const;
 
@@ -204,6 +207,7 @@ private:
     int64_t         _merge_size;
     bool            _disable_wal;
     std::string     _admin_group;
+    std::string     _admin;
     std::string     _alias;
 };
 

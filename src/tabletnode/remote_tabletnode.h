@@ -77,11 +77,15 @@ public:
                        CompactTabletResponse* response,
                        google::protobuf::Closure* done);
 
+    void CmdCtrl(google::protobuf::RpcController* controller,
+                 const TsCmdCtrlRequest* request,
+                 TsCmdCtrlResponse* response,
+                 google::protobuf::Closure* done);
+
     void UpdateSchema(google::protobuf::RpcController* controller,
                       const UpdateSchemaRequest* request,
                       UpdateSchemaResponse* response,
                       google::protobuf::Closure* done);
-
     std::string ProfilingLog();
 private:
     void DoLoadTablet(google::protobuf::RpcController* controller,
@@ -146,11 +150,15 @@ private:
                          CompactTabletResponse* response,
                          google::protobuf::Closure* done);
 
+    void DoCmdCtrl(google::protobuf::RpcController* controller,
+                   const TsCmdCtrlRequest* request,
+                   TsCmdCtrlResponse* response,
+                   google::protobuf::Closure* done);
+
     void DoUpdateSchema(google::protobuf::RpcController* controller,
                         const UpdateSchemaRequest* request,
                         UpdateSchemaResponse* response,
                         google::protobuf::Closure* done);
-
     void DoScheduleRpc(RpcSchedule* rpc_schedule);
 
 private:

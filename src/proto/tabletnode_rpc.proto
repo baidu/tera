@@ -103,6 +103,7 @@ message CompactTabletRequest {
     required uint64 sequence_id = 1;
     required string tablet_name = 2;
     required KeyRange key_range = 3;
+    optional int32  lg_no = 4;
 }
 
 message CompactTabletResponse {
@@ -306,6 +307,16 @@ message MergeTabletResponse {
     required uint64 sequence_id = 2;
 }
 
+message TsCmdCtrlRequest {
+    required uint64 sequence_id = 1;
+    required string command = 2;
+}
+
+message TsCmdCtrlResponse {
+    required uint64 sequence_id = 1;
+    required StatusCode status = 2;
+}
+
 // RPC interface
 
 service TabletNodeServer {
@@ -336,7 +347,7 @@ service TabletNodeServer {
 
     rpc SplitTablet(SplitTabletRequest) returns(SplitTabletResponse);
 
+    rpc CmdCtrl(TsCmdCtrlRequest) returns(TsCmdCtrlResponse);
     rpc UpdateSchema(UpdateSchemaRequest) returns(UpdateSchemaResponse);
 }
 option cc_generic_services = true;
-
