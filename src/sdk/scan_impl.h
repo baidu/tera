@@ -120,62 +120,6 @@ private:
     int32_t next_idx_; // offset in sliding_window[cur_buffer_idx]
 };
 
-/////////////////////////////
-/////    stream scan    /////
-/////////////////////////////
-class ResultStreamAsyncImpl : public ResultStreamImpl {
-public:
-    ResultStreamAsyncImpl(TableImpl* table, ScanDescImpl* scan_desc_impl);
-    virtual ~ResultStreamAsyncImpl();
-
-    bool LookUp(const std::string& row_key);
-    bool Done(ErrorCode* err);
-    void Next();
-
-    std::string RowName() const;
-    std::string Family() const;
-    std::string ColumnName() const;
-    std::string Qualifier() const;
-    int64_t Timestamp() const;
-    std::string Value() const;
-
-public:
-    void GetRpcHandle(ScanTabletRequest** request,
-                      ScanTabletResponse** response);
-    void ReleaseRpcHandle(ScanTabletRequest* request,
-                          ScanTabletResponse* response);
-    void OnFinish(ScanTabletRequest* request,
-                  ScanTabletResponse* response);
-
-private:
-    void DoScan();
-    void DoScanCallback(int64_t session_id, ScanTabletResponse* response,
-                        bool failed);
-
-    void RebuildStream(ScanTabletResponse* response);
-
-private:
-    std::queue<RowResult> _row_results_cache;
-    common::Thread _scan_thread;
-    AutoResetEvent _scan_event;
-    AutoResetEvent _scan_done_event;
-    AutoResetEvent _scan_push_event;
-    AutoResetEvent _scan_push_order_event;
-    AutoResetEvent _scan_pop_event;
-    uint64_t _cache_max_size;
-    int64_t _session_id;
-    bool _stopped;
-    bool _part_of_session;
-    int32_t _invoked_count;
-    int32_t _queue_size;
-    int32_t _cur_data_id;
-    int32_t _result_pos;
-
-    ScanTabletResponse _last_response;
-
-    Mutex _mutex;
-};
-
 class ResultStreamSyncImpl : public ResultStreamImpl {
 public:
     ResultStreamSyncImpl(TableImpl* table, ScanDescImpl* scan_desc_impl);
