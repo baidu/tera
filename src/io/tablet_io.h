@@ -13,6 +13,7 @@
 
 #include "common/base/scoped_ptr.h"
 #include "common/mutex.h"
+#include "io/tablet_scanner.h"
 #include "leveldb/db.h"
 #include "leveldb/options.h"
 #include "leveldb/raw_key_operator.h"
@@ -25,7 +26,6 @@
 #include "types.h"
 #include "utils/counter.h"
 #include "utils/rpc_timer_list.h"
-#include "io/tablet_scanner.h"
 
 namespace tera {
 namespace io {

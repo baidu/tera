@@ -6,10 +6,10 @@
 #ifndef TERA_IO_TABLET_SCANNER_H_
 #define TERA_IO_TABLET_SCANNER_H_
 
-#include "proto/tabletnode_rpc.pb.h"
 #include "common/mutex.h"
-#include "types.h"
 #include "leveldb/db.h"
+#include "proto/tabletnode_rpc.pb.h"
+#include "types.h"
 #include <queue>
 
 namespace tera {
@@ -66,7 +66,7 @@ public:
 
     ScanContext* GetScanContext(TabletIO* tablet_io, const ScanTabletRequest* request,
                 ScanTabletResponse* response, google::protobuf::Closure* done);
-    bool ReleaseScanContext(ScanContext* context);
+    bool ScheduleScanContext(ScanContext* context);
     void DestroyScanCache();
 
 private:

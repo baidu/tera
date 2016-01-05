@@ -1271,18 +1271,18 @@ bool TabletIO::HandleScan(const ScanTabletRequest* request,
                                       &(context->m_it));
     }
     // schedule scan context
-    return m_tablet_scanner.ReleaseScanContext(context);
+    return m_tablet_scanner.ScheduleScanContext(context);
 }
 
 void TabletIO::ProcessScan(ScanContext* context) {
-    uint32_t nr_rows_scan = 0;
-    uint32_t nr_size_scan = 0;
+    uint32_t rows_scan_num = 0;
+    uint32_t size_scan_bytes = 0;
     if (LowLevelScan(context->m_start_tera_key, context->m_end_row_key,
                      context->m_scan_options, context->m_it,
-                     &context->m_result, NULL, &nr_rows_scan, &nr_size_scan,
+                     &context->m_result, NULL, &rows_scan_num, &size_scan_bytes,
                      &context->m_complete, &context->m_ret_code)) {
-        m_counter.scan_rows.Add(nr_rows_scan);
-        m_counter.scan_size.Add(nr_size_scan);
+        m_counter.scan_rows.Add(rows_scan_num);
+        m_counter.scan_size.Add(size_scan_bytes);
     }
 }
 

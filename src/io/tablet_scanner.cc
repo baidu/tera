@@ -3,13 +3,13 @@
 // found in the LICENSE file.
 //
 
-#include <gflags/gflags.h>
-#include "io/tablet_scanner.h"
 #include "io/tablet_io.h"
+#include "io/tablet_scanner.h"
 #include "proto/status_code.pb.h"
+#include <gflags/gflags.h>
 #include <limits>
 
-DECLARE_int32(tablet_scanner_cache_size);
+DECLARE_int32(tera_tabletnode_scanner_cache_size);
 
 namespace tera {
 namespace io {
@@ -88,7 +88,7 @@ void ScanContextManager::DeleteContextFromCache(ScanContext* context) {
 
 // access in m_lock context
 void ScanContextManager::EvictCache() {
-    if (m_context_lru.size() > (uint32_t)FLAGS_tablet_scanner_cache_size) {
+    if (m_context_lru.size() > (uint32_t)FLAGS_tera_tabletnode_scanner_cache_size) {
         std::map<uint64_t, int64_t>::iterator lru_it = m_context_lru.begin();
         for (; lru_it != m_context_lru.end(); ++lru_it) {
             int64_t session_id = lru_it->second;
@@ -169,7 +169,7 @@ ScanContext* ScanContextManager::GetScanContext(TabletIO* tablet_io,
 }
 
 // check event bit, then schedule context
-bool ScanContextManager::ReleaseScanContext(ScanContext* context) {
+bool ScanContextManager::ScheduleScanContext(ScanContext* context) {
     while (context->m_ret_code == kTabletNodeOk) {
         ((TabletIO*)(context->m_tablet_io))->ProcessScan(context);
 
@@ -219,7 +219,7 @@ void ScanContextManager::DestroyScanCache() {
     while (!m_context_cache.empty()) {
     	std::map<int64_t, ScanContext*>::iterator it = m_context_cache.begin();
    	ScanContext* context = it->second;
-	DeleteScanContext(context); 
+	DeleteScanContext(context);
     }
 }
 

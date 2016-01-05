@@ -17,9 +17,7 @@
 #include "utils/atomic.h"
 #include "utils/timer.h"
 
-DECLARE_bool(tera_sdk_scan_async_enabled);
-DECLARE_int64(tera_sdk_scan_async_cache_size);
-DECLARE_int32(tera_sdk_scan_async_parallel_max_num);
+DECLARE_bool(tera_sdk_batch_scan_enabled);
 DECLARE_int32(tera_sdk_max_batch_scan_req);
 
 namespace tera {
@@ -476,7 +474,7 @@ ScanDescImpl::ScanDescImpl(const string& rowkey)
     : _start_timestamp(0),
       _timer_range(NULL),
       _buf_size(65536),
-      _is_async(FLAGS_tera_sdk_scan_async_enabled),
+      _is_async(FLAGS_tera_sdk_batch_scan_enabled),
       _max_version(1),
       _pack_interval(5000),
       _snapshot(0),
