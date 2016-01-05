@@ -13,7 +13,6 @@
 
 #include "common/base/scoped_ptr.h"
 #include "common/mutex.h"
-#include "io/stream_scan.h"
 #include "leveldb/db.h"
 #include "leveldb/options.h"
 #include "leveldb/raw_key_operator.h"
@@ -189,10 +188,6 @@ private:
     bool HandleScan(const ScanTabletRequest* request,
                     ScanTabletResponse* response,
                     google::protobuf::Closure* done);
-    // discard it
-    bool ScanRowsStreaming(const ScanTabletRequest* request,
-                           ScanTabletResponse* response,
-                           google::protobuf::Closure* done);
 
     void SetupScanInternalTeraKey(const ScanTabletRequest* request,
                                   std::string* start_tera_key,
@@ -243,7 +238,6 @@ private:
 
     std::map<std::string, uint32_t> m_cf_lg_map;
     std::map<std::string, uint32_t> m_lg_id_map;
-    StreamScanManager m_stream_scan;
     StatCounter m_counter;
 };
 
