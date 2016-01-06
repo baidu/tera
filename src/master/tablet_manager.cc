@@ -400,12 +400,15 @@ bool Tablet::GetSchemaUpdated() {
 }
 
 void Tablet::SetSchemaUpdated(bool flag) {
-    MutexLock lock(&m_mutex);
+    m_mutex.Lock();
     if (flag == m_schema_updated) {
+        m_mutex.Unlock();
         LOG(ERROR) << "[update] error on :" << *this;
+        m_mutex.Lock();
         abort();
     }
     m_schema_updated = flag;
+    m_mutex.Unlock();
 }
 
 bool Tablet::CheckStatusSwitch(TabletStatus old_status,
@@ -618,6 +621,11 @@ const TableSchema& Table::GetSchema() {
     return m_schema;
 }
 
+bool Table::GetSchemaUpdated() {
+    MutexLock lock(&m_mutex);
+    return m_schema_updated;
+}
+
 void Table::SetSchema(const TableSchema& schema) {
     MutexLock lock(&m_mutex);
     m_schema.CopyFrom(schema);
@@ -744,11 +752,14 @@ bool Table::GetTabletsForGc(std::set<uint64_t>* live_tablets,
 }
 
 void Table::SetSchemaUpdated(bool flag) {
-    MutexLock lock(&m_mutex);
+    m_mutex.Lock();
     if (flag == m_schema_updated) {
+        m_mutex.Unlock();
         LOG(ERROR) << "[update] error on :" << *this;
+        m_mutex.Lock();
         abort();
     }
+    m_mutex.Unlock();
     m_schema_updated = flag;
 }
 

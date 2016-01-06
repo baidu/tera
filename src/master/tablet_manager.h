@@ -191,6 +191,7 @@ public:
     uint64_t GetNextTabletNo();
     bool GetTabletsForGc(std::set<uint64_t>* live_tablets,
                          std::set<uint64_t>* dead_tablets);
+    bool GetSchemaUpdated();
     void SetSchemaUpdated(bool flag);
     void RefreshCounter();
 

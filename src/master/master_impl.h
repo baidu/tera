@@ -152,7 +152,7 @@ private:
     typedef Closure<void, SnapshotRollbackRequest*, SnapshotRollbackResponse*, bool, int> RollbackClosure;
     typedef Closure<void, ReleaseSnapshotRequest*, ReleaseSnapshotResponse*, bool, int> DelSnapshotClosure;
     typedef Closure<void, QueryRequest*, QueryResponse*, bool, int> QueryClosure;
-    typedef Closure<void, UpdateSchemaRequest*, UpdateSchemaResponse*, bool, int> UpdateSchemaClosure;
+    typedef Closure<void, UpdateRequest*, UpdateResponse*, bool, int> UpdateClosure;
     typedef Closure<void, LoadTabletRequest*, LoadTabletResponse*, bool, int> LoadClosure;
     typedef Closure<void, UnloadTabletRequest*, UnloadTabletResponse*, bool, int> UnloadClosure;
     typedef Closure<void, SplitTabletRequest*, SplitTabletResponse*, bool, int> SplitClosure;
@@ -454,15 +454,16 @@ private:
                                       bool failed, int error_code);
 
     void UpdateSchemaCallback(TabletPtr tablet,
-                              UpdateSchemaRequest* request,
-                              UpdateSchemaResponse* response,
+                              UpdateRequest* request,
+                              UpdateResponse* response,
                               bool rpc_failed, int status_code);
     void NoticeTabletNodeSchemaUpdatedAsync(TabletPtr tablet,
-                                            UpdateSchemaClosure* done);
+                                            UpdateClosure* done);
     void NoticeTabletNodeSchemaUpdated(TablePtr table);
     void NoticeTabletNodeSchemaUpdated(TabletPtr tablet);
     void SetTableAndTabletsSchemaUpdated(TablePtr table, bool flag);
-    void PollUntilSchemaUpdated(TablePtr table,
+    void PollUntilSchemaUpdated(TablePtr table, int32_t retry_times,
+                                UpdateTableResponse* rpc_response,
                                 google::protobuf::Closure* rpc_done);
 
     // load metabale to master memory
