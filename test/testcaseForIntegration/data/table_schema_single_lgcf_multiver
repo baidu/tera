@@ -1,0 +1,5 @@
+test<rawkey=binary, splitsize=1024, mergesize=128>{
+    lg1<storage=memory, compress=snappy, blocksize=4, use_memtable_on_leveldb=true, sst_size=8>{
+        cf1<maxversions=10, minversions=1>,
+    }
+}

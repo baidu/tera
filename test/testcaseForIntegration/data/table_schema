@@ -1,0 +1,18 @@
+test<rawkey=binary, splitsize=1024, mergesize=128>{
+    lg1<storage=memory, compress=snappy, blocksize=4, use_memtable_on_leveldb=true, sst_size=8>{
+        cf1<maxversions=3, minversions=1>,
+        cf2<maxversions=3, minversions=1>,
+        cf3<maxversions=3, minversions=1>,
+        cf4<maxversions=3, minversions=1>,
+        cf5<maxversions=3, minversions=1>,
+    },
+    lg2<storage=flash, compress=snappy, blocksize=4, use_memtable_on_leveldb=true, sst_size=8>{
+        cf6<maxversions=3, minversions=1>,
+        cf7<maxversions=3, minversions=1>,
+        cf8<maxversions=3, minversions=1>,
+    },
+    lg3<storage=disk, compress=snappy, blocksize=4, use_memtable_on_leveldb=true, sst_size=8>{
+        cf9<maxversions=3, minversions=1>,
+        cf10<maxversions=3, minversions=1>,
+    }
+}
