@@ -152,7 +152,7 @@ private:
     typedef Closure<void, SnapshotRollbackRequest*, SnapshotRollbackResponse*, bool, int> RollbackClosure;
     typedef Closure<void, ReleaseSnapshotRequest*, ReleaseSnapshotResponse*, bool, int> DelSnapshotClosure;
     typedef Closure<void, QueryRequest*, QueryResponse*, bool, int> QueryClosure;
-    typedef Closure<void, UpdateSchemaRequest*, UpdateSchemaResponse*, bool, int> UpdateSchemaClosure;
+    typedef Closure<void, UpdateRequest*, UpdateResponse*, bool, int> UpdateClosure;
     typedef Closure<void, LoadTabletRequest*, LoadTabletResponse*, bool, int> LoadClosure;
     typedef Closure<void, UnloadTabletRequest*, UnloadTabletResponse*, bool, int> UnloadClosure;
     typedef Closure<void, SplitTabletRequest*, SplitTabletResponse*, bool, int> SplitClosure;
@@ -453,17 +453,23 @@ private:
                                       WriteTabletResponse* response,
                                       bool failed, int error_code);
 
-    void UpdateSchemaCallback(TabletPtr tablet,
-                              UpdateSchemaRequest* request,
-                              UpdateSchemaResponse* response,
+    void UpdateSchemaCallback(std::string table_name,
+                              std::string tablet_path,
+                              std::string start_key,
+                              std::string end_key,
+                              UpdateRequest* request,
+                              UpdateResponse* response,
                               bool rpc_failed, int status_code);
     void NoticeTabletNodeSchemaUpdatedAsync(TabletPtr tablet,
-                                            UpdateSchemaClosure* done);
+                                            UpdateClosure* done);
     void NoticeTabletNodeSchemaUpdated(TablePtr table);
     void NoticeTabletNodeSchemaUpdated(TabletPtr tablet);
-    void SetTableAndTabletsSchemaUpdated(TablePtr table, bool flag);
-    void PollUntilSchemaUpdated(TablePtr table,
-                                google::protobuf::Closure* rpc_done);
+    void SetTableAndTabletsSchemaIsSyncing(TablePtr table, bool flag);
+    void PollUntilSchemaSynced(TablePtr table, int32_t retry_times,
+                               UpdateTableResponse* rpc_response,
+                               google::protobuf::Closure* rpc_done);
+    bool IsTableSchemaSyncDone(TablePtr table);
+    void ResetSchemaSyncStatus(TablePtr table);
 
     // load metabale to master memory
     bool LoadMetaTable(const std::string& meta_tablet_addr,

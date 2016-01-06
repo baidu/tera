@@ -57,10 +57,10 @@ std::ostream& operator << (std::ostream& o, const TabletPtr& tablet) {
     return o;
 }
 
-Tablet::Tablet(const TabletMeta& meta) : m_meta(meta), m_schema_updated(true) {}
+Tablet::Tablet(const TabletMeta& meta) : m_meta(meta), m_schema_is_syncing(false) {}
 
 Tablet::Tablet(const TabletMeta& meta, TablePtr table)
-    : m_meta(meta), m_table(table), m_schema_updated(true) {}
+    : m_meta(meta), m_table(table), m_schema_is_syncing(false) {}
 
 Tablet::~Tablet() {
     m_table.reset();
@@ -394,18 +394,14 @@ void Tablet::ToMetaTableKeyValue(std::string* packed_key,
     MakeMetaTableKeyValue(m_meta, packed_key, packed_value);
 }
 
-bool Tablet::GetSchemaUpdated() {
+bool Tablet::GetSchemaIsSyncing() {
     MutexLock lock(&m_mutex);
-    return m_schema_updated;
+    return m_schema_is_syncing;
 }
 
-void Tablet::SetSchemaUpdated(bool flag) {
+void Tablet::SetSchemaIsSyncing(bool flag) {
     MutexLock lock(&m_mutex);
-    if (flag == m_schema_updated) {
-        LOG(ERROR) << "[update] error on :" << *this;
-        abort();
-    }
-    m_schema_updated = flag;
+    m_schema_is_syncing = flag;
 }
 
 bool Tablet::CheckStatusSwitch(TabletStatus old_status,
@@ -526,7 +522,7 @@ Table::Table(const std::string& table_name)
       m_deleted_tablet_num(0),
       m_max_tablet_no(0),
       m_create_time((int64_t)time(NULL)),
-      m_schema_updated(true) {
+      m_schema_is_syncing(false) {
 }
 
 bool Table::FindTablet(const std::string& key_start, TabletPtr* tablet) {
@@ -743,13 +739,23 @@ bool Table::GetTabletsForGc(std::set<uint64_t>* live_tablets,
     return true;
 }
 
-void Table::SetSchemaUpdated(bool flag) {
+bool Table::GetSchemaIsSyncing() {
     MutexLock lock(&m_mutex);
-    if (flag == m_schema_updated) {
-        LOG(ERROR) << "[update] error on :" << *this;
-        abort();
+    return m_schema_is_syncing;
+}
+
+bool Table::GetSchemaSyncLockOrFailed() {
+    MutexLock lock(&m_mutex);
+    if (m_schema_is_syncing) {
+        return false;
     }
-    m_schema_updated = flag;
+    m_schema_is_syncing = true;
+    return true;
+}
+
+void Table::SetSchemaIsSyncing(bool flag) {
+    MutexLock lock(&m_mutex);
+    m_schema_is_syncing = flag;
 }
 
 void Table::RefreshCounter() {

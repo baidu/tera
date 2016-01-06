@@ -114,11 +114,11 @@ bool TabletNodeClient::CompactTablet(const CompactTabletRequest* request,
                                 m_rpc_timeout, m_thread_pool);
 }
 
-bool TabletNodeClient::UpdateSchema(const UpdateSchemaRequest* request,
-                                    UpdateSchemaResponse* response,
-                                    Closure<void, UpdateSchemaRequest*, UpdateSchemaResponse*, bool, int>* done) {
-    return SendMessageWithRetry(&TabletNodeServer::Stub::UpdateSchema,
-                                request, response, done, "UpdateSchema",
+bool TabletNodeClient::Update(const UpdateRequest* request,
+                                    UpdateResponse* response,
+                                    Closure<void, UpdateRequest*, UpdateResponse*, bool, int>* done) {
+    return SendMessageWithRetry(&TabletNodeServer::Stub::Update,
+                                request, response, done, "Update",
                                 m_rpc_timeout, m_thread_pool);
 }
 

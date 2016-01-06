@@ -19,11 +19,13 @@
 #include "common/mutex.h"
 #include "common/thread_pool.h"
 
+#include "proto/master_rpc.pb.h"
 #include "proto/table_meta.pb.h"
 #include "proto/tabletnode_rpc.pb.h"
 #include "utils/counter.h"
 
 namespace tera {
+class UpdateTableResponse;
 namespace master {
 
 
@@ -119,8 +121,8 @@ public:
 
     void ToMetaTableKeyValue(std::string* packed_key = NULL,
                              std::string* packed_value = NULL);
-    void SetSchemaUpdated(bool flag);
-    bool GetSchemaUpdated();
+    void SetSchemaIsSyncing(bool flag);
+    bool GetSchemaIsSyncing();
 
 private:
     Tablet(const Tablet&) {}
@@ -153,7 +155,7 @@ private:
         }
     } m_accumu_counter;
 
-    bool m_schema_updated; // is schema synced to ts who load this tablet
+    bool m_schema_is_syncing; // is schema synced to ts who load this tablet
 };
 
 typedef class boost::shared_ptr<Tablet> TabletPtr;
@@ -191,8 +193,17 @@ public:
     uint64_t GetNextTabletNo();
     bool GetTabletsForGc(std::set<uint64_t>* live_tablets,
                          std::set<uint64_t>* dead_tablets);
-    void SetSchemaUpdated(bool flag);
     void RefreshCounter();
+    bool GetSchemaIsSyncing();
+    void SetSchemaIsSyncing(bool flag);
+    void SyncedCountAdd(int32_t c);
+    int32_t GetSyncedCount();
+    int32_t GetTabletsCount();
+    void SetSchemaSyncResponse(UpdateTableResponse* response);
+    UpdateTableResponse* GetSchemaSyncResponse();
+    void SetSchemaSyncDone(google::protobuf::Closure* done);
+    google::protobuf::Closure* GetSchemaSyncDone();
+    bool GetSchemaSyncLockOrFailed();
 
 private:
     Table(const Table&) {}
@@ -209,7 +220,7 @@ private:
     uint64_t m_max_tablet_no;
     int64_t m_create_time;
     TableCounter m_counter;
-    bool m_schema_updated; // is schema synced to all ts(all tablets)
+    bool m_schema_is_syncing; // is schema syncing to all ts(all tablets)
 };
 
 class TabletManager {
