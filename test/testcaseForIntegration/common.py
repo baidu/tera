@@ -70,8 +70,8 @@ def run_tera_mark(file_path, op, table_name, random, value_size, num, key_size, 
     awk_args = ""
 
     if cf == '':  # kv mode
-        tera_bench_args += """--compression_ratio=1 --key_seed={kseed} --value_seed={vseed} """\           
-                           """ --value_size={vsize} --num={num} --benchmarks={random} """\                 
+        tera_bench_args += """--compression_ratio=1 --key_seed={kseed} --value_seed={vseed} """\
+                           """ --value_size={vsize} --num={num} --benchmarks={random} """\
                            """ --key_size={ksize} --key_step={kstep}""".format(kseed=key_seed,
                                                        vseed=value_seed, vsize=value_size, num=num,
                                                        random=random, ksize=key_size,
@@ -83,7 +83,7 @@ def run_tera_mark(file_path, op, table_name, random, value_size, num, key_size, 
             awk_args += """-F '\t' '{print $1"\t"$2}'""" 
     else:  # table 
         tera_bench_args += """--cf={cf} --compression_ratio=1 --key_seed={kseed} --value_seed={vseed} """\
-                           """ --value_size={vsize} --num={num} --benchmarks={random} """\                 
+                           """ --value_size={vsize} --num={num} --benchmarks={random} """\
                            """ --key_size={ksize} --key_step={kstep}""".format(cf=cf,
                                                             kseed=key_seed, vseed=value_seed,
                                                             vsize=value_size, num=num, random=random, ksize=key_size,
@@ -94,7 +94,7 @@ def run_tera_mark(file_path, op, table_name, random, value_size, num, key_size, 
         else:  # write                                                                                     
             awk_args += """-F '\t' '{print $1"\t"$2"\t"$3"\t"$4}'"""  
 
-    tera_mark_args = """--mode={op} --tablename={table_name} --type=async """\                             
+    tera_mark_args = """--mode={op} --tablename={table_name} --type=async """\
                      """ --verify=false --entry_limit={elimit}""".format(op=op, table_name=table_name,     
                                                                    elimit=entry_limit) 
 
