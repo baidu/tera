@@ -106,6 +106,7 @@ DEFINE_string(tera_master_gc_strategy, "default", "gc strategy, [default, increm
 
 DEFINE_int32(tera_master_max_split_concurrency, 1, "the max concurrency of tabletnode for split tablet");
 DEFINE_int32(tera_master_max_load_concurrency, 5, "the max concurrency of tabletnode for load tablet");
+DEFINE_int32(tera_master_max_move_concurrency, 50, "the max concurrency for move tablet");
 DEFINE_int32(tera_master_load_interval, 300, "the delay interval (in sec) for load tablet");
 
 // load balance
@@ -114,8 +115,7 @@ DEFINE_bool(tera_master_meta_isolate_enabled, false, "enable master to reserve a
 DEFINE_int32(tera_master_load_balance_period, 10000, "the period (in ms) for load balance policy execute");
 DEFINE_bool(tera_master_load_balance_table_grained, true, "whether the load balance policy only consider the specified table");
 DEFINE_double(tera_master_load_balance_size_ratio_trigger, 1.2, "ratio of heaviest node size to lightest to trigger load balance");
-DEFINE_bool(tera_master_load_balance_qps_policy_enabled, false, "enable QPS load balance");
-DEFINE_int32(tera_master_load_balance_accumulate_query_times, 10, "summarize how many queries to make QPS load-balance decision");
+DEFINE_int32(tera_master_load_balance_read_pending_threshold, 5000, "read pending threshold in QPS load-balance decision");
 
 DEFINE_double(tera_safemode_tablet_locality_ratio, 0.9, "the tablet locality ratio threshold of safemode");
 DEFINE_bool(tera_master_kick_tabletnode_enabled, true, "enable master to kick tabletnode");
@@ -173,6 +173,7 @@ DEFINE_int32(tera_asyncwriter_batch_size, 1024, "write batch to leveldb per X KB
 DEFINE_int32(tera_request_pending_limit, 100000, "the max read/write request pending");
 DEFINE_int32(tera_scan_request_pending_limit, 1000, "the max scan request pending");
 DEFINE_int32(tera_garbage_collect_period, 1800, "garbage collect period in s");
+DEFINE_int32(tera_garbage_collect_debug_log, 0, "garbage collect debug log");
 
 DEFINE_int32(tera_tabletnode_write_meta_rpc_timeout, 60000, "the timeout period (in ms) for tabletnode write meta");
 DEFINE_int32(tera_tabletnode_retry_period, 100, "the retry interval period (in ms) when operate tablet");
@@ -234,6 +235,7 @@ DEFINE_int64(tera_sdk_max_reader_pending_num, INT64_MAX, "default number of pend
 DEFINE_bool(tera_sdk_async_blocking_enabled, true, "enable blocking when async writing and reading");
 DEFINE_int32(tera_sdk_update_meta_concurrency, 3, "the concurrency for updating meta");
 DEFINE_int32(tera_sdk_update_meta_buffer_limit, 102400, "the pack size limit for updating meta");
+DEFINE_bool(tera_sdk_table_rename_enabled, false, "enable sdk table rename");
 
 DEFINE_bool(tera_sdk_cookie_enabled, true, "enable sdk cookie");
 DEFINE_string(tera_sdk_cookie_path, "/tmp/.tera_cookie", "the default path of sdk cookie");
@@ -245,6 +247,7 @@ DEFINE_int64(tera_sdk_perf_counter_log_interval, 1, "the interval of performance
 DEFINE_bool(tera_sdk_scan_async_enabled, false, "enable async scan");
 DEFINE_int64(tera_sdk_scan_async_cache_size, 16, "the max buffer size (in MB) for cached scan results");
 DEFINE_int32(tera_sdk_scan_async_parallel_max_num, 500, "the max number of concurrent task sending");
+DEFINE_int32(tera_sdk_max_batch_scan_req, 10, "the max number of concurrent scan req");
 
 DEFINE_string(tera_ins_addr_list, "", "the ins cluster addr. e.g. abc.com:1234,abb.com:1234");
 DEFINE_string(tera_ins_root_path, "", "root path on ins. e.g /ps/sandbox");

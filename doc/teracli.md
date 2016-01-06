@@ -50,7 +50,7 @@ tera支持高性能的key-value存储，其schema只需指定表名即可，若�
 
 span | 属性名 | 意义 | 有效取值 | 单位 | 默认值 | 其它说明
 ---  | ---    | ---  | ---      | ---  | ---    | ---
-table | rawkey | rawkey的拼装模式 | "binary" / "kv"/ "ttlkv" | - | - |
+table | rawkey | rawkey的拼装模式 | "binary" / "kv"/ "ttlkv" | - | key的长度必须小于64KB |
 table | splitsize | 某个tablet增大到此阈值时分裂为2个子tablets| >=0，等于0时关闭split | MB | 512 |
 table | mergesize | 某个tablet减小到此阈值时和相邻的1个tablet合并 | >=0，等于0时关闭merge | MB | 0 | splitsize至少要为mergesize的5倍
 lg    | storage   | 存储类型 | "disk" / "flash" / "memory" | - | "disk" |

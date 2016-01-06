@@ -5,16 +5,16 @@
 #       automatically config this for you.
 ################################################################
 
-SOFA_PBRPC_PREFIX=./thirdparty
-PROTOBUF_PREFIX=./thirdparty
-SNAPPY_PREFIX=./thirdparty
-ZOOKEEPER_PREFIX=./thirdparty
-GFLAGS_PREFIX=./thirdparty
-GLOG_PREFIX=./thirdparty
-GTEST_PREFIX=./thirdparty
-GPERFTOOLS_PREFIX=./thirdparty
-INS_PREFIX=./thirdparty
-BOOST_INCDIR=./thirdparty/boost_1_57_0
+SOFA_PBRPC_PREFIX=/home/work/git/tera/thirdparty
+PROTOBUF_PREFIX=/home/work/git/tera/thirdparty
+SNAPPY_PREFIX=/home/work/git/tera/thirdparty
+ZOOKEEPER_PREFIX=/home/work/git/tera/thirdparty
+GFLAGS_PREFIX=/home/work/git/tera/thirdparty
+GLOG_PREFIX=/home/work/git/tera/thirdparty
+GTEST_PREFIX=/home/work/git/tera/thirdparty
+GPERFTOOLS_PREFIX=/home/work/git/tera/thirdparty
+INS_PREFIX=/home/work/git/tera/thirdparty
+BOOST_INCDIR=/home/work/git/tera/thirdparty/boost_1_57_0
 
 SOFA_PBRPC_INCDIR = $(SOFA_PBRPC_PREFIX)/include
 PROTOBUF_INCDIR = $(PROTOBUF_PREFIX)/include

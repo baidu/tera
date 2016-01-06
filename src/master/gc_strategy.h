@@ -7,6 +7,7 @@
 #include "master/tablet_manager.h"
 #include "proto/tabletnode_client.h"
 #include "types.h"
+#include "utils/counter.h"
 
 namespace tera {
 namespace master {
@@ -57,6 +58,9 @@ private:
     mutable Mutex m_gc_mutex;
     std::map<std::string, GcTabletSet> m_gc_tablets;
     std::map<std::string, GcFileSet> m_gc_live_files;
+    int64_t m_file_total_num;
+    int64_t m_file_delete_num;
+    tera::Counter m_list_count;
 };
 
 class IncrementalGcStrategy : public GcStrategy{
@@ -74,7 +78,7 @@ public:
     virtual void PostQuery ();
 
 private:
-    void TEST_print_files(bool print_dead);
+    void DEBUG_print_files(bool print_dead);
     void CollectSingleDeadTablet(const std::string& tablename, uint64_t tabletnum);
     void DeleteTableFiles(const std::string& table_name);
 
@@ -105,6 +109,7 @@ private:
     TableFiles m_dead_tablet_files;
     TableFiles m_live_tablet_files;
     int64_t m_max_ts;
+    tera::Counter m_list_count;
 };
 
 } // namespace master

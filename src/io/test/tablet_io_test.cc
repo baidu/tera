@@ -73,6 +73,16 @@ public:
     TableSchema schema_;
 };
 
+// prepare test data
+bool PrepareTestData(TabletIO* tablet, uint64_t e, uint64_t s = 0) {
+    leveldb::WriteBatch batch;
+    for (uint64_t i = s; i < e; ++i) {
+        std::string str = StringFormat("%011llu", i); // NumberToString(i);
+        batch.Put(str, str);
+    }
+    return tablet->WriteBatch(&batch);
+}
+
 TEST_F(TabletIOTest, General) {
     std::string tablet_path = working_dir + "general";
     std::string key_start = "";
@@ -109,10 +119,7 @@ TEST_F(TabletIOTest, Split) {
                             empty_snaphsots_, empty_rollback_, NULL, NULL, NULL, &status));
 
     // prepare test data
-    for (uint32_t i = 0; i < N; ++i) {
-        std::string str = StringFormat("%011llu", i); // NumberToString(i);
-        EXPECT_TRUE(tablet.WriteOne(str, str));
-    }
+    EXPECT_TRUE(PrepareTestData(&tablet, N));
 
     // for first tablet
     tablet.GetDataSize(&size, NULL, &status);
@@ -174,10 +181,7 @@ TEST_F(TabletIOTest, SplitAndCheckSize) {
                             empty_snaphsots_, empty_rollback_, NULL, NULL, NULL, &status));
 
     // prepare test data
-    for (uint32_t i = 0; i < N; ++i) {
-        std::string str = StringFormat("%011llu", i); // NumberToString(i);
-        EXPECT_TRUE(tablet.WriteOne(str, str));
-    }
+    EXPECT_TRUE(PrepareTestData(&tablet, N));
 
     // for first tablet
     tablet.GetDataSize(&size, NULL, &status);
@@ -248,10 +252,7 @@ TEST_F(TabletIOTest, Compact) {
                             empty_snaphsots_, empty_rollback_, NULL, NULL, NULL, &status));
 
     // prepare test data
-    for (int i = 0; i < 100; ++i) {
-        std::string str = StringFormat("%011llu", i); // NumberToString(i);
-        EXPECT_TRUE(tablet.WriteOne(str, str));
-    }
+    EXPECT_TRUE(PrepareTestData(&tablet, 100));
 
     uint64_t table_size = 0;
     tablet.GetDataSize(&table_size, NULL, &status);
@@ -265,7 +266,7 @@ TEST_F(TabletIOTest, Compact) {
     TabletIO new_tablet(new_key_start, new_key_end);
     EXPECT_TRUE(new_tablet.Load(TableSchema(), tablet_path, std::vector<uint64_t>(),
                             empty_snaphsots_, empty_rollback_, NULL, NULL, NULL, &status));
-    EXPECT_TRUE(new_tablet.Compact(&status));
+    EXPECT_TRUE(new_tablet.Compact(0, &status));
 
     uint64_t new_table_size = 0;
     new_tablet.GetDataSize(&new_table_size, NULL, &status);
@@ -380,10 +381,8 @@ TEST_F(TabletIOTest, SplitToSubTable) {
                             empty_snaphsots_, empty_rollback_, NULL, NULL, NULL, &status));
 
     // prepare test data
-    for (uint64_t i = 0; i < N; ++i) {
-        std::string str = StringFormat("%011llu", i); // NumberToString(i);
-        EXPECT_TRUE(tablet.WriteOne(str, str));
-    }
+    EXPECT_TRUE(PrepareTestData(&tablet, N / 2, 0));
+    EXPECT_TRUE(PrepareTestData(&tablet, N, N / 2));
 
     // for first tablet
     tablet.GetDataSize(&size, NULL, &status);

@@ -33,6 +33,19 @@ TEST(StringUtilTest, IsValidName) {
     ASSERT_FALSE(IsValidName("a[{;:'\",<>/?\"'}]"));
 }
 
+TEST(StringUtilTest, IsValidCfName) {
+    ASSERT_TRUE(IsValidColumnFamilyName(""));
+    ASSERT_TRUE(IsValidColumnFamilyName(std::string(64 * 1024 - 1, 'a')));
+    ASSERT_FALSE(IsValidColumnFamilyName(std::string(64 * 1024, 'a')));
+
+    ASSERT_TRUE(IsValidColumnFamilyName("1"));
+    ASSERT_TRUE(IsValidColumnFamilyName("cf0"));
+    ASSERT_TRUE(IsValidColumnFamilyName("_1234567890-abcdefghijklmnopqrstuvwxyz:."));
+
+    ASSERT_FALSE(IsValidColumnFamilyName("cf0\1"));
+    ASSERT_FALSE(IsValidColumnFamilyName("cf0\2"));
+}
+
 }
 
 int main(int argc, char** argv) {

@@ -10,31 +10,29 @@ import common
 
 @nose.tools.with_setup(common.create_kv_table, common.cleanup)
 def test_showsize_kv_table():
-
-    time.sleep(10)
-    show_ret = common.parse_showinfo()
     table_name = "test"
-    nose.tools.assert_equal(show_ret[table_name]["size"], "4K")
-    dump_file = 'dump.out'
     scan_file = 'scan.out'
-    common.run_tera_mark([(dump_file, False)], op='w', table_name='test', random='random',
+    common.run_tera_mark([], op='w', table_name='test', random='random',
                          key_seed=1, value_seed=10, value_size=100, num=5000, key_size=20)
-    common.scan_table(table_name=table_name, file_path=scan_file, allversion=True)
-    nose.tools.assert_true(common.compare_files(dump_file, scan_file, need_sort=True))
-    nose.tools.assert_not_equal(show_ret[table_name]["size"], "4K")
-
+    time.sleep(3)
+    show_ret = common.parse_showinfo()
+    size = float(show_ret[table_name]["size"][:-1])
+    if size >= 774 * 0.9 and size <= 774 * 1.1:
+        nose.tools.assert_true(True)
+    else:
+        nose.tools.assert_true(False)
 
 @nose.tools.with_setup(common.create_singleversion_table, common.cleanup)
 def test_showsize_table():
-
-    time.sleep(10)
-    show_ret = common.parse_showinfo()
     table_name = "test"
-    nose.tools.assert_equal(show_ret[table_name]["size"], "4K")
-    dump_file = 'dump.out'
     scan_file = 'scan.out'
-    common.run_tera_mark([(dump_file, False)], op='w', table_name='test', cf='cf0:q,cf1:q', random='random',
-                         key_seed=1, value_seed=10, value_size=100, num=500000, key_size=20)
-    common.scan_table(table_name=table_name, file_path=scan_file, allversion=True)
-    nose.tools.assert_true(common.compare_files(dump_file, scan_file, need_sort=True))
-    nose.tools.assert_not_equal(show_ret[table_name]["size"], "4K")
+    common.run_tera_mark([], op='w', table_name='test', cf='cf0:q,cf1:q', random='random',
+                         key_seed=1, value_seed=10, value_size=100, num=5000, key_size=20)
+    show_ret = common.parse_showinfo()
+    time.sleep(3)
+    show_ret = common.parse_showinfo()
+    size = float(show_ret[table_name]["size"][:-1])
+    if size >= 1.65 * 0.95 and size <= 1.65 * 1.05:
+        nose.tools.assert_true(True)
+    else:
+        nose.tools.assert_true(False)
