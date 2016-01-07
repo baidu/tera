@@ -1,4 +1,5 @@
 [Tera - 高性能、可伸缩的结构化数据库](http://github.com/baidu/tera)
+
 ====
 [![Build Status](http://220.181.7.231/buildStatus/icon?job=tera_master_build)](http://220.181.7.231/job/tera_master_build/)  
 Copyright 2015, Baidu, Inc.
