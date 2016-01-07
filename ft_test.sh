@@ -37,7 +37,7 @@ sleep 2
 export PYTHONPATH=$PYTHONPATH:../../thirdparty/include/; export PATH=$PATH:../../thirdparty/bin/
 
 if [[ $# == 0 ]]; then
-    nosetests -s -v -x -w testcase > ../log/test.log
+    nosetests -s -v -x testcase/ > ../log/test.log
 else
     nosetests -s -v -x $1 > ../log/test.log
 fi
