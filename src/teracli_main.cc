@@ -1606,59 +1606,21 @@ int32_t BatchGetOp(Client* client, int32_t argc, char** argv, ErrorCode* err) {
             continue;
         }
         std::string& rowkey = input_v[0];
-        if (input_v.size() == 1) {
-            // only rowkey explicit, scan all records out
-            ScanDescriptor desc(rowkey);
-            ResultStream* result_stream;
-            desc.SetEnd(rowkey);
-            if ((result_stream = table->Scan(desc, err)) == NULL) {
-                LOG(ERROR) << "fail to get records from table: " << tablename;
-                return -1;
+        RowReader* reader = table->NewRowReader(rowkey);
+        for (size_t i = 1; i < input_v.size(); ++i) {
+            std::string& cfqu = input_v[i];
+            std::string::size_type pos = cfqu.find(":", 0);
+            if (pos != std::string::npos) {
+                // add column
+                reader->AddColumn(cfqu.substr(0, pos), cfqu.substr(pos + 1));
+            } else {
+                // add columnfamily
+                reader->AddColumnFamily(cfqu);
             }
-
-            while (!result_stream->Done()) {
-                {
-                    // for performance testing
-                    MutexLock locker(&g_stat_lock);
-                    g_key_num ++;
-                    g_total_size += result_stream->RowName().size()
-                        + result_stream->ColumnName().size()
-                        + sizeof(result_stream->Timestamp())
-                        + result_stream->Value().size();
-                    int32_t time_cur = time(NULL);
-                    int32_t time_used = time_cur - g_start_time;
-                    if (time_cur > g_last_time) {
-                        g_last_time = time_cur;
-                        LOG(INFO) << "Read file  "<<g_key_num<<" keys "<<g_key_num/(time_used?time_used:1)
-                            <<" keys/S "<<g_total_size/1024.0/1024/(time_used?time_used:1)<<" MB/S ";
-                    }
-                }
-                /*
-                std::cout << result_stream->RowName() << ":"
-                    << result_stream->ColumnName() << ":"
-                    << result_stream->Timestamp() << ":"
-                    << result_stream->Value() << std::endl;
-                */
-                result_stream->Next();
-            }
-        } else {
-            // get specific records with RowReader
-            RowReader* reader = table->NewRowReader(rowkey);
-            for (size_t i = 1; i < input_v.size(); ++i) {
-                std::string& cfqu = input_v[i];
-                std::string::size_type pos = cfqu.find(":", 0);
-                if (pos != std::string::npos) {
-                    // add column
-                    reader->AddColumn(cfqu.substr(0, pos), cfqu.substr(pos + 1));
-                } else {
-                    // add columnfamily
-                    reader->AddColumnFamily(cfqu);
-                }
-                reader->SetSnapshot(snapshot);
-            }
-            reader->SetCallBack(BatchGetCallBack);
-            table->Get(reader);
+            reader->SetSnapshot(snapshot);
         }
+        reader->SetCallBack(BatchGetCallBack);
+        table->Get(reader);
     }
     while (!table->IsGetFinished()) {
         // waiting async get finishing
