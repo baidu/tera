@@ -119,6 +119,8 @@ public:
 
     void ToMetaTableKeyValue(std::string* packed_key = NULL,
                              std::string* packed_value = NULL);
+    void SetSchemaUpdated(bool flag);
+    bool GetSchemaUpdated();
 
 private:
     Tablet(const Tablet&) {}
@@ -150,6 +152,8 @@ private:
             memset(this, 0, sizeof(TabletAccumulateCounter));
         }
     } m_accumu_counter;
+
+    bool m_schema_updated; // is schema synced to ts who load this tablet
 };
 
 typedef class boost::shared_ptr<Tablet> TabletPtr;
@@ -187,6 +191,8 @@ public:
     uint64_t GetNextTabletNo();
     bool GetTabletsForGc(std::set<uint64_t>* live_tablets,
                          std::set<uint64_t>* dead_tablets);
+    bool GetSchemaUpdated();
+    void SetSchemaUpdated(bool flag);
     void RefreshCounter();
 
 private:
@@ -204,6 +210,7 @@ private:
     uint64_t m_max_tablet_no;
     int64_t m_create_time;
     TableCounter m_counter;
+    bool m_schema_updated; // is schema synced to all ts(all tablets)
 };
 
 class TabletManager {

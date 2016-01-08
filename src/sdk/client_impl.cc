@@ -117,7 +117,7 @@ bool ClientImpl::CheckReturnValue(StatusCode status, std::string& reason, ErrorC
             err->SetFailed(ErrorCode::kOK, reason);
             break;
         default:
-            reason = "tera master is not ready, please wait..";
+            reason = "unknown system error, contact to cluster admin...";
             err->SetFailed(ErrorCode::kSystem, reason);
             break;
     }
@@ -194,7 +194,7 @@ bool ClientImpl::UpdateTable(const TableDescriptor& desc, ErrorCode* err) {
         }
         LOG(ERROR) << reason << "| status: " << StatusCodeToString(response.status());
     } else {
-        reason = "rpc fail to create table:" + desc.TableName();
+        reason = "rpc fail to update table:" + desc.TableName();
         LOG(ERROR) << reason;
         err->SetFailed(ErrorCode::kSystem, reason);
     }

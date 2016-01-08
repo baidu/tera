@@ -79,6 +79,10 @@ public:
                  TsCmdCtrlResponse* response,
                  Closure<void, TsCmdCtrlRequest*, TsCmdCtrlResponse*, bool, int>* done = NULL);
 
+    bool Update(const UpdateRequest* request,
+                      UpdateResponse* response,
+                      Closure<void, UpdateRequest*, UpdateResponse*, bool, int>* done = NULL);
+
 private:
     int32_t m_rpc_timeout;
     static ThreadPool* m_thread_pool;
