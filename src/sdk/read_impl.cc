@@ -26,6 +26,13 @@ RowReaderImpl::RowReaderImpl(Table* table, const std::string& row_key)
 RowReaderImpl::~RowReaderImpl() {
 }
 
+void RowReaderImpl::Reset() {
+    _finish = false;
+    _retry_times = 0;
+    _result_pos = 0;
+    _error_code.SetFailed(ErrorCode::kOK);
+}
+
 /// 设置读取特定版本
 void RowReaderImpl::SetTimestamp(int64_t ts) {
     SetTimeRange(ts, ts);

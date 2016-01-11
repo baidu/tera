@@ -6,7 +6,7 @@
  * @file tera_sample.cc
  * @author yanshiguang02@baidu.com
  * @date 2014/02/05 19:55:54
- * @brief Sample of Tera API
+ * @brief Sample of Tera HA API
  *  每个表都有个默认的LocalityGroup "default" 要么被用户显示创建, 要么被系统创建
  *  每个表都有个某人的ColumnFamily ""
  *      要么被用户显示创建, 要么被系统创建, 默认属于lg default
@@ -19,10 +19,10 @@
 #include <time.h>
 #include <unistd.h>
 
-#include "sdk/tera.h"
+#include "sdk/ha_tera.h"
 
 /// 创建一个表格
-int CreateTable(tera::Client* client) {
+int CreateTable(tera::HAClient* hclient) {
     // 创建一个表格的描述
     tera::TableDescriptor table_desc("webdb");
 
@@ -49,14 +49,14 @@ int CreateTable(tera::Client* client) {
     table_desc.AddColumnFamily("anchor", "lg1");
 
     tera::ErrorCode error_code;
-    if (!client->CreateTable(table_desc, &error_code)) {
+    if (!hclient->CreateTable(table_desc, &error_code)) {
         printf("Create Table fail: %s\n", tera::strerr(error_code));
     }
     return 0;
 }
 
 /// 修改一个表的内容
-int ModifyTable(tera::Table* table) {
+int ModifyTable(tera::HATable* table) {
     tera::ErrorCode error_code;
 
     // 修改需要先创建一个 RowMutation
@@ -68,7 +68,8 @@ int ModifyTable(tera::Table* table) {
     row->Put("title", "abe", "Baidu.com");
     row->Put("title", "abf", "Baidu.com");
     row->Put("anchor", "www.hao123.com/", "百度");
-    row->Put("html", "", time(NULL), "<html>Test content</html>");
+    row->Put("html", "", "<html>Test content</html>");
+    // row->Put("html", "", time(NULL), "<html>Test content</html>");
     // 删除一个column过去24小时内的所有版本
     // row->DeleteColumns("title", "abc", time(NULL), time(NULL) - 86400);
     // 删除一个column24小时之前的所有版本
@@ -96,36 +97,12 @@ int ModifyTable(tera::Table* table) {
     return 0;
 }
 
-/// 扫描一个表
-int ScanTable(tera::Table* table) {
-    tera::ErrorCode error_code;
-
-    // 创建一个scan表述
-    tera::ScanDescriptor scan_desc("com.baidu.");
-    // 只扫描百度主域
-    scan_desc.SetEnd("com.baidu.~");
-    // 设置扫描的column family
-    scan_desc.AddColumnFamily("anchor");
-    // 设置最多返回的版本
-    scan_desc.SetMaxVersions(3);
-    // 设置扫描的时间范围
-    scan_desc.SetTimeRange(time(NULL), time(NULL) - 3600);
-
-    tera::ResultStream* scanner = table->Scan(scan_desc, &error_code);
-    for (scanner->LookUp("com.baidu."); !scanner->Done(); scanner->Next()) {
-        printf("Row: %s\%s\%ld\%s\n",
-                scanner->RowName().c_str(), scanner->ColumnName().c_str(),
-                scanner->Timestamp(), scanner->Value().c_str());
-    }
-    delete scanner;
-    return 0;
-}
-
 bool finish = false;
 
 void ReadRowCallBack(tera::RowReader* row_reader) {
+    printf("ReadRowCallBack call\n");
     while (!row_reader->Done()) {
-        printf("Row: %s\%s\%ld\%s\n",
+        printf("ReadRowCallBack, Row: %s\%s\%ld\%s\n",
                 row_reader->RowName().c_str(), row_reader->ColumnName().c_str(),
                 row_reader->Timestamp(), row_reader->Value().c_str());
         row_reader->Next();
@@ -134,7 +111,7 @@ void ReadRowCallBack(tera::RowReader* row_reader) {
     finish = true;
 }
 
-int ReadRowFromTable(tera::Table* table) {
+int ReadRowFromTable(tera::HATable* table) {
     tera::ErrorCode error_code;
     tera::RowReader* row_reader = table->NewRowReader("com.baidu.www/");
     row_reader->AddColumnFamily("html");
@@ -176,30 +153,30 @@ int ReadRowFromTable(tera::Table* table) {
             row_reader1->Next();
         }
     }
+    if (row_reader2->GetError().GetType() != tera::ErrorCode::kOK) {
+        printf("read2 failed! error: %d, %s\n",
+               row_reader2->GetError().GetType(),
+               row_reader2->GetError().GetReason().c_str());
+    } else {
+        while (!row_reader2->Done()) {
+            printf("Row: %s\%s\%ld\%s\n",
+                   row_reader2->RowName().c_str(), row_reader2->ColumnName().c_str(),
+                   row_reader2->Timestamp(), row_reader2->Value().c_str());
+            row_reader2->Next();
+        }
+    }
     delete row_reader1;
-    // if (row_reader2->GetError().GetType() != tera::ErrorCode::kOK) {
-    //     printf("read2 failed! error: %d, %s\n",
-    //            row_reader2->GetError().GetType(),
-    //            row_reader2->GetError().GetReason().c_str());
-    // } else {
-    //     while (!row_reader2->Done()) {
-    //         printf("Row: %s\%s\%ld\%s\n",
-    //                row_reader2->RowName().c_str(), row_reader2->ColumnName().c_str(),
-    //                row_reader2->Timestamp(), row_reader2->Value().c_str());
-    //         row_reader2->Next();
-    //     }
-    // }
-    // delete row_reader2;
+    delete row_reader2;
     return 0;
 }
 
 /// 三维表格
-int ShowBigTable(tera::Client* client) {
+int ShowBigTable(tera::HAClient* client) {
     tera::ErrorCode error_code;
     // Create
     CreateTable(client);
     // Open
-    tera::Table* table = client->OpenTable("webdb", &error_code);
+    tera::HATable* table = client->OpenTable("webdb", &error_code);
     if (table == NULL) {
         printf("Open table fail: %s\n", tera::strerr(error_code));
         return 1;
@@ -214,70 +191,23 @@ int ShowBigTable(tera::Client* client) {
     return 0;
 }
 
-/// 二维表格
-int ShowSampleTable(tera::Client* client) {
+int main(int argc, char *argv[]) {
     tera::ErrorCode error_code;
-    // 创建表格,并关闭多版本
-    tera::TableDescriptor desc("sample_table");
-    tera::ColumnFamilyDescriptor* cfd = desc.AddColumnFamily("weight");
-    cfd->SetMaxVersions(0);
-    client->CreateTable(desc, &error_code);
-
-    // Open
-    tera::Table* table = client->OpenTable("sample_table", &error_code);
-    // Write
-    table->Put("com.baidu.www/", "weight", "", "serialized_weights", &error_code);
-    // Read
-    std::string value;
-    if (table->Get("com.baidu.www/", "weight", "", &value, &error_code)) {
-        printf("Read return %s\n", value.c_str());
-    }
-    // Close
-    delete table;
-    return 0;
-}
-
-
-/// 把表格作为一个kv使用
-int ShowKv(tera::Client* client) {
-    tera::ErrorCode error_code;
-    // Create
-    tera::TableDescriptor schema("kvstore");
-    client->CreateTable(schema, &error_code);
-    // Open
-    tera::Table* table = client->OpenTable("kvstore", &error_code);
-    // Write
-    table->Put("test_key", "", "", "test_value", &error_code);
-    // Read
-    std::string value;
-    if (table->Get("test_key", "", "", &value, &error_code)) {
-        printf("Read return %s\n", value.c_str());
-    }
-    // Close
-    delete table;
-    return 0;
-};
-
-/// 演示程序
-int main(int argc, char* argv[]) {
-    tera::ErrorCode error_code;
-    std::string flag_file = "./tera.flag";
-    if (argc >= 2) {
-        flag_file = argv[1];
-    }
     // 根据配置创建一个client
-    tera::Client* client = tera::Client::NewClient(flag_file, "tera_sample", &error_code);
+    std::vector<std::string> confpaths;
+    confpaths.push_back("./tera1.flag");
+    confpaths.push_back("./tera2.flag");
+    tera::HAClient* client = tera::HAClient::NewClient(confpaths, "tera_sample", &error_code);
     if (client == NULL) {
-        printf("Create tera client fail: %s\n", tera::strerr(error_code));
+        printf("New tera client fail: %s,%s\n", tera::strerr(error_code), error_code.GetReason().c_str());
         return 1;
+    } else {
+        printf("New tera client ok\n");
     }
 
-    //CreateTable(client);
-    // 演示三种使用方式
     ShowBigTable(client);
-    //ShowSampleTable(client);
-    //ShowKv(client);
+
+    printf("Run Over!\n");
+
     return 0;
 }
-
-/* vim: set expandtab ts=4 sw=4 sts=4 tw=100: */

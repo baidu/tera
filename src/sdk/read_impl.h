@@ -23,6 +23,8 @@ class RowReaderImpl : public RowReader, public SdkTask {
 public:
     RowReaderImpl(Table* table, const std::string& row_key);
     ~RowReaderImpl();
+    /// 重置内部状态
+    void Reset();
     /// 设置读取特定版本
     void SetTimestamp(int64_t ts);
     /// 返回读取时间戳

@@ -320,6 +320,7 @@ public:
     virtual const std::string& RowKey() = 0;
 
     virtual void Reset(const std::string& row_key) = 0;
+    virtual void Reset() = 0;
 
     /// 修改指定列
     virtual void Put(const std::string& family, const std::string& qualifier,
@@ -437,6 +438,7 @@ public:
 
     RowReader();
     virtual ~RowReader();
+    virtual void Reset() = 0;
     /// 返回row key
     virtual const std::string& RowName() = 0;
     /// 设置读取特定版本

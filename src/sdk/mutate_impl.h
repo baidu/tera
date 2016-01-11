@@ -35,6 +35,9 @@ public:
     /// 重置
     void Reset(const std::string& row_key);
 
+    /// 只重置内部数据，不影响用户的数据
+    void Reset();
+
     /// 修改一个列
     void Put(const std::string& family, const std::string& qualifier,
              const std::string& value);

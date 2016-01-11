@@ -35,6 +35,12 @@ void RowMutationImpl::Reset(const std::string& row_key) {
     _error_code.SetFailed(ErrorCode::kOK);
 }
 
+void RowMutationImpl::Reset() {
+    _retry_times = 0;
+    _finish = false;
+    _error_code.SetFailed(ErrorCode::kOK);
+}
+
 void RowMutationImpl::SetErrorIfInvalid(const std::string& str,
                                         const FieldLimit& field) {
     std::string reason = _error_code.GetReason();
