@@ -30,10 +30,13 @@ class Mutex {
 public:
     Mutex()
         : owner_(0), msg_(NULL), msg_threshold_(0), lock_time_(0) {
-        PthreadCall("init mutex", pthread_mutex_init(&mu_, NULL));
+        PthreadCall("init mutexattr", pthread_mutexattr_init(&attr_));
+        PthreadCall("set mutexattr", pthread_mutexattr_settype(&attr_, PTHREAD_MUTEX_ERRORCHECK)),
+        PthreadCall("init mutex", pthread_mutex_init(&mu_, &attr_));
     }
     ~Mutex() {
         PthreadCall("destroy mutex", pthread_mutex_destroy(&mu_));
+        PthreadCall("destroy mutexattr", pthread_mutexattr_destroy(&attr_));
     }
     // Lock the mutex.
     // Will deadlock if the mutex is already locked by this thread.
@@ -90,6 +93,7 @@ private:
     friend class CondVar;
     Mutex(const Mutex&);
     void operator=(const Mutex&);
+    pthread_mutexattr_t attr_;
     pthread_mutex_t mu_;
     pthread_t owner_;
     const char* msg_;

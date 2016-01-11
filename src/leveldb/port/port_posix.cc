@@ -34,9 +34,16 @@ static void PthreadCall(const char* label, int result) {
   }
 }
 
-Mutex::Mutex() { PthreadCall("init mutex", pthread_mutex_init(&mu_, NULL)); }
+Mutex::Mutex() {
+    PthreadCall("init mutexattr", pthread_mutexattr_init(&attr_));
+    PthreadCall("set mutexattr", pthread_mutexattr_settype(&attr_, PTHREAD_MUTEX_ERRORCHECK));
+    PthreadCall("init mutex", pthread_mutex_init(&mu_, &attr_));
+}
 
-Mutex::~Mutex() { PthreadCall("destroy mutex", pthread_mutex_destroy(&mu_)); }
+Mutex::~Mutex() {
+    PthreadCall("destroy mutex", pthread_mutex_destroy(&mu_));
+    PthreadCall("destroy mutexattr", pthread_mutexattr_destroy(&attr_));
+}
 
 void Mutex::Lock() { PthreadCall("lock", pthread_mutex_lock(&mu_)); }
 
