@@ -3,8 +3,11 @@
 // found in the LICENSE file.
 //
 
+#include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
+#include <readline/history.h>
+#include <readline/readline.h>
 
 #include <fstream>
 #include <iostream>
@@ -2482,23 +2485,9 @@ int32_t UserOp(Client* client, int32_t argc, char** argv, ErrorCode* err) {
     return -1;
 }
 
-int main(int argc, char* argv[]) {
-    ::google::ParseCommandLineFlags(&argc, &argv, true);
-
-    if (argc < 2) {
-        Usage(argv[0]);
-        return -1;
-    }
-
+int ExecuteCommand(Client* client, int argc, char* argv[]) {
     int ret = 0;
     ErrorCode error_code;
-    Client* client = Client::NewClient(FLAGS_flagfile, NULL);
-
-    if (client == NULL) {
-        LOG(ERROR) << "client instance not exist";
-        return -1;
-    }
-
     std::string cmd = argv[1];
     if (cmd == "create") {
         ret = CreateOp(client, argc, argv, &error_code);
@@ -2589,6 +2578,47 @@ int main(int argc, char* argv[]) {
         LOG(ERROR) << "fail reason: " << strerr(error_code)
             << " " << error_code.GetReason();
     }
+    return ret;
+}
+
+int main(int argc, char* argv[]) {
+    ::google::ParseCommandLineFlags(&argc, &argv, true);
+
+    if (argc < 2) {
+        Usage(argv[0]);
+        return -1;
+    }
+
+    Client* client = Client::NewClient(FLAGS_flagfile, NULL);
+    if (client == NULL) {
+        LOG(ERROR) << "client instance not exist";
+        return -1;
+    }
+
+    int ret  = 0;
+    if (argc == 2 && strcmp(argv[1], "interactive") == 0) {
+        char* line = NULL;
+        while ((line = readline("tera> ")) != NULL) {
+            char* line_copy = strdup(line);
+            std::vector<char*> arg_list;
+            arg_list.push_back(argv[0]);
+            char* tmp = NULL;
+            char* token = strtok_r(line, " \t", &tmp);
+            while (token != NULL) {
+                arg_list.push_back(token);
+                token = strtok_r(NULL, " \t", &tmp);
+            }
+            if (arg_list.size() > 1) {
+                add_history(line_copy);
+                ExecuteCommand(client, arg_list.size(), &arg_list[0]);
+            }
+            delete[] line_copy;
+            delete[] line;
+        }
+    } else {
+        ret = ExecuteCommand(client, argc, argv);
+    }
+
     delete client;
     return ret;
 }
