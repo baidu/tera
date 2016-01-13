@@ -928,7 +928,7 @@ int32_t ShowTabletList(const TabletMetaList& tablet_list, bool is_server_addr, b
                 row.push_back(NumberToString(counter.scan_rows()));
                 row.push_back(utils::ConvertByteToString(counter.scan_size()) + "B/s");
             }
-            row.push_back(meta.key_range().key_start().substr(0, 20));
+            row.push_back(DebugString(meta.key_range().key_start().substr(0, 20)));
             printer.AddRow(row);
         }
     } else {
