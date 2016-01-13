@@ -92,8 +92,8 @@ DEFINE_int32(tera_master_cache_keep_min, 512, "the minimal free cache size (in M
 
 DEFINE_int32(tera_master_thread_min_num, 1, "the min thread number of master server");
 DEFINE_int32(tera_master_thread_max_num, 10, "the max thread number of master server");
-DEFINE_int32(tera_master_impl_thread_min_num, 1, "the min thread number for master impl operations");
 DEFINE_int32(tera_master_impl_thread_max_num, 20, "the max thread number for master impl operations");
+DEFINE_int32(tera_master_impl_query_thread_num, 20, "the thread number for master impl query tabletnodes");
 DEFINE_int32(tera_master_impl_retry_times, 5, "the max retry times when master impl operation fail");
 
 DEFINE_string(tera_master_meta_table_name, "meta_table", "the meta table name");

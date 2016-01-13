@@ -36,8 +36,8 @@ DECLARE_bool(tera_master_cache_check_enabled);
 DECLARE_int32(tera_master_cache_release_period);
 DECLARE_int32(tera_master_cache_keep_min);
 
-DECLARE_int32(tera_master_impl_thread_min_num);
 DECLARE_int32(tera_master_impl_thread_max_num);
+DECLARE_int32(tera_master_impl_query_thread_num);
 DECLARE_int32(tera_master_impl_retry_times);
 
 DECLARE_int32(tera_master_common_retry_period);
@@ -111,6 +111,7 @@ MasterImpl::MasterImpl()
       m_load_scheduler(new LoadScheduler),
       m_release_cache_timer_id(kInvalidTimerId),
       m_query_enabled(false),
+      m_query_thread_pool(new ThreadPool(FLAGS_tera_master_impl_query_thread_num)),
       m_start_query_time(0),
       m_query_tabletnode_timer_id(kInvalidTimerId),
       m_load_balance_enabled(false),
@@ -3276,7 +3277,7 @@ void MasterImpl::QueryTabletNodeAsync(std::string addr, int32_t timeout,
 
     VLOG(20) << "QueryAsync id: " << request->sequence_id() << ", "
         << "server: " << addr;
-    node_client.Query(request, response, done);
+    node_client.Query(m_query_thread_pool.get(), request, response, done);
 }
 
 void MasterImpl::QueryTabletNodeCallback(std::string addr, QueryRequest* request,
@@ -5184,7 +5185,8 @@ void MasterImpl::RefreshTableCounter() {
 }
 
 std::string MasterImpl::ProfilingLog() {
-    return m_thread_pool->ProfilingLog();
+    return "[main : " + m_thread_pool->ProfilingLog() + "] [query : "
+        + m_query_thread_pool->ProfilingLog() + "]";
 }
 } // namespace master
 } // namespace tera
