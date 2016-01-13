@@ -1,5 +1,7 @@
 #!/bin/bash
 
+test_dir=tera_ft_test_data
+
 function usage() {
     echo "usage: $0 [case]"
     echo "example: $0                          # all test cases"
@@ -14,22 +16,22 @@ fi
 
 set -x -e
 
-rm -rf tmp
-mkdir tmp
-cp -r example/onebox/* tmp
-cp build/bin/teracli tmp/bin
-cp build/bin/tera_main tmp/bin
-cp build/benchmark/tera_bench tmp/bin
-cp build/benchmark/tera_mark tmp/bin
+rm -rf $test_dir
+mkdir $test_dir
+cp -r example/onebox/* $test_dir
+cp build/bin/teracli $test_dir/bin
+cp build/bin/tera_main $test_dir/bin
+cp build/benchmark/tera_bench $test_dir/bin
+cp build/benchmark/tera_mark $test_dir/bin
 
-mkdir -p tmp/log
-mkdir -p tmp/data
-cp -r test/testcase tmp/bin
-cp -r test/testcase/shell_script/* tmp/bin
-cp src/sdk/python/TeraSdk.py tmp/bin/testcase
-cp build/lib/libtera_c.so tmp/bin
+mkdir -p $test_dir/log
+mkdir -p $test_dir/data
+cp -r test/testcase $test_dir/bin
+cp -r test/testcase/shell_script/* $test_dir/bin
+cp src/sdk/python/TeraSdk.py $test_dir/bin/testcase
+cp build/lib/libtera_c.so $test_dir/bin
 
-cd tmp/bin/
+cd $test_dir/bin/
 sh kill_tera.sh
 sh launch_tera.sh
 sleep 2
