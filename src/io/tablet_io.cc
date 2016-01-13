@@ -525,7 +525,7 @@ bool TabletIO::IsBusy() {
     return is_busy;
 }
 
-bool TabletIO::WorkLoad(double* write_workload) {
+bool TabletIO::Workload(double* write_workload) {
     {
         MutexLock lock(&m_mutex);
         if (m_status != kReady) {
@@ -533,7 +533,7 @@ bool TabletIO::WorkLoad(double* write_workload) {
         }
         m_db_ref_count++;
     }
-    m_db->WorkLoad(write_workload);
+    m_db->Workload(write_workload);
     {
         MutexLock lock(&m_mutex);
         m_db_ref_count--;
@@ -1862,7 +1862,7 @@ void TabletIO::GetAndClearCounter(TabletCounter* counter) {
     counter->set_write_size(m_counter.write_size.Clear());
     counter->set_is_on_busy(IsBusy());
     double write_workload = 0;
-    WorkLoad(&write_workload);
+    Workload(&write_workload);
     counter->set_write_workload(write_workload);
 }
 

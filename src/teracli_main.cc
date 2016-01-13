@@ -868,6 +868,14 @@ int32_t ScanOp(Client* client, int32_t argc, char** argv, ErrorCode* err) {
     return 0;
 }
 
+static std::string DoubleToStr(double value)
+{
+    const int len_max = 32;
+    char buffer[len_max];
+    int len = snprintf(buffer, len_max, "%.2g", value);
+    return std::string(buffer, len);
+}
+
 int32_t ShowTabletList(const TabletMetaList& tablet_list, bool is_server_addr, bool is_x) {
     TPrinter printer;
     int cols;
@@ -877,14 +885,14 @@ int32_t ShowTabletList(const TabletMetaList& tablet_list, bool is_server_addr, b
             cols = 14;
             printer.Reset(cols,
                            " ", "server_addr", "path", "status", "size",
-                           "isbusy", "lread", "read", "rspeed", "write",
-                           "wspeed", "scan", "sspeed", "startkey");
+                           "lread", "read", "rspeed", "write", "wspeed",
+                           "scan", "sspeed", "wwl", "startkey");
         } else {
             cols = 13;
             printer.Reset(cols,
-                           " ", "path", "status", "size", "isbusy",
-                           "lread", "read", "rspeed", "write", "wspeed",
-                           "scan", "sspeed", "startkey");
+                           " ", "path", "status", "size", "lread",
+                           "read", "rspeed", "write", "wspeed",
+                           "scan", "sspeed", "wwl", "startkey");
         }
 
         for (int32_t i = 0; i < tablet_list.meta_size(); ++i) {
@@ -904,7 +912,7 @@ int32_t ShowTabletList(const TabletMetaList& tablet_list, bool is_server_addr, b
             for (int l = 0; l < meta.lg_size_size(); ++l) {
                 size_str += utils::ConvertByteToString(meta.lg_size(l));
                 if (l < meta.lg_size_size() - 1) {
-                    size_str += " ";
+                    size_str += ",";
                 }
             }
             size_str += "]";
@@ -912,11 +920,6 @@ int32_t ShowTabletList(const TabletMetaList& tablet_list, bool is_server_addr, b
 
             if (tablet_list.counter_size() > 0) {
                 const TabletCounter& counter = tablet_list.counter(i);
-                if (counter.is_on_busy()) {
-                    row.push_back("true");
-                } else {
-                    row.push_back("false");
-                }
                 row.push_back(NumberToString(counter.low_read_cell()));
                 row.push_back(NumberToString(counter.read_rows()));
                 row.push_back(utils::ConvertByteToString(counter.read_size()) + "B/s");
@@ -924,6 +927,7 @@ int32_t ShowTabletList(const TabletMetaList& tablet_list, bool is_server_addr, b
                 row.push_back(utils::ConvertByteToString(counter.write_size()) + "B/s");
                 row.push_back(NumberToString(counter.scan_rows()));
                 row.push_back(utils::ConvertByteToString(counter.scan_size()) + "B/s");
+                row.push_back(DoubleToStr(counter.write_workload()));
             }
             row.push_back(meta.key_range().key_start().substr(0, 20));
             printer.AddRow(row);
@@ -1200,13 +1204,12 @@ int32_t ShowSingleTabletNodeInfo(Client* client, const string& addr,
     std::cout << "  update time:   "
         << common::timer::get_time_str(info.timestamp() / 1000000) << "\n\n";
 
-    int cols = 5;
-    TPrinter printer(cols, "workload", "tablets", "load", "busy", "split");
+    int cols = 4;
+    TPrinter printer(cols, "workload", "tablets", "load", "split");
     std::vector<string> row;
     row.push_back(utils::ConvertByteToString(info.load()));
     row.push_back(NumberToString(info.tablet_total()));
     row.push_back(NumberToString(info.tablet_onload()));
-    row.push_back(NumberToString(info.tablet_onbusy()));
     row.push_back(NumberToString(info.tablet_onsplit()));
     printer.AddRow(row);
     printer.Print();

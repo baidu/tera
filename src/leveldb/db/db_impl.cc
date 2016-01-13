@@ -1430,7 +1430,12 @@ bool DBImpl::BusyWrite() {
 
 void DBImpl::Workload(double* write_workload) {
   MutexLock l(&mutex_);
-  *write_workload = versions_->CompactionScore();
+  double wwl = versions_->CompactionScore();
+  if (wwl >= 0) {
+    *write_workload = wwl;
+  } else {
+    *write_workload = 0;
+  }
 }
 
 Status DBImpl::Write(const WriteOptions& options, WriteBatch* my_batch) {

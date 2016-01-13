@@ -1467,10 +1467,6 @@ const char* VersionSet::LevelSummary(LevelSummaryStorage* scratch) const {
   return scratch->buffer;
 }
 
-double VersionSet::CompactionScore() {
-  return current_->compaction_score_;
-}
-
 // Return true iff the manifest contains the specified record.
 bool VersionSet::ManifestContains(const std::string& record) const {
   std::string fname = DescriptorFileName(dbname_, manifest_file_number_);
