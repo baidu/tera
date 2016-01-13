@@ -2584,11 +2584,6 @@ int ExecuteCommand(Client* client, int argc, char* argv[]) {
 int main(int argc, char* argv[]) {
     ::google::ParseCommandLineFlags(&argc, &argv, true);
 
-    if (argc < 2) {
-        Usage(argv[0]);
-        return -1;
-    }
-
     Client* client = Client::NewClient(FLAGS_flagfile, NULL);
     if (client == NULL) {
         LOG(ERROR) << "client instance not exist";
@@ -2596,7 +2591,7 @@ int main(int argc, char* argv[]) {
     }
 
     int ret  = 0;
-    if (argc == 2 && strcmp(argv[1], "interactive") == 0) {
+    if (argc == 1) {
         char* line = NULL;
         while ((line = readline("tera> ")) != NULL) {
             char* line_copy = strdup(line);
@@ -2608,9 +2603,15 @@ int main(int argc, char* argv[]) {
                 arg_list.push_back(token);
                 token = strtok_r(NULL, " \t", &tmp);
             }
+            if (arg_list.size() == 2 &&
+                (strcmp(arg_list[1], "quit") == 0 || strcmp(arg_list[1], "exit") == 0)) {
+                delete[] line_copy;
+                delete[] line;
+                break;
+            }
             if (arg_list.size() > 1) {
                 add_history(line_copy);
-                ExecuteCommand(client, arg_list.size(), &arg_list[0]);
+                ret = ExecuteCommand(client, arg_list.size(), &arg_list[0]);
             }
             delete[] line_copy;
             delete[] line;
