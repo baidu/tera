@@ -342,30 +342,45 @@ bool TabletIO::Unload(StatusCode* status) {
 //      "a" & "b" return "a_"
 bool TabletIO::FindAverageKey(const std::string& start, const std::string& end,
                              std::string* res) {
+    std::string s = start;
+    std::string e = end;
+    if (e == "") {
+        // make sure end > start
+        e.resize(s.size() + 1, '\xFF');
+    }
+    CHECK(s < e);
+    int max_len = s.size() > e.size() ? s.size() : e.size();
+    max_len++;  // max_len should be >0
+    s.resize(max_len, '\x00');
+    e.resize(max_len, '\x00');
+
+    if (s == e) {
+        // find failed, e.g. s == "a" && e == "a\0"
+        return false;
+    }
+
     std::string ave;
-    int ave_len = start.size() < end.size() ? start.size() : end.size();
-    for (int i = 0; i < ave_len; ++i) {
-        char c = (char)(((uint32_t)start[i] + end[i]) / 2);
-        ave.append(1, c);
-    }
-    if (ave > start) {
-        // find success
-        *res = ave;
-        return true;
-    }
-    if (start.size() == end.size()) {
-        // a~b, here we use '_'(0x5F), not '0x80', visible char
-        ave.append(1, '_');
-    } else if (start.size() < end.size()) {
-        char c = (end[ave.size()]) / 2;
-        if (c == '\x0') {
-            return false;
+    for (int i = 0; i < max_len; ++i) {
+        if (s[i] == e[i]) {
+            ave.append(1, s[i]);
+            continue;
+        } else if ((uint32_t)s[i] + 1 < (uint32_t)e[i]) {
+            // find success
+            char c = (char)(((uint32_t)(unsigned char)s[i]
+                             + (uint32_t)(unsigned char)(e[i])) / 2);
+            ave.append(1, c);
+            break;
+        } else {
+            // find success
+            CHECK(s[i] == e[i] - 1 && i < max_len - 1);
+            ave.append(1, s[i]);
+            char c = (char)(((uint32_t)(unsigned char)s[i + 1]
+                             + (uint32_t)(unsigned char)e[i + 1] + 0x100) / 2);
+            ave.append(1, c);
+            break;
         }
-        ave.append(1, c);
-    } else {
-        char c = static_cast<char>((start[ave.size()] + 0x100) / 2);
-        ave.append(1, c);
     }
+    CHECK(ave > start && (end == "" || ave < end));
     *res = ave;
     return true;
 }
