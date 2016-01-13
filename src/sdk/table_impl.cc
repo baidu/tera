@@ -55,7 +55,7 @@ DECLARE_string(tera_sdk_cookie_path);
 DECLARE_int32(tera_sdk_cookie_update_interval);
 DECLARE_bool(tera_sdk_perf_counter_enabled);
 DECLARE_int64(tera_sdk_perf_counter_log_interval);
-DECLARE_int32(FLAGS_tera_rpc_timeout_period);
+DECLARE_int32(tera_rpc_timeout_period);
 
 namespace tera {
 
