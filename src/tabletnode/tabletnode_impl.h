@@ -114,6 +114,8 @@ public:
 
     void TryReleaseMallocCache();
 
+    bool ApplySchema(const TsCmdCtrlRequest* request);
+
 private:
     bool CheckInKeyRange(const KeyList& key_list,
                          const std::string& key_start,

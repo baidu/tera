@@ -408,7 +408,13 @@ bool DefaultCompactStrategy::CheckCompactLowerBound(const Slice& cur_key,
 DefaultCompactStrategyFactory::DefaultCompactStrategyFactory(const TableSchema& schema)
     : m_schema(schema) {}
 
+void DefaultCompactStrategyFactory::SetArg(const void* arg) {
+    MutexLock lock(&m_mutex);
+    m_schema.CopyFrom(*(TableSchema*)arg);
+}
+
 DefaultCompactStrategy* DefaultCompactStrategyFactory::NewInstance() {
+    MutexLock lock(&m_mutex);
     return new DefaultCompactStrategy(m_schema);
 }
 

@@ -238,6 +238,60 @@ int32_t CreateByFileOp(Client* client, int32_t argc, char** argv, ErrorCode* err
     return 0;
 }
 
+int32_t Updatets(Client* client, int32_t argc, char** argv, ErrorCode* err) {
+    if (argc != 3) {
+        Usage(argv[0]);
+        return -1;
+    }
+    std::string schema = argv[2];
+    PropTree schema_tree;
+    if (!schema_tree.ParseFromString(schema)) {
+        LOG(ERROR) << "[update] invalid schema: " << schema;
+        LOG(ERROR) << "[update] state: " << schema_tree.State();
+        return -1;
+    }
+    std::string tablename = schema_tree.GetRootNode()->name_;
+    TableDescriptor* table_desc = client->GetTableDescriptor(tablename, err);
+    if (table_desc == NULL) {
+        LOG(ERROR) << "[update] can't get the TableDescriptor of table: " << tablename;
+        return -1;
+    }
+
+    // if try to update lg or cf, need to disable table
+    bool is_update_lg_cf = false;
+    if (!UpdateTableDescriptor(schema_tree, table_desc, &is_update_lg_cf, err)) {
+        LOG(ERROR) << "[update] update failed";
+        return -1;
+    }
+
+    //if (is_update_lg_cf && client->IsTableEnabled(table_desc->TableName(), err)) {
+    //    LOG(ERROR) << "[update] table is enabled, disable it first: " << table_desc->TableName();
+    //    return -1;
+    //}
+    if (!client->UpdateTable(*table_desc, err)) {
+        LOG(ERROR) << "[update] fail to update table, "
+            << strerr(*err);
+        //return -1;
+    }
+    TsCmdCtrlRequest request;
+    TsCmdCtrlResponse response;
+    request.set_sequence_id(0);
+    request.set_command("update");
+    TableSchema* schemax = request.mutable_schema();
+    TableDescToSchema(*table_desc, schemax);
+    request.set_tablet_name("oop2");
+    request.set_start("");
+    tabletnode::TabletNodeClient tabletnode_client("yq01-tera80.yq01.baidu.com:6688", 3600000);
+    if (!tabletnode_client.CmdCtrl(&request, &response)
+        || (response.status() != kTabletNodeOk)) {
+        LOG(ERROR) << "fail to update";
+        return -1;
+    }
+    ShowTableDescriptor(*table_desc);
+    delete table_desc;
+    return 0;
+}
+
 int32_t UpdateOp(Client* client, int32_t argc, char** argv, ErrorCode* err) {
     if (argc != 3) {
         Usage(argv[0]);
@@ -2620,6 +2674,8 @@ int main(int argc, char* argv[]) {
         Usage(argv[0]);
     } else if (cmd == "helpmore") {
         UsageMore(argv[0]);
+    } else if (cmd == "updatets") {
+        Updatets(client, argc, argv, &error_code);
     } else {
         Usage(argv[0]);
     }

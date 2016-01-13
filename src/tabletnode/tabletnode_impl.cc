@@ -665,10 +665,31 @@ void TabletNodeImpl::CmdCtrl(const TsCmdCtrlRequest* request,
             LOG(ERROR) << "[reload config] config file not found";
             response->set_status(kInvalidArgument);
         }
+    } if (request->command() == "update") {
+        if(ApplySchema(request)) {
+            LOG(INFO) << "[update] ok";
+            response->set_status(kTabletNodeOk);
+        } else {
+            LOG(INFO) << "[update] failed";
+            response->set_status(kInvalidArgument);
+        }
     } else {
         response->set_status(kInvalidArgument);
     }
     done->Run();
+}
+
+bool TabletNodeImpl::ApplySchema(const TsCmdCtrlRequest* request) {
+    StatusCode status;
+    io::TabletIO* tablet_io = m_tablet_manager->GetTablet(
+        request->tablet_name(), request->start(), &status);
+    if (tablet_io == NULL) {
+        LOG(INFO) << "[update] cannot find tablet_io";
+        return false;
+    }
+    tablet_io->ApplySchema(request->schema());
+    tablet_io->DecRef();
+    return true;
 }
 
 void TabletNodeImpl::Query(const QueryRequest* request,

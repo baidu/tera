@@ -93,6 +93,7 @@ TabletIO::~TabletIO() {
 }
 
 std::string TabletIO::GetTableName() const {
+    MutexLock lock(&m_schema_mutex);
     return m_table_schema.name();
 }
 
@@ -121,9 +122,20 @@ CompactStatus TabletIO::GetCompactStatus() const {
     return m_compact_status;
 }
 
+void TabletIO::SetSchema(const TableSchema& schema) {
+    MutexLock lock(&m_schema_mutex);
+    m_table_schema.CopyFrom(schema);
+}
+
 const TableSchema& TabletIO::GetSchema() const {
+    MutexLock lock(&m_schema_mutex);
     return m_table_schema;
 }
+
+RawKey TabletIO::RawKeyType() const {
+    MutexLock lock(&m_schema_mutex);
+    return m_table_schema.raw_key();
+};
 
 TabletIO::StatCounter& TabletIO::GetCounter() {
     return m_counter;
@@ -372,8 +384,8 @@ bool TabletIO::FindAverageKey(const std::string& start, const std::string& end,
 
 bool TabletIO::ParseRowKey(const std::string& tera_key, std::string* row_key) {
     leveldb::Slice row;
-    if ((m_table_schema.raw_key() == GeneralKv)
-        || (m_kv_only && m_table_schema.raw_key() == Readable)) {
+    if ((RawKeyType() == GeneralKv)
+        || (m_kv_only && RawKeyType() == Readable)) {
         row = tera_key;
     } else { // Table && TTL-KV
         if (!m_key_operator->ExtractTeraKey(tera_key, &row,
@@ -496,10 +508,13 @@ bool TabletIO::AddInheritedLiveFiles(std::vector<std::set<uint64_t> >* live) {
         }
         m_db_ref_count++;
     }
-    if (live->size() == 0) {
-        live->resize(m_table_schema.locality_groups_size());
-    } else {
-        CHECK(live->size() == static_cast<uint64_t>(m_table_schema.locality_groups_size()));
+    {
+        MutexLock lock(&m_schema_mutex);
+        if (live->size() == 0) {
+            live->resize(m_table_schema.locality_groups_size());
+        } else {
+            CHECK(live->size() == static_cast<uint64_t>(m_table_schema.locality_groups_size()));
+        }
     }
     m_db->AddInheritedLiveFiles(live);
     {
@@ -1018,7 +1033,7 @@ bool TabletIO::ReadCells(const RowReaderInfo& row_reader, RowResult* value_list,
     if (m_kv_only) {
         std::string key(row_reader.key());
         std::string value;
-        if (m_table_schema.raw_key() == TTLKv) {
+        if (RawKeyType() == TTLKv) {
             key.append(8, '\0');
         }
         if (!Read(key, &value, snapshot_id, status)) {
@@ -1340,7 +1355,7 @@ bool TabletIO::Scan(const ScanOption& option, KeyValueList* kv_list,
     // TTL-KV : m_key_operator::Compare会解RawKey([row_key | expire_timestamp])
     // 因此传递给Leveldb的Key一定要保证以expire_timestamp结尾.
     leveldb::CompactStrategy* strategy = NULL;
-    if (m_table_schema.raw_key() == TTLKv) {
+    if (RawKeyType() == TTLKv) {
         if (!start.empty()) {
             std::string start_key;
             m_key_operator->EncodeTeraKey(start, "", "", 0, leveldb::TKT_FORSEEK, &start_key);
@@ -1375,7 +1390,7 @@ bool TabletIO::Scan(const ScanOption& option, KeyValueList* kv_list,
         } else {
             if (!(strategy && strategy->ScanDrop(key, 0))) {
                 KeyValuePair* pair = kv_list->Add();
-                if (m_table_schema.raw_key() == TTLKv) {
+                if (RawKeyType() == TTLKv) {
                     pair->set_key(key.data(), key.size() - sizeof(int64_t));
                 } else {
                     pair->set_key(key.data(), key.size());
@@ -1464,9 +1479,10 @@ void TabletIO::SetupScanRowOptions(const ScanTabletRequest* request,
     scan_options->snapshot_id = request->snapshot_id();
 }
 
+// no concurrent, so no lock on m_schema_mutex
 void TabletIO::SetupOptionsForLG() {
     if (m_kv_only) {
-        if (m_table_schema.raw_key() == TTLKv) {
+        if (RawKeyType() == TTLKv) {
             m_ldb_options.compact_strategy_factory =
                 new KvCompactStrategyFactory(m_table_schema);
         } else {
@@ -1586,6 +1602,7 @@ void TabletIO::TearDownOptionsForLG() {
 }
 
 void TabletIO::IndexingCfToLG() {
+    MutexLock lock(&m_schema_mutex);
     for (int32_t i = 0; i < m_table_schema.locality_groups_size(); ++i) {
         const LocalityGroupSchema& lg_schema =
             m_table_schema.locality_groups(i);
@@ -1608,6 +1625,7 @@ void TabletIO::IndexingCfToLG() {
 
 void TabletIO::SetupIteratorOptions(const ScanOptions& scan_options,
                                     leveldb::ReadOptions* leveldb_opts) {
+    MutexLock lock(&m_schema_mutex);
     std::set<uint32_t> target_lgs;
     std::set<std::string>::const_iterator cf_it = scan_options.iter_cf_set.begin();
     for (; cf_it != scan_options.iter_cf_set.end(); ++cf_it) {
@@ -1812,6 +1830,7 @@ uint64_t TabletIO::Rollback(uint64_t snapshot_id, StatusCode* status) {
 }
 
 uint32_t TabletIO::GetLGidByCFName(const std::string& cfname) {
+    MutexLock lock(&m_schema_mutex);
     std::map<std::string, uint32_t>::iterator it = m_cf_lg_map.find(cfname);
     if (it != m_cf_lg_map.end()) {
         return it->second;
@@ -1867,6 +1886,12 @@ int32_t TabletIO::DecRef() {
 
 int32_t TabletIO::GetRef() const {
     return m_ref_count;
+}
+
+void TabletIO::ApplySchema(const TableSchema& schema) {
+    SetSchema(schema);
+    IndexingCfToLG();
+    m_ldb_options.compact_strategy_factory->SetArg(&schema);
 }
 
 } // namespace io

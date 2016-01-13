@@ -300,6 +300,9 @@ message MergeTabletResponse {
 message TsCmdCtrlRequest {
     required uint64 sequence_id = 1;
     required string command = 2;
+    optional TableSchema schema = 3;
+    optional string tablet_name = 4;
+    optional string start = 5;
 }
 
 message TsCmdCtrlResponse {
