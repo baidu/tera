@@ -1,18 +1,35 @@
 #!/bin/bash
 
-test_dir=tera_ft_test_data
-
 function usage() {
-    echo "usage: $0 [case]"
-    echo "example: $0                          # all test cases"
-    echo "         $0 testcase/test_put_get.py # specify a case"
+    echo "usage: 
+    $0 [opts] 
+    -d path:         test temp file path
+    -c casename:     run one case
+
+    e.g. $0                             # all test cases
+         $0 -c testcase/test_put_get.py # specify a case"
 }
 
-if [[ $# -gt 1 ]]; then
-    echo "0 or 1 command line argument"
-    usage
-    exit 1
-fi
+test_dir="tera_ft_test_data"
+case_name=""
+
+while getopts c:d:h arg
+do
+    case $arg in
+        c)
+            case_name=$OPTARG
+            echo "case_name: $case_name";; 
+        d)
+            test_dir=$OPTARG
+            echo "test_dir: $test_dir";; 
+        h)
+            usage
+            exit 0;;
+        ?) 
+            echo "unkonw argument: $arg"
+            exit 1;; 
+    esac
+done
 
 set -x -e
 
@@ -38,10 +55,6 @@ sleep 2
 
 export PYTHONPATH=$PYTHONPATH:../../thirdparty/include/; export PATH=$PATH:../../thirdparty/bin/
 
-if [[ $# == 0 ]]; then
-    nosetests -s -v -x > ../log/test.log
-else
-    nosetests -s -v -x $1 > ../log/test.log
-fi
+nosetests -s -v -x $case_name > ../log/test.log
 
 sh kill_tera.sh
