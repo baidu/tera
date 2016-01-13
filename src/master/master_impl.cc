@@ -136,8 +136,10 @@ MasterImpl::MasterImpl()
     }
 
     if (FLAGS_tera_master_gc_strategy == "default") {
-         gc_strategy = boost::shared_ptr<GcStrategy>(new BatchGcStrategy(m_tablet_manager));
+        LOG(INFO) << "[gc] gc strategy is BatchGcStrategy";
+        gc_strategy = boost::shared_ptr<GcStrategy>(new BatchGcStrategy(m_tablet_manager));
     } else if (FLAGS_tera_master_gc_strategy == "incremental") {
+        LOG(INFO) << "[gc] gc strategy is IncrementalGcStrategy";
         gc_strategy = boost::shared_ptr<GcStrategy>(new IncrementalGcStrategy(m_tablet_manager));
     } else {
         LOG(ERROR) << "Unknown gc strategy";

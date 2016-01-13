@@ -173,6 +173,7 @@ DEFINE_int32(tera_asyncwriter_batch_size, 1024, "write batch to leveldb per X KB
 DEFINE_int32(tera_request_pending_limit, 100000, "the max read/write request pending");
 DEFINE_int32(tera_scan_request_pending_limit, 1000, "the max scan request pending");
 DEFINE_int32(tera_garbage_collect_period, 1800, "garbage collect period in s");
+DEFINE_int32(tera_garbage_collect_debug_log, 0, "garbage collect debug log");
 
 DEFINE_int32(tera_tabletnode_write_meta_rpc_timeout, 60000, "the timeout period (in ms) for tabletnode write meta");
 DEFINE_int32(tera_tabletnode_retry_period, 100, "the retry interval period (in ms) when operate tablet");
