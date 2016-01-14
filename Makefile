@@ -62,10 +62,11 @@ ALL_OBJ := $(MASTER_OBJ) $(TABLETNODE_OBJ) $(IO_OBJ) $(SDK_OBJ) $(PROTO_OBJ) \
            $(JNI_TERA_OBJ) $(OTHER_OBJ) $(COMMON_OBJ) $(SERVER_OBJ) $(CLIENT_OBJ) \
            $(TERA_C_OBJ) $(MONITOR_OBJ) $(MARK_OBJ) $(TEST_OBJ)
 LEVELDB_LIB := src/leveldb/libleveldb.a
-TERA_C_SO = libtera_c.so
 
 PROGRAM = tera_main teracli teramo
 LIBRARY = libtera.a
+SOLIBRARY = libtera.so
+TERA_C_SO = libtera_c.so
 JNILIBRARY = libjni_tera.so
 BENCHMARK = tera_bench tera_mark
 TESTS = prop_tree_test tprinter_test string_util_test tablet_io_test
@@ -73,12 +74,12 @@ TESTS = prop_tree_test tprinter_test string_util_test tablet_io_test
 
 .PHONY: all clean cleanall test
 
-all: $(PROGRAM) $(LIBRARY) $(TERA_C_SO) $(JNILIBRARY) $(BENCHMARK) $(TESTS)
+all: $(PROGRAM) $(LIBRARY) $(SOLIBRARY) $(TERA_C_SO) $(JNILIBRARY) $(BENCHMARK) $(TESTS)
 	mkdir -p build/include build/lib build/bin build/log build/benchmark
 	mkdir -p $(UNITTEST_OUTPUT)
 	mv $(TESTS) $(UNITTEST_OUTPUT)
 	cp $(PROGRAM) build/bin
-	cp $(LIBRARY) $(TERA_C_SO) $(JNILIBRARY) build/lib
+	cp $(LIBRARY) $(SOLIBRARY) $(TERA_C_SO) $(JNILIBRARY) build/lib
 	cp src/leveldb/tera_bench .
 	cp -r benchmark/*.sh $(BENCHMARK) build/benchmark
 	cp src/sdk/tera.h build/include
@@ -106,6 +107,9 @@ tera_main: $(SERVER_OBJ) $(LEVELDB_LIB) $(MASTER_OBJ) $(TABLETNODE_OBJ) \
 
 libtera.a: $(SDK_OBJ) $(PROTO_OBJ) $(OTHER_OBJ) $(COMMON_OBJ)
 	$(AR) -rs $@ $(SDK_OBJ) $(PROTO_OBJ) $(OTHER_OBJ) $(COMMON_OBJ)
+
+libtera.so: $(SDK_OBJ) $(PROTO_OBJ) $(OTHER_OBJ) $(COMMON_OBJ)
+	$(CXX) -o $@ $^ $(SHARED_LDFLAGS) $(LDFLAGS)
 
 libtera_c.so: $(TERA_C_OBJ) $(SDK_OBJ) $(PROTO_OBJ) $(OTHER_OBJ) $(COMMON_OBJ)
 	$(CXX) -o $@ $(TERA_C_OBJ) $(SDK_OBJ) $(PROTO_OBJ) $(OTHER_OBJ) $(COMMON_OBJ) $(SHARED_LDFLAGS) \
