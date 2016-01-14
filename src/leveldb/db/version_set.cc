@@ -889,7 +889,7 @@ class VersionSetBuilder {
         Log(vset_->options_->info_log,
             "[%s] reset file smallest key: %s, from %s to %s\n",
             vset_->dbname_.c_str(),
-            TableFileName(vset_->dbname_, f->number).c_str(),
+            FileNumberDebugString(f->number).c_str(),
             f->smallest.DebugString().c_str(),
             vset_->db_key_start_.DebugString().c_str());
         f->smallest = vset_->db_key_start_;
@@ -905,7 +905,7 @@ class VersionSetBuilder {
         Log(vset_->options_->info_log,
             "[%s] reset file largest key: %s, from %s to %s\n",
             vset_->dbname_.c_str(),
-            TableFileName(vset_->dbname_, f->number).c_str(),
+            FileNumberDebugString(f->number).c_str(),
             f->largest.DebugString().c_str(),
             vset_->db_key_end_.DebugString().c_str());
         f->largest = vset_->db_key_end_;
@@ -921,22 +921,27 @@ class VersionSetBuilder {
     if (f->largest_fake || f->smallest_fake) {
       uint64_t s_offset = 0;
       uint64_t l_offset = f->file_size;
-      Table* tableptr;
+      Table* tableptr = NULL;
       Iterator* iter =
           vset_->table_cache_->NewIterator(
               ReadOptions(vset_->options_), vset_->dbname_,
               f->number, f->file_size, "", "", &tableptr);
-      if (tableptr == NULL) {
-      } else if (f->smallest_fake) {
-        s_offset = tableptr->ApproximateOffsetOf(f->smallest.Encode());
-      } else if (f->largest_fake) {
-        l_offset = tableptr->ApproximateOffsetOf(f->largest.Encode());
+      if (tableptr != NULL) {
+        if (f->smallest_fake) {
+          s_offset = tableptr->ApproximateOffsetOf(f->smallest.Encode());
+        }
+        if (f->largest_fake) {
+          l_offset = tableptr->ApproximateOffsetOf(f->largest.Encode());
+        }
+      } else {
+        Log(vset_->options_->info_log, "[%s] fail to reset file data_size: %s.\n",
+            vset_->dbname_.c_str(), FileNumberDebugString(f->number).c_str());
       }
       f->data_size = l_offset - s_offset;
       Log(vset_->options_->info_log,
-          "[%s] reset file data_size: %s, from %llu to %llu\n",
+          "[%s] reset file data_size: %s, from %llu to %llu\n, ",
           vset_->dbname_.c_str(),
-          TableFileName(vset_->dbname_, f->number).c_str(),
+          FileNumberDebugString(f->number).c_str(),
           static_cast<unsigned long long>(f->file_size),
           static_cast<unsigned long long>(f->data_size));
       delete iter;

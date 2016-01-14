@@ -126,6 +126,8 @@ uint64_t GetTabletNumFromPath(const std::string& tabletpath);
 
 // Check if this table file is inherited.
 bool IsTableFileInherited(uint64_t tablet, uint64_t number);
+
+std::string FileNumberDebugString(uint64_t full_number);
 }  // namespace leveldb
 
 #endif  // STORAGE_LEVELDB_DB_FILENAME_H_
