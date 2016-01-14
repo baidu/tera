@@ -956,13 +956,14 @@ bool TabletManager::FindTablet(const std::string& table_name,
 }
 
 void TabletManager::FindTablet(const std::string& server_addr,
-                               std::vector<TabletPtr>* tablet_meta_list) {
+                               std::vector<TabletPtr>* tablet_meta_list,
+                               bool all_tables) {
     m_mutex.Lock();
     TableList::iterator it = m_all_tables.begin();
     for (; it != m_all_tables.end(); ++it) {
         Table& table = *it->second;
         table.m_mutex.Lock();
-        if (table.m_status == kTableDisable) {
+        if (table.m_status == kTableDisable && !all_tables) {
             VLOG(10) << "FindTablet skip disable table: " << table.m_name;
             table.m_mutex.Unlock();
             continue;

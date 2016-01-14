@@ -2148,7 +2148,7 @@ void MasterImpl::DeleteTabletNode(const std::string& tabletnode_addr) {
 
     // move all tablets on the deleted tabletnode
     std::vector<TabletPtr> tablet_list;
-    m_tablet_manager->FindTablet(tabletnode_addr, &tablet_list);
+    m_tablet_manager->FindTablet(tabletnode_addr, &tablet_list, true);
     std::vector<TabletPtr>::iterator it;
     for (it = tablet_list.begin(); it != tablet_list.end(); ++it) {
         TabletPtr tablet = *it;
