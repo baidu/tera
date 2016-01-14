@@ -50,6 +50,8 @@ public:
     // Is too busy to write.
     virtual bool BusyWrite();
 
+    virtual void Workload(double* write_workload);
+
     // Apply the specified updates to the database.
     // Returns OK on success, non-OK on failure.
     // Note: consider setting options.sync = true.

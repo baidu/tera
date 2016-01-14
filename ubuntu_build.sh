@@ -40,6 +40,10 @@ unzip gtest-1.7.0.zip
 git clone https://github.com/fxsjy/ins
 (cd ins && PBRPC_PATH=../sofa-pbrpc/output/ make sdk )
 
+if [ ! -f "depends.mk" ]; then
+    cp depends.mk.template depends.mk
+fi
+
 sed -i 's/^SOFA_PBRPC_PREFIX=.*/SOFA_PBRPC_PREFIX=.\/sofa-pbrpc\/output/' depends.mk
 sed -i 's/^PROTOBUF_PREFIX=.*/PROTOBUF_PREFIX=\/usr\/local/' depends.mk
 sed -i 's/^SNAPPY_PREFIX=.*/SNAPPY_PREFIX=\/usr\/local/' depends.mk
