@@ -364,7 +364,7 @@ bool TabletIO::FindAverageKey(const std::string& start, const std::string& end,
         if (s[i] == e[i]) {
             ave.append(1, s[i]);
             continue;
-        } else if ((uint32_t)s[i] + 1 < (uint32_t)e[i]) {
+        } else if ((uint32_t)(unsigned char)s[i] + 1 < (uint32_t)(unsigned char)e[i]) {
             // find success
             char c = (char)(((uint32_t)(unsigned char)s[i]
                              + (uint32_t)(unsigned char)(e[i])) / 2);
@@ -372,10 +372,16 @@ bool TabletIO::FindAverageKey(const std::string& start, const std::string& end,
             break;
         } else {
             // find success
-            CHECK(s[i] == e[i] - 1 && i < max_len - 1);
-            ave.append(1, s[i]);
-            char c = (char)(((uint32_t)(unsigned char)s[i + 1]
-                             + (uint32_t)(unsigned char)e[i + 1] + 0x100) / 2);
+            CHECK((uint32_t)(unsigned char)s[i] == (uint32_t)(unsigned char)e[i] - 1
+                  && i < max_len - 1);
+            uint32_t c_int = ((uint32_t)(unsigned char)s[i + 1]
+                             + (uint32_t)(unsigned char)e[i + 1] + 0x100) / 2;
+            if (c_int < 0x100) {
+                ave.append(1, s[i]);
+            } else {
+                ave.append(1, e[i]);
+            }
+            char c = (char)(c_int);
             ave.append(1, c);
             break;
         }

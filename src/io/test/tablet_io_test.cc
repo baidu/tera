@@ -494,6 +494,18 @@ TEST_F(TabletIOTest, FindAverageKey) {
     ASSERT_LT(start, ave);
     ASSERT_LT(ave, end);
 
+    start = std::string("000017\xF0");
+    end = "000018000000001397050688";
+    ASSERT_TRUE(TabletIO::FindAverageKey(start, end, &ave));
+    ASSERT_LT(start, ave);
+    ASSERT_LT(ave, end);
+
+    start = std::string("0000\177");
+    end = std::string("0000\200");
+    ASSERT_TRUE(TabletIO::FindAverageKey(start, end, &ave));
+    ASSERT_LT(start, ave);
+    ASSERT_LT(ave, end);
+
     start = "";
     end = "\x1";
     ASSERT_TRUE(TabletIO::FindAverageKey(start, end, &ave));
