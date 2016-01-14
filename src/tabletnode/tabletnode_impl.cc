@@ -441,7 +441,25 @@ void TabletNodeImpl::WriteTablet(const WriteTabletRequest* request,
         if (mu_seq.row_key().size() >= 64 * 1024) { // 64KB
             response->set_status(kTableNotSupport);
             done->Run();
+            if (NULL != timer) {
+                RpcTimerList::Instance()->Erase(timer);
+                delete timer;
+            }
             return;
+        }
+        int32_t mu_num = mu_seq.mutation_sequence_size();
+        for (int32_t k = 0; k < mu_num; k++) {
+            const Mutation& mu = mu_seq.mutation_sequence(k);
+            if ((mu.qualifier().size() >= 64 * 1024)          // 64KB
+                || (mu.value().size() >= 32 * 1024 * 1024)) { // 32MB
+                response->set_status(kTableNotSupport);
+                done->Run();
+                if (NULL != timer) {
+                    RpcTimerList::Instance()->Erase(timer);
+                    delete timer;
+                }
+                return;
+            }
         }
     }
     if (request->row_list_size() > 0) {
