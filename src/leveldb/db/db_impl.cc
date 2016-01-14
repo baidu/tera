@@ -1428,6 +1428,16 @@ bool DBImpl::BusyWrite() {
   return (versions_->NumLevelFiles(0) >= options_.l0_slowdown_writes_trigger);
 }
 
+void DBImpl::Workload(double* write_workload) {
+  MutexLock l(&mutex_);
+  double wwl = versions_->CompactionScore();
+  if (wwl >= 0) {
+    *write_workload = wwl;
+  } else {
+    *write_workload = 0;
+  }
+}
+
 Status DBImpl::Write(const WriteOptions& options, WriteBatch* my_batch) {
   Writer w(&mutex_);
   w.batch = my_batch;

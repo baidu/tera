@@ -199,6 +199,7 @@ void Tablet::SetCounter(const TabletCounter& counter) {
         CounterWeightedSum(counter.write_kvs(), m_average_counter.write_kvs()));
     m_average_counter.set_write_size(
         CounterWeightedSum(counter.write_size(), m_average_counter.write_size()));
+    m_average_counter.set_write_workload(counter.write_workload());
     m_average_counter.set_is_on_busy(
         CounterWeightedSum(counter.is_on_busy(), m_average_counter.is_on_busy()));
 }
