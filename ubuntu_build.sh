@@ -1,6 +1,6 @@
 #!/bin/bash
 
-sudo apt-get -y install libz-dev libboost-dev automake libtool cmake pkgconf
+sudo apt-get -y install libz-dev libboost-dev automake libtool cmake pkgconf libreadline-dev libncurses-dev
 
 wget https://github.com/google/protobuf/releases/download/v2.6.1/protobuf-2.6.1.tar.gz
 tar xf protobuf-2.6.1.tar.gz
@@ -35,7 +35,7 @@ tar zxvf gperftools-2.2.1.tar.gz
 git clone --depth=1 https://github.com/xupeilin/gtest_archive
 mv gtest_archive/gtest-1.7.0.zip .
 unzip gtest-1.7.0.zip
-(cd gtest-1.7.0 && ./configure --disable-shared --with-pic && make && cp -a lib/.libs/* /usr/lib && cp -a include/gtest /usr/include
+(cd gtest-1.7.0 && ./configure --disable-shared --with-pic && make && cp -a lib/.libs/* /usr/lib && cp -a include/gtest /usr/include )
 
 git clone https://github.com/fxsjy/ins
 (cd ins && PBRPC_PATH=../sofa-pbrpc/output/ make sdk )
