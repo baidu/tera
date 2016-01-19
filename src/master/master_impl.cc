@@ -211,6 +211,8 @@ bool MasterImpl::Restore(const std::map<std::string, std::string>& tabletnode_li
 
     RestoreUserTablet(tablet_list);
 
+    RefreshTableCounter();
+
     // restore success
     m_restored = true;
     return true;
@@ -409,7 +411,6 @@ void MasterImpl::RestoreUserTablet(const std::vector<TabletMeta>& report_meta_li
     EnableQueryTabletNodeTimer();
     EnableTabletNodeGcTimer();
     EnableLoadBalance();
-    RefreshTableCounter();
 }
 
 void MasterImpl::LoadAllOffLineTablet() {
