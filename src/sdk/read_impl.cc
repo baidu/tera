@@ -20,10 +20,15 @@ RowReaderImpl::RowReaderImpl(Table* table, const std::string& row_key)
       _snapshot_id(0),
       _timeout_ms(0),
       _retry_times(0),
-      _result_pos(0) {
+      _result_pos(0),
+      _cc(NULL) {
 }
 
 RowReaderImpl::~RowReaderImpl() {
+    if (_cc != NULL) {
+        delete _cc;
+        _cc = NULL;
+    }
 }
 
 void RowReaderImpl::Reset() {
@@ -82,6 +87,10 @@ void RowReaderImpl::SetTimeOut(int64_t timeout_ms) {
 
 void RowReaderImpl::SetCallBack(RowReader::Callback callback) {
     _callback = callback;
+}
+
+void RowReaderImpl::SetCallChecker(CallChecker* cc) {
+    _cc = cc;
 }
 
 /// 设置用户上下文，可在回调函数中获取
@@ -196,6 +205,10 @@ void RowReaderImpl::ToMap(Map* rowmap) {
     }
 }
 
+const RowResult& RowReaderImpl::GetResult() {
+    return _result;
+}
+
 void RowReaderImpl::SetResult(const RowResult& result) {
     return _result.CopyFrom(result);
 }
@@ -226,7 +239,9 @@ int64_t RowReaderImpl::TimeOut() {
 
 void RowReaderImpl::RunCallback() {
     if (_callback) {
-        _callback(this);
+        if (_cc == NULL || _cc->NeedCall(_error_code.GetType())) {
+            _callback(this);
+        }
     } else {
         MutexLock lock(&_finish_mutex);
         _finish = true;

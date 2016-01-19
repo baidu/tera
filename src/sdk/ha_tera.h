@@ -6,6 +6,7 @@
 #define HA_TERA_TERA_H_
 
 #include "tera.h"
+#include "proto/table_meta.pb.h"
 
 namespace tera {
 
@@ -59,6 +60,9 @@ public:
     bool Append(const std::string& row_key, const std::string& family,
                 const std::string& qualifier, const std::string& value,
                 ErrorCode* err);
+    void LGet(RowReader* row_reader);
+    void LGet(const std::vector<RowReader*>& row_readers);
+
     /// 读取一个指定行
     void Get(RowReader* row_reader);
     /// 读取多行
@@ -109,10 +113,11 @@ public:
     void SetMaxMutationPendingNum(uint64_t max_pending_num);
     void SetMaxReaderPendingNum(uint64_t max_pending_num);
 
-    // 对于异步操作，HATable是无法知道操作是否成功的，只有用户才知道，
-    // 所以当失败时，由用户主动向下一tera集群发起操作命令
+    // 获取指定的集群
     Table* GetClusterHandle(size_t i);
+    static void MergeResult(const std::vector<RowResult>& results, RowResult& res, uint32_t max_size);
 private:
+
     HATable(const HATable&);
     void operator=(const HATable&);
     std::vector<Table*> _tables;

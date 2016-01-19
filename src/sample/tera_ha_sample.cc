@@ -18,6 +18,8 @@
 #include <stdio.h>
 #include <time.h>
 #include <unistd.h>
+#include <stdlib.h>
+#include "gflags/gflags.h"
 
 #include "sdk/ha_tera.h"
 
@@ -53,6 +55,16 @@ int CreateTable(tera::HAClient* hclient) {
         printf("Create Table fail: %s\n", tera::strerr(error_code));
     }
     return 0;
+}
+
+bool put_finish = false;
+void WriteRowCallBack(tera::RowMutation* row_mu) {
+    if (row_mu->GetError().GetType() != tera::ErrorCode::kOK) {
+        printf ("async put failed! reason:%s\n", row_mu->GetError().GetReason().c_str());
+    } else {
+        printf ("async put ok!\n");
+    }
+    put_finish = true;
 }
 
 /// 修改一个表的内容
@@ -94,6 +106,21 @@ int ModifyTable(tera::HATable* table) {
     printf("Write to table : %s\n", tera::strerr(mutation_list[0]->GetError()));
     delete row2;
 
+    // 异步修改
+    tera::RowMutation* row3 = table->NewRowMutation("com.baidu.map/");
+    row3->Put("content", "", 1, "<html>this is global map</html>");
+    row3->SetCallBack(WriteRowCallBack);
+    table->ApplyMutation(row3);
+
+    while (!put_finish) {
+        printf ("waitting async-put finish!\n");
+        if (row3->IsFinished()) {
+            printf ("row3 finish...\n");
+        } else {
+            printf ("row3 wroking...\n");
+        }
+        sleep(1);
+    }
     return 0;
 }
 
@@ -116,11 +143,11 @@ int ReadRowFromTable(tera::HATable* table) {
     tera::RowReader* row_reader = table->NewRowReader("com.baidu.www/");
     row_reader->AddColumnFamily("html");
     row_reader->AddColumn("anchor", "www.hao123.com/");
-    row_reader->SetMaxVersions(3);
+    row_reader->SetMaxVersions(10);
     row_reader->SetAsync();
     row_reader->SetCallBack(ReadRowCallBack);
     // Async Read one row
-    table->Get(row_reader);
+    table->LGet(row_reader);
 
     while (!finish) {
         sleep(1);
@@ -141,13 +168,19 @@ int ReadRowFromTable(tera::HATable* table) {
     rows_reader.push_back(row_reader2);
     table->Get(rows_reader);
 
+    tera::RowReader* row_reader3 = table->NewRowReader("com.baidu.www/");
+    row_reader3->AddColumnFamily("html");
+    row_reader3->SetMaxVersions(10);
+    row_reader3->SetTimeOut(5000);
+    table->LGet(row_reader3);
+
     if (row_reader1->GetError().GetType() != tera::ErrorCode::kOK) {
         printf("read1 failed! error: %d, %s\n",
                row_reader1->GetError().GetType(),
                row_reader1->GetError().GetReason().c_str());
     } else {
         while (!row_reader1->Done()) {
-            printf("Row: %s\%s\%ld\%s\n",
+            printf("Row1: %s\%s\%ld\%s\n",
                    row_reader1->RowName().c_str(), row_reader1->ColumnName().c_str(),
                    row_reader1->Timestamp(), row_reader1->Value().c_str());
             row_reader1->Next();
@@ -159,14 +192,27 @@ int ReadRowFromTable(tera::HATable* table) {
                row_reader2->GetError().GetReason().c_str());
     } else {
         while (!row_reader2->Done()) {
-            printf("Row: %s\%s\%ld\%s\n",
+            printf("Row2: %s\%s\%ld\%s\n",
                    row_reader2->RowName().c_str(), row_reader2->ColumnName().c_str(),
                    row_reader2->Timestamp(), row_reader2->Value().c_str());
             row_reader2->Next();
         }
     }
+    if (row_reader3->GetError().GetType() != tera::ErrorCode::kOK) {
+        printf("read3 failed! error: %d, %s\n",
+               row_reader3->GetError().GetType(),
+               row_reader3->GetError().GetReason().c_str());
+    } else {
+        while (!row_reader3->Done()) {
+            printf("Row3: %s\%s\%ld\%s\n",
+                   row_reader3->RowName().c_str(), row_reader3->ColumnName().c_str(),
+                   row_reader3->Timestamp(), row_reader3->Value().c_str());
+            row_reader3->Next();
+        }
+    }
     delete row_reader1;
     delete row_reader2;
+    delete row_reader3;
     return 0;
 }
 
@@ -193,6 +239,11 @@ int ShowBigTable(tera::HAClient* client) {
 
 int main(int argc, char *argv[]) {
     tera::ErrorCode error_code;
+    // 解析命令行参数
+    if (!google::ParseCommandLineFlags(&argc, &argv, true)) {
+        return 0;
+    }
+
     // 根据配置创建一个client
     std::vector<std::string> confpaths;
     confpaths.push_back("./tera1.flag");

@@ -12,6 +12,7 @@ INCPATH += -I../ $(DEPS_INCPATH)
 CFLAGS += $(OPT) $(SHARED_CFLAGS) $(INCPATH)
 CXXFLAGS += $(OPT) $(SHARED_CFLAGS) $(INCPATH)
 LDFLAGS += ../../build/lib/libtera.a $(DEPS_LDPATH) $(DEPS_LDFLAGS) -lpthread -lz -lrt
+# LDFLAGS += ../../build/lib/libtera.a -L$(GLOG_LIBDIR) -lglog -L$(GFLAGS_LIBDIR) -lgflags -lpthread -lz -lrt
 
 SAMPLE_SRC := ./tera_sample.cc ./tera_ha_sample.cc
 SAMPLE_OBJ := $(SAMPLE_SRC:.cc=.o)

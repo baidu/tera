@@ -2,7 +2,135 @@
 #include "read_impl.h"
 #include "ha_tera.h"
 
+DECLARE_bool(tera_sdk_ha_ddl_enable);
+DECLARE_int32(tera_sdk_ha_timestamp_diff);
+
 namespace tera {
+
+class PutCallbackChecker : public CallChecker {
+public:
+    explicit PutCallbackChecker(int size)
+        : _has_call(false),
+          _total_clusters(size),
+          _check_cout(1) {}
+
+    virtual ~PutCallbackChecker() {}
+
+    // 对于异步写，只要有一个调用callback就行了
+    bool NeedCall(ErrorCode::ErrorCodeType code) {
+        if (_has_call) {
+            return false;
+        } else {
+            if (_check_cout < _total_clusters) {
+                if (code == ErrorCode::kOK) {
+                    MutexLock lock(&_mutex);
+                    if (_has_call) {
+                        return false;
+                    } else {
+                        _has_call = true;
+                        return true;
+                    }
+                } else {
+                    MutexLock lock(&_mutex);
+                    _check_cout++;
+                    return false;
+                }
+            } else {
+                MutexLock lock(&_mutex);
+                if (_has_call) {
+                    return false;
+                } else {
+                    _has_call = true;
+                    return true;
+                }
+            }
+        }
+    }
+
+private:
+    mutable Mutex _mutex;
+    bool _has_call;
+    int _total_clusters;
+    int _check_cout;
+};
+
+class GetCallbackChecker : public CallChecker {
+public:
+    GetCallbackChecker(const std::vector<Table*> &clusters, RowReader* row_reader)
+        : _has_call(false),
+          _cluster_index(0),
+          _clusters(clusters),
+          _row_reader(row_reader) {}
+
+    virtual ~GetCallbackChecker() {}
+
+    // 对于异步读，如果读失败，则尝试从下一个集群读；
+    // 否则，返回true
+    bool NeedCall(ErrorCode::ErrorCodeType code) {
+        if (_has_call) {
+            return false;
+        } else if (code == ErrorCode::kOK) {
+            _has_call = true;
+            return true;
+        } else {
+            if (++_cluster_index >= _clusters.size()) {
+                _has_call = true;
+                return true;
+            } else {
+                _row_reader->Reset();
+                _clusters[_cluster_index]->Get(_row_reader);
+                return false;
+            }
+        }
+    }
+
+private:
+    bool _has_call;
+    size_t _cluster_index;
+    std::vector<Table*> _clusters;
+    RowReader* _row_reader;
+};
+
+class LGetCallbackChecker : public CallChecker {
+public:
+    LGetCallbackChecker(const std::vector<Table*> &clusters, RowReaderImpl* row_reader)
+        : _has_call(false),
+          _cluster_index(0),
+          _clusters(clusters),
+          _row_reader(row_reader) {}
+
+    virtual ~LGetCallbackChecker() {}
+
+    /// 比较两个集群，选择时间戳比较大的结果
+    bool NeedCall(ErrorCode::ErrorCodeType code) {
+        if (_has_call) {
+            return false;
+        } else if (code == ErrorCode::kOK) {
+            _results.push_back(_row_reader->GetResult());
+        }
+        if (++_cluster_index >= _clusters.size()) {
+            // 合并结果
+            if (_results.size() > 0) {
+                RowResult final_result;
+                HATable::MergeResult(_results, final_result, _row_reader->GetMaxVersions());
+                _row_reader->SetResult(final_result);
+            }
+            _has_call = true;
+            return true;
+        } else {
+            _row_reader->Reset();
+            _clusters[_cluster_index]->Get(_row_reader);
+            return false;
+        }
+    }
+
+private:
+    bool _has_call;
+    size_t _cluster_index;
+    std::vector<Table*> _clusters;
+    RowReaderImpl* _row_reader;
+    std::vector<RowResult> _results;
+};
 
 void HATable::Add(Table *t) {
     _tables.push_back(t);
@@ -18,11 +146,19 @@ RowReader* HATable::NewRowReader(const std::string& row_key) {
 
 void HATable::ApplyMutation(RowMutation* row_mu) {
     size_t failed_count = 0;
+
+    // 如果是异步操作，则设置回调的检查器
+    if (row_mu->IsAsync()) {
+        row_mu->SetCallChecker(new PutCallbackChecker(_tables.size()));
+    }
+
     for (size_t i = 0; i < _tables.size(); i++) {
         _tables[i]->ApplyMutation(row_mu);
         if (row_mu->GetError().GetType() != ErrorCode::kOK) {
             failed_count++;
-            LOG(WARNING) << "ApplyMutation failed! " << row_mu->GetError().GetType() << " at tera:" << i;
+            LOG(WARNING) << "ApplyMutation failed! "
+                         << row_mu->GetError().GetType()
+                         << " at tera:" << i;
         }
         // 如果所有集群都失败了，则认为失败
         if (failed_count < _tables.size()) {
@@ -35,6 +171,13 @@ void HATable::ApplyMutation(RowMutation* row_mu) {
 void HATable::ApplyMutation(const std::vector<RowMutation*>& row_mu_list) {
     std::vector<size_t> failed_count_list;
     failed_count_list.resize(row_mu_list.size());
+
+    for (size_t i = 0; i < row_mu_list.size(); i++) {
+        RowMutation* row_mu = row_mu_list[i];
+        if (row_mu->IsAsync()) {
+            row_mu->SetCallChecker(new PutCallbackChecker(_tables.size()));
+        }
+    }
 
     for (size_t i = 0; i < _tables.size(); i++) {
         _tables[i]->ApplyMutation(row_mu_list);
@@ -217,35 +360,104 @@ bool HATable::Append(const std::string& row_key, const std::string& family,
     }
 }
 
+// 从两个集群里获取时间戳比较新的数据, latest-get
+void HATable::LGet(RowReader* row_reader) {
+    size_t failed_count = 0;
+
+    RowReaderImpl* row_reader_impl = dynamic_cast<RowReaderImpl*>(row_reader);
+    // 如果是异步操作，则设置回调的检查器
+    if (row_reader_impl->IsAsync()) {
+        row_reader_impl->SetCallChecker(new LGetCallbackChecker(_tables, row_reader_impl));
+        if (_tables.size() > 0) {
+            _tables[0]->Get(row_reader);
+        }
+    } else {
+        // 同步Get
+        std::vector<RowResult> results;
+        for (size_t i = 0; i < _tables.size(); i++) {
+            _tables[i]->Get(row_reader_impl);
+            if (row_reader_impl->GetError().GetType() != ErrorCode::kOK) {
+                LOG(WARNING) << "Get failed! " << row_reader_impl->GetError().GetReason()
+                             << " at tera:" << i;
+                failed_count++;
+                if (failed_count < _tables.size()) {
+                    row_reader_impl->Reset();
+                }
+            } else {
+                results.push_back(row_reader_impl->GetResult());
+                row_reader_impl->Reset();
+            }
+        }
+        if (results.size() > 0) {
+            RowResult final_result;
+            HATable::MergeResult(results, final_result, row_reader_impl->GetMaxVersions());
+            row_reader_impl->SetResult(final_result);
+        }
+    }
+}
+
+void HATable::LGet(const std::vector<RowReader*>& row_readers) {
+    for (size_t i = 0; i < row_readers.size(); i++) {
+        LGet(row_readers[i]);
+    }
+}
+
 void HATable::Get(RowReader* row_reader) {
     size_t failed_count = 0;
-    for (size_t i = 0; i < _tables.size(); i++) {
-        _tables[i]->Get(row_reader);
-        if (row_reader->GetError().GetType() != ErrorCode::kOK) {
-            LOG(WARNING) << "Get failed! " << row_reader->GetError().GetReason() << " at tera:" << i;
-            failed_count++;
-        } else {
-            break;
+
+    // 如果是异步操作，则设置回调的检查器
+    if (row_reader->IsAsync()) {
+        row_reader->SetCallChecker(new GetCallbackChecker(_tables, row_reader));
+        if (_tables.size() > 0) {
+            _tables[0]->Get(row_reader);
         }
-        if (failed_count < _tables.size()) {
-            row_reader->Reset();
+    } else {
+        // 同步Get
+        for (size_t i = 0; i < _tables.size(); i++) {
+            _tables[i]->Get(row_reader);
+            if (row_reader->GetError().GetType() != ErrorCode::kOK) {
+                LOG(WARNING) << "Get failed! " << row_reader->GetError().GetReason()
+                             << " at tera:" << i;
+                failed_count++;
+            } else {
+                break;
+            }
+            if (failed_count < _tables.size()) {
+                row_reader->Reset();
+            }
         }
     }
 }
 
 // 可能有一批数据来自集群1，另一批数据来自集群2
 void HATable::Get(const std::vector<RowReader*>& row_readers) {
+
+    std::vector<RowReader*> async_readers;
+    std::vector<RowReader*> sync_readers;
+    for (size_t i = 0; i < row_readers.size(); i++) {
+        if (row_readers[i]->IsAsync()) {
+            async_readers.push_back(row_readers[i]);
+        } else {
+            sync_readers.push_back(row_readers[i]);
+        }
+    }
+
+    // 处理异步读
+    for (size_t i = 0; i < async_readers.size(); i++) {
+        Get(async_readers[i]);
+    }
+
+    // 处理同步读
     std::vector<size_t> failed_count_list;
     failed_count_list.resize(row_readers.size());
-    std::vector<RowReader*> tmp_read = row_readers;
 
     for (size_t i = 0; i < _tables.size(); i++) {
-        if (tmp_read.size() <= 0) {
+        if (sync_readers.size() <= 0) {
             continue;
         }
-        std::vector<RowReader*> need_read = tmp_read;
+        std::vector<RowReader*> need_read = sync_readers;
         _tables[i]->Get(need_read);
-        tmp_read.clear();
+        sync_readers.clear();
         for (size_t j = 0; j < need_read.size(); j++) {
             RowReader* row_reader = need_read[j];
             if (row_reader->GetError().GetType() != ErrorCode::kOK) {
@@ -259,7 +471,7 @@ void HATable::Get(const std::vector<RowReader*>& row_readers) {
                 if (failed_count_list[j] < _tables.size()) {
                     // 重置除用户数据外的数据，以用于后面的写
                     row_reader->Reset();
-                    tmp_read.push_back(row_reader);
+                    sync_readers.push_back(row_reader);
                 }
             } //fail
         }
@@ -403,6 +615,48 @@ Table* HATable::GetClusterHandle(size_t i) {
     return (i < _tables.size()) ? _tables[i] : NULL;
 }
 
+void HATable::MergeResult(const std::vector<RowResult>& results, RowResult& res, uint32_t max_size) {
+    std::vector<int> results_pos;
+    results_pos.resize(results.size());
+    for (uint32_t i = 0; i < results.size(); i++) {
+        results_pos[i] = 0;
+    }
+    for (uint32_t i = 0; i < max_size; i++) {
+        // 获取时间戳最大的结果
+        bool found = false;
+        uint32_t candidate_index;
+        int64_t timestamp;
+        for (uint32_t j = 0; j < results.size(); j++) {
+            if (results_pos[j] < results[j].key_values_size()) {
+                int64_t tmp_ts = results[j].key_values(results_pos[j]).timestamp();
+                if (!found || tmp_ts > timestamp) {
+                    timestamp = tmp_ts;
+                    candidate_index = j;
+                    found = true;
+                }
+            }
+        }
+        if (!found) {
+            break;
+        }
+        // 移动数组下标
+        for (uint32_t j = 0; j < results.size() && j != candidate_index; j++) {
+            if (results_pos[j] < results[j].key_values_size()) {
+                int64_t tmp_ts = results[j].key_values(results_pos[j]).timestamp();
+                // 时间戳相近，说明是同一批次
+                if (abs(timestamp-tmp_ts) < FLAGS_tera_sdk_ha_timestamp_diff) {
+                    results_pos[j] += 1;
+                }
+            }
+        }
+        // 保存结果
+        KeyValuePair* kv = res.add_key_values();
+        *kv = results[candidate_index].key_values(results_pos[candidate_index]);
+        results_pos[candidate_index] += 1;
+    }
+}
+
+
 void HAClient::SetGlogIsInitialized() {
     Client::SetGlogIsInitialized();
 }
@@ -439,15 +693,25 @@ HAClient* HAClient::NewClient(const std::vector<std::string>& confpaths,
 bool HAClient::CreateTable(const TableDescriptor& desc, ErrorCode* err) {
     bool ok = false;
     size_t failed_count = 0;
+    bool fail_fast = false;
     for (size_t i = 0; i < _clients.size(); i++) {
         ok = _clients[i]->CreateTable(desc, err);
         if (!ok) {
-            LOG(WARNING) << "Create table failed! " << err->GetReason() << " at tera:" << i;
-            failed_count++;
+            if (FLAGS_tera_sdk_ha_ddl_enable) {
+                LOG(ERROR) << "CreateTable failed! " << err->GetReason()
+                           << " at tera:" << i << ", STOP try other cluster!";
+                fail_fast = true;
+                break;
+            } else {
+                LOG(WARNING) << "CreateTable failed! " << err->GetReason() << " at tera:" << i;
+                failed_count++;
+            }
         }
     }
 
-    if (failed_count >= _clients.size()) {
+    if (fail_fast) {
+        return false;
+    } else if (failed_count >= _clients.size()) {
         return false;
     } else {
         err->SetFailed(ErrorCode::kOK, "success");
@@ -460,15 +724,25 @@ bool HAClient::CreateTable(const TableDescriptor& desc,
                            ErrorCode* err) {
     bool ok = false;
     size_t failed_count = 0;
+    bool fail_fast = false;
     for (size_t i = 0; i < _clients.size(); i++) {
         ok = _clients[i]->CreateTable(desc, tablet_delim, err);
         if (!ok) {
-            LOG(WARNING) << "CreateTable failed! " << err->GetReason() << " at tera:" << i;
-            failed_count++;
+            if (FLAGS_tera_sdk_ha_ddl_enable) {
+                LOG(ERROR) << "CreateTable failed! " << err->GetReason()
+                           << " at tera:" << i << ", STOP try other cluster!";
+                fail_fast = true;
+                break;
+            } else {
+                LOG(WARNING) << "CreateTable failed! " << err->GetReason() << " at tera:" << i;
+                failed_count++;
+            }
         }
     }
 
-    if (failed_count >= _clients.size()) {
+    if (fail_fast) {
+        return false;
+    } else if (failed_count >= _clients.size()) {
         return false;
     } else {
         err->SetFailed(ErrorCode::kOK, "success");
@@ -479,15 +753,25 @@ bool HAClient::CreateTable(const TableDescriptor& desc,
 bool HAClient::UpdateTable(const TableDescriptor& desc, ErrorCode* err) {
     bool ok = false;
     size_t failed_count = 0;
+    bool fail_fast = false;
     for (size_t i = 0; i < _clients.size(); i++) {
         ok = _clients[i]->UpdateTable(desc, err);
         if (!ok) {
-            LOG(WARNING) << "UpdateTable failed! " << err->GetReason() << " at tera:" << i;
-            failed_count++;
+            if (FLAGS_tera_sdk_ha_ddl_enable) {
+                LOG(ERROR) << "UpdateTable failed! " << err->GetReason()
+                           << " at tera:" << i << ", STOP try other cluster!";
+                fail_fast = true;
+                break;
+            } else {
+                LOG(WARNING) << "UpdateTable failed! " << err->GetReason() << " at tera:" << i;
+                failed_count++;
+            }
         }
     }
 
-    if (failed_count >= _clients.size()) {
+    if (fail_fast) {
+        return false;
+    } else if (failed_count >= _clients.size()) {
         return false;
     } else {
         err->SetFailed(ErrorCode::kOK, "success");
@@ -498,15 +782,25 @@ bool HAClient::UpdateTable(const TableDescriptor& desc, ErrorCode* err) {
 bool HAClient::DeleteTable(std::string name, ErrorCode* err) {
     bool ok = false;
     size_t failed_count = 0;
+    bool fail_fast = false;
     for (size_t i = 0; i < _clients.size(); i++) {
         ok = _clients[i]->DeleteTable(name, err);
         if (!ok) {
-            LOG(WARNING) << "DeleteTable failed! " << err->GetReason() << " at tera:" << i;
-            failed_count++;
+            if (FLAGS_tera_sdk_ha_ddl_enable) {
+                LOG(ERROR) << "DeleteTable failed! " << err->GetReason()
+                           << " at tera:" << i << ", STOP try other cluster!";
+                fail_fast = true;
+                break;
+            } else {
+                LOG(WARNING) << "DeleteTable failed! " << err->GetReason() << " at tera:" << i;
+                failed_count++;
+            }
         }
     }
 
-    if (failed_count >= _clients.size()) {
+    if (fail_fast) {
+        return false;
+    } else if (failed_count >= _clients.size()) {
         return false;
     } else {
         err->SetFailed(ErrorCode::kOK, "success");
@@ -517,15 +811,25 @@ bool HAClient::DeleteTable(std::string name, ErrorCode* err) {
 bool HAClient::DisableTable(std::string name, ErrorCode* err) {
     bool ok = false;
     size_t failed_count = 0;
+    bool fail_fast = false;
     for (size_t i = 0; i < _clients.size(); i++) {
         ok = _clients[i]->DisableTable(name, err);
         if (!ok) {
-            LOG(WARNING) << "DisableTable failed! " << err->GetReason() << " at tera:" << i;
-            failed_count++;
+            if (FLAGS_tera_sdk_ha_ddl_enable) {
+                LOG(ERROR) << "DisableTable failed! " << err->GetReason()
+                           << " at tera:" << i << ", STOP try other cluster!";
+                fail_fast = true;
+                break;
+            } else {
+                LOG(WARNING) << "DisableTable failed! " << err->GetReason() << " at tera:" << i;
+                failed_count++;
+            }
         }
     }
 
-    if (failed_count >= _clients.size()) {
+    if (fail_fast) {
+        return false;
+    } else if (failed_count >= _clients.size()) {
         return false;
     } else {
         err->SetFailed(ErrorCode::kOK, "success");
@@ -536,15 +840,25 @@ bool HAClient::DisableTable(std::string name, ErrorCode* err) {
 bool HAClient::EnableTable(std::string name, ErrorCode* err) {
     bool ok = false;
     size_t failed_count = 0;
+    bool fail_fast = false;
     for (size_t i = 0; i < _clients.size(); i++) {
         ok = _clients[i]->EnableTable(name, err);
         if (!ok) {
-            LOG(WARNING) << "EnableTable failed! " << err->GetReason() << " at tera:" << i;
-            failed_count++;
+            if (FLAGS_tera_sdk_ha_ddl_enable) {
+                LOG(ERROR) << "EnableTable failed! " << err->GetReason()
+                           << " at tera:" << i << ", STOP try other cluster!";
+                fail_fast = true;
+                break;
+            } else {
+                LOG(WARNING) << "EnableTable failed! " << err->GetReason() << " at tera:" << i;
+                failed_count++;
+            }
         }
     }
 
-    if (failed_count >= _clients.size()) {
+    if (fail_fast) {
+        return false;
+    } else if (failed_count >= _clients.size()) {
         return false;
     } else {
         err->SetFailed(ErrorCode::kOK, "success");
@@ -556,15 +870,25 @@ bool HAClient::CreateUser(const std::string& user,
                           const std::string& password, ErrorCode* err) {
     bool ok = false;
     size_t failed_count = 0;
+    bool fail_fast = false;
     for (size_t i = 0; i < _clients.size(); i++) {
         ok = _clients[i]->CreateUser(user, password, err);
         if (!ok) {
-            LOG(WARNING) << "CreateUser failed! " << err->GetReason() << " at tera:" << i;
-            failed_count++;
+            if (FLAGS_tera_sdk_ha_ddl_enable) {
+                LOG(ERROR) << "CreateUser failed! " << err->GetReason()
+                           << " at tera:" << i << ", STOP try other cluster!";
+                fail_fast = true;
+                break;
+            } else {
+                LOG(WARNING) << "CreateUser failed! " << err->GetReason() << " at tera:" << i;
+                failed_count++;
+            }
         }
     }
 
-    if (failed_count >= _clients.size()) {
+    if (fail_fast) {
+        return false;
+    } else if (failed_count >= _clients.size()) {
         return false;
     } else {
         err->SetFailed(ErrorCode::kOK, "success");
@@ -576,15 +900,25 @@ bool HAClient::CreateUser(const std::string& user,
 bool HAClient::DeleteUser(const std::string& user, ErrorCode* err) {
     bool ok = false;
     size_t failed_count = 0;
+    bool fail_fast = false;
     for (size_t i = 0; i < _clients.size(); i++) {
         ok = _clients[i]->DeleteUser(user, err);
         if (!ok) {
-            LOG(WARNING) << "DeleteUser failed! " << err->GetReason() << " at tera:" << i;
-            failed_count++;
+            if (FLAGS_tera_sdk_ha_ddl_enable) {
+                LOG(ERROR) << "DeleteUser failed! " << err->GetReason()
+                           << " at tera:" << i << ", STOP try other cluster!";
+                fail_fast = true;
+                break;
+            } else {
+                LOG(WARNING) << "DeleteUser failed! " << err->GetReason() << " at tera:" << i;
+                failed_count++;
+            }
         }
     }
 
-    if (failed_count >= _clients.size()) {
+    if (fail_fast) {
+        return false;
+    } else if (failed_count >= _clients.size()) {
         return false;
     } else {
         err->SetFailed(ErrorCode::kOK, "success");
@@ -596,15 +930,25 @@ bool HAClient::ChangePwd(const std::string& user,
                          const std::string& password, ErrorCode* err) {
     bool ok = false;
     size_t failed_count = 0;
+    bool fail_fast = false;
     for (size_t i = 0; i < _clients.size(); i++) {
         ok = _clients[i]->ChangePwd(user, password, err);
         if (!ok) {
-            LOG(WARNING) << "ChangePwd failed! " << err->GetReason() << " at tera:" << i;
-            failed_count++;
+            if (FLAGS_tera_sdk_ha_ddl_enable) {
+                LOG(ERROR) << "ChangePwd failed! " << err->GetReason()
+                           << " at tera:" << i << ", STOP try other cluster!";
+                fail_fast = true;
+                break;
+            } else {
+                LOG(WARNING) << "ChangePwd failed! " << err->GetReason() << " at tera:" << i;
+                failed_count++;
+            }
         }
     }
 
-    if (failed_count >= _clients.size()) {
+    if (fail_fast) {
+        return false;
+    } else if (failed_count >= _clients.size()) {
         return false;
     } else {
         err->SetFailed(ErrorCode::kOK, "success");
@@ -619,7 +963,7 @@ bool HAClient::ShowUser(const std::string& user, std::vector<std::string>& user_
     for (size_t i = 0; i < _clients.size(); i++) {
         ok = _clients[i]->ShowUser(user, user_groups, err);
         if (!ok) {
-            LOG(WARNING) << "ChangePwd failed! " << err->GetReason() << " at tera:" << i;
+            LOG(WARNING) << "ShowUser failed! " << err->GetReason() << " at tera:" << i;
             failed_count++;
         } else {
             // 对于读操作，只要一个成功就行
@@ -634,15 +978,25 @@ bool HAClient::AddUserToGroup(const std::string& user,
                               const std::string& group, ErrorCode* err) {
     bool ok = false;
     size_t failed_count = 0;
+    bool fail_fast = false;
     for (size_t i = 0; i < _clients.size(); i++) {
         ok = _clients[i]->AddUserToGroup(user, group, err);
         if (!ok) {
-            LOG(WARNING) << "AddUserToGroup failed! " << err->GetReason() << " at tera:" << i;
-            failed_count++;
+            if (FLAGS_tera_sdk_ha_ddl_enable) {
+                LOG(ERROR) << "AddUserToGroup failed! " << err->GetReason()
+                           << " at tera:" << i << ", STOP try other cluster!";
+                fail_fast = true;
+                break;
+            } else {
+                LOG(WARNING) << "AddUserToGroup failed! " << err->GetReason() << " at tera:" << i;
+                failed_count++;
+            }
         }
     }
 
-    if (failed_count >= _clients.size()) {
+    if (fail_fast) {
+        return false;
+    } else if (failed_count >= _clients.size()) {
         return false;
     } else {
         err->SetFailed(ErrorCode::kOK, "success");
@@ -654,15 +1008,25 @@ bool HAClient::DeleteUserFromGroup(const std::string& user,
                                    const std::string& group, ErrorCode* err) {
     bool ok = false;
     size_t failed_count = 0;
+    bool fail_fast = false;
     for (size_t i = 0; i < _clients.size(); i++) {
         ok = _clients[i]->DeleteUserFromGroup(user, group, err);
         if (!ok) {
-            LOG(WARNING) << "DeleteUserFromGroup failed! " << err->GetReason() << " at tera:" << i;
-            failed_count++;
+            if (FLAGS_tera_sdk_ha_ddl_enable) {
+                LOG(ERROR) << "DeleteUserFromGroup failed! " << err->GetReason()
+                           << " at tera:" << i << ", STOP try other cluster!";
+                fail_fast = true;
+                break;
+            } else {
+                LOG(WARNING) << "DeleteUserFromGroup failed! " << err->GetReason() << " at tera:" << i;
+                failed_count++;
+            }
         }
     }
 
-    if (failed_count >= _clients.size()) {
+    if (fail_fast) {
+        return false;
+    } else if (failed_count >= _clients.size()) {
         return false;
     } else {
         err->SetFailed(ErrorCode::kOK, "success");
@@ -702,7 +1066,7 @@ bool HAClient::GetTabletLocation(const std::string& table_name,
     for (size_t i = 0; i < _clients.size(); i++) {
         ok = _clients[i]->GetTabletLocation(table_name, tablets, err);
         if (!ok) {
-            LOG(WARNING) << "ChangePwd failed! " << err->GetReason() << " at tera:" << i;
+            LOG(WARNING) << "GetTabletLocation failed! " << err->GetReason() << " at tera:" << i;
             failed_count++;
         } else {
             // 对于读操作，只要一个成功就行
@@ -720,7 +1084,7 @@ TableDescriptor* HAClient::GetTableDescriptor(const std::string& table_name,
     for (size_t i = 0; i < _clients.size(); i++) {
         td = _clients[i]->GetTableDescriptor(table_name, err);
         if (td == NULL) {
-            LOG(WARNING) << "ChangePwd failed! " << err->GetReason() << " at tera:" << i;
+            LOG(WARNING) << "GetTableDescriptor failed! " << err->GetReason() << " at tera:" << i;
             failed_count++;
         } else {
             break;
@@ -840,15 +1204,25 @@ bool HAClient::GetSnapshot(const std::string& name, uint64_t* snapshot, ErrorCod
 bool HAClient::DelSnapshot(const std::string& name, uint64_t snapshot,ErrorCode* err) {
     bool ok = false;
     size_t failed_count = 0;
+    bool fail_fast = false;
     for (size_t i = 0; i < _clients.size(); i++) {
         ok = _clients[i]->DelSnapshot(name, snapshot, err);
         if (!ok) {
-            LOG(WARNING) << "DelSnapshot failed! " << err->GetReason() << " at tera:" << i;
-            failed_count++;
+            if (FLAGS_tera_sdk_ha_ddl_enable) {
+                LOG(ERROR) << "DelSnapshot failed! " << err->GetReason()
+                           << " at tera:" << i << ", STOP try other cluster!";
+                fail_fast = true;
+                break;
+            } else {
+                LOG(WARNING) << "DelSnapshot failed! " << err->GetReason() << " at tera:" << i;
+                failed_count++;
+            }
         }
     }
 
-    if (failed_count >= _clients.size()) {
+    if (fail_fast) {
+        return false;
+    } else if (failed_count >= _clients.size()) {
         return false;
     } else {
         err->SetFailed(ErrorCode::kOK, "success");
@@ -860,15 +1234,25 @@ bool HAClient::Rollback(const std::string& name, uint64_t snapshot,
                         const std::string& rollback_name, ErrorCode* err) {
     bool ok = false;
     size_t failed_count = 0;
+    bool  fail_fast = false;
     for (size_t i = 0; i < _clients.size(); i++) {
         ok = _clients[i]->Rollback(name, snapshot, rollback_name, err);
         if (!ok) {
-            LOG(WARNING) << "Rollback failed! " << err->GetReason() << " at tera:" << i;
-            failed_count++;
+            if (FLAGS_tera_sdk_ha_ddl_enable) {
+                LOG(ERROR) << "AddUserToGroup failed! " << err->GetReason()
+                           << " at tera:" << i << ", STOP try other cluster!";
+                fail_fast = true;
+                break;
+            } else {
+                LOG(WARNING) << "Rollback failed! " << err->GetReason() << " at tera:" << i;
+                failed_count++;
+            }
         }
     }
 
-    if (failed_count >= _clients.size()) {
+    if (fail_fast) {
+        return false;
+    } else if (failed_count >= _clients.size()) {
         return false;
     } else {
         err->SetFailed(ErrorCode::kOK, "success");
@@ -902,15 +1286,25 @@ bool HAClient::Rename(const std::string& old_table_name,
                       ErrorCode* err) {
     bool ok = false;
     size_t failed_count = 0;
+    bool fail_fast = false;
     for (size_t i = 0; i < _clients.size(); i++) {
         ok = _clients[i]->Rename(old_table_name, new_table_name, err);
         if (!ok) {
-            LOG(WARNING) << "Rename failed! " << err->GetReason() << " at tera:" << i;
-            failed_count++;
+            if (FLAGS_tera_sdk_ha_ddl_enable) {
+                LOG(ERROR) << "AddUserToGroup failed! " << err->GetReason()
+                           << " at tera:" << i << ", STOP try other cluster!";
+                fail_fast = true;
+                break;
+            } else {
+                LOG(WARNING) << "Rename failed! " << err->GetReason() << " at tera:" << i;
+                failed_count++;
+            }
         }
     }
 
-    if (failed_count >= _clients.size()) {
+    if (fail_fast) {
+        return false;
+    } else if (failed_count >= _clients.size()) {
         return false;
     } else {
         err->SetFailed(ErrorCode::kOK, "success");

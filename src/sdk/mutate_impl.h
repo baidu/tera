@@ -120,6 +120,9 @@ public:
 
     RowMutation::Callback GetCallBack();
 
+    /// 设置异步回调的检查器
+    void SetCallChecker(CallChecker* cc);
+
     /// 设置用户上下文，可在回调函数中获取
     void SetContext(void* context);
 
@@ -190,6 +193,7 @@ private:
     ErrorCode _error_code;
     mutable Mutex _finish_mutex;
     common::CondVar _finish_cond;
+    CallChecker* _cc;
 };
 
 void SerializeMutation(const RowMutation::Mutation& src, tera::Mutation* dst);

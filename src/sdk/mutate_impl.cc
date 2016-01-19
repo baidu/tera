@@ -17,7 +17,8 @@ RowMutationImpl::RowMutationImpl(TableImpl* table, const std::string& row_key)
       _timeout_ms(0),
       _retry_times(0),
       _finish(false),
-      _finish_cond(&_finish_mutex) {
+      _finish_cond(&_finish_mutex),
+      _cc(NULL) {
     SetErrorIfInvalid(row_key, kRowkey);
 }
 
@@ -315,6 +316,10 @@ RowMutation::Callback RowMutationImpl::GetCallBack() {
     return _callback;
 }
 
+void RowMutationImpl::SetCallChecker(CallChecker* cc) {
+    _cc = cc;
+}
+
 /// 设置用户上下文，可在回调函数中获取
 void RowMutationImpl::SetContext(void* context) {
     _user_context = context;
@@ -396,7 +401,9 @@ void RowMutationImpl::Wait() {
 
 void RowMutationImpl::RunCallback() {
     if (_callback) {
-        _callback(this);
+        if (_cc == NULL || _cc->NeedCall(_error_code.GetType())) {
+            _callback(this);
+        }
     } else {
         MutexLock lock(&_finish_mutex);
         _finish = true;

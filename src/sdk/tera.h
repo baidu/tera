@@ -64,6 +64,13 @@ enum RawKeyType {
 extern const int64_t kLatestTimestamp;
 extern const int64_t kOldestTimestamp;
 
+class CallChecker {
+public:
+    CallChecker() {}
+    virtual ~CallChecker() {}
+    virtual bool NeedCall(ErrorCode::ErrorCodeType code) = 0;
+};
+
 /// ACL
 struct ACL {
     int32_t owner;  ///< 所属用户id
@@ -396,6 +403,8 @@ public:
     /// 设置异步回调, 操作会异步返回
     typedef void (*Callback)(RowMutation* param);
     virtual void SetCallBack(Callback callback) = 0;
+    /// 设置回调的检查器
+    virtual void SetCallChecker(CallChecker* cc) = 0;
     // 返回异步回调函数
     virtual Callback GetCallBack() = 0;
     /// 设置用户上下文，可在回调函数中获取
@@ -460,11 +469,15 @@ public:
     /// 设置异步回调, 操作会异步返回
     typedef void (*Callback)(RowReader* param);
     virtual void SetCallBack(Callback callback) = 0;
+    /// 设置回调的检查器
+    virtual void SetCallChecker(CallChecker* cc) = 0;
     /// 设置用户上下文，可在回调函数中获取
     virtual void SetContext(void* context) = 0;
     virtual void* GetContext() = 0;
     /// 设置异步返回
     virtual void SetAsync() = 0;
+    /// 是否异步操作
+    virtual bool IsAsync() = 0;
     /// 异步操作是否完成
     virtual bool IsFinished() const = 0;
 

@@ -52,6 +52,8 @@ DEFINE_string(rollback_name, "", "rollback operation's name");
 DEFINE_int32(lg, -1, "locality group number.");
 DEFINE_int32(concurrency, 1, "concurrency for compact table.");
 
+DEFINE_string(other_flagfiles, "", "other tera configure files");
+
 volatile int32_t g_start_time = 0;
 volatile int32_t g_end_time = 0;
 volatile int32_t g_used_time = 0;
@@ -2520,17 +2522,10 @@ int32_t UserOp(Client* client, int32_t argc, char** argv, ErrorCode* err) {
     return -1;
 }
 
-int main(int argc, char* argv[]) {
-    ::google::ParseCommandLineFlags(&argc, &argv, true);
-
-    if (argc < 2) {
-        Usage(argv[0]);
-        return -1;
-    }
-
+int ProcessTera(int argc, char** argv, const char* tera_conf) {
     int ret = 0;
     ErrorCode error_code;
-    Client* client = Client::NewClient(FLAGS_flagfile, NULL);
+    Client* client = Client::NewClient(tera_conf, NULL);
 
     if (client == NULL) {
         LOG(ERROR) << "client instance not exist";
@@ -2630,3 +2625,34 @@ int main(int argc, char* argv[]) {
     delete client;
     return ret;
 }
+
+int main(int argc, char* argv[]) {
+    ::google::ParseCommandLineFlags(&argc, &argv, true);
+
+    if (argc < 2) {
+        Usage(argv[0]);
+        return -1;
+    }
+
+    int first_errcode;
+    first_errcode = 0;
+    std::vector<std::string> conf_files;
+    if (FLAGS_other_flagfiles != "") {
+        SplitString(FLAGS_other_flagfiles, ":", &conf_files);
+    }
+    conf_files.insert(conf_files.begin(), FLAGS_flagfile);
+    for (size_t i = 0; i < conf_files.size(); i++) {
+        int ret;
+        if (i != 0) {
+            printf ("================================================\n");
+        }
+        printf ("Process tera %lu, %s\n", i, conf_files[i].c_str());
+        ret = ProcessTera(argc, argv, conf_files[i].c_str());
+        if (ret != 0 && first_errcode == 0) {
+            first_errcode = ret;
+        }
+    }
+
+    return first_errcode;
+}
+

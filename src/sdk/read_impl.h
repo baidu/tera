@@ -50,6 +50,8 @@ public:
     void SetTimeOut(int64_t timeout_ms);
     /// 设置异步回调, 操作会异步返回
     void SetCallBack(RowReader::Callback callback);
+    /// 设置异步回调的检查器
+    void SetCallChecker(CallChecker* cc);
     /// 设置用户上下文，可在回调函数中获取
     void SetContext(void* context);
     void* GetContext();
@@ -83,6 +85,7 @@ public:
     typedef std::map< std::string, std::map<int64_t, std::string> > Map;
     void ToMap(Map* rowmap);
 
+    const RowResult& GetResult();
     void SetResult(const RowResult& result);
 
     void IncRetryTimes();
@@ -124,6 +127,7 @@ private:
     uint32_t _retry_times;
     int32_t _result_pos;
     RowResult _result;
+    CallChecker *_cc;
 };
 
 } // namespace tera
