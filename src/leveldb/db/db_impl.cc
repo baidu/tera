@@ -443,10 +443,14 @@ bool DBImpl::IsDbExist() {
 Status DBImpl::Recover(VersionEdit* edit) {
   mutex_.AssertHeld();
 
-  // Ignore error from CreateDir since the creation of the DB is
-  // committed only when the descriptor is created, and this directory
-  // may already exist from a previous failed creation attempt.
-  env_->CreateDir(dbname_);
+  if (!env_->FileExists(dbname_)) {
+    Status s = env_->CreateDir(dbname_);
+    if (!s.ok()) {
+      Log(options_.info_log, "[%s] fail to create db: %s",
+          dbname_.c_str(), s.ToString().c_str());
+      return s;
+    }
+  }
   assert(db_lock_ == NULL);
   Status s = env_->LockFile(LockFileName(dbname_), &db_lock_);
   if (!s.ok()) {
@@ -1422,6 +1426,16 @@ Status DBImpl::Delete(const WriteOptions& options, const Slice& key) {
 bool DBImpl::BusyWrite() {
   MutexLock l(&mutex_);
   return (versions_->NumLevelFiles(0) >= options_.l0_slowdown_writes_trigger);
+}
+
+void DBImpl::Workload(double* write_workload) {
+  MutexLock l(&mutex_);
+  double wwl = versions_->CompactionScore();
+  if (wwl >= 0) {
+    *write_workload = wwl;
+  } else {
+    *write_workload = 0;
+  }
 }
 
 Status DBImpl::Write(const WriteOptions& options, WriteBatch* my_batch) {

@@ -517,12 +517,31 @@ bool SetTableProperties(const string& name, const string& value,
     return true;
 }
 
-bool CheckTableDescrptor(TableDescriptor* table_desc) {
-    if (table_desc->SplitSize() < table_desc->MergeSize() * 5) {
-        LOG(ERROR) << "splitsize should be 5 times larger than mergesize"
-            << ", splitsize: " << table_desc->SplitSize()
-            << ", mergesize: " << table_desc->MergeSize();
+bool CheckTableDescrptor(const TableDescriptor& desc, ErrorCode* err) {
+    std::stringstream ss;
+    if (desc.SplitSize() < desc.MergeSize() * 5) {
+        ss << "splitsize should be 5 times larger than mergesize"
+           << ", splitsize: " << desc.SplitSize()
+           << ", mergesize: " << desc.MergeSize();
+        if (err != NULL) {
+            err->SetFailed(ErrorCode::kBadParam, ss.str());
+        }
         return false;
+    }
+    if (!IsValidTableName(desc.TableName())) {
+        if (err != NULL) {
+            err->SetFailed(ErrorCode::kBadParam, " invalid tablename ");
+        }
+        return false;
+    }
+    for (int32_t i = 0; i < desc.ColumnFamilyNum(); ++i) {
+        if (!IsValidColumnFamilyName(desc.ColumnFamily(i)->Name())) {
+            ss << " invalid columnfamily name:" << desc.ColumnFamily(i)->Name();
+            if (err != NULL) {
+                err->SetFailed(ErrorCode::kBadParam, ss.str());
+            }
+            return false;
+        }
     }
     return true;
 }
@@ -646,8 +665,8 @@ bool UpdateKvTableProperties(PropTree::Node* table_node,
     return true;
 }
 
-bool UpdateTableDescriptor(PropTree& schema_tree,
-                           TableDescriptor* table_desc, bool* is_update_lg_cf) {
+bool UpdateTableDescriptor(PropTree& schema_tree, TableDescriptor* table_desc,
+                           bool* is_update_lg_cf, ErrorCode* err) {
     PropTree::Node* table_node = schema_tree.GetRootNode();
     if (table_node == NULL || table_desc == NULL) {
         return false;
@@ -676,7 +695,7 @@ bool UpdateTableDescriptor(PropTree& schema_tree,
         return false;
     }
     if (is_update_ok) {
-        return CheckTableDescrptor(table_desc);
+        return CheckTableDescrptor(*table_desc, err);
     }
     return false;
 }
@@ -811,7 +830,7 @@ bool FillTableDescriptor(PropTree& schema_tree, TableDescriptor* table_desc) {
     return true;
 }
 
-bool ParseTableSchema(const string& schema, TableDescriptor* table_desc) {
+bool ParseTableSchema(const string& schema, TableDescriptor* table_desc, ErrorCode* err) {
     PropTree schema_tree;
     if (!schema_tree.ParseFromString(schema)) {
         LOG(ERROR) << schema_tree.State();
@@ -821,13 +840,13 @@ bool ParseTableSchema(const string& schema, TableDescriptor* table_desc) {
 
     VLOG(10) << "table to create: " << schema_tree.FormatString();
     if (FillTableDescriptor(schema_tree, table_desc) &&
-        CheckTableDescrptor(table_desc)) {
+        CheckTableDescrptor(*table_desc, err)) {
         return true;
     }
     return false;
 }
 
-bool ParseTableSchemaFile(const string& file, TableDescriptor* table_desc) {
+bool ParseTableSchemaFile(const string& file, TableDescriptor* table_desc, ErrorCode* err) {
     PropTree schema_tree;
     if (!schema_tree.ParseFromFile(file)) {
         LOG(ERROR) << schema_tree.State();
@@ -837,7 +856,7 @@ bool ParseTableSchemaFile(const string& file, TableDescriptor* table_desc) {
 
     VLOG(10) << "table to create: " << schema_tree.FormatString();
     if (FillTableDescriptor(schema_tree, table_desc) &&
-        CheckTableDescrptor(table_desc)) {
+        CheckTableDescrptor(*table_desc, err)) {
         return true;
     }
     return false;

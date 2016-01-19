@@ -9,6 +9,28 @@ import nose
 import common
 
 
+@nose.tools.with_setup(common.create_kv_table, common.cleanup)
+def test_scan_empty_kv():
+    """
+    scan empty kv table
+    """
+    table_name = 'test'
+    scan_file = 'scan.out'
+    common.scan_table(table_name=table_name, file_path=scan_file, allversion=True)
+    nose.tools.assert_true(common.file_is_empty(scan_file))
+
+
+@nose.tools.with_setup(common.create_singleversion_table, common.cleanup)
+def test_scan_empty_table():
+    """
+    scan empty table table
+    """
+    table_name = 'test'
+    scan_file = 'scan.out'
+    common.scan_table(table_name=table_name, file_path=scan_file, allversion=True)
+    nose.tools.assert_true(common.file_is_empty(scan_file))
+
+
 @nose.tools.with_setup(common.create_singleversion_table, common.cleanup)
 def test_rowreader_lowlevelscan():
     """

@@ -289,10 +289,8 @@ public:
         uint64_t diff = EnvDfs()->NowMicros() - t;
         dfs_sync_delay_counter.Add(diff);
         if (diff > 2000000) {
-            char buf[128];
-            get_time_str(buf, 128);
-            Log("[env_dfs] %s dfs sync for %s use %.2fms\n",
-                buf, filename_.c_str(), diff / 1000.0);
+            Log("[env_dfs] dfs sync for %s use %.2fms\n",
+                filename_.c_str(), diff / 1000.0);
         }
         return s;
     }

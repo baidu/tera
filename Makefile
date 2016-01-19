@@ -14,7 +14,8 @@ INCPATH += -I./src -I./include -I./src/leveldb/include -I./src/leveldb \
 		   -I./src/sdk/java/native-src $(DEPS_INCPATH)
 CFLAGS += $(OPT) $(SHARED_CFLAGS) $(INCPATH)
 CXXFLAGS += $(OPT) $(SHARED_CFLAGS) $(INCPATH)
-LDFLAGS += -rdynamic $(DEPS_LDPATH) $(DEPS_LDFLAGS) -lpthread -lrt -lz -ldl
+LDFLAGS += -rdynamic $(DEPS_LDPATH) $(DEPS_LDFLAGS) -lpthread -lrt -lz -ldl \
+           -lreadline -lncurses
 
 PROTO_FILES := $(wildcard src/proto/*.proto)
 PROTO_OUT_CC := $(PROTO_FILES:.proto=.pb.cc)
@@ -24,11 +25,12 @@ MASTER_SRC := $(wildcard src/master/*.cc)
 TABLETNODE_SRC := $(wildcard src/tabletnode/*.cc)
 IO_SRC := $(wildcard src/io/*.cc)
 SDK_SRC := $(wildcard src/sdk/*.cc)
+HTTP_SRC := $(wildcard src/sdk/http/*.cc)
 PROTO_SRC := $(filter-out %.pb.cc, $(wildcard src/proto/*.cc)) $(PROTO_OUT_CC)
 JNI_TERA_SRC := $(wildcard src/sdk/java/native-src/*.cc)
 VERSION_SRC := src/version.cc
 OTHER_SRC := $(wildcard src/zk/*.cc) $(wildcard src/utils/*.cc) $(VERSION_SRC) \
-	     src/tera_flags.cc
+             src/tera_flags.cc
 COMMON_SRC := $(wildcard src/common/base/*.cc) $(wildcard src/common/net/*.cc) \
               $(wildcard src/common/file/*.cc) $(wildcard src/common/file/recordio/*.cc)
 SERVER_SRC := src/tera_main.cc src/tera_entry.cc
@@ -54,6 +56,7 @@ CLIENT_OBJ := $(CLIENT_SRC:.cc=.o)
 TERA_C_OBJ := $(TERA_C_SRC:.cc=.o)
 MONITOR_OBJ := $(MONITOR_SRC:.cc=.o)
 MARK_OBJ := $(MARK_SRC:.cc=.o)
+HTTP_OBJ := $(HTTP_SRC:.cc=.o)
 TEST_OBJ := $(TEST_SRC:.cc=.o)
 ALL_OBJ := $(MASTER_OBJ) $(TABLETNODE_OBJ) $(IO_OBJ) $(SDK_OBJ) $(PROTO_OBJ) \
            $(JNI_TERA_OBJ) $(OTHER_OBJ) $(COMMON_OBJ) $(SERVER_OBJ) $(CLIENT_OBJ) \
@@ -90,7 +93,7 @@ check: $(TESTS)
 clean:
 	rm -rf $(ALL_OBJ) $(PROTO_OUT_CC) $(PROTO_OUT_H) $(TEST_OUTPUT)
 	$(MAKE) clean -C src/leveldb
-	rm -rf $(PROGRAM) $(LIBRARY) $(TERA_C_SO) $(JNILIBRARY) $(BENCHMARK) $(TESTS)
+	rm -rf $(PROGRAM) $(LIBRARY) $(TERA_C_SO) $(JNILIBRARY) $(BENCHMARK) $(TESTS) terahttp
 
 cleanall:
 	$(MAKE) clean
@@ -116,6 +119,9 @@ teramo: $(MONITOR_OBJ) $(LIBRARY)
 
 tera_mark: $(MARK_OBJ) $(LIBRARY) $(LEVELDB_LIB)
 	$(CXX) -o $@ $(MARK_OBJ) $(LIBRARY) $(LEVELDB_LIB) $(LDFLAGS)
+
+terahttp: $(HTTP_OBJ) $(PROTO_OBJ) $(LIBRARY)
+	$(CXX) -o $@ $(HTTP_OBJ) $(PROTO_OBJ) $(LIBRARY) $(LDFLAGS)
 
 libjni_tera.so: $(JNI_TERA_OBJ) $(LIBRARY)
 	$(CXX) -shared $(JNI_TERA_OBJ) -Xlinker "-(" $(LIBRARY) $(LDFLAGS) -Xlinker "-)" -o $@
