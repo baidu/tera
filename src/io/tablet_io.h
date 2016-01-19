@@ -224,6 +224,15 @@ private:
 
     bool ParseRowKey(const std::string& tera_key, std::string* row_key);
 
+    bool ScanWithFilter(const ScanOptions& scan_options);
+    bool IsCompleteRow(const std::list<KeyValuePair>& row_buf,
+                       leveldb::Iterator* it);
+    bool ShouldFilterRow(const ScanOptions& scan_options,
+                           const std::list<KeyValuePair>& row_buf,
+                           leveldb::Iterator* it);
+    void GotoNextRow(const std::list<KeyValuePair>& row_buf,
+                     leveldb::Iterator* it,
+                     KeyValuePair* next);
 private:
     mutable Mutex m_mutex;
     TabletWriter* m_async_writer;
