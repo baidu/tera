@@ -63,9 +63,6 @@ class ScanDescriptor(object):
     def IsAsync(self):
         return lib.tera_scan_descriptor_is_async(self.desc)
 
-    def SetFilterString(self, filter_string):
-        lib.tera_scan_descriptor_set_filter_string(self.desc, filter_string)
-
     def SetSnapshot(self, sid):
         lib.tera_scan_descriptor_set_snapshot(self.desc, sid)
 
