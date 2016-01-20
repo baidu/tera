@@ -998,18 +998,10 @@ void MasterImpl::UpdateTable(const UpdateTableRequest* request,
         return;
     }
 
-    table->SetSchema(request->schema());
-    const LocalityGroupSchema& lg0 = request->schema().locality_groups(0);
-    LOG(INFO) << "New table schema is updated: " << request->table_name()
-        << ", store_medium: " << lg0.store_type()
-        << ", compress: " << lg0.compress_type()
-        << ", raw_key: " << request->schema().raw_key()
-        << ", schema: " << request->schema().ShortDebugString();
-
     // write meta tablet
     WriteClosure* closure =
         NewClosure(this, &MasterImpl::UpdateTableRecordForUpdateCallback, table,
-                   FLAGS_tera_master_meta_retry_times, response, done);
+                   FLAGS_tera_master_meta_retry_times, &request->schema(), response, done);
     BatchWriteMetaTableAsync(boost::bind(&Table::ToMetaTableKeyValue, table, _1, _2),
                              false, closure);
     return;
@@ -4356,6 +4348,7 @@ void MasterImpl::UpdateTableRecordForEnableCallback(TablePtr table, int32_t retr
 }
 
 void MasterImpl::UpdateTableRecordForUpdateCallback(TablePtr table, int32_t retry_times,
+                                                    const TableSchema* schema,
                                                     UpdateTableResponse* rpc_response,
                                                     google::protobuf::Closure* rpc_done,
                                                     WriteTabletRequest* request,
@@ -4384,13 +4377,15 @@ void MasterImpl::UpdateTableRecordForUpdateCallback(TablePtr table, int32_t retr
         } else {
             WriteClosure* done =
                 NewClosure(this, &MasterImpl::UpdateTableRecordForUpdateCallback,
-                           table, retry_times - 1, rpc_response, rpc_done);
+                           table, retry_times - 1, schema, rpc_response, rpc_done);
             SuspendMetaOperation(boost::bind(&Table::ToMetaTableKeyValue, table, _1, _2),
                                  false, done);
         }
         return;
     }
-    LOG(INFO) << "update meta table success, " << table;
+
+    table->SetSchema(*schema);
+    LOG(INFO) << "[update] new table schema is updated: " << schema->ShortDebugString();
     rpc_response->set_status(kMasterOk);
     rpc_done->Run();
 }
