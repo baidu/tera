@@ -2609,9 +2609,9 @@ int CliMain(int argc, char* argv[]) {
     for (size_t i = 0; i < conf_files.size(); i++) {
         int ret;
         if (i != 0) {
-            printf ("================================================\n");
+            // printf ("================================================\n");
         }
-        printf ("Process tera %lu, %s\n", i, conf_files[i].c_str());
+        // printf ("Process tera %lu, %s\n", i, conf_files[i].c_str());
         ret = ProcessTera(argc, argv, conf_files[i].c_str());
         if (ret != 0 && first_errcode == 0) {
             first_errcode = ret;
