@@ -296,4 +296,14 @@ bool IsTableFileInherited(uint64_t tablet, uint64_t number) {
   uint64_t file_tablet = (number >> 32 & 0x7FFFFFFF);
   return (tablet == file_tablet) ? false : true;
 }
+
+std::string FileNumberDebugString(uint64_t full_number) {
+  uint64_t tablet = (full_number >> 32 & 0x7FFFFFFF);
+  uint64_t file = full_number & 0xffffffff;
+  char buf[32];
+  snprintf(buf, sizeof(buf), "[%08llu %08llu.sst]",
+           static_cast<unsigned long long>(tablet),
+           static_cast<unsigned long long>(file));
+  return std::string(buf, 23);
+}
 }  // namespace leveldb

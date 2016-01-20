@@ -61,6 +61,7 @@ message TabletCounter {
     optional uint32 write_rows = 8;
     optional uint32 write_kvs = 9;
     optional uint32 write_size = 10;
+    optional double write_workload = 11 [default = 0.0];
 
     optional bool is_on_busy = 15 [default = false];
 }

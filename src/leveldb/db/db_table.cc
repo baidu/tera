@@ -358,12 +358,28 @@ Status DBTable::Delete(const WriteOptions& options, const Slice& key) {
 bool DBTable::BusyWrite() {
     MutexLock l(&mutex_);
     for (std::set<uint32_t>::iterator it = options_.exist_lg_list->begin();
-            it != options_.exist_lg_list->end(); ++it) {
+         it != options_.exist_lg_list->end(); ++it) {
         if (lg_list_[*it]->BusyWrite()) {
             return true;
         }
     }
     return false;
+}
+
+void DBTable::Workload(double* write_workload) {
+    if (write_workload == NULL) {
+        return;
+    }
+    MutexLock l(&mutex_);
+    double ww = -1;
+    *write_workload = -1;
+    for (std::set<uint32_t>::iterator it = options_.exist_lg_list->begin();
+         it != options_.exist_lg_list->end(); ++it) {
+        lg_list_[*it]->Workload(&ww);
+        if (ww > *write_workload) {
+            *write_workload = ww;
+        }
+    }
 }
 
 Status DBTable::Write(const WriteOptions& options, WriteBatch* my_batch) {

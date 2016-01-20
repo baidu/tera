@@ -1,0 +1,23 @@
+import "sofa/pbrpc/rpc_option.proto";
+
+package tera.http;
+
+option cc_generic_services = true;
+
+message GetRequest {
+    optional string table_type = 1;
+    optional string tablename = 2;
+    optional string rowkey = 3;
+    optional string cf = 5;
+    optional string qu = 6;
+}
+
+message GetResponse {
+    optional bool status = 1; // true | false
+    optional string reason = 2;
+    optional string value = 3;
+}
+
+service HttpProxy {
+    rpc Get(GetRequest) returns(GetResponse);
+}

@@ -56,7 +56,9 @@ bool MasterEntry::Run() {
     static int64_t timer_ticks = 0;
     ++timer_ticks;
 
-    LOG(INFO) << "[ThreadPool schd/task/cnt] " << m_master_impl->ProfilingLog();
+    if (timer_ticks % 10 == 0) {
+        LOG(INFO) << "[ThreadPool schd/task/cnt] " << m_master_impl->ProfilingLog();
+    }
 
     ThisThread::Sleep(1000);
     return true;

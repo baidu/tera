@@ -32,6 +32,8 @@ class CONF:
         self.SCHEMA = 'table_schema'
         self.g_speed_limit = 0
         self.g_datasize = 0
+        self.g_web_report = True
+        self.g_web_report_type = ''
 
         self.TS_NUMBER = 'ts_number'
 
@@ -85,6 +87,7 @@ class Stat:
         for item in self.STAT_KEYS:
             self.g_stat.update({item: 0})
 
+
 stat = Stat()
 
 
@@ -103,13 +106,15 @@ class Common:
         self.EMAIL_BLOCK_TITLE = ''
         self.SENDMAIL = '/usr/sbin/sendmail'
         self.MAIL_PATH = '../tmp/mail_report'
-        self.MAIL_HEADER = 'Sender: leiliyuan <leiliyuan@baidu.com>\nTo: leiliyuan <leiliyuan@baidu.com>\n\
+        self.WEB_PATH = '../tmp/web_report'
+        self.MAIL_HEADER = 'Sender: tera_eva <tera_eva@baidu.com>\nTo: tera_dev <tera_dev@baidu.com>\n\
 Content-type: text/html\nSubject: EVA report\n\n'
 
         self.g_query_thread = None
         self.g_query_event = None
         self.g_report_thread = None
         self.g_exit = False
+        self.g_force_exit = False
         self.g_logger = None
 
         self.g_next_query_time = 0
