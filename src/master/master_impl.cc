@@ -98,7 +98,7 @@ DECLARE_string(tera_master_gc_strategy);
 
 DECLARE_string(flagfile);
 DECLARE_bool(tera_master_online_schema_update_enabled);
-DECLARE_int32(tera_master_schema_update_poll_period);
+DECLARE_int32(tera_master_schema_update_retry_period);
 DECLARE_int32(tera_master_schema_update_retry_times);
 
 namespace tera {
@@ -3276,6 +3276,7 @@ void MasterImpl::UpdateSchemaCallback(std::string table_name,
                                       std::string tablet_path,
                                       std::string start_key,
                                       std::string end_key,
+                                      int32_t retry_times,
                                       UpdateRequest* request,
                                       UpdateResponse* response,
                                       bool rpc_failed, int status_code) {
@@ -3300,6 +3301,18 @@ void MasterImpl::UpdateSchemaCallback(std::string table_name,
         } else {
             LOG(WARNING) << "[update] fail to update schema: " << StatusCodeToString(status)
                 << ": " << tablet;
+        }
+        if (retry_times > FLAGS_tera_master_schema_update_retry_times) {
+            LOG(ERROR) << "[update] retry " << retry_times << " times, kick "
+                << tablet->GetServerAddr();
+            TryKickTabletNode(tablet->GetServerAddr());
+        } else {
+            UpdateClosure* done =
+                NewClosure(this, &MasterImpl::UpdateSchemaCallback, tablet->GetTableName(),
+                           tablet->GetPath(), tablet->GetKeyStart(), tablet->GetKeyEnd(), retry_times + 1);
+            ThreadPool::Task task =
+                boost::bind(&MasterImpl::NoticeTabletNodeSchemaUpdatedAsync, this, tablet, done);
+            m_thread_pool->DelayTask(FLAGS_tera_master_schema_update_retry_period * 1000, task);
         }
         return;
     }
@@ -3335,9 +3348,10 @@ void MasterImpl::SetTableAndTabletsSchemaIsSyncing(TablePtr table, bool flag) {
 }
 
 void MasterImpl::NoticeTabletNodeSchemaUpdated(TabletPtr tablet) {
+    int32_t retry_times = 0;
     UpdateClosure* done =
-        NewClosure(this, &MasterImpl::UpdateSchemaCallback,
-                   tablet->GetTableName(), tablet->GetPath(), tablet->GetKeyStart(), tablet->GetKeyEnd());
+        NewClosure(this, &MasterImpl::UpdateSchemaCallback, tablet->GetTableName(),
+                   tablet->GetPath(), tablet->GetKeyStart(), tablet->GetKeyEnd(), retry_times);
     NoticeTabletNodeSchemaUpdatedAsync(tablet, done);
 }
 
@@ -4495,27 +4509,19 @@ void MasterImpl::UpdateTableRecordForUpdateCallback(TablePtr table, int32_t retr
 }
 
 void MasterImpl::PollUntilSchemaSynced(TablePtr table, int32_t retry_times,
-                                        UpdateTableResponse* rpc_response,
-                                        google::protobuf::Closure* rpc_done) {
+                                       UpdateTableResponse* rpc_response,
+                                       google::protobuf::Closure* rpc_done) {
     std::vector<TabletPtr> tablet_list;
     table->GetTablet(&tablet_list);
     std::vector<TabletPtr>::iterator it;
     for (it = tablet_list.begin(); it != tablet_list.end(); ++it) {
         if ((*it)->GetSchemaIsSyncing()) { // not synced yet
-            if (retry_times >= FLAGS_tera_master_schema_update_retry_times) {
-                LOG(ERROR) << "[update] failed to sync schema to all tablets"
-                    << ", last retry on :" << (*it);
-                SetTableAndTabletsSchemaIsSyncing(table, false); // failed, so rollback
-                rpc_response->set_status(kServerError);
-                rpc_done->Run();
-                return;
-            }
             LOG(INFO) << "[update] this tablet schema not synced yet:" << (*it);
             ThreadPool::Task task =
                 boost::bind(&MasterImpl::PollUntilSchemaSynced, this,
                             table, retry_times + 1, rpc_response, rpc_done);
-            m_thread_pool->DelayTask(FLAGS_tera_master_schema_update_poll_period * 1000, task);
-            NoticeTabletNodeSchemaUpdated(*it);
+            m_thread_pool->DelayTask(FLAGS_tera_master_schema_update_retry_period * 1000, task);
+            //NoticeTabletNodeSchemaUpdated(*it);
             return;
         }
     }
@@ -5078,8 +5084,7 @@ void MasterImpl::ProcessReadyTablet(TabletPtr tablet) {
         return;
     }
 
-    if (FLAGS_tera_master_online_schema_update_enabled
-        && !tablet->GetSchemaIsSyncing()) {
+    if (FLAGS_tera_master_online_schema_update_enabled) {
         LOG(INFO) << "[update] tablet ready but schema not synced: " << tablet;
         tablet->SetSchemaIsSyncing(true);
         NoticeTabletNodeSchemaUpdated(tablet);

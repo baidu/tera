@@ -457,6 +457,7 @@ private:
                               std::string tablet_path,
                               std::string start_key,
                               std::string end_key,
+                              int32_t retry_times,
                               UpdateRequest* request,
                               UpdateResponse* response,
                               bool rpc_failed, int status_code);
