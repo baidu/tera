@@ -402,6 +402,7 @@ private:
                                             bool failed, int error_code);
 
     void UpdateTableRecordForUpdateCallback(TablePtr table, int32_t retry_times,
+                                            const TableSchema* schema,
                                             UpdateTableResponse* rpc_response,
                                             google::protobuf::Closure* rpc_done,
                                             WriteTabletRequest* request,
