@@ -106,6 +106,9 @@ bool tera_table_getint64(tera_table_t* table,
     std::string key_str(row_key, keylen);
     std::string qu_str(qualifier, qulen);
     bool result = table->rep->Get(key_str, family, qu_str, value, &err, snapshot_id);
+    if (SaveError(errptr, err)) {
+        return false;
+    }
     return result;
 }
 
