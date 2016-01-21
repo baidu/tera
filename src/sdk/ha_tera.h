@@ -200,6 +200,8 @@ public:
     bool Rename(const std::string& old_table_name,
                 const std::string& new_table_name,
                 ErrorCode* err);
+    // 获取指定的集群
+    Client* GetClusterClient(size_t i);
 private:
     HAClient(const std::vector<Client*> &clients) {
         _clients = clients;

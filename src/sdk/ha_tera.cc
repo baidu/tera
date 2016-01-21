@@ -1330,6 +1330,13 @@ bool HAClient::Rollback(const std::string& name, uint64_t snapshot,
     }
 }
 
+// command分为safemode, tablet, meta, reload config
+// arg_list: safemode的参数可以是enter,leave, get
+// tablet命令的参数可以:move, split, merge
+// meta的命令参数:backup
+// reload config无参数
+// 所有这些命令都操作需要操作所有的tera集群
+// bool_result和str_result用第一个成功返回的结果
 bool HAClient::CmdCtrl(const std::string& command,
                        const std::vector<std::string>& arg_list,
                        bool* bool_result,
@@ -1337,18 +1344,29 @@ bool HAClient::CmdCtrl(const std::string& command,
                        ErrorCode* err) {
     bool ok = false;
     size_t failed_count = 0;
+    bool t_bool_result;
+    std::string t_str_result;
+    bool has_set = false;
     for (size_t i = 0; i < _clients.size(); i++) {
-        ok = _clients[i]->CmdCtrl(command, arg_list, bool_result, str_result, err);
+        ok = _clients[i]->CmdCtrl(command, arg_list, &t_bool_result, &t_str_result, err);
         if (!ok) {
             LOG(WARNING) << "CmdCtrl failed! " << err->GetReason() << " at tera:" << i;
             failed_count++;
         } else {
-            // 对于读操作，只要一个成功就行
-            break;
+            if (!has_set) {
+                has_set = true;
+                *bool_result = t_bool_result;
+                *str_result = t_str_result;
+            }
         }
     }
 
-    return (failed_count >= _clients.size()) ? false : true;
+    if (failed_count >= _clients.size()) {
+        return false;
+    } else {
+        err->SetFailed(ErrorCode::kOK, "success");
+        return true;
+    }
 }
 
 bool HAClient::Rename(const std::string& old_table_name,
@@ -1380,6 +1398,10 @@ bool HAClient::Rename(const std::string& old_table_name,
         err->SetFailed(ErrorCode::kOK, "success");
         return true;
     }
+}
+
+Client* HAClient::GetClusterClient(size_t i) {
+    return (i < _clients.size()) ? _clients[i] : NULL;
 }
 }
 
