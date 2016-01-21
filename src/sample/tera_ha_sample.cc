@@ -228,7 +228,7 @@ int ShowBigTable(tera::HAClient* client) {
         return 1;
     }
     // Write
-    // ModifyTable(table);
+    ModifyTable(table);
     // Scan
     //ScanTable(table);
     // Read

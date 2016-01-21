@@ -1,6 +1,6 @@
 include ../../depends.mk
 
-OPT ?= -g -Wall -Werror        # (B) Debug mode, w/ full line-level debugging symbols
+OPT ?= -g2 -Wall -Werror        # (B) Debug mode, w/ full line-level debugging symbols
 
 CC = cc
 CXX = g++
