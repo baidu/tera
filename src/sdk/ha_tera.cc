@@ -1,9 +1,11 @@
 #include "mutate_impl.h"
 #include "read_impl.h"
 #include "ha_tera.h"
+#include "utils/timer.h"
 
 DECLARE_bool(tera_sdk_ha_ddl_enable);
 DECLARE_int32(tera_sdk_ha_timestamp_diff);
+DECLARE_bool(tera_sdk_ha_get_random_mode);
 
 namespace tera {
 
@@ -405,16 +407,22 @@ void HATable::LGet(const std::vector<RowReader*>& row_readers) {
 void HATable::Get(RowReader* row_reader) {
     size_t failed_count = 0;
 
+    std::vector<Table*> table_set = _tables;
+    // 如果是随机Get，则每次对tables进行排序
+    if (FLAGS_tera_sdk_ha_get_random_mode) {
+        HATable::ShuffleArray(table_set);
+    }
+
     // 如果是异步操作，则设置回调的检查器
     if (row_reader->IsAsync()) {
-        row_reader->SetCallChecker(new GetCallbackChecker(_tables, row_reader));
-        if (_tables.size() > 0) {
-            _tables[0]->Get(row_reader);
+        row_reader->SetCallChecker(new GetCallbackChecker(table_set, row_reader));
+        if (table_set.size() > 0) {
+            table_set[0]->Get(row_reader);
         }
     } else {
         // 同步Get
-        for (size_t i = 0; i < _tables.size(); i++) {
-            _tables[i]->Get(row_reader);
+        for (size_t i = 0; i < table_set.size(); i++) {
+            table_set[i]->Get(row_reader);
             if (row_reader->GetError().GetType() != ErrorCode::kOK) {
                 LOG(WARNING) << "Get failed! " << row_reader->GetError().GetReason()
                              << " at tera:" << i;
@@ -422,7 +430,7 @@ void HATable::Get(RowReader* row_reader) {
             } else {
                 break;
             }
-            if (failed_count < _tables.size()) {
+            if (failed_count < table_set.size()) {
                 row_reader->Reset();
             }
         }
@@ -431,6 +439,12 @@ void HATable::Get(RowReader* row_reader) {
 
 // 可能有一批数据来自集群1，另一批数据来自集群2
 void HATable::Get(const std::vector<RowReader*>& row_readers) {
+
+    std::vector<Table*> table_set = _tables;
+    // 如果是随机Get，则每次对tables进行排序
+    if (FLAGS_tera_sdk_ha_get_random_mode) {
+        HATable::ShuffleArray(table_set);
+    }
 
     std::vector<RowReader*> async_readers;
     std::vector<RowReader*> sync_readers;
@@ -451,12 +465,12 @@ void HATable::Get(const std::vector<RowReader*>& row_readers) {
     std::vector<size_t> failed_count_list;
     failed_count_list.resize(row_readers.size());
 
-    for (size_t i = 0; i < _tables.size(); i++) {
+    for (size_t i = 0; i < table_set.size(); i++) {
         if (sync_readers.size() <= 0) {
             continue;
         }
         std::vector<RowReader*> need_read = sync_readers;
-        _tables[i]->Get(need_read);
+        table_set[i]->Get(need_read);
         sync_readers.clear();
         for (size_t j = 0; j < need_read.size(); j++) {
             RowReader* row_reader = need_read[j];
@@ -468,7 +482,7 @@ void HATable::Get(const std::vector<RowReader*>& row_readers) {
                 failed_count_list[j] += 1;
 
                 // 如果所有集群都失败了，则认为失败
-                if (failed_count_list[j] < _tables.size()) {
+                if (failed_count_list[j] < table_set.size()) {
                     // 重置除用户数据外的数据，以用于后面的写
                     row_reader->Reset();
                     sync_readers.push_back(row_reader);
@@ -481,9 +495,16 @@ void HATable::Get(const std::vector<RowReader*>& row_readers) {
 bool HATable::Get(const std::string& row_key, const std::string& family,
                   const std::string& qualifier, std::string* value,
                   ErrorCode* err, uint64_t snapshot_id) {
+
+    std::vector<Table*> table_set = _tables;
+    // 如果是随机Get，则每次对tables进行排序
+    if (FLAGS_tera_sdk_ha_get_random_mode) {
+        HATable::ShuffleArray(table_set);
+    }
+
     size_t failed_count = 0;
-    for (size_t i = 0; i < _tables.size(); i++) {
-        bool ok = _tables[i]->Get(row_key, family, qualifier, value, err, snapshot_id);
+    for (size_t i = 0; i < table_set.size(); i++) {
+        bool ok = table_set[i]->Get(row_key, family, qualifier, value, err, snapshot_id);
         if (!ok) {
             LOG(WARNING) << "Get failed! " << err->GetReason() << " at tera:" << i;
             failed_count++;
@@ -491,15 +512,22 @@ bool HATable::Get(const std::string& row_key, const std::string& family,
             break;
         }
     }
-    return (failed_count>=_tables.size()) ? false : true;
+    return (failed_count>=table_set.size()) ? false : true;
 }
 
 bool HATable::Get(const std::string& row_key, const std::string& family,
                   const std::string& qualifier, int64_t* value,
                   ErrorCode* err, uint64_t snapshot_id) {
+
+    std::vector<Table*> table_set = _tables;
+    // 如果是随机Get，则每次对tables进行排序
+    if (FLAGS_tera_sdk_ha_get_random_mode) {
+        HATable::ShuffleArray(table_set);
+    }
+
     size_t failed_count = 0;
-    for (size_t i = 0; i < _tables.size(); i++) {
-        bool ok = _tables[i]->Get(row_key, family, qualifier, value, err, snapshot_id);
+    for (size_t i = 0; i < table_set.size(); i++) {
+        bool ok = table_set[i]->Get(row_key, family, qualifier, value, err, snapshot_id);
         if (!ok) {
             LOG(WARNING) << "Get failed! " << err->GetReason() << " at tera:" << i;
             failed_count++;
@@ -507,7 +535,7 @@ bool HATable::Get(const std::string& row_key, const std::string& family,
             break;
         }
     }
-    return (failed_count>=_tables.size()) ? false : true;
+    return (failed_count>=table_set.size()) ? false : true;
 }
 
 bool HATable::IsPutFinished() {
@@ -653,6 +681,18 @@ void HATable::MergeResult(const std::vector<RowResult>& results, RowResult& res,
         KeyValuePair* kv = res.add_key_values();
         *kv = results[candidate_index].key_values(results_pos[candidate_index]);
         results_pos[candidate_index] += 1;
+    }
+}
+void HATable::ShuffleArray(std::vector<Table*>& table_set) {
+    int64_t seed = get_micros();
+    srandom(seed);
+    for (size_t i = table_set.size()-1; i > 0; i--) {
+        int rnd = random()%(i+1);
+
+        // swap
+        Table* t = table_set[rnd];
+        table_set[rnd] = table_set[i];
+        table_set[i] = t;
     }
 }
 

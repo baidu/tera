@@ -23,6 +23,10 @@ RowMutationImpl::RowMutationImpl(TableImpl* table, const std::string& row_key)
 }
 
 RowMutationImpl::~RowMutationImpl() {
+    if (_cc != NULL) {
+        delete _cc;
+        _cc = NULL;
+    }
 }
 
 /// 重置，复用前必须调用

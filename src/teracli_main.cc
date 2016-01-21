@@ -69,6 +69,8 @@ volatile int32_t g_cur_batch_num = 0;
 
 using namespace tera;
 
+std::vector<Client*> g_clients;
+
 void Usage(const std::string& prg_name) {
     std::cout << "\nSYNOPSIS\n";
     std::cout << "       " << prg_name << "  OPERATION  [OPTION...] \n\n";
@@ -2586,33 +2588,16 @@ int ExecuteCommand(Client* client, int argc, char* argv[]) {
     return ret;
 }
 
-int ProcessTera(int argc, char** argv, const char* tera_conf) {
-    ErrorCode error_code;
-    Client* client = Client::NewClient(tera_conf, NULL);
-
-    if (client == NULL) {
-        LOG(ERROR) << "client instance not exist";
-        return -1;
-    }
-
-    return ExecuteCommand(client, argc, argv);
-}
-
 int CliMain(int argc, char* argv[]) {
     int first_errcode;
     first_errcode = 0;
-    std::vector<std::string> conf_files;
-    if (FLAGS_other_flagfiles != "") {
-        SplitString(FLAGS_other_flagfiles, ":", &conf_files);
-    }
-    conf_files.insert(conf_files.begin(), FLAGS_flagfile);
-    for (size_t i = 0; i < conf_files.size(); i++) {
+    for (size_t i = 0; i < g_clients.size(); i++) {
         int ret;
         if (i != 0) {
             // printf ("================================================\n");
         }
         // printf ("Process tera %lu, %s\n", i, conf_files[i].c_str());
-        ret = ProcessTera(argc, argv, conf_files[i].c_str());
+        ret = ExecuteCommand(g_clients[i], argc, argv);
         if (ret != 0 && first_errcode == 0) {
             first_errcode = ret;
         }
@@ -2621,10 +2606,52 @@ int CliMain(int argc, char* argv[]) {
     return first_errcode;
 }
 
+int InitClient() {
+    std::vector<std::string> conf_files;
+    if (FLAGS_other_flagfiles != "") {
+        SplitString(FLAGS_other_flagfiles, ":", &conf_files);
+    }
+    conf_files.insert(conf_files.begin(), FLAGS_flagfile);
+    for (size_t i = 0; i < conf_files.size(); i++) {
+        ErrorCode error_code;
+        Client* client = Client::NewClient(conf_files[i], &error_code);
+        if (client == NULL) {
+            LOG(ERROR) << "client instance not exist, reason:" << error_code.GetReason();
+            break;
+        } else {
+            g_clients.push_back(client);
+        }
+    }
+
+    if (g_clients.size() < conf_files.size()) {
+        for (size_t i = 0; i <= g_clients.size(); i++) {
+            delete g_clients[i];
+        }
+        g_clients.clear();
+        return -1;
+    } else {
+        return 0;
+    }
+}
+
+void DeInitClient() {
+    for (size_t i = 0; i < g_clients.size(); i++) {
+        delete g_clients[i];
+    }
+    g_clients.clear();
+}
+
 int main(int argc, char* argv[]) {
     ::google::ParseCommandLineFlags(&argc, &argv, true);
 
     int ret  = 0;
+
+    ret = InitClient();
+    if (ret < 0) {
+        LOG(ERROR) << "init tera client failed!";
+        return -1;
+    }
+
     if (argc == 1) {
         char* line = NULL;
         while ((line = readline("tera> ")) != NULL) {
@@ -2654,6 +2681,7 @@ int main(int argc, char* argv[]) {
         ret = CliMain(argc, argv);
     }
 
+    DeInitClient();
     return ret;
 }
 

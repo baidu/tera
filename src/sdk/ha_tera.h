@@ -116,6 +116,7 @@ public:
     // 获取指定的集群
     Table* GetClusterHandle(size_t i);
     static void MergeResult(const std::vector<RowResult>& results, RowResult& res, uint32_t max_size);
+    static void ShuffleArray(std::vector<Table*>& table_set);
 private:
 
     HATable(const HATable&);
