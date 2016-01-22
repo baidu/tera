@@ -54,6 +54,7 @@ DEFINE_string(rollback_name, "", "rollback operation's name");
 
 DEFINE_int32(lg, -1, "locality group number.");
 DEFINE_int32(concurrency, 1, "concurrency for compact table.");
+DEFINE_int64(timestamp, -1, "timestamp.");
 
 volatile int32_t g_start_time = 0;
 volatile int32_t g_end_time = 0;
@@ -772,17 +773,29 @@ int32_t DeleteOp(Client* client, int32_t argc, char** argv, ErrorCode* err) {
         std::string input(argv[4]);
         if (input.find(":", 0) == std::string::npos) {
             // delete a family
-            mutation->DeleteFamily(input);
+            if (FLAGS_timestamp == -1) {
+                mutation->DeleteFamily(input);
+            } else {
+                mutation->DeleteFamily(input, FLAGS_timestamp);
+            }
         } else {
             std::string family;
             std::string qualifier;
             ParseCfQualifier(input, &family, &qualifier);
             if (op == "delete") {
                 // delete a column (all versions)
-                mutation->DeleteColumns(family, qualifier);
+                if (FLAGS_timestamp == -1) {
+                    mutation->DeleteColumns(family, qualifier);
+                } else {
+                    mutation->DeleteColumns(family, qualifier, FLAGS_timestamp);
+                }
             } else if (op == "delete1v") {
                 // delete the newest version
-                mutation->DeleteColumn(family, qualifier);
+                if (FLAGS_timestamp == -1) {
+                    mutation->DeleteColumn(family, qualifier);
+                } else {
+                    mutation->DeleteColumn(family, qualifier, FLAGS_timestamp);
+                }
             }
         }
     } else {
