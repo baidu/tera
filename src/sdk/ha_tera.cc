@@ -1,7 +1,8 @@
-#include "mutate_impl.h"
-#include "read_impl.h"
-#include "ha_tera.h"
+#include "sdk/mutate_impl.h"
+#include "sdk/read_impl.h"
+#include "sdk/ha_tera.h"
 #include "utils/timer.h"
+#include "sdk/callback_check.h"
 
 DECLARE_bool(tera_sdk_ha_ddl_enable);
 DECLARE_int32(tera_sdk_ha_timestamp_diff);
@@ -11,7 +12,7 @@ namespace tera {
 
 class PutCallbackChecker : public CallChecker {
 public:
-    PutCallbackChecker(const std::vector<Table*> &clusters, RowMutation* row_mutate)
+    PutCallbackChecker(const std::vector<Table*> &clusters, RowMutationImpl* row_mutate)
         : _has_call(false),
           _cluster_index(0),
           _clusters(clusters),
@@ -55,13 +56,13 @@ private:
     bool _has_call;
     size_t _cluster_index;
     std::vector<Table*> _clusters;
-    RowMutation* _row_mutate;
+    RowMutationImpl* _row_mutate;
     uint32_t _failed_count;
 };
 
 class GetCallbackChecker : public CallChecker {
 public:
-    GetCallbackChecker(const std::vector<Table*> &clusters, RowReader* row_reader)
+    GetCallbackChecker(const std::vector<Table*> &clusters, RowReaderImpl* row_reader)
         : _has_call(false),
           _cluster_index(0),
           _clusters(clusters),
@@ -93,7 +94,7 @@ private:
     bool _has_call;
     size_t _cluster_index;
     std::vector<Table*> _clusters;
-    RowReader* _row_reader;
+    RowReaderImpl* _row_reader;
 };
 
 class LGetCallbackChecker : public CallChecker {
@@ -152,10 +153,11 @@ RowReader* HATable::NewRowReader(const std::string& row_key) {
 void HATable::ApplyMutation(RowMutation* row_mu) {
     size_t failed_count = 0;
 
+    RowMutationImpl* row_mu_impl = dynamic_cast<RowMutationImpl*>(row_mu);
     // 如果是异步操作，则设置回调的检查器
     if (row_mu->IsAsync()) {
         if (_tables.size() > 0) {
-            row_mu->SetCallChecker(new PutCallbackChecker(_tables, row_mu));
+            row_mu_impl->SetCallChecker(new PutCallbackChecker(_tables, row_mu_impl));
             _tables[0]->ApplyMutation(row_mu);
         }
     } else {
@@ -170,7 +172,7 @@ void HATable::ApplyMutation(RowMutation* row_mu) {
             // 如果所有集群都失败了，则认为失败
             if (failed_count < _tables.size()) {
                 // 重置除用户数据外的数据，以用于后面的写
-                row_mu->Reset();
+                row_mu_impl->Reset();
             }
         }
     }
@@ -187,13 +189,6 @@ void HATable::ApplyMutation(const std::vector<RowMutation*>& row_mu_list) {
             async_mu.push_back(row_mu_list[i]);
         } else {
             sync_mu.push_back(row_mu_list[i]);
-        }
-    }
-
-    for (size_t i = 0; i < row_mu_list.size(); i++) {
-        RowMutation* row_mu = row_mu_list[i];
-        if (row_mu->IsAsync()) {
-            row_mu->SetCallChecker(new PutCallbackChecker(_tables, row_mu));
         }
     }
 
@@ -220,7 +215,8 @@ void HATable::ApplyMutation(const std::vector<RowMutation*>& row_mu_list) {
             // 如果所有集群都失败了，则认为失败
             if (failed_count_list[i] < _tables.size()) {
                 // 重置除用户数据外的数据，以用于后面的写
-                row_mu->Reset();
+                RowMutationImpl* row_mu_impl = dynamic_cast<RowMutationImpl*>(row_mu);
+                row_mu_impl->Reset();
             }
         }
     }
@@ -403,7 +399,7 @@ void HATable::LGet(RowReader* row_reader) {
         // 同步Get
         std::vector<RowResult> results;
         for (size_t i = 0; i < _tables.size(); i++) {
-            _tables[i]->Get(row_reader_impl);
+            _tables[i]->Get(row_reader);
             if (row_reader_impl->GetError().GetType() != ErrorCode::kOK) {
                 LOG(WARNING) << "Get failed! " << row_reader_impl->GetError().GetReason()
                              << " at tera:" << i;
@@ -439,10 +435,11 @@ void HATable::Get(RowReader* row_reader) {
         HATable::ShuffleArray(table_set);
     }
 
+    RowReaderImpl* row_reader_impl = dynamic_cast<RowReaderImpl*>(row_reader);
     // 如果是异步操作，则设置回调的检查器
     if (row_reader->IsAsync()) {
         if (table_set.size() > 0) {
-            row_reader->SetCallChecker(new GetCallbackChecker(table_set, row_reader));
+            row_reader_impl->SetCallChecker(new GetCallbackChecker(table_set, row_reader_impl));
             table_set[0]->Get(row_reader);
         }
     } else {
@@ -457,7 +454,7 @@ void HATable::Get(RowReader* row_reader) {
                 break;
             }
             if (failed_count < table_set.size()) {
-                row_reader->Reset();
+                row_reader_impl->Reset();
             }
         }
     }
@@ -514,7 +511,8 @@ void HATable::Get(const std::vector<RowReader*>& row_readers) {
                 // 如果所有集群都失败了，则认为失败
                 if (failed_count_list[j] < table_set.size()) {
                     // 重置除用户数据外的数据，以用于后面的写
-                    row_reader->Reset();
+                    RowReaderImpl* row_reader_impl = dynamic_cast<RowReaderImpl*>(row_reader);
+                    row_reader_impl->Reset();
                     sync_readers.push_back(row_reader);
                 }
             } //fail

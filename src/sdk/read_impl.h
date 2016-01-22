@@ -14,6 +14,7 @@
 #include "sdk/tera.h"
 #include "types.h"
 #include "utils/timer.h"
+#include "sdk/callback_check.h"
 
 namespace tera {
 

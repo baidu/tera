@@ -64,13 +64,6 @@ enum RawKeyType {
 extern const int64_t kLatestTimestamp;
 extern const int64_t kOldestTimestamp;
 
-class CallChecker {
-public:
-    CallChecker() {}
-    virtual ~CallChecker() {}
-    virtual bool NeedCall(ErrorCode::ErrorCodeType code) = 0;
-};
-
 /// ACL
 struct ACL {
     int32_t owner;  ///< 所属用户id
@@ -327,7 +320,6 @@ public:
     virtual const std::string& RowKey() = 0;
 
     virtual void Reset(const std::string& row_key) = 0;
-    virtual void Reset() = 0;
 
     /// 修改指定列
     virtual void Put(const std::string& family, const std::string& qualifier,
@@ -403,8 +395,6 @@ public:
     /// 设置异步回调, 操作会异步返回
     typedef void (*Callback)(RowMutation* param);
     virtual void SetCallBack(Callback callback) = 0;
-    /// 设置回调的检查器
-    virtual void SetCallChecker(CallChecker* cc) = 0;
     // 返回异步回调函数
     virtual Callback GetCallBack() = 0;
     /// 设置用户上下文，可在回调函数中获取
@@ -447,7 +437,6 @@ public:
 
     RowReader();
     virtual ~RowReader();
-    virtual void Reset() = 0;
     /// 返回row key
     virtual const std::string& RowName() = 0;
     /// 设置读取特定版本
@@ -469,8 +458,6 @@ public:
     /// 设置异步回调, 操作会异步返回
     typedef void (*Callback)(RowReader* param);
     virtual void SetCallBack(Callback callback) = 0;
-    /// 设置回调的检查器
-    virtual void SetCallChecker(CallChecker* cc) = 0;
     /// 设置用户上下文，可在回调函数中获取
     virtual void SetContext(void* context) = 0;
     virtual void* GetContext() = 0;

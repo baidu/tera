@@ -5,7 +5,7 @@
 #ifndef HA_TERA_TERA_H_
 #define HA_TERA_TERA_H_
 
-#include "tera.h"
+#include "sdk/tera.h"
 #include "proto/table_meta.pb.h"
 
 namespace tera {
