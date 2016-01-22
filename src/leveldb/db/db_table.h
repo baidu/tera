@@ -50,6 +50,8 @@ public:
     // Is too busy to write.
     virtual bool BusyWrite();
 
+    virtual void Workload(double* write_workload);
+
     // Apply the specified updates to the database.
     // Returns OK on success, non-OK on failure.
     // Note: consider setting options.sync = true.
@@ -129,8 +131,9 @@ public:
     virtual void CompactRange(const Slice* begin, const Slice* end, int lg_no);
 
     // tera-specific
-    virtual bool FindSplitKey(double ratio,
-                              std::string* split_key);
+    virtual bool FindSplitKey(double ratio, std::string* split_key);
+
+    virtual bool FindKeyRange(std::string* smallest_key, std::string* largest_key);
 
     virtual bool MinorCompact();
 

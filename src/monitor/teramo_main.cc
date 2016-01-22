@@ -8,6 +8,7 @@
 #include <stdlib.h>
 
 #include <iostream>
+#include <fstream>
 #include <limits>
 
 #include <gflags/gflags.h>
@@ -222,7 +223,7 @@ int FillResponse(const MonitorRequest& request, MonitorResponse* response) {
     ErrorCode err_code;
     string tablename = FLAGS_tera_master_stat_table_name;
 
-    Client* client = Client::NewClient();
+    Client* client = Client::NewClient(FLAGS_flagfile);
     if (client == NULL) {
         LOG(ERROR) << "client instance not exist";
         response->set_errmsg("system error");
@@ -256,6 +257,7 @@ int FillResponse(const MonitorRequest& request, MonitorResponse* response) {
 }
 
 void InitFlags(int32_t argc, char** argv, const MonitorRequest& request) {
+    ::google::ParseCommandLineFlags(&argc, &argv, true);
     if (FLAGS_flagfile.empty()) {
         string found_path;
         if (!FLAGS_tera_sdk_conf_file.empty()) {
@@ -422,8 +424,7 @@ void TEST_FillGetAllRequest(MonitorRequest* request) {
     request->set_max_timestamp(std::numeric_limits<int64_t>::max());
 }
 
-void Eva_FillGetInfoRequest(MonitorRequest* request, std::string ts_start, std::string ts_end) {
-    request->set_cmd(tera::kGetAll);
+void Eva_FillGetInfoRequest(MonitorRequest* request, const std::string& ts_start, const std::string& ts_end, const std::string& ts) {
     std::stringstream ss;
     int64_t start, end;
     ss << ts_start;
@@ -433,6 +434,22 @@ void Eva_FillGetInfoRequest(MonitorRequest* request, std::string ts_start, std::
     se >> end;
     request->set_min_timestamp(start);
     request->set_max_timestamp(end);
+    if (ts != "") {
+        std::ifstream in;
+        in.open(ts.c_str());
+        if (!in) {
+            LOG(ERROR) << "fail to open file: " << ts;
+            return;
+        }
+        while (!in.eof()) {
+            std::string addr;
+            in >> addr;
+            request->add_tabletnodes(addr);
+        }
+        request->set_cmd(tera::kGetPart);
+    } else {
+        request->set_cmd(tera::kGetAll);
+    }
 }
 
 
@@ -456,7 +473,10 @@ int main(int argc, char* argv[]) {
     } else if (string(argv[1]) == "testgetall") {
         TEST_FillGetAllRequest(&request);
     } else if (string(argv[1]) == "eva") { // ./teramo eva timestamp_strat timestamp_end
-        Eva_FillGetInfoRequest(&request, argv[2], argv[3]);
+        Eva_FillGetInfoRequest(&request, argv[2], argv[3], "");
+    } else if (string(argv[1]) == "trace") { // ./teramo eva timestamp_strat timestamp_end
+        Eva_FillGetInfoRequest(&request, argv[2], argv[3], argv[4]);
+        resfile = string(argv[4]) + ".response";
     } else {
         reqfile = argv[1];
         if (argc >= 3) {
@@ -464,6 +484,7 @@ int main(int argc, char* argv[]) {
         }
         ret = ParseRequest(reqfile, &request);
         if (ret < 0) {
+            std::cout << ret << std::endl;
             return ret;
         }
     }
@@ -471,6 +492,7 @@ int main(int argc, char* argv[]) {
 
     ret = FillResponse(request, &response);
     if (ret < 0) {
+        std::cout << ret << std::endl;
         return ret;
     }
     if (string(argv[1]) == "testlist" ||
@@ -480,5 +502,7 @@ int main(int argc, char* argv[]) {
     }
 
     ret = DumpResponse(resfile, response);
+    std::cout << ret << std::endl;
+
     return ret;
 }

@@ -8,6 +8,7 @@
 #include "master/tablet_manager.h"
 
 DECLARE_double(tera_master_load_balance_size_ratio_trigger);
+DECLARE_int32(tera_master_load_balance_read_pending_threshold);
 
 namespace tera {
 namespace master {
@@ -151,6 +152,11 @@ bool SizeScheduler::FindBestTablet(TabletNodePtr src_node, TabletNodePtr dst_nod
     return true;
 }
 
+bool SizeScheduler::NeedSchedule(std::vector<TabletNodePtr>& node_list,
+                                 const std::string& table_name) {
+    return true;
+}
+
 void SizeScheduler::AscendingSort(std::vector<TabletNodePtr>& node_list,
                                   const std::string& table_name) {
     SizeComparator comparator;
@@ -206,7 +212,7 @@ public:
 bool LoadScheduler::MayMoveOut(TabletNodePtr node, const std::string& table_name) {
     VLOG(7) << "[load-sched] MayMoveOut()";
     int64_t node_read_pending = node->GetReadPending();
-    if (node_read_pending <= 0) {
+    if (node_read_pending <= FLAGS_tera_master_load_balance_read_pending_threshold) {
         VLOG(7) << "[load-sched] node has no read pending";
         return false;
     }
@@ -265,22 +271,17 @@ bool LoadScheduler::FindBestTablet(TabletNodePtr src_node, TabletNodePtr dst_nod
             << " delay = " << src_node->GetRowReadDelay() << " : " << dst_node->GetRowReadDelay()
             << " qps = " << src_node->GetQps(table_name) << " : " << dst_node->GetQps(table_name);
 
-    int64_t best_tablet_index = -1;
-    int64_t best_tablet_size = 0;
-    int64_t best_tablet_qps = 0;
+    // Donot move out the most busy tablet, move the second one
+    std::map<int64_t, int64_t> tablet_sort;
     for (size_t i = 0; i < tablet_list.size(); ++i) {
         TabletPtr tablet = tablet_list[i];
-        int64_t size = tablet->GetDataSize();
         int64_t qps = tablet->GetAverageCounter().read_rows();
-        if (best_tablet_index == -1 || qps > best_tablet_qps) {
-            best_tablet_index = i;
-            best_tablet_size = size;
-            best_tablet_qps = qps;
-        }
+        tablet_sort[qps] = i;
     }
-    if (best_tablet_index == -1) {
-        return false;
-    }
+    std::map<int64_t, int64_t>::reverse_iterator it = tablet_sort.rbegin();
+    it++;
+    int64_t best_tablet_qps = it->first;
+    int64_t best_tablet_index = it->second;
     if (best_tablet_qps == 0) {
         VLOG(7) << "[load-sched] no need to move 0 QPS tablet";
         return false;
@@ -288,8 +289,26 @@ bool LoadScheduler::FindBestTablet(TabletNodePtr src_node, TabletNodePtr dst_nod
     *best_index = best_tablet_index;
     TabletPtr best_tablet = tablet_list[best_tablet_index];
     VLOG(7) << "[load-sched] best tablet = " << best_tablet->GetPath()
-            << " size = " << best_tablet_size
+            << " size = " << best_tablet->GetDataSize()
             << " qps = " << best_tablet_qps;
+    return true;
+}
+
+bool LoadScheduler::NeedSchedule(std::vector<TabletNodePtr>& node_list,
+                                 const std::string& table_name) {
+    size_t pending_node_num = 0;
+    for (size_t i = 0; i < node_list.size(); ++i) {
+        int64_t node_read_pending = node_list[i]->GetReadPending();
+        if (node_read_pending > FLAGS_tera_master_load_balance_read_pending_threshold) {
+            pending_node_num++;
+        }
+    }
+
+    // If pending_node_num large than 5%, we think read bottleneck is dfs io,
+    // do not need load balance by read.
+    if (pending_node_num * 20 > node_list.size()) {
+        return false;
+    }
     return true;
 }
 

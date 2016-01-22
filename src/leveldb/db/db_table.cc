@@ -358,12 +358,28 @@ Status DBTable::Delete(const WriteOptions& options, const Slice& key) {
 bool DBTable::BusyWrite() {
     MutexLock l(&mutex_);
     for (std::set<uint32_t>::iterator it = options_.exist_lg_list->begin();
-            it != options_.exist_lg_list->end(); ++it) {
+         it != options_.exist_lg_list->end(); ++it) {
         if (lg_list_[*it]->BusyWrite()) {
             return true;
         }
     }
     return false;
+}
+
+void DBTable::Workload(double* write_workload) {
+    if (write_workload == NULL) {
+        return;
+    }
+    MutexLock l(&mutex_);
+    double ww = -1;
+    *write_workload = -1;
+    for (std::set<uint32_t>::iterator it = options_.exist_lg_list->begin();
+         it != options_.exist_lg_list->end(); ++it) {
+        lg_list_[*it]->Workload(&ww);
+        if (ww > *write_workload) {
+            *write_workload = ww;
+        }
+    }
 }
 
 Status DBTable::Write(const WriteOptions& options, WriteBatch* my_batch) {
@@ -1010,6 +1026,28 @@ bool DBTable::FindSplitKey(double ratio,
         return false;
     }
     return biggest_it->second->FindSplitKey(ratio, split_key);
+}
+
+bool DBTable::FindKeyRange(std::string* smallest_key, std::string* largest_key) {
+    if (smallest_key && largest_key) {
+        smallest_key->clear();
+        largest_key->clear();
+    } else {
+        return false;
+    }
+    MutexLock l(&mutex_);
+    std::string sk, lk;
+    std::set<uint32_t>::iterator it = options_.exist_lg_list->begin();
+    for (; it != options_.exist_lg_list->end(); ++it) {
+        lg_list_[*it]->FindKeyRange(&sk, &lk);
+        if (smallest_key->empty() || sk < *smallest_key) {
+            *smallest_key = sk;
+        }
+        if (largest_key->empty() || lk > *largest_key) {
+            *largest_key = lk;
+        }
+    }
+    return true;
 }
 
 bool DBTable::MinorCompact() {

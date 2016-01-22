@@ -163,7 +163,11 @@ class DB {
   // Too busy to write
   virtual bool BusyWrite() = 0;
 
+  virtual void Workload(double* write_workload) = 0;
+
   virtual bool FindSplitKey(double ratio, std::string* split_key) = 0;
+  virtual bool FindKeyRange(std::string* smallest_key = NULL,
+                            std::string* largest_key = NULL) = 0;
 
   virtual bool MinorCompact() = 0;
 

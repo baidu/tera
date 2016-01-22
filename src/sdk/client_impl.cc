@@ -127,10 +127,7 @@ bool ClientImpl::CheckReturnValue(StatusCode status, std::string& reason, ErrorC
 bool ClientImpl::CreateTable(const TableDescriptor& desc,
                              const std::vector<string>& tablet_delim,
                              ErrorCode* err) {
-    if (!IsValidTableName(desc.TableName())) {
-        if (err != NULL) {
-            err->SetFailed(ErrorCode::kBadParam, " invalid tablename ");
-        }
+    if (!CheckTableDescrptor(desc, err)) {
         return false;
     }
     master::MasterClient master_client(_cluster->MasterAddr());
@@ -418,7 +415,11 @@ Table* ClientImpl::OpenTable(const std::string& table_name,
                              ErrorCode* err) {
     std::string internal_table_name;
     if (!GetInternalTableName(table_name, err, &internal_table_name)) {
-        LOG(ERROR) << "fail to scan meta schema";
+        std::string reason = "fail to scan meta schema";
+        if (err != NULL) {
+            err->SetFailed(ErrorCode::kBadParam, reason);
+        }
+        LOG(ERROR) << reason;
         return NULL;
     }
     err->SetFailed(ErrorCode::kOK);
@@ -426,7 +427,11 @@ Table* ClientImpl::OpenTable(const std::string& table_name,
                                      _zk_root_path, _zk_addr_list,
                                      &_thread_pool, _cluster);
     if (table == NULL) {
-        LOG(ERROR) << "fail to new TableImpl.";
+        std::string reason = "fail to new TableImpl";
+        if (err != NULL) {
+            err->SetFailed(ErrorCode::kBadParam, reason);
+        }
+        LOG(ERROR) << reason;
         return NULL;
     }
     if (!table->OpenInternal(err)) {
@@ -439,19 +444,18 @@ Table* ClientImpl::OpenTable(const std::string& table_name,
 bool ClientImpl::GetTabletLocation(const string& table_name,
                                    std::vector<TabletInfo>* tablets,
                                    ErrorCode* err) {
-    std::vector<TableInfo> table_list;
-    std::string internal_table_name;
-    if (!GetInternalTableName(table_name, err, &internal_table_name)) {
-        LOG(ERROR) << "faild to scan meta schema";
+    TableMeta table_meta;
+    TabletMetaList tablet_list;
+
+    if (!ShowTablesInfo(table_name, &table_meta, &tablet_list, err)) {
+        LOG(ERROR) << "table not exist: " << table_name;
         return false;
     }
-    ListInternal(&table_list, tablets, internal_table_name, "", 1,
-                 FLAGS_tera_sdk_show_max_num, err);
-    if (table_list.size() > 0
-        && table_list[0].table_desc->TableName() == internal_table_name) {
-        return true;
+
+    for (int i = 0; i < tablet_list.meta_size(); ++i) {
+        ParseTabletEntry(tablet_list.meta(i), tablets);
     }
-    return false;
+    return true;
 }
 
 TableDescriptor* ClientImpl::GetTableDescriptor(const string& table_name,
@@ -531,7 +535,8 @@ bool ClientImpl::ShowTablesInfo(const string& name,
         LOG(ERROR) << "faild to scan meta schema";
         return false;
     }
-    bool result = DoShowTablesInfo(&table_list, tablet_list, internal_table_name, err);
+    bool result = DoShowTablesInfo(&table_list, tablet_list, internal_table_name,
+                                   false, err);
     if ((table_list.meta_size() == 0)
         || (table_list.meta(0).table_name() != internal_table_name)) {
         return false;
@@ -544,13 +549,15 @@ bool ClientImpl::ShowTablesInfo(const string& name,
 
 bool ClientImpl::ShowTablesInfo(TableMetaList* table_list,
                                 TabletMetaList* tablet_list,
+                                bool is_brief,
                                 ErrorCode* err) {
-    return DoShowTablesInfo(table_list, tablet_list, "", err);
+    return DoShowTablesInfo(table_list, tablet_list, "", is_brief, err);
 }
 
 bool ClientImpl::DoShowTablesInfo(TableMetaList* table_list,
                                   TabletMetaList* tablet_list,
                                   const string& table_name,
+                                  bool is_brief,
                                   ErrorCode* err) {
     if (table_list == NULL || tablet_list == NULL) {
         return false;
@@ -576,11 +583,8 @@ bool ClientImpl::DoShowTablesInfo(TableMetaList* table_list,
         request.set_max_tablet_num(FLAGS_tera_sdk_show_max_num); //tablets be fetched at most in one RPC
         request.set_sequence_id(0);
         request.set_user_token(GetUserToken(_user_identity, _user_passcode));
+        request.set_all_brief(is_brief);
 
-        if (table_name == "") {
-            // show all table brief
-            request.set_all_brief(true);
-        }
         if (master_client.ShowTables(&request, &response) &&
             response.status() == kMasterOk) {
             if (tablet_list == NULL && response.all_brief()) {
@@ -1059,6 +1063,10 @@ static int InitFlags(const std::string& confpath, const std::string& log_prefix)
 
 Client* Client::NewClient(const string& confpath, const string& log_prefix, ErrorCode* err) {
     if (InitFlags(confpath, log_prefix) != 0) {
+        if (err != NULL) {
+            std::string reason = "init tera flag failed";
+            err->SetFailed(ErrorCode::kBadParam, reason);
+        }
         return NULL;
     }
     return new ClientImpl(FLAGS_tera_user_identity,

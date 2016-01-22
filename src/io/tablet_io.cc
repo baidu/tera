@@ -342,31 +342,68 @@ bool TabletIO::Unload(StatusCode* status) {
 //      "a" & "b" return "a_"
 bool TabletIO::FindAverageKey(const std::string& start, const std::string& end,
                              std::string* res) {
+    std::string s = start;
+    std::string e = end;
+    if (e == "") {
+        // make sure end > start
+        e.resize(s.size() + 1, '\xFF');
+    }
+    CHECK(s < e);
+    int max_len = s.size() > e.size() ? s.size() : e.size();
+    max_len++;  // max_len should be >0
+    s.resize(max_len, '\x00');
+    e.resize(max_len, '\x00');
+
+    if (s == e) {
+        // find failed, e.g. s == "a" && e == "a\0"
+        return false;
+    }
+
     std::string ave;
-    int ave_len = start.size() < end.size() ? start.size() : end.size();
-    for (int i = 0; i < ave_len; ++i) {
-        char c = (char)(((uint32_t)start[i] + end[i]) / 2);
-        ave.append(1, c);
+    for (int i = 0; i < max_len; ++i) {
+        if (s[i] == e[i]) {
+            ave.append(1, s[i]);
+            continue;
+        } else if ((uint32_t)(unsigned char)s[i] + 1 < (uint32_t)(unsigned char)e[i]) {
+            // find success
+            char c = (char)(((uint32_t)(unsigned char)s[i]
+                             + (uint32_t)(unsigned char)(e[i])) / 2);
+            ave.append(1, c);
+            break;
+        } else {
+            // find success
+            CHECK((uint32_t)(unsigned char)s[i] == (uint32_t)(unsigned char)e[i] - 1
+                  && i < max_len - 1);
+            uint32_t c_int = ((uint32_t)(unsigned char)s[i + 1]
+                             + (uint32_t)(unsigned char)e[i + 1] + 0x100) / 2;
+            if (c_int < 0x100) {
+                ave.append(1, s[i]);
+            } else {
+                ave.append(1, e[i]);
+            }
+            char c = (char)(c_int);
+            ave.append(1, c);
+            break;
+        }
     }
-    if (ave > start) {
-        // find success
-        *res = ave;
-        return true;
-    }
-    if (start.size() == end.size()) {
-        // a~b, here we use '_'(0x5F), not '0x80', visible char
-        ave.append(1, '_');
-    } else if (start.size() < end.size()) {
-        char c = (end[ave.size()]) / 2;
-        if (c == '\x0') {
+    CHECK(ave > start && (end == "" || ave < end));
+    *res = ave;
+    return true;
+}
+
+bool TabletIO::ParseRowKey(const std::string& tera_key, std::string* row_key) {
+    leveldb::Slice row;
+    if ((m_table_schema.raw_key() == GeneralKv)
+        || (m_kv_only && m_table_schema.raw_key() == Readable)) {
+        row = tera_key;
+    } else { // Table && TTL-KV
+        if (!m_key_operator->ExtractTeraKey(tera_key, &row,
+                                            NULL, NULL, NULL, NULL)) {
+            VLOG(5) << "fail to extract split key";
             return false;
         }
-        ave.append(1, c);
-    } else {
-        char c = static_cast<char>((start[ave.size()] + 0x100) / 2);
-        ave.append(1, c);
     }
-    *res = ave;
+    *row_key = row.ToString();
     return true;
 }
 
@@ -386,25 +423,28 @@ bool TabletIO::Split(std::string* split_key, StatusCode* status) {
     }
 
     std::string raw_split_key;
-    leveldb::Slice key_split;
+    split_key->clear();
     if (m_db->FindSplitKey(0.5, &raw_split_key)) {
-        if ((m_table_schema.raw_key() == GeneralKv)
-            || (m_kv_only && m_table_schema.raw_key() == Readable)) {
-            key_split = raw_split_key;
-        } else { // Table && TTL-KV
-            if (!m_key_operator->ExtractTeraKey(raw_split_key, &key_split,
-                                                NULL, NULL, NULL, NULL)) {
-                VLOG(5) << "fail to extract split key";
-            }
-        }
+        ParseRowKey(raw_split_key, split_key);
     }
 
-    split_key->clear();
-    if (!key_split.empty()) {
-        *split_key = key_split.ToString();
-    } else {
+    if (split_key->empty() || *split_key == m_end_key) {
         // could not find split_key, try calc average key
-        FindAverageKey(m_start_key, m_end_key, split_key);
+        std::string smallest_key, largest_key;
+        CHECK(m_db->FindKeyRange(&smallest_key, &largest_key));
+
+        std::string srow_key, lrow_key;
+        if (!smallest_key.empty()) {
+            ParseRowKey(smallest_key, &srow_key);
+        } else {
+            srow_key = m_start_key;
+        }
+        if (!largest_key.empty()) {
+            ParseRowKey(largest_key, &lrow_key);
+        } else {
+            lrow_key = m_end_key;
+        }
+        FindAverageKey(srow_key, lrow_key, split_key);
     }
 
     VLOG(5) << "start: [" << DebugString(m_start_key)
@@ -504,6 +544,22 @@ bool TabletIO::IsBusy() {
         m_db_ref_count--;
     }
     return is_busy;
+}
+
+bool TabletIO::Workload(double* write_workload) {
+    {
+        MutexLock lock(&m_mutex);
+        if (m_status != kReady) {
+            return false;
+        }
+        m_db_ref_count++;
+    }
+    m_db->Workload(write_workload);
+    {
+        MutexLock lock(&m_mutex);
+        m_db_ref_count--;
+    }
+    return true;
 }
 
 bool TabletIO::SnapshotIDToSeq(uint64_t snapshot_id, uint64_t* snapshot_sequence) {
@@ -1725,7 +1781,7 @@ uint64_t TabletIO::GetSnapshot(uint64_t id, uint64_t snapshot_sequence,
         MutexLock lock(&m_mutex);
         if (m_status != kReady) {
             SetStatusCode(m_status, status);
-            return false;
+            return 0;
         }
         m_db_ref_count++;
     }
@@ -1826,6 +1882,9 @@ void TabletIO::GetAndClearCounter(TabletCounter* counter) {
     counter->set_write_kvs(m_counter.write_kvs.Clear());
     counter->set_write_size(m_counter.write_size.Clear());
     counter->set_is_on_busy(IsBusy());
+    double write_workload = 0;
+    Workload(&write_workload);
+    counter->set_write_workload(write_workload);
 }
 
 int32_t TabletIO::AddRef() {
