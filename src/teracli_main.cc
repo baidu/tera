@@ -834,7 +834,7 @@ int32_t ScanOp(Client* client, int32_t argc, char** argv, ErrorCode* err) {
     if (argc == 5) {
         // scan all cells
     } else if (argc == 6) {
-        if (!ParseScanSchema(argv[5], &desc)) {
+        if (!desc.SetFilter(argv[5])) {
             LOG(ERROR) << "fail to parse scan schema: " << argv[5];
             return -1;
         }

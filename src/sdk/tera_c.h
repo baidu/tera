@@ -28,11 +28,23 @@ bool tera_table_get(tera_table_t* table,
                            uint64_t qulen, char** value, uint64_t* vallen,
                            char** errptr, uint64_t snapshot_id);
 
+bool tera_table_getint64(tera_table_t* table,
+                         const char* row_key, uint64_t keylen,
+                         const char* family, const char* qualifier,
+                         uint64_t qulen, int64_t* value,
+                         char** errptr, uint64_t snapshot_id);
+
 bool tera_table_put(tera_table_t* table,
                            const char* row_key, uint64_t keylen,
                            const char* family, const char* qualifier,
                            uint64_t qulen, const char* value, uint64_t vallen,
                            char** errptr);
+
+bool tera_table_putint64(tera_table_t* table,
+                         const char* row_key, uint64_t keylen,
+                         const char* family, const char* qualifier,
+                         uint64_t qulen, int64_t value,
+                         char** errptr);
 
 void tera_table_delete(tera_table_t* table, const char* row_key, uint64_t keylen,
                        const char* family, const char* qualifier, uint64_t qulen);
@@ -61,12 +73,12 @@ void tera_scan_descriptor_add_column_family(tera_scan_descriptor_t* desc, const 
 bool tera_scan_descriptor_is_async(tera_scan_descriptor_t* desc);
 void tera_scan_descriptor_set_buffer_size(tera_scan_descriptor_t* desc, int64_t size);
 void tera_scan_descriptor_set_end(tera_scan_descriptor_t* desc, const char* end_key, uint64_t keylen);
-void tera_scan_descriptor_set_filter_string(tera_scan_descriptor_t* desc, const char* filter_string);
 void tera_scan_descriptor_set_pack_interval(tera_scan_descriptor_t* desc, int64_t interval);
 void tera_scan_descriptor_set_is_async(tera_scan_descriptor_t* desc, bool is_async);
 void tera_scan_descriptor_set_max_versions(tera_scan_descriptor_t* desc, int32_t versions);
 void tera_scan_descriptor_set_snapshot(tera_scan_descriptor_t* desc, uint64_t snapshot_id);
 void tera_scan_descriptor_set_time_range(tera_scan_descriptor_t* desc, int64_t ts_start, int64_t ts_end);
+bool tera_scan_descriptor_set_filter(tera_scan_descriptor_t* desc, char* filter_str);
 
 // scan result stream
 bool tera_result_stream_done(tera_result_stream_t* stream, char** errptr);
@@ -77,7 +89,7 @@ void tera_result_stream_next(tera_result_stream_t* stream);
 void tera_result_stream_qualifier(tera_result_stream_t* stream, char** str, uint64_t* strlen);
 void tera_result_stream_row_name(tera_result_stream_t* stream, char** str, uint64_t* strlen);
 void tera_result_stream_value(tera_result_stream_t* stream, char** str, uint64_t* strlen);
-void tera_result_stream_value(tera_result_stream_t* stream, char** str, uint64_t* strlen);
+int64_t tera_result_stream_value_int64(tera_result_stream_t* stream);
 
 #ifdef __cplusplus
 }  /* end extern "C" */
