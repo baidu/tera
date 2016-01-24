@@ -176,7 +176,7 @@ TEST(SdkUtils, BuildSchema) {
     string schema = "lg0:cf1,cf2|lg3:cf3,cf4,cf5";
 
     TableDescriptor table_desc("unittest");
-    ParseSchema(schema, &table_desc);
+    ParseTableSchema(schema, &table_desc);
 
     string schema_t;
     BuildSchema(&table_desc, &schema_t);
