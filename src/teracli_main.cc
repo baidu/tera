@@ -2596,7 +2596,7 @@ int CliMain(int argc, char* argv[]) {
         if (i != 0) {
             // printf ("================================================\n");
         }
-        // printf ("Process tera %lu, %s\n", i, conf_files[i].c_str());
+        LOG(INFO) << "Process tera " << i;
         ret = ExecuteCommand(g_clients[i], argc, argv);
         if (ret != 0 && first_errcode == 0) {
             first_errcode = ret;

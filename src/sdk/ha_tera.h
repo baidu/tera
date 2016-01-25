@@ -2,20 +2,23 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#ifndef HA_TERA_TERA_H_
-#define HA_TERA_TERA_H_
+#ifndef SDK_HA_TERA_TERA_H_
+#define SDK_HA_TERA_TERA_H_
 
 #include "sdk/tera.h"
 #include "proto/table_meta.pb.h"
 
 namespace tera {
 
-class HATable {
-public:
-    HATable() {}
-    ~HATable() {}
+class ClientImpl;
+class TableImpl;
 
-    void Add(Table *t);
+class HATableImpl : public Table {
+public:
+    HATableImpl() {}
+    ~HATableImpl() {}
+
+    void Add(TableImpl *t);
     /// 返回一个新的RowMutation
     RowMutation* NewRowMutation(const std::string& row_key);
     /// 返回一个新的RowReader
@@ -116,24 +119,22 @@ public:
     // 获取指定的集群
     Table* GetClusterHandle(size_t i);
     static void MergeResult(const std::vector<RowResult>& results, RowResult& res, uint32_t max_size);
-    static void ShuffleArray(std::vector<Table*>& table_set);
+    static void ShuffleArray(std::vector<TableImpl*>& table_set);
 private:
 
-    HATable(const HATable&);
-    void operator=(const HATable&);
-    std::vector<Table*> _tables;
+    HATableImpl(const HATableImpl&);
+    void operator=(const HATableImpl&);
+    std::vector<TableImpl*> _tables;
 };
 
 
-class HAClient {
+class HAClientImpl : public Client {
 public:
-    /// 使用glog的用户必须调用此接口，避免glog被重复初始化
-    static void SetGlogIsInitialized();
-
-    static HAClient* NewClient(const std::vector<std::string>& confpaths,
-                               const std::string& log_prefix,
-                               ErrorCode* err = NULL);
-    ~HAClient() {for (size_t i = 0; i < _clients.size(); i++) { delete _clients[i]; } _clients.clear(); }
+    HAClientImpl(const std::string& user_identity,
+                 const std::string& user_passcode,
+                 const std::vector<std::string>& zk_clusters,
+                 const std::vector<std::string>& zk_paths);
+    virtual ~HAClientImpl();
 
     bool Init(ErrorCode* err = NULL);
 
@@ -164,7 +165,7 @@ public:
     bool DeleteUserFromGroup(const std::string& user,
                              const std::string& group, ErrorCode* err);
     /// 打开表格, 失败返回NULL
-    HATable* OpenTable(const std::string& table_name, ErrorCode* err);
+    Table* OpenTable(const std::string& table_name, ErrorCode* err);
     /// 获取表格分布信息
     bool GetTabletLocation(const std::string& table_name,
                            std::vector<TabletInfo>* tablets,
@@ -203,16 +204,13 @@ public:
     // 获取指定的集群
     Client* GetClusterClient(size_t i);
 private:
-    HAClient(const std::vector<Client*> &clients) {
-        _clients = clients;
-    }
-    HAClient(const HAClient&);
-    void operator=(const HAClient&);
+    HAClientImpl(const HAClientImpl&);
+    void operator=(const HAClientImpl&);
 
-    std::vector<Client*> _clients;
+    std::vector<ClientImpl*> _clients;
 };
 }
 
 
-#endif // HA_TERA_TERA_H_
+#endif // SDK_HA_TERA_TERA_H_
 

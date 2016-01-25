@@ -24,7 +24,7 @@
 #include "sdk/ha_tera.h"
 
 /// 创建一个表格
-int CreateTable(tera::HAClient* hclient) {
+int CreateTable(tera::Client* hclient) {
     // 创建一个表格的描述
     tera::TableDescriptor table_desc("webdb");
 
@@ -68,7 +68,7 @@ void WriteRowCallBack(tera::RowMutation* row_mu) {
 }
 
 /// 修改一个表的内容
-int ModifyTable(tera::HATable* table) {
+int ModifyTable(tera::Table* table) {
     tera::ErrorCode error_code;
 
     // 修改需要先创建一个 RowMutation
@@ -138,7 +138,7 @@ void ReadRowCallBack(tera::RowReader* row_reader) {
     finish = true;
 }
 
-int ReadRowFromTable(tera::HATable* table) {
+int ReadRowFromTable(tera::Table* table) {
     tera::ErrorCode error_code;
     tera::RowReader* row_reader = table->NewRowReader("com.baidu.www/");
     row_reader->AddColumnFamily("html");
@@ -147,7 +147,8 @@ int ReadRowFromTable(tera::HATable* table) {
     row_reader->SetAsync();
     row_reader->SetCallBack(ReadRowCallBack);
     // Async Read one row
-    table->LGet(row_reader);
+    /// TODO:
+    table->Get(row_reader);
 
     while (!finish) {
         sleep(1);
@@ -172,7 +173,9 @@ int ReadRowFromTable(tera::HATable* table) {
     row_reader3->AddColumnFamily("html");
     row_reader3->SetMaxVersions(10);
     row_reader3->SetTimeOut(5000);
-    table->LGet(row_reader3);
+    /// TODO
+    // table->LGet(row_reader3);
+    table->Get(row_reader3);
 
     if (row_reader1->GetError().GetType() != tera::ErrorCode::kOK) {
         printf("read1 failed! error: %d, %s\n",
@@ -217,12 +220,12 @@ int ReadRowFromTable(tera::HATable* table) {
 }
 
 /// 三维表格
-int ShowBigTable(tera::HAClient* client) {
+int ShowBigTable(tera::Client* client) {
     tera::ErrorCode error_code;
     // Create
     CreateTable(client);
     // Open
-    tera::HATable* table = client->OpenTable("webdb", &error_code);
+    tera::Table* table = client->OpenTable("webdb", &error_code);
     if (table == NULL) {
         printf("Open table fail: %s\n", tera::strerr(error_code));
         return 1;
@@ -245,10 +248,8 @@ int main(int argc, char *argv[]) {
     }
 
     // 根据配置创建一个client
-    std::vector<std::string> confpaths;
-    confpaths.push_back("./tera1.flag");
-    confpaths.push_back("./tera2.flag");
-    tera::HAClient* client = tera::HAClient::NewClient(confpaths, "tera_sample", &error_code);
+    std::string conf_path = "./tera_test.flag";
+    tera::Client* client = tera::Client::NewClient(conf_path, "tera_sample", &error_code);
     if (client == NULL) {
         printf("New tera client fail: %s,%s\n", tera::strerr(error_code), error_code.GetReason().c_str());
         return 1;

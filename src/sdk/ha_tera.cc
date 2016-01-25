@@ -1,5 +1,7 @@
 #include "sdk/mutate_impl.h"
 #include "sdk/read_impl.h"
+#include "sdk/client_impl.h"
+#include "sdk/table_impl.h"
 #include "sdk/ha_tera.h"
 #include "utils/timer.h"
 #include "sdk/callback_check.h"
@@ -12,7 +14,7 @@ namespace tera {
 
 class PutCallbackChecker : public CallChecker {
 public:
-    PutCallbackChecker(const std::vector<Table*> &clusters, RowMutationImpl* row_mutate)
+    PutCallbackChecker(const std::vector<TableImpl*> &clusters, RowMutationImpl* row_mutate)
         : _has_call(false),
           _cluster_index(0),
           _clusters(clusters),
@@ -55,14 +57,14 @@ public:
 private:
     bool _has_call;
     size_t _cluster_index;
-    std::vector<Table*> _clusters;
+    std::vector<TableImpl*> _clusters;
     RowMutationImpl* _row_mutate;
     uint32_t _failed_count;
 };
 
 class GetCallbackChecker : public CallChecker {
 public:
-    GetCallbackChecker(const std::vector<Table*> &clusters, RowReaderImpl* row_reader)
+    GetCallbackChecker(const std::vector<TableImpl*> &clusters, RowReaderImpl* row_reader)
         : _has_call(false),
           _cluster_index(0),
           _clusters(clusters),
@@ -93,13 +95,13 @@ public:
 private:
     bool _has_call;
     size_t _cluster_index;
-    std::vector<Table*> _clusters;
+    std::vector<TableImpl*> _clusters;
     RowReaderImpl* _row_reader;
 };
 
 class LGetCallbackChecker : public CallChecker {
 public:
-    LGetCallbackChecker(const std::vector<Table*> &clusters, RowReaderImpl* row_reader)
+    LGetCallbackChecker(const std::vector<TableImpl*> &clusters, RowReaderImpl* row_reader)
         : _has_call(false),
           _cluster_index(0),
           _clusters(clusters),
@@ -118,7 +120,7 @@ public:
             // 合并结果
             if (_results.size() > 0) {
                 RowResult final_result;
-                HATable::MergeResult(_results, final_result, _row_reader->GetMaxVersions());
+                HATableImpl::MergeResult(_results, final_result, _row_reader->GetMaxVersions());
                 _row_reader->SetResult(final_result);
             }
             _has_call = true;
@@ -133,24 +135,24 @@ public:
 private:
     bool _has_call;
     size_t _cluster_index;
-    std::vector<Table*> _clusters;
+    std::vector<TableImpl*> _clusters;
     RowReaderImpl* _row_reader;
     std::vector<RowResult> _results;
 };
 
-void HATable::Add(Table *t) {
+void HATableImpl::Add(TableImpl *t) {
     _tables.push_back(t);
 }
 
-RowMutation* HATable::NewRowMutation(const std::string& row_key) {
+RowMutation* HATableImpl::NewRowMutation(const std::string& row_key) {
     return new RowMutationImpl(NULL, row_key);
 }
 
-RowReader* HATable::NewRowReader(const std::string& row_key) {
+RowReader* HATableImpl::NewRowReader(const std::string& row_key) {
     return new RowReaderImpl(NULL, row_key);
 }
 
-void HATable::ApplyMutation(RowMutation* row_mu) {
+void HATableImpl::ApplyMutation(RowMutation* row_mu) {
     size_t failed_count = 0;
 
     RowMutationImpl* row_mu_impl = dynamic_cast<RowMutationImpl*>(row_mu);
@@ -178,7 +180,7 @@ void HATable::ApplyMutation(RowMutation* row_mu) {
     }
 }
 
-void HATable::ApplyMutation(const std::vector<RowMutation*>& row_mu_list) {
+void HATableImpl::ApplyMutation(const std::vector<RowMutation*>& row_mu_list) {
     std::vector<size_t> failed_count_list;
     failed_count_list.resize(row_mu_list.size());
 
@@ -222,9 +224,9 @@ void HATable::ApplyMutation(const std::vector<RowMutation*>& row_mu_list) {
     }
 }
 
-bool HATable::Put(const std::string& row_key, const std::string& family,
-                   const std::string& qualifier, const std::string& value,
-                   ErrorCode* err) {
+bool HATableImpl::Put(const std::string& row_key, const std::string& family,
+                      const std::string& qualifier, const std::string& value,
+                      ErrorCode* err) {
     size_t failed_count = 0;
     for (size_t i = 0; i < _tables.size(); i++) {
         bool ok = _tables[i]->Put(row_key, family, qualifier, value, err);
@@ -242,9 +244,9 @@ bool HATable::Put(const std::string& row_key, const std::string& family,
     }
 }
 
-bool HATable::Put(const std::string& row_key, const std::string& family,
-                   const std::string& qualifier, const int64_t value,
-                   ErrorCode* err) {
+bool HATableImpl::Put(const std::string& row_key, const std::string& family,
+                      const std::string& qualifier, const int64_t value,
+                      ErrorCode* err) {
     size_t failed_count = 0;
     for (size_t i = 0; i < _tables.size(); i++) {
         bool ok = _tables[i]->Put(row_key, family, qualifier, value, err);
@@ -262,9 +264,9 @@ bool HATable::Put(const std::string& row_key, const std::string& family,
     }
 }
 
-bool HATable::Put(const std::string& row_key, const std::string& family,
-                   const std::string& qualifier, const std::string& value,
-                   int32_t ttl, ErrorCode* err) {
+bool HATableImpl::Put(const std::string& row_key, const std::string& family,
+                      const std::string& qualifier, const std::string& value,
+                      int32_t ttl, ErrorCode* err) {
     size_t failed_count = 0;
     for (size_t i = 0; i < _tables.size(); i++) {
         bool ok = _tables[i]->Put(row_key, family, qualifier, value, ttl, err);
@@ -282,9 +284,9 @@ bool HATable::Put(const std::string& row_key, const std::string& family,
     }
 }
 
-bool HATable::Put(const std::string& row_key, const std::string& family,
-                   const std::string& qualifier, const std::string& value,
-                   int64_t timestamp, int32_t ttl, ErrorCode* err) {
+bool HATableImpl::Put(const std::string& row_key, const std::string& family,
+                      const std::string& qualifier, const std::string& value,
+                      int64_t timestamp, int32_t ttl, ErrorCode* err) {
     size_t failed_count = 0;
     for (size_t i = 0; i < _tables.size(); i++) {
         bool ok = _tables[i]->Put(row_key, family, qualifier, value, timestamp, ttl, err);
@@ -302,9 +304,9 @@ bool HATable::Put(const std::string& row_key, const std::string& family,
     }
 }
 
-bool HATable::Add(const std::string& row_key, const std::string& family,
-                   const std::string& qualifier, int64_t delta,
-                   ErrorCode* err) {
+bool HATableImpl::Add(const std::string& row_key, const std::string& family,
+                      const std::string& qualifier, int64_t delta,
+                      ErrorCode* err) {
     size_t failed_count = 0;
     for (size_t i = 0; i < _tables.size(); i++) {
         bool ok = _tables[i]->Add(row_key, family, qualifier, delta, err);
@@ -322,9 +324,9 @@ bool HATable::Add(const std::string& row_key, const std::string& family,
     }
 }
 
-bool HATable::AddInt64(const std::string& row_key, const std::string& family,
-                        const std::string& qualifier, int64_t delta,
-                        ErrorCode* err) {
+bool HATableImpl::AddInt64(const std::string& row_key, const std::string& family,
+                           const std::string& qualifier, int64_t delta,
+                           ErrorCode* err) {
     size_t failed_count = 0;
     for (size_t i = 0; i < _tables.size(); i++) {
         bool ok = _tables[i]->AddInt64(row_key, family, qualifier, delta, err);
@@ -342,11 +344,11 @@ bool HATable::AddInt64(const std::string& row_key, const std::string& family,
     }
 }
 
-bool HATable::PutIfAbsent(const std::string& row_key,
-                          const std::string& family,
-                          const std::string& qualifier,
-                          const std::string& value,
-                          ErrorCode* err) {
+bool HATableImpl::PutIfAbsent(const std::string& row_key,
+                              const std::string& family,
+                              const std::string& qualifier,
+                              const std::string& value,
+                              ErrorCode* err) {
     size_t failed_count = 0;
     for (size_t i = 0; i < _tables.size(); i++) {
         bool ok = _tables[i]->PutIfAbsent(row_key, family, qualifier, value, err);
@@ -364,9 +366,9 @@ bool HATable::PutIfAbsent(const std::string& row_key,
     }
 }
 
-bool HATable::Append(const std::string& row_key, const std::string& family,
-                     const std::string& qualifier, const std::string& value,
-                     ErrorCode* err) {
+bool HATableImpl::Append(const std::string& row_key, const std::string& family,
+                         const std::string& qualifier, const std::string& value,
+                         ErrorCode* err) {
     size_t failed_count = 0;
     for (size_t i = 0; i < _tables.size(); i++) {
         bool ok = _tables[i]->Append(row_key, family, qualifier, value, err);
@@ -385,7 +387,7 @@ bool HATable::Append(const std::string& row_key, const std::string& family,
 }
 
 // 从两个集群里获取时间戳比较新的数据, latest-get
-void HATable::LGet(RowReader* row_reader) {
+void HATableImpl::LGet(RowReader* row_reader) {
     size_t failed_count = 0;
 
     RowReaderImpl* row_reader_impl = dynamic_cast<RowReaderImpl*>(row_reader);
@@ -414,25 +416,25 @@ void HATable::LGet(RowReader* row_reader) {
         }
         if (results.size() > 0) {
             RowResult final_result;
-            HATable::MergeResult(results, final_result, row_reader_impl->GetMaxVersions());
+            HATableImpl::MergeResult(results, final_result, row_reader_impl->GetMaxVersions());
             row_reader_impl->SetResult(final_result);
         }
     }
 }
 
-void HATable::LGet(const std::vector<RowReader*>& row_readers) {
+void HATableImpl::LGet(const std::vector<RowReader*>& row_readers) {
     for (size_t i = 0; i < row_readers.size(); i++) {
         LGet(row_readers[i]);
     }
 }
 
-void HATable::Get(RowReader* row_reader) {
+void HATableImpl::Get(RowReader* row_reader) {
     size_t failed_count = 0;
 
-    std::vector<Table*> table_set = _tables;
+    std::vector<TableImpl*> table_set = _tables;
     // 如果是随机Get，则每次对tables进行排序
     if (FLAGS_tera_sdk_ha_get_random_mode) {
-        HATable::ShuffleArray(table_set);
+        HATableImpl::ShuffleArray(table_set);
     }
 
     RowReaderImpl* row_reader_impl = dynamic_cast<RowReaderImpl*>(row_reader);
@@ -461,12 +463,12 @@ void HATable::Get(RowReader* row_reader) {
 }
 
 // 可能有一批数据来自集群1，另一批数据来自集群2
-void HATable::Get(const std::vector<RowReader*>& row_readers) {
+void HATableImpl::Get(const std::vector<RowReader*>& row_readers) {
 
-    std::vector<Table*> table_set = _tables;
+    std::vector<TableImpl*> table_set = _tables;
     // 如果是随机Get，则每次对tables进行排序
     if (FLAGS_tera_sdk_ha_get_random_mode) {
-        HATable::ShuffleArray(table_set);
+        HATableImpl::ShuffleArray(table_set);
     }
 
     std::vector<RowReader*> async_readers;
@@ -520,14 +522,14 @@ void HATable::Get(const std::vector<RowReader*>& row_readers) {
     }
 }
 
-bool HATable::Get(const std::string& row_key, const std::string& family,
-                  const std::string& qualifier, std::string* value,
-                  ErrorCode* err, uint64_t snapshot_id) {
+bool HATableImpl::Get(const std::string& row_key, const std::string& family,
+                      const std::string& qualifier, std::string* value,
+                      ErrorCode* err, uint64_t snapshot_id) {
 
-    std::vector<Table*> table_set = _tables;
+    std::vector<TableImpl*> table_set = _tables;
     // 如果是随机Get，则每次对tables进行排序
     if (FLAGS_tera_sdk_ha_get_random_mode) {
-        HATable::ShuffleArray(table_set);
+        HATableImpl::ShuffleArray(table_set);
     }
 
     size_t failed_count = 0;
@@ -543,14 +545,14 @@ bool HATable::Get(const std::string& row_key, const std::string& family,
     return (failed_count>=table_set.size()) ? false : true;
 }
 
-bool HATable::Get(const std::string& row_key, const std::string& family,
-                  const std::string& qualifier, int64_t* value,
-                  ErrorCode* err, uint64_t snapshot_id) {
+bool HATableImpl::Get(const std::string& row_key, const std::string& family,
+                      const std::string& qualifier, int64_t* value,
+                      ErrorCode* err, uint64_t snapshot_id) {
 
-    std::vector<Table*> table_set = _tables;
+    std::vector<TableImpl*> table_set = _tables;
     // 如果是随机Get，则每次对tables进行排序
     if (FLAGS_tera_sdk_ha_get_random_mode) {
-        HATable::ShuffleArray(table_set);
+        HATableImpl::ShuffleArray(table_set);
     }
 
     size_t failed_count = 0;
@@ -566,7 +568,7 @@ bool HATable::Get(const std::string& row_key, const std::string& family,
     return (failed_count>=table_set.size()) ? false : true;
 }
 
-bool HATable::IsPutFinished() {
+bool HATableImpl::IsPutFinished() {
     for (size_t i = 0; i < _tables.size(); i++) {
         if (!_tables[i]->IsPutFinished()) {
             return false;
@@ -575,7 +577,7 @@ bool HATable::IsPutFinished() {
     return true;
 }
 
-bool HATable::IsGetFinished() {
+bool HATableImpl::IsGetFinished() {
     for (size_t i = 0; i < _tables.size(); i++) {
         if (!_tables[i]->IsGetFinished()) {
             return false;
@@ -584,7 +586,7 @@ bool HATable::IsGetFinished() {
     return true;
 }
 
-ResultStream* HATable::Scan(const ScanDescriptor& desc, ErrorCode* err) {
+ResultStream* HATableImpl::Scan(const ScanDescriptor& desc, ErrorCode* err) {
     for (size_t i = 0; i < _tables.size(); i++) {
         ResultStream* rs = _tables[i]->Scan(desc, err);
         if (rs == NULL) {
@@ -596,82 +598,82 @@ ResultStream* HATable::Scan(const ScanDescriptor& desc, ErrorCode* err) {
     return NULL;
 }
 
-const std::string HATable::GetName() {
+const std::string HATableImpl::GetName() {
     for (size_t i = 0; i < _tables.size(); i++) {
         return _tables[i]->GetName();
     }
     return "";
 }
 
-bool HATable::Flush() {
+bool HATableImpl::Flush() {
     return false;
 }
 
-bool HATable::CheckAndApply(const std::string& rowkey, const std::string& cf_c,
-                            const std::string& value, const RowMutation& row_mu,
-                            ErrorCode* err) {
-    err->SetFailed(ErrorCode::kNotImpl);
-    return false;
-}
-
-int64_t HATable::IncrementColumnValue(const std::string& row, const std::string& family,
-                                      const std::string& qualifier, int64_t amount,
-                                      ErrorCode* err) {
-    err->SetFailed(ErrorCode::kNotImpl);
-    return 0L;
-}
-
-void HATable::SetWriteTimeout(int64_t timeout_ms) {
-    for (size_t i = 0; i < _tables.size(); i++) {
-        _tables[i]->SetWriteTimeout(timeout_ms);
-    }
-}
-
-void HATable::SetReadTimeout(int64_t timeout_ms) {
-    for (size_t i = 0; i < _tables.size(); i++) {
-        _tables[i]->SetReadTimeout(timeout_ms);
-    }
-}
-
-bool HATable::LockRow(const std::string& rowkey, RowLock* lock, ErrorCode* err) {
-    err->SetFailed(ErrorCode::kNotImpl);
-    return false;
-}
-
-bool HATable::GetStartEndKeys(std::string* start_key, std::string* end_key,
-                              ErrorCode* err) {
-    err->SetFailed(ErrorCode::kNotImpl);
-    return false;
-}
-
-bool HATable::GetTabletLocation(std::vector<TabletInfo>* tablets,
+bool HATableImpl::CheckAndApply(const std::string& rowkey, const std::string& cf_c,
+                                const std::string& value, const RowMutation& row_mu,
                                 ErrorCode* err) {
     err->SetFailed(ErrorCode::kNotImpl);
     return false;
 }
 
-bool HATable::GetDescriptor(TableDescriptor* desc, ErrorCode* err) {
+int64_t HATableImpl::IncrementColumnValue(const std::string& row, const std::string& family,
+                                          const std::string& qualifier, int64_t amount,
+                                          ErrorCode* err) {
+    err->SetFailed(ErrorCode::kNotImpl);
+    return 0L;
+}
+
+void HATableImpl::SetWriteTimeout(int64_t timeout_ms) {
+    for (size_t i = 0; i < _tables.size(); i++) {
+        _tables[i]->SetWriteTimeout(timeout_ms);
+    }
+}
+
+void HATableImpl::SetReadTimeout(int64_t timeout_ms) {
+    for (size_t i = 0; i < _tables.size(); i++) {
+        _tables[i]->SetReadTimeout(timeout_ms);
+    }
+}
+
+bool HATableImpl::LockRow(const std::string& rowkey, RowLock* lock, ErrorCode* err) {
     err->SetFailed(ErrorCode::kNotImpl);
     return false;
 }
 
-void HATable::SetMaxMutationPendingNum(uint64_t max_pending_num) {
+bool HATableImpl::GetStartEndKeys(std::string* start_key, std::string* end_key,
+                                  ErrorCode* err) {
+    err->SetFailed(ErrorCode::kNotImpl);
+    return false;
+}
+
+bool HATableImpl::GetTabletLocation(std::vector<TabletInfo>* tablets,
+                                    ErrorCode* err) {
+    err->SetFailed(ErrorCode::kNotImpl);
+    return false;
+}
+
+bool HATableImpl::GetDescriptor(TableDescriptor* desc, ErrorCode* err) {
+    err->SetFailed(ErrorCode::kNotImpl);
+    return false;
+}
+
+void HATableImpl::SetMaxMutationPendingNum(uint64_t max_pending_num) {
     for (size_t i = 0; i < _tables.size(); i++) {
         _tables[i]->SetMaxMutationPendingNum(max_pending_num);
     }
 }
 
-void HATable::SetMaxReaderPendingNum(uint64_t max_pending_num) {
+void HATableImpl::SetMaxReaderPendingNum(uint64_t max_pending_num) {
     for (size_t i = 0; i < _tables.size(); i++) {
         _tables[i]->SetMaxReaderPendingNum(max_pending_num);
     }
 }
 
-Table* HATable::GetClusterHandle(size_t i) {
+Table* HATableImpl::GetClusterHandle(size_t i) {
     return (i < _tables.size()) ? _tables[i] : NULL;
 }
 
-void HATable::MergeResult(const std::vector<RowResult>& results, RowResult& res, uint32_t max_size) {
+void HATableImpl::MergeResult(const std::vector<RowResult>& results, RowResult& res, uint32_t max_size) {
     std::vector<int> results_pos;
     results_pos.resize(results.size());
     for (uint32_t i = 0; i < results.size(); i++) {
@@ -711,54 +713,40 @@ void HATable::MergeResult(const std::vector<RowResult>& results, RowResult& res,
         results_pos[candidate_index] += 1;
     }
 }
-void HATable::ShuffleArray(std::vector<Table*>& table_set) {
+void HATableImpl::ShuffleArray(std::vector<TableImpl*>& table_set) {
     int64_t seed = get_micros();
     srandom(seed);
     for (size_t i = table_set.size()-1; i > 0; i--) {
         int rnd = random()%(i+1);
 
         // swap
-        Table* t = table_set[rnd];
+        TableImpl* t = table_set[rnd];
         table_set[rnd] = table_set[i];
         table_set[i] = t;
     }
 }
 
+HAClientImpl::HAClientImpl(const std::string& user_identity,
+                           const std::string& user_passcode,
+                           const std::vector<std::string>& zk_clusters,
+                           const std::vector<std::string>& zk_paths) {
+    assert(zk_clusters.size() == zk_paths.size());
 
-void HAClient::SetGlogIsInitialized() {
-    Client::SetGlogIsInitialized();
-}
-
-HAClient* HAClient::NewClient(const std::vector<std::string>& confpaths,
-                              const std::string& log_prefix,
-                              ErrorCode* err) {
-    std::vector<std::string> t_confpaths = confpaths;
-
-    // 空则设置一个默认
-    if (t_confpaths.size() <= 0) {
-        t_confpaths.push_back("");
-    }
-
-    size_t failed_count = 0;
-    std::vector<Client*> cs;
-    for (size_t i = 0; i < t_confpaths.size(); i++) {
-        Client* c = Client::NewClient(t_confpaths[i], log_prefix, err);
-        if (c == NULL) {
-            failed_count++;
-        } else {
-            cs.push_back(c);
-        }
-    }
-
-    if (failed_count >= cs.size()) {
-        return NULL;
-    } else {
-        err->SetFailed(ErrorCode::kOK);
-        return new HAClient(cs);
+    for (size_t i = 0; i < zk_clusters.size(); i++) {
+        ClientImpl* ci = new ClientImpl(user_identity, user_passcode,
+                                        zk_clusters[i], zk_paths[i]);
+        _clients.push_back(ci);
     }
 }
 
-bool HAClient::CreateTable(const TableDescriptor& desc, ErrorCode* err) {
+HAClientImpl::~HAClientImpl() {
+    for (size_t i = 0; i < _clients.size(); i++) {
+        delete _clients[i];
+    }
+    _clients.clear();
+}
+
+bool HAClientImpl::CreateTable(const TableDescriptor& desc, ErrorCode* err) {
     bool ok = false;
     size_t failed_count = 0;
     bool fail_fast = false;
@@ -787,9 +775,9 @@ bool HAClient::CreateTable(const TableDescriptor& desc, ErrorCode* err) {
     }
 }
 
-bool HAClient::CreateTable(const TableDescriptor& desc,
-                           const std::vector<std::string>& tablet_delim,
-                           ErrorCode* err) {
+bool HAClientImpl::CreateTable(const TableDescriptor& desc,
+                               const std::vector<std::string>& tablet_delim,
+                               ErrorCode* err) {
     bool ok = false;
     size_t failed_count = 0;
     bool fail_fast = false;
@@ -818,7 +806,7 @@ bool HAClient::CreateTable(const TableDescriptor& desc,
     }
 }
 
-bool HAClient::UpdateTable(const TableDescriptor& desc, ErrorCode* err) {
+bool HAClientImpl::UpdateTable(const TableDescriptor& desc, ErrorCode* err) {
     bool ok = false;
     size_t failed_count = 0;
     bool fail_fast = false;
@@ -847,7 +835,7 @@ bool HAClient::UpdateTable(const TableDescriptor& desc, ErrorCode* err) {
     }
 }
 
-bool HAClient::DeleteTable(std::string name, ErrorCode* err) {
+bool HAClientImpl::DeleteTable(std::string name, ErrorCode* err) {
     bool ok = false;
     size_t failed_count = 0;
     bool fail_fast = false;
@@ -876,7 +864,7 @@ bool HAClient::DeleteTable(std::string name, ErrorCode* err) {
     }
 }
 
-bool HAClient::DisableTable(std::string name, ErrorCode* err) {
+bool HAClientImpl::DisableTable(std::string name, ErrorCode* err) {
     bool ok = false;
     size_t failed_count = 0;
     bool fail_fast = false;
@@ -905,7 +893,7 @@ bool HAClient::DisableTable(std::string name, ErrorCode* err) {
     }
 }
 
-bool HAClient::EnableTable(std::string name, ErrorCode* err) {
+bool HAClientImpl::EnableTable(std::string name, ErrorCode* err) {
     bool ok = false;
     size_t failed_count = 0;
     bool fail_fast = false;
@@ -934,8 +922,8 @@ bool HAClient::EnableTable(std::string name, ErrorCode* err) {
     }
 }
 
-bool HAClient::CreateUser(const std::string& user,
-                          const std::string& password, ErrorCode* err) {
+bool HAClientImpl::CreateUser(const std::string& user,
+                              const std::string& password, ErrorCode* err) {
     bool ok = false;
     size_t failed_count = 0;
     bool fail_fast = false;
@@ -965,7 +953,7 @@ bool HAClient::CreateUser(const std::string& user,
 }
 
 
-bool HAClient::DeleteUser(const std::string& user, ErrorCode* err) {
+bool HAClientImpl::DeleteUser(const std::string& user, ErrorCode* err) {
     bool ok = false;
     size_t failed_count = 0;
     bool fail_fast = false;
@@ -994,8 +982,8 @@ bool HAClient::DeleteUser(const std::string& user, ErrorCode* err) {
     }
 }
 
-bool HAClient::ChangePwd(const std::string& user,
-                         const std::string& password, ErrorCode* err) {
+bool HAClientImpl::ChangePwd(const std::string& user,
+                             const std::string& password, ErrorCode* err) {
     bool ok = false;
     size_t failed_count = 0;
     bool fail_fast = false;
@@ -1024,8 +1012,8 @@ bool HAClient::ChangePwd(const std::string& user,
     }
 }
 
-bool HAClient::ShowUser(const std::string& user, std::vector<std::string>& user_groups,
-                        ErrorCode* err) {
+bool HAClientImpl::ShowUser(const std::string& user, std::vector<std::string>& user_groups,
+                            ErrorCode* err) {
     bool ok = false;
     size_t failed_count = 0;
     for (size_t i = 0; i < _clients.size(); i++) {
@@ -1042,8 +1030,8 @@ bool HAClient::ShowUser(const std::string& user, std::vector<std::string>& user_
     return (failed_count >= _clients.size()) ? false : true;
 }
 
-bool HAClient::AddUserToGroup(const std::string& user,
-                              const std::string& group, ErrorCode* err) {
+bool HAClientImpl::AddUserToGroup(const std::string& user,
+                                  const std::string& group, ErrorCode* err) {
     bool ok = false;
     size_t failed_count = 0;
     bool fail_fast = false;
@@ -1072,8 +1060,8 @@ bool HAClient::AddUserToGroup(const std::string& user,
     }
 }
 
-bool HAClient::DeleteUserFromGroup(const std::string& user,
-                                   const std::string& group, ErrorCode* err) {
+bool HAClientImpl::DeleteUserFromGroup(const std::string& user,
+                                       const std::string& group, ErrorCode* err) {
     bool ok = false;
     size_t failed_count = 0;
     bool fail_fast = false;
@@ -1102,19 +1090,20 @@ bool HAClient::DeleteUserFromGroup(const std::string& user,
     }
 }
 
-HATable* HAClient::OpenTable(const std::string& table_name, ErrorCode* err) {
+Table* HAClientImpl::OpenTable(const std::string& table_name, ErrorCode* err) {
     size_t failed_count = 0;
-    HATable* ha_table = NULL;
+    HATableImpl* ha_table = NULL;
     for (size_t i = 0; i < _clients.size(); i++) {
-        Table *t = _clients[i]->OpenTable(table_name, err);
-        if (t == NULL) {
+        Table* t = _clients[i]->OpenTable(table_name, err);
+        TableImpl* ti = dynamic_cast<TableImpl*>(t);
+        if (ti == NULL) {
             LOG(WARNING) << "OpenTable failed! " << err->GetReason() << " at tera:" << i;
             failed_count++;
         } else {
             if (ha_table == NULL) {
-                ha_table = new HATable();
+                ha_table = new HATableImpl();
             }
-            ha_table->Add(t);
+            ha_table->Add(ti);
         }
     }
 
@@ -1126,9 +1115,9 @@ HATable* HAClient::OpenTable(const std::string& table_name, ErrorCode* err) {
     }
 }
 
-bool HAClient::GetTabletLocation(const std::string& table_name,
-                                 std::vector<TabletInfo>* tablets,
-                                 ErrorCode* err) {
+bool HAClientImpl::GetTabletLocation(const std::string& table_name,
+                                     std::vector<TabletInfo>* tablets,
+                                     ErrorCode* err) {
     bool ok = false;
     size_t failed_count = 0;
     for (size_t i = 0; i < _clients.size(); i++) {
@@ -1145,8 +1134,8 @@ bool HAClient::GetTabletLocation(const std::string& table_name,
     return (failed_count >= _clients.size()) ? false : true;
 }
 
-TableDescriptor* HAClient::GetTableDescriptor(const std::string& table_name,
-                                              ErrorCode* err) {
+TableDescriptor* HAClientImpl::GetTableDescriptor(const std::string& table_name,
+                                                  ErrorCode* err) {
     TableDescriptor* td = NULL;
     size_t failed_count = 0;
     for (size_t i = 0; i < _clients.size(); i++) {
@@ -1162,8 +1151,8 @@ TableDescriptor* HAClient::GetTableDescriptor(const std::string& table_name,
     return (failed_count >= _clients.size()) ? NULL : td;
 }
 
-bool HAClient::List(std::vector<TableInfo>* table_list,
-                    ErrorCode* err) {
+bool HAClientImpl::List(std::vector<TableInfo>* table_list,
+                        ErrorCode* err) {
     bool ok = false;
     size_t failed_count = 0;
     for (size_t i = 0; i < _clients.size(); i++) {
@@ -1181,10 +1170,10 @@ bool HAClient::List(std::vector<TableInfo>* table_list,
 }
 
 
-bool HAClient::List(const std::string& table_name,
-                    TableInfo* table_info,
-                    std::vector<TabletInfo>* tablet_list,
-                    ErrorCode* err) {
+bool HAClientImpl::List(const std::string& table_name,
+                        TableInfo* table_info,
+                        std::vector<TabletInfo>* tablet_list,
+                        ErrorCode* err) {
     bool ok = false;
     size_t failed_count = 0;
     for (size_t i = 0; i < _clients.size(); i++) {
@@ -1201,7 +1190,7 @@ bool HAClient::List(const std::string& table_name,
     return (failed_count >= _clients.size()) ? false : true;
 }
 
-bool HAClient::IsTableExist(const std::string& table_name, ErrorCode* err) {
+bool HAClientImpl::IsTableExist(const std::string& table_name, ErrorCode* err) {
     bool ok = false;
     size_t failed_count = 0;
     for (size_t i = 0; i < _clients.size(); i++) {
@@ -1218,7 +1207,7 @@ bool HAClient::IsTableExist(const std::string& table_name, ErrorCode* err) {
     return (failed_count >= _clients.size()) ? false : true;
 }
 
-bool HAClient::IsTableEnabled(const std::string& table_name, ErrorCode* err) {
+bool HAClientImpl::IsTableEnabled(const std::string& table_name, ErrorCode* err) {
     bool ok = false;
     size_t failed_count = 0;
     for (size_t i = 0; i < _clients.size(); i++) {
@@ -1235,7 +1224,7 @@ bool HAClient::IsTableEnabled(const std::string& table_name, ErrorCode* err) {
     return (failed_count >= _clients.size()) ? false : true;
 }
 
-bool HAClient::IsTableEmpty(const std::string& table_name, ErrorCode* err) {
+bool HAClientImpl::IsTableEmpty(const std::string& table_name, ErrorCode* err) {
     bool ok = false;
     size_t failed_count = 0;
     for (size_t i = 0; i < _clients.size(); i++) {
@@ -1252,7 +1241,7 @@ bool HAClient::IsTableEmpty(const std::string& table_name, ErrorCode* err) {
     return (failed_count >= _clients.size()) ? false : true;
 }
 
-bool HAClient::GetSnapshot(const std::string& name, uint64_t* snapshot, ErrorCode* err) {
+bool HAClientImpl::GetSnapshot(const std::string& name, uint64_t* snapshot, ErrorCode* err) {
     bool ok = false;
     size_t failed_count = 0;
     for (size_t i = 0; i < _clients.size(); i++) {
@@ -1269,7 +1258,7 @@ bool HAClient::GetSnapshot(const std::string& name, uint64_t* snapshot, ErrorCod
     return (failed_count >= _clients.size()) ? false : true;
 }
 
-bool HAClient::DelSnapshot(const std::string& name, uint64_t snapshot,ErrorCode* err) {
+bool HAClientImpl::DelSnapshot(const std::string& name, uint64_t snapshot,ErrorCode* err) {
     bool ok = false;
     size_t failed_count = 0;
     bool fail_fast = false;
@@ -1298,8 +1287,8 @@ bool HAClient::DelSnapshot(const std::string& name, uint64_t snapshot,ErrorCode*
     }
 }
 
-bool HAClient::Rollback(const std::string& name, uint64_t snapshot,
-                        const std::string& rollback_name, ErrorCode* err) {
+bool HAClientImpl::Rollback(const std::string& name, uint64_t snapshot,
+                            const std::string& rollback_name, ErrorCode* err) {
     bool ok = false;
     size_t failed_count = 0;
     bool  fail_fast = false;
@@ -1335,11 +1324,11 @@ bool HAClient::Rollback(const std::string& name, uint64_t snapshot,
 // reload config无参数
 // 所有这些命令都操作需要操作所有的tera集群
 // bool_result和str_result用第一个成功返回的结果
-bool HAClient::CmdCtrl(const std::string& command,
-                       const std::vector<std::string>& arg_list,
-                       bool* bool_result,
-                       std::string* str_result,
-                       ErrorCode* err) {
+bool HAClientImpl::CmdCtrl(const std::string& command,
+                           const std::vector<std::string>& arg_list,
+                           bool* bool_result,
+                           std::string* str_result,
+                           ErrorCode* err) {
     bool ok = false;
     size_t failed_count = 0;
     bool t_bool_result;
@@ -1367,9 +1356,9 @@ bool HAClient::CmdCtrl(const std::string& command,
     }
 }
 
-bool HAClient::Rename(const std::string& old_table_name,
-                      const std::string& new_table_name,
-                      ErrorCode* err) {
+bool HAClientImpl::Rename(const std::string& old_table_name,
+                          const std::string& new_table_name,
+                          ErrorCode* err) {
     bool ok = false;
     size_t failed_count = 0;
     bool fail_fast = false;
@@ -1398,7 +1387,7 @@ bool HAClient::Rename(const std::string& old_table_name,
     }
 }
 
-Client* HAClient::GetClusterClient(size_t i) {
+Client* HAClientImpl::GetClusterClient(size_t i) {
     return (i < _clients.size()) ? _clients[i] : NULL;
 }
 }
