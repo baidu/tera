@@ -19,6 +19,10 @@ void TabletNodeClient::SetRpcOption(int32_t max_inflow, int32_t max_outflow,
                              pending_buffer_size, thread_num);
 }
 
+void TabletNodeClient::Shutdown() {
+    RpcClientBase::Shutdown();
+}
+
 TabletNodeClient::TabletNodeClient(const std::string& server_addr,
                                              int32_t rpc_timeout)
     : RpcClient<TabletNodeServer::Stub>(server_addr),

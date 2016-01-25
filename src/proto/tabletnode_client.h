@@ -27,6 +27,7 @@ public:
     static void SetRpcOption(int32_t max_inflow = -1, int32_t max_outflow = -1,
                              int32_t pending_buffer_size = -1,
                              int32_t thread_num = -1);
+    static void Shutdown();
 
     TabletNodeClient(const std::string& addr = "",
                      int32_t rpc_timeout = FLAGS_tera_rpc_timeout_period);

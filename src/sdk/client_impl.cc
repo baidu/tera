@@ -63,6 +63,7 @@ ClientImpl::ClientImpl(const std::string& user_identity,
 }
 
 ClientImpl::~ClientImpl() {
+    tabletnode::TabletNodeClient::Shutdown();
     delete _cluster;
 }
 
