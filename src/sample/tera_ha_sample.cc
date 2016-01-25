@@ -21,6 +21,7 @@
 #include <stdlib.h>
 #include "gflags/gflags.h"
 
+#include "sdk/tera.h"
 #include "sdk/ha_tera.h"
 
 /// 创建一个表格
@@ -147,7 +148,6 @@ int ReadRowFromTable(tera::Table* table) {
     row_reader->SetAsync();
     row_reader->SetCallBack(ReadRowCallBack);
     // Async Read one row
-    /// TODO:
     table->Get(row_reader);
 
     while (!finish) {
@@ -173,9 +173,8 @@ int ReadRowFromTable(tera::Table* table) {
     row_reader3->AddColumnFamily("html");
     row_reader3->SetMaxVersions(10);
     row_reader3->SetTimeOut(5000);
-    /// TODO
-    // table->LGet(row_reader3);
-    table->Get(row_reader3);
+    tera::HATableImpl* ha_table = dynamic_cast<tera::HATableImpl*>(table);
+    ha_table->LGet(row_reader3);
 
     if (row_reader1->GetError().GetType() != tera::ErrorCode::kOK) {
         printf("read1 failed! error: %d, %s\n",
