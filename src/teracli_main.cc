@@ -175,6 +175,8 @@ void UsageMore(const std::string& prg_name) {
        reload config hostname:port                                          \n\
                 notify master | ts reload flag file                         \n\
                 *** at your own risk ***                                    \n\
+       findtablet tablename rowkey-prefix                                   \n\
+                  tablename start-key end-key                               \n\
        version\n\n";
 }
 
@@ -2345,6 +2347,91 @@ int32_t MetaOp(Client* client, int32_t argc, char** argv, ErrorCode* err) {
     return 0;
 }
 
+int32_t FindTabletOp(int32_t argc, char** argv, ErrorCode* err) {
+    if ((argc != 4) && (argc != 5)) {
+        UsageMore(argv[0]);
+        return -1;
+    }
+    if (argc == 5) {
+        std::string s = argv[3];
+        std::string e = argv[4];
+        if ((e != "") && (s.compare(e) >= 0)) {
+            if (err != NULL) {
+                err->SetFailed(ErrorCode::kBadParam, "note: start_key <= end_key");
+            }
+            return -1;
+        }
+    }
+    // get meta address
+    tera::sdk::ClusterFinder finder(FLAGS_tera_zk_root_path, FLAGS_tera_zk_addr_list);
+    std::string meta_tablet_addr = finder.RootTableAddr();
+    if (meta_tablet_addr.empty()) {
+        if (err != NULL) {
+            err->SetFailed(ErrorCode::kBadParam, "read root addr from zk fail");
+        }
+        return -1;
+    }
+    uint64_t seq_id = 0;
+    tera::TabletMetaList tablet_list;
+    tera::ScanTabletRequest request;
+    tera::ScanTabletResponse response;
+    request.set_sequence_id(seq_id++);
+    request.set_table_name(FLAGS_tera_master_meta_table_name);
+    request.set_start(std::string(argv[2]) + '#');
+    request.set_end(std::string(argv[2]) + '$');
+    tera::tabletnode::TabletNodeClient meta_node_client(meta_tablet_addr);
+    while (meta_node_client.ScanTablet(&request, &response)) {
+        if (response.status() != tera::kTabletNodeOk) {
+            std::stringstream ss;
+            ss << "fail to load meta table: "
+                << StatusCodeToString(response.status()) << std::endl;
+            if (err != NULL) {
+                err->SetFailed(ErrorCode::kBadParam, ss.str());
+            }
+            return -1;
+        }
+        int32_t record_size = response.results().key_values_size();
+        if (record_size <= 0) {
+            break;
+        }
+
+        std::string last_record_key;
+        for (int32_t i = 0; i < record_size; i++) {
+            const tera::KeyValuePair& record = response.results().key_values(i);
+            last_record_key = record.key();
+            ParseMetaTableKeyValue(record.key(), record.value(), tablet_list.add_meta());
+        }
+        std::string next_record_key = tera::NextKey(last_record_key);
+        request.set_start(next_record_key);
+        request.set_end(std::string(argv[2]) + '$');
+        request.set_sequence_id(seq_id++);
+        response.Clear();
+    }
+    std::string start_key;
+    std::string end_key;
+    if (argc == 4) {
+        start_key = std::string(argv[3]);
+        end_key = tera::NextKey(start_key);
+    } else {
+        start_key = std::string(argv[3]);
+        end_key = std::string(argv[4]);
+    }
+    int32_t tablet_num = tablet_list.meta_size();
+    for (int32_t i = 0; i < tablet_num; ++i) {
+        const tera::TabletMeta& meta = tablet_list.meta(i);
+        if ((meta.key_range().key_end() != "")
+            && (start_key.compare(meta.key_range().key_end()) >= 0)) {
+            continue;
+        }
+        if ((end_key != "")
+            && (end_key.compare(meta.key_range().key_start()) < 0)) {
+            break;
+        }
+        std::cout << meta.path() << " " << meta.server_addr() << std::endl;
+    }
+    return 0;
+}
+
 int32_t Meta2Op(Client *client, int32_t argc, char** argv) {
     if (argc < 3) {
         UsageMore(argv[0]);
@@ -2573,6 +2660,8 @@ int ExecuteCommand(Client* client, int argc, char* argv[]) {
     } else if (cmd == "findts") {
         // get tabletnode addr from a key
         ret = FindTsOp(client, argc, argv, &error_code);
+    } else if (cmd == "findtablet") {
+        ret = FindTabletOp(argc, argv, &error_code);
     } else if (cmd == "meta2") {
         ret = Meta2Op(client, argc, argv);
     } else if (cmd == "user") {
