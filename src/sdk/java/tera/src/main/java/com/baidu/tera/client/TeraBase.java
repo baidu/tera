@@ -3,7 +3,7 @@ package com.baidu.tera.client;
 public class TeraBase {
     static {
         try {
-            System.loadLibrary("tera_jni_sdk");
+            System.loadLibrary("jni_tera");
             System.out.println("JAVA: Load library.");
         } catch(Exception e) {
             System.out.println("JAVA: TeraBase: failed to load tera jni library.");

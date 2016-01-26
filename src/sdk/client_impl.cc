@@ -1030,7 +1030,8 @@ static int InitFlags(const std::string& confpath, const std::string& log_prefix)
     if (!confpath.empty() && IsExist(confpath)){
         flagfile = confpath;
     } else if(!confpath.empty() && !IsExist(confpath)){
-        LOG(ERROR) << "specified config file(function argument) not found";
+        LOG(ERROR) << "specified config file(function argument) not found: "
+            << confpath;
         return -1;
     } else if (!FLAGS_tera_sdk_conf_file.empty() && IsExist(confpath)) {
         flagfile = FLAGS_tera_sdk_conf_file;

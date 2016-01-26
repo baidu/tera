@@ -51,9 +51,17 @@ public class TeraClientImpl extends TeraBase {
         return createTable(tableName, "");
     }
 
-    public boolean dropTable(String tableName) {
+    public boolean dropTable(String tableName) throws InterruptedException {
         VLOG(10, "drop table:" + tableName);
-        return nativeDeleteTable(nativeTeraClientPointer, tableName);
+        int i = 60;
+        while (i-- > 0) {
+            if (nativeDeleteTable(nativeTeraClientPointer, tableName)) {
+                return true;
+            }
+            Thread.sleep(1000);
+        }
+        LOG_ERROR("JAVA: " + getNativeMessage());
+        return false;
     }
 
     public boolean enableTable(String tableName) {
