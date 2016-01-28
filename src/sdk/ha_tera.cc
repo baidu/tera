@@ -9,6 +9,7 @@
 DECLARE_bool(tera_sdk_ha_ddl_enable);
 DECLARE_int32(tera_sdk_ha_timestamp_diff);
 DECLARE_bool(tera_sdk_ha_get_random_mode);
+DECLARE_bool(tera_sdk_ha_get_notfound_ok);
 
 namespace tera {
 
@@ -81,6 +82,13 @@ public:
             _has_call = true;
             return true;
         } else {
+            if (code == ErrorCode::kNotFound) {
+                if (FLAGS_tera_sdk_ha_get_notfound_ok) {
+                    // 没有找到也认为成功，不继续读一个集群
+                    return true;
+                }
+            }
+            // 读下一个集群，直到结束
             if (++_cluster_index >= _clusters.size()) {
                 _has_call = true;
                 return true;
@@ -448,7 +456,14 @@ void HATableImpl::Get(RowReader* row_reader) {
         // 同步Get
         for (size_t i = 0; i < table_set.size(); i++) {
             table_set[i]->Get(row_reader);
-            if (row_reader->GetError().GetType() != ErrorCode::kOK) {
+            ErrorCode::ErrorCodeType err_type = row_reader->GetError().GetType();
+            if (err_type != ErrorCode::kOK) {
+                if (err_type == ErrorCode::kNotFound) {
+                    if (FLAGS_tera_sdk_ha_get_notfound_ok) {
+                        // 没有找到也认为成功，不继续读一个集群
+                        break;
+                    }
+                }
                 LOG(WARNING) << "Get failed! " << row_reader->GetError().GetReason()
                              << " at tera:" << i;
                 failed_count++;
@@ -503,7 +518,14 @@ void HATableImpl::Get(const std::vector<RowReader*>& row_readers) {
         sync_readers.clear();
         for (size_t j = 0; j < need_read.size(); j++) {
             RowReader* row_reader = need_read[j];
-            if (row_reader->GetError().GetType() != ErrorCode::kOK) {
+            ErrorCode::ErrorCodeType err_type = row_reader->GetError().GetType();
+            if (err_type != ErrorCode::kOK) {
+                if (err_type == ErrorCode::kNotFound) {
+                    if (FLAGS_tera_sdk_ha_get_notfound_ok) {
+                        // 没有找到也认为成功，不继续读一个集群
+                        break;
+                    }
+                }
                 LOG(WARNING) << j << " Get failed! error: "
                              << row_reader->GetError().GetType()
                              << ", " << row_reader->GetError().GetReason()
@@ -536,6 +558,13 @@ bool HATableImpl::Get(const std::string& row_key, const std::string& family,
     for (size_t i = 0; i < table_set.size(); i++) {
         bool ok = table_set[i]->Get(row_key, family, qualifier, value, err, snapshot_id);
         if (!ok) {
+            ErrorCode::ErrorCodeType err_type = err->GetType();
+            if (err_type == ErrorCode::kNotFound) {
+                if (FLAGS_tera_sdk_ha_get_notfound_ok) {
+                    // 没有找到也认为成功，不继续读一个集群
+                    break;
+                }
+            }
             LOG(WARNING) << "Get failed! " << err->GetReason() << " at tera:" << i;
             failed_count++;
         } else {
@@ -559,6 +588,13 @@ bool HATableImpl::Get(const std::string& row_key, const std::string& family,
     for (size_t i = 0; i < table_set.size(); i++) {
         bool ok = table_set[i]->Get(row_key, family, qualifier, value, err, snapshot_id);
         if (!ok) {
+            ErrorCode::ErrorCodeType err_type = err->GetType();
+            if (err_type == ErrorCode::kNotFound) {
+                if (FLAGS_tera_sdk_ha_get_notfound_ok) {
+                    // 没有找到也认为成功，不继续读一个集群
+                    break;
+                }
+            }
             LOG(WARNING) << "Get failed! " << err->GetReason() << " at tera:" << i;
             failed_count++;
         } else {

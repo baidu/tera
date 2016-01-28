@@ -128,12 +128,17 @@ int ModifyTable(tera::Table* table) {
 bool finish = false;
 
 void ReadRowCallBack(tera::RowReader* row_reader) {
-    printf("ReadRowCallBack call\n");
-    while (!row_reader->Done()) {
-        printf("ReadRowCallBack, Row: %s\%s\%ld\%s\n",
-                row_reader->RowName().c_str(), row_reader->ColumnName().c_str(),
-                row_reader->Timestamp(), row_reader->Value().c_str());
-        row_reader->Next();
+    if (row_reader->GetError().GetType() != tera::ErrorCode::kOK) {
+        printf("ReadRowCallBack! error: %d, %s\n",
+               row_reader->GetError().GetType(),
+               row_reader->GetError().GetReason().c_str());
+    } else {
+        while (!row_reader->Done()) {
+            printf("ReadRowCallBack: %s\%s\%ld\%s\n",
+                   row_reader->RowName().c_str(), row_reader->ColumnName().c_str(),
+                   row_reader->Timestamp(), row_reader->Value().c_str());
+            row_reader->Next();
+        }
     }
     delete row_reader;
     finish = true;
@@ -230,7 +235,7 @@ int ShowBigTable(tera::Client* client) {
         return 1;
     }
     // Write
-    ModifyTable(table);
+    // ModifyTable(table);
     // Scan
     //ScanTable(table);
     // Read
