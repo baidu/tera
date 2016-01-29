@@ -17,6 +17,7 @@ all: $(MYSQL_PATH) FORCE
 	$(MAKE) -C $(MYSQL_PATH)
 	$(MAKE) install -C $(MYSQL_PATH)
 	cp -af $(TERA_PLUGIN_PATH)/libtera.so $(OUTPUT)/lib/plugin
+	cp -af script/* $(OUTPUT)/bin
 	echo 'Done'
 
 clean:
