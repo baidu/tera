@@ -373,30 +373,28 @@ Tera_share::Tera_share()
   they are needed to function.
 */
 
-Tera_share *ha_tera::get_share(const char* table_name)
+Tera_share *ha_tera::get_share(const char* name)
 {
   Tera_share *tmp_share= NULL;
   DBUG_ENTER("ha_tera::get_share()");
-  DBUG_PRINT("info", ("table: %s", table_name));
-  std::string real_table_name = table_name;
-  for (size_t i = 0; i < real_table_name.size(); i++)
-  {
-    char c = real_table_name[i];
-    if (c == '.' || c == '/')
-    {
-      real_table_name[i] = '_';
-    }
-  }
+
+  char dbname[FN_HEADLEN];
+  char tabname[FN_HEADLEN];
+  char tera_tabname[FN_HEADLEN * 2];
+  ha_tera_util::path_to_dbname(name, dbname);
+  ha_tera_util::path_to_tabname(name, tabname);
+  ha_tera_util::name_to_tera_tabname(dbname, tabname, tera_tabname);
+  DBUG_PRINT("info", ("name: %s table: %s %s", name, dbname, tabname));
 
   mysql_mutex_lock(&tera_mutex);
-  if (tera_open_tables.find(real_table_name) != tera_open_tables.end())
+  if (tera_open_tables.find(tera_tabname) != tera_open_tables.end())
   {
-    tmp_share = tera_open_tables[real_table_name];
+    tmp_share = tera_open_tables[tera_tabname];
   }
   else
   {
     tera::ErrorCode ec;
-    tera::TableDescriptor table_desc(real_table_name);
+    tera::TableDescriptor table_desc(tera_tabname);
     table_desc.SetRawKey(tera::kGeneralKv);
     table_desc.AddLocalityGroup("default");
     if (!tera_client->CreateTable(table_desc, &ec))
@@ -404,7 +402,7 @@ Tera_share *ha_tera::get_share(const char* table_name)
       // goto err;
     }
 
-    tera::Table* tera_table = tera_client->OpenTable(real_table_name, &ec);
+    tera::Table* tera_table = tera_client->OpenTable(tera_tabname, &ec);
     if (tera_table == NULL)
     {
       goto err;
@@ -412,7 +410,7 @@ Tera_share *ha_tera::get_share(const char* table_name)
 
     tmp_share= new Tera_share;
     tmp_share->table = tera_table;
-    tera_open_tables[real_table_name] = tmp_share;
+    tera_open_tables[tera_tabname] = tmp_share;
 
     lock_shared_ha_data();
     set_ha_share_ptr(static_cast<Handler_share*>(tmp_share));
@@ -429,12 +427,19 @@ ha_tera::ha_tera(handlerton *hton, TABLE_SHARE *table_arg)
    share_(NULL),
    result_stream_(NULL),
    field_buf_(new uchar[64 << 20])
-{}
+{
+  DBUG_ENTER("ha_tera::ha_tera");
+  DBUG_PRINT("info", ("ha_tera handler %p", this));
+  DBUG_VOID_RETURN;
+}
 
 ha_tera::~ha_tera()
 {
+  DBUG_ENTER("ha_tera::~ha_tera");
+  DBUG_PRINT("info", ("ha_tera handler %p", this));
   delete[] field_buf_;
   delete result_stream_;
+  DBUG_VOID_RETURN;
 }
 
 /**
@@ -546,7 +551,7 @@ static bool tera_is_supported_system_table(const char *db,
 int ha_tera::open(const char *name, int mode, uint test_if_locked)
 {
   DBUG_ENTER("ha_tera::open");
-
+  DBUG_PRINT("info", ("ha_tera handler %p", this));
   if (!(share_ = get_share(name)))
     DBUG_RETURN(1);
   thr_lock_data_init(&share_->lock,&lock_,NULL);
@@ -613,7 +618,7 @@ int ha_tera::close(void)
 int ha_tera::write_row(uchar *buf)
 {
   DBUG_ENTER("ha_tera::write_row");
-
+  DBUG_PRINT("info", ("ha_tera handler %p", this));
   std::string key, value;
   mysql_buf_to_primary_data(buf, &key, &value);
   if (key == "")
@@ -814,6 +819,7 @@ int ha_tera::index_last(uchar *buf)
 int ha_tera::rnd_init(bool scan)
 {
   DBUG_ENTER("ha_tera::rnd_init");
+  DBUG_PRINT("info", ("ha_tera handler %p", this));
   delete result_stream_;
 
   tera::ErrorCode ec;
@@ -829,6 +835,7 @@ int ha_tera::rnd_init(bool scan)
 int ha_tera::rnd_end()
 {
   DBUG_ENTER("ha_tera::rnd_end");
+  DBUG_PRINT("info", ("ha_tera handler %p", this));
   DBUG_RETURN(0);
 }
 
@@ -851,6 +858,7 @@ int ha_tera::rnd_next(uchar *buf)
 {
   int rc = 0;
   DBUG_ENTER("ha_tera::rnd_next");
+  DBUG_PRINT("info", ("ha_tera handler %p", this));
   // MYSQL_READ_ROW_START(table_share->db.str, table_share->table_name.str, TRUE);
 
   std::string key, value;
@@ -934,6 +942,7 @@ int ha_tera::rnd_pos(uchar *buf, uchar *pos)
 {
   int rc = 0;
   DBUG_ENTER("ha_tera::rnd_pos");
+  DBUG_PRINT("info", ("ha_tera handler %p", this));
   MYSQL_READ_ROW_START(table_share->db.str, table_share->table_name.str, TRUE);
   last_key_.assign((char*)pos, ref_length);
   // get_row(last_key, buf);
@@ -984,6 +993,7 @@ int ha_tera::rnd_pos(uchar *buf, uchar *pos)
 int ha_tera::info(uint flag)
 {
   DBUG_ENTER("ha_tera::info");
+  DBUG_PRINT("info", ("ha_tera handler %p", this));
   DBUG_RETURN(0);
 }
 
@@ -1000,6 +1010,7 @@ int ha_tera::info(uint flag)
 int ha_tera::extra(enum ha_extra_function operation)
 {
   DBUG_ENTER("ha_tera::extra");
+  DBUG_PRINT("info", ("ha_tera handler %p", this));
   DBUG_RETURN(0);
 }
 
@@ -1073,6 +1084,7 @@ int ha_tera::truncate()
 int ha_tera::external_lock(THD *thd, int lock_type)
 {
   DBUG_ENTER("ha_tera::external_lock");
+  DBUG_PRINT("info", ("ha_tera handler %p", this));
   DBUG_RETURN(0);
 }
 
@@ -1227,12 +1239,17 @@ int ha_tera::create(const char *name, TABLE *table_arg,
                     HA_CREATE_INFO *create_info)
 {
   DBUG_ENTER("ha_tera::create");
+  DBUG_PRINT("info", ("ha_tera handler %p", this));
+  char dbname[FN_HEADLEN];
+  //char m_schemaname[FN_HEADLEN];
+  char tabname[FN_HEADLEN];
+  char tera_tabname[FN_HEADLEN * 2];
 
   bool create_from_tera = (create_info->table_options & HA_OPTION_CREATE_FROM_ENGINE);
-  ha_tera_util::path_to_dbname(name, dbname_);
-  ha_tera_util::path_to_tabname(name, tabname_);
-  ha_tera_util::name_to_tera_tabname(dbname_, tabname_, tera_tabname_);
-  DBUG_PRINT("info", ("create table: %s %s, from tera: %d", dbname_, tabname_, create_from_tera));
+  ha_tera_util::path_to_dbname(name, dbname);
+  ha_tera_util::path_to_tabname(name, tabname);
+  ha_tera_util::name_to_tera_tabname(dbname, tabname, tera_tabname);
+  DBUG_PRINT("info", ("create table: %s %s, from tera: %d", dbname, tabname, create_from_tera));
 
   if (create_from_tera)
   {
@@ -1252,19 +1269,19 @@ int ha_tera::create(const char *name, TABLE *table_arg,
     my_free((char*)data);
     DBUG_RETURN(2);
   }
-  DBUG_PRINT("info", ("setFrm table: %s %s  data: 0x%lx  len: %lu", dbname_, tabname_,
+  DBUG_PRINT("info", ("setFrm table: %s %s  data: 0x%lx  len: %lu", dbname, tabname,
                       (long)pack_data, (ulong)pack_length));
   std::string frm_data((char*)pack_data, pack_length);
   my_free((char*)data);
   my_free((char*)pack_data);
 
   tera::ErrorCode ec;
-  tera::TableDescriptor table_desc(tera_tabname_);
+  tera::TableDescriptor table_desc(tera_tabname);
   table_desc.SetRawKey(tera::kGeneralKv);
   table_desc.AddLocalityGroup("default");
   if (!tera_client->CreateTable(table_desc, &ec))
   {
-    DBUG_PRINT("TERA", ("create table %s %s on tera fail: %s", dbname_, tabname_,
+    DBUG_PRINT("TERA", ("create table %s %s on tera fail: %s", dbname, tabname,
                         ec.GetReason().c_str()));
     DBUG_RETURN(3);
   }
@@ -1273,7 +1290,7 @@ int ha_tera::create(const char *name, TABLE *table_arg,
   uint32 frm_version = 1;
   memcpy((char*)frm_flag.data(), &tera_frm_magic_num, 4);
   memcpy((char*)frm_flag.data() + 4, &frm_version, 4);
-  tera::RowMutation* frm_mu = tera_frm_table->NewRowMutation(tera_tabname_);
+  tera::RowMutation* frm_mu = tera_frm_table->NewRowMutation(tera_tabname);
   frm_mu->Put(tera_frm_data_column, "", frm_data);
   frm_mu->Put(tera_frm_flag_column, "", frm_flag);
   tera_frm_table->ApplyMutation(frm_mu);
@@ -1282,16 +1299,16 @@ int ha_tera::create(const char *name, TABLE *table_arg,
 
   if (ec.GetType() != tera::ErrorCode::kOK)
   {
-    DBUG_PRINT("TERA", ("put table %s %s frm into tera fail: %s", dbname_, tabname_,
+    DBUG_PRINT("TERA", ("put table %s %s frm into tera fail: %s", dbname, tabname,
                         ec.GetReason().c_str()));
     DBUG_RETURN(4);
   }
 
   mysql_mutex_lock(&tera_mutex);
-  all_table_version[dbname_][tabname_] = frm_version;
+  all_table_version[dbname][tabname] = frm_version;
   mysql_mutex_unlock(&tera_mutex);
 
-  DBUG_PRINT("info", ("create table %s %s on tera success", dbname_, tabname_));
+  DBUG_PRINT("info", ("create table %s %s on tera success", dbname, tabname));
   DBUG_RETURN(0);
 }
 
