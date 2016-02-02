@@ -69,7 +69,7 @@ SOLIBRARY = libtera.so
 TERA_C_SO = libtera_c.so
 JNILIBRARY = libjni_tera.so
 BENCHMARK = tera_bench tera_mark
-TESTS = prop_tree_test tprinter_test string_util_test tablet_io_test
+TESTS = prop_tree_test tprinter_test string_util_test tablet_io_test fragment_test
 
 
 .PHONY: all clean cleanall test
@@ -147,6 +147,9 @@ string_util_test: src/utils/test/string_util_test.o $(LIBRARY)
 
 tablet_io_test: src/io/test/tablet_io_test.o src/tabletnode/tabletnode_sysinfo.o\
 		$(IO_OBJ) $(PROTO_OBJ) $(OTHER_OBJ) $(COMMON_OBJ) $(LEVELDB_LIB)
+	$(CXX) -o $@ $^ $(LDFLAGS)
+
+fragment_test: src/utils/test/fragment_test.o src/utils/fragment.o
 	$(CXX) -o $@ $^ $(LDFLAGS)
 
 $(ALL_OBJ): %.o: %.cc $(PROTO_OUT_H)
