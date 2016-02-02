@@ -166,7 +166,7 @@ DEFINE_int32(tera_tabletnode_scan_pack_max_size, 10240, "the max size(KB) of the
 
 DEFINE_int32(tera_asyncwriter_pending_limit, 10000, "the max pending data size (KB) in async writer");
 DEFINE_bool(tera_enable_level0_limit, true, "enable level0 limit");
-DEFINE_int32(tera_tablet_level0_file_limit, 20000, "the max level0 file num before write busy");
+DEFINE_int32(tera_tablet_level0_file_limit, 2000, "the max level0 file num before write busy");
 DEFINE_int32(tera_asyncwriter_sync_interval, 100, "the interval (in ms) to sync write buffer to disk");
 DEFINE_int32(tera_asyncwriter_sync_size_threshold, 1024, "force sync per X KB");
 DEFINE_int32(tera_asyncwriter_batch_size, 1024, "write batch to leveldb per X KB");
