@@ -811,7 +811,7 @@ int32_t DeleteOp(Client* client, int32_t argc, char** argv, ErrorCode* err) {
 }
 
 int32_t ScanOp(Client* client, int32_t argc, char** argv, ErrorCode* err) {
-    if (argc != 5 && argc != 6) {
+    if (argc != 3 && argc != 5 && argc != 6) {
         LOG(ERROR) << "args number error: " << argc << ", need 5 | 6.";
         Usage(argv[0]);
         return -1;
@@ -825,8 +825,22 @@ int32_t ScanOp(Client* client, int32_t argc, char** argv, ErrorCode* err) {
         return -1;
     }
 
-    std::string start_rowkey = argv[3];
-    std::string end_rowkey = argv[4];
+    std::string start_rowkey;
+    std::string end_rowkey;
+    std::string fname = FLAGS_file;
+    if (!fname.empty()) {
+        const int32_t buf_size = 100 * 1024;
+        char buf[buf_size];
+        std::ifstream stream(fname.c_str());
+        stream.getline(buf, buf_size);
+        start_rowkey = std::string(buf);
+        stream.getline(buf, buf_size);
+        end_rowkey = std::string(buf);
+    } else {
+        start_rowkey = argv[3];
+        end_rowkey = argv[4];
+    }
+
     ResultStream* result_stream;
     ScanDescriptor desc(start_rowkey);
     desc.SetEnd(end_rowkey);
