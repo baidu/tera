@@ -466,12 +466,6 @@ private:
                                             UpdateClosure* done);
     void NoticeTabletNodeSchemaUpdated(TablePtr table);
     void NoticeTabletNodeSchemaUpdated(TabletPtr tablet);
-    void SetTableAndTabletsSchemaIsSyncing(TablePtr table, bool flag);
-    void PollUntilSchemaSynced(TablePtr table, int32_t retry_times,
-                               UpdateTableResponse* rpc_response,
-                               google::protobuf::Closure* rpc_done);
-    bool IsTableSchemaSyncDone(TablePtr table);
-    void ResetSchemaSyncStatus(TablePtr table);
 
     // load metabale to master memory
     bool LoadMetaTable(const std::string& meta_tablet_addr,

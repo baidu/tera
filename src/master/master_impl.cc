@@ -3313,7 +3313,6 @@ void MasterImpl::UpdateSchemaCallback(std::string table_name,
         return;
     }
     LOG(INFO) << "[update] tablet schema update done. " << tablet;
-    tablet->SetSchemaIsSyncing(false);
     TablePtr table = tablet->GetTable();
     if (!table->AddToRange(tablet->GetKeyStart(), tablet->GetKeyEnd())) {
         LOG(ERROR) << "[update] invalid argument:" << tablet;
@@ -3339,18 +3338,6 @@ void MasterImpl::NoticeTabletNodeSchemaUpdatedAsync(TabletPtr tablet,
     VLOG(20) << "NoticeTabletNodeSchemaUpdatedAsync id: " << request->sequence_id()
              << ", tablet:" << tablet;
     node_client.Update(request, response, done);
-}
-
-void MasterImpl::SetTableAndTabletsSchemaIsSyncing(TablePtr table, bool flag) {
-    MutexLock locker(&m_mutex);
-    table->SetSchemaIsSyncing(flag);
-
-    std::vector<TabletPtr> tablet_list;
-    table->GetTablet(&tablet_list);
-    std::vector<TabletPtr>::iterator it;
-    for (it = tablet_list.begin(); it != tablet_list.end(); ++it) {
-        (*it)->SetSchemaIsSyncing(flag);
-    }
 }
 
 void MasterImpl::NoticeTabletNodeSchemaUpdated(TabletPtr tablet) {
@@ -4491,7 +4478,7 @@ void MasterImpl::UpdateTableRecordForUpdateCallback(TablePtr table, int32_t retr
             LOG(ERROR) << kSms << "abort update meta table, " << table;
             rpc_response->set_status(kMetaTabletError);
             rpc_done->Run();
-            SetTableAndTabletsSchemaIsSyncing(table, false); // failed, so rollback
+            table->SetSchemaIsSyncing(false);
         } else {
             WriteClosure* done =
                 NewClosure(this, &MasterImpl::UpdateTableRecordForUpdateCallback,
@@ -4509,36 +4496,11 @@ void MasterImpl::UpdateTableRecordForUpdateCallback(TablePtr table, int32_t retr
         rpc_done->Run();
     } else {
         LOG(INFO) << "[update] online-schema-update";
-        SetTableAndTabletsSchemaIsSyncing(table, true);
-        NoticeTabletNodeSchemaUpdated(table);
+        table->SetSchemaIsSyncing(true);
         table->StoreUpdateRpc(rpc_response, rpc_done);
         table->ResetRangeFragment();
-        //int32_t retry_times = 0;
-        //PollUntilSchemaSynced(table, retry_times, rpc_response, rpc_done);
+        NoticeTabletNodeSchemaUpdated(table);
     }
-}
-
-void MasterImpl::PollUntilSchemaSynced(TablePtr table, int32_t retry_times,
-                                       UpdateTableResponse* rpc_response,
-                                       google::protobuf::Closure* rpc_done) {
-    std::vector<TabletPtr> tablet_list;
-    table->GetTablet(&tablet_list);
-    std::vector<TabletPtr>::iterator it;
-    for (it = tablet_list.begin(); it != tablet_list.end(); ++it) {
-        if ((*it)->GetSchemaIsSyncing()) { // not synced yet
-            LOG(INFO) << "[update] this tablet schema not synced yet:" << (*it);
-            ThreadPool::Task task =
-                boost::bind(&MasterImpl::PollUntilSchemaSynced, this,
-                            table, retry_times + 1, rpc_response, rpc_done);
-            m_thread_pool->DelayTask(FLAGS_tera_master_schema_update_retry_period * 1000, task);
-            return;
-        }
-    }
-    LOG(INFO) << "[update] DONE :" << table;
-    // new schema synced to all tablets/ts
-    table->SetSchemaIsSyncing(false);
-    rpc_response->set_status(kMasterOk);
-    rpc_done->Run();
 }
 
 void MasterImpl::UpdateTableRecordForRenameCallback(TablePtr table, int32_t retry_times,
@@ -5094,9 +5056,9 @@ void MasterImpl::ProcessReadyTablet(TabletPtr tablet) {
     }
 
     if (FLAGS_tera_master_online_schema_update_enabled
-        && tablet->GetTable()->GetSchemaIsSyncing()) {
+        && tablet->GetTable()->GetSchemaIsSyncing()
+        && !tablet->GetTable()->IsSchemaSyncedAtRange(tablet->GetKeyStart(), tablet->GetKeyEnd())) {
         LOG(INFO) << "[update] tablet ready but schema not synced: " << tablet;
-        tablet->SetSchemaIsSyncing(true);
         NoticeTabletNodeSchemaUpdated(tablet);
     }
 }

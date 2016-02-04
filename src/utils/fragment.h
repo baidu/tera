@@ -18,6 +18,8 @@ public:
 
     bool IsCompleteRange() const;
 
+    bool IsCoverRange(const std::string& start, const std::string& end) const;
+
     std::string DebugString() const;
 
 private:

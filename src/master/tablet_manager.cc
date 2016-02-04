@@ -57,10 +57,10 @@ std::ostream& operator << (std::ostream& o, const TabletPtr& tablet) {
     return o;
 }
 
-Tablet::Tablet(const TabletMeta& meta) : m_meta(meta), m_schema_is_syncing(false) {}
+Tablet::Tablet(const TabletMeta& meta) : m_meta(meta) {}
 
 Tablet::Tablet(const TabletMeta& meta, TablePtr table)
-    : m_meta(meta), m_table(table), m_schema_is_syncing(false) {}
+    : m_meta(meta), m_table(table) {}
 
 Tablet::~Tablet() {
     m_table.reset();
@@ -393,16 +393,6 @@ void Tablet::ToMetaTableKeyValue(std::string* packed_key,
                                  std::string* packed_value) {
     MutexLock lock(&m_mutex);
     MakeMetaTableKeyValue(m_meta, packed_key, packed_value);
-}
-
-bool Tablet::GetSchemaIsSyncing() {
-    MutexLock lock(&m_mutex);
-    return m_schema_is_syncing;
-}
-
-void Tablet::SetSchemaIsSyncing(bool flag) {
-    MutexLock lock(&m_mutex);
-    m_schema_is_syncing = flag;
 }
 
 bool Tablet::CheckStatusSwitch(TabletStatus old_status,
@@ -774,6 +764,11 @@ bool Table::AddToRange(const std::string& start, const std::string& end) {
 bool Table::IsCompleteRange() const {
     MutexLock lock(&m_mutex);
     return m_rangefragment->IsCompleteRange();
+}
+
+bool Table::IsSchemaSyncedAtRange(const std::string& start, const std::string& end) {
+    MutexLock lock(&m_mutex);
+    return m_rangefragment->IsCoverRange(start, end);
 }
 
 void Table::StoreUpdateRpc(UpdateTableResponse* response, google::protobuf::Closure* done) {

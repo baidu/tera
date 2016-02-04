@@ -122,7 +122,6 @@ public:
 
     void ToMetaTableKeyValue(std::string* packed_key = NULL,
                              std::string* packed_value = NULL);
-    void SetSchemaIsSyncing(bool flag);
     bool GetSchemaIsSyncing();
 
 private:
@@ -155,8 +154,6 @@ private:
             memset(this, 0, sizeof(TabletAccumulateCounter));
         }
     } m_accumu_counter;
-
-    bool m_schema_is_syncing; // is schema synced to ts who load this tablet
 };
 
 typedef class boost::shared_ptr<Tablet> TabletPtr;
@@ -197,10 +194,6 @@ public:
     void RefreshCounter();
     bool GetSchemaIsSyncing();
     void SetSchemaIsSyncing(bool flag);
-    void SetSchemaSyncResponse(UpdateTableResponse* response);
-    UpdateTableResponse* GetSchemaSyncResponse();
-    void SetSchemaSyncDone(google::protobuf::Closure* done);
-    google::protobuf::Closure* GetSchemaSyncDone();
     bool GetSchemaSyncLockOrFailed();
     void ResetRangeFragment();
     bool AddToRange(const std::string& start, const std::string& end);
@@ -208,6 +201,7 @@ public:
     RangeFragment* GetRangeFragment();
     void UpdateRpcDone();
     void StoreUpdateRpc(UpdateTableResponse* response, google::protobuf::Closure* done);
+    bool IsSchemaSyncedAtRange(const std::string& start, const std::string& end);
 
 private:
     Table(const Table&) {}
