@@ -1,4 +1,6 @@
-# Tera SDK 开发入门
+# Tera SDK 开发指南
+
+[Java SDK从这进入](https://github.com/baidu/tera/blob/master/doc/sdk_dev_guide_for_java.md)
 
 # 1. 主要数据结构
 
