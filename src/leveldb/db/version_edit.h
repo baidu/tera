@@ -25,6 +25,7 @@ struct FileMetaData {
   int allowed_seeks;          // Seeks allowed until compaction
   uint64_t number;
   uint64_t file_size;         // File size in bytes
+  uint64_t data_size;         // data_size <= file_size
   InternalKey smallest;       // Smallest internal key served by table
   InternalKey largest;        // Largest internal key served by table
   bool smallest_fake;         // smallest is not real, have out-of-range keys
@@ -34,6 +35,7 @@ struct FileMetaData {
       refs(0),
       allowed_seeks(1 << 30),
       file_size(0),
+      data_size(0),
       smallest_fake(false),
       largest_fake(false) { }
 };

@@ -23,6 +23,7 @@
 #include "proto/table_meta.pb.h"
 #include "proto/tabletnode_rpc.pb.h"
 #include "utils/counter.h"
+#include "utils/fragment.h"
 
 namespace tera {
 class UpdateTableResponse;
@@ -196,14 +197,17 @@ public:
     void RefreshCounter();
     bool GetSchemaIsSyncing();
     void SetSchemaIsSyncing(bool flag);
-    void SyncedCountAdd(int32_t c);
-    int32_t GetSyncedCount();
-    int32_t GetTabletsCount();
     void SetSchemaSyncResponse(UpdateTableResponse* response);
     UpdateTableResponse* GetSchemaSyncResponse();
     void SetSchemaSyncDone(google::protobuf::Closure* done);
     google::protobuf::Closure* GetSchemaSyncDone();
     bool GetSchemaSyncLockOrFailed();
+    void ResetRangeFragment();
+    bool AddToRange(const std::string& start, const std::string& end);
+    bool IsCompleteRange() const;
+    RangeFragment* GetRangeFragment();
+    void UpdateRpcDone();
+    void StoreUpdateRpc(UpdateTableResponse* response, google::protobuf::Closure* done);
 
 private:
     Table(const Table&) {}
@@ -221,6 +225,9 @@ private:
     int64_t m_create_time;
     TableCounter m_counter;
     bool m_schema_is_syncing; // is schema syncing to all ts(all tablets)
+    RangeFragment* m_rangefragment;
+    UpdateTableResponse* m_update_rpc_response;
+    google::protobuf::Closure* m_update_rpc_done;
 };
 
 class TabletManager {

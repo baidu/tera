@@ -197,6 +197,7 @@ void Tablet::SetCounter(const TabletCounter& counter) {
         CounterWeightedSum(counter.write_kvs(), m_average_counter.write_kvs()));
     m_average_counter.set_write_size(
         CounterWeightedSum(counter.write_size(), m_average_counter.write_size()));
+    m_average_counter.set_write_workload(counter.write_workload());
     m_average_counter.set_is_on_busy(
         CounterWeightedSum(counter.is_on_busy(), m_average_counter.is_on_busy()));
 }
@@ -522,7 +523,8 @@ Table::Table(const std::string& table_name)
       m_deleted_tablet_num(0),
       m_max_tablet_no(0),
       m_create_time((int64_t)time(NULL)),
-      m_schema_is_syncing(false) {
+      m_schema_is_syncing(false),
+      m_rangefragment(NULL) {
 }
 
 bool Table::FindTablet(const std::string& key_start, TabletPtr* tablet) {
@@ -751,6 +753,44 @@ bool Table::GetSchemaSyncLockOrFailed() {
     }
     m_schema_is_syncing = true;
     return true;
+}
+
+void Table::ResetRangeFragment() {
+    MutexLock lock(&m_mutex);
+    delete m_rangefragment;
+    m_rangefragment = new RangeFragment;
+}
+
+RangeFragment* Table::GetRangeFragment() {
+    MutexLock lock(&m_mutex);
+    return m_rangefragment;
+}
+
+bool Table::AddToRange(const std::string& start, const std::string& end) {
+    MutexLock lock(&m_mutex);
+    return m_rangefragment->AddToRange(start, end);
+}
+
+bool Table::IsCompleteRange() const {
+    MutexLock lock(&m_mutex);
+    return m_rangefragment->IsCompleteRange();
+}
+
+void Table::StoreUpdateRpc(UpdateTableResponse* response, google::protobuf::Closure* done) {
+    MutexLock lock(&m_mutex);
+    m_update_rpc_response = response;
+    m_update_rpc_done = done;
+}
+
+void Table::UpdateRpcDone() {
+    MutexLock lock(&m_mutex);
+    if (m_update_rpc_response != NULL) {
+        m_update_rpc_response->set_status(kMasterOk);
+        m_update_rpc_done->Run();
+
+        m_update_rpc_response = NULL;
+        m_update_rpc_done = NULL;
+    }
 }
 
 void Table::SetSchemaIsSyncing(bool flag) {

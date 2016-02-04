@@ -3,8 +3,11 @@
 // found in the LICENSE file.
 //
 
+#include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
+#include <readline/history.h>
+#include <readline/readline.h>
 
 #include <fstream>
 #include <iostream>
@@ -51,6 +54,7 @@ DEFINE_string(rollback_name, "", "rollback operation's name");
 
 DEFINE_int32(lg, -1, "locality group number.");
 DEFINE_int32(concurrency, 1, "concurrency for compact table.");
+DEFINE_int64(timestamp, -1, "timestamp.");
 
 volatile int32_t g_start_time = 0;
 volatile int32_t g_end_time = 0;
@@ -171,6 +175,8 @@ void UsageMore(const std::string& prg_name) {
        reload config hostname:port                                          \n\
                 notify master | ts reload flag file                         \n\
                 *** at your own risk ***                                    \n\
+       findtablet tablename rowkey-prefix                                   \n\
+                  tablename start-key end-key                               \n\
        version\n\n";
 }
 
@@ -769,17 +775,29 @@ int32_t DeleteOp(Client* client, int32_t argc, char** argv, ErrorCode* err) {
         std::string input(argv[4]);
         if (input.find(":", 0) == std::string::npos) {
             // delete a family
-            mutation->DeleteFamily(input);
+            if (FLAGS_timestamp == -1) {
+                mutation->DeleteFamily(input);
+            } else {
+                mutation->DeleteFamily(input, FLAGS_timestamp);
+            }
         } else {
             std::string family;
             std::string qualifier;
             ParseCfQualifier(input, &family, &qualifier);
             if (op == "delete") {
                 // delete a column (all versions)
-                mutation->DeleteColumns(family, qualifier);
+                if (FLAGS_timestamp == -1) {
+                    mutation->DeleteColumns(family, qualifier);
+                } else {
+                    mutation->DeleteColumns(family, qualifier, FLAGS_timestamp);
+                }
             } else if (op == "delete1v") {
                 // delete the newest version
-                mutation->DeleteColumn(family, qualifier);
+                if (FLAGS_timestamp == -1) {
+                    mutation->DeleteColumn(family, qualifier);
+                } else {
+                    mutation->DeleteColumn(family, qualifier, FLAGS_timestamp);
+                }
             }
         }
     } else {
@@ -818,7 +836,7 @@ int32_t ScanOp(Client* client, int32_t argc, char** argv, ErrorCode* err) {
     if (argc == 5) {
         // scan all cells
     } else if (argc == 6) {
-        if (!ParseScanSchema(argv[5], &desc)) {
+        if (!desc.SetFilter(argv[5])) {
             LOG(ERROR) << "fail to parse scan schema: " << argv[5];
             return -1;
         }
@@ -868,6 +886,14 @@ int32_t ScanOp(Client* client, int32_t argc, char** argv, ErrorCode* err) {
     return 0;
 }
 
+static std::string DoubleToStr(double value)
+{
+    const int len_max = 32;
+    char buffer[len_max];
+    int len = snprintf(buffer, len_max, "%.2g", value);
+    return std::string(buffer, len);
+}
+
 int32_t ShowTabletList(const TabletMetaList& tablet_list, bool is_server_addr, bool is_x) {
     TPrinter printer;
     int cols;
@@ -877,14 +903,14 @@ int32_t ShowTabletList(const TabletMetaList& tablet_list, bool is_server_addr, b
             cols = 14;
             printer.Reset(cols,
                            " ", "server_addr", "path", "status", "size",
-                           "isbusy", "lread", "read", "rspeed", "write",
-                           "wspeed", "scan", "sspeed", "startkey");
+                           "lread", "read", "rspeed", "write", "wspeed",
+                           "scan", "sspeed", "wwl", "startkey");
         } else {
             cols = 13;
             printer.Reset(cols,
-                           " ", "path", "status", "size", "isbusy",
-                           "lread", "read", "rspeed", "write", "wspeed",
-                           "scan", "sspeed", "startkey");
+                           " ", "path", "status", "size", "lread",
+                           "read", "rspeed", "write", "wspeed",
+                           "scan", "sspeed", "wwl", "startkey");
         }
 
         for (int32_t i = 0; i < tablet_list.meta_size(); ++i) {
@@ -904,7 +930,7 @@ int32_t ShowTabletList(const TabletMetaList& tablet_list, bool is_server_addr, b
             for (int l = 0; l < meta.lg_size_size(); ++l) {
                 size_str += utils::ConvertByteToString(meta.lg_size(l));
                 if (l < meta.lg_size_size() - 1) {
-                    size_str += " ";
+                    size_str += ",";
                 }
             }
             size_str += "]";
@@ -912,11 +938,6 @@ int32_t ShowTabletList(const TabletMetaList& tablet_list, bool is_server_addr, b
 
             if (tablet_list.counter_size() > 0) {
                 const TabletCounter& counter = tablet_list.counter(i);
-                if (counter.is_on_busy()) {
-                    row.push_back("true");
-                } else {
-                    row.push_back("false");
-                }
                 row.push_back(NumberToString(counter.low_read_cell()));
                 row.push_back(NumberToString(counter.read_rows()));
                 row.push_back(utils::ConvertByteToString(counter.read_size()) + "B/s");
@@ -924,8 +945,9 @@ int32_t ShowTabletList(const TabletMetaList& tablet_list, bool is_server_addr, b
                 row.push_back(utils::ConvertByteToString(counter.write_size()) + "B/s");
                 row.push_back(NumberToString(counter.scan_rows()));
                 row.push_back(utils::ConvertByteToString(counter.scan_size()) + "B/s");
+                row.push_back(DoubleToStr(counter.write_workload()));
             }
-            row.push_back(meta.key_range().key_start().substr(0, 20));
+            row.push_back(DebugString(meta.key_range().key_start().substr(0, 20)));
             printer.AddRow(row);
         }
     } else {
@@ -1200,13 +1222,12 @@ int32_t ShowSingleTabletNodeInfo(Client* client, const string& addr,
     std::cout << "  update time:   "
         << common::timer::get_time_str(info.timestamp() / 1000000) << "\n\n";
 
-    int cols = 5;
-    TPrinter printer(cols, "workload", "tablets", "load", "busy", "split");
+    int cols = 4;
+    TPrinter printer(cols, "workload", "tablets", "load", "split");
     std::vector<string> row;
     row.push_back(utils::ConvertByteToString(info.load()));
     row.push_back(NumberToString(info.tablet_total()));
     row.push_back(NumberToString(info.tablet_onload()));
-    row.push_back(NumberToString(info.tablet_onbusy()));
     row.push_back(NumberToString(info.tablet_onsplit()));
     printer.AddRow(row);
     printer.Print();
@@ -1606,59 +1627,21 @@ int32_t BatchGetOp(Client* client, int32_t argc, char** argv, ErrorCode* err) {
             continue;
         }
         std::string& rowkey = input_v[0];
-        if (input_v.size() == 1) {
-            // only rowkey explicit, scan all records out
-            ScanDescriptor desc(rowkey);
-            ResultStream* result_stream;
-            desc.SetEnd(rowkey);
-            if ((result_stream = table->Scan(desc, err)) == NULL) {
-                LOG(ERROR) << "fail to get records from table: " << tablename;
-                return -1;
+        RowReader* reader = table->NewRowReader(rowkey);
+        for (size_t i = 1; i < input_v.size(); ++i) {
+            std::string& cfqu = input_v[i];
+            std::string::size_type pos = cfqu.find(":", 0);
+            if (pos != std::string::npos) {
+                // add column
+                reader->AddColumn(cfqu.substr(0, pos), cfqu.substr(pos + 1));
+            } else {
+                // add columnfamily
+                reader->AddColumnFamily(cfqu);
             }
-
-            while (!result_stream->Done()) {
-                {
-                    // for performance testing
-                    MutexLock locker(&g_stat_lock);
-                    g_key_num ++;
-                    g_total_size += result_stream->RowName().size()
-                        + result_stream->ColumnName().size()
-                        + sizeof(result_stream->Timestamp())
-                        + result_stream->Value().size();
-                    int32_t time_cur = time(NULL);
-                    int32_t time_used = time_cur - g_start_time;
-                    if (time_cur > g_last_time) {
-                        g_last_time = time_cur;
-                        LOG(INFO) << "Read file  "<<g_key_num<<" keys "<<g_key_num/(time_used?time_used:1)
-                            <<" keys/S "<<g_total_size/1024.0/1024/(time_used?time_used:1)<<" MB/S ";
-                    }
-                }
-                /*
-                std::cout << result_stream->RowName() << ":"
-                    << result_stream->ColumnName() << ":"
-                    << result_stream->Timestamp() << ":"
-                    << result_stream->Value() << std::endl;
-                */
-                result_stream->Next();
-            }
-        } else {
-            // get specific records with RowReader
-            RowReader* reader = table->NewRowReader(rowkey);
-            for (size_t i = 1; i < input_v.size(); ++i) {
-                std::string& cfqu = input_v[i];
-                std::string::size_type pos = cfqu.find(":", 0);
-                if (pos != std::string::npos) {
-                    // add column
-                    reader->AddColumn(cfqu.substr(0, pos), cfqu.substr(pos + 1));
-                } else {
-                    // add columnfamily
-                    reader->AddColumnFamily(cfqu);
-                }
-                reader->SetSnapshot(snapshot);
-            }
-            reader->SetCallBack(BatchGetCallBack);
-            table->Get(reader);
+            reader->SetSnapshot(snapshot);
         }
+        reader->SetCallBack(BatchGetCallBack);
+        table->Get(reader);
     }
     while (!table->IsGetFinished()) {
         // waiting async get finishing
@@ -2364,6 +2347,91 @@ int32_t MetaOp(Client* client, int32_t argc, char** argv, ErrorCode* err) {
     return 0;
 }
 
+int32_t FindTabletOp(int32_t argc, char** argv, ErrorCode* err) {
+    if ((argc != 4) && (argc != 5)) {
+        UsageMore(argv[0]);
+        return -1;
+    }
+    if (argc == 5) {
+        std::string s = argv[3];
+        std::string e = argv[4];
+        if ((e != "") && (s.compare(e) >= 0)) {
+            if (err != NULL) {
+                err->SetFailed(ErrorCode::kBadParam, "note: start_key <= end_key");
+            }
+            return -1;
+        }
+    }
+    // get meta address
+    tera::sdk::ClusterFinder finder(FLAGS_tera_zk_root_path, FLAGS_tera_zk_addr_list);
+    std::string meta_tablet_addr = finder.RootTableAddr();
+    if (meta_tablet_addr.empty()) {
+        if (err != NULL) {
+            err->SetFailed(ErrorCode::kBadParam, "read root addr from zk fail");
+        }
+        return -1;
+    }
+    uint64_t seq_id = 0;
+    tera::TabletMetaList tablet_list;
+    tera::ScanTabletRequest request;
+    tera::ScanTabletResponse response;
+    request.set_sequence_id(seq_id++);
+    request.set_table_name(FLAGS_tera_master_meta_table_name);
+    request.set_start(std::string(argv[2]) + '#');
+    request.set_end(std::string(argv[2]) + '$');
+    tera::tabletnode::TabletNodeClient meta_node_client(meta_tablet_addr);
+    while (meta_node_client.ScanTablet(&request, &response)) {
+        if (response.status() != tera::kTabletNodeOk) {
+            std::stringstream ss;
+            ss << "fail to load meta table: "
+                << StatusCodeToString(response.status()) << std::endl;
+            if (err != NULL) {
+                err->SetFailed(ErrorCode::kBadParam, ss.str());
+            }
+            return -1;
+        }
+        int32_t record_size = response.results().key_values_size();
+        if (record_size <= 0) {
+            break;
+        }
+
+        std::string last_record_key;
+        for (int32_t i = 0; i < record_size; i++) {
+            const tera::KeyValuePair& record = response.results().key_values(i);
+            last_record_key = record.key();
+            ParseMetaTableKeyValue(record.key(), record.value(), tablet_list.add_meta());
+        }
+        std::string next_record_key = tera::NextKey(last_record_key);
+        request.set_start(next_record_key);
+        request.set_end(std::string(argv[2]) + '$');
+        request.set_sequence_id(seq_id++);
+        response.Clear();
+    }
+    std::string start_key;
+    std::string end_key;
+    if (argc == 4) {
+        start_key = std::string(argv[3]);
+        end_key = tera::NextKey(start_key);
+    } else {
+        start_key = std::string(argv[3]);
+        end_key = std::string(argv[4]);
+    }
+    int32_t tablet_num = tablet_list.meta_size();
+    for (int32_t i = 0; i < tablet_num; ++i) {
+        const tera::TabletMeta& meta = tablet_list.meta(i);
+        if ((meta.key_range().key_end() != "")
+            && (start_key.compare(meta.key_range().key_end()) >= 0)) {
+            continue;
+        }
+        if ((end_key != "")
+            && (end_key.compare(meta.key_range().key_start()) < 0)) {
+            break;
+        }
+        std::cout << meta.path() << " " << meta.server_addr() << std::endl;
+    }
+    return 0;
+}
+
 int32_t Meta2Op(Client *client, int32_t argc, char** argv) {
     if (argc < 3) {
         UsageMore(argv[0]);
@@ -2524,23 +2592,9 @@ int32_t UserOp(Client* client, int32_t argc, char** argv, ErrorCode* err) {
     return -1;
 }
 
-int main(int argc, char* argv[]) {
-    ::google::ParseCommandLineFlags(&argc, &argv, true);
-
-    if (argc < 2) {
-        Usage(argv[0]);
-        return -1;
-    }
-
+int ExecuteCommand(Client* client, int argc, char* argv[]) {
     int ret = 0;
     ErrorCode error_code;
-    Client* client = Client::NewClient(FLAGS_flagfile, NULL);
-
-    if (client == NULL) {
-        LOG(ERROR) << "client instance not exist";
-        return -1;
-    }
-
     std::string cmd = argv[1];
     if (cmd == "create") {
         ret = CreateOp(client, argc, argv, &error_code);
@@ -2610,6 +2664,8 @@ int main(int argc, char* argv[]) {
     } else if (cmd == "findts") {
         // get tabletnode addr from a key
         ret = FindTsOp(client, argc, argv, &error_code);
+    } else if (cmd == "findtablet") {
+        ret = FindTabletOp(argc, argv, &error_code);
     } else if (cmd == "meta2") {
         ret = Meta2Op(client, argc, argv);
     } else if (cmd == "user") {
@@ -2631,6 +2687,48 @@ int main(int argc, char* argv[]) {
         LOG(ERROR) << "fail reason: " << strerr(error_code)
             << " " << error_code.GetReason();
     }
+    return ret;
+}
+
+int main(int argc, char* argv[]) {
+    ::google::ParseCommandLineFlags(&argc, &argv, true);
+
+    Client* client = Client::NewClient(FLAGS_flagfile, NULL);
+    if (client == NULL) {
+        LOG(ERROR) << "client instance not exist";
+        return -1;
+    }
+
+    int ret  = 0;
+    if (argc == 1) {
+        char* line = NULL;
+        while ((line = readline("tera> ")) != NULL) {
+            char* line_copy = strdup(line);
+            std::vector<char*> arg_list;
+            arg_list.push_back(argv[0]);
+            char* tmp = NULL;
+            char* token = strtok_r(line, " \t", &tmp);
+            while (token != NULL) {
+                arg_list.push_back(token);
+                token = strtok_r(NULL, " \t", &tmp);
+            }
+            if (arg_list.size() == 2 &&
+                (strcmp(arg_list[1], "quit") == 0 || strcmp(arg_list[1], "exit") == 0)) {
+                delete[] line_copy;
+                delete[] line;
+                break;
+            }
+            if (arg_list.size() > 1) {
+                add_history(line_copy);
+                ret = ExecuteCommand(client, arg_list.size(), &arg_list[0]);
+            }
+            delete[] line_copy;
+            delete[] line;
+        }
+    } else {
+        ret = ExecuteCommand(client, argc, argv);
+    }
+
     delete client;
     return ret;
 }

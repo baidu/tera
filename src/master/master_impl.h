@@ -403,6 +403,7 @@ private:
                                             bool failed, int error_code);
 
     void UpdateTableRecordForUpdateCallback(TablePtr table, int32_t retry_times,
+                                            const TableSchema* schema,
                                             UpdateTableResponse* rpc_response,
                                             google::protobuf::Closure* rpc_done,
                                             WriteTabletRequest* request,
@@ -573,6 +574,7 @@ private:
     Counter m_this_sequence_id;
 
     bool m_query_enabled;
+    scoped_ptr<ThreadPool> m_query_thread_pool;
     int64_t m_start_query_time;
     int64_t m_query_tabletnode_timer_id;
     Counter m_query_pending_count;

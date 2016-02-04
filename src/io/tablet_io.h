@@ -107,6 +107,7 @@ public:
     virtual bool AddInheritedLiveFiles(std::vector<std::set<uint64_t> >* live);
 
     bool IsBusy();
+    bool Workload(double* write_workload);
 
     bool SnapshotIDToSeq(uint64_t snapshot_id, uint64_t* snapshot_sequence);
 

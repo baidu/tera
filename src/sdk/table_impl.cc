@@ -55,7 +55,7 @@ DECLARE_string(tera_sdk_cookie_path);
 DECLARE_int32(tera_sdk_cookie_update_interval);
 DECLARE_bool(tera_sdk_perf_counter_enabled);
 DECLARE_int64(tera_sdk_perf_counter_log_interval);
-DECLARE_int32(FLAGS_tera_rpc_timeout_period);
+DECLARE_int32(tera_rpc_timeout_period);
 
 namespace tera {
 
@@ -287,13 +287,6 @@ bool TableImpl::Get(const std::string& row_key, const std::string& family,
 ResultStream* TableImpl::Scan(const ScanDescriptor& desc, ErrorCode* err) {
     ScanDescImpl * impl = desc.GetImpl();
     impl->SetTableSchema(_table_schema);
-    if (impl->GetFilterString() != "") {
-        MutexLock lock(&_table_meta_mutex);
-        if (!impl->ParseFilterString()) {
-            // fail to parse filter string
-            return NULL;
-        }
-    }
     ResultStream * results = NULL;
     if (desc.IsAsync() && (_table_schema.raw_key() != GeneralKv)) {
         VLOG(6) << "activate async-scan";
@@ -424,15 +417,15 @@ void TableImpl::ScanCallBack(ScanTask* scan_task,
         _task_pool.PopTask(scan_task->GetId());
         CHECK_EQ(scan_task->GetRef(), 2);
         delete scan_task;
-    } else if (err == kKeyNotInRange) {
-        scan_task->IncRetryTimes();
-        ScanTabletAsync(scan_task, false);
     } else {
         scan_task->IncRetryTimes();
         ThreadPool::Task retry_task =
             boost::bind(&TableImpl::ScanTabletAsync, this, scan_task, false);
-        _thread_pool->DelayTask(
-            FLAGS_tera_sdk_retry_period * scan_task->RetryTimes(), retry_task);
+        CHECK(scan_task->RetryTimes() > 0);
+        int64_t retry_interval =
+            static_cast<int64_t>(pow(FLAGS_tera_sdk_delay_send_internal,
+                                     scan_task->RetryTimes() - 1) * 1000);
+        _thread_pool->DelayTask(retry_interval, retry_task);
     }
 }
 

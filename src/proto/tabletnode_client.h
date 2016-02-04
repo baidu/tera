@@ -64,7 +64,7 @@ public:
                   Closure<void, SnapshotRollbackRequest*, SnapshotRollbackResponse*, bool, int>* done = NULL);
 
 
-    bool Query(const QueryRequest* request,
+    bool Query(ThreadPool* thread_pool, const QueryRequest* request,
                QueryResponse* response,
                Closure<void, QueryRequest*, QueryResponse*, bool, int>* done = NULL);
 
