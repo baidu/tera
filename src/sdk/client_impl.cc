@@ -102,7 +102,7 @@ bool ClientImpl::CheckReturnValue(StatusCode status, std::string& reason, ErrorC
             break;
         case kTableStatusEnable:
             reason = "table status: enable.";
-            err->SetFailed(ErrorCode::kSystem, reason);
+            err->SetFailed(ErrorCode::kBadParam, reason);
             break;
         case kInvalidArgument:
             reason = "invalid arguments.";
@@ -118,7 +118,7 @@ bool ClientImpl::CheckReturnValue(StatusCode status, std::string& reason, ErrorC
             break;
         default:
             reason = "tera master is not ready, please wait..";
-            err->SetFailed(ErrorCode::kSystem, reason);
+            err->SetFailed(ErrorCode::kUnavailable, reason);
             break;
     }
     return false;
@@ -165,7 +165,7 @@ bool ClientImpl::CreateTable(const TableDescriptor& desc,
     } else {
         reason = "rpc fail to create table:" + desc.TableName();
         LOG(ERROR) << reason;
-        err->SetFailed(ErrorCode::kSystem, reason);
+        err->SetFailed(ErrorCode::kUnavailable, reason);
     }
     return false;
 }
@@ -196,7 +196,7 @@ bool ClientImpl::UpdateTable(const TableDescriptor& desc, ErrorCode* err) {
     } else {
         reason = "rpc fail to create table:" + desc.TableName();
         LOG(ERROR) << reason;
-        err->SetFailed(ErrorCode::kSystem, reason);
+        err->SetFailed(ErrorCode::kUnavailable, reason);
     }
     return false;
 }
@@ -223,7 +223,7 @@ bool ClientImpl::DeleteTable(string name, ErrorCode* err) {
     } else {
         reason = "rpc fail to delete table: " + name;
         LOG(ERROR) << reason;
-        err->SetFailed(ErrorCode::kSystem, reason);
+        err->SetFailed(ErrorCode::kUnavailable, reason);
     }
     return false;
 }
@@ -251,7 +251,7 @@ bool ClientImpl::DisableTable(string name, ErrorCode* err) {
     } else {
         reason = "rpc fail to disable table: " + name;
         LOG(ERROR) << reason;
-        err->SetFailed(ErrorCode::kSystem, reason);
+        err->SetFailed(ErrorCode::kUnavailable, reason);
     }
     return false;
 }
@@ -278,7 +278,7 @@ bool ClientImpl::EnableTable(string name, ErrorCode* err) {
     } else {
         reason = "rpc fail to enable table: " + name;
         LOG(ERROR) << reason;
-        err->SetFailed(ErrorCode::kSystem, reason);
+        err->SetFailed(ErrorCode::kUnavailable, reason);
     }
     return false;
 }
@@ -317,7 +317,7 @@ bool ClientImpl::OperateUser(UserInfo& operated_user, UserOperateType type,
     } else {
         reason = "rpc fail to operate user: " + operated_user.user_name();
         LOG(ERROR) << reason;
-        err->SetFailed(ErrorCode::kSystem, reason);
+        err->SetFailed(ErrorCode::kUnavailable, reason);
     }
     return false;
 }
@@ -386,7 +386,7 @@ bool ClientImpl::GetInternalTableName(const std::string& table_name, ErrorCode* 
     if (!meta_client.ScanTablet(&request, &response)
           || response.status() != kTabletNodeOk) {
         LOG(ERROR) << "fail to scan meta: " << StatusCodeToString(response.status());
-        err->SetFailed(ErrorCode::kSystem, "system error");
+        err->SetFailed(ErrorCode::kUnavailable, "system error");
         return false;
     }
     err->SetFailed(ErrorCode::kOK);
@@ -490,7 +490,7 @@ TableDescriptor* ClientImpl::GetTableDescriptor(const string& table_name,
 //
 //      if (!meta_client.ScanTablet(&request, &response)
 //          || response.status() != kTabletNodeOk) {
-//          err->SetFailed(ErrorCode::kSystem, "system error");
+//          err->SetFailed(ErrorCode::kUnavailable, "system error");
 //          return false;
 //      }
 //
@@ -637,7 +637,7 @@ bool ClientImpl::DoShowTablesInfo(TableMetaList* table_list,
     if (has_error) {
         LOG(ERROR) << "fail to show table info.";
         if (err != NULL) {
-            err->SetFailed(ErrorCode::kSystem, err_msg);
+            err->SetFailed(ErrorCode::kUnavailable, err_msg);
         }
         return false;
     }
@@ -673,7 +673,7 @@ bool ClientImpl::ShowTabletNodesInfo(const string& addr,
         return true;
     }
     LOG(ERROR) << "fail to show tabletnode info: " << addr;
-    err->SetFailed(ErrorCode::kSystem, StatusCodeToString(response.status()));
+    err->SetFailed(ErrorCode::kUnavailable, StatusCodeToString(response.status()));
     return false;
 }
 
@@ -702,7 +702,7 @@ bool ClientImpl::ShowTabletNodesInfo(std::vector<TabletNodeInfo>* infos,
         return true;
     }
     LOG(ERROR) << "fail to show tabletnode info";
-    err->SetFailed(ErrorCode::kSystem, StatusCodeToString(response.status()));
+    err->SetFailed(ErrorCode::kUnavailable, StatusCodeToString(response.status()));
     return false;
 }
 
@@ -801,7 +801,7 @@ bool ClientImpl::GetSnapshot(const string& name, uint64_t* snapshot, ErrorCode* 
             return true;
         }
     }
-    err->SetFailed(ErrorCode::kSystem, StatusCodeToString(response.status()));
+    err->SetFailed(ErrorCode::kUnavailable, StatusCodeToString(response.status()));
     std::cout << name << " get snapshot failed";
     return false;
 }
@@ -826,7 +826,7 @@ bool ClientImpl::DelSnapshot(const string& name, uint64_t snapshot, ErrorCode* e
             return true;
         }
     }
-    err->SetFailed(ErrorCode::kSystem, StatusCodeToString(response.status()));
+    err->SetFailed(ErrorCode::kUnavailable, StatusCodeToString(response.status()));
     std::cout << name << " del snapshot failed";
     return false;
 }
@@ -854,7 +854,7 @@ bool ClientImpl::Rollback(const string& name, uint64_t snapshot,
             return true;
         }
     }
-    err->SetFailed(ErrorCode::kSystem, StatusCodeToString(response.status()));
+    err->SetFailed(ErrorCode::kUnavailable, StatusCodeToString(response.status()));
     std::cout << name << " rollback to snapshot failed";
     return false;
 }
@@ -902,7 +902,7 @@ bool ClientImpl::Rename(const std::string& old_table_name,
     request.set_new_table_name(new_table_name);
     bool ok = master_client.RenameTable(&request, &response);
     if (!ok || response.status() != kMasterOk) {
-        err->SetFailed(ErrorCode::kSystem, "failed to rename table");
+        err->SetFailed(ErrorCode::kUnavailable, "failed to rename table");
         return false;
     }
     LOG(INFO) << "rename table OK. " << old_table_name
@@ -937,7 +937,7 @@ bool ClientImpl::ListInternal(std::vector<TableInfo>* table_list,
                 << request.start_table_name() << ", key: "
                 << request.start_tablet_key() << ", status: "
                 << StatusCodeToString(response.status());
-            err->SetFailed(ErrorCode::kSystem);
+            err->SetFailed(ErrorCode::kUnavailable);
             return false;
         }
 

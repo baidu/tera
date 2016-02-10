@@ -97,7 +97,7 @@ bool HashClient::Put(const std::string& row_key, const std::string& family,
                      ErrorCode* err) {
     if (!_table) {
         LOG(ERROR) << "table not open: " << _table_name;
-        SetErrorCode(err, ErrorCode::kSystem, "tail not open: " + _table_name);
+        SetErrorCode(err, ErrorCode::kUnavailable, "tail not open: " + _table_name);
         return false;
     }
     return _table->Put(_hash_method->HashKey(row_key), family, qualifier, value, err);
@@ -114,7 +114,7 @@ bool HashClient::Write(const std::string& row_key, const std::string& family,
                        UserContext* context, ErrorCode* err) {
     if (!_table) {
         LOG(ERROR) << "table not open: " << _table_name;
-        SetErrorCode(err, ErrorCode::kSystem, "tail not open: " + _table_name);
+        SetErrorCode(err, ErrorCode::kUnavailable, "tail not open: " + _table_name);
         return false;
     }
 
@@ -188,7 +188,7 @@ bool HashClient::Get(const std::string& row_key, const std::string& family,
                      ErrorCode* err) {
     if (!_table) {
         LOG(ERROR) << "table not open: " << _table_name;
-        SetErrorCode(err, ErrorCode::kSystem, "tail not open: " + _table_name);
+        SetErrorCode(err, ErrorCode::kUnavailable, "tail not open: " + _table_name);
         return false;
     }
 
@@ -266,7 +266,7 @@ bool HashClient::Seek(const HashScanDesc& desc, ErrorCode* err) {
 bool HashClient::Current(std::string* key, std::string* value,
                          ErrorCode* err) {
     if (_scan_stream->Done()) {
-        SetErrorCode(err, ErrorCode::kSystem, "not more record");
+        SetErrorCode(err, ErrorCode::kUnavailable, "not more record");
         return false;
     }
     *key = _hash_method->Key(_scan_stream->RowName());
@@ -277,11 +277,11 @@ bool HashClient::Current(std::string* key, std::string* value,
 bool HashClient::Current(std::string* row_key, std::string* family, std::string* qualifier,
                          std::string* value, ErrorCode* err) {
     if (!_scan_stream) {
-        SetErrorCode(err, ErrorCode::kSystem, "scan not ready");
+        SetErrorCode(err, ErrorCode::kUnavailable, "scan not ready");
         return false;
     }
     if (_scan_stream->Done()) {
-        SetErrorCode(err, ErrorCode::kSystem, "not more record");
+        SetErrorCode(err, ErrorCode::kUnavailable, "not more record");
         return false;
     }
 
@@ -319,7 +319,7 @@ bool HashClient::Current(std::string* row_key, void* obj,
 
 bool HashClient::Next(ErrorCode* err) {
     if (_scan_stream->Done()) {
-        SetErrorCode(err, ErrorCode::kSystem, "not more record");
+        SetErrorCode(err, ErrorCode::kUnavailable, "not more record");
         return false;
     }
     _scan_stream->Next();

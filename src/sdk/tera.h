@@ -21,12 +21,13 @@ public:
         kOK = 0,
         kNotFound,
         kBadParam,
-        kSystem,
+        kUnavailable,
         kTimeout,
-        kBusy,
+        kTooBusy,
+        kIOError,
+        kNetworkError,
         kNoQuota,
         kNoAuth,
-        kUnknown,
         kNotImpl
     };
     ErrorCode();
@@ -39,7 +40,7 @@ private:
     std::string _reason;
 };
 
-/// 将tera错误吗转化为可读字符串
+/// 将tera错误码转化为可读字符串
 const char* strerr(ErrorCode error_code);
 
 enum CompressType {

@@ -28,6 +28,7 @@
 #include "sdk/read_impl.h"
 #include "sdk/scan_impl.h"
 #include "sdk/schema_impl.h"
+#include "sdk/sdk_utils.h"
 #include "sdk/sdk_zk.h"
 #include "sdk/tera.h"
 #include "utils/crypt.h"
@@ -519,7 +520,7 @@ void TableImpl::DistributeMutations(const std::vector<RowMutationImpl*>& mu_list
                 }
             } else {
                 _cur_commit_pending_counter.Sub(row_mutation->MutationNum());
-                row_mutation->SetError(ErrorCode::kBusy, "pending too much mutations, try it later.");
+                row_mutation->SetError(ErrorCode::kTooBusy, "pending too much mutations, try it later.");
                 ThreadPool::Task task =
                     boost::bind(&TableImpl::BreakRequest, this, row_mutation->GetId());
                 row_mutation->DecRef();
@@ -812,7 +813,7 @@ void TableImpl::MutationTimeout(int64_t mutation_id) {
     } else {
         std::string err_reason = StringFormat("retry %u last error %s", row_mutation->RetryTimes(),
                                               StatusCodeToString(err).c_str());
-        row_mutation->SetError(ErrorCode::kSystem, err_reason);
+        row_mutation->SetError(StatusCodeToErrorCodeType(err), err_reason);
     }
     // only for flow control
     _cur_commit_pending_counter.Sub(row_mutation->MutationNum());
@@ -824,10 +825,12 @@ void TableImpl::MutationTimeout(int64_t mutation_id) {
 
 bool TableImpl::GetTabletLocation(std::vector<TabletInfo>* tablets,
                                   ErrorCode* err) {
+    err->SetFailed(ErrorCode::kNotImpl);
     return false;
 }
 
 bool TableImpl::GetDescriptor(TableDescriptor* desc, ErrorCode* err) {
+    err->SetFailed(ErrorCode::kNotImpl);
     return false;
 }
 
@@ -880,7 +883,7 @@ void TableImpl::DistributeReaders(const std::vector<RowReaderImpl*>& row_reader_
                 }
             } else {
                 _cur_reader_pending_counter.Dec();
-                row_reader->SetError(ErrorCode::kBusy, "pending too much readers, try it later.");
+                row_reader->SetError(ErrorCode::kTooBusy, "pending too much readers, try it later.");
                 ThreadPool::Task task =
                     boost::bind(&TableImpl::BreakRequest, this, row_reader->GetId());
                 row_reader->DecRef();
@@ -1164,7 +1167,7 @@ void TableImpl::ReaderTimeout(int64_t reader_id) {
     } else {
         std::string err_reason = StringFormat("retry %u last error %s", row_reader->RetryTimes(),
                                               StatusCodeToString(err).c_str());
-        row_reader->SetError(ErrorCode::kSystem, err_reason);
+        row_reader->SetError(StatusCodeToErrorCodeType(err), err_reason);
     }
     int64_t perf_time = common::timer::get_micros();
     row_reader->RunCallback();
@@ -1687,7 +1690,7 @@ void TableImpl::ReadTableMetaAsync(ErrorCode* ret_err, int32_t retry_times,
         MutexLock lock(&_table_meta_mutex);
         CHECK(_table_meta_updating);
         if (retry_times >= FLAGS_tera_sdk_retry_times) {
-            ret_err->SetFailed(ErrorCode::kSystem);
+            ret_err->SetFailed(ErrorCode::kUnavailable);
             _table_meta_updating = false;
             _table_meta_cond.Signal();
         } else {
@@ -1775,7 +1778,7 @@ void TableImpl::ReadTableMetaCallBack(ErrorCode* ret_err,
         _table_meta_updating = false;
         _table_meta_cond.Signal();
     } else if (retry_times >= FLAGS_tera_sdk_retry_times) {
-        ret_err->SetFailed(ErrorCode::kSystem);
+        ret_err->SetFailed(StatusCodeToErrorCodeType(err));
         _table_meta_updating = false;
         _table_meta_cond.Signal();
     } else {

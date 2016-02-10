@@ -25,7 +25,7 @@ ErrorCode::ErrorCodeType ErrorCode::GetType() const {
 }
 
 const char* strerr(ErrorCode error_code) {
-    const char* ret = "Unknown error";
+    const char* ret = NULL;
     switch (error_code.GetType()) {
     case ErrorCode::kOK:
         ret = "OK";
@@ -36,26 +36,33 @@ const char* strerr(ErrorCode error_code) {
     case ErrorCode::kBadParam:
         ret = "Bad Parameter";
         break;
-    case ErrorCode::kSystem:
-        ret = "SystemError";
+    case ErrorCode::kUnavailable:
+        ret = "Temporarily Unavailable";
         break;
     case ErrorCode::kTimeout:
         ret = "Timeout";
         break;
-    case ErrorCode::kBusy:
-        ret = "SystemBusy";
+    case ErrorCode::kTooBusy:
+        ret = "Server Too Busy";
+        break;
+    case ErrorCode::kIOError:
+        ret = "IO Error";
+        break;
+    case ErrorCode::kNetworkError:
+        ret = "Network Error";
         break;
     case ErrorCode::kNoQuota:
-        ret = "UserNoQuota";
+        ret = "User No Quota";
         break;
     case ErrorCode::kNoAuth:
-        ret = "UserUnauthorized";
+        ret = "User Unauthorized";
         break;
     case ErrorCode::kNotImpl:
-        ret = "Not Implement";
+        ret = "Not Implemented";
         break;
     default:
-        ret = "UnkownError";
+        ret = "Unkown Error";
+        break;
     }
     return ret;
 }
