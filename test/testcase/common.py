@@ -96,7 +96,9 @@ def create_kv_table():
     ret = subprocess.Popen(const.teracli_binary + ' create test', stdout=subprocess.PIPE, stderr=subprocess.PIPE, shell=True)
     print ''.join(ret.stdout.readlines())
     print ''.join(ret.stderr.readlines())
-
+    ret = parse_showinfo()
+    print ret
+    
 
 def create_singleversion_table():
     print 'create single version table'

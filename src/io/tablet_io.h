@@ -154,7 +154,7 @@ public:
     bool ReleaseSnapshot(uint64_t snapshot_id,  StatusCode* status = NULL);
     void ListSnapshot(std::vector<uint64_t>* snapshot_id);
 
-    uint64_t Rollback(uint64_t snapshot_id, StatusCode* status);
+    uint64_t GetRollback(uint64_t snapshot_id, StatusCode* status);
 
     uint32_t GetLGidByCFName(const std::string& cfname);
 

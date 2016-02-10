@@ -240,14 +240,8 @@ void TabletNodeImpl::LoadTablet(const LoadTabletRequest* request,
         snapshots[request->snapshots_id(i)] = request->snapshots_sequence(i);
     }
 
-    // to recover rollbacks
+    //////////// TODO ///////////////////
     std::map<uint64_t, uint64_t> rollbacks;
-    int32_t num_of_rollbacks = request->rollbacks_size();
-    for (int32_t i = 0; i < num_of_rollbacks; ++i) {
-        rollbacks[request->rollbacks(i).snapshot_id()] = request->rollbacks(i).rollback_point();
-        VLOG(10) << "load tablet with rollback " << request->rollbacks(i).snapshot_id()
-                 << "-" << request->rollbacks(i).rollback_point();
-    }
 
     LOG(INFO) << "start load tablet, id: " << request->sequence_id()
         << ", table: " << request->tablet_name()
@@ -292,6 +286,21 @@ void TabletNodeImpl::LoadTablet(const LoadTabletRequest* request,
     } else {
         tablet_io->DecRef();
         response->set_status(kTabletNodeOk);
+    }
+    // recover rollbacks
+    int32_t num_of_rollbacks = request->rollbacks_size();
+    for (int32_t i = 0; i < num_of_rollbacks; ++i) {
+        Rollback cur_rollback = request->rollbacks(i);
+        uint64_t rollback_point = tablet_io->GetRollback(cur_rollback.snapshot_id(), &status);
+        VLOG(10) << "recover rollback: " << cur_rollback.ShortDebugString();
+        if (cur_rollback.rollback_point() == leveldb::kMaxSequenceNumber) {
+            Rollback rollback;
+            rollback.set_name(cur_rollback.name());
+            rollback.set_snapshot_id(cur_rollback.snapshot_id());
+            rollback.set_rollback_point(rollback_point);
+            response->add_rollbacks()->CopyFrom(rollback);
+            VLOG(10) << "new rollback: " << rollback.ShortDebugString();
+        }
     }
 
     LOG(INFO) << "load tablet: " << request->path() << " ["
@@ -629,7 +638,7 @@ void TabletNodeImpl::ReleaseSnapshot(const ReleaseSnapshotRequest* request,
     done->Run();
 }
 
-void TabletNodeImpl::Rollback(const SnapshotRollbackRequest* request, SnapshotRollbackResponse* response,
+void TabletNodeImpl::GetRollback(const SnapshotRollbackRequest* request, SnapshotRollbackResponse* response,
                               google::protobuf::Closure* done) {
     StatusCode status = kTabletNodeOk;
     io::TabletIO* tablet_io = m_tablet_manager->GetTablet(request->table_name(),
@@ -645,7 +654,7 @@ void TabletNodeImpl::Rollback(const SnapshotRollbackRequest* request, SnapshotRo
         done->Run();
         return;
     }
-    uint64_t rollback_point = tablet_io->Rollback(request->snapshot_id(), &status);
+    uint64_t rollback_point = tablet_io->GetRollback(request->snapshot_id(), &status);
     if (status != kTabletNodeOk) {
         response->set_status(status);
     } else {

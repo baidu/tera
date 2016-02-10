@@ -81,7 +81,7 @@ public:
                          ReleaseSnapshotResponse* response,
                          google::protobuf::Closure* done);
 
-    void Rollback(const SnapshotRollbackRequest* request, SnapshotRollbackResponse* response,
+    void GetRollback(const SnapshotRollbackRequest* request, SnapshotRollbackResponse* response,
                   google::protobuf::Closure* done);
 
     void CmdCtrl(const TsCmdCtrlRequest* request, TsCmdCtrlResponse* response,

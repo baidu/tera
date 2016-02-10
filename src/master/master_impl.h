@@ -205,11 +205,11 @@ private:
         google::protobuf::Closure* done;
         TablePtr table;
         std::vector<TabletPtr> tablets;
+        std::vector<bool> retry;
         std::vector<uint64_t> rollback_points;
         int task_num;
         int finish_num;
         mutable Mutex mutex;
-        bool aborted;
     };
 
     void SafeModeCmdCtrl(const CmdCtrlRequest* request,
@@ -304,14 +304,21 @@ private:
                              WriteTabletRequest* request,
                              WriteTabletResponse* response,
                              bool failed, int error_code);
-    void RollbackAsync(TabletPtr tablet, uint64_t snapshot_id, int32_t timeout,
-                          RollbackClosure* done);
+    void AddDefaultRollbackCallback(TablePtr table, std::vector<TabletPtr> tablets,
+                                    int32_t retry_times, const RollbackRequest* rpc_request,
+                                    RollbackResponse* rpc_response, google::protobuf::Closure* rpc_done,
+                                    WriteTabletRequest* request, WriteTabletResponse* response,
+                                    bool failed, int error_code);
+    void ApplyRollbackTask(RollbackTask* task);
+    void RollbackAsync(TabletPtr tablet, uint64_t snapshot_id,
+                        int32_t timeout, RollbackClosure* done);
     void RollbackCallback(int32_t tablet_id, RollbackTask* task,
                           SnapshotRollbackRequest* master_request,
                           SnapshotRollbackResponse* master_response,
                           bool failed, int error_code);
     void AddRollbackCallback(TablePtr table,
                              std::vector<TabletPtr> tablets,
+                             bool no_more_retry,
                              int32_t retry_times,
                              const RollbackRequest* rpc_request,
                              RollbackResponse* rpc_response,
@@ -319,7 +326,12 @@ private:
                              WriteTabletRequest* request,
                              WriteTabletResponse* response,
                              bool failed, int error_code);
-
+    void LoadRollbackCallback(TabletPtr tablet, int32_t retry_times,
+                              LoadTabletResponse* rpc_response,
+                              WriteTabletRequest* request,
+                              WriteTabletResponse* response,
+                              bool failed, int error_code);
+    void RestoreRollback();
     void ScheduleQueryTabletNode();
     void QueryTabletNode();
     void QueryTabletNodeAsync(std::string addr, int32_t timeout,
