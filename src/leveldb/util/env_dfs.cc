@@ -462,11 +462,14 @@ Status DfsEnv::RenameFile(const std::string& src, const std::string& target)
 {
     tera::AutoCounter ac(&dfs_other_hang_counter, "RenameFile", src.c_str());
     dfs_other_counter.Inc();
-    if (dfs_->Rename(src, target) == 0) {
-
+    int res = dfs_->Rename(src, target);
+    if (res == 0) {
+        return Status::OK();
+    } else {
+        char buf[64];
+        snprintf(buf, sizeof(buf), "dfs return code: %d.", res);
+        return Status::IOError(Slice(buf));
     }
-    Status result;
-    return result;
 }
 
 Status DfsEnv::LockFile(const std::string& fname, FileLock** lock)
