@@ -22,6 +22,23 @@ static int CompareTwoEndKey(const std::string& a, const std::string& b) {
     return a.compare(b);
 }
 
+bool RangeFragment::IsCoverRange(const std::string& start, const std::string& end) const {
+    std::list<std::pair<std::string, std::string> >::const_iterator it=range_.begin();
+    for ( ; it != range_.end(); ++it ) {
+        if (it->second != ""
+            && start.compare(it->second) > 0) {
+            continue;
+        }
+        break;
+    }
+
+    if (it == range_.end()) {
+        return false;
+    }
+    return (start.compare(it->first) >= 0)
+            && (CompareTwoEndKey(end, it->second) <= 0);
+}
+
 bool RangeFragment::AddToRange(const std::string& start, const std::string& end) {
     if (end != "" && start.compare(end) > 0) {
         return false;

@@ -304,6 +304,85 @@ TEST(FragmentTest, Endkey) {
     ASSERT_TRUE(all.IsCompleteRange());
 }
 
+TEST(CoverTest, CompleteRange) {
+    RangeFragment all;
+    all.AddToRange("", "");
+    ASSERT_TRUE(all.IsCoverRange("", ""));
+    ASSERT_TRUE(all.IsCoverRange("", "a"));
+    ASSERT_TRUE(all.IsCoverRange("a", ""));
+    ASSERT_TRUE(all.IsCoverRange("a", "b"));
+}
+
+TEST(CoverTest, Start) {
+//  a b c d e f g h i j k l m n o p q r s t u v w x y z
+//                *
+    RangeFragment all;
+    all.AddToRange("", "h");
+
+    ASSERT_TRUE(all.IsCoverRange("", "g"));
+    ASSERT_TRUE(all.IsCoverRange("", "h"));
+    ASSERT_FALSE(all.IsCoverRange("", "i"));
+    ASSERT_FALSE(all.IsCoverRange("", ""));
+
+    ASSERT_TRUE(all.IsCoverRange("a", "g"));
+    ASSERT_TRUE(all.IsCoverRange("a", "h"));
+    ASSERT_FALSE(all.IsCoverRange("a", "i"));
+    ASSERT_FALSE(all.IsCoverRange("a", ""));
+
+    ASSERT_FALSE(all.IsCoverRange("h", "i"));
+    ASSERT_FALSE(all.IsCoverRange("h", ""));
+}
+
+TEST(CoverTest, End) {
+//  a b c d e f g h i j k l m n o p q r s t u v w x y z
+//                *
+    RangeFragment all;
+    all.AddToRange("h", "");
+    ASSERT_FALSE(all.IsCoverRange("", "g"));
+    ASSERT_FALSE(all.IsCoverRange("", "h"));
+    ASSERT_FALSE(all.IsCoverRange("", "i"));
+    ASSERT_FALSE(all.IsCoverRange("", ""));
+
+    ASSERT_FALSE(all.IsCoverRange("a", "g"));
+    ASSERT_FALSE(all.IsCoverRange("a", "h"));
+    ASSERT_FALSE(all.IsCoverRange("a", "i"));
+    ASSERT_FALSE(all.IsCoverRange("a", ""));
+
+    ASSERT_TRUE(all.IsCoverRange("h", "i"));
+    ASSERT_TRUE(all.IsCoverRange("h", ""));
+}
+
+TEST(CoverTest, Common) {
+//  a b c d e f g h i j k l m n o p q r s t u v w x y z
+//                *             *
+    RangeFragment all;
+    all.AddToRange("h", "o");
+
+    ASSERT_FALSE(all.IsCoverRange("a", "g"));
+    ASSERT_FALSE(all.IsCoverRange("a", "h"));
+    ASSERT_FALSE(all.IsCoverRange("a", "i"));
+    ASSERT_FALSE(all.IsCoverRange("a", "n"));
+    ASSERT_FALSE(all.IsCoverRange("a", "o"));
+    ASSERT_FALSE(all.IsCoverRange("a", "p"));
+    ASSERT_FALSE(all.IsCoverRange("a", ""));
+
+    ASSERT_TRUE(all.IsCoverRange("h", "i"));
+    ASSERT_TRUE(all.IsCoverRange("h", "o"));
+    ASSERT_FALSE(all.IsCoverRange("h", "p"));
+    ASSERT_FALSE(all.IsCoverRange("h", ""));
+
+    ASSERT_TRUE(all.IsCoverRange("i", "n"));
+    ASSERT_TRUE(all.IsCoverRange("i", "o"));
+    ASSERT_FALSE(all.IsCoverRange("i", "p"));
+    ASSERT_FALSE(all.IsCoverRange("i", ""));
+
+    ASSERT_FALSE(all.IsCoverRange("o", "p"));
+    ASSERT_FALSE(all.IsCoverRange("o", ""));
+
+    ASSERT_FALSE(all.IsCoverRange("p", "q"));
+    ASSERT_FALSE(all.IsCoverRange("p", ""));
+}
+
 } // namespace tera
 
 
