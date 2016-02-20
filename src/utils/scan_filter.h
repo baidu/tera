@@ -11,6 +11,9 @@
 using std::string;
 
 namespace tera {
+
+bool CheckCell(const KeyValuePair& kv, const Filter& filter);
+
 class ScanFilter {
 public:
     ScanFilter(const FilterList& filter_list);

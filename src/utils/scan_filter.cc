@@ -7,6 +7,56 @@
 #include <glog/logging.h>
 
 namespace tera {
+
+static bool CheckValue(const KeyValuePair& kv, const Filter& filter) {
+    int64_t v1 = *(int64_t*)kv.value().c_str();
+    int64_t v2 = *(int64_t*)filter.ref_value().c_str();
+    BinCompOp op = filter.bin_comp_op();
+    switch (op) {
+    case EQ:
+        return v1 == v2;
+        break;
+    case NE:
+        return v1 != v2;
+        break;
+    case LT:
+        return v1 < v2;
+        break;
+    case LE:
+        return v1 <= v2;
+        break;
+    case GT:
+        return v1 > v2;
+        break;
+    case GE:
+        return v1 >= v2;
+        break;
+    default:
+        LOG(ERROR) << "illegal compare operator: " << op;
+    }
+    return false;
+}
+
+bool CheckCell(const KeyValuePair& kv, const Filter& filter) {
+    switch (filter.type()) {
+    case BinComp: {
+        if (filter.field() == ValueFilter) {
+            if (!CheckValue(kv, filter)) {
+                return false;
+            }
+        } else {
+            LOG(ERROR) << "only support value-compare.";
+        }
+        break;
+    }
+    default: {
+        LOG(ERROR) << "only support compare.";
+        break;
+    }}
+    return true;
+}
+
+
 ScanFilter::ScanFilter(const FilterList& filter_list)
     : _filter_list(filter_list),
       _suc_num(0),
