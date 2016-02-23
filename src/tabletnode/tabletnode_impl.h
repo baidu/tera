@@ -60,6 +60,10 @@ public:
                        CompactTabletResponse* response,
                        google::protobuf::Closure* done);
 
+    void Update(const UpdateRequest* request,
+                UpdateResponse* response,
+                google::protobuf::Closure* done);
+
     void ReadTablet(int64_t start_micros,
                     const ReadTabletRequest* request,
                     ReadTabletResponse* response,
@@ -114,7 +118,7 @@ public:
 
     void TryReleaseMallocCache();
 
-    bool ApplySchema(const TsCmdCtrlRequest* request);
+    bool ApplySchema(const UpdateRequest* request);
 
 private:
     bool CheckInKeyRange(const KeyList& key_list,

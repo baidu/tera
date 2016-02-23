@@ -31,7 +31,14 @@ Tera构建手册
 的安装说明。
 * libunwind (0.99 only)
   http://www.nongnu.org/libunwind/
-  
+
+下列必需的开发库在多数Linux发行版中会默认预装，但在某些发行版中
+可能需要自行安装。
+* readline
+  https://cnswww.cns.cwru.edu/php/chet/readline/rltop.html
+* ncurses
+  https://www.gnu.org/software/ncurses/
+
 编译步骤
 ========
 

@@ -152,6 +152,7 @@ private:
     typedef Closure<void, SnapshotRollbackRequest*, SnapshotRollbackResponse*, bool, int> RollbackClosure;
     typedef Closure<void, ReleaseSnapshotRequest*, ReleaseSnapshotResponse*, bool, int> DelSnapshotClosure;
     typedef Closure<void, QueryRequest*, QueryResponse*, bool, int> QueryClosure;
+    typedef Closure<void, UpdateRequest*, UpdateResponse*, bool, int> UpdateClosure;
     typedef Closure<void, LoadTabletRequest*, LoadTabletResponse*, bool, int> LoadClosure;
     typedef Closure<void, UnloadTabletRequest*, UnloadTabletResponse*, bool, int> UnloadClosure;
     typedef Closure<void, SplitTabletRequest*, SplitTabletResponse*, bool, int> SplitClosure;
@@ -402,6 +403,7 @@ private:
                                             bool failed, int error_code);
 
     void UpdateTableRecordForUpdateCallback(TablePtr table, int32_t retry_times,
+                                            const TableSchema* schema,
                                             UpdateTableResponse* rpc_response,
                                             google::protobuf::Closure* rpc_done,
                                             WriteTabletRequest* request,
@@ -451,6 +453,19 @@ private:
                                       WriteTabletRequest* request,
                                       WriteTabletResponse* response,
                                       bool failed, int error_code);
+
+    void UpdateSchemaCallback(std::string table_name,
+                              std::string tablet_path,
+                              std::string start_key,
+                              std::string end_key,
+                              int32_t retry_times,
+                              UpdateRequest* request,
+                              UpdateResponse* response,
+                              bool rpc_failed, int status_code);
+    void NoticeTabletNodeSchemaUpdatedAsync(TabletPtr tablet,
+                                            UpdateClosure* done);
+    void NoticeTabletNodeSchemaUpdated(TablePtr table);
+    void NoticeTabletNodeSchemaUpdated(TabletPtr tablet);
 
     // load metabale to master memory
     bool LoadMetaTable(const std::string& meta_tablet_addr,
@@ -553,6 +568,7 @@ private:
     Counter m_this_sequence_id;
 
     bool m_query_enabled;
+    scoped_ptr<ThreadPool> m_query_thread_pool;
     int64_t m_start_query_time;
     int64_t m_query_tabletnode_timer_id;
     Counter m_query_pending_count;

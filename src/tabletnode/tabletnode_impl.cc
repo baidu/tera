@@ -387,6 +387,30 @@ void TabletNodeImpl::CompactTablet(const CompactTabletRequest* request,
     done->Run();
 }
 
+void TabletNodeImpl::Update(const UpdateRequest* request,
+                            UpdateResponse* response,
+                            google::protobuf::Closure* done) {
+    response->set_sequence_id(request->sequence_id());
+    switch (request->type()) {
+    case kUpdateSchema:
+        if(ApplySchema(request)) {
+            LOG(INFO) << "[update] ok for tablet_name: " << request->tablet_name()
+                << " start_key: " << DebugString(request->start_key());
+            response->set_status(kTabletNodeOk);
+        } else {
+            LOG(INFO) << "[update] failed";
+            response->set_status(kInvalidArgument);
+        }
+        done->Run();
+        break;
+    default:
+        LOG(INFO) << "[update] unknown cmd";
+        response->set_status(kInvalidArgument);
+        done->Run();
+        break;
+    }
+}
+
 void TabletNodeImpl::ReadTablet(int64_t start_micros,
                                 const ReadTabletRequest* request,
                                 ReadTabletResponse* response,
@@ -448,6 +472,10 @@ void TabletNodeImpl::WriteTablet(const WriteTabletRequest* request,
         if (mu_seq.row_key().size() >= 64 * 1024) { // 64KB
             response->set_status(kTableNotSupport);
             done->Run();
+            if (NULL != timer) {
+                RpcTimerList::Instance()->Erase(timer);
+                delete timer;
+            }
             return;
         }
         int32_t mu_num = mu_seq.mutation_sequence_size();
@@ -457,6 +485,10 @@ void TabletNodeImpl::WriteTablet(const WriteTabletRequest* request,
                 || (mu.value().size() >= 32 * 1024 * 1024)) { // 32MB
                 response->set_status(kTableNotSupport);
                 done->Run();
+                if (NULL != timer) {
+                    RpcTimerList::Instance()->Erase(timer);
+                    delete timer;
+                }
                 return;
             }
         }
@@ -665,26 +697,19 @@ void TabletNodeImpl::CmdCtrl(const TsCmdCtrlRequest* request,
             LOG(ERROR) << "[reload config] config file not found";
             response->set_status(kInvalidArgument);
         }
-    } if (request->command() == "update") {
-        if(ApplySchema(request)) {
-            LOG(INFO) << "[update] ok";
-            response->set_status(kTabletNodeOk);
-        } else {
-            LOG(INFO) << "[update] failed";
-            response->set_status(kInvalidArgument);
-        }
     } else {
         response->set_status(kInvalidArgument);
     }
     done->Run();
 }
 
-bool TabletNodeImpl::ApplySchema(const TsCmdCtrlRequest* request) {
+bool TabletNodeImpl::ApplySchema(const UpdateRequest* request) {
     StatusCode status;
     io::TabletIO* tablet_io = m_tablet_manager->GetTablet(
-        request->tablet_name(), request->start(), &status);
+        request->tablet_name(), request->start_key(), &status);
     if (tablet_io == NULL) {
-        LOG(INFO) << "[update] cannot find tablet_io";
+        LOG(INFO) << "[update] cannot find tablet_io for tablet_name: "
+            << request->tablet_name() << " start_key: " << DebugString(request->start_key());
         return false;
     }
     tablet_io->ApplySchema(request->schema());

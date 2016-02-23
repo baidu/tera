@@ -64,7 +64,7 @@ public:
                   Closure<void, SnapshotRollbackRequest*, SnapshotRollbackResponse*, bool, int>* done = NULL);
 
 
-    bool Query(const QueryRequest* request,
+    bool Query(ThreadPool* thread_pool, const QueryRequest* request,
                QueryResponse* response,
                Closure<void, QueryRequest*, QueryResponse*, bool, int>* done = NULL);
 
@@ -78,6 +78,10 @@ public:
     bool CmdCtrl(const TsCmdCtrlRequest* request,
                  TsCmdCtrlResponse* response,
                  Closure<void, TsCmdCtrlRequest*, TsCmdCtrlResponse*, bool, int>* done = NULL);
+
+    bool Update(const UpdateRequest* request,
+                      UpdateResponse* response,
+                      Closure<void, UpdateRequest*, UpdateResponse*, bool, int>* done = NULL);
 
 private:
     int32_t m_rpc_timeout;

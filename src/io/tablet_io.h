@@ -108,6 +108,7 @@ public:
     virtual bool AddInheritedLiveFiles(std::vector<std::set<uint64_t> >* live);
 
     bool IsBusy();
+    bool Workload(double* write_workload);
 
     bool SnapshotIDToSeq(uint64_t snapshot_id, uint64_t* snapshot_sequence);
 
@@ -224,9 +225,19 @@ private:
                     int64_t ts, leveldb::Slice value, KeyValuePair* kv);
 
     bool ParseRowKey(const std::string& tera_key, std::string* row_key);
+    bool ShouldFilterRowBuffer(std::list<KeyValuePair>& row_buf,
+                               const ScanOptions& scan_options);
 
+    bool ScanWithFilter(const ScanOptions& scan_options);
+    bool IsCompleteRow(const std::list<KeyValuePair>& row_buf,
+                       leveldb::Iterator* it);
+    bool ShouldFilterRow(const ScanOptions& scan_options,
+                           const std::list<KeyValuePair>& row_buf,
+                           leveldb::Iterator* it);
+    void GotoNextRow(const std::list<KeyValuePair>& row_buf,
+                     leveldb::Iterator* it,
+                     KeyValuePair* next);
     void SetSchema(const TableSchema& schema);
-
 private:
     mutable Mutex m_mutex;
     TabletWriter* m_async_writer;

@@ -117,7 +117,7 @@ bool ClientImpl::CheckReturnValue(StatusCode status, std::string& reason, ErrorC
             err->SetFailed(ErrorCode::kOK, reason);
             break;
         default:
-            reason = "tera master is not ready, please wait..";
+            reason = "unknown system error, contact to cluster admin...";
             err->SetFailed(ErrorCode::kSystem, reason);
             break;
     }
@@ -194,7 +194,7 @@ bool ClientImpl::UpdateTable(const TableDescriptor& desc, ErrorCode* err) {
         }
         LOG(ERROR) << reason << "| status: " << StatusCodeToString(response.status());
     } else {
-        reason = "rpc fail to create table:" + desc.TableName();
+        reason = "rpc fail to update table:" + desc.TableName();
         LOG(ERROR) << reason;
         err->SetFailed(ErrorCode::kSystem, reason);
     }
@@ -1030,7 +1030,8 @@ static int InitFlags(const std::string& confpath, const std::string& log_prefix)
     if (!confpath.empty() && IsExist(confpath)){
         flagfile = confpath;
     } else if(!confpath.empty() && !IsExist(confpath)){
-        LOG(ERROR) << "specified config file(function argument) not found";
+        LOG(ERROR) << "specified config file(function argument) not found: "
+            << confpath;
         return -1;
     } else if (!FLAGS_tera_sdk_conf_file.empty() && IsExist(confpath)) {
         flagfile = FLAGS_tera_sdk_conf_file;

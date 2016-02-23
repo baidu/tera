@@ -15,6 +15,10 @@ FLAG_DIR=$WORK_DIR/.build
 export PATH=${DEPS_PREFIX}/bin:$PATH
 mkdir -p ${DEPS_SOURCE} ${DEPS_PREFIX} ${FLAG_DIR}
 
+if [ ! -f "$WORK_DIR/depends.mk" ]; then
+    cp $WORK_DIR/depends.mk.template $WORK_DIR/depends.mk
+fi
+
 cd ${DEPS_SOURCE}
 
 # boost
