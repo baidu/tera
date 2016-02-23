@@ -2570,6 +2570,10 @@ static int32_t DeleteUserFromGroup(Client* client, const std::string& user,
 }
 
 int32_t UserOp(Client* client, int32_t argc, char** argv, ErrorCode* err) {
+    if (argc < 4) {
+        Usage(argv[0]);
+        return -1;
+    }
     std::string op = argv[2];
     if ((argc == 5) && (op == "create")) {
         return CreateUser(client, argv[3], argv[4], err);

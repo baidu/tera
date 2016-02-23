@@ -387,6 +387,25 @@ void TabletNodeImpl::CompactTablet(const CompactTabletRequest* request,
     done->Run();
 }
 
+void TabletNodeImpl::Update(const UpdateRequest* request,
+                            UpdateResponse* response,
+                            google::protobuf::Closure* done) {
+    response->set_sequence_id(request->sequence_id());
+    LOG(INFO) << "update cmd received";
+    switch (request->type()) {
+    case kUpdateSchema:
+        LOG(INFO) << "[update] new schema:" << request->schema().DebugString();
+        response->set_status(kTabletNodeOk);
+        done->Run();
+        break;
+    default:
+        LOG(INFO) << "[update] unknown cmd";
+        response->set_status(kInvalidArgument);
+        done->Run();
+        break;
+    }
+}
+
 void TabletNodeImpl::ReadTablet(int64_t start_micros,
                                 const ReadTabletRequest* request,
                                 ReadTabletResponse* response,
