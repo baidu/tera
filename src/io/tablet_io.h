@@ -22,6 +22,7 @@
 #include "proto/proto_helper.h"
 #include "proto/status_code.pb.h"
 #include "proto/table_meta.pb.h"
+#include "proto/table_schema.pb.h"
 #include "proto/tabletnode_rpc.pb.h"
 #include "types.h"
 #include "utils/counter.h"
@@ -84,8 +85,8 @@ public:
     std::string GetStartKey() const;
     std::string GetEndKey() const;
     virtual CompactStatus GetCompactStatus() const;
-    virtual const TableSchema& GetSchema() const;
-    RawKey TabletIO::RawKeyType() const;
+    virtual TableSchema GetSchema() const;
+    RawKey RawKeyType() const;
     bool KvOnly() const { return m_kv_only; }
     StatCounter& GetCounter();
     // tablet

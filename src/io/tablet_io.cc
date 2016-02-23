@@ -123,11 +123,10 @@ CompactStatus TabletIO::GetCompactStatus() const {
 }
 
 void TabletIO::SetSchema(const TableSchema& schema) {
-    MutexLock lock(&m_schema_mutex);
     m_table_schema.CopyFrom(schema);
 }
 
-const TableSchema& TabletIO::GetSchema() const {
+TableSchema TabletIO::GetSchema() const {
     MutexLock lock(&m_schema_mutex);
     return m_table_schema;
 }
@@ -1771,7 +1770,6 @@ void TabletIO::TearDownOptionsForLG() {
 }
 
 void TabletIO::IndexingCfToLG() {
-    MutexLock lock(&m_schema_mutex);
     for (int32_t i = 0; i < m_table_schema.locality_groups_size(); ++i) {
         const LocalityGroupSchema& lg_schema =
             m_table_schema.locality_groups(i);
@@ -2025,6 +2023,7 @@ int32_t TabletIO::GetRef() const {
 }
 
 void TabletIO::ApplySchema(const TableSchema& schema) {
+    MutexLock lock(&m_schema_mutex);
     SetSchema(schema);
     IndexingCfToLG();
     m_ldb_options.compact_strategy_factory->SetArg(&schema);

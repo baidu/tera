@@ -270,10 +270,10 @@ int32_t UpdateOp(Client* client, int32_t argc, char** argv, ErrorCode* err) {
         return -1;
     }
 
-    //if (is_update_lg_cf && client->IsTableEnabled(table_desc->TableName(), err)) {
-    //    LOG(ERROR) << "[update] table is enabled, disable it first: " << table_desc->TableName();
-    //    return -1;
-    //}
+    if (is_update_lg_cf && client->IsTableEnabled(table_desc->TableName(), err)) {
+        LOG(ERROR) << "[update] table is enabled, disable it first: " << table_desc->TableName();
+        return -1;
+    }
 
     if (!client->UpdateTable(*table_desc, err)) {
         LOG(ERROR) << "[update] fail to update table, "

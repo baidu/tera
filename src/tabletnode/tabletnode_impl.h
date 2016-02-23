@@ -118,8 +118,6 @@ public:
 
     void TryReleaseMallocCache();
 
-    bool ApplySchema(const UpdateRequest* request);
-
 private:
     bool CheckInKeyRange(const KeyList& key_list,
                          const std::string& key_start,
@@ -155,6 +153,8 @@ private:
     void GarbageCollectInPath(const std::string& path, leveldb::Env* env,
                               const std::set<std::string>& inherited_files,
                               const std::set<std::string> active_tablets);
+
+    bool ApplySchema(const UpdateRequest* request);
 private:
     mutable Mutex m_status_mutex;
     TabletNodeStatus m_status;

@@ -48,11 +48,14 @@ public:
     virtual const char* Name() const {
         return "tera.TTLKvCompactStrategyFactory";
     }
-    virtual void SetArg(const void* arg) {}
+    virtual void SetArg(const void* arg) {
+        MutexLock lock(&mutex_);
+        schema_.CopyFrom(*(TableSchema*)arg);
+    }
 
 private:
     TableSchema schema_;
-    mutable Mutex m_mutex;
+    mutable Mutex mutex_;
 };
 
 } // namespace io

@@ -68,7 +68,7 @@ KvCompactStrategyFactory::KvCompactStrategyFactory(const TableSchema& schema) :
 }
 
 KvCompactStrategy* KvCompactStrategyFactory::NewInstance() {
-    MutexLock lock(&m_mutex);
+    MutexLock lock(&mutex_);
     return new KvCompactStrategy(schema_);
 }
 

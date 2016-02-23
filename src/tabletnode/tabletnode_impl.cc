@@ -393,9 +393,9 @@ void TabletNodeImpl::Update(const UpdateRequest* request,
     response->set_sequence_id(request->sequence_id());
     switch (request->type()) {
     case kUpdateSchema:
+        LOG(INFO) << "[update] new schema:" << request->schema().DebugString();
         if(ApplySchema(request)) {
-            LOG(INFO) << "[update] ok for tablet_name: " << request->tablet_name()
-                << " start_key: " << DebugString(request->start_key());
+            LOG(INFO) << "[update] ok";
             response->set_status(kTabletNodeOk);
         } else {
             LOG(INFO) << "[update] failed";
@@ -706,10 +706,9 @@ void TabletNodeImpl::CmdCtrl(const TsCmdCtrlRequest* request,
 bool TabletNodeImpl::ApplySchema(const UpdateRequest* request) {
     StatusCode status;
     io::TabletIO* tablet_io = m_tablet_manager->GetTablet(
-        request->tablet_name(), request->start_key(), &status);
+        request->tablet_name(), request->key_range().key_start(), request->key_range().key_end(), &status);
     if (tablet_io == NULL) {
-        LOG(INFO) << "[update] cannot find tablet_io for tablet_name: "
-            << request->tablet_name() << " start_key: " << DebugString(request->start_key());
+        LOG(INFO) << "[update] tablet not found";
         return false;
     }
     tablet_io->ApplySchema(request->schema());
