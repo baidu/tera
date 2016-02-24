@@ -32,13 +32,16 @@ VERSION_SRC := src/version.cc
 OTHER_SRC := $(wildcard src/zk/*.cc) $(wildcard src/utils/*.cc) $(VERSION_SRC) \
              src/tera_flags.cc
 COMMON_SRC := $(wildcard src/common/base/*.cc) $(wildcard src/common/net/*.cc) \
-              $(wildcard src/common/file/*.cc) $(wildcard src/common/file/recordio/*.cc)
+              $(wildcard src/common/file/*.cc) $(wildcard src/common/file/recordio/*.cc) \
+			  $(wildcard src/common/console/*.cc) 
 SERVER_SRC := src/tera_main.cc src/tera_entry.cc
 CLIENT_SRC := src/teracli_main.cc
 TERA_C_SRC := src/tera_c.cc
 MONITOR_SRC := src/monitor/teramo_main.cc
 MARK_SRC := src/benchmark/mark.cc src/benchmark/mark_main.cc
-TEST_SRC := src/utils/test/prop_tree_test.cc src/utils/test/tprinter_test.cc src/io/test/tablet_io_test.cc
+TEST_SRC := src/utils/test/prop_tree_test.cc src/utils/test/tprinter_test.cc \
+			src/io/test/tablet_io_test.cc \
+			src/common/console/progress_bar_test.cc
 
 TEST_OUTPUT := test_output
 UNITTEST_OUTPUT := $(TEST_OUTPUT)/unittest
@@ -69,7 +72,8 @@ SOLIBRARY = libtera.so
 TERA_C_SO = libtera_c.so
 JNILIBRARY = libjni_tera.so
 BENCHMARK = tera_bench tera_mark
-TESTS = prop_tree_test tprinter_test string_util_test tablet_io_test fragment_test
+TESTS = prop_tree_test tprinter_test string_util_test tablet_io_test \
+		fragment_test progress_bar_test
 
 
 .PHONY: all clean cleanall test
@@ -150,6 +154,9 @@ tablet_io_test: src/io/test/tablet_io_test.o src/tabletnode/tabletnode_sysinfo.o
 	$(CXX) -o $@ $^ $(LDFLAGS)
 
 fragment_test: src/utils/test/fragment_test.o src/utils/fragment.o
+	$(CXX) -o $@ $^ $(LDFLAGS)
+
+progress_bar_test: src/common/console/progress_bar_test.o src/common/console/progress_bar.o
 	$(CXX) -o $@ $^ $(LDFLAGS)
 
 $(ALL_OBJ): %.o: %.cc $(PROTO_OUT_H)
