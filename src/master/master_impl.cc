@@ -970,6 +970,34 @@ void MasterImpl::EnableTable(const EnableTableRequest* request,
     }
 }
 
+void MasterImpl::UpdateCheck(const UpdateCheckRequest* request,
+                             UpdateCheckResponse* response,
+                             google::protobuf::Closure* done) {
+    response->set_sequence_id(request->sequence_id());
+    TablePtr table;
+    if (!m_tablet_manager->FindTable(request->table_name(), &table)) {
+        LOG(ERROR) << "[update] fail to update-check table: " << request->table_name()
+            << ", table not exist";
+        response->set_status(kTableNotExist);
+        done->Run();
+        return;
+    }
+    if (!HasPermissionOrReturn(request, response, done, table, "update-check table")) {
+        return;
+    }
+    if (!FLAGS_tera_master_online_schema_update_enabled) {
+        LOG(INFO) << "[update] online-schema-change is disabled";
+        response->set_status(kInvalidArgument);
+    } else if (table->GetSchemaIsSyncing()) {
+        response->set_done(false);
+        response->set_status(kMasterOk);
+    } else {
+        response->set_done(true);
+        response->set_status(kMasterOk);
+    }
+    done->Run();
+}
+
 void MasterImpl::UpdateTable(const UpdateTableRequest* request,
                              UpdateTableResponse* response,
                              google::protobuf::Closure* done) {

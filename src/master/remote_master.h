@@ -60,6 +60,11 @@ public:
                      UpdateTableResponse* response,
                      google::protobuf::Closure* done);
 
+    void UpdateCheck(google::protobuf::RpcController* controller,
+                     const UpdateCheckRequest* request,
+                     UpdateCheckResponse* response,
+                     google::protobuf::Closure* done);
+
     void CompactTable(google::protobuf::RpcController* controller,
                       const CompactTableRequest* request,
                       CompactTableResponse* response,
@@ -131,6 +136,11 @@ private:
     void DoUpdateTable(google::protobuf::RpcController* controller,
                        const UpdateTableRequest* request,
                        UpdateTableResponse* response,
+                       google::protobuf::Closure* done);
+
+    void DoUpdateCheck(google::protobuf::RpcController* controller,
+                       const UpdateCheckRequest* request,
+                       UpdateCheckResponse* response,
                        google::protobuf::Closure* done);
 
     void DoCompactTable(google::protobuf::RpcController* controller,

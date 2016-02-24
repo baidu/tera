@@ -42,12 +42,13 @@ public:
                              ErrorCode* err);
 
     virtual bool UpdateTable(const TableDescriptor& desc, ErrorCode* err);
+    virtual bool UpdateCheck(const std::string& table_name, bool* done, ErrorCode* err);
 
-    virtual bool DeleteTable(string name, ErrorCode* err);
+    virtual bool DeleteTable(const std::string& name, ErrorCode* err);
 
-    virtual bool DisableTable(string name, ErrorCode* err);
+    virtual bool DisableTable(const std::string& name, ErrorCode* err);
 
-    virtual bool EnableTable(string name, ErrorCode* err);
+    virtual bool EnableTable(const std::string& name, ErrorCode* err);
 
     virtual bool CreateUser(const std::string& user,
                             const std::string& password, ErrorCode* err);

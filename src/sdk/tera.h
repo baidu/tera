@@ -632,12 +632,13 @@ public:
                              ErrorCode* err) = 0;
     /// 更新表格Schema
     virtual bool UpdateTable(const TableDescriptor& desc, ErrorCode* err) = 0;
+    virtual bool UpdateCheck(const std::string& table_name, bool* done, ErrorCode* err) = 0;
     /// 删除表格
-    virtual bool DeleteTable(std::string name, ErrorCode* err) = 0;
+    virtual bool DeleteTable(const std::string& name, ErrorCode* err) = 0;
     /// 停止表格服务
-    virtual bool DisableTable(std::string name, ErrorCode* err) = 0;
+    virtual bool DisableTable(const std::string& name, ErrorCode* err) = 0;
     /// 恢复表格服务
-    virtual bool EnableTable(std::string name, ErrorCode* err) = 0;
+    virtual bool EnableTable(const std::string& name, ErrorCode* err) = 0;
 
     /// acl
     virtual bool CreateUser(const std::string& user,
