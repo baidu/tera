@@ -8,10 +8,11 @@
 
 #include <stdio.h>
 #include <stdlib.h>
+#include <gtest/gtest.h>
 
 using common::ProgressBar;
 
-int main(int argc, char* argv[]) {
+TEST(ProgressBarTest, Test) {
     int cur_size = 0;
     int total_size = 100000000;
 
@@ -25,5 +26,4 @@ int main(int argc, char* argv[]) {
         nanosleep(&interval, &interval);
     }
     progress_bar.Done();
-    return 0;
 }

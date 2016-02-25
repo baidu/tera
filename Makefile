@@ -40,8 +40,7 @@ TERA_C_SRC := src/tera_c.cc
 MONITOR_SRC := src/monitor/teramo_main.cc
 MARK_SRC := src/benchmark/mark.cc src/benchmark/mark_main.cc
 TEST_SRC := src/utils/test/prop_tree_test.cc src/utils/test/tprinter_test.cc \
-			src/io/test/tablet_io_test.cc \
-			src/common/console/progress_bar_test.cc
+			src/io/test/tablet_io_test.cc
 
 TEST_OUTPUT := test_output
 UNITTEST_OUTPUT := $(TEST_OUTPUT)/unittest
