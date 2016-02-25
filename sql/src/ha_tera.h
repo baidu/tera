@@ -70,14 +70,10 @@ class ha_tera: public handler
 {
   THR_LOCK_DATA lock_;      ///< MySQL lock
   Tera_share *share_;    ///< Shared lock info
-  Tera_share *get_share(const char* table_name); ///< Get the share
+  Tera_share *get_share(const char* name); ///< Get the share
   tera::ResultStream* result_stream_;
   std::string last_key_;
   uchar* field_buf_;
-  char dbname_[FN_HEADLEN];
-  //char m_schemaname[FN_HEADLEN];
-  char tabname_[FN_HEADLEN];
-  char tera_tabname_[FN_HEADLEN * 2];
 
   void mysql_buf_to_primary_data(const uchar* buf, std::string* key, std::string* value);
   int primary_data_to_mysql_buf(const std::string& key, const std::string& value, uchar* buf);
