@@ -20,6 +20,7 @@
 #include "common/thread_pool.h"
 #include "common/base/string_ext.h"
 #include "common/base/string_number.h"
+#include "common/console/progress_bar.h"
 #include "common/file/file_path.h"
 #include "io/coding.h"
 #include "proto/kv_helper.h"
@@ -323,6 +324,37 @@ int32_t DisableOp(Client* client, int32_t argc, char** argv, ErrorCode* err) {
     if (!client->DisableTable(tablename, err)) {
         LOG(ERROR) << "fail to disable table";
         return -1;
+    }
+    TableMeta table_meta;
+    TabletMetaList tablet_list;
+    tera::ClientImpl* client_impl = static_cast<tera::ClientImpl*>(client);
+    if (!client_impl->ShowTablesInfo(tablename, &table_meta, &tablet_list, err)) {
+        LOG(ERROR) << "table not exist: " << tablename;
+        return -1;
+    }
+
+    uint64_t tablet_num = tablet_list.meta_size();
+    common::ProgressBar progress_bar(common::ProgressBar::ENHANCED, tablet_num, 100);
+    while (true) {
+        if (!client_impl->ShowTablesInfo(tablename, &table_meta, &tablet_list, err)) {
+            LOG(ERROR) << "table not exist: " << tablename;
+            return -1;
+        }
+        uint64_t tablet_cnt = 0;
+        for (int32_t i = 0; i < tablet_list.meta_size(); ++i) {
+            const TabletMeta& tablet = tablet_list.meta(i);
+            VLOG(10) << "tablet status: " << StatusCodeToString(tablet.status());
+            if (tablet.status() == kTabletDisable || tablet.status() == kTableOffLine) {
+                tablet_cnt++;
+            }
+        }
+        progress_bar.Refresh(tablet_cnt);
+        if (tablet_cnt == tablet_num) {
+            // disable finish
+            progress_bar.Done();
+            break;
+        }
+        sleep(1);
     }
     return 0;
 }

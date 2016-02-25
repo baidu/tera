@@ -60,9 +60,9 @@ private:
     char char_1_;
     char char_2_;
 
-    time_t m_start_time;
-    time_t m_cur_time;
-    char *m_flush_buffer;
+    time_t start_time_;
+    time_t cur_time_;
+    char *flush_buffer_;
 };
 
 }  // namespace common
