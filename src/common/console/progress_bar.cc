@@ -66,7 +66,7 @@ void ProgressBar::Refresh(int32_t cur_size) {
     fflush(stdout);
 }
 
-void ProgressBar::Add(int32_t size) {
+void ProgressBar::AddAndRefresh(int32_t size) {
     cur_size_ += size;
     Refresh(cur_size_);
 }

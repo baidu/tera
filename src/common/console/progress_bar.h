@@ -38,7 +38,7 @@ public:
     ~ProgressBar();
 
     void Refresh(int32_t cur_size);
-    void Add(int32_t size);
+    void AddAndRefresh(int32_t size);
     void Done();
 
     int32_t GetPercent() {
