@@ -29,6 +29,7 @@ DEFINE_int32(tera_zk_retry_max_times, 10, "zookeeper operation max retry times")
 DEFINE_string(tera_zk_lib_log_path, "../log/zk.log", "zookeeper library log output file");
 DEFINE_string(tera_log_prefix, "", "prefix of log file (INFO, WARNING)");
 DEFINE_string(tera_local_addr, "", "local host's ip address");
+DEFINE_bool(tera_online_schema_update_enabled, false, "enable online-schema-update");
 
 /////////  io  /////////
 
@@ -109,7 +110,6 @@ DEFINE_int32(tera_master_max_load_concurrency, 5, "the max concurrency of tablet
 DEFINE_int32(tera_master_max_move_concurrency, 50, "the max concurrency for move tablet");
 DEFINE_int32(tera_master_load_interval, 300, "the delay interval (in sec) for load tablet");
 
-DEFINE_bool(tera_master_online_schema_update_enabled, false, "enable online-schema-update");
 DEFINE_int32(tera_master_schema_update_retry_period, 1, "the period (in second) to poll schema update");
 DEFINE_int32(tera_master_schema_update_retry_times, 60000, "the max retry times of syncing new schema to ts");
 

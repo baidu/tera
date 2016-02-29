@@ -20,6 +20,7 @@
 #include "sdk/sdk_zk.h"
 #include "utils/config_utils.h"
 #include "utils/crypt.h"
+#include "utils/schema_utils.h"
 #include "utils/string_util.h"
 #include "utils/utils_cmd.h"
 
@@ -42,6 +43,7 @@ DECLARE_int32(tera_sdk_rpc_limit_max_outflow);
 DECLARE_int32(tera_sdk_rpc_max_pending_buffer_size);
 DECLARE_int32(tera_sdk_rpc_work_thread_num);
 DECLARE_int32(tera_sdk_show_max_num);
+DECLARE_bool(tera_online_schema_update_enabled);
 
 namespace tera {
 
@@ -186,6 +188,33 @@ bool ClientImpl::UpdateTable(const TableDescriptor& desc, ErrorCode* err) {
 
     TableSchema* schema = request.mutable_schema();
     TableDescToSchema(desc, schema);
+
+    ErrorCode err2;
+    TableDescriptor* old_desc = GetTableDescriptor(desc.TableName(), &err2);
+    if (old_desc == NULL) {
+        return false;
+    }
+    TableSchema old_schema;
+    TableDescToSchema(*old_desc, &old_schema);
+    delete old_desc;
+
+    // if try to update lg, need to disable table
+    bool is_update_lg = IsSchemaLgDiff(*schema, old_schema);
+    bool is_update_cf = IsSchemaCfDiff(*schema, old_schema);
+
+    // compatible for old-master which no support for online-schema-update
+    if (!FLAGS_tera_online_schema_update_enabled
+        && IsTableEnabled(desc.TableName(), err)
+        && (is_update_lg || is_update_cf)) {
+        err->SetFailed(ErrorCode::kBadParam, "disable this table if you want to update (Lg | Cf) property(ies)");
+        return false;
+    }
+
+    if (FLAGS_tera_online_schema_update_enabled && is_update_lg
+        && IsTableEnabled(desc.TableName(), err)) {
+        err->SetFailed(ErrorCode::kBadParam, "disable this table if you want to update Lg property(ies)");
+        return false;
+    }
 
     string reason;
     if (master_client.UpdateTable(&request, &response)) {
