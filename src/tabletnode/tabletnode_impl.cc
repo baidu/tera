@@ -391,11 +391,16 @@ void TabletNodeImpl::Update(const UpdateRequest* request,
                             UpdateResponse* response,
                             google::protobuf::Closure* done) {
     response->set_sequence_id(request->sequence_id());
-    LOG(INFO) << "update cmd received";
     switch (request->type()) {
     case kUpdateSchema:
         LOG(INFO) << "[update] new schema:" << request->schema().DebugString();
-        response->set_status(kTabletNodeOk);
+        if(ApplySchema(request)) {
+            LOG(INFO) << "[update] ok";
+            response->set_status(kTabletNodeOk);
+        } else {
+            LOG(INFO) << "[update] failed";
+            response->set_status(kInvalidArgument);
+        }
         done->Run();
         break;
     default:
@@ -696,6 +701,19 @@ void TabletNodeImpl::CmdCtrl(const TsCmdCtrlRequest* request,
         response->set_status(kInvalidArgument);
     }
     done->Run();
+}
+
+bool TabletNodeImpl::ApplySchema(const UpdateRequest* request) {
+    StatusCode status;
+    io::TabletIO* tablet_io = m_tablet_manager->GetTablet(
+        request->tablet_name(), request->key_range().key_start(), request->key_range().key_end(), &status);
+    if (tablet_io == NULL) {
+        LOG(INFO) << "[update] tablet not found";
+        return false;
+    }
+    tablet_io->ApplySchema(request->schema());
+    tablet_io->DecRef();
+    return true;
 }
 
 void TabletNodeImpl::Query(const QueryRequest* request,

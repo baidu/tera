@@ -22,6 +22,7 @@
 #include "proto/proto_helper.h"
 #include "proto/status_code.pb.h"
 #include "proto/table_meta.pb.h"
+#include "proto/table_schema.pb.h"
 #include "proto/tabletnode_rpc.pb.h"
 #include "types.h"
 #include "utils/counter.h"
@@ -84,7 +85,8 @@ public:
     std::string GetStartKey() const;
     std::string GetEndKey() const;
     virtual CompactStatus GetCompactStatus() const;
-    virtual const TableSchema& GetSchema() const;
+    virtual TableSchema GetSchema() const;
+    RawKey RawKeyType() const;
     bool KvOnly() const { return m_kv_only; }
     StatCounter& GetCounter();
     // tablet
@@ -172,6 +174,7 @@ public:
     static bool FindAverageKey(const std::string& start, const std::string& end,
                                std::string* res);
 
+    void ApplySchema(const TableSchema& schema);
 private:
     friend class TabletWriter;
     bool WriteWithoutLock(const std::string& key, const std::string& value,
@@ -235,6 +238,7 @@ private:
     void GotoNextRow(const std::list<KeyValuePair>& row_buf,
                      leveldb::Iterator* it,
                      KeyValuePair* next);
+    void SetSchema(const TableSchema& schema);
 private:
     mutable Mutex m_mutex;
     TabletWriter* m_async_writer;
@@ -263,6 +267,7 @@ private:
     std::map<std::string, uint32_t> m_lg_id_map;
     StreamScanManager m_stream_scan;
     StatCounter m_counter;
+    mutable Mutex m_schema_mutex;
 };
 
 } // namespace io

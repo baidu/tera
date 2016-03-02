@@ -68,6 +68,8 @@ message UpdateRequest {
     optional uint64 sequence_id = 1;
     optional UpdateType type = 2;
     optional TableSchema schema = 3;
+    optional string tablet_name = 4;
+    optional KeyRange key_range = 5; 
 }
 
 message UpdateResponse {

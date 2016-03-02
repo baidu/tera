@@ -3334,6 +3334,9 @@ void MasterImpl::NoticeTabletNodeSchemaUpdatedAsync(TabletPtr tablet,
 
     request->set_sequence_id(m_this_sequence_id.Inc());
     request->mutable_schema()->CopyFrom(tablet->GetSchema());
+    request->set_tablet_name(tablet->GetTableName());
+    request->mutable_key_range()->set_key_start(tablet->GetKeyStart());
+    request->mutable_key_range()->set_key_end(tablet->GetKeyEnd());
 
     VLOG(20) << "NoticeTabletNodeSchemaUpdatedAsync id: " << request->sequence_id()
              << ", tablet:" << tablet;
