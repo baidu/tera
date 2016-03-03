@@ -479,10 +479,15 @@ int32_t PutOp(Client* client, int32_t argc, char** argv, ErrorCode* err) {
         ParseCfQualifier(argv[4], &columnfamily, &qualifier);
         value = argv[5];
     }
-    if (!table->Put(rowkey, columnfamily, qualifier, value, err)) {
-        LOG(ERROR) << "fail to put record to table: " << tablename;
-        return -1;
+
+    RowMutation* mutation = table->NewRowMutation(rowkey);
+    if (FLAGS_timestamp == -1) {
+        mutation->Put(columnfamily, qualifier, value);
+    } else {
+        mutation->Put(columnfamily, qualifier, FLAGS_timestamp, value);
     }
+    table->ApplyMutation(mutation);
+
     delete table;
     return 0;
 }
