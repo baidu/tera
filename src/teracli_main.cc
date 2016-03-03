@@ -53,6 +53,7 @@ DEFINE_int64(snapshot, 0, "read | scan snapshot");
 DEFINE_string(rollback_switch, "close", "Pandora's box, do not open");
 DEFINE_string(rollback_name, "", "rollback operation's name");
 
+DEFINE_string(file, "", "file name.");
 DEFINE_int32(lg, -1, "locality group number.");
 DEFINE_int32(concurrency, 1, "concurrency for compact table.");
 DEFINE_int64(timestamp, -1, "timestamp.");
@@ -847,7 +848,7 @@ int32_t DeleteOp(Client* client, int32_t argc, char** argv, ErrorCode* err) {
 }
 
 int32_t ScanOp(Client* client, int32_t argc, char** argv, ErrorCode* err) {
-    if (argc != 5 && argc != 6) {
+    if (argc != 3 && argc != 5 && argc != 6) {
         LOG(ERROR) << "args number error: " << argc << ", need 5 | 6.";
         Usage(argv[0]);
         return -1;
@@ -861,8 +862,22 @@ int32_t ScanOp(Client* client, int32_t argc, char** argv, ErrorCode* err) {
         return -1;
     }
 
-    std::string start_rowkey = argv[3];
-    std::string end_rowkey = argv[4];
+    std::string start_rowkey;
+    std::string end_rowkey;
+    std::string fname = FLAGS_file;
+    if (!fname.empty()) {
+        const int32_t buf_size = 100 * 1024;
+        char buf[buf_size];
+        std::ifstream stream(fname.c_str());
+        stream.getline(buf, buf_size);
+        start_rowkey = std::string(buf);
+        stream.getline(buf, buf_size);
+        end_rowkey = std::string(buf);
+    } else {
+        start_rowkey = argv[3];
+        end_rowkey = argv[4];
+    }
+
     ResultStream* result_stream;
     ScanDescriptor desc(start_rowkey);
     desc.SetEnd(end_rowkey);
@@ -2130,7 +2145,7 @@ int32_t FindMasterOp(Client* client, int32_t argc, char** argv, ErrorCode* err) 
 }
 
 int32_t FindTsOp(Client* client, int32_t argc, char** argv, ErrorCode* err) {
-    if (argc != 4) {
+    if (argc != 4 && argc != 3) {
         UsageMore(argv[0]);
         return -1;
     }
@@ -2142,7 +2157,21 @@ int32_t FindTsOp(Client* client, int32_t argc, char** argv, ErrorCode* err) {
         return -1;
     }
 
-    std::string rowkey = argv[3];
+    std::string rowkey;
+    if (argc == 4) {
+        rowkey = argv[3];
+    } else {
+        std::string fname = FLAGS_file;
+        if (fname.empty()) {
+            std::cerr << "file not exist: " << fname << std::endl;
+            return -2;
+        }
+        const int32_t buf_size = 100 * 1024;
+        char buf[buf_size];
+        std::ifstream stream(fname.c_str());
+        stream.getline(buf, buf_size);
+        rowkey = std::string(buf);
+    }
     table->ScanMetaTable(rowkey, rowkey + '\0');
 
     TabletMeta meta;
