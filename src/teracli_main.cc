@@ -56,6 +56,8 @@ DEFINE_int32(lg, -1, "locality group number.");
 DEFINE_int32(concurrency, 1, "concurrency for compact table.");
 DEFINE_int64(timestamp, -1, "timestamp.");
 
+DEFINE_string(tablet, "", "tablet name");
+
 volatile int32_t g_start_time = 0;
 volatile int32_t g_end_time = 0;
 volatile int32_t g_used_time = 0;
@@ -809,8 +811,32 @@ int32_t DeleteOp(Client* client, int32_t argc, char** argv, ErrorCode* err) {
     return 0;
 }
 
+bool GetTabletInfo(Client* client, const std::string& tablename,
+                   const std::string& tablet_path, TabletInfo* tablet,
+                   ErrorCode* err) {
+    std::vector<TabletInfo> tablet_list;
+    if (!client->GetTabletLocation(tablename, &tablet_list, err)) {
+        LOG(ERROR) << "fail to list tablet info";
+        return false;
+    }
+
+    std::vector<TabletInfo>::iterator tablet_it = tablet_list.begin();
+    for (; tablet_it != tablet_list.end(); ++tablet_it) {
+        if (tablet_it->path == tablet_path) {
+            *tablet = *tablet_it;
+            break;
+        }
+    }
+    if (tablet_it == tablet_list.end()) {
+        LOG(ERROR) << "fail to find tablet: " << tablet_path
+            << ", total tablets: " << tablet_list.size();
+        return false;
+    }
+    return true;
+}
+
 int32_t ScanOp(Client* client, int32_t argc, char** argv, ErrorCode* err) {
-    if (argc != 5 && argc != 6) {
+    if (argc < 3 || argc > 6) {
         LOG(ERROR) << "args number error: " << argc << ", need 5 | 6.";
         Usage(argv[0]);
         return -1;
@@ -824,8 +850,27 @@ int32_t ScanOp(Client* client, int32_t argc, char** argv, ErrorCode* err) {
         return -1;
     }
 
-    std::string start_rowkey = argv[3];
-    std::string end_rowkey = argv[4];
+    std::string start_rowkey;
+    std::string end_rowkey;
+    std::string filter;
+    if (!FLAGS_tablet.empty()) {
+        TabletInfo tablet;
+        if (!GetTabletInfo(client, tablename, FLAGS_tablet, &tablet, err)) {
+            LOG(ERROR) << "fail to parse tablet: " << FLAGS_tablet;
+            return -2;
+        }
+        start_rowkey = tablet.start_key;
+        end_rowkey = tablet.end_key;
+        if (argc > 3) {
+            filter = argv[3];
+        }
+    } else {
+        start_rowkey = argv[3];
+        end_rowkey = argv[4];
+        if (argc > 5) {
+            filter = argv[5];
+        }
+    }
     ResultStream* result_stream;
     ScanDescriptor desc(start_rowkey);
     desc.SetEnd(end_rowkey);
@@ -833,11 +878,9 @@ int32_t ScanOp(Client* client, int32_t argc, char** argv, ErrorCode* err) {
     desc.SetAsync(FLAGS_tera_client_scan_async_enabled);
     desc.SetPackInterval(FLAGS_scan_pack_interval);
 
-    if (argc == 5) {
-        // scan all cells
-    } else if (argc == 6) {
-        if (!desc.SetFilter(argv[5])) {
-            LOG(ERROR) << "fail to parse scan schema: " << argv[5];
+    if (!filter.empty()) {
+        if (!desc.SetFilter(filter)) {
+            LOG(ERROR) << "fail to parse scan schema: " << filter;
             return -1;
         }
     }
