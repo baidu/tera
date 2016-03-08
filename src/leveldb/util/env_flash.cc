@@ -591,13 +591,15 @@ void FlashEnv::UpdateFlashFile(const std::string& fname, uint64_t fsize) {
         param->fsize = fsize;
 
         task.priority >>= 1; // cut down priority to half
-        if (task.priority < 1) {
-            task.priority = 1;
+        if (task.priority > 0) {
+            task.id = update_flash_threads_.Schedule(UpdateFlashFileFunc, param, (double)task.priority,
+                                                     update_flash_retry_interval_millis_);
+            Log("[env_flash] schedule copy to local after %ld ms, id: %ld, prio: %ld, file: %s\n",
+                update_flash_retry_interval_millis_, task.id, task.priority, local_fname.c_str());
+        } else {
+            Log("[env_flash] abort schedule copy to local, file: %s\n", local_fname.c_str());
+            update_flash_waiting_files_.erase(fname);
         }
-        task.id = update_flash_threads_.Schedule(UpdateFlashFileFunc, param, (double)task.priority,
-                                                 update_flash_retry_interval_millis_);
-        Log("[env_flash] schedule copy to local after %ld ms, id: %ld, prio: %ld, file: %s\n",
-            update_flash_retry_interval_millis_, task.id, task.priority, local_fname.c_str());
     }
 }
 
