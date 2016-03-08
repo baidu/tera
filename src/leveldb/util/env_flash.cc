@@ -33,6 +33,9 @@ tera::Counter ssd_read_size_counter;
 tera::Counter ssd_write_counter;
 tera::Counter ssd_write_size_counter;
 
+const int64_t kFlashFileCheckIntervalMicros = 30 * 1000000;
+const int64_t kUpdateFlashRetryIntervalMillis = 60 * 1000;
+
 // Log error message
 static Status IOError(const std::string& context, int err_number) {
     return Status::IOError(context, strerror(err_number));
@@ -104,6 +107,8 @@ Status CopyToLocal(const std::string& local_fname, Env* env,
         return Status::IOError("dfs GetFileSize fail", s.ToString());
     }
 
+    Log("[env_flash] copy %s to local fail, size %ld, dfs size %ld, local size %ld\n",
+        fname.c_str(), fsize, file_size, local_size);
     if (fsize == file_size) {
         // dfs fsize match but local doesn't match
         s = IOError("local fsize mismatch", file_size);
@@ -153,41 +158,93 @@ public:
 // A file abstraction for randomly reading the contents of a file.
 class FlashRandomAccessFile :public RandomAccessFile{
 private:
-    RandomAccessFile* dfs_file_;
-    RandomAccessFile* flash_file_;
+    FlashEnv* flash_env_;
+    mutable RandomAccessFile* dfs_file_;
+    mutable RandomAccessFile* flash_file_;
+    std::string fname_;
+    std::string local_fname_;
+    uint64_t fsize_;
+
+    mutable port::Mutex mutex_;
+    mutable bool flash_file_is_checking_;
+    mutable uint64_t flash_file_last_check_micros_;
+    mutable uint64_t flash_file_check_interval_micros_;
+    mutable uint64_t read_dfs_count_;
 public:
-    FlashRandomAccessFile(Env* posix_env, Env* dfs_env, const std::string& fname,
-                          uint64_t fsize, bool vanish_allowed)
-        :dfs_file_(NULL), flash_file_(NULL) {
-        std::string local_fname = FlashEnv::FlashPath(fname) + fname;
+    FlashRandomAccessFile(FlashEnv* flash_env, const std::string& fname, uint64_t fsize)
+        : flash_env_(flash_env), dfs_file_(NULL), flash_file_(NULL), fname_(fname),
+          local_fname_(FlashEnv::FlashPath(fname) + fname), fsize_(fsize),
+          flash_file_is_checking_(false), flash_file_last_check_micros_(0),
+          flash_file_check_interval_micros_(kFlashFileCheckIntervalMicros),
+          read_dfs_count_(0) {
 
-        // copy from dfs with seq read
-        Status copy_status = CopyToLocal(local_fname, dfs_env, fname, fsize,
-                                         vanish_allowed);
-        if (!copy_status.ok()) {
-            Log("[env_flash] copy to local fail [%s]: %s\n",
-                copy_status.ToString().c_str(), local_fname.c_str());
-            // no flash file, use dfs file
-            dfs_env->NewRandomAccessFile(fname, &dfs_file_);
-            return;
+        // copy file to cache if force read from cache
+        if (flash_env_->ForceReadFromCache()) {
+            Status copy_status = CopyToLocal(local_fname_, flash_env_->BaseEnv(), fname, fsize,
+                                             flash_env_->VanishAllowed());
+            if (!copy_status.ok()) {
+                Log("[env_flash] copy to local fail [%s]: %s\n",
+                    copy_status.ToString().c_str(), local_fname_.c_str());
+            }
         }
 
-        Status s = posix_env->NewRandomAccessFile(local_fname, &flash_file_);
-        if (s.ok()) {
-            return;
+        // if cache file is identical with dfs file, use cache file
+        if (flash_env_->FlashFileIdentical(fname, fsize)) {
+            Status s = flash_env_->CacheEnv()->NewRandomAccessFile(local_fname_, &flash_file_);
+            if (s.ok()) {
+                return;
+            }
+            Log("[env_flash] local file check pass, but open for RandomAccess fail [%s]: %s\n",
+                s.ToString().c_str(), local_fname_.c_str());
+        } else {
+            Log("[env_flash] local file check fail: %s\n", local_fname_.c_str());
         }
-        Log("[env_flash] local file exists, but open for RandomAccess fail: %s\n",
-            local_fname.c_str());
-        Env::Default()->DeleteFile(local_fname);
-        dfs_env->NewRandomAccessFile(fname, &dfs_file_);
+
+        // else, use dfs file
+        flash_env_->ScheduleUpdateFlash(fname, fsize, 1);
+        flash_env_->BaseEnv()->NewRandomAccessFile(fname, &dfs_file_);
+        flash_file_last_check_micros_ = Env::Default()->NowMicros();
     }
     ~FlashRandomAccessFile() {
         delete dfs_file_;
         delete flash_file_;
     }
-    Status Read(uint64_t offset, size_t n, Slice* result,
-                      char* scratch) const {
-        if (flash_file_) {
+    Status Read(uint64_t offset, size_t n, Slice* result, char* scratch) const {
+        bool use_flash = false;
+        {
+            MutexLock l(&mutex_);
+            // evenry 30 seconds, check if flash file is identical to dfs file.
+            // if so, try open flash file;
+            // else, reschedule update it with a higher priority
+            if (flash_file_ == NULL &&
+                    !flash_file_is_checking_ &&
+                    flash_file_last_check_micros_ + flash_file_check_interval_micros_
+                        <= Env::Default()->NowMicros()) {
+                flash_file_is_checking_ = true;
+                mutex_.Unlock();
+                RandomAccessFile* tmp_file = NULL;
+                if (flash_env_->FlashFileIdentical(fname_, fsize_)) {
+                    flash_env_->CacheEnv()->NewRandomAccessFile(local_fname_, &tmp_file);
+                }
+                mutex_.Lock();
+                if (tmp_file != NULL) {
+                    flash_file_ = tmp_file;
+                    Log("[env_flash] switch to local file: %s\n", local_fname_.c_str());
+                } else {
+                    flash_env_->ScheduleUpdateFlash(fname_, fsize_, read_dfs_count_);
+                    read_dfs_count_ = 0;
+                }
+                flash_file_is_checking_ = false;
+                flash_file_last_check_micros_ = Env::Default()->NowMicros();
+            }
+            if (flash_file_ != NULL) {
+                use_flash = true;
+            } else {
+                ++read_dfs_count_;
+            }
+        }
+
+        if (use_flash) {
             Status read_status = flash_file_->Read(offset, n, result, scratch);
             if (read_status.ok()) {
                 ssd_read_counter.Inc();
@@ -305,10 +362,10 @@ public:
 
 std::vector<std::string> FlashEnv::flash_paths_(1, "./flash");
 
-FlashEnv::FlashEnv(Env* base_env) : EnvWrapper(Env::Default())
+FlashEnv::FlashEnv(Env* base_env)
+  : EnvWrapper(Env::Default()), dfs_env_(base_env), posix_env_(Env::Default()),
+    update_flash_retry_interval_millis_(kUpdateFlashRetryIntervalMillis)
 {
-    dfs_env_ = base_env;
-    posix_env_ = Env::Default();
 }
 
 FlashEnv::~FlashEnv()
@@ -333,8 +390,7 @@ Status FlashEnv::NewRandomAccessFile(const std::string& fname,
         uint64_t fsize, RandomAccessFile** result)
 {
     FlashRandomAccessFile* f =
-        new FlashRandomAccessFile(posix_env_, dfs_env_, fname,
-                                  fsize, vanish_allowed_);
+        new FlashRandomAccessFile(this, fname, fsize);
     if (f == NULL || !f->isValid()) {
         *result = NULL;
         delete f;
@@ -458,7 +514,96 @@ const std::string& FlashEnv::FlashPath(const std::string& fname) {
     return flash_paths_[hash % flash_paths_.size()];
 }
 
+void FlashEnv::SetIfForceReadFromCache(bool force) {
+    force_read_from_cache_ = force;
+}
+
+bool FlashEnv::ForceReadFromCache() {
+    return force_read_from_cache_;
+}
+
+void FlashEnv::SetUpdateFlashThreadNumber(int thread_num) {
+    update_flash_threads_.SetBackgroundThreads(thread_num);
+}
+
+bool FlashEnv::FlashFileIdentical(const std::string& fname, uint64_t fsize) {
+    uint64_t local_size = 0;
+    std::string local_fname = FlashEnv::FlashPath(fname) + fname;
+    Status s = Env::Default()->GetFileSize(local_fname, &local_size);
+    if (s.ok() && fsize == local_size) {
+        return true;
+    }
+    return false;
+}
+
+struct UpdateFlashFileParam {
+    FlashEnv* flash_env;
+    std::string fname;
+    uint64_t fsize;
+};
+
+void UpdateFlashFileFunc(void* arg) {
+    UpdateFlashFileParam* update_arg = (UpdateFlashFileParam*)arg;
+    update_arg->flash_env->UpdateFlashFile(update_arg->fname, update_arg->fsize);
+    delete update_arg;
+}
+
+void FlashEnv::ScheduleUpdateFlash(const std::string& fname, uint64_t fsize, int64_t priority) {
+    MutexLock l(&update_flash_mutex_);
+    if (update_flash_waiting_files_.find(fname) == update_flash_waiting_files_.end()) {
+        UpdateFlashFileParam* param = new UpdateFlashFileParam;
+        param->flash_env = this;
+        param->fname = fname;
+        param->fsize = fsize;
+
+        UpdateFlashTask& task = update_flash_waiting_files_[fname];
+        task.priority = priority;
+        task.id = update_flash_threads_.Schedule(UpdateFlashFileFunc, param, (double)task.priority, 0);
+        Log("[env_flash] schedule copy to local, id: %ld, prio: %ld, file: %s\n",
+            task.id, task.priority, fname.c_str());
+    } else {
+        UpdateFlashTask& task = update_flash_waiting_files_[fname];
+        task.priority += priority;
+        update_flash_threads_.ReSchedule(task.id, (double)task.priority, 0);
+        Log("[env_flash] reschedule copy to local, id: %ld, prio: %ld, file: %s\n",
+            task.id, task.priority, fname.c_str());
+    }
+}
+
+void FlashEnv::UpdateFlashFile(const std::string& fname, uint64_t fsize) {
+    std::string local_fname = FlashEnv::FlashPath(fname) + fname;
+    Status copy_status = CopyToLocal(local_fname, dfs_env_, fname, fsize, vanish_allowed_);
+
+    MutexLock l(&update_flash_mutex_);
+    if (copy_status.ok()) {
+        UpdateFlashTask& task = update_flash_waiting_files_[fname];
+        Log("[env_flash] copy to local success, id: %ld, prio: %ld, file: %s\n",
+            task.id, task.priority, local_fname.c_str());
+        update_flash_waiting_files_.erase(fname);
+    } else {
+        UpdateFlashTask& task = update_flash_waiting_files_[fname];
+        Log("[env_flash] copy to local fail [%s], id: %ld, prio: %ld, file: %s\n",
+            copy_status.ToString().c_str(), task.id, task.priority, local_fname.c_str());
+
+        UpdateFlashFileParam* param = new UpdateFlashFileParam;
+        param->flash_env = this;
+        param->fname = fname;
+        param->fsize = fsize;
+
+        task.priority >>= 1; // cut down priority to half
+        if (task.priority < 1) {
+            task.priority = 1;
+        }
+        task.id = update_flash_threads_.Schedule(UpdateFlashFileFunc, param, (double)task.priority,
+                                                 update_flash_retry_interval_millis_);
+        Log("[env_flash] schedule copy to local after %ld ms, id: %ld, prio: %ld, file: %s\n",
+            update_flash_retry_interval_millis_, task.id, task.priority, local_fname.c_str());
+    }
+}
+
 bool FlashEnv::vanish_allowed_ = false;
+bool FlashEnv::force_read_from_cache_ = true;
+ThreadPool FlashEnv::update_flash_threads_;
 
 Env* NewFlashEnv(Env* base_env)
 {

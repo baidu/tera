@@ -73,6 +73,8 @@ DECLARE_int32(tera_tabletnode_cache_mem_size);
 DECLARE_int32(tera_tabletnode_cache_disk_size);
 DECLARE_int32(tera_tabletnode_cache_disk_filenum);
 DECLARE_int32(tera_tabletnode_cache_log_level);
+DECLARE_int32(tera_tabletnode_cache_update_thread_num);
+DECLARE_bool(tera_tabletnode_cache_force_read_from_cache);
 DECLARE_int32(tera_tabletnode_gc_log_level);
 
 DECLARE_string(tera_leveldb_env_type);
@@ -171,6 +173,8 @@ void TabletNodeImpl::InitCacheSystem() {
         // compitable with legacy FlashEnv
         leveldb::FlashEnv::SetFlashPath(FLAGS_tera_tabletnode_cache_paths,
                                         FLAGS_tera_io_cache_path_vanish_allowed);
+        leveldb::FlashEnv::SetUpdateFlashThreadNumber(FLAGS_tera_tabletnode_cache_update_thread_num);
+        leveldb::FlashEnv::SetIfForceReadFromCache(FLAGS_tera_tabletnode_cache_force_read_from_cache);
         return;
     }
 
