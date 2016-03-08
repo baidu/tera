@@ -69,121 +69,203 @@ volatile int32_t g_cur_batch_num = 0;
 
 using namespace tera;
 
-void Usage(const std::string& prg_name) {
-    std::cout << "\nSYNOPSIS\n";
-    std::cout << "       " << prg_name << "  OPERATION  [OPTION...] \n\n";
-    std::cout << "DESCRIPTION \n\
-       create   <schema> [<delimiter_file>]                                 \n\
-              - schema syntax (all properties are optional):                \n\
-                    tablename <rawkey=binary,splitsize=1024,...> {          \n\
-                        lg1 <storage=flash,...> {                           \n\
-                            cf1 <maxversion=3>,                             \n\
-                            cf2...},                                        \n\
-                        lg2...                                              \n\
-                    }                                                       \n\
-              - kv mode schema:                                             \n\
-                    tablename <splitsize=1024, storage=memory, ...>         \n\
-              - simple mode schema:                                         \n\
-                    tablename{cf1, cf2, cf3, ...}                           \n\
-       createbyfile   <schema_file> [<delimiter_file>]                      \n\
-                                                                            \n\
-       update <schema>                                                      \n\
-              - kv schema:                                                  \n\
-                    e.g. tablename<splitsize=512,storage=disk>              \n\
-              - table schema:                                               \n\
-                - update properties                                         \n\
-                    e.g. tablename<splitsize=512>                           \n\
-                    e.g. tablename{lg0{cf0<ttl=123>}}                       \n\
-                    e.g. tablename<mergesize=233>{lg0<storage=disk>{cf0<ttl=123>}}       \n\
-                - add new cf                                                \n\
-                    e.g. tablename{lg0{cf0<ttl=250>,new_cf<op=add,ttl=233>}}\n\
-                - delete cf                                                 \n\
-                    e.g. tablename{lg0{cf0<op=del>}}                        \n\
-       enable/disable/drop  <tablename>                                     \n\
-                                                                            \n\
-       rename   <old table name> <new table name>                           \n\
-                rename table's name                                         \n\
-       put      <tablename> <rowkey> [<columnfamily:qualifier>] <value>     \n\
-                                                                            \n\
-       put-ttl  <tablename> <rowkey> [<columnfamily:qualifier>] <value> <ttl(second)>    \n\
-                                                                            \n\
-       putif    <tablename> <rowkey> [<columnfamily:qualifier>] <value>     \n\
-                                                                            \n\
-       get      <tablename> <rowkey> [<columnfamily:qualifier>]             \n\
-                                                                            \n\
-       scan[allv] <tablename> <startkey> <endkey> [<\"cf1|cf2\">]           \n\
-                scan table from startkey to endkey.                         \n\
-                (return all qulifier version when using suffix \"allv\")    \n\
-       delete[1v] <tablename> <rowkey> [<columnfamily:qualifier>]           \n\
-                delete row/columnfamily/qualifiers.                         \n\
-                (only delete latest version when using suffix \"1v\")       \n\
-       put_counter <tablename> <rowkey> [<columnfamily:qualifier>] <integer(int64_t)>   \n\
-                                                                            \n\
-       get_counter <tablename> <rowkey> [<columnfamily:qualifier>]          \n\
-                                                                            \n\
-       add      <tablename> <rowkey> <columnfamily:qualifier>   delta       \n\
-                add 'delta'(int64_t) to specified cell                      \n\
-       putint64 <tablename> <rowkey> [<columnfamily:qualifier>] <integer(int64_t)>       \n\
-                                                                            \n\
-       getint64 <tablename> <rowkey> [<columnfamily:qualifier>]             \n\
-                                                                            \n\
-       addint64 <tablename> <rowkey> <columnfamily:qualifier>  delta        \n\
-                add 'delta'(int64_t) to specified cell                      \n\
-       append   <tablename> <rowkey> [<columnfamily:qualifier>] <value>     \n\
-                                                                            \n\
-       batchput <tablename> <input file>                                    \n\
-                                                                            \n\
-       batchget <tablename> <input file>                                    \n\
-                                                                            \n\
-       show[x]  [<tablename>]                                               \n\
-                show table list or tablets info.                            \n\
-                (show more detail when using suffix \"x\")                  \n\
-       showschema[x] <tablename>                                            \n\
-                show table schema (show more detail when using suffix \"x\")\n\
-       showts[x] [<tabletnode addr>]                                        \n\
-                show all tabletnodes or single tabletnode info.             \n\
-                (show more detail when using suffix \"x\")                  \n\
-       user     <operation> <params>                                        \n\
-                create          <username> <password>                       \n\
-                changepwd       <username> <new-password>                   \n\
-                show            <username>                                  \n\
-                delete          <username>                                  \n\
-                addtogroup      <username> <groupname>                      \n\
-                deletefromgroup <username> <groupname>                      \n\
-       version\n\n";
+const char* builtin_cmd_list[] = {
+    "create",
+    "create   <schema> [<delimiter_file>]                              \n\
+         - schema syntax (all properties are optional):                \n\
+               tablename <rawkey=binary,splitsize=1024,...> {          \n\
+                   lg1 <storage=flash,...> {                           \n\
+                       cf1 <maxversion=3>,                             \n\
+                       cf2...},                                        \n\
+                   lg2...                                              \n\
+               }                                                       \n\
+         - kv mode schema:                                             \n\
+               tablename <splitsize=1024, storage=memory, ...>         \n\
+         - simple mode schema:                                         \n\
+               tablename{cf1, cf2, cf3, ...}",
+
+    "createbyfile",
+    "createbyfile <schema_file> [<delimiter_file>]",
+
+    "update",
+    "update <schema>                                                    \n\
+         - kv schema:                                                  \n\
+               e.g. tablename<splitsize=512,storage=disk>              \n\
+         - table schema:                                               \n\
+           - update properties                                         \n\
+               e.g. tablename<splitsize=512>                           \n\
+               e.g. tablename{lg0{cf0<ttl=123>}}                       \n\
+               e.g. tablename<mergesize=233>{lg0{cf0<ttl=123>}}        \n\
+           - add new cf                                                \n\
+               e.g. tablename{lg0{cf0<ttl=250>,new_cf<op=add,ttl=233>}}\n\
+           - delete cf                                                 \n\
+               e.g. tablename{lg0{cf0<op=del>}}",
+
+    "enable",
+    "enable <tablename>",
+
+    "disable",
+    "disable <tablename>",
+
+    "drop",
+    "drop <tablename>",
+
+    "rename",
+    "rename <old table name> <new table name>                           \n\
+            rename table's name",
+
+    "put",
+    "put <tablename> <rowkey> [<columnfamily:qualifier>] <value>",
+
+    "put-ttl",
+    "put-ttl <tablename> <rowkey> [<columnfamily:qualifier>] <value> <ttl(second)>",
+
+    "putif",
+    "putif <tablename> <rowkey> [<columnfamily:qualifier>] <value>",
+
+    "get",
+    "get<tablename> <rowkey> [<columnfamily:qualifier>]",
+
+    "scan",
+    "scan[allv] <tablename> <startkey> <endkey> [<\"cf1|cf2\">]               \n\
+                scan table from startkey to endkey.                           \n\
+                (return all qulifier version when using suffix \"allv\")",
+
+    "delete",
+    "delete[1v] <tablename> <rowkey> [<columnfamily:qualifier>]               \n\
+                delete row/columnfamily/qualifiers.                           \n\
+                (only delete latest version when using suffix \"1v\")",
+
+    "put_counter",
+    "put_counter <tablename> <rowkey> [<columnfamily:qualifier>] <integer(int64_t)>",
+
+    "get_counter",
+    "get_counter <tablename> <rowkey> [<columnfamily:qualifier>]",
+
+    "add",
+    "add <tablename> <rowkey> <columnfamily:qualifier>   delta                 \n\
+         add 'delta'(int64_t) to specified cell",
+
+    "putint64",
+    "putint64 <tablename> <rowkey> [<columnfamily:qualifier>] <integer(int64_t)>",
+
+    "getint64",
+    "getint64 <tablename> <rowkey> [<columnfamily:qualifier>]",
+
+    "addint64",
+    "addint64 <tablename> <rowkey> <columnfamily:qualifier>  delta              \n\
+              add 'delta'(int64_t) to specified cell",
+
+    "append",
+    "append <tablename> <rowkey> [<columnfamily:qualifier>] <value>",
+
+    "batchput",
+    "batchput <tablename> <input file>",
+
+    "batchget",
+    "batchget <tablename> <input file>",
+
+    "show",
+    "show[x] [<tablename>]                                               \n\
+             show table list or tablets info.                            \n\
+             (show more detail when using suffix \"x\")",
+
+    "showschema",
+    "showschema[x] <tablename>                                            \n\
+                   show table schema (show more detail when using suffix \"x\")",
+
+    "showts",
+    "showts[x] [<tabletnode addr>]                                        \n\
+               show all tabletnodes or single tabletnode info.            \n\
+               (show more detail when using suffix \"x\")",
+
+    "user",
+    "user <operation> <params>                                            \n\
+          create          <username> <password>                           \n\
+          changepwd       <username> <new-password>                       \n\
+          show            <username>                                      \n\
+          delete          <username>                                      \n\
+          addtogroup      <username> <groupname>                          \n\
+          deletefromgroup <username> <groupname>",
+
+    "tablet",
+    "tablet <operation> <params>                                          \n\
+            move    <tablet_path> <target_addr>                           \n\
+            compact <tablet_path>                                         \n\
+            split   <tablet_path>                                         \n\
+            merge   <tablet_path>",
+
+    "compact",
+    "compact <tablename> [--lg=] [--concurrency=]                         \n\
+             run manual compaction on a table, support only compact a     \n\
+             localitygroup.",
+
+    "safemode",
+    "safemode [get|enter|leave]",
+
+    "meta",
+    "meta[2] [backup|check|repair|show]                                   \n\
+             meta for master memory, meta2 for meta table.",
+
+    "findmaster",
+    "findmaster                                                           \n\
+                find the address of master",
+
+    "findts",
+    "findts <tablename> <rowkey>                                          \n\
+            find the specify tabletnode serving 'rowkey'.",
+
+    "reload",
+    "reload config hostname:port                                          \n\
+            notify master | ts reload flag file                           \n\
+            *** at your own risk ***",
+
+    "findtablet",
+    "findtablet <tablename> <rowkey-prefix>                               \n\
+                <tablename> <start-key> <end-key>",
+
+    "help",
+    "help [cmd]                                                           \n\
+          show manual for a or all cmd(s)",
+
+    "version",
+    "version                                                              \n\
+             show version info",
+};
+
+static void PrintCmdHelpInfo(const char* msg) {
+    if (msg == NULL) {
+        return;
+    }
+    int count = sizeof(builtin_cmd_list)/sizeof(char*);
+    for (int i = 0; i < count; i+=2) {
+        if(strncmp(msg, builtin_cmd_list[i], 32) == 0) {
+            std::cout << builtin_cmd_list[i + 1] << std::endl;
+            return;
+        }
+    }
 }
 
-void UsageMore(const std::string& prg_name) {
-    std::cout << "\nSYNOPSIS\n";
-    std::cout << "       " << prg_name << "  OPERATION  [OPTION...] \n\n";
-    std::cout << "DESCRIPTION \n\
-       tablet   <operation> <params>                                        \n\
-                move    <tablet_path> <target_addr>                         \n\
-                compact <tablet_path>                                       \n\
-                split   <tablet_path>                                       \n\
-                merge   <tablet_path>                                       \n\
-       compact  <tablename> [--lg=] [--concurrency=]                        \n\
-                run manual compaction on a table, support only compact a    \n\
-                localitygroup.                                              \n\
-       safemode [get|enter|leave]                                           \n\
-                                                                            \n\
-       meta[2]  [backup|check|repair|show]                                  \n\
-                meta for master memory, meta2 for meta table.               \n\
-       findmaster                                                           \n\
-                find the address of master                                  \n\
-       findts   <tablename> <rowkey>                                        \n\
-                find the specify tabletnode serving 'rowkey'.               \n\
-       reload config hostname:port                                          \n\
-                notify master | ts reload flag file                         \n\
-                *** at your own risk ***                                    \n\
-       findtablet tablename rowkey-prefix                                   \n\
-                  tablename start-key end-key                               \n\
-       version\n\n";
+static void PrintAllCmd() {
+    std::cout << "there is cmd list:" << std::endl;
+    int count = sizeof(builtin_cmd_list)/sizeof(char*);
+    for (int i = 0; i < count; i+=2) {
+        std::cout << builtin_cmd_list[i] << std::endl;
+    }
+
+    std::cout << std::endl << "help [cmd] for details." << std::endl;
+}
+
+static void PrintUnknownCmdHelpInfo(const char* msg) {
+    if (msg != NULL) {
+        std::cout << msg << " is not a valid command." << std::endl << std::endl;
+    }
+    PrintAllCmd();
 }
 
 int32_t CreateOp(Client* client, int32_t argc, char** argv, ErrorCode* err) {
     if (argc < 3) {
-        Usage(argv[0]);
+        PrintCmdHelpInfo(argv[1]);
         return -1;
     }
 
@@ -201,7 +283,7 @@ int32_t CreateOp(Client* client, int32_t argc, char** argv, ErrorCode* err) {
             return -1;
         }
     } else if (argc > 4) {
-        LOG(ERROR) << "too many args: " << argc;
+        PrintCmdHelpInfo("create");
         return -1;
     }
     if (!client->CreateTable(table_desc, delimiters, err)) {
@@ -215,7 +297,7 @@ int32_t CreateOp(Client* client, int32_t argc, char** argv, ErrorCode* err) {
 
 int32_t CreateByFileOp(Client* client, int32_t argc, char** argv, ErrorCode* err) {
     if (argc < 3) {
-        Usage(argv[0]);
+        PrintCmdHelpInfo(argv[1]);
         return -1;
     }
 
@@ -247,7 +329,7 @@ int32_t CreateByFileOp(Client* client, int32_t argc, char** argv, ErrorCode* err
 
 int32_t UpdateOp(Client* client, int32_t argc, char** argv, ErrorCode* err) {
     if (argc != 3) {
-        Usage(argv[0]);
+        PrintCmdHelpInfo(argv[1]);
         return -1;
     }
     std::string schema = argv[2];
@@ -288,7 +370,7 @@ int32_t UpdateOp(Client* client, int32_t argc, char** argv, ErrorCode* err) {
 
 int32_t DropOp(Client* client, int32_t argc, char** argv, ErrorCode* err) {
     if (argc < 3) {
-        Usage(argv[0]);
+        PrintCmdHelpInfo(argv[1]);
         return -1;
     }
 
@@ -302,7 +384,7 @@ int32_t DropOp(Client* client, int32_t argc, char** argv, ErrorCode* err) {
 
 int32_t EnableOp(Client* client, int32_t argc, char** argv, ErrorCode* err) {
     if (argc < 3) {
-        Usage(argv[0]);
+        PrintCmdHelpInfo(argv[1]);
         return -1;
     }
 
@@ -316,7 +398,7 @@ int32_t EnableOp(Client* client, int32_t argc, char** argv, ErrorCode* err) {
 
 int32_t DisableOp(Client* client, int32_t argc, char** argv, ErrorCode* err) {
     if (argc < 3) {
-        Usage(argv[0]);
+        PrintCmdHelpInfo(argv[1]);
         return -1;
     }
 
@@ -379,7 +461,7 @@ void ParseCfQualifier(const std::string& input, std::string* columnfamily,
 int32_t PutInt64Op(Client* client, int32_t argc, char** argv, ErrorCode* err) {
     if (argc != 5 && argc != 6) {
         LOG(ERROR) << "args number error: " << argc << ", need 5 | 6.";
-        Usage(argv[0]);
+        PrintCmdHelpInfo(argv[1]);
         return -1;
     }
 
@@ -417,7 +499,7 @@ int32_t PutInt64Op(Client* client, int32_t argc, char** argv, ErrorCode* err) {
 int32_t PutCounterOp(Client* client, int32_t argc, char** argv, ErrorCode* err) {
     if (argc != 5 && argc != 6) {
         LOG(ERROR) << "args number error: " << argc << ", need 5 | 6.";
-        Usage(argv[0]);
+        PrintCmdHelpInfo(argv[1]);
         return -1;
     }
 
@@ -457,7 +539,7 @@ int32_t PutCounterOp(Client* client, int32_t argc, char** argv, ErrorCode* err) 
 int32_t PutOp(Client* client, int32_t argc, char** argv, ErrorCode* err) {
     if (argc != 5 && argc != 6) {
         LOG(ERROR) << "args number error: " << argc << ", need 5 | 6.";
-        Usage(argv[0]);
+        PrintCmdHelpInfo(argv[1]);
         return -1;
     }
 
@@ -495,7 +577,7 @@ int32_t PutOp(Client* client, int32_t argc, char** argv, ErrorCode* err) {
 int32_t PutTTLOp(Client* client, int32_t argc, char** argv, ErrorCode* err) {
     if (argc != 6 && argc != 7) {
         LOG(ERROR) << "args number error: " << argc << ", need 5 | 6.";
-        Usage(argv[0]);
+        PrintCmdHelpInfo(argv[1]);
         return -1;
     }
 
@@ -530,7 +612,7 @@ int32_t PutTTLOp(Client* client, int32_t argc, char** argv, ErrorCode* err) {
 int32_t AppendOp(Client* client, int32_t argc, char** argv, ErrorCode* err) {
     if (argc != 5 && argc != 6) {
         LOG(ERROR) << "args number error: " << argc << ", need 5 | 6.";
-        Usage(argv[0]);
+        PrintCmdHelpInfo(argv[1]);
         return -1;
     }
 
@@ -563,7 +645,7 @@ int32_t AppendOp(Client* client, int32_t argc, char** argv, ErrorCode* err) {
 int32_t PutIfAbsentOp(Client* client, int32_t argc, char** argv, ErrorCode* err) {
     if (argc != 5 && argc != 6) {
         LOG(ERROR) << "args number error: " << argc << ", need 5 | 6.";
-        Usage(argv[0]);
+        PrintCmdHelpInfo(argv[1]);
         return -1;
     }
 
@@ -596,7 +678,7 @@ int32_t PutIfAbsentOp(Client* client, int32_t argc, char** argv, ErrorCode* err)
 int32_t AddOp(Client* client, int32_t argc, char** argv, ErrorCode* err) {
     if (argc != 5 && argc != 6) {
         LOG(ERROR)<< "args number error: " << argc << ", need 5 | 6.";
-        Usage(argv[0]);
+        PrintCmdHelpInfo(argv[1]);
         return -1;
     }
 
@@ -634,7 +716,7 @@ int32_t AddOp(Client* client, int32_t argc, char** argv, ErrorCode* err) {
 int32_t AddInt64Op(Client* client, int32_t argc, char** argv, ErrorCode* err) {
     if (argc != 5 && argc != 6) {
         LOG(ERROR)<< "args number error: " << argc << ", need 5 | 6.";
-        Usage(argv[0]);
+        PrintCmdHelpInfo(argv[1]);
         return -1;
     }
 
@@ -672,7 +754,7 @@ int32_t AddInt64Op(Client* client, int32_t argc, char** argv, ErrorCode* err) {
 int32_t GetInt64Op(Client* client, int32_t argc, char** argv, ErrorCode* err) {
     if (argc != 4 && argc != 5) {
         LOG(ERROR) << "args number error: " << argc << ", need 5 | 6.";
-        Usage(argv[0]);
+        PrintCmdHelpInfo(argv[1]);
         return -1;
     }
 
@@ -706,7 +788,7 @@ int32_t GetInt64Op(Client* client, int32_t argc, char** argv, ErrorCode* err) {
 int32_t GetOp(Client* client, int32_t argc, char** argv, ErrorCode* err) {
     if (argc != 4 && argc != 5) {
         LOG(ERROR) << "args number error: " << argc << ", need 5 | 6.";
-        Usage(argv[0]);
+        PrintCmdHelpInfo(argv[1]);
         return -1;
     }
 
@@ -749,7 +831,7 @@ int32_t GetOp(Client* client, int32_t argc, char** argv, ErrorCode* err) {
 int32_t GetCounterOp(Client* client, int32_t argc, char** argv, ErrorCode* err) {
     if (argc != 4 && argc != 5) {
         LOG(ERROR) << "args number error: " << argc << ", need 5 | 6.";
-        Usage(argv[0]);
+        PrintCmdHelpInfo(argv[1]);
         return -1;
     }
 
@@ -789,8 +871,7 @@ int32_t GetCounterOp(Client* client, int32_t argc, char** argv, ErrorCode* err) 
 
 int32_t DeleteOp(Client* client, int32_t argc, char** argv, ErrorCode* err) {
     if (argc != 4 && argc != 5) {
-        LOG(ERROR) << "args number error: " << argc << ", need 4 | 5.";
-        Usage(argv[0]);
+        PrintCmdHelpInfo("delete");
         return -1;
     }
 
@@ -848,8 +929,7 @@ int32_t DeleteOp(Client* client, int32_t argc, char** argv, ErrorCode* err) {
 
 int32_t ScanOp(Client* client, int32_t argc, char** argv, ErrorCode* err) {
     if (argc != 5 && argc != 6) {
-        LOG(ERROR) << "args number error: " << argc << ", need 5 | 6.";
-        Usage(argv[0]);
+        PrintCmdHelpInfo("scan");
         return -1;
     }
 
@@ -1406,7 +1486,7 @@ int32_t ShowTabletNodesInfo(Client* client, bool is_x, ErrorCode* err) {
 int32_t ShowTabletNodesOp(Client* client, int32_t argc, char** argv, ErrorCode* err) {
     if (argc < 2) {
         LOG(ERROR) << "args number error: " << argc << ", need >2.";
-        Usage(argv[0]);
+        PrintCmdHelpInfo(argv[1]);
         return -1;
     }
 
@@ -1424,7 +1504,7 @@ int32_t ShowTabletNodesOp(Client* client, int32_t argc, char** argv, ErrorCode* 
 int32_t ShowOp(Client* client, int32_t argc, char** argv, ErrorCode* err) {
     if (argc < 2) {
         LOG(ERROR) << "args number error: " << argc << ", need >2.";
-        Usage(argv[0]);
+        PrintCmdHelpInfo(argv[1]);
         return -1;
     }
 
@@ -1443,8 +1523,7 @@ int32_t ShowOp(Client* client, int32_t argc, char** argv, ErrorCode* err) {
 
 int32_t ShowSchemaOp(Client* client, int32_t argc, char** argv, ErrorCode* err) {
     if (argc < 3) {
-        LOG(ERROR) << "args number error: " << argc << ", need >2.";
-        Usage(argv[0]);
+        PrintCmdHelpInfo("showschema");
         return -1;
     }
 
@@ -1490,7 +1569,7 @@ void BatchPutCallBack(RowMutation* mutation) {
 int32_t BatchPutOp(Client* client, int32_t argc, char** argv, ErrorCode* err) {
     if (argc != 4) {
         LOG(ERROR) << "args number error: " << argc << ", need 4.";
-        Usage(argv[0]);
+        PrintCmdHelpInfo(argv[1]);
         return -1;
     }
 
@@ -1545,7 +1624,7 @@ int32_t BatchPutOp(Client* client, int32_t argc, char** argv, ErrorCode* err) {
 int32_t BatchPutInt64Op(Client* client, int32_t argc, char** argv, ErrorCode* err) {
     if (argc != 4) {
         LOG(ERROR) << "args number error: " << argc << ", need 4.";
-        Usage(argv[0]);
+        PrintCmdHelpInfo(argv[1]);
         return -1;
     }
 
@@ -1632,7 +1711,7 @@ void BatchGetCallBack(RowReader* reader) {
 int32_t BatchGetOp(Client* client, int32_t argc, char** argv, ErrorCode* err) {
     if (argc != 4 && argc != 5) {
         LOG(ERROR) << "args number error: " << argc << ", need 4 | 5.";
-        Usage(argv[0]);
+        PrintCmdHelpInfo(argv[1]);
         return -1;
     }
 
@@ -1723,7 +1802,7 @@ void BatchGetInt64CallBack(RowReader* reader) {
 int32_t BatchGetInt64Op(Client* client, int32_t argc, char** argv, ErrorCode* err) {
     if (argc != 4 && argc != 5) {
         LOG(ERROR) << "args number error: " << argc << ", need 4 | 5.";
-        Usage(argv[0]);
+        PrintCmdHelpInfo(argv[1]);
         return -1;
     }
 
@@ -1838,7 +1917,7 @@ int32_t GetRandomNumKey(int32_t key_size,std::string *p_key){
 
 int32_t SnapshotOp(Client* client, int32_t argc, char** argv, ErrorCode* err) {
     if (argc < 4) {
-      Usage(argv[0]);
+      PrintCmdHelpInfo(argv[1]);
       return -1;
     }
 
@@ -1870,7 +1949,7 @@ int32_t SnapshotOp(Client* client, int32_t argc, char** argv, ErrorCode* err) {
         }
         std::cout << "rollback to snapshot: " << FLAGS_snapshot << std::endl;
     } else {
-        Usage(argv[0]);
+        PrintCmdHelpInfo(argv[1]);
         return -1;
     }
     return 0;
@@ -1878,13 +1957,13 @@ int32_t SnapshotOp(Client* client, int32_t argc, char** argv, ErrorCode* err) {
 
 int32_t SafeModeOp(Client* client, int32_t argc, char** argv, ErrorCode* err) {
     if (argc < 3) {
-        UsageMore(argv[0]);
+        PrintCmdHelpInfo(argv[1]);
         return -1;
     }
 
     std::string op = argv[2];
     if (op != "get" && op != "leave" && op != "enter") {
-        UsageMore(argv[0]);
+        PrintCmdHelpInfo(argv[1]);
         return -1;
     }
 
@@ -1910,7 +1989,7 @@ int32_t SafeModeOp(Client* client, int32_t argc, char** argv, ErrorCode* err) {
 
 int32_t ReloadConfigOp(Client* client, int32_t argc, char** argv, ErrorCode* err) {
     if ((argc != 4) || (std::string(argv[2]) != "config")) {
-        UsageMore(argv[0]);
+        PrintCmdHelpInfo(argv[1]);
         return -1;
     }
     std::string addr(argv[3]);
@@ -1985,7 +2064,7 @@ int32_t CompactTablet(TabletInfo& tablet, int lg) {
 
 int32_t CompactTabletOp(Client* client, int32_t argc, char** argv, ErrorCode* err) {
     if (argc != 4) {
-        UsageMore(argv[0]);
+        PrintCmdHelpInfo(argv[1]);
         return -1;
     }
 
@@ -2034,7 +2113,7 @@ int32_t CompactTabletOp(Client* client, int32_t argc, char** argv, ErrorCode* er
 
 int32_t TabletOp(Client* client, int32_t argc, char** argv, ErrorCode* err) {
     if (argc != 4 && argc != 5) {
-        UsageMore(argv[0]);
+        PrintCmdHelpInfo(argv[1]);
         return -1;
     }
 
@@ -2043,7 +2122,7 @@ int32_t TabletOp(Client* client, int32_t argc, char** argv, ErrorCode* err) {
     if (op == "compact") {
         return CompactTabletOp(client, argc, argv, err);
     } else if (op != "move" && op != "split" && op != "merge") {
-        UsageMore(argv[0]);
+        PrintCmdHelpInfo(argv[1]);
         return -1;
     }
 
@@ -2068,7 +2147,7 @@ int32_t TabletOp(Client* client, int32_t argc, char** argv, ErrorCode* err) {
 
 int32_t RenameOp(Client* client, int32_t argc, char** argv, ErrorCode* err) {
     if (argc != 4 ) {
-        Usage(argv[0]);
+        PrintCmdHelpInfo(argv[1]);
         return -1;
     }
     std::vector<std::string> arg_list;
@@ -2086,7 +2165,7 @@ int32_t RenameOp(Client* client, int32_t argc, char** argv, ErrorCode* err) {
 
 int32_t CompactOp(Client* client, int32_t argc, char** argv, ErrorCode* err) {
     if (argc != 3) {
-        UsageMore(argv[0]);
+        PrintCmdHelpInfo(argv[1]);
         return -1;
     }
 
@@ -2121,7 +2200,7 @@ int32_t CompactOp(Client* client, int32_t argc, char** argv, ErrorCode* err) {
 
 int32_t FindMasterOp(Client* client, int32_t argc, char** argv, ErrorCode* err) {
     if (argc != 2) {
-        UsageMore(argv[0]);
+        PrintCmdHelpInfo(argv[1]);
         return -1;
     }
     tera::sdk::ClusterFinder finder(FLAGS_tera_zk_root_path, FLAGS_tera_zk_addr_list);
@@ -2131,7 +2210,7 @@ int32_t FindMasterOp(Client* client, int32_t argc, char** argv, ErrorCode* err) 
 
 int32_t FindTsOp(Client* client, int32_t argc, char** argv, ErrorCode* err) {
     if (argc != 4) {
-        UsageMore(argv[0]);
+        PrintCmdHelpInfo(argv[1]);
         return -1;
     }
 
@@ -2348,7 +2427,7 @@ int32_t ProcessMeta(const std::string& op, const TableMetaList& table_list,
 
 int32_t MetaOp(Client* client, int32_t argc, char** argv, ErrorCode* err) {
     if (argc != 4 && argc != 3) {
-        UsageMore(argv[0]);
+        PrintCmdHelpInfo(argv[1]);
         return -1;
     }
 
@@ -2376,7 +2455,7 @@ int32_t MetaOp(Client* client, int32_t argc, char** argv, ErrorCode* err) {
         }
         ProcessMeta(op, table_list, tablet_list);
     } else {
-        UsageMore(argv[0]);
+        PrintCmdHelpInfo(argv[1]);
         return -2;
     }
 
@@ -2386,7 +2465,7 @@ int32_t MetaOp(Client* client, int32_t argc, char** argv, ErrorCode* err) {
 
 int32_t FindTabletOp(int32_t argc, char** argv, ErrorCode* err) {
     if ((argc != 4) && (argc != 5)) {
-        UsageMore(argv[0]);
+        PrintCmdHelpInfo(argv[1]);
         return -1;
     }
     if (argc == 5) {
@@ -2471,13 +2550,13 @@ int32_t FindTabletOp(int32_t argc, char** argv, ErrorCode* err) {
 
 int32_t Meta2Op(Client *client, int32_t argc, char** argv) {
     if (argc < 3) {
-        UsageMore(argv[0]);
+        PrintCmdHelpInfo("meta");
         return -1;
     }
 
     std::string op = argv[2];
     if (op != "check" && op != "show" && op != "backup" && op != "repair") {
-        UsageMore(argv[0]);
+        PrintCmdHelpInfo(argv[1]);
         return -1;
     }
 
@@ -2608,7 +2687,7 @@ static int32_t DeleteUserFromGroup(Client* client, const std::string& user,
 
 int32_t UserOp(Client* client, int32_t argc, char** argv, ErrorCode* err) {
     if (argc < 4) {
-        Usage(argv[0]);
+        PrintCmdHelpInfo(argv[1]);
         return -1;
     }
     std::string op = argv[2];
@@ -2625,8 +2704,19 @@ int32_t UserOp(Client* client, int32_t argc, char** argv, ErrorCode* err) {
     } else if ((argc == 5) && (op == "deletefromgroup")) {
         return DeleteUserFromGroup(client, argv[3], argv[4], err);
     }
-    Usage(argv[0]);
+    PrintCmdHelpInfo(argv[1]);
     return -1;
+}
+
+int32_t HelpOp(int32_t argc, char** argv) {
+    if (argc == 2) {
+        PrintAllCmd();
+    } else if (argc == 3) {
+        PrintCmdHelpInfo(argv[2]);
+    } else {
+        PrintCmdHelpInfo("help");
+    }
+    return 0;
 }
 
 int ExecuteCommand(Client* client, int argc, char* argv[]) {
@@ -2714,11 +2804,9 @@ int ExecuteCommand(Client* client, int argc, char* argv[]) {
     } else if (cmd == "snapshot") {
         ret = SnapshotOp(client, argc, argv, &error_code);
     } else if (cmd == "help") {
-        Usage(argv[0]);
-    } else if (cmd == "helpmore") {
-        UsageMore(argv[0]);
+        HelpOp(argc, argv);
     } else {
-        Usage(argv[0]);
+        PrintUnknownCmdHelpInfo(argv[1]);
     }
     if (error_code.GetType() != ErrorCode::kOK) {
         LOG(ERROR) << "fail reason: " << strerr(error_code)
