@@ -264,15 +264,8 @@ int32_t UpdateOp(Client* client, int32_t argc, char** argv, ErrorCode* err) {
         return -1;
     }
 
-    // if try to update lg or cf, need to disable table
-    bool is_update_lg_cf = false;
-    if (!UpdateTableDescriptor(schema_tree, table_desc, &is_update_lg_cf, err)) {
+    if (!UpdateTableDescriptor(schema_tree, table_desc, err)) {
         LOG(ERROR) << "[update] update failed";
-        return -1;
-    }
-
-    if (is_update_lg_cf && client->IsTableEnabled(table_desc->TableName(), err)) {
-        LOG(ERROR) << "[update] table is enabled, disable it first: " << table_desc->TableName();
         return -1;
     }
 

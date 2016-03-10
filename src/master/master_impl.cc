@@ -24,6 +24,7 @@
 #include "proto/proto_helper.h"
 #include "proto/tabletnode_client.h"
 #include "utils/config_utils.h"
+#include "utils/schema_utils.h"
 #include "utils/string_util.h"
 #include "utils/timer.h"
 #include "utils/utils_cmd.h"
@@ -97,7 +98,7 @@ DECLARE_bool(tera_only_root_create_table);
 DECLARE_string(tera_master_gc_strategy);
 
 DECLARE_string(flagfile);
-DECLARE_bool(tera_master_online_schema_update_enabled);
+DECLARE_bool(tera_online_schema_update_enabled);
 DECLARE_int32(tera_master_schema_update_retry_period);
 DECLARE_int32(tera_master_schema_update_retry_times);
 
@@ -1001,7 +1002,7 @@ void MasterImpl::UpdateTable(const UpdateTableRequest* request,
         done->Run();
         return;
     }
-    if (FLAGS_tera_master_online_schema_update_enabled
+    if (FLAGS_tera_online_schema_update_enabled
         && !table->GetSchemaSyncLockOrFailed()) {
         // there is a online-schema-update is doing...
         LOG(INFO) << "[update] no concurrent online-schema-update, table:" << table;
@@ -4491,15 +4492,17 @@ void MasterImpl::UpdateTableRecordForUpdateCallback(TablePtr table, int32_t retr
         }
         return;
     }
+    bool is_update_cf = IsSchemaCfDiff(table->GetSchema(), *schema);
     table->SetSchema(*schema);
     if ((table->GetStatus() == kTableDisable) // no need to sync
-        || !FLAGS_tera_master_online_schema_update_enabled) {
+        || !FLAGS_tera_online_schema_update_enabled
+        || !is_update_cf) {
         LOG(INFO) << "[update] new table schema is updated: " << schema->ShortDebugString();
+        table->SetSchemaIsSyncing(false); // releases the schema-sync lock
         rpc_response->set_status(kMasterOk);
         rpc_done->Run();
     } else {
         LOG(INFO) << "[update] online-schema-update";
-        table->SetSchemaIsSyncing(true);
         table->StoreUpdateRpc(rpc_response, rpc_done);
         table->ResetRangeFragment();
         NoticeTabletNodeSchemaUpdated(table);
@@ -5058,7 +5061,7 @@ void MasterImpl::ProcessReadyTablet(TabletPtr tablet) {
         return;
     }
 
-    if (FLAGS_tera_master_online_schema_update_enabled
+    if (FLAGS_tera_online_schema_update_enabled
         && tablet->GetTable()->GetSchemaIsSyncing()
         && !tablet->GetTable()->IsSchemaSyncedAtRange(tablet->GetKeyStart(), tablet->GetKeyEnd())) {
         LOG(INFO) << "[update] tablet ready but schema not synced: " << tablet;
