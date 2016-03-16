@@ -651,6 +651,11 @@ void Table::ListRollback(std::vector<std::string>* rollback_names) {
     *rollback_names = m_rollback_names;
 }
 
+int64_t Table::GetTabletsCount() {
+    MutexLock lock(&m_mutex);
+    return m_tablets_list.size();
+}
+
 void Table::AddDeleteTabletCount() {
     MutexLock lock(&m_mutex);
     m_deleted_tablet_num++;
@@ -981,6 +986,16 @@ bool TabletManager::AddTablet(const std::string& table_name,
                    server_addr, table_status, data_size);
 
     return AddTablet(meta, schema, tablet, ret_status);
+}
+
+int64_t TabletManager::GetAllTabletsCount() {
+    MutexLock lock(&m_mutex);
+    int64_t count = 0;
+    TableList::iterator it;
+    for (it = m_all_tables.begin(); it != m_all_tables.end(); ++it) {
+        count += it->second->GetTabletsCount();
+    }
+    return count;
 }
 
 bool TabletManager::FindTablet(const std::string& table_name,

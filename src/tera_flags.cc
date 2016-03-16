@@ -148,6 +148,10 @@ DEFINE_int64(tera_master_stat_table_splitsize, 100, "default split size of stat 
 
 DEFINE_int32(tera_master_gc_period, 60000, "the period (in ms) for master gc");
 
+DEFINE_bool(tera_master_available_check_enabled, true, "whether execute availability check");
+DEFINE_int64(tera_master_not_available_threshold, 30, "the threshold (in s) of not available");
+DEFINE_int64(tera_master_available_check_period, 300, "the period (in s) of availability check");
+
 ///////// tablet node  /////////
 
 DEFINE_string(tera_tabletnode_port, "20000", "the tablet node port of tera system");
