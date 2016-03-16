@@ -22,7 +22,8 @@ public:
     MemTableOnLevelDB (const InternalKeyComparator& comparator,
                        CompactStrategyFactory* compact_strategy_factory,
                        size_t write_buffer_size,
-                       size_t block_size);
+                       size_t block_size,
+                       Logger* info_log);
 
     ~MemTableOnLevelDB();
 
@@ -38,7 +39,7 @@ public:
 
     const uint64_t GetSnapshot(uint64_t last_sequence);
 
-    void ReleaseSnapshot(uint64_t sequence_number);
+    void TryReleaseSnapshot(uint64_t sequence_number);
 
 private:
     Env* GetBaseEnv();
