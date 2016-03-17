@@ -3,11 +3,12 @@
 // found in the LICENSE file.
 
 #include "sdk/client_impl.h"
-
+#include "sdk/ha_tera.h"
 #include <iostream>
 
 #include "gflags/gflags.h"
 
+#include "common/base/string_ext.h"
 #include "common/file/file_path.h"
 #include "common/mutex.h"
 #include "proto/kv_helper.h"
@@ -1099,10 +1100,24 @@ Client* Client::NewClient(const string& confpath, const string& log_prefix, Erro
         }
         return NULL;
     }
-    return new ClientImpl(FLAGS_tera_user_identity,
-                          FLAGS_tera_user_passcode,
-                          FLAGS_tera_zk_addr_list,
-                          FLAGS_tera_zk_root_path);
+
+    std::vector<std::string> zk_clusters;
+    std::vector<std::string> zk_paths;
+    SplitString(FLAGS_tera_zk_addr_list, ";", &zk_clusters);
+    SplitString(FLAGS_tera_zk_root_path, ";", &zk_paths);
+    if (zk_clusters.size() == zk_paths.size() && zk_clusters.size() > 1) {
+        // 多集群的ha模式
+        return new HAClientImpl(FLAGS_tera_user_identity,
+                                FLAGS_tera_user_passcode,
+                                zk_clusters,
+                                zk_paths);
+    } else {
+        // 普通的单集群模式
+        return new ClientImpl(FLAGS_tera_user_identity,
+                              FLAGS_tera_user_passcode,
+                              FLAGS_tera_zk_addr_list,
+                              FLAGS_tera_zk_root_path);
+    }
 }
 
 Client* Client::NewClient(const string& confpath, ErrorCode* err) {

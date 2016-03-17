@@ -14,6 +14,7 @@
 #include "sdk/tera.h"
 #include "types.h"
 #include "utils/timer.h"
+#include "sdk/callback_check.h"
 
 namespace tera {
 
@@ -23,6 +24,8 @@ class RowReaderImpl : public RowReader, public SdkTask {
 public:
     RowReaderImpl(Table* table, const std::string& row_key);
     ~RowReaderImpl();
+    /// 重置内部状态
+    void Reset();
     /// 设置读取特定版本
     void SetTimestamp(int64_t ts);
     /// 返回读取时间戳
@@ -48,6 +51,8 @@ public:
     void SetTimeOut(int64_t timeout_ms);
     /// 设置异步回调, 操作会异步返回
     void SetCallBack(RowReader::Callback callback);
+    /// 设置异步回调的检查器
+    void SetCallChecker(CallChecker* cc);
     /// 设置用户上下文，可在回调函数中获取
     void SetContext(void* context);
     void* GetContext();
@@ -81,6 +86,7 @@ public:
     typedef std::map< std::string, std::map<int64_t, std::string> > Map;
     void ToMap(Map* rowmap);
 
+    const RowResult& GetResult();
     void SetResult(const RowResult& result);
 
     void IncRetryTimes();
@@ -122,6 +128,7 @@ private:
     uint32_t _retry_times;
     int32_t _result_pos;
     RowResult _result;
+    CallChecker *_cc;
 };
 
 } // namespace tera

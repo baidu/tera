@@ -464,6 +464,8 @@ public:
     virtual void* GetContext() = 0;
     /// 设置异步返回
     virtual void SetAsync() = 0;
+    /// 是否异步操作
+    virtual bool IsAsync() = 0;
     /// 异步操作是否完成
     virtual bool IsFinished() const = 0;
 

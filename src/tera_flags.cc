@@ -253,6 +253,11 @@ DEFINE_int64(tera_sdk_scan_async_cache_size, 16, "the max buffer size (in MB) fo
 DEFINE_int32(tera_sdk_scan_async_parallel_max_num, 500, "the max number of concurrent task sending");
 DEFINE_int32(tera_sdk_max_batch_scan_req, 10, "the max number of concurrent scan req");
 
+DEFINE_bool(tera_sdk_ha_ddl_enable, false, "enable ha_sdk DDL");
+DEFINE_int32(tera_sdk_ha_timestamp_diff, 2000000, "the max microsecond of two cluster operate timestamp");
+DEFINE_bool(tera_sdk_ha_get_random_mode, false, "random select the cluster to read");
+DEFINE_bool(tera_sdk_ha_get_notfound_ok, false, "treat the notfound status of get the same way as ok");
+
 DEFINE_string(tera_ins_addr_list, "", "the ins cluster addr. e.g. abc.com:1234,abb.com:1234");
 DEFINE_string(tera_ins_root_path, "", "root path on ins. e.g /ps/sandbox");
 DEFINE_bool(tera_ins_enabled, false, "option to open ins naming");
