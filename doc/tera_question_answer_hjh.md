@@ -1,5 +1,6 @@
 tera串讲时被问到的问题，及我整理的答案
 ======
+by 黄俊辉
 
 1. master的内存和meta不一致怎么办
  - master对meta的操作都是先更新自己本地内存，然后meta上的数据；
@@ -154,11 +155,4 @@ tera串讲时被问到的问题，及我整理的答案
  - 目前tera只支持行内的事务，不支持跨行事务；
  - db\_table保存了last sequence，读只能读到该sequence前的数据，所以只有当某行所有列都写成功了，才更新last sequence；
  - 这样就避免读数据读到有些列是新数据，有些列是旧数据；
-
-30. 简要了解当前业务
- - linkcache，链接缓存，是linkbase的子集，使用了tera的ttlkv功能；
- - linkbase，链接库，使用了tera的表格功能；
- - sign server，链接的签名服务，使用了tera的kv功能；
- - DNS，spider的DNS，使用了tera的表格功能；
- - garbage，网页过滤，使用了tera的表格功能；
  
