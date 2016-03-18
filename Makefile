@@ -36,7 +36,7 @@ COMMON_SRC := $(wildcard src/common/base/*.cc) $(wildcard src/common/net/*.cc) \
 			  $(wildcard src/common/console/*.cc) 
 SERVER_SRC := src/tera_main.cc src/tera_entry.cc
 CLIENT_SRC := src/teracli_main.cc
-TEST_CLIENT_SRC := test/slowcase/test_main.cc
+TEST_CLIENT_SRC := src/tera_test_main.cc
 TERA_C_SRC := src/tera_c.cc
 MONITOR_SRC := src/monitor/teramo_main.cc
 MARK_SRC := src/benchmark/mark.cc src/benchmark/mark_main.cc
