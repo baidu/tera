@@ -46,6 +46,26 @@ TEST(StringUtilTest, IsValidCfName) {
     ASSERT_FALSE(IsValidColumnFamilyName("cf0\2"));
 }
 
+TEST(StringUtilTest, RoundNumberToNDecimalPlaces) {
+    ASSERT_EQ(RoundNumberToNDecimalPlaces(33, -1), "(null)");
+    ASSERT_EQ(RoundNumberToNDecimalPlaces(33, 10), "(null)");
+
+    ASSERT_EQ(RoundNumberToNDecimalPlaces(33, 0), "33");
+    ASSERT_EQ(RoundNumberToNDecimalPlaces(33, 1), "33.0");
+    ASSERT_EQ(RoundNumberToNDecimalPlaces(33, 2), "33.00");
+    ASSERT_EQ(RoundNumberToNDecimalPlaces(33, 9), "33.000000000");
+
+    ASSERT_EQ(RoundNumberToNDecimalPlaces(123456789.987654321, 0), "123456790");
+    ASSERT_EQ(RoundNumberToNDecimalPlaces(123456789.987654321, 1), "123456790.0");
+    ASSERT_EQ(RoundNumberToNDecimalPlaces(123456789.987654321, 2), "123456789.99");
+    ASSERT_EQ(RoundNumberToNDecimalPlaces(123456789.987654321, 6), "123456789.987654");
+
+    ASSERT_EQ(RoundNumberToNDecimalPlaces(0, 6), "0.000000");
+    ASSERT_EQ(RoundNumberToNDecimalPlaces(0.1, 6), "0.100000");
+    ASSERT_EQ(RoundNumberToNDecimalPlaces(0.01, 6), "0.010000");
+    ASSERT_EQ(RoundNumberToNDecimalPlaces(0.000012345678, 6), "0.000012");
+}
+
 }
 
 int main(int argc, char** argv) {

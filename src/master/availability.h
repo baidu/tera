@@ -17,7 +17,7 @@ namespace master {
 class TabletAvailability {
 public:
     TabletAvailability(boost::shared_ptr<TabletManager> t) : tablet_manager_(t) {}
-    double GetAvailability();
+    void LogAvailability();
     void AddNotReadyTablet(const std::string& id);
     void EraseNotReadyTablet(const std::string& id);
 

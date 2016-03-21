@@ -102,8 +102,8 @@ DECLARE_bool(tera_online_schema_update_enabled);
 DECLARE_int32(tera_master_schema_update_retry_period);
 DECLARE_int32(tera_master_schema_update_retry_times);
 
-DECLARE_int64(tera_master_available_check_period);
-DECLARE_bool(tera_master_available_check_enabled);
+DECLARE_int64(tera_master_availability_check_period);
+DECLARE_bool(tera_master_availability_check_enabled);
 
 namespace tera {
 namespace master {
@@ -5182,9 +5182,8 @@ void MasterImpl::EnableTabletNodeGcTimer() {
 
 void MasterImpl::DoAvailableCheck() {
     MutexLock lock(&m_mutex);
-    if (FLAGS_tera_master_available_check_enabled) {
-        LOG(INFO) << "[availability] available tablets percentage: "
-            << m_tablet_availability->GetAvailability();
+    if (FLAGS_tera_master_availability_check_enabled) {
+        m_tablet_availability->LogAvailability();
     }
     ScheduleAvailableCheck();
 }
@@ -5194,7 +5193,7 @@ void MasterImpl::ScheduleAvailableCheck() {
     ThreadPool::Task task =
         boost::bind(&MasterImpl::DoAvailableCheck, this);
     m_gc_timer_id = m_thread_pool->DelayTask(
-        FLAGS_tera_master_available_check_period * 1000, task);
+        FLAGS_tera_master_availability_check_period * 1000, task);
 }
 
 void MasterImpl::EnableAvailabilityCheck() {
