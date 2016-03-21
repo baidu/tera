@@ -46,6 +46,32 @@ TEST(StringUtilTest, IsValidCfName) {
     ASSERT_FALSE(IsValidColumnFamilyName("cf0\2"));
 }
 
+TEST(EditDistance, AllCase) {
+    ASSERT_EQ(EditDistance("", ""), 0);
+    ASSERT_EQ(EditDistance("", "a"), 1);
+    ASSERT_EQ(EditDistance("a", ""), 1);
+    ASSERT_EQ(EditDistance("ab", ""), 2);
+    ASSERT_EQ(EditDistance("", "ab"), 2);
+
+    ASSERT_EQ(EditDistance("a", "a"), 0);
+    ASSERT_EQ(EditDistance("a", "b"), 1);
+
+    ASSERT_EQ(EditDistance("ax", "axy"), 1); // insertion
+    ASSERT_EQ(EditDistance("ax", "a"), 1);   // removal
+    ASSERT_EQ(EditDistance("ax", "ay"), 1);  // substitution
+
+    ASSERT_EQ(EditDistance("showschema", "show_schema"), 1);
+    ASSERT_EQ(EditDistance("showschema", "showscheama"), 1);
+    ASSERT_EQ(EditDistance("branch", "branc"), 1);
+    ASSERT_EQ(EditDistance("update", "udpate"), 2);
+
+    ASSERT_EQ(EditDistance("aaa", "bbb"), 3);
+    ASSERT_EQ(EditDistance("aaa", "baa"), 1);
+    ASSERT_EQ(EditDistance("abb", "acc"), 2);
+    ASSERT_EQ(EditDistance("abc", "op"), 3);
+    ASSERT_EQ(EditDistance("abc", "rstuvw"), 6);
+}
+
 }
 
 int main(int argc, char** argv) {
