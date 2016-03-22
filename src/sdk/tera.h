@@ -462,7 +462,7 @@ public:
     /// 设置用户上下文，可在回调函数中获取
     virtual void SetContext(void* context) = 0;
     virtual void* GetContext() = 0;
-    /// 设置异步返回
+    /// 设置异步返回 !!! NOT implemented
     virtual void SetAsync() = 0;
     /// 异步操作是否完成
     virtual bool IsFinished() const = 0;
