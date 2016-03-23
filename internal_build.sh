@@ -6,11 +6,11 @@ set -e -u -E # this script will exit if any sub-command fails
 # download & build depend software
 ########################################
 
-WORK_DIR=`pwd`
-DEPS_SOURCE=`pwd`/thirdsrc
-DEPS_PREFIX=`pwd`/thirdparty
+WORK_DIR=$(cd $(dirname $0); pwd)
+DEPS_SOURCE=$WORK_DIR/thirdsrc
+DEPS_PREFIX=$WORK_DIR/thirdparty
 DEPS_CONFIG="--prefix=${DEPS_PREFIX} --disable-shared --with-pic"
-FLAG_DIR=`pwd`/.build
+FLAG_DIR=$WORK_DIR/.build
 
 export PATH=${DEPS_PREFIX}/bin:$PATH
 mkdir -p ${DEPS_SOURCE} ${DEPS_PREFIX} ${FLAG_DIR}
@@ -19,6 +19,10 @@ if [ ! -f "${FLAG_DIR}/dl_third" ] || [ ! -d "${DEPS_SOURCE}/.git" ]; then
     rm -rf ${DEPS_SOURCE}
     git clone --depth=1 http://gitlab.baidu.com/baidups/third.git ${DEPS_SOURCE}
     touch "${FLAG_DIR}/dl_third"
+fi
+
+if [ ! -f "$WORK_DIR/depends.mk" ]; then
+    cp $WORK_DIR/depends.mk.template $WORK_DIR/depends.mk
 fi
 
 cd ${DEPS_SOURCE}
@@ -135,8 +139,8 @@ if [ ! -f "${FLAG_DIR}/gtest_1_7_0" ] \
     cd gtest-1.7.0
     ./configure ${DEPS_CONFIG}
     make
-    cp -a lib/.libs/* ${DEPS_PREFIX}/lib
-    cp -a include/gtest ${DEPS_PREFIX}/include
+    cp -af lib/.libs/* ${DEPS_PREFIX}/lib
+    cp -af include/gtest ${DEPS_PREFIX}/include
     cd -
     touch "${FLAG_DIR}/gtest_1_7_0"
 fi
@@ -197,20 +201,21 @@ cd ${WORK_DIR}
 # config depengs.mk
 ########################################
 
-sed -i 's/^SOFA_PBRPC_PREFIX=.*/SOFA_PBRPC_PREFIX=.\/thirdparty/' depends.mk
-sed -i 's/^PROTOBUF_PREFIX=.*/PROTOBUF_PREFIX=.\/thirdparty/' depends.mk
-sed -i 's/^SNAPPY_PREFIX=.*/SNAPPY_PREFIX=.\/thirdparty/' depends.mk
-sed -i 's/^ZOOKEEPER_PREFIX=.*/ZOOKEEPER_PREFIX=.\/thirdparty/' depends.mk
-sed -i 's/^GFLAGS_PREFIX=.*/GFLAGS_PREFIX=.\/thirdparty/' depends.mk
-sed -i 's/^GLOG_PREFIX=.*/GLOG_PREFIX=.\/thirdparty/' depends.mk
-sed -i 's/^GTEST_PREFIX=.*/GTEST_PREFIX=.\/thirdparty/' depends.mk
-sed -i 's/^GPERFTOOLS_PREFIX=.*/GPERFTOOLS_PREFIX=.\/thirdparty/' depends.mk
-sed -i 's/^BOOST_INCDIR=.*/BOOST_INCDIR=.\/thirdparty\/boost_1_57_0/' depends.mk
-sed -i 's/^INS_PREFIX=.*/INS_PREFIX=.\/thirdparty/' depends.mk
+sed -i "s:^SOFA_PBRPC_PREFIX=.*:SOFA_PBRPC_PREFIX=$DEPS_PREFIX:" depends.mk
+sed -i "s:^PROTOBUF_PREFIX=.*:PROTOBUF_PREFIX=$DEPS_PREFIX:" depends.mk
+sed -i "s:^SNAPPY_PREFIX=.*:SNAPPY_PREFIX=$DEPS_PREFIX:" depends.mk
+sed -i "s:^ZOOKEEPER_PREFIX=.*:ZOOKEEPER_PREFIX=$DEPS_PREFIX:" depends.mk
+sed -i "s:^GFLAGS_PREFIX=.*:GFLAGS_PREFIX=$DEPS_PREFIX:" depends.mk
+sed -i "s:^GLOG_PREFIX=.*:GLOG_PREFIX=$DEPS_PREFIX:" depends.mk
+sed -i "s:^GTEST_PREFIX=.*:GTEST_PREFIX=$DEPS_PREFIX:" depends.mk
+sed -i "s:^GPERFTOOLS_PREFIX=.*:GPERFTOOLS_PREFIX=$DEPS_PREFIX:" depends.mk
+sed -i "s:^BOOST_INCDIR=.*:BOOST_INCDIR=$DEPS_PREFIX/boost_1_57_0:" depends.mk
+sed -i "s:^INS_PREFIX=.*:INS_PREFIX=$DEPS_PREFIX:" depends.mk
 
 ########################################
 # build tera
 ########################################
 
+make clean
 make -j4
 

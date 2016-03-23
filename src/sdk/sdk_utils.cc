@@ -14,6 +14,7 @@
 #include "common/file/file_path.h"
 #include "gflags/gflags.h"
 #include "glog/logging.h"
+#include "utils/string_util.h"
 
 #include "sdk/filter_utils.h"
 
@@ -109,6 +110,9 @@ void ShowTableSchema(const TableSchema& s, bool is_x) {
         if (is_x && schema.admin_group() != "") {
             ss << "admin_group=" << schema.admin_group() << ",";
         }
+        if (is_x && schema.admin() != "") {
+            ss << "admin=" << schema.admin() << ",";
+        }
         ss << "\b>\n" << "  (kv mode)\n";
         str = ss.str();
         ReplaceStringInPlace(str, ",\b", "");
@@ -126,6 +130,9 @@ void ShowTableSchema(const TableSchema& s, bool is_x) {
     }
     if (is_x && schema.admin_group() != "") {
         ss << "admin_group=" << schema.admin_group() << ",";
+    }
+    if (is_x && schema.admin() != "") {
+        ss << "admin=" << schema.admin() << ",";
     }
     if (is_x || schema.disable_wal()) {
         ss << "wal=" << Switch2Str(!schema.disable_wal()) << ",";
@@ -227,6 +234,7 @@ void TableDescToSchema(const TableDescriptor& desc, TableSchema* schema) {
     schema->set_split_size(desc.SplitSize());
     schema->set_merge_size(desc.MergeSize());
     schema->set_admin_group(desc.AdminGroup());
+    schema->set_admin(desc.Admin());
     schema->set_disable_wal(desc.IsWalDisabled());
     schema->set_alias(desc.Alias());
     // add lg
@@ -303,6 +311,9 @@ void TableSchemaToDesc(const TableSchema& schema, TableDescriptor* desc) {
     if (schema.has_admin_group()) {
         desc->SetAdminGroup(schema.admin_group());
     }
+    if (schema.has_admin()) {
+        desc->SetAdmin(schema.admin());
+    }
     if (schema.has_disable_wal() && schema.disable_wal()) {
         desc->DisableWal();
     }
@@ -353,31 +364,37 @@ void TableSchemaToDesc(const TableSchema& schema, TableDescriptor* desc) {
 
 bool SetCfProperties(const string& name, const string& value,
                      ColumnFamilyDescriptor* desc) {
+    if (desc == NULL) {
+        return false;
+    }
     if (name == "ttl") {
-        int32_t ttl = atoi(value.c_str());
-        if (ttl < 0){
+        int32_t ttl;
+        if (!StringToNumber(value, &ttl) || (ttl < 0)) {
             return false;
         }
         desc->SetTimeToLive(ttl);
     } else if (name == "maxversions") {
-        int32_t versions = atol(value.c_str());
-        if (versions <= 0){
+        int32_t versions;
+        if (!StringToNumber(value, &versions) || (versions <= 0)) {
             return false;
         }
         desc->SetMaxVersions(versions);
     } else if (name == "minversions") {
-        int32_t versions = atol(value.c_str());
-        if (versions <= 0){
+        int32_t versions;
+        if (!StringToNumber(value, &versions) || (versions <= 0)) {
             return false;
         }
         desc->SetMinVersions(versions);
     } else if (name == "diskquota") {
-        int64_t quota = atol(value.c_str());
-        if (quota <= 0){
+        int64_t quota;
+        if (!StringToNumber(value, &quota) || (quota <= 0)) {
             return false;
         }
         desc->SetDiskQuota(quota);
     } else if (name == "type") {
+        if (value != "bytes") {
+            return false;
+        }
         desc->SetType(value);
     }else {
         return false;
@@ -387,6 +404,9 @@ bool SetCfProperties(const string& name, const string& value,
 
 bool SetLgProperties(const string& name, const string& value,
                      LocalityGroupDescriptor* desc) {
+    if (desc == NULL) {
+        return false;
+    }
     if (name == "compress") {
         if (value == "none") {
             desc->SetCompress(kNoneCompress);
@@ -406,8 +426,8 @@ bool SetLgProperties(const string& name, const string& value,
             return false;
         }
     } else if (name == "blocksize") {
-        int blocksize = atoi(value.c_str());
-        if (blocksize <= 0){
+        int blocksize;
+        if (!StringToNumber(value, &blocksize) || (blocksize <= 0)){
             return false;
         }
         desc->SetBlockSize(blocksize);
@@ -420,21 +440,21 @@ bool SetLgProperties(const string& name, const string& value,
             return false;
         }
     } else if (name == "memtable_ldb_write_buffer_size") {
-        int32_t buffer_size = atoi(value.c_str()); //KB
-        if (buffer_size <= 0) {
+        int32_t buffer_size; //KB
+        if (!StringToNumber(value, &buffer_size) || (buffer_size <= 0)) {
             return false;
         }
         desc->SetMemtableLdbWriteBufferSize(buffer_size);
     } else if (name == "memtable_ldb_block_size") {
-        int32_t block_size = atoi(value.c_str()); //KB
-        if (block_size <= 0) {
+        int32_t block_size; //KB
+        if (!StringToNumber(value, &block_size) || (block_size <= 0)) {
             return false;
         }
         desc->SetMemtableLdbBlockSize(block_size);
     } else if (name == "sst_size") {
         const int32_t SST_SIZE_MAX = 1024; // MB
-        int32_t sst_size = atoi(value.c_str());
-        if ( (sst_size <= 0) || (sst_size > SST_SIZE_MAX) ) {
+        int32_t sst_size;
+        if (!StringToNumber(value, &sst_size) || (sst_size <= 0) || (sst_size > SST_SIZE_MAX) ) {
             return false;
         }
         desc->SetSstSize(sst_size<<20); // display in MB, store in Bytes.
@@ -444,20 +464,11 @@ bool SetLgProperties(const string& name, const string& value,
     return true;
 }
 
-bool IsValidGroupName(const string& name) {
-    const size_t len = name.length();
-    for (size_t i = 0; i < len; ++i) {
-        if (!isalnum(name[i]) && (name[i] != '_')) {
-            return false;
-        }
-    }
-    const size_t kLenMin = 2;
-    const size_t kLenMax = 32;
-    return (kLenMin <= len) && (len <= kLenMax);
-}
-
 bool SetTableProperties(const string& name, const string& value,
                         TableDescriptor* desc) {
+    if (desc == NULL) {
+        return false;
+    }
     if (name == "rawkey") {
         if (value == "readable") {
             desc->SetRawKey(kReadable);
@@ -471,14 +482,14 @@ bool SetTableProperties(const string& name, const string& value,
             return false;
         }
     } else if (name == "splitsize") {
-        int splitsize = atoi(value.c_str());
-        if (splitsize < 0) { // splitsize == 0 : split closed
+        int splitsize; // MB
+        if (!StringToNumber(value, &splitsize) || (splitsize < 0)) {
             return false;
         }
         desc->SetSplitSize(splitsize);
     } else if (name == "mergesize") {
-        int mergesize = atoi(value.c_str());
-        if (mergesize < 0) { // mergesize == 0 : merge closed
+        int mergesize; // MB
+        if (!StringToNumber(value, &mergesize) || (mergesize < 0)) { // mergesize == 0 : merge closed
             return false;
         }
         desc->SetMergeSize(mergesize);
@@ -487,6 +498,11 @@ bool SetTableProperties(const string& name, const string& value,
             return false;
         }
         desc->SetAdminGroup(value);
+    } else if (name == "admin") {
+        if (!IsValidUserName(value)) {
+            return false;
+        }
+        desc->SetAdmin(value);
     } else if (name == "wal") {
         if (value == "on") {
             // do nothing
@@ -501,17 +517,36 @@ bool SetTableProperties(const string& name, const string& value,
     return true;
 }
 
-bool CheckTableDescrptor(TableDescriptor* table_desc) {
-    if (table_desc->SplitSize() < table_desc->MergeSize() * 5) {
-        LOG(ERROR) << "splitsize should be 5 times larger than mergesize"
-            << ", splitsize: " << table_desc->SplitSize()
-            << ", mergesize: " << table_desc->MergeSize();
+bool CheckTableDescrptor(const TableDescriptor& desc, ErrorCode* err) {
+    std::stringstream ss;
+    if (desc.SplitSize() < desc.MergeSize() * 5) {
+        ss << "splitsize should be 5 times larger than mergesize"
+           << ", splitsize: " << desc.SplitSize()
+           << ", mergesize: " << desc.MergeSize();
+        if (err != NULL) {
+            err->SetFailed(ErrorCode::kBadParam, ss.str());
+        }
         return false;
+    }
+    if (!IsValidTableName(desc.TableName())) {
+        if (err != NULL) {
+            err->SetFailed(ErrorCode::kBadParam, " invalid tablename ");
+        }
+        return false;
+    }
+    for (int32_t i = 0; i < desc.ColumnFamilyNum(); ++i) {
+        if (!IsValidColumnFamilyName(desc.ColumnFamily(i)->Name())) {
+            ss << " invalid columnfamily name:" << desc.ColumnFamily(i)->Name();
+            if (err != NULL) {
+                err->SetFailed(ErrorCode::kBadParam, ss.str());
+            }
+            return false;
+        }
     }
     return true;
 }
 
-bool UpdateCfProperties(PropTree::Node* table_node, TableDescriptor* table_desc) {
+bool UpdateCfProperties(const PropTree::Node* table_node, TableDescriptor* table_desc) {
     if (table_node == NULL || table_desc == NULL) {
         return false;
     }
@@ -557,7 +592,7 @@ bool UpdateCfProperties(PropTree::Node* table_node, TableDescriptor* table_desc)
     return true;
 }
 
-bool UpdateLgProperties(PropTree::Node* table_node, TableDescriptor* table_desc) {
+bool UpdateLgProperties(const PropTree::Node* table_node, TableDescriptor* table_desc) {
     if (table_node == NULL || table_desc == NULL) {
         return false;
     }
@@ -583,11 +618,11 @@ bool UpdateLgProperties(PropTree::Node* table_node, TableDescriptor* table_desc)
     return true;
 }
 
-bool UpdateTableProperties(PropTree::Node* table_node, TableDescriptor* table_desc) {
+bool UpdateTableProperties(const PropTree::Node* table_node, TableDescriptor* table_desc) {
     if (table_node == NULL || table_desc == NULL) {
         return false;
     }
-    for (std::map<string, string>::iterator i = table_node->properties_.begin();
+    for (std::map<string, string>::const_iterator i = table_node->properties_.begin();
          i != table_node->properties_.end(); ++i) {
         if (i->first == "rawkey") {
             LOG(ERROR) << "[update] can't reset rawkey!";
@@ -602,8 +637,7 @@ bool UpdateTableProperties(PropTree::Node* table_node, TableDescriptor* table_de
     return true;
 }
 
-bool UpdateKvTableProperties(PropTree::Node* table_node,
-                             TableDescriptor* table_desc, bool* is_update_lg_cf) {
+bool UpdateKvTableProperties(const PropTree::Node* table_node, TableDescriptor* table_desc) {
     if (table_node == NULL || table_desc == NULL) {
         return false;
     }
@@ -613,14 +647,14 @@ bool UpdateKvTableProperties(PropTree::Node* table_node,
         LOG(ERROR) << "[update] fail to get locality group: kv";
         return false;
     }
-    for (std::map<string, string>::iterator i = table_node->properties_.begin();
+    for (std::map<string, string>::const_iterator i = table_node->properties_.begin();
          i != table_node->properties_.end(); ++i) {
         if (i->first == "rawkey") {
             LOG(ERROR) << "[update] can't reset rawkey!";
             return false;
         }
         if (SetLgProperties(i->first, i->second, lg_desc)) {
-            *is_update_lg_cf = true;
+            // do nothing
         } else if (!SetTableProperties(i->first, i->second, table_desc)) {
             LOG(ERROR) << "[update] illegal value: " << i->second
                 << " for table property: " << i->first;
@@ -630,37 +664,34 @@ bool UpdateKvTableProperties(PropTree::Node* table_node,
     return true;
 }
 
-bool UpdateTableDescriptor(PropTree& schema_tree,
-                           TableDescriptor* table_desc, bool* is_update_lg_cf) {
+bool UpdateTableDescriptor(PropTree& schema_tree, TableDescriptor* table_desc, ErrorCode* err) {
     PropTree::Node* table_node = schema_tree.GetRootNode();
     if (table_node == NULL || table_desc == NULL) {
         return false;
     }
-    bool is_update_ok = false;
+    bool is_ok = false;
     if (table_desc->RawKey() == kTTLKv || table_desc->RawKey() == kGeneralKv) {
         if (schema_tree.MaxDepth() != 1) {
             LOG(ERROR) << "invalid schema for kv table: " << table_node->name_;
             return false;
         }
-        is_update_ok = UpdateKvTableProperties(table_node, table_desc, is_update_lg_cf);
+        is_ok = UpdateKvTableProperties(table_node, table_desc);
     } else if (schema_tree.MaxDepth() == 1) {
         // updates table properties, no updates for lg & cf properties
-        is_update_ok = UpdateTableProperties(table_node, table_desc);
+        is_ok = UpdateTableProperties(table_node, table_desc);
     } else if (schema_tree.MaxDepth() == 2) {
-        *is_update_lg_cf = true;
-        is_update_ok = UpdateLgProperties(table_node, table_desc) &&
-               UpdateTableProperties(table_node, table_desc);
+        is_ok = UpdateLgProperties(table_node, table_desc)
+                && UpdateTableProperties(table_node, table_desc);
     } else if (schema_tree.MaxDepth() == 3) {
-        *is_update_lg_cf = true;
-        is_update_ok =  UpdateCfProperties(table_node, table_desc) &&
-                        UpdateLgProperties(table_node, table_desc) &&
-                        UpdateTableProperties(table_node, table_desc);
+        is_ok =  UpdateCfProperties(table_node, table_desc)
+                 && UpdateLgProperties(table_node, table_desc)
+                 && UpdateTableProperties(table_node, table_desc);
     } else {
         LOG(ERROR) << "invalid schema";
         return false;
     }
-    if (is_update_ok) {
-        return CheckTableDescrptor(table_desc);
+    if (is_ok) {
+        return CheckTableDescrptor(*table_desc, err);
     }
     return false;
 }
@@ -795,7 +826,7 @@ bool FillTableDescriptor(PropTree& schema_tree, TableDescriptor* table_desc) {
     return true;
 }
 
-bool ParseTableSchema(const string& schema, TableDescriptor* table_desc) {
+bool ParseTableSchema(const string& schema, TableDescriptor* table_desc, ErrorCode* err) {
     PropTree schema_tree;
     if (!schema_tree.ParseFromString(schema)) {
         LOG(ERROR) << schema_tree.State();
@@ -805,13 +836,13 @@ bool ParseTableSchema(const string& schema, TableDescriptor* table_desc) {
 
     VLOG(10) << "table to create: " << schema_tree.FormatString();
     if (FillTableDescriptor(schema_tree, table_desc) &&
-        CheckTableDescrptor(table_desc)) {
+        CheckTableDescrptor(*table_desc, err)) {
         return true;
     }
     return false;
 }
 
-bool ParseTableSchemaFile(const string& file, TableDescriptor* table_desc) {
+bool ParseTableSchemaFile(const string& file, TableDescriptor* table_desc, ErrorCode* err) {
     PropTree schema_tree;
     if (!schema_tree.ParseFromFile(file)) {
         LOG(ERROR) << schema_tree.State();
@@ -821,48 +852,10 @@ bool ParseTableSchemaFile(const string& file, TableDescriptor* table_desc) {
 
     VLOG(10) << "table to create: " << schema_tree.FormatString();
     if (FillTableDescriptor(schema_tree, table_desc) &&
-        CheckTableDescrptor(table_desc)) {
+        CheckTableDescrptor(*table_desc, err)) {
         return true;
     }
     return false;
-}
-
-bool ParseScanSchema(const string& schema, ScanDescriptor* desc) {
-    std::vector<string> cfs;
-    string schema_in;
-    string cf, col;
-    string::size_type pos;
-    if ((pos = schema.find("SELECT ")) != 0) {
-        LOG(ERROR) << "illegal scan expression: should be begin with \"SELECT\"";
-        return false;
-    }
-    if ((pos = schema.find(" WHERE ")) != string::npos) {
-        schema_in = schema.substr(7, pos - 7);
-        string filter_str = schema.substr(pos + 7, schema.size() - pos - 7);
-        desc->SetFilterString(filter_str);
-    } else {
-        schema_in = schema.substr(7);
-    }
-
-    schema_in = RemoveInvisibleChar(schema_in);
-    if (schema_in == "*") {
-        return true;
-    }
-    SplitString(schema_in, ",", &cfs);
-    for (size_t i = 0; i < cfs.size(); ++i) {
-        if ((pos = cfs[i].find(":", 0)) == string::npos) {
-            // add columnfamily
-            desc->AddColumnFamily(cfs[i]);
-            VLOG(10) << "add cf: " << cfs[i] << " to scan descriptor";
-        } else {
-            // add column
-            cf = cfs[i].substr(0, pos);
-            col = cfs[i].substr(pos + 1);
-            desc->AddColumn(cf, col);
-            VLOG(10) << "add column: " << cf << ":" << col << " to scan descriptor";
-        }
-    }
-    return true;
 }
 
 bool BuildSchema(TableDescriptor* table_desc, string* schema) {
@@ -913,8 +906,9 @@ bool ParseDelimiterFile(const string& filename, std::vector<string>* delims) {
     while (fin >> str) {
         delimiters.push_back(str);
     }
+
     bool is_delim_error = false;
-    for (size_t i = 1; i < delimiters.size() - 1; i++) {
+    for (size_t i = 1; i < delimiters.size(); i++) {
         if (delimiters[i] <= delimiters[i-1]) {
             LOG(ERROR) << "delimiter error: line: " << i + 1
                 << ", [" << delimiters[i] << "]";

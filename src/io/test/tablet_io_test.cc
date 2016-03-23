@@ -26,7 +26,7 @@ DECLARE_int32(tera_io_retry_max_times);
 DECLARE_int64(tera_tablet_living_period);
 DECLARE_string(tera_leveldb_env_type);
 
-DECLARE_int64(tera_tablet_write_buffer_size);
+DECLARE_int64(tera_tablet_max_write_buffer_size);
 DECLARE_string(log_dir);
 
 namespace tera {
@@ -73,6 +73,16 @@ public:
     TableSchema schema_;
 };
 
+// prepare test data
+bool PrepareTestData(TabletIO* tablet, uint64_t e, uint64_t s = 0) {
+    leveldb::WriteBatch batch;
+    for (uint64_t i = s; i < e; ++i) {
+        std::string str = StringFormat("%011llu", i); // NumberToString(i);
+        batch.Put(str, str);
+    }
+    return tablet->WriteBatch(&batch);
+}
+
 TEST_F(TabletIOTest, General) {
     std::string tablet_path = working_dir + "general";
     std::string key_start = "";
@@ -109,10 +119,7 @@ TEST_F(TabletIOTest, Split) {
                             empty_snaphsots_, empty_rollback_, NULL, NULL, NULL, &status));
 
     // prepare test data
-    for (uint32_t i = 0; i < N; ++i) {
-        std::string str = StringFormat("%011llu", i); // NumberToString(i);
-        EXPECT_TRUE(tablet.WriteOne(str, str));
-    }
+    EXPECT_TRUE(PrepareTestData(&tablet, N));
 
     // for first tablet
     tablet.GetDataSize(&size, NULL, &status);
@@ -135,9 +142,9 @@ TEST_F(TabletIOTest, Split) {
     LOG(INFO) << "table[" << key_start << ", " << key_end
         << "]: size = " << size;
     split_key.clear();
-    EXPECT_FALSE(other_tablet.Split(&split_key, &status));
+    EXPECT_TRUE(other_tablet.Split(&split_key, &status));
     LOG(INFO) << "split key = " << split_key << ", code " << StatusCodeToString(status);
-    EXPECT_TRUE((split_key == ""));
+    EXPECT_EQ(split_key, "6");
     EXPECT_TRUE(other_tablet.Unload());
 
     key_start = "";
@@ -174,10 +181,7 @@ TEST_F(TabletIOTest, SplitAndCheckSize) {
                             empty_snaphsots_, empty_rollback_, NULL, NULL, NULL, &status));
 
     // prepare test data
-    for (uint32_t i = 0; i < N; ++i) {
-        std::string str = StringFormat("%011llu", i); // NumberToString(i);
-        EXPECT_TRUE(tablet.WriteOne(str, str));
-    }
+    EXPECT_TRUE(PrepareTestData(&tablet, N));
 
     // for first tablet
     tablet.GetDataSize(&size, NULL, &status);
@@ -248,10 +252,7 @@ TEST_F(TabletIOTest, Compact) {
                             empty_snaphsots_, empty_rollback_, NULL, NULL, NULL, &status));
 
     // prepare test data
-    for (int i = 0; i < 100; ++i) {
-        std::string str = StringFormat("%011llu", i); // NumberToString(i);
-        EXPECT_TRUE(tablet.WriteOne(str, str));
-    }
+    EXPECT_TRUE(PrepareTestData(&tablet, 100));
 
     uint64_t table_size = 0;
     tablet.GetDataSize(&table_size, NULL, &status);
@@ -265,7 +266,7 @@ TEST_F(TabletIOTest, Compact) {
     TabletIO new_tablet(new_key_start, new_key_end);
     EXPECT_TRUE(new_tablet.Load(TableSchema(), tablet_path, std::vector<uint64_t>(),
                             empty_snaphsots_, empty_rollback_, NULL, NULL, NULL, &status));
-    EXPECT_TRUE(new_tablet.Compact(&status));
+    EXPECT_TRUE(new_tablet.Compact(0, &status));
 
     uint64_t new_table_size = 0;
     new_tablet.GetDataSize(&new_table_size, NULL, &status);
@@ -380,10 +381,8 @@ TEST_F(TabletIOTest, SplitToSubTable) {
                             empty_snaphsots_, empty_rollback_, NULL, NULL, NULL, &status));
 
     // prepare test data
-    for (uint64_t i = 0; i < N; ++i) {
-        std::string str = StringFormat("%011llu", i); // NumberToString(i);
-        EXPECT_TRUE(tablet.WriteOne(str, str));
-    }
+    EXPECT_TRUE(PrepareTestData(&tablet, N / 2, 0));
+    EXPECT_TRUE(PrepareTestData(&tablet, N, N / 2));
 
     // for first tablet
     tablet.GetDataSize(&size, NULL, &status);
@@ -443,13 +442,86 @@ TEST_F(TabletIOTest, SplitToSubTable) {
 
     LOG(INFO) << "SplitToSubTable() end ...";
 }
+
+TEST_F(TabletIOTest, FindAverageKey) {
+    std::string start, end, ave;
+
+    start = "abc";
+    end = "abe";
+    ASSERT_TRUE(TabletIO::FindAverageKey(start, end, &ave));
+    ASSERT_EQ(ave, "abd");
+
+    start = "helloa";
+    end = "hellob";
+    ASSERT_TRUE(TabletIO::FindAverageKey(start, end, &ave));
+    ASSERT_EQ(ave, "helloa\x80");
+
+    start = "a";
+    end = "b";
+    ASSERT_TRUE(TabletIO::FindAverageKey(start, end, &ave));
+    ASSERT_EQ(ave, "a\x80");
+
+    start = "a";
+    // b(0x62), 1(0x31)
+    end = "ab";
+    ASSERT_TRUE(TabletIO::FindAverageKey(start, end, &ave));
+    ASSERT_EQ(ave, "a1");
+
+    // _(0x5F)
+    start = "a\x10";
+    end = "b";
+    ASSERT_TRUE(TabletIO::FindAverageKey(start, end, &ave));
+    ASSERT_EQ(ave, "a\x88");
+
+    start = "";
+    end = "";
+    ASSERT_TRUE(TabletIO::FindAverageKey(start, end, &ave));
+    ASSERT_EQ(ave, "\x7F");
+
+    start = "";
+    end = "b";
+    ASSERT_TRUE(TabletIO::FindAverageKey(start, end, &ave));
+    ASSERT_EQ(ave, "1");
+
+    start = "b";
+    end = "";
+    ASSERT_TRUE(TabletIO::FindAverageKey(start, end, &ave));
+    ASSERT_EQ(ave, "\xb0");
+
+    start = "000000000000001480186993";
+    end = "000000000000002147352684";
+    ASSERT_TRUE(TabletIO::FindAverageKey(start, end, &ave));
+    ASSERT_LT(start, ave);
+    ASSERT_LT(ave, end);
+
+    start = std::string("000017\xF0");
+    end = "000018000000001397050688";
+    ASSERT_TRUE(TabletIO::FindAverageKey(start, end, &ave));
+    ASSERT_LT(start, ave);
+    ASSERT_LT(ave, end);
+
+    start = std::string("0000\177");
+    end = std::string("0000\200");
+    ASSERT_TRUE(TabletIO::FindAverageKey(start, end, &ave));
+    ASSERT_LT(start, ave);
+    ASSERT_LT(ave, end);
+
+    start = "";
+    end = "\x1";
+    ASSERT_TRUE(TabletIO::FindAverageKey(start, end, &ave));
+    ASSERT_EQ(ave, std::string("\x0\x80", 2));
+
+    start = "";
+    end = std::string("\x0", 1);
+    ASSERT_FALSE(TabletIO::FindAverageKey(start, end, &ave));
+}
 } // namespace io
 } // namespace tera
 
 int main(int argc, char** argv) {
     FLAGS_tera_io_retry_max_times = 1;
     FLAGS_tera_tablet_living_period = 0;
-    FLAGS_tera_tablet_write_buffer_size = 1;
+    FLAGS_tera_tablet_max_write_buffer_size = 1;
     FLAGS_tera_leveldb_env_type = "local";
     ::google::InitGoogleLogging(argv[0]);
     FLAGS_log_dir = "./log";

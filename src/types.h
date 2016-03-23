@@ -32,6 +32,9 @@ const std::string kMail = "[MAIL] ";
 const int64_t kLatestTs = INT64_MAX;
 const int64_t kOldestTs = INT64_MIN;
 const int32_t kMaxRpcSize = (16 << 20);
+const uint64_t kRowkeySize = (64 << 10);       // 64KB
+const uint64_t kQualifierSize = (64 << 10);    // 64KB
+const uint64_t kValueSize = (32 << 20);        // 32MB
 
 } // namespace tera
 

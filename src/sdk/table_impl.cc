@@ -55,7 +55,7 @@ DECLARE_string(tera_sdk_cookie_path);
 DECLARE_int32(tera_sdk_cookie_update_interval);
 DECLARE_bool(tera_sdk_perf_counter_enabled);
 DECLARE_int64(tera_sdk_perf_counter_log_interval);
-DECLARE_int32(FLAGS_tera_rpc_timeout_period);
+DECLARE_int32(tera_rpc_timeout_period);
 
 namespace tera {
 
@@ -109,15 +109,29 @@ RowReader* TableImpl::NewRowReader(const std::string& row_key) {
 }
 
 void TableImpl::ApplyMutation(RowMutation* row_mu) {
+    if (row_mu->GetError().GetType() != ErrorCode::kOK) {
+        ThreadPool::Task task =
+            boost::bind(&RowMutationImpl::RunCallback,
+                        static_cast<RowMutationImpl*>(row_mu));
+        _thread_pool->AddTask(task);
+        return;
+    }
     std::vector<RowMutationImpl*> mu_list;
     mu_list.push_back(static_cast<RowMutationImpl*>(row_mu));
     DistributeMutations(mu_list, true);
 }
 
 void TableImpl::ApplyMutation(const std::vector<RowMutation*>& row_mutations) {
-    std::vector<RowMutationImpl*> mu_list(row_mutations.size());
+    std::vector<RowMutationImpl*> mu_list;
     for (uint32_t i = 0; i < row_mutations.size(); i++) {
-        mu_list[i] = static_cast<RowMutationImpl*>(row_mutations[i]);
+        if (row_mutations[i]->GetError().GetType() != ErrorCode::kOK) {
+            ThreadPool::Task task =
+                boost::bind(&RowMutationImpl::RunCallback,
+                            static_cast<RowMutationImpl*>(row_mutations[i]));
+            _thread_pool->AddTask(task);
+            continue;
+        }
+        mu_list.push_back(static_cast<RowMutationImpl*>(row_mutations[i]));
     }
     DistributeMutations(mu_list, true);
 }
@@ -273,17 +287,10 @@ bool TableImpl::Get(const std::string& row_key, const std::string& family,
 ResultStream* TableImpl::Scan(const ScanDescriptor& desc, ErrorCode* err) {
     ScanDescImpl * impl = desc.GetImpl();
     impl->SetTableSchema(_table_schema);
-    if (impl->GetFilterString() != "") {
-        MutexLock lock(&_table_meta_mutex);
-        if (!impl->ParseFilterString()) {
-            // fail to parse filter string
-            return NULL;
-        }
-    }
     ResultStream * results = NULL;
-    if (desc.IsAsync() && !_table_schema.kv_only()) {
+    if (desc.IsAsync() && (_table_schema.raw_key() != GeneralKv)) {
         VLOG(6) << "activate async-scan";
-        results = new ResultStreamAsyncImpl(this, impl);
+        results = new ResultStreamBatchImpl(this, impl);
     } else {
         VLOG(6) << "activate sync-scan";
         results = new ResultStreamSyncImpl(this, impl);
@@ -410,15 +417,15 @@ void TableImpl::ScanCallBack(ScanTask* scan_task,
         _task_pool.PopTask(scan_task->GetId());
         CHECK_EQ(scan_task->GetRef(), 2);
         delete scan_task;
-    } else if (err == kKeyNotInRange) {
-        scan_task->IncRetryTimes();
-        ScanTabletAsync(scan_task, false);
     } else {
         scan_task->IncRetryTimes();
         ThreadPool::Task retry_task =
             boost::bind(&TableImpl::ScanTabletAsync, this, scan_task, false);
-        _thread_pool->DelayTask(
-            FLAGS_tera_sdk_retry_period * scan_task->RetryTimes(), retry_task);
+        CHECK(scan_task->RetryTimes() > 0);
+        int64_t retry_interval =
+            static_cast<int64_t>(pow(FLAGS_tera_sdk_delay_send_internal,
+                                     scan_task->RetryTimes() - 1) * 1000);
+        _thread_pool->DelayTask(retry_interval, retry_task);
     }
 }
 
@@ -2019,10 +2026,10 @@ void TableImpl::DoDumpCookie() {
     int lock_fd = open(cookie_lock_file.c_str(), O_WRONLY | O_CREAT | O_EXCL, 0644);
     if (lock_fd == -1) {
         int errno_saved = errno;
-        LOG(INFO) << "[SDK COOKIE] faild to create cookie-lock-file" << cookie_lock_file
-                   << ". reason: " << strerror(errno_saved)
-                   << ". If reason is \"File exists\", means lock is held by another process"
-                   << "otherwise, IO error";
+        if (errno != EEXIST) {
+            LOG(INFO) << "[SDK COOKIE] failed to create cookie-lock-file: " << cookie_lock_file
+                      << ". reason: " << strerror(errno_saved);
+        }
         return;
     }
 

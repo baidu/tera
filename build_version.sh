@@ -1,5 +1,9 @@
 #!/bin/bash
 
+# If release a new version, modify these infos
+VERSION_INFO="master"
+VERSION_ADDR="https://github.com/baidu/tera"
+
 BUILD_DATE_TIME=`date`
 BUILD_HOSTNAME=`hostname`
 BUILD_GCC_VERSION=`gcc --version | head -n 1`
@@ -25,6 +29,10 @@ gen_info_template_foot ()
 gen_info_print_template ()
 {
     echo "void PrintSystemVersion() {"
+    echo "    std::cout << \"=====  Version Info ===== \" << std::endl;"
+    echo "    std::cout << \"Version: $VERSION_INFO\" << std::endl;"
+    echo "    std::cout << \"Address: $VERSION_ADDR\" << std::endl;"
+    echo "    std::cout << std::endl;"
     echo "    std::cout << \"=====  Git Info ===== \" << std::endl"
     echo "        << kGitInfo << std::endl;"
     echo "    std::cout << \"=====  Build Info ===== \" << std::endl;"

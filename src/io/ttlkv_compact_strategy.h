@@ -5,6 +5,7 @@
 #ifndef TERA_IO_TTLKV_COMPACT_STRATEGY_H_
 #define TERA_IO_TTLKV_COMPACT_STRATEGY_H_
 
+#include "common/mutex.h"
 #include "leveldb/compact_strategy.h"
 #include "leveldb/raw_key_operator.h"
 #include "proto/table_schema.pb.h"
@@ -47,9 +48,14 @@ public:
     virtual const char* Name() const {
         return "tera.TTLKvCompactStrategyFactory";
     }
+    virtual void SetArg(const void* arg) {
+        MutexLock lock(&mutex_);
+        schema_.CopyFrom(*(TableSchema*)arg);
+    }
 
 private:
     TableSchema schema_;
+    mutable Mutex mutex_;
 };
 
 } // namespace io

@@ -115,6 +115,10 @@ public:
                     ShowTablesResponse* response,
                     google::protobuf::Closure* done);
 
+    void ShowTablesBrief(const ShowTablesRequest* request,
+                         ShowTablesResponse* response,
+                         google::protobuf::Closure* done);
+
     void ShowTabletNodes(const ShowTabletNodesRequest* request,
                          ShowTabletNodesResponse* response,
                          google::protobuf::Closure* done);
@@ -141,11 +145,14 @@ public:
     bool GetMetaTabletAddr(std::string* addr);
     void TryLoadTablet(TabletPtr tablet, std::string addr = "");
 
+    std::string ProfilingLog();
+
 private:
     typedef Closure<void, SnapshotRequest*, SnapshotResponse*, bool, int> SnapshotClosure;
     typedef Closure<void, SnapshotRollbackRequest*, SnapshotRollbackResponse*, bool, int> RollbackClosure;
     typedef Closure<void, ReleaseSnapshotRequest*, ReleaseSnapshotResponse*, bool, int> DelSnapshotClosure;
     typedef Closure<void, QueryRequest*, QueryResponse*, bool, int> QueryClosure;
+    typedef Closure<void, UpdateRequest*, UpdateResponse*, bool, int> UpdateClosure;
     typedef Closure<void, LoadTabletRequest*, LoadTabletResponse*, bool, int> LoadClosure;
     typedef Closure<void, UnloadTabletRequest*, UnloadTabletResponse*, bool, int> UnloadClosure;
     typedef Closure<void, SplitTabletRequest*, SplitTabletResponse*, bool, int> SplitClosure;
@@ -208,6 +215,7 @@ private:
 
     void SafeModeCmdCtrl(const CmdCtrlRequest* request,
                          CmdCtrlResponse* response);
+    void ReloadConfig(CmdCtrlResponse* response);
     void TabletCmdCtrl(const CmdCtrlRequest* request,
                        CmdCtrlResponse* response);
     void MetaCmdCtrl(const CmdCtrlRequest* request,
@@ -233,8 +241,8 @@ private:
     void ReleaseCacheWrapper();
     void EnableReleaseCacheTimer();
     void DisableReleaseCacheTimer();
-    void EnableLoadBalanceTimer();
-    void DisableLoadBalanceTimer();
+    void EnableLoadBalance();
+    void DisableLoadBalance();
 
     void InitAsync();
 
@@ -395,6 +403,7 @@ private:
                                             bool failed, int error_code);
 
     void UpdateTableRecordForUpdateCallback(TablePtr table, int32_t retry_times,
+                                            const TableSchema* schema,
                                             UpdateTableResponse* rpc_response,
                                             google::protobuf::Closure* rpc_done,
                                             WriteTabletRequest* request,
@@ -444,6 +453,19 @@ private:
                                       WriteTabletRequest* request,
                                       WriteTabletResponse* response,
                                       bool failed, int error_code);
+
+    void UpdateSchemaCallback(std::string table_name,
+                              std::string tablet_path,
+                              std::string start_key,
+                              std::string end_key,
+                              int32_t retry_times,
+                              UpdateRequest* request,
+                              UpdateResponse* response,
+                              bool rpc_failed, int status_code);
+    void NoticeTabletNodeSchemaUpdatedAsync(TabletPtr tablet,
+                                            UpdateClosure* done);
+    void NoticeTabletNodeSchemaUpdated(TablePtr table);
+    void NoticeTabletNodeSchemaUpdated(TabletPtr tablet);
 
     // load metabale to master memory
     bool LoadMetaTable(const std::string& meta_tablet_addr,
@@ -526,6 +548,7 @@ private:
                                Callback* done, TablePtr table, const char* operate);
 
     void FillAlias(const std::string& key, const std::string& value);
+    void RefreshTableCounter();
 private:
     mutable Mutex m_status_mutex;
     MasterStatus m_status;
@@ -545,12 +568,13 @@ private:
     Counter m_this_sequence_id;
 
     bool m_query_enabled;
+    scoped_ptr<ThreadPool> m_query_thread_pool;
+    int64_t m_start_query_time;
     int64_t m_query_tabletnode_timer_id;
     Counter m_query_pending_count;
 
     bool m_load_balance_enabled;
     int64_t m_load_balance_timer_id;
-    Counter m_load_balance_count;
 
     scoped_ptr<ThreadPool> m_thread_pool;
     AutoResetEvent m_query_event;

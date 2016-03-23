@@ -7,6 +7,7 @@
 
 #include "leveldb/compact_strategy.h"
 
+#include "common/mutex.h"
 #include "io/io_utils.h"
 #include "proto/table_schema.pb.h"
 
@@ -78,12 +79,14 @@ class DefaultCompactStrategyFactory : public leveldb::CompactStrategyFactory {
 public:
     DefaultCompactStrategyFactory(const TableSchema& schema);
     virtual DefaultCompactStrategy* NewInstance();
+    virtual void SetArg(const void* arg);
     virtual const char* Name() const {
         return "tera.DefaultCompactStrategyFactory";
     }
 
 private:
     TableSchema m_schema;
+    mutable Mutex m_mutex;
 };
 
 } // namespace io

@@ -13,3 +13,8 @@
 #--tera_zk_enabled=true
 #--tera_zk_addr_list=localhost:2181
 #--tera_zk_root_path=/tera
+--tera_master_query_tabletnode_period=1000
+--tera_local_addr=localhost
+
+# sdk
+--tera_sdk_timeout=20000

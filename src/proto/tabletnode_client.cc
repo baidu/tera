@@ -90,12 +90,12 @@ bool TabletNodeClient::Rollback(const SnapshotRollbackRequest* request,
                                 m_rpc_timeout, m_thread_pool);
 }
 
-bool TabletNodeClient::Query(const QueryRequest* request,
+bool TabletNodeClient::Query(ThreadPool* thread_pool, const QueryRequest* request,
                                   QueryResponse* response,
                                   Closure<void, QueryRequest*, QueryResponse*, bool, int>* done) {
     return SendMessageWithRetry(&TabletNodeServer::Stub::Query,
                                 request, response, done, "Query",
-                                m_rpc_timeout, m_thread_pool);
+                                m_rpc_timeout, thread_pool);
 }
 
 bool TabletNodeClient::SplitTablet(const SplitTabletRequest* request,
@@ -111,6 +111,22 @@ bool TabletNodeClient::CompactTablet(const CompactTabletRequest* request,
                                           Closure<void, CompactTabletRequest*, CompactTabletResponse*, bool, int>* done) {
     return SendMessageWithRetry(&TabletNodeServer::Stub::CompactTablet,
                                 request, response, done, "CompactTablet",
+                                m_rpc_timeout, m_thread_pool);
+}
+
+bool TabletNodeClient::Update(const UpdateRequest* request,
+                                    UpdateResponse* response,
+                                    Closure<void, UpdateRequest*, UpdateResponse*, bool, int>* done) {
+    return SendMessageWithRetry(&TabletNodeServer::Stub::Update,
+                                request, response, done, "Update",
+                                m_rpc_timeout, m_thread_pool);
+}
+
+bool TabletNodeClient::CmdCtrl(const TsCmdCtrlRequest* request,
+                               TsCmdCtrlResponse* response,
+                               Closure<void, TsCmdCtrlRequest*, TsCmdCtrlResponse*, bool, int>* done) {
+    return SendMessageWithRetry(&TabletNodeServer::Stub::CmdCtrl,
+                                request, response, done, "TsCmdCtrl",
                                 m_rpc_timeout, m_thread_pool);
 }
 

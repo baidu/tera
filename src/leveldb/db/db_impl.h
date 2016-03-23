@@ -50,16 +50,16 @@ class DBImpl : public DB {
   virtual void GetApproximateSizes(const Range* range, int n, uint64_t* sizes);
   // lgsize not used in db_impl, just for interface compatable
   virtual void GetApproximateSizes(uint64_t* size, std::vector<uint64_t>* lgsize = NULL);
-  virtual void CompactRange(const Slice* begin, const Slice* end);
+  virtual void CompactRange(const Slice* begin, const Slice* end, int lg_no = -1);
 
   void AddBoundLogSize(uint64_t size);
 
   // tera-specific
   virtual bool BusyWrite();
-  bool FindSplitKey(const std::string& start_key,
-                    const std::string& end_key,
-                    double ratio,
-                    std::string* split_key);
+  virtual void Workload(double* write_workload);
+
+  bool FindSplitKey(double ratio, std::string* split_key);
+  bool FindKeyRange(std::string* smallest_key, std::string* largest_key);
 
   // Add all sst files inherited from other tablets
   virtual void AddInheritedLiveFiles(std::vector<std::set<uint64_t> >* live);

@@ -12,6 +12,8 @@
 #include <map>
 #include <string>
 
+#pragma GCC visibility push(default)
+
 namespace teraeasy {
 
 typedef std::string Key;
@@ -47,5 +49,7 @@ private:
 
 Table* OpenTable(const std::string& table_name, const std::string& conf_path = "");
 }
+
+#pragma GCC visibility pop
 
 #endif  // TERA_TERA_EASY_H_

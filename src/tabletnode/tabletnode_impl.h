@@ -60,11 +60,14 @@ public:
                        CompactTabletResponse* response,
                        google::protobuf::Closure* done);
 
+    void Update(const UpdateRequest* request,
+                UpdateResponse* response,
+                google::protobuf::Closure* done);
+
     void ReadTablet(int64_t start_micros,
                     const ReadTabletRequest* request,
                     ReadTabletResponse* response,
-                    google::protobuf::Closure* done,
-                    ReadRpcTimer* timer = NULL);
+                    google::protobuf::Closure* done);
 
     void WriteTablet(const WriteTabletRequest* request,
                      WriteTabletResponse* response,
@@ -84,6 +87,9 @@ public:
 
     void Rollback(const SnapshotRollbackRequest* request, SnapshotRollbackResponse* response,
                   google::protobuf::Closure* done);
+
+    void CmdCtrl(const TsCmdCtrlRequest* request, TsCmdCtrlResponse* response,
+                 google::protobuf::Closure* done);
 
     void Query(const QueryRequest* request, QueryResponse* response,
                google::protobuf::Closure* done);
@@ -147,6 +153,8 @@ private:
     void GarbageCollectInPath(const std::string& path, leveldb::Env* env,
                               const std::set<std::string>& inherited_files,
                               const std::set<std::string> active_tablets);
+
+    bool ApplySchema(const UpdateRequest* request);
 private:
     mutable Mutex m_status_mutex;
     TabletNodeStatus m_status;

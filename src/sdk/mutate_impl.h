@@ -21,6 +21,14 @@ class TableImpl;
 
 class RowMutationImpl : public RowMutation, public SdkTask {
 public:
+    enum FieldLimit {
+        kRowkey = 0,
+        kColumnFamily,
+        kQualifier,
+        kTimeStamp,
+        kValue
+    };
+
     RowMutationImpl(TableImpl* table, const std::string& row_key);
     ~RowMutationImpl();
 
@@ -159,6 +167,8 @@ public:
     /// 释放引用
     void Unref();
 
+    void SetErrorIfInvalid(const std::string& str,
+                           const FieldLimit& field);
 protected:
     /// 增加一个操作
     RowMutation::Mutation& AddMutation();

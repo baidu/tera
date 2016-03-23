@@ -127,16 +127,16 @@ void TabletNodeSysInfo::AddExtraInfo(const std::string& name, int64_t value) {
 
 void TabletNodeSysInfo::SetCurrentTime() {
     MutexLock lock(&m_mutex);
-    m_info.set_time_stamp(get_micros());
+    m_info.set_timestamp(get_micros());
 }
 
 int64_t TabletNodeSysInfo::GetTimeStamp() {
-    return m_info.time_stamp();
+    return m_info.timestamp();
 }
 
 void TabletNodeSysInfo::SetTimeStamp(int64_t ts) {
     MutexLock lock(&m_mutex);
-    m_info.set_time_stamp(ts);
+    m_info.set_timestamp(ts);
 }
 
 void TabletNodeSysInfo::CollectTabletNodeInfo(TabletManager* tablet_manager,
@@ -148,17 +148,17 @@ void TabletNodeSysInfo::CollectTabletNodeInfo(TabletManager* tablet_manager,
 
     m_tablet_list.Clear();
     int64_t total_size = 0;
-    int32_t low_read_cell = 0;
-    int32_t scan_rows = 0;
-    int32_t scan_kvs = 0;
-    int32_t scan_size = 0;
-    int32_t read_rows = 0;
-    int32_t read_kvs = 0;
-    int32_t read_size = 0;
-    int32_t write_rows = 0;
-    int32_t write_kvs = 0;
-    int32_t write_size = 0;
-    int32_t busy_cnt = 0;
+    int64_t low_read_cell = 0;
+    int64_t scan_rows = 0;
+    int64_t scan_kvs = 0;
+    int64_t scan_size = 0;
+    int64_t read_rows = 0;
+    int64_t read_kvs = 0;
+    int64_t read_size = 0;
+    int64_t write_rows = 0;
+    int64_t write_kvs = 0;
+    int64_t write_size = 0;
+    int64_t busy_cnt = 0;
 
     std::vector<io::TabletIO*> tablet_ios;
     tablet_manager->GetAllTablets(&tablet_ios);
@@ -184,7 +184,7 @@ void TabletNodeSysInfo::CollectTabletNodeInfo(TabletManager* tablet_manager,
         total_size += tablet_meta->size();
 
         TabletCounter* counter = m_tablet_list.add_counter();
-        tablet_io->GetAndClearCounter(counter, interval);
+        tablet_io->GetAndClearCounter(counter);
         low_read_cell += counter->low_read_cell();
         scan_rows += counter->scan_rows();
         scan_kvs += counter->scan_kvs();
@@ -201,16 +201,16 @@ void TabletNodeSysInfo::CollectTabletNodeInfo(TabletManager* tablet_manager,
         }
         tablet_io->DecRef();
     }
-    m_info.set_low_read_cell(low_read_cell);
-    m_info.set_scan_rows(scan_rows);
-    m_info.set_scan_kvs(scan_kvs);
-    m_info.set_scan_size(scan_size);
-    m_info.set_read_rows(read_rows);
-    m_info.set_read_kvs(read_kvs);
-    m_info.set_read_size(read_size);
-    m_info.set_write_rows(write_rows);
-    m_info.set_write_kvs(write_kvs);
-    m_info.set_write_size(write_size);
+    m_info.set_low_read_cell(low_read_cell * 1000000 / interval);
+    m_info.set_scan_rows(scan_rows * 1000000 / interval);
+    m_info.set_scan_kvs(scan_kvs * 1000000 / interval);
+    m_info.set_scan_size(scan_size * 1000000 / interval);
+    m_info.set_read_rows(read_rows * 1000000 / interval);
+    m_info.set_read_kvs(read_kvs * 1000000 / interval);
+    m_info.set_read_size(read_size * 1000000 / interval);
+    m_info.set_write_rows(write_rows * 1000000 / interval);
+    m_info.set_write_kvs(write_kvs * 1000000 / interval);
+    m_info.set_write_size(write_size * 1000000 / interval);
     m_info.set_tablet_onbusy(busy_cnt);
 
     // refresh tabletnodeinfo

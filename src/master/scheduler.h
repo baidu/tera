@@ -27,6 +27,9 @@ public:
                                 const std::string& table_name,
                                 size_t* best_index) = 0;
 
+    virtual bool NeedSchedule(std::vector<TabletNodePtr>& node_list,
+                              const std::string& table_name) = 0;
+
     virtual void AscendingSort(std::vector<TabletNodePtr>& node_list,
                                const std::string& table_name) = 0;
     virtual void DescendingSort(std::vector<TabletNodePtr>& node_list,

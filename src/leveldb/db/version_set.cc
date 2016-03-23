@@ -11,6 +11,7 @@
 #include <iostream>
 
 #include <algorithm>
+#include <math.h>
 #include <stdio.h>
 #include "db/filename.h"
 #include "db/log_reader.h"
@@ -30,21 +31,22 @@ namespace leveldb {
 
 // Maximum bytes of overlaps in grandparent (i.e., level+2) before we
 // stop building a single file in a level->level+1 compaction.
-static int64_t MaxGrandParentOverlapBytes(int target_file_size) {
+static int64_t MaxGrandParentOverlapBytes(int64_t target_file_size) {
     return 10 * target_file_size;
 }
 
 // Maximum number of bytes in all compacted files.  We avoid expanding
 // the lower level file set of a compaction if it would make the
 // total compaction cover more than this many bytes.
-static int64_t ExpandedCompactionByteSizeLimit(int target_file_size) {
+static int64_t ExpandedCompactionByteSizeLimit(int64_t target_file_size) {
     return 25 * target_file_size;
 }
 
-static double MaxBytesForLevel(int level) {
+static double MaxBytesForLevel(int level, int sst_size) {
   // Note: the result for level zero is not really used since we set
   // the level-0 compaction threshold based on number of files.
-  double result = 40 * 1048576.0;  // Result for both level-0 and level-1
+  // double result = 40 * 1048576.0;  // Result for both level-0 and level-1
+  double result = 5 * sst_size;  // Result for both level-0 and level-1
   while (level > 1) {
     result *= 10;
     level--;
@@ -52,7 +54,7 @@ static double MaxBytesForLevel(int level) {
   return result;
 }
 
-static uint64_t MaxFileSizeForLevel(int level, int target_file_size) {
+static uint64_t MaxFileSizeForLevel(int level, int64_t target_file_size) {
   if (level == 2) {
     return 2 * target_file_size;
   } else if(level > 2) {
@@ -530,10 +532,10 @@ void Version::GetApproximateSizes(uint64_t* size, uint64_t* size_under_level1) {
   uint64_t total_size = 0;
   // calculate file size under level1
   for (int level = 1; level < config::kNumLevels; level++) {
-      const std::vector<FileMetaData*>& files = files_[level];
-      for (size_t i = 0; i < files.size(); i++) {
-          total_size += files[i]->file_size;
-      }
+    const std::vector<FileMetaData*>& files = files_[level];
+    for (size_t i = 0; i < files.size(); i++) {
+      total_size += files[i]->data_size;
+    }
   }
   if (size_under_level1) {
     *size_under_level1 = total_size;
@@ -542,55 +544,80 @@ void Version::GetApproximateSizes(uint64_t* size, uint64_t* size_under_level1) {
   // calculate level0
   const std::vector<FileMetaData*>& files = files_[0];
   for (size_t i = 0; i < files.size(); i++) {
-      total_size += files[i]->file_size;
+    total_size += files[i]->data_size;
   }
   if (size) {
     *size = total_size;
   }
 }
 
-bool Version::FindSplitKey(const Slice* smallest_user_key,
-                           const Slice* largest_user_key,
-                           double ratio,
-                           std::string* split_key) {
-    assert(ratio >= 0 && ratio <= 1);
-    uint64_t size_under_level1;
-    GetApproximateSizes(NULL, &size_under_level1);
+bool Version::FindSplitKey(double ratio, std::string* split_key) {
+  assert(ratio >= 0 && ratio <= 1);
+  uint64_t size_under_level1;
+  GetApproximateSizes(NULL, &size_under_level1);
 
-    uint64_t want_split_size = static_cast<uint64_t>(size_under_level1 * ratio);
+  uint64_t want_split_size = static_cast<uint64_t>(size_under_level1 * ratio);
 
-    const Comparator* user_cmp = vset_->icmp_.user_comparator();
-    const FileMetaData* largest_file = NULL;
-    size_t split_size = 0;
-    size_t now_pos[config::kNumLevels] = {0};
-    while (split_size < want_split_size) {
-        largest_file = NULL;
-        int step_level = -1;
-        for (int level = 1; level < config::kNumLevels; level++) {
-            const std::vector<FileMetaData*>& files = files_[level];
-            if (now_pos[level] >= files.size()) {
-                continue;
-            }
-            const FileMetaData* file = files[now_pos[level]];
-            if (largest_file == NULL ||
-                user_cmp->Compare(largest_file->largest.user_key(),
-                                  file->largest.user_key()) > 0) {
-                largest_file = file;
-                step_level = level;
-            }
-        }
-        // when leveldb is empty
-        if (largest_file == NULL) {
-            return false;
-        }
-        split_size += files_[step_level][now_pos[step_level]]->file_size;
-        now_pos[step_level] ++;
+  const Comparator* user_cmp = vset_->icmp_.user_comparator();
+  const FileMetaData* largest_file = NULL;
+  size_t split_size = 0;
+  size_t now_pos[config::kNumLevels] = {0};
+  while (split_size < want_split_size) {
+    largest_file = NULL;
+    int step_level = -1;
+    for (int level = 1; level < config::kNumLevels; level++) {
+      const std::vector<FileMetaData*>& files = files_[level];
+      if (now_pos[level] >= files.size()) {
+        continue;
+      }
+      const FileMetaData* file = files[now_pos[level]];
+      if (largest_file == NULL ||
+        user_cmp->Compare(largest_file->largest.user_key(),
+                          file->largest.user_key()) > 0) {
+        largest_file = file;
+        step_level = level;
+      }
     }
+    // when leveldb is empty
     if (largest_file == NULL) {
-            return false;
+      return false;
     }
-    *split_key = largest_file->largest.user_key().ToString();
-    return true;
+    split_size += files_[step_level][now_pos[step_level]]->data_size;
+    now_pos[step_level] ++;
+  }
+  if (largest_file == NULL) {
+    return false;
+  }
+  *split_key = largest_file->largest.user_key().ToString();
+  return true;
+}
+
+bool Version::FindKeyRange(std::string* smallest_key, std::string* largest_key) {
+  std::string sk, lk;
+  const Comparator* user_cmp = vset_->icmp_.user_comparator();
+  for (int level = 0; level < config::kNumLevels; level++) {
+    const std::vector<FileMetaData*>& files = files_[level];
+    for (size_t i = 0; i < files.size(); i++) {
+      const FileMetaData* file = files[i];
+      if (sk.empty() ||
+          user_cmp->Compare(file->smallest.user_key(), sk) < 0) {
+        sk = file->smallest.user_key().ToString();
+      }
+      if (lk.empty() ||
+          user_cmp->Compare(file->largest.user_key(), lk) > 0) {
+        lk = file->largest.user_key().ToString();
+      }
+    }
+  }
+  Log(vset_->options_->info_log, "[%s] find key range: [%s,%s].\n",
+      vset_->dbname_.c_str(), sk.c_str(), lk.c_str());
+  if (smallest_key) {
+    *smallest_key = sk;
+  }
+  if (largest_key) {
+    *largest_key = lk;
+  }
+  return true;
 }
 
 //  end of tera-specific
@@ -611,6 +638,8 @@ std::string Version::DebugString() const {
       AppendNumberTo(&r, files[i]->number);
       r.push_back(':');
       AppendNumberTo(&r, files[i]->file_size);
+      r.push_back(':');
+      AppendNumberTo(&r, files[i]->data_size);
       r.append("[");
       r.append(files[i]->smallest.DebugString());
       r.append(" .. ");
@@ -743,7 +772,7 @@ class VersionSetBuilder {
          ++iter) {
       const int level = iter->first;
       FileMetaData f = iter->second;
-      ModifyFileMetaKeyRange(&f);
+      ModifyFileMeta(&f);
       levels_[level].deleted_files.push_back(f);
     }
 
@@ -752,7 +781,7 @@ class VersionSetBuilder {
     while (it != edit->new_files_.end()) {
       const int level = it->first;
       FileMetaData& f_new = it->second;
-      if (!ModifyFileMetaKeyRange(&f_new)) {
+      if (!ModifyFileMeta(&f_new)) {
         // File is out-of-range, erase from edit
         it = edit->new_files_.erase(it);
         continue;
@@ -761,6 +790,11 @@ class VersionSetBuilder {
 
       FileMetaData* f = new FileMetaData(f_new);
       f->refs = 1;
+
+      if (f->data_size == 0 && !f->smallest_fake && !f->largest_fake) {
+        // Make sure this is a new file generated by compaction.
+        f->data_size = f->file_size;
+      }
 
       // We arrange to automatically compact this file after
       // a certain number of seeks.  Let's assume:
@@ -850,16 +884,17 @@ class VersionSetBuilder {
     f->refs++;
     files->push_back(f);
   }
-  // modify key range of file meta
-  // return false if file out of tablet range
-  bool ModifyFileMetaKeyRange(FileMetaData* f) {
+  // Modify key range
+  // Return false if file out of tablet range
+  bool ModifyFileMeta(FileMetaData* f) {
+    // Try modify key range
     if (!vset_->db_key_start_.user_key().empty() &&
         vset_->icmp_.Compare(f->smallest, vset_->db_key_start_) < 0) {
       if (vset_->icmp_.Compare(f->largest, vset_->db_key_start_) > 0) {
         Log(vset_->options_->info_log,
             "[%s] reset file smallest key: %s, from %s to %s\n",
             vset_->dbname_.c_str(),
-            TableFileName(vset_->dbname_, f->number).c_str(),
+            FileNumberDebugString(f->number).c_str(),
             f->smallest.DebugString().c_str(),
             vset_->db_key_start_.DebugString().c_str());
         f->smallest = vset_->db_key_start_;
@@ -875,7 +910,7 @@ class VersionSetBuilder {
         Log(vset_->options_->info_log,
             "[%s] reset file largest key: %s, from %s to %s\n",
             vset_->dbname_.c_str(),
-            TableFileName(vset_->dbname_, f->number).c_str(),
+            FileNumberDebugString(f->number).c_str(),
             f->largest.DebugString().c_str(),
             vset_->db_key_end_.DebugString().c_str());
         f->largest = vset_->db_key_end_;
@@ -1122,6 +1157,7 @@ Status VersionSet::ReadCurrentFile(uint64_t tablet, std::string* dscname ) {
     if (manifest_set.size() < 1) {
       Log(options_->info_log, "[%s] none available manifest file.",
           dbname_.c_str());
+      ArchiveFile(env_, CurrentFileName(pdbname));
       return Status::Corruption("DB has none available manifest file.");
     }
     // select the largest manifest number
@@ -1219,7 +1255,9 @@ Status VersionSet::Recover() {
     log::Reader reader(files[i], &reporter, true/*checksum*/, 0/*initial_offset*/);
     Slice record;
     std::string scratch;
+    int64_t record_num = 0;
     while (reader.ReadRecord(&record, &scratch) && s.ok()) {
+      record_num++;
       VersionEdit edit;
       s = edit.DecodeFrom(record);
       if (s.ok()) {
@@ -1272,6 +1310,11 @@ Status VersionSet::Recover() {
       }
     }
     delete files[i];
+    if (record_num == 0) {
+      // empty manifest, delete it
+      ArchiveFile(env_, dscname[i]);
+      return Status::Corruption("empty manifest:" + s.ToString());
+    }
     if (s.ok()) {
       Version* v = new Version(this);
       builder.SaveTo(v);
@@ -1314,21 +1357,60 @@ Status VersionSet::Recover() {
     prev_log_number_ = prev_log_number;
   }
 
-  Log(options_->info_log, "[%s] recover finish, key_start: %s, key_end: %s\n",
-      dbname_.c_str(), db_key_start_.DebugString().data(), db_key_end_.DebugString().data());
-  // Debug
   for (int level = 0; level < config::kNumLevels; level++) {
     const std::vector<FileMetaData*>& files = current_->files_[level];
     for (size_t i = 0; i < files.size(); i++) {
-      Log(options_->info_log, "[%s] recover: %08u %08u, level: %d, s: %d %s, l: %d %s\n",
+      FileMetaData* f = files[i];
+      ModifyFileSize(f);
+      // Debug
+      Log(options_->info_log, "[%s] recover: %s, level: %d, s: %d %s, l: %d %s\n",
           dbname_.c_str(),
-          static_cast<uint32_t>(files[i]->number >> 32 & 0x7fffffff),
-          static_cast<uint32_t>(files[i]->number & 0xffffffff), level,
-          files[i]->smallest_fake, files[i]->smallest.user_key().ToString().data(),
-          files[i]->largest_fake, files[i]->largest.user_key().ToString().data());
+          FileNumberDebugString(f->number).c_str(), level,
+          f->smallest_fake, f->smallest.user_key().ToString().data(),
+          f->largest_fake, f->largest.user_key().ToString().data());
     }
   }
+
+  Log(options_->info_log, "[%s] recover finish, key_start: %s, key_end: %s\n",
+      dbname_.c_str(), db_key_start_.DebugString().data(), db_key_end_.DebugString().data());
   return s;
+}
+
+// Modify data_size of file meta
+bool VersionSet::ModifyFileSize(FileMetaData* f) {
+  // Try modify data_size in file meta
+  // data_size = largest_key_offset - smallest_key_offset
+  if (f->largest_fake || f->smallest_fake) {
+    uint64_t s_offset = 0;
+    uint64_t l_offset = f->file_size;
+    Table* tableptr = NULL;
+    Iterator* iter =
+        table_cache_->NewIterator(ReadOptions(options_), dbname_,
+                                  f->number, f->file_size, "", "", &tableptr);
+    if (tableptr != NULL) {
+      if (f->smallest_fake) {
+        s_offset = tableptr->ApproximateOffsetOf(f->smallest.Encode());
+      }
+      if (f->largest_fake) {
+        l_offset = tableptr->ApproximateOffsetOf(f->largest.Encode());
+      }
+    } else {
+      Log(options_->info_log, "[%s] fail to reset file data_size: %s.\n",
+          dbname_.c_str(), FileNumberDebugString(f->number).c_str());
+    }
+    f->data_size = l_offset - s_offset;
+    Log(options_->info_log,
+        "[%s] reset file data_size: %s, from %llu to %llu\n, ",
+        dbname_.c_str(),
+        FileNumberDebugString(f->number).c_str(),
+        static_cast<unsigned long long>(f->file_size),
+        static_cast<unsigned long long>(f->data_size));
+    delete iter;
+  } else {
+    // do not need modify
+    f->data_size = f->file_size;
+  }
+  return true;
 }
 
 void VersionSet::MarkFileNumberUsed(uint64_t number) {
@@ -1356,12 +1438,16 @@ void VersionSet::Finalize(Version* v) {
       // file size is small (perhaps because of a small write-buffer
       // setting, or very high compression ratios, or lots of
       // overwrites/deletions).
-      score = v->files_[level].size() /
-          static_cast<double>(config::kL0_CompactionTrigger);
+      //
+      // (3) More level0 files means write hotspot.
+      // We give lower score to avoid too much level0 compaction.
+      score = sqrt(v->files_[level].size() /
+          static_cast<double>(config::kL0_CompactionTrigger));
     } else {
       // Compute the ratio of current size to size limit.
       const uint64_t level_bytes = TotalFileSize(v->files_[level]);
-      score = static_cast<double>(level_bytes) / MaxBytesForLevel(level);
+      score = static_cast<double>(level_bytes)
+          / MaxBytesForLevel(level, options_->sst_size);
     }
 
     if (score > best_score) {

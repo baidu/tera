@@ -178,14 +178,13 @@ Status SetCurrentFile(Env* env, const std::string& dbname,
   if (s.ok()) {
     s = env->RenameFile(tmp, CurrentFileName(dbname));
   } else {
-    Log("[dfs error] open dbtmp[%s] error, status[%s].\n",
-        tmp.c_str(), s.ToString().c_str());
+    Log("[%s][dfs error] open dbtmp[%s] error, status[%s].\n",
+        dbname.c_str(), tmp.c_str(), s.ToString().c_str());
   }
   if (!s.ok()) {
+    Log("[%s][dfs error] rename CURRENT[%s] error, status[%s].\n",
+        dbname.c_str(), tmp.c_str(), s.ToString().c_str());
     env->DeleteFile(tmp);
-  } else {
-    Log("[dfs error] rename CURRENT[%s] error, status[%s].\n",
-        tmp.c_str(), s.ToString().c_str());
   }
   return s;
 }
@@ -296,5 +295,15 @@ bool IsTableFileInherited(uint64_t tablet, uint64_t number) {
   assert(number > UINT_MAX);
   uint64_t file_tablet = (number >> 32 & 0x7FFFFFFF);
   return (tablet == file_tablet) ? false : true;
+}
+
+std::string FileNumberDebugString(uint64_t full_number) {
+  uint64_t tablet = (full_number >> 32 & 0x7FFFFFFF);
+  uint64_t file = full_number & 0xffffffff;
+  char buf[32];
+  snprintf(buf, sizeof(buf), "[%08llu %08llu.sst]",
+           static_cast<unsigned long long>(tablet),
+           static_cast<unsigned long long>(file));
+  return std::string(buf, 23);
 }
 }  // namespace leveldb

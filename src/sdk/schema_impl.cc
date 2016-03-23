@@ -247,6 +247,14 @@ std::string TableDescImpl::AdminGroup() const {
     return _admin_group;
 }
 
+void TableDescImpl::SetAdmin(const std::string& name) {
+    _admin = name;
+}
+
+std::string TableDescImpl::Admin() const {
+    return _admin;
+}
+
 void TableDescImpl::SetAlias(const std::string& alias) {
     _alias =  alias;
 }

@@ -80,6 +80,8 @@ void RemoteTabletNode::LoadTablet(google::protobuf::RpcController* controller,
                                   const LoadTabletRequest* request,
                                   LoadTabletResponse* response,
                                   google::protobuf::Closure* done) {
+    uint64_t id = request->sequence_id();
+    LOG(INFO) << "accept RPC (LoadTablet) id: " << id;
     ThreadPool::Task callback =
         boost::bind(&RemoteTabletNode::DoLoadTablet, this, controller,
                    request, response, done);
@@ -90,6 +92,8 @@ void RemoteTabletNode::UnloadTablet(google::protobuf::RpcController* controller,
                                     const UnloadTabletRequest* request,
                                     UnloadTabletResponse* response,
                                     google::protobuf::Closure* done) {
+    uint64_t id = request->sequence_id();
+    LOG(INFO) << "accept RPC (UnloadTablet) id: " << id;
     ThreadPool::Task callback =
         boost::bind(&RemoteTabletNode::DoUnloadTablet, this, controller,
                    request, response, done);
@@ -100,6 +104,7 @@ void RemoteTabletNode::ReadTablet(google::protobuf::RpcController* controller,
                                   const ReadTabletRequest* request,
                                   ReadTabletResponse* response,
                                   google::protobuf::Closure* done) {
+    VLOG(8) << "accept RPC (ReadTablet)";
     static uint32_t last_print = time(NULL);
     if (read_pending_counter.Get() > FLAGS_tera_request_pending_limit) {
         response->set_sequence_id(request->sequence_id());
@@ -110,6 +115,7 @@ void RemoteTabletNode::ReadTablet(google::protobuf::RpcController* controller,
             LOG(WARNING) << "Too many pending read requests, return TabletNode Is Busy!";
             last_print = now_time;
         }
+        VLOG(8) << "finish RPC (ReadTablet)";
     } else {
         int32_t row_num = request->row_info_list_size();
         read_pending_counter.Add(row_num);
@@ -129,6 +135,7 @@ void RemoteTabletNode::WriteTablet(google::protobuf::RpcController* controller,
                                    const WriteTabletRequest* request,
                                    WriteTabletResponse* response,
                                    google::protobuf::Closure* done) {
+    VLOG(8) << "accept RPC (WriteTablet)";
     static uint32_t last_print = time(NULL);
     if (write_pending_counter.Get() > FLAGS_tera_request_pending_limit) {
         response->set_sequence_id(request->sequence_id());
@@ -139,6 +146,7 @@ void RemoteTabletNode::WriteTablet(google::protobuf::RpcController* controller,
             LOG(WARNING) << "Too many pending write requests, return TabletNode Is Busy!";
             last_print = now_time;
         }
+        VLOG(8) << "finish RPC (WriteTablet)";
     } else {
         int32_t row_num = request->row_list_size();
         write_pending_counter.Add(row_num);
@@ -152,10 +160,31 @@ void RemoteTabletNode::WriteTablet(google::protobuf::RpcController* controller,
     }
 }
 
+void RemoteTabletNode::ScanTablet(google::protobuf::RpcController* controller,
+                                  const ScanTabletRequest* request,
+                                  ScanTabletResponse* response,
+                                  google::protobuf::Closure* done) {
+    VLOG(8) << "accept RPC (ScanTablet)";
+    if (scan_pending_counter.Get() > FLAGS_tera_scan_request_pending_limit) {
+        response->set_sequence_id(request->sequence_id());
+        response->set_status(kTabletNodeIsBusy);
+        done->Run();
+        VLOG(8) << "finish RPC (ScanTablet)";
+    } else {
+        scan_pending_counter.Inc();
+        ScanRpc* rpc = new ScanRpc(controller, request, response, done);
+        m_scan_rpc_schedule->EnqueueRpc(request->table_name(), rpc);
+        m_scan_thread_pool->AddTask(boost::bind(&RemoteTabletNode::DoScheduleRpc,
+                                                this, m_scan_rpc_schedule.get()));
+    }
+}
+
 void RemoteTabletNode::GetSnapshot(google::protobuf::RpcController* controller,
                                   const SnapshotRequest* request,
                                   SnapshotResponse* response,
                                   google::protobuf::Closure* done) {
+    uint64_t id = request->sequence_id();
+    LOG(INFO) << "accept RPC (GetSnapshot) id: " << id;
     ThreadPool::Task callback =
         boost::bind(&RemoteTabletNode::DoGetSnapshot, this, controller,
                     request, response, done);
@@ -166,6 +195,8 @@ void RemoteTabletNode::ReleaseSnapshot(google::protobuf::RpcController* controll
                                            const ReleaseSnapshotRequest* request,
                                            ReleaseSnapshotResponse* response,
                                            google::protobuf::Closure* done) {
+    uint64_t id = request->sequence_id();
+    LOG(INFO) << "accept RPC (ReleaseSnapshot) id: " << id;
     ThreadPool::Task callback =
     boost::bind(&RemoteTabletNode::DoReleaseSnapshot, this, controller,
                request, response, done);
@@ -176,6 +207,8 @@ void RemoteTabletNode::Rollback(google::protobuf::RpcController* controller,
                                 const SnapshotRollbackRequest* request,
                                 SnapshotRollbackResponse* response,
                                 google::protobuf::Closure* done) {
+    uint64_t id = request->sequence_id();
+    LOG(INFO) << "accept RPC (Rollback) id: " << id;
     ThreadPool::Task callback =
     boost::bind(&RemoteTabletNode::DoRollback, this, controller,
                request, response, done);
@@ -187,34 +220,32 @@ void RemoteTabletNode::Query(google::protobuf::RpcController* controller,
                              const QueryRequest* request,
                              QueryResponse* response,
                              google::protobuf::Closure* done) {
+    uint64_t id = request->sequence_id();
+    LOG(INFO) << "accept RPC (Query) id: " << id;
     ThreadPool::Task callback =
         boost::bind(&RemoteTabletNode::DoQuery, this, controller,
                    request, response, done);
     m_ctrl_thread_pool->AddPriorityTask(callback);
 }
 
-
-void RemoteTabletNode::ScanTablet(google::protobuf::RpcController* controller,
-                                  const ScanTabletRequest* request,
-                                  ScanTabletResponse* response,
-                                  google::protobuf::Closure* done) {
-    if (scan_pending_counter.Get() > FLAGS_tera_scan_request_pending_limit) {
-        response->set_sequence_id(request->sequence_id());
-        response->set_status(kTabletNodeIsBusy);
-        done->Run();
-    } else {
-        scan_pending_counter.Inc();
-        ScanRpc* rpc = new ScanRpc(controller, request, response, done);
-        m_scan_rpc_schedule->EnqueueRpc(request->table_name(), rpc);
-        m_scan_thread_pool->AddTask(boost::bind(&RemoteTabletNode::DoScheduleRpc,
-                                                this, m_scan_rpc_schedule.get()));
-    }
+void RemoteTabletNode::CmdCtrl(google::protobuf::RpcController* controller,
+                               const TsCmdCtrlRequest* request,
+                               TsCmdCtrlResponse* response,
+                               google::protobuf::Closure* done) {
+    uint64_t id = request->sequence_id();
+    LOG(INFO) << "accept RPC (CmdCtrl) id: " << id;
+    ThreadPool::Task callback =
+        boost::bind(&RemoteTabletNode::DoCmdCtrl, this, controller,
+                    request, response, done);
+    m_ctrl_thread_pool->AddPriorityTask(callback);
 }
 
 void RemoteTabletNode::SplitTablet(google::protobuf::RpcController* controller,
                                    const SplitTabletRequest* request,
                                    SplitTabletResponse* response,
                                    google::protobuf::Closure* done) {
+    uint64_t id = request->sequence_id();
+    LOG(INFO) << "accept RPC (SplitTablet) id: " << id;
     ThreadPool::Task callback =
         boost::bind(&RemoteTabletNode::DoSplitTablet, this, controller,
                     request, response, done);
@@ -225,11 +256,23 @@ void RemoteTabletNode::CompactTablet(google::protobuf::RpcController* controller
                                    const CompactTabletRequest* request,
                                    CompactTabletResponse* response,
                                    google::protobuf::Closure* done) {
+    uint64_t id = request->sequence_id();
+    LOG(INFO) << "accept RPC (CompactTablet) id: " << id;
     compact_pending_counter.Inc();
     ThreadPool::Task callback =
         boost::bind(&RemoteTabletNode::DoCompactTablet, this, controller,
                    request, response, done);
     m_compact_thread_pool->AddTask(callback);
+}
+
+void RemoteTabletNode::Update(google::protobuf::RpcController* controller,
+                              const UpdateRequest* request,
+                              UpdateResponse* response,
+                              google::protobuf::Closure* done) {
+    ThreadPool::Task callback =
+        boost::bind(&RemoteTabletNode::DoUpdate, this, controller,
+                   request, response, done);
+    m_ctrl_thread_pool->AddTask(callback);
 }
 
 std::string RemoteTabletNode::ProfilingLog() {
@@ -245,7 +288,7 @@ void RemoteTabletNode::DoLoadTablet(google::protobuf::RpcController* controller,
                                     LoadTabletResponse* response,
                                     google::protobuf::Closure* done) {
     uint64_t id = request->sequence_id();
-    LOG(INFO) << "accept RPC (LoadTablet) id: " << id;
+    LOG(INFO) << "run RPC (LoadTablet) id: " << id;
     m_tabletnode_impl->LoadTablet(request, response, done);
     LOG(INFO) << "finish RPC (LoadTablet) id: " << id;
 }
@@ -255,7 +298,7 @@ void RemoteTabletNode::DoUnloadTablet(google::protobuf::RpcController* controlle
                                       UnloadTabletResponse* response,
                                       google::protobuf::Closure* done) {
     uint64_t id = request->sequence_id();
-    LOG(INFO) << "accept RPC (UnloadTablet) id: " << id;
+    LOG(INFO) << "run RPC (UnloadTablet) id: " << id;
     m_tabletnode_impl->UnloadTablet(request, response, done);
     LOG(INFO) << "finish RPC (UnloadTablet) id: " << id;
 }
@@ -266,10 +309,35 @@ void RemoteTabletNode::DoReadTablet(google::protobuf::RpcController* controller,
                                     ReadTabletResponse* response,
                                     google::protobuf::Closure* done,
                                     ReadRpcTimer* timer) {
-    VLOG(8) << "accept RPC (ReadTablet)";
+    VLOG(8) << "run RPC (ReadTablet)";
     int32_t row_num = request->row_info_list_size();
     read_pending_counter.Sub(row_num);
-    m_tabletnode_impl->ReadTablet(start_micros, request, response, done, timer);
+
+    bool is_read_timeout = false;
+    if (request->has_client_timeout_ms()) {
+        int64_t read_timeout = request->client_timeout_ms() * 1000; // ms -> us
+        int64_t detal = get_micros() - start_micros;
+        if (detal > read_timeout) {
+            VLOG(5) << "timeout, drop read request for:" << request->tablet_name()
+                << ", detal(in us):" << detal
+                << ", read_timeout(in us):" << read_timeout;
+            is_read_timeout = true;
+        }
+    }
+
+    if (!is_read_timeout) {
+        m_tabletnode_impl->ReadTablet(start_micros, request, response, done);
+    } else {
+        response->set_sequence_id(request->sequence_id());
+        response->set_success_num(0);
+        response->set_status(kTableIsBusy);
+        done->Run();
+    }
+
+    if (NULL != timer) {
+        RpcTimerList::Instance()->Erase(timer);
+        delete timer;
+    }
     VLOG(8) << "finish RPC (ReadTablet)";
 }
 
@@ -278,7 +346,7 @@ void RemoteTabletNode::DoWriteTablet(google::protobuf::RpcController* controller
                                      WriteTabletResponse* response,
                                      google::protobuf::Closure* done,
                                      WriteRpcTimer* timer) {
-    VLOG(8) << "accept RPC (WriteTablet)";
+    VLOG(8) << "run RPC (WriteTablet)";
     int32_t row_num = request->row_list_size();
     write_pending_counter.Sub(row_num);
     m_tabletnode_impl->WriteTablet(request, response, done, timer);
@@ -289,7 +357,7 @@ void RemoteTabletNode::DoScanTablet(google::protobuf::RpcController* controller,
                                     const ScanTabletRequest* request,
                                     ScanTabletResponse* response,
                                     google::protobuf::Closure* done) {
-    VLOG(8) << "accept RPC (ScanTablet)";
+    VLOG(8) << "run RPC (ScanTablet)";
     scan_pending_counter.Dec();
     m_tabletnode_impl->ScanTablet(request, response, done);
     VLOG(8) << "finish RPC (ScanTablet)";
@@ -299,7 +367,7 @@ void RemoteTabletNode::DoGetSnapshot(google::protobuf::RpcController* controller
                                      const SnapshotRequest* request, SnapshotResponse* response,
                                      google::protobuf::Closure* done) {
     uint64_t id = request->sequence_id();
-    LOG(INFO) << "accept RPC (GetSnapshot) id: " << id;
+    LOG(INFO) << "run RPC (GetSnapshot) id: " << id;
     m_tabletnode_impl->GetSnapshot(request, response, done);
     LOG(INFO) << "finish RPC (GetSnapshot) id: " << id;
 }
@@ -308,7 +376,7 @@ void RemoteTabletNode::DoReleaseSnapshot(google::protobuf::RpcController* contro
                                               const ReleaseSnapshotRequest* request, ReleaseSnapshotResponse* response,
                                               google::protobuf::Closure* done) {
     uint64_t id = request->sequence_id();
-    LOG(INFO) << "accept RPC (ReleaseSnapshot) id: " << id;
+    LOG(INFO) << "run RPC (ReleaseSnapshot) id: " << id;
     m_tabletnode_impl->ReleaseSnapshot(request, response, done);
     LOG(INFO) << "finish RPC (ReleaseSnapshot) id: " << id;
 }
@@ -319,7 +387,7 @@ void RemoteTabletNode::DoRollback(google::protobuf::RpcController* controller,
                                   SnapshotRollbackResponse* response,
                                   google::protobuf::Closure* done) {
     uint64_t id = request->sequence_id();
-    LOG(INFO) << "accept RPC (Rollback) id: " << id;
+    LOG(INFO) << "run RPC (Rollback) id: " << id;
     m_tabletnode_impl->Rollback(request, response, done);
     LOG(INFO) << "finish RPC (Rollback) id: " << id;
 }
@@ -331,9 +399,21 @@ void RemoteTabletNode::DoQuery(google::protobuf::RpcController* controller,
                                google::protobuf::Closure* done) {
     uint64_t id = request->sequence_id();
     int64_t start_micros = get_micros();
-    LOG(INFO) << "accept RPC (Query) id: " << id;
+    LOG(INFO) << "run RPC (Query) id: " << id;
     m_tabletnode_impl->Query(request, response, done);
     LOG(INFO) << "finish RPC (Query) id: " << id
+        << ", cost " << (get_micros() - start_micros) / 1000 << "ms.";
+}
+
+void RemoteTabletNode::DoCmdCtrl(google::protobuf::RpcController* controller,
+                                 const TsCmdCtrlRequest* request,
+                                 TsCmdCtrlResponse* response,
+                                 google::protobuf::Closure* done) {
+    uint64_t id = request->sequence_id();
+    int64_t start_micros = get_micros();
+    LOG(INFO) << "run RPC (CmdCtrl) id: " << id;
+    m_tabletnode_impl->CmdCtrl(request, response, done);
+    LOG(INFO) << "finish RPC (CmdCtrl) id: " << id
         << ", cost " << (get_micros() - start_micros) / 1000 << "ms.";
 }
 
@@ -342,7 +422,7 @@ void RemoteTabletNode::DoSplitTablet(google::protobuf::RpcController* controller
                                      SplitTabletResponse* response,
                                      google::protobuf::Closure* done) {
     uint64_t id = request->sequence_id();
-    LOG(INFO) << "accept RPC (SplitTablet) id: " << id;
+    LOG(INFO) << "run RPC (SplitTablet) id: " << id;
     m_tabletnode_impl->SplitTablet(request, response, done);
     LOG(INFO) << "finish RPC (SplitTablet) id: " << id;
 }
@@ -352,10 +432,20 @@ void RemoteTabletNode::DoCompactTablet(google::protobuf::RpcController* controll
                                      CompactTabletResponse* response,
                                      google::protobuf::Closure* done) {
     uint64_t id = request->sequence_id();
-    LOG(INFO) << "accept RPC (CompactTablet) id: " << id;
+    LOG(INFO) << "run RPC (CompactTablet) id: " << id;
     compact_pending_counter.Dec();
     m_tabletnode_impl->CompactTablet(request, response, done);
     LOG(INFO) << "finish RPC (CompactTablet) id: " << id;
+}
+
+void RemoteTabletNode::DoUpdate(google::protobuf::RpcController* controller,
+                                const UpdateRequest* request,
+                                UpdateResponse* response,
+                                google::protobuf::Closure* done) {
+    uint64_t id = request->sequence_id();
+    LOG(INFO) << "accept RPC (Update) id: " << id;
+    m_tabletnode_impl->Update(request, response, done);
+    LOG(INFO) << "finish RPC (Update) id: " << id;
 }
 
 void RemoteTabletNode::DoScheduleRpc(RpcSchedule* rpc_schedule) {
@@ -368,19 +458,6 @@ void RemoteTabletNode::DoScheduleRpc(RpcSchedule* rpc_schedule) {
     case RPC_READ: {
         ReadRpc* read_rpc = (ReadRpc*)rpc;
         table_name = read_rpc->request->tablet_name();
-        if (read_rpc->request->has_client_timeout_ms()) {
-            int64_t read_timeout = read_rpc->request->client_timeout_ms() * 1000; // ms -> us
-            int64_t detal = get_micros() - read_rpc->start_micros;
-            if (detal > read_timeout) {
-                VLOG(5) << "timeout, drop read request for:" << table_name
-                    << ", detal(in us):" << detal << ", read_timeout(in us):" << read_timeout;
-                read_rpc->response->set_sequence_id(read_rpc->request->sequence_id());
-                read_rpc->response->set_success_num(0);
-                read_rpc->response->set_status(kTableIsBusy);
-                read_rpc->done->Run();
-                break;
-            }
-        }
         DoReadTablet(read_rpc->controller, read_rpc->start_micros,
                      read_rpc->request, read_rpc->response,
                      read_rpc->done,read_rpc->timer);
