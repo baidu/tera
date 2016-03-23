@@ -1,0 +1,21 @@
+lang_cpp {
+global:
+    extern "C++" {
+        tera::*;
+        teraeasy::*;
+    };
+local:
+    *;
+};
+
+lang_c {
+global:
+    extern "C" {
+        tera_*;
+        Java_com_baidu_tera_*;
+    };
+local:
+    *;
+};
+
+
