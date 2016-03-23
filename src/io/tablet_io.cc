@@ -329,6 +329,7 @@ bool TabletIO::Unload(StatusCode* status) {
         LOG(INFO) << "[Unload] shutdown1 failed, keep log " << m_tablet_path;
     }
 
+    m_tablet_scanner.DestroyScanCache();
     delete m_db;
     m_db = NULL;
 
@@ -1393,7 +1394,7 @@ bool TabletIO::ScanRows(const ScanTabletRequest* request,
         response->set_status(status);
         done->Run();
     } else if (request->has_session_id() && request->session_id() > 0) {
-        success = ScanRowsStreaming(request, response, done);
+        success = HandleScan(request, response, done);
     } else {
         success = ScanRowsRestricted(request, response, done);
     }
@@ -1434,63 +1435,38 @@ bool TabletIO::ScanRowsRestricted(const ScanTabletRequest* request,
     return ret;
 }
 
-bool TabletIO::ScanRowsStreaming(const ScanTabletRequest* request,
-                                 ScanTabletResponse* response,
-                                 google::protobuf::Closure* done) {
-    bool is_first_scan = false;
-    std::string table_name = request->table_name();
-    m_stream_scan.PushTask(request, response, done, &is_first_scan);
-    if (!is_first_scan) {
-        LOG(INFO) << "not first rpc to call scan: " << table_name;
+bool TabletIO::HandleScan(const ScanTabletRequest* request,
+                          ScanTabletResponse* response,
+                          google::protobuf::Closure* done) {
+    // concurrency control, ensure only one scanner step init leveldb::Iterator
+    ScanContext* context = m_tablet_scanner.GetScanContext(this, request, response, done);
+    if (context == NULL) {
         return true;
     }
 
-    std::string start_tera_key;
-    std::string end_row_key;
-    SetupScanInternalTeraKey(request, &start_tera_key, &end_row_key);
-
-    ScanOptions scan_options;
-    SetupScanRowOptions(request, &scan_options);
-
-    uint32_t read_row_count = 0;
-    uint32_t read_bytes = 0;
-    bool is_complete = false;
-
-    uint64_t session_id = request->session_id();
-    StreamScan* scan_stream = m_stream_scan.GetStream(session_id);
-    leveldb::Iterator* it = NULL;
-    StatusCode ret_code = InitedScanInterator(start_tera_key, scan_options, &it);
-    if (ret_code != kTabletNodeOk) {
-        scan_stream->SetStatusCode(ret_code);
-        m_stream_scan.RemoveSession(session_id);
-        return false;
+    // first rpc init iterator and scan parameter
+    if (context->m_it == NULL) {
+        std::string start_tera_key;
+        std::string end_row_key;
+        SetupScanInternalTeraKey(request, &(context->m_start_tera_key), &(context->m_end_row_key));
+        SetupScanRowOptions(request, &(context->m_scan_options));
+        context->m_ret_code = InitedScanInterator(context->m_start_tera_key, context->m_scan_options,
+                                      &(context->m_it));
     }
+    // schedule scan context
+    return m_tablet_scanner.ScheduleScanContext(context);
+}
 
-    StatusCode status = kTabletNodeOk;
-    uint64_t data_id = 0;
-    while (status == kTabletNodeOk) {
-        RowResult value_list;
-        if (LowLevelScan(start_tera_key, end_row_key, scan_options, it,
-                         &value_list, NULL, &read_row_count, &read_bytes,
-                         &is_complete, &status)) {
-            m_counter.scan_rows.Add(read_row_count);
-            m_counter.scan_size.Add(read_bytes);
-
-            scan_stream->SetCompleted(is_complete);
-            if (!scan_stream->PushData(data_id, value_list)) {
-                break;
-            }
-            data_id++;
-        }
-        scan_stream->SetStatusCode(status);
-        if (is_complete) {
-            break;
-        }
+void TabletIO::ProcessScan(ScanContext* context) {
+    uint32_t rows_scan_num = 0;
+    uint32_t size_scan_bytes = 0;
+    if (LowLevelScan(context->m_start_tera_key, context->m_end_row_key,
+                     context->m_scan_options, context->m_it,
+                     &context->m_result, NULL, &rows_scan_num, &size_scan_bytes,
+                     &context->m_complete, &context->m_ret_code)) {
+        m_counter.scan_rows.Add(rows_scan_num);
+        m_counter.scan_size.Add(size_scan_bytes);
     }
-
-    delete it;
-    m_stream_scan.RemoveSession(session_id);
-    return true;
 }
 
 bool TabletIO::Scan(const ScanOption& option, KeyValueList* kv_list,
