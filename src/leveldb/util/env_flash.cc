@@ -559,14 +559,14 @@ void FlashEnv::ScheduleUpdateFlash(const std::string& fname, uint64_t fsize, int
         UpdateFlashTask& task = update_flash_waiting_files_[fname];
         task.priority = priority;
         task.id = update_flash_threads_.Schedule(UpdateFlashFileFunc, param, (double)task.priority, 0);
-        Log("[env_flash] schedule copy to local, id: %ld, prio: %ld, file: %s\n",
-            task.id, task.priority, fname.c_str());
+        Log("[env_flash] schedule copy to local, id: %ld, prio: %ld, file: %s, pend: %ld\n",
+            task.id, task.priority, fname.c_str(), update_flash_threads_.GetPendingTaskNum());
     } else {
         UpdateFlashTask& task = update_flash_waiting_files_[fname];
         task.priority += priority;
         update_flash_threads_.ReSchedule(task.id, (double)task.priority, 0);
-        Log("[env_flash] reschedule copy to local, id: %ld, prio: %ld, file: %s\n",
-            task.id, task.priority, fname.c_str());
+        Log("[env_flash] reschedule copy to local, id: %ld, prio: %ld, file: %s, pend: %ld\n",
+            task.id, task.priority, fname.c_str(), update_flash_threads_.GetPendingTaskNum());
     }
 }
 
@@ -577,13 +577,14 @@ void FlashEnv::UpdateFlashFile(const std::string& fname, uint64_t fsize) {
     MutexLock l(&update_flash_mutex_);
     if (copy_status.ok()) {
         UpdateFlashTask& task = update_flash_waiting_files_[fname];
-        Log("[env_flash] copy to local success, id: %ld, prio: %ld, file: %s\n",
-            task.id, task.priority, local_fname.c_str());
+        Log("[env_flash] copy to local success, id: %ld, prio: %ld, file: %s, pend: %ld\n",
+            task.id, task.priority, local_fname.c_str(), update_flash_threads_.GetPendingTaskNum());
         update_flash_waiting_files_.erase(fname);
     } else {
         UpdateFlashTask& task = update_flash_waiting_files_[fname];
-        Log("[env_flash] copy to local fail [%s], id: %ld, prio: %ld, file: %s\n",
-            copy_status.ToString().c_str(), task.id, task.priority, local_fname.c_str());
+        Log("[env_flash] copy to local fail [%s], id: %ld, prio: %ld, file: %s, pend: %ld\n",
+            copy_status.ToString().c_str(), task.id, task.priority,
+            local_fname.c_str(), update_flash_threads_.GetPendingTaskNum());
 
         UpdateFlashFileParam* param = new UpdateFlashFileParam;
         param->flash_env = this;
