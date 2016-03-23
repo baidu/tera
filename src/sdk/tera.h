@@ -274,6 +274,10 @@ public:
     /// 设置预读的buffer大小, 默认64K
     void SetBufferSize(int64_t buf_size);
 
+    /// set number limit for each buffer
+    void SetNumberLimit(int64_t number_limit);
+    int64_t GetNumberLimit();
+
     /// 设置async, 缺省true
     void SetAsync(bool async);
 

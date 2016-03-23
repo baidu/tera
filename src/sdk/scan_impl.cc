@@ -17,6 +17,8 @@
 #include "utils/atomic.h"
 #include "utils/timer.h"
 
+DECLARE_int64(tera_sdk_scan_number_limit);
+DECLARE_int64(tera_sdk_scan_buffer_size);
 DECLARE_bool(tera_sdk_scan_async_enabled);
 DECLARE_int64(tera_sdk_scan_async_cache_size);
 DECLARE_int32(tera_sdk_scan_async_parallel_max_num);
@@ -764,7 +766,8 @@ void ResultStreamSyncImpl::Reset() {
 ScanDescImpl::ScanDescImpl(const string& rowkey)
     : _start_timestamp(0),
       _timer_range(NULL),
-      _buf_size(65536),
+      _buf_size(FLAGS_tera_sdk_scan_buffer_size),
+      _number_limit(FLAGS_tera_sdk_scan_number_limit),
       _is_async(FLAGS_tera_sdk_scan_async_enabled),
       _max_version(1),
       _pack_interval(5000),
@@ -780,6 +783,7 @@ ScanDescImpl::ScanDescImpl(const ScanDescImpl& impl)
       _start_qualifier(impl._start_qualifier),
       _start_timestamp(impl._start_timestamp),
       _buf_size(impl._buf_size),
+      _number_limit(impl._number_limit),
       _is_async(impl._is_async),
       _max_version(impl._max_version),
       _pack_interval(impl._pack_interval),
@@ -874,6 +878,10 @@ void ScanDescImpl::SetBufferSize(int64_t buf_size) {
     _buf_size = buf_size;
 }
 
+void ScanDescImpl::SetNumberLimit(int64_t number_limit) {
+    _number_limit = number_limit;
+}
+
 void ScanDescImpl::SetAsync(bool async) {
     _is_async = async;
 }
@@ -935,6 +943,10 @@ const ValueConverter ScanDescImpl::GetValueConverter() const {
 
 int64_t ScanDescImpl::GetBufferSize() const {
     return _buf_size;
+}
+
+int64_t ScanDescImpl::GetNumberLimit() {
+    return _number_limit;
 }
 
 bool ScanDescImpl::IsAsync() const {
