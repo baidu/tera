@@ -635,8 +635,14 @@ bool ClientImpl::DoShowTablesInfo(TableMetaList* table_list,
                 has_more = false;
             }
             for(int i = 0; i < response.tablet_meta_list().meta_size(); i++){
-                tablet_list->add_meta()->CopyFrom(response.tablet_meta_list().meta(i));
-                tablet_list->add_counter()->CopyFrom(response.tablet_meta_list().counter(i));
+                const std::string& table_name = response.tablet_meta_list().meta(i).table_name();
+                const std::string& tablet_key = response.tablet_meta_list().meta(i).key_range().key_start();
+                // compatible to old master
+                if (table_name > start_table_name
+                    || (table_name == start_table_name && tablet_key >= start_tablet_key)) {
+                    tablet_list->add_meta()->CopyFrom(response.tablet_meta_list().meta(i));
+                    tablet_list->add_counter()->CopyFrom(response.tablet_meta_list().counter(i));
+                }
                 if (i == response.tablet_meta_list().meta_size() - 1 ) {
                     std::string prev_table_name = start_table_name;
                     start_table_name = response.tablet_meta_list().meta(i).table_name();
@@ -659,8 +665,9 @@ bool ClientImpl::DoShowTablesInfo(TableMetaList* table_list,
             }
             has_more = false;
         }
-        VLOG(16) << "fetch meta:" << start_table_name
-                 << " / " << start_tablet_key;
+        VLOG(16) << "fetch meta table name: " << start_table_name
+                 << " tablet size: " << response.tablet_meta_list().meta_size()
+                 << " next start: " << DebugString(start_tablet_key);
     };
 
     if (has_error) {
