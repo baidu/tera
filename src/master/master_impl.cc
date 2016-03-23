@@ -102,6 +102,9 @@ DECLARE_bool(tera_online_schema_update_enabled);
 DECLARE_int32(tera_master_schema_update_retry_period);
 DECLARE_int32(tera_master_schema_update_retry_times);
 
+DECLARE_int64(tera_master_available_check_period);
+DECLARE_bool(tera_master_available_check_enabled);
+
 namespace tera {
 namespace master {
 
@@ -124,7 +127,8 @@ MasterImpl::MasterImpl()
       m_stat_table(NULL),
       m_gc_enabled(false),
       m_gc_timer_id(kInvalidTimerId),
-      m_gc_query_enable(false) {
+      m_gc_query_enable(false),
+      m_tablet_availability(new TabletAvailability(m_tablet_manager)) {
     if (FLAGS_tera_master_cache_check_enabled) {
         EnableReleaseCacheTimer();
     }
@@ -375,6 +379,7 @@ void MasterImpl::RestoreUserTablet(const std::vector<TabletMeta>& report_meta_li
             VLOG(8) << "READY Tablet, " << tablet;
             continue;
         }
+        m_tablet_availability->AddNotReadyTablet(tablet->GetPath());
         // meta table may be manipulated by other threads during restore
         if (tablet->GetTableName() == FLAGS_tera_master_meta_table_name) {
             continue;
@@ -415,6 +420,7 @@ void MasterImpl::RestoreUserTablet(const std::vector<TabletMeta>& report_meta_li
     EnableQueryTabletNodeTimer();
     EnableTabletNodeGcTimer();
     EnableLoadBalance();
+    EnableAvailabilityCheck();
 }
 
 void MasterImpl::LoadAllOffLineTablet() {
@@ -2160,6 +2166,7 @@ void MasterImpl::DeleteTabletNode(const std::string& tabletnode_addr) {
     std::vector<TabletPtr>::iterator it;
     for (it = tablet_list.begin(); it != tablet_list.end(); ++it) {
         TabletPtr tablet = *it;
+        m_tablet_availability->AddNotReadyTablet(tablet->GetPath());
 
         if (FLAGS_tera_master_tabletnode_timeout > 0
             && tablet->GetTableName() != FLAGS_tera_master_meta_table_name) {
@@ -2540,6 +2547,7 @@ void MasterImpl::LoadTabletCallback(TabletPtr tablet, int32_t retry,
     if (!failed && (status == kTabletNodeOk || status == kTabletReady)) {
         LOG(INFO) << "load tablet success, " << tablet;
         tablet->SetStatusIf(kTableReady, kTableOnLoad);
+        m_tablet_availability->EraseNotReadyTablet(tablet->GetPath());
         if (tablet->GetTableName() == FLAGS_tera_master_meta_table_name) {
             CHECK(tablet->GetPath() == FLAGS_tera_master_meta_table_path);
             m_zk_adapter->UpdateRootTabletNode(server_addr);
@@ -2695,6 +2703,7 @@ void MasterImpl::UnloadTabletCallback(TabletPtr tablet, int32_t retry,
     // success
     if (!failed && (status == kTabletNodeOk || status == kKeyNotInRange)) {
         LOG(INFO) << "unload tablet success, " << tablet;
+        m_tablet_availability->AddNotReadyTablet(tablet->GetPath());
         if (tablet->SetStatusIf(kTableOffLine, kTableUnLoading)) {
             ProcessOffLineTablet(tablet);
             // unload success, try load
@@ -4227,13 +4236,13 @@ void MasterImpl::MergeTabletWriteMetaCallback(TabletMeta new_meta,
 
     TabletPtr tablet_c;
     if (tablet_p1->GetKeyStart() == new_meta.key_range().key_start()) {
-        m_tablet_manager->DeleteTablet(tablet_p1->GetTableName(), tablet_p1->GetKeyStart());
+        DeleteTablet(tablet_p1);
         m_tablet_manager->AddTablet(new_meta, TableSchema(), &tablet_c);
-        m_tablet_manager->DeleteTablet(tablet_p2->GetTableName(), tablet_p2->GetKeyStart());
+        DeleteTablet(tablet_p2);
     } else {
-        m_tablet_manager->DeleteTablet(tablet_p2->GetTableName(), tablet_p2->GetKeyStart());
+        DeleteTablet(tablet_p2);
         m_tablet_manager->AddTablet(new_meta, TableSchema(), &tablet_c);
-        m_tablet_manager->DeleteTablet(tablet_p1->GetTableName(), tablet_p1->GetKeyStart());
+        DeleteTablet(tablet_p1);
     }
     ProcessOffLineTablet(tablet_c);
     TryLoadTablet(tablet_c);
@@ -4347,8 +4356,7 @@ void MasterImpl::AddMetaCallback(TablePtr table,
         }
         if (retry_times <= 0) {
             for(size_t i = 0; i < tablets.size(); i++) {
-                m_tablet_manager->DeleteTablet(tablets[i]->GetTableName(),
-                    tablets[i]->GetKeyStart());
+                DeleteTablet(tablets[i]);
             }
             rpc_response->set_status(kMetaTabletError);
             rpc_done->Run();
@@ -4702,11 +4710,16 @@ void MasterImpl::DeleteTableCallback(TablePtr table,
     // clean tablet manager
     for (uint32_t i = 0; i < tablets.size(); ++i) {
         TabletPtr tablet = tablets[i];
-        m_tablet_manager->DeleteTablet(tablet->GetTableName(), tablet->GetKeyStart());
+        DeleteTablet(tablet);
     }
     LOG(INFO) << "delete meta table record success, " << table;
     rpc_response->set_status(kMasterOk);
     rpc_done->Run();
+}
+
+void MasterImpl::DeleteTablet(TabletPtr tablet) {
+    m_tablet_manager->DeleteTablet(tablet->GetTableName(), tablet->GetKeyStart());
+    m_tablet_availability->EraseNotReadyTablet(tablet->GetPath());
 }
 
 void MasterImpl::ScanMetaTableAsync(const std::string& table_name,
@@ -4827,7 +4840,7 @@ void MasterImpl::ScanMetaCallbackForSplit(TabletPtr tablet,
     m_tablet_manager->AddTablet(second_meta, TableSchema(), &second_tablet);
 
     // delete old tablet
-    m_tablet_manager->DeleteTablet(tablet->GetTableName(), tablet->GetKeyStart());
+    DeleteTablet(tablet);
 
     // update first child tablet meta
     first_meta.set_status(kTableOffLine);
@@ -5165,6 +5178,28 @@ void MasterImpl::EnableTabletNodeGcTimer() {
         ScheduleTabletNodeGc();
     }
     m_gc_enabled = true;
+}
+
+void MasterImpl::DoAvailableCheck() {
+    MutexLock lock(&m_mutex);
+    if (FLAGS_tera_master_available_check_enabled) {
+        LOG(INFO) << "[availability] available tablets percentage: "
+            << m_tablet_availability->GetAvailability();
+    }
+    ScheduleAvailableCheck();
+}
+
+void MasterImpl::ScheduleAvailableCheck() {
+    m_mutex.AssertHeld();
+    ThreadPool::Task task =
+        boost::bind(&MasterImpl::DoAvailableCheck, this);
+    m_gc_timer_id = m_thread_pool->DelayTask(
+        FLAGS_tera_master_available_check_period * 1000, task);
+}
+
+void MasterImpl::EnableAvailabilityCheck() {
+    MutexLock lock(&m_mutex);
+    ScheduleAvailableCheck();
 }
 
 void MasterImpl::DisableTabletNodeGcTimer() {

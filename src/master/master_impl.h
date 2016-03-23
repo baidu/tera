@@ -17,6 +17,7 @@
 #include "gflags/gflags.h"
 
 #include "master/gc_strategy.h"
+#include "master/availability.h"
 #include "master/tablet_manager.h"
 #include "master/tabletnode_manager.h"
 #include "master/user_manager.h"
@@ -549,6 +550,12 @@ private:
 
     void FillAlias(const std::string& key, const std::string& value);
     void RefreshTableCounter();
+
+    void DoAvailableCheck();
+    void ScheduleAvailableCheck();
+    void EnableAvailabilityCheck();
+    void DeleteTablet(TabletPtr tablet);
+
 private:
     mutable Mutex m_status_mutex;
     MasterStatus m_status;
@@ -602,6 +609,8 @@ private:
     boost::shared_ptr<GcStrategy> gc_strategy;
     std::map<std::string, std::string> m_alias;
     mutable Mutex m_alias_mutex;
+
+    boost::shared_ptr<TabletAvailability> m_tablet_availability;
 };
 
 } // namespace master
