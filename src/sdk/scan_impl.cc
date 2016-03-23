@@ -17,8 +17,8 @@
 #include "utils/atomic.h"
 #include "utils/timer.h"
 
-DECLARE_int64(tera_sdk_sacn_number_limit);
-DECLARE_int64(tera_sdk_sacn_buffer_limit);
+DECLARE_int64(tera_sdk_scan_number_limit);
+DECLARE_int64(tera_sdk_scan_buffer_size);
 DECLARE_bool(tera_sdk_scan_async_enabled);
 DECLARE_int64(tera_sdk_scan_async_cache_size);
 DECLARE_int32(tera_sdk_scan_async_parallel_max_num);
@@ -766,8 +766,8 @@ void ResultStreamSyncImpl::Reset() {
 ScanDescImpl::ScanDescImpl(const string& rowkey)
     : _start_timestamp(0),
       _timer_range(NULL),
-      _buf_size(FLAGS_tera_sdk_sacn_buffer_limit),
-      _number_limit(FLAGS_tera_sdk_sacn_number_limit),
+      _buf_size(FLAGS_tera_sdk_scan_buffer_size),
+      _number_limit(FLAGS_tera_sdk_scan_number_limit),
       _is_async(FLAGS_tera_sdk_scan_async_enabled),
       _max_version(1),
       _pack_interval(5000),

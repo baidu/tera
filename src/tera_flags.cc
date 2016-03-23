@@ -252,8 +252,8 @@ DEFINE_int32(tera_sdk_cookie_update_interval, 600, "the interval of cookie updat
 DEFINE_bool(tera_sdk_perf_counter_enabled, true, "enable performance counter log");
 DEFINE_int64(tera_sdk_perf_counter_log_interval, 1, "the interval of performance counter log dumping");
 
-DEFINE_int64(tera_sdk_sacn_buffer_limit, 65536, "default buffer limit for scan");
-DEFINE_int64(tera_sdk_sacn_number_limit, 1000000000, "default number limit for scan");
+DEFINE_int64(tera_sdk_scan_buffer_size, 65536, "default buffer limit for scan");
+DEFINE_int64(tera_sdk_scan_number_limit, 1000000000, "default number limit for scan");
 DEFINE_bool(tera_sdk_scan_async_enabled, false, "enable async scan");
 DEFINE_int64(tera_sdk_scan_async_cache_size, 16, "the max buffer size (in MB) for cached scan results");
 DEFINE_int32(tera_sdk_scan_async_parallel_max_num, 500, "the max number of concurrent task sending");

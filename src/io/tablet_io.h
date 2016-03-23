@@ -5,6 +5,7 @@
 #ifndef TERA_IO_TABLET_IO_H_
 #define TERA_IO_TABLET_IO_H_
 
+#include <limits>
 #include <list>
 #include <map>
 #include <set>
