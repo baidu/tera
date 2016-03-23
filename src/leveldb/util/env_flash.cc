@@ -85,7 +85,7 @@ Status CopyToLocal(const std::string& local_fname, Env* env,
         && local_file->Append(result).ok()) {
         local_size += result.size();
     }
-    delete buf;
+    delete [] buf;
     delete dfs_file;
     delete local_file;
 
