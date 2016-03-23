@@ -303,6 +303,8 @@ class VersionSet {
 
   Status ReadCurrentFile(uint64_t tablet, std::string* dscname);
 
+  bool ModifyFileSize(FileMetaData* f);
+
   Env* const env_;
   const std::string dbname_;
   const Options* const options_;

@@ -13,7 +13,6 @@ DECLARE_int32(tera_master_max_load_concurrency);
 DECLARE_int32(tera_master_max_split_concurrency);
 DECLARE_int32(tera_master_load_interval);
 DECLARE_bool(tera_master_meta_isolate_enabled);
-DECLARE_int32(tera_master_load_balance_accumulate_query_times);
 
 namespace tera {
 namespace master {
@@ -340,26 +339,12 @@ void TabletNodeManager::UpdateTabletNode(const std::string& addr,
     node->m_info.set_tablet_onload(node->m_onload_count);
     node->m_info.set_tablet_onsplit(node->m_onsplit_count);
 
-    TabletNode::MutableCounter latest_counter;
-    latest_counter.m_read_pending = state.m_info.read_pending();
-    latest_counter.m_row_read_delay = state.m_info.extra_info(1).value();
-    node->m_accumulate_counter.m_read_pending += latest_counter.m_read_pending;
-    node->m_accumulate_counter.m_row_read_delay += latest_counter.m_row_read_delay;
-
-    const uint64_t max_counter_size = FLAGS_tera_master_load_balance_accumulate_query_times;
-    uint64_t counter_size = node->m_counter_list.size();
-    if (counter_size >= max_counter_size) {
-        CHECK_EQ(counter_size, max_counter_size);
-        const TabletNode::MutableCounter& earliest_counter = node->m_counter_list.front();
-        node->m_accumulate_counter.m_read_pending -= earliest_counter.m_read_pending;
-        node->m_accumulate_counter.m_row_read_delay -= earliest_counter.m_row_read_delay;
-        node->m_counter_list.pop_front();
-    }
-    node->m_counter_list.push_back(latest_counter);
-
-    counter_size = node->m_counter_list.size();
-    node->m_average_counter.m_read_pending = node->m_accumulate_counter.m_read_pending / counter_size;
-    node->m_average_counter.m_row_read_delay = node->m_accumulate_counter.m_row_read_delay / counter_size;
+    node->m_average_counter.m_read_pending =
+        CounterWeightedSum(state.m_info.read_pending(),
+                           node->m_average_counter.m_read_pending);
+    node->m_average_counter.m_row_read_delay =
+        CounterWeightedSum(state.m_info.extra_info(1).value(),
+                           node->m_average_counter.m_row_read_delay);
     VLOG(15) << "update tabletnode : " << addr;
 }
 

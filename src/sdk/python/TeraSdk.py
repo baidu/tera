@@ -63,14 +63,14 @@ class ScanDescriptor(object):
     def IsAsync(self):
         return lib.tera_scan_descriptor_is_async(self.desc)
 
-    def SetFilterString(self, filter_string):
-        lib.tera_scan_descriptor_set_filter_string(self.desc, filter_string)
-
     def SetSnapshot(self, sid):
         lib.tera_scan_descriptor_set_snapshot(self.desc, sid)
 
     def SetTimeRange(self, start, end):
         lib.tera_scan_descriptor_set_time_range(self.desc, start, end)
+
+    def SetFilter(self, filter_str):
+        return lib.tera_scan_descriptor_set_filter(self.desc, filter_str)
 
 
 class ResultStream(object):
@@ -146,6 +146,9 @@ class ResultStream(object):
         vallen = c_uint64()
         lib.tera_result_stream_value(self.stream, byref(value), byref(vallen))
         return copy_string_to_user(value, long(vallen.value))
+
+    def ValueInt64(self):
+        return lib.tera_result_stream_value_int64(self.stream)
 
     def Timestamp(self):
         """
@@ -303,6 +306,18 @@ class Table(object):
             raise TeraSdkException("get record failed:" + err.value)
         return copy_string_to_user(value, long(vallen.value))
 
+    def GetInt64(self, rowkey, cf, qu, snapshot):
+        err = c_char_p()
+        value = c_int64()
+        result = lib.tera_table_getint64(
+            self.table, rowkey, c_uint64(len(rowkey)), cf,
+            qu, c_uint64(len(qu)), byref(value), byref(err),
+            c_uint64(snapshot)
+        )
+        if not result:
+            raise TeraSdkException("get record failed:" + err.value)
+        return long(value.value)
+
     def Put(self, rowkey, cf, qu, value):
         """ 同步put一个cell的值
 
@@ -318,6 +333,15 @@ class Table(object):
         result = lib.tera_table_put(
             self.table, rowkey, c_uint64(len(rowkey)), cf,
             qu, c_uint64(len(qu)), value, c_uint64(len(value)), byref(err)
+        )
+        if not result:
+            raise TeraSdkException("put record failed:" + err.value)
+
+    def PutInt64(self, rowkey, cf, qu, value):
+        err = c_char_p()
+        result = lib.tera_table_putint64(
+            self.table, rowkey, c_uint64(len(rowkey)), cf,
+            qu, c_uint64(len(qu)), value, byref(err)
         )
         if not result:
             raise TeraSdkException("put record failed:" + err.value)
@@ -401,6 +425,9 @@ def init_function_prototype():
                                              POINTER(c_uint64)]
     lib.tera_result_stream_value.restype = None
 
+    lib.tera_result_stream_value_int64.argtypes = [c_void_p]
+    lib.tera_result_stream_value_int64.restype = c_int64
+
     ###################
     # scan descriptor #
     ###################
@@ -423,9 +450,6 @@ def init_function_prototype():
     lib.tera_scan_descriptor_set_end.argtypes = [c_void_p, c_void_p, c_uint64]
     lib.tera_scan_descriptor_set_end.restype = None
 
-    lib.tera_scan_descriptor_set_filter_string.argtypes = [c_void_p, c_char_p]
-    lib.tera_scan_descriptor_set_filter_string.restype = None
-
     lib.tera_scan_descriptor_set_pack_interval.argtypes = [c_char_p, c_int64]
     lib.tera_scan_descriptor_set_pack_interval.restype = None
 
@@ -441,6 +465,9 @@ def init_function_prototype():
     lib.tera_scan_descriptor_set_time_range.argtypes = [c_void_p,
                                                         c_int64, c_int64]
     lib.tera_scan_descriptor_set_time_range.restype = None
+
+    lib.tera_scan_descriptor_set_filter.argtypes = [c_void_p, c_char_p]
+    lib.tera_scan_descriptor_set_filter.restype = c_bool
 
     ##########
     # client #
@@ -481,10 +508,21 @@ def init_function_prototype():
                                    POINTER(c_char_p), c_uint64]
     lib.tera_table_get.restype = c_bool
 
+    lib.tera_table_getint64.argtypes = [c_void_p, c_char_p, c_uint64,
+                                        c_char_p, c_char_p, c_uint64,
+                                        POINTER(c_int64), POINTER(c_char_p),
+                                        c_uint64]
+    lib.tera_table_getint64.restype = c_bool
+
     lib.tera_table_put.argtypes = [c_void_p, c_char_p, c_uint64, c_char_p,
                                    c_char_p, c_uint64, c_char_p, c_uint64,
                                    POINTER(c_char_p)]
     lib.tera_table_put.restype = c_bool
+
+    lib.tera_table_putint64.argtypes = [c_void_p, c_char_p, c_uint64, c_char_p,
+                                        c_char_p, c_uint64, c_int64,
+                                        POINTER(c_char_p)]
+    lib.tera_table_putint64.restype = c_bool
 
     lib.tera_table_delete.argtypes = [c_void_p, c_char_p, c_uint64,
                                       c_char_p, c_char_p, c_uint64]

@@ -1848,6 +1848,8 @@ class ModelDB: public DB {
   virtual bool BusyWrite() {
     return false;
   }
+  virtual void Workload(double* write_workload) {}
+
   virtual Status Write(const WriteOptions& options, WriteBatch* batch) {
     class Handler : public WriteBatch::Handler {
      public:

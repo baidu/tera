@@ -6,21 +6,25 @@ set -e -u -E # this script will exit if any sub-command fails
 # download & build depend software
 ########################################
 
-WORK_DIR=`pwd`
-DEPS_SOURCE=`pwd`/thirdsrc
-DEPS_PREFIX=`pwd`/thirdparty
+WORK_DIR=$(cd $(dirname $0); pwd)
+DEPS_SOURCE=$WORK_DIR/thirdsrc
+DEPS_PREFIX=$WORK_DIR/thirdparty
 DEPS_CONFIG="--prefix=${DEPS_PREFIX} --disable-shared --with-pic"
-FLAG_DIR=`pwd`/.build
+FLAG_DIR=$WORK_DIR/.build
 
 export PATH=${DEPS_PREFIX}/bin:$PATH
 mkdir -p ${DEPS_SOURCE} ${DEPS_PREFIX} ${FLAG_DIR}
+
+if [ ! -f "$WORK_DIR/depends.mk" ]; then
+    cp $WORK_DIR/depends.mk.template $WORK_DIR/depends.mk
+fi
 
 cd ${DEPS_SOURCE}
 
 # boost
 if [ ! -f "${FLAG_DIR}/boost_1_57_0" ] \
     || [ ! -d "${DEPS_PREFIX}/boost_1_57_0/boost" ]; then
-    wget http://superb-dca2.dl.sourceforge.net/project/boost/boost/1.57.0/boost_1_57_0.tar.gz
+    wget -O boost_1_57_0.tar.gz http://superb-dca2.dl.sourceforge.net/project/boost/boost/1.57.0/boost_1_57_0.tar.gz
     tar zxf boost_1_57_0.tar.gz
     rm -rf ${DEPS_PREFIX}/boost_1_57_0
     mv boost_1_57_0 ${DEPS_PREFIX}
@@ -88,7 +92,7 @@ fi
 if [ ! -f "${FLAG_DIR}/zookeeper_3_4_6" ] \
     || [ ! -f "${DEPS_PREFIX}/lib/libzookeeper_mt.a" ] \
     || [ ! -d "${DEPS_PREFIX}/include/zookeeper" ]; then
-    wget http://www.us.apache.org/dist/zookeeper/stable/zookeeper-3.4.6.tar.gz
+    wget -O zookeeper-3.4.6.tar.gz http://www.us.apache.org/dist/zookeeper/stable/zookeeper-3.4.6.tar.gz
     tar zxf zookeeper-3.4.6.tar.gz
     cd zookeeper-3.4.6/src/c
     ./configure ${DEPS_CONFIG}
@@ -142,15 +146,15 @@ if [ ! -f "${FLAG_DIR}/gtest_1_7_0" ] \
     || [ ! -f "${DEPS_PREFIX}/lib/libgtest.a" ] \
     || [ ! -d "${DEPS_PREFIX}/include/gtest" ]; then
     # wget --no-check-certificate https://googletest.googlecode.com/files/gtest-1.7.0.zip
-    rm -rf gtest_archive
+    rm -rf gtest_archive gtest-1.7.0.zip gtest-1.7.0
     git clone --depth=1 https://github.com/xupeilin/gtest_archive
     mv gtest_archive/gtest-1.7.0.zip .
     unzip gtest-1.7.0.zip
     cd gtest-1.7.0
     ./configure ${DEPS_CONFIG}
     make
-    cp -a lib/.libs/* ${DEPS_PREFIX}/lib
-    cp -a include/gtest ${DEPS_PREFIX}/include
+    cp -af lib/.libs/* ${DEPS_PREFIX}/lib
+    cp -af include/gtest ${DEPS_PREFIX}/include
     cd -
     touch "${FLAG_DIR}/gtest_1_7_0"
 fi
@@ -159,7 +163,7 @@ fi
 if [ ! -f "${FLAG_DIR}/libunwind_0_99_beta" ] \
     || [ ! -f "${DEPS_PREFIX}/lib/libunwind.a" ] \
     || [ ! -f "${DEPS_PREFIX}/include/libunwind.h" ]; then
-    wget http://download.savannah.gnu.org/releases/libunwind/libunwind-0.99-beta.tar.gz
+    wget -O libunwind-0.99-beta.tar.gz http://download.savannah.gnu.org/releases/libunwind/libunwind-0.99-beta.tar.gz
     tar zxf libunwind-0.99-beta.tar.gz
     cd libunwind-0.99-beta
     ./configure ${DEPS_CONFIG}
@@ -206,20 +210,19 @@ cd ${WORK_DIR}
 # config depengs.mk
 ########################################
 
-sed -i 's/^SOFA_PBRPC_PREFIX=.*/SOFA_PBRPC_PREFIX=.\/thirdparty/' depends.mk
-sed -i 's/^PROTOBUF_PREFIX=.*/PROTOBUF_PREFIX=.\/thirdparty/' depends.mk
-sed -i 's/^SNAPPY_PREFIX=.*/SNAPPY_PREFIX=.\/thirdparty/' depends.mk
-sed -i 's/^ZOOKEEPER_PREFIX=.*/ZOOKEEPER_PREFIX=.\/thirdparty/' depends.mk
-sed -i 's/^GFLAGS_PREFIX=.*/GFLAGS_PREFIX=.\/thirdparty/' depends.mk
-sed -i 's/^GLOG_PREFIX=.*/GLOG_PREFIX=.\/thirdparty/' depends.mk
-sed -i 's/^GTEST_PREFIX=.*/GTEST_PREFIX=.\/thirdparty/' depends.mk
-sed -i 's/^GPERFTOOLS_PREFIX=.*/GPERFTOOLS_PREFIX=.\/thirdparty/' depends.mk
-sed -i 's/^BOOST_INCDIR=.*/BOOST_INCDIR=.\/thirdparty\/boost_1_57_0/' depends.mk
-sed -i 's/^INS_PREFIX=.*/INS_PREFIX=.\/thirdparty/' depends.mk
+sed -i "s:^SOFA_PBRPC_PREFIX=.*:SOFA_PBRPC_PREFIX=$DEPS_PREFIX:" depends.mk
+sed -i "s:^PROTOBUF_PREFIX=.*:PROTOBUF_PREFIX=$DEPS_PREFIX:" depends.mk
+sed -i "s:^SNAPPY_PREFIX=.*:SNAPPY_PREFIX=$DEPS_PREFIX:" depends.mk
+sed -i "s:^ZOOKEEPER_PREFIX=.*:ZOOKEEPER_PREFIX=$DEPS_PREFIX:" depends.mk
+sed -i "s:^GFLAGS_PREFIX=.*:GFLAGS_PREFIX=$DEPS_PREFIX:" depends.mk
+sed -i "s:^GLOG_PREFIX=.*:GLOG_PREFIX=$DEPS_PREFIX:" depends.mk
+sed -i "s:^GTEST_PREFIX=.*:GTEST_PREFIX=$DEPS_PREFIX:" depends.mk
+sed -i "s:^GPERFTOOLS_PREFIX=.*:GPERFTOOLS_PREFIX=$DEPS_PREFIX:" depends.mk
+sed -i "s:^BOOST_INCDIR=.*:BOOST_INCDIR=$DEPS_PREFIX/boost_1_57_0:" depends.mk
+sed -i "s:^INS_PREFIX=.*:INS_PREFIX=$DEPS_PREFIX:" depends.mk
 
 ########################################
 # build tera
 ########################################
 
 make -j4
-
