@@ -78,13 +78,14 @@ Status CopyToLocal(const std::string& local_fname, Env* env,
         return s;
     }
 
-    char buf[1048576];
+    char* buf = new char[1048576];
     Slice result;
     local_size = 0;
     while (dfs_file->Read(1048576, &result, buf).ok() && result.size() > 0
         && local_file->Append(result).ok()) {
         local_size += result.size();
     }
+    delete buf;
     delete dfs_file;
     delete local_file;
 
