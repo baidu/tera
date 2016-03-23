@@ -227,15 +227,15 @@ void TabletNodeZkAdapter::OnSafeModeMarkDeleted() {
 }
 
 void TabletNodeZkAdapter::OnKickMarkCreated() {
-    LOG(FATAL) << "kick mark node is created";
-    exit(1);
+    LOG(ERROR) << "kick mark node is created";
+    _Exit(EXIT_FAILURE);
 //    Finalize();
 //    m_tabletnode_impl->ExitService();
 }
 
 void TabletNodeZkAdapter::OnSelfNodeDeleted() {
-    LOG(FATAL) << "self node is deleted";
-    exit(1);
+    LOG(ERROR) << "self node is deleted";
+    _Exit(EXIT_FAILURE);
 //    m_tabletnode_impl->ExitService();
 }
 
@@ -301,7 +301,8 @@ void FakeTabletNodeZkAdapter::Init() {
     m_tabletnode_impl->SetTabletNodeStatus(TabletNodeImpl::kIsRunning);
 
     if (!Register(m_tabletnode_impl->GetSessionId())) {
-        LOG(FATAL) << "fail to create fake serve-node.";
+        LOG(ERROR) << "fail to create fake serve-node.";
+        _Exit(EXIT_FAILURE);
     }
     LOG(INFO) << "create fake serve-node success: " << m_tabletnode_impl->GetSessionId();
 }
@@ -311,8 +312,9 @@ bool FakeTabletNodeZkAdapter::Register(const std::string& session_id, int* zk_co
     std::string node_name = m_fake_path + kTsListPath + "/" + session_id;
 
     if (!zk::FakeZkUtil::WriteNode(node_name, m_server_addr)) {
-        LOG(FATAL) << "fake zk error: " << node_name
+        LOG(ERROR) << "fake zk error: " << node_name
             << ", " << m_server_addr;
+        _Exit(EXIT_FAILURE);
     }
     return true;
 }
@@ -321,8 +323,9 @@ bool FakeTabletNodeZkAdapter::GetRootTableAddr(std::string* root_table_addr) {
     MutexLock locker(&m_mutex);
     std::string root_table = m_fake_path + kRootTabletNodePath;
     if (!zk::FakeZkUtil::ReadNode(root_table, root_table_addr)) {
-        LOG(FATAL) << "fake zk error: " << root_table
+        LOG(ERROR) << "fake zk error: " << root_table
             << ", " << *root_table_addr;
+        _Exit(EXIT_FAILURE);
     }
     return true;
 }
@@ -397,14 +400,14 @@ void InsTabletNodeZkAdapter::OnMetaChange(std::string meta_addr, bool deleted) {
 }
 
 void InsTabletNodeZkAdapter::OnKickMarkCreated() {
-    LOG(FATAL) << "I am kicked by master";
-    abort();
+    LOG(ERROR) << "I am kicked by master";
+    _Exit(EXIT_FAILURE);
 }
 
 void InsTabletNodeZkAdapter::OnLockChange(std::string session_id, bool deleted) {
     if (deleted || session_id != m_ins_sdk->GetSessionID()) {
-        LOG(FATAL) << "I lost my lock , so quit";
-        abort();
+        LOG(ERROR) << "I lost my lock , so quit";
+        _Exit(EXIT_FAILURE);
     }
 }
 

@@ -74,7 +74,7 @@ public:
     }
 };
 
-// eche strategy object has its own inner status or context,
+// each strategy object has its own inner status or context,
 // so create anew one when needed.
 
 class CompactStrategyFactory {
@@ -82,6 +82,7 @@ public:
     virtual ~CompactStrategyFactory() {}
     virtual CompactStrategy* NewInstance() = 0;
     virtual const char* Name() const = 0;
+    virtual void SetArg(const void* arg) = 0;
 };
 
 class DummyCompactStrategyFactory : public CompactStrategyFactory {
@@ -92,6 +93,7 @@ public:
     virtual const char* Name() const {
         return "leveldb.DummyCompactStrategyFactory";
     }
+    virtual void SetArg(const void* arg) {}
 };
 
 } // namespace leveldb

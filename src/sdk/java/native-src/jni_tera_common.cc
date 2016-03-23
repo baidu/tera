@@ -24,7 +24,7 @@ void SendErrorJ(JNIEnv *env, jobject jobj, std::string msg) {
     env->SetObjectField(jobj,
                         env->GetFieldID(jc, "nativeMsg", "Ljava/lang/String;"),
                         jmsg);
-    LOG(ERROR) << msg;
+    VLOG(10) << msg;
 }
 
 void InitFlags(std::string confpath) {

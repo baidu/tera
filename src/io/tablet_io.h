@@ -22,6 +22,7 @@
 #include "proto/proto_helper.h"
 #include "proto/status_code.pb.h"
 #include "proto/table_meta.pb.h"
+#include "proto/table_schema.pb.h"
 #include "proto/tabletnode_rpc.pb.h"
 #include "types.h"
 #include "utils/counter.h"
@@ -58,8 +59,10 @@ public:
         int64_t timeout;
 
         ScanOptions()
-            : max_versions(UINT32_MAX), version_num(0), max_size(UINT32_MAX), number_limit(INT64_MAX),
-              ts_start(kOldestTs), ts_end(kLatestTs), snapshot_id(0), timeout(INT64_MAX / 2)
+            : max_versions(std::numeric_limits<uint32_t>::max()),
+              version_num(0), max_size(std::numeric_limits<uint32_t>::max()),
+              number_limit(std::numeric_limits<int64_t>::max()),
+              ts_start(kOldestTs), ts_end(kLatestTs), snapshot_id(0), timeout(std::numeric_limits<int64_t>::max() / 2)
         {}
     };
 
@@ -85,7 +88,8 @@ public:
     std::string GetStartKey() const;
     std::string GetEndKey() const;
     virtual CompactStatus GetCompactStatus() const;
-    virtual const TableSchema& GetSchema() const;
+    virtual TableSchema GetSchema() const;
+    RawKey RawKeyType() const;
     bool KvOnly() const { return m_kv_only; }
     StatCounter& GetCounter();
     // tablet
@@ -108,6 +112,7 @@ public:
     virtual bool AddInheritedLiveFiles(std::vector<std::set<uint64_t> >* live);
 
     bool IsBusy();
+    bool Workload(double* write_workload);
 
     bool SnapshotIDToSeq(uint64_t snapshot_id, uint64_t* snapshot_sequence);
 
@@ -172,6 +177,7 @@ public:
     static bool FindAverageKey(const std::string& start, const std::string& end,
                                std::string* res);
 
+    void ApplySchema(const TableSchema& schema);
 private:
     friend class TabletWriter;
     bool WriteWithoutLock(const std::string& key, const std::string& value,
@@ -224,7 +230,19 @@ private:
                     int64_t ts, leveldb::Slice value, KeyValuePair* kv);
 
     bool ParseRowKey(const std::string& tera_key, std::string* row_key);
+    bool ShouldFilterRowBuffer(std::list<KeyValuePair>& row_buf,
+                               const ScanOptions& scan_options);
 
+    bool ScanWithFilter(const ScanOptions& scan_options);
+    bool IsCompleteRow(const std::list<KeyValuePair>& row_buf,
+                       leveldb::Iterator* it);
+    bool ShouldFilterRow(const ScanOptions& scan_options,
+                           const std::list<KeyValuePair>& row_buf,
+                           leveldb::Iterator* it);
+    void GotoNextRow(const std::list<KeyValuePair>& row_buf,
+                     leveldb::Iterator* it,
+                     KeyValuePair* next);
+    void SetSchema(const TableSchema& schema);
 private:
     mutable Mutex m_mutex;
     TabletWriter* m_async_writer;
@@ -253,6 +271,7 @@ private:
     std::map<std::string, uint32_t> m_lg_id_map;
     StreamScanManager m_stream_scan;
     StatCounter m_counter;
+    mutable Mutex m_schema_mutex;
 };
 
 } // namespace io

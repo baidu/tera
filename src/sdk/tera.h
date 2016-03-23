@@ -235,6 +235,7 @@ public:
     virtual int64_t Timestamp() const = 0;
     /// Value
     virtual std::string Value() const = 0;
+    virtual int64_t ValueInt64() const = 0;
     ResultStream() {}
     virtual ~ResultStream() {}
 
@@ -261,8 +262,8 @@ public:
     void SetPackInterval(int64_t timeout);
     /// 设置返回版本的时间范围
     void SetTimeRange(int64_t ts_end, int64_t ts_start);
-    /// 设置过滤表达式（仅支持AND）
-    bool SetFilterString(const std::string& filter_string);
+
+    bool SetFilter(const std::string& schema);
     typedef bool (*ValueConverter)(const std::string& in,
                                    const std::string& type,
                                    std::string* out);

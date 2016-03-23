@@ -18,7 +18,7 @@ def main():
         print(e.reason)
         return
     try:
-        table = client.OpenTable("oops2")
+        table = client.OpenTable("oops")
     except TeraSdkException as e:
         print(e.reason)
         return
@@ -55,6 +55,36 @@ def main():
         time.sleep(0.01)
 
     print("main() done\n")
+
+
+def put_get_int64(table, rowkey, cf, qu, value):
+    try:
+        table.PutInt64(rowkey, cf, qu, value)
+        print("i got:" + str(table.GetInt64(rowkey, cf, qu, 0)))
+    except TeraSdkException as e:
+        print(e.reason)
+
+
+def scan_with_filter(table):
+    from TeraSdk import ScanDescriptor
+    scan_desc = ScanDescriptor("")
+    scan_desc.SetBufferSize(1024 * 1024)  # 1MB
+    if not scan_desc.SetFilter("SELECT * WHERE int64 cf0 >= 0"):
+        print("invalid filter")
+        return
+    try:
+        stream = table.Scan(scan_desc)
+    except TeraSdkException as e:
+        print(e.reason)
+        return
+
+    while not stream.Done():
+        row = stream.RowName()
+        column = stream.ColumnName()
+        timestamp = str(stream.Timestamp())
+        val = stream.ValueInt64()
+        print row + ":" + column + ":" + timestamp + ":" + str(val)
+        stream.Next()
 
 
 def my_mu_callback(raw_mu):

@@ -29,6 +29,7 @@ DEFINE_int32(tera_zk_retry_max_times, 10, "zookeeper operation max retry times")
 DEFINE_string(tera_zk_lib_log_path, "../log/zk.log", "zookeeper library log output file");
 DEFINE_string(tera_log_prefix, "", "prefix of log file (INFO, WARNING)");
 DEFINE_string(tera_local_addr, "", "local host's ip address");
+DEFINE_bool(tera_online_schema_update_enabled, false, "enable online-schema-update");
 
 /////////  io  /////////
 
@@ -64,7 +65,7 @@ DEFINE_int32(tera_memenv_block_cache_size, 20, "block cache size for leveldb whi
 
 DEFINE_string(tera_leveldb_compact_strategy, "default", "the default strategy to drive consum compaction, should be [default|LG|dummy]");
 DEFINE_bool(tera_leveldb_verify_checksums, true, "enable verify data read from storage against checksums");
-DEFINE_bool(tera_leveldb_ignore_corruption_in_compaction, true, "skip corruption blocks of sst file in compaction");
+DEFINE_bool(tera_leveldb_ignore_corruption_in_compaction, false, "skip corruption blocks of sst file in compaction");
 
 DEFINE_int64(tera_io_scan_stream_task_max_num, 5000, "the max number of concurrent rpc task");
 DEFINE_int64(tera_io_scan_stream_task_pending_time, 180, "the max pending time (in sec) for timeout and interator cleaning");
@@ -92,8 +93,8 @@ DEFINE_int32(tera_master_cache_keep_min, 512, "the minimal free cache size (in M
 
 DEFINE_int32(tera_master_thread_min_num, 1, "the min thread number of master server");
 DEFINE_int32(tera_master_thread_max_num, 10, "the max thread number of master server");
-DEFINE_int32(tera_master_impl_thread_min_num, 1, "the min thread number for master impl operations");
 DEFINE_int32(tera_master_impl_thread_max_num, 20, "the max thread number for master impl operations");
+DEFINE_int32(tera_master_impl_query_thread_num, 20, "the thread number for master impl query tabletnodes");
 DEFINE_int32(tera_master_impl_retry_times, 5, "the max retry times when master impl operation fail");
 
 DEFINE_string(tera_master_meta_table_name, "meta_table", "the meta table name");
@@ -102,11 +103,15 @@ DEFINE_string(tera_master_meta_table_path, "meta", "the path of meta table");
 DEFINE_int64(tera_master_split_tablet_size, 512, "the size (in MB) of tablet to trigger split");
 DEFINE_bool(tera_master_merge_enabled, false, "enable the auto-merge tablet");
 DEFINE_int64(tera_master_merge_tablet_size, 0, "the size (in MB) of tablet to trigger merge");
-DEFINE_string(tera_master_gc_strategy, "default", "gc strategy, [default, incremental]");
+DEFINE_string(tera_master_gc_strategy, "incremental", "gc strategy, [default, incremental]");
 
 DEFINE_int32(tera_master_max_split_concurrency, 1, "the max concurrency of tabletnode for split tablet");
 DEFINE_int32(tera_master_max_load_concurrency, 5, "the max concurrency of tabletnode for load tablet");
+DEFINE_int32(tera_master_max_move_concurrency, 50, "the max concurrency for move tablet");
 DEFINE_int32(tera_master_load_interval, 300, "the delay interval (in sec) for load tablet");
+
+DEFINE_int32(tera_master_schema_update_retry_period, 1, "the period (in second) to poll schema update");
+DEFINE_int32(tera_master_schema_update_retry_times, 60000, "the max retry times of syncing new schema to ts");
 
 // load balance
 DEFINE_bool(tera_master_move_tablet_enabled, true, "enable master to auto move tablet");
@@ -114,8 +119,7 @@ DEFINE_bool(tera_master_meta_isolate_enabled, false, "enable master to reserve a
 DEFINE_int32(tera_master_load_balance_period, 10000, "the period (in ms) for load balance policy execute");
 DEFINE_bool(tera_master_load_balance_table_grained, true, "whether the load balance policy only consider the specified table");
 DEFINE_double(tera_master_load_balance_size_ratio_trigger, 1.2, "ratio of heaviest node size to lightest to trigger load balance");
-DEFINE_bool(tera_master_load_balance_qps_policy_enabled, false, "enable QPS load balance");
-DEFINE_int32(tera_master_load_balance_accumulate_query_times, 10, "summarize how many queries to make QPS load-balance decision");
+DEFINE_int32(tera_master_load_balance_read_pending_threshold, 5000, "read pending threshold in QPS load-balance decision");
 
 DEFINE_double(tera_safemode_tablet_locality_ratio, 0.9, "the tablet locality ratio threshold of safemode");
 DEFINE_bool(tera_master_kick_tabletnode_enabled, true, "enable master to kick tabletnode");
@@ -143,6 +147,10 @@ DEFINE_int64(tera_master_stat_table_interval, 60, "interval of system status dum
 DEFINE_int64(tera_master_stat_table_splitsize, 100, "default split size of stat table");
 
 DEFINE_int32(tera_master_gc_period, 60000, "the period (in ms) for master gc");
+
+DEFINE_bool(tera_master_available_check_enabled, true, "whether execute availability check");
+DEFINE_int64(tera_master_not_available_threshold, 30, "the threshold (in s) of not available");
+DEFINE_int64(tera_master_available_check_period, 300, "the period (in s) of availability check");
 
 ///////// tablet node  /////////
 
@@ -173,6 +181,7 @@ DEFINE_int32(tera_asyncwriter_batch_size, 1024, "write batch to leveldb per X KB
 DEFINE_int32(tera_request_pending_limit, 100000, "the max read/write request pending");
 DEFINE_int32(tera_scan_request_pending_limit, 1000, "the max scan request pending");
 DEFINE_int32(tera_garbage_collect_period, 1800, "garbage collect period in s");
+DEFINE_int32(tera_garbage_collect_debug_log, 0, "garbage collect debug log");
 
 DEFINE_int32(tera_tabletnode_write_meta_rpc_timeout, 60000, "the timeout period (in ms) for tabletnode write meta");
 DEFINE_int32(tera_tabletnode_retry_period, 100, "the retry interval period (in ms) when operate tablet");

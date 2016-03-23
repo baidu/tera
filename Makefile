@@ -14,7 +14,8 @@ INCPATH += -I./src -I./include -I./src/leveldb/include -I./src/leveldb \
 		   -I./src/sdk/java/native-src $(DEPS_INCPATH)
 CFLAGS += $(OPT) $(SHARED_CFLAGS) $(INCPATH)
 CXXFLAGS += $(OPT) $(SHARED_CFLAGS) $(INCPATH)
-LDFLAGS += -rdynamic $(DEPS_LDPATH) $(DEPS_LDFLAGS) -lpthread -lrt -lz -ldl
+LDFLAGS += -rdynamic $(DEPS_LDPATH) $(DEPS_LDFLAGS) -lpthread -lrt -lz -ldl \
+           -lreadline -lncurses
 
 PROTO_FILES := $(wildcard src/proto/*.proto)
 PROTO_OUT_CC := $(PROTO_FILES:.proto=.pb.cc)
@@ -24,19 +25,22 @@ MASTER_SRC := $(wildcard src/master/*.cc)
 TABLETNODE_SRC := $(wildcard src/tabletnode/*.cc)
 IO_SRC := $(wildcard src/io/*.cc)
 SDK_SRC := $(wildcard src/sdk/*.cc)
+HTTP_SRC := $(wildcard src/sdk/http/*.cc)
 PROTO_SRC := $(filter-out %.pb.cc, $(wildcard src/proto/*.cc)) $(PROTO_OUT_CC)
 JNI_TERA_SRC := $(wildcard src/sdk/java/native-src/*.cc)
 VERSION_SRC := src/version.cc
 OTHER_SRC := $(wildcard src/zk/*.cc) $(wildcard src/utils/*.cc) $(VERSION_SRC) \
-	     src/tera_flags.cc
+             src/tera_flags.cc
 COMMON_SRC := $(wildcard src/common/base/*.cc) $(wildcard src/common/net/*.cc) \
-              $(wildcard src/common/file/*.cc) $(wildcard src/common/file/recordio/*.cc)
+              $(wildcard src/common/file/*.cc) $(wildcard src/common/file/recordio/*.cc) \
+			  $(wildcard src/common/console/*.cc) 
 SERVER_SRC := src/tera_main.cc src/tera_entry.cc
 CLIENT_SRC := src/teracli_main.cc
 TERA_C_SRC := src/tera_c.cc
 MONITOR_SRC := src/monitor/teramo_main.cc
 MARK_SRC := src/benchmark/mark.cc src/benchmark/mark_main.cc
-TEST_SRC := src/utils/test/prop_tree_test.cc src/utils/test/tprinter_test.cc src/io/test/tablet_io_test.cc
+TEST_SRC := src/utils/test/prop_tree_test.cc src/utils/test/tprinter_test.cc \
+			src/io/test/tablet_io_test.cc
 
 TEST_OUTPUT := test_output
 UNITTEST_OUTPUT := $(TEST_OUTPUT)/unittest
@@ -54,28 +58,31 @@ CLIENT_OBJ := $(CLIENT_SRC:.cc=.o)
 TERA_C_OBJ := $(TERA_C_SRC:.cc=.o)
 MONITOR_OBJ := $(MONITOR_SRC:.cc=.o)
 MARK_OBJ := $(MARK_SRC:.cc=.o)
+HTTP_OBJ := $(HTTP_SRC:.cc=.o)
 TEST_OBJ := $(TEST_SRC:.cc=.o)
 ALL_OBJ := $(MASTER_OBJ) $(TABLETNODE_OBJ) $(IO_OBJ) $(SDK_OBJ) $(PROTO_OBJ) \
            $(JNI_TERA_OBJ) $(OTHER_OBJ) $(COMMON_OBJ) $(SERVER_OBJ) $(CLIENT_OBJ) \
            $(TERA_C_OBJ) $(MONITOR_OBJ) $(MARK_OBJ) $(TEST_OBJ)
 LEVELDB_LIB := src/leveldb/libleveldb.a
-TERA_C_SO = libtera_c.so
 
 PROGRAM = tera_main teracli teramo
 LIBRARY = libtera.a
+SOLIBRARY = libtera.so
+TERA_C_SO = libtera_c.so
 JNILIBRARY = libjni_tera.so
 BENCHMARK = tera_bench tera_mark
-TESTS = prop_tree_test tprinter_test string_util_test tablet_io_test
+TESTS = prop_tree_test tprinter_test string_util_test tablet_io_test \
+		fragment_test progress_bar_test
 
 
 .PHONY: all clean cleanall test
 
-all: $(PROGRAM) $(LIBRARY) $(TERA_C_SO) $(JNILIBRARY) $(BENCHMARK) $(TESTS)
+all: $(PROGRAM) $(LIBRARY) $(SOLIBRARY) $(TERA_C_SO) $(JNILIBRARY) $(BENCHMARK) $(TESTS)
 	mkdir -p build/include build/lib build/bin build/log build/benchmark
 	mkdir -p $(UNITTEST_OUTPUT)
 	mv $(TESTS) $(UNITTEST_OUTPUT)
 	cp $(PROGRAM) build/bin
-	cp $(LIBRARY) $(TERA_C_SO) $(JNILIBRARY) build/lib
+	cp $(LIBRARY) $(SOLIBRARY) $(TERA_C_SO) $(JNILIBRARY) build/lib
 	cp src/leveldb/tera_bench .
 	cp -r benchmark/*.sh $(BENCHMARK) build/benchmark
 	cp src/sdk/tera.h build/include
@@ -90,7 +97,7 @@ check: $(TESTS)
 clean:
 	rm -rf $(ALL_OBJ) $(PROTO_OUT_CC) $(PROTO_OUT_H) $(TEST_OUTPUT)
 	$(MAKE) clean -C src/leveldb
-	rm -rf $(PROGRAM) $(LIBRARY) $(TERA_C_SO) $(JNILIBRARY) $(BENCHMARK) $(TESTS)
+	rm -rf $(PROGRAM) $(LIBRARY) $(TERA_C_SO) $(JNILIBRARY) $(BENCHMARK) $(TESTS) terahttp
 
 cleanall:
 	$(MAKE) clean
@@ -104,6 +111,9 @@ tera_main: $(SERVER_OBJ) $(LEVELDB_LIB) $(MASTER_OBJ) $(TABLETNODE_OBJ) \
 libtera.a: $(SDK_OBJ) $(PROTO_OBJ) $(OTHER_OBJ) $(COMMON_OBJ)
 	$(AR) -rs $@ $(SDK_OBJ) $(PROTO_OBJ) $(OTHER_OBJ) $(COMMON_OBJ)
 
+libtera.so: $(SDK_OBJ) $(PROTO_OBJ) $(OTHER_OBJ) $(COMMON_OBJ)
+	$(CXX) -o $@ $^ $(SHARED_LDFLAGS) $(LDFLAGS)
+
 libtera_c.so: $(TERA_C_OBJ) $(SDK_OBJ) $(PROTO_OBJ) $(OTHER_OBJ) $(COMMON_OBJ)
 	$(CXX) -o $@ $(TERA_C_OBJ) $(SDK_OBJ) $(PROTO_OBJ) $(OTHER_OBJ) $(COMMON_OBJ) $(SHARED_LDFLAGS) \
 	-Xlinker "-(" $(LDFLAGS) -Xlinker "-)"
@@ -116,6 +126,9 @@ teramo: $(MONITOR_OBJ) $(LIBRARY)
 
 tera_mark: $(MARK_OBJ) $(LIBRARY) $(LEVELDB_LIB)
 	$(CXX) -o $@ $(MARK_OBJ) $(LIBRARY) $(LEVELDB_LIB) $(LDFLAGS)
+
+terahttp: $(HTTP_OBJ) $(PROTO_OBJ) $(LIBRARY)
+	$(CXX) -o $@ $(HTTP_OBJ) $(PROTO_OBJ) $(LIBRARY) $(LDFLAGS)
 
 libjni_tera.so: $(JNI_TERA_OBJ) $(LIBRARY)
 	$(CXX) -shared $(JNI_TERA_OBJ) -Xlinker "-(" $(LIBRARY) $(LDFLAGS) -Xlinker "-)" -o $@
@@ -137,6 +150,12 @@ string_util_test: src/utils/test/string_util_test.o $(LIBRARY)
 
 tablet_io_test: src/io/test/tablet_io_test.o src/tabletnode/tabletnode_sysinfo.o\
 		$(IO_OBJ) $(PROTO_OBJ) $(OTHER_OBJ) $(COMMON_OBJ) $(LEVELDB_LIB)
+	$(CXX) -o $@ $^ $(LDFLAGS)
+
+fragment_test: src/utils/test/fragment_test.o src/utils/fragment.o
+	$(CXX) -o $@ $^ $(LDFLAGS)
+
+progress_bar_test: src/common/console/progress_bar_test.o src/common/console/progress_bar.o
 	$(CXX) -o $@ $^ $(LDFLAGS)
 
 $(ALL_OBJ): %.o: %.cc $(PROTO_OUT_H)

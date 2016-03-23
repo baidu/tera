@@ -235,7 +235,7 @@ bool HashClient::Seek(const HashScanDesc& desc, ErrorCode* err) {
         scan_desc.SetBufferSize(FLAGS_tera_hash_sdk_scan_buffer_size);
     }
     if (!desc.filter_expression.empty()) {
-        scan_desc.SetFilterString(desc.filter_expression);
+        scan_desc.SetFilter(desc.filter_expression);
     }
 
     if (desc.converter) {
