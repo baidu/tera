@@ -876,10 +876,6 @@ void ScanDescImpl::SetNumberLimit(int64_t number_limit) {
     _number_limit = number_limit;
 }
 
-int64_t ScanDescImpl::GetNumberLimit() {
-    return _number_limit;
-}
-
 void ScanDescImpl::SetAsync(bool async) {
     _is_async = async;
 }
@@ -941,6 +937,10 @@ const ValueConverter ScanDescImpl::GetValueConverter() const {
 
 int64_t ScanDescImpl::GetBufferSize() const {
     return _buf_size;
+}
+
+int64_t ScanDescImpl::GetNumberLimit() {
+    return _number_limit;
 }
 
 bool ScanDescImpl::IsAsync() const {

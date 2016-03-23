@@ -259,8 +259,6 @@ public:
 
     void SetNumberLimit(int64_t number_limit);
 
-    int64_t GetNumberLimit();
-
     void SetAsync(bool async);
 
     void SetStart(const std::string& row_key, const std::string& column_family = "",
@@ -295,6 +293,8 @@ public:
     uint64_t GetSnapshot() const;
 
     int64_t GetBufferSize() const;
+
+    int64_t GetNumberLimit();
 
     bool IsAsync() const;
 
