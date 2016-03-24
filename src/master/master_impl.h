@@ -232,7 +232,7 @@ private:
     void UnloadTabletAsync(std::string table_name, std::string key_start,
                            std::string server_addr, int32_t retry);
 
-    void RetryLoadTablet(TabletPtr tablet, int32_t retry_times);
+    void RetryLoadTablet(TabletPtr tablet, int32_t retry_times, bool new_db = false);
     void RetryUnloadTablet(TabletPtr tablet, int32_t retry_times);
     bool TrySplitTablet(TabletPtr tablet);
     bool TryMergeTablet(TabletPtr tablet);
@@ -249,7 +249,7 @@ private:
 
     bool CreateAndLoadTable(const std::string& table_name,
                             bool compress, StoreMedium store, StatusCode* status);
-    void LoadTabletAsync(TabletPtr tablet, LoadClosure* done,
+    void LoadTabletAsync(TabletPtr tablet, LoadClosure* done, bool new_db = false,
                          uint64_t timer_id = 0);
     void LoadTabletCallback(TabletPtr tablet, int32_t retry,
                             LoadTabletRequest* request,

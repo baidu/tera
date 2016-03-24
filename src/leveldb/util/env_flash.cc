@@ -112,6 +112,7 @@ Status CopyToLocal(const std::string& local_fname, Env* env,
         s = IOError("dfs fsize mismatch", file_size);
     }
     Env::Default()->DeleteFile(local_fname);
+    env->DeleteFile(fname);
     return s;
 }
 
@@ -333,9 +334,21 @@ Status FlashEnv::NewSequentialFile(const std::string& fname, SequentialFile** re
 Status FlashEnv::NewRandomAccessFile(const std::string& fname,
         uint64_t fsize, RandomAccessFile** result)
 {
-    FlashRandomAccessFile* f =
-        new FlashRandomAccessFile(posix_env_, dfs_env_, fname,
-                                  fsize, vanish_allowed_);
+    FlashRandomAccessFile* f = NULL;
+    {
+        MutexLock l(&mask_mutex_);
+        if (mask_files_.find(fname) == mask_files_.end()) {
+            mask_mutex_.Unlock();
+            f = new FlashRandomAccessFile(posix_env_, dfs_env_, fname,
+                                          fsize, vanish_allowed_);
+            mask_mutex_.Lock();
+            if (!f->isValid()) {
+                mask_files_.insert(fname);
+                delete f;
+                f = NULL;
+            }
+        }
+    }
     if (f == NULL || !f->isValid()) {
         *result = NULL;
         delete f;
@@ -381,6 +394,7 @@ Status FlashEnv::GetChildren(const std::string& path,
 
 Status FlashEnv::DeleteFile(const std::string& fname)
 {
+
     posix_env_->DeleteFile(FlashEnv::FlashPath(fname) + fname);
     return dfs_env_->DeleteFile(fname);
 }
@@ -399,6 +413,10 @@ Status FlashEnv::CreateDir(const std::string& name)
 
 Status FlashEnv::DeleteDir(const std::string& name)
 {
+    {
+        MutexLock l(&mask_mutex_);
+        mask_files_.erase(name);
+    }
     posix_env_->DeleteDir(FlashEnv::FlashPath(name) + name);
     return dfs_env_->DeleteDir(name);
 };
