@@ -125,9 +125,9 @@ private:
     SequentialFile* flash_file_;
 
 public:
-    FlashSequentialFile(Env* posix_env, Env* dfs_env, const std::string& fname)
+    FlashSequentialFile(FlashEnv* flash_env, const std::string& fname)
         :dfs_file_(NULL), flash_file_(NULL) {
-        dfs_env->NewSequentialFile(fname, &dfs_file_);
+        flash_env->BaseEnv()->NewSequentialFile(fname, &dfs_file_);
     }
 
     virtual ~FlashSequentialFile() {
@@ -173,7 +173,7 @@ private:
 public:
     FlashRandomAccessFile(FlashEnv* flash_env, const std::string& fname, uint64_t fsize)
         : flash_env_(flash_env), dfs_file_(NULL), flash_file_(NULL), fname_(fname),
-          local_fname_(FlashEnv::FlashPath(fname) + fname), fsize_(fsize),
+          local_fname_(flash_env->FlashPath(fname) + fname), fsize_(fsize),
           flash_file_is_checking_(false), flash_file_last_check_micros_(0),
           flash_file_check_interval_micros_(kFlashFileCheckIntervalMicros),
           read_dfs_count_(0) {
@@ -266,9 +266,9 @@ private:
     WritableFile* flash_file_;
     std::string local_fname_;
 public:
-    FlashWritableFile(Env* posix_env, Env* dfs_env, const std::string& fname)
+    FlashWritableFile(FlashEnv* flash_env, const std::string& fname)
         :dfs_file_(NULL), flash_file_(NULL) {
-        Status s = dfs_env->NewWritableFile(fname, &dfs_file_);
+        Status s = flash_env->BaseEnv()->NewWritableFile(fname, &dfs_file_);
         if (!s.ok()) {
             return;
         }
@@ -276,13 +276,13 @@ public:
             // Log(logger, "[env_flash] Don't cache %s\n", fname.c_str());
             return;
         }
-        local_fname_ = FlashEnv::FlashPath(fname) + fname;
+        local_fname_ = flash_env->FlashPath(fname) + fname;
         for(size_t i = 1; i < local_fname_.size(); i++) {
             if (local_fname_.at(i) == '/') {
-                posix_env->CreateDir(local_fname_.substr(0,i));
+                flash_env->CacheEnv()->CreateDir(local_fname_.substr(0,i));
             }
         }
-        s = posix_env->NewWritableFile(local_fname_, &flash_file_);
+        s = flash_env->CacheEnv()->NewWritableFile(local_fname_, &flash_file_);
         if (!s.ok()) {
             Log("[env_flash] Open local flash file for write fail: %s\n",
                 local_fname_.c_str());
@@ -360,10 +360,10 @@ public:
     }
 };
 
-std::vector<std::string> FlashEnv::flash_paths_(1, "./flash");
 
 FlashEnv::FlashEnv(Env* base_env)
   : EnvWrapper(Env::Default()), dfs_env_(base_env), posix_env_(Env::Default()),
+    flash_paths_(1, "./flash"), vanish_allowed_(false), force_read_from_cache_(true),
     update_flash_retry_interval_millis_(kUpdateFlashRetryIntervalMillis)
 {
 }
@@ -375,7 +375,7 @@ FlashEnv::~FlashEnv()
 // SequentialFile
 Status FlashEnv::NewSequentialFile(const std::string& fname, SequentialFile** result)
 {
-    FlashSequentialFile* f = new FlashSequentialFile(posix_env_, dfs_env_, fname);
+    FlashSequentialFile* f = new FlashSequentialFile(this, fname);
     if (!f->isValid()) {
         delete f;
         *result = NULL;
@@ -411,7 +411,7 @@ Status FlashEnv::NewWritableFile(const std::string& fname,
         WritableFile** result)
 {
     Status s;
-    FlashWritableFile* f = new FlashWritableFile(posix_env_, dfs_env_, fname);
+    FlashWritableFile* f = new FlashWritableFile(this, fname);
     if (f == NULL || !f->isValid()) {
         *result = NULL;
         delete f;
@@ -603,10 +603,6 @@ void FlashEnv::UpdateFlashFile(const std::string& fname, uint64_t fsize) {
         }
     }
 }
-
-bool FlashEnv::vanish_allowed_ = false;
-bool FlashEnv::force_read_from_cache_ = true;
-ThreadPool FlashEnv::update_flash_threads_;
 
 Env* NewFlashEnv(Env* base_env)
 {
