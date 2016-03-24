@@ -24,6 +24,8 @@
 
 ## 性能优化
 
+[针对表格不同读写特性的性能优化建议](https://github.com/baidu/tera/blob/master/doc/perf_opz.md)
+
 ## 功能实现
 
 [动态负载均衡](https://github.com/baidu/tera/blob/master/doc/load-balance.md)
