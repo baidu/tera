@@ -35,6 +35,7 @@ DEFINE_int64(entry_limit, 0, "writing/reading speed limit");
 
 int mode = 0;
 int type = 0;
+volatile bool is_quit = false;
 
 bool parse_row(const char* buffer, ssize_t size,
                int* op, std::string* row,
@@ -343,7 +344,7 @@ void* print_proc(void* param) {
     Adapter* adapter = (Adapter*)param;
     usleep(1000000);
     int64_t count = 0;
-    for (;;) {
+    while (!is_quit) {
         if (count % 10 == 0) {
             std::cout << std::endl;
             print_header();
@@ -408,6 +409,7 @@ void* print_proc(void* param) {
 
         count++;
     }
+    return NULL;
 }
 
 void print_summary(Statistic* marker, double duration) {
@@ -639,7 +641,8 @@ int main(int argc, char** argv) {
     double duration = (finish_time.tv_sec - start_time.tv_sec)
         + (double)(finish_time.tv_usec - start_time.tv_usec) / 1000000.0;
 
-    pthread_cancel(print_thread);
+    is_quit = true;
+    pthread_join(print_thread, NULL);
 
     print_summary_proc(adapter, duration);
     delete adapter;
