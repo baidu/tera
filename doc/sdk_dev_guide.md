@@ -2,19 +2,19 @@
 
 [Java SDK从这进入](https://github.com/baidu/tera/blob/master/doc/sdk_dev_guide_for_java.md)
 
-**目录**
-  1. [主要数据结构](#main-data-structure)
-   * tera::Client、tera::Table
-   * RowMutation、RowReader、ScanDescriptor/ResultStream
-   * TableDescriptor、LocalityGroupDescriptor、ColumnFamilyDescriptor
-  2. [主要功能及代码示例](#sample-code)
-   * [表格管理](#table-management)
-     * 表格描述符
-     * 表格操作
-   * [数据操作（同步、异步、批量）](#data-management)
-     * 读
-     * 写
-     * 扫描
+>**目录**
+>  1. [主要数据结构](#main-data-structure)
+>   * tera::Client、tera::Table
+>   * RowMutation、RowReader、ScanDescriptor/ResultStream
+>   * TableDescriptor、LocalityGroupDescriptor、ColumnFamilyDescriptor
+>  2. [主要功能及代码示例](#sample-code)
+>   * [表格管理](#table-management)
+>     * 表格描述符
+>     * 表格操作
+>   * [数据操作（同步、异步、批量）](#data-management)
+>     * 读
+>     * 写
+>     * 扫描
 
 <a name="main-data-structure"></a>
 # 1. 主要数据结构
@@ -88,7 +88,7 @@ if (client == NULL) {
 delete client;                        // 注意回收内存
 ```
 
-<a name=“table-management"></a>
+<a name="table-management"></a>
 ## 表格管理
 
 #### 表格描述符
@@ -138,7 +138,7 @@ std::vector<tera::TabletInfo> tablet_list;
 client->List("hello", &table_info, &tablet_list, &error_code);
 ```
 
-<a name=“data-management"></a>
+<a name="data-management"></a>
 ## 数据操作
 
 ```
