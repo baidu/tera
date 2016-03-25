@@ -4,7 +4,6 @@
 
 #ifndef _Included_com_baidu_tera_client_TeraTableImpl
 #define _Included_com_baidu_tera_client_TeraTableImpl
-#pragma GCC visibility push(default)
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -75,5 +74,4 @@ JNIEXPORT jlong JNICALL Java_com_baidu_tera_client_TeraTableImpl_nativeScan
 #ifdef __cplusplus
 }
 #endif
-#pragma GCC visibility pop
 #endif

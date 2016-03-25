@@ -4,7 +4,6 @@
 
 #ifndef _Included_com_baidu_tera_client_TeraResultImpl
 #define _Included_com_baidu_tera_client_TeraResultImpl
-#pragma GCC visibility push(default)
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -67,5 +66,4 @@ JNIEXPORT jbyteArray JNICALL Java_com_baidu_tera_client_TeraResultImpl_nativeGet
 #ifdef __cplusplus
 }
 #endif
-#pragma GCC visibility pop
 #endif

@@ -4,7 +4,6 @@
 
 #ifndef _Included_com_baidu_tera_client_TeraMutationImpl
 #define _Included_com_baidu_tera_client_TeraMutationImpl
-#pragma GCC visibility push(default)
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -51,5 +50,4 @@ JNIEXPORT jboolean JNICALL Java_com_baidu_tera_client_TeraMutationImpl_nativeDel
 #ifdef __cplusplus
 }
 #endif
-#pragma GCC visibility pop
 #endif

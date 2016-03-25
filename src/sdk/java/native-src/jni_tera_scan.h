@@ -4,7 +4,6 @@
 
 #ifndef _Included_com_baidu_tera_client_TeraScanImpl
 #define _Included_com_baidu_tera_client_TeraScanImpl
-#pragma GCC visibility push(default)
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -43,5 +42,4 @@ JNIEXPORT void JNICALL Java_com_baidu_tera_client_TeraScanImpl_nativeDeleteScanD
 #ifdef __cplusplus
 }
 #endif
-#pragma GCC visibility pop
 #endif

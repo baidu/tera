@@ -4,7 +4,6 @@
 
 #ifndef _Included_com_baidu_tera_client_ScanResultStreamImpl
 #define _Included_com_baidu_tera_client_ScanResultStreamImpl
-#pragma GCC visibility push(default)
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -75,5 +74,4 @@ JNIEXPORT void JNICALL Java_com_baidu_tera_client_ScanResultStreamImpl_nativeDel
 #ifdef __cplusplus
 }
 #endif
-#pragma GCC visibility pop
 #endif
