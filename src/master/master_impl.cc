@@ -1008,10 +1008,9 @@ void MasterImpl::UpdateTable(const UpdateTableRequest* request,
         done->Run();
         return;
     }
-    if (FLAGS_tera_online_schema_update_enabled
-        && !table->GetSchemaSyncLockOrFailed()) {
-        // there is a online-schema-update is doing...
-        LOG(INFO) << "[update] no concurrent online-schema-update, table:" << table;
+    if (!table->PrepareUpdate(request->schema())) {
+        // another schema-update is doing...
+        LOG(INFO) << "[update] no concurrent schema-update, table:" << table;
         response->set_status(kInvalidArgument);
         done->Run();
         return;
@@ -1020,7 +1019,7 @@ void MasterImpl::UpdateTable(const UpdateTableRequest* request,
     // write meta tablet
     WriteClosure* closure =
         NewClosure(this, &MasterImpl::UpdateTableRecordForUpdateCallback, table,
-                   FLAGS_tera_master_meta_retry_times, &request->schema(), response, done);
+                   FLAGS_tera_master_meta_retry_times, response, done);
     BatchWriteMetaTableAsync(boost::bind(&Table::ToMetaTableKeyValue, table, _1, _2),
                              false, closure);
     return;
@@ -1125,7 +1124,16 @@ void MasterImpl::ShowTables(const ShowTablesRequest* request,
             if (!HasPermissionOnTable(request, table)) {
                 continue;
             }
-            table->ToMeta(table_meta_list->add_meta());
+
+            TableSchema old_schema;
+            if (table->GetOldSchema(&old_schema)) {
+                TableMeta meta;
+                table->ToMeta(&meta);
+                meta.mutable_schema()->CopyFrom(old_schema);
+                table_meta_list->add_meta()->CopyFrom(meta);
+            } else {
+                table->ToMeta(table_meta_list->add_meta());
+            }
         }
         TabletMetaList* tablet_meta_list = response->mutable_tablet_meta_list();
         for (uint32_t i = 0; i < tablet_list.size(); ++i) {
@@ -4464,7 +4472,6 @@ void MasterImpl::UpdateTableRecordForEnableCallback(TablePtr table, int32_t retr
 }
 
 void MasterImpl::UpdateTableRecordForUpdateCallback(TablePtr table, int32_t retry_times,
-                                                    const TableSchema* schema,
                                                     UpdateTableResponse* rpc_response,
                                                     google::protobuf::Closure* rpc_done,
                                                     WriteTabletRequest* request,
@@ -4488,24 +4495,29 @@ void MasterImpl::UpdateTableRecordForUpdateCallback(TablePtr table, int32_t retr
         }
         if (retry_times <= 0) {
             LOG(ERROR) << kSms << "abort update meta table, " << table;
+            table->AbortUpdate();
             rpc_response->set_status(kMetaTabletError);
             rpc_done->Run();
             table->SetSchemaIsSyncing(false);
         } else {
             WriteClosure* done =
                 NewClosure(this, &MasterImpl::UpdateTableRecordForUpdateCallback,
-                           table, retry_times - 1, schema, rpc_response, rpc_done);
+                           table, retry_times - 1, rpc_response, rpc_done);
             SuspendMetaOperation(boost::bind(&Table::ToMetaTableKeyValue, table, _1, _2),
                                  false, done);
         }
         return;
     }
-    bool is_update_cf = IsSchemaCfDiff(table->GetSchema(), *schema);
-    table->SetSchema(*schema);
+    bool is_update_cf = true;
+    TableSchema schema;
+    if (table->GetOldSchema(&schema)) {
+        is_update_cf = IsSchemaCfDiff(table->GetSchema(), schema);
+    }
+    table->CommitUpdate();
     if ((table->GetStatus() == kTableDisable) // no need to sync
         || !FLAGS_tera_online_schema_update_enabled
         || !is_update_cf) {
-        LOG(INFO) << "[update] new table schema is updated: " << schema->ShortDebugString();
+        LOG(INFO) << "[update] new table schema is updated: " << table->GetSchema().ShortDebugString();
         table->SetSchemaIsSyncing(false); // releases the schema-sync lock
         rpc_response->set_status(kMasterOk);
         rpc_done->Run();
