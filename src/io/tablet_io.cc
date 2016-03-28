@@ -608,10 +608,13 @@ bool TabletIO::LowLevelScan(const std::string& start_tera_key,
         SetStatusCode(ret_code, status);
         return false;
     }
+    leveldb::CompactStrategy* compact_strategy =
+        m_ldb_options.compact_strategy_factory->NewInstance();
 
-    bool ret = LowLevelScan(start_tera_key, end_row_key, scan_options, it,
+    bool ret = LowLevelScan(start_tera_key, end_row_key, scan_options, it, compact_strategy,
                             value_list, next_start_point, read_row_count, read_bytes,
                             is_complete, status);
+    delete compact_strategy;
     delete it;
     return ret;
 }
@@ -620,15 +623,13 @@ inline bool TabletIO::LowLevelScan(const std::string& start_tera_key,
                             const std::string& end_row_key,
                             const ScanOptions& scan_options,
                             leveldb::Iterator* it,
+                            leveldb::CompactStrategy* compact_strategy,
                             RowResult* value_list,
                             KeyValuePair* next_start_point,
                             uint32_t* read_row_count,
                             uint32_t* read_bytes,
                             bool* is_complete,
                             StatusCode* status) {
-    // init compact strategy
-    leveldb::CompactStrategy* compact_strategy =
-        m_ldb_options.compact_strategy_factory->NewInstance();
     std::list<KeyValuePair> row_buf;
     std::string last_key, last_col, last_qual;
     uint32_t buffer_size = 0;
@@ -763,8 +764,6 @@ inline bool TabletIO::LowLevelScan(const std::string& start_tera_key,
     if (!it->Valid()) {
         it_status = it->status();
     }
-
-    delete compact_strategy;
 
     if (!it_status.ok()) {
         SetStatusCode(it_status, status);
@@ -1242,14 +1241,16 @@ bool TabletIO::ScanRowsStreaming(const ScanTabletRequest* request,
         m_stream_scan.RemoveSession(session_id);
         return false;
     }
+    leveldb::CompactStrategy* compact_strategy =
+        m_ldb_options.compact_strategy_factory->NewInstance();
 
     StatusCode status = kTabletNodeOk;
     uint64_t data_id = 0;
     while (status == kTabletNodeOk) {
         RowResult value_list;
-        if (LowLevelScan(start_tera_key, end_row_key, scan_options, it,
-                         &value_list, response->mutable_next_start_point(), &read_row_count, &read_bytes,
-                         &is_complete, &status)) {
+        if (LowLevelScan(start_tera_key, end_row_key, scan_options, it, compact_strategy,
+                         &value_list, response->mutable_next_start_point(), &read_row_count,
+                         &read_bytes, &is_complete, &status)) {
             m_counter.scan_rows.Add(read_row_count);
             m_counter.scan_size.Add(read_bytes);
 
@@ -1269,6 +1270,7 @@ bool TabletIO::ScanRowsStreaming(const ScanTabletRequest* request,
         }
     }
 
+    delete compact_strategy;
     delete it;
     m_stream_scan.RemoveSession(session_id);
     return true;
