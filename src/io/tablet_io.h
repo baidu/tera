@@ -29,6 +29,10 @@
 #include "utils/counter.h"
 #include "utils/rpc_timer_list.h"
 
+namespace leveldb {
+class CompactStrategy;
+}
+
 namespace tera {
 namespace io {
 
@@ -220,6 +224,7 @@ private:
                       const std::string& end_row_key,
                       const ScanOptions& scan_options,
                       leveldb::Iterator* it,
+                      leveldb::CompactStrategy* compact_strategy,
                       RowResult* value_list,
                       KeyValuePair* next_start_point,
                       uint32_t* read_row_count,
