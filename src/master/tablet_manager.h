@@ -206,6 +206,9 @@ public:
     void SetOldSchema(TableSchema* schema);
     bool GetOldSchema(TableSchema* schema);
     void ClearOldSchema();
+    bool PrepareUpdate(const TableSchema& schema);
+    void AbortUpdate();
+    void CommitUpdate();
 
 private:
     Table(const Table&) {}

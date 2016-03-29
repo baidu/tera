@@ -677,6 +677,29 @@ void Table::ToMetaTableKeyValue(std::string* packed_key,
     MakeMetaTableKeyValue(meta, packed_key, packed_value);
 }
 
+bool Table::PrepareUpdate(const TableSchema& schema) {
+    if (!GetSchemaSyncLockOrFailed()) {
+        return false;
+    }
+    TableSchema* origin_schema = new TableSchema;
+    origin_schema->CopyFrom(GetSchema());
+    SetOldSchema(origin_schema);
+    SetSchema(schema);
+    return true;
+}
+
+void Table::AbortUpdate() {
+    TableSchema old_schema;
+    if (GetOldSchema(&old_schema)) {
+        SetSchema(old_schema);
+        ClearOldSchema();
+    }
+}
+
+void Table::CommitUpdate() {
+    ClearOldSchema();
+}
+
 void Table::ToMeta(TableMeta* meta) {
     meta->set_table_name(m_name);
     meta->set_status(m_status);

@@ -1008,19 +1008,13 @@ void MasterImpl::UpdateTable(const UpdateTableRequest* request,
         done->Run();
         return;
     }
-    if (!table->GetSchemaSyncLockOrFailed()) {
-        // there is a schema-update is doing...
+    if (!table->PrepareUpdate(request->schema())) {
+        // another schema-update is doing...
         LOG(INFO) << "[update] no concurrent schema-update, table:" << table;
         response->set_status(kInvalidArgument);
         done->Run();
         return;
     }
-    // keep the old schema, if fails to write meta, rollback memory
-    TableSchema* origin_schema = new TableSchema;
-    origin_schema->CopyFrom(table->GetSchema());
-    table->SetOldSchema(origin_schema);
-
-    table->SetSchema(request->schema());
 
     // write meta tablet
     WriteClosure* closure =
@@ -4501,11 +4495,7 @@ void MasterImpl::UpdateTableRecordForUpdateCallback(TablePtr table, int32_t retr
         }
         if (retry_times <= 0) {
             LOG(ERROR) << kSms << "abort update meta table, " << table;
-            TableSchema old_schema;
-            if (table->GetOldSchema(&old_schema)) {
-                table->SetSchema(old_schema);
-                table->ClearOldSchema();
-            }
+            table->AbortUpdate();
             rpc_response->set_status(kMetaTabletError);
             rpc_done->Run();
             table->SetSchemaIsSyncing(false);
@@ -4522,8 +4512,8 @@ void MasterImpl::UpdateTableRecordForUpdateCallback(TablePtr table, int32_t retr
     TableSchema schema;
     if (table->GetOldSchema(&schema)) {
         is_update_cf = IsSchemaCfDiff(table->GetSchema(), schema);
-        table->ClearOldSchema();
     }
+    table->CommitUpdate();
     if ((table->GetStatus() == kTableDisable) // no need to sync
         || !FLAGS_tera_online_schema_update_enabled
         || !is_update_cf) {
