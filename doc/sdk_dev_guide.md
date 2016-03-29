@@ -1,10 +1,25 @@
-# Tera SDK 开发指南
+# Tera SDK 主要api使用方法
 
 [Java SDK从这进入](https://github.com/baidu/tera/blob/master/doc/sdk_dev_guide_for_java.md)
 
+>**目录**
+>  1. [主要数据结构](#main-data-structure)
+>   * tera::Client、tera::Table
+>   * RowMutation、RowReader、ScanDescriptor/ResultStream
+>   * TableDescriptor、LocalityGroupDescriptor、ColumnFamilyDescriptor
+>  2. [主要功能及代码示例](#sample-code)
+>   * [表格管理](#table-management)
+>     * 表格描述符
+>     * 表格操作
+>   * [数据操作（同步、异步、批量）](#data-management)
+>     * 读
+>     * 写
+>     * 扫描
+
+<a name="main-data-structure"></a>
 # 1. 主要数据结构
 
-##### (1) tera::Client 访问tera服务主结构
+#### (1) tera::Client 访问tera服务主结构
 
 所有对tera的访问或操作全部由此发起。
 
@@ -18,13 +33,13 @@
 
 * 一个集群对应一个Client即可，如需访问多个Client，需要创建多个
 
-##### (2) tera::Table 表格主结构
+#### (2) tera::Table 表格主结构
 
 对表格的所有增删查改操作由此发起。
 
 由`tera::Client::OpenTable`产生，`tera::Client::CloseTable`关闭，不可析构。
 
-##### (3) tera::RowReader 随机行读取
+#### (3) tera::RowReader 随机行读取
 
 由`tera::Table NewRowReader()`产生，通过`tera::Table Get()`生效。
 
@@ -34,7 +49,7 @@
 
 迭代器方式使用，或返回一个columnfamily/qualifier索引的多级Map。
 
-##### (4) tera::RowMutation 行插入/更新/删除
+#### (4) tera::RowMutation 行插入/更新/删除
 
 由`tera::Table NewRowMutation()`产生，通过`tera::Table ApplyMutation()`生效。
 
@@ -44,22 +59,23 @@
 
 支持Counter、Append、PutIfAbsent等特殊操作。
 
-##### (5) tera::ScanDescriptor / tera::ResultStream 遍历
+#### (5) tera::ScanDescriptor / tera::ResultStream 遍历
 
 `tera::ScanDescriptor`描述遍历需求，包括行区间、列集合、时间区间、版本、特殊过滤器等。
 
 由`tera::Table Scan()`生效，返回迭代器`tera::ResultStream`。
 
-##### (6) 表格描述
+#### (6) 表格描述
 
 包含`tera::TableDescriptor / tera::LocalityGroupDescriptor / tera::ColumnFamilyDescriptor`
 
 建表及更新表格结构时使用，通过这些描述符定义表格的各种结构及其属性。
 
-##### (7) tera::ErrorCode
+#### (7) tera::ErrorCode
 
 很多操作会返回，注意检查。
 
+<a name="sample-code"></a>
 # 2. 主要功能及代码示例
 
 ```
@@ -72,9 +88,10 @@ if (client == NULL) {
 delete client;                        // 注意回收内存
 ```
 
+<a name="table-management"></a>
 ## 表格管理
 
-##### 表格描述符
+#### 表格描述符
 
 ```
 // create 名为 hello 的表格，包含一个LocalityGroup：lg_1，lg_1 中有一个ColumnFamily：cf_11
@@ -91,7 +108,7 @@ cf_t->SetMaxVersions(5);
 cf_t->SetTimeToLive(10000);
 ```
 
-##### 表格操作
+#### 表格操作
 ```
 // 建、删、加载、卸载
 client->CreateTable(table_desc, &error_code)
@@ -121,6 +138,7 @@ std::vector<tera::TabletInfo> tablet_list;
 client->List("hello", &table_info, &tablet_list, &error_code);
 ```
 
+<a name="data-management"></a>
 ## 数据操作
 
 ```
@@ -128,7 +146,7 @@ client->List("hello", &table_info, &tablet_list, &error_code);
 tera::Table* table =  client->OpenTable("hello", &error_code);
 ```
 
-##### 读
+#### 读
 ```
 // 同步单条读出数据（简单，性能较低）
 std::string value;
@@ -158,7 +176,7 @@ for (size_t i = 0; i < readers.size(); ++i) {
 }
 ```
 
-##### 写、删
+#### 写、删
 
 ```
 // 同步单条写入数据（简单，性能较低）
@@ -190,7 +208,7 @@ for (size_t i = 0; i < mutations.size(); ++i) {
 }
 ```
 
-##### 遍历
+#### 扫描
 
 ```
 // 闭开区间

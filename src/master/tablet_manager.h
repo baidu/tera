@@ -192,6 +192,7 @@ public:
     bool GetTabletsForGc(std::set<uint64_t>* live_tablets,
                          std::set<uint64_t>* dead_tablets);
     void RefreshCounter();
+    int64_t GetTabletsCount();
     bool GetSchemaIsSyncing();
     void SetSchemaIsSyncing(bool flag);
     bool GetSchemaSyncLockOrFailed();
@@ -300,6 +301,7 @@ public:
     void LoadTableMeta(const std::string& key, const std::string& value);
     void LoadTabletMeta(const std::string& key, const std::string& value);
 
+    int64_t GetAllTabletsCount();
 private:
     void PackTabletMeta(TabletMeta* meta, const std::string& table_name,
                         const std::string& key_start = "",

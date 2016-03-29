@@ -5,6 +5,7 @@
 #include "string_util.h"
 
 #include <stdint.h>
+#include <stdlib.h>
 
 namespace tera {
 
@@ -86,6 +87,71 @@ bool IsValidColumnFamilyName(const std::string& str) {
         }
     }
     return true;
+}
+
+struct EditDistanceMatrix {
+    EditDistanceMatrix(int row, int col)
+        : matrix_((int*)malloc(sizeof(int) * row * col)),
+          n_(col) {}
+    int& At(int row, int col) {return matrix_[row * n_ + col];}
+    ~EditDistanceMatrix() {
+        free(matrix_);
+        matrix_ = NULL;
+    }
+    int* matrix_;
+private:
+    int n_; // columns(row size)
+    EditDistanceMatrix(const EditDistanceMatrix& m);
+    EditDistanceMatrix& operator=(const EditDistanceMatrix& m);
+};
+
+static int MinOfThreeNum(int a, int b, int c) {
+    int min = (a < b) ? a : b;
+    min = (min < c) ? min : c;
+    return min;
+}
+
+/*
+        a[0] a[1] a[2] a[3] . . . a[n-1]
+  b[0]
+  b[1]
+  b[2]        +    +
+  b[3]        +    *
+  .
+  .
+  .
+  b[m-1]
+*/
+
+// https://en.wikipedia.org/wiki/Edit_distance
+// https://en.wikipedia.org/wiki/Levenshtein_distance
+int EditDistance(const std::string& a, const std::string& b) {
+    int n = a.size();
+    int m = b.size();
+    if ((n == 0) || (m == 0)) {
+        return (n == 0) ? m : n;
+    }
+    EditDistanceMatrix matrix(m, n);
+    matrix.At(0, 0) = (a[0] == b[0]) ? 0 : 1;
+    for (size_t i = 1; i < a.size(); i++) {
+        matrix.At(0, i) = matrix.At(0, i-1) + 1;
+    }
+    for (size_t j = 1; j < b.size(); j++) {
+        matrix.At(j, 0) = matrix.At(j-1, 0) + 1;
+    }
+    for (size_t j = 1; j < b.size(); j++) {
+        for (size_t i = 1; i < a.size(); i++) {
+            int min = MinOfThreeNum(matrix.At(j-1, i-1),
+                                    matrix.At(j,   i-1),
+                                    matrix.At(j-1, i));
+            if (a[i] == b[j]) {
+                matrix.At(j, i) = min;
+            } else {
+                matrix.At(j, i) = min + 1;
+            }
+        }
+    }
+    return matrix.At(m-1, n-1);
 }
 
 } // namespace tera

@@ -251,6 +251,7 @@ message ScanTabletRequest {
     optional bool part_of_session = 17;
     optional int64 timestamp = 18 [default = 0];
     optional int64 timeout = 19;
+    optional int64 number_limit = 21;
 }
 
 message ScanTabletResponse {

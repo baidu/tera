@@ -353,6 +353,9 @@ void TableImpl::CommitScan(ScanTask* scan_task,
     if (impl->GetBufferSize() != 0) {
         request->set_buffer_limit(impl->GetBufferSize());
     }
+    if (impl->GetNumberLimit() != 0) {
+        request->set_number_limit(impl->GetNumberLimit());
+    }
     if (impl->GetTimerRange() != NULL) {
         TimeRange* time_range = request->mutable_timerange();
         time_range->CopyFrom(*(impl->GetTimerRange()));
