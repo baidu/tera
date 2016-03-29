@@ -67,6 +67,9 @@ int64_t ThreadPool::Schedule(void (*function)(void*), void* arg,
     bg_threads_.push_back(t);
   }
 
+  if (wait_time_millisec == 0) {
+    ++pending_task_num_;
+  }
   int64_t now_time = static_cast<int64_t>(Env::Default()->NowMicros() / 1000);
   int64_t exe_time = (wait_time_millisec == 0) ? 0 : now_time + wait_time_millisec;
   BGItem bg_item = {arg, function, priority, ++last_item_id_, exe_time};
@@ -93,6 +96,9 @@ void ThreadPool::ReSchedule(int64_t id, double priority, int64_t wait_time_milli
     return;
   }
 
+  if (bg_item.exe_time != 0 && exe_time == 0) {
+    ++pending_task_num_;
+  }
   bg_item.exe_time = exe_time;
   bg_item.priority = priority;
   PutInQueue(bg_item, exe_time);
@@ -101,6 +107,11 @@ void ThreadPool::ReSchedule(int64_t id, double priority, int64_t wait_time_milli
 int ThreadPool::GetThreadNumber() {
   MutexLock lock(&mutex_);
   return total_threads_limit_;
+}
+
+int64_t ThreadPool::GetPendingTaskNum() {
+  MutexLock lock(&mutex_);
+  return pending_task_num_;
 }
 
 void ThreadPool::Timer() {
@@ -130,6 +141,7 @@ void ThreadPool::Timer() {
     if (IsLatest(it->second, bg_item.priority, bg_item.exe_time)) {
       // set time to 0 to make sure exe_time does not effect comparision
       // in pri_queue
+      ++pending_task_num_;
       bg_item.exe_time = 0;
       it->second.exe_time = 0;
       pri_queue_.push(bg_item);
@@ -154,6 +166,7 @@ void ThreadPool::BGThread() {
     BGMap::iterator it = latest_.find(bg_item.id);
     // only execute the function if the task is the latest one
     if (IsLatest(it->second, bg_item.priority, bg_item.exe_time)) {
+      --pending_task_num_;
       void (*function)(void*) = bg_item.function;
       void* arg = bg_item.arg;
       latest_.erase(it);

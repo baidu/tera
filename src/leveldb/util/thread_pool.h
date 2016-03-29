@@ -32,6 +32,7 @@ public:
   // Return maximal allowed thread number
   int GetThreadNumber();
   void SetLogger(Logger* info_log) { info_log_ = info_log; }
+  int64_t GetPendingTaskNum();
 
 private:
   struct BGItem {
@@ -67,6 +68,7 @@ private:
   bool exit_all_threads_;
   int64_t last_item_id_;
   int active_number_;
+  int64_t pending_task_num_;
 
   Logger* info_log_;
   port::Mutex mutex_;
