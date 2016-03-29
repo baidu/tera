@@ -12,6 +12,7 @@
 #include <iostream>
 #include "env.h"
 #include "status.h"
+#include "util/thread_pool.h"
 
 
 namespace leveldb {
@@ -59,18 +60,43 @@ public:
 
     virtual Env* CacheEnv() { return posix_env_; }
 
+    Env* BaseEnv() { return dfs_env_; }
+
     /// flash path for local flash cache
-    static void SetFlashPath(const std::string& path, bool vanish_allowed);
-    static const std::string& FlashPath(const std::string& fname);
-    static const std::vector<std::string>& GetFlashPaths() {
+    void SetFlashPath(const std::string& path, bool vanish_allowed);
+    const std::string& FlashPath(const std::string& fname);
+    const bool VanishAllowed() {
+        return vanish_allowed_;
+    }
+    const std::vector<std::string>& GetFlashPaths() {
         return flash_paths_;
     }
+
+    /// copy to local
+    void SetIfForceReadFromCache(bool force);
+    bool ForceReadFromCache();
+    void SetUpdateFlashThreadNumber(int thread_num);
+
+    bool FlashFileIdentical(const std::string& fname, uint64_t fsize);
+    void ScheduleUpdateFlash(const std::string& fname, uint64_t fsize, int64_t priority);
+    void UpdateFlashFile(const std::string& fname, uint64_t fsize);
 
 private:
     Env* dfs_env_;
     Env* posix_env_;
-    static std::vector<std::string> flash_paths_;
-    static bool vanish_allowed_;
+
+    std::vector<std::string> flash_paths_;
+    bool vanish_allowed_;
+
+    bool force_read_from_cache_;
+    ThreadPool update_flash_threads_;
+    port::Mutex update_flash_mutex_;
+    struct UpdateFlashTask {
+        int64_t id;
+        int64_t priority;
+    };
+    std::map<std::string, UpdateFlashTask> update_flash_waiting_files_;
+    int64_t update_flash_retry_interval_millis_;
 };
 
 /// new flash env

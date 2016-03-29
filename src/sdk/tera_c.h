@@ -7,6 +7,8 @@
 
 #include "tera.h"
 
+#pragma GCC visibility push(default)
+
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -94,5 +96,7 @@ int64_t tera_result_stream_value_int64(tera_result_stream_t* stream);
 #ifdef __cplusplus
 }  /* end extern "C" */
 #endif
+
+#pragma GCC visibility pop
 
 #endif
