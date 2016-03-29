@@ -750,6 +750,27 @@ bool Table::GetSchemaSyncLockOrFailed() {
     return true;
 }
 
+void Table::SetOldSchema(TableSchema* schema) {
+    MutexLock lock(&m_mutex);
+    delete m_old_schema;
+    m_old_schema = schema;
+}
+
+bool Table::GetOldSchema(TableSchema* schema) {
+    MutexLock lock(&m_mutex);
+    if ((schema != NULL) && (m_old_schema != NULL)) {
+        schema->CopyFrom(*m_old_schema);
+        return true;
+    }
+    return false;
+}
+
+void Table::ClearOldSchema() {
+    MutexLock lock(&m_mutex);
+    delete m_old_schema;
+    m_old_schema = NULL;
+}
+
 void Table::ResetRangeFragment() {
     MutexLock lock(&m_mutex);
     delete m_rangefragment;

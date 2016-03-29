@@ -1018,12 +1018,14 @@ void MasterImpl::UpdateTable(const UpdateTableRequest* request,
     // keep the old schema, if fails to write meta, rollback memory
     TableSchema* origin_schema = new TableSchema;
     origin_schema->CopyFrom(table->GetSchema());
+    table->SetOldSchema(origin_schema);
+
     table->SetSchema(request->schema());
 
     // write meta tablet
     WriteClosure* closure =
         NewClosure(this, &MasterImpl::UpdateTableRecordForUpdateCallback, table,
-                   FLAGS_tera_master_meta_retry_times, (const TableSchema*)origin_schema, response, done);
+                   FLAGS_tera_master_meta_retry_times, response, done);
     BatchWriteMetaTableAsync(boost::bind(&Table::ToMetaTableKeyValue, table, _1, _2),
                              false, closure);
     return;
@@ -1128,7 +1130,16 @@ void MasterImpl::ShowTables(const ShowTablesRequest* request,
             if (!HasPermissionOnTable(request, table)) {
                 continue;
             }
-            table->ToMeta(table_meta_list->add_meta());
+
+            TableSchema old_schema;
+            if (table->GetOldSchema(&old_schema)) {
+                TableMeta meta;
+                table->ToMeta(&meta);
+                meta.mutable_schema()->CopyFrom(old_schema);
+                table_meta_list->add_meta()->CopyFrom(meta);
+            } else {
+                table->ToMeta(table_meta_list->add_meta());
+            }
         }
         TabletMetaList* tablet_meta_list = response->mutable_tablet_meta_list();
         for (uint32_t i = 0; i < tablet_list.size(); ++i) {
@@ -4467,7 +4478,6 @@ void MasterImpl::UpdateTableRecordForEnableCallback(TablePtr table, int32_t retr
 }
 
 void MasterImpl::UpdateTableRecordForUpdateCallback(TablePtr table, int32_t retry_times,
-                                                    const TableSchema* origin_schema,
                                                     UpdateTableResponse* rpc_response,
                                                     google::protobuf::Closure* rpc_done,
                                                     WriteTabletRequest* request,
@@ -4491,22 +4501,29 @@ void MasterImpl::UpdateTableRecordForUpdateCallback(TablePtr table, int32_t retr
         }
         if (retry_times <= 0) {
             LOG(ERROR) << kSms << "abort update meta table, " << table;
-            table->SetSchema(*origin_schema);
-            delete origin_schema;
+            TableSchema old_schema;
+            if (table->GetOldSchema(&old_schema)) {
+                table->SetSchema(old_schema);
+                table->ClearOldSchema();
+            }
             rpc_response->set_status(kMetaTabletError);
             rpc_done->Run();
             table->SetSchemaIsSyncing(false);
         } else {
             WriteClosure* done =
                 NewClosure(this, &MasterImpl::UpdateTableRecordForUpdateCallback,
-                           table, retry_times - 1, origin_schema, rpc_response, rpc_done);
+                           table, retry_times - 1, rpc_response, rpc_done);
             SuspendMetaOperation(boost::bind(&Table::ToMetaTableKeyValue, table, _1, _2),
                                  false, done);
         }
         return;
     }
-    bool is_update_cf = IsSchemaCfDiff(table->GetSchema(), *origin_schema);
-    delete origin_schema;
+    bool is_update_cf = true;
+    TableSchema schema;
+    if (table->GetOldSchema(&schema)) {
+        is_update_cf = IsSchemaCfDiff(table->GetSchema(), schema);
+        table->ClearOldSchema();
+    }
     if ((table->GetStatus() == kTableDisable) // no need to sync
         || !FLAGS_tera_online_schema_update_enabled
         || !is_update_cf) {
