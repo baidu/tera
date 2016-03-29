@@ -10,6 +10,7 @@
 #include <readline/readline.h>
 
 #include <fstream>
+#include <iomanip>
 #include <iostream>
 #include <limits>
 #include <sstream>
@@ -249,16 +250,48 @@ static void PrintCmdHelpInfo(const char* msg) {
 static void PrintAllCmd() {
     std::cout << "there is cmd list:" << std::endl;
     int count = sizeof(builtin_cmd_list)/sizeof(char*);
+    bool newline = false;
     for (int i = 0; i < count; i+=2) {
-        std::cout << builtin_cmd_list[i] << std::endl;
+        std::cout << std::setiosflags(std::ios::left) << std::setw(20) << builtin_cmd_list[i];
+        if (newline) {
+            std::cout << std::endl;
+            newline = false;
+        } else {
+            newline = true;
+        }
     }
 
     std::cout << std::endl << "help [cmd] for details." << std::endl;
 }
 
+// return false if similar command(s) not found
+static bool PromptSimilarCmd(const char* msg) {
+    if (msg == NULL) {
+        return false;
+    }
+    bool found = false;
+    int64_t len = strlen(msg);
+    int64_t threshold = int64_t((len * 0.3 < 3) ? 3 : len * 0.3);
+    int count = sizeof(builtin_cmd_list)/sizeof(char*);
+    for (int i = 0; i < count; i+=2) {
+        if (EditDistance(msg, builtin_cmd_list[i]) <= threshold) {
+            if (!found) {
+                std::cout << "Did you mean:" << std::endl;
+                found = true;
+            }
+            std::cout << "    " << builtin_cmd_list[i] << std::endl;
+        }
+    }
+    return found;
+}
+
 static void PrintUnknownCmdHelpInfo(const char* msg) {
     if (msg != NULL) {
-        std::cout << msg << " is not a valid command." << std::endl << std::endl;
+        std::cout << "'" << msg << "' is not a valid command." << std::endl << std::endl;
+    }
+    if ((msg != NULL)
+        && PromptSimilarCmd(msg)) {
+        return;
     }
     PrintAllCmd();
 }

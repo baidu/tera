@@ -26,6 +26,8 @@
 
 #include "jni_md.h"
 
+#pragma GCC visibility push(default)
+
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -1937,6 +1939,8 @@ JNI_OnUnload(JavaVM *vm, void *reserved);
 #ifdef __cplusplus
 } /* extern "C" */
 #endif /* __cplusplus */
+
+#pragma GCC visibility pop
 
 #endif /* !_JAVASOFT_JNI_H_ */
 

@@ -38,13 +38,15 @@ sh ./build.sh
 
 #使用示例
 
-[通过OneBox体验Tera](https://github.com/baidu/tera/blob/master/doc/Onebox.md)
+[体验单机Tera](https://github.com/baidu/tera/blob/master/doc/Onebox.md)
 
 [通过docker体验Tera](https://github.com/baidu/tera/blob/master/example/docker)
 
-[SDK 开发入门](https://github.com/baidu/tera/blob/master/doc/sdk_dev_guide.md)
+[主要api使用方法](https://github.com/baidu/tera/blob/master/doc/sdk_dev_guide.md)
 
-[teracli 使用手册](https://github.com/baidu/tera/blob/master/doc/teracli.md)
+[客户端teracli使用方法](https://github.com/baidu/tera/blob/master/doc/teracli.md)
+
+[其它文档](https://github.com/baidu/tera/blob/master/doc/README.md)
 
 #反馈与技术支持
 tera_dev@baidu.com
