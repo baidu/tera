@@ -514,7 +514,8 @@ Table::Table(const std::string& table_name)
       m_max_tablet_no(0),
       m_create_time((int64_t)time(NULL)),
       m_schema_is_syncing(false),
-      m_rangefragment(NULL) {
+      m_rangefragment(NULL),
+      m_old_schema(NULL) {
 }
 
 bool Table::FindTablet(const std::string& key_start, TabletPtr* tablet) {
