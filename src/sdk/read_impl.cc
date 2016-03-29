@@ -190,6 +190,12 @@ void RowReaderImpl::ToMap(Map* rowmap) {
 }
 
 void RowReaderImpl::SetResult(const RowResult& result) {
+    int32_t num = result.key_values_size();
+    for (int32_t i = 0; i < num; ++i) {
+        const std::string& key = result.key_values(i).key();
+        CHECK(_row_key == key) << "FATAL: rowkey[" << _row_key
+                << "] vs result[" << key << "]";
+    }
     return _result.CopyFrom(result);
 }
 
