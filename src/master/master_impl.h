@@ -554,6 +554,8 @@ private:
     void ScheduleAvailableCheck();
     void EnableAvailabilityCheck();
     void DeleteTablet(TabletPtr tablet);
+    void CopyTableMetaToUser(TablePtr table, TableMeta* meta_ptr);
+    bool IsUpdateCf(TablePtr table);
 
 private:
     mutable Mutex m_status_mutex;

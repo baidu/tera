@@ -1076,6 +1076,18 @@ void MasterImpl::SearchTable(const SearchTableRequest* request,
     done->Run();
 }
 
+void MasterImpl::CopyTableMetaToUser(TablePtr table, TableMeta* meta_ptr) {
+    TableSchema old_schema;
+    if (table->GetOldSchema(&old_schema)) {
+        TableMeta meta;
+        table->ToMeta(&meta);
+        meta.mutable_schema()->CopyFrom(old_schema);
+        meta_ptr->CopyFrom(meta);
+    } else {
+        table->ToMeta(meta_ptr);
+    }
+}
+
 void MasterImpl::ShowTables(const ShowTablesRequest* request,
                             ShowTablesResponse* response,
                             google::protobuf::Closure* done) {
@@ -1124,16 +1136,7 @@ void MasterImpl::ShowTables(const ShowTablesRequest* request,
             if (!HasPermissionOnTable(request, table)) {
                 continue;
             }
-
-            TableSchema old_schema;
-            if (table->GetOldSchema(&old_schema)) {
-                TableMeta meta;
-                table->ToMeta(&meta);
-                meta.mutable_schema()->CopyFrom(old_schema);
-                table_meta_list->add_meta()->CopyFrom(meta);
-            } else {
-                table->ToMeta(table_meta_list->add_meta());
-            }
+            CopyTableMetaToUser(table, table_meta_list->add_meta());
         }
         TabletMetaList* tablet_meta_list = response->mutable_tablet_meta_list();
         for (uint32_t i = 0; i < tablet_list.size(); ++i) {
@@ -4508,11 +4511,7 @@ void MasterImpl::UpdateTableRecordForUpdateCallback(TablePtr table, int32_t retr
         }
         return;
     }
-    bool is_update_cf = true;
-    TableSchema schema;
-    if (table->GetOldSchema(&schema)) {
-        is_update_cf = IsSchemaCfDiff(table->GetSchema(), schema);
-    }
+    bool is_update_cf = IsUpdateCf(table);
     table->CommitUpdate();
     if ((table->GetStatus() == kTableDisable) // no need to sync
         || !FLAGS_tera_online_schema_update_enabled
@@ -4527,6 +4526,14 @@ void MasterImpl::UpdateTableRecordForUpdateCallback(TablePtr table, int32_t retr
         table->ResetRangeFragment();
         NoticeTabletNodeSchemaUpdated(table);
     }
+}
+
+bool MasterImpl::IsUpdateCf(TablePtr table) {
+    TableSchema schema;
+    if (table->GetOldSchema(&schema)) {
+        return IsSchemaCfDiff(table->GetSchema(), schema);
+    }
+    return true;
 }
 
 void MasterImpl::UpdateTableRecordForRenameCallback(TablePtr table, int32_t retry_times,
