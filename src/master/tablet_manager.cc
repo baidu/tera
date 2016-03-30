@@ -514,7 +514,8 @@ Table::Table(const std::string& table_name)
       m_max_tablet_no(0),
       m_create_time((int64_t)time(NULL)),
       m_schema_is_syncing(false),
-      m_rangefragment(NULL) {
+      m_rangefragment(NULL),
+      m_old_schema(NULL) {
 }
 
 bool Table::FindTablet(const std::string& key_start, TabletPtr* tablet) {
@@ -677,6 +678,29 @@ void Table::ToMetaTableKeyValue(std::string* packed_key,
     MakeMetaTableKeyValue(meta, packed_key, packed_value);
 }
 
+bool Table::PrepareUpdate(const TableSchema& schema) {
+    if (!GetSchemaSyncLockOrFailed()) {
+        return false;
+    }
+    TableSchema* origin_schema = new TableSchema;
+    origin_schema->CopyFrom(GetSchema());
+    SetOldSchema(origin_schema);
+    SetSchema(schema);
+    return true;
+}
+
+void Table::AbortUpdate() {
+    TableSchema old_schema;
+    if (GetOldSchema(&old_schema)) {
+        SetSchema(old_schema);
+        ClearOldSchema();
+    }
+}
+
+void Table::CommitUpdate() {
+    ClearOldSchema();
+}
+
 void Table::ToMeta(TableMeta* meta) {
     meta->set_table_name(m_name);
     meta->set_status(m_status);
@@ -748,6 +772,27 @@ bool Table::GetSchemaSyncLockOrFailed() {
     }
     m_schema_is_syncing = true;
     return true;
+}
+
+void Table::SetOldSchema(TableSchema* schema) {
+    MutexLock lock(&m_mutex);
+    delete m_old_schema;
+    m_old_schema = schema;
+}
+
+bool Table::GetOldSchema(TableSchema* schema) {
+    MutexLock lock(&m_mutex);
+    if ((schema != NULL) && (m_old_schema != NULL)) {
+        schema->CopyFrom(*m_old_schema);
+        return true;
+    }
+    return false;
+}
+
+void Table::ClearOldSchema() {
+    MutexLock lock(&m_mutex);
+    delete m_old_schema;
+    m_old_schema = NULL;
 }
 
 void Table::ResetRangeFragment() {

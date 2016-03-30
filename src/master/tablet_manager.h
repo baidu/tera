@@ -203,6 +203,12 @@ public:
     void UpdateRpcDone();
     void StoreUpdateRpc(UpdateTableResponse* response, google::protobuf::Closure* done);
     bool IsSchemaSyncedAtRange(const std::string& start, const std::string& end);
+    void SetOldSchema(TableSchema* schema);
+    bool GetOldSchema(TableSchema* schema);
+    void ClearOldSchema();
+    bool PrepareUpdate(const TableSchema& schema);
+    void AbortUpdate();
+    void CommitUpdate();
 
 private:
     Table(const Table&) {}
@@ -223,6 +229,7 @@ private:
     RangeFragment* m_rangefragment;
     UpdateTableResponse* m_update_rpc_response;
     google::protobuf::Closure* m_update_rpc_done;
+    TableSchema* m_old_schema;
 };
 
 class TabletManager {
