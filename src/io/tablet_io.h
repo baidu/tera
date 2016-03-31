@@ -16,6 +16,7 @@
 #include "common/mutex.h"
 #include "io/stream_scan.h"
 #include "leveldb/db.h"
+#include "leveldb/compact_strategy.h"
 #include "leveldb/options.h"
 #include "leveldb/raw_key_operator.h"
 #include "leveldb/slice.h"
@@ -28,10 +29,6 @@
 #include "types.h"
 #include "utils/counter.h"
 #include "utils/rpc_timer_list.h"
-
-namespace leveldb {
-class CompactStrategy;
-}
 
 namespace tera {
 namespace io {
@@ -69,6 +66,23 @@ public:
               number_limit(std::numeric_limits<int64_t>::max()),
               ts_start(kOldestTs), ts_end(kLatestTs), snapshot_id(0), timeout(std::numeric_limits<int64_t>::max() / 2)
         {}
+    };
+
+    struct ScanContext {
+        leveldb::CompactStrategy* compact_strategy;
+        uint32_t version_num;
+        std::string last_key;
+        std::string last_col;
+        std::string last_qual;
+
+        ScanContext(leveldb::CompactStrategyFactory* strategy_factory)
+            : compact_strategy(strategy_factory->NewInstance()),
+              version_num(1)
+        {}
+
+        ~ScanContext() {
+            delete compact_strategy;
+        }
     };
 
     struct StatCounter {
@@ -224,7 +238,7 @@ private:
                       const std::string& end_row_key,
                       const ScanOptions& scan_options,
                       leveldb::Iterator* it,
-                      leveldb::CompactStrategy* compact_strategy,
+                      ScanContext* scan_context,
                       RowResult* value_list,
                       KeyValuePair* next_start_point,
                       uint32_t* read_row_count,
