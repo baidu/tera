@@ -2,6 +2,8 @@
 
 [Java SDK从这进入](https://github.com/baidu/tera/blob/master/doc/sdk_dev_guide_for_java.md)
 
+[Python SDK从这进入](https://github.com/baidu/tera/blob/master/doc/sdk_dev_guide_for_python.md)
+
 >**目录**
 >  1. [主要数据结构](#main-data-structure)
 >   * tera::Client、tera::Table
@@ -17,6 +19,7 @@
 >     * 扫描
 
 <a name="main-data-structure"></a>
+
 # 1. 主要数据结构
 
 #### (1) tera::Client 访问tera服务主结构
@@ -81,7 +84,7 @@
 ```
 // tera的统一操作，可以传入指定配置，默认会依次从./tera.flag、../conf/tera.flag、TERA_CONF环境变量查找
 tera::ErrorCode error_code;
-tera::Client* client = tera::Client::NewClient("./tera.flag", &error_code); 
+tera::Client* client = tera::Client::NewClient("./tera.flag", &error_code);
 if (client == NULL) {
 }
 ...
@@ -186,12 +189,12 @@ table->Put("rowkey1", "columnfamily1", "qualifier1", "value11", &error_code);
 tera::RowMutation* mutation = table->NewRowMutation("rowkey2");
 mutation->Put("family21", "qualifier21", "value21");
 mutation->Put("family22", "qualifier22", "value22");
-mutation->DeleteFamily("family11");    
+mutation->DeleteFamily("family11");
 mutation->DeleteColumns("family22", "qualifier22");
 ...
 mutation->SetCallBack(CallBack);                         // 若不设定回调，则为同步写入
 table->ApplyMutation(mutation);                          // 同步写入会阻塞
-...    
+...
 while (!table->IsPutFinished());                         // 如使用异步，等待后台写入完成后退出
 delete mutation;                                         // 注意回收内存，若异步，可在回调中回收
 
