@@ -4,8 +4,35 @@
 sample of using Tera Python SDK
 """
 
-from TeraSdk import Client, RowMutation, MUTATION_CALLBACK, TeraSdkException
+from TeraSdk import Client, RowMutation, RowReader, TeraSdkException
+from TeraSdk import MUTATION_CALLBACK, READER_CALLBACK, Status
 import time
+
+
+def mutation_callback(raw_mu):
+    mu = RowMutation(raw_mu)
+    status = mu.GetStatus()
+    if status.GetReasonNumber() != Status.OK:
+        print(status.GetReasonString())
+    print "callback of rowkey:", mu.RowKey()
+    mu.Destroy()
+write_callback = MUTATION_CALLBACK(mutation_callback)
+
+
+def reader_callback(raw_reader):
+    reader = RowReader(raw_reader)
+    status = reader.GetStatus()
+    if status.GetReasonNumber() != Status.OK:
+        print(status.GetReasonString())
+    while not reader.Done():
+        row = reader.RowKey()
+        column = reader.Family() + ":" + reader.Qualifier()
+        timestamp = str(reader.Timestamp())
+        val = reader.Value()
+        print row + ":" + column + ":" + timestamp + ":" + val
+        reader.Next()
+    reader.Destroy()
+read_callback = READER_CALLBACK(reader_callback)
 
 
 def main():
@@ -24,15 +51,35 @@ def main():
         return
 
     # sync put
-    try:
-        table.Put("row_sync", "cf0", "qu_sync", "value_sync")
-    except TeraSdkException as e:
-        print(e.reason)
-        return
+    sync_put(table)
 
     # sync get
+    sync_get(table)
+
+    # scan (stream)
+    scan(table)
+
+    # async put
+    async_put(table)
+
+    # async get
+    async_get(table)
+
+    print("main() done\n")
+
+
+def sync_put(table):
+    print("\nsync put")
     try:
-        print(table.Get("row_sync", "cf0", "qu_sync", 0))
+        table.Put("sync", "cf0", "qu0", "value")
+    except TeraSdkException as e:
+        print(e.reason)
+
+
+def sync_get(table):
+    print("\nsync get")
+    try:
+        print(table.Get("sync", "cf0", "qu0", 0))
     except TeraSdkException as e:
         print(e.reason)
         if "not found" in e.reason:
@@ -40,21 +87,28 @@ def main():
         else:
             return
 
-    # scan (stream)
-    scan(table)
 
-    # async put
-    mu = table.NewRowMutation("row_async")
-    mu.Put("cf0", "qu_async", "value_async")
-    mycallback = MUTATION_CALLBACK(my_mu_callback)
-    mu.SetCallback(mycallback)
-
-    table.ApplyMutation(mu)  # async
-
+def async_put(table):
+    print("\nasync put")
+    rowkey_list = ["async"]
+    for key in rowkey_list:
+        mu = table.NewRowMutation(key)
+        mu.Put("cf0", "qu0", "value")
+        mu.SetCallback(write_callback)
+        table.ApplyMutation(mu)
     while not table.IsPutFinished():
         time.sleep(0.01)
 
-    print("main() done\n")
+
+def async_get(table):
+    print("\nasync get")
+    rowkey_list = ["async", "async_not_found"]
+    for key in rowkey_list:
+        reader = table.NewRowReader(key)
+        reader.SetCallback(read_callback)
+        table.ApplyReader(reader)
+    while not table.IsGetFinished():
+        time.sleep(0.01)
 
 
 def put_get_int64(table, rowkey, cf, qu, value):
@@ -87,12 +141,8 @@ def scan_with_filter(table):
         stream.Next()
 
 
-def my_mu_callback(raw_mu):
-    mu = RowMutation(raw_mu)
-    print "callback of rowkey:", mu.RowKey()
-
-
 def scan(table):
+    print("\nscan")
     from TeraSdk import ScanDescriptor
     scan_desc = ScanDescriptor("")
     scan_desc.SetBufferSize(1024 * 1024)  # 1MB
