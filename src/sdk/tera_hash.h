@@ -9,6 +9,8 @@
 
 #include "tera.h"
 
+#pragma GCC visibility push(default)
+
 namespace tera {
 
 class HashMethod {
@@ -127,5 +129,7 @@ private:
 };
 
 } // namespace tera
+
+#pragma GCC visibility pop
 
 #endif // TERA_SDK_TERA_HASH_H_

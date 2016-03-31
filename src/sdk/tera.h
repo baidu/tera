@@ -12,6 +12,7 @@
 #include <string>
 #include <vector>
 
+#pragma GCC visibility push(default)
 namespace tera {
 
 /// 操作错误码
@@ -273,6 +274,10 @@ public:
     void SetSnapshot(uint64_t snapshot_id);
     /// 设置预读的buffer大小, 默认64K
     void SetBufferSize(int64_t buf_size);
+
+    /// set number limit for each buffer
+    void SetNumberLimit(int64_t number_limit);
+    int64_t GetNumberLimit();
 
     /// 设置async, 缺省true
     void SetAsync(bool async);
@@ -696,4 +701,6 @@ private:
     void operator=(const Client&);
 };
 } // namespace tera
+#pragma GCC visibility pop
+
 #endif  // TERA_TERA_H_

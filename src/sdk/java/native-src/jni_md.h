@@ -8,9 +8,11 @@
 #ifndef _JAVASOFT_JNI_MD_H_
 #define _JAVASOFT_JNI_MD_H_
 
-#define JNIEXPORT
+#define JNIEXPORT __attribute__ ((visibility ("default")))
 #define JNIIMPORT
 #define JNICALL
+
+#pragma GCC visibility push(default)
 
 typedef int jint;
 #ifdef _LP64 /* 64-bit Solaris */
@@ -20,5 +22,7 @@ typedef long long jlong;
 #endif
 
 typedef signed char jbyte;
+
+#pragma GCC visibility pop
 
 #endif /* !_JAVASOFT_JNI_MD_H_ */
