@@ -43,6 +43,11 @@ public:
     bool SameColumn(const TeraKey& tk);
     bool SameQualifier(const TeraKey& tk);
 
+    bool IsDel();
+    int Compare(const TeraKey& tk);
+    std::string DebugString();
+
+    bool empty() const { return is_empty_; }
     Slice raw_key() const { return raw_key_; }
     Slice key() const { return key_; }
     Slice column() const { return column_; }
@@ -59,6 +64,7 @@ private:
     Slice qualifier_;
     int64_t timestamp_;
     TeraKeyType type_;
+    bool is_empty_;
 };
 
 } // namespace leveldb
