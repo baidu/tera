@@ -599,35 +599,38 @@ void TableImpl::PackMutations(const std::string& server_addr,
     TaskBatch* mutation_batch = NULL;
     std::map<std::string, TaskBatch>::iterator it =
         _mutation_batch_map.find(server_addr);
-    if (it == _mutation_batch_map.end()) {
-        mutation_batch = &_mutation_batch_map[server_addr];
-        mutation_batch->row_id_list = new std::vector<int64_t>;
-        ThreadPool::Task task =
-            boost::bind(&TableImpl::MutationBatchTimeout, this, server_addr);
-        int64_t timer_id = _thread_pool->DelayTask(_write_commit_timeout, task);
-        mutation_batch->timer_id = timer_id;
-    } else {
+    if (it != _mutation_batch_map.end()) {
         mutation_batch = &it->second;
     }
 
     for (size_t i = 0; i < mu_list.size(); ++i) {
+        if (mutation_batch == NULL) {
+            mutation_batch = &_mutation_batch_map[server_addr];
+            mutation_batch->row_id_list = new std::vector<int64_t>;
+            ThreadPool::Task task =
+                boost::bind(&TableImpl::MutationBatchTimeout, this, server_addr);
+            int64_t timer_id = _thread_pool->DelayTask(_write_commit_timeout, task);
+            mutation_batch->timer_id = timer_id;
+        }
+
         RowMutationImpl* row_mutation = mu_list[i];
         mutation_batch->row_id_list->push_back(row_mutation->GetId());
         row_mutation->DecRef();
-    }
 
-    if (mutation_batch->row_id_list->size() >= _commit_size) {
-        std::vector<int64_t>* mu_id_list = mutation_batch->row_id_list;
-        uint64_t timer_id = mutation_batch->timer_id;
-        _mutation_batch_mutex.Unlock();
-        if (_thread_pool->CancelTask(timer_id)) {
-            _mutation_batch_mutex.Lock();
-            _mutation_batch_map.erase(server_addr);
-            _mutation_batch_mutex.Unlock();
-            CommitMutationsById(server_addr, *mu_id_list);
-            delete mu_id_list;
+        if (mutation_batch->row_id_list->size() >= _commit_size) {
+            std::vector<int64_t>* mu_id_list = mutation_batch->row_id_list;
+            uint64_t timer_id = mutation_batch->timer_id;
+            const bool non_block_cancel = true;
+            bool is_running = false;
+            if (_thread_pool->CancelTask(timer_id, non_block_cancel, &is_running)) {
+                _mutation_batch_map.erase(server_addr);
+                CommitMutationsById(server_addr, *mu_id_list);
+                delete mu_id_list;
+            } else {
+                CHECK(is_running);
+            }
+            mutation_batch = true;
         }
-        _mutation_batch_mutex.Lock();
     }
 }
 
