@@ -102,6 +102,10 @@ const char* builtin_cmd_list[] = {
            - delete cf                                                 \n\
                e.g. tablename{lg0{cf0<op=del>}}",
 
+    "update-check",
+    "update-check <tablename>                                           \n\
+                  check status of last online-schema-update",
+
     "enable",
     "enable <tablename>",
 
@@ -362,7 +366,7 @@ int32_t CreateByFileOp(Client* client, int32_t argc, char** argv, ErrorCode* err
 
 int32_t UpdateCheckOp(Client* client, int32_t argc, char** argv, ErrorCode* err) {
     if (argc != 3) {
-        Usage(argv[0]);
+        PrintCmdHelpInfo(argv[1]);
         return -1;
     }
     bool done = false;

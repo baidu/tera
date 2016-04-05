@@ -992,7 +992,7 @@ void MasterImpl::UpdateCheck(const UpdateCheckRequest* request,
     if (!HasPermissionOrReturn(request, response, done, table, "update-check table")) {
         return;
     }
-    if (!FLAGS_tera_master_online_schema_update_enabled) {
+    if (!FLAGS_tera_online_schema_update_enabled) {
         LOG(INFO) << "[update] online-schema-change is disabled";
         response->set_status(kInvalidArgument);
     } else if (table->GetSchemaIsSyncing()) {
