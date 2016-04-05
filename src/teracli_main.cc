@@ -360,6 +360,20 @@ int32_t CreateByFileOp(Client* client, int32_t argc, char** argv, ErrorCode* err
     return 0;
 }
 
+int32_t UpdateCheckOp(Client* client, int32_t argc, char** argv, ErrorCode* err) {
+    if (argc != 3) {
+        Usage(argv[0]);
+        return -1;
+    }
+    bool done = false;
+    if (!client->UpdateCheck(argv[2], &done, err)) {
+        std::cerr << err->GetReason() << std::endl;
+        return -1;
+    }
+    std::cout << "update " << (done ? "successed" : "is running...") << std::endl;
+    return 0;
+}
+
 int32_t UpdateOp(Client* client, int32_t argc, char** argv, ErrorCode* err) {
     if (argc != 3) {
         PrintCmdHelpInfo(argv[1]);
@@ -2755,6 +2769,8 @@ int ExecuteCommand(Client* client, int argc, char* argv[]) {
         ret = CreateByFileOp(client, argc, argv, &error_code);
     } else if (cmd == "update") {
         ret = UpdateOp(client, argc, argv, &error_code);
+    } else if (cmd == "update-check") {
+        ret = UpdateCheckOp(client, argc, argv, &error_code);
     } else if (cmd == "drop") {
         ret = DropOp(client, argc, argv, &error_code);
     } else if (cmd == "enable") {

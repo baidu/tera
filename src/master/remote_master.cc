@@ -114,6 +114,16 @@ void RemoteMaster::UpdateTable(google::protobuf::RpcController* controller,
     m_thread_pool->AddTask(callback);
 }
 
+void RemoteMaster::UpdateCheck(google::protobuf::RpcController* controller,
+                               const UpdateCheckRequest* request,
+                               UpdateCheckResponse* response,
+                               google::protobuf::Closure* done) {
+    ThreadPool::Task callback =
+        boost::bind(&RemoteMaster::DoUpdateCheck, this, controller,
+                    request, response, done);
+    m_thread_pool->AddTask(callback);
+}
+
 void RemoteMaster::CompactTable(google::protobuf::RpcController* controller,
                                 const CompactTableRequest* request,
                                 CompactTableResponse* response,
@@ -261,6 +271,15 @@ void RemoteMaster::DoUpdateTable(google::protobuf::RpcController* controller,
     LOG(INFO) << "run RPC (UpdateTable)";
     m_master_impl->UpdateTable(request, response, done);
     LOG(INFO) << "finish RPC (UpdateTable)";
+}
+
+void RemoteMaster::DoUpdateCheck(google::protobuf::RpcController* controller,
+                                 const UpdateCheckRequest* request,
+                                 UpdateCheckResponse* response,
+                                 google::protobuf::Closure* done) {
+    LOG(INFO) << "accept RPC (UpdateCheck)";
+    m_master_impl->UpdateCheck(request, response, done);
+    LOG(INFO) << "finish RPC (UpdateCheck)";
 }
 
 void RemoteMaster::DoCompactTable(google::protobuf::RpcController* controller,

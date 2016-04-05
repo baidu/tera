@@ -104,6 +104,10 @@ public:
                      UpdateTableResponse* response,
                      google::protobuf::Closure* done);
 
+    void UpdateCheck(const UpdateCheckRequest* request,
+                     UpdateCheckResponse* response,
+                     google::protobuf::Closure* done);
+
     void CompactTable(const CompactTableRequest* request,
                       CompactTableResponse* response,
                       google::protobuf::Closure* done);

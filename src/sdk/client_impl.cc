@@ -230,7 +230,29 @@ bool ClientImpl::UpdateTable(const TableDescriptor& desc, ErrorCode* err) {
     return false;
 }
 
-bool ClientImpl::DeleteTable(string name, ErrorCode* err) {
+bool ClientImpl::UpdateCheck(const std::string& table_name, bool* done, ErrorCode* err) {
+    master::MasterClient master_client(_cluster->MasterAddr());
+    UpdateCheckRequest request;
+    UpdateCheckResponse response;
+    request.set_sequence_id(0);
+    request.set_table_name(table_name);
+    request.set_user_token(GetUserToken(_user_identity, _user_passcode));
+
+    string reason;
+    if (master_client.UpdateCheck(&request, &response)) {
+        if (CheckReturnValue(response.status(), reason, err)) {
+            *done = response.done();
+            return true;
+        }
+        err->SetFailed(ErrorCode::kSystem, reason);
+    } else {
+        reason = "rpc fail to update-check table:" + table_name;
+        err->SetFailed(ErrorCode::kSystem, reason);
+    }
+    return false;
+}
+
+bool ClientImpl::DeleteTable(const std::string& name, ErrorCode* err) {
     std::string internal_table_name;
     if (!GetInternalTableName(name, err, &internal_table_name)) {
         LOG(ERROR) << "faild to scan meta schema";
@@ -257,7 +279,7 @@ bool ClientImpl::DeleteTable(string name, ErrorCode* err) {
     return false;
 }
 
-bool ClientImpl::DisableTable(string name, ErrorCode* err) {
+bool ClientImpl::DisableTable(const std::string& name, ErrorCode* err) {
     std::string internal_table_name;
     if (!GetInternalTableName(name, err, &internal_table_name)) {
         LOG(ERROR) << "faild to scan meta schema";
@@ -285,7 +307,7 @@ bool ClientImpl::DisableTable(string name, ErrorCode* err) {
     return false;
 }
 
-bool ClientImpl::EnableTable(string name, ErrorCode* err) {
+bool ClientImpl::EnableTable(const std::string& name, ErrorCode* err) {
     master::MasterClient master_client(_cluster->MasterAddr());
     std::string internal_table_name;
     if (!GetInternalTableName(name, err, &internal_table_name)) {

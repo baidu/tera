@@ -87,6 +87,14 @@ bool MasterClient::UpdateTable(const UpdateTableRequest* request,
                                 "UpdateTable", m_rpc_timeout);
 }
 
+bool MasterClient::UpdateCheck(const UpdateCheckRequest* request,
+                               UpdateCheckResponse* response) {
+    return SendMessageWithRetry(&MasterServer::Stub::UpdateCheck,
+                                request, response,
+                                (Closure<void, UpdateCheckRequest*, UpdateCheckResponse*, bool, int>*)NULL,
+                                "UpdateCheck", m_rpc_timeout);
+}
+
 bool MasterClient::SearchTable(const SearchTableRequest* request,
                                SearchTableResponse* response) {
     return SendMessageWithRetry(&MasterServer::Stub::SearchTable,
