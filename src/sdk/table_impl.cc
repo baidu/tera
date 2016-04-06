@@ -70,6 +70,8 @@ TableImpl::TableImpl(const std::string& table_name,
       _commit_size(FLAGS_tera_sdk_batch_size),
       _write_commit_timeout(FLAGS_tera_sdk_write_send_interval),
       _read_commit_timeout(FLAGS_tera_sdk_read_send_interval),
+      _mutation_batch_seq(0),
+      _reader_batch_seq(0),
       _max_commit_pending_num(FLAGS_tera_sdk_max_mutation_pending_num),
       _max_reader_pending_num(FLAGS_tera_sdk_max_reader_pending_num),
       _meta_cond(&_meta_mutex),
@@ -595,9 +597,10 @@ void TableImpl::PackMutations(const std::string& server_addr,
     for (size_t i = 0; i < mu_list.size(); ++i) {
         if (mutation_batch == NULL) {
             mutation_batch = &_mutation_batch_map[server_addr];
-            mutation_batch->row_id_list = new std::vector<int64_t>;
-            ThreadPool::Task task =
-                boost::bind(&TableImpl::MutationBatchTimeout, this, server_addr);
+            mutation_batch->sequence_num = _mutation_batch_seq++;
+            mutation_batch->row_id_list = new std::vector<int64_t>(_commit_size);
+            ThreadPool::Task task = boost::bind(&TableImpl::MutationBatchTimeout, this,
+                                                server_addr, mutation_batch->sequence_num);
             int64_t timer_id = _thread_pool->DelayTask(_write_commit_timeout, task);
             mutation_batch->timer_id = timer_id;
         }
@@ -611,19 +614,18 @@ void TableImpl::PackMutations(const std::string& server_addr,
             uint64_t timer_id = mutation_batch->timer_id;
             const bool non_block_cancel = true;
             bool is_running = false;
-            if (_thread_pool->CancelTask(timer_id, non_block_cancel, &is_running)) {
-                _mutation_batch_map.erase(server_addr);
-                CommitMutationsById(server_addr, *mu_id_list);
-                delete mu_id_list;
-            } else {
-                CHECK(is_running);
+            if (!_thread_pool->CancelTask(timer_id, non_block_cancel, &is_running)) {
+                CHECK(is_running); // this delay task must be waiting for _mutation_batch_mutex
             }
-            mutation_batch = true;
+            _mutation_batch_map.erase(server_addr);
+            CommitMutationsById(server_addr, *mu_id_list);
+            delete mu_id_list;
+            mutation_batch = NULL;
         }
     }
 }
 
-void TableImpl::MutationBatchTimeout(std::string server_addr) {
+void TableImpl::MutationBatchTimeout(std::string server_addr, uint64_t batch_seq) {
     std::vector<int64_t>* mu_id_list = NULL;
     {
         MutexLock lock(&_mutation_batch_mutex);
@@ -633,6 +635,9 @@ void TableImpl::MutationBatchTimeout(std::string server_addr) {
             return;
         }
         TaskBatch* mutation_batch = &it->second;
+        if (mutation_batch->sequence_num != batch_seq) {
+            return;
+        }
         mu_id_list = mutation_batch->row_id_list;
         _mutation_batch_map.erase(it);
     }
@@ -924,39 +929,42 @@ void TableImpl::PackReaders(const std::string& server_addr,
     TaskBatch* reader_buffer = NULL;
     std::map<std::string, TaskBatch>::iterator it =
         _reader_batch_map.find(server_addr);
-    if (it == _reader_batch_map.end()) {
-        reader_buffer = &_reader_batch_map[server_addr];
-        reader_buffer->row_id_list = new std::vector<int64_t>;
-        ThreadPool::Task task =
-            boost::bind(&TableImpl::ReaderBatchTimeout, this, server_addr);
-        uint64_t timer_id = _thread_pool->DelayTask(_read_commit_timeout, task);
-        reader_buffer->timer_id = timer_id;
-    } else {
+    if (it != _reader_batch_map.end()) {
         reader_buffer = &it->second;
     }
 
     for (size_t i = 0; i < reader_list.size(); ++i) {
+        if (reader_buffer == NULL) {
+            reader_buffer = &_reader_batch_map[server_addr];
+            reader_buffer->sequence_num = _reader_batch_seq++;
+            reader_buffer->row_id_list = new std::vector<int64_t>;
+            ThreadPool::Task task = boost::bind(&TableImpl::ReaderBatchTimeout, this,
+                                                server_addr, reader_buffer->sequence_num);
+            uint64_t timer_id = _thread_pool->DelayTask(_read_commit_timeout, task);
+            reader_buffer->timer_id = timer_id;
+        }
+
         RowReaderImpl* reader = reader_list[i];
         reader_buffer->row_id_list->push_back(reader->GetId());
         reader->DecRef();
-    }
 
-    if (reader_buffer->row_id_list->size() >= _commit_size) {
-        std::vector<int64_t>* reader_id_list = reader_buffer->row_id_list;
-        uint64_t timer_id = reader_buffer->timer_id;
-        _reader_batch_mutex.Unlock();
-        if (_thread_pool->CancelTask(timer_id)) {
-            _reader_batch_mutex.Lock();
+        if (reader_buffer->row_id_list->size() >= _commit_size) {
+            std::vector<int64_t>* reader_id_list = reader_buffer->row_id_list;
+            uint64_t timer_id = reader_buffer->timer_id;
+            const bool non_block_cancel = true;
+            bool is_running = false;
+            if (!_thread_pool->CancelTask(timer_id, non_block_cancel, &is_running)) {
+                CHECK(is_running); // this delay task must be waiting for _reader_batch_map
+            }
             _reader_batch_map.erase(server_addr);
-            _reader_batch_mutex.Unlock();
             CommitReadersById(server_addr, *reader_id_list);
             delete reader_id_list;
+            reader_buffer = NULL;
         }
-        _reader_batch_mutex.Lock();
     }
 }
 
-void TableImpl::ReaderBatchTimeout(std::string server_addr) {
+void TableImpl::ReaderBatchTimeout(std::string server_addr, uint64_t batch_seq) {
     std::vector<int64_t>* reader_id_list = NULL;
     {
         MutexLock lock(&_reader_batch_mutex);
@@ -966,6 +974,9 @@ void TableImpl::ReaderBatchTimeout(std::string server_addr) {
             return;
         }
         TaskBatch* reader_buffer = &it->second;
+        if (reader_buffer->sequence_num != batch_seq) {
+            return;
+        }
         reader_id_list = reader_buffer->row_id_list;
         _reader_batch_map.erase(it);
     }
