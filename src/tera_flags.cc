@@ -148,9 +148,12 @@ DEFINE_int64(tera_master_stat_table_splitsize, 100, "default split size of stat 
 
 DEFINE_int32(tera_master_gc_period, 60000, "the period (in ms) for master gc");
 
-DEFINE_bool(tera_master_available_check_enabled, true, "whether execute availability check");
-DEFINE_int64(tera_master_not_available_threshold, 30, "the threshold (in s) of not available");
-DEFINE_int64(tera_master_available_check_period, 300, "the period (in s) of availability check");
+DEFINE_bool(tera_master_availability_check_enabled, true, "whether execute availability check");    // reload config safety
+DEFINE_int64(tera_master_not_available_threshold, 0, "the threshold (in s) of not available");     // reload config safety
+DEFINE_int64(tera_master_availability_check_period, 60, "the period (in s) of availability check"); // reload config safety
+DEFINE_int64(tera_master_availability_warning_threshold, 30, "30s, the threshold (in s) of warning availability"); // reload config safety
+DEFINE_int64(tera_master_availability_error_threshold, 300, "5 minutes, the threshold (in s) of error availability");        // reload config safety
+DEFINE_int64(tera_master_availability_fatal_threshold, 1800, "30 minutes, the threshold (in s) of fatal availability");        // reload config safety
 
 ///////// tablet node  /////////
 

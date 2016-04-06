@@ -11,7 +11,11 @@
 
 #include "common/base/string_ext.h"
 #include "common/timer.h"
+#include "utils/string_util.h"
 
+DECLARE_int64(tera_master_availability_warning_threshold);
+DECLARE_int64(tera_master_availability_error_threshold);
+DECLARE_int64(tera_master_availability_fatal_threshold);
 DECLARE_int64(tera_master_not_available_threshold);
 DECLARE_string(tera_master_meta_table_name);
 DECLARE_string(tera_master_meta_table_path);
@@ -38,9 +42,12 @@ static std::string GetNameFromPath(const std::string& path) {
     return t[0];
 }
 
-double TabletAvailability::GetAvailability() {
+void TabletAvailability::LogAvailability() {
     MutexLock lock(&mutex_);
     int64_t not_avai_count = 0;
+    int64_t not_avai_warning = 0;
+    int64_t not_avai_error = 0;
+    int64_t not_avai_fatal = 0;
     int64_t start = ::common::timer::get_micros();
     std::map<std::string, int64_t>::iterator it;
     for (it = tablets_.begin(); it != tablets_.end(); ++it) {
@@ -50,18 +57,35 @@ double TabletAvailability::GetAvailability() {
             LOG(ERROR) << "[availability] unknown table:" << table_name;
             continue;
         }
-        if ((table->GetStatus() == kTableEnable)
-            && (start - it->second > FLAGS_tera_master_not_available_threshold * 1000 * 1000)) {
+        if (table->GetStatus() != kTableEnable) {
+            continue;
+        }
+
+        if ((start - it->second) > FLAGS_tera_master_not_available_threshold * 1000 * 1000LL) {
             VLOG(12) << "[availability] not available:" << it->first;
             not_avai_count++;
+        }
+        if ((start - it->second) > FLAGS_tera_master_availability_fatal_threshold * 1000 * 1000LL) {
+            not_avai_fatal++;
+        } else if ((start - it->second) > FLAGS_tera_master_availability_error_threshold * 1000 * 1000LL) {
+            not_avai_error++;
+        } else if ((start - it->second) > FLAGS_tera_master_availability_warning_threshold * 1000 * 1000LL) {
+            not_avai_warning++;
         }
     }
     int64_t cost = ::common::timer::get_micros() - start;
     int64_t all_tablets = tablet_manager_->GetAllTabletsCount();
+    LOG(INFO) << "[availability][current-status] fatal=" << not_avai_fatal
+        << " f-ratio=" << RoundNumberToNDecimalPlaces((double)not_avai_fatal/all_tablets, 6)
+        << ", error=" << not_avai_error
+        << " e-ratio=" << RoundNumberToNDecimalPlaces((double)not_avai_error/all_tablets, 6)
+        << ", warn=" << not_avai_warning
+        << " w-ratio=" << RoundNumberToNDecimalPlaces((double)not_avai_warning/all_tablets, 6);
+
     LOG(INFO) << "[availability][current-status] (not-available/not-ready/all-tablets: "
         << not_avai_count << "/" << tablets_.size() << "/" << all_tablets << ")"
-        << " cost time:" << cost/1000 << " ms";
-    return 1 - not_avai_count/(double)all_tablets;
+        << " available tablets percentage: " << 1 - not_avai_count/(double)all_tablets;
+    LOG(INFO) << "[availability] cost time:" << cost/1000 << " ms";
 }
 
 } // master

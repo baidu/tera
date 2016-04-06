@@ -4,6 +4,9 @@
 
 #include "string_util.h"
 
+#include <iostream>
+#include <sstream>
+
 #include <stdint.h>
 #include <stdlib.h>
 
@@ -87,6 +90,17 @@ bool IsValidColumnFamilyName(const std::string& str) {
         }
     }
     return true;
+}
+
+std::string RoundNumberToNDecimalPlaces(double n, int d) {
+    if (d < 0 || 9 < d) {
+        return "(null)";
+    }
+    std::stringstream ss;
+    ss << std::fixed;
+    ss.precision(d);
+    ss << n;
+    return ss.str();
 }
 
 struct EditDistanceMatrix {
