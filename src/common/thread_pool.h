@@ -10,6 +10,7 @@
 #include <deque>
 #include <map>
 #include <queue>
+#include <set>
 #include <sstream>
 #include <vector>
 #include <boost/function.hpp>
@@ -27,7 +28,6 @@ public:
           work_cv_(&mutex_),
           stop_(false),
           last_task_id_(0),
-          running_task_id_(0),
           schedule_cost_sum_(0),
           schedule_count_(0),
           task_cost_sum_(0),
@@ -114,7 +114,7 @@ public:
         while (1) {
             {
                 MutexLock lock(&mutex_);
-                if (running_task_id_ != task_id) {
+                if (running_task_ids_.find(task_id) == running_task_ids_.end()) {
                     BGMap::iterator it = latest_.find(task_id);
                     if (it == latest_.end()) {
                         if (is_running != NULL) {
@@ -197,13 +197,13 @@ private:
                         schedule_count_++;
                         task = bg_item.task;
                         latest_.erase(it);
-                        running_task_id_ = bg_item.id;
+                        running_task_ids_.insert(bg_item.id);
                         mutex_.Unlock();
                         task(bg_item.id);
                         task_cost_sum_ += timer::get_micros() - now_time;
                         task_count_++;
                         mutex_.Lock("ThreadProcRelock");
-                        running_task_id_ = 0;
+                        running_task_ids_.erase(bg_item.id);
                     }
                     continue;
                 } else if (queue_.empty() && !stop_) {
@@ -257,11 +257,11 @@ private:
     CondVar work_cv_;
     bool stop_;
     std::vector<pthread_t> tids_;
+    std::set<int64_t> running_task_ids_;
 
     BGQueue time_queue_;
     BGMap latest_;
     int64_t last_task_id_;
-    int64_t running_task_id_;
 
     // for profiling
     int64_t schedule_cost_sum_;
