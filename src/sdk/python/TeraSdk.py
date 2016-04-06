@@ -102,6 +102,13 @@ class ScanDescriptor(object):
         lib.tera_scan_descriptor_set_is_async(self.desc, is_async)
 
     def SetPackInterval(self, interval):
+        """
+        设置scan操作的超时时长，单位ms
+        服务端在scan操作达到约 interval 毫秒后尽快返回给client结果
+
+        Args:
+            iinterval(long): 一次scan的超时时长，单位ms
+        """
         lib.tera_scan_descriptor_set_pack_interval(self.desc, interval)
 
     def AddColumn(self, cf, qu):
@@ -125,15 +132,32 @@ class ScanDescriptor(object):
         lib.tera_scan_descriptor_add_column_family(self.desc, cf)
 
     def IsAsync(self):
+        """
+        Returns:
+            (bool) 当前scan操作是否为async方式
+        """
         return lib.tera_scan_descriptor_is_async(self.desc)
 
-    def SetSnapshot(self, sid):
-        lib.tera_scan_descriptor_set_snapshot(self.desc, sid)
-
     def SetTimeRange(self, start, end):
+        """
+        设置返回版本的时间范围
+        C++接口用户注意：C++的这个接口里start和end参数的顺序和这里相反！
+
+        Args:
+            start(long): 开始时间戳（结果包含该值），Epoch (00:00:00 UTC, January 1, 1970), measured in us
+            end(long): 截止时间戳（结果包含该值），Epoch (00:00:00 UTC, January 1, 1970), measured in us
+        """
         lib.tera_scan_descriptor_set_time_range(self.desc, start, end)
 
     def SetFilter(self, filter_str):
+        """
+        设置过滤器（当前只支持比较初级的功能）
+
+        Args:
+            filter_str(string): 过滤字符串
+        Returns:
+            (bool) 返回True表示filter_str解析成功，支持这种过滤方式，否则表示解析失败
+        """
         return lib.tera_scan_descriptor_set_filter(self.desc, filter_str)
 
 
@@ -212,12 +236,17 @@ class ResultStream(object):
         return copy_string_to_user(value, long(vallen.value))
 
     def ValueInt64(self):
+        """
+        Returns:
+            (long) 当前cell为一个int64计数器，取出该计数器的数值
+            对一个非int64计数器调用该方法，属未定义行为
+        """
         return lib.tera_result_stream_value_int64(self.stream)
 
     def Timestamp(self):
         """
         Returns:
-            (long) 当前cell对应的时间戳，Unix time
+            (long) 当前cell对应的时间戳，Epoch (00:00:00 UTC, January 1, 1970), measured in us
         """
         return lib.tera_result_stream_timestamp(self.stream)
 
@@ -313,9 +342,18 @@ class RowMutation(object):
         lib.tera_row_mutation_set_callback(self.mutation, callback)
 
     def GetStatus(self):
+        """
+        返回本次Mutation的结果状态
+
+        Returns:
+            (class Status) 操作结果状态，可以获知成功或失败，若失败，具体原因
+        """
         return Status(lib.tera_row_mutation_get_status_code(self.mutation))
 
     def Destroy(self):
+        """
+        销毁这个mutation，释放底层资源，以后不得再使用这个对象
+        """
         lib.tera_row_mutation_destroy(self.mutation)
 
 
@@ -327,11 +365,13 @@ class Table(object):
         self.table = table
 
     def NewRowMutation(self, rowkey):
-        """ 生成一个对 rowkey 的RowMutation对象
+        """ 生成一个对 rowkey 的RowMutation对象（修改一行）
+        一个RowMutation对某一行的操作（例如多列修改）是原子的
+
         Args:
             rowkey(string): 待变更的rowkey
         Returns:
-            (RowMutation): RowMutation对象
+            (class RowMutation): RowMutation对象
         """
         return RowMutation(lib.tera_row_mutation(self.table, rowkey,
                                                  c_uint64(len(rowkey))))
@@ -341,15 +381,29 @@ class Table(object):
             如果之前调用过 SetCallback() 则本次调用为异步，否则为同步
 
         Args:
-            mutation(RowMutation): RowMutation对象
+            mutation(class RowMutation): RowMutation对象
         """
         lib.tera_table_apply_mutation(self.table, mutation.mutation)
 
     def NewRowReader(self, rowkey):
+        """ 生成一个对 rowkey 的RowReader对象（读取一行）
+        一个RowReader对某一行的操作（例如读取多列）是原子的
+
+        Args:
+            rowkey(string): 待读取的rowkey
+        Returns:
+            (class RowReader): RowReader对象
+        """
         return RowReader(lib.tera_row_reader(self.table, rowkey,
                                              c_uint64(len(rowkey))))
 
     def ApplyReader(self, reader):
+        """ 应用一次读取，
+            如果之前调用过 SetCallback() 则本次调用为异步，否则为同步
+
+        Args:
+            reader(class RowReader): RowReader对象
+        """
         lib.tera_table_apply_reader(self.table, reader.reader)
 
     def IsPutFinished(self):
@@ -361,6 +415,11 @@ class Table(object):
         return lib.tera_table_is_put_finished(self.table)
 
     def IsGetFinished(self):
+        """ table的异步读操作是否*全部*完成
+
+        Returns:
+            (bool) 全部完成则返回true，否则返回false.
+        """
         return lib.tera_table_is_get_finished(self.table)
 
     def Get(self, rowkey, cf, qu, snapshot):
@@ -371,6 +430,8 @@ class Table(object):
             cf(string): ColumnFamily名
             qu(string): Qualifier名
             snapshot(long): 快照，不关心的用户设置为0即可
+        Returns:
+            (string) cell的值
         Raises:
             TeraSdkException: 读操作失败
         """
@@ -387,6 +448,19 @@ class Table(object):
         return copy_string_to_user(value, long(vallen.value))
 
     def GetInt64(self, rowkey, cf, qu, snapshot):
+        """ 类同Get()接口，区别是将cell的内容作为int64计数器返回
+            对非int64计数器的cell调用此方法属于未定义行为
+
+        Args:
+            rowkey(string): Rowkey的值
+            cf(string): ColumnFamily名
+            qu(string): Qualifier名
+            snapshot(long): 快照，不关心的用户设置为0即可
+        Returns:
+            (long) cell的数值
+        Raises:
+            TeraSdkException: 读操作失败
+        """
         err = c_char_p()
         value = c_int64()
         result = lib.tera_table_getint64(
@@ -418,6 +492,16 @@ class Table(object):
             raise TeraSdkException("put record failed:" + err.value)
 
     def PutInt64(self, rowkey, cf, qu, value):
+        """ 类同Put()方法，区别是这里的参数value可以是一个数字（能够用int64表示）计数器
+
+        Args:
+            rowkey(string): Rowkey的值
+            cf(string): ColumnFamily名
+            qu(string): Qualifier名
+            value(long): cell的数值，能够用int64表示
+        Raises:
+            TeraSdkException: 写操作失败
+        """
         err = c_char_p()
         result = lib.tera_table_putint64(
             self.table, rowkey, c_uint64(len(rowkey)), cf,
@@ -575,9 +659,18 @@ class RowReader(object):
         return lib.tera_row_reader_timestamp(self.reader)
 
     def GetStatus(self):
+        """
+        返回本次RowReader读取的结果状态
+
+        Returns:
+            (class Status) 操作结果状态，可以获知成功或失败，若失败，具体原因
+        """
         return Status(lib.tera_row_reader_get_status_code(self.reader))
 
     def Destroy(self):
+        """
+        销毁这个mutation，释放底层资源，以后不得再使用这个对象
+        """
         lib.tera_row_reader_destroy(self.reader)
 
 
@@ -588,6 +681,10 @@ class TeraSdkException(Exception):
     def __str__(self):
         return self.reason
 
+
+##########################
+# 以下代码用户不需要关心 #
+##########################
 
 def init_function_prototype():
     ######################
