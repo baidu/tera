@@ -471,7 +471,7 @@ bool ClientImpl::GetInternalTableName(const std::string& table_name, ErrorCode* 
 
 Table* ClientImpl::OpenTable(const std::string& table_name,
                              ErrorCode* err) {
-    MutexLock l1(&_open_table_mutex);
+    _open_table_mutex.Lock();
     TableHandle& th = _open_table_map[table_name];
     th.ref++;
 
@@ -483,18 +483,25 @@ Table* ClientImpl::OpenTable(const std::string& table_name,
         _open_table_mutex.Unlock();
         VLOG(10) << "open a new table: " << table_name;
         th.handle = OpenTableInternal(table_name, err);
-        if (th.handle == NULL) {
-            MutexLock l3(&_open_table_mutex);
-            th.mu->Unlock();
+        th.mu->Unlock();
+    } else {
+        _open_table_mutex.Unlock();
+    }
+
+    th.mu->Lock();
+    if (th.handle == NULL) {
+        VLOG(10) << "open null table: " << table_name;
+        th.mu->Unlock();
+        MutexLock l(&_open_table_mutex);
+        if (--th.ref == 0) {
             delete th.mu;
             _open_table_map.erase(table_name);
-            return NULL;
         }
-        _open_table_mutex.Lock();
-        th.mu->Unlock();
+        return NULL;
     }
 
     Table* table_impl = th.handle;
+    th.mu->Unlock();
     return new TableInternal(table_impl, this);
 }
 

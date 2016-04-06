@@ -12,6 +12,7 @@
 #include <limits>
 #include <sstream>
 
+#include <boost/bind.hpp>
 #include <gflags/gflags.h>
 #include <glog/logging.h>
 
@@ -38,7 +39,9 @@ using namespace common::timer;
 
 void Usage(const std::string& prg_name) {
     std::cout << "DESCRIPTION \n\
-       rw-consistency-test  \n";
+       rw-consistency-test  \n\
+       shared-tableimpl-test\n\
+       version \n";
 }
 
 static common::Counter w_pending;
@@ -265,6 +268,46 @@ int32_t RWConsistencyTest(int32_t argc, char** argv, ErrorCode* err) {
     return 0;
 }
 
+int32_t SharedTableImplTask(Client* client, ErrorCode* err) {
+    std::string tablename = FLAGS_table;
+    Table* table = client->OpenTable(tablename, err);
+    if (table == NULL) {
+        LOG(ERROR) << "fail to open table: " << tablename;
+        return -1;
+    }
+    delete table;
+    return 0;
+}
+
+int32_t SharedTableImplTest(int32_t argc, char** argv, ErrorCode* err) {
+    if (FLAGS_table.empty()) {
+        Usage(argv[0]);
+        return -1;
+    }
+
+    Client* client = Client::NewClient(FLAGS_flagfile, NULL);
+    if (client == NULL) {
+        LOG(ERROR) << "client instance not exist";
+        return -2;
+    }
+
+    ThreadPool thread_pool(100);
+    for (int i = 0; i < 1000000; ++i) {
+        ThreadPool::Task task =
+                boost::bind(&SharedTableImplTask, client, err);
+        thread_pool.AddTask(task);
+    }
+    while (thread_pool.PendingNum() > 0) {
+        std::cerr << common::timer::get_time_str(time(NULL)) << " "
+            << "waiting for test finish, pending " << thread_pool.PendingNum()
+            << " tasks ..." << std::endl;
+        sleep(1);
+    }
+    thread_pool.Stop(true);
+    delete client;
+    return 0;
+}
+
 int ExecuteCommand(int argc, char* argv[]) {
     int ret = 0;
     ErrorCode error_code;
@@ -275,6 +318,8 @@ int ExecuteCommand(int argc, char* argv[]) {
     std::string cmd = argv[1];
     if (cmd == "rw-consistency-test") {
         ret = RWConsistencyTest(argc, argv, &error_code);
+    } else if (cmd == "shared-tableimpl-test") {
+        ret = SharedTableImplTest(argc, argv, &error_code);
     } else if (cmd == "version") {
         PrintSystemVersion();
         ret = 0;
