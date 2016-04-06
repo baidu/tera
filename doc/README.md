@@ -34,6 +34,10 @@
 
 [tablet的可用性统计实现](https://github.com/baidu/tera/blob/master/doc/tablet-availability.md)
 
+## 版本发布
+
+[版本发布及管理](https://github.com/baidu/tera/blob/master/doc/release_management.md)
+
 ## 源码相关
 
 [源码目录结构](https://github.com/baidu/tera/blob/master/src/README.md)
