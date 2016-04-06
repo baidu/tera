@@ -11,6 +11,7 @@
 
 #include "proto/table_meta.pb.h"
 #include "proto/tabletnode_rpc.pb.h"
+#include "sdk/client_impl.h"
 #include "sdk/sdk_task.h"
 #include "sdk/sdk_zk.h"
 #include "sdk/tera.h"
@@ -427,6 +428,150 @@ private:
     /// read request will contain this member,
     /// so tabletnodes can drop the read-request that timeouted
     uint64_t _pending_timeout_ms;
+};
+
+class TableInternal : public Table {
+public:
+    explicit TableInternal(Table* impl, ClientImpl* client)
+        : _impl(impl), _client(client) {}
+    virtual ~TableInternal() {
+        _client->CloseTable(_impl->GetName());
+    }
+    virtual RowMutation* NewRowMutation(const std::string& row_key) {
+        return _impl->NewRowMutation(row_key);
+    }
+    virtual RowReader* NewRowReader(const std::string& row_key) {
+        return _impl->NewRowReader(row_key);
+    }
+    virtual void ApplyMutation(RowMutation* row_mu) {
+        _impl->ApplyMutation(row_mu);
+    }
+    virtual void ApplyMutation(const std::vector<RowMutation*>& row_mu_list) {
+        _impl->ApplyMutation(row_mu_list);
+    }
+    virtual bool Put(const std::string& row_key, const std::string& family,
+                     const std::string& qualifier, const std::string& value,
+                     ErrorCode* err) {
+        return _impl->Put(row_key, family, qualifier, value, err);
+    }
+    virtual bool Put(const std::string& row_key, const std::string& family,
+                     const std::string& qualifier, const int64_t value,
+                     ErrorCode* err) {
+        return _impl->Put(row_key, family, qualifier, value, err);
+    }
+    virtual bool Put(const std::string& row_key, const std::string& family,
+                     const std::string& qualifier, const std::string& value,
+                     int32_t ttl, ErrorCode* err) {
+        return _impl->Put(row_key, family, qualifier, value, ttl, err);
+    }
+    virtual bool Put(const std::string& row_key, const std::string& family,
+                     const std::string& qualifier, const std::string& value,
+                     int64_t timestamp, int32_t ttl, ErrorCode* err) {
+        return _impl->Put(row_key, family, qualifier, value, timestamp, ttl, err);
+    }
+    virtual bool Add(const std::string& row_key, const std::string& family,
+                     const std::string& qualifier, int64_t delta,
+                     ErrorCode* err) {
+        return _impl->Add(row_key, family, qualifier, delta, err);
+    }
+    virtual bool AddInt64(const std::string& row_key, const std::string& family,
+                     const std::string& qualifier, int64_t delta,
+                     ErrorCode* err) {
+        return _impl->AddInt64(row_key, family, qualifier, delta, err);
+    }
+
+    virtual bool PutIfAbsent(const std::string& row_key,
+                             const std::string& family,
+                             const std::string& qualifier,
+                             const std::string& value,
+                             ErrorCode* err) {
+        return _impl->PutIfAbsent(row_key, family, qualifier, value, err);
+    }
+
+    virtual bool Append(const std::string& row_key, const std::string& family,
+                        const std::string& qualifier, const std::string& value,
+                        ErrorCode* err) {
+        return _impl->Append(row_key, family, qualifier, value, err);
+    }
+    virtual void Get(RowReader* row_reader) {
+        _impl->Get(row_reader);
+    }
+    virtual void Get(const std::vector<RowReader*>& row_readers) {
+        _impl->Get(row_readers);
+    }
+    virtual bool Get(const std::string& row_key, const std::string& family,
+                     const std::string& qualifier, std::string* value,
+                     ErrorCode* err, uint64_t snapshot_id = 0) {
+        return _impl->Get(row_key, family, qualifier, value, err, snapshot_id);
+    }
+    virtual bool Get(const std::string& row_key, const std::string& family,
+                     const std::string& qualifier, int64_t* value,
+                     ErrorCode* err, uint64_t snapshot_id = 0) {
+        return _impl->Get(row_key, family, qualifier, value, err, snapshot_id);
+    }
+
+    virtual bool IsPutFinished() {
+        return _impl->IsPutFinished();
+    }
+    virtual bool IsGetFinished() {
+        return _impl->IsGetFinished();
+    }
+
+    virtual ResultStream* Scan(const ScanDescriptor& desc, ErrorCode* err) {
+        return _impl->Scan(desc, err);
+    }
+
+    virtual const std::string GetName() {
+        return _impl->GetName();
+    }
+
+    virtual bool Flush() {
+        return _impl->Flush();
+    }
+    virtual bool CheckAndApply(const std::string& rowkey, const std::string& cf_c,
+                               const std::string& value, const RowMutation& row_mu,
+                               ErrorCode* err) {
+        return _impl->CheckAndApply(rowkey, cf_c, value, row_mu, err);
+    }
+    virtual int64_t IncrementColumnValue(const std::string& row, const std::string& family,
+                                         const std::string& qualifier, int64_t amount,
+                                         ErrorCode* err) {
+        return _impl->IncrementColumnValue(row, family, qualifier, amount, err);
+    }
+    virtual void SetWriteTimeout(int64_t timeout_ms) {
+        _impl->SetWriteTimeout(timeout_ms);
+    }
+    virtual void SetReadTimeout(int64_t timeout_ms) {
+        _impl->SetReadTimeout(timeout_ms);
+    }
+
+    virtual bool LockRow(const std::string& rowkey, RowLock* lock, ErrorCode* err) {
+        return _impl->LockRow(rowkey, lock, err);
+    }
+
+    virtual bool GetStartEndKeys(std::string* start_key, std::string* end_key,
+                                 ErrorCode* err) {
+        return _impl->GetStartEndKeys(start_key, end_key, err);
+    }
+
+    virtual bool GetTabletLocation(std::vector<TabletInfo>* tablets,
+                                   ErrorCode* err) {
+        return _impl->GetTabletLocation(tablets, err);
+    }
+    virtual bool GetDescriptor(TableDescriptor* desc, ErrorCode* err) {
+        return _impl->GetDescriptor(desc, err);
+    }
+
+    virtual void SetMaxMutationPendingNum(uint64_t max_pending_num) {
+        _impl->SetMaxMutationPendingNum(max_pending_num);
+    }
+    virtual void SetMaxReaderPendingNum(uint64_t max_pending_num) {
+        _impl->SetMaxReaderPendingNum(max_pending_num);
+    }
+
+private:
+    Table* _impl;
+    ClientImpl* _client;
 };
 
 } // namespace tera

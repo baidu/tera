@@ -121,6 +121,8 @@ public:
     std::string GetZkAddrList() { return _zk_addr_list; }
     std::string GetZkRootPath() { return _zk_root_path; }
 
+    void CloseTable(const string& table_name);
+
 private:
     bool ListInternal(std::vector<TableInfo>* table_list,
                       std::vector<TabletInfo>* tablet_list,
@@ -150,6 +152,8 @@ private:
                           const string& table_name,
                           bool is_brief,
                           ErrorCode* err);
+
+    Table* OpenTableInternal(const string& table_name, ErrorCode* err);
 private:
     ClientImpl(const ClientImpl&);
     void operator=(const ClientImpl&);
@@ -166,6 +170,15 @@ private:
     /// if there is _cluster,
     ///    we save master_addr & root_table_addr in _cluster, access zookeeper only once.
     sdk::ClusterFinder* _cluster;
+
+    Mutex _open_table_mutex;
+    struct TableHandle {
+        Table* handle;
+        Mutex* mu;
+        int ref;
+        TableHandle() : handle(NULL), mu(NULL), ref(0) {}
+    };
+    std::map<std::string, TableHandle> _open_table_map;
 };
 
 } // namespace tera
