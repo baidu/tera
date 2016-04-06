@@ -97,6 +97,7 @@ public:
     RawKey RawKeyType() const;
     bool KvOnly() const { return m_kv_only; }
     StatCounter& GetCounter();
+    void SetMemoryCache(leveldb::Cache* cache);
     // tablet
     virtual bool Load(const TableSchema& schema,
                       const std::string& path,
@@ -265,7 +266,7 @@ private:
     volatile int32_t m_db_ref_count;
     leveldb::Options m_ldb_options;
     leveldb::DB* m_db;
-    bool m_mem_store_activated;
+    leveldb::Cache* m_memory_cache;
     TableSchema m_table_schema;
     bool m_kv_only;
     std::map<uint64_t, uint64_t> id_to_snapshot_num_;

@@ -65,6 +65,7 @@ DECLARE_int32(tera_tabletnode_compact_thread_num);
 DECLARE_string(tera_tabletnode_path_prefix);
 
 // cache-related
+DECLARE_int32(tera_memenv_block_cache_size);
 DECLARE_bool(tera_tabletnode_cache_enabled);
 DECLARE_string(tera_tabletnode_cache_paths);
 DECLARE_int32(tera_tabletnode_cache_block_size);
@@ -118,6 +119,8 @@ TabletNodeImpl::TabletNodeImpl(const TabletNodeInfo& tabletnode_info,
 
     m_ldb_block_cache =
         leveldb::NewLRUCache(FLAGS_tera_tabletnode_block_cache_size * 1024UL * 1024);
+    m_memory_cache =
+        leveldb::NewLRUCache(FLAGS_tera_memenv_block_cache_size * 1024 * 1024);
     m_ldb_table_cache =
         new leveldb::TableCache(FLAGS_tera_tabletnode_table_cache_size);
     if (!s.ok()) {
@@ -278,27 +281,30 @@ void TabletNodeImpl::LoadTablet(const LoadTabletRequest* request,
             << StatusCodeToString(status);
         response->set_status((StatusCode)tablet_io->GetStatus());
         tablet_io->DecRef();
-    } else if (!tablet_io->Load(schema, request->path(), parent_tablets,
+    } else {
+        ///TODO: User per user memery_cache according to user quota.
+        tablet_io->SetMemoryCache(m_memory_cache);
+        if (!tablet_io->Load(schema, request->path(), parent_tablets,
                                 snapshots, rollbacks, m_ldb_logger,
                                 m_ldb_block_cache, m_ldb_table_cache, &status)) {
-        tablet_io->DecRef();
-        LOG(ERROR) << "fail to load tablet: " << request->path()
-            << " [" << DebugString(key_start) << ", "
-            << DebugString(key_end) << "], status: "
-            << StatusCodeToString(status);
-        if (!m_tablet_manager->RemoveTablet(request->tablet_name(), key_start,
-                                            key_end, &status)) {
-            LOG(ERROR) << "fail to remove tablet: " << request->path()
+            tablet_io->DecRef();
+            LOG(ERROR) << "fail to load tablet: " << request->path()
                 << " [" << DebugString(key_start) << ", "
                 << DebugString(key_end) << "], status: "
                 << StatusCodeToString(status);
+            if (!m_tablet_manager->RemoveTablet(request->tablet_name(), key_start,
+                                                key_end, &status)) {
+                LOG(ERROR) << "fail to remove tablet: " << request->path()
+                    << " [" << DebugString(key_start) << ", "
+                    << DebugString(key_end) << "], status: "
+                    << StatusCodeToString(status);
+            }
+            response->set_status(kIOError);
+        } else {
+            tablet_io->DecRef();
+            response->set_status(kTabletNodeOk);
         }
-        response->set_status(kIOError);
-    } else {
-        tablet_io->DecRef();
-        response->set_status(kTabletNodeOk);
     }
-
     LOG(INFO) << "load tablet: " << request->path() << " ["
         << DebugString(key_start) << ", " << DebugString(key_end) << "]";
     done->Run();

@@ -82,6 +82,10 @@ Options InitOptionsLG(const Options& options, uint32_t lg_id) {
     if (lg_info->env) {
         opt.env = lg_info->env;
     }
+    if (lg_info->block_cache) {
+        opt.block_cache = lg_info->block_cache;
+    }
+    opt.seek_latency = lg_info->seek_latency;
     opt.compression = lg_info->compression;
     opt.block_size = lg_info->block_size;
     opt.use_memtable_on_leveldb = lg_info->use_memtable_on_leveldb;
