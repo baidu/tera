@@ -16,6 +16,9 @@ def mutation_callback(raw_mu):
         print(status.GetReasonString())
     print "callback of rowkey:", mu.RowKey()
     mu.Destroy()
+'''
+用户需要确保回调执行时，write_callback仍然有效（例如没有因为过作用域被gc掉）
+'''
 write_callback = MUTATION_CALLBACK(mutation_callback)
 
 
@@ -32,6 +35,9 @@ def reader_callback(raw_reader):
         print row + ":" + column + ":" + timestamp + ":" + val
         reader.Next()
     reader.Destroy()
+'''
+用户需要确保回调执行时，read_callback仍然有效（例如没有因为过作用域被gc掉）
+'''
 read_callback = READER_CALLBACK(reader_callback)
 
 
