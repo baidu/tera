@@ -8,22 +8,9 @@
 #include <stdint.h>
 
 #include "leveldb/slice.h"
+#include "leveldb/tera_key.h"
 
 namespace leveldb {
-
-enum TeraKeyType {
-    TKT_FORSEEK = 0,
-    TKT_DEL,
-    TKT_DEL_COLUMN,
-    TKT_DEL_QUALIFIERS,
-    TKT_DEL_QUALIFIER,
-    TKT_VALUE,
-    TKT_TYPE_NUM,
-    TKT_ADD,
-    TKT_PUT_IFABSENT,
-    TKT_APPEND,
-    TKT_ADDINT64
-};
 
 class RawKeyOperator {
 public:
