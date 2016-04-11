@@ -29,6 +29,7 @@
 #include "proto/tabletnode.pb.h"
 #include "proto/tabletnode_client.h"
 #include "sdk/client_impl.h"
+#include "sdk/cookie.h"
 #include "sdk/sdk_utils.h"
 #include "sdk/sdk_zk.h"
 #include "sdk/table_impl.h"
@@ -228,6 +229,11 @@ const char* builtin_cmd_list[] = {
     "findtablet",
     "findtablet <tablename> <rowkey-prefix>                               \n\
                 <tablename> <start-key> <end-key>",
+
+    "cookie",
+    "cookie <command> <args>                                              \n\
+            dump     cookie-file     -- dump contents of specified files  \n\
+            findkey  cookie-file key -- find a key's info",
 
     "help",
     "help [cmd]                                                           \n\
@@ -2031,6 +2037,23 @@ int32_t SafeModeOp(Client* client, int32_t argc, char** argv, ErrorCode* err) {
     return 0;
 }
 
+int32_t CookieOp(int32_t argc, char** argv) {
+    std::string command;
+    if (argc == 4) {
+        command = argv[2];
+        if (command == "dump") {
+            return ::tera::sdk::DumpCookieFile(argv[3]);
+        }
+    } else if (argc == 5) {
+        command = argv[2];
+        if (command == "findkey") {
+            return ::tera::sdk::FindKeyInCookieFile(argv[3], argv[4]);
+        }
+    }
+    PrintCmdHelpInfo(argv[1]);
+    return -1;
+}
+
 int32_t ReloadConfigOp(Client* client, int32_t argc, char** argv, ErrorCode* err) {
     if ((argc != 4) || (std::string(argv[2]) != "config")) {
         PrintCmdHelpInfo(argv[1]);
@@ -2845,6 +2868,8 @@ int ExecuteCommand(Client* client, int argc, char* argv[]) {
         ret = UserOp(client, argc, argv, &error_code);
     } else if (cmd == "reload") {
         ret = ReloadConfigOp(client, argc, argv, &error_code);
+    } else if (cmd == "cookie") {
+        ret = CookieOp(argc, argv);
     } else if (cmd == "version") {
         PrintSystemVersion();
     } else if (cmd == "snapshot") {
