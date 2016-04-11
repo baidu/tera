@@ -13,9 +13,10 @@
 #include "common/timer.h"
 #include "utils/string_util.h"
 
-DECLARE_int64(tera_master_availability_warning_threshold);
+DECLARE_bool(tera_master_availability_show_details_enabled);
 DECLARE_int64(tera_master_availability_error_threshold);
 DECLARE_int64(tera_master_availability_fatal_threshold);
+DECLARE_int64(tera_master_availability_warning_threshold);
 DECLARE_int64(tera_master_not_available_threshold);
 DECLARE_string(tera_master_meta_table_name);
 DECLARE_string(tera_master_meta_table_path);
@@ -67,8 +68,14 @@ void TabletAvailability::LogAvailability() {
         }
         if ((start - it->second) > FLAGS_tera_master_availability_fatal_threshold * 1000 * 1000LL) {
             not_avai_fatal++;
+            if (FLAGS_tera_master_availability_show_details_enabled) {
+                LOG(INFO) << "[availability] fatal-tablet:" << it->first;
+            }
         } else if ((start - it->second) > FLAGS_tera_master_availability_error_threshold * 1000 * 1000LL) {
             not_avai_error++;
+            if (FLAGS_tera_master_availability_show_details_enabled) {
+                LOG(INFO) << "[availability] error-tablet:" << it->first;
+            }
         } else if ((start - it->second) > FLAGS_tera_master_availability_warning_threshold * 1000 * 1000LL) {
             not_avai_warning++;
         }
