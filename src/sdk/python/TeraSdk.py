@@ -824,6 +824,9 @@ def init_function_prototype():
                                         POINTER(c_char_p)]
     lib.tera_table_putint64.restype = c_bool
 
+    lib.tera_table_scan.argtypes = [c_void_p, c_void_p, POINTER(c_char_p)]
+    lib.tera_table_scan.restype = c_void_p
+
     lib.tera_table_delete.argtypes = [c_void_p, c_char_p, c_uint64,
                                       c_char_p, c_char_p, c_uint64]
     lib.tera_table_delete.restype = None
