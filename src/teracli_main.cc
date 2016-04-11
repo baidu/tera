@@ -324,8 +324,7 @@ int32_t CreateOp(Client* client, int32_t argc, char** argv, ErrorCode* err) {
         return -1;
     }
     if (!client->CreateTable(table_desc, delimiters, err)) {
-        LOG(ERROR) << "fail to create table, "
-            << strerr(*err);
+        LOG(ERROR) << "fail to create table, " << err->ToString();
         return -1;
     }
     ShowTableDescriptor(table_desc);
@@ -356,8 +355,7 @@ int32_t CreateByFileOp(Client* client, int32_t argc, char** argv, ErrorCode* err
         return -1;
     }
     if (!client->CreateTable(table_desc, delimiters, err)) {
-        LOG(ERROR) << "fail to create table, "
-            << strerr(*err);
+        LOG(ERROR) << "fail to create table, " << err->ToString();
         return -1;
     }
     ShowTableDescriptor(table_desc);
@@ -371,7 +369,7 @@ int32_t UpdateCheckOp(Client* client, int32_t argc, char** argv, ErrorCode* err)
     }
     bool done = false;
     if (!client->UpdateCheck(argv[2], &done, err)) {
-        std::cerr << err->GetReason() << std::endl;
+        std::cerr << err->ToString() << std::endl;
         return -1;
     }
     std::cout << "update " << (done ? "successed" : "is running...") << std::endl;
@@ -403,8 +401,7 @@ int32_t UpdateOp(Client* client, int32_t argc, char** argv, ErrorCode* err) {
     }
 
     if (!client->UpdateTable(*table_desc, err)) {
-        LOG(ERROR) << "[update] fail to update table, "
-            << strerr(*err);
+        LOG(ERROR) << "[update] fail to update table, " << err->ToString();
         return -1;
     }
     ShowTableDescriptor(*table_desc);
@@ -420,7 +417,7 @@ int32_t DropOp(Client* client, int32_t argc, char** argv, ErrorCode* err) {
 
     std::string tablename = argv[2];
     if (!client->DeleteTable(tablename, err)) {
-        LOG(ERROR) << "fail to delete table, " << err->GetReason();
+        LOG(ERROR) << "fail to delete table, " << err->ToString();
         return -1;
     }
     return 0;
@@ -1036,7 +1033,7 @@ int32_t ScanOp(Client* client, int32_t argc, char** argv, ErrorCode* err) {
     }
     delete result_stream;
     if (err->GetType() != ErrorCode::kOK) {
-        LOG(ERROR) << "fail to finish scan: " << err->GetReason();
+        LOG(ERROR) << "fail to finish scan: " << err->ToString();
         return -1;
     }
     g_end_time = time(NULL);
@@ -1589,7 +1586,7 @@ int32_t ShowSchemaOp(Client* client, int32_t argc, char** argv, ErrorCode* err) 
 void BatchPutCallBack(RowMutation* mutation) {
     const ErrorCode& error_code = mutation->GetError();
     if (error_code.GetType() != ErrorCode::kOK) {
-        LOG(ERROR) << "exception occured, reason:" << error_code.GetReason();
+        LOG(ERROR) << "exception occured, reason:" << error_code.ToString();
     }
     int32_t mut_num = mutation->MutationNum();
 
@@ -1969,13 +1966,13 @@ int32_t SnapshotOp(Client* client, int32_t argc, char** argv, ErrorCode* err) {
     uint64_t snapshot = 0;
     if (argc == 5 && strcmp(argv[3], "del") == 0) {
         if (!client->DelSnapshot(tablename, FLAGS_snapshot, err)) {
-            LOG(ERROR) << "fail to del snapshot: " << FLAGS_snapshot << " ," << err->GetReason();
+            LOG(ERROR) << "fail to del snapshot: " << FLAGS_snapshot << " ," << err->ToString();
             return -1;
         }
         std::cout << "Del snapshot " << snapshot << std::endl;
     } else if (strcmp(argv[3], "create") == 0) {
         if (!client->GetSnapshot(tablename, &snapshot, err)) {
-            LOG(ERROR) << "fail to get snapshot: " << err->GetReason();
+            LOG(ERROR) << "fail to get snapshot: " << err->ToString();
             return -1;
         }
         std::cout << "new snapshot: " << snapshot << std::endl;
@@ -1988,7 +1985,7 @@ int32_t SnapshotOp(Client* client, int32_t argc, char** argv, ErrorCode* err) {
             return -1;
         }
         if (!client->Rollback(tablename, FLAGS_snapshot, FLAGS_rollback_name, err)) {
-            LOG(ERROR) << "fail to rollback to snapshot: " << err->GetReason();
+            LOG(ERROR) << "fail to rollback to snapshot: " << err->ToString();
             return -1;
         }
         std::cout << "rollback to snapshot: " << FLAGS_snapshot << std::endl;
@@ -2664,8 +2661,7 @@ int32_t Meta2Op(Client *client, int32_t argc, char** argv) {
 static int32_t CreateUser(Client* client, const std::string& user,
                           const std::string& password, ErrorCode* err) {
     if (!client->CreateUser(user, password, err)) {
-        LOG(ERROR) << "fail to create user: " << user
-            << ", " << strerr(*err);
+        LOG(ERROR) << "fail to create user: " << user << ", " << err->ToString();
         return -1;
     }
     return 0;
@@ -2673,8 +2669,7 @@ static int32_t CreateUser(Client* client, const std::string& user,
 
 static int32_t DeleteUser(Client* client, const std::string& user, ErrorCode* err) {
     if (!client->DeleteUser(user, err)) {
-        LOG(ERROR) << "fail to delete user: " << user
-            << ", " << strerr(*err);
+        LOG(ERROR) << "fail to delete user: " << user << ", " << err->ToString();
         return -1;
     }
     return 0;
@@ -2683,8 +2678,7 @@ static int32_t DeleteUser(Client* client, const std::string& user, ErrorCode* er
 static int32_t ChangePwd(Client* client, const std::string& user,
                          const std::string& password, ErrorCode* err) {
     if (!client->ChangePwd(user, password, err)) {
-        LOG(ERROR) << "fail to update user: " << user
-            << ", " << strerr(*err);
+        LOG(ERROR) << "fail to update user: " << user << ", " << err->ToString();
         return -1;
     }
     return 0;
@@ -2693,8 +2687,7 @@ static int32_t ChangePwd(Client* client, const std::string& user,
 static int32_t ShowUser(Client* client, const std::string& user, ErrorCode* err) {
     std::vector<std::string> user_infos;
     if (!client->ShowUser(user, user_infos, err)) {
-        LOG(ERROR) << "fail to show user: " << user
-            << ", " << strerr(*err);
+        LOG(ERROR) << "fail to show user: " << user << ", " << err->ToString();
         return -1;
     }
     if (user_infos.size() < 1) {
@@ -2713,7 +2706,7 @@ static int32_t AddUserToGroup(Client* client, const std::string& user,
                                 const std::string& group, ErrorCode* err) {
     if (!client->AddUserToGroup(user, group, err)) {
         LOG(ERROR) << "fail to add user: " << user
-            << " to group:" << group << strerr(*err);
+            << " to group:" << group << err->ToString();
         return -1;
     }
     return 0;
@@ -2723,7 +2716,7 @@ static int32_t DeleteUserFromGroup(Client* client, const std::string& user,
                                      const std::string& group, ErrorCode* err) {
     if (!client->DeleteUserFromGroup(user, group, err)) {
         LOG(ERROR) << "fail to delete user: " << user
-            << " from group: " << group << strerr(*err);
+            << " from group: " << group << err->ToString();
         return -1;
     }
     return 0;
@@ -2855,8 +2848,7 @@ int ExecuteCommand(Client* client, int argc, char* argv[]) {
         PrintUnknownCmdHelpInfo(argv[1]);
     }
     if (error_code.GetType() != ErrorCode::kOK) {
-        LOG(ERROR) << "fail reason: " << strerr(error_code)
-            << " " << error_code.GetReason();
+        LOG(ERROR) << "fail reason: " << error_code.ToString();
     }
     return ret;
 }
