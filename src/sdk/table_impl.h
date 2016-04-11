@@ -430,11 +430,11 @@ private:
     uint64_t _pending_timeout_ms;
 };
 
-class TableInternal : public Table {
+class TableWrapper: public Table {
 public:
-    explicit TableInternal(Table* impl, ClientImpl* client)
+    explicit TableWrapper(Table* impl, ClientImpl* client)
         : _impl(impl), _client(client) {}
-    virtual ~TableInternal() {
+    virtual ~TableWrapper() {
         _client->CloseTable(_impl->GetName());
     }
     virtual RowMutation* NewRowMutation(const std::string& row_key) {

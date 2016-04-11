@@ -65,12 +65,15 @@ ClientImpl::ClientImpl(const std::string& user_identity,
 }
 
 ClientImpl::~ClientImpl() {
-    if (!_open_table_map.empty()) {
-        std::map<std::string, TableHandle>::iterator it = _open_table_map.begin() ;
-        for (; it != _open_table_map.end(); ++it) {
-            LOG(ERROR) << "table should be delete first: " << it->first;
+    {
+        MutexLock l(&_open_table_mutex);
+        if (!_open_table_map.empty()) {
+            std::map<std::string, TableHandle>::iterator it = _open_table_map.begin() ;
+            for (; it != _open_table_map.end(); ++it) {
+                LOG(ERROR) << "table should be delete first: " << it->first;
+            }
+            CHECK(false);
         }
-        CHECK(false);
     }
     delete _cluster;
 }
@@ -482,13 +485,16 @@ Table* ClientImpl::OpenTable(const std::string& table_name,
         th.mu->Lock();
         _open_table_mutex.Unlock();
         VLOG(10) << "open a new table: " << table_name;
-        th.handle = OpenTableInternal(table_name, err);
+        th.handle = OpenTableInternal(table_name, &th.err);
         th.mu->Unlock();
     } else {
         _open_table_mutex.Unlock();
     }
 
     th.mu->Lock();
+    if (err) {
+        *err = th.err;
+    }
     if (th.handle == NULL) {
         VLOG(10) << "open null table: " << table_name;
         th.mu->Unlock();
@@ -502,7 +508,7 @@ Table* ClientImpl::OpenTable(const std::string& table_name,
 
     Table* table_impl = th.handle;
     th.mu->Unlock();
-    return new TableInternal(table_impl, this);
+    return new TableWrapper(table_impl, this);
 }
 
 Table* ClientImpl::OpenTableInternal(const std::string& table_name,

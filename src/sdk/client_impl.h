@@ -176,6 +176,7 @@ private:
         Table* handle;
         Mutex* mu;
         int ref;
+        ErrorCode err;
         TableHandle() : handle(NULL), mu(NULL), ref(0) {}
     };
     std::map<std::string, TableHandle> _open_table_map;
