@@ -67,6 +67,10 @@ public:
     RpcClientBase() : m_rpc_channel(NULL) {}
     virtual ~RpcClientBase() {}
 
+    static void Shutdown() {
+        m_rpc_client.Shutdown();
+    }
+
 protected:
     virtual void ResetClient(const std::string& server_addr) {
         std::map<std::string, sofa::pbrpc::RpcChannel*>::iterator it;
