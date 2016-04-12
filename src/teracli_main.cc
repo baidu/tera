@@ -58,6 +58,9 @@ DEFINE_int32(lg, -1, "locality group number.");
 DEFINE_int32(concurrency, 1, "concurrency for compact table.");
 DEFINE_int64(timestamp, -1, "timestamp.");
 
+// using FLAGS instead of isatty() for compatibility
+DEFINE_bool(stdout_is_tty, true, "is stdout connected to a tty");
+
 volatile int32_t g_start_time = 0;
 volatile int32_t g_end_time = 0;
 volatile int32_t g_used_time = 0;
@@ -67,6 +70,8 @@ volatile int32_t g_key_num = 0;
 Mutex g_stat_lock;
 
 volatile int32_t g_cur_batch_num = 0;
+
+tera::TPrinter::PrintOpt g_printer_opt;
 
 using namespace tera;
 
@@ -1055,6 +1060,15 @@ static std::string DoubleToStr(double value)
     return std::string(buffer, len);
 }
 
+std::string BytesNumberToString(const uint64_t size) {
+    if (FLAGS_stdout_is_tty) {
+        // 1024 -> 1K
+        // 1024*1024 -> 1M
+        return utils::ConvertByteToString(size);
+    }
+    return NumberToString(size);
+}
+
 int32_t ShowTabletList(const TabletMetaList& tablet_list, bool is_server_addr, bool is_x) {
     TPrinter printer;
     int cols;
@@ -1086,10 +1100,10 @@ int32_t ShowTabletList(const TabletMetaList& tablet_list, bool is_server_addr, b
 
             uint64_t size = meta.size();
             std::string size_str =
-                utils::ConvertByteToString(size) +
+                BytesNumberToString(size) +
                 "[";
             for (int l = 0; l < meta.lg_size_size(); ++l) {
-                size_str += utils::ConvertByteToString(meta.lg_size(l));
+                size_str += BytesNumberToString(meta.lg_size(l));
                 if (l < meta.lg_size_size() - 1) {
                     size_str += ",";
                 }
@@ -1101,11 +1115,11 @@ int32_t ShowTabletList(const TabletMetaList& tablet_list, bool is_server_addr, b
                 const TabletCounter& counter = tablet_list.counter(i);
                 row.push_back(NumberToString(counter.low_read_cell()));
                 row.push_back(NumberToString(counter.read_rows()));
-                row.push_back(utils::ConvertByteToString(counter.read_size()) + "B/s");
+                row.push_back(BytesNumberToString(counter.read_size()) + "B/s");
                 row.push_back(NumberToString(counter.write_rows()));
-                row.push_back(utils::ConvertByteToString(counter.write_size()) + "B/s");
+                row.push_back(BytesNumberToString(counter.write_size()) + "B/s");
                 row.push_back(NumberToString(counter.scan_rows()));
-                row.push_back(utils::ConvertByteToString(counter.scan_size()) + "B/s");
+                row.push_back(BytesNumberToString(counter.scan_size()) + "B/s");
                 row.push_back(DoubleToStr(counter.write_workload()));
             }
             row.push_back(DebugString(meta.key_range().key_start().substr(0, 20)));
@@ -1125,13 +1139,13 @@ int32_t ShowTabletList(const TabletMetaList& tablet_list, bool is_server_addr, b
             row.push_back(StatusCodeToString(meta.status()));
 
             uint64_t size = meta.size();
-            row.push_back(utils::ConvertByteToString(size));
+            row.push_back(BytesNumberToString(size));
             row.push_back(DebugString(meta.key_range().key_start()).substr(0, 20));
             row.push_back(DebugString(meta.key_range().key_end()).substr(0, 20));
             printer.AddRow(row);
         }
     }
-    printer.Print();
+    printer.Print(g_printer_opt);
     return 0;
 }
 
@@ -1256,7 +1270,7 @@ int32_t ShowAllTables(Client* client, bool is_x, bool show_all, ErrorCode* err) 
         TableStatus status = table_list.meta(table_no).status();
         std::string lg_size_str = "";
         for (int l = 0; l < counter.lg_size_size(); ++l) {
-            lg_size_str += utils::ConvertByteToString(counter.lg_size(l));
+            lg_size_str += BytesNumberToString(counter.lg_size(l));
             if (l < counter.lg_size_size() - 1) {
                 lg_size_str += ",";
             }
@@ -1285,61 +1299,63 @@ int32_t ShowAllTables(Client* client, bool is_x, bool show_all, ErrorCode* err) 
                            NumberToString(table_no).data(),
                            table_alias.data(),
                            StatusCodeToString(status).data(),
-                           utils::ConvertByteToString(counter.size()).data(),
+                           BytesNumberToString(counter.size()).data(),
                            lg_size_str.data(),
                            NumberToString(counter.tablet_num()).data(),
                            NumberToString(notready).data(),
-                           utils::ConvertByteToString(counter.lread()).data(),
-                           utils::ConvertByteToString(counter.read_rows()).data(),
-                           utils::ConvertByteToString(counter.read_max()).data(),
-                           (utils::ConvertByteToString(counter.read_size()) + "B/s").data(),
-                           utils::ConvertByteToString(counter.write_rows()).data(),
-                           utils::ConvertByteToString(counter.write_max()).data(),
-                           (utils::ConvertByteToString(counter.write_size()) + "B/s").data(),
-                           utils::ConvertByteToString(counter.scan_rows()).data(),
-                           utils::ConvertByteToString(counter.scan_max()).data(),
-                           (utils::ConvertByteToString(counter.scan_size()) + "B/s").data());
+                           BytesNumberToString(counter.lread()).data(),
+                           BytesNumberToString(counter.read_rows()).data(),
+                           BytesNumberToString(counter.read_max()).data(),
+                           (BytesNumberToString(counter.read_size()) + "B/s").data(),
+                           BytesNumberToString(counter.write_rows()).data(),
+                           BytesNumberToString(counter.write_max()).data(),
+                           (BytesNumberToString(counter.write_size()) + "B/s").data(),
+                           BytesNumberToString(counter.scan_rows()).data(),
+                           BytesNumberToString(counter.scan_max()).data(),
+                           (BytesNumberToString(counter.scan_size()) + "B/s").data());
         } else {
             printer.AddRow(cols,
                            NumberToString(table_no).data(),
                            table_alias.data(),
                            StatusCodeToString(status).data(),
-                           utils::ConvertByteToString(counter.size()).data(),
+                           BytesNumberToString(counter.size()).data(),
                            lg_size_str.data(),
                            NumberToString(counter.tablet_num()).data(),
                            NumberToString(notready).data());
         }
     }
-    if (is_x) {
+    if (!FLAGS_stdout_is_tty) {
+        // we don't need total infos
+    } else if (is_x) {
         printer.AddRow(cols,
                        "-",
                        "total",
                        "-",
-                       utils::ConvertByteToString(sum_size).data(),
+                       BytesNumberToString(sum_size).data(),
                        "-",
                        NumberToString(sum_tablet).data(),
                        NumberToString(sum_notready).data(),
-                       utils::ConvertByteToString(sum_lread).data(),
-                       utils::ConvertByteToString(sum_read).data(),
+                       BytesNumberToString(sum_lread).data(),
+                       BytesNumberToString(sum_read).data(),
                        "-",
-                       (utils::ConvertByteToString(sum_rspeed) + "B/s").data(),
-                       utils::ConvertByteToString(sum_write).data(),
+                       (BytesNumberToString(sum_rspeed) + "B/s").data(),
+                       BytesNumberToString(sum_write).data(),
                        "-",
-                       (utils::ConvertByteToString(sum_wspeed) + "B/s").data(),
-                       utils::ConvertByteToString(sum_scan).data(),
+                       (BytesNumberToString(sum_wspeed) + "B/s").data(),
+                       BytesNumberToString(sum_scan).data(),
                        "-",
-                       (utils::ConvertByteToString(sum_sspeed) + "B/s").data());
+                       (BytesNumberToString(sum_sspeed) + "B/s").data());
     } else {
         printer.AddRow(cols,
                        "-",
                        "total",
                        "-",
-                       utils::ConvertByteToString(sum_size).data(),
+                       BytesNumberToString(sum_size).data(),
                        "-",
                        NumberToString(sum_tablet).data(),
                        NumberToString(sum_notready).data());
     }
-    printer.Print();
+    printer.Print(g_printer_opt);
     std::cout << std::endl;
     if (show_all) {
         ShowTabletList(tablet_list, true, true);
@@ -1358,12 +1374,13 @@ int32_t ShowSingleTable(Client* client, const string& table_name,
         return -1;
     }
 
-    std::cout << std::endl;
-    std::cout << "create time: "
-        << common::timer::get_time_str(table_meta.create_time()) << std::endl;
-    std::cout << std::endl;
+    if (FLAGS_stdout_is_tty) {
+        std::cout << std::endl;
+        std::cout << "create time: "
+            << common::timer::get_time_str(table_meta.create_time()) << std::endl;
+        std::cout << std::endl;
+    }
     ShowTabletList(tablet_list, true, is_x);
-    std::cout << std::endl;
     return 0;
 }
 
@@ -1386,12 +1403,12 @@ int32_t ShowSingleTabletNodeInfo(Client* client, const string& addr,
     int cols = 4;
     TPrinter printer(cols, "workload", "tablets", "load", "split");
     std::vector<string> row;
-    row.push_back(utils::ConvertByteToString(info.load()));
+    row.push_back(BytesNumberToString(info.load()));
     row.push_back(NumberToString(info.tablet_total()));
     row.push_back(NumberToString(info.tablet_onload()));
     row.push_back(NumberToString(info.tablet_onsplit()));
     printer.AddRow(row);
-    printer.Print();
+    printer.Print(g_printer_opt);
 
     std::cout << std::endl;
     cols = 7;
@@ -1399,28 +1416,28 @@ int32_t ShowSingleTabletNodeInfo(Client* client, const string& addr,
     row.clear();
     row.push_back(NumberToString(info.low_read_cell()));
     row.push_back(NumberToString(info.read_rows()));
-    row.push_back(utils::ConvertByteToString(info.read_size()) + "B/s");
+    row.push_back(BytesNumberToString(info.read_size()) + "B/s");
     row.push_back(NumberToString(info.write_rows()));
-    row.push_back(utils::ConvertByteToString(info.write_size()) + "B/s");
+    row.push_back(BytesNumberToString(info.write_size()) + "B/s");
     row.push_back(NumberToString(info.scan_rows()));
-    row.push_back(utils::ConvertByteToString(info.scan_size()) + "B/s");
+    row.push_back(BytesNumberToString(info.scan_size()) + "B/s");
     printer.AddRow(row);
-    printer.Print();
+    printer.Print(g_printer_opt);
 
     std::cout << "\nHardware Info:\n";
     cols = 8;
     printer.Reset(cols, "cpu", "mem_used", "net_tx", "net_rx", "dfs_r", "dfs_w", "local_r", "local_w");
     row.clear();
     row.push_back(NumberToString(info.cpu_usage()));
-    row.push_back(utils::ConvertByteToString(info.mem_used()));
-    row.push_back(utils::ConvertByteToString(info.net_tx()) + "B/s");
-    row.push_back(utils::ConvertByteToString(info.net_rx()) + "B/s");
-    row.push_back(utils::ConvertByteToString(info.dfs_io_r()) + "B/s");
-    row.push_back(utils::ConvertByteToString(info.dfs_io_w()) + "B/s");
-    row.push_back(utils::ConvertByteToString(info.local_io_r()) + "B/s");
-    row.push_back(utils::ConvertByteToString(info.local_io_w()) + "B/s");
+    row.push_back(BytesNumberToString(info.mem_used()));
+    row.push_back(BytesNumberToString(info.net_tx()) + "B/s");
+    row.push_back(BytesNumberToString(info.net_rx()) + "B/s");
+    row.push_back(BytesNumberToString(info.dfs_io_r()) + "B/s");
+    row.push_back(BytesNumberToString(info.dfs_io_w()) + "B/s");
+    row.push_back(BytesNumberToString(info.local_io_r()) + "B/s");
+    row.push_back(BytesNumberToString(info.local_io_w()) + "B/s");
     printer.AddRow(row);
-    printer.Print();
+    printer.Print(g_printer_opt);
 
     std::cout << "\nOther Infos:\n";
     cols = info.extra_info_size();
@@ -1434,7 +1451,7 @@ int32_t ShowSingleTabletNodeInfo(Client* client, const string& addr,
         row_int.push_back(info.extra_info(i).value());
     }
     printer.AddRow(row_int);
-    printer.Print();
+    printer.Print(g_printer_opt);
 
     std::cout << "\nTablets In this TabletNode:\n";
     ShowTabletList(tablet_list, false, is_x);
@@ -1477,27 +1494,27 @@ int32_t ShowTabletNodesInfo(Client* client, bool is_x, ErrorCode* err) {
             } else {
                 row.push_back(infos[i].status_m());
             }
-            row.push_back(utils::ConvertByteToString(infos[i].load()));
+            row.push_back(BytesNumberToString(infos[i].load()));
             row.push_back(NumberToString(infos[i].tablet_total()));
             row.push_back(NumberToString(infos[i].low_read_cell()));
             row.push_back(NumberToString(infos[i].read_rows()));
-            row.push_back(utils::ConvertByteToString(infos[i].read_size()) + "B");
+            row.push_back(BytesNumberToString(infos[i].read_size()) + "B");
             row.push_back(NumberToString(infos[i].write_rows()));
-            row.push_back(utils::ConvertByteToString(infos[i].write_size()) + "B");
+            row.push_back(BytesNumberToString(infos[i].write_size()) + "B");
             row.push_back(NumberToString(infos[i].scan_rows()));
-            row.push_back(utils::ConvertByteToString(infos[i].scan_size()) + "B");
+            row.push_back(BytesNumberToString(infos[i].scan_size()) + "B");
             row.push_back(extra["rand_read_delay"] + "ms");
             row.push_back(extra["read_pending"]);
             row.push_back(extra["write_pending"]);
             row.push_back(extra["scan_pending"]);
             row.push_back(NumberToString(infos[i].tablet_onload()));
             row.push_back(NumberToString(infos[i].tablet_onbusy()));
-            row.push_back(utils::ConvertByteToString(infos[i].mem_used()));
+            row.push_back(BytesNumberToString(infos[i].mem_used()));
             row.push_back(NumberToString(infos[i].cpu_usage()));
-            row.push_back(utils::ConvertByteToString(infos[i].net_tx()));
-            row.push_back(utils::ConvertByteToString(infos[i].net_rx()));
-            row.push_back(utils::ConvertByteToString(infos[i].dfs_io_r()));
-            row.push_back(utils::ConvertByteToString(infos[i].dfs_io_w()));
+            row.push_back(BytesNumberToString(infos[i].net_tx()));
+            row.push_back(BytesNumberToString(infos[i].net_rx()));
+            row.push_back(BytesNumberToString(infos[i].dfs_io_r()));
+            row.push_back(BytesNumberToString(infos[i].dfs_io_w()));
             printer.AddRow(row);
         }
     } else {
@@ -1515,14 +1532,14 @@ int32_t ShowTabletNodesInfo(Client* client, bool is_x, ErrorCode* err) {
             } else {
                 row.push_back(infos[i].status_m());
             }
-            row.push_back(utils::ConvertByteToString(infos[i].load()));
+            row.push_back(BytesNumberToString(infos[i].load()));
             row.push_back(NumberToString(infos[i].tablet_total()));
             row.push_back(NumberToString(infos[i].tablet_onload()));
             row.push_back(NumberToString(infos[i].tablet_onbusy()));
             printer.AddRow(row);
         }
     }
-    printer.Print();
+    printer.Print(g_printer_opt);
     std::cout << std::endl;
     return 0;
 }
@@ -2102,7 +2119,7 @@ int32_t CompactTablet(TabletInfo& tablet, int lg) {
     }
 
     std::cout << "compact tablet success: " << path << ", data size: "
-        << utils::ConvertByteToString(response.compact_size()) << std::endl;
+        << BytesNumberToString(response.compact_size()) << std::endl;
     return 0;
 }
 
@@ -2869,6 +2886,7 @@ int main(int argc, char* argv[]) {
         LOG(ERROR) << "client instance not exist";
         return -1;
     }
+    g_printer_opt.print_head = FLAGS_stdout_is_tty;
 
     int ret  = 0;
     if (argc == 1) {
