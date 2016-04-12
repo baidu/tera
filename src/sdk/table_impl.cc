@@ -1047,7 +1047,7 @@ void TableImpl::ReaderCallBack(std::vector<int64_t>* reader_id_list,
 
     std::map<uint32_t, std::vector<int64_t>* > retry_times_list;
     std::vector<RowReaderImpl*> not_in_range_list;
-    uint32_t row_result_num = 0;
+    uint32_t row_result_index = 0;
     for (uint32_t i = 0; i < reader_id_list->size(); ++i) {
         int64_t reader_id = (*reader_id_list)[i];
 
@@ -1059,6 +1059,10 @@ void TableImpl::ReaderCallBack(std::vector<int64_t>* reader_id_list,
             SdkTask* task = _task_pool.PopTask(reader_id);
             if (task == NULL) {
                 VLOG(10) << "reader " << reader_id << " success but timeout";
+                if (err == kTabletNodeOk) {
+                    // result is timeout, discard it
+                    row_result_index++;
+                }
                 continue;
             }
             CHECK_EQ(task->Type(), SdkTask::READ);
@@ -1066,7 +1070,7 @@ void TableImpl::ReaderCallBack(std::vector<int64_t>* reader_id_list,
 
             RowReaderImpl* row_reader = (RowReaderImpl*)task;
             if (err == kTabletNodeOk) {
-                row_reader->SetResult(response->detail().row_result(row_result_num++));
+                row_reader->SetResult(response->detail().row_result(row_result_index++));
                 row_reader->SetError(ErrorCode::kOK);
             } else if (err == kKeyNotExist) {
                 row_reader->SetError(ErrorCode::kNotFound, "not found");
