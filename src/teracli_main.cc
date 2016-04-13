@@ -62,6 +62,7 @@ DEFINE_int32(concurrency, 1, "concurrency for compact table.");
 DEFINE_int64(timestamp, -1, "timestamp.");
 DEFINE_string(tablets_file, "", "tablet set file");
 
+DEFINE_bool(readable, true, "readable input");
 DEFINE_bool(printable, true, "printable output");
 DEFINE_bool(print_data, true, "is print data when scan");
 DEFINE_bool(rowkey_count, false, "is print rowkey count when scan");
@@ -3151,9 +3152,34 @@ int32_t HelpOp(int32_t argc, char** argv) {
     return 0;
 }
 
+bool ParseCommand(int argc, char** argv, char*** ret_argv) {
+    char** parsed_argv = new char* [argc];
+    for (int i = 0; i < argc; i++) {
+        std::string parsed_arg;
+        if (!ParseDebugString(argv[i], &parsed_arg)) {
+            for (int j = 0; j < i; j++) {
+                delete[] parsed_argv[j];
+            }
+            delete[] parsed_argv;
+            std::cout << "invalid readable format of argument: " << argv[i] << std::endl;
+            return false;
+        }
+        parsed_argv[i] = new char[parsed_arg.size() + 1];
+        strcpy(parsed_argv[i], parsed_arg.c_str());
+    }
+    *ret_argv = parsed_argv;
+    return true;
+}
+
 int ExecuteCommand(Client* client, int argc, char* argv[]) {
     int ret = 0;
     ErrorCode error_code;
+
+    char** backup_argv = (char**)argv;
+    if (FLAGS_readable && !ParseCommand(argc, backup_argv, &argv)) {
+        return 1;
+    }
+
     std::string cmd = argv[1];
     if (cmd == "create") {
         ret = CreateOp(client, argc, argv, &error_code);
@@ -3249,9 +3275,16 @@ int ExecuteCommand(Client* client, int argc, char* argv[]) {
         HelpOp(argc, argv);
     } else {
         PrintUnknownCmdHelpInfo(argv[1]);
+        ret = 1;
     }
     if (error_code.GetType() != ErrorCode::kOK) {
         LOG(ERROR) << "fail reason: " << error_code.ToString();
+    }
+    if (FLAGS_readable) {
+        for (int i = 0; i < argc; i++) {
+            delete[] argv[i];
+        }
+        delete[] argv;
     }
     return ret;
 }
