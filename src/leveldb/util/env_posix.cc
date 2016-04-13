@@ -628,10 +628,8 @@ class PosixEnv : public Env {
     }
     for (uint32_t i = 0; i < items.size() && result.ok(); ++i) {
         path += items[i];
-        if (!IsExist(path)) {
-            if (mkdir(path.c_str(), 0755) != 0) {
-                result = IOError(path, errno);
-            }
+        if (mkdir(path.c_str(), 0755) != 0 && errno != EEXIST) {
+            result = IOError(path, errno);
         }
         path += "/";
     }
