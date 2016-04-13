@@ -38,6 +38,7 @@ mkdir $test_dir
 cp -r example/onebox/* $test_dir
 cp build/bin/teracli $test_dir/bin
 cp build/bin/tera_main $test_dir/bin
+cp build/bin/tera_test $test_dir/bin
 cp build/benchmark/tera_bench $test_dir/bin
 cp build/benchmark/tera_mark $test_dir/bin
 
