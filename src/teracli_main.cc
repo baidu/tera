@@ -204,7 +204,8 @@ const char* builtin_cmd_list[] = {
             move    <tablet_path> <target_addr>                           \n\
             compact <tablet_path>                                         \n\
             split   <tablet_path>                                         \n\
-            merge   <tablet_path>",
+            merge   <tablet_path>                                         \n\
+            scan    <tablet_path>",
 
     "compact",
     "compact <tablename> [--lg=] [--concurrency=]                         \n\
@@ -982,45 +983,16 @@ int32_t DeleteOp(Client* client, int32_t argc, char** argv, ErrorCode* err) {
     return 0;
 }
 
-int32_t ScanOp(Client* client, int32_t argc, char** argv, ErrorCode* err) {
-    if (argc != 5 && argc != 6) {
-        PrintCmdHelpInfo("scan");
-        return -1;
-    }
-
-    std::string op = argv[1];
-    std::string tablename = argv[2];
-    Table* table = NULL;
-    if ((table = client->OpenTable(tablename, err)) == NULL) {
-        LOG(ERROR) << "fail to open table";
-        return -1;
-    }
-
-    std::string start_rowkey = argv[3];
-    std::string end_rowkey = argv[4];
-    ResultStream* result_stream;
-    ScanDescriptor desc(start_rowkey);
-    desc.SetEnd(end_rowkey);
+int32_t ScanRange(Table* table, ScanDescriptor& desc, ErrorCode* err) {
     desc.SetBufferSize(FLAGS_tera_client_scan_package_size << 10);
     desc.SetAsync(FLAGS_tera_client_scan_async_enabled);
     desc.SetPackInterval(FLAGS_scan_pack_interval);
-
-    if (argc == 5) {
-        // scan all cells
-    } else if (argc == 6) {
-        if (!desc.SetFilter(argv[5])) {
-            LOG(ERROR) << "fail to parse scan schema: " << argv[5];
-            return -1;
-        }
-    }
-    if (op == "scanallv") {
-        desc.SetMaxVersions(std::numeric_limits<int>::max());
-    }
-
     desc.SetSnapshot(FLAGS_snapshot);
+
+    ResultStream* result_stream;
     if ((result_stream = table->Scan(desc, err)) == NULL) {
-        LOG(ERROR) << "fail to scan records from table: " << tablename;
-        return -1;
+        LOG(ERROR) << "fail to scan records from table: " << table->GetName();
+        return -7;
     }
     g_start_time = time(NULL);
     while (!result_stream->Done(err)) {
@@ -1054,8 +1026,35 @@ int32_t ScanOp(Client* client, int32_t argc, char** argv, ErrorCode* err) {
     g_used_time = g_end_time - g_start_time;
     LOG(INFO) << "Scan done " << g_key_num << " keys " << g_key_num/(g_used_time?g_used_time:1)
             <<" keys/S " << g_total_size/1024.0/1024/(g_used_time?g_used_time:1) << " MB/S ";
-    delete table;
     return 0;
+}
+
+int32_t ScanOp(Client* client, int32_t argc, char** argv, ErrorCode* err) {
+    if (argc != 5 && argc != 6) {
+        PrintCmdHelpInfo("scan");
+        return -1;
+    }
+
+    std::string op = argv[1];
+    std::string tablename = argv[2];
+    Table* table = NULL;
+    if ((table = client->OpenTable(tablename, err)) == NULL) {
+        LOG(ERROR) << "fail to open table";
+        return -1;
+    }
+
+    std::string start_rowkey = argv[3];
+    std::string end_rowkey = argv[4];
+    ScanDescriptor desc(start_rowkey);
+    desc.SetEnd(end_rowkey);
+    if (op == "scanallv") {
+        desc.SetMaxVersions(std::numeric_limits<int>::max());
+    }
+    if (argc == 6 && !desc.SetFilter(argv[5])) {
+        LOG(ERROR) << "fail to parse scan schema: " << argv[5];
+        return -1;
+    }
+    return ScanRange(table, desc, err);
 }
 
 static std::string DoubleToStr(double value)
@@ -2195,6 +2194,74 @@ int32_t CompactTabletOp(Client* client, int32_t argc, char** argv, ErrorCode* er
     return CompactTablet(*tablet_it, lg);
 }
 
+bool GetTabletInfo(Client* client, const std::string& tablename,
+                   const std::string& tablet_path, TabletInfo* tablet,
+                   ErrorCode* err) {
+    std::vector<TabletInfo> tablet_list;
+    if (!client->GetTabletLocation(tablename, &tablet_list, err)) {
+        LOG(ERROR) << "fail to list tablet info";
+        return false;
+    }
+
+    std::vector<TabletInfo>::iterator tablet_it = tablet_list.begin();
+    for (; tablet_it != tablet_list.end(); ++tablet_it) {
+        if (tablet_it->path == tablet_path) {
+            *tablet = *tablet_it;
+            break;
+        }
+    }
+    if (tablet_it == tablet_list.end()) {
+        LOG(ERROR) << "fail to find tablet: " << tablet_path
+            << ", total tablets: " << tablet_list.size();
+        return false;
+    }
+    return true;
+}
+
+int32_t ScanTabletOp(Client* client, int32_t argc, char** argv, ErrorCode* err) {
+    if (argc < 4) {
+        PrintCmdHelpInfo(argv[1]);
+        return -1;
+    }
+
+    std::vector<std::string> subs;
+    std::string op = argv[2];
+    std::string tablet_path = argv[3];
+    SplitString(tablet_path, "/", &subs);
+    if (subs.size() != 2) {
+        LOG(ERROR) << "tablet path error, format [table/tablet]: " << tablet_path;
+        return -2;
+    }
+
+    Table* table = NULL;
+    if ((table = client->OpenTable(subs[0], err)) == NULL) {
+        LOG(ERROR) << "fail to open table: " << subs[0];
+        return -3;
+    }
+
+    TabletInfo tablet;
+    if (!GetTabletInfo(client, subs[0], tablet_path, &tablet, err)) {
+        LOG(ERROR) << "fail to parse tablet: " << tablet_path;
+        return -4;
+    }
+
+    ScanDescriptor desc(tablet.start_key);
+    desc.SetEnd(tablet.end_key);
+
+    if (op == "scanallv") {
+        desc.SetMaxVersions(std::numeric_limits<int>::max());
+    }
+
+    if (argc > 4 && !desc.SetFilter(argv[4])) {
+        LOG(ERROR) << "fail to parse scan schema: " << argv[4];
+        return -5;
+    }
+
+    int32_t ret = ScanRange(table, desc, err);
+    delete table;
+    return ret;
+}
+
 int32_t TabletOp(Client* client, int32_t argc, char** argv, ErrorCode* err) {
     if (argc != 4 && argc != 5) {
         PrintCmdHelpInfo(argv[1]);
@@ -2205,6 +2272,8 @@ int32_t TabletOp(Client* client, int32_t argc, char** argv, ErrorCode* err) {
 
     if (op == "compact") {
         return CompactTabletOp(client, argc, argv, err);
+    } else if (op == "scan" || op == "scanallv") {
+        return ScanTabletOp(client, argc, argv, err);
     } else if (op != "move" && op != "split" && op != "merge") {
         PrintCmdHelpInfo(argv[1]);
         return -1;
