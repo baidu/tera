@@ -2225,6 +2225,7 @@ int32_t ScanTabletOp(Client* client, int32_t argc, char** argv, ErrorCode* err) 
     }
 
     std::vector<std::string> subs;
+    std::string op = argv[2];
     std::string tablet_path = argv[3];
     SplitString(tablet_path, "/", &subs);
     if (subs.size() != 2) {
@@ -2246,6 +2247,11 @@ int32_t ScanTabletOp(Client* client, int32_t argc, char** argv, ErrorCode* err) 
 
     ScanDescriptor desc(tablet.start_key);
     desc.SetEnd(tablet.end_key);
+
+    if (op == "scanallv") {
+        desc.SetMaxVersions(std::numeric_limits<int>::max());
+    }
+
     if (argc > 4 && !desc.SetFilter(argv[4])) {
         LOG(ERROR) << "fail to parse scan schema: " << argv[4];
         return -5;
@@ -2266,7 +2272,7 @@ int32_t TabletOp(Client* client, int32_t argc, char** argv, ErrorCode* err) {
 
     if (op == "compact") {
         return CompactTabletOp(client, argc, argv, err);
-    } else if (op == "scan") {
+    } else if (op == "scan" || op == "scanallv") {
         return ScanTabletOp(client, argc, argv, err);
     } else if (op != "move" && op != "split" && op != "merge") {
         PrintCmdHelpInfo(argv[1]);
