@@ -1,6 +1,8 @@
 #!/bin/bash
+
 BIN_DIR=`pwd`
 ROOT_DIR=$BIN_DIR/..
+
 export LD_LIBRARY_PATH=$ROOT_DIR/lib/plugin:$LD_LIBRARY_PATH
 nohup \
 ./mysqld --port=8806 --user=$USER \
