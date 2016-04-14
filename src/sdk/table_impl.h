@@ -198,19 +198,36 @@ public:
 
     struct PerfCounter {
         int64_t start_time;
-        Counter rpc_r;
-        Counter rpc_r_cnt;
+        Counter rpc_r;                    // 读取的耗时
+        Counter rpc_r_cnt;                // 读取的次数
 
-        Counter rpc_w;
-        Counter rpc_w_cnt;
+        Counter rpc_w;                    // 写入的耗时
+        Counter rpc_w_cnt;                // 写入的次数
 
-        Counter rpc_s;
-        Counter rpc_s_cnt;
+        Counter rpc_s;                    // scan的耗时
+        Counter rpc_s_cnt;                // scan的次数
 
-        Counter user_callback;
-        Counter user_callback_cnt;
+        Counter user_callback;            // 运行用户callback的耗时
+        Counter user_callback_cnt;        // 运行用户callback的次数
 
-        std::string ToLog();
+        Counter get_meta;                 // 更新meta的耗时
+        Counter get_meta_cnt;             // 更新meta的次数
+
+        Counter mutate_cnt;               // 分发mutation的次数
+        Counter mutate_ok_cnt;            // mutation回调成功的次数
+        Counter mutate_fail_cnt;          // mutation回调失败的次数
+        Counter mutate_range_cnt;         // mutation回调失败-原因为not in range
+        Counter mutate_timeout_cnt;       // mutation在sdk队列中超时
+        Counter mutate_queue_timeout_cnt; // mutation在sdk队列中超时，且之前从未被重试过
+
+        Counter reader_cnt;               // 分发reader的次数
+        Counter reader_ok_cnt;            // reader回调成功的次数
+        Counter reader_fail_cnt;          // reader回调失败的次数
+        Counter reader_range_cnt;         // reader回调失败-原因为not in range
+        Counter reader_timeout_cnt;       // reader在sdk队列中超时
+        Counter reader_queue_timeout_cnt; // raader在sdk队列中超时，且之前从未被重试过
+
+        void DoDumpPerfCounterLog(const std::string& log_prefix);
 
         PerfCounter() {
             start_time = common::timer::get_micros();
@@ -323,6 +340,7 @@ private:
     void ScanMetaTableCallBack(std::string key_start,
                                std::string key_end,
                                std::string expand_key_end,
+                               int64_t start_time,
                                ScanTabletRequest* request,
                                ScanTabletResponse* response,
                                bool failed, int error_code);
