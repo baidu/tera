@@ -1,7 +1,7 @@
 include ../depends.mk
 
 OUTPUT = $(shell pwd)/build
-MYSQL_PATH = mysql-cluster-gpl-7.4.8
+MYSQL_PATH = mysql-cluster-gpl-7.4.10
 TERA_PLUGIN_PATH = $(MYSQL_PATH)/storage/tera
 
 .PHONY: all clean cleanall
