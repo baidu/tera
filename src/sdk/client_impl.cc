@@ -65,6 +65,16 @@ ClientImpl::ClientImpl(const std::string& user_identity,
 }
 
 ClientImpl::~ClientImpl() {
+    {
+        MutexLock l(&_open_table_mutex);
+        if (!_open_table_map.empty()) {
+            std::map<std::string, TableHandle>::iterator it = _open_table_map.begin() ;
+            for (; it != _open_table_map.end(); ++it) {
+                LOG(ERROR) << "table should be delete first: " << it->first;
+            }
+            CHECK(false);
+        }
+    }
     delete _cluster;
 }
 
@@ -464,6 +474,45 @@ bool ClientImpl::GetInternalTableName(const std::string& table_name, ErrorCode* 
 
 Table* ClientImpl::OpenTable(const std::string& table_name,
                              ErrorCode* err) {
+    _open_table_mutex.Lock();
+    TableHandle& th = _open_table_map[table_name];
+    th.ref++;
+
+    if (th.mu == NULL) {
+        // open a new table
+        CHECK(th.handle == NULL);
+        th.mu = new Mutex();
+        th.mu->Lock();
+        _open_table_mutex.Unlock();
+        VLOG(10) << "open a new table: " << table_name;
+        th.handle = OpenTableInternal(table_name, &th.err);
+        th.mu->Unlock();
+    } else {
+        _open_table_mutex.Unlock();
+    }
+
+    th.mu->Lock();
+    if (err) {
+        *err = th.err;
+    }
+    if (th.handle == NULL) {
+        VLOG(10) << "open null table: " << table_name;
+        th.mu->Unlock();
+        MutexLock l(&_open_table_mutex);
+        if (--th.ref == 0) {
+            delete th.mu;
+            _open_table_map.erase(table_name);
+        }
+        return NULL;
+    }
+
+    Table* table_impl = th.handle;
+    th.mu->Unlock();
+    return new TableWrapper(table_impl, this);
+}
+
+Table* ClientImpl::OpenTableInternal(const std::string& table_name,
+                                     ErrorCode* err) {
     std::string internal_table_name;
     if (!GetInternalTableName(table_name, err, &internal_table_name)) {
         std::string reason = "fail to scan meta schema";
@@ -490,6 +539,21 @@ Table* ClientImpl::OpenTable(const std::string& table_name,
         return NULL;
     }
     return table;
+}
+
+void ClientImpl::CloseTable(const std::string& table_name) {
+    MutexLock l(&_open_table_mutex);
+    std::map<std::string, TableHandle>::iterator it;
+    it = _open_table_map.find(table_name);
+    assert(it != _open_table_map.end());
+    TableHandle& h = it->second;
+    h.ref--;
+    if (h.ref == 0) {
+        VLOG(10) << "close table: " << table_name;
+        delete h.handle;
+        delete h.mu;
+        _open_table_map.erase(it);
+    }
 }
 
 bool ClientImpl::GetTabletLocation(const string& table_name,

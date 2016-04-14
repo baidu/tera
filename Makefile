@@ -66,14 +66,14 @@ ALL_OBJ := $(MASTER_OBJ) $(TABLETNODE_OBJ) $(IO_OBJ) $(SDK_OBJ) $(PROTO_OBJ) \
            $(TEST_CLIENT_OBJ) $(TERA_C_OBJ) $(MONITOR_OBJ) $(MARK_OBJ) $(TEST_OBJ)
 LEVELDB_LIB := src/leveldb/libleveldb.a
 
-PROGRAM = tera_main teracli teramo
+PROGRAM = tera_main teracli teramo tera_test
 LIBRARY = libtera.a
 SOLIBRARY = libtera.so
 TERA_C_SO = libtera_c.so
 JNILIBRARY = libjni_tera.so
 BENCHMARK = tera_bench tera_mark
 TESTS = prop_tree_test tprinter_test string_util_test tablet_io_test \
-		fragment_test progress_bar_test tera_test
+		fragment_test progress_bar_test
 
 .PHONY: all clean cleanall test
 

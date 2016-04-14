@@ -24,6 +24,7 @@
 #include "proto/kv_helper.h"
 #include "proto/proto_helper.h"
 #include "proto/tabletnode_client.h"
+#include "sdk/cookie.h"
 #include "sdk/mutate_impl.h"
 #include "sdk/read_impl.h"
 #include "sdk/scan_impl.h"
@@ -1047,7 +1048,7 @@ void TableImpl::ReaderCallBack(std::vector<int64_t>* reader_id_list,
 
     std::map<uint32_t, std::vector<int64_t>* > retry_times_list;
     std::vector<RowReaderImpl*> not_in_range_list;
-    uint32_t row_result_num = 0;
+    uint32_t row_result_index = 0;
     for (uint32_t i = 0; i < reader_id_list->size(); ++i) {
         int64_t reader_id = (*reader_id_list)[i];
 
@@ -1059,6 +1060,10 @@ void TableImpl::ReaderCallBack(std::vector<int64_t>* reader_id_list,
             SdkTask* task = _task_pool.PopTask(reader_id);
             if (task == NULL) {
                 VLOG(10) << "reader " << reader_id << " success but timeout";
+                if (err == kTabletNodeOk) {
+                    // result is timeout, discard it
+                    row_result_index++;
+                }
                 continue;
             }
             CHECK_EQ(task->Type(), SdkTask::READ);
@@ -1066,7 +1071,7 @@ void TableImpl::ReaderCallBack(std::vector<int64_t>* reader_id_list,
 
             RowReaderImpl* row_reader = (RowReaderImpl*)task;
             if (err == kTabletNodeOk) {
-                row_reader->SetResult(response->detail().row_result(row_result_num++));
+                row_reader->SetResult(response->detail().row_result(row_result_index++));
                 row_reader->SetError(ErrorCode::kOK);
             } else if (err == kKeyNotExist) {
                 row_reader->SetError(ErrorCode::kNotFound, "not found");
@@ -1793,71 +1798,6 @@ void TableImpl::ReadTableMetaCallBack(ErrorCode* ret_err,
     delete response;
 }
 
-static bool CalculateChecksumOfData(std::fstream& outfile, long size, std::string* hash_str) {
-    // 100 MB, (100 * 1024 * 1024) / 250 = 419,430
-    // cookie文件中，每个tablet的缓存大小约为100~200 Bytes，不妨计为250 Bytes，
-    // 那么，100MB可以支持约40万个tablets
-    const long MAX_SIZE = 100 * 1024 * 1024;
-
-    if(size > MAX_SIZE || size <= 0) {
-        LOG(INFO) << "[SDK COOKIE] invalid size : " << size;
-        return false;
-    }
-    if(hash_str == NULL) {
-        LOG(INFO) << "[SDK COOKIE] input argument `hash_str' is NULL";
-        return false;
-    }
-    std::string data(size, '\0');
-    outfile.read(const_cast<char*>(data.data()), size);
-    if(outfile.fail()) {
-        LOG(INFO) << "[SDK COOKIE] fail to read cookie file";
-        return false;
-    }
-    if (GetHashString(data, 0, hash_str) != 0) {
-        return false;
-    }
-    return true;
-}
-
-static bool IsCookieChecksumRight(const std::string& cookie_file) {
-    std::fstream outfile(cookie_file.c_str(), std::ios_base::in | std::ios_base::out);
-    int errno_saved = errno;
-    if(outfile.fail()) {
-        LOG(INFO) << "[SDK COOKIE] fail to open " << cookie_file.c_str()
-            << " " << strerror(errno_saved);
-        return false;
-    }
-
-    // gets file size, in bytes
-    outfile.seekp(0, std::ios_base::end);
-    long file_size = outfile.tellp();
-    if(file_size < HASH_STRING_LEN) {
-        LOG(INFO) << "[SDK COOKIE] invalid file size: " << file_size;
-        return false;
-    }
-
-    // calculates checksum according to cookie file content
-    std::string hash_str;
-    outfile.seekp(0, std::ios_base::beg);
-    if(!CalculateChecksumOfData(outfile, file_size - HASH_STRING_LEN, &hash_str)) {
-        return false;
-    }
-    LOG(INFO) << "[SDK COOKIE] checksum rebuild: " << hash_str;
-
-    // gets checksum in cookie file
-    char hash_str_saved[HASH_STRING_LEN + 1] = {'\0'};
-    outfile.read(hash_str_saved, HASH_STRING_LEN);
-    if(outfile.fail()) {
-        int errno_saved = errno;
-        LOG(INFO) << "[SDK COOKIE] fail to get checksum: " << strerror(errno_saved);
-        return false;
-    }
-    LOG(INFO) << "[SDK COOKIE] checksum in file: " << hash_str_saved;
-
-    outfile.close();
-    return strncmp(hash_str.c_str(), hash_str_saved, HASH_STRING_LEN) == 0;
-}
-
 bool TableImpl::RestoreCookie() {
     const std::string& cookie_dir = FLAGS_tera_sdk_cookie_path;
     if (!IsExist(cookie_dir)) {
@@ -1868,36 +1808,11 @@ bool TableImpl::RestoreCookie() {
             return true;
         }
     }
-    std::string cookie_file = GetCookieFilePathName();
-    if (!IsExist(cookie_file)) {
-        // cookie file is not exist
-        return true;
-    }
-    if(!IsCookieChecksumRight(cookie_file)) {
-        if(unlink(cookie_file.c_str()) == -1) {
-            int errno_saved = errno;
-            LOG(INFO) << "[SDK COOKIE] fail to delete broken cookie file: " << cookie_file
-                << ". reason: " << strerror(errno_saved);
-        } else {
-            LOG(INFO) << "[SDK COOKIE] delete broken cookie file" << cookie_file;
-        }
-        return true;
-    }
-
-    FileStream fs;
-    if (!fs.Open(cookie_file, FILE_READ)) {
-        LOG(INFO) << "[SDK COOKIE] fail to open " << cookie_file;
-        return true;
-    }
     SdkCookie cookie;
-    RecordReader record_reader;
-    record_reader.Reset(&fs);
-    if (!record_reader.ReadNextMessage(&cookie)) {
-        LOG(INFO) << "[SDK COOKIE] fail to parse sdk cookie, file: " << cookie_file;
+    std::string cookie_file = GetCookieFilePathName();
+    if (!::tera::sdk::RestoreCookie(cookie_file, true, &cookie)) {
         return true;
     }
-    fs.Close();
-
     if (cookie.table_name() != _name) {
         LOG(INFO) << "[SDK COOKIE] cookie name error: " << cookie.table_name()
             << ", should be: " << _name;
@@ -1908,7 +1823,8 @@ bool TableImpl::RestoreCookie() {
     for (int i = 0; i < cookie.tablets_size(); ++i) {
         const TabletMeta& meta = cookie.tablets(i).meta();
         const std::string& start_key = meta.key_range().key_start();
-        LOG(INFO) << "[SDK COOKIE] restore tablet, range [" << DebugString(start_key)
+        LOG(INFO) << "[SDK COOKIE] restore:" << meta.path()
+            << " range [" << DebugString(start_key)
             << " : " << DebugString(meta.key_range().key_end()) << "]";
         TabletMetaNode& node = _tablet_meta_list[start_key];
         node.meta = meta;
@@ -1928,114 +1844,9 @@ std::string TableImpl::GetCookieLockFilePathName(void) {
     return GetCookieFilePathName() + ".LOCK";
 }
 
-/*
- * If there is overtime/legacy cookie-lock-file, then delete it.
- * Normally, process which created cookie-lock-file would delete it after dumped.
- * But if this process crashed before delete cookie-lock-file.
- * Another process could call this function to delete legacy cookie-lock-file.
- *
- * create_time = [time of cookie-lock-file creation]
- * timeout     = [input parameter `timeout_secondes']
- *
- * create_time + timeout > current_time :=> legacy cookie-lock-file
- */
-void TableImpl::DeleteLegacyCookieLockFile(const std::string& lock_file, int timeout_seconds) {
-    struct stat lock_stat;
-    int ret = stat(lock_file.c_str(), &lock_stat);
-    if (ret == -1) {
-        return;
-    }
-    time_t curr_time = time(NULL);
-    if (((unsigned int)curr_time - lock_stat.st_atime) > timeout_seconds) {
-        // It's a long time since creation of cookie-lock-file, dumping must has done.
-        // So, delete the cookie-lock-file is safe.
-        int errno_saved = -1;
-        if (unlink(lock_file.c_str()) == -1) {
-            errno_saved = errno;
-            LOG(INFO) << "[SDK COOKIE] fail to delete cookie-lock-file: " << lock_file
-                       << ". reason: " << strerror(errno_saved);
-        }
-    }
-}
-
-void TableImpl::CloseAndRemoveCookieLockFile(int lock_fd, const std::string& cookie_lock_file) {
-    if (lock_fd < 0) {
-        return;
-    }
-    close(lock_fd);
-    if (unlink(cookie_lock_file.c_str()) == -1) {
-        int errno_saved = errno;
-        LOG(INFO) << "[SDK COOKIE] fail to delete cookie-lock-file: " << cookie_lock_file
-                   << ". reason: " << strerror(errno_saved);
-    }
-}
-
-static bool AppendChecksumToCookie(const std::string& cookie_file) {
-    std::fstream outfile(cookie_file.c_str(), std::ios_base::in | std::ios_base::out);
-    int errno_saved = errno;
-    if(outfile.fail()) {
-        LOG(INFO) << "[SDK COOKIE] fail to open " << cookie_file.c_str()
-            << " " << strerror(errno_saved);
-        return false;
-    }
-
-    // get file size, in bytes
-    outfile.seekp(0, std::ios_base::end);
-    long file_size = outfile.tellp();
-    if(file_size < HASH_STRING_LEN) {
-        LOG(INFO) << "[SDK COOKIE] invalid file size: " << file_size;
-        return false;
-    }
-
-    // calculates checksum according to cookie file content
-    outfile.seekp(0, std::ios_base::beg);
-    std::string hash_str;
-    if(!CalculateChecksumOfData(outfile, file_size, &hash_str)) {
-        return false;
-    }
-    LOG(INFO) << "[SDK COOKIE] file checksum: " << hash_str;
-
-    // append checksum to the end of cookie file
-    outfile.seekp(0, std::ios_base::end);
-    outfile.write(hash_str.c_str(), hash_str.length());
-    if(outfile.fail()) {
-        LOG(INFO) << "[SDK COOKIE] fail to append checksum";
-        return false;
-    }
-    outfile.close();
-    return true;
-}
-
-static bool AddOtherUserWritePermission(const std::string& cookie_file) {
-    struct stat st;
-    int ret = stat(cookie_file.c_str(), &st);
-    if(ret != 0) {
-        return false;
-    }
-    if((st.st_mode & S_IWOTH) == S_IWOTH) {
-        // other user has write permission already
-        return true;
-    }
-    return chmod(cookie_file.c_str(),
-             S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP | S_IROTH | S_IWOTH) == 0;
-}
-
 void TableImpl::DoDumpCookie() {
     std::string cookie_file = GetCookieFilePathName();
     std::string cookie_lock_file = GetCookieLockFilePathName();
-
-    int cookie_lock_file_timeout = 10; // in seconds
-    DeleteLegacyCookieLockFile(cookie_lock_file, cookie_lock_file_timeout);
-    int lock_fd = open(cookie_lock_file.c_str(), O_WRONLY | O_CREAT | O_EXCL, 0644);
-    if (lock_fd == -1) {
-        int errno_saved = errno;
-        if (errno != EEXIST) {
-            LOG(INFO) << "[SDK COOKIE] failed to create cookie-lock-file: " << cookie_lock_file
-                      << ". reason: " << strerror(errno_saved);
-        }
-        return;
-    }
-
     SdkCookie cookie;
     cookie.set_table_name(_name);
     {
@@ -2052,36 +1863,7 @@ void TableImpl::DoDumpCookie() {
             tablet->set_status(node.status);
         }
     }
-
-    FileStream fs;
-    if (!fs.Open(cookie_file, FILE_WRITE)) {
-        LOG(INFO) << "[SDK COOKIE] fail to open " << cookie_file;
-        CloseAndRemoveCookieLockFile(lock_fd, cookie_lock_file);
-        return;
-    }
-    RecordWriter record_writer;
-    record_writer.Reset(&fs);
-    if (!record_writer.WriteMessage(cookie)) {
-        LOG(INFO) << "[SDK COOKIE] fail to write cookie file " << cookie_file;
-        fs.Close();
-        CloseAndRemoveCookieLockFile(lock_fd, cookie_lock_file);
-        return;
-    }
-    fs.Close();
-
-    if(!AppendChecksumToCookie(cookie_file)) {
-        LOG(INFO) << "[SDK COOKIE] fail to append checksum to cookie file " << cookie_file;
-        CloseAndRemoveCookieLockFile(lock_fd, cookie_lock_file);
-        return;
-    }
-    if(!AddOtherUserWritePermission(cookie_file)) {
-        LOG(INFO) << "[SDK COOKIE] fail to chmod cookie file " << cookie_file;
-        CloseAndRemoveCookieLockFile(lock_fd, cookie_lock_file);
-        return;
-    }
-
-    CloseAndRemoveCookieLockFile(lock_fd, cookie_lock_file);
-    LOG(INFO) << "[SDK COOKIE] update local cookie success: " << cookie_file;
+    ::tera::sdk::DumpCookie(cookie_file, cookie_lock_file, cookie);
 }
 
 void TableImpl::DumpCookie() {
