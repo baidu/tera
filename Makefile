@@ -93,6 +93,7 @@ check: $(TESTS)
 	( cd $(UNITTEST_OUTPUT); \
 	for t in $(TESTS); do echo "***** Running $$t"; ./$$t || exit 1; done )
 	$(MAKE) check -C src/leveldb
+	sh ./src/sdk/python/checker.sh
 
 clean:
 	rm -rf $(ALL_OBJ) $(PROTO_OUT_CC) $(PROTO_OUT_H) $(TEST_OUTPUT)
