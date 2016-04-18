@@ -2,6 +2,7 @@
 
 # If release a new version, modify these infos
 VERSION_INFO="0.3.1"
+VERSION_ADDR="https://github.com/baidu/tera/tree/0.3"
 
 BUILD_DATE_TIME=`date`
 BUILD_HOSTNAME=`hostname`
