@@ -11,7 +11,7 @@ by 黄俊辉
 
 2. merge之后master宕机怎么保证meta状态正确
  - merge主要分为3个步骤:(1) unload两个旧的tablet；(2) 向meta表的ts发送删除两个旧tablet、新增1个新tablet的信息请求；(3) load新tablet；
- - master在步骤1或步骤2宕机，不会是meta状态不一致；对于步骤2，master向ts发送WriteTablet请求，ts内部是一个原子操作，保证都成功或都失败；
+ - master在步骤1或步骤3宕机，不会是meta状态不一致；对于步骤2，master向ts发送WriteTablet请求，ts内部是一个原子操作，保证都成功或都失败；
 
 3. merge后leveldb load时路径参数是什么
  - 两个父tablet的id，根据这两个id可以生成父tablet的路径，进而知道父tablet下面的所有lg，即leveldb的数据，根据这些信息生成merge后tablet的每个lg的manifest文件；
