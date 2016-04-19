@@ -57,10 +57,16 @@ std::ostream& operator << (std::ostream& o, const TabletPtr& tablet) {
     return o;
 }
 
-Tablet::Tablet(const TabletMeta& meta) : m_meta(meta), m_update_time(0) {}
+Tablet::Tablet(const TabletMeta& meta)
+    : m_meta(meta),
+      m_update_time(0),
+      m_load_time(std::numeric_limits<int64_t>::max()) {}
 
 Tablet::Tablet(const TabletMeta& meta, TablePtr table)
-    : m_meta(meta), m_table(table), m_update_time(0) {}
+    : m_meta(meta),
+      m_table(table),
+      m_update_time(0),
+      m_load_time(std::numeric_limits<int64_t>::max()) {}
 
 Tablet::~Tablet() {
     m_table.reset();
@@ -325,6 +331,22 @@ int64_t Tablet::SetUpdateTime(int64_t timestamp) {
     MutexLock lock(&m_mutex);
     int64_t ts = m_update_time;
     m_update_time = timestamp;
+    return ts;
+}
+
+int64_t Tablet::LoadTime() {
+    MutexLock lock(&m_mutex);
+    if (m_meta.status() != kTableReady) {
+        return std::numeric_limits<int>::max();
+    } else {
+        return m_load_time;
+    }
+}
+
+int64_t Tablet::SetLoadTime(int64_t timestamp) {
+    MutexLock lock(&m_mutex);
+    int64_t ts = m_load_time;
+    m_load_time = timestamp;
     return ts;
 }
 

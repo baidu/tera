@@ -2585,8 +2585,8 @@ void MasterImpl::LoadTabletCallback(TabletPtr tablet, int32_t retry,
     // success
     if (!failed && (status == kTabletNodeOk || status == kTabletReady)) {
         LOG(INFO) << "load tablet success, " << tablet;
+        tablet->SetLoadTime(get_micros());
         tablet->SetStatusIf(kTableReady, kTableOnLoad);
-        tablet->SetUpdateTime(0);
         m_tablet_availability->EraseNotReadyTablet(tablet->GetPath());
         if (tablet->GetTableName() == FLAGS_tera_master_meta_table_name) {
             CHECK(tablet->GetPath() == FLAGS_tera_master_meta_table_path);
@@ -3484,9 +3484,15 @@ void MasterImpl::QueryTabletNodeCallback(std::string addr, QueryRequest* request
                     << ", addr: " << meta.server_addr()
                     << ", status: " << meta.status();
             } else if (m_tablet_manager->FindTablet(table_name, key_start, &tablet)) {
-                if (tablet->SetUpdateTime(start_query) > m_start_query_time) {
-                    LOG(ERROR) << "caution: one tablet multi-loaded, " <<
-                        meta.server_addr() << " vs " << tablet->GetServerAddr();
+                int64_t pre_time = tablet->SetUpdateTime(start_query);
+                int64_t load_time = tablet->LoadTime();
+                if (load_time < m_start_query_time && pre_time > m_start_query_time) {
+                    LOG(ERROR) << "caution: one tablet multi-loaded, path "
+                        << tablet->GetPath() << ", addr " << meta.server_addr()
+                        << " vs " << tablet->GetServerAddr()
+                        << ", start_query " << m_start_query_time
+                        << ", pre_update " << pre_time
+                        << ", cur_time " << start_query;
                 }
                 if (tablet->Verify(table_name, key_start, key_end, meta.path(),
                                    meta.server_addr())) {
@@ -3547,11 +3553,9 @@ void MasterImpl::QueryTabletNodeCallback(std::string addr, QueryRequest* request
             TabletPtr tablet = *it;
             tabletnode::TabletRange range(tablet->GetTableName(), tablet->GetKeyStart(),
                                           tablet->GetKeyEnd());
-            if ((tablet_map.find(range) == tablet_map.end()) &&
-                (tablet->SetStatusIf(kTableOffLine, kTableReady))) {
+            if (tablet_map.find(range) == tablet_map.end()) {
                 LOG(INFO) << "master load tablet, but ts not: addr " << addr
                            << ", " << tablet;
-                TryLoadTablet(tablet, addr);
                 continue;
             }
 
