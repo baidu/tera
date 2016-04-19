@@ -124,7 +124,7 @@ teramo: $(MONITOR_OBJ) $(LIBRARY)
 
 tera_mark: $(MARK_OBJ) $(LIBRARY) $(LEVELDB_LIB)
 	$(CXX) -o $@ $^ $(LDFLAGS)
-	
+
 tera_test: $(TEST_CLIENT_OBJ) $(LIBRARY)
 	$(CXX) -o $@ $(TEST_CLIENT_OBJ) $(LIBRARY) $(LDFLAGS)
 

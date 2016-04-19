@@ -683,6 +683,7 @@ void TableImpl::CommitMutations(const std::string& server_addr,
             SerializeMutation(mu, mutation);
         }
         mu_id_list->push_back(row_mutation->GetId());
+        row_mutation->AddCommitTimes();
         row_mutation->DecRef();
     }
 
@@ -816,11 +817,13 @@ void TableImpl::MutationTimeout(int64_t mutation_id) {
     }
     if (row_mutation->RetryTimes() == 0) {
         _perf_counter.mutate_queue_timeout_cnt.Inc();
-        std::string err_reason = StringFormat("this mutation always in request-queue, have no chance to execute in %u ms.", _timeout);
+        std::string err_reason = StringFormat("commit %lld times, retry 0 times, in %u ms.",
+                                              row_mutation->GetCommitTimes(), _timeout);
         row_mutation->SetError(ErrorCode::kTimeout, err_reason);
     } else {
-        std::string err_reason = StringFormat("retry %u times, last error: %s", row_mutation->RetryTimes(),
-                                              StatusCodeToString(err).c_str());
+        std::string err_reason = StringFormat("commit %lld times, retry %u times, in %u ms. last error: %s",
+                                              row_mutation->GetCommitTimes(), row_mutation->RetryTimes(),
+                                              _timeout, StatusCodeToString(err).c_str());
         row_mutation->SetError(ErrorCode::kSystem, err_reason);
     }
     // only for flow control
@@ -1020,6 +1023,7 @@ void TableImpl::CommitReaders(const std::string server_addr,
         row_reader->ToProtoBuf(row_reader_info);
         // row_reader_info->CopyFrom(row_reader->GetRowReaderInfo());
         reader_id_list->push_back(row_reader->GetId());
+        row_reader->AddCommitTimes();
         row_reader->DecRef();
     }
     request->set_timestamp(common::timer::get_micros());
@@ -1179,11 +1183,13 @@ void TableImpl::ReaderTimeout(int64_t reader_id) {
     }
     if (row_reader->RetryTimes() == 0) {
         _perf_counter.reader_queue_timeout_cnt.Inc();
-        std::string err_reason = StringFormat("this reader always in request-queue, have no chance to execute in %u ms.", _timeout);
+        std::string err_reason = StringFormat("commit %lld times, retry 0 times, in %u ms.",
+                                              row_reader->GetCommitTimes(), _timeout);
         row_reader->SetError(ErrorCode::kTimeout, err_reason);
     } else {
-        std::string err_reason = StringFormat("retry %u times, last error: %s", row_reader->RetryTimes(),
-                                              StatusCodeToString(err).c_str());
+        std::string err_reason = StringFormat("commit %lld times, retry %u times, in %u ms. last error: %s",
+                                              row_reader->GetCommitTimes(),  row_reader->RetryTimes(),
+                                              _timeout, StatusCodeToString(err).c_str());
         row_reader->SetError(ErrorCode::kSystem, err_reason);
     }
     int64_t perf_time = common::timer::get_micros();
@@ -2147,7 +2153,7 @@ void TableImpl::DumpPerfCounterLogDelay() {
 }
 
 void TableImpl::DoDumpPerfCounterLog() {
-    LOG(INFO) << "[table " << _name << " PerfCounter]"
+    LOG(INFO) << "[table " << _name << " PerfCounter][pending]"
         << " pending_r: " << _cur_reader_pending_counter.Get()
         << " pending_w: " << _cur_commit_pending_counter.Get();
     _perf_counter.DoDumpPerfCounterLog("[table " + _name + " PerfCounter]");
@@ -2156,30 +2162,28 @@ void TableImpl::DoDumpPerfCounterLog() {
 void TableImpl::PerfCounter::DoDumpPerfCounterLog(const std::string& log_prefix) {
     int64_t ts = common::timer::get_micros();
     int64_t interval = (ts - start_time) / 1000;
-    LOG(INFO) << log_prefix
+    LOG(INFO) << log_prefix << "[delay](ms)"
         << " get meta: " << CalcAverage(get_meta, get_meta_cnt, interval)
-        << " callback: " << CalcAverage(user_callback, user_callback_cnt, interval);
-
-    LOG(INFO) << log_prefix
+        << " callback: " << CalcAverage(user_callback, user_callback_cnt, interval)
         << " rpc_r: " << CalcAverage(rpc_r, rpc_r_cnt, interval)
         << " rpc_w: " << CalcAverage(rpc_w, rpc_w_cnt, interval)
         << " rpc_s: " << CalcAverage(rpc_s, rpc_s_cnt, interval);
 
-    LOG(INFO) << log_prefix
-        << " mutate_cnt: " << mutate_cnt.Clear()
-        << " mutate_ok_cnt: " << mutate_ok_cnt.Clear()
-        << " mutate_fail_cnt: " << mutate_fail_cnt.Clear()
-        << " mutate_range_cnt: " << mutate_range_cnt.Clear()
-        << " mutate_timeout_cnt: " << mutate_timeout_cnt.Clear()
-        << " mutate_queue_timeout_cnt: " << mutate_queue_timeout_cnt.Clear();
+    LOG(INFO) << log_prefix << "[mutation]"
+        << " all: " << mutate_cnt.Clear()
+        << " ok: " << mutate_ok_cnt.Clear()
+        << " fail: " << mutate_fail_cnt.Clear()
+        << " range: " << mutate_range_cnt.Clear()
+        << " timeout: " << mutate_timeout_cnt.Clear()
+        << " queue_timeout: " << mutate_queue_timeout_cnt.Clear();
 
-    LOG(INFO) << log_prefix
-        << " reader_cnt: " << reader_cnt.Clear()
-        << " reader_ok_cnt: " << reader_ok_cnt.Clear()
-        << " reader_fail_cnt: " << reader_fail_cnt.Clear()
-        << " reader_range_cnt: " << reader_range_cnt.Clear()
-        << " reader_timeout_cnt: " << reader_timeout_cnt.Clear()
-        << " reader_queue_timeout_cnt: " << reader_queue_timeout_cnt.Clear();
+    LOG(INFO) << log_prefix << "[reader]"
+        << " all: " << reader_cnt.Clear()
+        << " ok: " << reader_ok_cnt.Clear()
+        << " fail: " << reader_fail_cnt.Clear()
+        << " range: " << reader_range_cnt.Clear()
+        << " timeout: " << reader_timeout_cnt.Clear()
+        << " queue_timeout: " << reader_queue_timeout_cnt.Clear();
 }
 
 void TableImpl::DelayTaskWrapper(ThreadPool::Task task, int64_t task_id) {
