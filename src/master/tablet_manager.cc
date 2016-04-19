@@ -321,9 +321,11 @@ int64_t Tablet::UpdateTime() {
     return m_update_time;
 }
 
-void Tablet::SetUpdateTime(int64_t timestamp) {
+int64_t Tablet::SetUpdateTime(int64_t timestamp) {
     MutexLock lock(&m_mutex);
+    int64_t ts = m_update_time;
     m_update_time = timestamp;
+    return ts;
 }
 
 int32_t Tablet::AddSnapshot(uint64_t snapshot) {

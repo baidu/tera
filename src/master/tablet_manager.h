@@ -125,7 +125,7 @@ public:
     bool GetSchemaIsSyncing();
 
     int64_t UpdateTime();
-    void SetUpdateTime(int64_t timestamp);
+    int64_t SetUpdateTime(int64_t timestamp);
 
 private:
     Tablet(const Tablet&) {}
