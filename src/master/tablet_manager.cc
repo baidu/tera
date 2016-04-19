@@ -57,10 +57,10 @@ std::ostream& operator << (std::ostream& o, const TabletPtr& tablet) {
     return o;
 }
 
-Tablet::Tablet(const TabletMeta& meta) : m_meta(meta) {}
+Tablet::Tablet(const TabletMeta& meta) : m_meta(meta), m_update_time(0) {}
 
 Tablet::Tablet(const TabletMeta& meta, TablePtr table)
-    : m_meta(meta), m_table(table) {}
+    : m_meta(meta), m_table(table), m_update_time(0) {}
 
 Tablet::~Tablet() {
     m_table.reset();
@@ -314,6 +314,16 @@ bool Tablet::SetAddrAndStatusIf(const std::string& server_addr,
         return true;
     }
     return false;
+}
+
+int64_t Tablet::UpdateTime() {
+    MutexLock lock(&m_mutex);
+    return m_update_time;
+}
+
+void Tablet::SetUpdateTime(int64_t timestamp) {
+    MutexLock lock(&m_mutex);
+    m_update_time = timestamp;
 }
 
 int32_t Tablet::AddSnapshot(uint64_t snapshot) {
