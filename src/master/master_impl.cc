@@ -5239,7 +5239,7 @@ void MasterImpl::ScheduleAvailableCheck() {
     m_mutex.AssertHeld();
     ThreadPool::Task task =
         boost::bind(&MasterImpl::DoAvailableCheck, this);
-    m_gc_timer_id = m_thread_pool->DelayTask(
+    m_thread_pool->DelayTask(
         FLAGS_tera_master_availability_check_period * 1000, task);
 }
 
