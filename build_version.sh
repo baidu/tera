@@ -2,7 +2,7 @@
 
 # If release a new version, modify these infos
 VERSION_INFO="0.3.1"
-VERSION_ADDR="https://github.com/baidu/archive/0.3.1.zip"
+VERSION_ADDR="https://github.com/baidu/tera/archive/0.3.1.zip"
 
 BUILD_DATE_TIME=`date`
 BUILD_HOSTNAME=`hostname`
