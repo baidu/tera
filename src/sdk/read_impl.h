@@ -100,6 +100,9 @@ public:
     /// 序列化
     void ToProtoBuf(RowReaderInfo* info);
 
+    void AddCommitTimes() { _commit_times++; }
+    int64_t GetCommitTimes() { return _commit_times; }
+
 private:
     std::string _row_key;
     RowReader::Callback _callback;
@@ -122,6 +125,9 @@ private:
     uint32_t _retry_times;
     int32_t _result_pos;
     RowResult _result;
+
+    /// 记录此reader被提交到ts的次数
+    int64_t _commit_times;
 };
 
 } // namespace tera

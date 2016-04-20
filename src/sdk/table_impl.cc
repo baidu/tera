@@ -380,8 +380,8 @@ void TableImpl::ScanCallBack(ScanTask* scan_task,
                              ScanTabletRequest* request,
                              ScanTabletResponse* response,
                              bool failed, int error_code) {
-    _perf_counter.rpc_w.Add(common::timer::get_micros() - request->timestamp());
-    _perf_counter.rpc_w_cnt.Inc();
+    _perf_counter.rpc_s.Add(common::timer::get_micros() - request->timestamp());
+    _perf_counter.rpc_s_cnt.Inc();
     ResultStreamImpl* stream = scan_task->stream;
 
     if (failed) {
@@ -495,7 +495,7 @@ void TableImpl::DistributeMutations(const std::vector<RowMutationImpl*>& mu_list
 
     for (uint32_t i = 0; i < mu_list.size(); i++) {
         RowMutationImpl* row_mutation = (RowMutationImpl*)mu_list[i];
-
+        _perf_counter.mutate_cnt.Inc();
         if (called_by_user) {
             row_mutation->SetId(_next_task_id.Inc());
             _task_pool.PutTask(row_mutation);
@@ -684,6 +684,7 @@ void TableImpl::CommitMutations(const std::string& server_addr,
             SerializeMutation(mu, mutation);
         }
         mu_id_list->push_back(row_mutation->GetId());
+        row_mutation->AddCommitTimes();
         row_mutation->DecRef();
     }
 
@@ -728,6 +729,7 @@ void TableImpl::MutateCallBack(std::vector<int64_t>* mu_id_list,
         }
 
         if (err == kTabletNodeOk) {
+            _perf_counter.mutate_ok_cnt.Inc();
             SdkTask* task = _task_pool.PopTask(mu_id);
             if (task == NULL) {
                 VLOG(10) << "mutation " << mu_id << " success but timeout: " << DebugString(row);
@@ -745,6 +747,7 @@ void TableImpl::MutateCallBack(std::vector<int64_t>* mu_id_list,
             _perf_counter.user_callback_cnt.Inc();
             continue;
         }
+        _perf_counter.mutate_fail_cnt.Inc();
 
         VLOG(10) << "fail to mutate table: " << _name
             << " row: " << DebugString(row)
@@ -760,6 +763,7 @@ void TableImpl::MutateCallBack(std::vector<int64_t>* mu_id_list,
         row_mutation->SetInternalError(err);
 
         if (err == kKeyNotInRange) {
+            _perf_counter.mutate_range_cnt.Inc();
             row_mutation->IncRetryTimes();
             not_in_range_list.push_back(row_mutation);
         } else {
@@ -796,6 +800,7 @@ void TableImpl::MutateCallBack(std::vector<int64_t>* mu_id_list,
 }
 
 void TableImpl::MutationTimeout(int64_t mutation_id) {
+    _perf_counter.mutate_timeout_cnt.Inc();
     SdkTask* task = _task_pool.PopTask(mutation_id);
     if (task == NULL) {
         return;
@@ -812,10 +817,14 @@ void TableImpl::MutationTimeout(int64_t mutation_id) {
                            row_mutation->GetMetaTimeStamp());
     }
     if (row_mutation->RetryTimes() == 0) {
-        row_mutation->SetError(ErrorCode::kTimeout);
+        _perf_counter.mutate_queue_timeout_cnt.Inc();
+        std::string err_reason = StringFormat("commit %lld times, retry 0 times, in %u ms.",
+                                              row_mutation->GetCommitTimes(), _timeout);
+        row_mutation->SetError(ErrorCode::kTimeout, err_reason);
     } else {
-        std::string err_reason = StringFormat("retry %u last error %s", row_mutation->RetryTimes(),
-                                              StatusCodeToString(err).c_str());
+        std::string err_reason = StringFormat("commit %lld times, retry %u times, in %u ms. last error: %s",
+                                              row_mutation->GetCommitTimes(), row_mutation->RetryTimes(),
+                                              _timeout, StatusCodeToString(err).c_str());
         row_mutation->SetError(ErrorCode::kSystem, err_reason);
     }
     // only for flow control
@@ -858,6 +867,7 @@ void TableImpl::DistributeReaders(const std::vector<RowReaderImpl*>& row_reader_
     }
 
     for (uint32_t i = 0; i < row_reader_list.size(); i++) {
+        _perf_counter.reader_cnt.Inc();
         RowReaderImpl* row_reader = (RowReaderImpl*)row_reader_list[i];
         if (called_by_user) {
             row_reader->SetId(_next_task_id.Inc());
@@ -1014,6 +1024,7 @@ void TableImpl::CommitReaders(const std::string server_addr,
         row_reader->ToProtoBuf(row_reader_info);
         // row_reader_info->CopyFrom(row_reader->GetRowReaderInfo());
         reader_id_list->push_back(row_reader->GetId());
+        row_reader->AddCommitTimes();
         row_reader->DecRef();
     }
     request->set_timestamp(common::timer::get_micros());
@@ -1057,6 +1068,7 @@ void TableImpl::ReaderCallBack(std::vector<int64_t>* reader_id_list,
             err = response->detail().status(i);
         }
         if (err == kTabletNodeOk || err == kKeyNotExist || err == kSnapshotNotExist) {
+            _perf_counter.reader_ok_cnt.Inc();
             SdkTask* task = _task_pool.PopTask(reader_id);
             if (task == NULL) {
                 VLOG(10) << "reader " << reader_id << " success but timeout";
@@ -1086,6 +1098,7 @@ void TableImpl::ReaderCallBack(std::vector<int64_t>* reader_id_list,
             _cur_reader_pending_counter.Dec();
             continue;
         }
+        _perf_counter.reader_fail_cnt.Inc();
 
         VLOG(10) << "fail to read table: " << _name
             << " errcode: " << StatusCodeToString(err);
@@ -1100,6 +1113,7 @@ void TableImpl::ReaderCallBack(std::vector<int64_t>* reader_id_list,
         row_reader->SetInternalError(err);
 
         if (err == kKeyNotInRange) {
+            _perf_counter.reader_range_cnt.Inc();
             row_reader->IncRetryTimes();
             not_in_range_list.push_back(row_reader);
         } else {
@@ -1152,6 +1166,7 @@ void TableImpl::DistributeReadersById(std::vector<int64_t>* reader_id_list) {
 }
 
 void TableImpl::ReaderTimeout(int64_t reader_id) {
+    _perf_counter.reader_timeout_cnt.Inc();
     SdkTask* task = _task_pool.PopTask(reader_id);
     if (task == NULL) {
         return;
@@ -1168,10 +1183,14 @@ void TableImpl::ReaderTimeout(int64_t reader_id) {
                            row_reader->GetMetaTimeStamp());
     }
     if (row_reader->RetryTimes() == 0) {
-        row_reader->SetError(ErrorCode::kTimeout);
+        _perf_counter.reader_queue_timeout_cnt.Inc();
+        std::string err_reason = StringFormat("commit %lld times, retry 0 times, in %u ms.",
+                                              row_reader->GetCommitTimes(), _timeout);
+        row_reader->SetError(ErrorCode::kTimeout, err_reason);
     } else {
-        std::string err_reason = StringFormat("retry %u last error %s", row_reader->RetryTimes(),
-                                              StatusCodeToString(err).c_str());
+        std::string err_reason = StringFormat("commit %lld times, retry %u times, in %u ms. last error: %s",
+                                              row_reader->GetCommitTimes(),  row_reader->RetryTimes(),
+                                              _timeout, StatusCodeToString(err).c_str());
         row_reader->SetError(ErrorCode::kSystem, err_reason);
     }
     int64_t perf_time = common::timer::get_micros();
@@ -1375,16 +1394,19 @@ void TableImpl::ScanMetaTableAsync(const std::string& key_start, const std::stri
     request->set_round_down(true);
 
     Closure<void, ScanTabletRequest*, ScanTabletResponse*, bool, int>* done =
-        NewClosure(this, &TableImpl::ScanMetaTableCallBack, key_start, key_end, expand_key_end);
+        NewClosure(this, &TableImpl::ScanMetaTableCallBack, key_start, key_end, expand_key_end, ::common::timer::get_micros());
     tabletnode_client_async.ScanTablet(request, response, done);
 }
 
 void TableImpl::ScanMetaTableCallBack(std::string key_start,
                                       std::string key_end,
                                       std::string expand_key_end,
+                                      int64_t start_time,
                                       ScanTabletRequest* request,
                                       ScanTabletResponse* response,
                                       bool failed, int error_code) {
+    _perf_counter.get_meta.Add(::common::timer::get_micros() - start_time);
+    _perf_counter.get_meta_cnt.Inc();
     if (failed) {
         if (error_code == sofa::pbrpc::RPC_ERROR_SERVER_SHUTDOWN ||
             error_code == sofa::pbrpc::RPC_ERROR_SERVER_UNREACHABLE ||
@@ -1893,6 +1915,14 @@ std::string TableImpl::GetCookieFileName(const std::string& tablename,
     return fname.str();
 }
 
+static int64_t CalcAverage(Counter& sum, Counter& cnt, int64_t interval) {
+    if (cnt.Get() == 0 || interval == 0) {
+        return 0;
+    } else {
+        return sum.Clear() * 1000 / cnt.Clear() / interval / 1000;
+    }
+}
+
 void TableImpl::DumpPerfCounterLogDelay() {
     DoDumpPerfCounterLog();
     ThreadPool::Task task =
@@ -1901,9 +1931,37 @@ void TableImpl::DumpPerfCounterLogDelay() {
 }
 
 void TableImpl::DoDumpPerfCounterLog() {
-    LOG(INFO) << "[Table " << _name << "] " <<  _perf_counter.ToLog()
-        << "pending_r: " << _cur_reader_pending_counter.Get() << ", "
-        << "pending_w: " << _cur_commit_pending_counter.Get();
+    LOG(INFO) << "[table " << _name << " PerfCounter][pending]"
+        << " pending_r: " << _cur_reader_pending_counter.Get()
+        << " pending_w: " << _cur_commit_pending_counter.Get();
+    _perf_counter.DoDumpPerfCounterLog("[table " + _name + " PerfCounter]");
+}
+
+void TableImpl::PerfCounter::DoDumpPerfCounterLog(const std::string& log_prefix) {
+    int64_t ts = common::timer::get_micros();
+    int64_t interval = (ts - start_time) / 1000;
+    LOG(INFO) << log_prefix << "[delay](ms)"
+        << " get meta: " << CalcAverage(get_meta, get_meta_cnt, interval)
+        << " callback: " << CalcAverage(user_callback, user_callback_cnt, interval)
+        << " rpc_r: " << CalcAverage(rpc_r, rpc_r_cnt, interval)
+        << " rpc_w: " << CalcAverage(rpc_w, rpc_w_cnt, interval)
+        << " rpc_s: " << CalcAverage(rpc_s, rpc_s_cnt, interval);
+
+    LOG(INFO) << log_prefix << "[mutation]"
+        << " all: " << mutate_cnt.Clear()
+        << " ok: " << mutate_ok_cnt.Clear()
+        << " fail: " << mutate_fail_cnt.Clear()
+        << " range: " << mutate_range_cnt.Clear()
+        << " timeout: " << mutate_timeout_cnt.Clear()
+        << " queue_timeout: " << mutate_queue_timeout_cnt.Clear();
+
+    LOG(INFO) << log_prefix << "[reader]"
+        << " all: " << reader_cnt.Clear()
+        << " ok: " << reader_ok_cnt.Clear()
+        << " fail: " << reader_fail_cnt.Clear()
+        << " range: " << reader_range_cnt.Clear()
+        << " timeout: " << reader_timeout_cnt.Clear()
+        << " queue_timeout: " << reader_queue_timeout_cnt.Clear();
 }
 
 void TableImpl::DelayTaskWrapper(ThreadPool::Task task, int64_t task_id) {
@@ -1931,26 +1989,6 @@ void TableImpl::ClearDelayTask() {
         _thread_pool->CancelTask(*it);
     }
     _delay_task_ids.clear();
-}
-
-static int64_t CalcAverage(Counter& sum, Counter& cnt, int64_t interval) {
-    if (cnt.Get() == 0 || interval == 0) {
-        return 0;
-    } else {
-        return sum.Clear() * 1000 / cnt.Clear() / interval / 1000;
-    }
-}
-
-std::string TableImpl::PerfCounter::ToLog() {
-    std::stringstream ss;
-    int64_t ts = common::timer::get_micros();
-    int64_t interval = (ts - start_time) / 1000;
-    ss << "rpc_r: " << CalcAverage(rpc_r, rpc_r_cnt, interval) << ", ";
-    ss << "rpc_w: " << CalcAverage(rpc_w, rpc_w_cnt, interval) << ", ";
-    ss << "rpc_s: " << CalcAverage(rpc_s, rpc_s_cnt, interval) << ", ";
-    ss << "callback: " << CalcAverage(user_callback, user_callback_cnt, interval) << ", ";
-    start_time = ts;
-    return ss.str();
 }
 
 void TableImpl::BreakRequest(int64_t task_id) {

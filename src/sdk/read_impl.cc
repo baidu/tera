@@ -20,7 +20,8 @@ RowReaderImpl::RowReaderImpl(Table* table, const std::string& row_key)
       _snapshot_id(0),
       _timeout_ms(0),
       _retry_times(0),
-      _result_pos(0) {
+      _result_pos(0),
+      _commit_times(0) {
 }
 
 RowReaderImpl::~RowReaderImpl() {
