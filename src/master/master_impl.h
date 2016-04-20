@@ -585,7 +585,7 @@ private:
     bool m_gc_enabled;
     int64_t m_gc_timer_id;
     bool m_gc_query_enable;
-    boost::shared_ptr<GcStrategy> gc_strategy;
+    boost::shared_ptr<GcStrategy> m_gc_strategy;
     std::map<std::string, std::string> m_alias;
     mutable Mutex m_alias_mutex;
 };

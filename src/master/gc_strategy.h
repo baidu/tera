@@ -28,6 +28,9 @@ public:
 
     // delete useless files
     virtual void PostQuery () = 0;
+
+    // clear memory when table is deleted
+    virtual void Clear(std::string tablename) = 0;
 };
 
 class BatchGcStrategy : public GcStrategy {
@@ -43,6 +46,8 @@ public:
 
     // delete dead files
     virtual void PostQuery ();
+
+    virtual void Clear(std::string tablename);
 
 private:
     void CollectDeadTabletsFiles();
@@ -76,6 +81,9 @@ public:
 
     // delete dead files
     virtual void PostQuery ();
+
+    // clear memory when table is deleted
+    virtual void Clear(std::string tablename);
 
 private:
     void DEBUG_print_files(bool print_dead);
