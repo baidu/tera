@@ -81,6 +81,10 @@ void BatchGcStrategy::PostQuery () {
     m_list_count.Clear();
 }
 
+void BatchGcStrategy::Clear(std::string tablename) {
+    LOG(INFO) << "[gc] Clear do nothing (BatchGcStrategy) " << tablename;
+}
+
 void BatchGcStrategy::ProcessQueryCallbackForGc(QueryResponse* response) {
     MutexLock lock(&m_gc_mutex);
     std::set<std::string> gc_table_set;
@@ -380,6 +384,13 @@ void IncrementalGcStrategy::PostQuery () {
     }
     LOG(INFO) << "[gc] Delete useless sst, cost: " << (get_micros() - start_ts) / 1000 << "ms. list_times " << m_list_count.Get();
     m_list_count.Clear();
+}
+
+void IncrementalGcStrategy::Clear(std::string tablename) {
+    LOG(INFO) << "[gc] Clear " << tablename;
+    MutexLock lock(&m_gc_mutex);
+    m_dead_tablet_files.erase(tablename);
+    m_live_tablet_files.erase(tablename);
 }
 
 void IncrementalGcStrategy::DeleteTableFiles(const std::string& table_name) {

@@ -145,10 +145,10 @@ MasterImpl::MasterImpl()
 
     if (FLAGS_tera_master_gc_strategy == "default") {
         LOG(INFO) << "[gc] gc strategy is BatchGcStrategy";
-        gc_strategy = boost::shared_ptr<GcStrategy>(new BatchGcStrategy(m_tablet_manager));
+        m_gc_strategy = boost::shared_ptr<GcStrategy>(new BatchGcStrategy(m_tablet_manager));
     } else if (FLAGS_tera_master_gc_strategy == "incremental") {
         LOG(INFO) << "[gc] gc strategy is IncrementalGcStrategy";
-        gc_strategy = boost::shared_ptr<GcStrategy>(new IncrementalGcStrategy(m_tablet_manager));
+        m_gc_strategy = boost::shared_ptr<GcStrategy>(new IncrementalGcStrategy(m_tablet_manager));
     } else {
         LOG(ERROR) << "Unknown gc strategy";
     }
@@ -3567,7 +3567,7 @@ void MasterImpl::QueryTabletNodeCallback(std::string addr, QueryRequest* request
     }
     // if this is a gc query, process it
     if (request->is_gc_query()) {
-        gc_strategy->ProcessQueryCallbackForGc(response);
+        m_gc_strategy->ProcessQueryCallbackForGc(response);
     }
 
     if (0 == m_query_pending_count.Dec()) {
@@ -4759,6 +4759,7 @@ void MasterImpl::DeleteTableCallback(TablePtr table,
         TabletPtr tablet = tablets[i];
         DeleteTablet(tablet);
     }
+    m_gc_strategy->Clear(table->GetTableName());
     LOG(INFO) << "delete meta table record success, " << table;
     rpc_response->set_status(kMasterOk);
     rpc_done->Run();
@@ -5268,7 +5269,7 @@ void MasterImpl::DoTabletNodeGc() {
         }
     }
 
-    bool need_gc = gc_strategy->PreQuery();
+    bool need_gc = m_gc_strategy->PreQuery();
 
     MutexLock lock(&m_mutex);
     if (!need_gc) {
@@ -5283,7 +5284,7 @@ void MasterImpl::DoTabletNodeGc() {
 }
 
 void MasterImpl::DoTabletNodeGcPhase2() {
-    gc_strategy->PostQuery();
+    m_gc_strategy->PostQuery();
 
     LOG(INFO) << "[gc] try clean trash dir.";
     int64_t start = common::timer::get_micros();
