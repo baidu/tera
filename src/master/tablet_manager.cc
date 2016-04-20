@@ -1401,7 +1401,7 @@ bool TabletManager::DumpMetaTable(const std::string& meta_tablet_addr,
         mutation->set_value(packed_value);
     }
     // dump tablet record
-    int32_t request_size = 0;
+    uint64_t request_size = 0;
     for (size_t i = 0; i < tablets.size(); i++) {
         std::string packed_key;
         std::string packed_value;
