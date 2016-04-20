@@ -1,9 +1,5 @@
 # Tera SDK 主要api使用方法
 
-[Java SDK从这进入](https://github.com/baidu/tera/blob/master/doc/sdk_dev_guide_for_java.md)
-
-[Python SDK从这进入](https://github.com/baidu/tera/blob/master/doc/sdk_dev_guide_for_python.md)
-
 >**目录**
 >  1. [主要数据结构](#main-data-structure)
 >   * tera::Client、tera::Table
@@ -17,6 +13,8 @@
 >     * 读
 >     * 写
 >     * 扫描
+>  3. [Java SDK](https://github.com/baidu/tera/blob/master/doc/sdk_dev_guide_for_java.md)
+>  4. [Python SDK](https://github.com/baidu/tera/blob/master/doc/sdk_dev_guide_for_python.md)
 
 <a name="main-data-structure"></a>
 
