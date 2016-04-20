@@ -518,7 +518,7 @@ void MasterZkAdapter::OnWatchFailed(const std::string& path, int watch_type,
 
 
 void MasterZkAdapter::OnSessionTimeout() {
-    LOG(FATAL) << "zk session timeout!";
+    LOG(ERROR) << "zk session timeout!";
     _Exit(EXIT_FAILURE);
 }
 
@@ -541,23 +541,27 @@ bool FakeMasterZkAdapter::Init(std::string* root_tablet_addr,
 
     // setup master-lock
     if (!IsEmpty(master_lock)) {
-        LOG(FATAL) << "fake zk error: " << master_lock;
+        LOG(ERROR) << "fake zk error: " << master_lock;
+        _Exit(EXIT_FAILURE);
     }
     if (!zk::FakeZkUtil::WriteNode(master_lock + "/0", m_server_addr)) {
-        LOG(FATAL) << "fake zk error: " << master_lock + "/0, "
+        LOG(ERROR) << "fake zk error: " << master_lock + "/0, "
             << m_server_addr;
+        _Exit(EXIT_FAILURE);
     }
 
     // get all ts
     std::vector<std::string> allts;
     if (!zk::FakeZkUtil::ListNodes(ts_list_path, &allts) && allts.size() == 0) {
-        LOG(FATAL) << "fake zk error: " << ts_list_path;
+        LOG(ERROR) << "fake zk error: " << ts_list_path;
+        _Exit(EXIT_FAILURE);
     }
     for (size_t i = 0; i < allts.size(); ++i) {
         std::string value;
         std::string node_path = ts_list_path + "/" + allts[i];
         if (!zk::FakeZkUtil::ReadNode(node_path, &value)) {
-            LOG(FATAL) << "fake zk error: " << allts[i];
+            LOG(ERROR) << "fake zk error: " << allts[i];
+            _Exit(EXIT_FAILURE);
         }
         (*tabletnode_list)[value] = allts[i];
     }
@@ -581,8 +585,9 @@ bool FakeMasterZkAdapter::UnmarkSafeMode() {
 bool FakeMasterZkAdapter::UpdateRootTabletNode(const std::string& root_tablet_addr) {
     std::string root_table = m_fake_path + kRootTabletNodePath;
     if (!zk::FakeZkUtil::WriteNode(root_table, root_tablet_addr)) {
-        LOG(FATAL) << "fake zk error: " << root_table
+        LOG(ERROR) << "fake zk error: " << root_table
             << ", " << root_tablet_addr;
+        _Exit(EXIT_FAILURE);
     }
     LOG(INFO) << "update fake root_table_addr: " << root_tablet_addr;
     return true;
@@ -703,7 +708,7 @@ void InsMasterZkAdapter::RefreshTabletNodeList() {
 
 void InsMasterZkAdapter::OnLockChange(std::string session_id, bool deleted) {
     if (deleted || session_id != m_ins_sdk->GetSessionID()) {
-        LOG(FATAL) << "master lock lost";
+        LOG(ERROR) << "master lock lost";
         exit(1);
     }
 }
@@ -727,8 +732,8 @@ bool InsMasterZkAdapter::UpdateRootTabletNode(const std::string& root_tablet_add
 
 void InsMasterZkAdapter::OnSessionTimeout() {
     MutexLock lock(&m_mutex);
-    LOG(FATAL) << "ins sessiont timeout";
-    abort();
+    LOG(ERROR) << "ins sessiont timeout";
+    _Exit(EXIT_FAILURE);
 }
 
 } // namespace master
