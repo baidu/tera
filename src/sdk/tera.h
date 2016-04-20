@@ -12,6 +12,7 @@
 #include <string>
 #include <vector>
 
+#pragma GCC visibility push(default)
 namespace tera {
 
 /// 操作错误码
@@ -274,6 +275,10 @@ public:
     /// 设置预读的buffer大小, 默认64K
     void SetBufferSize(int64_t buf_size);
 
+    /// set number limit for each buffer
+    void SetNumberLimit(int64_t number_limit);
+    int64_t GetNumberLimit();
+
     /// 设置async, 缺省true
     void SetAsync(bool async);
 
@@ -462,7 +467,7 @@ public:
     /// 设置用户上下文，可在回调函数中获取
     virtual void SetContext(void* context) = 0;
     virtual void* GetContext() = 0;
-    /// 设置异步返回
+    /// 设置异步返回 !!! NOT implemented
     virtual void SetAsync() = 0;
     /// 异步操作是否完成
     virtual bool IsFinished() const = 0;
@@ -632,12 +637,13 @@ public:
                              ErrorCode* err) = 0;
     /// 更新表格Schema
     virtual bool UpdateTable(const TableDescriptor& desc, ErrorCode* err) = 0;
+    virtual bool UpdateCheck(const std::string& table_name, bool* done, ErrorCode* err) = 0;
     /// 删除表格
-    virtual bool DeleteTable(std::string name, ErrorCode* err) = 0;
+    virtual bool DeleteTable(const std::string& name, ErrorCode* err) = 0;
     /// 停止表格服务
-    virtual bool DisableTable(std::string name, ErrorCode* err) = 0;
+    virtual bool DisableTable(const std::string& name, ErrorCode* err) = 0;
     /// 恢复表格服务
-    virtual bool EnableTable(std::string name, ErrorCode* err) = 0;
+    virtual bool EnableTable(const std::string& name, ErrorCode* err) = 0;
 
     /// acl
     virtual bool CreateUser(const std::string& user,
@@ -696,4 +702,6 @@ private:
     void operator=(const Client&);
 };
 } // namespace tera
+#pragma GCC visibility pop
+
 #endif  // TERA_TERA_H_

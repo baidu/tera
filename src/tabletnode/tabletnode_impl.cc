@@ -73,6 +73,8 @@ DECLARE_int32(tera_tabletnode_cache_mem_size);
 DECLARE_int32(tera_tabletnode_cache_disk_size);
 DECLARE_int32(tera_tabletnode_cache_disk_filenum);
 DECLARE_int32(tera_tabletnode_cache_log_level);
+DECLARE_int32(tera_tabletnode_cache_update_thread_num);
+DECLARE_bool(tera_tabletnode_cache_force_read_from_cache);
 DECLARE_int32(tera_tabletnode_gc_log_level);
 
 DECLARE_string(tera_leveldb_env_type);
@@ -169,8 +171,11 @@ bool TabletNodeImpl::Init() {
 void TabletNodeImpl::InitCacheSystem() {
     if (!FLAGS_tera_tabletnode_cache_enabled) {
         // compitable with legacy FlashEnv
-        leveldb::FlashEnv::SetFlashPath(FLAGS_tera_tabletnode_cache_paths,
-                                        FLAGS_tera_io_cache_path_vanish_allowed);
+        leveldb::FlashEnv* flash_env = (leveldb::FlashEnv*)io::LeveldbFlashEnv();
+        flash_env->SetFlashPath(FLAGS_tera_tabletnode_cache_paths,
+                                FLAGS_tera_io_cache_path_vanish_allowed);
+        flash_env->SetUpdateFlashThreadNumber(FLAGS_tera_tabletnode_cache_update_thread_num);
+        flash_env->SetIfForceReadFromCache(FLAGS_tera_tabletnode_cache_force_read_from_cache);
         return;
     }
 
@@ -1072,7 +1077,8 @@ void TabletNodeImpl::GarbageCollect() {
     }
 
     // collect flash directories
-    const std::vector<std::string>& flash_paths = leveldb::FlashEnv::GetFlashPaths();
+    leveldb::FlashEnv* flash_env = (leveldb::FlashEnv*)io::LeveldbFlashEnv();
+    const std::vector<std::string>& flash_paths = flash_env->GetFlashPaths();
     for (size_t d = 0; d < flash_paths.size(); ++d) {
         std::string flash_dir = flash_paths[d] + FLAGS_tera_tabletnode_path_prefix;
         GarbageCollectInPath(flash_dir, leveldb::Env::Default(),

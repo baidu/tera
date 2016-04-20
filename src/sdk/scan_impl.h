@@ -260,6 +260,8 @@ public:
 
     void SetBufferSize(int64_t buf_size);
 
+    void SetNumberLimit(int64_t number_limit);
+
     void SetAsync(bool async);
 
     void SetStart(const std::string& row_key, const std::string& column_family = "",
@@ -295,6 +297,8 @@ public:
 
     int64_t GetBufferSize() const;
 
+    int64_t GetNumberLimit();
+
     bool IsAsync() const;
 
     void SetTableSchema(const TableSchema& schema);
@@ -318,6 +322,7 @@ private:
     std::vector<tera::ColumnFamily*> _cf_list;
     tera::TimeRange* _timer_range;
     int64_t _buf_size;
+    int64_t _number_limit;
     bool _is_async;
     int32_t _max_version;
     int64_t _pack_interval;

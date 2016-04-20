@@ -653,15 +653,17 @@ void DBImpl::TEST_CompactRange(int level, const Slice* begin,const Slice* end) {
   }
 
   MutexLock l(&mutex_);
-  while (!manual.done) {
-    while (manual_compaction_ != NULL) {
-      bg_cv_.Wait();
+  while (!manual.done && !shutting_down_.Acquire_Load() && bg_error_.ok()) {
+    if (manual_compaction_ == NULL) { // Idle
+        manual_compaction_ = &manual;
+        MaybeScheduleCompaction();
+    } else { // Running either my compaction or another compaction.
+        bg_cv_.Wait();
     }
-    manual_compaction_ = &manual;
-    MaybeScheduleCompaction();
-    while (manual_compaction_ == &manual) {
-      bg_cv_.Wait();
-    }
+  }
+  if (manual_compaction_ == &manual) {
+    // Cancel my manual compaction since we aborted early for some reason.
+    manual_compaction_ = NULL;
   }
 }
 
@@ -1396,15 +1398,52 @@ Iterator* DBImpl::NewIterator(const ReadOptions& options) {
 
 const uint64_t DBImpl::GetSnapshot(uint64_t last_sequence) {
   MutexLock l(&mutex_);
+  if (options_.use_memtable_on_leveldb) {
+    if (mem_) {
+      ((MemTableOnLevelDB*)mem_)->GetSnapshot(last_sequence);
+    }
+    if (imm_) {
+      ((MemTableOnLevelDB*)imm_)->GetSnapshot(last_sequence);
+    }
+  }
   snapshots_.insert(last_sequence);
+  // Log(options_.info_log,
+  //     "[%s] get snapshot: %llu,  size %llu", dbname_.c_str(),
+  //     (unsigned long long)last_sequence,
+  //     (unsigned long long)snapshots_.size());
   return last_sequence;
+}
+
+void DBImpl::TryReleaseSnapshot(uint64_t sequence_number) {
+  // In mem compaction, may release a snapshot which is not exist.
+
+  //Log(options_.info_log,
+  //    "[%s] release snapshot: %llu,  size %llu", dbname_.c_str(),
+  //    (unsigned long long)sequence_number,
+  //    (unsigned long long)snapshots_.size());
+  std::multiset<uint64_t>::iterator it = snapshots_.find(sequence_number);
+  if (it != snapshots_.end()) {
+    snapshots_.erase(it);
+  }
 }
 
 void DBImpl::ReleaseSnapshot(uint64_t sequence_number) {
   MutexLock l(&mutex_);
+  if (options_.use_memtable_on_leveldb) {
+    if (mem_) {
+      ((MemTableOnLevelDB*)mem_)->TryReleaseSnapshot(sequence_number);
+    }
+    if (imm_) {
+      ((MemTableOnLevelDB*)imm_)->TryReleaseSnapshot(sequence_number);
+    }
+  }
   std::multiset<uint64_t>::iterator it = snapshots_.find(sequence_number);
   assert(it != snapshots_.end());
   snapshots_.erase(it);
+  //Log(options_.info_log,
+  //    "[%s] release snapshot: %llu,  size %llu", dbname_.c_str(),
+  //    (unsigned long long)sequence_number,
+  //    (unsigned long long)snapshots_.size());
 }
 
 const uint64_t DBImpl::Rollback(uint64_t snapshot_seq, uint64_t rollback_point) {
@@ -1750,10 +1789,13 @@ MemTable* DBImpl::NewMemTable() const {
         return new MemTable(internal_comparator_,
                   options_.enable_strategy_when_get ? options_.compact_strategy_factory : NULL);
     } else {
+        Logger* info_log = NULL;
+        // Logger* info_log = options_.info_log;
         return new MemTableOnLevelDB(internal_comparator_,
                                      options_.compact_strategy_factory,
                                      options_.memtable_ldb_write_buffer_size,
-                                     options_.memtable_ldb_block_size);
+                                     options_.memtable_ldb_block_size,
+                                     info_log);
     }
 }
 

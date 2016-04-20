@@ -17,7 +17,8 @@ RowMutationImpl::RowMutationImpl(TableImpl* table, const std::string& row_key)
       _timeout_ms(0),
       _retry_times(0),
       _finish(false),
-      _finish_cond(&_finish_mutex) {
+      _finish_cond(&_finish_mutex),
+      _commit_times(0) {
     SetErrorIfInvalid(row_key, kRowkey);
 }
 
@@ -33,6 +34,7 @@ void RowMutationImpl::Reset(const std::string& row_key) {
     _retry_times = 0;
     _finish = false;
     _error_code.SetFailed(ErrorCode::kOK);
+    _commit_times = 0;
 }
 
 void RowMutationImpl::SetErrorIfInvalid(const std::string& str,

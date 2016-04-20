@@ -55,6 +55,14 @@ void ScanDescriptor::SetBufferSize(int64_t buf_size) {
     _impl->SetBufferSize(buf_size);
 }
 
+void ScanDescriptor::SetNumberLimit(int64_t number_limit) {
+    _impl->SetNumberLimit(number_limit);
+}
+
+int64_t ScanDescriptor::GetNumberLimit() {
+    return _impl->GetNumberLimit();
+}
+
 void ScanDescriptor::SetAsync(bool async) {
     _impl->SetAsync(async);
 }

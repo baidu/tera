@@ -5,6 +5,7 @@
 #ifndef TERA_IO_TABLET_IO_H_
 #define TERA_IO_TABLET_IO_H_
 
+#include <limits>
 #include <list>
 #include <map>
 #include <set>
@@ -15,6 +16,7 @@
 #include "common/mutex.h"
 #include "io/stream_scan.h"
 #include "leveldb/db.h"
+#include "leveldb/compact_strategy.h"
 #include "leveldb/options.h"
 #include "leveldb/raw_key_operator.h"
 #include "leveldb/slice.h"
@@ -48,7 +50,8 @@ public:
     struct ScanOptions {
         uint32_t max_versions;
         uint32_t version_num; // restore version_num for stream scan
-        uint32_t max_size;
+        uint32_t max_size; // kv size > max_size, return to user
+        int64_t number_limit; // kv number > number_limit, return to user
         int64_t ts_start;
         int64_t ts_end;
         uint64_t snapshot_id;
@@ -58,9 +61,28 @@ public:
         int64_t timeout;
 
         ScanOptions()
-            : max_versions(UINT32_MAX), version_num(0), max_size(UINT32_MAX),
-              ts_start(kOldestTs), ts_end(kLatestTs), snapshot_id(0), timeout(INT64_MAX / 2)
+            : max_versions(std::numeric_limits<uint32_t>::max()),
+              version_num(0), max_size(std::numeric_limits<uint32_t>::max()),
+              number_limit(std::numeric_limits<int64_t>::max()),
+              ts_start(kOldestTs), ts_end(kLatestTs), snapshot_id(0), timeout(std::numeric_limits<int64_t>::max() / 2)
         {}
+    };
+
+    struct ScanContext {
+        leveldb::CompactStrategy* compact_strategy;
+        uint32_t version_num;
+        std::string last_key;
+        std::string last_col;
+        std::string last_qual;
+
+        ScanContext(leveldb::CompactStrategyFactory* strategy_factory)
+            : compact_strategy(strategy_factory->NewInstance()),
+              version_num(1)
+        {}
+
+        ~ScanContext() {
+            delete compact_strategy;
+        }
     };
 
     struct StatCounter {
@@ -192,7 +214,8 @@ private:
     void ProcessRowBuffer(std::list<KeyValuePair>& row_buf,
                           const ScanOptions& scan_options,
                           RowResult* value_list,
-                          uint32_t* buffer_size);
+                          uint32_t* buffer_size,
+                          int64_t* number_limit);
 
     StatusCode InitedScanInterator(const std::string& start_tera_key,
                                    const ScanOptions& scan_options,
@@ -215,6 +238,7 @@ private:
                       const std::string& end_row_key,
                       const ScanOptions& scan_options,
                       leveldb::Iterator* it,
+                      ScanContext* scan_context,
                       RowResult* value_list,
                       KeyValuePair* next_start_point,
                       uint32_t* read_row_count,

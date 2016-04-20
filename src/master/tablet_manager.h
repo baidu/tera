@@ -192,6 +192,7 @@ public:
     bool GetTabletsForGc(std::set<uint64_t>* live_tablets,
                          std::set<uint64_t>* dead_tablets);
     void RefreshCounter();
+    int64_t GetTabletsCount();
     bool GetSchemaIsSyncing();
     void SetSchemaIsSyncing(bool flag);
     bool GetSchemaSyncLockOrFailed();
@@ -202,6 +203,12 @@ public:
     void UpdateRpcDone();
     void StoreUpdateRpc(UpdateTableResponse* response, google::protobuf::Closure* done);
     bool IsSchemaSyncedAtRange(const std::string& start, const std::string& end);
+    void SetOldSchema(TableSchema* schema);
+    bool GetOldSchema(TableSchema* schema);
+    void ClearOldSchema();
+    bool PrepareUpdate(const TableSchema& schema);
+    void AbortUpdate();
+    void CommitUpdate();
 
 private:
     Table(const Table&) {}
@@ -222,6 +229,7 @@ private:
     RangeFragment* m_rangefragment;
     UpdateTableResponse* m_update_rpc_response;
     google::protobuf::Closure* m_update_rpc_done;
+    TableSchema* m_old_schema;
 };
 
 class TabletManager {
@@ -300,6 +308,7 @@ public:
     void LoadTableMeta(const std::string& key, const std::string& value);
     void LoadTabletMeta(const std::string& key, const std::string& value);
 
+    int64_t GetAllTabletsCount();
 private:
     void PackTabletMeta(TabletMeta* meta, const std::string& table_name,
                         const std::string& key_start = "",

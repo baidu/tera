@@ -148,6 +148,14 @@ DEFINE_int64(tera_master_stat_table_splitsize, 100, "default split size of stat 
 
 DEFINE_int32(tera_master_gc_period, 60000, "the period (in ms) for master gc");
 
+DEFINE_bool(tera_master_availability_check_enabled, true, "whether execute availability check");    // reload config safety
+DEFINE_bool(tera_master_availability_show_details_enabled, false, "whether show details of not-ready tablets"); // reload config safety
+DEFINE_int64(tera_master_not_available_threshold, 0, "the threshold (in s) of not available");     // reload config safety
+DEFINE_int64(tera_master_availability_check_period, 60, "the period (in s) of availability check"); // reload config safety
+DEFINE_int64(tera_master_availability_warning_threshold, 30, "30s, the threshold (in s) of warning availability"); // reload config safety
+DEFINE_int64(tera_master_availability_error_threshold, 300, "5 minutes, the threshold (in s) of error availability");        // reload config safety
+DEFINE_int64(tera_master_availability_fatal_threshold, 1800, "30 minutes, the threshold (in s) of fatal availability");        // reload config safety
+
 ///////// tablet node  /////////
 
 DEFINE_string(tera_tabletnode_port, "20000", "the tablet node port of tera system");
@@ -198,6 +206,8 @@ DEFINE_int32(tera_tabletnode_cache_mem_size, 2048, "the maximal size (in KB) of 
 DEFINE_int32(tera_tabletnode_cache_disk_size, 1024, "the maximal size (in MB) of disk cache");
 DEFINE_int32(tera_tabletnode_cache_disk_filenum, 1, "the file num of disk cache storage");
 DEFINE_int32(tera_tabletnode_cache_log_level, 1, "the log level [0 - 5] for cache system (0: FATAL, 1: ERROR, 2: WARN, 3: INFO, 5: DEBUG).");
+DEFINE_int32(tera_tabletnode_cache_update_thread_num, 4, "thread num for update cache");
+DEFINE_bool(tera_tabletnode_cache_force_read_from_cache, true, "force update cache before any read");
 DEFINE_int32(tera_tabletnode_gc_log_level, 15, "the vlog level [0 - 16] for cache gc.");
 
 DEFINE_bool(tera_tabletnode_tcm_cache_release_enabled, true, "enable the timer to release tcmalloc cache");
@@ -248,6 +258,8 @@ DEFINE_int32(tera_sdk_cookie_update_interval, 600, "the interval of cookie updat
 DEFINE_bool(tera_sdk_perf_counter_enabled, true, "enable performance counter log");
 DEFINE_int64(tera_sdk_perf_counter_log_interval, 1, "the interval of performance counter log dumping");
 
+DEFINE_int64(tera_sdk_scan_buffer_size, 65536, "default buffer limit for scan");
+DEFINE_int64(tera_sdk_scan_number_limit, 1000000000, "default number limit for scan");
 DEFINE_bool(tera_sdk_scan_async_enabled, false, "enable async scan");
 DEFINE_int64(tera_sdk_scan_async_cache_size, 16, "the max buffer size (in MB) for cached scan results");
 DEFINE_int32(tera_sdk_scan_async_parallel_max_num, 500, "the max number of concurrent task sending");

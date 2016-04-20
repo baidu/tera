@@ -17,6 +17,7 @@
 #include "gflags/gflags.h"
 
 #include "master/gc_strategy.h"
+#include "master/availability.h"
 #include "master/tablet_manager.h"
 #include "master/tabletnode_manager.h"
 #include "master/user_manager.h"
@@ -101,6 +102,10 @@ public:
 
     void UpdateTable(const UpdateTableRequest* request,
                      UpdateTableResponse* response,
+                     google::protobuf::Closure* done);
+
+    void UpdateCheck(const UpdateCheckRequest* request,
+                     UpdateCheckResponse* response,
                      google::protobuf::Closure* done);
 
     void CompactTable(const CompactTableRequest* request,
@@ -403,7 +408,6 @@ private:
                                             bool failed, int error_code);
 
     void UpdateTableRecordForUpdateCallback(TablePtr table, int32_t retry_times,
-                                            const TableSchema* schema,
                                             UpdateTableResponse* rpc_response,
                                             google::protobuf::Closure* rpc_done,
                                             WriteTabletRequest* request,
@@ -549,6 +553,14 @@ private:
 
     void FillAlias(const std::string& key, const std::string& value);
     void RefreshTableCounter();
+
+    void DoAvailableCheck();
+    void ScheduleAvailableCheck();
+    void EnableAvailabilityCheck();
+    void DeleteTablet(TabletPtr tablet);
+    void CopyTableMetaToUser(TablePtr table, TableMeta* meta_ptr);
+    bool IsUpdateCf(TablePtr table);
+
 private:
     mutable Mutex m_status_mutex;
     MasterStatus m_status;
@@ -599,9 +611,11 @@ private:
     bool m_gc_enabled;
     int64_t m_gc_timer_id;
     bool m_gc_query_enable;
-    boost::shared_ptr<GcStrategy> gc_strategy;
+    boost::shared_ptr<GcStrategy> m_gc_strategy;
     std::map<std::string, std::string> m_alias;
     mutable Mutex m_alias_mutex;
+
+    boost::shared_ptr<TabletAvailability> m_tablet_availability;
 };
 
 } // namespace master
