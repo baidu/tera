@@ -368,6 +368,7 @@ private:
     struct TaskBatch {
         uint64_t sequence_num;
         uint64_t timer_id;
+        uint64_t byte_size;
         std::vector<int64_t>* row_id_list;
     };
 
