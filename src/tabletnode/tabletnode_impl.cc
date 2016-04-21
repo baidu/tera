@@ -498,7 +498,7 @@ void TabletNodeImpl::WriteTablet(const WriteTabletRequest* request,
             }
         }
     }
-    if (request->row_list_size() > 0) {
+    if (row_num > 0) {
         for (int32_t i = 0; i < row_num; i++) {
             io::TabletIO* tablet_io = m_tablet_manager->GetTablet(
                 request->tablet_name(), request->row_list(i).row_key(), &status);
