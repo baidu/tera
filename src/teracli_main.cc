@@ -15,6 +15,7 @@
 #include <limits>
 #include <sstream>
 
+#include <boost/shared_ptr.hpp>
 #include <gflags/gflags.h>
 #include <glog/logging.h>
 
@@ -75,6 +76,9 @@ volatile int32_t g_cur_batch_num = 0;
 tera::TPrinter::PrintOpt g_printer_opt;
 
 using namespace tera;
+
+typedef boost::shared_ptr<Table> TablePtr;
+typedef boost::shared_ptr<TableImpl> TableImplPtr;
 
 const char* builtin_cmd_list[] = {
     "create",
@@ -522,8 +526,8 @@ int32_t PutInt64Op(Client* client, int32_t argc, char** argv, ErrorCode* err) {
     }
 
     std::string tablename = argv[2];
-    Table* table = NULL;
-    if ((table = client->OpenTable(tablename, err)) == NULL) {
+    TablePtr table(client->OpenTable(tablename, err));
+    if (table == NULL) {
         LOG(ERROR) << "fail to open table";
         return -1;
     }
@@ -548,7 +552,6 @@ int32_t PutInt64Op(Client* client, int32_t argc, char** argv, ErrorCode* err) {
         LOG(ERROR) << "fail to put record to table: " << tablename;
         return -1;
     }
-    delete table;
     return 0;
 }
 
@@ -560,8 +563,8 @@ int32_t PutCounterOp(Client* client, int32_t argc, char** argv, ErrorCode* err) 
     }
 
     std::string tablename = argv[2];
-    Table* table = NULL;
-    if ((table = client->OpenTable(tablename, err)) == NULL) {
+    TablePtr table(client->OpenTable(tablename, err));
+    if (table == NULL) {
         LOG(ERROR) << "fail to open table";
         return -1;
     }
@@ -588,7 +591,6 @@ int32_t PutCounterOp(Client* client, int32_t argc, char** argv, ErrorCode* err) 
         LOG(ERROR) << "fail to put record to table: " << tablename;
         return -1;
     }
-    delete table;
     return 0;
 }
 
@@ -600,8 +602,8 @@ int32_t PutOp(Client* client, int32_t argc, char** argv, ErrorCode* err) {
     }
 
     std::string tablename = argv[2];
-    Table* table = NULL;
-    if ((table = client->OpenTable(tablename, err)) == NULL) {
+    TablePtr table(client->OpenTable(tablename, err));
+    if (table == NULL) {
         LOG(ERROR) << "fail to open table";
         return -1;
     }
@@ -625,8 +627,6 @@ int32_t PutOp(Client* client, int32_t argc, char** argv, ErrorCode* err) {
         mutation->Put(columnfamily, qualifier, FLAGS_timestamp, value);
     }
     table->ApplyMutation(mutation);
-
-    delete table;
     return 0;
 }
 
@@ -638,8 +638,8 @@ int32_t PutTTLOp(Client* client, int32_t argc, char** argv, ErrorCode* err) {
     }
 
     std::string tablename = argv[2];
-    Table* table = NULL;
-    if ((table = client->OpenTable(tablename, err)) == NULL) {
+    TablePtr table(client->OpenTable(tablename, err));
+    if (table == NULL) {
         LOG(ERROR) << "fail to open table";
         return -1;
     }
@@ -673,8 +673,8 @@ int32_t AppendOp(Client* client, int32_t argc, char** argv, ErrorCode* err) {
     }
 
     std::string tablename = argv[2];
-    Table* table = NULL;
-    if ((table = client->OpenTable(tablename, err)) == NULL) {
+    TablePtr table(client->OpenTable(tablename, err));
+    if (table == NULL) {
         LOG(ERROR) << "fail to open table";
         return -1;
     }
@@ -694,7 +694,6 @@ int32_t AppendOp(Client* client, int32_t argc, char** argv, ErrorCode* err) {
         LOG(ERROR) << "fail to append record to table: " << tablename;
         return -1;
     }
-    delete table;
     return 0;
 }
 
@@ -706,8 +705,8 @@ int32_t PutIfAbsentOp(Client* client, int32_t argc, char** argv, ErrorCode* err)
     }
 
     std::string tablename = argv[2];
-    Table* table = NULL;
-    if ((table = client->OpenTable(tablename, err)) == NULL) {
+    TablePtr table(client->OpenTable(tablename, err));
+    if (table == NULL) {
         LOG(ERROR) << "fail to open table";
         return -1;
     }
@@ -727,7 +726,6 @@ int32_t PutIfAbsentOp(Client* client, int32_t argc, char** argv, ErrorCode* err)
         LOG(ERROR) << "fail to put record to table: " << tablename;
         return -1;
     }
-    delete table;
     return 0;
 }
 
@@ -739,8 +737,8 @@ int32_t AddOp(Client* client, int32_t argc, char** argv, ErrorCode* err) {
     }
 
     std::string tablename = argv[2];
-    Table* table = NULL;
-    if ((table = client->OpenTable(tablename, err)) == NULL) {
+    TablePtr table(client->OpenTable(tablename, err));
+    if (table == NULL) {
         LOG(ERROR) << "fail to open table";
         return -1;
     }
@@ -765,7 +763,6 @@ int32_t AddOp(Client* client, int32_t argc, char** argv, ErrorCode* err) {
         LOG(ERROR) << "fail to add record to table: " << tablename;
         return -1;
     }
-    delete table;
     return 0;
 }
 
@@ -777,8 +774,8 @@ int32_t AddInt64Op(Client* client, int32_t argc, char** argv, ErrorCode* err) {
     }
 
     std::string tablename = argv[2];
-    Table* table = NULL;
-    if ((table = client->OpenTable(tablename, err)) == NULL) {
+    TablePtr table(client->OpenTable(tablename, err));
+    if (table == NULL) {
         LOG(ERROR) << "fail to open table";
         return -1;
     }
@@ -803,7 +800,6 @@ int32_t AddInt64Op(Client* client, int32_t argc, char** argv, ErrorCode* err) {
         LOG(ERROR) << "fail to add record to table: " << tablename;
         return -1;
     }
-    delete table;
     return 0;
 }
 
@@ -815,8 +811,8 @@ int32_t GetInt64Op(Client* client, int32_t argc, char** argv, ErrorCode* err) {
     }
 
     std::string tablename = argv[2];
-    Table* table = NULL;
-    if ((table = client->OpenTable(tablename, err)) == NULL) {
+    TablePtr table(client->OpenTable(tablename, err));
+    if (table == NULL) {
         LOG(ERROR) << "fail to open table";
         return -1;
     }
@@ -837,7 +833,6 @@ int32_t GetInt64Op(Client* client, int32_t argc, char** argv, ErrorCode* err) {
     }
 
     std::cout << value << std::endl;
-    delete table;
     return 0;
 }
 
@@ -849,8 +844,8 @@ int32_t GetOp(Client* client, int32_t argc, char** argv, ErrorCode* err) {
     }
 
     std::string tablename = argv[2];
-    Table* table = NULL;
-    if ((table = client->OpenTable(tablename, err)) == NULL) {
+    TablePtr table(client->OpenTable(tablename, err));
+    if (table == NULL) {
         LOG(ERROR) << "fail to open table";
         return -1;
     }
@@ -880,7 +875,6 @@ int32_t GetOp(Client* client, int32_t argc, char** argv, ErrorCode* err) {
         reader->Next();
     }
     delete reader;
-    delete table;
     return 0;
 }
 
@@ -892,8 +886,8 @@ int32_t GetCounterOp(Client* client, int32_t argc, char** argv, ErrorCode* err) 
     }
 
     std::string tablename = argv[2];
-    Table* table = NULL;
-    if ((table = client->OpenTable(tablename, err)) == NULL) {
+    TablePtr table(client->OpenTable(tablename, err));
+    if (table == NULL) {
         LOG(ERROR) << "fail to open table";
         return -1;
     }
@@ -920,7 +914,6 @@ int32_t GetCounterOp(Client* client, int32_t argc, char** argv, ErrorCode* err) 
     } else {
         std::cout << counter << std::endl;
     }
-    delete table;
     return 0;
 }
 
@@ -933,8 +926,8 @@ int32_t DeleteOp(Client* client, int32_t argc, char** argv, ErrorCode* err) {
 
     std::string tablename = argv[2];
     std::string rowkey = argv[3];
-    Table* table = NULL;
-    if ((table = client->OpenTable(tablename, err)) == NULL) {
+    TablePtr table(client->OpenTable(tablename, err));
+    if (table == NULL) {
         LOG(ERROR) << "fail to open table";
         return -1;
     }
@@ -978,12 +971,10 @@ int32_t DeleteOp(Client* client, int32_t argc, char** argv, ErrorCode* err) {
         LOG(FATAL) << "should not run here.";
     }
     table->ApplyMutation(mutation);
-
-    delete table;
     return 0;
 }
 
-int32_t ScanRange(Table* table, ScanDescriptor& desc, ErrorCode* err) {
+int32_t ScanRange(TablePtr& table, ScanDescriptor& desc, ErrorCode* err) {
     desc.SetBufferSize(FLAGS_tera_client_scan_package_size << 10);
     desc.SetAsync(FLAGS_tera_client_scan_async_enabled);
     desc.SetPackInterval(FLAGS_scan_pack_interval);
@@ -1037,8 +1028,8 @@ int32_t ScanOp(Client* client, int32_t argc, char** argv, ErrorCode* err) {
 
     std::string op = argv[1];
     std::string tablename = argv[2];
-    Table* table = NULL;
-    if ((table = client->OpenTable(tablename, err)) == NULL) {
+    TablePtr table(client->OpenTable(tablename, err));
+    if (table == NULL) {
         LOG(ERROR) << "fail to open table";
         return -1;
     }
@@ -1641,8 +1632,8 @@ int32_t BatchPutOp(Client* client, int32_t argc, char** argv, ErrorCode* err) {
 
     std::string tablename = argv[2];
     std::string record_file = argv[3];
-    Table* table = NULL;
-    if ((table = client->OpenTable(tablename, err)) == NULL) {
+    TablePtr table(client->OpenTable(tablename, err));
+    if (table == NULL) {
         LOG(ERROR) << "fail to open table";
         return -1;
     }
@@ -1683,7 +1674,6 @@ int32_t BatchPutOp(Client* client, int32_t argc, char** argv, ErrorCode* err) {
     g_end_time = time(NULL);
     g_used_time = g_end_time-g_start_time;
     LOG(INFO) << "Write done,write_key_num=" << g_key_num << " used_time=" << g_used_time <<std::endl;
-    delete table;
     return 0;
 }
 
@@ -1696,8 +1686,8 @@ int32_t BatchPutInt64Op(Client* client, int32_t argc, char** argv, ErrorCode* er
 
     std::string tablename = argv[2];
     std::string record_file = argv[3];
-    Table* table = NULL;
-    if ((table = client->OpenTable(tablename, err)) == NULL) {
+    TablePtr table(client->OpenTable(tablename, err));
+    if (table == NULL) {
         LOG(ERROR) << "fail to open table";
         return -1;
     }
@@ -1743,7 +1733,6 @@ int32_t BatchPutInt64Op(Client* client, int32_t argc, char** argv, ErrorCode* er
     g_end_time = time(NULL);
     g_used_time = g_end_time-g_start_time;
     LOG(INFO) << "Write done,write_key_num=" << g_key_num << " used_time=" << g_used_time <<std::endl;
-    delete table;
     return 0;
 }
 
@@ -1790,8 +1779,8 @@ int32_t BatchGetOp(Client* client, int32_t argc, char** argv, ErrorCode* err) {
 
     std::string tablename = argv[2];
     std::string input_file = argv[3];
-    Table* table = NULL;
-    if ((table = client->OpenTable(tablename, err)) == NULL) {
+    TablePtr table(client->OpenTable(tablename, err));
+    if (table == NULL) {
         LOG(ERROR) << "fail to open table";
         return -1;
     }
@@ -1832,7 +1821,6 @@ int32_t BatchGetOp(Client* client, int32_t argc, char** argv, ErrorCode* err) {
     g_end_time = time(NULL);
     g_used_time = g_end_time-g_start_time;
     LOG(INFO) << "Read done,write_key_num=" << g_key_num << " used_time=" << g_used_time <<std::endl;
-    delete table;
     return 0;
 }
 
@@ -1881,8 +1869,8 @@ int32_t BatchGetInt64Op(Client* client, int32_t argc, char** argv, ErrorCode* er
 
     std::string tablename = argv[2];
     std::string input_file = argv[3];
-    Table* table = NULL;
-    if ((table = client->OpenTable(tablename, err)) == NULL) {
+    TablePtr table(client->OpenTable(tablename, err));
+    if (table == NULL) {
         LOG(ERROR) << "fail to open table";
         return -1;
     }
@@ -1962,7 +1950,6 @@ int32_t BatchGetInt64Op(Client* client, int32_t argc, char** argv, ErrorCode* er
     g_end_time = time(NULL);
     g_used_time = g_end_time-g_start_time;
     LOG(INFO) << "Read done,write_key_num=" << g_key_num << " used_time=" << g_used_time <<std::endl;
-    delete table;
     return 0;
 }
 
@@ -2233,8 +2220,8 @@ int32_t ScanTabletOp(Client* client, int32_t argc, char** argv, ErrorCode* err) 
         return -2;
     }
 
-    Table* table = NULL;
-    if ((table = client->OpenTable(subs[0], err)) == NULL) {
+    TablePtr table(client->OpenTable(subs[0], err));
+    if (table == NULL) {
         LOG(ERROR) << "fail to open table: " << subs[0];
         return -3;
     }
@@ -2258,7 +2245,6 @@ int32_t ScanTabletOp(Client* client, int32_t argc, char** argv, ErrorCode* err) 
     }
 
     int32_t ret = ScanRange(table, desc, err);
-    delete table;
     return ret;
 }
 
@@ -2368,8 +2354,8 @@ int32_t FindTsOp(Client* client, int32_t argc, char** argv, ErrorCode* err) {
     }
 
     std::string tablename = argv[2];
-    TableImpl* table = NULL;
-    if ((table = (TableImpl*)client->OpenTable(tablename, err)) == NULL) {
+    TableImplPtr table((TableImpl*)client->OpenTable(tablename, err));
+    if (table == NULL) {
         LOG(ERROR) << "fail to open table";
         return -1;
     }
@@ -2383,8 +2369,6 @@ int32_t FindTsOp(Client* client, int32_t argc, char** argv, ErrorCode* err) {
         return -1;
     }
     std::cout << meta.server_addr() << "/" << meta.path() << std::endl;
-    delete table;
-
     return 0;
 }
 
