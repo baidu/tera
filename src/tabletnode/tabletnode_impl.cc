@@ -1163,6 +1163,10 @@ double TabletNodeImpl::GetBlockCacheHitRate() {
     return m_ldb_block_cache->HitRate();
 }
 
+double TabletNodeImpl::GetTableCacheHitRate() {
+    return m_ldb_table_cache->HitRate();
+}
+
 TabletNodeSysInfo& TabletNodeImpl::GetSysInfo() {
     return m_sysinfo;
 }

@@ -64,6 +64,8 @@ class TableCache {
   // Evict any entry for the specified file number
   void Evict(const std::string& dbname, uint64_t file_number);
 
+  double HitRate() { return cache_->HitRate(); }
+
  private:
   Cache* cache_;
 
