@@ -200,9 +200,9 @@ private:
                         running_task_ids_.insert(bg_item.id);
                         mutex_.Unlock();
                         task(bg_item.id);
+                        mutex_.Lock("ThreadProcRelock");
                         task_cost_sum_ += timer::get_micros() - now_time;
                         task_count_++;
-                        mutex_.Lock("ThreadProcRelock");
                         running_task_ids_.erase(bg_item.id);
                     }
                     continue;
@@ -222,10 +222,9 @@ private:
                 schedule_count_++;
                 mutex_.Unlock();
                 task(0);
-                int64_t finish_time = timer::get_micros();
-                task_cost_sum_ += finish_time - start_time;
-                task_count_++;
                 mutex_.Lock("ThreadProcRelock2");
+                task_cost_sum_ += timer::get_micros() - start_time;
+                task_count_++;
             }
         }
     }
