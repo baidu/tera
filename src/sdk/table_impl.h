@@ -235,7 +235,7 @@ private:
                        bool flush);
 
     // mutation打包不满但到达最大等待时间
-    void MutationBatchTimeout(std::string server_addr);
+    void MutationBatchTimeout(std::string server_addr, uint64_t batch_seq);
 
     // 通过异步RPC将mutation提交至TS
     void CommitMutationsById(const std::string& server_addr,
@@ -263,7 +263,7 @@ private:
                      std::vector<RowReaderImpl*>& reader_list);
 
     // reader打包不满但到达最大等待时间
-    void ReaderBatchTimeout(std::string server_addr);
+    void ReaderBatchTimeout(std::string server_addr, uint64_t batch_seq);
 
     // 通过异步RPC将reader提交至TS
     void CommitReadersById(const std::string server_addr,
@@ -366,7 +366,9 @@ private:
     void operator=(const TableImpl&);
 
     struct TaskBatch {
+        uint64_t sequence_num;
         uint64_t timer_id;
+        uint64_t byte_size;
         std::vector<int64_t>* row_id_list;
     };
 
@@ -382,6 +384,8 @@ private:
     uint64_t _read_commit_timeout;
     std::map<std::string, TaskBatch> _mutation_batch_map;
     std::map<std::string, TaskBatch> _reader_batch_map;
+    uint64_t _mutation_batch_seq;
+    uint64_t _reader_batch_seq;
     Counter _cur_commit_pending_counter;
     Counter _cur_reader_pending_counter;
     int64_t _max_commit_pending_num;
