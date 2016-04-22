@@ -15,5 +15,6 @@ class Const:
         self.launch_ts_first_script = './launch_ts_first.sh'
         self.data_path = 'testcase/data/'
         self.user_root_flag_path = './testcase/data/tera.flag.root'
+        self.teracli_dir = '.'
 
 const = Const()
