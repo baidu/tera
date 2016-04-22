@@ -615,7 +615,7 @@ bool ResultStreamSyncImpl::Done(ErrorCode* err) {
     while (1) {
         const string& scan_end_key = _scan_desc_impl->GetEndRowKey();
         /// scan failed
-        if (_response->status() != kTabletNodeOk) {
+        if (_response->status() != kTabletNodeOk && _response->status() != kTabletTimeout) {
             if (err) {
                 err->SetFailed(ErrorCode::kSystem,
                                StatusCodeToString(_response->status()));
@@ -637,7 +637,7 @@ bool ResultStreamSyncImpl::Done(ErrorCode* err) {
         // Newer version of TS will return next_start_point when the opration is timeout
         if (!_response->complete()) {
             // Without next_start_point, kv is the last kv pair from last scan
-            if (_response->next_start_point().key() == "") {
+            if (_response->status() == kTableOk) {
                 const KeyValuePair& kv = _response->results().key_values(_result_pos - 1);
                 if (_scan_desc_impl->IsKvOnlyTable()) {
                     _scan_desc_impl->SetStart(GetNextStartPoint(kv.key()), kv.column_family(),
@@ -650,15 +650,12 @@ bool ResultStreamSyncImpl::Done(ErrorCode* err) {
                                               kv.qualifier(), kv.timestamp() - 1);
                 }
             // next_start_point is where the next scan should start
-            } else {
+            } else if (_response->status() == kTabletTimeout) {
                 const KeyValuePair& kv = _response->next_start_point();
-                if (_scan_desc_impl->IsKvOnlyTable()) {
-                    _scan_desc_impl->SetStart(kv.key(), kv.column_family(),
+                _scan_desc_impl->SetStart(kv.key(), kv.column_family(),
                                               kv.qualifier(), kv.timestamp());
-                } else {
-                    _scan_desc_impl->SetStart(kv.key(), kv.column_family(),
-                                              kv.qualifier(), kv.timestamp());
-                }
+            } else {
+                // other errors
             }
         } else {
             _scan_desc_impl->SetStart(tablet_end_key);

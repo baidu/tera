@@ -994,6 +994,7 @@ inline bool TabletIO::LowLevelScan(const std::string& start_tera_key,
     } else {
         if (now_time > time_out && next_start_point) {
             next_start_point->CopyFrom(next_start_kv_pair);
+            SetStatusCode(kTabletTimeout, status);
         }
         *is_complete = false;
     }
@@ -1375,9 +1376,14 @@ bool TabletIO::ScanRows(const ScanTabletRequest* request,
             scan_option.set_size_limit(FLAGS_tera_tabletnode_scan_pack_max_size << 10);
         }
         scan_option.set_round_down(request->round_down());
+        if (request->has_timeout()) {
+            scan_option.set_timeout(request->timeout());
+        } else {
+            scan_option.set_timeout(INT64_MAX / 2);
+        }
         bool complete = false;
         success = Scan(scan_option, response->mutable_results()->mutable_key_values(),
-                       &complete, &status);
+                       response->mutable_next_start_point(), &complete, &status);
         if (success) {
             response->set_complete(complete);
         }
@@ -1485,7 +1491,7 @@ bool TabletIO::ScanRowsStreaming(const ScanTabletRequest* request,
     return true;
 }
 
-bool TabletIO::Scan(const ScanOption& option, KeyValueList* kv_list,
+bool TabletIO::Scan(const ScanOption& option, KeyValueList* kv_list, KeyValuePair* next_start_point,
                     bool* complete, StatusCode* status) {
     std::string start = option.key_range().key_start();
     std::string end = option.key_range().key_end();
@@ -1541,11 +1547,21 @@ bool TabletIO::Scan(const ScanOption& option, KeyValueList* kv_list,
             it->SeekToLast();
         }
     }
+
+    int64_t now_time = GetTimeStampInMs();
+    int64_t timeout = now_time + option.timeout();
+    KeyValuePair next_start_kv_pair;
+    VLOG(9) << "KV-Scan timeout set to be " << option.timeout();
     for (; it->Valid(); it->Next()) {
+        now_time = GetTimeStampInMs();
         leveldb::Slice key = it->key();
         leveldb::Slice value = it->value();
         *complete = (!noexist_end && m_key_operator->Compare(key, end) >= 0);
         if (*complete || (option.size_limit() > 0 && pack_size > option.size_limit())) {
+            break;
+        } else if (now_time > timeout) {
+            VLOG(9) << "KV-Scan timeout. Mark next start key: " << key.data();
+            MakeKvPair(key, "", "", 0, "", &next_start_kv_pair);
             break;
         } else {
             if (!(strategy && strategy->ScanDrop(key, 0))) {
@@ -1564,6 +1580,10 @@ bool TabletIO::Scan(const ScanOption& option, KeyValueList* kv_list,
     }
     if (!it->Valid()) {
         *complete = true;
+    } else if (now_time > timeout && next_start_point) {
+        *complete = false;
+        next_start_point->CopyFrom(next_start_kv_pair);
+        SetStatusCode(kTabletTimeout, status);
     }
     m_counter.scan_rows.Add(kv_list->size());
     m_counter.scan_size.Add(pack_size);
@@ -1889,7 +1909,7 @@ uint64_t TabletIO::GetSnapshot(uint64_t id, uint64_t snapshot_sequence,
         MutexLock lock(&m_mutex);
         if (m_status != kReady) {
             SetStatusCode(m_status, status);
-            return 0;
+            return false;
         }
         m_db_ref_count++;
     }

@@ -403,7 +403,7 @@ void TableImpl::ScanCallBack(ScanTask* scan_task,
     }
 
     StatusCode err = response->status();
-    if (err != kTabletNodeOk && err != kSnapshotNotExist) {
+    if (err != kTabletNodeOk && err != kSnapshotNotExist && err != kTabletTimeout) {
         VLOG(10) << "fail to scan table: " << _name
             << " errcode: " << StatusCodeToString(err);
     }
