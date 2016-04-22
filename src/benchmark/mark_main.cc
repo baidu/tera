@@ -14,6 +14,7 @@
 
 #include "benchmark/mark.h"
 #include "types.h"
+#include "version.h"
 
 DECLARE_string(flagfile);
 DEFINE_string(tablename, "", "table_name");
@@ -486,6 +487,11 @@ void print_summary_proc(Adapter* adapter, double duration) {
 
 int main(int argc, char** argv) {
     ::google::ParseCommandLineFlags(&argc, &argv, true);
+
+    if (argc > 1 && strcmp(argv[1], "version") == 0) {
+        PrintSystemVersion();
+        return 0;
+    }
 
     tera::ErrorCode err;
     tera::Client* client = tera::Client::NewClient("", "tera_mark");
