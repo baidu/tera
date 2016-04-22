@@ -267,7 +267,7 @@ def run_tera_mark(file_path, op, table_name, random, value_size, num, key_size, 
         dump_cmd = '{tera_bench} {tera_bench_args} | awk {awk_args} {redirect_op} {out}'.format(
             tera_bench=const.tera_bench_binary, tera_bench_args=tera_bench_args,
             redirect_op=redirect_op, awk_args=awk_args, out=path)
-	runcmd(cmd)
+	runcmd(dump_cmd)
 
 
 def scan_table(table_name, file_path, allversion, snapshot=0, is_async=False):
