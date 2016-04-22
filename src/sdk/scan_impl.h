@@ -38,6 +38,7 @@ public:
     std::string Qualifier() const = 0;
     int64_t Timestamp() const = 0;
     std::string Value() const = 0;
+    int64_t ValueInt64() const = 0;
 
 public:
     ScanDescImpl* GetScanDesc();
@@ -78,6 +79,7 @@ public:
     std::string ColumnName() const; // get cf:qu
     int64_t Timestamp() const; // get ts
     std::string Value() const; // get value
+    int64_t ValueInt64() const; // get value as int64_t
 
 public:
     // TableImpl interface
@@ -191,6 +193,7 @@ public:
     std::string Qualifier() const;
     int64_t Timestamp() const;
     std::string Value() const;
+    int64_t ValueInt64() const;
 
 public:
     void GetRpcHandle(ScanTabletRequest** request,
@@ -249,13 +252,15 @@ public:
 
     void SetTimeRange(int64_t ts_end, int64_t ts_start);
 
-    bool SetFilterString(const std::string& filter_string);
+    bool SetFilter(const std::string& schema);
 
     void SetValueConverter(ValueConverter converter);
 
     void SetSnapshot(uint64_t snapshot_id);
 
     void SetBufferSize(int64_t buf_size);
+
+    void SetNumberLimit(int64_t number_limit);
 
     void SetAsync(bool async);
 
@@ -292,15 +297,18 @@ public:
 
     int64_t GetBufferSize() const;
 
+    int64_t GetNumberLimit();
+
     bool IsAsync() const;
 
     void SetTableSchema(const TableSchema& schema);
 
-    bool ParseFilterString();
 
     bool IsKvOnlyTable();
 
 private:
+
+    bool ParseFilterString();
     bool ParseSubFilterString(const std::string& filter_str, Filter* filter);
 
     bool ParseValueCompareFilter(const std::string& filter_str, Filter* filter);
@@ -314,6 +322,7 @@ private:
     std::vector<tera::ColumnFamily*> _cf_list;
     tera::TimeRange* _timer_range;
     int64_t _buf_size;
+    int64_t _number_limit;
     bool _is_async;
     int32_t _max_version;
     int64_t _pack_interval;

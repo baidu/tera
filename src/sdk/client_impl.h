@@ -42,12 +42,13 @@ public:
                              ErrorCode* err);
 
     virtual bool UpdateTable(const TableDescriptor& desc, ErrorCode* err);
+    virtual bool UpdateCheck(const std::string& table_name, bool* done, ErrorCode* err);
 
-    virtual bool DeleteTable(string name, ErrorCode* err);
+    virtual bool DeleteTable(const std::string& name, ErrorCode* err);
 
-    virtual bool DisableTable(string name, ErrorCode* err);
+    virtual bool DisableTable(const std::string& name, ErrorCode* err);
 
-    virtual bool EnableTable(string name, ErrorCode* err);
+    virtual bool EnableTable(const std::string& name, ErrorCode* err);
 
     virtual bool CreateUser(const std::string& user,
                             const std::string& password, ErrorCode* err);
@@ -102,6 +103,7 @@ public:
 
     bool ShowTablesInfo(TableMetaList* table_list,
                         TabletMetaList* tablet_list,
+                        bool is_brief,
                         ErrorCode* err);
 
     bool ShowTabletNodesInfo(const string& addr,
@@ -118,6 +120,8 @@ public:
 
     std::string GetZkAddrList() { return _zk_addr_list; }
     std::string GetZkRootPath() { return _zk_root_path; }
+
+    void CloseTable(const string& table_name);
 
 private:
     bool ListInternal(std::vector<TableInfo>* table_list,
@@ -146,7 +150,10 @@ private:
     bool DoShowTablesInfo(TableMetaList* table_list,
                           TabletMetaList* tablet_list,
                           const string& table_name,
+                          bool is_brief,
                           ErrorCode* err);
+
+    Table* OpenTableInternal(const string& table_name, ErrorCode* err);
 private:
     ClientImpl(const ClientImpl&);
     void operator=(const ClientImpl&);
@@ -163,6 +170,16 @@ private:
     /// if there is _cluster,
     ///    we save master_addr & root_table_addr in _cluster, access zookeeper only once.
     sdk::ClusterFinder* _cluster;
+
+    Mutex _open_table_mutex;
+    struct TableHandle {
+        Table* handle;
+        Mutex* mu;
+        int ref;
+        ErrorCode err;
+        TableHandle() : handle(NULL), mu(NULL), ref(0) {}
+    };
+    std::map<std::string, TableHandle> _open_table_map;
 };
 
 } // namespace tera

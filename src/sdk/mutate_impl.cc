@@ -2,6 +2,7 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include "common/base/string_format.h"
 #include "io/coding.h"
 #include "sdk/mutate_impl.h"
 #include "utils/timer.h"
@@ -16,7 +17,9 @@ RowMutationImpl::RowMutationImpl(TableImpl* table, const std::string& row_key)
       _timeout_ms(0),
       _retry_times(0),
       _finish(false),
-      _finish_cond(&_finish_mutex) {
+      _finish_cond(&_finish_mutex),
+      _commit_times(0) {
+    SetErrorIfInvalid(row_key, kRowkey);
 }
 
 RowMutationImpl::~RowMutationImpl() {
@@ -31,11 +34,41 @@ void RowMutationImpl::Reset(const std::string& row_key) {
     _retry_times = 0;
     _finish = false;
     _error_code.SetFailed(ErrorCode::kOK);
+    _commit_times = 0;
+}
+
+void RowMutationImpl::SetErrorIfInvalid(const std::string& str,
+                                        const FieldLimit& field) {
+    std::string reason = _error_code.GetReason();
+    switch (field) {
+    case kRowkey: {
+        if (str.size() >= kRowkeySize) {
+            reason.append(" Bad parameters: rowkey should < 64KB");
+            _error_code.SetFailed(ErrorCode::kBadParam, reason);
+        }
+    } break;
+    case kQualifier: {
+        if (str.size() >= kQualifierSize) {
+            reason.append(" Bad parameters: qualifier should < 64KB");
+            _error_code.SetFailed(ErrorCode::kBadParam, reason);
+        }
+    } break;
+    case kValue: {
+        if (str.size() >= kValueSize) {
+            reason.append(" Bad parameters: value should < 32MB");
+            _error_code.SetFailed(ErrorCode::kBadParam, reason);
+        }
+    } break;
+    default: {
+        abort();
+    }
+    }
 }
 
 // 原子加一个Cell
 void RowMutationImpl::AddInt64(const std::string& family, const std::string& qualifier,
-                          const int64_t delta) {
+                               const int64_t delta) {
+    SetErrorIfInvalid(qualifier, kQualifier);
     std::string delta_str((char*)&delta, sizeof(int64_t));
     RowMutation::Mutation& mutation = AddMutation();
     mutation.type = RowMutation::kAddInt64;
@@ -48,6 +81,7 @@ void RowMutationImpl::AddInt64(const std::string& family, const std::string& qua
 // 原子加一个Cell
 void RowMutationImpl::Add(const std::string& family, const std::string& qualifier,
                           const int64_t delta) {
+    SetErrorIfInvalid(qualifier, kQualifier);
     char delta_buf[sizeof(int64_t)];
     RowMutation::Mutation& mutation = AddMutation();
     mutation.type = RowMutation::kAdd;
@@ -61,6 +95,8 @@ void RowMutationImpl::Add(const std::string& family, const std::string& qualifie
 // 原子操作：如果不存在才能Put成功
 void RowMutationImpl::PutIfAbsent(const std::string& family, const std::string& qualifier,
                                   const std::string& value) {
+    SetErrorIfInvalid(qualifier, kQualifier);
+    SetErrorIfInvalid(value, kValue);
     RowMutation::Mutation& mutation = AddMutation();
     mutation.type = RowMutation::kPutIfAbsent;
     mutation.family = family;
@@ -71,6 +107,8 @@ void RowMutationImpl::PutIfAbsent(const std::string& family, const std::string& 
 
 void RowMutationImpl::Append(const std::string& family, const std::string& qualifier,
                              const std::string& value) {
+    SetErrorIfInvalid(qualifier, kQualifier);
+    SetErrorIfInvalid(value, kValue);
     RowMutation::Mutation& mutation = AddMutation();
     mutation.type = RowMutation::kAppend;
     mutation.family = family;
@@ -95,6 +133,8 @@ void RowMutationImpl::Put(const std::string& family, const std::string& qualifie
 /// 带TTL修改一个列
 void RowMutationImpl::Put(const std::string& family, const std::string& qualifier,
                           const std::string& value, int32_t ttl) {
+    SetErrorIfInvalid(qualifier, kQualifier);
+    SetErrorIfInvalid(value, kValue);
     RowMutation::Mutation& mutation = AddMutation();
     mutation.type = RowMutation::kPut;
     mutation.family = family;
@@ -107,6 +147,8 @@ void RowMutationImpl::Put(const std::string& family, const std::string& qualifie
 /// 修改一个列的特定版本
 void RowMutationImpl::Put(const std::string& family, const std::string& qualifier,
                           int64_t timestamp, const std::string& value) {
+    SetErrorIfInvalid(qualifier, kQualifier);
+    SetErrorIfInvalid(value, kValue);
     RowMutation::Mutation& mutation = AddMutation();
     mutation.type = RowMutation::kPut;
     mutation.family = family;
@@ -126,6 +168,8 @@ void RowMutationImpl::Put(const std::string& family, const std::string& qualifie
 /// 带TTL的修改一个列的特定版本
 void RowMutationImpl::Put(const std::string& family, const std::string& qualifier,
                           int64_t timestamp, const std::string& value, int32_t ttl) {
+    SetErrorIfInvalid(qualifier, kQualifier);
+    SetErrorIfInvalid(value, kValue);
     RowMutation::Mutation& mutation = AddMutation();
     mutation.type = RowMutation::kPut;
     mutation.family = family;
@@ -166,6 +210,7 @@ void RowMutationImpl::DeleteColumn(const std::string& family,
 void RowMutationImpl::DeleteColumn(const std::string& family,
                                    const std::string& qualifier,
                                    int64_t timestamp) {
+    SetErrorIfInvalid(qualifier, kQualifier);
     RowMutation::Mutation& mutation = AddMutation();
     mutation.type = RowMutation::kDeleteColumn;
     mutation.family = family;
@@ -190,6 +235,7 @@ void RowMutationImpl::DeleteColumns(const std::string& family,
 void RowMutationImpl::DeleteColumns(const std::string& family,
                                     const std::string& qualifier,
                                     int64_t timestamp) {
+    SetErrorIfInvalid(qualifier, kQualifier);
     RowMutation::Mutation& mutation = AddMutation();
     mutation.type = RowMutation::kDeleteColumns;
     mutation.family = family;

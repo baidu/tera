@@ -17,6 +17,8 @@
 #include "utils/atomic.h"
 #include "utils/timer.h"
 
+DECLARE_int64(tera_sdk_scan_number_limit);
+DECLARE_int64(tera_sdk_scan_buffer_size);
 DECLARE_bool(tera_sdk_scan_async_enabled);
 DECLARE_int64(tera_sdk_scan_async_cache_size);
 DECLARE_int32(tera_sdk_scan_async_parallel_max_num);
@@ -306,6 +308,10 @@ int64_t ResultStreamBatchImpl::Timestamp() const {
 std::string ResultStreamBatchImpl::Value() const {
     const KeyValuePair& row = sliding_window_[sliding_window_idx_].cell_.key_values(next_idx_);
     return row.has_value() ? row.value(): "";
+}
+int64_t ResultStreamBatchImpl::ValueInt64() const {
+    std::string v = Value();
+    return (v.size() == sizeof(int64_t)) ? *(int64_t*)v.c_str() : 0;
 }
 
 /////////////////////////////
@@ -713,6 +719,14 @@ string ResultStreamSyncImpl::Value() const {
     return "";
 }
 
+int64_t ResultStreamSyncImpl::ValueInt64() const {
+    std::string v;
+    if (_response->results().key_values(_result_pos).has_value()) {
+        v = _response->results().key_values(_result_pos).value();
+    }
+    return (v.size() == sizeof(int64_t)) ? *(int64_t*)v.c_str() : 0;
+}
+
 void ResultStreamSyncImpl::GetRpcHandle(ScanTabletRequest** request,
                                     ScanTabletResponse** response) {
     *request = new ScanTabletRequest;
@@ -752,7 +766,8 @@ void ResultStreamSyncImpl::Reset() {
 ScanDescImpl::ScanDescImpl(const string& rowkey)
     : _start_timestamp(0),
       _timer_range(NULL),
-      _buf_size(65536),
+      _buf_size(FLAGS_tera_sdk_scan_buffer_size),
+      _number_limit(FLAGS_tera_sdk_scan_number_limit),
       _is_async(FLAGS_tera_sdk_scan_async_enabled),
       _max_version(1),
       _pack_interval(5000),
@@ -768,6 +783,7 @@ ScanDescImpl::ScanDescImpl(const ScanDescImpl& impl)
       _start_qualifier(impl._start_qualifier),
       _start_timestamp(impl._start_timestamp),
       _buf_size(impl._buf_size),
+      _number_limit(impl._number_limit),
       _is_async(impl._is_async),
       _max_version(impl._max_version),
       _pack_interval(impl._pack_interval),
@@ -846,14 +862,6 @@ void ScanDescImpl::SetTimeRange(int64_t ts_end, int64_t ts_start) {
     _timer_range->set_ts_end(ts_end);
 }
 
-bool ScanDescImpl::SetFilterString(const string& filter_string) {
-    if (!CheckFilterString(filter_string)) {
-        return false;
-    }
-    _filter_string = filter_string;
-    return true;
-}
-
 void ScanDescImpl::SetValueConverter(ValueConverter convertor) {
     _value_converter = convertor;
 }
@@ -868,6 +876,10 @@ uint64_t ScanDescImpl::GetSnapshot() const {
 
 void ScanDescImpl::SetBufferSize(int64_t buf_size) {
     _buf_size = buf_size;
+}
+
+void ScanDescImpl::SetNumberLimit(int64_t number_limit) {
+    _number_limit = number_limit;
 }
 
 void ScanDescImpl::SetAsync(bool async) {
@@ -933,12 +945,58 @@ int64_t ScanDescImpl::GetBufferSize() const {
     return _buf_size;
 }
 
+int64_t ScanDescImpl::GetNumberLimit() {
+    return _number_limit;
+}
+
 bool ScanDescImpl::IsAsync() const {
     return _is_async;
 }
 
 void ScanDescImpl::SetTableSchema(const TableSchema& schema) {
     _table_schema = schema;
+}
+
+bool ScanDescImpl::IsKvOnlyTable() {
+    return _table_schema.kv_only();
+}
+
+// SELECT * WHERE <type> <cf0> <op0> <value0> AND <type> <cf1> <op1> <value1>
+bool ScanDescImpl::SetFilter(const std::string& schema) {
+    std::string select;
+    std::string where;
+    std::string::size_type pos;
+    if ((pos = schema.find("SELECT ")) != 0) {
+        LOG(ERROR) << "illegal scan expression: should be begin with \"SELECT\"";
+        return false;
+    }
+    if ((pos = schema.find(" WHERE ")) != string::npos) {
+        select = schema.substr(7, pos - 7);
+        where = schema.substr(pos + 7, schema.size() - pos - 7);
+    } else {
+        select = schema.substr(7);
+    }
+    // parse select
+    {
+        select = RemoveInvisibleChar(select);
+        if (select != "*") {
+            std::vector<string> cfs;
+            SplitString(select, ",", &cfs);
+            for (size_t i = 0; i < cfs.size(); ++i) {
+                // add columnfamily
+                AddColumnFamily(cfs[i]);
+                VLOG(10) << "add cf: " << cfs[i] << " to scan descriptor";
+            }
+        }
+    }
+    // parse where
+    if (where != "") {
+        _filter_string = where;
+        if (!ParseFilterString()) {
+            return false;
+        }
+    }
+    return true;
 }
 
 bool ScanDescImpl::ParseFilterString() {
@@ -958,10 +1016,6 @@ bool ScanDescImpl::ParseFilterString() {
     }
 
     return true;
-}
-
-bool ScanDescImpl::IsKvOnlyTable() {
-    return _table_schema.kv_only();
 }
 
 bool ScanDescImpl::ParseSubFilterString(const string& filter_str,

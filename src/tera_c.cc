@@ -19,6 +19,7 @@ using tera::Client;
 using tera::ErrorCode;
 using tera::ResultStream;
 using tera::RowMutation;
+using tera::RowReader;
 using tera::ScanDescriptor;
 using tera::Table;
 
@@ -27,6 +28,7 @@ extern "C" {
 struct tera_client_t          { Client*         rep; };
 struct tera_result_stream_t   { ResultStream*   rep; };
 struct tera_row_mutation_t    { RowMutation*    rep; };
+struct tera_row_reader_t      { RowReader*      rep; };
 struct tera_scan_descriptor_t { ScanDescriptor* rep; };
 struct tera_table_t           { Table*          rep; };
 
@@ -54,6 +56,10 @@ typedef std::map<void*, std::pair<void*, void*> > mutation_callback_map_t;
 static mutation_callback_map_t g_mutation_callback_map;
 static Mutex g_mutation_mutex;
 
+//           <RowReader*,   <tera_row_reader_t*, user_callback> >
+typedef std::map<void*, std::pair<void*, void*> > reader_callback_map_t;
+static reader_callback_map_t g_reader_callback_map;
+static Mutex g_reader_mutex;
 
 tera_client_t* tera_client_open(const char* conf_path, const char* log_prefix, char** errptr) {
     ErrorCode err;
@@ -97,6 +103,21 @@ bool tera_table_get(tera_table_t* table,
     return result;
 }
 
+bool tera_table_getint64(tera_table_t* table,
+                         const char* row_key, uint64_t keylen,
+                         const char* family, const char* qualifier,
+                         uint64_t qulen, int64_t* value,
+                         char** errptr, uint64_t snapshot_id) {
+    ErrorCode err;
+    std::string key_str(row_key, keylen);
+    std::string qu_str(qualifier, qulen);
+    bool result = table->rep->Get(key_str, family, qu_str, value, &err, snapshot_id);
+    if (SaveError(errptr, err)) {
+        return false;
+    }
+    return result;
+}
+
 bool tera_table_put(tera_table_t* table,
                     const char* row_key, uint64_t keylen,
                     const char* family, const char* qualifier,
@@ -107,6 +128,21 @@ bool tera_table_put(tera_table_t* table,
     std::string qu_str(qualifier, qulen);
     std::string value_str(value, vallen);
     bool result = table->rep->Put(key_str, family, qu_str, value_str, &err);
+    if (SaveError(errptr, err)) {
+        return false;
+    }
+    return result;
+}
+
+bool tera_table_putint64(tera_table_t* table,
+                         const char* row_key, uint64_t keylen,
+                         const char* family, const char* qualifier,
+                         uint64_t qulen, int64_t value,
+                         char** errptr) {
+    ErrorCode err;
+    std::string key_str(row_key, keylen);
+    std::string qu_str(qualifier, qulen);
+    bool result = table->rep->Put(key_str, family, qu_str, value, &err);
     if (SaveError(errptr, err)) {
         return false;
     }
@@ -129,12 +165,135 @@ tera_row_mutation_t* tera_row_mutation(tera_table_t* table, const char* row_key,
     return result;
 }
 
+int64_t tera_row_mutation_get_status_code(tera_row_mutation_t* mu) {
+    return mu->rep->GetError().GetType();
+}
+
+void tera_row_mutation_destroy(tera_row_mutation_t* mu) {
+    delete mu->rep;
+    mu->rep = NULL;
+}
+
 void tera_table_apply_mutation(tera_table_t* table, tera_row_mutation_t* mutation) {
     table->rep->ApplyMutation(mutation->rep);
 }
 
+tera_row_reader_t* tera_row_reader(tera_table_t* table, const char* row_key, uint64_t keylen) {
+    tera_row_reader_t* result = new tera_row_reader_t;
+    result->rep = table->rep->NewRowReader(std::string(row_key, keylen));
+    return result;
+}
+
+void tera_row_reader_rowkey(tera_row_reader_t* reader, char** str, uint64_t* strlen) {
+    std::string val = reader->rep->RowName();
+    *str = CopyString(val);
+    *strlen = val.size();
+}
+
+void tera_row_reader_add_column_family(tera_row_reader_t* reader, const char* family) {
+    reader->rep->AddColumnFamily(family);
+}
+
+bool tera_row_reader_done(tera_row_reader_t* reader) {
+    return reader->rep->Done();
+}
+
+void tera_row_reader_next(tera_row_reader_t* reader) {
+    reader->rep->Next();
+}
+
+void tera_row_reader_value(tera_row_reader_t* reader, char** str, uint64_t* strlen) {
+    std::string val = reader->rep->Value();
+    *str = CopyString(val);
+    *strlen = val.size();
+}
+
+void tera_row_reader_callback_stub(RowReader* reader) {
+    MutexLock locker(&g_reader_mutex);
+    void* sdk_reader = reader; // C++ sdk RowReader*
+    reader_callback_map_t::iterator it = g_reader_callback_map.find(sdk_reader);
+    assert (it != g_reader_callback_map.end());
+
+    std::pair<void*, void*> apair = it->second;
+    void* c_reader = apair.first; // C tera_row_reader_t*
+    ReaderCallbackType callback = (ReaderCallbackType)apair.second;
+
+    g_reader_mutex.Unlock();
+    // users use C tera_row_reader_t* to construct it's own object
+    callback(c_reader);
+    g_reader_mutex.Lock();
+
+    g_reader_callback_map.erase(it);
+}
+
+void tera_row_reader_set_callback(tera_row_reader_t* reader, ReaderCallbackType callback) {
+    MutexLock locker(&g_reader_mutex);
+    g_reader_callback_map.insert( std::pair<void*, std::pair<void*, void*> >(
+        reader->rep,
+        std::pair<void*, void*>(reader, (void*)callback))
+    );
+    reader->rep->SetCallBack(tera_row_reader_callback_stub);
+}
+
+void tera_row_reader_add_column(tera_row_reader_t* reader, const char* cf, const char* qu, uint64_t len) {
+    reader->rep->AddColumn(cf, std::string(qu, len));
+}
+
+void tera_row_reader_set_timestamp(tera_row_reader_t* reader, int64_t ts) {
+    reader->rep->SetTimestamp(ts);
+}
+
+void tera_row_reader_set_time_range(tera_row_reader_t* reader, int64_t start, int64_t end) {
+    reader->rep->SetTimeRange(start, end);
+}
+
+void tera_row_reader_set_snapshot(tera_row_reader_t* reader, uint64_t snapshot) {
+    reader->rep->SetSnapshot(snapshot);
+}
+
+void tera_row_reader_set_max_versions(tera_row_reader_t* reader, uint32_t maxversions) {
+    reader->rep->SetMaxVersions(maxversions);
+}
+
+void tera_row_reader_set_timeout(tera_row_reader_t* reader, int64_t timeout) {
+    reader->rep->SetTimeOut(timeout);
+}
+
+void tera_row_reader_family(tera_row_reader_t* reader, char** str, uint64_t* strlen) {
+    std::string val = reader->rep->Family();
+    *str = CopyString(val);
+    *strlen = val.size();
+}
+
+void tera_row_reader_qualifier(tera_row_reader_t* reader, char** str, uint64_t* strlen) {
+    std::string val = reader->rep->Qualifier();
+    *str = CopyString(val);
+    *strlen = val.size();
+}
+
+int64_t tera_row_reader_timestamp(tera_row_reader_t* reader) {
+    return reader->rep->Timestamp();
+}
+
+int64_t tera_row_reader_get_status_code(tera_row_reader_t* reader) {
+    return reader->rep->GetError().GetType();
+}
+
+void tera_row_reader_destroy(tera_row_reader_t* reader) {
+    delete reader->rep;
+    reader->rep = NULL;
+}
+
+void tera_table_apply_reader(tera_table_t* table, tera_row_reader_t* reader) {
+    table->rep->Get(reader->rep);
+}
+
 bool tera_table_is_put_finished(tera_table_t* table) {
     return table->rep->IsPutFinished();
+}
+
+bool tera_table_is_get_finished(tera_table_t* table) {
+    return table->rep->IsGetFinished();
 }
 
 void tera_row_mutation_put(tera_row_mutation_t* mu, const char* cf,
@@ -227,10 +386,6 @@ void tera_scan_descriptor_set_end(tera_scan_descriptor_t* desc, const char* end_
     desc->rep->SetEnd(key);
 }
 
-void tera_scan_descriptor_set_filter_string(tera_scan_descriptor_t* desc, const char* filter_string) {
-    desc->rep->SetFilterString(filter_string);
-}
-
 void tera_scan_descriptor_set_pack_interval(tera_scan_descriptor_t* desc, int64_t interval) {
     desc->rep->SetPackInterval(interval);
 }
@@ -246,6 +401,10 @@ void tera_scan_descriptor_set_snapshot(tera_scan_descriptor_t* desc, uint64_t sn
 // NOTE: arguments order is different from C++ sdk(tera.h)
 void tera_scan_descriptor_set_time_range(tera_scan_descriptor_t* desc, int64_t ts_start, int64_t ts_end) {
     desc->rep->SetTimeRange(ts_end, ts_start);
+}
+
+bool tera_scan_descriptor_set_filter(tera_scan_descriptor_t* desc, char* filter_str) {
+    return desc->rep->SetFilter(filter_str);
 }
 
 bool tera_result_stream_done(tera_result_stream_t* stream, char** errptr) {
@@ -295,6 +454,10 @@ void tera_result_stream_value(tera_result_stream_t* stream, char** str, uint64_t
     std::string val = stream->rep->Value();
     *str = CopyString(val);
     *strlen = val.size();
+}
+
+int64_t tera_result_stream_value_int64(tera_result_stream_t* stream) {
+    return stream->rep->ValueInt64();
 }
 
 }  // end extern "C"

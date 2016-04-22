@@ -73,6 +73,8 @@ DECLARE_int32(tera_tabletnode_cache_mem_size);
 DECLARE_int32(tera_tabletnode_cache_disk_size);
 DECLARE_int32(tera_tabletnode_cache_disk_filenum);
 DECLARE_int32(tera_tabletnode_cache_log_level);
+DECLARE_int32(tera_tabletnode_cache_update_thread_num);
+DECLARE_bool(tera_tabletnode_cache_force_read_from_cache);
 DECLARE_int32(tera_tabletnode_gc_log_level);
 
 DECLARE_string(tera_leveldb_env_type);
@@ -169,8 +171,11 @@ bool TabletNodeImpl::Init() {
 void TabletNodeImpl::InitCacheSystem() {
     if (!FLAGS_tera_tabletnode_cache_enabled) {
         // compitable with legacy FlashEnv
-        leveldb::FlashEnv::SetFlashPath(FLAGS_tera_tabletnode_cache_paths,
-                                        FLAGS_tera_io_cache_path_vanish_allowed);
+        leveldb::FlashEnv* flash_env = (leveldb::FlashEnv*)io::LeveldbFlashEnv();
+        flash_env->SetFlashPath(FLAGS_tera_tabletnode_cache_paths,
+                                FLAGS_tera_io_cache_path_vanish_allowed);
+        flash_env->SetUpdateFlashThreadNumber(FLAGS_tera_tabletnode_cache_update_thread_num);
+        flash_env->SetIfForceReadFromCache(FLAGS_tera_tabletnode_cache_force_read_from_cache);
         return;
     }
 
@@ -387,6 +392,30 @@ void TabletNodeImpl::CompactTablet(const CompactTabletRequest* request,
     done->Run();
 }
 
+void TabletNodeImpl::Update(const UpdateRequest* request,
+                            UpdateResponse* response,
+                            google::protobuf::Closure* done) {
+    response->set_sequence_id(request->sequence_id());
+    switch (request->type()) {
+    case kUpdateSchema:
+        LOG(INFO) << "[update] new schema:" << request->schema().DebugString();
+        if(ApplySchema(request)) {
+            LOG(INFO) << "[update] ok";
+            response->set_status(kTabletNodeOk);
+        } else {
+            LOG(INFO) << "[update] failed";
+            response->set_status(kInvalidArgument);
+        }
+        done->Run();
+        break;
+    default:
+        LOG(INFO) << "[update] unknown cmd";
+        response->set_status(kInvalidArgument);
+        done->Run();
+        break;
+    }
+}
+
 void TabletNodeImpl::ReadTablet(int64_t start_micros,
                                 const ReadTabletRequest* request,
                                 ReadTabletResponse* response,
@@ -448,7 +477,25 @@ void TabletNodeImpl::WriteTablet(const WriteTabletRequest* request,
         if (mu_seq.row_key().size() >= 64 * 1024) { // 64KB
             response->set_status(kTableNotSupport);
             done->Run();
+            if (NULL != timer) {
+                RpcTimerList::Instance()->Erase(timer);
+                delete timer;
+            }
             return;
+        }
+        int32_t mu_num = mu_seq.mutation_sequence_size();
+        for (int32_t k = 0; k < mu_num; k++) {
+            const Mutation& mu = mu_seq.mutation_sequence(k);
+            if ((mu.qualifier().size() >= 64 * 1024)          // 64KB
+                || (mu.value().size() >= 32 * 1024 * 1024)) { // 32MB
+                response->set_status(kTableNotSupport);
+                done->Run();
+                if (NULL != timer) {
+                    RpcTimerList::Instance()->Erase(timer);
+                    delete timer;
+                }
+                return;
+            }
         }
     }
     if (request->row_list_size() > 0) {
@@ -659,6 +706,19 @@ void TabletNodeImpl::CmdCtrl(const TsCmdCtrlRequest* request,
         response->set_status(kInvalidArgument);
     }
     done->Run();
+}
+
+bool TabletNodeImpl::ApplySchema(const UpdateRequest* request) {
+    StatusCode status;
+    io::TabletIO* tablet_io = m_tablet_manager->GetTablet(
+        request->tablet_name(), request->key_range().key_start(), request->key_range().key_end(), &status);
+    if (tablet_io == NULL) {
+        LOG(INFO) << "[update] tablet not found";
+        return false;
+    }
+    tablet_io->ApplySchema(request->schema());
+    tablet_io->DecRef();
+    return true;
 }
 
 void TabletNodeImpl::Query(const QueryRequest* request,
@@ -1017,7 +1077,8 @@ void TabletNodeImpl::GarbageCollect() {
     }
 
     // collect flash directories
-    const std::vector<std::string>& flash_paths = leveldb::FlashEnv::GetFlashPaths();
+    leveldb::FlashEnv* flash_env = (leveldb::FlashEnv*)io::LeveldbFlashEnv();
+    const std::vector<std::string>& flash_paths = flash_env->GetFlashPaths();
     for (size_t d = 0; d < flash_paths.size(); ++d) {
         std::string flash_dir = flash_paths[d] + FLAGS_tera_tabletnode_path_prefix;
         GarbageCollectInPath(flash_dir, leveldb::Env::Default(),

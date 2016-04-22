@@ -39,8 +39,8 @@ void ScanDescriptor::SetTimeRange(int64_t ts_end, int64_t ts_start) {
     _impl->SetTimeRange(ts_end, ts_start);
 }
 
-bool ScanDescriptor::SetFilterString(const std::string& filter_string) {
-    return _impl->SetFilterString(filter_string);
+bool ScanDescriptor::SetFilter(const std::string& filter_string) {
+    return _impl->SetFilter(filter_string);
 }
 
 void ScanDescriptor::SetValueConverter(ValueConverter converter) {
@@ -53,6 +53,14 @@ void ScanDescriptor::SetSnapshot(uint64_t snapshot_id) {
 
 void ScanDescriptor::SetBufferSize(int64_t buf_size) {
     _impl->SetBufferSize(buf_size);
+}
+
+void ScanDescriptor::SetNumberLimit(int64_t number_limit) {
+    _impl->SetNumberLimit(number_limit);
+}
+
+int64_t ScanDescriptor::GetNumberLimit() {
+    return _impl->GetNumberLimit();
 }
 
 void ScanDescriptor::SetAsync(bool async) {

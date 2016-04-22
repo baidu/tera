@@ -30,7 +30,11 @@ class Mutex {
 public:
     Mutex()
         : owner_(0), msg_(NULL), msg_threshold_(0), lock_time_(0) {
-        PthreadCall("init mutex", pthread_mutex_init(&mu_, NULL));
+        pthread_mutexattr_t attr;
+        PthreadCall("init mutexattr", pthread_mutexattr_init(&attr));
+        PthreadCall("set mutexattr", pthread_mutexattr_settype(&attr, PTHREAD_MUTEX_ERRORCHECK));
+        PthreadCall("init mutex", pthread_mutex_init(&mu_, &attr));
+        PthreadCall("destroy mutexattr", pthread_mutexattr_destroy(&attr));
     }
     ~Mutex() {
         PthreadCall("destroy mutex", pthread_mutex_destroy(&mu_));

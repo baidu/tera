@@ -21,6 +21,14 @@ class TableImpl;
 
 class RowMutationImpl : public RowMutation, public SdkTask {
 public:
+    enum FieldLimit {
+        kRowkey = 0,
+        kColumnFamily,
+        kQualifier,
+        kTimeStamp,
+        kValue
+    };
+
     RowMutationImpl(TableImpl* table, const std::string& row_key);
     ~RowMutationImpl();
 
@@ -159,6 +167,12 @@ public:
     /// 释放引用
     void Unref();
 
+    void SetErrorIfInvalid(const std::string& str,
+                           const FieldLimit& field);
+
+    void AddCommitTimes() { _commit_times++; }
+    int64_t GetCommitTimes() { return _commit_times; }
+
 protected:
     /// 增加一个操作
     RowMutation::Mutation& AddMutation();
@@ -177,6 +191,9 @@ private:
     ErrorCode _error_code;
     mutable Mutex _finish_mutex;
     common::CondVar _finish_cond;
+
+    /// 记录此mutation被提交到ts的次数
+    int64_t _commit_times;
 };
 
 void SerializeMutation(const RowMutation::Mutation& src, tera::Mutation* dst);

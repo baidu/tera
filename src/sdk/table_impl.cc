@@ -24,6 +24,7 @@
 #include "proto/kv_helper.h"
 #include "proto/proto_helper.h"
 #include "proto/tabletnode_client.h"
+#include "sdk/cookie.h"
 #include "sdk/mutate_impl.h"
 #include "sdk/read_impl.h"
 #include "sdk/scan_impl.h"
@@ -55,7 +56,7 @@ DECLARE_string(tera_sdk_cookie_path);
 DECLARE_int32(tera_sdk_cookie_update_interval);
 DECLARE_bool(tera_sdk_perf_counter_enabled);
 DECLARE_int64(tera_sdk_perf_counter_log_interval);
-DECLARE_int32(FLAGS_tera_rpc_timeout_period);
+DECLARE_int32(tera_rpc_timeout_period);
 
 namespace tera {
 
@@ -109,15 +110,29 @@ RowReader* TableImpl::NewRowReader(const std::string& row_key) {
 }
 
 void TableImpl::ApplyMutation(RowMutation* row_mu) {
+    if (row_mu->GetError().GetType() != ErrorCode::kOK) {
+        ThreadPool::Task task =
+            boost::bind(&RowMutationImpl::RunCallback,
+                        static_cast<RowMutationImpl*>(row_mu));
+        _thread_pool->AddTask(task);
+        return;
+    }
     std::vector<RowMutationImpl*> mu_list;
     mu_list.push_back(static_cast<RowMutationImpl*>(row_mu));
     DistributeMutations(mu_list, true);
 }
 
 void TableImpl::ApplyMutation(const std::vector<RowMutation*>& row_mutations) {
-    std::vector<RowMutationImpl*> mu_list(row_mutations.size());
+    std::vector<RowMutationImpl*> mu_list;
     for (uint32_t i = 0; i < row_mutations.size(); i++) {
-        mu_list[i] = static_cast<RowMutationImpl*>(row_mutations[i]);
+        if (row_mutations[i]->GetError().GetType() != ErrorCode::kOK) {
+            ThreadPool::Task task =
+                boost::bind(&RowMutationImpl::RunCallback,
+                            static_cast<RowMutationImpl*>(row_mutations[i]));
+            _thread_pool->AddTask(task);
+            continue;
+        }
+        mu_list.push_back(static_cast<RowMutationImpl*>(row_mutations[i]));
     }
     DistributeMutations(mu_list, true);
 }
@@ -273,13 +288,6 @@ bool TableImpl::Get(const std::string& row_key, const std::string& family,
 ResultStream* TableImpl::Scan(const ScanDescriptor& desc, ErrorCode* err) {
     ScanDescImpl * impl = desc.GetImpl();
     impl->SetTableSchema(_table_schema);
-    if (impl->GetFilterString() != "") {
-        MutexLock lock(&_table_meta_mutex);
-        if (!impl->ParseFilterString()) {
-            // fail to parse filter string
-            return NULL;
-        }
-    }
     ResultStream * results = NULL;
     if (desc.IsAsync() && (_table_schema.raw_key() != GeneralKv)) {
         VLOG(6) << "activate async-scan";
@@ -346,6 +354,9 @@ void TableImpl::CommitScan(ScanTask* scan_task,
     if (impl->GetBufferSize() != 0) {
         request->set_buffer_limit(impl->GetBufferSize());
     }
+    if (impl->GetNumberLimit() != 0) {
+        request->set_number_limit(impl->GetNumberLimit());
+    }
     if (impl->GetTimerRange() != NULL) {
         TimeRange* time_range = request->mutable_timerange();
         time_range->CopyFrom(*(impl->GetTimerRange()));
@@ -369,8 +380,8 @@ void TableImpl::ScanCallBack(ScanTask* scan_task,
                              ScanTabletRequest* request,
                              ScanTabletResponse* response,
                              bool failed, int error_code) {
-    _perf_counter.rpc_w.Add(common::timer::get_micros() - request->timestamp());
-    _perf_counter.rpc_w_cnt.Inc();
+    _perf_counter.rpc_s.Add(common::timer::get_micros() - request->timestamp());
+    _perf_counter.rpc_s_cnt.Inc();
     ResultStreamImpl* stream = scan_task->stream;
 
     if (failed) {
@@ -410,15 +421,15 @@ void TableImpl::ScanCallBack(ScanTask* scan_task,
         _task_pool.PopTask(scan_task->GetId());
         CHECK_EQ(scan_task->GetRef(), 2);
         delete scan_task;
-    } else if (err == kKeyNotInRange) {
-        scan_task->IncRetryTimes();
-        ScanTabletAsync(scan_task, false);
     } else {
         scan_task->IncRetryTimes();
         ThreadPool::Task retry_task =
             boost::bind(&TableImpl::ScanTabletAsync, this, scan_task, false);
-        _thread_pool->DelayTask(
-            FLAGS_tera_sdk_retry_period * scan_task->RetryTimes(), retry_task);
+        CHECK(scan_task->RetryTimes() > 0);
+        int64_t retry_interval =
+            static_cast<int64_t>(pow(FLAGS_tera_sdk_delay_send_internal,
+                                     scan_task->RetryTimes() - 1) * 1000);
+        _thread_pool->DelayTask(retry_interval, retry_task);
     }
 }
 
@@ -484,7 +495,7 @@ void TableImpl::DistributeMutations(const std::vector<RowMutationImpl*>& mu_list
 
     for (uint32_t i = 0; i < mu_list.size(); i++) {
         RowMutationImpl* row_mutation = (RowMutationImpl*)mu_list[i];
-
+        _perf_counter.mutate_cnt.Inc();
         if (called_by_user) {
             row_mutation->SetId(_next_task_id.Inc());
             _task_pool.PutTask(row_mutation);
@@ -673,6 +684,7 @@ void TableImpl::CommitMutations(const std::string& server_addr,
             SerializeMutation(mu, mutation);
         }
         mu_id_list->push_back(row_mutation->GetId());
+        row_mutation->AddCommitTimes();
         row_mutation->DecRef();
     }
 
@@ -717,6 +729,7 @@ void TableImpl::MutateCallBack(std::vector<int64_t>* mu_id_list,
         }
 
         if (err == kTabletNodeOk) {
+            _perf_counter.mutate_ok_cnt.Inc();
             SdkTask* task = _task_pool.PopTask(mu_id);
             if (task == NULL) {
                 VLOG(10) << "mutation " << mu_id << " success but timeout: " << DebugString(row);
@@ -734,6 +747,7 @@ void TableImpl::MutateCallBack(std::vector<int64_t>* mu_id_list,
             _perf_counter.user_callback_cnt.Inc();
             continue;
         }
+        _perf_counter.mutate_fail_cnt.Inc();
 
         VLOG(10) << "fail to mutate table: " << _name
             << " row: " << DebugString(row)
@@ -749,6 +763,7 @@ void TableImpl::MutateCallBack(std::vector<int64_t>* mu_id_list,
         row_mutation->SetInternalError(err);
 
         if (err == kKeyNotInRange) {
+            _perf_counter.mutate_range_cnt.Inc();
             row_mutation->IncRetryTimes();
             not_in_range_list.push_back(row_mutation);
         } else {
@@ -785,6 +800,7 @@ void TableImpl::MutateCallBack(std::vector<int64_t>* mu_id_list,
 }
 
 void TableImpl::MutationTimeout(int64_t mutation_id) {
+    _perf_counter.mutate_timeout_cnt.Inc();
     SdkTask* task = _task_pool.PopTask(mutation_id);
     if (task == NULL) {
         return;
@@ -801,10 +817,14 @@ void TableImpl::MutationTimeout(int64_t mutation_id) {
                            row_mutation->GetMetaTimeStamp());
     }
     if (row_mutation->RetryTimes() == 0) {
-        row_mutation->SetError(ErrorCode::kTimeout);
+        _perf_counter.mutate_queue_timeout_cnt.Inc();
+        std::string err_reason = StringFormat("commit %lld times, retry 0 times, in %u ms.",
+                                              row_mutation->GetCommitTimes(), _timeout);
+        row_mutation->SetError(ErrorCode::kTimeout, err_reason);
     } else {
-        std::string err_reason = StringFormat("retry %u last error %s", row_mutation->RetryTimes(),
-                                              StatusCodeToString(err).c_str());
+        std::string err_reason = StringFormat("commit %lld times, retry %u times, in %u ms. last error: %s",
+                                              row_mutation->GetCommitTimes(), row_mutation->RetryTimes(),
+                                              _timeout, StatusCodeToString(err).c_str());
         row_mutation->SetError(ErrorCode::kSystem, err_reason);
     }
     // only for flow control
@@ -847,6 +867,7 @@ void TableImpl::DistributeReaders(const std::vector<RowReaderImpl*>& row_reader_
     }
 
     for (uint32_t i = 0; i < row_reader_list.size(); i++) {
+        _perf_counter.reader_cnt.Inc();
         RowReaderImpl* row_reader = (RowReaderImpl*)row_reader_list[i];
         if (called_by_user) {
             row_reader->SetId(_next_task_id.Inc());
@@ -1003,6 +1024,7 @@ void TableImpl::CommitReaders(const std::string server_addr,
         row_reader->ToProtoBuf(row_reader_info);
         // row_reader_info->CopyFrom(row_reader->GetRowReaderInfo());
         reader_id_list->push_back(row_reader->GetId());
+        row_reader->AddCommitTimes();
         row_reader->DecRef();
     }
     request->set_timestamp(common::timer::get_micros());
@@ -1037,7 +1059,7 @@ void TableImpl::ReaderCallBack(std::vector<int64_t>* reader_id_list,
 
     std::map<uint32_t, std::vector<int64_t>* > retry_times_list;
     std::vector<RowReaderImpl*> not_in_range_list;
-    uint32_t row_result_num = 0;
+    uint32_t row_result_index = 0;
     for (uint32_t i = 0; i < reader_id_list->size(); ++i) {
         int64_t reader_id = (*reader_id_list)[i];
 
@@ -1046,9 +1068,14 @@ void TableImpl::ReaderCallBack(std::vector<int64_t>* reader_id_list,
             err = response->detail().status(i);
         }
         if (err == kTabletNodeOk || err == kKeyNotExist || err == kSnapshotNotExist) {
+            _perf_counter.reader_ok_cnt.Inc();
             SdkTask* task = _task_pool.PopTask(reader_id);
             if (task == NULL) {
                 VLOG(10) << "reader " << reader_id << " success but timeout";
+                if (err == kTabletNodeOk) {
+                    // result is timeout, discard it
+                    row_result_index++;
+                }
                 continue;
             }
             CHECK_EQ(task->Type(), SdkTask::READ);
@@ -1056,7 +1083,7 @@ void TableImpl::ReaderCallBack(std::vector<int64_t>* reader_id_list,
 
             RowReaderImpl* row_reader = (RowReaderImpl*)task;
             if (err == kTabletNodeOk) {
-                row_reader->SetResult(response->detail().row_result(row_result_num++));
+                row_reader->SetResult(response->detail().row_result(row_result_index++));
                 row_reader->SetError(ErrorCode::kOK);
             } else if (err == kKeyNotExist) {
                 row_reader->SetError(ErrorCode::kNotFound, "not found");
@@ -1071,6 +1098,7 @@ void TableImpl::ReaderCallBack(std::vector<int64_t>* reader_id_list,
             _cur_reader_pending_counter.Dec();
             continue;
         }
+        _perf_counter.reader_fail_cnt.Inc();
 
         VLOG(10) << "fail to read table: " << _name
             << " errcode: " << StatusCodeToString(err);
@@ -1085,6 +1113,7 @@ void TableImpl::ReaderCallBack(std::vector<int64_t>* reader_id_list,
         row_reader->SetInternalError(err);
 
         if (err == kKeyNotInRange) {
+            _perf_counter.reader_range_cnt.Inc();
             row_reader->IncRetryTimes();
             not_in_range_list.push_back(row_reader);
         } else {
@@ -1137,6 +1166,7 @@ void TableImpl::DistributeReadersById(std::vector<int64_t>* reader_id_list) {
 }
 
 void TableImpl::ReaderTimeout(int64_t reader_id) {
+    _perf_counter.reader_timeout_cnt.Inc();
     SdkTask* task = _task_pool.PopTask(reader_id);
     if (task == NULL) {
         return;
@@ -1153,10 +1183,14 @@ void TableImpl::ReaderTimeout(int64_t reader_id) {
                            row_reader->GetMetaTimeStamp());
     }
     if (row_reader->RetryTimes() == 0) {
-        row_reader->SetError(ErrorCode::kTimeout);
+        _perf_counter.reader_queue_timeout_cnt.Inc();
+        std::string err_reason = StringFormat("commit %lld times, retry 0 times, in %u ms.",
+                                              row_reader->GetCommitTimes(), _timeout);
+        row_reader->SetError(ErrorCode::kTimeout, err_reason);
     } else {
-        std::string err_reason = StringFormat("retry %u last error %s", row_reader->RetryTimes(),
-                                              StatusCodeToString(err).c_str());
+        std::string err_reason = StringFormat("commit %lld times, retry %u times, in %u ms. last error: %s",
+                                              row_reader->GetCommitTimes(),  row_reader->RetryTimes(),
+                                              _timeout, StatusCodeToString(err).c_str());
         row_reader->SetError(ErrorCode::kSystem, err_reason);
     }
     int64_t perf_time = common::timer::get_micros();
@@ -1360,16 +1394,19 @@ void TableImpl::ScanMetaTableAsync(const std::string& key_start, const std::stri
     request->set_round_down(true);
 
     Closure<void, ScanTabletRequest*, ScanTabletResponse*, bool, int>* done =
-        NewClosure(this, &TableImpl::ScanMetaTableCallBack, key_start, key_end, expand_key_end);
+        NewClosure(this, &TableImpl::ScanMetaTableCallBack, key_start, key_end, expand_key_end, ::common::timer::get_micros());
     tabletnode_client_async.ScanTablet(request, response, done);
 }
 
 void TableImpl::ScanMetaTableCallBack(std::string key_start,
                                       std::string key_end,
                                       std::string expand_key_end,
+                                      int64_t start_time,
                                       ScanTabletRequest* request,
                                       ScanTabletResponse* response,
                                       bool failed, int error_code) {
+    _perf_counter.get_meta.Add(::common::timer::get_micros() - start_time);
+    _perf_counter.get_meta_cnt.Inc();
     if (failed) {
         if (error_code == sofa::pbrpc::RPC_ERROR_SERVER_SHUTDOWN ||
             error_code == sofa::pbrpc::RPC_ERROR_SERVER_UNREACHABLE ||
@@ -1783,71 +1820,6 @@ void TableImpl::ReadTableMetaCallBack(ErrorCode* ret_err,
     delete response;
 }
 
-static bool CalculateChecksumOfData(std::fstream& outfile, long size, std::string* hash_str) {
-    // 100 MB, (100 * 1024 * 1024) / 250 = 419,430
-    // cookie文件中，每个tablet的缓存大小约为100~200 Bytes，不妨计为250 Bytes，
-    // 那么，100MB可以支持约40万个tablets
-    const long MAX_SIZE = 100 * 1024 * 1024;
-
-    if(size > MAX_SIZE || size <= 0) {
-        LOG(INFO) << "[SDK COOKIE] invalid size : " << size;
-        return false;
-    }
-    if(hash_str == NULL) {
-        LOG(INFO) << "[SDK COOKIE] input argument `hash_str' is NULL";
-        return false;
-    }
-    std::string data(size, '\0');
-    outfile.read(const_cast<char*>(data.data()), size);
-    if(outfile.fail()) {
-        LOG(INFO) << "[SDK COOKIE] fail to read cookie file";
-        return false;
-    }
-    if (GetHashString(data, 0, hash_str) != 0) {
-        return false;
-    }
-    return true;
-}
-
-static bool IsCookieChecksumRight(const std::string& cookie_file) {
-    std::fstream outfile(cookie_file.c_str(), std::ios_base::in | std::ios_base::out);
-    int errno_saved = errno;
-    if(outfile.fail()) {
-        LOG(INFO) << "[SDK COOKIE] fail to open " << cookie_file.c_str()
-            << " " << strerror(errno_saved);
-        return false;
-    }
-
-    // gets file size, in bytes
-    outfile.seekp(0, std::ios_base::end);
-    long file_size = outfile.tellp();
-    if(file_size < HASH_STRING_LEN) {
-        LOG(INFO) << "[SDK COOKIE] invalid file size: " << file_size;
-        return false;
-    }
-
-    // calculates checksum according to cookie file content
-    std::string hash_str;
-    outfile.seekp(0, std::ios_base::beg);
-    if(!CalculateChecksumOfData(outfile, file_size - HASH_STRING_LEN, &hash_str)) {
-        return false;
-    }
-    LOG(INFO) << "[SDK COOKIE] checksum rebuild: " << hash_str;
-
-    // gets checksum in cookie file
-    char hash_str_saved[HASH_STRING_LEN + 1] = {'\0'};
-    outfile.read(hash_str_saved, HASH_STRING_LEN);
-    if(outfile.fail()) {
-        int errno_saved = errno;
-        LOG(INFO) << "[SDK COOKIE] fail to get checksum: " << strerror(errno_saved);
-        return false;
-    }
-    LOG(INFO) << "[SDK COOKIE] checksum in file: " << hash_str_saved;
-
-    outfile.close();
-    return strncmp(hash_str.c_str(), hash_str_saved, HASH_STRING_LEN) == 0;
-}
-
 bool TableImpl::RestoreCookie() {
     const std::string& cookie_dir = FLAGS_tera_sdk_cookie_path;
     if (!IsExist(cookie_dir)) {
@@ -1858,36 +1830,11 @@ bool TableImpl::RestoreCookie() {
             return true;
         }
     }
-    std::string cookie_file = GetCookieFilePathName();
-    if (!IsExist(cookie_file)) {
-        // cookie file is not exist
-        return true;
-    }
-    if(!IsCookieChecksumRight(cookie_file)) {
-        if(unlink(cookie_file.c_str()) == -1) {
-            int errno_saved = errno;
-            LOG(INFO) << "[SDK COOKIE] fail to delete broken cookie file: " << cookie_file
-                << ". reason: " << strerror(errno_saved);
-        } else {
-            LOG(INFO) << "[SDK COOKIE] delete broken cookie file" << cookie_file;
-        }
-        return true;
-    }
-
-    FileStream fs;
-    if (!fs.Open(cookie_file, FILE_READ)) {
-        LOG(INFO) << "[SDK COOKIE] fail to open " << cookie_file;
-        return true;
-    }
     SdkCookie cookie;
-    RecordReader record_reader;
-    record_reader.Reset(&fs);
-    if (!record_reader.ReadNextMessage(&cookie)) {
-        LOG(INFO) << "[SDK COOKIE] fail to parse sdk cookie, file: " << cookie_file;
+    std::string cookie_file = GetCookieFilePathName();
+    if (!::tera::sdk::RestoreCookie(cookie_file, true, &cookie)) {
         return true;
     }
-    fs.Close();
-
     if (cookie.table_name() != _name) {
         LOG(INFO) << "[SDK COOKIE] cookie name error: " << cookie.table_name()
             << ", should be: " << _name;
@@ -1898,7 +1845,8 @@ bool TableImpl::RestoreCookie() {
     for (int i = 0; i < cookie.tablets_size(); ++i) {
         const TabletMeta& meta = cookie.tablets(i).meta();
         const std::string& start_key = meta.key_range().key_start();
-        LOG(INFO) << "[SDK COOKIE] restore tablet, range [" << DebugString(start_key)
+        LOG(INFO) << "[SDK COOKIE] restore:" << meta.path()
+            << " range [" << DebugString(start_key)
             << " : " << DebugString(meta.key_range().key_end()) << "]";
         TabletMetaNode& node = _tablet_meta_list[start_key];
         node.meta = meta;
@@ -1918,114 +1866,9 @@ std::string TableImpl::GetCookieLockFilePathName(void) {
     return GetCookieFilePathName() + ".LOCK";
 }
 
-/*
- * If there is overtime/legacy cookie-lock-file, then delete it.
- * Normally, process which created cookie-lock-file would delete it after dumped.
- * But if this process crashed before delete cookie-lock-file.
- * Another process could call this function to delete legacy cookie-lock-file.
- *
- * create_time = [time of cookie-lock-file creation]
- * timeout     = [input parameter `timeout_secondes']
- *
- * create_time + timeout > current_time :=> legacy cookie-lock-file
- */
-void TableImpl::DeleteLegacyCookieLockFile(const std::string& lock_file, int timeout_seconds) {
-    struct stat lock_stat;
-    int ret = stat(lock_file.c_str(), &lock_stat);
-    if (ret == -1) {
-        return;
-    }
-    time_t curr_time = time(NULL);
-    if (((unsigned int)curr_time - lock_stat.st_atime) > timeout_seconds) {
-        // It's a long time since creation of cookie-lock-file, dumping must has done.
-        // So, delete the cookie-lock-file is safe.
-        int errno_saved = -1;
-        if (unlink(lock_file.c_str()) == -1) {
-            errno_saved = errno;
-            LOG(INFO) << "[SDK COOKIE] fail to delete cookie-lock-file: " << lock_file
-                       << ". reason: " << strerror(errno_saved);
-        }
-    }
-}
-
-void TableImpl::CloseAndRemoveCookieLockFile(int lock_fd, const std::string& cookie_lock_file) {
-    if (lock_fd < 0) {
-        return;
-    }
-    close(lock_fd);
-    if (unlink(cookie_lock_file.c_str()) == -1) {
-        int errno_saved = errno;
-        LOG(INFO) << "[SDK COOKIE] fail to delete cookie-lock-file: " << cookie_lock_file
-                   << ". reason: " << strerror(errno_saved);
-    }
-}
-
-static bool AppendChecksumToCookie(const std::string& cookie_file) {
-    std::fstream outfile(cookie_file.c_str(), std::ios_base::in | std::ios_base::out);
-    int errno_saved = errno;
-    if(outfile.fail()) {
-        LOG(INFO) << "[SDK COOKIE] fail to open " << cookie_file.c_str()
-            << " " << strerror(errno_saved);
-        return false;
-    }
-
-    // get file size, in bytes
-    outfile.seekp(0, std::ios_base::end);
-    long file_size = outfile.tellp();
-    if(file_size < HASH_STRING_LEN) {
-        LOG(INFO) << "[SDK COOKIE] invalid file size: " << file_size;
-        return false;
-    }
-
-    // calculates checksum according to cookie file content
-    outfile.seekp(0, std::ios_base::beg);
-    std::string hash_str;
-    if(!CalculateChecksumOfData(outfile, file_size, &hash_str)) {
-        return false;
-    }
-    LOG(INFO) << "[SDK COOKIE] file checksum: " << hash_str;
-
-    // append checksum to the end of cookie file
-    outfile.seekp(0, std::ios_base::end);
-    outfile.write(hash_str.c_str(), hash_str.length());
-    if(outfile.fail()) {
-        LOG(INFO) << "[SDK COOKIE] fail to append checksum";
-        return false;
-    }
-    outfile.close();
-    return true;
-}
-
-static bool AddOtherUserWritePermission(const std::string& cookie_file) {
-    struct stat st;
-    int ret = stat(cookie_file.c_str(), &st);
-    if(ret != 0) {
-        return false;
-    }
-    if((st.st_mode & S_IWOTH) == S_IWOTH) {
-        // other user has write permission already
-        return true;
-    }
-    return chmod(cookie_file.c_str(),
-             S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP | S_IROTH | S_IWOTH) == 0;
-}
-
 void TableImpl::DoDumpCookie() {
     std::string cookie_file = GetCookieFilePathName();
     std::string cookie_lock_file = GetCookieLockFilePathName();
-
-    int cookie_lock_file_timeout = 10; // in seconds
-    DeleteLegacyCookieLockFile(cookie_lock_file, cookie_lock_file_timeout);
-    int lock_fd = open(cookie_lock_file.c_str(), O_WRONLY | O_CREAT | O_EXCL, 0644);
-    if (lock_fd == -1) {
-        int errno_saved = errno;
-        if (errno != EEXIST) {
-            LOG(INFO) << "[SDK COOKIE] failed to create cookie-lock-file: " << cookie_lock_file
-                      << ". reason: " << strerror(errno_saved);
-        }
-        return;
-    }
-
     SdkCookie cookie;
     cookie.set_table_name(_name);
     {
@@ -2042,36 +1885,7 @@ void TableImpl::DoDumpCookie() {
             tablet->set_status(node.status);
         }
     }
-
-    FileStream fs;
-    if (!fs.Open(cookie_file, FILE_WRITE)) {
-        LOG(INFO) << "[SDK COOKIE] fail to open " << cookie_file;
-        CloseAndRemoveCookieLockFile(lock_fd, cookie_lock_file);
-        return;
-    }
-    RecordWriter record_writer;
-    record_writer.Reset(&fs);
-    if (!record_writer.WriteMessage(cookie)) {
-        LOG(INFO) << "[SDK COOKIE] fail to write cookie file " << cookie_file;
-        fs.Close();
-        CloseAndRemoveCookieLockFile(lock_fd, cookie_lock_file);
-        return;
-    }
-    fs.Close();
-
-    if(!AppendChecksumToCookie(cookie_file)) {
-        LOG(INFO) << "[SDK COOKIE] fail to append checksum to cookie file " << cookie_file;
-        CloseAndRemoveCookieLockFile(lock_fd, cookie_lock_file);
-        return;
-    }
-    if(!AddOtherUserWritePermission(cookie_file)) {
-        LOG(INFO) << "[SDK COOKIE] fail to chmod cookie file " << cookie_file;
-        CloseAndRemoveCookieLockFile(lock_fd, cookie_lock_file);
-        return;
-    }
-
-    CloseAndRemoveCookieLockFile(lock_fd, cookie_lock_file);
-    LOG(INFO) << "[SDK COOKIE] update local cookie success: " << cookie_file;
+    ::tera::sdk::DumpCookie(cookie_file, cookie_lock_file, cookie);
 }
 
 void TableImpl::DumpCookie() {
@@ -2101,6 +1915,14 @@ std::string TableImpl::GetCookieFileName(const std::string& tablename,
     return fname.str();
 }
 
+static int64_t CalcAverage(Counter& sum, Counter& cnt, int64_t interval) {
+    if (cnt.Get() == 0 || interval == 0) {
+        return 0;
+    } else {
+        return sum.Clear() * 1000 / cnt.Clear() / interval / 1000;
+    }
+}
+
 void TableImpl::DumpPerfCounterLogDelay() {
     DoDumpPerfCounterLog();
     ThreadPool::Task task =
@@ -2109,9 +1931,37 @@ void TableImpl::DumpPerfCounterLogDelay() {
 }
 
 void TableImpl::DoDumpPerfCounterLog() {
-    LOG(INFO) << "[Table " << _name << "] " <<  _perf_counter.ToLog()
-        << "pending_r: " << _cur_reader_pending_counter.Get() << ", "
-        << "pending_w: " << _cur_commit_pending_counter.Get();
+    LOG(INFO) << "[table " << _name << " PerfCounter][pending]"
+        << " pending_r: " << _cur_reader_pending_counter.Get()
+        << " pending_w: " << _cur_commit_pending_counter.Get();
+    _perf_counter.DoDumpPerfCounterLog("[table " + _name + " PerfCounter]");
+}
+
+void TableImpl::PerfCounter::DoDumpPerfCounterLog(const std::string& log_prefix) {
+    int64_t ts = common::timer::get_micros();
+    int64_t interval = (ts - start_time) / 1000;
+    LOG(INFO) << log_prefix << "[delay](ms)"
+        << " get meta: " << CalcAverage(get_meta, get_meta_cnt, interval)
+        << " callback: " << CalcAverage(user_callback, user_callback_cnt, interval)
+        << " rpc_r: " << CalcAverage(rpc_r, rpc_r_cnt, interval)
+        << " rpc_w: " << CalcAverage(rpc_w, rpc_w_cnt, interval)
+        << " rpc_s: " << CalcAverage(rpc_s, rpc_s_cnt, interval);
+
+    LOG(INFO) << log_prefix << "[mutation]"
+        << " all: " << mutate_cnt.Clear()
+        << " ok: " << mutate_ok_cnt.Clear()
+        << " fail: " << mutate_fail_cnt.Clear()
+        << " range: " << mutate_range_cnt.Clear()
+        << " timeout: " << mutate_timeout_cnt.Clear()
+        << " queue_timeout: " << mutate_queue_timeout_cnt.Clear();
+
+    LOG(INFO) << log_prefix << "[reader]"
+        << " all: " << reader_cnt.Clear()
+        << " ok: " << reader_ok_cnt.Clear()
+        << " fail: " << reader_fail_cnt.Clear()
+        << " range: " << reader_range_cnt.Clear()
+        << " timeout: " << reader_timeout_cnt.Clear()
+        << " queue_timeout: " << reader_queue_timeout_cnt.Clear();
 }
 
 void TableImpl::DelayTaskWrapper(ThreadPool::Task task, int64_t task_id) {
@@ -2139,26 +1989,6 @@ void TableImpl::ClearDelayTask() {
         _thread_pool->CancelTask(*it);
     }
     _delay_task_ids.clear();
-}
-
-static int64_t CalcAverage(Counter& sum, Counter& cnt, int64_t interval) {
-    if (cnt.Get() == 0 || interval == 0) {
-        return 0;
-    } else {
-        return sum.Clear() * 1000 / cnt.Clear() / interval / 1000;
-    }
-}
-
-std::string TableImpl::PerfCounter::ToLog() {
-    std::stringstream ss;
-    int64_t ts = common::timer::get_micros();
-    int64_t interval = (ts - start_time) / 1000;
-    ss << "rpc_r: " << CalcAverage(rpc_r, rpc_r_cnt, interval) << ", ";
-    ss << "rpc_w: " << CalcAverage(rpc_w, rpc_w_cnt, interval) << ", ";
-    ss << "rpc_s: " << CalcAverage(rpc_s, rpc_s_cnt, interval) << ", ";
-    ss << "callback: " << CalcAverage(user_callback, user_callback_cnt, interval) << ", ";
-    start_time = ts;
-    return ss.str();
 }
 
 void TableImpl::BreakRequest(int64_t task_id) {
