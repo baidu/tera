@@ -333,6 +333,7 @@ void DBImpl::DeleteObsoleteFiles() {
                 // (in case there is a race that allows other incarnations)
                 filenames[i] = *it;
                 keep = false;
+                manifest_set.erase(it);
               }
           }
           break;
