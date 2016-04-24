@@ -511,7 +511,7 @@ Table* ClientImpl::OpenTable(const std::string& table_name,
     return new TableWrapper(table_impl, this);
 }
 
-Table* ClientImpl::OpenTableInternal(const std::string& table_name,
+TableImpl* ClientImpl::OpenTableInternal(const std::string& table_name,
                                      ErrorCode* err) {
     std::string internal_table_name;
     if (!GetInternalTableName(table_name, err, &internal_table_name)) {

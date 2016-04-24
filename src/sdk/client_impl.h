@@ -26,6 +26,7 @@ struct TSInfo {
     uint32_t onsplit_count;
 };
 
+class TableImpl;
 class ClientImpl : public Client {
 public:
     ClientImpl(const std::string& user_identity,
@@ -122,6 +123,7 @@ public:
     std::string GetZkRootPath() { return _zk_root_path; }
 
     void CloseTable(const string& table_name);
+    TableImpl* OpenTableInternal(const string& table_name, ErrorCode* err);
 
 private:
     bool ListInternal(std::vector<TableInfo>* table_list,
@@ -153,7 +155,6 @@ private:
                           bool is_brief,
                           ErrorCode* err);
 
-    Table* OpenTableInternal(const string& table_name, ErrorCode* err);
 private:
     ClientImpl(const ClientImpl&);
     void operator=(const ClientImpl&);
