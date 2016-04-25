@@ -800,11 +800,11 @@ void TableImpl::MutateCallBack(std::vector<int64_t>* mu_id_list,
 }
 
 void TableImpl::MutationTimeout(int64_t mutation_id) {
-    _perf_counter.mutate_timeout_cnt.Inc();
     SdkTask* task = _task_pool.PopTask(mutation_id);
     if (task == NULL) {
         return;
     }
+    _perf_counter.mutate_timeout_cnt.Inc();
     CHECK_NOTNULL(task);
     CHECK_EQ(task->Type(), SdkTask::MUTATION);
 
@@ -1166,11 +1166,11 @@ void TableImpl::DistributeReadersById(std::vector<int64_t>* reader_id_list) {
 }
 
 void TableImpl::ReaderTimeout(int64_t reader_id) {
-    _perf_counter.reader_timeout_cnt.Inc();
     SdkTask* task = _task_pool.PopTask(reader_id);
     if (task == NULL) {
         return;
     }
+    _perf_counter.reader_timeout_cnt.Inc();
     CHECK_NOTNULL(task);
     CHECK_EQ(task->Type(), SdkTask::READ);
 
