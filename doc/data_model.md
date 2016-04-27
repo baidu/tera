@@ -72,15 +72,37 @@ tera的底层存储引擎采用了基于leveldb优化后的key-value存储。
 
 例如：
 
-（逻辑结构图）
+```
+          age     weight     country    language:en    language:cn
+John              54KG       USA        yes          
+Lilei     17                 China                     yes
+Toshi     19      60KG       Japan      no                 
+```
 
-在存储引擎中的存储格式为：
+在底层存储引擎中的存储格式为：
 
-（kv结构图）
+```
+John:country:USA
+John:language:en:yes
+John:weight:54KG
+Lilei:age:17
+Lilei:country:China
+Lilei:language:cn:yes
+Toshi:age:19
+Toshi:country:Japan
+Toshi:language:en:no
+Toshi:weight:60KG
+```
+
+其中：
+
+ * 空字段不占用实际存储
+ * 平展化后，同一行的数据存储在一起，方便进行前缀压缩
+ * 一行数据不会被分配至不同的表格分片中
 
 Tera中的数据删除采用标记删除方式，
 不同的删除操作通过插入不同的删除标记进行数据屏蔽，
-通过后台compact完成数据的物理删除，细节请参见（数据删除文档）。
+通过后台compact完成数据的物理删除，细节请[参见](https://github.com/baidu/tera/blob/doc/data-model/doc/data-deletion-in-tera.md)。
 
 从存储中看，删除标记与数据没有任何区别，可以统一存储。
 
@@ -131,8 +153,6 @@ Tera中的数据删除采用标记删除方式，
  * 内部完成key-value至表格结构的转换
 
 ### 2. 随机写
-
-流程：
 
  1. TabletIO::Write接受写请求
  1. 将请求传递至TabletWriter
