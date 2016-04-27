@@ -102,7 +102,7 @@ Toshi:weight:60KG
 
 Tera中的数据删除采用标记删除方式，
 不同的删除操作通过插入不同的删除标记进行数据屏蔽，
-通过后台compact完成数据的物理删除，细节请[参见](https://github.com/baidu/tera/blob/doc/data-model/doc/data-deletion-in-tera.md)。
+通过后台compact完成数据的物理删除，细节请[参见](https://github.com/baidu/tera/blob/master/doc/data-deletion-in-tera.md)。
 
 从存储中看，删除标记与数据没有任何区别，可以统一存储。
 
