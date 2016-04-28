@@ -7,6 +7,7 @@
 #include "common/mutex.h"
 #include "types.h"
 
+DEFINE_bool(tera_replication_read_try_all, false, "try to read all replicas instread of randomly choose one");
 DEFINE_bool(tera_replication_write_need_all_success, false, "return OK only if all replicas write success");
 DEFINE_string(tera_replication_conf_paths, "../conf/tera.flag", "paths for flag files. user \';\' to split");
 
@@ -281,7 +282,12 @@ public:
 
     virtual RowReaderReplicate* NewRowReader(const std::string& row_key) {
         std::vector<RowReader*> row_readers;
-        for (size_t i = 0; i < _tables.size(); i++) {
+        if (FLAGS_tera_replication_read_try_all) {
+            for (size_t i = 0; i < _tables.size(); i++) {
+                row_readers.push_back(_tables[i]->NewRowReader(row_key));
+            }
+        } else {
+            size_t i = random() % _tables.size();
             row_readers.push_back(_tables[i]->NewRowReader(row_key));
         }
         return new RowReaderReplicateImpl(row_readers);
