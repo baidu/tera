@@ -62,6 +62,7 @@ DEFINE_int64(timestamp, -1, "timestamp.");
 
 // using FLAGS instead of isatty() for compatibility
 DEFINE_bool(stdout_is_tty, true, "is stdout connected to a tty");
+DEFINE_bool(reorder_tablets, false, "reorder tablets by ts list");
 
 volatile int32_t g_start_time = 0;
 volatile int32_t g_end_time = 0;
@@ -192,6 +193,12 @@ const char* builtin_cmd_list[] = {
     "showts",
     "showts[x] [<tabletnode addr>]                                        \n\
                show all tabletnodes or single tabletnode info.            \n\
+               (show more detail when using suffix \"x\")",
+
+    "range",
+    "range[x]  <tablename>                                                \n\
+               get all tablets range.                                     \n\
+               --reorder_tablets=true ordered tablets by ts addr          \n\
                (show more detail when using suffix \"x\")",
 
     "user",
@@ -2846,6 +2853,81 @@ int32_t UserOp(Client* client, int32_t argc, char** argv, ErrorCode* err) {
     return -1;
 }
 
+void ReorderTabletList(std::vector<TabletInfo>* tablets) {
+    if (tablets->size() <= 1) {
+        return;
+    }
+
+    // ordered all tablets by ts
+    std::map<std::string, std::vector<TabletInfo> > tablet_map;
+    size_t max_tablet = 0;
+    for (size_t i = 0; i < tablets->size(); ++i) {
+        std::vector<TabletInfo>& v = tablet_map[tablets->at(i).server_addr];
+        v.push_back(tablets->at(i));
+        if (v.size() > max_tablet) {
+            max_tablet = v.size();
+        }
+    }
+
+    size_t ts_num = tablet_map.size();
+    std::vector<std::vector<TabletInfo> > tablet_vector;
+    tablet_vector.resize(ts_num);
+    std::map<std::string, std::vector<TabletInfo> >::iterator it =
+        tablet_map.begin();
+    for (size_t i = 0; it != tablet_map.end(); ++it, ++i) {
+        tablet_vector[i].swap(it->second);
+    }
+
+    // recover tablet list
+    std::vector<TabletInfo> tablets_t;
+    for (size_t y = 0; y < max_tablet; y++) {
+        for (size_t x = 0; x < ts_num; x++) {
+            if (y < tablet_vector[x].size()) {
+                tablets_t.push_back(tablet_vector[x][y]);
+            }
+        }
+    }
+    CHECK(tablets_t.size() == tablets->size());
+    tablets->swap(tablets_t);
+}
+
+int32_t RangeOp(Client* client, int32_t argc, char** argv, ErrorCode* err) {
+    if (argc != 3) {
+        PrintCmdHelpInfo(argv[1]);
+        return -1;
+    }
+
+    bool is_x = (std::string(argv[1]) == "rangex");
+    std::string tablename = argv[2];
+
+    std::vector<TabletInfo> tablet_list;
+    if (!client->GetTabletLocation(tablename, &tablet_list, err)) {
+        LOG(ERROR) << "fail to list tablet info: " << tablename;
+        return -2;
+    }
+
+    if (FLAGS_reorder_tablets) {
+        ReorderTabletList(&tablet_list);
+    }
+
+    std::vector<TabletInfo>::iterator it = tablet_list.begin();
+    for (; it != tablet_list.end(); ++it) {
+        if (it->start_key.empty()) {
+            it->start_key = "-";
+        }
+        if (it->end_key.empty()) {
+            it->end_key = "-";
+        }
+        if (is_x) {
+            std::cout << it->server_addr << "\t" << it->path << "\t"
+                << it->start_key << "\t" << it->end_key << std::endl;
+        } else {
+            std::cout << it->start_key << "\t" << it->end_key << std::endl;
+        }
+    }
+    return 0;
+}
+
 int32_t HelpOp(int32_t argc, char** argv) {
     if (argc == 2) {
         PrintAllCmd();
@@ -2941,10 +3023,12 @@ int ExecuteCommand(Client* client, int argc, char* argv[]) {
         ret = ReloadConfigOp(client, argc, argv, &error_code);
     } else if (cmd == "cookie") {
         ret = CookieOp(argc, argv);
-    } else if (cmd == "version") {
-        PrintSystemVersion();
     } else if (cmd == "snapshot") {
         ret = SnapshotOp(client, argc, argv, &error_code);
+    } else if (cmd == "range" || cmd == "rangex") {
+        ret = RangeOp(client, argc, argv, &error_code);
+    } else if (cmd == "version") {
+        PrintSystemVersion();
     } else if (cmd == "help") {
         HelpOp(argc, argv);
     } else {
@@ -2959,6 +3043,14 @@ int ExecuteCommand(Client* client, int argc, char* argv[]) {
 
 int main(int argc, char* argv[]) {
     ::google::ParseCommandLineFlags(&argc, &argv, true);
+
+    if (argc > 1 && std::string(argv[1]) == "version") {
+        PrintSystemVersion();
+        return 0;
+    } else if (argc > 1 && std::string(argv[1]) == "help") {
+        HelpOp(argc, argv);
+        return 0;
+    }
 
     Client* client = Client::NewClient(FLAGS_flagfile, NULL);
     if (client == NULL) {
