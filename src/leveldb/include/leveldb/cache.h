@@ -86,7 +86,7 @@ class Cache {
   virtual uint64_t NewId() = 0;
 
   // Return the look-up hit rate.
-  virtual double HitRate() = 0;
+  virtual double HitRate(bool force_clear = false) = 0;
 
  private:
   void LRU_Remove(Handle* e);

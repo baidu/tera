@@ -112,6 +112,8 @@ public:
 
     double GetBlockCacheHitRate();
 
+    double GetTableCacheHitRate();
+
     TabletNodeSysInfo& GetSysInfo();
 
     void RefreshSysInfo();

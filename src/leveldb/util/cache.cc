@@ -328,13 +328,19 @@ class ShardedLRUCache : public Cache {
     MutexLock l(&id_mutex_);
     return ++(last_id_);
   }
-  virtual double HitRate() {
+  virtual double HitRate(bool force_clear) {
     MutexLock l(&id_mutex_);
+    double ret;
     if (lookups_ > 0) {
-      return (double)hits_ / (double)lookups_;
+      ret = (double)hits_ / (double)lookups_;
     } else {
-      return 0.0;
+      ret = 0.0;
     }
+    if (force_clear) {
+      hits_ = 0;
+      lookups_ = 0;
+    }
+    return ret;
   }
 };
 
