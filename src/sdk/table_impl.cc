@@ -71,6 +71,8 @@ TableImpl::TableImpl(const std::string& table_name,
       _commit_size(FLAGS_tera_sdk_batch_size),
       _write_commit_timeout(FLAGS_tera_sdk_write_send_interval),
       _read_commit_timeout(FLAGS_tera_sdk_read_send_interval),
+      _mutation_batch_seq(0),
+      _reader_batch_seq(0),
       _max_commit_pending_num(FLAGS_tera_sdk_max_mutation_pending_num),
       _max_reader_pending_num(FLAGS_tera_sdk_max_reader_pending_num),
       _meta_cond(&_meta_mutex),
@@ -590,48 +592,58 @@ void TableImpl::DistributeMutationsById(std::vector<int64_t>* mu_id_list) {
 void TableImpl::PackMutations(const std::string& server_addr,
                               std::vector<RowMutationImpl*>& mu_list,
                               bool flush) {
-    if (flush) {
-        CommitMutations(server_addr, mu_list);
-        return;
-    }
-
     MutexLock lock(&_mutation_batch_mutex);
     TaskBatch* mutation_batch = NULL;
-    std::map<std::string, TaskBatch>::iterator it =
-        _mutation_batch_map.find(server_addr);
-    if (it == _mutation_batch_map.end()) {
-        mutation_batch = &_mutation_batch_map[server_addr];
-        mutation_batch->row_id_list = new std::vector<int64_t>;
-        ThreadPool::Task task =
-            boost::bind(&TableImpl::MutationBatchTimeout, this, server_addr);
-        int64_t timer_id = _thread_pool->DelayTask(_write_commit_timeout, task);
-        mutation_batch->timer_id = timer_id;
-    } else {
-        mutation_batch = &it->second;
-    }
-
     for (size_t i = 0; i < mu_list.size(); ++i) {
+        // find existing batch or create a new batch
+        if (mutation_batch == NULL) {
+            std::map<std::string, TaskBatch>::iterator it = _mutation_batch_map.find(server_addr);
+            if (it != _mutation_batch_map.end()) {
+                mutation_batch = &it->second;
+            } else {
+                mutation_batch = &_mutation_batch_map[server_addr];
+                mutation_batch->sequence_num = _mutation_batch_seq++;
+                mutation_batch->row_id_list = new std::vector<int64_t>;
+                ThreadPool::Task task = boost::bind(&TableImpl::MutationBatchTimeout, this,
+                                                    server_addr, mutation_batch->sequence_num);
+                int64_t timer_id = _thread_pool->DelayTask(_write_commit_timeout, task);
+                mutation_batch->timer_id = timer_id;
+                mutation_batch->byte_size = 0;
+            }
+        }
+
+        // put mutation into the batch
         RowMutationImpl* row_mutation = mu_list[i];
         mutation_batch->row_id_list->push_back(row_mutation->GetId());
+        mutation_batch->byte_size += row_mutation->Size();
         row_mutation->DecRef();
-    }
 
-    if (mutation_batch->row_id_list->size() >= _commit_size) {
-        std::vector<int64_t>* mu_id_list = mutation_batch->row_id_list;
-        uint64_t timer_id = mutation_batch->timer_id;
-        _mutation_batch_mutex.Unlock();
-        if (_thread_pool->CancelTask(timer_id)) {
-            _mutation_batch_mutex.Lock();
+        // commit the batch if:
+        // 1) batch_byte_size >= max_rpc_byte_size
+        // for the *LAST* batch, commit it if:
+        // 2) any mutation is sync (flush == true)
+        // 3) batch_row_num >= min_batch_row_num
+        if (mutation_batch->byte_size >= kMaxRpcSize ||
+            (i == mu_list.size() - 1 &&
+             (flush || mutation_batch->row_id_list->size() >= _commit_size))) {
+            std::vector<int64_t>* mu_id_list = mutation_batch->row_id_list;
+            uint64_t timer_id = mutation_batch->timer_id;
+            const bool non_block_cancel = true;
+            bool is_running = false;
+            if (!_thread_pool->CancelTask(timer_id, non_block_cancel, &is_running)) {
+                CHECK(is_running); // this delay task must be waiting for _mutation_batch_mutex
+            }
             _mutation_batch_map.erase(server_addr);
             _mutation_batch_mutex.Unlock();
             CommitMutationsById(server_addr, *mu_id_list);
             delete mu_id_list;
+            mutation_batch = NULL;
+            _mutation_batch_mutex.Lock();
         }
-        _mutation_batch_mutex.Lock();
     }
 }
 
-void TableImpl::MutationBatchTimeout(std::string server_addr) {
+void TableImpl::MutationBatchTimeout(std::string server_addr, uint64_t batch_seq) {
     std::vector<int64_t>* mu_id_list = NULL;
     {
         MutexLock lock(&_mutation_batch_mutex);
@@ -641,6 +653,9 @@ void TableImpl::MutationBatchTimeout(std::string server_addr) {
             return;
         }
         TaskBatch* mutation_batch = &it->second;
+        if (mutation_batch->sequence_num != batch_seq) {
+            return;
+        }
         mu_id_list = mutation_batch->row_id_list;
         _mutation_batch_map.erase(it);
     }
@@ -688,6 +703,7 @@ void TableImpl::CommitMutations(const std::string& server_addr,
         row_mutation->DecRef();
     }
 
+    VLOG(20) << "commit " << mu_list.size() << " mutations to " << server_addr;
     request->set_timestamp(common::timer::get_micros());
     Closure<void, WriteTabletRequest*, WriteTabletResponse*, bool, int>* done =
         NewClosure(this, &TableImpl::MutateCallBack, mu_id_list);
@@ -800,11 +816,11 @@ void TableImpl::MutateCallBack(std::vector<int64_t>* mu_id_list,
 }
 
 void TableImpl::MutationTimeout(int64_t mutation_id) {
-    _perf_counter.mutate_timeout_cnt.Inc();
     SdkTask* task = _task_pool.PopTask(mutation_id);
     if (task == NULL) {
         return;
     }
+    _perf_counter.mutate_timeout_cnt.Inc();
     CHECK_NOTNULL(task);
     CHECK_EQ(task->Type(), SdkTask::MUTATION);
 
@@ -940,17 +956,17 @@ void TableImpl::PackReaders(const std::string& server_addr,
                             std::vector<RowReaderImpl*>& reader_list) {
     MutexLock lock(&_reader_batch_mutex);
     TaskBatch* reader_buffer = NULL;
-    std::map<std::string, TaskBatch>::iterator it =
-        _reader_batch_map.find(server_addr);
-    if (it == _reader_batch_map.end()) {
+    std::map<std::string, TaskBatch>::iterator it = _reader_batch_map.find(server_addr);
+    if (it != _reader_batch_map.end()) {
+        reader_buffer = &it->second;
+    } else {
         reader_buffer = &_reader_batch_map[server_addr];
+        reader_buffer->sequence_num = _reader_batch_seq++;
         reader_buffer->row_id_list = new std::vector<int64_t>;
-        ThreadPool::Task task =
-            boost::bind(&TableImpl::ReaderBatchTimeout, this, server_addr);
+        ThreadPool::Task task = boost::bind(&TableImpl::ReaderBatchTimeout, this,
+                                            server_addr, reader_buffer->sequence_num);
         uint64_t timer_id = _thread_pool->DelayTask(_read_commit_timeout, task);
         reader_buffer->timer_id = timer_id;
-    } else {
-        reader_buffer = &it->second;
     }
 
     for (size_t i = 0; i < reader_list.size(); ++i) {
@@ -962,19 +978,21 @@ void TableImpl::PackReaders(const std::string& server_addr,
     if (reader_buffer->row_id_list->size() >= _commit_size) {
         std::vector<int64_t>* reader_id_list = reader_buffer->row_id_list;
         uint64_t timer_id = reader_buffer->timer_id;
-        _reader_batch_mutex.Unlock();
-        if (_thread_pool->CancelTask(timer_id)) {
-            _reader_batch_mutex.Lock();
-            _reader_batch_map.erase(server_addr);
-            _reader_batch_mutex.Unlock();
-            CommitReadersById(server_addr, *reader_id_list);
-            delete reader_id_list;
+        const bool non_block_cancel = true;
+        bool is_running = false;
+        if (!_thread_pool->CancelTask(timer_id, non_block_cancel, &is_running)) {
+            CHECK(is_running); // this delay task must be waiting for _reader_batch_map
         }
+        _reader_batch_map.erase(server_addr);
+        _reader_batch_mutex.Unlock();
+        CommitReadersById(server_addr, *reader_id_list);
+        delete reader_id_list;
+        reader_buffer = NULL;
         _reader_batch_mutex.Lock();
     }
 }
 
-void TableImpl::ReaderBatchTimeout(std::string server_addr) {
+void TableImpl::ReaderBatchTimeout(std::string server_addr, uint64_t batch_seq) {
     std::vector<int64_t>* reader_id_list = NULL;
     {
         MutexLock lock(&_reader_batch_mutex);
@@ -984,6 +1002,9 @@ void TableImpl::ReaderBatchTimeout(std::string server_addr) {
             return;
         }
         TaskBatch* reader_buffer = &it->second;
+        if (reader_buffer->sequence_num != batch_seq) {
+            return;
+        }
         reader_id_list = reader_buffer->row_id_list;
         _reader_batch_map.erase(it);
     }
@@ -1166,11 +1187,11 @@ void TableImpl::DistributeReadersById(std::vector<int64_t>* reader_id_list) {
 }
 
 void TableImpl::ReaderTimeout(int64_t reader_id) {
-    _perf_counter.reader_timeout_cnt.Inc();
     SdkTask* task = _task_pool.PopTask(reader_id);
     if (task == NULL) {
         return;
     }
+    _perf_counter.reader_timeout_cnt.Inc();
     CHECK_NOTNULL(task);
     CHECK_EQ(task->Type(), SdkTask::READ);
 

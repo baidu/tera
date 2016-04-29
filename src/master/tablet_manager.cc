@@ -57,10 +57,16 @@ std::ostream& operator << (std::ostream& o, const TabletPtr& tablet) {
     return o;
 }
 
-Tablet::Tablet(const TabletMeta& meta) : m_meta(meta) {}
+Tablet::Tablet(const TabletMeta& meta)
+    : m_meta(meta),
+      m_update_time(0),
+      m_load_time(std::numeric_limits<int64_t>::max()) {}
 
 Tablet::Tablet(const TabletMeta& meta, TablePtr table)
-    : m_meta(meta), m_table(table) {}
+    : m_meta(meta),
+      m_table(table),
+      m_update_time(0),
+      m_load_time(std::numeric_limits<int64_t>::max()) {}
 
 Tablet::~Tablet() {
     m_table.reset();
@@ -314,6 +320,34 @@ bool Tablet::SetAddrAndStatusIf(const std::string& server_addr,
         return true;
     }
     return false;
+}
+
+int64_t Tablet::UpdateTime() {
+    MutexLock lock(&m_mutex);
+    return m_update_time;
+}
+
+int64_t Tablet::SetUpdateTime(int64_t timestamp) {
+    MutexLock lock(&m_mutex);
+    int64_t ts = m_update_time;
+    m_update_time = timestamp;
+    return ts;
+}
+
+int64_t Tablet::LoadTime() {
+    MutexLock lock(&m_mutex);
+    if (m_meta.status() != kTableReady) {
+        return std::numeric_limits<int>::max();
+    } else {
+        return m_load_time;
+    }
+}
+
+int64_t Tablet::SetLoadTime(int64_t timestamp) {
+    MutexLock lock(&m_mutex);
+    int64_t ts = m_load_time;
+    m_load_time = timestamp;
+    return ts;
 }
 
 int32_t Tablet::AddSnapshot(uint64_t snapshot) {
@@ -1524,7 +1558,7 @@ bool TabletManager::DumpMetaTable(const std::string& meta_tablet_addr,
         mutation->set_value(packed_value);
     }
     // dump tablet record
-    int32_t request_size = 0;
+    uint64_t request_size = 0;
     for (size_t i = 0; i < tablets.size(); i++) {
         std::string packed_key;
         std::string packed_value;

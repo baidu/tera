@@ -31,9 +31,11 @@ public:
         kNotImpl
     };
     ErrorCode();
-    void SetFailed(ErrorCodeType err, const std::string& reason = "");
+    std::string ToString() const;
+
     std::string GetReason() const;
     ErrorCodeType GetType() const;
+    void SetFailed(ErrorCodeType err, const std::string& reason = "");
 
 private:
     ErrorCodeType _err;

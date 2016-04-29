@@ -124,6 +124,11 @@ public:
                              std::string* packed_value = NULL);
     bool GetSchemaIsSyncing();
 
+    int64_t UpdateTime();
+    int64_t SetUpdateTime(int64_t timestamp);
+    int64_t LoadTime();
+    int64_t SetLoadTime(int64_t timestamp);
+
 private:
     Tablet(const Tablet&) {}
     Tablet& operator=(const Tablet&) {return *this;}
@@ -134,6 +139,8 @@ private:
     mutable Mutex m_mutex;
     TabletMeta m_meta;
     TablePtr m_table;
+    int64_t m_update_time;
+    int64_t m_load_time;
     std::string m_server_id;
     std::string m_expect_server_addr;
     std::list<TabletCounter> m_counter_list;
