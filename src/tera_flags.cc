@@ -256,7 +256,7 @@ DEFINE_string(tera_sdk_cookie_path, "/tmp/.tera_cookie", "the default path of sd
 DEFINE_int32(tera_sdk_cookie_update_interval, 600, "the interval of cookie updating(s)");
 
 DEFINE_bool(tera_sdk_perf_counter_enabled, true, "enable performance counter log");
-DEFINE_int64(tera_sdk_perf_counter_log_interval, 1, "the interval of performance counter log dumping");
+DEFINE_int64(tera_sdk_perf_counter_log_interval, 60, "the interval period (in sec) of performance counter log dumping");
 
 DEFINE_int64(tera_sdk_scan_buffer_size, 65536, "default buffer limit for scan");
 DEFINE_int64(tera_sdk_scan_number_limit, 1000000000, "default number limit for scan");
