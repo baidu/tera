@@ -2351,7 +2351,8 @@ int32_t FindTsOp(Client* client, int32_t argc, char** argv, ErrorCode* err) {
     }
 
     std::string tablename = argv[2];
-    TableImplPtr table((TableImpl*)client->OpenTable(tablename, err));
+    tera::ClientImpl* client_impl = static_cast<tera::ClientImpl*>(client);
+    TableImplPtr table(client_impl->OpenTableInternal(tablename, err));
     if (table == NULL) {
         LOG(ERROR) << "fail to open table";
         return -1;
