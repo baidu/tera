@@ -114,7 +114,8 @@ void MemTable::Add(SequenceNumber s, ValueType type,
   last_seq_ = s;
 }
 
-bool MemTable::Get(const LookupKey& key, std::string* value, const std::map<uint64_t, uint64_t>& rollbacks, Status* s) {
+bool MemTable::Get(const LookupKey& key, std::string* value, uint64_t* sequence_number,
+                   const std::map<uint64_t, uint64_t>& rollbacks, Status* s) {
   Slice memkey = key.memtable_key();
   Table::Iterator iter(&table_);
   iter.Seek(memkey.data());
@@ -149,6 +150,7 @@ bool MemTable::Get(const LookupKey& key, std::string* value, const std::map<uint
                   compact_strategy_factory_->NewInstance() : NULL;
           if (!strategy || !strategy->Drop(Slice(key_ptr, key_length - 8), 0)) {
               value->assign(v.data(), v.size());
+              *sequence_number = ikey.sequence;
           } else {
               *s = Status::NotFound(Slice());
           }

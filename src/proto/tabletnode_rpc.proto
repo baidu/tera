@@ -152,11 +152,12 @@ message Mutation {
 message RowMutationSequence {
     required bytes row_key = 1;
     repeated Mutation mutation_sequence = 2;
+    optional int64 last_sequence = 3 [default = -1];
 }
 
 message WriteTabletRequest {
     optional uint64 sequence_id = 1;
-    required string tablet_name = 2;    
+    required string tablet_name = 2;
     //repeated KeyValuePair pair_list = 3;  // for compatible
     optional bool is_sync = 4 [default = false];
     optional bool is_instant = 5 [default = false];
@@ -271,6 +272,9 @@ message RowReaderInfo {
     optional TimeRange time_range = 3;
     optional FilterList filter_list = 4;
     optional uint32 max_version = 5;
+    optional uint64 snapshot = 6;
+    optional bool is_tmp_snapshot = 7;
+    optional bool get_tmp_snapshot = 8;
 }
 
 message ReadTabletRequest {
@@ -279,7 +283,7 @@ message ReadTabletRequest {
     //repeated bytes key_list = 3; 
     repeated RowReaderInfo row_info_list = 4;
     //repeated KeyValuePair key_values = 5;
-    optional uint64 snapshot_id = 6;
+    //optional uint64 snapshot_id = 6;
     optional int64 timestamp = 7 [default = 0];
     optional int64 client_timeout_ms = 8 [default = 0];
 }
