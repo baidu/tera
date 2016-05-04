@@ -610,7 +610,7 @@ bool TabletIO::GetDataSize(uint64_t* size, std::vector<uint64_t>* lgsize,
     return true;
 }
 
-bool TabletIO::Read(const leveldb::Slice& key, std::string* value,
+bool TabletIO::Read(const leveldb::Slice& key, std::string* value, uint64_t* sequence_num,
                     uint64_t snapshot_id, StatusCode* status) {
     CHECK_NOTNULL(m_db);
     leveldb::ReadOptions read_option(&m_ldb_options);
@@ -622,7 +622,7 @@ bool TabletIO::Read(const leveldb::Slice& key, std::string* value,
         }
     }
     read_option.rollbacks = rollbacks_;
-    leveldb::Status db_status = m_db->Get(read_option, key, value);
+    leveldb::Status db_status = m_db->Get(read_option, key, value, sequence_num);
     if (!db_status.ok()) {
         // LOG(ERROR) << "fail to read value for key: " << key.data()
         //    << " from tablet: " << m_tablet_path;
@@ -667,6 +667,7 @@ bool TabletIO::LowLevelScan(const std::string& start_tera_key,
                             const std::string& end_row_key,
                             const ScanOptions& scan_options,
                             RowResult* value_list,
+                            uint64_t* sequence_number,
                             KeyValuePair* next_start_point,
                             uint32_t* read_row_count,
                             uint32_t* read_bytes,
@@ -681,8 +682,8 @@ bool TabletIO::LowLevelScan(const std::string& start_tera_key,
     ScanContext scan_context(m_ldb_options.compact_strategy_factory);
 
     bool ret = LowLevelScan(start_tera_key, end_row_key, scan_options, it, &scan_context,
-                            value_list, next_start_point, read_row_count, read_bytes,
-                            is_complete, status);
+                            value_list, sequence_number, next_start_point, read_row_count,
+                            read_bytes, is_complete, status);
     delete it;
     return ret;
 }
@@ -818,6 +819,7 @@ inline bool TabletIO::LowLevelScan(const std::string& start_tera_key,
                                    leveldb::Iterator* it,
                                    ScanContext* scan_context,
                                    RowResult* value_list,
+                                   uint64_t* sequence_number,
                                    KeyValuePair* next_start_point,
                                    uint32_t* read_row_count,
                                    uint32_t* read_bytes,
@@ -828,6 +830,8 @@ inline bool TabletIO::LowLevelScan(const std::string& start_tera_key,
     std::string& last_col = scan_context->last_col;
     std::string& last_qual = scan_context->last_qual;
     uint32_t& version_num = scan_context->version_num;
+    std::string& last_cell_key = scan_context->last_cell_key;
+    uint64_t& max_sequence = scan_context->max_sequence;
 
     std::list<KeyValuePair> row_buf;
     uint32_t buffer_size = 0;
@@ -875,10 +879,27 @@ inline bool TabletIO::LowLevelScan(const std::string& start_tera_key,
             break;
         }
 
+        // begin to scan next row
+        if (key.compare(last_cell_key) != 0) {
+            last_cell_key.assign(key.data(), key.size());
+            *read_row_count += 1;
+            if (row_buf.size() > 0) {
+                ProcessRowBuffer(row_buf, scan_options, value_list, &buffer_size, &number_limit);
+                row_buf.clear();
+            }
+            max_sequence = 0;
+        }
+
+        if (type == leveldb::TKT_MAX_SEQ && value.size() == sizeof(uint64_t)) {
+            max_sequence = *(uint64_t*)value.data();
+            it->Next();
+            continue;
+        }
+
         const std::set<std::string>& cf_set = scan_options.iter_cf_set;
         if (cf_set.size() > 0 &&
             cf_set.find(col.ToString()) == cf_set.end() &&
-            type != leveldb::TKT_DEL) {
+            type > leveldb::TKT_DEL) {
             // donot need this column, skip row deleting tag
             it->Next();
             continue;
@@ -906,13 +927,6 @@ inline bool TabletIO::LowLevelScan(const std::string& start_tera_key,
             }
             it->Next();
             continue;
-        }
-
-        // begin to scan next row
-        if (key.compare(last_key) != 0) {
-            *read_row_count += 1;
-            ProcessRowBuffer(row_buf, scan_options, value_list, &buffer_size, &number_limit);
-            row_buf.clear();
         }
 
         // max version filter
@@ -968,7 +982,7 @@ inline bool TabletIO::LowLevelScan(const std::string& start_tera_key,
         && !IsCompleteRow(row_buf, it)
         && ShouldFilterRow(scan_options, row_buf, it)) {
         GotoNextRow(row_buf, it, &next_start_kv_pair);
-    } else {
+    } else if (row_buf.size() > 0) {
         // process the last row of tablet
         ProcessRowBuffer(row_buf, scan_options, value_list, &buffer_size, &number_limit);
     }
@@ -996,6 +1010,9 @@ inline bool TabletIO::LowLevelScan(const std::string& start_tera_key,
             next_start_point->CopyFrom(next_start_kv_pair);
         }
         *is_complete = false;
+    }
+    if (sequence_number != NULL) {
+        *sequence_number = max_sequence;
     }
     return true;
 }
@@ -1170,7 +1187,8 @@ bool TabletIO::LowLevelSeek(const std::string& row_key,
 }
 
 bool TabletIO::ReadCells(const RowReaderInfo& row_reader, RowResult* value_list,
-                         uint64_t snapshot_id, StatusCode* status) {
+                         uint64_t* sequence_number, uint64_t snapshot_id,
+                         StatusCode* status) {
     {
         MutexLock lock(&m_mutex);
         if (m_status != kReady && m_status != kOnSplit
@@ -1195,7 +1213,7 @@ bool TabletIO::ReadCells(const RowReaderInfo& row_reader, RowResult* value_list,
         if (RawKeyType() == TTLKv) {
             key.append(8, '\0');
         }
-        if (!Read(key, &value, snapshot_id, status)) {
+        if (!Read(key, &value, sequence_number, snapshot_id, status)) {
             m_counter.read_rows.Inc();
             row_read_delay.Add(get_micros() - read_ms);
             {
@@ -1262,7 +1280,7 @@ bool TabletIO::ReadCells(const RowReaderInfo& row_reader, RowResult* value_list,
         uint32_t read_bytes = 0;
         bool is_complete = false;
         ret = LowLevelScan(start_tera_key, end_row_key, scan_options,
-                           value_list, NULL, &read_row_count, &read_bytes,
+                           value_list, sequence_number, NULL, &read_row_count, &read_bytes,
                            &is_complete, status);
     }
     m_counter.read_rows.Inc();
@@ -1412,7 +1430,7 @@ bool TabletIO::ScanRowsRestricted(const ScanTabletRequest* request,
     StatusCode status = kTabletNodeOk;
     bool ret = false;
     if (LowLevelScan(start_tera_key, end_row_key, scan_options,
-                     response->mutable_results(), response->mutable_next_start_point(),
+                     response->mutable_results(), NULL, response->mutable_next_start_point(),
                      &read_row_count, &read_bytes, &is_complete, &status)) {
         response->set_complete(is_complete);
         m_counter.scan_rows.Add(read_row_count);
@@ -1463,7 +1481,7 @@ bool TabletIO::ScanRowsStreaming(const ScanTabletRequest* request,
     while (status == kTabletNodeOk) {
         RowResult value_list;
         if (LowLevelScan(start_tera_key, end_row_key, scan_options, it, &scan_context,
-                         &value_list, NULL, &read_row_count, &read_bytes,
+                         &value_list, NULL, NULL, &read_row_count, &read_bytes,
                          &is_complete, &status)) {
             m_counter.scan_rows.Add(read_row_count);
             m_counter.scan_size.Add(read_bytes);
@@ -1883,6 +1901,39 @@ void TabletIO::ProcessRowBuffer(std::list<KeyValuePair>& row_buf,
     }
 }
 
+uint64_t TabletIO::GetTmpSnapshot(uint64_t snapshot_sequence, StatusCode* status) {
+    {
+        MutexLock lock(&m_mutex);
+        if (m_status != kReady) {
+            SetStatusCode(m_status, status);
+            return 0;
+        }
+        m_db_ref_count++;
+    }
+    uint64_t snapshot = m_db->GetSnapshot(snapshot_sequence);
+    MutexLock lock(&m_mutex);
+    tmp_snapshots_.insert(snapshot);
+    m_db_ref_count--;
+    return snapshot;
+
+}
+
+bool TabletIO::ReleaseTmpSnapshot(uint64_t snapshot, StatusCode* status) {
+    {
+        MutexLock lock(&m_mutex);
+        if (m_status != kReady) {
+            SetStatusCode(m_status, status);
+            return false;
+        }
+        m_db_ref_count++;
+    }
+    m_db->ReleaseSnapshot(snapshot);
+    MutexLock lock(&m_mutex);
+    tmp_snapshots_.erase(snapshot);
+    m_db_ref_count--;
+    return true;
+}
+
 uint64_t TabletIO::GetSnapshot(uint64_t id, uint64_t snapshot_sequence,
                                StatusCode* status) {
     {
@@ -2023,6 +2074,29 @@ void TabletIO::ApplySchema(const TableSchema& schema) {
     SetSchema(schema);
     IndexingCfToLG();
     m_ldb_options.compact_strategy_factory->SetArg(&schema);
+}
+
+bool TabletIO::GetRowLastSequence(const std::string& row, uint64_t* row_last_sequence,
+                                  StatusCode* status) {
+    std::string last_sequence_key;
+    m_key_operator->EncodeTeraKey(row, "", "", kLatestTs, leveldb::TKT_MAX_SEQ,
+                                  &last_sequence_key);
+
+    leveldb::ReadOptions read_option(&m_ldb_options);
+    read_option.verify_checksums = FLAGS_tera_leveldb_verify_checksums;
+    read_option.rollbacks = rollbacks_;
+    std::string value;
+    leveldb::Status db_status = m_db->Get(read_option, last_sequence_key, &value);
+    if (!db_status.ok()) {
+        SetStatusCode(db_status, status);
+        return false;
+    }
+    if (value.size() != sizeof(uint64_t)) {
+        SetStatusCode(kTableCorrupt, status);
+        return false;
+    }
+    *row_last_sequence = DecodeFixed64(value.data());
+    return true;
 }
 
 } // namespace io

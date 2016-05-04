@@ -5,6 +5,7 @@
 #include "common/base/string_format.h"
 #include "io/coding.h"
 #include "sdk/mutate_impl.h"
+#include "sdk/table_impl.h"
 #include "utils/timer.h"
 
 namespace tera {
@@ -18,7 +19,8 @@ RowMutationImpl::RowMutationImpl(TableImpl* table, const std::string& row_key)
       _retry_times(0),
       _finish(false),
       _finish_cond(&_finish_mutex),
-      _commit_times(0) {
+      _commit_times(0),
+      _last_sequence(kMaxSequenceNumber) {
     SetErrorIfInvalid(row_key, kRowkey);
 }
 
@@ -337,13 +339,18 @@ bool RowMutationImpl::IsFinished() const {
     return _finish;
 }
 
+/// 返回table
+Table* RowMutationImpl::GetTable() {
+    return _table;
+}
+
 /// 返回row_key
 const std::string& RowMutationImpl::RowKey() {
     return _row_key;
 }
 
 /// mutation数量
-uint32_t RowMutationImpl::MutationNum() {
+uint32_t RowMutationImpl::MutationNum() const {
     return _mu_seq.size();
 }
 
@@ -362,7 +369,7 @@ uint32_t RowMutationImpl::Size() {
 }
 
 /// 返回mutation
-const RowMutation::Mutation& RowMutationImpl::GetMutation(uint32_t index) {
+const RowMutation::Mutation& RowMutationImpl::GetMutation(uint32_t index) const {
     return _mu_seq[index];
 }
 
@@ -398,6 +405,21 @@ void RowMutationImpl::RunCallback() {
         _finish = true;
         _finish_cond.Signal();
     }
+}
+
+void RowMutationImpl::Concatenate(const RowMutationImpl& row_mu) {
+    uint32_t mutation_num = row_mu.MutationNum();
+    for (size_t i = 0; i < mutation_num; i++) {
+        AddMutation() = row_mu.GetMutation(i);
+    }
+}
+
+void RowMutationImpl::SetLastSequence(uint64_t last_sequence) {
+    _last_sequence = last_sequence;
+}
+
+uint64_t RowMutationImpl::GetLastSequence() {
+    return _last_sequence;
 }
 
 RowMutation::Mutation& RowMutationImpl::AddMutation() {
