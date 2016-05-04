@@ -421,17 +421,26 @@ void TabletNodeImpl::ReadTablet(int64_t start_micros,
                                 ReadTabletResponse* response,
                                 google::protobuf::Closure* done) {
     int32_t row_num = request->row_info_list_size();
-    uint64_t snapshot_id = request->snapshot_id() == 0 ? 0 : request->snapshot_id();
     uint32_t read_success_num = 0;
 
     for (int32_t i = 0; i < row_num; i++) {
+        uint64_t snapshot_id = 0;
+        if (request->row_info_list(i).get_snapshot()) {
+            snapshot_id = random_id;
+        }
         StatusCode row_status = kTabletNodeOk;
         io::TabletIO* tablet_io = m_tablet_manager->GetTablet(
             request->tablet_name(), request->row_info_list(i).key(), &row_status);
         if (tablet_io == NULL) {
             range_error_counter.Inc();
             response->mutable_detail()->add_status(kKeyNotInRange);
+        } else if (request->row_info_list(i).get_snapshot() &&
+                   0 == tablet_io->GetSnapshot(snapshot_id, (0x1ull << 56) - 1, &row_status)) {
+            response->mutable_detail()->add_status(row_status);
         } else {
+            if (request->row_info_list(i).snapshot_id() != 0) {
+                snapshot_id = request->row_info_list(i).snapshot_id();
+            }
             if (tablet_io->ReadCells(request->row_info_list(i),
                                      response->mutable_detail()->add_row_result(),
                                      snapshot_id, &row_status)) {

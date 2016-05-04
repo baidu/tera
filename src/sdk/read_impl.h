@@ -103,6 +103,11 @@ public:
     void AddCommitTimes() { _commit_times++; }
     int64_t GetCommitTimes() { return _commit_times; }
 
+    uint64_t GetLastSequence();
+
+    void SetGetSnapshot(bool get_snapshot) { _get_snapshot = get_snapshot; }
+    bool GetSnapshot() { return _get_snapshot; }
+
 private:
     std::string _row_key;
     RowReader::Callback _callback;
@@ -120,6 +125,7 @@ private:
     int64_t _ts_end;
     uint32_t _max_version;
     uint64_t _snapshot_id;
+    bool _get_snapshot;
 
     int64_t _timeout_ms;
     uint32_t _retry_times;

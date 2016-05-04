@@ -18,6 +18,7 @@ RowReaderImpl::RowReaderImpl(Table* table, const std::string& row_key)
       _ts_end(kLatestTs),
       _max_version(1),
       _snapshot_id(0),
+      _get_snapshot(false),
       _timeout_ms(0),
       _retry_times(0),
       _result_pos(0),
@@ -257,6 +258,8 @@ void RowReaderImpl::ToProtoBuf(RowReaderInfo* info) {
     info->set_max_version(_max_version);
     info->mutable_time_range()->set_ts_start(_ts_start);
     info->mutable_time_range()->set_ts_end(_ts_end);
+    info->set_snapshot_id(_snapshot_id);
+    info->set_get_snapshot(_get_snapshot);
 
     FamilyMap::iterator f_it = _family_map.begin();
     for (; f_it != _family_map.end(); ++f_it) {
@@ -271,6 +274,10 @@ void RowReaderImpl::ToProtoBuf(RowReaderInfo* info) {
             family_info->add_qualifier_list(*q_it);
         }
     }
+}
+
+uint64_t RowReaderImpl::GetLastSequence() {
+    return _result.last_sequence();
 }
 
 } // namespace tera

@@ -498,6 +498,41 @@ private:
     void operator=(const RowReader&);
 };
 
+/// 事务接口
+class Transaction {
+public:
+    Transaction() {}
+    virtual ~Transaction() {}
+
+    /// 提交一个修改操作
+    virtual void ApplyMutation(RowMutation* row_mu) = 0;
+    /// 读取操作
+    virtual void Get(RowReader* row_reader) = 0;
+
+    /// 回调函数原型
+    typedef void (*Callback)(Transaction* transaction);
+    /// 设置提交回调, 提交操作会异步返回
+    virtual void SetCommitCallback(Callback callback) = 0;
+    /// 获取提交回调
+    virtual Callback GetCommitCallback();
+    /// 设置回滚回调, 回滚操作会异步返回
+    virtual void SetRollbackCallback(Callback callback) = 0;
+    /// 获取回滚回调
+    virtual Callback GetRollbackCallback();
+
+    /// 设置用户上下文，可在回调函数中获取
+    virtual void SetContext(void* context) = 0;
+    /// 获取用户上下文
+    virtual void* GetContext() = 0;
+
+    /// 获得结果错误码
+    virtual const ErrorCode& GetError() = 0;
+
+private:
+    Transaction(const Transaction&);
+    void operator=(const Transaction&);
+};
+
 struct TableInfo {
     TableDescriptor* table_desc;
     std::string status;
@@ -696,6 +731,12 @@ public:
     virtual bool Rename(const std::string& old_table_name,
                         const std::string& new_table_name,
                         ErrorCode* err) = 0 ;
+
+    /// 提交事务
+    virtual void Commit(Transaction* row_transaction) = 0;
+    /// 回滚事务
+    virtual void Rollback(Transaction* row_transaction) = 0;
+
     Client() {}
     virtual ~Client() {}
 

@@ -133,22 +133,7 @@ void TabletWriter::Write(const WriteTabletRequest* request,
     }
 
     if (code != kTabletNodeOk) {
-        int32_t index_num = index_list->size();
-        for (int32_t i = 0; i < index_num; i++) {
-            int32_t index = (*index_list)[i];
-            response->mutable_row_status_list()->Set(index, code);
-        }
-
-        delete index_list;
-        if (done_counter->Add(index_num) == row_num) {
-            done->Run();
-            delete done_counter;
-            if (NULL != timer) {
-                RpcTimerList::Instance()->Erase(timer);
-                delete timer;
-            }
-        }
-
+        FinishTask(task, code);
         return;
     }
 
@@ -220,9 +205,10 @@ bool TabletWriter::SwapActiveBuffer(bool force) {
 bool TabletWriter::BatchRequest(const WriteTabletRequest& request,
                                 const std::vector<int32_t>& index_list,
                                 leveldb::WriteBatch* batch,
-                                bool kv_only) {
+                                bool kv_only, uint64_t last_sequence) {
     int32_t index_num = index_list.size();
     int64_t timestamp_old = 0;
+    uint64_t last_sequence = m_tablet->LastSequence();
 
     for (int32_t i = 0; i < index_num; ++i) {
         int32_t index = index_list[i];
@@ -314,12 +300,40 @@ bool TabletWriter::BatchRequest(const WriteTabletRequest& request,
                     batch->Put(tera_key, mu.value());
                 }
             }
+            std::string tera_key;
+            m_tablet->GetRawKeyOperator()->EncodeTeraKey(row_key, "", "", kLatestTs,
+                                                         leveldb::TKT_MAX_SEQ, &tera_key);
+            std::string value(sizeof(uint64_t), 0);
+            EncodeFixed64(value.data(), last_sequence);
+            size_t lg_num = m_tablet->m_ldb_options.exist_lg_list->size();
+            if (lg_num > 1) {
+                // put max_seq mark to all LGs
+                for (lg_id = 0; lg_id < lg_num; ++lg_id) {
+                    std::string tera_key_tmp = tera_key;
+                    leveldb::PutFixed32LGId(&tera_key_tmp, lg_id);
+                    VLOG(10) << "Batch Request, key:" << row_key << ",family:"
+                        << ",lg_id:" << lg_id;
+                    batch->Put(tera_key_tmp, value);
+                }
+            } else {
+                VLOG(10) << "Batch Request, key:" << row_key << ",family:"
+                    << ",lg_id:" << lg_id;
+                batch->Put(tera_key, value);
+            }
+
         }
     }
     return true;
 }
 
 void TabletWriter::FinishTask(const WriteTask& task, StatusCode status) {
+    std::vector<StatusCode> status_vector(task.index_list->size(), status);
+    FinishTask(task, status_vector);
+}
+
+void TabletWriter::FinishTask(const WriteTask& task,
+                              const std::vector<StatusCode>& status_vector) {
+    CHECK_EQ(task.index_list->size(), status_vector.size());
     const WriteTabletRequest* request = task.request;
     int32_t row_num = request->row_list_size();
 
@@ -331,7 +345,7 @@ void TabletWriter::FinishTask(const WriteTask& task, StatusCode status) {
         int32_t index = (*task.index_list)[i];
         const RowMutationSequence& row_list = request->row_list(index);
         m_tablet->GetCounter().write_kvs.Add(row_list.mutation_sequence_size());
-        response->mutable_row_status_list()->Set(index, status);
+        response->mutable_row_status_list()->Set(index, status_vector[i]);
     }
 
     delete task.index_list;
@@ -349,11 +363,55 @@ void TabletWriter::FinishTask(const WriteTask& task, StatusCode status) {
 StatusCode TabletWriter::FlushToDiskBatch(WriteTaskBuffer* task_buffer) {
     size_t task_num = task_buffer->size();
     leveldb::WriteBatch batch;
+    std::set<std::string> commit_row_key_set;
+    std::vector<std::vector<StatusCode> > status_buffer(task_num);
 
     for (size_t i = 0; i < task_num; ++i) {
         const WriteTask& task = (*task_buffer)[i];
         const std::vector<int32_t>* index_list = task.index_list;
-        BatchRequest(*(task.request), *index_list, &batch, m_tablet->KvOnly());
+        std::vector<StatusCode>& status_vector = status_buffer[i];
+        status_vector.resize(index_list->size(), kTableOk);
+        std::vector<int32_t> commit_index_list;
+        for (int32_t i = 0; i < index_list->size(); i++) {
+            int32_t index = (*index_list)[i];
+            const RowMutationSequence& row_mu = task.request->row_list(index);
+            const std::string& row_key = row_mu.row_key();
+            uint64_t row_last_read_sequence = row_mu.last_sequence();
+            uint64_t row_last_sequence = 0;
+
+            if (row_last_read_sequence < leveldb::kMaxSequenceNumber) {
+                if (commit_row_key.find(row_key) != commit_row_key.end()) {
+                    VLOG(10) << "transaction of row " << DebugString(row_key)
+                             << " is interrupted: found same row in one batch";
+                    status_vector[i] = kTransactionFail;
+                    continue;
+                }
+                StatusCode s;
+                if (!m_tablet->GetRowLastSequence(row_key, &row_last_sequence, &s)) {
+                    VLOG(10) << "fail to get last sequence of row: " << DebugString(row_key)
+                             << " status: " << s;
+                }
+                if (row_last_read_sequence < row_last_sequence) {
+                    VLOG(10) << "transaction of row " << DebugString(row_key)
+                             << " is interrupted: last sequence " << row_last_read_sequence
+                             << " -> " << row_last_sequence;
+                    status_vector[i] = kTransactionFail;
+                    continue;
+                } else if (row_last_read_sequence > row_last_sequence) {
+                    LOG(WARNING) << "last sequence of row " << DebugString(row_key)
+                                 << " is skewed: " << row_last_read_sequence
+                                 << " -> " << row_last_sequence;
+                } else {
+                    VLOG(10) << "transaction of row " << DebugString(row_key)
+                             << " pass check: last sequence " << row_last_sequence;
+                }
+            }
+            commit_index_list.push_back(i);
+            commit_row_key_set.insert(row_key);
+        }
+
+        BatchRequest(*(task.request), commit_index_list, &batch, m_tablet->KvOnly(),
+                     m_tablet->LastSequence());
     }
 
     StatusCode status = kTableOk;
@@ -361,7 +419,16 @@ StatusCode TabletWriter::FlushToDiskBatch(WriteTaskBuffer* task_buffer) {
     m_tablet->WriteBatch(&batch, disable_wal, FLAGS_tera_sync_log, &status);
     batch.Clear();
     for (size_t i = 0; i < task_num; i++) {
-        FinishTask((*task_buffer)[i], status);
+        const WriteTask& task = (*task_buffer)[i];
+        std::vector<StatusCode>& status_vector = status_buffer[i];
+        if (status != kTableOk) {
+            for (size_t j = 0; j = task.index_list->size(); j++) {
+                if (status_vector[j] == kTableOk) {
+                    status_vector[j] = status;
+                }
+            }
+        }
+        FinishTask(task, status_vector);
     }
     VLOG(7) << "finish a batch: " << task_num;
     return status;
