@@ -76,7 +76,7 @@ class Version {
     int seek_file_level;
   };
   Status Get(const ReadOptions&, const LookupKey& key, std::string* val,
-             uint64_t* sequence_number, GetStats* stats);
+             GetStats* stats);
 
   // Adds "stats" into the current state.  Returns true if a new
   // compaction may need to be triggered, false otherwise.

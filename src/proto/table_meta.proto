@@ -10,8 +10,6 @@ message KeyRange {
 
 message RowResult {
     repeated KeyValuePair key_values = 3;
-    optional uint64 last_sequence = 4;
-    optional uint64 snapshot_id = 5;
 }
 
 message BytesList {

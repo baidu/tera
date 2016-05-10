@@ -74,12 +74,10 @@ public:
         std::string last_key;
         std::string last_col;
         std::string last_qual;
-        std::string last_cell_key;
-        uint64_t max_sequence;
 
         ScanContext(leveldb::CompactStrategyFactory* strategy_factory)
             : compact_strategy(strategy_factory->NewInstance()),
-              version_num(1), max_sequence(0)
+              version_num(1)
         {}
 
         ~ScanContext() {
@@ -137,7 +135,7 @@ public:
 
     bool SnapshotIDToSeq(uint64_t snapshot_id, uint64_t* snapshot_sequence);
 
-    virtual bool Read(const leveldb::Slice& key, std::string* value, int64_t* sequence_num,
+    virtual bool Read(const leveldb::Slice& key, std::string* value,
                       uint64_t snapshot_id = 0, StatusCode* status = NULL);
 
     // read a row
@@ -199,12 +197,6 @@ public:
                                std::string* res);
 
     void ApplySchema(const TableSchema& schema);
-
-    uint64_t LastSequence() { return m_db->LastSequence(); }
-
-    bool GetRowLastSequence(const std::string& row, uint64_t* row_last_sequence,
-                            StatusCode* status);
-
 private:
     friend class TabletWriter;
     bool WriteWithoutLock(const std::string& key, const std::string& value,

@@ -40,8 +40,8 @@ class DBImpl : public DB {
   virtual Status Delete(const WriteOptions&, const Slice& key);
   virtual Status Write(const WriteOptions& options, WriteBatch* updates);
   virtual Status Get(const ReadOptions& options,
-                     const Slice& key, std::string* value,
-                     uint64_t* sequence_number = NULL);
+                     const Slice& key,
+                     std::string* value);
   virtual Iterator* NewIterator(const ReadOptions&);
   virtual const uint64_t GetSnapshot(uint64_t last_sequence = kMaxSequenceNumber);
   virtual void ReleaseSnapshot(uint64_t sequence_number);
@@ -64,8 +64,6 @@ class DBImpl : public DB {
 
   // Add all sst files inherited from other tablets
   virtual void AddInheritedLiveFiles(std::vector<std::set<uint64_t> >* live);
-
-  virtual uint64_t LastSequence() const { abort(); return 0; } // useless, nobody should call this
 
   Iterator* NewInternalIterator();
 

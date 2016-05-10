@@ -1041,7 +1041,9 @@ void TableImpl::CommitReaders(const std::string server_addr,
     for (uint32_t i = 0; i < reader_list.size(); ++i) {
         RowReaderImpl* row_reader = reader_list[i];
         RowReaderInfo* row_reader_info = request->add_row_info_list();
+        request->set_snapshot_id(row_reader->GetSnapshot());
         row_reader->ToProtoBuf(row_reader_info);
+        // row_reader_info->CopyFrom(row_reader->GetRowReaderInfo());
         reader_id_list->push_back(row_reader->GetId());
         row_reader->AddCommitTimes();
         row_reader->DecRef();

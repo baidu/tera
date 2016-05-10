@@ -173,8 +173,6 @@ public:
     void AddCommitTimes() { _commit_times++; }
     int64_t GetCommitTimes() { return _commit_times; }
 
-    void Concatenate(const RowMutationImpl& row_mu);
-
 protected:
     /// 增加一个操作
     RowMutation::Mutation& AddMutation();

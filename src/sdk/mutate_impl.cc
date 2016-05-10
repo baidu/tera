@@ -400,13 +400,6 @@ void RowMutationImpl::RunCallback() {
     }
 }
 
-void RowMutationImpl::Concatenate(const RowMutationImpl& row_mu) {
-    uint32_t mutation_num = row_mu.MutationNum();
-    for (size_t i = 0; i < mutation_num; i++) {
-        AddMutation() = row_mu.GetMutation(i);
-    }
-}
-
 RowMutation::Mutation& RowMutationImpl::AddMutation() {
     _mu_seq.resize(_mu_seq.size() + 1);
     return _mu_seq.back();

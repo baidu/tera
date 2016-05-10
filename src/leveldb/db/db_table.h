@@ -65,8 +65,7 @@ public:
     //
     // May return some other Status on an error.
     virtual Status Get(const ReadOptions& options,
-                       const Slice& key, std::string* value,
-                       uint64_t* sequence_number = NULL);
+                       const Slice& key, std::string* value);
 
     // Return a heap-allocated iterator over the contents of the database.
     // The result of NewIterator() is initially invalid (caller must
@@ -140,8 +139,6 @@ public:
 
     // Add all sst files inherited from other tablets
     virtual void AddInheritedLiveFiles(std::vector<std::set<uint64_t> >* live);
-
-    virtual uint64_t LastSequence() const { return last_sequence_; }
 
     // for unit test
     Status TEST_CompactMemTable();
