@@ -67,7 +67,8 @@ class MemTable {
   // If memtable contains a deletion for key, store a NotFound() error
   // in *status and return true.
   // Else, return false.
-  virtual bool Get(const LookupKey& key, std::string* value, const std::map<uint64_t, uint64_t>& rollbacks, Status* s);
+  virtual bool Get(const LookupKey& key, std::string* value, uint64_t* sequence_number,
+                   const std::map<uint64_t, uint64_t>& rollbacks, Status* s);
 
   SequenceNumber GetLastSequence() const {
       return last_seq_;

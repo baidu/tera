@@ -12,6 +12,7 @@
 namespace leveldb {
 
 enum TeraKeyType {
+    TKT_MAX_SEQ        = -50,
     TKT_FORSEEK        = 0,
     TKT_DEL            = 1,
     TKT_DEL_COLUMN     = 2,

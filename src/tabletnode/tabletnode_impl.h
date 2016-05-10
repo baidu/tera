@@ -85,6 +85,8 @@ public:
                          ReleaseSnapshotResponse* response,
                          google::protobuf::Closure* done);
 
+    void ReleaseTmpSnapshot(io::TabletIO* tablet_io, uint64_t tmp_snapshot_id);
+
     void Rollback(const SnapshotRollbackRequest* request, SnapshotRollbackResponse* response,
                   google::protobuf::Closure* done);
 

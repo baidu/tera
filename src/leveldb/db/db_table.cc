@@ -609,7 +609,8 @@ WriteBatch* DBTable::GroupWriteBatch(RecordWriter** last_writer) {
 }
 
 Status DBTable::Get(const ReadOptions& options,
-                    const Slice& key, std::string* value) {
+                    const Slice& key, std::string* value,
+                    uint64_t* sequence_number) {
     uint32_t lg_id = 0;
     Slice real_key = key;
     if (!GetFixed32LGId(&real_key, &lg_id)) {
@@ -628,7 +629,7 @@ Status DBTable::Get(const ReadOptions& options,
         new_options.snapshot = commit_snapshot_;
     }
     mutex_.Unlock();
-    Status s = lg_list_[lg_id]->Get(new_options, real_key, value);
+    Status s = lg_list_[lg_id]->Get(new_options, real_key, value, sequence_number);
     mutex_.Lock();
     return s;
 }
