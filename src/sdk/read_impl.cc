@@ -3,13 +3,17 @@
 // found in the LICENSE file.
 
 #include "sdk/read_impl.h"
+#include "sdk/table_impl.h"
+#include "sdk/txn_impl.h"
 
 namespace tera {
 
 /// 读取操作
-RowReaderImpl::RowReaderImpl(Table* table, const std::string& row_key)
+RowReaderImpl::RowReaderImpl(TableImpl* table, const std::string& row_key)
     : SdkTask(SdkTask::READ),
+      _table(table),
       _row_key(row_key),
+      _txn(NULL),
       _callback(NULL),
       _user_context(NULL),
       _finish(false),
@@ -78,6 +82,10 @@ void RowReaderImpl::SetCallBack(RowReader::Callback callback) {
     _callback = callback;
 }
 
+RowReader::Callback RowReaderImpl::GetCallBack() {
+    return _callback;
+}
+
 /// 设置用户上下文，可在回调函数中获取
 void RowReaderImpl::SetContext(void* context) {
     _user_context = context;
@@ -132,8 +140,17 @@ int64_t RowReaderImpl::Timestamp() {
     }
 }
 
+Table* RowReaderImpl::GetTable() {
+    return _table;
+}
+
 const std::string& RowReaderImpl::RowName() {
     return _row_key;
+}
+
+/// 获得所属事务
+Transaction* RowReaderImpl::GetTransaction() {
+    return _txn;
 }
 
 /// Column cf:qualifier

@@ -744,17 +744,22 @@ void TableImpl::MutateCallBack(std::vector<int64_t>* mu_id_list,
             err = response->row_status_list(i);
         }
 
-        if (err == kTabletNodeOk) {
+        if (err == kTabletNodeOk || err == kTransactionFail) {
             _perf_counter.mutate_ok_cnt.Inc();
             SdkTask* task = _task_pool.PopTask(mu_id);
             if (task == NULL) {
-                VLOG(10) << "mutation " << mu_id << " success but timeout: " << DebugString(row);
+                VLOG(10) << "mutation " << mu_id << " finish but timeout: " << DebugString(row);
                 continue;
             }
             CHECK_EQ(task->Type(), SdkTask::MUTATION);
             CHECK_EQ(task->GetRef(), 1);
             RowMutationImpl* row_mutation = (RowMutationImpl*)task;
-            row_mutation->SetError(ErrorCode::kOK);
+            if (err == kTabletNodeOk) {
+                row_mutation->SetError(ErrorCode::kOK);
+            } else {
+                row_mutation->SetError(ErrorCode::kTxnFail, "transaction commit fail");
+            }
+
             // only for flow control
             _cur_commit_pending_counter.Sub(row_mutation->MutationNum());
             int64_t perf_time = common::timer::get_micros();

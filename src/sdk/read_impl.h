@@ -18,10 +18,11 @@
 namespace tera {
 
 class TableImpl;
+class TransactionImpl;
 
 class RowReaderImpl : public RowReader, public SdkTask {
 public:
-    RowReaderImpl(Table* table, const std::string& row_key);
+    RowReaderImpl(TableImpl* table, const std::string& row_key);
     ~RowReaderImpl();
     /// 设置读取特定版本
     void SetTimestamp(int64_t ts);
@@ -48,6 +49,7 @@ public:
     void SetTimeOut(int64_t timeout_ms);
     /// 设置异步回调, 操作会异步返回
     void SetCallBack(RowReader::Callback callback);
+    RowReader::Callback GetCallBack();
     /// 设置用户上下文，可在回调函数中获取
     void SetContext(void* context);
     void* GetContext();
@@ -65,8 +67,12 @@ public:
     bool Done();
     /// 迭代下一个cell
     void Next();
+    /// table ptr
+    Table* GetTable();
     /// Row
     const std::string& RowName();
+    /// 获得所属事务
+    virtual Transaction* GetTransaction();
     /// 读取的结果
     std::string Value();
     /// Timestamp
@@ -103,8 +109,12 @@ public:
     void AddCommitTimes() { _commit_times++; }
     int64_t GetCommitTimes() { return _commit_times; }
 
+    void SetTransaction(TransactionImpl* txn) { _txn = txn; }
+
 private:
+    TableImpl* _table;
     std::string _row_key;
+    TransactionImpl* _txn;
     RowReader::Callback _callback;
     void* _user_context;
 

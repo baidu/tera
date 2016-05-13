@@ -5,6 +5,8 @@
 #include "common/base/string_format.h"
 #include "io/coding.h"
 #include "sdk/mutate_impl.h"
+#include "sdk/table_impl.h"
+#include "sdk/txn_impl.h"
 #include "utils/timer.h"
 
 namespace tera {
@@ -13,6 +15,7 @@ RowMutationImpl::RowMutationImpl(TableImpl* table, const std::string& row_key)
     : SdkTask(SdkTask::MUTATION),
       _table(table),
       _row_key(row_key),
+      _txn(NULL),
       _callback(NULL),
       _timeout_ms(0),
       _retry_times(0),
@@ -337,13 +340,23 @@ bool RowMutationImpl::IsFinished() const {
     return _finish;
 }
 
+/// 返回table
+Table* RowMutationImpl::GetTable() {
+    return _table;
+}
+
 /// 返回row_key
 const std::string& RowMutationImpl::RowKey() {
     return _row_key;
 }
 
+/// 获得所属事务
+Transaction* RowMutationImpl::GetTransaction() {
+    return _txn;
+}
+
 /// mutation数量
-uint32_t RowMutationImpl::MutationNum() {
+uint32_t RowMutationImpl::MutationNum() const {
     return _mu_seq.size();
 }
 
@@ -362,7 +375,7 @@ uint32_t RowMutationImpl::Size() {
 }
 
 /// 返回mutation
-const RowMutation::Mutation& RowMutationImpl::GetMutation(uint32_t index) {
+const RowMutation::Mutation& RowMutationImpl::GetMutation(uint32_t index) const {
     return _mu_seq[index];
 }
 
@@ -397,6 +410,13 @@ void RowMutationImpl::RunCallback() {
         MutexLock lock(&_finish_mutex);
         _finish = true;
         _finish_cond.Signal();
+    }
+}
+
+void RowMutationImpl::Concatenate(const RowMutationImpl& row_mu) {
+    uint32_t mutation_num = row_mu.MutationNum();
+    for (size_t i = 0; i < mutation_num; i++) {
+        AddMutation() = row_mu.GetMutation(i);
     }
 }
 
