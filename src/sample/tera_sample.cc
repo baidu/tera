@@ -246,6 +246,60 @@ int ShowKv(tera::Client* client) {
     return 0;
 };
 
+int ShowTransaction(tera::Client* client) {
+    tera::ErrorCode error_code;
+    // Create
+    tera::TableDescriptor schema("employee");
+    schema.AddColumnFamily("title");
+    schema.AddColumnFamily("salary");
+    client->CreateTable(schema, &error_code);
+    // Open
+    tera::Table* table = client->OpenTable("employee", &error_code);
+    assert(table);
+    // init write
+    tera::RowMutation* init = table->NewRowMutation("Amy");
+    init->Put("title", "", "junior");
+    init->Put("salary", "", "100");
+    table->ApplyMutation(init);
+    assert(init->GetError().GetType() == tera::ErrorCode::kOK);
+    delete init;
+    // txn read
+    tera::Transaction* txn = client->NewTransaction();
+    tera::RowReader* read = table->NewRowReader("Amy");
+    read->AddColumnFamily("title");
+    txn->Get(read);
+    assert(read->GetError().GetType() == tera::ErrorCode::kOK);
+    // get title
+    std::string title;
+    while (!read->Done()) {
+        if (read->Family() == "title") {
+            title = read->Value();
+            break;
+        }
+        read->Next();
+    }
+    delete read;
+    // txn write
+    tera::RowMutation* mutate = table->NewRowMutation("Amy");
+    if (title == "junior") {
+        mutate->Put("title", "", "senior");
+        mutate->Put("salary", "", "200");
+    } else if (title == "senior") {
+        mutate->Put("title", "", "director");
+        mutate->Put("salary", "", "300");
+    }
+    txn->ApplyMutation(mutate);
+    assert(read->GetError().GetType() == tera::ErrorCode::kOK);
+    delete mutate;
+    // txn commit
+    client->Commit(txn);
+    printf("Transaction commit result %s\n", txn->GetError().ToString().c_str());
+    delete txn;
+    // Close
+    delete table;
+    return 0;
+}
+
 /// 演示程序
 int main(int argc, char* argv[]) {
     tera::ErrorCode error_code;
@@ -257,10 +311,11 @@ int main(int argc, char* argv[]) {
     }
 
     //CreateTable(client);
-    // 演示三种使用方式
+    // 演示四种使用方式
     ShowBigTable(client);
     //ShowSampleTable(client);
     //ShowKv(client);
+    //ShowTransaction(client);
     return 0;
 }
 
