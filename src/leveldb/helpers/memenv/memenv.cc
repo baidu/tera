@@ -363,6 +363,8 @@ class MemoryEnv : public EnvWrapper {
 
   virtual Env* CacheEnv() { return this; }
 
+  virtual Env* BaseEnv() { return this; }
+
   virtual Status GetTestDirectory(std::string* path) {
     *path = "/test";
     return Status::OK();

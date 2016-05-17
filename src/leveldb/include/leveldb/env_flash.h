@@ -60,7 +60,7 @@ public:
 
     virtual Env* CacheEnv() { return posix_env_; }
 
-    Env* BaseEnv() { return dfs_env_; }
+    virtual Env* BaseEnv() { return dfs_env_; }
 
     /// flash path for local flash cache
     void SetFlashPath(const std::string& path, bool vanish_allowed);

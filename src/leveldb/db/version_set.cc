@@ -1378,38 +1378,49 @@ Status VersionSet::Recover() {
 
 // Modify data_size of file meta
 bool VersionSet::ModifyFileSize(FileMetaData* f) {
+  f->data_size = f->file_size;
+  if (!f->largest_fake && !f->smallest_fake) {
+    // do not need modify
+    return true;
+  }
+
   // Try modify data_size in file meta
   // data_size = largest_key_offset - smallest_key_offset
-  if (f->largest_fake || f->smallest_fake) {
-    uint64_t s_offset = 0;
-    uint64_t l_offset = f->file_size;
-    Table* tableptr = NULL;
-    Iterator* iter =
-        table_cache_->NewIterator(ReadOptions(options_), dbname_,
-                                  f->number, f->file_size, "", "", &tableptr);
-    if (tableptr != NULL) {
-      if (f->smallest_fake) {
-        s_offset = tableptr->ApproximateOffsetOf(f->smallest.Encode());
-      }
-      if (f->largest_fake) {
-        l_offset = tableptr->ApproximateOffsetOf(f->largest.Encode());
-      }
-    } else {
-      Log(options_->info_log, "[%s] fail to reset file data_size: %s.\n",
-          dbname_.c_str(), FileNumberDebugString(f->number).c_str());
-    }
-    f->data_size = l_offset - s_offset;
-    Log(options_->info_log,
-        "[%s] reset file data_size: %s, from %llu to %llu\n, ",
-        dbname_.c_str(),
-        FileNumberDebugString(f->number).c_str(),
-        static_cast<unsigned long long>(f->file_size),
-        static_cast<unsigned long long>(f->data_size));
-    delete iter;
-  } else {
-    // do not need modify
-    f->data_size = f->file_size;
+  uint64_t s_offset = 0;
+  uint64_t l_offset = f->file_size;
+  std::string fname = TableFileName(dbname_, f->number);
+
+  // do not fill cache here
+  RandomAccessFile* file;
+  Status s = options_->env->BaseEnv()->NewRandomAccessFile(fname, f->file_size, &file);
+  if (!s.ok()) {
+    Log(options_->info_log, "[%s] fail to access: %s.\n", dbname_.c_str(), fname.c_str());
+    return false;
   }
+
+  Table* table;
+  s = Table::Open(*options_, file, f->file_size, &table);
+  if (!s.ok()) {
+    Log(options_->info_log, "[%s] fail to open: %s.\n", dbname_.c_str(), fname.c_str());
+    delete file;
+    return false;
+  }
+
+  if (f->smallest_fake) {
+    s_offset = table->ApproximateOffsetOf(f->smallest.Encode());
+  }
+  if (f->largest_fake) {
+    l_offset = table->ApproximateOffsetOf(f->largest.Encode());
+  }
+  f->data_size = l_offset - s_offset;
+  Log(options_->info_log,
+      "[%s] reset file data_size: %s, from %llu to %llu\n, ",
+      dbname_.c_str(),
+      FileNumberDebugString(f->number).c_str(),
+      static_cast<unsigned long long>(f->file_size),
+      static_cast<unsigned long long>(f->data_size));
+  delete table;
+  delete file;
   return true;
 }
 

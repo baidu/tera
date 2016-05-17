@@ -57,6 +57,8 @@ public:
 
     virtual Env* CacheEnv() { return this; }
 
+    virtual Env* BaseEnv() { return this; }
+
     static uint64_t gettid() {
         pid_t tid = syscall(SYS_gettid);
         return tid;

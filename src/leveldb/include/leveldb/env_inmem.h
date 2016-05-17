@@ -59,6 +59,8 @@ public:
 
     virtual Env* CacheEnv() { return mem_env_; }
 
+    virtual Env* BaseEnv() { return dfs_env_; }
+
 private:
     Env* dfs_env_;
     Env* mem_env_;

@@ -144,6 +144,9 @@ class Env {
   // Return the cache env, e.g. MemEnv in InMemoryEnv, PosixEnv in FlashEnv
   virtual Env* CacheEnv() = 0;
 
+  // Return the base env, e.g. DfsEnv in InMemoryEnv, DfsEnv in FlashEnv
+  virtual Env* BaseEnv() = 0;
+
   // Arrange to run "(*function)(arg)" once in a background thread.
   // Return a schedule id
   // "function" may run in an unspecified thread.  Multiple functions

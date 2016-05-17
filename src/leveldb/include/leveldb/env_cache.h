@@ -56,6 +56,7 @@ public:
     }
 
     virtual Env* CacheEnv() { return posix_env_; }
+    virtual Env* BaseEnv() { return dfs_env_; }
 
     // reset operation is for testing
     static void ResetMemCache();
