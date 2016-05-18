@@ -1,4 +1,5 @@
 #!/usr/bin/env python
+# encoding: utf-8
 
 """
 sample of using Tera Python SDK
@@ -71,6 +72,8 @@ def main():
     # async get
     async_get(table)
 
+    table.Close()
+    client.Close()
     print("main() done\n")
 
 
@@ -165,6 +168,8 @@ def scan(table):
         val = stream.Value()
         print row + ":" + column + ":" + timestamp + ":" + val
         stream.Next()
+    scan_desc.Destroy()
+    stream.Destroy()
 
 
 if __name__ == '__main__':
