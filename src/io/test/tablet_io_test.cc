@@ -313,24 +313,28 @@ TEST_F(TabletIOTest, LowLevelScan) {
     std::string start_tera_key;
     std::string end_row_key;
     RowResult value_list;
+    uint64_t sequence_number = 0;
     KeyValuePair next_start_point;
     uint32_t read_row_count = 0;
     uint32_t read_bytes = 0;
     bool is_complete = false;
     EXPECT_TRUE(tablet.LowLevelScan(start_tera_key, "", TabletIO::ScanOptions(),
-                                    &value_list, &next_start_point, &read_row_count, &read_bytes, &is_complete, NULL));
+                                    &value_list, &sequence_number, &next_start_point,
+                                    &read_row_count, &read_bytes, &is_complete, NULL));
     EXPECT_EQ(value_list.key_values_size(), 1);
 
     tablet.GetRawKeyOperator()->EncodeTeraKey("row", "", "", get_micros(), leveldb::TKT_DEL, &tkey1);
     tablet.WriteOne(tkey1, "lala" , false, NULL);
     EXPECT_TRUE(tablet.LowLevelScan(start_tera_key, "", TabletIO::ScanOptions(),
-                                    &value_list, &next_start_point, &read_row_count, &read_bytes, &is_complete, NULL));
+                                    &value_list, &sequence_number, &next_start_point,
+                                    &read_row_count, &read_bytes, &is_complete, NULL));
     EXPECT_EQ(value_list.key_values_size(), 0);
 
     tablet.GetRawKeyOperator()->EncodeTeraKey("row", "column", "2a", get_micros(), leveldb::TKT_VALUE, &tkey1);
     tablet.WriteOne(tkey1, "lala" , false, NULL);
     EXPECT_TRUE(tablet.LowLevelScan(start_tera_key, "", TabletIO::ScanOptions(),
-                                    &value_list, &next_start_point, &read_row_count, &read_bytes, &is_complete, NULL));
+                                    &value_list, &sequence_number, &next_start_point,
+                                    &read_row_count, &read_bytes, &is_complete, NULL));
     EXPECT_EQ(value_list.key_values_size(), 1);
 
     tablet.GetRawKeyOperator()->EncodeTeraKey("row", "", "", get_micros(), leveldb::TKT_DEL, &tkey1);
@@ -353,17 +357,20 @@ TEST_F(TabletIOTest, LowLevelScan) {
     end_row_key = std::string("row1\0", 5);
     TabletIO::ScanOptions scan_options;
     EXPECT_TRUE(tablet.LowLevelScan(start_tera_key, end_row_key, scan_options,
-                                    &value_list, &next_start_point, &read_row_count, &read_bytes, &is_complete, NULL));
+                                    &value_list, &sequence_number, &next_start_point,
+                                    &read_row_count, &read_bytes, &is_complete, NULL));
     EXPECT_EQ(value_list.key_values_size(), 5);
     tablet.GetRawKeyOperator()->EncodeTeraKey("row", "", "", 0, leveldb::TKT_FORSEEK, &start_tera_key);
     end_row_key = std::string("row\0", 5);
     scan_options.column_family_list["column"].insert("1a");
     EXPECT_TRUE(tablet.LowLevelScan(start_tera_key, end_row_key, scan_options,
-                                    &value_list, &next_start_point, &read_row_count, &read_bytes, &is_complete, NULL));
+                                    &value_list, &sequence_number, &next_start_point,
+                                    &read_row_count, &read_bytes, &is_complete, NULL));
     EXPECT_EQ(value_list.key_values_size(), 3);
     scan_options.max_versions = 2;
     EXPECT_TRUE(tablet.LowLevelScan(start_tera_key, end_row_key, scan_options,
-                                    &value_list, &next_start_point, &read_row_count, &read_bytes, &is_complete, NULL));
+                                    &value_list, &sequence_number, &next_start_point,
+                                    &read_row_count, &read_bytes, &is_complete, NULL));
     EXPECT_EQ(value_list.key_values_size(), 2);
     EXPECT_TRUE(tablet.Unload());
 }

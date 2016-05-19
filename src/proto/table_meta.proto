@@ -16,6 +16,8 @@ message BytesList {
     repeated bytes content = 1;
     repeated StatusCode status = 2;
     repeated RowResult row_result = 3;
+    repeated uint64 last_sequence = 4;
+    repeated uint64 tmp_snapshot_id = 5;
 }
 
 message KeyValuePair {
@@ -46,7 +48,7 @@ message ScanOption {
     optional bytes end = 5;
     optional string start_family = 6;
     optional bytes start_qualifier = 7;
-    optional uint64 snapshot_id = 8;
+    optional uint64 snapshot_seq = 8;
     optional bool round_down = 9;
 }
 
