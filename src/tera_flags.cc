@@ -31,8 +31,6 @@ DEFINE_string(tera_log_prefix, "", "prefix of log file (INFO, WARNING)");
 DEFINE_string(tera_local_addr, "", "local host's ip address");
 DEFINE_bool(tera_online_schema_update_enabled, false, "enable online-schema-update");
 
-DEFINE_int32(tera_tmp_snapshot_ttl, 60, "tmp snapshot ttl (in s)");
-
 /////////  io  /////////
 
 DEFINE_int32(tera_tablet_max_block_log_number, 50, "max number of unsed log files produced by switching log");

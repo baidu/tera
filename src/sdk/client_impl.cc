@@ -15,10 +15,9 @@
 #include "proto/proto_helper.h"
 #include "proto/table_meta.pb.h"
 #include "proto/tabletnode_client.h"
+#include "sdk/table_impl.h"
 #include "sdk/sdk_utils.h"
 #include "sdk/sdk_zk.h"
-#include "sdk/table_impl.h"
-#include "sdk/txn_impl.h"
 #include "utils/config_utils.h"
 #include "utils/crypt.h"
 #include "utils/schema_utils.h"
@@ -1031,20 +1030,6 @@ bool ClientImpl::Rename(const std::string& old_table_name,
     LOG(INFO) << "rename table OK. " << old_table_name
               << " -> " << new_table_name;
     return true;
-}
-
-Transaction* ClientImpl::NewTransaction() {
-    return new TransactionImpl(&_thread_pool);
-}
-
-void ClientImpl::Commit(Transaction* transaction) {
-    TransactionImpl* txn_impl = static_cast<TransactionImpl*>(transaction);
-    txn_impl->Commit();
-}
-
-void ClientImpl::Rollback(Transaction* transaction) {
-    TransactionImpl* txn_impl = static_cast<TransactionImpl*>(transaction);
-    txn_impl->Rollback();
 }
 
 bool ClientImpl::ListInternal(std::vector<TableInfo>* table_list,

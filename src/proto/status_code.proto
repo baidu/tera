@@ -45,8 +45,6 @@ enum StatusCode {
     kNotPermission = 72;
     kIOError = 73;
     
-    kTransactionFail = 80;
-    
     //// master rpc ////
 
     // create&update table

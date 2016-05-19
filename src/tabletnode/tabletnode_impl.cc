@@ -86,8 +86,6 @@ DECLARE_int64(tera_tabletnode_tcm_cache_size);
 
 DECLARE_string(flagfile);
 
-DECLARE_int32(tera_tmp_snapshot_ttl);
-
 extern tera::Counter range_error_counter;
 extern tera::Counter rand_read_delay;
 
@@ -423,35 +421,20 @@ void TabletNodeImpl::ReadTablet(int64_t start_micros,
                                 ReadTabletResponse* response,
                                 google::protobuf::Closure* done) {
     int32_t row_num = request->row_info_list_size();
+    uint64_t snapshot_id = request->snapshot_id() == 0 ? 0 : request->snapshot_id();
     uint32_t read_success_num = 0;
 
     for (int32_t i = 0; i < row_num; i++) {
-        bool get_new_snapshot = request->row_info_list(i).get_tmp_snapshot();
-        uint64_t snapshot_id = request->row_info_list(i).snapshot_id();
-        uint64_t tmp_snapshot_id = 0;
-        uint64_t last_sequence = 0;
         StatusCode row_status = kTabletNodeOk;
         io::TabletIO* tablet_io = m_tablet_manager->GetTablet(
             request->tablet_name(), request->row_info_list(i).key(), &row_status);
         if (tablet_io == NULL) {
             range_error_counter.Inc();
             response->mutable_detail()->add_status(kKeyNotInRange);
-        } else if (get_new_snapshot &&
-                   0 == (tmp_snapshot_id = tablet_io->GetTmpSnapshot(kMaxSequenceNumber, &row_status))) {
-            response->mutable_detail()->add_status(row_status);
         } else {
-            if (get_new_snapshot) {
-                tablet_io->AddRef();
-                ThreadPool::Task task = boost::bind(&TabletNodeImpl::ReleaseTmpSnapshot, this,
-                                                    tablet_io, tmp_snapshot_id);
-                m_thread_pool->DelayTask(FLAGS_tera_tmp_snapshot_ttl * 1000, task);
-                if (snapshot_id == 0) {
-                    snapshot_id = tmp_snapshot_id;
-                }
-            }
             if (tablet_io->ReadCells(request->row_info_list(i),
                                      response->mutable_detail()->add_row_result(),
-                                     &last_sequence, snapshot_id, &row_status)) {
+                                     snapshot_id, &row_status)) {
                 read_success_num++;
             } else {
                 response->mutable_detail()->mutable_row_result()->RemoveLast();
@@ -459,8 +442,6 @@ void TabletNodeImpl::ReadTablet(int64_t start_micros,
             tablet_io->DecRef();
             response->mutable_detail()->add_status(row_status);
         }
-        response->mutable_detail()->add_tmp_snapshot_id(tmp_snapshot_id);
-        response->mutable_detail()->add_last_sequence(last_sequence);
     }
 
     VLOG(10) << "seq_id: " << request->sequence_id()
@@ -675,18 +656,6 @@ void TabletNodeImpl::ReleaseSnapshot(const ReleaseSnapshotRequest* request,
     tablet_io->DecRef();
     response->set_snapshot_id(request->snapshot_id());
     done->Run();
-}
-
-void TabletNodeImpl::ReleaseTmpSnapshot(io::TabletIO* tablet_io,
-                                        uint64_t tmp_snapshot_id) {
-    StatusCode status = kTabletNodeOk;
-    if (tablet_io->ReleaseTmpSnapshot(tmp_snapshot_id, &status)) {
-        VLOG(10) << "released tmp snapshot: " << tmp_snapshot_id
-            << ", tablet: " << tablet_io->GetTablePath()
-            << " [" << DebugString(tablet_io->GetStartKey())
-            << ", " << DebugString(tablet_io->GetEndKey()) << "]";
-    }
-    tablet_io->DecRef();
 }
 
 void TabletNodeImpl::Rollback(const SnapshotRollbackRequest* request, SnapshotRollbackResponse* response,

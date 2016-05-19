@@ -30,13 +30,12 @@ public:
         WriteTabletResponse* response;
         google::protobuf::Closure* done;
         const std::vector<int32_t>* index_list;
-        std::vector<int32_t>* commit_index_list;
         Counter* done_counter;
         WriteRpcTimer* timer;
 
         WriteTask() :
             request(NULL), response(NULL), done(NULL), index_list(NULL),
-            commit_index_list(NULL), done_counter(NULL), timer(NULL) {}
+            done_counter(NULL), timer(NULL) {}
     };
 
     typedef std::vector<WriteTask> WriteTaskBuffer;
@@ -57,7 +56,7 @@ public:
     bool BatchRequest(const WriteTabletRequest& request,
                       const std::vector<int32_t>& index_list,
                       leveldb::WriteBatch* batch,
-                      bool kv_only, uint64_t last_sequence);
+                      bool kv_only);
     void Start();
     void Stop();
 
@@ -65,8 +64,8 @@ private:
     void DoWork();
     bool SwapActiveBuffer(bool force);
     /// 任务完成, 执行回调
+    void FinishTaskBatch(WriteTaskBuffer* task_buffer, StatusCode status);
     void FinishTask(const WriteTask& task, StatusCode status);
-    void FinishTask(const WriteTask& task, const std::vector<StatusCode>& status_vector);
     /// 将buffer刷到磁盘(leveldb), 并sync
     StatusCode FlushToDiskBatch(WriteTaskBuffer* task_buffer);
 

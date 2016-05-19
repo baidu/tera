@@ -21,7 +21,7 @@ class TableImpl;
 
 class RowReaderImpl : public RowReader, public SdkTask {
 public:
-    RowReaderImpl(TableImpl* table, const std::string& row_key);
+    RowReaderImpl(Table* table, const std::string& row_key);
     ~RowReaderImpl();
     /// 设置读取特定版本
     void SetTimestamp(int64_t ts);
@@ -48,7 +48,6 @@ public:
     void SetTimeOut(int64_t timeout_ms);
     /// 设置异步回调, 操作会异步返回
     void SetCallBack(RowReader::Callback callback);
-    RowReader::Callback GetCallBack();
     /// 设置用户上下文，可在回调函数中获取
     void SetContext(void* context);
     void* GetContext();
@@ -66,8 +65,6 @@ public:
     bool Done();
     /// 迭代下一个cell
     void Next();
-    /// table ptr
-    Table* GetTable();
     /// Row
     const std::string& RowName();
     /// 读取的结果
@@ -106,15 +103,7 @@ public:
     void AddCommitTimes() { _commit_times++; }
     int64_t GetCommitTimes() { return _commit_times; }
 
-    void SetLastSequence(uint64_t last_sequence) { _last_sequence = last_sequence; }
-    uint64_t GetLastSequence() { return _last_sequence; }
-
-    void SetCreateTmpSnapshot() { _get_tmp_snapshot = true; }
-    void SetTmpSnapshot(uint64_t tmp_snapshot_id) { _tmp_snapshot_id = tmp_snapshot_id; }
-    uint64_t GetTmpSnapshot() { return _tmp_snapshot_id; }
-
 private:
-    TableImpl* _table;
     std::string _row_key;
     RowReader::Callback _callback;
     void* _user_context;
@@ -131,14 +120,11 @@ private:
     int64_t _ts_end;
     uint32_t _max_version;
     uint64_t _snapshot_id;
-    bool _get_tmp_snapshot;
 
     int64_t _timeout_ms;
     uint32_t _retry_times;
     int32_t _result_pos;
     RowResult _result;
-    uint64_t _tmp_snapshot_id;
-    uint64_t _last_sequence;
 
     /// 记录此reader被提交到ts的次数
     int64_t _commit_times;

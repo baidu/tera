@@ -131,20 +131,17 @@ public:
     /// 异步操作是否完成
     bool IsFinished() const;
 
-    /// 返回table
-    Table* GetTable();
-
     /// 返回row_key
     const std::string& RowKey();
 
     /// mutation数量
-    uint32_t MutationNum() const;
+    uint32_t MutationNum();
 
     /// mutation总大小
     uint32_t Size();
 
     /// 返回mutation
-    const RowMutation::Mutation& GetMutation(uint32_t index) const;
+    const RowMutation::Mutation& GetMutation(uint32_t index);
 
     /// 重试次数
     uint32_t RetryTimes();
@@ -176,11 +173,6 @@ public:
     void AddCommitTimes() { _commit_times++; }
     int64_t GetCommitTimes() { return _commit_times; }
 
-    void Concatenate(const RowMutationImpl& row_mu);
-
-    void SetLastSequence(uint64_t last_sequence);
-    uint64_t GetLastSequence();
-
 protected:
     /// 增加一个操作
     RowMutation::Mutation& AddMutation();
@@ -202,7 +194,6 @@ private:
 
     /// 记录此mutation被提交到ts的次数
     int64_t _commit_times;
-    uint64_t _last_sequence;
 };
 
 void SerializeMutation(const RowMutation::Mutation& src, tera::Mutation* dst);

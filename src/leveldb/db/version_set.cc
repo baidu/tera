@@ -298,7 +298,6 @@ struct Saver {
   const Comparator* ucmp;
   Slice user_key;
   std::string* value;
-  uint64_t* sequence_number;
   CompactStrategy* compact_strategy;
 };
 }
@@ -313,7 +312,6 @@ static void SaveValue(void* arg, const Slice& ikey, const Slice& v) {
       if (s->state == kFound) {
         if (!s->compact_strategy || !s->compact_strategy->Drop(parsed_key.user_key, 0)) {
           s->value->assign(v.data(), v.size());
-          *s->sequence_number = parsed_key.sequence;
         } else {
           s->state = kDeleted; // stop searching in other files.
         }
@@ -329,7 +327,6 @@ static bool NewestFirst(FileMetaData* a, FileMetaData* b) {
 Status Version::Get(const ReadOptions& options,
                     const LookupKey& k,
                     std::string* value,
-                    uint64_t* sequence_number,
                     GetStats* stats) {
   ReadOptions opts = options;
   opts.db_opt = vset_->options_;
@@ -405,7 +402,6 @@ Status Version::Get(const ReadOptions& options,
       saver.ucmp = ucmp;
       saver.user_key = user_key;
       saver.value = value;
-      saver.sequence_number = sequence_number;
       saver.compact_strategy = vset_->options_->enable_strategy_when_get ?
               vset_->options_->compact_strategy_factory->NewInstance() : NULL;
       s = vset_->table_cache_->Get(opts, vset_->dbname_, f->number,

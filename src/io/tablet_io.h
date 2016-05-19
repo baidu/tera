@@ -74,12 +74,10 @@ public:
         std::string last_key;
         std::string last_col;
         std::string last_qual;
-        std::string last_cell_key;
-        uint64_t max_sequence;
 
         ScanContext(leveldb::CompactStrategyFactory* strategy_factory)
             : compact_strategy(strategy_factory->NewInstance()),
-              version_num(1), max_sequence(0)
+              version_num(1)
         {}
 
         ~ScanContext() {
@@ -137,19 +135,17 @@ public:
 
     bool SnapshotIDToSeq(uint64_t snapshot_id, uint64_t* snapshot_sequence);
 
-    virtual bool Read(const leveldb::Slice& key, std::string* value, uint64_t* sequence_num = NULL,
+    virtual bool Read(const leveldb::Slice& key, std::string* value,
                       uint64_t snapshot_id = 0, StatusCode* status = NULL);
 
     // read a row
     virtual bool ReadCells(const RowReaderInfo& row_reader, RowResult* value_list,
-                           uint64_t* sequence_num = NULL, uint64_t snapshot_id = 0,
-                           StatusCode* status = NULL);
-    /// scan from leveldb
+                           uint64_t snapshot_id = 0, StatusCode* status = NULL);
+    /// scan from leveldb return ture means complete flase means not complete
     bool LowLevelScan(const std::string& start_tera_key,
                       const std::string& end_row_key,
                       const ScanOptions& scan_options,
                       RowResult* value_list,
-                      uint64_t* sequence_number,
                       KeyValuePair* next_start_point,
                       uint32_t* read_row_count,
                       uint32_t* read_bytes,
@@ -177,9 +173,6 @@ public:
                           ScanTabletResponse* response,
                           google::protobuf::Closure* done);
 
-    uint64_t GetTmpSnapshot(uint64_t snapshot_sequence, StatusCode* status);
-    bool ReleaseTmpSnapshot(uint64_t snapshot_id, StatusCode* status);
-
     uint64_t GetSnapshot(uint64_t id, uint64_t snapshot_sequence,
                          StatusCode* status = NULL);
     bool ReleaseSnapshot(uint64_t snapshot_id,  StatusCode* status = NULL);
@@ -204,12 +197,6 @@ public:
                                std::string* res);
 
     void ApplySchema(const TableSchema& schema);
-
-    uint64_t LastSequence() { return m_db->LastSequence(); }
-
-    bool GetRowLastSequence(const std::string& row, uint64_t* row_last_sequence,
-                            StatusCode* status);
-
 private:
     friend class TabletWriter;
     bool WriteWithoutLock(const std::string& key, const std::string& value,
@@ -253,7 +240,6 @@ private:
                       leveldb::Iterator* it,
                       ScanContext* scan_context,
                       RowResult* value_list,
-                      uint64_t* sequence,
                       KeyValuePair* next_start_point,
                       uint32_t* read_row_count,
                       uint32_t* read_bytes,
@@ -298,7 +284,6 @@ private:
     bool m_kv_only;
     std::map<uint64_t, uint64_t> id_to_snapshot_num_;
     std::map<uint64_t, uint64_t> rollbacks_;
-    std::set<uint64_t> tmp_snapshots_;
 
     const leveldb::RawKeyOperator* m_key_operator;
 
