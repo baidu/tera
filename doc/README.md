@@ -2,49 +2,45 @@
 
 ## 简介
 
-[系统设计](doc/tera_design.md)
+[系统设计](tera_design.md)
 
-[Tera表格数据模型及实现](doc/data_model.md)
+[Tera表格数据模型及实现](data_model.md)
 
-[master、ts、client的交互](doc/master-ts-client-interactive.md)
+[master、ts、client的交互](master-ts-client-interactive.md)
 
 ## 使用帮助
 
-[构建tera](BUILD)
+[体验单机Tera](onebox.md)
 
-[体验单机Tera](doc/onebox.md)
+[命令行工具teracli使用方法](teracli.md)
 
-[通过docker体验Tera](example/docker)
+[主要api使用方法](sdk_dev_guide.md)
 
-[命令行工具teracli使用方法](doc/teracli.md)
+[搭建tera集群](cluster_setup.md)
 
-[主要api使用方法](doc/sdk_dev_guide.md)
-
-[搭建tera集群](doc/cluster_setup.md)
-
-[各flag配置项含义介绍](doc/tera_flag.md)
+[各flag配置项含义介绍](tera_flag.md)
 
 ## 性能优化
 
-[针对表格不同读写特性的性能优化建议](doc/perf_opz.md)
+[针对表格不同读写特性的性能优化建议](perf_opz.md)
 
 ## 功能实现
 
-[动态负载均衡](doc/load-balance.md)
+[动态负载均衡](load-balance.md)
 
-[数据删除的实现](doc/data-deletion-in-tera.md)
+[数据删除的实现](data-deletion-in-tera.md)
 
-[tablet的可用性统计实现](doc/tablet-availability.md)
+[tablet的可用性统计实现](tablet-availability.md)
 
 ## 版本发布
 
-[版本发布及管理](doc/release_management.md)
+[版本发布及管理](release_management.md)
 
 ## 源码相关
 
-[源码目录结构](src/README.md)
+[源码目录结构](../src/README.md)
 
-[LevelDB](src/leveldb/README.md)
+[LevelDB](../src/leveldb/README.md)
 
 ## TodoList
 1. Master的设计与实现（职责、功能、每个功能怎么实现的、为什么这么实现、还有哪些遗留问题）
