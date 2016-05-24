@@ -4,6 +4,8 @@
 
 [系统设计](doc/tera_design.md)
 
+[Tera表格数据模型及实现](doc/data_model.md)
+
 [master、ts、client的交互](doc/master-ts-client-interactive.md)
 
 ## 使用帮助
