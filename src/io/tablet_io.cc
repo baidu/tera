@@ -1311,12 +1311,9 @@ bool TabletIO::WriteOne(const std::string& key, const std::string& value,
     return WriteBatch(&batch, false, sync, status);
 }
 
-bool TabletIO::Write(const WriteTabletRequest* request,
-                     WriteTabletResponse* response,
-                     google::protobuf::Closure* done,
-                     const std::vector<int32_t>* index_list,
-                     Counter* done_counter, WriteRpcTimer* timer,
-                     StatusCode* status) {
+bool TabletIO::Write(std::vector<const RowMutationSequence*>* row_mutation_vec,
+                     std::vector<StatusCode>* status_vec, bool is_instant,
+                     WriteCallback callback, StatusCode* status) {
     {
         MutexLock lock(&m_mutex);
         if (m_status != kReady && m_status != kOnSplit
@@ -1332,13 +1329,13 @@ bool TabletIO::Write(const WriteTabletRequest* request,
         }
         m_db_ref_count++;
     }
-    m_async_writer->Write(request, response, done, index_list,
-                          done_counter, timer);
+    bool ret = m_async_writer->Write(row_mutation_vec, status_vec, is_instant,
+                                     callback, status);
     {
         MutexLock lock(&m_mutex);
         m_db_ref_count--;
     }
-    return true;
+    return ret;
 }
 
 bool TabletIO::ScanRows(const ScanTabletRequest* request,
