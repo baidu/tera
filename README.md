@@ -42,19 +42,19 @@ sh ./build.sh
 
 [体验单机Tera](doc/onebox.md)
 
-[通过docker体验Tera](https://github.com/baidu/tera/blob/master/example/docker)
+[通过docker体验Tera](example/docker)
 
-[主要api使用方法](https://github.com/baidu/tera/blob/master/doc/sdk_dev_guide.md)
+[主要api使用方法](doc/sdk_dev_guide.md)
 
-[客户端teracli使用方法](https://github.com/baidu/tera/blob/master/doc/teracli.md)
+[客户端teracli使用方法](doc/teracli.md)
 
-[其它文档](https://github.com/baidu/tera/blob/master/doc/README.md)
+[其它文档](doc/README.md)
 
 #反馈与技术支持
 tera_dev@baidu.com
 
 #成为贡献者
-完成[5个小任务](https://github.com/baidu/tera/blob/master/doc/to_be_a_contributor.md),帮你一步步成为tera贡献者.
+完成[5个小任务](doc/to_be_a_contributor.md),帮你一步步成为tera贡献者.
 
 #欢迎加入
 如果你热爱开源，热爱分布式技术，请将简历发送至： 
