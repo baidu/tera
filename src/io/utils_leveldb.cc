@@ -144,12 +144,12 @@ bool DeleteEnvDir(const std::string& dir) {
     leveldb::Env* env = LeveldbBaseEnv();
     leveldb::Status s;
     if (env->DeleteFile(dir).ok()) {
-        LOG(INFO) << "[gc] delete file in file system, dir: " << dir;
+        LOG(INFO) << "[gc] delete: " << dir;
         return true;
     }
     if (is_support_rmdir) {
         if (env->DeleteDir(dir).ok()) {
-            LOG(INFO) << "[gc] delete dir in file system, dir: " << dir;
+            LOG(INFO) << "[gc] delete: " << dir;
             return true;
         } else {
             is_support_rmdir = false;
@@ -170,7 +170,7 @@ bool DeleteEnvDir(const std::string& dir) {
         DeleteEnvDir(c_dir);
     }
     if (env->DeleteDir(dir).ok()) {
-        LOG(INFO) << "[gc] delete dir in file system, dir: " << dir;
+        LOG(INFO) << "[gc] delete: " << dir;
         return true;
     }
     return true;
