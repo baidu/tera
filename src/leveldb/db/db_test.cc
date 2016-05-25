@@ -1811,7 +1811,8 @@ class ModelDB: public DB {
     return DB::Delete(o, key);
   }
   virtual Status Get(const ReadOptions& options,
-                     const Slice& key, std::string* value) {
+                     const Slice& key, std::string* value,
+                     uint64_t* sequence_number = NULL) {
     assert(false);      // Not implemented
     return Status::NotFound(key);
   }
@@ -1902,6 +1903,8 @@ class ModelDB: public DB {
   virtual void CompactMissFiles(const Slice* begin, const Slice* end) {}
 
   virtual void AddInheritedLiveFiles(std::vector<std::set<uint64_t> >* live) {}
+
+  virtual uint64_t LastSequence() const { return 0; }
 
  private:
   class ModelIter: public Iterator {

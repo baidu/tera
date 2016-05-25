@@ -29,7 +29,8 @@ static inline void ExtractTsAndType(const Slice& tera_key,
                                     TeraKeyType* type) {
     uint64_t n = DecodeBigEndain(tera_key.data() + tera_key.size() - sizeof(uint64_t));
     if (type) {
-        *type = static_cast<TeraKeyType>((n << 56) >> 56);
+        int8_t type_byte = static_cast<int8_t>((n << 56) >> 56); // to support nagetive type
+        *type = static_cast<TeraKeyType>(type_byte);
     }
     if (timestamp) {
         *timestamp = (1L << 56) - 1 - (n >> 8);

@@ -3,13 +3,17 @@
 // found in the LICENSE file.
 
 #include "sdk/read_impl.h"
+#include "sdk/table_impl.h"
+#include "sdk/txn_impl.h"
 
 namespace tera {
 
 /// 读取操作
-RowReaderImpl::RowReaderImpl(Table* table, const std::string& row_key)
+RowReaderImpl::RowReaderImpl(TableImpl* table, const std::string& row_key)
     : SdkTask(SdkTask::READ),
+      _table(table),
       _row_key(row_key),
+      _txn(NULL),
       _callback(NULL),
       _user_context(NULL),
       _finish(false),
@@ -18,9 +22,12 @@ RowReaderImpl::RowReaderImpl(Table* table, const std::string& row_key)
       _ts_end(kLatestTs),
       _max_version(1),
       _snapshot_id(0),
+      _tmp_snapshot_seq(kMaxSequenceNumber),
+      _get_tmp_snapshot(false),
       _timeout_ms(0),
       _retry_times(0),
       _result_pos(0),
+      _last_sequence(0),
       _commit_times(0) {
 }
 
@@ -78,6 +85,10 @@ void RowReaderImpl::SetCallBack(RowReader::Callback callback) {
     _callback = callback;
 }
 
+RowReader::Callback RowReaderImpl::GetCallBack() {
+    return _callback;
+}
+
 /// 设置用户上下文，可在回调函数中获取
 void RowReaderImpl::SetContext(void* context) {
     _user_context = context;
@@ -132,8 +143,17 @@ int64_t RowReaderImpl::Timestamp() {
     }
 }
 
+Table* RowReaderImpl::GetTable() {
+    return _table;
+}
+
 const std::string& RowReaderImpl::RowName() {
     return _row_key;
+}
+
+/// 获得所属事务
+Transaction* RowReaderImpl::GetTransaction() {
+    return _txn;
 }
 
 /// Column cf:qualifier
@@ -257,6 +277,14 @@ void RowReaderImpl::ToProtoBuf(RowReaderInfo* info) {
     info->set_max_version(_max_version);
     info->mutable_time_range()->set_ts_start(_ts_start);
     info->mutable_time_range()->set_ts_end(_ts_end);
+    if (_snapshot_id == 0 && _tmp_snapshot_seq < kMaxSequenceNumber) {
+        info->set_snapshot(_tmp_snapshot_seq);
+        info->set_is_tmp_snapshot(true);
+    } else {
+        info->set_snapshot(_snapshot_id);
+        info->set_is_tmp_snapshot(false);
+    }
+    info->set_get_tmp_snapshot(_get_tmp_snapshot);
 
     FamilyMap::iterator f_it = _family_map.begin();
     for (; f_it != _family_map.end(); ++f_it) {

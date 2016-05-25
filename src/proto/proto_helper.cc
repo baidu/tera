@@ -10,6 +10,8 @@
 namespace tera {
 
 std::string StatusCodeToString(int32_t status) {
+    return StatusCode_Name(static_cast<StatusCode>(status));
+
     switch (status) {
     // master
     case kMasterNotInited:
@@ -195,6 +197,8 @@ std::string StatusCodeToString(int32_t status) {
 }
 
 std::string StatusCodeToString(TabletNodeStatus status) {
+    return TabletNodeStatus_Name(status);
+
     switch (status) {
         case kTabletNodeInit:
             return "kTabletNodeInit";

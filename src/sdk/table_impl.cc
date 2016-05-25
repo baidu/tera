@@ -698,6 +698,7 @@ void TableImpl::CommitMutations(const std::string& server_addr,
             tera::Mutation* mutation = mu_seq->add_mutation_sequence();
             SerializeMutation(mu, mutation);
         }
+        mu_seq->set_last_sequence(row_mutation->GetLastSequence());
         mu_id_list->push_back(row_mutation->GetId());
         row_mutation->AddCommitTimes();
         row_mutation->DecRef();
@@ -744,17 +745,22 @@ void TableImpl::MutateCallBack(std::vector<int64_t>* mu_id_list,
             err = response->row_status_list(i);
         }
 
-        if (err == kTabletNodeOk) {
+        if (err == kTabletNodeOk || err == kTransactionFail) {
             _perf_counter.mutate_ok_cnt.Inc();
             SdkTask* task = _task_pool.PopTask(mu_id);
             if (task == NULL) {
-                VLOG(10) << "mutation " << mu_id << " success but timeout: " << DebugString(row);
+                VLOG(10) << "mutation " << mu_id << " finish but timeout: " << DebugString(row);
                 continue;
             }
             CHECK_EQ(task->Type(), SdkTask::MUTATION);
             CHECK_EQ(task->GetRef(), 1);
             RowMutationImpl* row_mutation = (RowMutationImpl*)task;
-            row_mutation->SetError(ErrorCode::kOK);
+            if (err == kTabletNodeOk) {
+                row_mutation->SetError(ErrorCode::kOK);
+            } else {
+                row_mutation->SetError(ErrorCode::kTxnFail, "transaction commit fail");
+            }
+
             // only for flow control
             _cur_commit_pending_counter.Sub(row_mutation->MutationNum());
             int64_t perf_time = common::timer::get_micros();
@@ -1041,9 +1047,7 @@ void TableImpl::CommitReaders(const std::string server_addr,
     for (uint32_t i = 0; i < reader_list.size(); ++i) {
         RowReaderImpl* row_reader = reader_list[i];
         RowReaderInfo* row_reader_info = request->add_row_info_list();
-        request->set_snapshot_id(row_reader->GetSnapshot());
         row_reader->ToProtoBuf(row_reader_info);
-        // row_reader_info->CopyFrom(row_reader->GetRowReaderInfo());
         reader_id_list->push_back(row_reader->GetId());
         row_reader->AddCommitTimes();
         row_reader->DecRef();
@@ -1111,6 +1115,8 @@ void TableImpl::ReaderCallBack(std::vector<int64_t>* reader_id_list,
             } else { // err == kSnapshotNotExist
                 row_reader->SetError(ErrorCode::kNotFound, "snapshot not found");
             }
+            row_reader->SetTmpSnapshot(response->detail().tmp_snapshot_id(i));
+            row_reader->SetLastSequence(response->detail().last_sequence(i));
             int64_t perf_time = common::timer::get_micros();
             row_reader->RunCallback();
             _perf_counter.user_callback.Add(common::timer::get_micros() - perf_time);
