@@ -123,6 +123,12 @@ std::string RowReaderImpl::Value() {
     }
 }
 
+/// 读取的结果
+int64_t RowReaderImpl::ValueInt64() {
+    std::string v = Value();
+    return (v.size() == sizeof(int64_t)) ? *(int64_t*)v.c_str() : 0;
+}
+
 /// Timestamp
 int64_t RowReaderImpl::Timestamp() {
     if (_result.key_values(_result_pos).has_timestamp()) {

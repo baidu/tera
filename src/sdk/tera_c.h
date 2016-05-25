@@ -64,6 +64,8 @@ void tera_table_apply_mutation(tera_table_t* table, tera_row_mutation_t* mutatio
 void tera_row_mutation_put(tera_row_mutation_t* mu, const char* cf,
                            const char* qu, uint64_t qulen,
                            const char* val, uint64_t vallen);
+void tera_row_mutation_put_int64(tera_row_mutation_t* mu, const char* cf,
+                                 const char* qu, uint64_t qulen, int64_t val);
 void tera_row_mutation_delete_column(tera_row_mutation_t* mu, const char* cf,
                                      const char* qu, uint64_t qulen);
 void tera_row_mutation_set_callback(tera_row_mutation_t* mu, MutationCallbackType callback);
@@ -117,6 +119,7 @@ bool tera_row_reader_done(tera_row_reader_t* reader);
 void tera_row_reader_next(tera_row_reader_t* reader);
 void tera_row_reader_rowkey(tera_row_reader_t* reader, char** str, uint64_t* strlen);
 void tera_row_reader_value(tera_row_reader_t* reader, char** str, uint64_t* strlen);
+int64_t tera_row_reader_value_int64(tera_row_reader_t* reader);
 void tera_row_reader_family(tera_row_reader_t* reader, char** str, uint64_t* strlen);
 void tera_row_reader_qualifier(tera_row_reader_t* reader, char** str, uint64_t* strlen);
 int64_t tera_row_reader_timestamp(tera_row_reader_t* reader);

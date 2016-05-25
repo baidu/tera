@@ -482,6 +482,7 @@ public:
     virtual void Next() = 0;
     /// 读取的结果
     virtual std::string Value() = 0;
+    virtual int64_t ValueInt64() = 0;
     virtual std::string Family() = 0;
     virtual std::string ColumnName() = 0;
     virtual std::string Qualifier() = 0;
