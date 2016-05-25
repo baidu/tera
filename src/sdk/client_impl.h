@@ -30,9 +30,7 @@ class TableImpl;
 class ClientImpl : public Client {
 public:
     ClientImpl(const std::string& user_identity,
-               const std::string& user_passcode,
-               const std::string& zk_addr_list,
-               const std::string& zk_root_path);
+               const std::string& user_passcode);
 
     virtual ~ClientImpl();
 

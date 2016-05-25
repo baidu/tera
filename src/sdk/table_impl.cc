@@ -86,7 +86,7 @@ TableImpl::TableImpl(const std::string& table_name,
       _cluster_private(false),
       _pending_timeout_ms(FLAGS_tera_rpc_timeout_period) {
     if (_cluster == NULL) {
-        _cluster = new sdk::ClusterFinder(zk_root_path, zk_addr_list);
+        _cluster = sdk::NewClusterFinder();
         _cluster_private = true;
     }
 }
