@@ -18,6 +18,9 @@ public:
     RowMutationReplicate() {}
     virtual ~RowMutationReplicate() {}
 
+    // 获得row key
+    virtual const std::string& RowKey() = 0;
+
     /// 修改默认列
     virtual void Put(const std::string& value) = 0;
 
@@ -48,6 +51,9 @@ class RowReaderReplicate {
 public:
     RowReaderReplicate() {};
     virtual ~RowReaderReplicate() {};
+
+    /// 获得row key
+    virtual const std::string& RowName() = 0;
 
     /// 设置异步回调, 操作会异步返回
     typedef void (*Callback)(RowReaderReplicate* param);

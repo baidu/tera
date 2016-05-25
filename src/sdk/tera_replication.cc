@@ -39,6 +39,10 @@ public:
         }
     }
 
+    virtual const std::string& RowKey() {
+        return _row_mutations[0]->RowKey();
+    }
+
     virtual void Put(const std::string& value) {
         for (size_t i = 0; i < _row_mutations.size(); i++) {
             _row_mutations[i]->Put(value);
@@ -176,6 +180,10 @@ public:
         for (size_t i = 0; i < _row_readers.size(); i++) {
             delete _row_readers[i];
         }
+    }
+
+    virtual const std::string& RowName() {
+        return _row_readers[0]->RowName();
     }
 
     virtual void SetCallBack(Callback callback) {
