@@ -95,6 +95,10 @@ public:
     /// 使用glog的用户必须调用此接口，避免glog被重复初始化
     static void SetGlogIsInitialized();
 
+    static ClientReplicate* NewClient(const std::string& confpath,
+                                      const std::string& log_prefix,
+                                      ErrorCode* err = NULL);
+
     static ClientReplicate* NewClient(const std::string& confpath, ErrorCode* err = NULL);
 
     static ClientReplicate* NewClient();

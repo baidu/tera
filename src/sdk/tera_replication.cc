@@ -6,6 +6,7 @@
 
 #include "common/mutex.h"
 #include "types.h"
+#include "utils/config_utils.h"
 
 DEFINE_bool(tera_replication_read_try_all, false, "try to read all replicas instread of randomly choose one");
 DEFINE_bool(tera_replication_write_need_all_success, false, "return OK only if all replicas write success");
@@ -15,8 +16,10 @@ namespace tera {
 
 class RowMutationReplicateImpl : public RowMutationReplicate {
 public:
-    RowMutationReplicateImpl(const std::vector<RowMutation*>& row_mutations)
+    RowMutationReplicateImpl(const std::vector<RowMutation*>& row_mutations,
+                             const std::vector<Table*>& tables)
         : _row_mutations(row_mutations),
+          _tables(tables),
           _user_callback(NULL),
           _user_context(NULL),
           _finish_cond(&_mutex),
@@ -86,8 +89,13 @@ public:
         }
     }
 
+public:
     const std::vector<RowMutation*>& GetRowMutationList() {
         return _row_mutations;
+    }
+
+    const std::vector<Table*>& GetTableList() {
+        return _tables;
     }
 
     bool IsAsync() {
@@ -135,6 +143,7 @@ private:
     }
 
     std::vector<RowMutation*> _row_mutations;
+    std::vector<Table*> _tables;
     RowMutationReplicate::Callback _user_callback;
     void* _user_context;
 
@@ -147,8 +156,10 @@ private:
 
 class RowReaderReplicateImpl : public RowReaderReplicate {
 public:
-    RowReaderReplicateImpl(const std::vector<RowReader*>& row_readers)
+    RowReaderReplicateImpl(const std::vector<RowReader*>& row_readers,
+                           const std::vector<Table*>& tables)
         : _row_readers(row_readers),
+          _tables(tables),
           _user_callback(NULL),
           _user_context(NULL),
           _finish_cond(&_mutex),
@@ -193,8 +204,13 @@ public:
         return _valid_row_reader->Value();
     }
 
+public:
     const std::vector<RowReader*>& GetRowReaderList() {
         return _row_readers;
+    }
+
+    const std::vector<Table*>& GetTableList() {
+        return _tables;
     }
 
     bool IsAsync() {
@@ -240,6 +256,7 @@ private:
     }
 
     std::vector<RowReader*> _row_readers;
+    std::vector<Table*> _tables;
     RowReaderReplicate::Callback _user_callback;
     void* _user_context;
 
@@ -265,15 +282,16 @@ public:
         for (size_t i = 0; i < _tables.size(); i++) {
             row_mutations.push_back(_tables[i]->NewRowMutation(row_key));
         }
-        return new RowMutationReplicateImpl(row_mutations);
+        return new RowMutationReplicateImpl(row_mutations, _tables);
     }
 
     virtual void ApplyMutation(RowMutationReplicate* mutation_rep) {
         RowMutationReplicateImpl* mutation_rep_impl = (RowMutationReplicateImpl*)mutation_rep;
         bool is_async = mutation_rep_impl->IsAsync();
         const std::vector<RowMutation*>& mutation_list = mutation_rep_impl->GetRowMutationList();
-        for (size_t i = 0; i < _tables.size(); i++) {
-            _tables[i]->ApplyMutation(mutation_list[i]);
+        const std::vector<Table*>& table_list = mutation_rep_impl->GetTableList();
+        for (size_t i = 0; i < mutation_list.size(); i++) {
+            table_list[i]->ApplyMutation(mutation_list[i]);
         }
         if (!is_async) {
             mutation_rep_impl->Wait();
@@ -282,23 +300,27 @@ public:
 
     virtual RowReaderReplicate* NewRowReader(const std::string& row_key) {
         std::vector<RowReader*> row_readers;
+        std::vector<Table*> tables;
         if (FLAGS_tera_replication_read_try_all) {
             for (size_t i = 0; i < _tables.size(); i++) {
                 row_readers.push_back(_tables[i]->NewRowReader(row_key));
+                tables.push_back(_tables[i]);
             }
         } else {
             size_t i = random() % _tables.size();
             row_readers.push_back(_tables[i]->NewRowReader(row_key));
+            tables.push_back(_tables[i]);
         }
-        return new RowReaderReplicateImpl(row_readers);
+        return new RowReaderReplicateImpl(row_readers, tables);
     }
 
     virtual void Get(RowReaderReplicate* reader_rep) {
         RowReaderReplicateImpl* reader_rep_impl = (RowReaderReplicateImpl*)reader_rep;
         bool is_async = reader_rep_impl->IsAsync();
         const std::vector<RowReader*>& reader_list = reader_rep_impl->GetRowReaderList();
-        for (size_t i = 0; i < _tables.size(); i++) {
-            _tables[i]->Get(reader_list[i]);
+        const std::vector<Table*>& table_list = reader_rep_impl->GetTableList();
+        for (size_t i = 0; i < reader_list.size(); i++) {
+            table_list[i]->Get(reader_list[i]);
         }
         if (!is_async) {
             reader_rep_impl->Wait();
@@ -348,7 +370,10 @@ void ClientReplicate::SetGlogIsInitialized() {
     Client::SetGlogIsInitialized();
 }
 
-ClientReplicate* ClientReplicate::NewClient(const std::string& confpath, ErrorCode* err) {
+ClientReplicate* ClientReplicate::NewClient(const std::string& confpath,
+                                            const std::string& log_prefix,
+                                            ErrorCode* err) {
+    utils::LoadFlagFile(confpath);
     std::string conf_paths = FLAGS_tera_replication_conf_paths;
     std::vector<std::string> confs;
     size_t token_pos = 0;
@@ -366,7 +391,7 @@ ClientReplicate* ClientReplicate::NewClient(const std::string& confpath, ErrorCo
 
     std::vector<Client*> clients;
     for (size_t i = 0; i < confs.size(); i++) {
-        Client* client = Client::NewClient(confs[i], err);
+        Client* client = Client::NewClient(confs[i], log_prefix, err);
         if (client == NULL) {
             for (size_t j = 0; j < clients.size(); j++) {
                 delete clients[j];
@@ -376,6 +401,10 @@ ClientReplicate* ClientReplicate::NewClient(const std::string& confpath, ErrorCo
         clients.push_back(client);
     }
     return new ClientReplicateImpl(clients);
+}
+
+ClientReplicate* ClientReplicate::NewClient(const std::string& confpath, ErrorCode* err) {
+    return NewClient(confpath, "tera", err);
 }
 
 ClientReplicate* ClientReplicate::NewClient() {
