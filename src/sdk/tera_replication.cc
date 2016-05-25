@@ -1,4 +1,4 @@
-// Copyright (c) 2015, Baidu.com, Inc. All Rights Reserved
+// Copyright (c) 2016, Baidu.com, Inc. All Rights Reserved
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -10,7 +10,7 @@
 
 DEFINE_bool(tera_replication_read_try_all, false, "try to read all replicas instread of randomly choose one");
 DEFINE_bool(tera_replication_write_need_all_success, false, "return OK only if all replicas write success");
-DEFINE_string(tera_replication_conf_paths, "../conf/tera.flag", "paths for flag files. user \';\' to split");
+DEFINE_string(tera_replication_conf_paths, "../conf/tera.flag", "paths for flag files. use \';\' to split");
 
 namespace tera {
 
