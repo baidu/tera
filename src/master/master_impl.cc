@@ -1849,8 +1849,10 @@ uint32_t MasterImpl::LoadBalance(Scheduler* scheduler,
         }
     }
 
-    LOG(INFO) << "LoadBalance (" << scheduler->Name() << ") " << table_name
-              << " total round " << round_count << " total move " << total_move_count;
+    if (total_move_count != 0) {
+        LOG(INFO) << "LoadBalance (" << scheduler->Name() << ") " << table_name
+                  << " total round " << round_count << " total move " << total_move_count;
+    }
     return total_move_count;
 }
 
