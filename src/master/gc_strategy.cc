@@ -157,7 +157,7 @@ void BatchGcStrategy::CollectSingleDeadTablet(const std::string& tablename, uint
         leveldb::FileType type = leveldb::kUnknown;
         uint64_t number = 0;
         if (ParseFileName(children[lg], &number, &type)) {
-            LOG(INFO) << "[gc] delete log file: " << lg_path;
+            LOG(INFO) << "[gc] delete: " << lg_path;
             env->DeleteFile(lg_path);
             continue;
         }
@@ -165,7 +165,7 @@ void BatchGcStrategy::CollectSingleDeadTablet(const std::string& tablename, uint
         leveldb::Slice rest(children[lg]);
         uint64_t lg_num = 0;
         if (!leveldb::ConsumeDecimalNumber(&rest, &lg_num)) {
-            LOG(INFO) << "[gc] skip unknown dir: " << lg_path;
+            LOG(ERROR) << "[gc] skip unknown dir: " << lg_path;
             continue;
         }
 
@@ -185,8 +185,7 @@ void BatchGcStrategy::CollectSingleDeadTablet(const std::string& tablename, uint
             if (!ParseFileName(files[f], &number, &type) ||
                 type != leveldb::kTableFile) {
                 // only keep sst, delete rest files
-                LOG(INFO) << "[gc] delete obsolete file: " << file_path;
-                env->DeleteFile(file_path);
+                io::DeleteEnvDir(file_path);
                 continue;
             }
 
@@ -216,7 +215,7 @@ void BatchGcStrategy::DeleteObsoleteFiles() {
             std::set<uint64_t>::iterator it = file_set[lg].begin();
             for (; it != file_set[lg].end(); ++it) {
                 std::string file_path = leveldb::BuildTableFilePath(tablepath, lg, *it);
-                LOG(INFO) << "[gc] delete trash table file: " << file_path;
+                LOG(INFO) << "[gc] delete: " << file_path;
                 env->DeleteFile(file_path);
                 m_file_delete_num++;
             }
@@ -435,7 +434,8 @@ void IncrementalGcStrategy::DeleteTableFiles(const std::string& table_name) {
                         leveldb::ParseFullFileNumber(*it, NULL, &file_no);
                         debug_str += " " + boost::lexical_cast<std::string>(file_no);
                     }
-                    VLOG(12) << "[gc] delete file " << file_path << " live = " << debug_str;
+                    VLOG(12) << "[gc] live = " << debug_str;
+                    LOG(INFO) << "[gc] delete: " << file_path;
                     env->DeleteFile(file_path);
                     lg_file_set.m_storage_files.erase(file_it++);
                 } else {
@@ -490,7 +490,7 @@ void IncrementalGcStrategy::CollectSingleDeadTablet(const std::string& tablename
         leveldb::FileType type = leveldb::kUnknown;
         uint64_t number = 0;
         if (ParseFileName(children[lg], &number, &type)) {
-            LOG(INFO) << "[gc] delete log file: " << lg_path;
+            LOG(INFO) << "[gc] delete: " << lg_path;
             env->DeleteFile(lg_path);
             continue;
         }
@@ -518,8 +518,7 @@ void IncrementalGcStrategy::CollectSingleDeadTablet(const std::string& tablename
             if (!ParseFileName(files[f], &number, &type) ||
                 type != leveldb::kTableFile) {
                 // only keep sst, delete rest files
-                LOG(INFO) << "[gc] delete obsolete file: " << file_path;
-                env->DeleteFile(file_path);
+                io::DeleteEnvDir(file_path);
                 continue;
             }
 
