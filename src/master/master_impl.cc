@@ -3560,17 +3560,16 @@ void MasterImpl::QueryTabletNodeCallback(std::string addr, QueryRequest* request
             }
 
             TabletStatus tablet_status = tablet->GetStatus();
-            uint64_t average_qps = tablet->GetAverageCounter().read_rows();
             if (tablet_status == kTableReady || tablet_status == kTableOnLoad
                 || tablet_status == kTableOffLine) {
                 state.m_data_size += tablet->GetDataSize();
-                state.m_qps += average_qps;
+                state.m_qps += tablet->GetQps();
                 if (state.m_table_size.find(tablet->GetTableName()) != state.m_table_size.end()) {
                     state.m_table_size[tablet->GetTableName()] += tablet->GetDataSize();
-                    state.m_table_qps[tablet->GetTableName()] += average_qps;
+                    state.m_table_qps[tablet->GetTableName()] += tablet->GetQps();
                 } else {
                     state.m_table_size[tablet->GetTableName()] = tablet->GetDataSize();
-                    state.m_table_qps[tablet->GetTableName()] = average_qps;
+                    state.m_table_qps[tablet->GetTableName()] = tablet->GetQps();
                 }
             }
         }
