@@ -8,6 +8,7 @@
 
 #include "common/mutex.h"
 #include "leveldb/db.h"
+#include "leveldb/cache.h"
 #include "proto/tabletnode_rpc.pb.h"
 #include "types.h"
 #include <queue>
@@ -36,6 +37,7 @@ struct ScanOptions {
     {}
 };
 
+class ScanContextManager;
 typedef std::pair<ScanTabletResponse*, google::protobuf::Closure*> ScanJob;
 struct ScanContext {
     int64_t m_session_id;
@@ -54,9 +56,8 @@ struct ScanContext {
     uint64_t m_data_idx; // return data_id
 
     // protect by manager lock
-    uint64_t m_ref; // init value to 1, use for free scan context
-    uint64_t m_lru_seq_no;
     std::queue<ScanJob> m_jobs;
+    std::queue<leveldb::Cache::Handle*> m_handles;
 };
 
 class ScanContextManager {
@@ -70,16 +71,12 @@ public:
     void DestroyScanCache();
 
 private:
-    ScanContext* GetContextFromCache(int64_t session_id);
-    bool InsertContextToCache(ScanContext* context);
-    void DeleteContextFromCache(ScanContext* context);
-    void EvictCache();
     void DeleteScanContext(ScanContext* context);
 
+    // <session_id, ScanContext>
+
     Mutex m_lock;
-    std::map<int64_t, ScanContext*> m_context_cache;
-    uint64_t m_seq_no; // use for lru
-    std::map<uint64_t, int64_t> m_context_lru; // <seq_no, session id>
+    ::leveldb::Cache* cache_;
 };
 
 } // namespace io

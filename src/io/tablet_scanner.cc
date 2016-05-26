@@ -8,119 +8,35 @@
 #include "proto/status_code.pb.h"
 #include <gflags/gflags.h>
 #include <limits>
+#include "util/coding.h"
 
 DECLARE_int32(tera_tabletnode_scanner_cache_size);
 
 namespace tera {
 namespace io {
 
-ScanContextManager::ScanContextManager()
-    : m_seq_no(1) {
-    // init scan manager
+ScanContextManager::ScanContextManager() {
+    cache_ = leveldb::NewLRUCache(FLAGS_tera_tabletnode_scanner_cache_size);
 }
-
-ScanContextManager::~ScanContextManager() {
-    // drop all scan context
-
-}
+ScanContextManager::~ScanContextManager() {}
 
 // access in m_lock context
-ScanContext* ScanContextManager::GetContextFromCache(int64_t session_id) {
-    ScanContext* context = NULL;
-    std::map<int64_t, ScanContext*>::iterator it = m_context_cache.find(session_id);
-    if (it != m_context_cache.end()) {
-        context = it->second;
-        // update lru
-        std::map<uint64_t, int64_t>::iterator lru_it = m_context_lru.find(context->m_lru_seq_no);
-        if (lru_it != m_context_lru.end()) {
-            m_context_lru.erase(lru_it);
-        }
-        context->m_lru_seq_no = m_seq_no++;
-        m_context_lru[context->m_lru_seq_no] = session_id;
-    }
-    return context;
-}
-
-// access in m_lock context
-bool ScanContextManager::InsertContextToCache(ScanContext* context) {
-    // insert context into cache
-    int64_t session_id = context->m_session_id;
-    std::map<int64_t, ScanContext*>::iterator it = m_context_cache.find(session_id);
-    if (it != m_context_cache.end()) {
-        LOG(WARNING) << "scan, session id " << session_id << " already in cache.";
-        return false;
-    }
-    VLOG(10) << "ll-scan insert session_id " << session_id << " to cache";
-    m_context_cache[session_id] = context;
-
-    // update lru
-    context->m_lru_seq_no = m_seq_no++;
-    std::map<uint64_t, int64_t>::iterator lru_it = m_context_lru.find(context->m_lru_seq_no);
-    if (lru_it != m_context_lru.end()) {
-        m_context_lru.erase(lru_it);
-    }
-    m_context_lru[context->m_lru_seq_no] = session_id;
-
-    // try evict oldest cache item
-    EvictCache();
-    return true;
-}
-
-// access in m_lock context
-void ScanContextManager::DeleteContextFromCache(ScanContext* context) {
-    if (context->m_ref > 1) {
-        LOG(WARNING) << " ref leaks, session id " << context->m_session_id;
-    }
-    int64_t session_id = context->m_session_id;
-    std::map<int64_t, ScanContext*>::iterator it = m_context_cache.find(session_id);
-    if (it != m_context_cache.end()) {
-        m_context_cache.erase(it);
-    }
-    std::map<uint64_t, int64_t>::iterator lru_it = m_context_lru.find(context->m_lru_seq_no);
-    if (lru_it != m_context_lru.end()) {
-        m_context_lru.erase(lru_it);
-    }
+static void LRUCacheDeleter(const ::leveldb::Slice& key, void* value) {
+    ScanContext* context = reinterpret_cast<ScanContext*>(value);
     if (context->m_it) {
         delete context->m_it;
     }
     delete context;
-}
-
-// access in m_lock context
-void ScanContextManager::EvictCache() {
-    if (m_context_lru.size() > (uint32_t)FLAGS_tera_tabletnode_scanner_cache_size) {
-        std::map<uint64_t, int64_t>::iterator lru_it = m_context_lru.begin();
-        for (; lru_it != m_context_lru.end(); ++lru_it) {
-            int64_t session_id = lru_it->second;
-            std::map<int64_t, ScanContext*>::iterator it = m_context_cache.find(session_id);
-            if (it != m_context_cache.end()) {
-                ScanContext* context = it->second;
-                if (context->m_ref == 1) {
-                    // release idle context
-                    context->m_ref = 0;
-                    m_context_cache.erase(it);
-                    m_context_lru.erase(lru_it);
-                    if (context->m_it) {
-                        delete context->m_it;
-                    }
-                    delete context;
-		    VLOG(10) <<"ll-scan evict session_id " << session_id << " from cache";
-                    break;
-                }
-                // continue try evict next cache item
-            } else {
-                LOG(WARNING) << "scan task in lru, but not in cache, session id " << session_id;
-                m_context_lru.erase(lru_it);
-                break;
-            }
-        }
-    }
+    return;
 }
 
 ScanContext* ScanContextManager::GetScanContext(TabletIO* tablet_io,
                                                 const ScanTabletRequest* request,
                                                 ScanTabletResponse* response,
                                                 google::protobuf::Closure* done) {
+    ScanContext* context = NULL;
+    ::leveldb::Cache::Handle* handle = NULL;
+
     // init common param of response
     VLOG(10) << "push task for session id: " << request->session_id()
         << ", sequence id: " << request->sequence_id();
@@ -130,11 +46,15 @@ ScanContext* ScanContextManager::GetScanContext(TabletIO* tablet_io,
 
     // search from cache
     MutexLock l(&m_lock);
-    ScanContext* context = GetContextFromCache(request->session_id());
-    if (context) {
+    char buf[sizeof(request->session_id())];
+    ::leveldb::EncodeFixed64(buf, request->session_id());
+    ::leveldb::Slice key(buf, sizeof(buf));
+    handle = cache_->Lookup(key);
+    if (handle) {
         // not first session rpc, no need init scan context
+        context = reinterpret_cast<ScanContext*>(cache_->Value(handle));
         context->m_jobs.push(ScanJob(response, done));
-        ++(context->m_ref);
+        context->m_handles.push(handle); // refer item in cache
         if (context->m_jobs.size() > 1) {
             return NULL;
         }
@@ -152,7 +72,6 @@ ScanContext* ScanContextManager::GetScanContext(TabletIO* tablet_io,
     // first rpc new scan context
     context = new ScanContext;
     context->m_session_id = request->session_id();
-    context->m_ref = 1;// ref counter for cache
     context->m_tablet_io = tablet_io;
 
     context->m_it = NULL;
@@ -161,9 +80,9 @@ ScanContext* ScanContextManager::GetScanContext(TabletIO* tablet_io,
     context->m_data_idx = 0;
     context->m_complete = false;
 
-    InsertContextToCache(context);
+    handle = cache_->Insert(key, context, 1, &LRUCacheDeleter);
     context->m_jobs.push(ScanJob(response, done));
-    ++(context->m_ref);
+    context->m_handles.push(handle);  // refer item in cache
     // init context other param in TabletIO context
     return context;
 }
@@ -192,13 +111,16 @@ bool ScanContextManager::ScheduleScanContext(ScanContext* context) {
         {
             MutexLock l(&m_lock);
             context->m_jobs.pop();
-            (context->m_ref)--;
+            ::leveldb::Cache::Handle* handle = context->m_handles.front();
+            context->m_handles.pop();
+            cache_->Release(handle); // unrefer cache item
+
             // complete or io error, return all the rest request to client
             if (context->m_complete || (context->m_ret_code != kTabletNodeOk)) {
-                DeleteScanContext(context);
+                DeleteScanContext(context); // never use context
                 return true;
             }
-            if (context->m_ref == 1) {
+            if (context->m_jobs.size() == 0) {
                 return true;
             }
         }
@@ -206,35 +128,35 @@ bool ScanContextManager::ScheduleScanContext(ScanContext* context) {
     {
         MutexLock l(&m_lock);
         if (context->m_ret_code != kTabletNodeOk) {
-            DeleteScanContext(context);
+            DeleteScanContext(context); // never use context
         }
     }
     return true;
+}
+
+// access in m_lock context
+void ScanContextManager::DeleteScanContext(ScanContext* context) {
+    uint32_t job_size = context->m_jobs.size();
+    while (job_size) {
+        ScanTabletResponse* response = context->m_jobs.front().first;
+        ::google::protobuf::Closure* done = context->m_jobs.front().second;
+        response->set_complete(context->m_complete);
+        response->set_status(context->m_ret_code);
+        done->Run();
+
+        context->m_jobs.pop();
+        ::leveldb::Cache::Handle* handle = context->m_handles.front();
+        context->m_handles.pop();
+        cache_->Release(handle); // unrefer cache item
+        job_size--;
+    }
 }
 
 // when tabletio unload, because scan_context->m_it has reference of version,
 // so we shoud drop all cache it
 void ScanContextManager::DestroyScanCache() {
     MutexLock l(&m_lock);
-    while (!m_context_cache.empty()) {
-    	std::map<int64_t, ScanContext*>::iterator it = m_context_cache.begin();
-   	ScanContext* context = it->second;
-	DeleteScanContext(context);
-    }
-}
-
-// access in m_lock context
-void ScanContextManager::DeleteScanContext(ScanContext* context) {
-    while (context->m_ref > 1) {
-        ScanTabletResponse* response = context->m_jobs.front().first;
-        ::google::protobuf::Closure* done = context->m_jobs.front().second;
-        response->set_complete(context->m_complete);
-        response->set_status(context->m_ret_code);
-        done->Run();
-        context->m_jobs.pop();
-        (context->m_ref)--;
-    }
-    DeleteContextFromCache(context);
+    delete cache_;
 }
 
 } // namespace io
