@@ -1,23 +1,46 @@
 # Tera文档专区
-文档还在集中整理中，现在想学习tera还只能看代码。
 
-后续整理的文档可以放在这个目录下，也可以放在对应代码目录下，但都在这留个链接方便索引。
+## 简介
 
-[系统设计](https://github.com/BaiduPS/tera/blob/master/doc/tera_design.md)
+[系统设计](tera_design.md)
 
-[系统构建](https://github.com/BaiduPS/tera/blob/master/BUILD)
+[Tera表格数据模型及实现](data_model.md)
 
-[通过OneBox体验Tera](https://github.com/BaiduPS/tera/blob/master/doc/Onebox.md)
+[master、ts、client的交互](master-ts-client-interactive.md)
 
-[主要API使用方法](https://github.com/BaiduPS/tera/wiki/%E4%B8%BB%E8%A6%81API%E4%BD%BF%E7%94%A8%E6%96%B9%E6%B3%95)
+## 使用帮助
 
-[源码目录结构](https://github.com/BaiduPS/tera/blob/master/src/README.md)
+[体验单机Tera](onebox.md)
 
-[LevelDB](https://github.com/BaiduPS/tera/blob/master/src/leveldb/README.md)
+[命令行工具teracli使用方法](teracli.md)
 
-[命令行工具使用手册](https://github.com/BaiduPS/tera/blob/master/doc/teracli.md)
+[主要api使用方法](sdk_dev_guide.md)
 
-[tera实现之master、ts、client的交互](https://github.com/BaiduPS/tera/blob/master/doc/master-ts-client-interactive.md)
+[搭建tera集群](cluster_setup.md)
+
+[各flag配置项含义介绍](tera_flag.md)
+
+## 性能优化
+
+[针对表格不同读写特性的性能优化建议](perf_opz.md)
+
+## 功能实现
+
+[动态负载均衡](load-balance.md)
+
+[数据删除的实现](data-deletion-in-tera.md)
+
+[tablet的可用性统计实现](tablet-availability.md)
+
+## 版本发布
+
+[版本发布及管理](release_management.md)
+
+## 源码相关
+
+[源码目录结构](../src/README.md)
+
+[LevelDB](../src/leveldb/README.md)
 
 ## TodoList
 1. Master的设计与实现（职责、功能、每个功能怎么实现的、为什么这么实现、还有哪些遗留问题）
@@ -25,9 +48,5 @@
 1. SDK的结构化文档（可折叠，可搜索，类是windows的帮助）
 1. 性能数据，不同场景下的测试数，瓶颈分析
 1. 性能方面设计折衷（怎样实现的高性能随机读写）
-1. 数据模型的详细介绍
-  * cf的使用建议
-  * 各种删除的语义
-  * 多版本保留机制
 1. 监控系统的安装和使用
 1. 快速、低成本Split&Merge的实现原理

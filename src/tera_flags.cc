@@ -29,6 +29,7 @@ DEFINE_int32(tera_zk_retry_max_times, 10, "zookeeper operation max retry times")
 DEFINE_string(tera_zk_lib_log_path, "../log/zk.log", "zookeeper library log output file");
 DEFINE_string(tera_log_prefix, "", "prefix of log file (INFO, WARNING)");
 DEFINE_string(tera_local_addr, "", "local host's ip address");
+DEFINE_bool(tera_online_schema_update_enabled, false, "enable online-schema-update");
 
 /////////  io  /////////
 
@@ -64,7 +65,7 @@ DEFINE_int32(tera_memenv_block_cache_size, 20, "block cache size for leveldb whi
 
 DEFINE_string(tera_leveldb_compact_strategy, "default", "the default strategy to drive consum compaction, should be [default|LG|dummy]");
 DEFINE_bool(tera_leveldb_verify_checksums, true, "enable verify data read from storage against checksums");
-DEFINE_bool(tera_leveldb_ignore_corruption_in_compaction, true, "skip corruption blocks of sst file in compaction");
+DEFINE_bool(tera_leveldb_ignore_corruption_in_compaction, false, "skip corruption blocks of sst file in compaction");
 
 DEFINE_int32(tera_rpc_client_max_inflow, -1, "the max input flow (in MB/s) for rpc-client, -1 means no limit");
 DEFINE_int32(tera_rpc_client_max_outflow, -1, "the max input flow (in MB/s) for rpc-client, -1 means no limit");
@@ -89,8 +90,8 @@ DEFINE_int32(tera_master_cache_keep_min, 512, "the minimal free cache size (in M
 
 DEFINE_int32(tera_master_thread_min_num, 1, "the min thread number of master server");
 DEFINE_int32(tera_master_thread_max_num, 10, "the max thread number of master server");
-DEFINE_int32(tera_master_impl_thread_min_num, 1, "the min thread number for master impl operations");
 DEFINE_int32(tera_master_impl_thread_max_num, 20, "the max thread number for master impl operations");
+DEFINE_int32(tera_master_impl_query_thread_num, 20, "the thread number for master impl query tabletnodes");
 DEFINE_int32(tera_master_impl_retry_times, 5, "the max retry times when master impl operation fail");
 
 DEFINE_string(tera_master_meta_table_name, "meta_table", "the meta table name");
@@ -99,12 +100,15 @@ DEFINE_string(tera_master_meta_table_path, "meta", "the path of meta table");
 DEFINE_int64(tera_master_split_tablet_size, 512, "the size (in MB) of tablet to trigger split");
 DEFINE_bool(tera_master_merge_enabled, false, "enable the auto-merge tablet");
 DEFINE_int64(tera_master_merge_tablet_size, 0, "the size (in MB) of tablet to trigger merge");
-DEFINE_string(tera_master_gc_strategy, "default", "gc strategy, [default, incremental]");
+DEFINE_string(tera_master_gc_strategy, "incremental", "gc strategy, [default, incremental]");
 
 DEFINE_int32(tera_master_max_split_concurrency, 1, "the max concurrency of tabletnode for split tablet");
 DEFINE_int32(tera_master_max_load_concurrency, 5, "the max concurrency of tabletnode for load tablet");
 DEFINE_int32(tera_master_max_move_concurrency, 50, "the max concurrency for move tablet");
 DEFINE_int32(tera_master_load_interval, 300, "the delay interval (in sec) for load tablet");
+
+DEFINE_int32(tera_master_schema_update_retry_period, 1, "the period (in second) to poll schema update");
+DEFINE_int32(tera_master_schema_update_retry_times, 60000, "the max retry times of syncing new schema to ts");
 
 // load balance
 DEFINE_bool(tera_master_move_tablet_enabled, true, "enable master to auto move tablet");
@@ -141,6 +145,14 @@ DEFINE_int64(tera_master_stat_table_splitsize, 100, "default split size of stat 
 
 DEFINE_int32(tera_master_gc_period, 60000, "the period (in ms) for master gc");
 
+DEFINE_bool(tera_master_availability_check_enabled, true, "whether execute availability check");    // reload config safety
+DEFINE_bool(tera_master_availability_show_details_enabled, false, "whether show details of not-ready tablets"); // reload config safety
+DEFINE_int64(tera_master_not_available_threshold, 0, "the threshold (in s) of not available");     // reload config safety
+DEFINE_int64(tera_master_availability_check_period, 60, "the period (in s) of availability check"); // reload config safety
+DEFINE_int64(tera_master_availability_warning_threshold, 30, "30s, the threshold (in s) of warning availability"); // reload config safety
+DEFINE_int64(tera_master_availability_error_threshold, 300, "5 minutes, the threshold (in s) of error availability");        // reload config safety
+DEFINE_int64(tera_master_availability_fatal_threshold, 1800, "30 minutes, the threshold (in s) of fatal availability");        // reload config safety
+
 ///////// tablet node  /////////
 
 DEFINE_string(tera_tabletnode_port, "20000", "the tablet node port of tera system");
@@ -171,6 +183,7 @@ DEFINE_int32(tera_asyncwriter_batch_size, 1024, "write batch to leveldb per X KB
 DEFINE_int32(tera_request_pending_limit, 100000, "the max read/write request pending");
 DEFINE_int32(tera_scan_request_pending_limit, 1000, "the max scan request pending");
 DEFINE_int32(tera_garbage_collect_period, 1800, "garbage collect period in s");
+DEFINE_int32(tera_garbage_collect_debug_log, 0, "garbage collect debug log");
 
 DEFINE_int32(tera_tabletnode_write_meta_rpc_timeout, 60000, "the timeout period (in ms) for tabletnode write meta");
 DEFINE_int32(tera_tabletnode_retry_period, 100, "the retry interval period (in ms) when operate tablet");
@@ -191,6 +204,8 @@ DEFINE_int32(tera_tabletnode_cache_mem_size, 2048, "the maximal size (in KB) of 
 DEFINE_int32(tera_tabletnode_cache_disk_size, 1024, "the maximal size (in MB) of disk cache");
 DEFINE_int32(tera_tabletnode_cache_disk_filenum, 1, "the file num of disk cache storage");
 DEFINE_int32(tera_tabletnode_cache_log_level, 1, "the log level [0 - 5] for cache system (0: FATAL, 1: ERROR, 2: WARN, 3: INFO, 5: DEBUG).");
+DEFINE_int32(tera_tabletnode_cache_update_thread_num, 4, "thread num for update cache");
+DEFINE_bool(tera_tabletnode_cache_force_read_from_cache, true, "force update cache before any read");
 DEFINE_int32(tera_tabletnode_gc_log_level, 15, "the vlog level [0 - 16] for cache gc.");
 
 DEFINE_bool(tera_tabletnode_tcm_cache_release_enabled, true, "enable the timer to release tcmalloc cache");
@@ -239,9 +254,11 @@ DEFINE_string(tera_sdk_cookie_path, "/tmp/.tera_cookie", "the default path of sd
 DEFINE_int32(tera_sdk_cookie_update_interval, 600, "the interval of cookie updating(s)");
 
 DEFINE_bool(tera_sdk_perf_counter_enabled, true, "enable performance counter log");
-DEFINE_int64(tera_sdk_perf_counter_log_interval, 1, "the interval of performance counter log dumping");
+DEFINE_int64(tera_sdk_perf_counter_log_interval, 60, "the interval period (in sec) of performance counter log dumping");
 
 DEFINE_bool(tera_sdk_batch_scan_enabled, false, "enable async scan");
+DEFINE_int64(tera_sdk_scan_buffer_size, 65536, "default buffer limit for scan");
+DEFINE_int64(tera_sdk_scan_number_limit, 1000000000, "default number limit for scan");
 DEFINE_int32(tera_sdk_max_batch_scan_req, 10, "the max number of concurrent scan req");
 
 DEFINE_string(tera_ins_addr_list, "", "the ins cluster addr. e.g. abc.com:1234,abb.com:1234");

@@ -19,11 +19,14 @@
 #include "common/mutex.h"
 #include "common/thread_pool.h"
 
+#include "proto/master_rpc.pb.h"
 #include "proto/table_meta.pb.h"
 #include "proto/tabletnode_rpc.pb.h"
 #include "utils/counter.h"
+#include "utils/fragment.h"
 
 namespace tera {
+class UpdateTableResponse;
 namespace master {
 
 
@@ -119,6 +122,12 @@ public:
 
     void ToMetaTableKeyValue(std::string* packed_key = NULL,
                              std::string* packed_value = NULL);
+    bool GetSchemaIsSyncing();
+
+    int64_t UpdateTime();
+    int64_t SetUpdateTime(int64_t timestamp);
+    int64_t LoadTime();
+    int64_t SetLoadTime(int64_t timestamp);
 
 private:
     Tablet(const Tablet&) {}
@@ -130,6 +139,8 @@ private:
     mutable Mutex m_mutex;
     TabletMeta m_meta;
     TablePtr m_table;
+    int64_t m_update_time;
+    int64_t m_load_time;
     std::string m_server_id;
     std::string m_expect_server_addr;
     std::list<TabletCounter> m_counter_list;
@@ -188,6 +199,23 @@ public:
     bool GetTabletsForGc(std::set<uint64_t>* live_tablets,
                          std::set<uint64_t>* dead_tablets);
     void RefreshCounter();
+    int64_t GetTabletsCount();
+    bool GetSchemaIsSyncing();
+    void SetSchemaIsSyncing(bool flag);
+    bool GetSchemaSyncLockOrFailed();
+    void ResetRangeFragment();
+    bool AddToRange(const std::string& start, const std::string& end);
+    bool IsCompleteRange() const;
+    RangeFragment* GetRangeFragment();
+    void UpdateRpcDone();
+    void StoreUpdateRpc(UpdateTableResponse* response, google::protobuf::Closure* done);
+    bool IsSchemaSyncedAtRange(const std::string& start, const std::string& end);
+    void SetOldSchema(TableSchema* schema);
+    bool GetOldSchema(TableSchema* schema);
+    void ClearOldSchema();
+    bool PrepareUpdate(const TableSchema& schema);
+    void AbortUpdate();
+    void CommitUpdate();
 
 private:
     Table(const Table&) {}
@@ -204,6 +232,11 @@ private:
     uint64_t m_max_tablet_no;
     int64_t m_create_time;
     TableCounter m_counter;
+    bool m_schema_is_syncing; // is schema syncing to all ts(all tablets)
+    RangeFragment* m_rangefragment;
+    UpdateTableResponse* m_update_rpc_response;
+    google::protobuf::Closure* m_update_rpc_done;
+    TableSchema* m_old_schema;
 };
 
 class TabletManager {
@@ -246,7 +279,8 @@ public:
                     StatusCode* ret_status = NULL);
 
     void FindTablet(const std::string& server_addr,
-                    std::vector<TabletPtr>* tablet_meta_list);
+                    std::vector<TabletPtr>* tablet_meta_list,
+                    bool all_tables = false);
 
     bool FindTable(const std::string& table_name,
                    std::vector<TabletPtr>* tablet_meta_list,
@@ -281,6 +315,7 @@ public:
     void LoadTableMeta(const std::string& key, const std::string& value);
     void LoadTabletMeta(const std::string& key, const std::string& value);
 
+    int64_t GetAllTabletsCount();
 private:
     void PackTabletMeta(TabletMeta* meta, const std::string& table_name,
                         const std::string& key_start = "",

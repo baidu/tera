@@ -60,6 +60,10 @@ public:
                        CompactTabletResponse* response,
                        google::protobuf::Closure* done);
 
+    void Update(const UpdateRequest* request,
+                UpdateResponse* response,
+                google::protobuf::Closure* done);
+
     void ReadTablet(int64_t start_micros,
                     const ReadTabletRequest* request,
                     ReadTabletResponse* response,
@@ -108,6 +112,8 @@ public:
 
     double GetBlockCacheHitRate();
 
+    double GetTableCacheHitRate();
+
     TabletNodeSysInfo& GetSysInfo();
 
     void RefreshSysInfo();
@@ -149,6 +155,8 @@ private:
     void GarbageCollectInPath(const std::string& path, leveldb::Env* env,
                               const std::set<std::string>& inherited_files,
                               const std::set<std::string> active_tablets);
+
+    bool ApplySchema(const UpdateRequest* request);
 private:
     mutable Mutex m_status_mutex;
     TabletNodeStatus m_status;

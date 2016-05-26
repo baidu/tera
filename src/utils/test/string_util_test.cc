@@ -46,6 +46,52 @@ TEST(StringUtilTest, IsValidCfName) {
     ASSERT_FALSE(IsValidColumnFamilyName("cf0\2"));
 }
 
+TEST(StringUtilTest, RoundNumberToNDecimalPlaces) {
+    ASSERT_EQ(RoundNumberToNDecimalPlaces(33, -1), "(null)");
+    ASSERT_EQ(RoundNumberToNDecimalPlaces(33, 10), "(null)");
+
+    ASSERT_EQ(RoundNumberToNDecimalPlaces(33, 0), "33");
+    ASSERT_EQ(RoundNumberToNDecimalPlaces(33, 1), "33.0");
+    ASSERT_EQ(RoundNumberToNDecimalPlaces(33, 2), "33.00");
+    ASSERT_EQ(RoundNumberToNDecimalPlaces(33, 9), "33.000000000");
+
+    ASSERT_EQ(RoundNumberToNDecimalPlaces(123456789.987654321, 0), "123456790");
+    ASSERT_EQ(RoundNumberToNDecimalPlaces(123456789.987654321, 1), "123456790.0");
+    ASSERT_EQ(RoundNumberToNDecimalPlaces(123456789.987654321, 2), "123456789.99");
+    ASSERT_EQ(RoundNumberToNDecimalPlaces(123456789.987654321, 6), "123456789.987654");
+
+    ASSERT_EQ(RoundNumberToNDecimalPlaces(0, 6), "0.000000");
+    ASSERT_EQ(RoundNumberToNDecimalPlaces(0.1, 6), "0.100000");
+    ASSERT_EQ(RoundNumberToNDecimalPlaces(0.01, 6), "0.010000");
+    ASSERT_EQ(RoundNumberToNDecimalPlaces(0.000012345678, 6), "0.000012");
+}
+
+TEST(EditDistance, AllCase) {
+    ASSERT_EQ(EditDistance("", ""), 0);
+    ASSERT_EQ(EditDistance("", "a"), 1);
+    ASSERT_EQ(EditDistance("a", ""), 1);
+    ASSERT_EQ(EditDistance("ab", ""), 2);
+    ASSERT_EQ(EditDistance("", "ab"), 2);
+
+    ASSERT_EQ(EditDistance("a", "a"), 0);
+    ASSERT_EQ(EditDistance("a", "b"), 1);
+
+    ASSERT_EQ(EditDistance("ax", "axy"), 1); // insertion
+    ASSERT_EQ(EditDistance("ax", "a"), 1);   // removal
+    ASSERT_EQ(EditDistance("ax", "ay"), 1);  // substitution
+
+    ASSERT_EQ(EditDistance("showschema", "show_schema"), 1);
+    ASSERT_EQ(EditDistance("showschema", "showscheama"), 1);
+    ASSERT_EQ(EditDistance("branch", "branc"), 1);
+    ASSERT_EQ(EditDistance("update", "udpate"), 2);
+
+    ASSERT_EQ(EditDistance("aaa", "bbb"), 3);
+    ASSERT_EQ(EditDistance("aaa", "baa"), 1);
+    ASSERT_EQ(EditDistance("abb", "acc"), 2);
+    ASSERT_EQ(EditDistance("abc", "op"), 3);
+    ASSERT_EQ(EditDistance("abc", "rstuvw"), 6);
+}
+
 }
 
 int main(int argc, char** argv) {

@@ -47,6 +47,9 @@ public:
     virtual bool UpdateTable(const UpdateTableRequest* request,
                              UpdateTableResponse* response);
 
+    virtual bool UpdateCheck(const UpdateCheckRequest* request,
+                             UpdateCheckResponse* response);
+
     virtual bool SearchTable(const SearchTableRequest* request,
                              SearchTableResponse* response);
 

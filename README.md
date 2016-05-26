@@ -17,15 +17,17 @@ Tera是一个高性能、可伸缩的结构化数据存储系统，被设计用�
  * 高效随机读写
 
 #数据模型
-Tera使用了bigtable的数据模型，可以将一张表格理解为这样一种数据结构：<br>
-map\<RowKey, map\<ColummnFamily:Qualifier, map\<Timestamp, Value> > > <br>
+Tera使用了bigtable的数据模型，可以将一张表格理解为这样一种数据结构：
+```
+map<RowKey, map<ColummnFamily:Qualifier, map<Timestamp, Value> > >
+```
 其中RowKey、ColumnFamily、Qualifier和Value是字符串，Timestamp是一个64位整形。ColumnFamliy需要建表时指定，是访问控制、版本保留等策略的基本单位。
 
 #系统架构
 系统主要由Tabletserver、Master和ClientSDK三部分构成。其中Tabletserver是核心服务器，承载着所有的数据管理与访问；Master是系统的仲裁者，负责表格的创建、schema更新与负载均衡；ClientSDK包含供管理员使用的命令行工具teracli和给用户使用的SDK。
 表格被按RowKey全局排序，并横向切分成多个Tablet，每个Tablet负责服务RowKey的一个区间，表格又被纵向且分为多个LocalityGroup，一个Tablet的多个Localitygroup在物理上单独存储，可以选择不同的存储介质，以优化访问效率。
 
-![架构图](https://github.com/baidu/tera/blob/master/resources/images/arch.png?raw=true)
+![架构图](resources/images/arch.png)
 
 #系统依赖
  * 使用分布式文件系统（HDFS、NFS等）持久化数据与元信息
@@ -34,23 +36,25 @@ map\<RowKey, map\<ColummnFamily:Qualifier, map\<Timestamp, Value> > > <br>
 
 #系统构建
 sh ./build.sh  
-参考[BUILD](https://github.com/baidu/tera/blob/master/BUILD)
+参考[BUILD](BUILD)
 
 #使用示例
 
-[通过OneBox体验Tera](https://github.com/baidu/tera/blob/master/doc/Onebox.md)
+[体验单机Tera](doc/onebox.md)
 
-[通过docker体验Tera](https://github.com/baidu/tera/blob/master/example/docker)
+[通过docker体验Tera](example/docker)
 
-[SDK 开发入门](https://github.com/baidu/tera/blob/master/doc/sdk_dev_guide.md)
+[主要api使用方法](doc/sdk_dev_guide.md)
 
-[teracli 使用手册](https://github.com/baidu/tera/blob/master/doc/teracli.md)
+[客户端teracli使用方法](doc/teracli.md)
+
+[其它文档](doc/README.md)
 
 #反馈与技术支持
 tera_dev@baidu.com
 
 #成为贡献者
-完成[5个小任务](https://github.com/baidu/tera/blob/master/doc/to_be_a_contributor.md),帮你一步步成为tera贡献者.
+完成[5个小任务](doc/to_be_a_contributor.md),帮你一步步成为tera贡献者.
 
 #欢迎加入
 如果你热爱开源，热爱分布式技术，请将简历发送至： 

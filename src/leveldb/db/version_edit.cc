@@ -8,6 +8,7 @@
 
 #include "db/version_edit.h"
 
+#include "db/filename.h"
 #include "db/version_set.h"
 #include "util/coding.h"
 
@@ -296,21 +297,29 @@ std::string VersionEdit::DebugString() const {
     r.append(" ");
     r.append(compact_pointers_[i].second.DebugString());
   }
+  uint64_t tablet_number = 0;
+  uint64_t file_number = 0;
   for (FileMetaSet::const_iterator iter = deleted_files_.begin();
        iter != deleted_files_.end();
        ++iter) {
-    r.append("\n  DeleteFile: ");
+    ParseFullFileNumber(iter->second.number, &tablet_number, &file_number);
+    r.append("\n  DeleteFile: level ");
     AppendNumberTo(&r, iter->first);
-    r.append(" ");
-    AppendNumberTo(&r, iter->second.number);
+    r.append(" tablet ");
+    AppendNumberTo(&r, tablet_number);
+    r.append(" file ");
+    AppendNumberTo(&r, file_number);
   }
   for (size_t i = 0; i < new_files_.size(); i++) {
     const FileMetaData& f = new_files_[i].second;
-    r.append("\n  AddFile: ");
+    ParseFullFileNumber(f.number, &tablet_number, &file_number);
+    r.append("\n  AddFile: level ");
     AppendNumberTo(&r, new_files_[i].first);
-    r.append(" ");
-    AppendNumberTo(&r, f.number);
-    r.append(" ");
+    r.append(" tablet ");
+    AppendNumberTo(&r, tablet_number);
+    r.append(" file ");
+    AppendNumberTo(&r, file_number);
+    r.append(" size ");
     AppendNumberTo(&r, f.file_size);
     r.append(" ");
     r.append(f.smallest.DebugString());

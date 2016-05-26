@@ -273,6 +273,15 @@ TEST(FileNameTest, IsTableFileInherited) {
   number = 0x8065432101234567;
   ASSERT_EQ(true, IsTableFileInherited(tablet, number));
 }
+
+TEST(FileNameTest, FileNumberDebugString) {
+  uint64_t number = 0x8000000100000000;
+  ASSERT_EQ("[00000001 00000000.sst]", FileNumberDebugString(number));
+
+  // 1234567=0x12d687, 89=0x59, 987654321=0x3ADE68B1
+  number = 0x8012d6870012d687;
+  ASSERT_EQ("[01234567 01234567.sst]", FileNumberDebugString(number));
+}
 }  // namespace leveldb
 
 int main(int argc, char** argv) {

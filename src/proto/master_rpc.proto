@@ -67,6 +67,18 @@ message UpdateTableResponse {
     required uint64 sequence_id = 2;
 }
 
+message UpdateCheckRequest {
+    optional uint64 sequence_id = 1;
+    optional string table_name = 2;
+    optional bytes user_token = 3;
+}
+
+message UpdateCheckResponse {
+    optional uint64 sequence_id = 1;
+    optional StatusCode status = 2;
+    optional bool done = 3;
+}
+
 message CompactTableRequest {
     required uint64 sequence_id = 1;
 }
@@ -248,6 +260,7 @@ service MasterServer {
     rpc DisableTable(DisableTableRequest) returns (DisableTableResponse);
     rpc EnableTable(EnableTableRequest) returns (EnableTableResponse);
     rpc UpdateTable(UpdateTableRequest) returns (UpdateTableResponse);
+    rpc UpdateCheck(UpdateCheckRequest) returns (UpdateCheckResponse);
     rpc CompactTable(CompactTableRequest) returns (CompactTableResponse);
     rpc SearchTable(SearchTableRequest) returns(SearchTableResponse);
 

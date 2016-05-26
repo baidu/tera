@@ -355,6 +355,7 @@ service TabletNodeServer {
     rpc Rollback(SnapshotRollbackRequest) returns(SnapshotRollbackResponse);
 
     rpc SplitTablet(SplitTabletRequest) returns(SplitTabletResponse);
+
     rpc CmdCtrl(TsCmdCtrlRequest) returns(TsCmdCtrlResponse);
     rpc Update(UpdateRequest) returns(UpdateResponse);
 }

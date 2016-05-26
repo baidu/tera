@@ -18,7 +18,8 @@ namespace leveldb {
 MemTableOnLevelDB::MemTableOnLevelDB(const InternalKeyComparator& comparator,
                                      CompactStrategyFactory* compact_strategy_factory,
                                      size_t write_buffer_size,
-                                     size_t block_size)
+                                     size_t block_size,
+                                     Logger* info_log)
                                      : MemTable(comparator, compact_strategy_factory) {
     char memdb_name[1024] = { '\0' };
     snprintf(memdb_name, sizeof(memdb_name), "/%d/%llu", getpid(),
@@ -32,7 +33,7 @@ MemTableOnLevelDB::MemTableOnLevelDB(const InternalKeyComparator& comparator,
     opts.comparator = comparator.user_comparator();
     opts.dump_mem_on_shutdown = false;
     opts.drop_base_level_del_in_compaction = false;
-    opts.info_log = NULL;
+    opts.info_log = info_log;
 
     DBImpl* db_impl = new DBImpl(opts, memdb_name);
     VersionEdit edit;
@@ -92,8 +93,8 @@ const uint64_t MemTableOnLevelDB::GetSnapshot(uint64_t last_sequence) {
     return memdb_->GetSnapshot(last_sequence);
 }
 
-void MemTableOnLevelDB::ReleaseSnapshot(uint64_t sequence_number) {
-    return memdb_->ReleaseSnapshot(sequence_number);
+void MemTableOnLevelDB::TryReleaseSnapshot(uint64_t sequence_number) {
+    return memdb_->TryReleaseSnapshot(sequence_number);
 }
 
 static pthread_once_t mem_base_env_once = PTHREAD_ONCE_INIT;

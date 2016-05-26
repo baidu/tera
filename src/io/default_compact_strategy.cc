@@ -138,6 +138,9 @@ bool DefaultCompactStrategy::Drop(const Slice& tera_key, uint64_t n,
         if (n <= m_snapshot) {
             if (++m_version_num > static_cast<uint32_t>(m_schema.column_families(cf_id).max_versions())) {
                 // drop out-of-range version
+                VLOG(20) << "compact drop true: " << key.ToString()
+                    << ", version " << m_version_num
+                    << ", timestamp " << ts;
                 return true;
             }
         }
@@ -147,6 +150,9 @@ bool DefaultCompactStrategy::Drop(const Slice& tera_key, uint64_t n,
         // drop ADDs which is later than Put
         return true;
     }
+    VLOG(20) << "compact drop false: " << key.ToString()
+        << ", version " << m_version_num
+        << ", timestamp " << ts;
     return false;
 }
 
@@ -354,11 +360,15 @@ bool DefaultCompactStrategy::ScanDrop(const Slice& tera_key, uint64_t n) {
         if (m_version_num >
             static_cast<uint32_t>(m_schema.column_families(cf_id).max_versions())) {
             // drop out-of-range version
-            VLOG(20) << "drop true: " << key.ToString()
-                << ", version: " << m_version_num;
+            VLOG(20) << "scan drop true: " << key.ToString()
+                << ", version " << m_version_num
+                << ", timestamp " << ts;
             return true;
         }
     }
+    VLOG(20) << "scan drop false: " << key.ToString()
+        << ", version " << m_version_num
+        << ", timestamp " << ts;
     return false;
 }
 
@@ -408,7 +418,13 @@ bool DefaultCompactStrategy::CheckCompactLowerBound(const Slice& cur_key,
 DefaultCompactStrategyFactory::DefaultCompactStrategyFactory(const TableSchema& schema)
     : m_schema(schema) {}
 
+void DefaultCompactStrategyFactory::SetArg(const void* arg) {
+    MutexLock lock(&m_mutex);
+    m_schema.CopyFrom(*(TableSchema*)arg);
+}
+
 DefaultCompactStrategy* DefaultCompactStrategyFactory::NewInstance() {
+    MutexLock lock(&m_mutex);
     return new DefaultCompactStrategy(m_schema);
 }
 

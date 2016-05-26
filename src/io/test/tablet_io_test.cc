@@ -145,7 +145,7 @@ TEST_F(TabletIOTest, Split) {
     split_key.clear();
     EXPECT_TRUE(other_tablet.Split(&split_key, &status));
     LOG(INFO) << "split key = " << split_key << ", code " << StatusCodeToString(status);
-    EXPECT_EQ(split_key, "6000");
+    EXPECT_EQ(split_key, "6");
     EXPECT_TRUE(other_tablet.Unload());
 
     key_start = "";
@@ -455,12 +455,12 @@ TEST_F(TabletIOTest, FindAverageKey) {
     start = "helloa";
     end = "hellob";
     ASSERT_TRUE(TabletIO::FindAverageKey(start, end, &ave));
-    ASSERT_EQ(ave, "helloa_");
+    ASSERT_EQ(ave, "helloa\x80");
 
     start = "a";
     end = "b";
     ASSERT_TRUE(TabletIO::FindAverageKey(start, end, &ave));
-    ASSERT_EQ(ave, "a_");
+    ASSERT_EQ(ave, "a\x80");
 
     start = "a";
     // b(0x62), 1(0x31)
@@ -477,7 +477,7 @@ TEST_F(TabletIOTest, FindAverageKey) {
     start = "";
     end = "";
     ASSERT_TRUE(TabletIO::FindAverageKey(start, end, &ave));
-    ASSERT_EQ(ave, "_");
+    ASSERT_EQ(ave, "\x7F");
 
     start = "";
     end = "b";
@@ -487,11 +487,30 @@ TEST_F(TabletIOTest, FindAverageKey) {
     start = "b";
     end = "";
     ASSERT_TRUE(TabletIO::FindAverageKey(start, end, &ave));
-    ASSERT_EQ(ave, "\xb1");
+    ASSERT_EQ(ave, "\xb0");
+
+    start = "000000000000001480186993";
+    end = "000000000000002147352684";
+    ASSERT_TRUE(TabletIO::FindAverageKey(start, end, &ave));
+    ASSERT_LT(start, ave);
+    ASSERT_LT(ave, end);
+
+    start = std::string("000017\xF0");
+    end = "000018000000001397050688";
+    ASSERT_TRUE(TabletIO::FindAverageKey(start, end, &ave));
+    ASSERT_LT(start, ave);
+    ASSERT_LT(ave, end);
+
+    start = std::string("0000\177");
+    end = std::string("0000\200");
+    ASSERT_TRUE(TabletIO::FindAverageKey(start, end, &ave));
+    ASSERT_LT(start, ave);
+    ASSERT_LT(ave, end);
 
     start = "";
     end = "\x1";
-    ASSERT_FALSE(TabletIO::FindAverageKey(start, end, &ave));
+    ASSERT_TRUE(TabletIO::FindAverageKey(start, end, &ave));
+    ASSERT_EQ(ave, std::string("\x0\x80", 2));
 
     start = "";
     end = std::string("\x0", 1);

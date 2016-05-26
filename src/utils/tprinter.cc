@@ -118,17 +118,21 @@ string TPrinter::ToString(const PrintOpt& opt) {
         }
         ostr << std::endl;
     }
-
+    bool first_line = true;
     for (size_t i = 0; i < body_.size(); ++i) {
         std::vector<string> line;
         FormatOneLine(body_[i], &line);
+        if (first_line) {
+            first_line = false;
+        } else {
+            ostr << std::endl;
+        }
         for (int j = 0; j < cols_; ++j) {
             ostr << "  " << std::setfill(' ')
                 << std::setw(col_width_[j])
                 << std::setiosflags(std::ios::left)
                 << line[j];
         }
-        ostr << std::endl;
     }
     return ostr.str();
 }

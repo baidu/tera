@@ -20,7 +20,8 @@ RowReaderImpl::RowReaderImpl(Table* table, const std::string& row_key)
       _snapshot_id(0),
       _timeout_ms(0),
       _retry_times(0),
-      _result_pos(0) {
+      _result_pos(0),
+      _commit_times(0) {
 }
 
 RowReaderImpl::~RowReaderImpl() {
@@ -190,6 +191,12 @@ void RowReaderImpl::ToMap(Map* rowmap) {
 }
 
 void RowReaderImpl::SetResult(const RowResult& result) {
+    int32_t num = result.key_values_size();
+    for (int32_t i = 0; i < num; ++i) {
+        const std::string& key = result.key_values(i).key();
+        CHECK(_row_key == key) << "FATAL: rowkey[" << _row_key
+                << "] vs result[" << key << "]";
+    }
     return _result.CopyFrom(result);
 }
 

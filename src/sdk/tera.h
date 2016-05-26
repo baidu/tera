@@ -12,6 +12,7 @@
 #include <string>
 #include <vector>
 
+#pragma GCC visibility push(default)
 namespace tera {
 
 /// 操作错误码
@@ -30,9 +31,11 @@ public:
         kNotImpl
     };
     ErrorCode();
-    void SetFailed(ErrorCodeType err, const std::string& reason = "");
+    std::string ToString() const;
+
     std::string GetReason() const;
     ErrorCodeType GetType() const;
+    void SetFailed(ErrorCodeType err, const std::string& reason = "");
 
 private:
     ErrorCodeType _err;
@@ -235,6 +238,7 @@ public:
     virtual int64_t Timestamp() const = 0;
     /// Value
     virtual std::string Value() const = 0;
+    virtual int64_t ValueInt64() const = 0;
     ResultStream() {}
     virtual ~ResultStream() {}
 
@@ -261,8 +265,8 @@ public:
     void SetPackInterval(int64_t timeout);
     /// 设置返回版本的时间范围
     void SetTimeRange(int64_t ts_end, int64_t ts_start);
-    /// 设置过滤表达式（仅支持AND）
-    bool SetFilterString(const std::string& filter_string);
+
+    bool SetFilter(const std::string& schema);
     typedef bool (*ValueConverter)(const std::string& in,
                                    const std::string& type,
                                    std::string* out);
@@ -272,6 +276,10 @@ public:
     void SetSnapshot(uint64_t snapshot_id);
     /// 设置预读的buffer大小, 默认64K
     void SetBufferSize(int64_t buf_size);
+
+    /// set number limit for each buffer
+    void SetNumberLimit(int64_t number_limit);
+    int64_t GetNumberLimit();
 
     /// 设置async, 缺省true
     void SetAsync(bool async);
@@ -406,6 +414,7 @@ public:
     /// 是否异步操作
     virtual bool IsAsync() = 0;
     /// 异步操作是否完成
+    /// !!! Not implemented
     virtual bool IsFinished() const = 0;
     /// mutation数量
     virtual uint32_t MutationNum() = 0;
@@ -461,9 +470,10 @@ public:
     /// 设置用户上下文，可在回调函数中获取
     virtual void SetContext(void* context) = 0;
     virtual void* GetContext() = 0;
-    /// 设置异步返回
+    /// 设置异步返回 !!! NOT implemented
     virtual void SetAsync() = 0;
     /// 异步操作是否完成
+    /// !!! Not implemented
     virtual bool IsFinished() const = 0;
 
     /// 获得结果错误码
@@ -576,6 +586,7 @@ public:
 
     virtual const std::string GetName() = 0;
 
+    /// !!! Not implemented
     virtual bool Flush() = 0;
     /// 条件修改, 指定Cell的值为value时, 才执行row_mu
     virtual bool CheckAndApply(const std::string& rowkey, const std::string& cf_c,
@@ -586,7 +597,9 @@ public:
                                          const std::string& qualifier, int64_t amount,
                                          ErrorCode* err) = 0;
     /// 设置表格写操作默认超时
+    /// !!! Not implemented
     virtual void SetWriteTimeout(int64_t timeout_ms) = 0;
+    /// !!! Not implemented
     virtual void SetReadTimeout(int64_t timeout_ms) = 0;
 
     /// 创建行锁
@@ -597,9 +610,11 @@ public:
                                  ErrorCode* err) = 0;
 
     /// 获取表格分布信息
+    /// !!! Not implemented
     virtual bool GetTabletLocation(std::vector<TabletInfo>* tablets,
                                    ErrorCode* err) = 0;
     /// 获取表格描述符
+    /// !!! Not implemented
     virtual bool GetDescriptor(TableDescriptor* desc, ErrorCode* err) = 0;
 
     virtual void SetMaxMutationPendingNum(uint64_t max_pending_num) = 0;
@@ -631,12 +646,13 @@ public:
                              ErrorCode* err) = 0;
     /// 更新表格Schema
     virtual bool UpdateTable(const TableDescriptor& desc, ErrorCode* err) = 0;
+    virtual bool UpdateCheck(const std::string& table_name, bool* done, ErrorCode* err) = 0;
     /// 删除表格
-    virtual bool DeleteTable(std::string name, ErrorCode* err) = 0;
+    virtual bool DeleteTable(const std::string& name, ErrorCode* err) = 0;
     /// 停止表格服务
-    virtual bool DisableTable(std::string name, ErrorCode* err) = 0;
+    virtual bool DisableTable(const std::string& name, ErrorCode* err) = 0;
     /// 恢复表格服务
-    virtual bool EnableTable(std::string name, ErrorCode* err) = 0;
+    virtual bool EnableTable(const std::string& name, ErrorCode* err) = 0;
 
     /// acl
     virtual bool CreateUser(const std::string& user,
@@ -695,4 +711,6 @@ private:
     void operator=(const Client&);
 };
 } // namespace tera
+#pragma GCC visibility pop
+
 #endif  // TERA_TERA_H_

@@ -30,6 +30,7 @@ void RemoteMaster::GetSnapshot(google::protobuf::RpcController* controller,
                                const GetSnapshotRequest* request,
                                GetSnapshotResponse* response,
                                google::protobuf::Closure* done) {
+    LOG(INFO) << "accept RPC (GetSnapshot)";
     ThreadPool::Task callback =
         boost::bind(&RemoteMaster::DoGetSnapshot, this, controller,
                     request, response, done);
@@ -40,6 +41,7 @@ void RemoteMaster::DelSnapshot(google::protobuf::RpcController* controller,
                                const DelSnapshotRequest* request,
                                DelSnapshotResponse* response,
                                google::protobuf::Closure* done) {
+    LOG(INFO) << "accept RPC (DelSnapshot)";
     ThreadPool::Task callback =
         boost::bind(&RemoteMaster::DoDelSnapshot, this, controller,
                     request, response, done);
@@ -50,6 +52,7 @@ void RemoteMaster::GetRollback(google::protobuf::RpcController* controller,
                                const RollbackRequest* request,
                                RollbackResponse* response,
                                google::protobuf::Closure* done) {
+    LOG(INFO) << "accept RPC (Rollback)";
     ThreadPool::Task callback =
         boost::bind(&RemoteMaster::DoRollback, this, controller,
                     request, response, done);
@@ -60,6 +63,7 @@ void RemoteMaster::CreateTable(google::protobuf::RpcController* controller,
                                const CreateTableRequest* request,
                                CreateTableResponse* response,
                                google::protobuf::Closure* done) {
+    LOG(INFO) << "accept RPC (CreateTable)";
     ThreadPool::Task callback =
         boost::bind(&RemoteMaster::DoCreateTable, this, controller,
                     request, response, done);
@@ -70,6 +74,7 @@ void RemoteMaster::DeleteTable(google::protobuf::RpcController* controller,
                                const DeleteTableRequest* request,
                                DeleteTableResponse* response,
                                google::protobuf::Closure* done) {
+    LOG(INFO) << "accept RPC (DeleteTable)";
     ThreadPool::Task callback =
         boost::bind(&RemoteMaster::DoDeleteTable, this, controller,
                     request, response, done);
@@ -80,6 +85,7 @@ void RemoteMaster::DisableTable(google::protobuf::RpcController* controller,
                                 const DisableTableRequest* request,
                                 DisableTableResponse* response,
                                 google::protobuf::Closure* done) {
+    LOG(INFO) << "accept RPC (DisableTable)";
     ThreadPool::Task callback =
         boost::bind(&RemoteMaster::DoDisableTable, this, controller,
                     request, response, done);
@@ -90,6 +96,7 @@ void RemoteMaster::EnableTable(google::protobuf::RpcController* controller,
                                const EnableTableRequest* request,
                                EnableTableResponse* response,
                                google::protobuf::Closure* done) {
+    LOG(INFO) << "accept RPC (EnableTable)";
     ThreadPool::Task callback =
         boost::bind(&RemoteMaster::DoEnableTable, this, controller,
                     request, response, done);
@@ -100,8 +107,19 @@ void RemoteMaster::UpdateTable(google::protobuf::RpcController* controller,
                                const UpdateTableRequest* request,
                                UpdateTableResponse* response,
                                google::protobuf::Closure* done) {
+    LOG(INFO) << "accept RPC (UpdateTable)";
     ThreadPool::Task callback =
         boost::bind(&RemoteMaster::DoUpdateTable, this, controller,
+                    request, response, done);
+    m_thread_pool->AddTask(callback);
+}
+
+void RemoteMaster::UpdateCheck(google::protobuf::RpcController* controller,
+                               const UpdateCheckRequest* request,
+                               UpdateCheckResponse* response,
+                               google::protobuf::Closure* done) {
+    ThreadPool::Task callback =
+        boost::bind(&RemoteMaster::DoUpdateCheck, this, controller,
                     request, response, done);
     m_thread_pool->AddTask(callback);
 }
@@ -110,6 +128,7 @@ void RemoteMaster::CompactTable(google::protobuf::RpcController* controller,
                                 const CompactTableRequest* request,
                                 CompactTableResponse* response,
                                 google::protobuf::Closure* done) {
+    LOG(INFO) << "accept RPC (CompactTable)";
     ThreadPool::Task callback =
         boost::bind(&RemoteMaster::DoCompactTable, this, controller,
                     request, response, done);
@@ -120,6 +139,7 @@ void RemoteMaster::SearchTable(google::protobuf::RpcController* controller,
                                const SearchTableRequest* request,
                                SearchTableResponse* response,
                                google::protobuf::Closure* done) {
+    LOG(INFO) << "accept RPC (SearchTable)";
     ThreadPool::Task callback =
         boost::bind(&RemoteMaster::DoSearchTable, this, controller,
                     request, response, done);
@@ -130,6 +150,7 @@ void RemoteMaster::ShowTables(google::protobuf::RpcController* controller,
                               const ShowTablesRequest* request,
                               ShowTablesResponse* response,
                               google::protobuf::Closure* done) {
+    LOG(INFO) << "accept RPC (ShowTables)";
     ThreadPool::Task callback =
         boost::bind(&RemoteMaster::DoShowTables, this, controller,
                     request, response, done);
@@ -140,6 +161,7 @@ void RemoteMaster::ShowTabletNodes(google::protobuf::RpcController* controller,
                                    const ShowTabletNodesRequest* request,
                                    ShowTabletNodesResponse* response,
                                    google::protobuf::Closure* done) {
+    LOG(INFO) << "accept RPC (ShowTabletNodes)";
     ThreadPool::Task callback =
         boost::bind(&RemoteMaster::DoShowTabletNodes, this, controller,
                     request, response, done);
@@ -150,6 +172,7 @@ void RemoteMaster::CmdCtrl(google::protobuf::RpcController* controller,
                            const CmdCtrlRequest* request,
                            CmdCtrlResponse* response,
                            google::protobuf::Closure* done) {
+    LOG(INFO) << "accept RPC (CmdCtrl)";
     ThreadPool::Task callback =
         boost::bind(&RemoteMaster::DoCmdCtrl, this, controller,
                     request, response, done);
@@ -160,10 +183,20 @@ void RemoteMaster::OperateUser(google::protobuf::RpcController* controller,
                                const OperateUserRequest* request,
                                OperateUserResponse* response,
                                google::protobuf::Closure* done) {
+    LOG(INFO) << "accept RPC (OperateUser)";
     ThreadPool::Task callback =
         boost::bind(&RemoteMaster::DoOperateUser, this, controller,
                     request, response, done);
     m_thread_pool->AddTask(callback);
+}
+
+void RemoteMaster::RenameTable(google::protobuf::RpcController* controller,
+                               const RenameTableRequest* request,
+                               RenameTableResponse* response,
+                               google::protobuf::Closure* done) {
+    LOG(INFO) << "accept RPC (RenameTable)";
+    m_master_impl->RenameTable(request, response, done);
+    LOG(INFO) << "finish RPC (RenameTable)";
 }
 
 // internal
@@ -172,7 +205,7 @@ void RemoteMaster::DoGetSnapshot(google::protobuf::RpcController* controller,
                                  const GetSnapshotRequest* request,
                                  GetSnapshotResponse* response,
                                  google::protobuf::Closure* done) {
-    LOG(INFO) << "accept RPC (GetSnapshot)";
+    LOG(INFO) << "run RPC (GetSnapshot)";
     m_master_impl->GetSnapshot(request, response, done);
     LOG(INFO) << "finish RPC (GetSnapshot)";
 }
@@ -181,7 +214,7 @@ void RemoteMaster::DoDelSnapshot(google::protobuf::RpcController* controller,
                                  const DelSnapshotRequest* request,
                                  DelSnapshotResponse* response,
                                  google::protobuf::Closure* done) {
-    LOG(INFO) << "accept RPC (DelSnapshot)";
+    LOG(INFO) << "run RPC (DelSnapshot)";
     m_master_impl->DelSnapshot(request, response, done);
     LOG(INFO) << "finish RPC (DelSnapshot)";
 }
@@ -190,7 +223,7 @@ void RemoteMaster::DoRollback(google::protobuf::RpcController* controller,
                              const RollbackRequest* request,
                              RollbackResponse* response,
                              google::protobuf::Closure* done) {
-    LOG(INFO) << "accept RPC (Rollback)";
+    LOG(INFO) << "run RPC (Rollback)";
     m_master_impl->GetRollback(request, response, done);
     LOG(INFO) << "finish RPC (Rollback)";
 }
@@ -199,7 +232,7 @@ void RemoteMaster::DoCreateTable(google::protobuf::RpcController* controller,
                                  const CreateTableRequest* request,
                                  CreateTableResponse* response,
                                  google::protobuf::Closure* done) {
-    LOG(INFO) << "accept RPC (CreateTable)";
+    LOG(INFO) << "run RPC (CreateTable)";
     m_master_impl->CreateTable(request, response, done);
     LOG(INFO) << "finish RPC (CreateTable)";
 }
@@ -208,7 +241,7 @@ void RemoteMaster::DoDeleteTable(google::protobuf::RpcController* controller,
                                  const DeleteTableRequest* request,
                                  DeleteTableResponse* response,
                                  google::protobuf::Closure* done) {
-    LOG(INFO) << "accept RPC (DeleteTable)";
+    LOG(INFO) << "run RPC (DeleteTable)";
     m_master_impl->DeleteTable(request, response, done);
     LOG(INFO) << "finish RPC (DeleteTable)";
 }
@@ -217,7 +250,7 @@ void RemoteMaster::DoDisableTable(google::protobuf::RpcController* controller,
                                   const DisableTableRequest* request,
                                   DisableTableResponse* response,
                                   google::protobuf::Closure* done) {
-    LOG(INFO) << "accept RPC (DisableTable)";
+    LOG(INFO) << "run RPC (DisableTable)";
     m_master_impl->DisableTable(request, response, done);
     LOG(INFO) << "finish RPC (DisableTable)";
 }
@@ -226,7 +259,7 @@ void RemoteMaster::DoEnableTable(google::protobuf::RpcController* controller,
                                  const EnableTableRequest* request,
                                  EnableTableResponse* response,
                                  google::protobuf::Closure* done) {
-    LOG(INFO) << "accept RPC (EnableTable)";
+    LOG(INFO) << "run RPC (EnableTable)";
     m_master_impl->EnableTable(request, response, done);
     LOG(INFO) << "finish RPC (EnableTable)";
 }
@@ -235,16 +268,25 @@ void RemoteMaster::DoUpdateTable(google::protobuf::RpcController* controller,
                                  const UpdateTableRequest* request,
                                  UpdateTableResponse* response,
                                  google::protobuf::Closure* done) {
-    LOG(INFO) << "accept RPC (UpdateTable)";
+    LOG(INFO) << "run RPC (UpdateTable)";
     m_master_impl->UpdateTable(request, response, done);
     LOG(INFO) << "finish RPC (UpdateTable)";
+}
+
+void RemoteMaster::DoUpdateCheck(google::protobuf::RpcController* controller,
+                                 const UpdateCheckRequest* request,
+                                 UpdateCheckResponse* response,
+                                 google::protobuf::Closure* done) {
+    LOG(INFO) << "accept RPC (UpdateCheck)";
+    m_master_impl->UpdateCheck(request, response, done);
+    LOG(INFO) << "finish RPC (UpdateCheck)";
 }
 
 void RemoteMaster::DoCompactTable(google::protobuf::RpcController* controller,
                                   const CompactTableRequest* request,
                                   CompactTableResponse* response,
                                   google::protobuf::Closure* done) {
-    LOG(INFO) << "accept RPC (CompactTable)";
+    LOG(INFO) << "run RPC (CompactTable)";
     m_master_impl->CompactTable(request, response, done);
     LOG(INFO) << "finish RPC (CompactTable)";
 }
@@ -253,7 +295,7 @@ void RemoteMaster::DoSearchTable(google::protobuf::RpcController* controller,
                                  const SearchTableRequest* request,
                                  SearchTableResponse* response,
                                  google::protobuf::Closure* done) {
-    LOG(INFO) << "accept RPC (SearchTable)";
+    LOG(INFO) << "run RPC (SearchTable)";
     m_master_impl->SearchTable(request, response, done);
     LOG(INFO) << "finish RPC (SearchTable)";
 }
@@ -262,7 +304,7 @@ void RemoteMaster::DoShowTables(google::protobuf::RpcController* controller,
                                 const ShowTablesRequest* request,
                                 ShowTablesResponse* response,
                                 google::protobuf::Closure* done) {
-    LOG(INFO) << "accept RPC (ShowTables)";
+    LOG(INFO) << "run RPC (ShowTables)";
     if (request->has_all_brief() && request->all_brief()) {
         m_master_impl->ShowTablesBrief(request, response, done);
     } else {
@@ -275,7 +317,7 @@ void RemoteMaster::DoShowTabletNodes(google::protobuf::RpcController* controller
                                      const ShowTabletNodesRequest* request,
                                      ShowTabletNodesResponse* response,
                                      google::protobuf::Closure* done) {
-    LOG(INFO) << "accept RPC (ShowTabletNodes)";
+    LOG(INFO) << "run RPC (ShowTabletNodes)";
     m_master_impl->ShowTabletNodes(request, response, done);
     LOG(INFO) << "finish RPC (ShowTabletNodes)";
 }
@@ -284,7 +326,7 @@ void RemoteMaster::DoCmdCtrl(google::protobuf::RpcController* controller,
                              const CmdCtrlRequest* request,
                              CmdCtrlResponse* response,
                              google::protobuf::Closure* done) {
-    LOG(INFO) << "accept RPC (CmdCtrl)";
+    LOG(INFO) << "run RPC (CmdCtrl)";
     m_master_impl->CmdCtrl(request, response);
     LOG(INFO) << "finish RPC (CmdCtrl)";
 
@@ -295,18 +337,9 @@ void RemoteMaster::DoOperateUser(google::protobuf::RpcController* controller,
                                  const OperateUserRequest* request,
                                  OperateUserResponse* response,
                                  google::protobuf::Closure* done) {
-    LOG(INFO) << "accept RPC (OperateUser)";
+    LOG(INFO) << "run RPC (OperateUser)";
     m_master_impl->OperateUser(request, response, done);
     LOG(INFO) << "finish RPC (OperateUser)";
-}
-
-void RemoteMaster::RenameTable(google::protobuf::RpcController* controller,
-                               const RenameTableRequest* request,
-                               RenameTableResponse* response,
-                               google::protobuf::Closure* done) {
-    LOG(INFO) << "accept RPC (RenameTable)";
-    m_master_impl->RenameTable(request, response, done);
-    LOG(INFO) << "finish RPC (RenameTable)";
 }
 
 } // namespace master
