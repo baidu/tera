@@ -26,6 +26,9 @@ static void LRUCacheDeleter(const ::leveldb::Slice& key, void* value) {
     if (context->m_it) {
         delete context->m_it;
     }
+    if (context->m_compact_strategy) {
+        delete context->m_compact_strategy;
+    }
     delete context;
     return;
 }
@@ -75,10 +78,12 @@ ScanContext* ScanContextManager::GetScanContext(TabletIO* tablet_io,
     context->m_tablet_io = tablet_io;
 
     context->m_it = NULL;
+    context->m_compact_strategy = NULL;
     context->m_ret_code = kTabletNodeOk;
     context->m_result.Clear();
     context->m_data_idx = 0;
     context->m_complete = false;
+    context->m_version_num = 1;
 
     handle = cache_->Insert(key, context, 1, &LRUCacheDeleter);
     context->m_jobs.push(ScanJob(response, done));

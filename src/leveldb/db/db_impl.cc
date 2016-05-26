@@ -333,6 +333,7 @@ void DBImpl::DeleteObsoleteFiles() {
                 // (in case there is a race that allows other incarnations)
                 filenames[i] = *it;
                 keep = false;
+                manifest_set.erase(it);
               }
           }
           break;
@@ -653,15 +654,17 @@ void DBImpl::TEST_CompactRange(int level, const Slice* begin,const Slice* end) {
   }
 
   MutexLock l(&mutex_);
-  while (!manual.done) {
-    while (manual_compaction_ != NULL) {
-      bg_cv_.Wait();
+  while (!manual.done && !shutting_down_.Acquire_Load() && bg_error_.ok()) {
+    if (manual_compaction_ == NULL) { // Idle
+        manual_compaction_ = &manual;
+        MaybeScheduleCompaction();
+    } else { // Running either my compaction or another compaction.
+        bg_cv_.Wait();
     }
-    manual_compaction_ = &manual;
-    MaybeScheduleCompaction();
-    while (manual_compaction_ == &manual) {
-      bg_cv_.Wait();
-    }
+  }
+  if (manual_compaction_ == &manual) {
+    // Cancel my manual compaction since we aborted early for some reason.
+    manual_compaction_ = NULL;
   }
 }
 

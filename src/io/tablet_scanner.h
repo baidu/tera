@@ -9,8 +9,10 @@
 #include "common/mutex.h"
 #include "leveldb/db.h"
 #include "leveldb/cache.h"
+#include "leveldb/compact_strategy.h"
 #include "proto/tabletnode_rpc.pb.h"
 #include "types.h"
+#include <limits>
 #include <queue>
 
 namespace tera {
@@ -21,8 +23,8 @@ class TabletIO;
 typedef std::map< std::string, std::set<std::string> > ColumnFamilyMap;
 struct ScanOptions {
     uint32_t max_versions;
-    uint32_t version_num; // restore version_num for stream scan
     uint32_t max_size;
+    int64_t number_limit; // kv number > number_limit, return to user
     int64_t ts_start;
     int64_t ts_end;
     uint64_t snapshot_id;
@@ -32,8 +34,10 @@ struct ScanOptions {
     int64_t timeout;
 
     ScanOptions()
-        : max_versions(UINT32_MAX), version_num(0), max_size(UINT32_MAX),
-        ts_start(kOldestTs), ts_end(kLatestTs), snapshot_id(0), timeout(INT64_MAX / 2)
+            : max_versions(std::numeric_limits<uint32_t>::max()),
+              max_size(std::numeric_limits<uint32_t>::max()),
+              number_limit(std::numeric_limits<int64_t>::max()),
+              ts_start(kOldestTs), ts_end(kLatestTs), snapshot_id(0), timeout(std::numeric_limits<int64_t>::max() / 2)
     {}
 };
 
@@ -48,6 +52,11 @@ struct ScanContext {
     std::string m_end_row_key;
     ScanOptions m_scan_options;
     leveldb::Iterator* m_it; // init to NULL
+    leveldb::CompactStrategy* m_compact_strategy;
+    uint32_t m_version_num;
+    std::string m_last_key;
+    std::string m_last_col;
+    std::string m_last_qual;
 
     // use for reture
     StatusCode m_ret_code; // set by lowlevelscan

@@ -60,6 +60,24 @@ message QueryResponse {
     repeated InheritedLiveFiles inh_live_files = 5;
 }
 
+enum UpdateType {
+    kUpdateSchema = 0; 
+}
+
+message UpdateRequest {
+    optional uint64 sequence_id = 1;
+    optional UpdateType type = 2;
+    optional TableSchema schema = 3;
+    optional string tablet_name = 4;
+    optional KeyRange key_range = 5; 
+}
+
+message UpdateResponse {
+    optional uint64 sequence_id = 1;
+    optional StatusCode status = 2;
+    optional string reason = 3;
+}
+
 message LoadTabletRequest {
     required uint64 sequence_id = 1;
     required string tablet_name = 2;
@@ -233,6 +251,7 @@ message ScanTabletRequest {
     optional bool part_of_session = 17;
     optional int64 timestamp = 18 [default = 0];
     optional int64 timeout = 19;
+    optional int64 number_limit = 21;
 }
 
 message ScanTabletResponse {
@@ -337,5 +356,6 @@ service TabletNodeServer {
 
     rpc SplitTablet(SplitTabletRequest) returns(SplitTabletResponse);
     rpc CmdCtrl(TsCmdCtrlRequest) returns(TsCmdCtrlResponse);
+    rpc Update(UpdateRequest) returns(UpdateResponse);
 }
 option cc_generic_services = true;
