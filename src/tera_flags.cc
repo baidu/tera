@@ -153,7 +153,7 @@ DEFINE_int32(tera_tabletnode_impl_thread_min_num, 1, "the min thread number for 
 DEFINE_int32(tera_tabletnode_impl_thread_max_num, 10, "the max thread number for tablet node impl operations");
 DEFINE_int32(tera_tabletnode_compact_thread_num, 10, "the max thread number for leveldb compaction");
 
-DEFINE_int32(tera_tabletnode_scanner_cache_size, 100, "default tablet scanner manager cache no more than 100 stream");
+DEFINE_int32(tera_tabletnode_scanner_cache_size, 5, "default tablet scanner manager cache no more than 100 stream");
 DEFINE_int32(tera_tabletnode_connect_retry_times, 5, "the max retry times when connect to tablet node");
 DEFINE_int32(tera_tabletnode_connect_retry_period, 1000, "the retry period (in ms) between retry two tablet node connection");
 DEFINE_int32(tera_tabletnode_connect_timeout_period, 180000, "the timeout period (in ms) for each tablet node connection");
