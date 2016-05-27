@@ -70,11 +70,6 @@ public:
     static bool ListNodes(const std::string& path, std::vector<std::string>* values);
 };
 
-class InsUtil {
-public:
-    static bool ReadNode(const std::string& name, std::string* value);
-};
-
 } // namespace zk
 } // namespace tera
 

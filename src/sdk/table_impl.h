@@ -83,8 +83,6 @@ class TableImpl : public Table {
     friend class MutationCommitBuffer;
 public:
     TableImpl(const std::string& table_name,
-              const std::string& zk_root_path,
-              const std::string& zk_addr_list,
               ThreadPool* thread_pool,
               sdk::ClusterFinder* cluster);
 

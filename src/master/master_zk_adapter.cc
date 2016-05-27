@@ -535,6 +535,7 @@ bool FakeMasterZkAdapter::Init(std::string* root_tablet_addr,
                                std::map<std::string, std::string>* tabletnode_list,
                                bool* safe_mode) {
     std::string master_lock = m_fake_path + kMasterLockPath;
+    std::string master_path = m_fake_path + kMasterNodePath;
     std::string ts_list_path = m_fake_path + kTsListPath;
     std::string kick_path = m_fake_path + kKickPath;
     std::string root_path = m_fake_path + kRootTabletNodePath;
@@ -546,6 +547,11 @@ bool FakeMasterZkAdapter::Init(std::string* root_tablet_addr,
     }
     if (!zk::FakeZkUtil::WriteNode(master_lock + "/0", m_server_addr)) {
         LOG(ERROR) << "fake zk error: " << master_lock + "/0, "
+            << m_server_addr;
+        _Exit(EXIT_FAILURE);
+    }
+    if (!zk::FakeZkUtil::WriteNode(master_path, m_server_addr)) {
+        LOG(ERROR) << "fake zk error: " << master_path + ", "
             << m_server_addr;
         _Exit(EXIT_FAILURE);
     }
