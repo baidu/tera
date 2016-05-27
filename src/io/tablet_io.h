@@ -163,7 +163,7 @@ public:
 
 private:
     friend class TabletWriter;
-    friend struct ScanConextManager;
+    friend class ScanConextManager;
     bool WriteWithoutLock(const std::string& key, const std::string& value,
                           bool sync = false, StatusCode* status = NULL);
 //     int64_t GetDataSizeWithoutLock(StatusCode* status = NULL);
@@ -232,7 +232,7 @@ private:
 private:
     mutable Mutex m_mutex;
     TabletWriter* m_async_writer;
-    ScanContextManager m_scan_context_manager;
+    ScanContextManager* m_scan_context_manager;
 
     std::string m_tablet_path;
     const std::string m_start_key;

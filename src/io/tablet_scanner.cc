@@ -21,7 +21,12 @@ namespace io {
 ScanContextManager::ScanContextManager() {
     m_cache = leveldb::NewLRUCache(FLAGS_tera_tabletnode_scanner_cache_size);
 }
-ScanContextManager::~ScanContextManager() {}
+// when tabletio unload, because scan_context->m_it has reference of version,
+// so we shoud drop all cache it
+ScanContextManager::~ScanContextManager() {
+    MutexLock l(&m_lock);
+    delete m_cache;
+}
 
 // access in m_lock context
 static void LRUCacheDeleter(const ::leveldb::Slice& key, void* value) {
@@ -172,13 +177,6 @@ void ScanContextManager::DeleteScanContext(ScanContext* context) {
     ::leveldb::EncodeFixed64(buf, session_id);
     ::leveldb::Slice key(buf, sizeof(buf));
     m_cache->Erase(key);
-}
-
-// when tabletio unload, because scan_context->m_it has reference of version,
-// so we shoud drop all cache it
-void ScanContextManager::DestroyScanCache() {
-    MutexLock l(&m_lock);
-    delete m_cache;
 }
 
 } // namespace io
