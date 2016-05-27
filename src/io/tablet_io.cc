@@ -281,6 +281,8 @@ bool TabletIO::Load(const TableSchema& schema,
     m_async_writer = new TabletWriter(this);
     m_async_writer->Start();
 
+    m_scan_context_manager = new ScanContextManager;
+
     {
         MutexLock lock(&m_mutex);
         m_status = kReady;
@@ -329,7 +331,7 @@ bool TabletIO::Unload(StatusCode* status) {
         LOG(INFO) << "[Unload] shutdown1 failed, keep log " << m_tablet_path;
     }
 
-    m_scan_context_manager.DestroyScanCache();
+    delete m_scan_context_manager;
     delete m_db;
     m_db = NULL;
 
@@ -1432,7 +1434,7 @@ bool TabletIO::HandleScan(const ScanTabletRequest* request,
                           ScanTabletResponse* response,
                           google::protobuf::Closure* done) {
     // concurrency control, ensure only one scanner step init leveldb::Iterator
-    ScanContext* context = m_scan_context_manager.GetScanContext(this, request, response, done);
+    ScanContext* context = m_scan_context_manager->GetScanContext(this, request, response, done);
     if (context == NULL) {
         return true;
     }
@@ -1448,7 +1450,7 @@ bool TabletIO::HandleScan(const ScanTabletRequest* request,
         context->compact_strategy = m_ldb_options.compact_strategy_factory->NewInstance();
     }
     // schedule scan context
-    return m_scan_context_manager.ScheduleScanContext(context);
+    return m_scan_context_manager->ScheduleScanContext(context);
 }
 
 void TabletIO::ProcessScan(ScanContext* context) {

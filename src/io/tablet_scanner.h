@@ -78,7 +78,6 @@ public:
     ScanContext* GetScanContext(TabletIO* tablet_io, const ScanTabletRequest* request,
                 ScanTabletResponse* response, google::protobuf::Closure* done);
     bool ScheduleScanContext(ScanContext* context);
-    void DestroyScanCache();
 
 private:
     void DeleteScanContext(ScanContext* context);
