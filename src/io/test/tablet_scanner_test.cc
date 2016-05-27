@@ -96,6 +96,7 @@ public:
         uint64_t ts = get_micros();
 
         last_key_ = s;
+        done_cnt_ = 0;
         for (uint32_t i = 0; i < nr_req; i++) {
             ScanTabletRequest* request = new ScanTabletRequest;
             ScanTabletResponse* response = new ScanTabletResponse;

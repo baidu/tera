@@ -1456,7 +1456,7 @@ void TabletIO::ProcessScan(ScanContext* context) {
     uint32_t size_scan_bytes = 0;
     if (LowLevelScan(context->m_start_tera_key, context->m_end_row_key,
                      context->m_scan_options, context->m_it, context,
-                     &context->m_result, NULL, &rows_scan_num, &size_scan_bytes,
+                     context->m_result, NULL, &rows_scan_num, &size_scan_bytes,
                      &context->m_complete, &context->m_ret_code)) {
         m_counter.scan_rows.Add(rows_scan_num);
         m_counter.scan_size.Add(size_scan_bytes);

@@ -80,7 +80,7 @@ ScanContext* ScanContextManager::GetScanContext(TabletIO* tablet_io,
     context->m_it = NULL;
     context->m_compact_strategy = NULL;
     context->m_ret_code = kTabletNodeOk;
-    context->m_result.Clear();
+    context->m_result = NULL;
     context->m_data_idx = 0;
     context->m_complete = false;
     context->m_version_num = 1;
@@ -95,9 +95,6 @@ ScanContext* ScanContextManager::GetScanContext(TabletIO* tablet_io,
 // check event bit, then schedule context
 bool ScanContextManager::ScheduleScanContext(ScanContext* context) {
     while (context->m_ret_code == kTabletNodeOk) {
-        ((TabletIO*)(context->m_tablet_io))->ProcessScan(context);
-
-        // reply to client
         ScanTabletResponse* response;
         ::google::protobuf::Closure* done;
         {
@@ -105,12 +102,16 @@ bool ScanContextManager::ScheduleScanContext(ScanContext* context) {
             response = context->m_jobs.front().first;
             done = context->m_jobs.front().second;
         }
-        response->mutable_results()->CopyFrom(context->m_result);
+        context->m_result = response->mutable_results();
+
+        ((TabletIO*)(context->m_tablet_io))->ProcessScan(context);
+
+        // reply to client
         response->set_complete(context->m_complete);
         response->set_status(context->m_ret_code);
         response->set_results_id(context->m_data_idx);
         (context->m_data_idx)++;
-        context->m_result.Clear();
+        context->m_result = NULL;
         done->Run();// TODO: try async return, time consume need test
 
         {

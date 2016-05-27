@@ -61,7 +61,7 @@ struct ScanContext {
     // use for reture
     StatusCode m_ret_code; // set by lowlevelscan
     bool m_complete; // test this flag know whether scan finish or not
-    RowResult m_result; // scan result for one round
+    RowResult* m_result; // scan result for one round
     uint64_t m_data_idx; // return data_id
 
     // protect by manager lock
