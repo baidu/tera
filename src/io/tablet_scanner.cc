@@ -23,6 +23,8 @@ ScanContextManager::~ScanContextManager() {}
 // access in m_lock context
 static void LRUCacheDeleter(const ::leveldb::Slice& key, void* value) {
     ScanContext* context = reinterpret_cast<ScanContext*>(value);
+    VLOG(10) << "evict from cache, " << context->session_id;
+    CHECK(context->handles.size() == 0);
     if (context->it) {
         delete context->it;
     }
@@ -57,17 +59,19 @@ ScanContext* ScanContextManager::GetScanContext(TabletIO* tablet_io,
         // not first session rpc, no need init scan context
         context = reinterpret_cast<ScanContext*>(m_cache->Value(handle));
         context->jobs.push(ScanJob(response, done));
-        context->handles.push(handle); // refer item in cache
         if (context->jobs.size() > 1) {
+            m_cache->Release(handle);
+            VLOG(10) << "push task into queue, " << request->session_id();
             return NULL;
         }
+        context->handles.push(handle); // first one refer item in cache
         return context;
     }
 
     // case 1: if this session's first request not arrive, drop this one
     // case 2: client RPCtimeout resend
     if (request->part_of_session()) {
-        VLOG(10) << "drop invalid request " << request->sequence_id();
+        VLOG(10) << "drop invalid request " << request->sequence_id() << ", session_id " << request->session_id();
         done->Run();
         return NULL;
     }
@@ -104,7 +108,7 @@ bool ScanContextManager::ScheduleScanContext(ScanContext* context) {
         }
         context->result = response->mutable_results();
 
-        ((TabletIO*)(context->tablet_io))->ProcessScan(context);
+        context->tablet_io->ProcessScan(context);
 
         // reply to client
         response->set_complete(context->complete);
@@ -117,9 +121,6 @@ bool ScanContextManager::ScheduleScanContext(ScanContext* context) {
         {
             MutexLock l(&m_lock);
             context->jobs.pop();
-            ::leveldb::Cache::Handle* handle = context->handles.front();
-            context->handles.pop();
-            m_cache->Release(handle); // unrefer cache item
 
             // complete or io error, return all the rest request to client
             if (context->complete || (context->ret_code != kTabletNodeOk)) {
@@ -127,6 +128,9 @@ bool ScanContextManager::ScheduleScanContext(ScanContext* context) {
                 return true;
             }
             if (context->jobs.size() == 0) {
+                ::leveldb::Cache::Handle* handle = context->handles.front();
+                context->handles.pop();
+                m_cache->Release(handle); // unrefer cache item
                 return true;
             }
         }
@@ -151,11 +155,19 @@ void ScanContextManager::DeleteScanContext(ScanContext* context) {
         done->Run();
 
         context->jobs.pop();
-        ::leveldb::Cache::Handle* handle = context->handles.front();
-        context->handles.pop();
-        m_cache->Release(handle); // unrefer cache item
         job_size--;
     }
+
+    int64_t session_id = context->session_id;
+    VLOG(10) << "scan " << session_id << ", complete " << context->complete << ", ret " << StatusCode_Name(context->ret_code);
+    ::leveldb::Cache::Handle* handle = context->handles.front();
+    context->handles.pop();
+    m_cache->Release(handle); // unrefer cache item, no more use context!!!
+
+    char buf[sizeof(int64_t)];
+    ::leveldb::EncodeFixed64(buf, session_id);
+    ::leveldb::Slice key(buf, sizeof(buf));
+    m_cache->Erase(key);
 }
 
 // when tabletio unload, because scan_context->m_it has reference of version,

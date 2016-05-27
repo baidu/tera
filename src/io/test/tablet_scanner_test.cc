@@ -6,6 +6,7 @@
 
 #include <stdlib.h>
 
+#include <boost/bind.hpp>
 #include "gflags/gflags.h"
 #include "glog/logging.h"
 #include "gtest/gtest.h"
@@ -13,6 +14,7 @@
 #include "common/base/scoped_ptr.h"
 #include "common/base/string_format.h"
 #include "common/base/string_number.h"
+#include "common/thread_pool.h"
 #include "db/filename.h"
 #include "leveldb/raw_key_operator.h"
 #include "leveldb/table_utils.h"
@@ -20,7 +22,6 @@
 #include "proto/status_code.pb.h"
 #include "utils/timer.h"
 #include "utils/utils_cmd.h"
-#include "io/tablet_scanner.h"
 
 DECLARE_string(tera_tabletnode_path_prefix);
 DECLARE_int32(tera_io_retry_max_times);
@@ -29,6 +30,7 @@ DECLARE_string(tera_leveldb_env_type);
 
 DECLARE_int64(tera_tablet_max_write_buffer_size);
 DECLARE_string(log_dir);
+DECLARE_int32(v);
 
 namespace tera {
 namespace io {
@@ -78,14 +80,14 @@ public:
             LOG(INFO) << "req[" << done_cnt_ << "] scan done";
         }
         done_cnt_++;
-        if (req_vec.size() == done_cnt_) {
+        if (req_vec_.size() == done_cnt_) {
             for (uint32_t j = 0; j < done_cnt_; j++) {
-                delete req_vec[j];
-                delete resp_vec[j];
+                delete req_vec_[j];
+                delete resp_vec_[j];
             }
-            req_vec.clear();
-            resp_vec.clear();
-            done_vec.clear();
+            req_vec_.clear();
+            resp_vec_.clear();
+            done_vec_.clear();
         }
     }
 
@@ -122,9 +124,9 @@ public:
             time_range->set_ts_end(ts);
             request->set_timestamp(ts);
 
-            req_vec.push_back(request);
-            resp_vec.push_back(response);
-            done_vec.push_back(done);
+            req_vec_.push_back(request);
+            resp_vec_.push_back(response);
+            done_vec_.push_back(done);
         }
     }
 
@@ -142,12 +144,67 @@ public:
         return;
     }
 
+    void NewRequestDone(ScanTabletRequest* request, ScanTabletResponse* response) {
+
+    }
+    void NewRequest(uint64_t nr_req, uint64_t s, uint64_t e,
+                    std::vector<ScanTabletRequest*> * req_vec,
+                    std::vector<ScanTabletResponse*> * resp_vec,
+                    std::vector<google::protobuf::Closure*> * done_vec) {
+        std::string start_key = StringFormat("%011llu", s); // NumberToString(500);
+        std::string end_key = StringFormat("%011llu", e); // NumberToString(500);
+        int64_t session_id = get_micros();
+        uint64_t ts = get_micros();
+
+        for (uint32_t i = 0; i < nr_req; i++) {
+            ScanTabletRequest* request = new ScanTabletRequest;
+            ScanTabletResponse* response = new ScanTabletResponse;
+            google::protobuf::Closure* done =
+                google::protobuf::NewCallback(this, &TabletScannerTest::NewRequestDone, request, response);
+
+            request->set_part_of_session(true);
+            if (i == 0) {
+                request->set_part_of_session(false);
+            }
+            request->set_session_id(session_id);
+            request->set_sequence_id(100);
+            request->set_table_name(schema_.name());
+            request->set_start(start_key);
+            request->set_end(end_key);
+            request->set_snapshot_id(0);
+            request->set_timeout(5000);
+            request->set_buffer_limit(65536);
+            request->set_snapshot_id(0);
+            request->set_max_version(1);
+            TimeRange* time_range = request->mutable_timerange();
+            time_range->set_ts_start(0);
+            time_range->set_ts_end(ts);
+            request->set_timestamp(ts);
+
+            req_vec->push_back(request);
+            resp_vec->push_back(response);
+            done_vec->push_back(done);
+        }
+    }
+
+    void MultiScan(TabletIO* tablet) {
+        uint64_t nr = 10;
+        std::vector<ScanTabletRequest*> req_vec;
+        std::vector<ScanTabletResponse*> resp_vec;
+        std::vector<google::protobuf::Closure*> done_vec;
+        NewRequest(nr, 5, 5000, &req_vec, &resp_vec, &done_vec);
+
+        for (uint32_t i = 0; i < nr; i++) {
+            tablet->ScanRows(req_vec[i], resp_vec[i], done_vec[i]);
+        }
+    }
+
 public:
     uint64_t session_id_;
 
-    std::vector<ScanTabletRequest*> req_vec;
-    std::vector<ScanTabletResponse*> resp_vec;
-    std::vector<google::protobuf::Closure*> done_vec;
+    std::vector<ScanTabletRequest*> req_vec_;
+    std::vector<ScanTabletResponse*> resp_vec_;
+    std::vector<google::protobuf::Closure*> done_vec_;
     uint64_t done_cnt_;
     uint64_t last_key_;
 
@@ -171,9 +228,33 @@ TEST_F(TabletScannerTest, General) {
     NewRpcRequest(nr, 5, 500000);
 
     for (uint32_t i = 0; i < nr; i++) {
-        tablet.ScanRows(req_vec[i], resp_vec[i], done_vec[i]);
+        tablet.ScanRows(req_vec_[i], resp_vec_[i], done_vec_[i]);
     }
 
+    EXPECT_TRUE(tablet.Unload());
+}
+
+TEST_F(TabletScannerTest, CacheEvict) {
+    std::string tablet_path = working_dir + "CacheEvict";
+    std::string key_start = "";
+    std::string key_end = "";
+    StatusCode status;
+
+    TabletIO tablet(key_start, key_end);
+    EXPECT_TRUE(tablet.Load(GetTableSchema(), tablet_path, std::vector<uint64_t>(),
+                            empty_snaphsots_, empty_rollback_, NULL, NULL, NULL, &status));
+
+    PrepareData(&tablet, 1000000);
+
+    // multi scan
+    uint32_t nr_thread = 40;
+    ThreadPool pool(nr_thread);
+    for (uint32_t i = 0; i < nr_thread; i++) {
+        ThreadPool::Task task =
+            boost::bind(&TabletScannerTest::MultiScan, this, &tablet);
+        pool.AddTask(task);
+    }
+    pool.Stop(true);
     EXPECT_TRUE(tablet.Unload());
 }
 
@@ -185,6 +266,7 @@ int main(int argc, char** argv) {
     FLAGS_tera_tablet_living_period = 0;
     FLAGS_tera_tablet_max_write_buffer_size = 1;
     FLAGS_tera_leveldb_env_type = "local";
+    //FLAGS_v = 10;
     ::google::InitGoogleLogging(argv[0]);
     FLAGS_log_dir = "./log";
     if (access(FLAGS_log_dir.c_str(), F_OK)) {
