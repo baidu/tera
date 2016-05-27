@@ -137,6 +137,9 @@ void ShowTableSchema(const TableSchema& s, bool is_x) {
     if (is_x || schema.disable_wal()) {
         ss << "wal=" << Switch2Str(!schema.disable_wal()) << ",";
     }
+    if (is_x || schema.enable_txn()) {
+        ss << "txn=" << Switch2Str(schema.enable_txn()) << ",";
+    }
     ss << "\b> {" << std::endl;
 
     size_t lg_num = schema.locality_groups_size();
@@ -236,6 +239,7 @@ void TableDescToSchema(const TableDescriptor& desc, TableSchema* schema) {
     schema->set_admin_group(desc.AdminGroup());
     schema->set_admin(desc.Admin());
     schema->set_disable_wal(desc.IsWalDisabled());
+    schema->set_enable_txn(desc.IsTxnEnabled());
     schema->set_alias(desc.Alias());
     // add lg
     int num = desc.LocalityGroupNum();
@@ -316,6 +320,9 @@ void TableSchemaToDesc(const TableSchema& schema, TableDescriptor* desc) {
     }
     if (schema.has_disable_wal() && schema.disable_wal()) {
         desc->DisableWal();
+    }
+    if (schema.has_enable_txn() && schema.enable_txn()) {
+        desc->EnableTxn();
     }
     if (schema.has_alias()) {
         desc->SetAlias(schema.alias());
@@ -511,6 +518,14 @@ bool SetTableProperties(const string& name, const string& value,
         } else {
             return false;
         }
+    } else if (name == "txn") {
+        if (value == "on") {
+            desc->EnableTxn();
+        } else if (value == "off") {
+            // do nothing
+        } else {
+            return false;
+        }
     } else {
         return false;
     }
@@ -542,6 +557,13 @@ bool CheckTableDescrptor(const TableDescriptor& desc, ErrorCode* err) {
             }
             return false;
         }
+    }
+    if (desc.IsTxnEnabled() && (desc.RawKey() == kGeneralKv || desc.RawKey() == kTTLKv)) {
+        ss << "kv and ttlkv don't support txn";
+        if (err != NULL) {
+            err->SetFailed(ErrorCode::kBadParam, ss.str());
+        }
+        return false;
     }
     return true;
 }

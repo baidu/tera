@@ -692,12 +692,8 @@ void TableImpl::CommitMutations(const std::string& server_addr,
     for (uint32_t i = 0; i < mu_list.size(); ++i) {
         RowMutationImpl* row_mutation = mu_list[i];
         RowMutationSequence* mu_seq = request->add_row_list();
-        mu_seq->set_row_key(row_mutation->RowKey());
-        for (uint32_t j = 0; j < row_mutation->MutationNum(); j++) {
-            const RowMutation::Mutation& mu = row_mutation->GetMutation(j);
-            tera::Mutation* mutation = mu_seq->add_mutation_sequence();
-            SerializeMutation(mu, mutation);
-        }
+        row_mutation->Serialize(mu_seq);
+
         mu_id_list->push_back(row_mutation->GetId());
         row_mutation->AddCommitTimes();
         row_mutation->DecRef();

@@ -173,6 +173,19 @@ public:
     void AddCommitTimes() { _commit_times++; }
     int64_t GetCommitTimes() { return _commit_times; }
 
+    void LockBeforeWrite(uint64_t lock_id, const std::string& lock_annotation = "");
+    void InsureLockedAlready(uint64_t lock_id);
+    void UnlockAfterWrite(uint64_t lock_id);
+
+    bool IsLockBeforeWrite() { return _lock_before_write; }
+    bool IsInsureLockedAlready() { return _insure_locked_already; }
+    bool IsUnlockAfterWrite() { return _unlock_after_write; }
+
+    uint64_t LockId() { return _lock_id; }
+    const std::string& LockAnnotation() { return _lock_annotation; }
+
+    void Serialize(tera::RowMutationSequence* dst);
+
 protected:
     /// 增加一个操作
     RowMutation::Mutation& AddMutation();
@@ -194,6 +207,13 @@ private:
 
     /// 记录此mutation被提交到ts的次数
     int64_t _commit_times;
+
+    /// 锁相关
+    bool _lock_before_write;
+    bool _insure_locked_already;
+    bool _unlock_after_write;
+    uint64_t _lock_id;
+    std::string _lock_annotation;
 };
 
 void SerializeMutation(const RowMutation::Mutation& src, tera::Mutation* dst);

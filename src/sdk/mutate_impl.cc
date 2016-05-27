@@ -18,7 +18,11 @@ RowMutationImpl::RowMutationImpl(TableImpl* table, const std::string& row_key)
       _retry_times(0),
       _finish(false),
       _finish_cond(&_finish_mutex),
-      _commit_times(0) {
+      _commit_times(0),
+      _lock_before_write(false),
+      _insure_locked_already(false),
+      _unlock_after_write(false),
+      _lock_id(0) {
     SetErrorIfInvalid(row_key, kRowkey);
 }
 
@@ -400,6 +404,22 @@ void RowMutationImpl::RunCallback() {
     }
 }
 
+void RowMutationImpl::LockBeforeWrite(uint64_t lock_id, const std::string& lock_annotation) {
+    _lock_before_write = true;
+    _lock_id = lock_id;
+    _lock_annotation = lock_annotation;
+}
+
+void RowMutationImpl::InsureLockedAlready(uint64_t lock_id) {
+    _insure_locked_already = true;
+    _lock_id = lock_id;
+}
+
+void RowMutationImpl::UnlockAfterWrite(uint64_t lock_id) {
+    _unlock_after_write = true;
+    _lock_id = lock_id;
+}
+
 RowMutation::Mutation& RowMutationImpl::AddMutation() {
     _mu_seq.resize(_mu_seq.size() + 1);
     return _mu_seq.back();
@@ -468,6 +488,20 @@ void SerializeMutation(const RowMutation::Mutation& src, tera::Mutation* dst) {
             assert(false);
             break;
     }
+}
+
+void RowMutationImpl::Serialize(tera::RowMutationSequence* dst) {
+    dst->set_row_key(RowKey());
+    for (uint32_t i = 0; i < MutationNum(); i++) {
+        const RowMutation::Mutation& mu = GetMutation(i);
+        tera::Mutation* mutation = dst->add_mutation_sequence();
+        SerializeMutation(mu, mutation);
+    }
+    dst->set_lock_before_write(_lock_before_write);
+    dst->set_unlock_after_write(_unlock_after_write);
+    dst->set_insure_locked_already(_insure_locked_already);
+    dst->set_lock_id(_lock_id);
+    dst->set_lock_annotation(_lock_annotation);
 }
 
 } // namespace tera

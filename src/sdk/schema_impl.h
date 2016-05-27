@@ -172,6 +172,9 @@ public:
     void DisableWal();
     bool IsWalDisabled() const;
 
+    void EnableTxn();
+    bool IsTxnEnabled() const;
+
     /// 插入snapshot
     int32_t AddSnapshot(uint64_t snapshot);
     /// 获取snapshot
@@ -206,6 +209,7 @@ private:
     int64_t         _split_size;
     int64_t         _merge_size;
     bool            _disable_wal;
+    bool            _enable_txn;
     std::string     _admin_group;
     std::string     _admin;
     std::string     _alias;

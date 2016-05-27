@@ -19,7 +19,7 @@ const int64_t kInvalidTimerId = 0;
 const uint32_t kUnknownId = -1U;
 const uint32_t kInvalidSessionId = -1U;
 const std::string kUnknownAddr = "255.255.255.255:0000";
-const uint64_t kMaxTimeStamp = (1ULL << 56) - 1;
+const int64_t kMaxTimeStamp = (1ULL << 56) - 1;
 const uint32_t kMaxHostNameSize = 255;
 const std::string kMasterNodePath = "/master";
 const std::string kMasterLockPath = "/master-lock";
@@ -35,6 +35,7 @@ const uint64_t kMaxRpcSize = (16 << 20);       // 16MB
 const uint64_t kRowkeySize = (64 << 10);       // 64KB
 const uint64_t kQualifierSize = (64 << 10);    // 64KB
 const uint64_t kValueSize = (32 << 20);        // 32MB
+const uint64_t kMaxLocalityGroupNum = 1024;
 
 } // namespace tera
 

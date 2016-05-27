@@ -13,6 +13,7 @@
 #include "io/io_utils.h"
 #include "io/tablet_io.h"
 #include "leveldb/lg_coding.h"
+#include "lock.h"
 #include "proto/proto_helper.h"
 #include "utils/counter.h"
 #include "utils/timer.h"
@@ -28,7 +29,9 @@ namespace tera {
 namespace io {
 
 TabletWriter::TabletWriter(TabletIO* tablet_io)
-    : m_tablet(tablet_io), m_stopped(true),
+    : m_tablet(tablet_io),
+      m_lock_manager(&tablet_io->m_lock_manager),
+      m_stopped(true),
       m_sync_timestamp(0),
       m_active_buffer_instant(false),
       m_active_buffer_size(0),
@@ -190,110 +193,221 @@ bool TabletWriter::SwapActiveBuffer(bool force) {
     return true;
 }
 
-bool TabletWriter::BatchRequest(const std::vector<const RowMutationSequence*>& row_mutation_vec,
-                                leveldb::WriteBatch* batch, bool kv_only) {
-    int64_t timestamp_old = 0;
-
+void TabletWriter::BatchRequest(WriteTask& task, leveldb::WriteBatch* batch) {
+    std::vector<const RowMutationSequence*>& row_mutation_vec = *task.row_mutation_vec;
+    std::vector<StatusCode>& status_vec = *task.status_vec;
     for (uint32_t i = 0; i < row_mutation_vec.size(); ++i) {
         const RowMutationSequence& row_mu = *row_mutation_vec[i];
-        const std::string& row_key = row_mu.row_key();
-        int32_t mu_num = row_mu.mutation_sequence().size();
-        if (kv_only) {
-            // only the last mutation take effect for kv
-            const Mutation& mu = row_mu.mutation_sequence().Get(mu_num - 1);
-            std::string tera_key;
-            if (m_tablet->GetSchema().raw_key() == TTLKv) { // TTL-KV
-                if (mu.ttl() == -1) { // never expires
-                    m_tablet->GetRawKeyOperator()->EncodeTeraKey(row_key, "", "",
-                            kLatestTs, leveldb::TKT_FORSEEK, &tera_key);
-                } else { // no check of overflow risk ...
-                    m_tablet->GetRawKeyOperator()->EncodeTeraKey(row_key, "", "",
-                            get_micros() / 1000000 + mu.ttl(), leveldb::TKT_FORSEEK, &tera_key);
-                }
-            } else { // Readable-KV
-                tera_key.assign(row_key);
-            }
-            if (mu.type() == kPut) {
-                batch->Put(tera_key, mu.value());
-            } else {
-                batch->Delete(tera_key);
-            }
+        StatusCode* status = &status_vec[i];
+        *status = kTableOk;
+        if (m_tablet->KvOnly()) {
+            BatchKvRequest(row_mu, batch);
         } else {
-            for (int32_t t = 0; t < mu_num; ++t) {
-                const Mutation& mu = row_mu.mutation_sequence().Get(t);
-                std::string tera_key;
-                leveldb::TeraKeyType type = leveldb::TKT_VALUE;
-                switch (mu.type()) {
-                    case kDeleteRow:
-                        type = leveldb::TKT_DEL;
-                        break;
-                    case kDeleteFamily:
-                        type = leveldb::TKT_DEL_COLUMN;
-                        break;
-                    case kDeleteColumn:
-                        type = leveldb::TKT_DEL_QUALIFIER;
-                        break;
-                    case kDeleteColumns:
-                        type = leveldb::TKT_DEL_QUALIFIERS;
-                        break;
-                    case kAdd:
-                        type = leveldb::TKT_ADD;
-                        break;
-                    case kAddInt64:
-                        type = leveldb::TKT_ADDINT64;
-                        break;
-                    case kPutIfAbsent:
-                        type = leveldb::TKT_PUT_IFABSENT;
-                        break;
-                    case kAppend:
-                        type = leveldb::TKT_APPEND;
-                        break;
-                    default:
-                        break;
-                }
-                int64_t timestamp = get_unique_micros(timestamp_old);
-                timestamp_old = timestamp;
-                if (mu.has_timestamp() && mu.timestamp() < timestamp) {
-                    timestamp = mu.timestamp();
-                }
-                m_tablet->GetRawKeyOperator()->EncodeTeraKey(row_key, mu.family(), mu.qualifier(),
-                                                            timestamp, type, &tera_key);
-                uint32_t lg_id = 0;
-                size_t lg_num = m_tablet->m_ldb_options.exist_lg_list->size();
-                if (lg_num > 1) {
-                    if (type != leveldb::TKT_DEL) {
-                        lg_id = m_tablet->GetLGidByCFName(mu.family());
-                        leveldb::PutFixed32LGId(&tera_key, lg_id);
-                        VLOG(10) << "Batch Request, key:" << row_key << ",family:"
-                            << mu.family() << ",lg_id:" << lg_id;
-                        batch->Put(tera_key, mu.value());
-                    } else {
-                        // put row_del mark to all LGs
-                        for (lg_id = 0; lg_id < lg_num; ++lg_id) {
-                            std::string tera_key_tmp = tera_key;
-                            leveldb::PutFixed32LGId(&tera_key_tmp, lg_id);
-                            VLOG(10) << "Batch Request, key:" << row_key << ",family:"
-                                << mu.family() << ",lg_id:" << lg_id;
-                            batch->Put(tera_key_tmp, mu.value());
-                        }
-                    }
-                } else {
-                    VLOG(10) << "Batch Request, key:" << row_key << ",family:"
-                        << mu.family() << ",lg_id:" << lg_id;
-                    batch->Put(tera_key, mu.value());
-                }
+            BatchTableRequest(row_mu, batch, status);
+        }
+    }
+}
+
+void TabletWriter::BatchKvRequest(const RowMutationSequence& row_mu,
+                                  leveldb::WriteBatch* batch) {
+    const std::string& row_key = row_mu.row_key();
+    int32_t mu_num = row_mu.mutation_sequence().size();
+    // only the last mutation take effect for kv
+    const Mutation& mu = row_mu.mutation_sequence().Get(mu_num - 1);
+    std::string tera_key;
+    if (m_tablet->GetSchema().raw_key() == TTLKv) { // TTL-KV
+        if (mu.ttl() == -1) { // never expires
+            m_tablet->GetRawKeyOperator()->EncodeTeraKey(row_key, "", "",
+                    kLatestTs, leveldb::TKT_FORSEEK, &tera_key);
+        } else { // no check of overflow risk ...
+            m_tablet->GetRawKeyOperator()->EncodeTeraKey(row_key, "", "",
+                    get_micros() / 1000000 + mu.ttl(), leveldb::TKT_FORSEEK, &tera_key);
+        }
+    } else { // Readable-KV
+        tera_key.assign(row_key);
+    }
+    if (mu.type() == kPut) {
+        batch->Put(tera_key, mu.value());
+    } else {
+        batch->Delete(tera_key);
+    }
+}
+
+bool TabletWriter::BatchTableRequest(const RowMutationSequence& row_mu,
+                                     leveldb::WriteBatch* batch,
+                                     StatusCode* status) {
+    int64_t timestamp_old = 0;
+    const std::string& row_key = row_mu.row_key();
+    if (m_tablet->GetSchema().enable_txn()) {
+        if (!HandleLockBeforeWrite(row_mu, batch, status)) {
+            return false;
+        }
+    }
+
+    int32_t mu_num = row_mu.mutation_sequence().size();
+    for (int32_t t = 0; t < mu_num; ++t) {
+        const Mutation& mu = row_mu.mutation_sequence().Get(t);
+        std::string tera_key;
+        leveldb::TeraKeyType type = leveldb::TKT_VALUE;
+        switch (mu.type()) {
+            case kDeleteRow:
+                type = leveldb::TKT_DEL;
+                break;
+            case kDeleteFamily:
+                type = leveldb::TKT_DEL_COLUMN;
+                break;
+            case kDeleteColumn:
+                type = leveldb::TKT_DEL_QUALIFIER;
+                break;
+            case kDeleteColumns:
+                type = leveldb::TKT_DEL_QUALIFIERS;
+                break;
+            case kAdd:
+                type = leveldb::TKT_ADD;
+                break;
+            case kAddInt64:
+                type = leveldb::TKT_ADDINT64;
+                break;
+            case kPutIfAbsent:
+                type = leveldb::TKT_PUT_IFABSENT;
+                break;
+            case kAppend:
+                type = leveldb::TKT_APPEND;
+                break;
+            default:
+                break;
+        }
+        int64_t timestamp = get_unique_micros(timestamp_old);
+        timestamp_old = timestamp;
+        if (mu.has_timestamp() && mu.timestamp() < timestamp) {
+            timestamp = mu.timestamp();
+        }
+        m_tablet->GetRawKeyOperator()->EncodeTeraKey(row_key, mu.family(), mu.qualifier(),
+                                                     timestamp, type, &tera_key);
+        uint32_t lg_id = 0;
+        size_t lg_num = m_tablet->GetLGNum();
+        if (type != leveldb::TKT_DEL) {
+            lg_id = m_tablet->GetLGidByCFName(mu.family());
+            leveldb::PutFixed32LGId(&tera_key, lg_id);
+            VLOG(10) << "Batch Request, key:" << row_key << ",family:"
+                << mu.family() << ",lg_id:" << lg_id;
+            batch->Put(tera_key, mu.value());
+        } else {
+            // put row_del mark to all LGs
+            for (lg_id = 0; lg_id < lg_num; ++lg_id) {
+                std::string tera_key_tmp = tera_key;
+                leveldb::PutFixed32LGId(&tera_key_tmp, lg_id);
+                VLOG(10) << "Batch Request, key:" << row_key << ",family:"
+                    << mu.family() << ",lg_id:" << lg_id;
+                batch->Put(tera_key_tmp, mu.value());
             }
         }
     }
     return true;
 }
 
+bool TabletWriter::HandleLockBeforeWrite(const RowMutationSequence& mu_seq,
+                                         leveldb::WriteBatch* batch,
+                                         StatusCode* status) {
+    const std::string& row_key = mu_seq.row_key();
+
+    if (mu_seq.lock_before_write()) {
+        if (!m_lock_manager->Lock(row_key, mu_seq.lock_id(),
+                                  mu_seq.lock_annotation(), status)) {
+            return false;
+        }
+        BatchLock(row_key, get_micros(), mu_seq.lock_id(),
+                  mu_seq.lock_annotation(), batch);
+        return true;
+    }
+
+    if (mu_seq.unlock_after_write()) {
+        if (!m_lock_manager->IsLocked(row_key, mu_seq.lock_id(), NULL, status)) {
+            return false;
+        }
+        BatchUnlock(row_key, batch);
+        return true;
+    }
+
+    StatusCode lock_status = kTableOk;
+    if (m_lock_manager->IsLocked(row_key, mu_seq.lock_id(), NULL, &lock_status)) {
+        return true;
+    } else if (lock_status == kLockNotOwn || mu_seq.insure_locked_already()) {
+        SetStatusCode(lock_status, status);
+        return false;
+    } else {
+        CHECK_EQ(lock_status, kLockNotExist);
+        return true;
+    }
+}
+
+void TabletWriter::HandleLockAfterWrite(const RowMutationSequence& mu_seq,
+                                        const StatusCode& write_status) {
+    if (mu_seq.unlock_after_write()) {
+        if (write_status != kTableOk) {
+            LOG(WARNING) << "fail to write lock-delete mark: "
+                << StatusCodeToString(write_status)
+                << ", abort unload, key: " << mu_seq.row_key();
+        } else {
+            CHECK(m_lock_manager->Unlock(mu_seq.row_key(), mu_seq.lock_id(), NULL, NULL));
+        }
+    }
+}
+
+void TabletWriter::BatchLock(const std::string& row_key, int64_t timestamp,
+                             uint64_t lock_id, const std::string& annotation,
+                             leveldb::WriteBatch* batch) {
+    std::string lock_key;
+    m_tablet->GetRawKeyOperator()->EncodeTeraKey(row_key, "", "", kMaxTimeStamp,
+                                                 leveldb::TKT_LOCK, &lock_key);
+    std::string lock_value;
+    m_tablet->EncodeLock(lock_id, timestamp, annotation, &lock_value);
+
+    // put lock to all LGs
+    size_t lg_num = m_tablet->GetLGNum();
+    for (size_t lg_id = 0; lg_id < lg_num; ++lg_id) {
+        std::string tera_key_tmp = lock_key;
+        leveldb::PutFixed32LGId(&tera_key_tmp, lg_id);
+        VLOG(10) << "Batch lock, key:" << row_key << ",lg_id:" << lg_id;
+        batch->Put(tera_key_tmp, lock_value);
+    }
+    std::string tera_key_tmp = lock_key;
+    leveldb::PutFixed32LGId(&tera_key_tmp, m_tablet->m_meta_lg_id);
+    VLOG(10) << "Batch lock, key:" << row_key << ",lg_id:" << m_tablet->m_meta_lg_id;
+    batch->Put(tera_key_tmp, lock_value);
+}
+
+void TabletWriter::BatchUnlock(const std::string& row_key, leveldb::WriteBatch* batch) {
+    std::string lock_key;
+    m_tablet->GetRawKeyOperator()->EncodeTeraKey(row_key, "", "", kMaxTimeStamp,
+                                                 leveldb::TKT_LOCK, &lock_key);
+    // put lock-delete mark to all LGs
+    size_t lg_num = m_tablet->GetLGNum();
+    for (size_t lg_id = 0; lg_id < lg_num; ++lg_id) {
+        std::string tera_key_tmp = lock_key;
+        leveldb::PutFixed32LGId(&tera_key_tmp, lg_id);
+        VLOG(10) << "Batch unlock, key:" << row_key << ",lg_id:" << lg_id;
+        batch->Delete(tera_key_tmp);
+    }
+    std::string tera_key_tmp = lock_key;
+    leveldb::PutFixed32LGId(&tera_key_tmp, m_tablet->m_meta_lg_id);
+    VLOG(10) << "Batch unlock, key:" << row_key << ",lg_id:" << m_tablet->m_meta_lg_id;
+    batch->Delete(tera_key_tmp);
+}
+
 void TabletWriter::FinishTask(const WriteTask& task, StatusCode status) {
     int32_t row_num = task.row_mutation_vec->size();
     m_tablet->GetCounter().write_rows.Add(row_num);
     for (int32_t i = 0; i < row_num; i++) {
-        m_tablet->GetCounter().write_kvs.Add((*task.row_mutation_vec)[i]->mutation_sequence_size());
-        (*task.status_vec)[i] = status;
+        const RowMutationSequence& row_mu = *(*task.row_mutation_vec)[i];
+        StatusCode& row_status = (*task.status_vec)[i];
+        if (row_status == kTableOk) {
+            row_status = status;
+        }
+        if (!m_tablet->KvOnly() && m_tablet->GetSchema().enable_txn()) {
+            HandleLockAfterWrite(row_mu, row_status);
+        }
+        m_tablet->GetCounter().write_kvs.Add(row_mu.mutation_sequence_size());
     }
     task.callback(task.row_mutation_vec, task.status_vec);
 }
@@ -303,8 +417,7 @@ StatusCode TabletWriter::FlushToDiskBatch(WriteTaskBuffer* task_buffer) {
     leveldb::WriteBatch batch;
 
     for (size_t i = 0; i < task_num; ++i) {
-        const WriteTask& task = (*task_buffer)[i];
-        BatchRequest(*task.row_mutation_vec, &batch, m_tablet->KvOnly());
+        BatchRequest((*task_buffer)[i], &batch);
     }
 
     StatusCode status = kTableOk;

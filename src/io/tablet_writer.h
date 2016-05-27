@@ -20,6 +20,7 @@ namespace tera {
 namespace io {
 
 class TabletIO;
+class LockManager;
 
 class TabletWriter {
 public:
@@ -43,24 +44,35 @@ public:
     /// 初略计算一个request的数据大小
     static uint64_t CountRequestSize(std::vector<const RowMutationSequence*>& row_mutation_vec,
                                      bool kv_only);
-    /// 把一个request打到一个leveldbbatch里去, request是原子的, batch也是, so ..
-    bool BatchRequest(const std::vector<const RowMutationSequence*>& row_mutation_vec,
-                      leveldb::WriteBatch* batch,
-                      bool kv_only);
     void Start();
     void Stop();
 
 private:
     void DoWork();
     bool SwapActiveBuffer(bool force);
+    /// 把一个request打到一个leveldbbatch里去, request是原子的, batch也是, so ..
+    void BatchRequest(WriteTask& task, leveldb::WriteBatch* batch);
+    void BatchKvRequest(const RowMutationSequence& row_mu, leveldb::WriteBatch* batch);
+    bool BatchTableRequest(const RowMutationSequence& row_mu, leveldb::WriteBatch* batch,
+                           StatusCode* status = NULL);
     /// 任务完成, 执行回调
     void FinishTaskBatch(WriteTaskBuffer* task_buffer, StatusCode status);
     void FinishTask(const WriteTask& task, StatusCode status);
     /// 将buffer刷到磁盘(leveldb), 并sync
     StatusCode FlushToDiskBatch(WriteTaskBuffer* task_buffer);
+;
+    bool HandleLockBeforeWrite(const RowMutationSequence& mu_seq,
+                               leveldb::WriteBatch* batch,
+                               StatusCode* status = NULL);
+    void HandleLockAfterWrite(const RowMutationSequence& mu_seq,
+                              const StatusCode& write_status);
+    void BatchLock(const std::string& row_key, int64_t timestamp, uint64_t lock_id,
+                   const std::string& annotation, leveldb::WriteBatch* batch);
+    void BatchUnlock(const std::string& row_key, leveldb::WriteBatch* batch);
 
 private:
     TabletIO* m_tablet;
+    LockManager* m_lock_manager;
 
     mutable Mutex m_task_mutex;
     mutable Mutex m_status_mutex;

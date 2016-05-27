@@ -60,9 +60,9 @@ private:
     std::string m_last_key;
     std::string m_last_col;
     std::string m_last_qual;
-    int64_t m_last_ts;
     leveldb::TeraKeyType m_last_type;
     leveldb::TeraKeyType m_cur_type;
+    int64_t m_last_ts;
     int64_t m_del_row_ts;
     int64_t m_del_col_ts;
     int64_t m_del_qual_ts;
@@ -73,6 +73,7 @@ private:
     uint32_t m_version_num;
     uint64_t m_snapshot;
     bool m_has_put;
+    int64_t m_lock_ts;
 };
 
 class DefaultCompactStrategyFactory : public leveldb::CompactStrategyFactory {
