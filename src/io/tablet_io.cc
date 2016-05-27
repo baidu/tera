@@ -681,13 +681,13 @@ bool TabletIO::LowLevelScan(const std::string& start_tera_key,
     }
 
     ScanContext* context = new ScanContext;
-    context->m_compact_strategy = m_ldb_options.compact_strategy_factory->NewInstance();
-    context->m_version_num = 1;
+    context->compact_strategy = m_ldb_options.compact_strategy_factory->NewInstance();
+    context->version_num = 1;
     bool ret = LowLevelScan(start_tera_key, end_row_key, scan_options, it, context,
                             value_list, next_start_point, read_row_count, read_bytes,
                             is_complete, status);
     delete it;
-    delete context->m_compact_strategy;
+    delete context->compact_strategy;
     delete context;
     return ret;
 }
@@ -827,11 +827,11 @@ inline bool TabletIO::LowLevelScan(const std::string& start_tera_key,
                                    uint32_t* read_bytes,
                                    bool* is_complete,
                                    StatusCode* status) {
-    leveldb::CompactStrategy* compact_strategy = scan_context->m_compact_strategy;
-    std::string& last_key = scan_context->m_last_key;
-    std::string& last_col = scan_context->m_last_col;
-    std::string& last_qual = scan_context->m_last_qual;
-    uint32_t& version_num = scan_context->m_version_num;
+    leveldb::CompactStrategy* compact_strategy = scan_context->compact_strategy;
+    std::string& last_key = scan_context->last_key;
+    std::string& last_col = scan_context->last_col;
+    std::string& last_qual = scan_context->last_qual;
+    uint32_t& version_num = scan_context->version_num;
 
     std::list<KeyValuePair> row_buf;
     uint32_t buffer_size = 0;
@@ -1438,14 +1438,14 @@ bool TabletIO::HandleScan(const ScanTabletRequest* request,
     }
 
     // first rpc init iterator and scan parameter
-    if (context->m_it == NULL) {
+    if (context->it == NULL) {
         std::string start_tera_key;
         std::string end_row_key;
-        SetupScanInternalTeraKey(request, &(context->m_start_tera_key), &(context->m_end_row_key));
-        SetupScanRowOptions(request, &(context->m_scan_options));
-        context->m_ret_code = InitedScanInterator(context->m_start_tera_key, context->m_scan_options,
-                                      &(context->m_it));
-        context->m_compact_strategy = m_ldb_options.compact_strategy_factory->NewInstance();
+        SetupScanInternalTeraKey(request, &(context->start_tera_key), &(context->end_row_key));
+        SetupScanRowOptions(request, &(context->scan_options));
+        context->ret_code = InitedScanInterator(context->start_tera_key, context->scan_options,
+                                      &(context->it));
+        context->compact_strategy = m_ldb_options.compact_strategy_factory->NewInstance();
     }
     // schedule scan context
     return m_tablet_scanner.ScheduleScanContext(context);
@@ -1454,10 +1454,10 @@ bool TabletIO::HandleScan(const ScanTabletRequest* request,
 void TabletIO::ProcessScan(ScanContext* context) {
     uint32_t rows_scan_num = 0;
     uint32_t size_scan_bytes = 0;
-    if (LowLevelScan(context->m_start_tera_key, context->m_end_row_key,
-                     context->m_scan_options, context->m_it, context,
-                     context->m_result, NULL, &rows_scan_num, &size_scan_bytes,
-                     &context->m_complete, &context->m_ret_code)) {
+    if (LowLevelScan(context->start_tera_key, context->end_row_key,
+                     context->scan_options, context->it, context,
+                     context->result, NULL, &rows_scan_num, &size_scan_bytes,
+                     &context->complete, &context->ret_code)) {
         m_counter.scan_rows.Add(rows_scan_num);
         m_counter.scan_size.Add(size_scan_bytes);
     }

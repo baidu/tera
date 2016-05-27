@@ -44,29 +44,29 @@ struct ScanOptions {
 class ScanContextManager;
 typedef std::pair<ScanTabletResponse*, google::protobuf::Closure*> ScanJob;
 struct ScanContext {
-    int64_t m_session_id;
-    TabletIO* m_tablet_io;
+    int64_t session_id;
+    TabletIO* tablet_io;
 
     // use for lowlevelscan
-    std::string m_start_tera_key;
-    std::string m_end_row_key;
-    ScanOptions m_scan_options;
-    leveldb::Iterator* m_it; // init to NULL
-    leveldb::CompactStrategy* m_compact_strategy;
-    uint32_t m_version_num;
-    std::string m_last_key;
-    std::string m_last_col;
-    std::string m_last_qual;
+    std::string start_tera_key;
+    std::string end_row_key;
+    ScanOptions scan_options;
+    leveldb::Iterator* it; // init to NULL
+    leveldb::CompactStrategy* compact_strategy;
+    uint32_t version_num;
+    std::string last_key;
+    std::string last_col;
+    std::string last_qual;
 
     // use for reture
-    StatusCode m_ret_code; // set by lowlevelscan
-    bool m_complete; // test this flag know whether scan finish or not
-    RowResult* m_result; // scan result for one round
-    uint64_t m_data_idx; // return data_id
+    StatusCode ret_code; // set by lowlevelscan
+    bool complete; // test this flag know whether scan finish or not
+    RowResult* result; // scan result for one round
+    uint64_t data_idx; // return data_id
 
     // protect by manager lock
-    std::queue<ScanJob> m_jobs;
-    std::queue<leveldb::Cache::Handle*> m_handles;
+    std::queue<ScanJob> jobs;
+    std::queue<leveldb::Cache::Handle*> handles;
 };
 
 class ScanContextManager {
@@ -85,7 +85,7 @@ private:
     // <session_id, ScanContext>
 
     Mutex m_lock;
-    ::leveldb::Cache* cache_;
+    ::leveldb::Cache* m_cache;
 };
 
 } // namespace io

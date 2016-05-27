@@ -16,18 +16,18 @@ namespace tera {
 namespace io {
 
 ScanContextManager::ScanContextManager() {
-    cache_ = leveldb::NewLRUCache(FLAGS_tera_tabletnode_scanner_cache_size);
+    m_cache = leveldb::NewLRUCache(FLAGS_tera_tabletnode_scanner_cache_size);
 }
 ScanContextManager::~ScanContextManager() {}
 
 // access in m_lock context
 static void LRUCacheDeleter(const ::leveldb::Slice& key, void* value) {
     ScanContext* context = reinterpret_cast<ScanContext*>(value);
-    if (context->m_it) {
-        delete context->m_it;
+    if (context->it) {
+        delete context->it;
     }
-    if (context->m_compact_strategy) {
-        delete context->m_compact_strategy;
+    if (context->compact_strategy) {
+        delete context->compact_strategy;
     }
     delete context;
     return;
@@ -49,16 +49,16 @@ ScanContext* ScanContextManager::GetScanContext(TabletIO* tablet_io,
 
     // search from cache
     MutexLock l(&m_lock);
-    char buf[sizeof(request->session_id())];
+    char buf[sizeof(int64_t)];
     ::leveldb::EncodeFixed64(buf, request->session_id());
     ::leveldb::Slice key(buf, sizeof(buf));
-    handle = cache_->Lookup(key);
+    handle = m_cache->Lookup(key);
     if (handle) {
         // not first session rpc, no need init scan context
-        context = reinterpret_cast<ScanContext*>(cache_->Value(handle));
-        context->m_jobs.push(ScanJob(response, done));
-        context->m_handles.push(handle); // refer item in cache
-        if (context->m_jobs.size() > 1) {
+        context = reinterpret_cast<ScanContext*>(m_cache->Value(handle));
+        context->jobs.push(ScanJob(response, done));
+        context->handles.push(handle); // refer item in cache
+        if (context->jobs.size() > 1) {
             return NULL;
         }
         return context;
@@ -74,66 +74,66 @@ ScanContext* ScanContextManager::GetScanContext(TabletIO* tablet_io,
 
     // first rpc new scan context
     context = new ScanContext;
-    context->m_session_id = request->session_id();
-    context->m_tablet_io = tablet_io;
+    context->session_id = request->session_id();
+    context->tablet_io = tablet_io;
 
-    context->m_it = NULL;
-    context->m_compact_strategy = NULL;
-    context->m_ret_code = kTabletNodeOk;
-    context->m_result = NULL;
-    context->m_data_idx = 0;
-    context->m_complete = false;
-    context->m_version_num = 1;
+    context->it = NULL;
+    context->compact_strategy = NULL;
+    context->ret_code = kTabletNodeOk;
+    context->result = NULL;
+    context->data_idx = 0;
+    context->complete = false;
+    context->version_num = 1;
 
-    handle = cache_->Insert(key, context, 1, &LRUCacheDeleter);
-    context->m_jobs.push(ScanJob(response, done));
-    context->m_handles.push(handle);  // refer item in cache
+    handle = m_cache->Insert(key, context, 1, &LRUCacheDeleter);
+    context->jobs.push(ScanJob(response, done));
+    context->handles.push(handle);  // refer item in cache
     // init context other param in TabletIO context
     return context;
 }
 
 // check event bit, then schedule context
 bool ScanContextManager::ScheduleScanContext(ScanContext* context) {
-    while (context->m_ret_code == kTabletNodeOk) {
+    while (context->ret_code == kTabletNodeOk) {
         ScanTabletResponse* response;
         ::google::protobuf::Closure* done;
         {
             MutexLock l(&m_lock);
-            response = context->m_jobs.front().first;
-            done = context->m_jobs.front().second;
+            response = context->jobs.front().first;
+            done = context->jobs.front().second;
         }
-        context->m_result = response->mutable_results();
+        context->result = response->mutable_results();
 
-        ((TabletIO*)(context->m_tablet_io))->ProcessScan(context);
+        ((TabletIO*)(context->tablet_io))->ProcessScan(context);
 
         // reply to client
-        response->set_complete(context->m_complete);
-        response->set_status(context->m_ret_code);
-        response->set_results_id(context->m_data_idx);
-        (context->m_data_idx)++;
-        context->m_result = NULL;
+        response->set_complete(context->complete);
+        response->set_status(context->ret_code);
+        response->set_results_id(context->data_idx);
+        (context->data_idx)++;
+        context->result = NULL;
         done->Run();// TODO: try async return, time consume need test
 
         {
             MutexLock l(&m_lock);
-            context->m_jobs.pop();
-            ::leveldb::Cache::Handle* handle = context->m_handles.front();
-            context->m_handles.pop();
-            cache_->Release(handle); // unrefer cache item
+            context->jobs.pop();
+            ::leveldb::Cache::Handle* handle = context->handles.front();
+            context->handles.pop();
+            m_cache->Release(handle); // unrefer cache item
 
             // complete or io error, return all the rest request to client
-            if (context->m_complete || (context->m_ret_code != kTabletNodeOk)) {
+            if (context->complete || (context->ret_code != kTabletNodeOk)) {
                 DeleteScanContext(context); // never use context
                 return true;
             }
-            if (context->m_jobs.size() == 0) {
+            if (context->jobs.size() == 0) {
                 return true;
             }
         }
     }
     {
         MutexLock l(&m_lock);
-        if (context->m_ret_code != kTabletNodeOk) {
+        if (context->ret_code != kTabletNodeOk) {
             DeleteScanContext(context); // never use context
         }
     }
@@ -142,18 +142,18 @@ bool ScanContextManager::ScheduleScanContext(ScanContext* context) {
 
 // access in m_lock context
 void ScanContextManager::DeleteScanContext(ScanContext* context) {
-    uint32_t job_size = context->m_jobs.size();
+    uint32_t job_size = context->jobs.size();
     while (job_size) {
-        ScanTabletResponse* response = context->m_jobs.front().first;
-        ::google::protobuf::Closure* done = context->m_jobs.front().second;
-        response->set_complete(context->m_complete);
-        response->set_status(context->m_ret_code);
+        ScanTabletResponse* response = context->jobs.front().first;
+        ::google::protobuf::Closure* done = context->jobs.front().second;
+        response->set_complete(context->complete);
+        response->set_status(context->ret_code);
         done->Run();
 
-        context->m_jobs.pop();
-        ::leveldb::Cache::Handle* handle = context->m_handles.front();
-        context->m_handles.pop();
-        cache_->Release(handle); // unrefer cache item
+        context->jobs.pop();
+        ::leveldb::Cache::Handle* handle = context->handles.front();
+        context->handles.pop();
+        m_cache->Release(handle); // unrefer cache item
         job_size--;
     }
 }
@@ -162,7 +162,7 @@ void ScanContextManager::DeleteScanContext(ScanContext* context) {
 // so we shoud drop all cache it
 void ScanContextManager::DestroyScanCache() {
     MutexLock l(&m_lock);
-    delete cache_;
+    delete m_cache;
 }
 
 } // namespace io
