@@ -66,7 +66,7 @@ struct ScanContext {
 
     // protect by manager lock
     std::queue<ScanJob> jobs;
-    std::queue<leveldb::Cache::Handle*> handles;
+    leveldb::Cache::Handle* handle;
 };
 
 class ScanContextManager {

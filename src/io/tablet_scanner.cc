@@ -24,7 +24,7 @@ ScanContextManager::~ScanContextManager() {}
 static void LRUCacheDeleter(const ::leveldb::Slice& key, void* value) {
     ScanContext* context = reinterpret_cast<ScanContext*>(value);
     VLOG(10) << "evict from cache, " << context->session_id;
-    CHECK(context->handles.size() == 0);
+    CHECK(context->handle == NULL);
     if (context->it) {
         delete context->it;
     }
@@ -64,7 +64,8 @@ ScanContext* ScanContextManager::GetScanContext(TabletIO* tablet_io,
             VLOG(10) << "push task into queue, " << request->session_id();
             return NULL;
         }
-        context->handles.push(handle); // first one refer item in cache
+        CHECK(context->handle == NULL);
+        context->handle = handle; // first one refer item in cache
         return context;
     }
 
@@ -91,7 +92,7 @@ ScanContext* ScanContextManager::GetScanContext(TabletIO* tablet_io,
 
     handle = m_cache->Insert(key, context, 1, &LRUCacheDeleter);
     context->jobs.push(ScanJob(response, done));
-    context->handles.push(handle);  // refer item in cache
+    context->handle = handle;  // refer item in cache
     // init context other param in TabletIO context
     return context;
 }
@@ -128,8 +129,8 @@ bool ScanContextManager::ScheduleScanContext(ScanContext* context) {
                 return true;
             }
             if (context->jobs.size() == 0) {
-                ::leveldb::Cache::Handle* handle = context->handles.front();
-                context->handles.pop();
+                ::leveldb::Cache::Handle* handle = context->handle;
+                context->handle = NULL;
                 m_cache->Release(handle); // unrefer cache item
                 return true;
             }
@@ -160,8 +161,8 @@ void ScanContextManager::DeleteScanContext(ScanContext* context) {
 
     int64_t session_id = context->session_id;
     VLOG(10) << "scan " << session_id << ", complete " << context->complete << ", ret " << StatusCode_Name(context->ret_code);
-    ::leveldb::Cache::Handle* handle = context->handles.front();
-    context->handles.pop();
+    ::leveldb::Cache::Handle* handle = context->handle;
+    context->handle = NULL;
     m_cache->Release(handle); // unrefer cache item, no more use context!!!
 
     char buf[sizeof(int64_t)];
