@@ -46,10 +46,10 @@ DECLARE_string(log_dir);
 DECLARE_string(tera_master_meta_table_name);
 DECLARE_string(tera_zk_addr_list);
 DECLARE_string(tera_zk_root_path);
+DECLARE_bool(tera_sdk_batch_scan_enabled);
 
 DEFINE_int32(tera_client_batch_put_num, 1000, "num of each batch in batch put mode");
 DEFINE_int32(tera_client_scan_package_size, 1024, "the package size (in KB) of each scan request");
-DEFINE_bool(tera_client_scan_async_enabled, false, "enable the streaming scan mode");
 
 DEFINE_int64(scan_pack_interval, 5000, "scan timeout");
 DEFINE_int64(snapshot, 0, "read | scan snapshot");
@@ -980,7 +980,7 @@ int32_t DeleteOp(Client* client, int32_t argc, char** argv, ErrorCode* err) {
 
 int32_t ScanRange(TablePtr& table, ScanDescriptor& desc, ErrorCode* err) {
     desc.SetBufferSize(FLAGS_tera_client_scan_package_size << 10);
-    desc.SetAsync(FLAGS_tera_client_scan_async_enabled);
+    desc.SetAsync(FLAGS_tera_sdk_batch_scan_enabled);
     desc.SetPackInterval(FLAGS_scan_pack_interval);
     desc.SetSnapshot(FLAGS_snapshot);
 
