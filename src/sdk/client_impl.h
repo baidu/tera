@@ -117,9 +117,6 @@ public:
                 const std::string& new_table_name,
                 ErrorCode* err);
 
-    std::string GetZkAddrList() { return _zk_addr_list; }
-    std::string GetZkRootPath() { return _zk_root_path; }
-
     void CloseTable(const string& table_name);
     TableImpl* OpenTableInternal(const string& table_name, ErrorCode* err);
 
@@ -160,8 +157,6 @@ private:
 
     std::string _user_identity;
     std::string _user_passcode;
-    std::string _zk_addr_list;
-    std::string _zk_root_path;
 
     /// _cluster could cache the master_addr & root_table_addr.
     /// if there is no _cluster,

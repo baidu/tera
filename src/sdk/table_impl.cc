@@ -61,8 +61,6 @@ DECLARE_int32(tera_rpc_timeout_period);
 namespace tera {
 
 TableImpl::TableImpl(const std::string& table_name,
-                     const std::string& zk_root_path,
-                     const std::string& zk_addr_list,
                      common::ThreadPool* thread_pool,
                      sdk::ClusterFinder* cluster)
     : _name(table_name),
@@ -79,8 +77,6 @@ TableImpl::TableImpl(const std::string& table_name,
       _meta_updating_count(0),
       _table_meta_cond(&_table_meta_mutex),
       _table_meta_updating(false),
-      _zk_root_path(zk_root_path),
-      _zk_addr_list(zk_addr_list),
       _thread_pool(thread_pool),
       _cluster(cluster),
       _cluster_private(false),
