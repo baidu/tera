@@ -232,7 +232,7 @@ private:
 private:
     mutable Mutex m_mutex;
     TabletWriter* m_async_writer;
-    ScanContextManager m_tablet_scanner;
+    ScanContextManager m_scan_context_manager;
 
     std::string m_tablet_path;
     const std::string m_start_key;
