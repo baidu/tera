@@ -1132,7 +1132,6 @@ static int SpecifiedFlagfileCount(const std::string& confpath) {
 }
 
 static int InitFlags(const std::string& confpath, const std::string& log_prefix) {
-    MutexLock locker(&g_mutex);
     // search conf file, priority:
     //   user-specified > ./tera.flag > ../conf/tera.flag
     std::string flagfile;
@@ -1177,6 +1176,9 @@ static int InitFlags(const std::string& confpath, const std::string& log_prefix)
 }
 
 Client* Client::NewClient(const string& confpath, const string& log_prefix, ErrorCode* err) {
+    // Protect the section from [load flagfile] to [new a client instance],
+    // because the client constructor will use flagfile options to initial its private options
+    MutexLock locker(&g_mutex);
     if (InitFlags(confpath, log_prefix) != 0) {
         if (err != NULL) {
             std::string reason = "init tera flag failed";
