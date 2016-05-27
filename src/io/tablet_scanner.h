@@ -6,14 +6,15 @@
 #ifndef TERA_IO_TABLET_SCANNER_H_
 #define TERA_IO_TABLET_SCANNER_H_
 
+#include "types.h"
+#include <limits>
+#include <queue>
+
 #include "common/mutex.h"
 #include "leveldb/cache.h"
 #include "leveldb/compact_strategy.h"
 #include "leveldb/db.h"
 #include "proto/tabletnode_rpc.pb.h"
-#include "types.h"
-#include <limits>
-#include <queue>
 
 namespace tera {
 namespace io {
