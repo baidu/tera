@@ -281,6 +281,8 @@ bool TabletIO::Load(const TableSchema& schema,
     m_async_writer = new TabletWriter(this);
     m_async_writer->Start();
 
+    m_scan_context_manager = new ScanContextManager;
+
     {
         MutexLock lock(&m_mutex);
         m_status = kReady;
@@ -329,6 +331,7 @@ bool TabletIO::Unload(StatusCode* status) {
         LOG(INFO) << "[Unload] shutdown1 failed, keep log " << m_tablet_path;
     }
 
+    delete m_scan_context_manager;
     delete m_db;
     m_db = NULL;
 
@@ -678,15 +681,18 @@ bool TabletIO::LowLevelScan(const std::string& start_tera_key,
         SetStatusCode(ret_code, status);
         return false;
     }
-    ScanContext scan_context(m_ldb_options.compact_strategy_factory);
 
-    bool ret = LowLevelScan(start_tera_key, end_row_key, scan_options, it, &scan_context,
+    ScanContext* context = new ScanContext;
+    context->compact_strategy = m_ldb_options.compact_strategy_factory->NewInstance();
+    context->version_num = 1;
+    bool ret = LowLevelScan(start_tera_key, end_row_key, scan_options, it, context,
                             value_list, next_start_point, read_row_count, read_bytes,
                             is_complete, status);
     delete it;
+    delete context->compact_strategy;
+    delete context;
     return ret;
 }
-
 
 bool TabletIO::ScanWithFilter(const ScanOptions& scan_options) {
     return scan_options.filter_list.filter_size() != 0;
@@ -945,7 +951,6 @@ inline bool TabletIO::LowLevelScan(const std::string& start_tera_key,
         }
 
         KeyValuePair kv;
-        (const_cast<ScanOptions&>(scan_options)).version_num = version_num;
         MakeKvPair(key, col, qual, ts, value, &kv);
         row_buf.push_back(kv);
 
@@ -1384,7 +1389,7 @@ bool TabletIO::ScanRows(const ScanTabletRequest* request,
         response->set_status(status);
         done->Run();
     } else if (request->has_session_id() && request->session_id() > 0) {
-        success = ScanRowsStreaming(request, response, done);
+        success = HandleScan(request, response, done);
     } else {
         success = ScanRowsRestricted(request, response, done);
     }
@@ -1425,64 +1430,39 @@ bool TabletIO::ScanRowsRestricted(const ScanTabletRequest* request,
     return ret;
 }
 
-bool TabletIO::ScanRowsStreaming(const ScanTabletRequest* request,
-                                 ScanTabletResponse* response,
-                                 google::protobuf::Closure* done) {
-    bool is_first_scan = false;
-    std::string table_name = request->table_name();
-    m_stream_scan.PushTask(request, response, done, &is_first_scan);
-    if (!is_first_scan) {
-        LOG(INFO) << "not first rpc to call scan: " << table_name;
+bool TabletIO::HandleScan(const ScanTabletRequest* request,
+                          ScanTabletResponse* response,
+                          google::protobuf::Closure* done) {
+    // concurrency control, ensure only one scanner step init leveldb::Iterator
+    ScanContext* context = m_scan_context_manager->GetScanContext(this, request, response, done);
+    if (context == NULL) {
         return true;
     }
 
-    std::string start_tera_key;
-    std::string end_row_key;
-    SetupScanInternalTeraKey(request, &start_tera_key, &end_row_key);
-
-    ScanOptions scan_options;
-    SetupScanRowOptions(request, &scan_options);
-
-    uint32_t read_row_count = 0;
-    uint32_t read_bytes = 0;
-    bool is_complete = false;
-
-    uint64_t session_id = request->session_id();
-    StreamScan* scan_stream = m_stream_scan.GetStream(session_id);
-    leveldb::Iterator* it = NULL;
-    StatusCode ret_code = InitedScanInterator(start_tera_key, scan_options, &it);
-    if (ret_code != kTabletNodeOk) {
-        scan_stream->SetStatusCode(ret_code);
-        m_stream_scan.RemoveSession(session_id);
-        return false;
+    // first rpc init iterator and scan parameter
+    if (context->it == NULL) {
+        std::string start_tera_key;
+        std::string end_row_key;
+        SetupScanInternalTeraKey(request, &(context->start_tera_key), &(context->end_row_key));
+        SetupScanRowOptions(request, &(context->scan_options));
+        context->ret_code = InitedScanInterator(context->start_tera_key, context->scan_options,
+                                      &(context->it));
+        context->compact_strategy = m_ldb_options.compact_strategy_factory->NewInstance();
     }
-    ScanContext scan_context(m_ldb_options.compact_strategy_factory);
+    // schedule scan context
+    return m_scan_context_manager->ScheduleScanContext(context);
+}
 
-    StatusCode status = kTabletNodeOk;
-    uint64_t data_id = 0;
-    while (status == kTabletNodeOk) {
-        RowResult value_list;
-        if (LowLevelScan(start_tera_key, end_row_key, scan_options, it, &scan_context,
-                         &value_list, NULL, &read_row_count, &read_bytes,
-                         &is_complete, &status)) {
-            m_counter.scan_rows.Add(read_row_count);
-            m_counter.scan_size.Add(read_bytes);
-
-            scan_stream->SetCompleted(is_complete);
-            if (!scan_stream->PushData(data_id, value_list)) {
-                break;
-            }
-            data_id++;
-        }
-        scan_stream->SetStatusCode(status);
-        if (is_complete) {
-            break;
-        }
+void TabletIO::ProcessScan(ScanContext* context) {
+    uint32_t rows_scan_num = 0;
+    uint32_t size_scan_bytes = 0;
+    if (LowLevelScan(context->start_tera_key, context->end_row_key,
+                     context->scan_options, context->it, context,
+                     context->result, NULL, &rows_scan_num, &size_scan_bytes,
+                     &context->complete, &context->ret_code)) {
+        m_counter.scan_rows.Add(rows_scan_num);
+        m_counter.scan_size.Add(size_scan_bytes);
     }
-
-    delete it;
-    m_stream_scan.RemoveSession(session_id);
-    return true;
 }
 
 bool TabletIO::Scan(const ScanOption& option, KeyValueList* kv_list,
@@ -1638,7 +1618,6 @@ void TabletIO::SetupScanRowOptions(const ScanTabletRequest* request,
     if (request->timeout()) {
         scan_options->timeout = request->timeout();
     }
-    scan_options->version_num = 0;
     scan_options->snapshot_id = request->snapshot_id();
 }
 
@@ -1877,6 +1856,7 @@ void TabletIO::ProcessRowBuffer(std::list<KeyValuePair>& row_buf,
         }
 
         value_list->add_key_values()->CopyFrom(*it);
+
         (*number_limit)++;
         *buffer_size += key.size() + col.size() + qual.size()
             + sizeof(ts) + value.size();

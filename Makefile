@@ -40,7 +40,7 @@ TERA_C_SRC := src/tera_c.cc
 MONITOR_SRC := src/monitor/teramo_main.cc
 MARK_SRC := src/benchmark/mark.cc src/benchmark/mark_main.cc
 TEST_SRC := src/utils/test/prop_tree_test.cc src/utils/test/tprinter_test.cc \
-            src/io/test/tablet_io_test.cc
+	src/io/test/tablet_io_test.cc src/io/test/tablet_scanner_test.cc
 
 TEST_OUTPUT := test_output
 UNITTEST_OUTPUT := $(TEST_OUTPUT)/unittest
@@ -73,7 +73,7 @@ TERA_C_SO = libtera_c.so
 JNILIBRARY = libjni_tera.so
 BENCHMARK = tera_bench tera_mark
 TESTS = prop_tree_test tprinter_test string_util_test tablet_io_test \
-		fragment_test progress_bar_test
+	tablet_scanner_test fragment_test progress_bar_test
 
 .PHONY: all clean cleanall test
 
@@ -158,6 +158,10 @@ fragment_test: src/utils/test/fragment_test.o src/utils/fragment.o
 	$(CXX) -o $@ $^ $(LDFLAGS)
 
 progress_bar_test: src/common/console/progress_bar_test.o src/common/console/progress_bar.o
+	$(CXX) -o $@ $^ $(LDFLAGS)
+
+tablet_scanner_test: src/io/test/tablet_scanner_test.o src/tabletnode/tabletnode_sysinfo.o\
+		$(IO_OBJ) $(PROTO_OBJ) $(OTHER_OBJ) $(COMMON_OBJ) $(LEVELDB_LIB)
 	$(CXX) -o $@ $^ $(LDFLAGS)
 
 $(ALL_OBJ): %.o: %.cc $(PROTO_OUT_H)

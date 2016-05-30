@@ -249,9 +249,9 @@ def scan_table(table_name, file_path, allversion, snapshot=0, is_async=False):
         allv += 'scan'
     
     if is_async is True:
-        async_flag = '--tera_sdk_scan_async_enabled=true --v=30 --tera_client_scan_async_enabled=true'
+        async_flag = '--tera_sdk_batch_scan_enabled=true --v=30 '
     else:
-        async_flag = '--tera_sdk_scan_async_enabled=false'
+        async_flag = '--tera_sdk_batch_scan_enabled=false'
         
     snapshot_args = ''
     if snapshot != 0:
