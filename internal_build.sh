@@ -26,6 +26,7 @@ if [ ! -f "$WORK_DIR/depends.mk" ]; then
 fi
 
 cd ${DEPS_SOURCE}
+git pull
 
 # boost
 if [ ! -f "${FLAG_DIR}/boost_1_57_0" ] \
