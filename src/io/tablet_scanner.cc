@@ -24,7 +24,7 @@ ScanContextManager::ScanContextManager() {
 // when tabletio unload, because scan_context->m_it has reference of version,
 // so we shoud drop all cache it
 ScanContextManager::~ScanContextManager() {
-    //MutexLock l(&m_lock);
+    MutexLock l(&m_lock);
     delete m_cache;
 }
 

@@ -2068,8 +2068,8 @@ int32_t ReloadConfigOp(Client* client, int32_t argc, char** argv, ErrorCode* err
     }
     std::string addr(argv[3]);
 
-    tera::sdk::ClusterFinder finder(FLAGS_tera_zk_root_path, FLAGS_tera_zk_addr_list);
-    if (finder.MasterAddr() == addr) {
+    scoped_ptr<tera::sdk::ClusterFinder> finder(tera::sdk::NewClusterFinder());
+    if (finder->MasterAddr() == addr) {
         // master
         std::vector<std::string> arg_list;
         if (!client->CmdCtrl("reload config", arg_list, NULL, NULL, err)) {
@@ -2346,8 +2346,8 @@ int32_t FindMasterOp(Client* client, int32_t argc, char** argv, ErrorCode* err) 
         PrintCmdHelpInfo(argv[1]);
         return -1;
     }
-    tera::sdk::ClusterFinder finder(FLAGS_tera_zk_root_path, FLAGS_tera_zk_addr_list);
-    std::cout << "master addr:< " << finder.MasterAddr() << " >\n";
+    scoped_ptr<tera::sdk::ClusterFinder> finder(tera::sdk::NewClusterFinder());
+    std::cout << "master addr:< " << finder->MasterAddr() << " >\n";
     return 0;
 }
 
@@ -2621,8 +2621,8 @@ int32_t FindTabletOp(int32_t argc, char** argv, ErrorCode* err) {
         }
     }
     // get meta address
-    tera::sdk::ClusterFinder finder(FLAGS_tera_zk_root_path, FLAGS_tera_zk_addr_list);
-    std::string meta_tablet_addr = finder.RootTableAddr();
+    scoped_ptr<tera::sdk::ClusterFinder> finder(tera::sdk::NewClusterFinder());
+    std::string meta_tablet_addr = finder->RootTableAddr();
     if (meta_tablet_addr.empty()) {
         if (err != NULL) {
             err->SetFailed(ErrorCode::kBadParam, "read root addr from zk fail");
@@ -2703,8 +2703,8 @@ int32_t Meta2Op(Client *client, int32_t argc, char** argv) {
     }
 
     // get meta address
-    tera::sdk::ClusterFinder finder(FLAGS_tera_zk_root_path, FLAGS_tera_zk_addr_list);
-    std::string meta_tablet_addr = finder.RootTableAddr();
+    scoped_ptr<tera::sdk::ClusterFinder> finder(tera::sdk::NewClusterFinder());
+    std::string meta_tablet_addr = finder->RootTableAddr();
     if (meta_tablet_addr.empty()) {
         std::cerr << "read root addr from zk fail";
         return -1;
