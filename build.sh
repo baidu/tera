@@ -66,12 +66,12 @@ if [ ! -f "${FLAG_DIR}/snappy_1_1_1" ] \
 fi
 
 # sofa-pbrpc
-if [ ! -f "${FLAG_DIR}/sofa-pbrpc_1_0_0" ] \
+if [ ! -f "${FLAG_DIR}/sofa-pbrpc_1_1_0" ] \
     || [ ! -f "${DEPS_PREFIX}/lib/libsofa-pbrpc.a" ] \
     || [ ! -d "${DEPS_PREFIX}/include/sofa/pbrpc" ]; then
-    wget --no-check-certificate -O sofa-pbrpc-1.0.0.tar.gz https://github.com/BaiduPS/sofa-pbrpc/archive/v1.0.0.tar.gz
-    tar zxf sofa-pbrpc-1.0.0.tar.gz
-    cd sofa-pbrpc-1.0.0
+    wget --no-check-certificate -O sofa-pbrpc-1.1.0.tar.gz https://github.com/baidu/sofa-pbrpc/archive/v1.1.0.tar.gz
+    tar zxf sofa-pbrpc-1.1.0.tar.gz
+    cd sofa-pbrpc-1.1.0
     sed -i '/BOOST_HEADER_DIR=/ d' depends.mk
     sed -i '/PROTOBUF_DIR=/ d' depends.mk
     sed -i '/SNAPPY_DIR=/ d' depends.mk
@@ -85,7 +85,7 @@ if [ ! -f "${FLAG_DIR}/sofa-pbrpc_1_0_0" ] \
     make -j4
     make install
     cd ..
-    touch "${FLAG_DIR}/sofa-pbrpc_1_0_0"
+    touch "${FLAG_DIR}/sofa-pbrpc_1_1_0"
 fi
 
 # zookeeper
@@ -190,18 +190,18 @@ if [ ! -f "${FLAG_DIR}/gperftools_2_2_1" ] \
 fi
 
 # ins
-if [ ! -f "${FLAG_DIR}/ins" ] \
+if [ ! -f "${FLAG_DIR}/ins_0_13" ] \
     || [ ! -f "${DEPS_PREFIX}/lib/libins_sdk.a" ] \
     || [ ! -f "${DEPS_PREFIX}/include/ins_sdk.h" ]; then
-    rm -rf ins
-    git clone https://github.com/fxsjy/ins
-    cd ins
+    wget --no-check-certificate -O ins-0.13.tar.gz https://github.com/baidu/ins/archive/0.13.tar.gz
+    tar zxf ins-0.13.tar.gz
+    cd ins-0.13
     sed -i "s|^PREFIX=.*|PREFIX=${DEPS_PREFIX}|" Makefile
     sed -i "s|^PROTOC=.*|PROTOC=${DEPS_PREFIX}/bin/protoc|" Makefile
     BOOST_PATH=${DEPS_PREFIX}/boost_1_57_0 make install_sdk
     make -j4 install_sdk
     cd -
-    touch "${FLAG_DIR}/ins"
+    touch "${FLAG_DIR}/ins_0_13"
 fi
 
 cd ${WORK_DIR}
