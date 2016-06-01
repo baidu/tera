@@ -71,6 +71,7 @@ public:
     const std::string& GetPath();
     int64_t GetDataSize();
     void GetDataSize(int64_t* size, std::vector<int64_t>* lg_size);
+    int64_t GetQps();
 
     const std::string& GetKeyStart();
     const std::string& GetKeyEnd();

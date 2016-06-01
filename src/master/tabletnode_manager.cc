@@ -78,6 +78,16 @@ uint64_t TabletNode::GetReadPending() {
     return m_average_counter.m_read_pending;
 }
 
+uint64_t TabletNode::GetWritePending() {
+    MutexLock lock(&m_mutex);
+    return m_average_counter.m_write_pending;
+}
+
+uint64_t TabletNode::GetScanPending() {
+    MutexLock lock(&m_mutex);
+    return m_average_counter.m_scan_pending;
+}
+
 uint64_t TabletNode::GetRowReadDelay() {
     MutexLock lock(&m_mutex);
     return m_average_counter.m_row_read_delay;
@@ -128,11 +138,11 @@ bool TabletNode::TryLoad(TabletPtr tablet) {
     } else {
         m_table_size[tablet->GetTableName()] = tablet->GetDataSize();
     }
-    m_qps += tablet->GetAverageCounter().read_rows();
+    m_qps += tablet->GetQps();
     if (m_table_qps.find(tablet->GetTableName()) != m_table_qps.end()) {
-        m_table_qps[tablet->GetTableName()] += tablet->GetAverageCounter().read_rows();
+        m_table_qps[tablet->GetTableName()] += tablet->GetQps();
     } else {
-        m_table_qps[tablet->GetTableName()] = tablet->GetAverageCounter().read_rows();
+        m_table_qps[tablet->GetTableName()] = tablet->GetQps();
     }
     //VLOG(5) << "load on: " << m_addr << ", size: " << tablet->GetDataSize()
     //      << ", total size: " << m_data_size;
@@ -342,6 +352,12 @@ void TabletNodeManager::UpdateTabletNode(const std::string& addr,
     node->m_average_counter.m_read_pending =
         CounterWeightedSum(state.m_info.read_pending(),
                            node->m_average_counter.m_read_pending);
+    node->m_average_counter.m_write_pending =
+        CounterWeightedSum(state.m_info.write_pending(),
+                           node->m_average_counter.m_write_pending);
+    node->m_average_counter.m_scan_pending =
+        CounterWeightedSum(state.m_info.scan_pending(),
+                           node->m_average_counter.m_scan_pending);
     node->m_average_counter.m_row_read_delay =
         CounterWeightedSum(state.m_info.extra_info(1).value(),
                            node->m_average_counter.m_row_read_delay);

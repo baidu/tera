@@ -48,6 +48,8 @@ struct TabletNode {
 
     struct MutableCounter {
         uint64_t m_read_pending;
+        uint64_t m_write_pending;
+        uint64_t m_scan_pending;
         uint64_t m_row_read_delay; // micros
 
         MutableCounter() {
@@ -82,6 +84,8 @@ struct TabletNode {
     uint64_t GetSize(const std::string& table_name = "");
     uint64_t GetQps(const std::string& table_name = "");
     uint64_t GetReadPending();
+    uint64_t GetWritePending();
+    uint64_t GetScanPending();
     uint64_t GetRowReadDelay();
 
     uint32_t GetPlanToMoveInCount();

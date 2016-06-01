@@ -8,7 +8,8 @@
 #include "master/tablet_manager.h"
 
 DECLARE_double(tera_master_load_balance_size_ratio_trigger);
-DECLARE_int32(tera_master_load_balance_read_pending_threshold);
+DECLARE_int32(tera_master_load_balance_ts_load_threshold);
+DECLARE_int32(tera_master_load_balance_scan_weight);
 
 namespace tera {
 namespace master {
@@ -69,7 +70,8 @@ public:
     }
 };
 
-bool SizeScheduler::MayMoveOut(TabletNodePtr node, const std::string& table_name) {
+bool SizeScheduler::MayMoveOut(const TabletNodePtr& node,
+                               const std::string& table_name) {
     VLOG(7) << "[size-sched] MayMoveOut()";
     int64_t node_size = node->GetSize(table_name);
     if (node_size <= 0) {
@@ -106,7 +108,8 @@ bool SizeScheduler::FindBestNode(const std::vector<TabletNodePtr>& node_list,
     return true;
 }
 
-bool SizeScheduler::FindBestTablet(TabletNodePtr src_node, TabletNodePtr dst_node,
+bool SizeScheduler::FindBestTablet(const TabletNodePtr& src_node,
+                                   const TabletNodePtr& dst_node,
                                    const std::vector<TabletPtr>& tablet_list,
                                    const std::string& table_name,
                                    size_t* best_index) {
@@ -133,7 +136,7 @@ bool SizeScheduler::FindBestTablet(TabletNodePtr src_node, TabletNodePtr dst_nod
     for (size_t i = 0; i < tablet_list.size(); ++i) {
         TabletPtr tablet = tablet_list[i];
         int64_t size = tablet->GetDataSize();
-        int64_t qps = tablet->GetAverageCounter().read_rows();
+        int64_t qps = tablet->GetQps();
         if (size <= ideal_move_size
                 && (best_tablet_index == -1 || size > best_tablet_size)) {
             best_tablet_index = i;
@@ -175,12 +178,17 @@ void SizeScheduler::DescendingSort(std::vector<TabletNodePtr>& node_list,
 //                LoadScheduler
 /////////////////////////////////////////////////
 
+static uint64_t GetPending(const TabletNodePtr& ts) {
+    return ts->GetReadPending() + ts->GetWritePending()
+        + ts->GetScanPending() * FLAGS_tera_master_load_balance_scan_weight;
+}
+
 class LoadComparator : public Comparator {
 public:
     int Compare(const TabletNodePtr& a, const TabletNodePtr& b,
                 const std::string& table_name) {
-        uint64_t a_read_pending = a->GetReadPending();
-        uint64_t b_read_pending = b->GetReadPending();
+        uint64_t a_read_pending = GetPending(a);
+        uint64_t b_read_pending = GetPending(b);
         if (a_read_pending < b_read_pending) {
             return -1;
         } else if (a_read_pending > b_read_pending) {
@@ -209,16 +217,16 @@ public:
     virtual ~LoadComparator() {}
 };
 
-bool LoadScheduler::MayMoveOut(TabletNodePtr node, const std::string& table_name) {
+bool LoadScheduler::MayMoveOut(const TabletNodePtr& node, const std::string& table_name) {
     VLOG(7) << "[load-sched] MayMoveOut()";
-    int64_t node_read_pending = node->GetReadPending();
-    if (node_read_pending <= FLAGS_tera_master_load_balance_read_pending_threshold) {
-        VLOG(7) << "[load-sched] node has no read pending";
+    int64_t node_read_pending = GetPending(node);
+    if (node_read_pending <= FLAGS_tera_master_load_balance_ts_load_threshold) {
+        VLOG(7) << "[load-sched] node do not need loadbalance: " << node_read_pending;
         return false;
     }
     int64_t node_qps = node->GetQps(table_name);
     if (node_qps <= 0) {
-        VLOG(7) << "[load-sched] node has 0 qps";
+        VLOG(7) << "[load-sched] node has 0 qps.";
         return false;
     }
     return true;
@@ -251,15 +259,16 @@ bool LoadScheduler::FindBestNode(const std::vector<TabletNodePtr>& node_list,
     return true;
 }
 
-bool LoadScheduler::FindBestTablet(TabletNodePtr src_node, TabletNodePtr dst_node,
+bool LoadScheduler::FindBestTablet(const TabletNodePtr& src_node,
+                                   const TabletNodePtr& dst_node,
                                    const std::vector<TabletPtr>& tablet_list,
                                    const std::string& table_name,
                                    size_t* best_index) {
     VLOG(7) << "[load-sched] FindBestTablet() " << src_node->GetAddr()
             << " -> " << dst_node->GetAddr();
 
-    int64_t src_node_read_pending = src_node->GetReadPending();
-    int64_t dst_node_read_pending = dst_node->GetReadPending();
+    int64_t src_node_read_pending = GetPending(src_node);
+    int64_t dst_node_read_pending = GetPending(dst_node);
     if (src_node_read_pending <= 0 || dst_node_read_pending > 0) {
         VLOG(7) << "[load-sched] read pending not reach threshold: " << src_node_read_pending
                 << " : " << dst_node_read_pending;
@@ -275,7 +284,7 @@ bool LoadScheduler::FindBestTablet(TabletNodePtr src_node, TabletNodePtr dst_nod
     std::map<int64_t, int64_t> tablet_sort;
     for (size_t i = 0; i < tablet_list.size(); ++i) {
         TabletPtr tablet = tablet_list[i];
-        int64_t qps = tablet->GetAverageCounter().read_rows();
+        int64_t qps = tablet->GetQps();
         tablet_sort[qps] = i;
     }
     std::map<int64_t, int64_t>::reverse_iterator it = tablet_sort.rbegin();
@@ -298,15 +307,15 @@ bool LoadScheduler::NeedSchedule(std::vector<TabletNodePtr>& node_list,
                                  const std::string& table_name) {
     size_t pending_node_num = 0;
     for (size_t i = 0; i < node_list.size(); ++i) {
-        int64_t node_read_pending = node_list[i]->GetReadPending();
-        if (node_read_pending > FLAGS_tera_master_load_balance_read_pending_threshold) {
+        int64_t node_read_pending = GetPending(node_list[i]);
+        if (node_read_pending > FLAGS_tera_master_load_balance_ts_load_threshold) {
             pending_node_num++;
         }
     }
 
-    // If pending_node_num large than 5%, we think read bottleneck is dfs io,
+    // If pending_node_num large than 10%, we think read bottleneck is dfs io,
     // do not need load balance by read.
-    if (pending_node_num * 20 > node_list.size()) {
+    if (pending_node_num * 10 > node_list.size()) {
         return false;
     }
     return true;
