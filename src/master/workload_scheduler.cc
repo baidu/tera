@@ -8,7 +8,8 @@
 #include "master/tablet_manager.h"
 
 DECLARE_double(tera_master_load_balance_size_ratio_trigger);
-DECLARE_int32(tera_master_load_balance_threshold);
+DECLARE_int32(tera_master_load_balance_ts_load_threshold);
+DECLARE_int32(tera_master_load_balance_scan_weight);
 
 namespace tera {
 namespace master {
@@ -178,7 +179,8 @@ void SizeScheduler::DescendingSort(std::vector<TabletNodePtr>& node_list,
 /////////////////////////////////////////////////
 
 static uint64_t GetPending(const TabletNodePtr& ts) {
-    return ts->GetReadPending() + ts->GetWritePending() + ts->GetScanPending() * 100;
+    return ts->GetReadPending() + ts->GetWritePending()
+        + ts->GetScanPending() * FLAGS_tera_master_load_balance_scan_weight;
 }
 
 class LoadComparator : public Comparator {
@@ -218,13 +220,13 @@ public:
 bool LoadScheduler::MayMoveOut(const TabletNodePtr& node, const std::string& table_name) {
     VLOG(7) << "[load-sched] MayMoveOut()";
     int64_t node_read_pending = GetPending(node);
-    if (node_read_pending <= FLAGS_tera_master_load_balance_threshold) {
-        VLOG(7) << "[load-sched] node has no read pending";
+    if (node_read_pending <= FLAGS_tera_master_load_balance_ts_load_threshold) {
+        VLOG(7) << "[load-sched] node do not need loadbalance: " << node_read_pending;
         return false;
     }
     int64_t node_qps = node->GetQps(table_name);
     if (node_qps <= 0) {
-        VLOG(7) << "[load-sched] node has 0 qps";
+        VLOG(7) << "[load-sched] node has 0 qps.";
         return false;
     }
     return true;
@@ -306,7 +308,7 @@ bool LoadScheduler::NeedSchedule(std::vector<TabletNodePtr>& node_list,
     size_t pending_node_num = 0;
     for (size_t i = 0; i < node_list.size(); ++i) {
         int64_t node_read_pending = GetPending(node_list[i]);
-        if (node_read_pending > FLAGS_tera_master_load_balance_threshold) {
+        if (node_read_pending > FLAGS_tera_master_load_balance_ts_load_threshold) {
             pending_node_num++;
         }
     }

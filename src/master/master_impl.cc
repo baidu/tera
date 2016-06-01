@@ -2274,7 +2274,7 @@ void MasterImpl::TryMovePendingTablet(TabletPtr tablet) {
     }
     if (GetMasterStatus() == kIsRunning
         && tablet->GetStatus() == kTableOffLine) {
-        LOG(INFO) << "try move, " << tablet;
+        LOG(INFO) << "try move pending tablet, " << tablet;
         TryLoadTablet(tablet);
     }
 }
@@ -2361,7 +2361,7 @@ void MasterImpl::LoadAllOffLineTablets() {
     for (it = all_tablet_list.begin(); it != all_tablet_list.end(); ++it) {
         TabletPtr tablet = *it;
         if (tablet->GetStatus() == kTableOffLine) {
-            LOG(INFO) << "try move, " << tablet;
+            LOG(INFO) << "try load offline tablet, " << tablet;
             TryLoadTablet(tablet);
         }
     }
@@ -2382,7 +2382,7 @@ void MasterImpl::LoadAllDeadNodeTablets() {
             && node->GetState() == kReady) {
             continue;
         }
-        LOG(INFO) << "try move, " << tablet;
+        LOG(INFO) << "try load tablets in dead node, " << tablet;
         TryLoadTablet(tablet);
     }
 }
@@ -2392,7 +2392,7 @@ void MasterImpl::MoveOffLineTablets(const std::vector<TabletPtr>& tablet_list) {
     for (it = tablet_list.begin(); it != tablet_list.end(); ++it) {
         TabletPtr tablet = *it;
         if (tablet->GetStatus() == kTableOffLine) {
-            LOG(INFO) << "try move, " << tablet;
+            LOG(INFO) << "try move offline tablet, " << tablet;
             TryLoadTablet(tablet);
         }
     }
@@ -3516,7 +3516,7 @@ void MasterImpl::QueryTabletNodeCallback(std::string addr, QueryRequest* request
                         ClearUnusedSnapshots(tablet, meta);
                     }
                 } else {
-                    LOG(WARNING) << "fail to verify tablet: " << meta.table_name()
+                    VLOG(10) << "fail to verify tablet: " << meta.table_name()
                         << ", path: " << meta.path()
                         << ", range: [" << DebugString(key_start)
                         << ", " << DebugString(key_end)
