@@ -618,29 +618,13 @@ private:
                 continue;
             }
 
-            std::vector<WriteBatch*> lg_batchs;
-            lg_batchs.resize(options_.exist_lg_list->size());
-            std::fill(lg_batchs.begin(), lg_batchs.end(), (WriteBatch*)0);
-            bool created_new_wb = false;
-            if (options_.exist_lg_list->size() > 1) {
-                status = batch.SeperateLocalityGroup(&lg_batchs);
-                created_new_wb = true;
-                if (!status.ok()) {
-                    return status;
-                }
-                for (uint32_t i = 0; i < options_.exist_lg_list->size(); ++i) {
-                    if (lg_batchs[i] != 0) {
-                        WriteBatchInternal::SetSequence(lg_batchs[i], batch_seq);
-                    }
-                }
-            } else {
-                lg_batchs[0] = (&batch);
+            std::vector<WriteBatch> lg_batchs(options_.exist_lg_list->size());
+            status = batch.SeperateLocalityGroup(&lg_batchs);
+            if (!status.ok()) {
+                return status;
             }
             for (uint32_t i = 0; i < lg_batchs.size(); ++i) {
-                if (lg_batchs[i] == NULL) {
-                    continue;
-                }
-                status = repairers[i]->InsertMemTable(lg_batchs[i], batch_seq);
+                status = repairers[i]->InsertMemTable(&lg_batchs[i], batch_seq);
                 if (!status.ok()) {
                     Log(options_.info_log, "[%s][lg:%d] Insert log #%llu: ignoring %s",
                         dbname_.c_str(), i,
@@ -648,15 +632,7 @@ private:
                         status.ToString().c_str());
                     status = Status::OK();  // Keep going with rest of file
                 } else {
-                    counter += WriteBatchInternal::Count(lg_batchs[i]);
-                }
-            }
-            if (created_new_wb) {
-                for (uint32_t i = 0; i < lg_batchs.size(); ++i) {
-                    if (lg_batchs[i] != NULL) {
-                        delete lg_batchs[i];
-                        lg_batchs[i] = NULL;
-                    }
+                    counter += WriteBatchInternal::Count(&lg_batchs[i]);
                 }
             }
             last_sequence_ = batch_seq + batch_count - 1;
