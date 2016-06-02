@@ -46,10 +46,10 @@ DECLARE_string(log_dir);
 DECLARE_string(tera_master_meta_table_name);
 DECLARE_string(tera_zk_addr_list);
 DECLARE_string(tera_zk_root_path);
+DECLARE_bool(tera_sdk_batch_scan_enabled);
 
 DEFINE_int32(tera_client_batch_put_num, 1000, "num of each batch in batch put mode");
 DEFINE_int32(tera_client_scan_package_size, 1024, "the package size (in KB) of each scan request");
-DEFINE_bool(tera_client_scan_async_enabled, false, "enable the streaming scan mode");
 
 DEFINE_int64(scan_pack_interval, 5000, "scan timeout");
 DEFINE_int64(snapshot, 0, "read | scan snapshot");
@@ -62,6 +62,7 @@ DEFINE_int64(timestamp, -1, "timestamp.");
 
 // using FLAGS instead of isatty() for compatibility
 DEFINE_bool(stdout_is_tty, true, "is stdout connected to a tty");
+DEFINE_bool(reorder_tablets, false, "reorder tablets by ts list");
 
 volatile int32_t g_start_time = 0;
 volatile int32_t g_end_time = 0;
@@ -192,6 +193,12 @@ const char* builtin_cmd_list[] = {
     "showts",
     "showts[x] [<tabletnode addr>]                                        \n\
                show all tabletnodes or single tabletnode info.            \n\
+               (show more detail when using suffix \"x\")",
+
+    "range",
+    "range[x]  <tablename>                                                \n\
+               get all tablets range.                                     \n\
+               --reorder_tablets=true ordered tablets by ts addr          \n\
                (show more detail when using suffix \"x\")",
 
     "user",
@@ -973,7 +980,7 @@ int32_t DeleteOp(Client* client, int32_t argc, char** argv, ErrorCode* err) {
 
 int32_t ScanRange(TablePtr& table, ScanDescriptor& desc, ErrorCode* err) {
     desc.SetBufferSize(FLAGS_tera_client_scan_package_size << 10);
-    desc.SetAsync(FLAGS_tera_client_scan_async_enabled);
+    desc.SetAsync(FLAGS_tera_sdk_batch_scan_enabled);
     desc.SetPackInterval(FLAGS_scan_pack_interval);
     desc.SetSnapshot(FLAGS_snapshot);
 
@@ -2061,8 +2068,8 @@ int32_t ReloadConfigOp(Client* client, int32_t argc, char** argv, ErrorCode* err
     }
     std::string addr(argv[3]);
 
-    tera::sdk::ClusterFinder finder(FLAGS_tera_zk_root_path, FLAGS_tera_zk_addr_list);
-    if (finder.MasterAddr() == addr) {
+    scoped_ptr<tera::sdk::ClusterFinder> finder(tera::sdk::NewClusterFinder());
+    if (finder->MasterAddr() == addr) {
         // master
         std::vector<std::string> arg_list;
         if (!client->CmdCtrl("reload config", arg_list, NULL, NULL, err)) {
@@ -2339,8 +2346,8 @@ int32_t FindMasterOp(Client* client, int32_t argc, char** argv, ErrorCode* err) 
         PrintCmdHelpInfo(argv[1]);
         return -1;
     }
-    tera::sdk::ClusterFinder finder(FLAGS_tera_zk_root_path, FLAGS_tera_zk_addr_list);
-    std::cout << "master addr:< " << finder.MasterAddr() << " >\n";
+    scoped_ptr<tera::sdk::ClusterFinder> finder(tera::sdk::NewClusterFinder());
+    std::cout << "master addr:< " << finder->MasterAddr() << " >\n";
     return 0;
 }
 
@@ -2351,7 +2358,8 @@ int32_t FindTsOp(Client* client, int32_t argc, char** argv, ErrorCode* err) {
     }
 
     std::string tablename = argv[2];
-    TableImplPtr table((TableImpl*)client->OpenTable(tablename, err));
+    tera::ClientImpl* client_impl = static_cast<tera::ClientImpl*>(client);
+    TableImplPtr table(client_impl->OpenTableInternal(tablename, err));
     if (table == NULL) {
         LOG(ERROR) << "fail to open table";
         return -1;
@@ -2613,8 +2621,8 @@ int32_t FindTabletOp(int32_t argc, char** argv, ErrorCode* err) {
         }
     }
     // get meta address
-    tera::sdk::ClusterFinder finder(FLAGS_tera_zk_root_path, FLAGS_tera_zk_addr_list);
-    std::string meta_tablet_addr = finder.RootTableAddr();
+    scoped_ptr<tera::sdk::ClusterFinder> finder(tera::sdk::NewClusterFinder());
+    std::string meta_tablet_addr = finder->RootTableAddr();
     if (meta_tablet_addr.empty()) {
         if (err != NULL) {
             err->SetFailed(ErrorCode::kBadParam, "read root addr from zk fail");
@@ -2695,8 +2703,8 @@ int32_t Meta2Op(Client *client, int32_t argc, char** argv) {
     }
 
     // get meta address
-    tera::sdk::ClusterFinder finder(FLAGS_tera_zk_root_path, FLAGS_tera_zk_addr_list);
-    std::string meta_tablet_addr = finder.RootTableAddr();
+    scoped_ptr<tera::sdk::ClusterFinder> finder(tera::sdk::NewClusterFinder());
+    std::string meta_tablet_addr = finder->RootTableAddr();
     if (meta_tablet_addr.empty()) {
         std::cerr << "read root addr from zk fail";
         return -1;
@@ -2838,6 +2846,81 @@ int32_t UserOp(Client* client, int32_t argc, char** argv, ErrorCode* err) {
     return -1;
 }
 
+void ReorderTabletList(std::vector<TabletInfo>* tablets) {
+    if (tablets->size() <= 1) {
+        return;
+    }
+
+    // ordered all tablets by ts
+    std::map<std::string, std::vector<TabletInfo> > tablet_map;
+    size_t max_tablet = 0;
+    for (size_t i = 0; i < tablets->size(); ++i) {
+        std::vector<TabletInfo>& v = tablet_map[tablets->at(i).server_addr];
+        v.push_back(tablets->at(i));
+        if (v.size() > max_tablet) {
+            max_tablet = v.size();
+        }
+    }
+
+    size_t ts_num = tablet_map.size();
+    std::vector<std::vector<TabletInfo> > tablet_vector;
+    tablet_vector.resize(ts_num);
+    std::map<std::string, std::vector<TabletInfo> >::iterator it =
+        tablet_map.begin();
+    for (size_t i = 0; it != tablet_map.end(); ++it, ++i) {
+        tablet_vector[i].swap(it->second);
+    }
+
+    // recover tablet list
+    std::vector<TabletInfo> tablets_t;
+    for (size_t y = 0; y < max_tablet; y++) {
+        for (size_t x = 0; x < ts_num; x++) {
+            if (y < tablet_vector[x].size()) {
+                tablets_t.push_back(tablet_vector[x][y]);
+            }
+        }
+    }
+    CHECK(tablets_t.size() == tablets->size());
+    tablets->swap(tablets_t);
+}
+
+int32_t RangeOp(Client* client, int32_t argc, char** argv, ErrorCode* err) {
+    if (argc != 3) {
+        PrintCmdHelpInfo(argv[1]);
+        return -1;
+    }
+
+    bool is_x = (std::string(argv[1]) == "rangex");
+    std::string tablename = argv[2];
+
+    std::vector<TabletInfo> tablet_list;
+    if (!client->GetTabletLocation(tablename, &tablet_list, err)) {
+        LOG(ERROR) << "fail to list tablet info: " << tablename;
+        return -2;
+    }
+
+    if (FLAGS_reorder_tablets) {
+        ReorderTabletList(&tablet_list);
+    }
+
+    std::vector<TabletInfo>::iterator it = tablet_list.begin();
+    for (; it != tablet_list.end(); ++it) {
+        if (it->start_key.empty()) {
+            it->start_key = "-";
+        }
+        if (it->end_key.empty()) {
+            it->end_key = "-";
+        }
+        if (is_x) {
+            std::cout << it->server_addr << "\t" << it->path << "\t"
+                << it->start_key << "\t" << it->end_key << std::endl;
+        } else {
+            std::cout << it->start_key << "\t" << it->end_key << std::endl;
+        }
+    }
+    return 0;
+}
+
 int32_t HelpOp(int32_t argc, char** argv) {
     if (argc == 2) {
         PrintAllCmd();
@@ -2933,10 +3016,12 @@ int ExecuteCommand(Client* client, int argc, char* argv[]) {
         ret = ReloadConfigOp(client, argc, argv, &error_code);
     } else if (cmd == "cookie") {
         ret = CookieOp(argc, argv);
-    } else if (cmd == "version") {
-        PrintSystemVersion();
     } else if (cmd == "snapshot") {
         ret = SnapshotOp(client, argc, argv, &error_code);
+    } else if (cmd == "range" || cmd == "rangex") {
+        ret = RangeOp(client, argc, argv, &error_code);
+    } else if (cmd == "version") {
+        PrintSystemVersion();
     } else if (cmd == "help") {
         HelpOp(argc, argv);
     } else {
@@ -2950,6 +3035,14 @@ int ExecuteCommand(Client* client, int argc, char* argv[]) {
 
 int main(int argc, char* argv[]) {
     ::google::ParseCommandLineFlags(&argc, &argv, true);
+
+    if (argc > 1 && std::string(argv[1]) == "version") {
+        PrintSystemVersion();
+        return 0;
+    } else if (argc > 1 && std::string(argv[1]) == "help") {
+        HelpOp(argc, argv);
+        return 0;
+    }
 
     Client* client = Client::NewClient(FLAGS_flagfile, NULL);
     if (client == NULL) {

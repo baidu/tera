@@ -1163,7 +1163,11 @@ std::string TabletNodeImpl::GetSessionId() {
 }
 
 double TabletNodeImpl::GetBlockCacheHitRate() {
-    return m_ldb_block_cache->HitRate();
+    return m_ldb_block_cache->HitRate(true);
+}
+
+double TabletNodeImpl::GetTableCacheHitRate() {
+    return m_ldb_table_cache->HitRate(true);
 }
 
 TabletNodeSysInfo& TabletNodeImpl::GetSysInfo() {

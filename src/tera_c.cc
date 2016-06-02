@@ -72,6 +72,11 @@ tera_client_t* tera_client_open(const char* conf_path, const char* log_prefix, c
     return result;
 }
 
+void tera_client_close(tera_client_t* client) {
+    delete client->rep;
+    delete client;
+}
+
 tera_table_t* tera_table_open(tera_client_t* client, const char* table_name, char** errptr) {
     ErrorCode err;
     tera_table_t* result = new tera_table_t;
@@ -81,6 +86,11 @@ tera_table_t* tera_table_open(tera_client_t* client, const char* table_name, cha
         return NULL;
     }
     return result;
+}
+
+void tera_table_close(tera_table_t* table) {
+    delete table->rep;
+    delete table;
 }
 
 bool tera_table_get(tera_table_t* table,
@@ -171,7 +181,7 @@ int64_t tera_row_mutation_get_status_code(tera_row_mutation_t* mu) {
 
 void tera_row_mutation_destroy(tera_row_mutation_t* mu) {
     delete mu->rep;
-    mu->rep = NULL;
+    delete mu;
 }
 
 void tera_table_apply_mutation(tera_table_t* table, tera_row_mutation_t* mutation) {
@@ -281,7 +291,7 @@ int64_t tera_row_reader_get_status_code(tera_row_reader_t* reader) {
 
 void tera_row_reader_destroy(tera_row_reader_t* reader) {
     delete reader->rep;
-    reader->rep = NULL;
+    delete reader;
 }
 
 void tera_table_apply_reader(tera_table_t* table, tera_row_reader_t* reader) {
@@ -352,11 +362,21 @@ tera_result_stream_t* tera_table_scan(tera_table_t* table,
     return result;
 }
 
+void tera_result_stream_destroy(tera_result_stream_t* desc) {
+    delete desc->rep;
+    delete desc;
+}
+
 tera_scan_descriptor_t* tera_scan_descriptor(const char* start_key, uint64_t keylen) {
     std::string key(start_key, keylen);
     tera_scan_descriptor_t* result = new tera_scan_descriptor_t;
     result->rep = new ScanDescriptor(key);
     return result;
+}
+
+void tera_scan_descriptor_destroy(tera_scan_descriptor_t* desc) {
+    delete desc->rep;
+    delete desc;
 }
 
 void tera_scan_descriptor_add_column(tera_scan_descriptor_t* desc, const char* cf,

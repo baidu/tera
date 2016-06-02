@@ -287,6 +287,12 @@ void TableDescToSchema(const TableDescriptor& desc, TableSchema* schema) {
 }
 
 void TableSchemaToDesc(const TableSchema& schema, TableDescriptor* desc) {
+    // for compatibility
+    if (schema.has_kv_only() && schema.kv_only()) {
+        LOG(ERROR) << "compatible covert rawkey: " << RawKey_Name(schema.raw_key());
+        desc->SetRawKey(kGeneralKv);
+    }
+
     switch (schema.raw_key()) {
         case Binary:
             desc->SetRawKey(kBinary);
@@ -300,12 +306,6 @@ void TableSchemaToDesc(const TableSchema& schema, TableDescriptor* desc) {
         default:
             desc->SetRawKey(kReadable);
     }
-
-    // for compatibility
-    if (schema.kv_only()) {
-        desc->SetRawKey(kGeneralKv);
-    }
-
     if (schema.has_split_size()) {
         desc->SetSplitSize(schema.split_size());
     }

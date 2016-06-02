@@ -1,9 +1,9 @@
-tera串讲时被问到的问题，及我整理的答案
+﻿tera串讲时被问到的问题，及我整理的答案
 ======
 by 黄俊辉
 
 1. master的内存和meta不一致怎么办
- - master对meta的操作都是先更新自己本地内存，然后meta上的数据；
+ - master对meta的操作都是先更新自己本地内存，然后更新meta上的数据；
  - 如果master更新了自己本地内存的数据，但是写meta表失败，则master会重试；
  - 超过重试次数后，则设置失败，并返回给客户端对应的错误码；
  - 对于分裂，TS是直接把两个新tablet的信息更新到meta表上，而没有经过master；
@@ -11,7 +11,7 @@ by 黄俊辉
 
 2. merge之后master宕机怎么保证meta状态正确
  - merge主要分为3个步骤:(1) unload两个旧的tablet；(2) 向meta表的ts发送删除两个旧tablet、新增1个新tablet的信息请求；(3) load新tablet；
- - master在步骤1或步骤2宕机，不会是meta状态不一致；对于步骤2，master向ts发送WriteTablet请求，ts内部是一个原子操作，保证都成功或都失败；
+ - master在步骤1或步骤3宕机，不会是meta状态不一致；对于步骤2，master向ts发送WriteTablet请求，ts内部是一个原子操作，保证都成功或都失败；
 
 3. merge后leveldb load时路径参数是什么
  - 两个父tablet的id，根据这两个id可以生成父tablet的路径，进而知道父tablet下面的所有lg，即leveldb的数据，根据这些信息生成merge后tablet的每个lg的manifest文件；

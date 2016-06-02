@@ -58,6 +58,12 @@ class ScanDescriptor(object):
         self.desc = lib.tera_scan_descriptor(start_key,
                                              c_uint64(len(start_key)))
 
+    def Destroy(self):
+        """
+        销毁这个scan_descriptor，释放底层资源，以后不得再使用这个对象
+        """
+        lib.tera_scan_descriptor_destroy(self.desc)
+
     def SetEnd(self, end_key):
         """
         不调用此函数时，end_key被置为“无穷大”
@@ -144,8 +150,10 @@ class ScanDescriptor(object):
         C++接口用户注意：C++的这个接口里start和end参数的顺序和这里相反！
 
         Args:
-            start(long): 开始时间戳（结果包含该值），Epoch (00:00:00 UTC, January 1, 1970), measured in us
-            end(long): 截止时间戳（结果包含该值），Epoch (00:00:00 UTC, January 1, 1970), measured in us
+            start(long): 开始时间戳（结果包含该值），
+                Epoch (00:00:00 UTC, January 1, 1970), measured in us
+            end(long): 截止时间戳（结果包含该值），
+                Epoch (00:00:00 UTC, January 1, 1970), measured in us
         """
         lib.tera_scan_descriptor_set_time_range(self.desc, start, end)
 
@@ -167,6 +175,12 @@ class ResultStream(object):
 
     def __init__(self, stream):
         self.stream = stream
+
+    def Destroy(self):
+        """
+        销毁这个result_stream，释放底层资源，以后不得再使用这个对象
+        """
+        lib.tera_result_stream_destroy(self.stream)
 
     def Done(self):
         """ 此stream是否已经读完
@@ -246,7 +260,8 @@ class ResultStream(object):
     def Timestamp(self):
         """
         Returns:
-            (long) 当前cell对应的时间戳，Epoch (00:00:00 UTC, January 1, 1970), measured in us
+            (long) 当前cell对应的时间戳，
+                Epoch (00:00:00 UTC, January 1, 1970), measured in us
         """
         return lib.tera_result_stream_timestamp(self.stream)
 
@@ -265,6 +280,12 @@ class Client(object):
         self.client = lib.tera_client_open(conf_path, log_prefix, byref(err))
         if self.client is None:
             raise TeraSdkException("open client failed:" + str(err.value))
+
+    def Close(self):
+        """
+        销毁这个client，释放底层资源，以后不得再使用这个对象
+        """
+        lib.tera_client_close(self.client)
 
     def OpenTable(self, name):
         """ 打开名为<name>的表
@@ -363,6 +384,12 @@ class Table(object):
     """
     def __init__(self, table):
         self.table = table
+
+    def Close(self):
+        """
+        销毁这个table，释放底层资源，以后不得再使用这个对象
+        """
+        lib.tera_table_close(self.table)
 
     def NewRowMutation(self, rowkey):
         """ 生成一个对 rowkey 的RowMutation对象（修改一行）
@@ -694,6 +721,9 @@ def init_function_prototype():
                                             POINTER(c_char_p)]
     lib.tera_result_stream_done.restype = c_bool
 
+    lib.tera_result_stream_destroy.argtypes = [c_void_p]
+    lib.tera_result_stream_destroy.restype = None
+
     lib.tera_result_stream_timestamp.argtypes = [c_void_p]
     lib.tera_result_stream_timestamp.restype = c_int64
 
@@ -734,8 +764,11 @@ def init_function_prototype():
     lib.tera_scan_descriptor.argtypes = [c_char_p, c_uint64]
     lib.tera_scan_descriptor.restype = c_void_p
 
+    lib.tera_scan_descriptor_destroy.argtypes = [c_void_p]
+    lib.tera_scan_descriptor_destroy.restype = None
+
     lib.tera_scan_descriptor_add_column.argtypes = [c_void_p, c_char_p,
-                                                    c_void_p, c_uint64]
+                                                    c_char_p, c_uint64]
     lib.tera_scan_descriptor_add_column.restype = None
 
     lib.tera_scan_descriptor_add_column_family.argtypes = [c_void_p, c_char_p]
@@ -747,7 +780,7 @@ def init_function_prototype():
     lib.tera_scan_descriptor_set_buffer_size.argtypes = [c_void_p, c_int64]
     lib.tera_scan_descriptor_set_buffer_size.restype = None
 
-    lib.tera_scan_descriptor_set_end.argtypes = [c_void_p, c_void_p, c_uint64]
+    lib.tera_scan_descriptor_set_end.argtypes = [c_void_p, c_char_p, c_uint64]
     lib.tera_scan_descriptor_set_end.restype = None
 
     lib.tera_scan_descriptor_set_pack_interval.argtypes = [c_char_p, c_int64]
@@ -775,8 +808,14 @@ def init_function_prototype():
     lib.tera_client_open.argtypes = [c_char_p, c_char_p, POINTER(c_char_p)]
     lib.tera_client_open.restype = c_void_p
 
+    lib.tera_client_close.argtypes = [c_void_p]
+    lib.tera_client_close.restype = None
+
     lib.tera_table_open.argtypes = [c_void_p, c_char_p, POINTER(c_char_p)]
     lib.tera_table_open.restype = c_void_p
+
+    lib.tera_table_close.argtypes = [c_void_p]
+    lib.tera_table_close.restype = None
 
     ################
     # row_mutation #
@@ -837,7 +876,7 @@ def init_function_prototype():
     lib.tera_table_is_put_finished.argtypes = [c_void_p]
     lib.tera_table_is_put_finished.restype = c_bool
 
-    lib.tera_table_apply_reader.argtypes = [c_void_p]
+    lib.tera_table_apply_reader.argtypes = [c_void_p, c_void_p]
     lib.tera_table_apply_reader.restype = None
 
     lib.tera_table_is_get_finished.argtypes = [c_void_p]
@@ -855,11 +894,14 @@ def init_function_prototype():
     ##############
     # row_reader #
     ##############
+    lib.tera_row_reader.argtypes = [c_void_p, c_char_p, c_uint64]
+    lib.tera_row_reader.restype = c_void_p
+
     lib.tera_row_reader_add_column_family.argtypes = [c_void_p, c_char_p]
     lib.tera_row_reader_add_column_family.restype = None
 
     lib.tera_row_reader_add_column.argtypes = [c_void_p, c_char_p,
-                                               c_void_p, c_uint64]
+                                               c_char_p, c_uint64]
     lib.tera_row_reader_add_column.restype = None
 
     lib.tera_row_reader_set_callback.argtypes = [c_void_p, READER_CALLBACK]

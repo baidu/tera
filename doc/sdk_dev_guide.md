@@ -137,6 +137,9 @@ if (client->IsTableEmpty("hello", &error_code)) {
 tera::TableInfo table_info = {NULL, ""};
 std::vector<tera::TabletInfo> tablet_list;
 client->List("hello", &table_info, &tablet_list, &error_code);
+
+// 只获取表格tablet信息
+client->GetTabletLocation("hello", &tablet_list, &error_code);
 ```
 
 <a name="data-management"></a>

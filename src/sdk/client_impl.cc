@@ -28,8 +28,6 @@ DECLARE_string(tera_master_meta_table_name);
 DECLARE_string(tera_sdk_conf_file);
 DECLARE_string(tera_user_identity);
 DECLARE_string(tera_user_passcode);
-DECLARE_string(tera_zk_addr_list);
-DECLARE_string(tera_zk_root_path);
 
 DECLARE_int32(tera_sdk_retry_times);
 DECLARE_int32(tera_sdk_update_meta_internal);
@@ -48,20 +46,16 @@ DECLARE_bool(tera_online_schema_update_enabled);
 namespace tera {
 
 ClientImpl::ClientImpl(const std::string& user_identity,
-                       const std::string& user_passcode,
-                       const std::string& zk_addr_list,
-                       const std::string& zk_root_path)
+                       const std::string& user_passcode)
     : _thread_pool(FLAGS_tera_sdk_thread_max_num),
       _user_identity(user_identity),
-      _user_passcode(user_passcode),
-      _zk_addr_list(zk_addr_list),
-      _zk_root_path(zk_root_path) {
+      _user_passcode(user_passcode) {
     tabletnode::TabletNodeClient::SetThreadPool(&_thread_pool);
     tabletnode::TabletNodeClient::SetRpcOption(
         FLAGS_tera_sdk_rpc_limit_enabled ? FLAGS_tera_sdk_rpc_limit_max_inflow : -1,
         FLAGS_tera_sdk_rpc_limit_enabled ? FLAGS_tera_sdk_rpc_limit_max_outflow : -1,
         FLAGS_tera_sdk_rpc_max_pending_buffer_size, FLAGS_tera_sdk_rpc_work_thread_num);
-    _cluster = new sdk::ClusterFinder(zk_root_path, zk_addr_list);
+    _cluster = sdk::NewClusterFinder();
 }
 
 ClientImpl::~ClientImpl() {
@@ -511,7 +505,7 @@ Table* ClientImpl::OpenTable(const std::string& table_name,
     return new TableWrapper(table_impl, this);
 }
 
-Table* ClientImpl::OpenTableInternal(const std::string& table_name,
+TableImpl* ClientImpl::OpenTableInternal(const std::string& table_name,
                                      ErrorCode* err) {
     std::string internal_table_name;
     if (!GetInternalTableName(table_name, err, &internal_table_name)) {
@@ -523,9 +517,7 @@ Table* ClientImpl::OpenTableInternal(const std::string& table_name,
         return NULL;
     }
     err->SetFailed(ErrorCode::kOK);
-    TableImpl* table = new TableImpl(internal_table_name,
-                                     _zk_root_path, _zk_addr_list,
-                                     &_thread_pool, _cluster);
+    TableImpl* table = new TableImpl(internal_table_name, &_thread_pool, _cluster);
     if (table == NULL) {
         std::string reason = "fail to new TableImpl";
         if (err != NULL) {
@@ -1140,7 +1132,6 @@ static int SpecifiedFlagfileCount(const std::string& confpath) {
 }
 
 static int InitFlags(const std::string& confpath, const std::string& log_prefix) {
-    MutexLock locker(&g_mutex);
     // search conf file, priority:
     //   user-specified > ./tera.flag > ../conf/tera.flag
     std::string flagfile;
@@ -1185,6 +1176,9 @@ static int InitFlags(const std::string& confpath, const std::string& log_prefix)
 }
 
 Client* Client::NewClient(const string& confpath, const string& log_prefix, ErrorCode* err) {
+    // Protect the section from [load flagfile] to [new a client instance],
+    // because the client constructor will use flagfile options to initial its private options
+    MutexLock locker(&g_mutex);
     if (InitFlags(confpath, log_prefix) != 0) {
         if (err != NULL) {
             std::string reason = "init tera flag failed";
@@ -1193,9 +1187,7 @@ Client* Client::NewClient(const string& confpath, const string& log_prefix, Erro
         return NULL;
     }
     return new ClientImpl(FLAGS_tera_user_identity,
-                          FLAGS_tera_user_passcode,
-                          FLAGS_tera_zk_addr_list,
-                          FLAGS_tera_zk_root_path);
+                          FLAGS_tera_user_passcode);
 }
 
 Client* Client::NewClient(const string& confpath, ErrorCode* err) {

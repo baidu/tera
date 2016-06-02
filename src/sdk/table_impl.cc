@@ -61,8 +61,6 @@ DECLARE_int32(tera_rpc_timeout_period);
 namespace tera {
 
 TableImpl::TableImpl(const std::string& table_name,
-                     const std::string& zk_root_path,
-                     const std::string& zk_addr_list,
                      common::ThreadPool* thread_pool,
                      sdk::ClusterFinder* cluster)
     : _name(table_name),
@@ -79,14 +77,12 @@ TableImpl::TableImpl(const std::string& table_name,
       _meta_updating_count(0),
       _table_meta_cond(&_table_meta_mutex),
       _table_meta_updating(false),
-      _zk_root_path(zk_root_path),
-      _zk_addr_list(zk_addr_list),
       _thread_pool(thread_pool),
       _cluster(cluster),
       _cluster_private(false),
       _pending_timeout_ms(FLAGS_tera_rpc_timeout_period) {
     if (_cluster == NULL) {
-        _cluster = new sdk::ClusterFinder(zk_root_path, zk_addr_list);
+        _cluster = sdk::NewClusterFinder();
         _cluster_private = true;
     }
 }
@@ -812,11 +808,11 @@ void TableImpl::MutateCallBack(std::vector<int64_t>* mu_id_list,
 }
 
 void TableImpl::MutationTimeout(int64_t mutation_id) {
-    _perf_counter.mutate_timeout_cnt.Inc();
     SdkTask* task = _task_pool.PopTask(mutation_id);
     if (task == NULL) {
         return;
     }
+    _perf_counter.mutate_timeout_cnt.Inc();
     CHECK_NOTNULL(task);
     CHECK_EQ(task->Type(), SdkTask::MUTATION);
 
@@ -1183,11 +1179,11 @@ void TableImpl::DistributeReadersById(std::vector<int64_t>* reader_id_list) {
 }
 
 void TableImpl::ReaderTimeout(int64_t reader_id) {
-    _perf_counter.reader_timeout_cnt.Inc();
     SdkTask* task = _task_pool.PopTask(reader_id);
     if (task == NULL) {
         return;
     }
+    _perf_counter.reader_timeout_cnt.Inc();
     CHECK_NOTNULL(task);
     CHECK_EQ(task->Type(), SdkTask::READ);
 
