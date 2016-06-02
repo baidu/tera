@@ -40,8 +40,8 @@ public:
 private:
     typedef std::map<std::string, LockNode> LockMap;
     typedef LockMap::iterator LockIterator;
-    bool LockManager::GetLockNode(const std::string& key, uint64_t id,
-                                  LockIterator* ret_it, StatusCode* status = NULL);
+    bool GetLockNode(const std::string& key, uint64_t id, LockIterator* ret_it,
+                     StatusCode* status = NULL);
 
 private:
     Mutex mutex_;
