@@ -16,6 +16,7 @@ message BytesList {
     repeated bytes content = 1;
     repeated StatusCode status = 2;
     repeated RowResult row_result = 3;
+    repeated uint64 row_sequences = 4;
 }
 
 message KeyValuePair {

@@ -173,6 +173,9 @@ public:
     void AddCommitTimes() { _commit_times++; }
     int64_t GetCommitTimes() { return _commit_times; }
 
+    void SetLastSequence(uint64_t last_sequence) { _last_sequence = last_sequence; }
+    uint64_t GetLastSequence() { return _last_sequence; }
+
 protected:
     /// 增加一个操作
     RowMutation::Mutation& AddMutation();
@@ -194,6 +197,7 @@ private:
 
     /// 记录此mutation被提交到ts的次数
     int64_t _commit_times;
+    uint64_t _last_sequence;
 };
 
 void SerializeMutation(const RowMutation::Mutation& src, tera::Mutation* dst);

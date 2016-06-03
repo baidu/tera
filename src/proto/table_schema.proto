@@ -55,6 +55,7 @@ message TableSchema {
     optional string admin_group = 12; // users in admin_group can admin this table
     optional string alias = 13; // table alias
     optional string admin = 14;
+    optional bool enable_txn = 15 [default = false];
 
     // deprecated, instead by raw_key GeneralKv
     optional bool kv_only = 9 [default = false];

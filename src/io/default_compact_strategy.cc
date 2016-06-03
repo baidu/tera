@@ -47,6 +47,10 @@ bool DefaultCompactStrategy::Drop(const Slice& tera_key, uint64_t n,
         return true;
     }
 
+    if (type == leveldb::TKT_SEQ) {
+        return false;
+    }
+
     m_cur_type = type;
     m_cur_ts = ts;
     int32_t cf_id = -1;
@@ -252,6 +256,10 @@ bool DefaultCompactStrategy::ScanDrop(const Slice& tera_key, uint64_t n) {
     if (!m_raw_key_operator->ExtractTeraKey(tera_key, &key, &col, &qual, &ts, &type)) {
         LOG(WARNING) << "invalid tera key: " << tera_key.ToString();
         return true;
+    }
+
+    if (type == leveldb::TKT_SEQ) {
+        return false;
     }
 
     m_cur_type = type;

@@ -1903,6 +1903,8 @@ class ModelDB: public DB {
 
   virtual void AddInheritedLiveFiles(std::vector<std::set<uint64_t> >* live) {}
 
+  virtual uint64_t LastSequence() const { return 0; }
+
  private:
   class ModelIter: public Iterator {
    public:

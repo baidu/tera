@@ -11,6 +11,7 @@
 
 #include <deque>
 #include <set>
+#include <stdlib.h>
 #include "db/db_table.h"
 #include "db/dbformat.h"
 #include "db/log_writer.h"
@@ -64,6 +65,8 @@ class DBImpl : public DB {
 
   // Add all sst files inherited from other tablets
   virtual void AddInheritedLiveFiles(std::vector<std::set<uint64_t> >* live);
+
+  virtual uint64_t LastSequence() const { abort(); return 0; } // useless, do not call this
 
   Iterator* NewInternalIterator();
 
