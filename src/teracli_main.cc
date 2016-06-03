@@ -1381,6 +1381,7 @@ int32_t ShowSingleTable(Client* client, const string& table_name,
         std::cout << std::endl;
     }
     ShowTabletList(tablet_list, true, is_x);
+    std::cout << std::endl;
     return 0;
 }
 
