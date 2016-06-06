@@ -34,6 +34,22 @@ public:
         kIsRunning = kTabletNodeIsRunning
     };
 
+    struct WriteTabletTask {
+        std::vector<const RowMutationSequence*> row_mutation_vec;
+        std::vector<StatusCode> row_status_vec;
+        std::vector<int32_t> row_index_vec;
+        Counter row_done_counter;
+
+        const WriteTabletRequest* request;
+        WriteTabletResponse* response;
+        google::protobuf::Closure* done;
+        WriteRpcTimer* timer;
+
+        WriteTabletTask(const WriteTabletRequest* req, WriteTabletResponse* resp,
+                   google::protobuf::Closure* d, WriteRpcTimer* t)
+            : request(req), response(resp), done(d), timer(t) {}
+    };
+
     TabletNodeImpl(const TabletNodeInfo& tabletnode_info,
                    TabletManager* tablet_manager = NULL);
     ~TabletNodeImpl();
@@ -112,6 +128,8 @@ public:
 
     double GetBlockCacheHitRate();
 
+    double GetTableCacheHitRate();
+
     TabletNodeSysInfo& GetSysInfo();
 
     void RefreshSysInfo();
@@ -119,6 +137,14 @@ public:
     void TryReleaseMallocCache();
 
 private:
+    // call this when fail to write TabletIO
+    void WriteTabletFail(WriteTabletTask* tablet_task, StatusCode status);
+
+    // write callback for TabletIO::Write()
+    void WriteTabletCallback(WriteTabletTask* tablet_task,
+                             std::vector<const RowMutationSequence*>* row_mutation_vec,
+                             std::vector<StatusCode>* status_vec);
+
     bool CheckInKeyRange(const KeyList& key_list,
                          const std::string& key_start,
                          const std::string& key_end);

@@ -421,6 +421,7 @@ public:
     /// 是否异步操作
     virtual bool IsAsync() = 0;
     /// 异步操作是否完成
+    /// !!! Not implemented
     virtual bool IsFinished() const = 0;
     /// mutation数量
     virtual uint32_t MutationNum() const = 0;
@@ -484,6 +485,7 @@ public:
     /// 设置异步返回 !!! NOT implemented
     virtual void SetAsync() = 0;
     /// 异步操作是否完成
+    /// !!! Not implemented
     virtual bool IsFinished() const = 0;
 
     /// 获得结果错误码
@@ -631,6 +633,7 @@ public:
 
     virtual const std::string GetName() = 0;
 
+    /// !!! Not implemented
     virtual bool Flush() = 0;
     /// 条件修改, 指定Cell的值为value时, 才执行row_mu
     virtual bool CheckAndApply(const std::string& rowkey, const std::string& cf_c,
@@ -641,7 +644,9 @@ public:
                                          const std::string& qualifier, int64_t amount,
                                          ErrorCode* err) = 0;
     /// 设置表格写操作默认超时
+    /// !!! Not implemented
     virtual void SetWriteTimeout(int64_t timeout_ms) = 0;
+    /// !!! Not implemented
     virtual void SetReadTimeout(int64_t timeout_ms) = 0;
 
     /// 创建行锁
@@ -652,9 +657,11 @@ public:
                                  ErrorCode* err) = 0;
 
     /// 获取表格分布信息
+    /// !!! Not implemented
     virtual bool GetTabletLocation(std::vector<TabletInfo>* tablets,
                                    ErrorCode* err) = 0;
     /// 获取表格描述符
+    /// !!! Not implemented
     virtual bool GetDescriptor(TableDescriptor* desc, ErrorCode* err) = 0;
 
     virtual void SetMaxMutationPendingNum(uint64_t max_pending_num) = 0;

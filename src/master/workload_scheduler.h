@@ -15,12 +15,13 @@ public:
     SizeScheduler() {}
     virtual ~SizeScheduler() {}
 
-    virtual bool MayMoveOut(TabletNodePtr node, const std::string& table_name);
+    virtual bool MayMoveOut(const TabletNodePtr& node, const std::string& table_name);
     virtual bool FindBestNode(const std::vector<TabletNodePtr>& node_list,
                               const std::string& table_name,
                               size_t* best_index);
 
-    virtual bool FindBestTablet(TabletNodePtr src_node, TabletNodePtr dst_node,
+    virtual bool FindBestTablet(const TabletNodePtr& src_node,
+                                const TabletNodePtr& dst_node,
                                 const std::vector<TabletPtr>& tablet_list,
                                 const std::string& table_name,
                                 size_t* best_index);
@@ -48,12 +49,13 @@ public:
     LoadScheduler() {}
     virtual ~LoadScheduler() {}
 
-    virtual bool MayMoveOut(TabletNodePtr node, const std::string& table_name);
+    virtual bool MayMoveOut(const TabletNodePtr& node, const std::string& table_name);
     virtual bool FindBestNode(const std::vector<TabletNodePtr>& node_list,
                               const std::string& table_name,
                               size_t* best_index);
 
-    virtual bool FindBestTablet(TabletNodePtr src_node, TabletNodePtr dst_node,
+    virtual bool FindBestTablet(const TabletNodePtr& src_node,
+                                const TabletNodePtr& dst_node,
                                 const std::vector<TabletPtr>& tablet_list,
                                 const std::string& table_name,
                                 size_t* best_index);

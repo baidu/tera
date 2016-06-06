@@ -23,14 +23,16 @@ typedef struct tera_table_t tera_table_t;
 typedef void (*MutationCallbackType)(void* param);
 typedef void (*ReaderCallbackType)(void* param);
 tera_client_t* tera_client_open(const char* conf_path, const char* log_prefix, char** err);
+void tera_client_close(tera_client_t* client);
 
 tera_table_t* tera_table_open(tera_client_t* client, const char* table_name, char** err);
+void tera_table_close(tera_table_t* table);
 
 bool tera_table_get(tera_table_t* table,
-                           const char* row_key, uint64_t keylen,
-                           const char* family, const char* qualifier,
-                           uint64_t qulen, char** value, uint64_t* vallen,
-                           char** errptr, uint64_t snapshot_id);
+                    const char* row_key, uint64_t keylen,
+                    const char* family, const char* qualifier,
+                    uint64_t qulen, char** value, uint64_t* vallen,
+                    char** errptr, uint64_t snapshot_id);
 
 bool tera_table_getint64(tera_table_t* table,
                          const char* row_key, uint64_t keylen,
@@ -39,10 +41,10 @@ bool tera_table_getint64(tera_table_t* table,
                          char** errptr, uint64_t snapshot_id);
 
 bool tera_table_put(tera_table_t* table,
-                           const char* row_key, uint64_t keylen,
-                           const char* family, const char* qualifier,
-                           uint64_t qulen, const char* value, uint64_t vallen,
-                           char** errptr);
+                    const char* row_key, uint64_t keylen,
+                    const char* family, const char* qualifier,
+                    uint64_t qulen, const char* value, uint64_t vallen,
+                    char** errptr);
 
 bool tera_table_putint64(tera_table_t* table,
                          const char* row_key, uint64_t keylen,
@@ -87,6 +89,7 @@ void tera_scan_descriptor_set_max_versions(tera_scan_descriptor_t* desc, int32_t
 void tera_scan_descriptor_set_snapshot(tera_scan_descriptor_t* desc, uint64_t snapshot_id);
 void tera_scan_descriptor_set_time_range(tera_scan_descriptor_t* desc, int64_t ts_start, int64_t ts_end);
 bool tera_scan_descriptor_set_filter(tera_scan_descriptor_t* desc, char* filter_str);
+void tera_scan_descriptor_destroy(tera_scan_descriptor_t* desc);
 
 // scan result stream
 bool tera_result_stream_done(tera_result_stream_t* stream, char** errptr);
@@ -98,8 +101,10 @@ void tera_result_stream_qualifier(tera_result_stream_t* stream, char** str, uint
 void tera_result_stream_row_name(tera_result_stream_t* stream, char** str, uint64_t* strlen);
 void tera_result_stream_value(tera_result_stream_t* stream, char** str, uint64_t* strlen);
 int64_t tera_result_stream_value_int64(tera_result_stream_t* stream);
+void tera_result_stream_destroy(tera_result_stream_t* desc);
 
 // row reader
+tera_row_reader_t* tera_row_reader(tera_table_t* table, const char* row_key, uint64_t keylen);
 void tera_row_reader_add_column_family(tera_row_reader_t* reader, const char* family);
 void tera_row_reader_add_column(tera_row_reader_t* reader, const char* cf, const char* qu, uint64_t len);
 void tera_row_reader_set_callback(tera_row_reader_t* reader, ReaderCallbackType callback);

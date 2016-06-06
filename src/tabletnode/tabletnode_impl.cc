@@ -467,10 +467,20 @@ void TabletNodeImpl::WriteTablet(const WriteTabletRequest* request,
     response->set_sequence_id(request->sequence_id());
     StatusCode status = kTabletNodeOk;
 
-    std::map<io::TabletIO*, std::vector<int32_t>* > req_index_map;
-    std::map<io::TabletIO*, std::vector<int32_t>* >::iterator it;
+    std::map<io::TabletIO*, WriteTabletTask* > tablet_task_map;
+    std::map<io::TabletIO*, WriteTabletTask* >::iterator it;
 
     int32_t row_num = request->row_list_size();
+    if (row_num == 0) {
+        response->set_status(kTabletNodeOk);
+        done->Run();
+        if (NULL != timer) {
+            RpcTimerList::Instance()->Erase(timer);
+            delete timer;
+        }
+        return;
+    }
+
     // check arguments
     for (int32_t i = 0; i < row_num; i++) {
         const RowMutationSequence& mu_seq = request->row_list(i);
@@ -498,44 +508,28 @@ void TabletNodeImpl::WriteTablet(const WriteTabletRequest* request,
             }
         }
     }
-    if (row_num > 0) {
-        for (int32_t i = 0; i < row_num; i++) {
-            io::TabletIO* tablet_io = m_tablet_manager->GetTablet(
-                request->tablet_name(), request->row_list(i).row_key(), &status);
-            it = req_index_map.find(tablet_io);
-            if (it == req_index_map.end()) {
-                // keep one ref to tablet_io
-                std::vector<int32_t>* index_list = new std::vector<int32_t>;
-                req_index_map[tablet_io] = index_list;
-                index_list->push_back(i);
-            } else {
-                if (tablet_io != NULL) {
-                    tablet_io->DecRef();
-                }
-                std::vector<int32_t>* index_list = it->second;
-                index_list->push_back(i);
-            }
-        }
-    } else {
-        response->set_status(kTabletNodeOk);
-        done->Run();
-        if (NULL != timer) {
-            RpcTimerList::Instance()->Erase(timer);
-            delete timer;
-        }
-        return;
-    }
 
-    if (req_index_map.size() == 1 && req_index_map.begin()->first == NULL) {
-        range_error_counter.Inc();
-        response->set_status(kKeyNotInRange);
-        done->Run();
-        if (NULL != timer) {
-            RpcTimerList::Instance()->Erase(timer);
-            delete timer;
+    for (int32_t i = 0; i < row_num; i++) {
+        io::TabletIO* tablet_io = m_tablet_manager->GetTablet(
+            request->tablet_name(), request->row_list(i).row_key(), &status);
+        if (tablet_io == NULL) {
+            range_error_counter.Inc();
         }
-        delete req_index_map.begin()->second;
-        return;
+        it = tablet_task_map.find(tablet_io);
+        WriteTabletTask* tablet_task = NULL;
+        if (it == tablet_task_map.end()) {
+            // keep one ref to tablet_io
+            tablet_task = tablet_task_map[tablet_io] =
+                new WriteTabletTask(request, response, done, timer);
+        } else {
+            if (tablet_io != NULL) {
+                tablet_io->DecRef();
+            }
+            tablet_task = it->second;
+        }
+        tablet_task->row_mutation_vec.push_back(&request->row_list(i));
+        tablet_task->row_status_vec.push_back(kTabletNodeOk);
+        tablet_task->row_index_vec.push_back(i);
     }
 
     // reserve response status list space
@@ -545,42 +539,51 @@ void TabletNodeImpl::WriteTablet(const WriteTabletRequest* request,
         response->mutable_row_status_list()->AddAlreadyReserved();
     }
 
-    Counter* done_counter = new Counter;
-    for (it = req_index_map.begin(); it != req_index_map.end(); ++it) {
+    for (it = tablet_task_map.begin(); it != tablet_task_map.end(); ++it) {
         io::TabletIO* tablet_io = it->first;
-        std::vector<int32_t>* index_list = it->second;
-        int32_t index_num = index_list->size();
-        CHECK(index_num > 0);
-        StatusCode status = kTabletNodeOk;
+        WriteTabletTask* tablet_task = it->second;
         if (tablet_io == NULL) {
-            for (int32_t i = 0; i < index_num; i++) {
-                int32_t index = (*index_list)[i];
-                response->mutable_row_status_list()->Set(index, kKeyNotInRange);
-            }
-            delete index_list;
-            done_counter->Add(index_num);
-            // NULL must be the 1st item in req_index_map, so there is
-            // no need to call done->Run().
-        } else if (!tablet_io->Write(request, response, done, index_list,
-                                     done_counter, timer, &status)) {
+            WriteTabletFail(tablet_task, kKeyNotInRange);
+        } else if (!tablet_io->Write(&tablet_task->row_mutation_vec,
+                                     &tablet_task->row_status_vec,
+                                     request->is_instant(),
+                                     boost::bind(&TabletNodeImpl::WriteTabletCallback, this,
+                                                 tablet_task, _1, _2),
+                                     &status)) {
             tablet_io->DecRef();
-            for (int32_t i = 0; i < index_num; i++) {
-                int32_t index = (*index_list)[i];
-                response->mutable_row_status_list()->Set(index, status);
-            }
-            delete index_list;
-            if (done_counter->Add(index_num) == row_num) {
-                done->Run();
-                delete done_counter;
-                if (NULL != timer) {
-                    RpcTimerList::Instance()->Erase(timer);
-                    delete timer;
-                }
-            }
+            WriteTabletFail(tablet_task, status);
         } else {
             tablet_io->DecRef();
         }
     }
+}
+
+void TabletNodeImpl::WriteTabletFail(WriteTabletTask* tablet_task, StatusCode status) {
+    int32_t row_num = tablet_task->row_status_vec.size();
+    for (int32_t i = 0; i < row_num; i++) {
+        tablet_task->row_status_vec[i] = status;
+    }
+    WriteTabletCallback(tablet_task, &tablet_task->row_mutation_vec, &tablet_task->row_status_vec);
+}
+
+void TabletNodeImpl::WriteTabletCallback(WriteTabletTask* tablet_task,
+                                         std::vector<const RowMutationSequence*>* row_mutation_vec,
+                                         std::vector<StatusCode>* status_vec) {
+    int32_t index_num = tablet_task->row_index_vec.size();
+    for (int32_t i = 0; i < index_num; i++) {
+        int32_t index = tablet_task->row_index_vec[i];
+        tablet_task->response->mutable_row_status_list()->Set(index, (*status_vec)[i]);
+    }
+
+    if (tablet_task->row_done_counter.Add(index_num) == tablet_task->request->row_list_size()) {
+        tablet_task->done->Run();
+        if (NULL != tablet_task->timer) {
+            RpcTimerList::Instance()->Erase(tablet_task->timer);
+            delete tablet_task->timer;
+        }
+    }
+
+    delete tablet_task;
 }
 
 void TabletNodeImpl::GetSnapshot(const SnapshotRequest* request,
@@ -1160,7 +1163,11 @@ std::string TabletNodeImpl::GetSessionId() {
 }
 
 double TabletNodeImpl::GetBlockCacheHitRate() {
-    return m_ldb_block_cache->HitRate();
+    return m_ldb_block_cache->HitRate(true);
+}
+
+double TabletNodeImpl::GetTableCacheHitRate() {
+    return m_ldb_table_cache->HitRate(true);
 }
 
 TabletNodeSysInfo& TabletNodeImpl::GetSysInfo() {

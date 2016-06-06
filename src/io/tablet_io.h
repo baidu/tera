@@ -5,18 +5,19 @@
 #ifndef TERA_IO_TABLET_IO_H_
 #define TERA_IO_TABLET_IO_H_
 
-#include <limits>
 #include <list>
 #include <map>
 #include <set>
 #include <string>
 #include <vector>
 
+#include <boost/bind.hpp>
+#include <boost/function.hpp>
+
 #include "common/base/scoped_ptr.h"
 #include "common/mutex.h"
-#include "io/stream_scan.h"
+#include "io/tablet_scanner.h"
 #include "leveldb/db.h"
-#include "leveldb/compact_strategy.h"
 #include "leveldb/options.h"
 #include "leveldb/raw_key_operator.h"
 #include "leveldb/slice.h"
@@ -28,12 +29,14 @@
 #include "proto/tabletnode_rpc.pb.h"
 #include "types.h"
 #include "utils/counter.h"
-#include "utils/rpc_timer_list.h"
 
 namespace tera {
 namespace io {
 
 class TabletWriter;
+struct ScanOptions;
+struct ScanContext;
+class ScanContextManager;
 
 class TabletIO {
 public:
@@ -45,44 +48,6 @@ public:
         kSplited = kTabletSplited,
         kUnLoading = kTabletUnLoading,
         kUnLoading2 = kTabletUnLoading2
-    };
-    typedef std::map< std::string, std::set<std::string> > ColumnFamilyMap;
-    struct ScanOptions {
-        uint32_t max_versions;
-        uint32_t version_num; // restore version_num for stream scan
-        uint32_t max_size; // kv size > max_size, return to user
-        int64_t number_limit; // kv number > number_limit, return to user
-        int64_t ts_start;
-        int64_t ts_end;
-        uint64_t snapshot_id;
-        FilterList filter_list;
-        ColumnFamilyMap column_family_list;
-        std::set<std::string> iter_cf_set;
-        int64_t timeout;
-
-        ScanOptions()
-            : max_versions(std::numeric_limits<uint32_t>::max()),
-              version_num(0), max_size(std::numeric_limits<uint32_t>::max()),
-              number_limit(std::numeric_limits<int64_t>::max()),
-              ts_start(kOldestTs), ts_end(kLatestTs), snapshot_id(0), timeout(std::numeric_limits<int64_t>::max() / 2)
-        {}
-    };
-
-    struct ScanContext {
-        leveldb::CompactStrategy* compact_strategy;
-        uint32_t version_num;
-        std::string last_key;
-        std::string last_col;
-        std::string last_qual;
-
-        ScanContext(leveldb::CompactStrategyFactory* strategy_factory)
-            : compact_strategy(strategy_factory->NewInstance()),
-              version_num(1)
-        {}
-
-        ~ScanContext() {
-            delete compact_strategy;
-        }
     };
 
     struct StatCounter {
@@ -97,6 +62,9 @@ public:
         tera::Counter write_kvs;
         tera::Counter write_size;
     };
+
+    typedef boost::function<void (std::vector<const RowMutationSequence*>*,
+                                  std::vector<StatusCode>*)> WriteCallback;
 
 public:
     TabletIO(const std::string& key_start, const std::string& key_end);
@@ -159,12 +127,9 @@ public:
                   bool sync = true, StatusCode* status = NULL);
     bool WriteBatch(leveldb::WriteBatch* batch, bool disable_wal = false, bool sync = true,
                     StatusCode* status = NULL);
-    virtual bool Write(const WriteTabletRequest* request,
-                       WriteTabletResponse* response,
-                       google::protobuf::Closure* done,
-                       const std::vector<int32_t>* index_list,
-                       Counter* done_counter, WriteRpcTimer* timer = NULL,
-                       StatusCode* status = NULL);
+    bool Write(std::vector<const RowMutationSequence*>* row_mutation_vec,
+               std::vector<StatusCode>* status_vec, bool is_instant,
+               WriteCallback callback, StatusCode* status = NULL);
 
     virtual bool Scan(const ScanOption& option, KeyValueList* kv_list,
                       bool* complete, StatusCode* status = NULL);
@@ -195,10 +160,12 @@ public:
 
     static bool FindAverageKey(const std::string& start, const std::string& end,
                                std::string* res);
-
+    void ProcessScan(ScanContext* context);
     void ApplySchema(const TableSchema& schema);
+
 private:
     friend class TabletWriter;
+    friend class ScanConextManager;
     bool WriteWithoutLock(const std::string& key, const std::string& value,
                           bool sync = false, StatusCode* status = NULL);
 //     int64_t GetDataSizeWithoutLock(StatusCode* status = NULL);
@@ -224,9 +191,10 @@ private:
     bool ScanRowsRestricted(const ScanTabletRequest* request,
                             ScanTabletResponse* response,
                             google::protobuf::Closure* done);
-    bool ScanRowsStreaming(const ScanTabletRequest* request,
-                           ScanTabletResponse* response,
-                           google::protobuf::Closure* done);
+    // tablet scanner
+    bool HandleScan(const ScanTabletRequest* request,
+                    ScanTabletResponse* response,
+                    google::protobuf::Closure* done);
 
     void SetupScanInternalTeraKey(const ScanTabletRequest* request,
                                   std::string* start_tera_key,
@@ -266,6 +234,7 @@ private:
 private:
     mutable Mutex m_mutex;
     TabletWriter* m_async_writer;
+    ScanContextManager* m_scan_context_manager;
 
     std::string m_tablet_path;
     const std::string m_start_key;
@@ -289,7 +258,6 @@ private:
 
     std::map<std::string, uint32_t> m_cf_lg_map;
     std::map<std::string, uint32_t> m_lg_id_map;
-    StreamScanManager m_stream_scan;
     StatCounter m_counter;
     mutable Mutex m_schema_mutex;
 };

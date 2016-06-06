@@ -67,9 +67,6 @@ DEFINE_string(tera_leveldb_compact_strategy, "default", "the default strategy to
 DEFINE_bool(tera_leveldb_verify_checksums, true, "enable verify data read from storage against checksums");
 DEFINE_bool(tera_leveldb_ignore_corruption_in_compaction, false, "skip corruption blocks of sst file in compaction");
 
-DEFINE_int64(tera_io_scan_stream_task_max_num, 5000, "the max number of concurrent rpc task");
-DEFINE_int64(tera_io_scan_stream_task_pending_time, 180, "the max pending time (in sec) for timeout and interator cleaning");
-
 DEFINE_int32(tera_rpc_client_max_inflow, -1, "the max input flow (in MB/s) for rpc-client, -1 means no limit");
 DEFINE_int32(tera_rpc_client_max_outflow, -1, "the max input flow (in MB/s) for rpc-client, -1 means no limit");
 DEFINE_int32(tera_rpc_timeout_period, 60000, "the timeout period (in ms) for rpc");
@@ -116,10 +113,10 @@ DEFINE_int32(tera_master_schema_update_retry_times, 60000, "the max retry times 
 // load balance
 DEFINE_bool(tera_master_move_tablet_enabled, true, "enable master to auto move tablet");
 DEFINE_bool(tera_master_meta_isolate_enabled, false, "enable master to reserve a tabletnode for meta");
-DEFINE_int32(tera_master_load_balance_period, 10000, "the period (in ms) for load balance policy execute");
 DEFINE_bool(tera_master_load_balance_table_grained, true, "whether the load balance policy only consider the specified table");
 DEFINE_double(tera_master_load_balance_size_ratio_trigger, 1.2, "ratio of heaviest node size to lightest to trigger load balance");
-DEFINE_int32(tera_master_load_balance_read_pending_threshold, 5000, "read pending threshold in QPS load-balance decision");
+DEFINE_int32(tera_master_load_balance_ts_load_threshold, 5000, "threshold of one tabletnode in QPS load-balance decision");
+DEFINE_int32(tera_master_load_balance_scan_weight, 300, "scan weight in load-balance decision");
 
 DEFINE_double(tera_safemode_tablet_locality_ratio, 0.9, "the tablet locality ratio threshold of safemode");
 DEFINE_bool(tera_master_kick_tabletnode_enabled, true, "enable master to kick tabletnode");
@@ -168,6 +165,7 @@ DEFINE_int32(tera_tabletnode_impl_thread_min_num, 1, "the min thread number for 
 DEFINE_int32(tera_tabletnode_impl_thread_max_num, 10, "the max thread number for tablet node impl operations");
 DEFINE_int32(tera_tabletnode_compact_thread_num, 10, "the max thread number for leveldb compaction");
 
+DEFINE_int32(tera_tabletnode_scanner_cache_size, 5, "default tablet scanner manager cache no more than 100 stream");
 DEFINE_int32(tera_tabletnode_connect_retry_times, 5, "the max retry times when connect to tablet node");
 DEFINE_int32(tera_tabletnode_connect_retry_period, 1000, "the retry period (in ms) between retry two tablet node connection");
 DEFINE_int32(tera_tabletnode_connect_timeout_period, 180000, "the timeout period (in ms) for each tablet node connection");
@@ -256,13 +254,11 @@ DEFINE_string(tera_sdk_cookie_path, "/tmp/.tera_cookie", "the default path of sd
 DEFINE_int32(tera_sdk_cookie_update_interval, 600, "the interval of cookie updating(s)");
 
 DEFINE_bool(tera_sdk_perf_counter_enabled, true, "enable performance counter log");
-DEFINE_int64(tera_sdk_perf_counter_log_interval, 1, "the interval of performance counter log dumping");
+DEFINE_int64(tera_sdk_perf_counter_log_interval, 60, "the interval period (in sec) of performance counter log dumping");
 
+DEFINE_bool(tera_sdk_batch_scan_enabled, false, "enable batch scan");
 DEFINE_int64(tera_sdk_scan_buffer_size, 65536, "default buffer limit for scan");
 DEFINE_int64(tera_sdk_scan_number_limit, 1000000000, "default number limit for scan");
-DEFINE_bool(tera_sdk_scan_async_enabled, false, "enable async scan");
-DEFINE_int64(tera_sdk_scan_async_cache_size, 16, "the max buffer size (in MB) for cached scan results");
-DEFINE_int32(tera_sdk_scan_async_parallel_max_num, 500, "the max number of concurrent task sending");
 DEFINE_int32(tera_sdk_max_batch_scan_req, 10, "the max number of concurrent scan req");
 
 DEFINE_string(tera_ins_addr_list, "", "the ins cluster addr. e.g. abc.com:1234,abb.com:1234");

@@ -33,7 +33,7 @@
 3. 全部TS返回后，Master处理Query得到的结果，并且把收集到的信息写入到stat表中。
 
 # Load Balance
-为什么需要Load Balance？其一，Load Balance可以使TS之间数据均匀，避免访问热点（又Move保证）。其二，Load Balance可以使Tablet之间数据均匀，避免某个Tablet过大，导致读，写性能下降（由Split保证）；或者某个Tablet过小浪费资源（由Merge保证）。Master通过分析Query收集的结果进行判断是否要发起以上操作。
+为什么需要Load Balance？其一，Load Balance可以使TS之间数据均匀，避免访问热点（由Move保证）。其二，Load Balance可以使Tablet之间数据均匀，避免某个Tablet过大，导致读，写性能下降（由Split保证）；或者某个Tablet过小浪费资源（由Merge保证）。Master通过分析Query收集的结果进行判断是否要发起以上操作。
 
 * Split
 

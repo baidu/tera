@@ -11,8 +11,6 @@
 
 #include "proto/status_code.pb.h"
 #include "proto/tabletnode_rpc.pb.h"
-#include "utils/counter.h"
-#include "utils/rpc_timer_list.h"
 
 namespace leveldb {
 class WriteBatch;
@@ -25,17 +23,13 @@ class TabletIO;
 
 class TabletWriter {
 public:
-    struct WriteTask {
-        const WriteTabletRequest* request;
-        WriteTabletResponse* response;
-        google::protobuf::Closure* done;
-        const std::vector<int32_t>* index_list;
-        Counter* done_counter;
-        WriteRpcTimer* timer;
+    typedef boost::function<void (std::vector<const RowMutationSequence*>*, \
+                                  std::vector<StatusCode>*)> WriteCallback;
 
-        WriteTask() :
-            request(NULL), response(NULL), done(NULL), index_list(NULL),
-            done_counter(NULL), timer(NULL) {}
+    struct WriteTask {
+        std::vector<const RowMutationSequence*>* row_mutation_vec;
+        std::vector<StatusCode>* status_vec;
+        WriteCallback callback;
     };
 
     typedef std::vector<WriteTask> WriteTaskBuffer;
@@ -43,18 +37,14 @@ public:
 public:
     TabletWriter(TabletIO* tablet_io);
     ~TabletWriter();
-    void Write(const WriteTabletRequest* request,
-               WriteTabletResponse* response,
-               google::protobuf::Closure* done,
-               const std::vector<int32_t>* index_list,
-               Counter* done_counter, WriteRpcTimer* timer = NULL);
+    bool Write(std::vector<const RowMutationSequence*>* row_mutation_vec,
+               std::vector<StatusCode>* status_vec, bool is_instant,
+               WriteCallback callback, StatusCode* status = NULL);
     /// 初略计算一个request的数据大小
-    static uint64_t CountRequestSize(const WriteTabletRequest& request,
-                                     const std::vector<int32_t>& index_list,
+    static uint64_t CountRequestSize(std::vector<const RowMutationSequence*>& row_mutation_vec,
                                      bool kv_only);
     /// 把一个request打到一个leveldbbatch里去, request是原子的, batch也是, so ..
-    bool BatchRequest(const WriteTabletRequest& request,
-                      const std::vector<int32_t>& index_list,
+    bool BatchRequest(const std::vector<const RowMutationSequence*>& row_mutation_vec,
                       leveldb::WriteBatch* batch,
                       bool kv_only);
     void Start();

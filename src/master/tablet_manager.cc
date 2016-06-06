@@ -115,6 +115,12 @@ void Tablet::GetDataSize(int64_t* size, std::vector<int64_t>* lg_size) {
     }
 }
 
+int64_t Tablet::GetQps() {
+    MutexLock lock(&m_mutex);
+    return m_average_counter.read_rows() + m_average_counter.write_rows()
+        + m_average_counter.scan_rows();
+}
+
 const std::string& Tablet::GetKeyStart() {
     MutexLock lock(&m_mutex);
     return m_meta.key_range().key_start();
