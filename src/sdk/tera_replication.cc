@@ -188,10 +188,6 @@ public:
 
     virtual void SetCallBack(Callback callback) {
         _user_callback = callback;
-        for (size_t i = 0; i < _row_readers.size(); i++) {
-            _row_readers[i]->SetCallBack(RowReaderCallback);
-            _row_readers[i]->SetContext(this);
-        }
     }
 
     virtual void SetContext(void* context) {
@@ -298,7 +294,11 @@ public:
         bool is_async = mutation_rep_impl->IsAsync();
         const std::vector<RowMutation*>& mutation_list = mutation_rep_impl->GetRowMutationList();
         const std::vector<Table*>& table_list = mutation_rep_impl->GetTableList();
-        for (size_t i = 0; i < mutation_list.size(); i++) {
+        // in async mode, after the last call of ApplyMutation, we should not access
+        // 'mutation_rep_impl' anymore, that's why we assign the value of 'mutation_list.size()'
+        // to a local variable 'mutation_num'
+        size_t mutation_num = mutation_list.size();
+        for (size_t i = 0; i < mutation_num; i++) {
             table_list[i]->ApplyMutation(mutation_list[i]);
         }
         if (!is_async) {
@@ -327,7 +327,8 @@ public:
         bool is_async = reader_rep_impl->IsAsync();
         const std::vector<RowReader*>& reader_list = reader_rep_impl->GetRowReaderList();
         const std::vector<Table*>& table_list = reader_rep_impl->GetTableList();
-        for (size_t i = 0; i < reader_list.size(); i++) {
+        size_t reader_num = reader_list.size();
+        for (size_t i = 0; i < reader_num; i++) {
             table_list[i]->Get(reader_list[i]);
         }
         if (!is_async) {
