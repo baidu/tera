@@ -3035,6 +3035,7 @@ int ExecuteCommand(Client* client, int argc, char* argv[]) {
 }
 
 int main(int argc, char* argv[]) {
+    FLAGS_minloglevel = 2;
     ::google::ParseCommandLineFlags(&argc, &argv, true);
 
     if (argc > 1 && std::string(argv[1]) == "version") {
