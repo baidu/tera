@@ -7,73 +7,14 @@ Copyright 2016, Baidu, Inc.
 * 没有单行事务，通用的事务功能可能无从谈起，例如Google的触发式计算框架Percolator中实现的多行事务功能就是在Bigtable单行事务的基础上构建的
 
 ##功能
-* 提供单行的read-modify-write原子语义  
-  下面的例子中，Session B在事务进行过程中，value被Session A所修改，因此B的提交将失败，否则将出现A的更新被覆盖的问题：
-```
-           -------------------
-           |  Wang  |  100   |
-           -------------------
-             Session A              Session B
-time
-|                                   Begin
-|          Begin
-|          value=Get(Wang);
-|          100
-|                                   value=Get(Wang);
-|                                   100
-|
-v          value+=20;
-           120
-           Put(Wang, value);
-                                    value-=20;
-                                    80
-                                    Put(Wang, value);
-           Commit
-           success
-                                    Commit
-                                    fail
-```
-
-* 两个事务修改同一行，但读操作所涉及到的CF或者Colum无任何交集时，两个事务不会冲突  
-  下面的例子中，Session A和Session B分别对同一行的Cf1和Cf2进行read-modify-write操作，后提交的事务不会因先提交的事务而失败：
-```
-           ---------------------------
-           |  ROW   |  CF1   |  CF2  |
-           ---------------------------
-           |  Wang  |  100   |  100  |
-           ---------------------------
-             Session A              Session B
-time
-|                                   Begin
-|          Begin
-|          value=Get(Wang, CF1);
-|          100
-|                                   value=Get(Wang, CF2);
-|                                   100
-|
-v          value+=20;
-           120
-           Put(Wang, CF1, value);
-                                    value-=20;
-                                    80
-                                    Put(Wang, CF2, value);
-           Commit
-           success
-                                    Commit
-                                    success
-```
+* 提供单行的read-modify-write原子语义
+* 两个事务修改同一行，但读操作所涉及到的CF或者Colum无任何交集时，两个事务不会冲突
 * 能够避免“幻影读”现象  
-  假设一个事务对多个CF或者CF内的一个Column范围进行了read-modify-write操作，在提交前，另一个事务在这些CF或者Column区间内新增或删除了一个Column，前者在提交时将会失败。
+  *详见事务用户手册*
 
 ##约束
-* 多版本语义的约束
-  * 写操作的时间戳不能由用户指定，而是由Tera分配，Tera保证一行内的修改时间戳单调递增，也就是说，只支持以下四种操作：
-    * 增加最新版本
-    * 删除整行
-    * 删除整个CF
-    * 删除整个Column
-  * 读操作的时间戳不能由用户指定，只能读到第一次Get时快照视图上每个Column的最新版本
-  * 数据的历史版本只能由非事务操作修改，历史版本不能参与到事务过程中
+* 不支持多版本语义  
+  *详见事务用户手册*
 
 ##设计和实现
 * read-modify-write原子性的保证  
@@ -84,12 +25,13 @@ v          value+=20;
 * 时间戳校验  
   假设某个事务提交时，ReadRange = {CF1, CF2:Column1~CF2:Column5, CF3:Column2}，表示本次事务读取了CF1的全部数据，CF2的[Column1, Column5)的数据，CF3的Column2的数据，Tabletserver将分别采用三种校验方式：
   * 对于整个CF的时间戳校验  
-  因为CF下的Column数量可以非常多，如果每个column分别进行校验，可能产生大量的扫描操作（要依次读取这些column），为了避免这种情况，为每个CF维护一个特殊的Cell：CFMaxTS，代表CF里所有Cell（包含Delete）的最大时间戳。校验时将ReadMaxTS与此CFMaxTS进行比较。
+  扫描整个CF内的所有Column，得到最大时间戳，与ReadMaxTS进行比较。  
+  因为CF下的Column数量可以非常多，如果每个column分别进行校验，可能产生大量的扫描操作（要依次读取这些column），为了避免这种情况，可以为每个CF维护一个特殊的Cell：CFMaxTS，代表CF里所有Cell（包含Delete）的最大时间戳。校验时将ReadMaxTS与此CFMaxTS进行比较。（这种方式作为未来优化的备选方案，暂不实现。）
   * 对于一段Column范围的时间戳校验  
-  通过扫描这个Column段内的数据，得到最大时间戳，ReadMaxTS进行比较。
+  通过扫描这个Column段内的数据，得到最大时间戳，与ReadMaxTS进行比较。
   * 对于单个Column的时间戳校验  
   读此Column的最新版本，用其时间戳与ReadMaxTS进行比较。
-* CFMaxTS的存储  
+* CFMaxTS的存储（暂不实现）  
   CFMaxTS有两种存储方式，一种是作为一个单独的、用户不可见的LG存储，与用户的LG隔离，另一种是放在每个CF的开头，与用户数据混合存储：
   * 单独存储  
   好处是用户的读操作不会受CFMaxTS标记的影响，读吞吐不会下降，缺点是进行时间戳校验时，CFMaxTS标记有可能在磁盘上，需要发起IO操作才能读到，并且是一次磁盘seek，影响写吞吐
@@ -109,8 +51,7 @@ v          value+=20;
              |        |  MAX_TS  |  C1  |  C2  |  MAX_TS   |  C1  |  MAX_TS  |  C1  |  C2  |
              -------------------------------------------------------------------------------
   ```
-  两种方式都不会影响LG的稀疏程度，which is better？
-* CFMaxTS的更新和清除  
+* CFMaxTS的更新和清除（暂不实现）  
   当CF被修改时，不论是Put还是Delete，都需要一并更新CFMaxTS，使其记录本次修改的时间戳。  
   当CF的全部数据都被删除时，CFMaxTS也应该被清除，实现方法是在Compact的Drop判断逻辑中遇到CFMaxTS时，检查后面一个**不被Drop**的Cell是否属于同一个CF，如果是，则保留CFMaxTS，否则清除CFMaxTS。
 * 事务内多次读操作的一致性视图保证  
@@ -120,7 +61,7 @@ v          value+=20;
 * Compact垃圾清理算法的修改  
   在原有GC算法的基础上，只需要在某个Cell需要被Drop时，检查其时间戳距当前时间是否在TxnTimeout之内，是的话予以保留
 * 读操作逻辑的修改  
-  在原有GC算法的基础上，维护一个最大被Drop的sequence_number（简称MaxDropSeq），在读用户数据之前，检查ReadSeqNum是否大于DropSeq，是的话，进行读操作，否则，认为事务超时。
+  在原有GC算法的基础上，维护每个tablet的最大参与Compact的sequence_number（简称MaxCompactSeqNum），在读用户数据之前，检查ReadSeqNum是否大于等于MaxCompactSeqNum，是的话，进行读操作，否则，认为事务超时。
 * WriteBuffer的实现
   * WriteBuffer由两个数据结构组成，一个是修改队列，即vector<Mutation>，用于向Tabletserver提交修改，另一个是可索引的两级map，即map<CF, map<Column, Value/Delete>>。  
   * 对于Put操作，插入修改队列的末尾，同时修改两级map
