@@ -84,6 +84,10 @@ using namespace tera;
 typedef boost::shared_ptr<Table> TablePtr;
 typedef boost::shared_ptr<TableImpl> TableImplPtr;
 
+/// global variables of single-row-txn used in interactive mode
+tera::Transaction* g_row_txn = NULL;
+Table* g_row_txn_table = NULL;
+
 const char* builtin_cmd_list[] = {
     "create",
     "create   <schema> [<delimiter_file>]                              \n\
@@ -203,6 +207,12 @@ const char* builtin_cmd_list[] = {
                get all tablets range.                                     \n\
                --reorder_tablets=true ordered tablets by ts addr          \n\
                (show more detail when using suffix \"x\")",
+
+    "txn",
+    "txn <operation> <params>                                             \n\
+         start      <tablename> <row_key>                                 \n\
+         commit                                                           \n\
+         (only support single row transaction)",
 
     "user",
     "user <operation> <params>                                            \n\
@@ -635,7 +645,15 @@ int32_t PutOp(Client* client, int32_t argc, char** argv, ErrorCode* err) {
     } else {
         mutation->Put(columnfamily, qualifier, FLAGS_timestamp, value);
     }
-    table->ApplyMutation(mutation);
+    if (g_row_txn != NULL) {
+        g_row_txn->ApplyMutation(mutation);
+    } else {
+        table->ApplyMutation(mutation);
+    }
+    if (mutation->GetError().GetType() != tera::ErrorCode::kOK) {
+        std::cout << mutation->GetError().ToString() << std::endl;
+    }
+    delete mutation;
     return 0;
 }
 
@@ -883,13 +901,21 @@ int32_t GetOp(Client* client, int32_t argc, char** argv, ErrorCode* err) {
             reader->AddColumnFamily(columnfamily);
         }
     }
-    table->Get(reader);
+    if (g_row_txn != NULL) {
+        g_row_txn->Get(reader);
+    } else {
+        table->Get(reader);
+    }
     while (!reader->Done()) {
         std::cout << PrintableFormatter(reader->RowName()) << ":"
             << PrintableFormatter(reader->ColumnName()) << ":"
             << reader->Timestamp() << ":"
             << PrintableFormatter(reader->Value()) << std::endl;
         reader->Next();
+    }
+    if (reader->GetError().GetType() != tera::ErrorCode::kOK
+        && reader->GetError().GetType() != tera::ErrorCode::kNotFound) {
+        std::cout << reader->GetError().ToString() << std::endl;
     }
     delete reader;
     return 0;
@@ -987,7 +1013,15 @@ int32_t DeleteOp(Client* client, int32_t argc, char** argv, ErrorCode* err) {
     } else {
         LOG(FATAL) << "should not run here.";
     }
-    table->ApplyMutation(mutation);
+    if (g_row_txn != NULL) {
+        g_row_txn->ApplyMutation(mutation);
+    } else {
+        table->ApplyMutation(mutation);
+    }
+    if (mutation->GetError().GetType() != tera::ErrorCode::kOK) {
+        std::cout << mutation->GetError().ToString() << std::endl;
+    }
+    delete mutation;
     return 0;
 }
 
@@ -2964,6 +2998,72 @@ int32_t RangeOp(Client* client, int32_t argc, char** argv, ErrorCode* err) {
     return 0;
 }
 
+int StartRowTxnOp(Client* client, int32_t argc, char** argv, ErrorCode* err) {
+    if (argc != 5) {
+        PrintCmdHelpInfo(argv[1]);
+        return -1;
+    }
+    if (g_row_txn != NULL) {
+        LOG(ERROR) << "txn has started";
+        return -1;
+    }
+
+    CHECK(g_row_txn_table == NULL);
+    std::string tablename = argv[3];
+    g_row_txn_table = client->OpenTable(tablename, err);
+    if (g_row_txn_table == NULL) {
+        LOG(ERROR) << "fail to open table";
+        return -1;
+    }
+
+    std::string row_key = argv[4];
+    g_row_txn = g_row_txn_table->StartRowTransaction(row_key);
+    if (g_row_txn == NULL) {
+        LOG(ERROR) << "fail to start row txn";
+        delete g_row_txn_table;
+        g_row_txn_table = NULL;
+        return -1;
+    }
+    return 0;
+}
+
+int CommitRowTxnOp(Client* client, int32_t argc, char** argv, ErrorCode* err) {
+    if (argc != 3) {
+        PrintCmdHelpInfo(argv[1]);
+        return -1;
+    }
+    if (g_row_txn == NULL) {
+        LOG(ERROR) << "txn has not started";
+        return -1;
+    }
+    g_row_txn_table->CommitRowTransaction(g_row_txn);
+    std::cout << g_row_txn->GetError().ToString() << std::endl;
+
+    delete g_row_txn;
+    g_row_txn = NULL;
+    delete g_row_txn_table;
+    g_row_txn_table = NULL;
+    return 0;
+}
+
+int TxnOp(Client* client, int32_t argc, char** argv, ErrorCode* err) {
+    if (argc < 3) {
+        LOG(ERROR) << "args number error: " << argc << ", need > 2";
+        PrintCmdHelpInfo(argv[1]);
+        return -1;
+    }
+
+    std::string txn_op = argv[2];
+    if (txn_op == "start") {
+        return StartRowTxnOp(client, argc, argv, err);
+    } else if (txn_op == "commit") {
+        return CommitRowTxnOp(client, argc, argv, err);
+    } else {
+        PrintCmdHelpInfo(argv[1]);
+        return -1;
+    }
+}
+
 int32_t HelpOp(int32_t argc, char** argv) {
     if (argc == 2) {
         PrintAllCmd();
@@ -3063,6 +3163,8 @@ int ExecuteCommand(Client* client, int argc, char* argv[]) {
         ret = SnapshotOp(client, argc, argv, &error_code);
     } else if (cmd == "range" || cmd == "rangex") {
         ret = RangeOp(client, argc, argv, &error_code);
+    } else if (cmd == "txn") {
+        ret = TxnOp(client, argc, argv, &error_code);
     } else if (cmd == "version") {
         PrintSystemVersion();
     } else if (cmd == "help") {

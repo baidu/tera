@@ -28,7 +28,8 @@ public:
         kNoQuota,
         kNoAuth,
         kUnknown,
-        kNotImpl
+        kNotImpl,
+        kTxnFail
     };
     ErrorCode();
     std::string ToString() const;
@@ -194,6 +195,10 @@ public:
     void DisableWal();
     bool IsWalDisabled() const;
 
+    // 事务
+    void EnableTxn();
+    bool IsTxnEnabled() const;
+
     /// 插入snapshot
     int32_t AddSnapshot(uint64_t snapshot);
     /// 获取snapshot
@@ -298,6 +303,7 @@ private:
 class RowLock {
 };
 
+class Transaction;
 class Table;
 /// 修改操作
 class RowMutation {
@@ -429,6 +435,8 @@ public:
     virtual uint32_t Size() = 0;
     virtual uint32_t RetryTimes() = 0;
     virtual const RowMutation::Mutation& GetMutation(uint32_t index) = 0;
+    /// 返回所属事务
+    virtual Transaction* GetTransaction() = 0;
 
 private:
     RowMutation(const RowMutation&);
@@ -503,10 +511,43 @@ public:
     /// 将结果转存到一个std::map中, 格式为: map<column, map<timestamp, value>>
     typedef std::map< std::string, std::map<int64_t, std::string> > Map;
     virtual void ToMap(Map* rowmap) = 0;
+    /// 返回所属事务
+    virtual Transaction* GetTransaction() = 0;
 
 private:
     RowReader(const RowReader&);
     void operator=(const RowReader&);
+};
+
+/// 事务操作接口
+class Transaction {
+public:
+    /// 提交一个修改操作
+    virtual void ApplyMutation(RowMutation* row_mu) = 0;
+    /// 读取操作
+    virtual void Get(RowReader* row_reader) = 0;
+
+    /// 回调函数原型
+    typedef void (*Callback)(Transaction* transaction);
+    /// 设置提交回调, 提交操作会异步返回
+    virtual void SetCommitCallback(Callback callback) = 0;
+    /// 获取提交回调
+    virtual Callback GetCommitCallback() = 0;
+
+    /// 设置用户上下文，可在回调函数中获取
+    virtual void SetContext(void* context) = 0;
+    /// 获取用户上下文
+    virtual void* GetContext() = 0;
+
+    /// 获得结果错误码
+    virtual const ErrorCode& GetError() = 0;
+
+    Transaction() {}
+    virtual ~Transaction() {}
+
+private:
+    Transaction(const Transaction&);
+    void operator=(const Transaction&);
 };
 
 struct TableInfo {
@@ -605,6 +646,12 @@ public:
     virtual int64_t IncrementColumnValue(const std::string& row, const std::string& family,
                                          const std::string& qualifier, int64_t amount,
                                          ErrorCode* err) = 0;
+
+    /// 创建事务
+    virtual Transaction* StartRowTransaction(const std::string& row_key) = 0;
+    /// 提交事务
+    virtual void CommitRowTransaction(Transaction* transaction) = 0;
+
     /// 设置表格写操作默认超时
     /// !!! Not implemented
     virtual void SetWriteTimeout(int64_t timeout_ms) = 0;

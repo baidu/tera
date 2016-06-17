@@ -17,7 +17,7 @@ enum StatusCode {
     kTabletNodeIsIniting = 24;
     kTabletNodeIsReadonly = 25;
     kTabletNodeIsRunning = 29;
-    
+
     // tablet node manage
     kTabletNodeReady = 30;
     kTabletNodeOffLine = 31;
@@ -34,7 +34,7 @@ enum StatusCode {
     kTabletOnMerge = 50;
     kTabletUnLoading = 52;
     kTabletUnLoading2 = 68;
-    
+
     kTableNotFound = 45;
     kTableCorrupt = 46;
     kTableNotSupport = 47;
@@ -44,7 +44,9 @@ enum StatusCode {
     kIllegalAccess = 71;
     kNotPermission = 72;
     kIOError = 73;
-    
+
+    kTxnFail = 80;
+
     //// master rpc ////
 
     // create&update table
@@ -60,7 +62,7 @@ enum StatusCode {
 
     // report
     kTabletNodeNotRegistered = 306;
-    
+
     // cmdctrl
     kInvalidArgument = 310;
 
@@ -75,7 +77,7 @@ enum StatusCode {
     // key
     kKeyNotExist = 402;
     kKeyNotInRange = 403;
-    
+
     // meta table
     kMetaTabletError = 500;
 
@@ -90,10 +92,10 @@ enum StatusCode {
     kAsyncNotRunning = 801;
     kAsyncTooBusy = 802;
     kAsyncFailure = 803;
-    
+
     // zk
     kZKError = 900;
-    
+
     kTableStatusEnable = 1000;
     kTableStatusDisable = 1001;
 }

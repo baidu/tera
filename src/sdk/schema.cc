@@ -119,6 +119,14 @@ bool TableDescriptor::IsWalDisabled() const {
     return _impl->IsWalDisabled();
 }
 
+void TableDescriptor::EnableTxn() {
+    _impl->EnableTxn();
+}
+
+bool TableDescriptor::IsTxnEnabled() const {
+    return _impl->IsTxnEnabled();
+}
+
 int32_t TableDescriptor::AddSnapshot(uint64_t snapshot) {
     return _impl->AddSnapshot(snapshot);
 }
