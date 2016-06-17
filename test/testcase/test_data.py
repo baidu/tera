@@ -9,7 +9,7 @@ import unittest
 import common
 from conf import const
 
-class S1(unittest.TestCase):
+class Data(unittest.TestCase):
     
     def setUp(self):
         out = common.runcmd_output("cd %s; ./teracli showts|grep kReady" % (const.teracli_dir), ignore_status=True)

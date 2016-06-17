@@ -9,7 +9,7 @@ import time
 import unittest
 import common
 
-class S1(unittest.TestCase):
+class ShowSize(unittest.TestCase):
     
     def setup(self):
         common.cleanup()

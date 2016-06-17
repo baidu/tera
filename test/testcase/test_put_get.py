@@ -9,7 +9,7 @@ import common
 def setUp():
 
     common.clear_env()
-    
+    common.check_core()
     '''
     set env
     '''
