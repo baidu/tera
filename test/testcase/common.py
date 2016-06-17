@@ -26,7 +26,7 @@ def runcmd(cmd, ignore_status=False):
     """
     print time.strftime("%Y%m%d-%H%M%S") + " command: "+cmd
     p = subprocess.Popen(cmd,stdout=subprocess.PIPE,stderr=subprocess.PIPE,shell=True)
-    (out,err)=p.communicate()
+    (out,err) = p.communicate()
     print "stdout: "
     print out
     print "stderr: "
@@ -43,7 +43,7 @@ def runcmd_output(cmd, ignore_status=False):
     """
     print time.strftime("%Y%m%d-%H%M%S") + " command: "+cmd
     p = subprocess.Popen(cmd,stdout=subprocess.PIPE,stderr=subprocess.PIPE,shell=True)
-    (out,err)=p.communicate()
+    (out,err) = p.communicate()
     print "stdout: "
     print out
     print "stderr: "
