@@ -18,7 +18,7 @@ def check_core():
     if system core path is not current directory, this function can not catch the core.
     """
     ret = runcmd("cd %s && ls|grep core" % (const.teracli_dir), ignore_status=True)
-    assert(ret == 1)
+    assert( ret == 1 )
 
 def runcmd(cmd, ignore_status=False):
     """
@@ -34,7 +34,7 @@ def runcmd(cmd, ignore_status=False):
     print "returncode: %d" % p.returncode
     ret = p.returncode
     if not ignore_status:
-        assert(ret == 0)
+        assert( ret == 0 )
     return ret
 
 def runcmd_output(cmd, ignore_status=False):
@@ -51,19 +51,19 @@ def runcmd_output(cmd, ignore_status=False):
     print "returncode: %d" % p.returncode
     ret = p.returncode
     if not ignore_status:
-        assert(ret == 0)
+        assert( ret == 0 )
     return out.strip()
 
 def wait_table_disabled(tablename):
     retry_times = 10
     while( retry_times > 0 ):
         time.sleep(2)
-        retry_times = retry_times-1
+        retry_times = retry_times - 1
         disable_count = runcmd_output('cd %s && ./teracli show %s|grep kTabletDisable|wc -l' % (const.teracli_dir, tablename), ignore_status=True)
         tablet_count = runcmd_output('cd %s && ./teracli show %s|grep %s|wc -l' % (const.teracli_dir, tablename, tablename), ignore_status=True)
         if ( disable_count == tablet_count ):
             return
-    assert(retry_times>0)
+    assert( retry_times > 0 )
 
 def drop_table(tablename):
     ret = runcmd('cd %s && ./teracli show %s' % (const.teracli_dir, tablename), ignore_status=True)

@@ -17,7 +17,7 @@ def setup():
 def teardown():
     pass
 
-class S1(unittest.TestCase):
+class Snapshot(unittest.TestCase):
     
     def setUp(self):
         out = common.runcmd_output("cd %s; ./teracli showts|grep kReady" % (const.teracli_dir), ignore_status=True)
