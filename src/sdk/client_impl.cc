@@ -66,7 +66,6 @@ ClientImpl::~ClientImpl() {
             for (; it != _open_table_map.end(); ++it) {
                 LOG(ERROR) << "table should be delete first: " << it->first;
             }
-            CHECK(false);
         }
     }
     delete _cluster;
