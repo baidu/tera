@@ -38,6 +38,9 @@ static const char* strerr(ErrorCode::ErrorCodeType type) {
     case ErrorCode::kNotImpl:
         ret = "Not Implement";
         break;
+    case ErrorCode::kTxnFail:
+        ret = "TransactionFail";
+        break;
     default:
         ret = "UnkownError";
     }

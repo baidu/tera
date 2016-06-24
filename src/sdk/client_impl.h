@@ -95,6 +95,17 @@ public:
                          string* str_result,
                          ErrorCode* err);
 
+    virtual bool Rename(const std::string& old_table_name,
+                        const std::string& new_table_name,
+                        ErrorCode* err);
+
+    virtual Transaction* NewTransaction();
+    virtual void Commit(Transaction* row_transaction);
+    virtual void Rollback(Transaction* row_transaction);
+
+public:
+    // 以下接口内部使用
+
     bool ShowTablesInfo(const string& name,
                         TableMeta* meta,
                         TabletMetaList* tablet_list,
@@ -112,10 +123,6 @@ public:
 
     bool ShowTabletNodesInfo(std::vector<TabletNodeInfo>* infos,
                              ErrorCode* err);
-
-    bool Rename(const std::string& old_table_name,
-                const std::string& new_table_name,
-                ErrorCode* err);
 
     void CloseTable(const string& table_name);
     TableImpl* OpenTableInternal(const string& table_name, ErrorCode* err);

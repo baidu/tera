@@ -18,6 +18,7 @@
 namespace tera {
 
 class TableImpl;
+class TransactionImpl;
 
 class RowMutationImpl : public RowMutation, public SdkTask {
 public:
@@ -131,17 +132,23 @@ public:
     /// 异步操作是否完成
     bool IsFinished() const;
 
+    /// 返回table
+    Table* GetTable();
+
     /// 返回row_key
     const std::string& RowKey();
 
+    /// 获得所属事务
+    virtual Transaction* GetTransaction();
+
     /// mutation数量
-    uint32_t MutationNum();
+    uint32_t MutationNum() const;
 
     /// mutation总大小
     uint32_t Size();
 
     /// 返回mutation
-    const RowMutation::Mutation& GetMutation(uint32_t index);
+    const RowMutation::Mutation& GetMutation(uint32_t index) const;
 
     /// 重试次数
     uint32_t RetryTimes();
@@ -173,6 +180,10 @@ public:
     void AddCommitTimes() { _commit_times++; }
     int64_t GetCommitTimes() { return _commit_times; }
 
+    void Concatenate(const RowMutationImpl& row_mu);
+
+    void SetTransaction(TransactionImpl* txn) { _txn = txn; }
+
 protected:
     /// 增加一个操作
     RowMutation::Mutation& AddMutation();
@@ -180,6 +191,7 @@ protected:
 private:
     TableImpl* _table;
     std::string _row_key;
+    TransactionImpl* _txn;
     std::vector<RowMutation::Mutation> _mu_seq;
 
     RowMutation::Callback _callback;
