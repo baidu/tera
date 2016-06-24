@@ -983,16 +983,17 @@ def init_function_prototype():
     lib.tera_row_reader_destroy.argtypes = [c_void_p]
     lib.tera_row_reader_destroy.restype = None
 
+    libc.free.argtypes = [c_void_p]
+    libc.free.restype = None
+
 
 def copy_string_to_user(value, size):
     result = string_at(value, size)
-    libc = cdll.LoadLibrary('libc.so.6')
-    libc.free.argtypes = [c_void_p]
-    libc.free.restype = None
     libc.free(value)
     return result
 
 
 lib = cdll.LoadLibrary('./libtera_c.so')
+libc = cdll.LoadLibrary('libc.so.6')
 
 init_function_prototype()
