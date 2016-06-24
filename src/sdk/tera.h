@@ -301,6 +301,7 @@ class RowLock {
 class Table;
 /// 修改操作
 class RowMutation {
+/// rowkey的限制：大小 [0, 64KB)，任意二进制串
 public:
     enum Type {
         kPut,
@@ -315,9 +316,16 @@ public:
     };
     struct Mutation {
         Type type;
+
+        /// 大小 [0, 64KB)，cf名本身是可打印字符串，不限制数量
         std::string family;
+
+        /// 大小 [0, 64KB)，任意二进制串
         std::string qualifier;
+
+        /// 大小 [0, 32MB)
         std::string value;
+
         int64_t timestamp;
         int32_t ttl;
     };
