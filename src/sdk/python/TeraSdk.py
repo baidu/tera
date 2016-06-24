@@ -353,6 +353,19 @@ class RowMutation(object):
         lib.tera_row_mutation_delete_column(self.mutation, cf,
                                             qu, c_uint64(len(qu)))
 
+    def DeleteFamily(self, cf):
+        """ 删除ColumnFamily下所有列的所有版本
+
+        Args:
+            cf(string): ColumnFamily名
+        """
+        lib.tera_row_mutation_delete_family(self.mutation, cf)
+
+    def DeleteRow(self):
+        """ 删除整行
+        """
+        lib.tera_row_mutation_delete_row(self.mutation)
+
     def RowKey(self):
         """
         Returns:
@@ -854,6 +867,12 @@ def init_function_prototype():
     lib.tera_row_mutation_delete_column.argtypes = [c_void_p, c_char_p,
                                                     c_char_p, c_uint64]
     lib.tera_row_mutation_delete_column.restype = None
+
+    lib.tera_row_mutation_delete_family.argtypes = [c_void_p, c_char_p]
+    lib.tera_row_mutation_delete_family.restype = None
+
+    lib.tera_row_mutation_delete_row.argtypes = [c_void_p]
+    lib.tera_row_mutation_delete_row.restype = None
 
     lib.tera_row_mutation_rowkey.argtypes = [c_void_p,
                                              POINTER(POINTER(c_ubyte)),

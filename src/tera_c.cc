@@ -327,6 +327,14 @@ void tera_row_mutation_delete_column(tera_row_mutation_t* mu, const char* cf,
     mu->rep->DeleteColumn(cf, std::string(qu, qulen));
 }
 
+void tera_row_mutation_delete_row(tera_row_mutation_t* mu) {
+    mu->rep->DeleteRow();
+}
+
+void tera_row_mutation_delete_family(tera_row_mutation_t* mu, const char* cf) {
+    mu->rep->DeleteFamily(std::string(cf));
+}
+
 void tera_row_mutation_callback_stub(RowMutation* mu) {
     MutexLock locker(&g_mutation_mutex);
     void* sdk_mu = mu; // C++ sdk RowMutation*
