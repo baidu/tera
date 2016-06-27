@@ -68,6 +68,8 @@ void tera_row_mutation_put_int64(tera_row_mutation_t* mu, const char* cf,
                                  const char* qu, uint64_t qulen, int64_t val);
 void tera_row_mutation_delete_column(tera_row_mutation_t* mu, const char* cf,
                                      const char* qu, uint64_t qulen);
+void tera_row_mutation_delete_row(tera_row_mutation_t* mu);
+void tera_row_mutation_delete_family(tera_row_mutation_t* mu, const char* cf);
 void tera_row_mutation_set_callback(tera_row_mutation_t* mu, MutationCallbackType callback);
 void tera_row_mutation_rowkey(tera_row_mutation_t* mu, char** val, uint64_t* vallen);
 int64_t tera_row_mutation_get_status_code(tera_row_mutation_t* mu);
