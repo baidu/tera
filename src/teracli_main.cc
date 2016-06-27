@@ -85,7 +85,7 @@ const char* builtin_cmd_list[] = {
     "create",
     "create   <schema> [<delimiter_file>]                              \n\
          - schema syntax (all properties are optional):                \n\
-               tablename <rawkey=binary,splitsize=1024,...> {          \n\
+               tablename <splitsize=1024,...> {                        \n\
                    lg1 <storage=flash,...> {                           \n\
                        cf1 <maxversion=3>,                             \n\
                        cf2...},                                        \n\
@@ -100,7 +100,7 @@ const char* builtin_cmd_list[] = {
     "createbyfile <schema_file> [<delimiter_file>]",
 
     "update",
-    "update <schema>                                                    \n\
+    "update <schema>                                                   \n\
          - kv schema:                                                  \n\
                e.g. tablename<splitsize=512,storage=disk>              \n\
          - table schema:                                               \n\
@@ -114,7 +114,7 @@ const char* builtin_cmd_list[] = {
                e.g. tablename{lg0{cf0<op=del>}}",
 
     "update-check",
-    "update-check <tablename>                                           \n\
+    "update-check <tablename>                                          \n\
                   check status of last online-schema-update",
 
     "enable",
