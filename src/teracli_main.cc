@@ -1591,16 +1591,14 @@ int32_t ShowSchemaOp(Client* client, int32_t argc, char** argv, ErrorCode* err) 
 
     std::string cmd = argv[1];
     std::string table_name = argv[2];
-    TableMeta table_meta;
-    TabletMetaList tablet_list;
+    TableSchema table_schema;
 
     tera::ClientImpl* client_impl = static_cast<tera::ClientImpl*>(client);
-    if (!client_impl->ShowTablesInfo(table_name, &table_meta, &tablet_list, err)) {
+    if (!client_impl->ShowTableSchema(table_name, &table_schema, err)) {
         LOG(ERROR) << "table not exist: " << table_name;
         return -1;
     }
-
-    ShowTableSchema(table_meta.schema(), cmd == "showschemax");
+    ShowTableSchema(table_schema, cmd == "showschemax");
     return 0;
 }
 
