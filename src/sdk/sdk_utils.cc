@@ -85,19 +85,18 @@ void ShowTableSchema(const TableSchema& s, bool is_x) {
         table_alias = schema.alias();
     }
     if (schema.has_kv_only() && schema.kv_only()) {
+        std::cerr << "caution: old style schema, do not update it if necessary." << std::endl;
         schema.set_raw_key(GeneralKv);
     }
 
     if (schema.raw_key() == TTLKv || schema.raw_key() == GeneralKv) {
         const LocalityGroupSchema& lg_schema = schema.locality_groups(0);
         ss << "\n  " << table_alias << " <";
-        if (is_x || schema.raw_key() != Readable) {
+        if (is_x) {
             ss << "rawkey=" << TableProp2Str(schema.raw_key()) << ",";
         }
         ss << "splitsize=" << schema.split_size() << ",";
-        if (is_x || schema.merge_size() != FLAGS_tera_master_merge_tablet_size) {
-            ss << "mergesize=" << schema.merge_size() << ",";
-        }
+        ss << "mergesize=" << schema.merge_size() << ",";
         if (is_x || schema.disable_wal()) {
             ss << "wal=" << Switch2Str(!schema.disable_wal()) << ",";
         }
@@ -121,13 +120,11 @@ void ShowTableSchema(const TableSchema& s, bool is_x) {
     }
 
     ss << "\n  " << table_alias << " <";
-    if (is_x || schema.raw_key() != Readable) {
+    if (is_x) {
         ss << "rawkey=" << TableProp2Str(schema.raw_key()) << ",";
     }
     ss << "splitsize=" << schema.split_size() << ",";
-    if (is_x || schema.merge_size() != FLAGS_tera_master_merge_tablet_size) {
-        ss << "mergesize=" << schema.merge_size() << ",";
-    }
+    ss << "mergesize=" << schema.merge_size() << ",";
     if (is_x && schema.admin_group() != "") {
         ss << "admin_group=" << schema.admin_group() << ",";
     }
@@ -705,6 +702,7 @@ bool FillTableDescriptor(PropTree& schema_tree, TableDescriptor* table_desc) {
         return false;
     }
     table_desc->SetTableName(schema_tree.GetRootNode()->name_);
+    table_desc->SetRawKey(kBinary);
     if (schema_tree.MaxDepth() != schema_tree.MinDepth() ||
         schema_tree.MaxDepth() == 0 || schema_tree.MaxDepth() > 3) {
         LOG(ERROR) << "schema error: " << schema_tree.FormatString();
@@ -714,7 +712,7 @@ bool FillTableDescriptor(PropTree& schema_tree, TableDescriptor* table_desc) {
     if (schema_tree.MaxDepth() == 1) {
         // kv mode, only have 1 locality group
         // e.g. table1<splitsize=1024, storage=flash>
-        table_desc->SetRawKey(kGeneralKv);
+        table_desc->SetRawKey(kTTLKv);
         LocalityGroupDescriptor* lg_desc;
         lg_desc = table_desc->AddLocalityGroup("kv");
         if (lg_desc == NULL) {
