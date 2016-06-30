@@ -18,10 +18,10 @@ Copyright 2016, Baidu, Inc.
 
 ##设计和实现
 * read-modify-write原子性的保证  
-  * 在事务过程中，SDK将记录所有读操作所涉及到的CF以及Column的范围（简称ReadRange），以及所读到的所有数据的最大时间戳（简称ReadMaxTS）
+  * 在事务过程中，SDK将记录所有读操作所涉及到的CF以及Column的范围（简称ReadRange），以及该范围内**所有数据及删除标记（PUT&DEL）**的最大时间戳（简称ReadMaxTS）
   * 在事务过程中，SDK将所有写操作的更新数据保存到本地内存中（简称WriteBuffer）
   * 在用户发起事务提交时，SDK将WriteBuffer、ReadRange和ReadMaxTS一并发送至Tabletserver
-  * Tabletserver收到SDK的事务提交请求后，校验ReadRange所覆盖的**当前数据**的最大时间戳（简称CurrentMaxTS）是否等于ReadMaxTS，如果等于，则校验成功，将更新数据写入表格，并返回SDK提交成功，否则返回提交失败
+  * Tabletserver收到SDK的事务提交请求后，校验ReadRange所覆盖的**当前所有数据及删除标记**的最大时间戳（简称CurrentMaxTS）是否等于ReadMaxTS，如果等于，则校验成功，将更新数据写入表格，并返回SDK提交成功，否则返回提交失败
 * 时间戳校验  
   假设某个事务提交时，ReadRange = {CF1, CF2:Column1~CF2:Column5, CF3:Column2}，表示本次事务读取了CF1的全部数据，CF2的[Column1, Column5)的数据，CF3的Column2的数据，Tabletserver将分别采用三种校验方式：
   * 对于整个CF的时间戳校验  
