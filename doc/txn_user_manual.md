@@ -59,6 +59,7 @@ Copyright 2016, Baidu, Inc.
                                       Commit
                                       success
   ```
+
 * 能够避免“幻影读”现象  
   下面的例子中，Session A在事务中读取了CF1的[C1 ~ C5)区间，区间内只有C2和C4两个列；Session B插入了一个新的列C4，导致Session A的事务提交失败：
   ```
@@ -96,7 +97,7 @@ Copyright 2016, Baidu, Inc.
   * 数据的历史版本只能由非事务操作修改，历史版本不能参与到事务过程中
 
 ###API
-```
+```C++
 class Table {
     /// 创建事务
     virtual Transaction* StartRowTransaction(const std::string& row_key) = 0;
@@ -134,7 +135,7 @@ class Transaction {
 ```
 
 ###使用示例
-```
+```C++
 #include "tera.h"
 
 int main() {
