@@ -20,10 +20,10 @@ Tera支持在建立表格时预分配若干tablet，tablet分隔的key写在tabl
 
 表格结构中包含表名、locality groups定义、column families定义，一个典型的表格定义如下（可写入文件）：
 
-    # 二进制编码的key, tablet分裂阈值为4096M，合并阈值为512M
-    # 三个lg，分别配置为内存、flash、磁盘存储
-    table_hello <rawkey=binary, splitsize=4096, mergesize=512> {
-        lg_index <storage=memory, compress=snappy, blocksize=4> {
+    # tablet分裂阈值为4096M，合并阈值为512M
+    # 三个lg，分别配置为flash、flash、磁盘存储
+    table_hello <splitsize=4096, mergesize=512> {
+        lg_index <storage=flash, blocksize=4> {
             update_flag <maxversions=1>
         },
         lg_props <storage=flash, blocksize=32> {
@@ -50,22 +50,22 @@ tera支持高性能的key-value存储，其schema只需指定表名即可，若�
 
 span | 属性名 | 意义 | 有效取值 | 单位 | 默认值 | 其它说明
 ---  | ---    | ---  | ---      | ---  | ---    | ---
-table | rawkey | rawkey的拼装模式 | "binary" / "kv"/ "ttlkv" | - | key的长度必须小于64KB |
 table | splitsize | 某个tablet增大到此阈值时分裂为2个子tablets| >=0，等于0时关闭split | MB | 512 |
 table | mergesize | 某个tablet减小到此阈值时和相邻的1个tablet合并 | >=0，等于0时关闭merge | MB | 0 | splitsize至少要为mergesize的5倍
 lg    | storage   | 存储类型 | "disk" / "flash" / "memory" | - | "disk" |
-lg    | compress  | 压缩算法 | "snappy" / "none" | - | "snappy" |
 lg    | blocksize | LevelDB中block的大小       | >0 | KB | 4 |
 lg    | use_memtable_on_leveldb | 是否启用内存compact | "true" / "false" | - | false |
 lg    | sst_size  | 第一层sst文件大小 | >0 | MB | 8 |
 cf    | maxversions | 保存的最大版本数  | >0 | - | 1 |
-cf    | minversions | 保存的最小版本数 | >0 | - | 1 |
 cf    | ttl | 数据有效时间 | >=0，等于0时此数据永远有效 | second | 0 | 和minversions冲突时以minversions为准
 
 <!--
+table | rawkey | rawkey的拼装模式 | "binary" / "kv"/ "ttlkv" | - | key的长度必须小于64KB |
+lg    | compress  | 压缩算法 | "snappy" / "none" | - | "snappy" |
 lg    | memtable_ldb_write_buffer_size | 内存compact开启后，写buffer的大小 | >0 | MB | 1 | 一般不用暴露给用户
 lg    | memtable_ldb_block_size |  内存compact开启后，压缩块的大小 | >0 | KB | 4 | 一般不用暴露给用户
 cf    | diskquota   | 存储限额  | >0 | MB | 0 | 暂未使用
+cf    | minversions | 保存的最小版本数 | >0 | - | 1 |
 -->
 
 ## update 更新表格schema
@@ -77,13 +77,12 @@ cf    | diskquota   | 存储限额  | >0 | MB | 0 | 暂未使用
 
 ### 更新table模式schema
 
-1. 更新lg或者cf属性时，需要disable表格
-
-1. table的rawkey属性不能被修改
+1. 更新lg属性时，需要disable表格
+2. 支持表格、cf属性热更新
 
 #### 示例
 
-更新table级别的属性（不更新lg、cf属性）：
+更新table的属性（不更新lg、cf属性）：
 
     ./teracli update "oops<mergesize=512>"
     ./teracli update "oops<splitsize=1024,mergesize=128>"
