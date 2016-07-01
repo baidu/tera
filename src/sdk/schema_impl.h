@@ -192,7 +192,6 @@ private:
     typedef std::map<std::string, LGDescImpl*> LGMap;
     typedef std::map<std::string, CFDescImpl*> CFMap;
     std::string     _name;
-    bool            _kv_only;
     LGMap           _lg_map;
     std::vector<LGDescImpl*> _lgs;
     CFMap           _cf_map;
