@@ -21,6 +21,9 @@ class MasterClient : public RpcClient<MasterServer::Stub> {
 public:
     MasterClient(const std::string& server_addr = "",
                  int32_t rpc_timeout = FLAGS_tera_rpc_timeout_period);
+    MasterClient(RpcClientBase* rpc_client_base,
+                 const std::string& server_addr = "",
+                 int32_t rpc_timeout = FLAGS_tera_rpc_timeout_period);
     virtual ~MasterClient();
 
     virtual bool GetSnapshot(const GetSnapshotRequest* request,

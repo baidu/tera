@@ -84,6 +84,7 @@ class TableImpl : public Table {
 public:
     TableImpl(const std::string& table_name,
               ThreadPool* thread_pool,
+              RpcClientBase* rpc_client_base,
               sdk::ClusterFinder* cluster);
 
     virtual ~TableImpl();
@@ -433,6 +434,7 @@ private:
     std::string _zk_addr_list;
 
     ThreadPool* _thread_pool;
+    RpcClientBase* _rpc_client_base;
     mutable Mutex _delay_task_id_mutex;
     std::set<int64_t> _delay_task_ids;
     /// _cluster could cache the master_addr & root_table_addr.

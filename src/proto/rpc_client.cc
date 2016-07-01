@@ -6,10 +6,27 @@
 
 namespace tera {
 
-sofa::pbrpc::RpcChannelOptions RpcClientBase::m_channel_options;
-std::map<std::string, sofa::pbrpc::RpcChannel*> RpcClientBase::m_rpc_channel_list;
-sofa::pbrpc::RpcClientOptions RpcClientBase::m_rpc_client_options;
-sofa::pbrpc::RpcClient RpcClientBase::m_rpc_client;
-Mutex RpcClientBase::m_mutex;
+static RpcClientBase* default_rpc_client_base = NULL;
+static bool default_rpc_client_base_is_init = false;
+static Mutex default_rpc_client_base_mutex;
+
+void InitDefaultRpcClientBase(ThreadPool* thread_pool, int32_t thread_num) {
+    MutexLock l(&default_rpc_client_base_mutex);
+    if (!default_rpc_client_base_is_init) {
+        default_rpc_client_base = new RpcClientBase(thread_pool, thread_num);
+        default_rpc_client_base_is_init = true;
+    }
+}
+
+void SetDefaultRpcClientBaseOption(int32_t max_inflow, int32_t max_outflow,
+                                   int32_t pending_buffer_size) {
+    CHECK_NOTNULL(default_rpc_client_base);
+    default_rpc_client_base->SetOption(max_inflow, max_outflow, pending_buffer_size);
+}
+
+RpcClientBase* GetDefaultRpcClientBase() {
+    CHECK_NOTNULL(default_rpc_client_base);
+    return default_rpc_client_base;
+}
 
 } // namespace tera

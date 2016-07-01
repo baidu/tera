@@ -22,14 +22,14 @@ namespace tabletnode {
 
 class TabletNodeClient : public RpcClient<TabletNodeServer::Stub> {
 public:
-    static void SetThreadPool(ThreadPool* thread_pool);
-
-    static void SetRpcOption(int32_t max_inflow = -1, int32_t max_outflow = -1,
-                             int32_t pending_buffer_size = -1,
-                             int32_t thread_num = -1);
-
     TabletNodeClient(const std::string& addr = "",
-                     int32_t rpc_timeout = FLAGS_tera_rpc_timeout_period);
+                     int32_t rpc_timeout = FLAGS_tera_rpc_timeout_period,
+                     ThreadPool* thread_pool = NULL);
+
+    TabletNodeClient(RpcClientBase* rpc_client_base,
+                     const std::string& addr = "",
+                     int32_t rpc_timeout = FLAGS_tera_rpc_timeout_period,
+                     ThreadPool* thread_pool = NULL);
 
     ~TabletNodeClient();
 
@@ -85,7 +85,7 @@ public:
 
 private:
     int32_t m_rpc_timeout;
-    static ThreadPool* m_thread_pool;
+    ThreadPool* m_thread_pool;
 };
 
 } // namespace sdk

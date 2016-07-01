@@ -149,6 +149,7 @@ private:
     ClientImpl(const ClientImpl&);
     void operator=(const ClientImpl&);
     ThreadPool _thread_pool;
+    RpcClientBase _rpc_client_base;
 
     std::string _user_identity;
     std::string _user_passcode;

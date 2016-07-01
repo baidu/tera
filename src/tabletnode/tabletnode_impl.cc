@@ -107,7 +107,7 @@ TabletNodeImpl::TabletNodeImpl(const TabletNodeInfo& tabletnode_info,
     } else {
         m_local_addr = FLAGS_tera_local_addr + ":" + FLAGS_tera_tabletnode_port;
     }
-    TabletNodeClient::SetThreadPool(m_thread_pool.get());
+    InitDefaultRpcClientBase(m_thread_pool.get());
 
     leveldb::Env::Default()->SetBackgroundThreads(FLAGS_tera_tabletnode_compact_thread_num);
     leveldb::Env::Default()->RenameFile(FLAGS_tera_leveldb_log_path,
