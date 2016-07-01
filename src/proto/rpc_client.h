@@ -39,8 +39,8 @@ struct RpcCallbackParam {
 
 class RpcClientBase {
 public:
-    static void SetOption(int32_t max_inflow, int32_t max_outflow,
-                          int32_t pending_buffer_size, int32_t thread_num) {
+    void SetOption(int32_t max_inflow, int32_t max_outflow,
+                   int32_t pending_buffer_size) {
         if (-1 != max_inflow) {
             m_rpc_client_options.max_throughput_in = max_inflow;
         }
@@ -50,12 +50,9 @@ public:
         if (-1 != pending_buffer_size) {
             m_rpc_client_options.max_pending_buffer_size = pending_buffer_size;
         }
-        if (-1 != thread_num) {
-            m_rpc_client_options.work_thread_num = thread_num;
-        }
-        m_rpc_client.ResetOptions(m_rpc_client_options);
+        m_rpc_client->ResetOptions(m_rpc_client_options);
 
-        sofa::pbrpc::RpcClientOptions new_options = m_rpc_client.GetOptions();
+        sofa::pbrpc::RpcClientOptions new_options = m_rpc_client->GetOptions();
         LOG(INFO) << "set rpc option: ("
             << "max_inflow: " << new_options.max_throughput_in
             << " MB/s, max_outflow: " << new_options.max_throughput_out
@@ -64,39 +61,42 @@ public:
             << ")";
     }
 
-    RpcClientBase() : m_rpc_channel(NULL) {}
+    RpcClientBase(ThreadPool* thread_pool = NULL,
+                  int32_t thread_num = -1) : m_thread_pool(thread_pool) {
+        // pbrpc doesn't support reset thread_num,
+        // we have to set it before start
+        m_rpc_client_options.callback_thread_num = 1;
+        if (thread_num > 0) {
+            m_rpc_client_options.work_thread_num = thread_num;
+        }
+        m_rpc_client.reset(new sofa::pbrpc::RpcClient(m_rpc_client_options));
+    }
     virtual ~RpcClientBase() {}
 
-protected:
-    virtual void ResetClient(const std::string& server_addr) {
-        std::map<std::string, sofa::pbrpc::RpcChannel*>::iterator it;
-        m_mutex.Lock();
-        it = m_rpc_channel_list.find(server_addr);
-        if (it != m_rpc_channel_list.end()) {
-            m_rpc_channel = it->second;
-        } else {
-            m_rpc_channel = m_rpc_channel_list[server_addr]
-                = new sofa::pbrpc::RpcChannel(&m_rpc_client, server_addr,
-                                              m_channel_options);
-        }
-        m_mutex.Unlock();
-    }
+    sofa::pbrpc::RpcClient* GetRpcClient() { return m_rpc_client.get(); }
+    ThreadPool* GetThreadPool() { return m_thread_pool; }
 
-protected:
-    sofa::pbrpc::RpcChannel* m_rpc_channel;
-
-    static sofa::pbrpc::RpcChannelOptions m_channel_options;
-    static std::map<std::string, sofa::pbrpc::RpcChannel*> m_rpc_channel_list;
-    static sofa::pbrpc::RpcClientOptions m_rpc_client_options;
-    static sofa::pbrpc::RpcClient m_rpc_client;
-    static Mutex m_mutex;
+private:
+    sofa::pbrpc::RpcClientOptions m_rpc_client_options;
+    scoped_ptr<sofa::pbrpc::RpcClient> m_rpc_client;
+    ThreadPool* m_thread_pool;
 };
 
+void InitDefaultRpcClientBase(ThreadPool* thread_pool = NULL, int32_t thread_num = -1);
+void SetDefaultRpcClientBaseOption(int32_t max_inflow, int32_t max_outflow,
+                                   int32_t pending_buffer_size);
+RpcClientBase* GetDefaultRpcClientBase();
+
 template<class ServerType>
-class RpcClient : public RpcClientBase {
+class RpcClient {
 public:
-    RpcClient(const std::string& addr) {
-        ResetClient(addr);
+    RpcClient(RpcClientBase* base, const std::string& server_addr) {
+        m_base = base;
+        sofa::pbrpc::RpcChannelOptions channel_options;
+        m_rpc_channel.reset(new sofa::pbrpc::RpcChannel(m_base->GetRpcClient(),
+                                                        server_addr, channel_options));
+        m_server_client.reset(new ServerType(m_rpc_channel.get()));
+        m_server_addr = server_addr;
     }
     virtual ~RpcClient() {}
 
@@ -105,31 +105,16 @@ public:
     }
 
 protected:
-    virtual void ResetClient(const std::string& server_addr) {
-        if (m_server_addr == server_addr) {
-            // VLOG(5) << "address [" << server_addr << "] not be applied";
-            return;
-        }
-        /*
-        IpAddress ip_address(server_addr);
-        if (!ip_address.IsValid()) {
-            LOG(ERROR) << "invalid address: " << server_addr;
-            return;
-        }
-        */
-        RpcClientBase::ResetClient(server_addr);
-        m_server_client.reset(new ServerType(m_rpc_channel));
-        m_server_addr = server_addr;
-        // VLOG(5) << "reset connected address to: " << server_addr;
-    }
-
     template <class Request, class Response, class Callback>
     bool SendMessageWithRetry(void(ServerType::*func)(
                               google::protobuf::RpcController*, const Request*,
                               Response*, google::protobuf::Closure*),
                               const Request* request, Response* response,
                               Callback* closure, const std::string& tips,
-                              int32_t rpc_timeout, ThreadPool* thread_pool = 0) {
+                              int32_t rpc_timeout, ThreadPool* thread_pool = NULL) {
+        if (thread_pool == NULL) {
+            thread_pool = m_base->GetThreadPool();
+        }
         if (NULL == m_server_client.get()) {
             // sync call
             if (closure == NULL) {
@@ -203,15 +188,9 @@ protected:
         closure->Run((Request*)request, response, failed, error);
     }
 
-    virtual bool PollAndResetServerAddr() {
-        return true;
-    }
-
-    virtual bool IsRetryStatus(const StatusCode& status) {
-        return false;
-    }
-
 private:
+    RpcClientBase* m_base;
+    scoped_ptr<sofa::pbrpc::RpcChannel> m_rpc_channel;
     scoped_ptr<ServerType> m_server_client;
     std::string m_server_addr;
 

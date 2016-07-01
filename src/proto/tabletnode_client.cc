@@ -7,22 +7,20 @@
 namespace tera {
 namespace tabletnode {
 
-ThreadPool* TabletNodeClient::m_thread_pool = NULL;
-
-void TabletNodeClient::SetThreadPool(ThreadPool* thread_pool) {
-    m_thread_pool = thread_pool;
-}
-
-void TabletNodeClient::SetRpcOption(int32_t max_inflow, int32_t max_outflow,
-                         int32_t pending_buffer_size, int32_t thread_num) {
-    RpcClientBase::SetOption(max_inflow, max_outflow,
-                             pending_buffer_size, thread_num);
-}
-
 TabletNodeClient::TabletNodeClient(const std::string& server_addr,
-                                             int32_t rpc_timeout)
-    : RpcClient<TabletNodeServer::Stub>(server_addr),
-      m_rpc_timeout(rpc_timeout) {}
+                                   int32_t rpc_timeout,
+                                   ThreadPool* thread_pool)
+    : RpcClient<TabletNodeServer::Stub>(GetDefaultRpcClientBase(), server_addr),
+      m_rpc_timeout(rpc_timeout),
+      m_thread_pool(thread_pool) {}
+
+TabletNodeClient::TabletNodeClient(RpcClientBase* rpc_client_base,
+                                   const std::string& server_addr,
+                                   int32_t rpc_timeout,
+                                   ThreadPool* thread_pool)
+    : RpcClient<TabletNodeServer::Stub>(rpc_client_base, server_addr),
+      m_rpc_timeout(rpc_timeout),
+      m_thread_pool(thread_pool) {}
 
 TabletNodeClient::~TabletNodeClient() {}
 

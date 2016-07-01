@@ -18,7 +18,13 @@ namespace master {
 
 MasterClient::MasterClient(const std::string& server_addr,
                            int32_t rpc_timeout)
-    : RpcClient<MasterServer::Stub>(server_addr),
+    : RpcClient<MasterServer::Stub>(GetDefaultRpcClientBase(), server_addr),
+      m_rpc_timeout(rpc_timeout) {}
+
+MasterClient::MasterClient(RpcClientBase* rpc_client_base,
+                           const std::string& server_addr,
+                           int32_t rpc_timeout)
+    : RpcClient<MasterServer::Stub>(rpc_client_base, server_addr),
       m_rpc_timeout(rpc_timeout) {}
 
 MasterClient::~MasterClient() {}

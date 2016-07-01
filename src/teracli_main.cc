@@ -3044,6 +3044,9 @@ int main(int argc, char* argv[]) {
         return 0;
     }
 
+    ThreadPool thread_pool;
+    InitDefaultRpcClientBase(&thread_pool);
+
     Client* client = Client::NewClient(FLAGS_flagfile, NULL);
     if (client == NULL) {
         LOG(ERROR) << "client instance not exist";

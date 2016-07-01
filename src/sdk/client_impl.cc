@@ -48,13 +48,13 @@ namespace tera {
 ClientImpl::ClientImpl(const std::string& user_identity,
                        const std::string& user_passcode)
     : _thread_pool(FLAGS_tera_sdk_thread_max_num),
+      _rpc_client_base(&_thread_pool, FLAGS_tera_sdk_rpc_work_thread_num),
       _user_identity(user_identity),
       _user_passcode(user_passcode) {
-    tabletnode::TabletNodeClient::SetThreadPool(&_thread_pool);
-    tabletnode::TabletNodeClient::SetRpcOption(
+    _rpc_client_base.SetOption(
         FLAGS_tera_sdk_rpc_limit_enabled ? FLAGS_tera_sdk_rpc_limit_max_inflow : -1,
         FLAGS_tera_sdk_rpc_limit_enabled ? FLAGS_tera_sdk_rpc_limit_max_outflow : -1,
-        FLAGS_tera_sdk_rpc_max_pending_buffer_size, FLAGS_tera_sdk_rpc_work_thread_num);
+        FLAGS_tera_sdk_rpc_max_pending_buffer_size);
     _cluster = sdk::NewClusterFinder();
 }
 
@@ -516,7 +516,8 @@ TableImpl* ClientImpl::OpenTableInternal(const std::string& table_name,
         return NULL;
     }
     err->SetFailed(ErrorCode::kOK);
-    TableImpl* table = new TableImpl(internal_table_name, &_thread_pool, _cluster);
+    TableImpl* table = new TableImpl(internal_table_name, &_thread_pool,
+                                     &_rpc_client_base, _cluster);
     if (table == NULL) {
         std::string reason = "fail to new TableImpl";
         if (err != NULL) {

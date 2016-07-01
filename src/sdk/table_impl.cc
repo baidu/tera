@@ -62,6 +62,7 @@ namespace tera {
 
 TableImpl::TableImpl(const std::string& table_name,
                      common::ThreadPool* thread_pool,
+                     RpcClientBase* rpc_client_base,
                      sdk::ClusterFinder* cluster)
     : _name(table_name),
       _last_sequence_id(0),
@@ -78,6 +79,7 @@ TableImpl::TableImpl(const std::string& table_name,
       _table_meta_cond(&_table_meta_mutex),
       _table_meta_updating(false),
       _thread_pool(thread_pool),
+      _rpc_client_base(rpc_client_base),
       _cluster(cluster),
       _cluster_private(false),
       _pending_timeout_ms(FLAGS_tera_rpc_timeout_period) {
@@ -324,7 +326,7 @@ void TableImpl::ScanTabletAsync(ScanTask* scan_task, bool called_by_user) {
 
 void TableImpl::CommitScan(ScanTask* scan_task,
                            const std::string& server_addr) {
-    tabletnode::TabletNodeClient tabletnode_client(server_addr);
+    tabletnode::TabletNodeClient tabletnode_client(_rpc_client_base, server_addr);
     ResultStreamImpl* stream = scan_task->stream;
     ScanTabletRequest* request = scan_task->request;
     ScanTabletResponse* response = scan_task->response;
@@ -677,7 +679,7 @@ void TableImpl::CommitMutationsById(const std::string& server_addr,
 
 void TableImpl::CommitMutations(const std::string& server_addr,
                                 std::vector<RowMutationImpl*>& mu_list) {
-    tabletnode::TabletNodeClient tabletnode_client_async(server_addr);
+    tabletnode::TabletNodeClient tabletnode_client_async(_rpc_client_base, server_addr);
     WriteTabletRequest* request = new WriteTabletRequest;
     WriteTabletResponse* response = new WriteTabletResponse;
     request->set_sequence_id(_last_sequence_id++);
@@ -767,7 +769,7 @@ void TableImpl::MutateCallBack(std::vector<int64_t>* mu_id_list,
 
         SdkTask* task = _task_pool.GetTask(mu_id);
         if (task == NULL) {
-            VLOG(10) << "mutation " << mu_id << " timeout: " << DebugString(row);
+            VLOG(10) << "mutation " << mu_id << " fail and timeout: " << DebugString(row);
             continue;
         }
         CHECK_EQ(task->Type(), SdkTask::MUTATION);
@@ -839,6 +841,9 @@ void TableImpl::MutationTimeout(int64_t mutation_id) {
                                               _timeout, StatusCodeToString(err).c_str());
         row_mutation->SetError(ErrorCode::kSystem, err_reason);
     }
+    VLOG(10) << "mutation " << mutation_id << " timeout: " << DebugString(row_mutation->RowKey())
+             << " commit " << row_mutation->GetCommitTimes() << " times";
+
     // only for flow control
     _cur_commit_pending_counter.Sub(row_mutation->MutationNum());
     int64_t perf_time = common::timer::get_micros();
@@ -1028,7 +1033,7 @@ void TableImpl::CommitReadersById(const std::string server_addr,
 void TableImpl::CommitReaders(const std::string server_addr,
                               std::vector<RowReaderImpl*>& reader_list) {
     std::vector<int64_t>* reader_id_list = new std::vector<int64_t>;
-    tabletnode::TabletNodeClient tabletnode_client_async(server_addr);
+    tabletnode::TabletNodeClient tabletnode_client_async(_rpc_client_base, server_addr);
     ReadTabletRequest* request = new ReadTabletRequest;
     ReadTabletResponse* response = new ReadTabletResponse;
     request->set_sequence_id(_last_sequence_id++);
@@ -1399,7 +1404,7 @@ void TableImpl::ScanMetaTableAsync(const std::string& key_start, const std::stri
     }
 
     VLOG(6) << "root: " << meta_addr;
-    tabletnode::TabletNodeClient tabletnode_client_async(meta_addr);
+    tabletnode::TabletNodeClient tabletnode_client_async(_rpc_client_base, meta_addr);
     ScanTabletRequest* request = new ScanTabletRequest;
     ScanTabletResponse* response = new ScanTabletResponse;
     request->set_sequence_id(_last_sequence_id++);
@@ -1747,7 +1752,7 @@ void TableImpl::ReadTableMetaAsync(ErrorCode* ret_err, int32_t retry_times,
         return;
     }
 
-    tabletnode::TabletNodeClient tabletnode_client_async(meta_server);
+    tabletnode::TabletNodeClient tabletnode_client_async(_rpc_client_base, meta_server);
     ReadTabletRequest* request = new ReadTabletRequest;
     ReadTabletResponse* response = new ReadTabletResponse;
     request->set_sequence_id(_last_sequence_id++);

@@ -137,7 +137,7 @@ MasterImpl::MasterImpl()
     } else {
         m_local_addr = FLAGS_tera_local_addr + ":" + FLAGS_tera_master_port;
     }
-    tabletnode::TabletNodeClient::SetThreadPool(m_thread_pool.get());
+    InitDefaultRpcClientBase(m_thread_pool.get());
 
     if (FLAGS_tera_leveldb_env_type != "local") {
         io::InitDfsEnv();
@@ -1661,7 +1661,8 @@ void MasterImpl::QueryTabletNode() {
         CreateStatTable();
         ErrorCode err;
         const std::string& tablename = FLAGS_tera_master_stat_table_name;
-        m_stat_table = new TableImpl(tablename, m_thread_pool.get(), NULL);
+        m_stat_table = new TableImpl(tablename, m_thread_pool.get(),
+                                     GetDefaultRpcClientBase(), NULL);
         FLAGS_tera_sdk_perf_counter_log_interval = 60;
         if (m_stat_table->OpenInternal(&err)) {
             m_is_stat_table = true;
