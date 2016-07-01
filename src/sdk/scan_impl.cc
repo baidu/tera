@@ -12,8 +12,9 @@
 
 #include "proto/proto_helper.h"
 #include "proto/table_schema.pb.h"
-#include "sdk/table_impl.h"
 #include "sdk/filter_utils.h"
+#include "sdk/sdk_utils.h"
+#include "sdk/table_impl.h"
 #include "utils/atomic.h"
 #include "utils/timer.h"
 
@@ -373,13 +374,8 @@ bool ResultStreamSyncImpl::Done(ErrorCode* err) {
             // next_start_point is where the next scan should start
             } else {
                 const KeyValuePair& kv = _response->next_start_point();
-                if (_scan_desc_impl->IsKvOnlyTable()) {
-                    _scan_desc_impl->SetStart(kv.key(), kv.column_family(),
-                                              kv.qualifier(), kv.timestamp());
-                } else {
-                    _scan_desc_impl->SetStart(kv.key(), kv.column_family(),
-                                              kv.qualifier(), kv.timestamp());
-                }
+                _scan_desc_impl->SetStart(kv.key(), kv.column_family(),
+                                          kv.qualifier(), kv.timestamp());
             }
         } else {
             _scan_desc_impl->SetStart(tablet_end_key);
@@ -679,7 +675,7 @@ void ScanDescImpl::SetTableSchema(const TableSchema& schema) {
 }
 
 bool ScanDescImpl::IsKvOnlyTable() {
-    return _table_schema.kv_only();
+    return !IsBigTable(_table_schema);
 }
 
 // SELECT * WHERE <type> <cf0> <op0> <value0> AND <type> <cf1> <op1> <value1>
