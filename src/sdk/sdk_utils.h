@@ -48,7 +48,7 @@ bool BuildSchema(TableDescriptor* table_desc, string* schema);
 
 bool ParseDelimiterFile(const string& filename, std::vector<string>* delims);
 
-bool IsBigTable(const TableSchema& schema);
+bool IsKvTable(const TableSchema& schema);
 
 } // namespace tera
 #endif // TERA_SDK_SDK_UTILS_H_

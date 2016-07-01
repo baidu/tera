@@ -675,7 +675,7 @@ void ScanDescImpl::SetTableSchema(const TableSchema& schema) {
 }
 
 bool ScanDescImpl::IsKvOnlyTable() {
-    return !IsBigTable(_table_schema);
+    return IsKvTable(_table_schema);
 }
 
 // SELECT * WHERE <type> <cf0> <op0> <value0> AND <type> <cf1> <op1> <value1>

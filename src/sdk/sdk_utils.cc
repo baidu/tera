@@ -295,6 +295,8 @@ void TableSchemaToDesc(const TableSchema& schema, TableDescriptor* desc) {
     }
     // for compatibility
     if (schema.has_kv_only() && schema.kv_only() && schema.raw_key() != GeneralKv) {
+        LOG(WARNING) << "table " << schema.name()
+            << ": old style schema, do not update it if necessary.";
         desc->SetRawKey(kGeneralKv);
     }
 
@@ -920,10 +922,10 @@ bool ParseDelimiterFile(const string& filename, std::vector<string>* delims) {
     return true;
 }
 
-bool IsBigTable(const TableSchema& schema) {
-    return (!schema.kv_only() &&
-            schema.raw_key() != GeneralKv &&
-            schema.raw_key() != TTLKv);
+bool IsKvTable(const TableSchema& schema) {
+    return (schema.kv_only() ||
+            schema.raw_key() == GeneralKv ||
+            schema.raw_key() == TTLKv);
 }
 
 } // namespace tera
