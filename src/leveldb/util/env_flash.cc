@@ -559,13 +559,13 @@ void FlashEnv::ScheduleUpdateFlash(const std::string& fname, uint64_t fsize, int
 
         UpdateFlashTask& task = update_flash_waiting_files_[fname];
         task.priority = priority;
-        task.id = update_flash_threads_.Schedule(UpdateFlashFileFunc, param, (double)task.priority, 0);
+        task.id = update_flash_threads_.Schedule(UpdateFlashFileFunc, param, (double)task.priority);
         Log("[env_flash] schedule copy to local, id: %ld, prio: %ld, file: %s, pend: %ld\n",
             task.id, task.priority, fname.c_str(), update_flash_threads_.GetPendingTaskNum());
     } else {
         UpdateFlashTask& task = update_flash_waiting_files_[fname];
         task.priority += priority;
-        update_flash_threads_.ReSchedule(task.id, (double)task.priority, 0);
+        update_flash_threads_.ReSchedule(task.id, (double)task.priority);
         Log("[env_flash] reschedule copy to local, id: %ld, prio: %ld, file: %s, pend: %ld\n",
             task.id, task.priority, fname.c_str(), update_flash_threads_.GetPendingTaskNum());
     }

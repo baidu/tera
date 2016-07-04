@@ -853,7 +853,7 @@ int64_t PosixEnv::Schedule(void (*function)(void*), void* arg, double prio,
   return thread_pool_.Schedule(function, arg, prio, wait_time_millisec);
 }
 
-void PosixEnv::ReSchedule(int64_t id, double prio, int64_t millisec = 0) {
+void PosixEnv::ReSchedule(int64_t id, double prio, int64_t millisec = -1) {
   return thread_pool_.ReSchedule(id, prio, millisec);
 }
 
