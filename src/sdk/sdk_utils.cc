@@ -84,7 +84,7 @@ void ShowTableSchema(const TableSchema& s, bool is_x) {
     if (!schema.alias().empty()) {
         table_alias = schema.alias();
     }
-    if (schema.has_kv_only() && schema.kv_only()) {
+    if (schema.has_kv_only() && schema.kv_only() && schema.raw_key() != GeneralKv) {
         std::cerr << "caution: old style schema, do not update it if necessary." << std::endl;
         schema.set_raw_key(GeneralKv);
     }
@@ -280,12 +280,6 @@ void TableDescToSchema(const TableDescriptor& desc, TableSchema* schema) {
 }
 
 void TableSchemaToDesc(const TableSchema& schema, TableDescriptor* desc) {
-    // for compatibility
-    if (schema.has_kv_only() && schema.kv_only()) {
-        LOG(ERROR) << "compatible covert rawkey: " << RawKey_Name(schema.raw_key());
-        desc->SetRawKey(kGeneralKv);
-    }
-
     switch (schema.raw_key()) {
         case Binary:
             desc->SetRawKey(kBinary);
@@ -299,6 +293,13 @@ void TableSchemaToDesc(const TableSchema& schema, TableDescriptor* desc) {
         default:
             desc->SetRawKey(kReadable);
     }
+    // for compatibility
+    if (schema.has_kv_only() && schema.kv_only() && schema.raw_key() != GeneralKv) {
+        LOG(WARNING) << "table " << schema.name()
+            << ": old style schema, do not update it if necessary.";
+        desc->SetRawKey(kGeneralKv);
+    }
+
     if (schema.has_split_size()) {
         desc->SetSplitSize(schema.split_size());
     }
@@ -920,4 +921,11 @@ bool ParseDelimiterFile(const string& filename, std::vector<string>* delims) {
     delims->swap(delimiters);
     return true;
 }
+
+bool IsKvTable(const TableSchema& schema) {
+    return (schema.kv_only() ||
+            schema.raw_key() == GeneralKv ||
+            schema.raw_key() == TTLKv);
+}
+
 } // namespace tera
