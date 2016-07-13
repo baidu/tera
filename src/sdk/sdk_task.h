@@ -5,9 +5,16 @@
 #ifndef  TERA_SDK_SDK_TASK_H_
 #define  TERA_SDK_SDK_TASK_H_
 
-#include <boost/unordered_map.hpp>
+#include <boost/function.hpp>
+#include <boost/multi_index_container.hpp>
+#include <boost/multi_index/global_fun.hpp>
+#include <boost/multi_index/hashed_index.hpp>
+#include <boost/multi_index/indexed_by.hpp>
+#include <boost/multi_index/ordered_index.hpp>
 
+#include "common/base/stdint.h"
 #include "common/mutex.h"
+#include "common/thread_pool.h"
 
 #include "proto/table_meta.pb.h"
 #include "sdk/tera.h"
@@ -15,8 +22,8 @@
 namespace tera {
 
 class SdkTask {
-
 public:
+    typedef boost::function<void (SdkTask*)> TimeoutFunc;
     enum TYPE {
         READ,
         MUTATION,
@@ -33,10 +40,11 @@ public:
     void SetId(int64_t id) { _id = id; }
     int64_t GetId() { return _id; }
 
-    void SetTimeout(int64_t timeout) { _timeout = timeout; }
-    int64_t Timeout() { return _timeout; }
+    void SetDueTime(uint64_t due_time) { _due_time_ms = due_time; }
+    uint64_t DueTime() { return _due_time_ms; }
 
-    bool operator<(const SdkTask& rhs) const { return _timeout < rhs._timeout; }
+    void SetTimeoutFunc(TimeoutFunc timeout_func) { _timeout_func = timeout_func; }
+    TimeoutFunc GetTimeoutFunc() { return _timeout_func; }
 
     int64_t GetRef();
     void IncRef();
@@ -49,7 +57,7 @@ protected:
           _internal_err(kTabletNodeOk),
           _meta_timestamp(0),
           _id(-1),
-          _timeout(0),
+          _due_time_ms(UINT64_MAX),
           _cond(&_mutex),
           _ref(1) {}
     virtual ~SdkTask() {}
@@ -59,18 +67,31 @@ private:
     StatusCode _internal_err;
     int64_t _meta_timestamp;
     int64_t _id;
-    int64_t _timeout;
+    uint64_t _due_time_ms; // timestamp of timeout
+    TimeoutFunc _timeout_func;
 
     Mutex _mutex;
     CondVar _cond;
     int64_t _ref;
 };
 
-class SdkTaskHashMap {
+int64_t GetSdkTaskId(SdkTask* task);
+
+uint64_t GetSdkTaskDueTime(SdkTask* task);
+
+class SdkTimeoutManager {
 public:
-    bool PutTask(SdkTask* task);
+    SdkTimeoutManager(ThreadPool* thread_pool);
+    ~SdkTimeoutManager();
+
+    // timeout <= 0 means NEVER timeout
+    bool PutTask(SdkTask* task, int64_t timeout = 0,
+                 SdkTask::TimeoutFunc timeout_func = NULL);
     SdkTask* GetTask(int64_t task_id);
     SdkTask* PopTask(int64_t task_id);
+
+    void CheckTimeout();
+    void RunTimeoutFunc(SdkTask* sdk_task);
 
 private:
     uint32_t Shard(int64_t task_id);
@@ -78,9 +99,34 @@ private:
 private:
     const static uint32_t kShardBits = 6;
     const static uint32_t kShardNum = (1 << kShardBits);
-    typedef boost::unordered_map<int64_t, SdkTask*> TaskHashMap;
-    TaskHashMap _map_shard[kShardNum];
+    typedef boost::multi_index_container<
+        SdkTask*,
+        boost::multi_index::indexed_by<
+            // hashed on SdkTask::_id
+            boost::multi_index::hashed_unique<
+                boost::multi_index::global_fun<SdkTask*, int64_t, &GetSdkTaskId> >,
+
+            // sort by less<int64_t> on SdkTask::_due_time_ms
+            boost::multi_index::ordered_non_unique<
+                boost::multi_index::global_fun<SdkTask*, uint64_t, &GetSdkTaskDueTime> >
+        >
+    > TaskMap;
+    enum {
+        INDEX_BY_ID = 0,
+        INDEX_BY_DUE_TIME = 1,
+    };
+    typedef TaskMap::nth_index<INDEX_BY_ID>::type TaskIdIndex;
+    typedef TaskMap::nth_index<INDEX_BY_DUE_TIME>::type TaskDueTimeIndex;
+    TaskMap _map_shard[kShardNum];
     mutable Mutex _mutex_shard[kShardNum];
+    ThreadPool* _thread_pool;
+
+    mutable Mutex _bg_mutex;
+    bool _stop;
+    bool _bg_exit;
+    CondVar _bg_cond;
+    int64_t _bg_func_id;
+    const ThreadPool::Task _bg_func;
 };
 
 } // namespace tera
