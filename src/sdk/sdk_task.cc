@@ -45,8 +45,30 @@ uint64_t GetSdkTaskDueTime(SdkTask* task) {
 }
 
 SdkTimeoutManager::SdkTimeoutManager(ThreadPool* thread_pool)
-    : _thread_pool(thread_pool) {
-    CheckTimeout();
+    : _thread_pool(thread_pool),
+      _stop(false),
+      _bg_exit(false),
+      _bg_cond(&_bg_mutex),
+      _bg_func_id(0),
+      _bg_func(boost::bind(&SdkTimeoutManager::CheckTimeout, this)) {
+    _thread_pool->AddTask(_bg_func);
+}
+
+SdkTimeoutManager::~SdkTimeoutManager() {
+    MutexLock l(&_bg_mutex);
+    _stop = true;
+    if (_bg_func_id > 0) {
+        bool non_block = true;
+        bool is_running = false;
+        if (_thread_pool->CancelTask(_bg_func_id, non_block, &is_running)) {
+            _bg_exit = true;
+        } else {
+            CHECK(is_running);
+        }
+    }
+    while (!_bg_exit) {
+        _bg_cond.Wait();
+    }
 }
 
 bool SdkTimeoutManager::PutTask(SdkTask* task, int64_t timeout,
@@ -128,10 +150,19 @@ void SdkTimeoutManager::CheckTimeout() {
             mutex.Lock();
         }
     }
+
+    MutexLock l(&_bg_mutex);
+    if (_stop) {
+        _bg_exit = true;
+        _bg_cond.Signal();
+        return;
+    }
+
     if (get_millis() == now_ms) {
-        _thread_pool->DelayTask(1, boost::bind(&SdkTimeoutManager::CheckTimeout, this));
+        _bg_func_id = _thread_pool->DelayTask(1, _bg_func);
     } else {
-        _thread_pool->AddTask(boost::bind(&SdkTimeoutManager::CheckTimeout, this));
+        _thread_pool->AddTask(_bg_func);
+        _bg_func_id = 0;
     }
 }
 

@@ -82,6 +82,7 @@ uint64_t GetSdkTaskDueTime(SdkTask* task);
 class SdkTimeoutManager {
 public:
     SdkTimeoutManager(ThreadPool* thread_pool);
+    ~SdkTimeoutManager();
 
     // timeout <= 0 means NEVER timeout
     bool PutTask(SdkTask* task, int64_t timeout = 0,
@@ -119,6 +120,13 @@ private:
     TaskMap _map_shard[kShardNum];
     mutable Mutex _mutex_shard[kShardNum];
     ThreadPool* _thread_pool;
+
+    mutable Mutex _bg_mutex;
+    bool _stop;
+    bool _bg_exit;
+    CondVar _bg_cond;
+    int64_t _bg_func_id;
+    const ThreadPool::Task _bg_func;
 };
 
 } // namespace tera
