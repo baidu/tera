@@ -9,12 +9,13 @@ import common
 import time
 import subprocess
 
+'''
+Test launch TS first
+'''
 @nose.tools.nottest
 @nose.tools.with_setup()
 def test_launch_ts_first():
-    """
-    Test launch TS first
-    """
+
     common.cluster_op('kill')
     common.cluster_op('launch')
     time.sleep(10)

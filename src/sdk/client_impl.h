@@ -95,23 +95,18 @@ public:
                          string* str_result,
                          ErrorCode* err);
 
-    bool ShowTablesInfo(const string& name,
-                        TableMeta* meta,
-                        TabletMetaList* tablet_list,
-                        ErrorCode* err);
+    bool ShowTableSchema(const string& name, TableSchema* meta, ErrorCode* err);
 
-    bool ShowTablesInfo(TableMetaList* table_list,
-                        TabletMetaList* tablet_list,
-                        bool is_brief,
-                        ErrorCode* err);
+    bool ShowTablesInfo(const string& name, TableMeta* meta,
+                        TabletMetaList* tablet_list, ErrorCode* err);
 
-    bool ShowTabletNodesInfo(const string& addr,
-                             TabletNodeInfo* info,
-                             TabletMetaList* tablet_list,
-                             ErrorCode* err);
+    bool ShowTablesInfo(TableMetaList* table_list, TabletMetaList* tablet_list,
+                        bool is_brief, ErrorCode* err);
 
-    bool ShowTabletNodesInfo(std::vector<TabletNodeInfo>* infos,
-                             ErrorCode* err);
+    bool ShowTabletNodesInfo(const string& addr, TabletNodeInfo* info,
+                             TabletMetaList* tablet_list, ErrorCode* err);
+
+    bool ShowTabletNodesInfo(std::vector<TabletNodeInfo>* infos, ErrorCode* err);
 
     bool Rename(const std::string& old_table_name,
                 const std::string& new_table_name,

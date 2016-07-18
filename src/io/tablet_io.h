@@ -11,6 +11,9 @@
 #include <string>
 #include <vector>
 
+#include <boost/bind.hpp>
+#include <boost/function.hpp>
+
 #include "common/base/scoped_ptr.h"
 #include "common/mutex.h"
 #include "io/tablet_scanner.h"
@@ -26,7 +29,6 @@
 #include "proto/tabletnode_rpc.pb.h"
 #include "types.h"
 #include "utils/counter.h"
-#include "utils/rpc_timer_list.h"
 
 namespace tera {
 namespace io {
@@ -60,6 +62,9 @@ public:
         tera::Counter write_kvs;
         tera::Counter write_size;
     };
+
+    typedef boost::function<void (std::vector<const RowMutationSequence*>*,
+                                  std::vector<StatusCode>*)> WriteCallback;
 
 public:
     TabletIO(const std::string& key_start, const std::string& key_end);
@@ -122,12 +127,9 @@ public:
                   bool sync = true, StatusCode* status = NULL);
     bool WriteBatch(leveldb::WriteBatch* batch, bool disable_wal = false, bool sync = true,
                     StatusCode* status = NULL);
-    virtual bool Write(const WriteTabletRequest* request,
-                       WriteTabletResponse* response,
-                       google::protobuf::Closure* done,
-                       const std::vector<int32_t>* index_list,
-                       Counter* done_counter, WriteRpcTimer* timer = NULL,
-                       StatusCode* status = NULL);
+    bool Write(std::vector<const RowMutationSequence*>* row_mutation_vec,
+               std::vector<StatusCode>* status_vec, bool is_instant,
+               WriteCallback callback, StatusCode* status = NULL);
 
     virtual bool Scan(const ScanOption& option, KeyValueList* kv_list,
                       bool* complete, StatusCode* status = NULL);

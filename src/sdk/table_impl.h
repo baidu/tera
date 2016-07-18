@@ -266,7 +266,7 @@ private:
                         bool failed, int error_code);
 
     // mutation到达用户设置的超时时间但尚未处理完
-    void MutationTimeout(int64_t mutation_id);
+    void MutationTimeout(SdkTask* sdk_task);
 
     // 将一批reader根据rowkey分配给各个TS
     void DistributeReaders(const std::vector<RowReaderImpl*>& row_reader_list,
@@ -294,7 +294,7 @@ private:
                         bool failed, int error_code);
 
     // reader到达用户设置的超时时间但尚未处理完
-    void ReaderTimeout(int64_t mutation_id);
+    void ReaderTimeout(SdkTask* sdk_task);
 
     void ScanTabletAsync(ScanTask* scan_task, bool called_by_user);
 
@@ -423,7 +423,7 @@ private:
     TableSchema _table_schema;
     // end of table meta managerment
 
-    SdkTaskHashMap _task_pool;
+    SdkTimeoutManager _task_pool;
     Counter _next_task_id;
 
     master::MasterClient* _master_client;

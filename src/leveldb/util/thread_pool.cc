@@ -89,8 +89,12 @@ void ThreadPool::ReSchedule(int64_t id, double priority, int64_t wait_time_milli
   int64_t exe_time = 0;
   // set exe_time to 0 if
   // the task is already in pri_queue or need to push into pri_queue
-  if (bg_item.exe_time != 0 && wait_time_millisec != 0) {
-    exe_time = now_time + wait_time_millisec;
+  if (bg_item.exe_time != 0) {
+    if (wait_time_millisec > 0) {
+      exe_time = now_time + wait_time_millisec;
+    } else if (wait_time_millisec < 0) {
+      exe_time = bg_item.exe_time;
+    }
   }
   if (IsLatest(bg_item, priority, exe_time)) {
     return;

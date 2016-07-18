@@ -66,7 +66,6 @@ ClientImpl::~ClientImpl() {
             for (; it != _open_table_map.end(); ++it) {
                 LOG(ERROR) << "table should be delete first: " << it->first;
             }
-            CHECK(false);
         }
     }
     delete _cluster;
@@ -629,6 +628,43 @@ bool ClientImpl::List(std::vector<TableInfo>* table_list, ErrorCode* err) {
     return ListInternal(table_list, &tablet_list, "", "",
                         FLAGS_tera_sdk_show_max_num,
                         0, err);
+}
+
+bool ClientImpl::ShowTableSchema(const string& name, TableSchema* schema,
+                                 ErrorCode* err) {
+    tabletnode::TabletNodeClient meta_client(_cluster->RootTableAddr(true));
+    ScanTabletRequest request;
+    ScanTabletResponse response;
+    request.set_sequence_id(0);
+    request.set_table_name(FLAGS_tera_master_meta_table_name);
+    request.set_start("");
+    request.set_end("@~");
+    if (!meta_client.ScanTablet(&request, &response)
+        || response.status() != kTabletNodeOk) {
+        LOG(ERROR) << "fail to scan meta: " << StatusCodeToString(response.status());
+        err->SetFailed(ErrorCode::kSystem, "system error");
+        return false;
+    }
+    int32_t table_size = response.results().key_values_size();
+    for (int32_t i = 0; i < table_size; i++) {
+        const KeyValuePair& record = response.results().key_values(i);
+        const string& key = record.key();
+        const string& value = record.value();
+        if (key[0] == '@') {
+            TableMeta meta;
+            ParseMetaTableKeyValue(key, value, &meta);
+            if (meta.schema().name() == name
+                || meta.schema().alias() == name) {
+                *schema = meta.schema();
+                return true;
+            }
+        } else if (key[0] > '@') {
+            break;
+        } else {
+            continue;
+        }
+    }
+    return false;
 }
 
 // show exactly one table

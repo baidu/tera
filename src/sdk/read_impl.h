@@ -69,6 +69,8 @@ public:
     const std::string& RowName();
     /// 读取的结果
     std::string Value();
+    /// 读取的结果
+    int64_t ValueInt64();
     /// Timestamp
     int64_t Timestamp();
     /// Column cf:qualifier

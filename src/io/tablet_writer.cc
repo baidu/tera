@@ -74,15 +74,11 @@ void TabletWriter::Stop() {
     LOG(INFO) << "tablet writer is stopped";
 }
 
-uint64_t TabletWriter::CountRequestSize(const WriteTabletRequest& request,
-                                        const std::vector<int32_t>& index_list,
+uint64_t TabletWriter::CountRequestSize(std::vector<const RowMutationSequence*>& row_mutation_vec,
                                         bool kv_only) {
     uint64_t data_size = 0;
-    int32_t index_num = index_list.size();
-
-    for (int32_t i = 0; i < index_num; i++) {
-        int32_t index = index_list[i];
-        const RowMutationSequence& mu_seq = request.row_list(index);
+    for (uint32_t i = 0; i < row_mutation_vec.size(); i++) {
+        const RowMutationSequence& mu_seq = *row_mutation_vec[i];
         int32_t mu_num = mu_seq.mutation_sequence_size();
         for (int32_t j = 0; j < mu_num; j++) {
             const Mutation& mu = mu_seq.mutation_sequence(j);
@@ -97,30 +93,19 @@ uint64_t TabletWriter::CountRequestSize(const WriteTabletRequest& request,
     return data_size;
 }
 
-void TabletWriter::Write(const WriteTabletRequest* request,
-                         WriteTabletResponse* response,
-                         google::protobuf::Closure* done,
-                         const std::vector<int32_t>* index_list,
-                         Counter* done_counter, WriteRpcTimer* timer) {
+bool TabletWriter::Write(std::vector<const RowMutationSequence*>* row_mutation_vec,
+                         std::vector<StatusCode>* status_vec, bool is_instant,
+                         WriteCallback callback, StatusCode* status) {
     static uint32_t last_print = time(NULL);
     const uint64_t MAX_PENDING_SIZE = FLAGS_tera_asyncwriter_pending_limit * 1024UL;
-    uint64_t request_size = CountRequestSize(*request, *index_list,
-                                             m_tablet->KvOnly());
-    WriteTask task;
-    task.request = request;
-    task.response = response;
-    task.done = done;
-    task.index_list = index_list;
-    task.done_counter = done_counter;
-    task.timer = timer;
-    int32_t row_num = request->row_list_size();
 
     MutexLock lock(&m_task_mutex);
-    StatusCode code = kTabletNodeOk;
     if (m_stopped) {
         LOG(ERROR) << "tablet writer is stopped";
-        code = kAsyncNotRunning;
-    } else if (m_active_buffer_size >= MAX_PENDING_SIZE || m_tablet_busy) {
+        SetStatusCode(kAsyncNotRunning, status);
+        return false;
+    }
+    if (m_active_buffer_size >= MAX_PENDING_SIZE || m_tablet_busy) {
         uint32_t now_time = time(NULL);
         if (now_time > last_print) {
             LOG(WARNING) << "[" << m_tablet->GetTablePath()
@@ -129,36 +114,24 @@ void TabletWriter::Write(const WriteTabletRequest* request,
                 << m_tablet_busy;
             last_print = now_time;
         }
-        code = kTabletNodeIsBusy;
+        SetStatusCode(kTabletNodeIsBusy, status);
+        return false;
     }
 
-    if (code != kTabletNodeOk) {
-        int32_t index_num = index_list->size();
-        for (int32_t i = 0; i < index_num; i++) {
-            int32_t index = (*index_list)[i];
-            response->mutable_row_status_list()->Set(index, code);
-        }
-
-        delete index_list;
-        if (done_counter->Add(index_num) == row_num) {
-            done->Run();
-            delete done_counter;
-            if (NULL != timer) {
-                RpcTimerList::Instance()->Erase(timer);
-                delete timer;
-            }
-        }
-
-        return;
-    }
+    uint64_t request_size = CountRequestSize(*row_mutation_vec, m_tablet->KvOnly());
+    WriteTask task;
+    task.row_mutation_vec = row_mutation_vec;
+    task.status_vec = status_vec;
+    task.callback = callback;
 
     m_active_buffer->push_back(task);
     m_active_buffer_size += request_size;
-    m_active_buffer_instant |= request->is_instant();
+    m_active_buffer_instant |= is_instant;
     if (m_active_buffer_size >= FLAGS_tera_asyncwriter_sync_size_threshold * 1024UL ||
-        request->is_instant()) {
+        m_active_buffer_instant) {
         m_write_event.Set();
     }
+    return true;
 }
 
 void TabletWriter::DoWork() {
@@ -217,16 +190,12 @@ bool TabletWriter::SwapActiveBuffer(bool force) {
     return true;
 }
 
-bool TabletWriter::BatchRequest(const WriteTabletRequest& request,
-                                const std::vector<int32_t>& index_list,
-                                leveldb::WriteBatch* batch,
-                                bool kv_only) {
-    int32_t index_num = index_list.size();
+bool TabletWriter::BatchRequest(const std::vector<const RowMutationSequence*>& row_mutation_vec,
+                                leveldb::WriteBatch* batch, bool kv_only) {
     int64_t timestamp_old = 0;
 
-    for (int32_t i = 0; i < index_num; ++i) {
-        int32_t index = index_list[i];
-        const RowMutationSequence& row_mu = request.row_list(index);
+    for (uint32_t i = 0; i < row_mutation_vec.size(); ++i) {
+        const RowMutationSequence& row_mu = *row_mutation_vec[i];
         const std::string& row_key = row_mu.row_key();
         int32_t mu_num = row_mu.mutation_sequence().size();
         if (kv_only) {
@@ -320,30 +289,13 @@ bool TabletWriter::BatchRequest(const WriteTabletRequest& request,
 }
 
 void TabletWriter::FinishTask(const WriteTask& task, StatusCode status) {
-    const WriteTabletRequest* request = task.request;
-    int32_t row_num = request->row_list_size();
-
-    int32_t index_num = task.index_list->size();
-    m_tablet->GetCounter().write_rows.Add(index_num);
-
-    WriteTabletResponse* response = task.response;
-    for (int32_t i = 0; i < index_num; i++) {
-        int32_t index = (*task.index_list)[i];
-        const RowMutationSequence& row_list = request->row_list(index);
-        m_tablet->GetCounter().write_kvs.Add(row_list.mutation_sequence_size());
-        response->mutable_row_status_list()->Set(index, status);
+    int32_t row_num = task.row_mutation_vec->size();
+    m_tablet->GetCounter().write_rows.Add(row_num);
+    for (int32_t i = 0; i < row_num; i++) {
+        m_tablet->GetCounter().write_kvs.Add((*task.row_mutation_vec)[i]->mutation_sequence_size());
+        (*task.status_vec)[i] = status;
     }
-
-    delete task.index_list;
-    if (task.done_counter->Add(index_num) == row_num) {
-        task.done->Run();
-        delete task.done_counter;
-        WriteRpcTimer* timer = task.timer;
-        if (NULL != timer) {
-            RpcTimerList::Instance()->Erase(timer);
-            delete timer;
-        }
-    }
+    task.callback(task.row_mutation_vec, task.status_vec);
 }
 
 StatusCode TabletWriter::FlushToDiskBatch(WriteTaskBuffer* task_buffer) {
@@ -352,8 +304,7 @@ StatusCode TabletWriter::FlushToDiskBatch(WriteTaskBuffer* task_buffer) {
 
     for (size_t i = 0; i < task_num; ++i) {
         const WriteTask& task = (*task_buffer)[i];
-        const std::vector<int32_t>* index_list = task.index_list;
-        BatchRequest(*(task.request), *index_list, &batch, m_tablet->KvOnly());
+        BatchRequest(*task.row_mutation_vec, &batch, m_tablet->KvOnly());
     }
 
     StatusCode status = kTableOk;

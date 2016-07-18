@@ -1,19 +1,22 @@
-"""
+'''
 Copyright (c) 2015, Baidu.com, Inc. All Rights Reserved
 Use of this source code is governed by a BSD-style license that can be
 found in the LICENSE file.
-"""
+'''
 
 import common
 
 from conf import const
 
+'''
+set env
+'''
 def setUp():
-    """
-    set env
-    """
 
     common.print_debug_msg(1, "setup()")
+
+def tearDown():
+    common.print_debug_msg(1, "teardown()")
 
 def test_create_user():
     cmd = "./teracli user create z1 z1pwd --flagfile=" + const.user_root_flag_path
@@ -95,8 +98,4 @@ def test_delete_user():
     cmd = "./teracli user delete z1 --flagfile=" + const.user_root_flag_path
     common.execute_and_check_returncode(cmd, 255)
 
-def tearDown():
-    """
-    tear down
-    """
-    common.print_debug_msg(1, "teardown()")
+

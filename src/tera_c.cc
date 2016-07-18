@@ -212,6 +212,10 @@ void tera_row_reader_next(tera_row_reader_t* reader) {
     reader->rep->Next();
 }
 
+int64_t tera_row_reader_value_int64(tera_row_reader_t* reader) {
+    return reader->rep->ValueInt64();
+}
+
 void tera_row_reader_value(tera_row_reader_t* reader, char** str, uint64_t* strlen) {
     std::string val = reader->rep->Value();
     *str = CopyString(val);
@@ -306,6 +310,12 @@ bool tera_table_is_get_finished(tera_table_t* table) {
     return table->rep->IsGetFinished();
 }
 
+void tera_row_mutation_put_int64(tera_row_mutation_t* mu, const char* cf,
+                                 const char* qu, uint64_t qulen,
+                                 int64_t val) {
+    mu->rep->Put(cf, std::string(qu, qulen), val);
+}
+
 void tera_row_mutation_put(tera_row_mutation_t* mu, const char* cf,
                            const char* qu, uint64_t qulen,
                            const char* val, uint64_t vallen) {
@@ -315,6 +325,14 @@ void tera_row_mutation_put(tera_row_mutation_t* mu, const char* cf,
 void tera_row_mutation_delete_column(tera_row_mutation_t* mu, const char* cf,
                                      const char* qu, uint64_t qulen) {
     mu->rep->DeleteColumn(cf, std::string(qu, qulen));
+}
+
+void tera_row_mutation_delete_row(tera_row_mutation_t* mu) {
+    mu->rep->DeleteRow();
+}
+
+void tera_row_mutation_delete_family(tera_row_mutation_t* mu, const char* cf) {
+    mu->rep->DeleteFamily(std::string(cf));
 }
 
 void tera_row_mutation_callback_stub(RowMutation* mu) {

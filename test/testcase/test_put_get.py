@@ -1,15 +1,18 @@
-"""
+'''
 Copyright (c) 2015, Baidu.com, Inc. All Rights Reserved
 Use of this source code is governed by a BSD-style license that can be
 found in the LICENSE file.
-"""
+'''
 
 import common
 
 def setUp():
-    """
+
+    common.clear_env()
+    common.check_core()
+    '''
     set env
-    """
+    '''
 
     common.print_debug_msg(0, "start master, ts1, ts2, ts3, and status is ok")
     common.print_debug_msg(1, "create test_table001 and test_table002(kv)")
@@ -20,10 +23,14 @@ def setUp():
     common.exe_and_check_res(cmd)
 
 
-def test_put_table():
-    """
+def tearDown():
+    pass
+
+    '''
     put method
-    """
+    '''
+def test_put_table():
+
 
     common.print_debug_msg(2, "put one data to table_test001 and table_test002")
 
@@ -33,11 +40,11 @@ def test_put_table():
     cmd = "./teracli put table_test002 test002key test002v"
     common.exe_and_check_res(cmd)
 
-
-def test_get_table():
-    """
+    '''
     get method
-    """
+    '''
+def test_get_table():
+
 
     common.print_debug_msg(3, "read data form table_test001 and table_test002")
 
@@ -47,10 +54,3 @@ def test_get_table():
     cmd = "./teracli get table_test002 test002key"
     common.exe_and_check_res(cmd)
 
-
-def tearDown():
-    """
-    clear env
-    """
-
-    common.clear_env()

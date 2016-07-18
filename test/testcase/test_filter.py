@@ -10,9 +10,11 @@ from TeraSdk import Client, TeraSdkException
 
 
 def setUp():
-    cmd = "./teracli create 'filter_table{lg0{cf0,cf1}}'"
-    common.exe_and_check_res(cmd)
+    common.drop_table("filter_table") 
+    common.runcmd("./teracli create 'filter_table{lg0{cf0,cf1}}'")
 
+def tearDown():
+    pass
 
 def test_filter():
     try:
@@ -46,13 +48,6 @@ def test_filter():
     filter_str = "SELECT cf0,cf1 WHERE int64 cf0 > 99 AND int64 cf1 <= 100"
     expect = []
     check_filter_and_expect(table, filter_str, expect)
-
-
-def tearDown():
-    cmd = "./teracli disable filter_table"
-    common.exe_and_check_res(cmd)
-    cmd = "./teracli drop filter_table"
-    common.exe_and_check_res(cmd)
 
 
 def check_filter_and_expect(table, filter_str, expect):

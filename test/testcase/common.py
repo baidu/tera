@@ -7,11 +7,83 @@ found in the LICENSE file.
 import subprocess
 import filecmp
 import os
+import time
 import nose.tools
 import json
 
 from conf import const
 
+def check_core():
+    """
+    if system core path is not current directory, this function can not catch the core.
+    """
+    ret = runcmd("cd %s && ls|grep core" % (const.teracli_dir), ignore_status=True)
+    assert( ret == 1 )
+
+def runcmd(cmd, ignore_status=False):
+    """
+    run cmd and return code
+    """
+    print time.strftime("%Y%m%d-%H%M%S") + " command: "+cmd
+    p = subprocess.Popen(cmd,stdout=subprocess.PIPE,stderr=subprocess.PIPE,shell=True)
+    (out,err) = p.communicate()
+    print "stdout: "
+    print out
+    print "stderr: "
+    print err
+    print "returncode: %d" % p.returncode
+    ret = p.returncode
+    if not ignore_status:
+        assert( ret == 0 )
+    return ret
+
+def runcmd_output(cmd, ignore_status=False):
+    """
+    run cmd and return code
+    """
+    print time.strftime("%Y%m%d-%H%M%S") + " command: "+cmd
+    p = subprocess.Popen(cmd,stdout=subprocess.PIPE,stderr=subprocess.PIPE,shell=True)
+    (out,err) = p.communicate()
+    print "stdout: "
+    print out
+    print "stderr: "
+    print err
+    print "returncode: %d" % p.returncode
+    ret = p.returncode
+    if not ignore_status:
+        assert( ret == 0 )
+    return out.strip()
+
+def wait_table_disabled(tablename):
+    retry_times = 10
+    while( retry_times > 0 ):
+        time.sleep(2)
+        retry_times = retry_times - 1
+        disable_count = runcmd_output('cd %s && ./teracli show %s|grep kTabletDisable|wc -l' % (const.teracli_dir, tablename), ignore_status=True)
+        tablet_count = runcmd_output('cd %s && ./teracli show %s|grep %s|wc -l' % (const.teracli_dir, tablename, tablename), ignore_status=True)
+        if ( disable_count == tablet_count ):
+            return
+    assert( retry_times > 0 )
+
+def drop_table(tablename):
+    ret = runcmd('cd %s && ./teracli show %s' % (const.teracli_dir, tablename), ignore_status=True)
+    if(ret == 0):
+        runcmd('cd %s && ./teracli disable %s' % (const.teracli_dir, tablename) )
+        wait_table_disabled(tablename)
+        runcmd('cd %s && ./teracli show %s' % (const.teracli_dir, tablename) )
+        runcmd('cd %s && ./teracli drop %s' % (const.teracli_dir, tablename) )
+        time.sleep(5)
+
+def cleanup():
+    """
+    cleanup
+    """
+    drop_table("test")
+    files = os.listdir('.')
+    for f in files:
+        if f.endswith('.out'):
+            os.remove(f)
+            
 def print_debug_msg(sid=0, msg=""):
     """
     provide general print interface
@@ -40,34 +112,8 @@ def clear_env():
     """
 
     print_debug_msg(4, "delete table_test001 and table_test002, clear env")
-
-    cmd = "./teracli disable table_test001"
-    exe_and_check_res(cmd)
-
-    cmd = "./teracli drop table_test001"
-    exe_and_check_res(cmd)
-
-    cmd = "./teracli disable table_test002"
-    exe_and_check_res(cmd)
-
-    cmd = "./teracli drop table_test002"
-    exe_and_check_res(cmd)
-
-
-def cleanup():
-    ret = subprocess.Popen(const.teracli_binary + ' disable test',
-                           stdout=subprocess.PIPE, stderr=subprocess.PIPE, shell=True)
-    print ''.join(ret.stdout.readlines())
-    print ''.join(ret.stderr.readlines())
-    ret = subprocess.Popen(const.teracli_binary + ' drop test',
-                           stdout=subprocess.PIPE, stderr=subprocess.PIPE, shell=True)
-    print ''.join(ret.stdout.readlines())
-    print ''.join(ret.stderr.readlines())
-
-    files = os.listdir('.')
-    for f in files:
-        if f.endswith('.out'):
-            os.remove(f)
+    drop_table("table_test001")
+    drop_table("table_test002")
 
 
 def cluster_op(op):
@@ -206,10 +252,7 @@ def run_tera_mark(file_path, op, table_name, random, value_size, num, key_size, 
         tera_bench=const.tera_bench_binary, bench_args=tera_bench_args, awk_args=awk_args,
         tera_mark=const.tera_mark_binary, mark_args=tera_mark_args)
 
-    print cmd
-    ret = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, shell=True)
-    print ''.join(ret.stdout.readlines())
-    print ''.join(ret.stderr.readlines())
+    runcmd(cmd)
 
     # write/append data to a file for comparison
     for path, is_append in file_path:
@@ -227,10 +270,7 @@ def run_tera_mark(file_path, op, table_name, random, value_size, num, key_size, 
         dump_cmd = '{tera_bench} {tera_bench_args} | awk {awk_args} {redirect_op} {out}'.format(
             tera_bench=const.tera_bench_binary, tera_bench_args=tera_bench_args,
             redirect_op=redirect_op, awk_args=awk_args, out=path)
-        print dump_cmd
-        ret = subprocess.Popen(dump_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, shell=True)
-        print ''.join(ret.stdout.readlines())
-        print ''.join(ret.stderr.readlines())
+        runcmd(dump_cmd)
 
 
 def scan_table(table_name, file_path, allversion, snapshot=0, is_async=False):
@@ -259,10 +299,7 @@ def scan_table(table_name, file_path, allversion, snapshot=0, is_async=False):
     
     scan_cmd = '{teracli} {flags} {op} {table_name} "" "" {snapshot} > {out}'.format(
         teracli=const.teracli_binary, flags=async_flag, op=allv, table_name=table_name, snapshot=snapshot_args, out=file_path)
-    print scan_cmd
-    ret = subprocess.Popen(scan_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, shell=True)
-    print ''.join(ret.stdout.readlines())
-    print ''.join(ret.stderr.readlines())
+    runcmd(scan_cmd)
 
 
 def get_tablet_list(table_name):

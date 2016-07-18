@@ -24,9 +24,10 @@ public:
   // A task will be put in queue and being processed by background thread
   // Return value is the task's id number
   int64_t Schedule(void (*function)(void*), void* arg, double priority,
-                   int64_t wait_time_millisec);
+                   int64_t wait_time_millisec = 0);
   // Modify a task's priority or execute time
-  void ReSchedule(int64_t id, double priority, int64_t wait_time_millisec);
+  // wait_time_millisec == -1 means don't change execute time
+  void ReSchedule(int64_t id, double priority, int64_t wait_time_millisec = -1);
   // Set background threads number. 'num' needs to greater than zero
   void SetBackgroundThreads(int num);
   // Return maximal allowed thread number

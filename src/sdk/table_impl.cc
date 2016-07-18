@@ -77,6 +77,7 @@ TableImpl::TableImpl(const std::string& table_name,
       _meta_updating_count(0),
       _table_meta_cond(&_table_meta_mutex),
       _table_meta_updating(false),
+      _task_pool(thread_pool),
       _thread_pool(thread_pool),
       _cluster(cluster),
       _cluster_private(false),
@@ -496,7 +497,6 @@ void TableImpl::DistributeMutations(const std::vector<RowMutationImpl*>& mu_list
         _perf_counter.mutate_cnt.Inc();
         if (called_by_user) {
             row_mutation->SetId(_next_task_id.Inc());
-            _task_pool.PutTask(row_mutation);
 
             int64_t row_timeout = -1;
             if (!row_mutation->IsAsync()) {
@@ -504,11 +504,8 @@ void TableImpl::DistributeMutations(const std::vector<RowMutationImpl*>& mu_list
             } else {
                 row_timeout = row_mutation->TimeOut() > 0 ? row_mutation->TimeOut() : _timeout;
             }
-            if (row_timeout > 0) {
-                ThreadPool::Task task =
-                    boost::bind(&TableImpl::MutationTimeout, this, row_mutation->GetId());
-                _thread_pool->DelayTask(row_timeout, task);
-            }
+            SdkTask::TimeoutFunc task = boost::bind(&TableImpl::MutationTimeout, this, _1);
+            _task_pool.PutTask(row_mutation, row_timeout, task);
         }
 
         // flow control
@@ -811,11 +808,7 @@ void TableImpl::MutateCallBack(std::vector<int64_t>* mu_id_list,
     delete mu_id_list;
 }
 
-void TableImpl::MutationTimeout(int64_t mutation_id) {
-    SdkTask* task = _task_pool.PopTask(mutation_id);
-    if (task == NULL) {
-        return;
-    }
+void TableImpl::MutationTimeout(SdkTask* task) {
     _perf_counter.mutate_timeout_cnt.Inc();
     CHECK_NOTNULL(task);
     CHECK_EQ(task->Type(), SdkTask::MUTATION);
@@ -883,17 +876,13 @@ void TableImpl::DistributeReaders(const std::vector<RowReaderImpl*>& row_reader_
         RowReaderImpl* row_reader = (RowReaderImpl*)row_reader_list[i];
         if (called_by_user) {
             row_reader->SetId(_next_task_id.Inc());
-            _task_pool.PutTask(row_reader);
 
             int64_t row_timeout = sync_min_timeout;
             if (row_reader->IsAsync()) {
                 row_timeout = row_reader->TimeOut() > 0 ? row_reader->TimeOut() : _timeout;
             }
-            if (row_timeout >= 0) {
-                ThreadPool::Task task =
-                    boost::bind(&TableImpl::ReaderTimeout, this, row_reader->GetId());
-                _thread_pool->DelayTask(row_timeout, task);
-            }
+            SdkTask::TimeoutFunc task = boost::bind(&TableImpl::ReaderTimeout, this, _1);
+            _task_pool.PutTask(row_reader, row_timeout, task);
         }
 
         // flow control
@@ -1182,11 +1171,7 @@ void TableImpl::DistributeReadersById(std::vector<int64_t>* reader_id_list) {
     delete reader_id_list;
 }
 
-void TableImpl::ReaderTimeout(int64_t reader_id) {
-    SdkTask* task = _task_pool.PopTask(reader_id);
-    if (task == NULL) {
-        return;
-    }
+void TableImpl::ReaderTimeout(SdkTask* task) {
     _perf_counter.reader_timeout_cnt.Inc();
     CHECK_NOTNULL(task);
     CHECK_EQ(task->Type(), SdkTask::READ);

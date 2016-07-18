@@ -59,6 +59,7 @@ DEFINE_string(rollback_name, "", "rollback operation's name");
 DEFINE_int32(lg, -1, "locality group number.");
 DEFINE_int32(concurrency, 1, "concurrency for compact table.");
 DEFINE_int64(timestamp, -1, "timestamp.");
+DEFINE_string(tablets_file, "", "tablet set file");
 
 // using FLAGS instead of isatty() for compatibility
 DEFINE_bool(stdout_is_tty, true, "is stdout connected to a tty");
@@ -85,7 +86,7 @@ const char* builtin_cmd_list[] = {
     "create",
     "create   <schema> [<delimiter_file>]                              \n\
          - schema syntax (all properties are optional):                \n\
-               tablename <rawkey=binary,splitsize=1024,...> {          \n\
+               tablename <splitsize=1024,...> {                        \n\
                    lg1 <storage=flash,...> {                           \n\
                        cf1 <maxversion=3>,                             \n\
                        cf2...},                                        \n\
@@ -100,7 +101,7 @@ const char* builtin_cmd_list[] = {
     "createbyfile <schema_file> [<delimiter_file>]",
 
     "update",
-    "update <schema>                                                    \n\
+    "update <schema>                                                   \n\
          - kv schema:                                                  \n\
                e.g. tablename<splitsize=512,storage=disk>              \n\
          - table schema:                                               \n\
@@ -114,7 +115,7 @@ const char* builtin_cmd_list[] = {
                e.g. tablename{lg0{cf0<op=del>}}",
 
     "update-check",
-    "update-check <tablename>                                           \n\
+    "update-check <tablename>                                          \n\
                   check status of last online-schema-update",
 
     "enable",
@@ -219,9 +220,11 @@ const char* builtin_cmd_list[] = {
             scan    <tablet_path>",
 
     "compact",
-    "compact <tablename> [--lg=] [--concurrency=]                         \n\
-             run manual compaction on a table, support only compact a     \n\
-             localitygroup.",
+    "compact <tablename> [--lg=] [--concurrency=] [--tablets_file=]       \n\
+             run manual compaction on a table.                            \n\
+             --lg: only run compact on specified lg number.               \n\
+             --concurrency: compacting tablets number at the same time.   \n\
+             --tablets_file: specify tablet set, one tablet_path each line.",
 
     "safemode",
     "safemode [get|enter|leave]",
@@ -1381,6 +1384,7 @@ int32_t ShowSingleTable(Client* client, const string& table_name,
         std::cout << std::endl;
     }
     ShowTabletList(tablet_list, true, is_x);
+    std::cout << std::endl;
     return 0;
 }
 
@@ -1590,16 +1594,14 @@ int32_t ShowSchemaOp(Client* client, int32_t argc, char** argv, ErrorCode* err) 
 
     std::string cmd = argv[1];
     std::string table_name = argv[2];
-    TableMeta table_meta;
-    TabletMetaList tablet_list;
+    TableSchema table_schema;
 
     tera::ClientImpl* client_impl = static_cast<tera::ClientImpl*>(client);
-    if (!client_impl->ShowTablesInfo(table_name, &table_meta, &tablet_list, err)) {
+    if (!client_impl->ShowTableSchema(table_name, &table_schema, err)) {
         LOG(ERROR) << "table not exist: " << table_name;
         return -1;
     }
-
-    ShowTableSchema(table_meta.schema(), cmd == "showschemax");
+    ShowTableSchema(table_schema, cmd == "showschemax");
     return 0;
 }
 
@@ -2306,6 +2308,70 @@ int32_t RenameOp(Client* client, int32_t argc, char** argv, ErrorCode* err) {
     return 0;
 }
 
+void ReorderTabletList(std::vector<TabletInfo>* tablets) {
+    if (tablets->size() <= 1) {
+        return;
+    }
+
+    // ordered all tablets by ts
+    std::map<std::string, std::vector<TabletInfo> > tablet_map;
+    size_t max_tablet = 0;
+    for (size_t i = 0; i < tablets->size(); ++i) {
+        std::vector<TabletInfo>& v = tablet_map[tablets->at(i).server_addr];
+        v.push_back(tablets->at(i));
+        if (v.size() > max_tablet) {
+            max_tablet = v.size();
+        }
+    }
+
+    size_t ts_num = tablet_map.size();
+    std::vector<std::vector<TabletInfo> > tablet_vector;
+    tablet_vector.resize(ts_num);
+    std::map<std::string, std::vector<TabletInfo> >::iterator it =
+        tablet_map.begin();
+    for (size_t i = 0; it != tablet_map.end(); ++it, ++i) {
+        tablet_vector[i].swap(it->second);
+    }
+
+    // recover tablet list
+    std::vector<TabletInfo> tablets_t;
+    for (size_t y = 0; y < max_tablet; y++) {
+        for (size_t x = 0; x < ts_num; x++) {
+            if (y < tablet_vector[x].size()) {
+                tablets_t.push_back(tablet_vector[x][y]);
+            }
+        }
+    }
+    CHECK(tablets_t.size() == tablets->size());
+    tablets->swap(tablets_t);
+}
+
+bool FiltrateTabletsByFile(std::vector<TabletInfo>& tablet_list) {
+    if (FLAGS_tablets_file.empty()) {
+        return true;
+    }
+    std::ifstream fin(FLAGS_tablets_file.c_str());
+    if (fin.fail()) {
+        LOG(ERROR) << "fail to read tablets file: " << FLAGS_tablets_file;
+        return false;
+    }
+    std::set<string> tablets_filter;
+    string str;
+    while (fin >> str) {
+        tablets_filter.insert(str);
+    }
+
+    std::vector<TabletInfo> tablets;
+    std::vector<TabletInfo>::iterator tablet_it = tablet_list.begin();
+    for (; tablet_it != tablet_list.end(); ++tablet_it) {
+        if (tablets_filter.find(tablet_it->path) != tablets_filter.end()) {
+            tablets.push_back(*tablet_it);
+        }
+    }
+    tablet_list.swap(tablets);
+    return true;
+}
+
 int32_t CompactOp(Client* client, int32_t argc, char** argv, ErrorCode* err) {
     if (argc != 3) {
         PrintCmdHelpInfo(argv[1]);
@@ -2318,6 +2384,10 @@ int32_t CompactOp(Client* client, int32_t argc, char** argv, ErrorCode* err) {
         LOG(ERROR) << "fail to list tablets info: " << tablename;
         return -3;
     }
+    if (!FiltrateTabletsByFile(tablet_list)) {
+        return -4;
+    }
+    ReorderTabletList(&tablet_list);
 
     int conc = FLAGS_concurrency;
     if (conc <= 0 || conc > 1000) {
@@ -2846,44 +2916,6 @@ int32_t UserOp(Client* client, int32_t argc, char** argv, ErrorCode* err) {
     return -1;
 }
 
-void ReorderTabletList(std::vector<TabletInfo>* tablets) {
-    if (tablets->size() <= 1) {
-        return;
-    }
-
-    // ordered all tablets by ts
-    std::map<std::string, std::vector<TabletInfo> > tablet_map;
-    size_t max_tablet = 0;
-    for (size_t i = 0; i < tablets->size(); ++i) {
-        std::vector<TabletInfo>& v = tablet_map[tablets->at(i).server_addr];
-        v.push_back(tablets->at(i));
-        if (v.size() > max_tablet) {
-            max_tablet = v.size();
-        }
-    }
-
-    size_t ts_num = tablet_map.size();
-    std::vector<std::vector<TabletInfo> > tablet_vector;
-    tablet_vector.resize(ts_num);
-    std::map<std::string, std::vector<TabletInfo> >::iterator it =
-        tablet_map.begin();
-    for (size_t i = 0; it != tablet_map.end(); ++it, ++i) {
-        tablet_vector[i].swap(it->second);
-    }
-
-    // recover tablet list
-    std::vector<TabletInfo> tablets_t;
-    for (size_t y = 0; y < max_tablet; y++) {
-        for (size_t x = 0; x < ts_num; x++) {
-            if (y < tablet_vector[x].size()) {
-                tablets_t.push_back(tablet_vector[x][y]);
-            }
-        }
-    }
-    CHECK(tablets_t.size() == tablets->size());
-    tablets->swap(tablets_t);
-}
-
 int32_t RangeOp(Client* client, int32_t argc, char** argv, ErrorCode* err) {
     if (argc != 3) {
         PrintCmdHelpInfo(argv[1]);
@@ -3034,6 +3066,7 @@ int ExecuteCommand(Client* client, int argc, char* argv[]) {
 }
 
 int main(int argc, char* argv[]) {
+    FLAGS_minloglevel = 2;
     ::google::ParseCommandLineFlags(&argc, &argv, true);
 
     if (argc > 1 && std::string(argv[1]) == "version") {

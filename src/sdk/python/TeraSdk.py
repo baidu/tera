@@ -330,6 +330,18 @@ class RowMutation(object):
                                   qu, c_uint64(len(qu)),
                                   value, c_uint64(len(value)))
 
+    def PutInt64(self, cf, qu, value):
+        """ 写入（修改）这一行上
+            ColumnFamily为<cf>, Qualifier为<qu>的cell值为<value>
+
+        Args:
+            cf(string): ColumnFamily名
+            qu(string): Qualifier名
+            value(long): cell的值
+        """
+        lib.tera_row_mutation_put_int64(self.mutation, cf,
+                                        qu, c_uint64(len(qu)), value)
+
     def DeleteColumn(self, cf, qu):
         """ 删除这一行上
             ColumnFamily为<cf>, Qualifier为<qu>的cell
@@ -340,6 +352,19 @@ class RowMutation(object):
         """
         lib.tera_row_mutation_delete_column(self.mutation, cf,
                                             qu, c_uint64(len(qu)))
+
+    def DeleteFamily(self, cf):
+        """ 删除ColumnFamily下所有列的所有版本
+
+        Args:
+            cf(string): ColumnFamily名
+        """
+        lib.tera_row_mutation_delete_family(self.mutation, cf)
+
+    def DeleteRow(self):
+        """ 删除整行
+        """
+        lib.tera_row_mutation_delete_row(self.mutation)
 
     def RowKey(self):
         """
@@ -658,6 +683,13 @@ class RowReader(object):
         lib.tera_row_reader_value(self.reader, byref(value), byref(vallen))
         return copy_string_to_user(value, long(vallen.value))
 
+    def ValueInt64(self):
+        """
+        Returns:
+            (long) 当前cell对应的value
+        """
+        return long(lib.tera_row_reader_value_int64(self.reader))
+
     def Family(self):
         """
         Returns:
@@ -825,12 +857,22 @@ def init_function_prototype():
                                           c_char_p, c_uint64]
     lib.tera_row_mutation_put.restype = None
 
+    lib.tera_row_mutation_put_int64.argtypes = [c_void_p, c_char_p,
+                                                c_char_p, c_uint64, c_int64]
+    lib.tera_row_mutation_put_int64.restype = None
+
     lib.tera_row_mutation_set_callback.argtypes = [c_void_p, MUTATION_CALLBACK]
     lib.tera_row_mutation_set_callback.restype = None
 
     lib.tera_row_mutation_delete_column.argtypes = [c_void_p, c_char_p,
                                                     c_char_p, c_uint64]
     lib.tera_row_mutation_delete_column.restype = None
+
+    lib.tera_row_mutation_delete_family.argtypes = [c_void_p, c_char_p]
+    lib.tera_row_mutation_delete_family.restype = None
+
+    lib.tera_row_mutation_delete_row.argtypes = [c_void_p]
+    lib.tera_row_mutation_delete_row.restype = None
 
     lib.tera_row_mutation_rowkey.argtypes = [c_void_p,
                                              POINTER(POINTER(c_ubyte)),
@@ -938,6 +980,9 @@ def init_function_prototype():
                                           POINTER(c_uint64)]
     lib.tera_row_reader_value.restype = None
 
+    lib.tera_row_reader_value_int64.argtypes = [c_void_p]
+    lib.tera_row_reader_value_int64.restype = c_int64
+
     lib.tera_row_reader_family.argtypes = [c_void_p,
                                            POINTER(POINTER(c_ubyte)),
                                            POINTER(c_uint64)]
@@ -957,16 +1002,17 @@ def init_function_prototype():
     lib.tera_row_reader_destroy.argtypes = [c_void_p]
     lib.tera_row_reader_destroy.restype = None
 
+    libc.free.argtypes = [c_void_p]
+    libc.free.restype = None
+
 
 def copy_string_to_user(value, size):
     result = string_at(value, size)
-    libc = cdll.LoadLibrary('libc.so.6')
-    libc.free.argtypes = [c_void_p]
-    libc.free.restype = None
     libc.free(value)
     return result
 
 
 lib = cdll.LoadLibrary('./libtera_c.so')
+libc = cdll.LoadLibrary('libc.so.6')
 
 init_function_prototype()

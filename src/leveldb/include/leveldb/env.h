@@ -156,8 +156,9 @@ class Env {
       double prio = 0.0,
       int64_t wait_time_millisec = 0) = 0;
 
-  // Update background task priority with the schedule id return by Schedule
-  virtual void ReSchedule(int64_t id, double prio, int64_t millisec = 0) = 0;
+  // Update background task priority with the schedule id return by Schedule.
+  // If wait_time_millisec < 0, the exec time will not be updated.
+  virtual void ReSchedule(int64_t id, double prio, int64_t wait_time_millisec = -1) = 0;
 
   // Start a new thread, invoking "function(arg)" within the new thread.
   // When "function(arg)" returns, the thread will be destroyed.
@@ -366,7 +367,7 @@ class EnvWrapper : public Env {
     return target_->Schedule(f, a, prio, wait_time_millisec);
   }
   Env* CacheEnv() { return target_->CacheEnv(); };
-  void ReSchedule(int64_t id, double prio, int64_t millisec = 0) {
+  void ReSchedule(int64_t id, double prio, int64_t millisec = -1) {
     return target_->ReSchedule(id, prio, millisec);
   }
   void StartThread(void (*f)(void*), void* a) {
