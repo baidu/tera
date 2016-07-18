@@ -264,3 +264,8 @@ DEFINE_int32(tera_sdk_max_batch_scan_req, 10, "the max number of concurrent scan
 DEFINE_string(tera_ins_addr_list, "", "the ins cluster addr. e.g. abc.com:1234,abb.com:1234");
 DEFINE_string(tera_ins_root_path, "", "root path on ins. e.g /ps/sandbox");
 DEFINE_bool(tera_ins_enabled, false, "option to open ins naming");
+
+/////////  http /////////
+DEFINE_string(tera_http_port, "8657", "the http proxy port of tera");
+DEFINE_int32(tera_http_request_thread_num, 30, "the http proxy thread num for handle client request");
+DEFINE_int32(tera_http_ctrl_thread_num, 10, "the http proxy thread num for it self");
