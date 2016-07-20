@@ -363,8 +363,7 @@ private:
     void DumpCookie();
     void DoDumpCookie();
     std::string GetCookieFileName(const std::string& tablename,
-                                  const std::string& zk_addr,
-                                  const std::string& zk_path,
+                                  const std::string& cluster_id,
                                   int64_t create_time);
     std::string GetCookieFilePathName();
     std::string GetCookieLockFilePathName();
@@ -428,9 +427,6 @@ private:
 
     master::MasterClient* _master_client;
     tabletnode::TabletNodeClient* _tabletnode_client;
-
-    std::string _zk_root_path;
-    std::string _zk_addr_list;
 
     ThreadPool* _thread_pool;
     mutable Mutex _delay_task_id_mutex;
