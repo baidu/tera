@@ -61,6 +61,8 @@ DEFINE_int32(concurrency, 1, "concurrency for compact table.");
 DEFINE_int64(timestamp, -1, "timestamp.");
 DEFINE_string(tablets_file, "", "tablet set file");
 
+DEFINE_bool(printable, true, "printable output");
+
 // using FLAGS instead of isatty() for compatibility
 DEFINE_bool(stdout_is_tty, true, "is stdout connected to a tty");
 DEFINE_bool(reorder_tablets, false, "reorder tablets by ts list");
@@ -843,6 +845,14 @@ int32_t GetInt64Op(Client* client, int32_t argc, char** argv, ErrorCode* err) {
     return 0;
 }
 
+std::string PrintableFormatter(const std::string& value) {
+    if (FLAGS_printable) {
+        return DebugString(value);
+    } else {
+        return value;
+    }
+}
+
 int32_t GetOp(Client* client, int32_t argc, char** argv, ErrorCode* err) {
     if (argc != 4 && argc != 5) {
         LOG(ERROR) << "args number error: " << argc << ", need 5 | 6.";
@@ -875,10 +885,10 @@ int32_t GetOp(Client* client, int32_t argc, char** argv, ErrorCode* err) {
     }
     table->Get(reader);
     while (!reader->Done()) {
-        std::cout << reader->RowName() << ":"
-           << reader->ColumnName() << ":"
-           << reader->Timestamp() << ":"
-           << reader->Value() << std::endl;
+        std::cout << PrintableFormatter(reader->RowName()) << ":"
+            << PrintableFormatter(reader->ColumnName()) << ":"
+            << reader->Timestamp() << ":"
+            << PrintableFormatter(reader->Value()) << std::endl;
         reader->Next();
     }
     delete reader;
@@ -1001,10 +1011,11 @@ int32_t ScanRange(TablePtr& table, ScanDescriptor& desc, ErrorCode* err) {
         g_total_size += len;
         g_key_num ++;
         g_cur_batch_num ++;
-        std::cout << result_stream->RowName() << ":"
-           << result_stream->ColumnName() << ":"
-           << result_stream->Timestamp() << ":"
-           << result_stream->Value() << std::endl;
+        std::cout << PrintableFormatter(result_stream->RowName()) << ":"
+            << PrintableFormatter(result_stream->ColumnName()) << ":"
+            << result_stream->Timestamp() << ":"
+            << PrintableFormatter(result_stream->Value()) << std::endl;
+
         result_stream->Next();
         if (g_cur_batch_num >= FLAGS_tera_client_batch_put_num) {
             int32_t time_cur=time(NULL);
