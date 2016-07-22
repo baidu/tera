@@ -54,6 +54,21 @@ std::string ClusterFinder::RootTableAddr(bool update) {
     return _root_table_addr;
 }
 
+std::string ClusterFinder::ClusterId() {
+    std::string name = Name();
+    std::string authority = Authority();
+    std::string path = Path();
+    if (name.empty() || authority.empty() || path.empty()) {
+        LOG(FATAL) << "cluster name/authority/path must be non-empty";
+    }
+    std::string cluster_id = name + "://" + authority;
+    if (path[0] != '/') {
+        cluster_id += "/";
+    }
+    cluster_id += path;
+    return cluster_id;
+}
+
 ZkClusterFinder::ZkClusterFinder(const std::string& zk_root_path,
                                  const std::string& zk_addr_list)
     : _zk_root_path(zk_root_path), _zk_addr_list(zk_addr_list) {

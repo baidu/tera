@@ -461,6 +461,7 @@ bool TableImpl::OpenInternal(ErrorCode* err) {
     if (FLAGS_tera_sdk_perf_counter_enabled) {
         DumpPerfCounterLogDelay();
     }
+    LOG(INFO) << "open table " << _name << " at cluster " << _cluster->ClusterId();
     return true;
 }
 
@@ -1861,7 +1862,7 @@ bool TableImpl::RestoreCookie() {
 
 std::string TableImpl::GetCookieFilePathName(void) {
     return FLAGS_tera_sdk_cookie_path + "/"
-        + GetCookieFileName(_name, _zk_addr_list, _zk_root_path, _create_time);
+        + GetCookieFileName(_name, _cluster->ClusterId(), _create_time);
 }
 
 std::string TableImpl::GetCookieLockFilePathName(void) {
@@ -1902,12 +1903,10 @@ void TableImpl::EnableCookieUpdateTimer() {
 }
 
 std::string TableImpl::GetCookieFileName(const std::string& tablename,
-                                         const std::string& zk_addr,
-                                         const std::string& zk_path,
+                                         const std::string& cluster_id,
                                          int64_t create_time) {
     uint32_t hash = 0;
-    if (GetHashNumber(zk_addr, hash, &hash) != 0
-        || GetHashNumber(zk_path, hash, &hash) != 0) {
+    if (GetHashNumber(cluster_id, hash, &hash) != 0) {
         LOG(FATAL) << "invalid arguments";
     }
     char hash_str[9] = {'\0'};
