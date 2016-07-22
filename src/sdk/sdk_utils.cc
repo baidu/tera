@@ -517,8 +517,8 @@ bool SetTableProperties(const string& name, const string& value,
 
 bool CheckTableDescrptor(const TableDescriptor& desc, ErrorCode* err) {
     std::stringstream ss;
-    if (desc.SplitSize() < desc.MergeSize() * 5) {
-        ss << "splitsize should be 5 times larger than mergesize"
+    if (desc.SplitSize() < desc.MergeSize() * 3) {
+        ss << "splitsize should be 3 times larger than mergesize"
            << ", splitsize: " << desc.SplitSize()
            << ", mergesize: " << desc.MergeSize();
         if (err != NULL) {
