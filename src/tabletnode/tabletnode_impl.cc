@@ -509,6 +509,7 @@ void TabletNodeImpl::WriteTablet(const WriteTabletRequest* request,
         }
     }
 
+    Counter* row_done_counter = new Counter;
     for (int32_t i = 0; i < row_num; i++) {
         io::TabletIO* tablet_io = m_tablet_manager->GetTablet(
             request->tablet_name(), request->row_list(i).row_key(), &status);
@@ -520,7 +521,7 @@ void TabletNodeImpl::WriteTablet(const WriteTabletRequest* request,
         if (it == tablet_task_map.end()) {
             // keep one ref to tablet_io
             tablet_task = tablet_task_map[tablet_io] =
-                new WriteTabletTask(request, response, done, timer);
+                new WriteTabletTask(request, response, done, timer, row_done_counter);
         } else {
             if (tablet_io != NULL) {
                 tablet_io->DecRef();
@@ -575,12 +576,13 @@ void TabletNodeImpl::WriteTabletCallback(WriteTabletTask* tablet_task,
         tablet_task->response->mutable_row_status_list()->Set(index, (*status_vec)[i]);
     }
 
-    if (tablet_task->row_done_counter.Add(index_num) == tablet_task->request->row_list_size()) {
+    if (tablet_task->row_done_counter->Add(index_num) == tablet_task->request->row_list_size()) {
         tablet_task->done->Run();
         if (NULL != tablet_task->timer) {
             RpcTimerList::Instance()->Erase(tablet_task->timer);
             delete tablet_task->timer;
         }
+        delete tablet_task->row_done_counter;
     }
 
     delete tablet_task;
