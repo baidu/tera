@@ -17,6 +17,8 @@
   along with this program; if not, write to the Free Software
   Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301  USA */
 
+#include <string>
+
 class ha_tera_util {
 public:
   static void path_to_dbname(const char *path_name, char *dbname);
@@ -24,3 +26,5 @@ public:
   static void name_to_tera_tabname(const char* dbname, const char* tabname, char* tera_tabname);
   static bool tera_tabname_to_name(const char* tera_tabname, char* dbname, char* tabname);
 };
+
+std::string escape_string(const std::string& src);

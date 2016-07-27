@@ -84,3 +84,17 @@ bool ha_tera_util::tera_tabname_to_name(const char* tera_tabname, char* dbname, 
   return true;
 }
 
+std::string escape_string(const std::string& src) {
+    std::string dst;
+    for (size_t i = 0; i < src.size(); i++) {
+        char c = src[i];
+        if (c >= ' ' && c <= '~') {
+            dst.push_back(c);
+        } else {
+            char buf[10];
+            snprintf(buf, sizeof(buf), "\\x%02x", static_cast<unsigned int>(c) & 0xff);
+            dst.append(buf);
+        }
+    }
+    return dst;
+}

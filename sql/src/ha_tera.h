@@ -104,12 +104,9 @@ public:
   */
   ulonglong table_flags() const
   {
-    /*
-      We are saying that this engine is just statement capable to have
-      an engine that can only handle statement-based logging. This is
-      used in testing.
-    */
-    return HA_BINLOG_STMT_CAPABLE;
+    return HA_NO_TRANSACTIONS |  // not support txn
+           HA_REC_NOT_IN_SEQ |   // support 'sort by', through position() and rnd_pos()
+           HA_BINLOG_STMT_CAPABLE;
   }
 
   /** @brief

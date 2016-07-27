@@ -267,8 +267,8 @@ static void* tera_loop(void*)
       if (frm_version <= old_version)
       {
 
-        DBUG_PRINT("info", ("frm version of %s %s too old %u, now %u",
-                            dbname, tabname, frm_version, old_version));
+        DBUG_PRINT("debug", ("frm version of %s %s too old %u, now %u",
+                             dbname, tabname, frm_version, old_version));
         continue;
       }
       mysql_mutex_unlock(&tera_mutex);
@@ -429,14 +429,14 @@ ha_tera::ha_tera(handlerton *hton, TABLE_SHARE *table_arg)
    field_buf_(new uchar[64 << 20])
 {
   DBUG_ENTER("ha_tera::ha_tera");
-  DBUG_PRINT("info", ("ha_tera handler %p", this));
+  DBUG_PRINT("debug", ("ha_tera handler %p", this));
   DBUG_VOID_RETURN;
 }
 
 ha_tera::~ha_tera()
 {
   DBUG_ENTER("ha_tera::~ha_tera");
-  DBUG_PRINT("info", ("ha_tera handler %p", this));
+  DBUG_PRINT("debug", ("ha_tera handler %p", this));
   delete[] field_buf_;
   delete result_stream_;
   DBUG_VOID_RETURN;
@@ -618,9 +618,10 @@ int ha_tera::close(void)
 int ha_tera::write_row(uchar *buf)
 {
   DBUG_ENTER("ha_tera::write_row");
-  DBUG_PRINT("info", ("ha_tera handler %p", this));
+  DBUG_PRINT("debug", ("ha_tera handler %p", this));
   std::string key, value;
   mysql_buf_to_primary_data(buf, &key, &value);
+  DBUG_PRINT("debug", ("write key %s", escape_string(key).c_str()));
   if (key == "")
   {
     DBUG_RETURN(1);
@@ -819,7 +820,7 @@ int ha_tera::index_last(uchar *buf)
 int ha_tera::rnd_init(bool scan)
 {
   DBUG_ENTER("ha_tera::rnd_init");
-  DBUG_PRINT("info", ("ha_tera handler %p", this));
+  DBUG_PRINT("debug", ("ha_tera handler %p", this));
   delete result_stream_;
 
   tera::ErrorCode ec;
@@ -835,7 +836,7 @@ int ha_tera::rnd_init(bool scan)
 int ha_tera::rnd_end()
 {
   DBUG_ENTER("ha_tera::rnd_end");
-  DBUG_PRINT("info", ("ha_tera handler %p", this));
+  DBUG_PRINT("debug", ("ha_tera handler %p", this));
   DBUG_RETURN(0);
 }
 
@@ -858,18 +859,13 @@ int ha_tera::rnd_next(uchar *buf)
 {
   int rc = 0;
   DBUG_ENTER("ha_tera::rnd_next");
-  DBUG_PRINT("info", ("ha_tera handler %p", this));
+  DBUG_PRINT("debug", ("ha_tera handler %p", this));
   // MYSQL_READ_ROW_START(table_share->db.str, table_share->table_name.str, TRUE);
 
-  std::string key, value;
   for (; !result_stream_->Done(); result_stream_->Next())
   {
     const std::string& key = result_stream_->RowName();
     const std::string& value = result_stream_->Value();
-    if (key == last_key_)
-    {
-      continue;
-    }
     if (result_stream_->Family() != "" || result_stream_->Qualifier() != "")
     {
       continue;
@@ -878,6 +874,8 @@ int ha_tera::rnd_next(uchar *buf)
     {
       continue;
     }
+    DBUG_PRINT("debug", ("read key %s", escape_string(key).c_str()));
+    last_key_ = key;
     break;
   }
   if (result_stream_->Done())
@@ -886,7 +884,6 @@ int ha_tera::rnd_next(uchar *buf)
   }
   else
   {
-    last_key_ = key;
     result_stream_->Next();
   }
 
@@ -919,6 +916,7 @@ int ha_tera::rnd_next(uchar *buf)
 void ha_tera::position(const uchar *record)
 {
   DBUG_ENTER("ha_tera::position");
+  DBUG_PRINT("debug", ("save key %s", escape_string(last_key_).c_str()));
   memcpy(ref, last_key_.c_str(), last_key_.size());
   ref_length = last_key_.size();
   DBUG_VOID_RETURN;
@@ -942,12 +940,19 @@ int ha_tera::rnd_pos(uchar *buf, uchar *pos)
 {
   int rc = 0;
   DBUG_ENTER("ha_tera::rnd_pos");
-  DBUG_PRINT("info", ("ha_tera handler %p", this));
-  MYSQL_READ_ROW_START(table_share->db.str, table_share->table_name.str, TRUE);
-  last_key_.assign((char*)pos, ref_length);
-  // get_row(last_key, buf);
-  rc = HA_ERR_WRONG_COMMAND;
-  MYSQL_READ_ROW_DONE(rc);
+  DBUG_PRINT("debug", ("ha_tera handler %p", this));
+
+  std::string pos_key((char*)pos, ref_length);
+  DBUG_PRINT("debug", ("seek key %s", escape_string(pos_key).c_str()));
+  delete result_stream_;
+  tera::ErrorCode ec;
+  tera::ScanDescriptor scan_desc(pos_key);
+  result_stream_ = share_->table->Scan(scan_desc, &ec);
+  if (result_stream_ == NULL)
+  {
+    DBUG_RETURN(1);
+  }
+  rc = rnd_next(buf);
   DBUG_RETURN(rc);
 }
 
@@ -993,7 +998,7 @@ int ha_tera::rnd_pos(uchar *buf, uchar *pos)
 int ha_tera::info(uint flag)
 {
   DBUG_ENTER("ha_tera::info");
-  DBUG_PRINT("info", ("ha_tera handler %p", this));
+  DBUG_PRINT("debug", ("ha_tera handler %p", this));
   DBUG_RETURN(0);
 }
 
@@ -1010,7 +1015,7 @@ int ha_tera::info(uint flag)
 int ha_tera::extra(enum ha_extra_function operation)
 {
   DBUG_ENTER("ha_tera::extra");
-  DBUG_PRINT("info", ("ha_tera handler %p", this));
+  DBUG_PRINT("debug", ("ha_tera handler %p", this));
   DBUG_RETURN(0);
 }
 
@@ -1084,7 +1089,7 @@ int ha_tera::truncate()
 int ha_tera::external_lock(THD *thd, int lock_type)
 {
   DBUG_ENTER("ha_tera::external_lock");
-  DBUG_PRINT("info", ("ha_tera handler %p", this));
+  DBUG_PRINT("debug", ("ha_tera handler %p", this));
   DBUG_RETURN(0);
 }
 
@@ -1239,7 +1244,7 @@ int ha_tera::create(const char *name, TABLE *table_arg,
                     HA_CREATE_INFO *create_info)
 {
   DBUG_ENTER("ha_tera::create");
-  DBUG_PRINT("info", ("ha_tera handler %p", this));
+  DBUG_PRINT("debug", ("ha_tera handler %p", this));
   char dbname[FN_HEADLEN];
   //char m_schemaname[FN_HEADLEN];
   char tabname[FN_HEADLEN];
@@ -1317,7 +1322,6 @@ void ha_tera::mysql_buf_to_primary_data(const uchar* buf,
                                         std::string* value)
 {
   DBUG_ENTER("ha_tera::mysql_buf_to_primary_data");
-  std::cerr << "ha_tera::mysql_buf_to_primary_data" << std::endl;
   for(Field **field = table->field; *field; field++)
   {
     uint32_t field_len = (*field)->pack_length();
@@ -1356,7 +1360,6 @@ void ha_tera::mysql_buf_to_primary_data(const uchar* buf,
     }
   }
 
-  std::cerr << "key: " << *key << " value: " << *value << std::endl;
   DBUG_VOID_RETURN;
 }
 
@@ -1365,20 +1368,16 @@ int ha_tera::primary_data_to_mysql_buf(const std::string& key,
                                        uchar* buf)
 {
   DBUG_ENTER("ha_tera::primary_data_to_mysql_buf");
-  std::cerr << "ha_tera::primary_data_to_mysql_buf" << std::endl;
-  std::cerr << "key: " << key << " value: " << value << std::endl;
 
   uchar* blob_ptr = field_buf_;
   char* field_ptr = (char*)value.data();
   char* end_ptr = field_ptr + value.size();
   for(Field **field = table->field; *field; field++)
   {
-    std::cerr << "1" << std::endl;
     if (end_ptr - field_ptr < (long long)sizeof(uint32_t))
     {
       DBUG_RETURN(-1);
     }
-    std::cerr << "2" << std::endl;
     uint32_t field_len = uint4korr(field_ptr);
     field_ptr += sizeof(uint32_t);
 
@@ -1387,12 +1386,10 @@ int ha_tera::primary_data_to_mysql_buf(const std::string& key,
       (*field)->set_null();
       continue;
     }
-    std::cerr << "3" << std::endl;
     if (end_ptr - field_ptr < field_len)
     {
       DBUG_RETURN(-1);
     }
-    std::cerr << "4" << std::endl;
     (*field)->set_notnull();
     int offset = 0;
     if((*field)->type()  == MYSQL_TYPE_VARCHAR)
@@ -1420,7 +1417,6 @@ int ha_tera::primary_data_to_mysql_buf(const std::string& key,
       memcpy((*field)->ptr + offset, field_ptr, field_len);
     }
     field_ptr += field_len;
-    std::cerr << "5" << std::endl;
   }
 
   DBUG_RETURN(0);
