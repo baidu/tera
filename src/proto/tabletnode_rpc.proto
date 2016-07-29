@@ -152,6 +152,7 @@ message Mutation {
 message RowMutationSequence {
     required bytes row_key = 1;
     repeated Mutation mutation_sequence = 2;
+    optional uint64 last_sequence = 3 [default = 0xFFFFFFFFFFFFFF]; // (1ull << 56) - 1
 }
 
 message WriteTabletRequest {

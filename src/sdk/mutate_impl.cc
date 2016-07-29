@@ -18,7 +18,8 @@ RowMutationImpl::RowMutationImpl(TableImpl* table, const std::string& row_key)
       _retry_times(0),
       _finish(false),
       _finish_cond(&_finish_mutex),
-      _commit_times(0) {
+      _commit_times(0),
+      _last_sequence(kMaxSequenceNumber) {
     SetErrorIfInvalid(row_key, kRowkey);
 }
 

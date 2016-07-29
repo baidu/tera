@@ -140,6 +140,8 @@ public:
     // Add all sst files inherited from other tablets
     virtual void AddInheritedLiveFiles(std::vector<std::set<uint64_t> >* live);
 
+    virtual uint64_t LastSequence() const { return last_sequence_; }
+
     // for unit test
     Status TEST_CompactMemTable();
     void TEST_CompactRange(int level, const Slice* begin, const Slice* end);

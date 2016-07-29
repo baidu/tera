@@ -96,7 +96,8 @@ ScanContext* ScanContextManager::GetScanContext(TabletIO* tablet_io,
     context->result = NULL;
     context->data_idx = 0;
     context->complete = false;
-    context->version_num = 1;
+    context->version_num = 0;
+    context->row_sequence = 0;
 
     handle = m_cache->Insert(key, context, 1, &LRUCacheDeleter);
     context->jobs.push(ScanJob(response, done));

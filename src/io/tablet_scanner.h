@@ -58,6 +58,7 @@ struct ScanContext {
     std::string last_key;
     std::string last_col;
     std::string last_qual;
+    uint64_t row_sequence;
 
     // use for reture
     StatusCode ret_code; // set by lowlevelscan

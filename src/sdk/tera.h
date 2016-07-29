@@ -28,7 +28,8 @@ public:
         kNoQuota,
         kNoAuth,
         kUnknown,
-        kNotImpl
+        kNotImpl,
+        kTxnFail
     };
     ErrorCode();
     std::string ToString() const;

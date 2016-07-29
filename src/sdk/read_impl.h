@@ -105,6 +105,9 @@ public:
     void AddCommitTimes() { _commit_times++; }
     int64_t GetCommitTimes() { return _commit_times; }
 
+    void SetRowSequence(uint64_t row_sequence) { _row_sequence = row_sequence; }
+    uint64_t GetRowSequence() { return _row_sequence; }
+
 private:
     std::string _row_key;
     RowReader::Callback _callback;
@@ -130,6 +133,7 @@ private:
 
     /// 记录此reader被提交到ts的次数
     int64_t _commit_times;
+    uint64_t _row_sequence;
 };
 
 } // namespace tera

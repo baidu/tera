@@ -108,12 +108,14 @@ public:
 
     // read a row
     virtual bool ReadCells(const RowReaderInfo& row_reader, RowResult* value_list,
-                           uint64_t snapshot_id = 0, StatusCode* status = NULL);
-    /// scan from leveldb return ture means complete flase means not complete
+                           uint64_t* sequence_num = NULL, uint64_t snapshot_id = 0,
+                           StatusCode* status = NULL);
+    /// scan from leveldb
     bool LowLevelScan(const std::string& start_tera_key,
                       const std::string& end_row_key,
                       const ScanOptions& scan_options,
                       RowResult* value_list,
+                      uint64_t* sequence_number,
                       KeyValuePair* next_start_point,
                       uint32_t* read_row_count,
                       uint32_t* read_bytes,
@@ -121,7 +123,8 @@ public:
                       StatusCode* status = NULL);
 
     bool LowLevelSeek(const std::string& row_key, const ScanOptions& scan_options,
-                      RowResult* value_list, StatusCode* status = NULL);
+                      RowResult* value_list, uint64_t* sequence_number,
+                      StatusCode* status = NULL);
 
     bool WriteOne(const std::string& key, const std::string& value,
                   bool sync = true, StatusCode* status = NULL);
@@ -162,6 +165,11 @@ public:
                                std::string* res);
     void ProcessScan(ScanContext* context);
     void ApplySchema(const TableSchema& schema);
+
+    uint64_t LastSequence() { return m_db->LastSequence(); }
+
+    bool GetRowSequence(const std::string& row_key, uint64_t* row_sequence,
+                        StatusCode* status = NULL);
 
 private:
     friend class TabletWriter;
@@ -208,6 +216,7 @@ private:
                       leveldb::Iterator* it,
                       ScanContext* scan_context,
                       RowResult* value_list,
+                      uint64_t* sequence_number,
                       KeyValuePair* next_start_point,
                       uint32_t* read_row_count,
                       uint32_t* read_bytes,

@@ -20,6 +20,7 @@ const uint32_t kUnknownId = -1U;
 const uint32_t kInvalidSessionId = -1U;
 const std::string kUnknownAddr = "255.255.255.255:0000";
 const uint64_t kMaxTimeStamp = (1ULL << 56) - 1;
+const uint64_t kMaxSequenceNumber = (1ULL << 56) - 1;
 const uint32_t kMaxHostNameSize = 255;
 const std::string kMasterNodePath = "/master";
 const std::string kMasterLockPath = "/master-lock";

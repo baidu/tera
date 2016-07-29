@@ -425,6 +425,7 @@ void TabletNodeImpl::ReadTablet(int64_t start_micros,
     uint32_t read_success_num = 0;
 
     for (int32_t i = 0; i < row_num; i++) {
+        uint64_t row_sequence = 0;
         StatusCode row_status = kTabletNodeOk;
         io::TabletIO* tablet_io = m_tablet_manager->GetTablet(
             request->tablet_name(), request->row_info_list(i).key(), &row_status);
@@ -434,7 +435,7 @@ void TabletNodeImpl::ReadTablet(int64_t start_micros,
         } else {
             if (tablet_io->ReadCells(request->row_info_list(i),
                                      response->mutable_detail()->add_row_result(),
-                                     snapshot_id, &row_status)) {
+                                     &row_sequence, snapshot_id, &row_status)) {
                 read_success_num++;
             } else {
                 response->mutable_detail()->mutable_row_result()->RemoveLast();
@@ -442,6 +443,7 @@ void TabletNodeImpl::ReadTablet(int64_t start_micros,
             tablet_io->DecRef();
             response->mutable_detail()->add_status(row_status);
         }
+        response->mutable_detail()->add_row_sequences(row_sequence);
     }
 
     VLOG(10) << "seq_id: " << request->sequence_id()
