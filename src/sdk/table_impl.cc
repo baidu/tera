@@ -1887,6 +1887,10 @@ void TableImpl::DoDumpCookie() {
             tablet->set_status(node.status);
         }
     }
+    if (!IsExist(FLAGS_tera_sdk_cookie_path) && !CreateDirWithRetry(FLAGS_tera_sdk_cookie_path)) {
+        LOG(INFO) << "[SDK COOKIE] fail to create cookie dir: " << FLAGS_tera_sdk_cookie_path;
+        return;
+    }
     ::tera::sdk::DumpCookie(cookie_file, cookie_lock_file, cookie);
 }
 
