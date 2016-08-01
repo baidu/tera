@@ -479,26 +479,19 @@ Status DBTable::Write(const WriteOptions& options, WriteBatch* my_batch) {
         mutex_.Lock();
     }
     if (s.ok()) {
-        std::vector<WriteBatch*> lg_updates;
-        lg_updates.resize(lg_list_.size());
-        std::fill(lg_updates.begin(), lg_updates.end(), (WriteBatch*)0);
-        bool created_new_wb = false;
+        std::vector<WriteBatch> lg_updates(lg_list_.size());
+        updates->SeperateLocalityGroup(&lg_updates);
+
         // kv version may not create snapshot
         for (uint32_t i = 0; i < lg_list_.size(); ++i) {
             lg_list_[i]->GetSnapshot(last_sequence_);
         }
         commit_snapshot_ = last_sequence_;
-        if (lg_list_.size() > 1) {
-            updates->SeperateLocalityGroup(&lg_updates);
-            created_new_wb = true;
-        } else {
-            lg_updates[0] = updates;
-        }
+
         mutex_.Unlock();
         //TODO: should be multi-thread distributed
         for (uint32_t i = 0; i < lg_updates.size(); ++i) {
-            assert(lg_updates[i] != NULL);
-            Status lg_s = lg_list_[i]->Write(WriteOptions(), lg_updates[i]);
+            Status lg_s = lg_list_[i]->Write(WriteOptions(), &lg_updates[i]);
             if (!lg_s.ok()) {
                 // 这种情况下内存处于不一致状态
                 Log(options_.info_log, "[%s] [Fatal] Write to lg%u fail",
@@ -520,15 +513,6 @@ Status DBTable::Write(const WriteOptions& options, WriteBatch* my_batch) {
                 lg_list_[i]->ReleaseSnapshot(commit_snapshot_);
             }
             commit_snapshot_ = last_sequence_ + WriteBatchInternal::Count(updates);
-        }
-
-        if (created_new_wb) {
-            for (uint32_t i = 0; i < lg_updates.size(); ++i) {
-                if (lg_updates[i] != NULL) {
-                    delete lg_updates[i];
-                    lg_updates[i] = NULL;
-                }
-            }
         }
     }
 
@@ -868,48 +852,28 @@ Status DBTable::RecoverLogFile(uint64_t log_number, uint64_t recover_limit,
             last_sequence_ = last_seq;
         }
 
-        std::vector<WriteBatch*> lg_updates;
-        lg_updates.resize(lg_list_.size());
-        std::fill(lg_updates.begin(), lg_updates.end(), (WriteBatch*)0);
-        bool created_new_wb = false;
-        if (lg_list_.size() > 1) {
-            status = batch.SeperateLocalityGroup(&lg_updates);
-            created_new_wb = true;
-            if (!status.ok()) {
-                return status;
-            }
-        } else {
-            lg_updates[0] = (&batch);
+        std::vector<WriteBatch> lg_updates(lg_list_.size());
+        status = batch.SeperateLocalityGroup(&lg_updates);
+        if (!status.ok()) {
+            return status;
         }
 
         if (status.ok()) {
             //TODO: should be multi-thread distributed
             for (uint32_t i = 0; i < lg_updates.size(); ++i) {
-                if (lg_updates[i] == NULL) {
-                    continue;
-                }
                 if (last_seq <= lg_list_[i]->GetLastSequence()) {
                     continue;
                 }
-                uint64_t first = WriteBatchInternal::Sequence(lg_updates[i]);
-                uint64_t last = first + WriteBatchInternal::Count(lg_updates[i]) - 1;
+                uint64_t first = WriteBatchInternal::Sequence(&lg_updates[i]);
+                uint64_t last = first + WriteBatchInternal::Count(&lg_updates[i]) - 1;
                 // Log(options_.info_log, "[%s] recover log batch first= %lu, last= %lu\n",
                 //     dbname_.c_str(), first, last);
 
-                Status lg_s = lg_list_[i]->RecoverInsertMem(lg_updates[i], (*edit_list)[i]);
+                Status lg_s = lg_list_[i]->RecoverInsertMem(&lg_updates[i], (*edit_list)[i]);
                 if (!lg_s.ok()) {
                     Log(options_.info_log, "[%s] recover log fail batch first= %lu, last= %lu\n",
                         dbname_.c_str(), first, last);
                     status = lg_s;
-                }
-            }
-        }
-
-        if (created_new_wb) {
-            for (uint32_t i = 0; i < lg_updates.size(); ++i) {
-                if (lg_updates[i] != NULL) {
-                    delete lg_updates[i];
-                    lg_updates[i] = NULL;
                 }
             }
         }

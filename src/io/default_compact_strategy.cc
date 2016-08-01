@@ -13,15 +13,16 @@ namespace io {
 DefaultCompactStrategy::DefaultCompactStrategy(const TableSchema& schema)
     : m_schema(schema),
       m_raw_key_operator(GetRawKeyOperatorFromSchema(m_schema)),
+      m_last_type(leveldb::TKT_FORSEEK), m_cur_type(leveldb::TKT_FORSEEK),
       m_last_ts(-1), m_del_row_ts(-1), m_del_col_ts(-1), m_del_qual_ts(-1), m_cur_ts(-1),
       m_del_row_seq(0), m_del_col_seq(0), m_del_qual_seq(0), m_version_num(0),
-      m_snapshot(leveldb::kMaxSequenceNumber) {
+      m_snapshot(leveldb::kMaxSequenceNumber),
+      m_has_put(false), m_lock_ts(kMaxTimeStamp) {
     // build index
     for (int32_t i = 0; i < m_schema.column_families_size(); ++i) {
         const std::string name = m_schema.column_families(i).name();
         m_cf_indexs[name] = i;
     }
-    m_has_put = false;
     VLOG(11) << "DefaultCompactStrategy construct";
 }
 
@@ -45,6 +46,10 @@ bool DefaultCompactStrategy::Drop(const Slice& tera_key, uint64_t n,
     if (!m_raw_key_operator->ExtractTeraKey(tera_key, &key, &col, &qual, &ts, &type)) {
         LOG(WARNING) << "invalid tera key: " << tera_key.ToString();
         return true;
+    }
+
+    if (type == leveldb::TKT_LOCK) {
+        return !m_schema.enable_txn();
     }
 
     m_cur_type = type;
@@ -254,16 +259,22 @@ bool DefaultCompactStrategy::ScanDrop(const Slice& tera_key, uint64_t n) {
         return true;
     }
 
+    if (type == leveldb::TKT_LOCK && !m_schema.enable_txn()) {
+        return true;
+    }
+
     m_cur_type = type;
     m_last_ts = m_cur_ts;
     m_cur_ts = ts;
     int32_t cf_id = -1;
-    if (type != leveldb::TKT_DEL && DropIllegalColumnFamily(col.ToString(), &cf_id)) {
+    if (type != leveldb::TKT_DEL && type != leveldb::TKT_LOCK &&
+        DropIllegalColumnFamily(col.ToString(), &cf_id)) {
         // drop illegal column family
         return true;
     }
 
-    if (type >= leveldb::TKT_VALUE && DropByLifeTime(cf_id, ts)) {
+    if (type >= leveldb::TKT_VALUE && type != leveldb::TKT_LOCK &&
+        DropByLifeTime(cf_id, ts)) {
         // drop out-of-life-time record
         return true;
     }
@@ -277,6 +288,12 @@ bool DefaultCompactStrategy::ScanDrop(const Slice& tera_key, uint64_t n) {
         m_version_num = 0;
         m_del_row_ts = m_del_col_ts = m_del_qual_ts = -1;
         m_has_put = false;
+        m_lock_ts = kMaxTimeStamp;
+
+        if (type == leveldb::TKT_LOCK) {
+            m_lock_ts = n;
+            return true;
+        }
 
         // no break in switch: need to set multiple variables
         switch (type) {
@@ -288,6 +305,12 @@ bool DefaultCompactStrategy::ScanDrop(const Slice& tera_key, uint64_t n) {
                 m_del_qual_ts = ts;
             default:;
         }
+    } else if (type == leveldb::TKT_LOCK) {
+        m_lock_ts = n;
+        return true;
+    } else if (ts >= m_lock_ts) {
+        VLOG(15) << "tera.DefaultCompactStrategy: drop locked data, lock ts: " << m_lock_ts;
+        return true;
     } else if (m_del_row_ts >= ts) {
         // skip deleted row and the same row_del mark
         return true;

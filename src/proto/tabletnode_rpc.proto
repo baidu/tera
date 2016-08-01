@@ -152,11 +152,16 @@ message Mutation {
 message RowMutationSequence {
     required bytes row_key = 1;
     repeated Mutation mutation_sequence = 2;
+    optional bool lock_before_write = 3 [default = false];
+    optional bool unlock_after_write = 4 [default = false];
+    optional bool insure_locked_already = 5 [default = false];
+    optional uint64 lock_id = 6;
+    optional bytes lock_annotation = 7;
 }
 
 message WriteTabletRequest {
     optional uint64 sequence_id = 1;
-    required string tablet_name = 2;    
+    required string tablet_name = 2;
     //repeated KeyValuePair pair_list = 3;  // for compatible
     optional bool is_sync = 4 [default = false];
     optional bool is_instant = 5 [default = false];

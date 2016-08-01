@@ -24,6 +24,7 @@
 #include "leveldb/env_flash.h"
 #include "leveldb/env_inmem.h"
 #include "leveldb/filter_policy.h"
+#include "leveldb/util/coding.h"
 #include "types.h"
 #include "utils/counter.h"
 #include "utils/scan_filter.h"
@@ -78,7 +79,8 @@ TabletIO::TabletIO(const std::string& key_start, const std::string& key_end)
       m_ref_count(1), m_db_ref_count(0), m_db(NULL),
       m_mem_store_activated(false),
       m_kv_only(false),
-      m_key_operator(NULL) {
+      m_key_operator(NULL),
+      m_meta_lg_id(-1) {
 }
 
 TabletIO::~TabletIO() {
@@ -182,6 +184,10 @@ bool TabletIO::Load(const TableSchema& schema,
         }
     }
 
+    if (m_kv_only && m_table_schema.enable_txn()) {
+        m_table_schema.set_enable_txn(false);
+    }
+
     m_key_operator = GetRawKeyOperatorFromSchema(m_table_schema);
     // [m_raw_start_key, m_raw_end_key)
     m_raw_start_key = m_start_key;
@@ -276,6 +282,20 @@ bool TabletIO::Load(const TableSchema& schema,
         SetStatusCode(db_status, status);
 //         delete m_ldb_options.env;
         return false;
+    }
+
+    if (m_table_schema.enable_txn()) {
+        LOG(INFO) << "[Load] Start load locks " << m_tablet_path;
+        if (!LoadLock(status)) {
+            delete m_db;
+            m_db = NULL;
+            {
+                MutexLock lock(&m_mutex);
+                m_status = kNotInit;
+                m_db_ref_count--;
+            }
+            return false;
+        }
     }
 
     m_async_writer = new TabletWriter(this);
@@ -532,11 +552,11 @@ bool TabletIO::AddInheritedLiveFiles(std::vector<std::set<uint64_t> >* live) {
         m_db_ref_count++;
     }
     {
-        MutexLock lock(&m_schema_mutex);
+        uint32_t lg_num = m_ldb_options.exist_lg_list->size();
         if (live->size() == 0) {
-            live->resize(m_table_schema.locality_groups_size());
+            live->resize(lg_num);
         } else {
-            CHECK(live->size() == static_cast<uint64_t>(m_table_schema.locality_groups_size()));
+            CHECK(live->size() == lg_num);
         }
     }
     m_db->AddInheritedLiveFiles(live);
@@ -884,13 +904,28 @@ inline bool TabletIO::LowLevelScan(const std::string& start_tera_key,
         const std::set<std::string>& cf_set = scan_options.iter_cf_set;
         if (cf_set.size() > 0 &&
             cf_set.find(col.ToString()) == cf_set.end() &&
-            type != leveldb::TKT_DEL) {
+            type != leveldb::TKT_DEL &&
+            type != leveldb::TKT_LOCK) {
             // donot need this column, skip row deleting tag
             it->Next();
             continue;
         }
 
-        if (compact_strategy->ScanDrop(it->key(), 0)) {
+        uint64_t n = 0;
+        if (type == leveldb::TKT_LOCK) {
+            int64_t lock_ts = 0;
+            if (!DecodeLock(value.ToString(), NULL, &lock_ts, NULL)) {
+                LOG(WARNING) << "invalid lock format, key: " << DebugString(tera_key.ToString())
+                             << " value: " << DebugString(value.ToString());
+                it->Next();
+                continue;
+            }
+            n = lock_ts;
+            VLOG(10) << "lock key: " << DebugString(tera_key.ToString())
+                     << " ts: " << lock_ts;
+        }
+
+        if (compact_strategy->ScanDrop(it->key(), n)) {
             // skip drop record
             it->Next();
             continue;
@@ -1701,6 +1736,12 @@ void TabletIO::SetupOptionsForLG() {
         exist_lg_list->insert(lg_i);
         (*lg_info_list)[lg_i] = lg_info;
     }
+    if (m_table_schema.enable_txn()) {
+        // m_meta_lg_id = kMetaLgId;
+        m_meta_lg_id = m_table_schema.locality_groups_size();
+        exist_lg_list->insert(m_meta_lg_id);
+        (*lg_info_list)[m_meta_lg_id] = new leveldb::LG_info(m_meta_lg_id, LeveldbMemEnv());
+    }
 
     if (exist_lg_list->size() == 0) {
         delete exist_lg_list;
@@ -1775,6 +1816,9 @@ void TabletIO::SetupIteratorOptions(const ScanOptions& scan_options,
     }
     if (target_lgs.size() > 0) {
         leveldb_opts->target_lgs = new std::set<uint32_t>(target_lgs);
+    } else if (m_table_schema.enable_txn()) {
+        leveldb_opts->target_lgs = new std::set<uint32_t>(*m_ldb_options.exist_lg_list);
+        leveldb_opts->target_lgs->erase(m_meta_lg_id);
     }
 }
 
@@ -2000,6 +2044,106 @@ void TabletIO::ApplySchema(const TableSchema& schema) {
     SetSchema(schema);
     IndexingCfToLG();
     m_ldb_options.compact_strategy_factory->SetArg(&schema);
+}
+
+uint32_t TabletIO::GetLGNum() {
+    uint32_t lg_num = m_ldb_options.exist_lg_list->size();
+    if (m_table_schema.enable_txn()) {
+        lg_num--;
+    }
+    return lg_num;
+}
+
+bool TabletIO::LoadLock(StatusCode* status) {
+    // init iterator
+    leveldb::ReadOptions read_option(&m_ldb_options);
+    read_option.verify_checksums = FLAGS_tera_leveldb_verify_checksums;
+    read_option.fill_cache = false;
+    read_option.target_lgs = new std::set<uint32_t>;
+    read_option.target_lgs->insert(m_meta_lg_id);
+    leveldb::Iterator* it = m_db->NewIterator(read_option);
+    delete read_option.target_lgs;
+
+    // scan lock
+    for (it->SeekToFirst(); it->Valid(); it->Next()) {
+        leveldb::Slice tera_key = it->key();
+        leveldb::Slice value = it->value();
+        leveldb::Slice key, col, qual;
+        int64_t ts = 0;
+        leveldb::TeraKeyType type;
+        if (!m_key_operator->ExtractTeraKey(tera_key, &key, &col, &qual, &ts, &type)) {
+            LOG(WARNING) << "scan lock: invalid tera key: "
+                         << DebugString(tera_key.ToString());
+            continue;
+        }
+        VLOG(10) << "scan lock: " << "tablet=[" << m_tablet_path
+            << "] key=[" << DebugString(key.ToString())
+            << "] column=[" << DebugString(col.ToString())
+            << ":" << DebugString(qual.ToString())
+            << "] ts=[" << ts << "] type=[" << type << "]";
+        if (!col.empty() || !qual.empty() || ts != kMaxTimeStamp ||
+            type != leveldb::TKT_LOCK) {
+            LOG(WARNING) << "scan lock: invalid key format: "
+                         << DebugString(tera_key.ToString());
+            continue;
+        }
+        int64_t lock_ts = 0;
+        uint64_t lock_id = 0;
+        std::string lock_annotation;
+        if (!DecodeLock(value.ToString(), &lock_id, &lock_ts, &lock_annotation)) {
+            LOG(WARNING) << "scan lock: invalid lock format, key: "
+                         << DebugString(it->value().ToString())
+                         << " value: " << DebugString(it->value().ToString());
+            continue;
+        }
+        VLOG(10) << "load lock: " << key.ToString() << ", id: " << lock_id
+                 << ", ts: " << lock_ts << ", annotation: " << lock_annotation;
+        CHECK(m_lock_manager.Lock(key.ToString(), lock_id, lock_annotation));
+    }
+
+    leveldb::Status it_status = it->status();
+    delete it;
+
+    if (!it_status.ok()) {
+        SetStatusCode(it_status, status);
+        VLOG(10) << "scan lock fail: " << "tablet=[" << m_tablet_path <<
+            "] status=[" << it_status.ToString();
+        return false;
+    }
+
+    return true;
+}
+
+void TabletIO::EncodeLock(uint64_t lock_id, int64_t lock_ts,
+                          const std::string& lock_annotation,
+                          std::string* dst) {
+    dst->clear();
+    leveldb::PutVarint64(dst, lock_id);
+    leveldb::PutVarint64(dst, lock_ts);
+    leveldb::PutLengthPrefixedSlice(dst, lock_annotation);
+}
+
+bool TabletIO::DecodeLock(const std::string& src, uint64_t* lock_id,
+                          int64_t* lock_ts, std::string* lock_annotation) {
+    leveldb::Slice input(src);
+    uint64_t id = 0;
+    uint64_t ts = 0;
+    leveldb::Slice annotation;
+    if (!leveldb::GetVarint64(&input, &id) ||
+        !leveldb::GetVarint64(&input, &ts) ||
+        !leveldb::GetLengthPrefixedSlice(&input, &annotation)) {
+        return false;
+    }
+    if (lock_id != NULL) {
+        *lock_id = id;
+    }
+    if (lock_ts != NULL) {
+        *lock_ts = ts;
+    }
+    if (lock_annotation != NULL) {
+        lock_annotation->assign(annotation.ToString());
+    }
+    return true;
 }
 
 } // namespace io

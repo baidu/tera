@@ -194,6 +194,9 @@ public:
     void DisableWal();
     bool IsWalDisabled() const;
 
+    void EnableTxn();
+    bool IsTxnEnabled() const;
+
     /// 插入snapshot
     int32_t AddSnapshot(uint64_t snapshot);
     /// 获取snapshot

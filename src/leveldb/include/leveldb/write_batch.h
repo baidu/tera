@@ -59,7 +59,7 @@ class WriteBatch {
   };
   Status Iterate(Handler* handler) const;
 
-  Status SeperateLocalityGroup(std::vector<WriteBatch*>* lg_bw) const;
+  Status SeperateLocalityGroup(std::vector<WriteBatch>* lg_bw) const;
 
  private:
   friend class WriteBatchInternal;

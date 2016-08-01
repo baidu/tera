@@ -16,6 +16,7 @@
 
 #include "common/base/scoped_ptr.h"
 #include "common/mutex.h"
+#include "io/lock.h"
 #include "io/tablet_scanner.h"
 #include "leveldb/db.h"
 #include "leveldb/options.h"
@@ -32,6 +33,8 @@
 
 namespace tera {
 namespace io {
+
+//const uint32_t kMetaLgId = kMaxLocalityGroupNum;
 
 class TabletWriter;
 struct ScanOptions;
@@ -166,9 +169,6 @@ public:
 private:
     friend class TabletWriter;
     friend class ScanConextManager;
-    bool WriteWithoutLock(const std::string& key, const std::string& value,
-                          bool sync = false, StatusCode* status = NULL);
-//     int64_t GetDataSizeWithoutLock(StatusCode* status = NULL);
 
     void SetupOptionsForLG();
     void TearDownOptionsForLG();
@@ -231,6 +231,13 @@ private:
                      leveldb::Iterator* it,
                      KeyValuePair* next);
     void SetSchema(const TableSchema& schema);
+    uint32_t GetLGNum();
+    bool LoadLock(StatusCode* status);
+    void EncodeLock(uint64_t lock_id, int64_t lock_ts, const std::string& lock_annotation,
+                    std::string* dst);
+    bool DecodeLock(const std::string& src, uint64_t* lock_id = NULL,
+                    int64_t* lock_ts = NULL, std::string* lock_annotation = NULL);
+
 private:
     mutable Mutex m_mutex;
     TabletWriter* m_async_writer;
@@ -260,6 +267,9 @@ private:
     std::map<std::string, uint32_t> m_lg_id_map;
     StatCounter m_counter;
     mutable Mutex m_schema_mutex;
+
+    LockManager m_lock_manager;
+    int32_t m_meta_lg_id;
 };
 
 } // namespace io
