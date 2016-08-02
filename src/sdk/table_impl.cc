@@ -27,6 +27,7 @@
 #include "sdk/cookie.h"
 #include "sdk/mutate_impl.h"
 #include "sdk/read_impl.h"
+#include "sdk/single_row_txn.h"
 #include "sdk/scan_impl.h"
 #include "sdk/schema_impl.h"
 #include "sdk/sdk_zk.h"
@@ -692,6 +693,10 @@ void TableImpl::CommitMutations(const std::string& server_addr,
             tera::Mutation* mutation = mu_seq->add_mutation_sequence();
             SerializeMutation(mu, mutation);
         }
+        SingleRowTxn* txn = (SingleRowTxn*)(row_mutation->GetTransaction());
+        if (txn != NULL) {
+            txn->Serialize(mu_seq);
+        }
         mu_id_list->push_back(row_mutation->GetId());
         row_mutation->AddCommitTimes();
         row_mutation->DecRef();
@@ -738,17 +743,22 @@ void TableImpl::MutateCallBack(std::vector<int64_t>* mu_id_list,
             err = response->row_status_list(i);
         }
 
-        if (err == kTabletNodeOk) {
+        if (err == kTabletNodeOk || err == kTxnFail) {
             _perf_counter.mutate_ok_cnt.Inc();
             SdkTask* task = _task_pool.PopTask(mu_id);
             if (task == NULL) {
-                VLOG(10) << "mutation " << mu_id << " success but timeout: " << DebugString(row);
+                VLOG(10) << "mutation " << mu_id << " finish but timeout: " << DebugString(row);
                 continue;
             }
             CHECK_EQ(task->Type(), SdkTask::MUTATION);
             CHECK_EQ(task->GetRef(), 1);
             RowMutationImpl* row_mutation = (RowMutationImpl*)task;
-            row_mutation->SetError(ErrorCode::kOK);
+            if (err == kTabletNodeOk) {
+                row_mutation->SetError(ErrorCode::kOK);
+            } else {
+                row_mutation->SetError(ErrorCode::kTxnFail, "transaction commit fail");
+            }
+
             // only for flow control
             _cur_commit_pending_counter.Sub(row_mutation->MutationNum());
             int64_t perf_time = common::timer::get_micros();
@@ -2014,6 +2024,17 @@ void TableImpl::BreakRequest(int64_t task_id) {
         CHECK(false);
         break;
     }
+}
+
+/// 创建事务
+Transaction* TableImpl::StartRowTransaction(const std::string& row_key) {
+    return new SingleRowTxn(this, row_key, _thread_pool);
+}
+
+/// 提交事务
+void TableImpl::CommitRowTransaction(Transaction* transaction) {
+    SingleRowTxn* row_txn_impl = (SingleRowTxn*)transaction;
+    row_txn_impl->Commit();
 }
 
 std::string CounterCoding::EncodeCounter(int64_t counter) {

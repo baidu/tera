@@ -160,6 +160,11 @@ public:
                                          const std::string& qualifier, int64_t amount,
                                          ErrorCode* err);
 
+    /// 创建事务
+    virtual Transaction* StartRowTransaction(const std::string& row_key);
+    /// 提交事务
+    virtual void CommitRowTransaction(Transaction* transaction);
+
     virtual void SetWriteTimeout(int64_t timeout_ms);
     virtual void SetReadTimeout(int64_t timeout_ms);
 
@@ -553,6 +558,12 @@ public:
                                          const std::string& qualifier, int64_t amount,
                                          ErrorCode* err) {
         return _impl->IncrementColumnValue(row, family, qualifier, amount, err);
+    }
+    virtual Transaction* StartRowTransaction(const std::string& row_key) {
+        return _impl->StartRowTransaction(row_key);
+    }
+    virtual void CommitRowTransaction(Transaction* transaction) {
+        _impl->CommitRowTransaction(transaction);
     }
     virtual void SetWriteTimeout(int64_t timeout_ms) {
         _impl->SetWriteTimeout(timeout_ms);

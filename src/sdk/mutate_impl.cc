@@ -18,7 +18,8 @@ RowMutationImpl::RowMutationImpl(TableImpl* table, const std::string& row_key)
       _retry_times(0),
       _finish(false),
       _finish_cond(&_finish_mutex),
-      _commit_times(0) {
+      _commit_times(0),
+      _txn(NULL) {
     SetErrorIfInvalid(row_key, kRowkey);
 }
 
@@ -397,6 +398,13 @@ void RowMutationImpl::RunCallback() {
         MutexLock lock(&_finish_mutex);
         _finish = true;
         _finish_cond.Signal();
+    }
+}
+
+void RowMutationImpl::Concatenate(RowMutationImpl& row_mu) {
+    uint32_t mutation_num = row_mu.MutationNum();
+    for (size_t i = 0; i < mutation_num; i++) {
+        AddMutation() = row_mu.GetMutation(i);
     }
 }
 

@@ -192,7 +192,8 @@ TableDescImpl::TableDescImpl(const std::string& tb_name)
       _raw_key_type(kBinary),
       _split_size(FLAGS_tera_master_split_tablet_size),
       _merge_size(FLAGS_tera_master_merge_tablet_size),
-      _disable_wal(false) {
+      _disable_wal(false),
+      _enable_txn(false) {
 }
 
 /*
@@ -414,6 +415,14 @@ void TableDescImpl::DisableWal() {
 
 bool TableDescImpl::IsWalDisabled() const {
     return _disable_wal;
+}
+
+void TableDescImpl::EnableTxn() {
+    _enable_txn = true;
+}
+
+bool TableDescImpl::IsTxnEnabled() const {
+    return _enable_txn;
 }
 
 /// 插入snapshot

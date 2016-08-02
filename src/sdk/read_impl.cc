@@ -21,7 +21,8 @@ RowReaderImpl::RowReaderImpl(Table* table, const std::string& row_key)
       _timeout_ms(0),
       _retry_times(0),
       _result_pos(0),
-      _commit_times(0) {
+      _commit_times(0),
+      _txn(NULL) {
 }
 
 RowReaderImpl::~RowReaderImpl() {
@@ -76,6 +77,10 @@ void RowReaderImpl::SetTimeOut(int64_t timeout_ms) {
 
 void RowReaderImpl::SetCallBack(RowReader::Callback callback) {
     _callback = callback;
+}
+
+RowReader::Callback RowReaderImpl::GetCallBack() {
+    return _callback;
 }
 
 /// 设置用户上下文，可在回调函数中获取
