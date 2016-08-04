@@ -62,6 +62,8 @@ DEFINE_int64(timestamp, -1, "timestamp.");
 DEFINE_string(tablets_file, "", "tablet set file");
 
 DEFINE_bool(printable, true, "printable output");
+DEFINE_bool(print_data, true, "is print data when scan");
+DEFINE_bool(rowkey_count, false, "is print rowkey count when scan");
 
 // using FLAGS instead of isatty() for compatibility
 DEFINE_bool(stdout_is_tty, true, "is stdout connected to a tty");
@@ -1037,7 +1039,15 @@ int32_t ScanRange(TablePtr& table, ScanDescriptor& desc, ErrorCode* err) {
         return -7;
     }
     g_start_time = time(NULL);
+
+    std::string last_key = "";
+    int64_t found_num = 0;
     while (!result_stream->Done(err)) {
+        if (result_stream->RowName() != last_key) {
+            found_num++;
+        }
+        last_key = result_stream->RowName();
+
         int32_t len = result_stream->RowName().size()
             + result_stream->ColumnName().size()
             + sizeof(result_stream->Timestamp())
@@ -1045,10 +1055,12 @@ int32_t ScanRange(TablePtr& table, ScanDescriptor& desc, ErrorCode* err) {
         g_total_size += len;
         g_key_num ++;
         g_cur_batch_num ++;
-        std::cout << PrintableFormatter(result_stream->RowName()) << ":"
-            << PrintableFormatter(result_stream->ColumnName()) << ":"
-            << result_stream->Timestamp() << ":"
-            << PrintableFormatter(result_stream->Value()) << std::endl;
+        if (FLAGS_print_data) {
+            std::cout << PrintableFormatter(result_stream->RowName()) << ":"
+                << PrintableFormatter(result_stream->ColumnName()) << ":"
+                << result_stream->Timestamp() << ":"
+                << PrintableFormatter(result_stream->Value()) << std::endl;
+        }
 
         result_stream->Next();
         if (g_cur_batch_num >= FLAGS_tera_client_batch_put_num) {
@@ -1059,6 +1071,9 @@ int32_t ScanRange(TablePtr& table, ScanDescriptor& desc, ErrorCode* err) {
             g_cur_batch_num = 0;
             g_last_time = time_cur;
         }
+    }
+    if (FLAGS_rowkey_count) {
+        std::cout << found_num << std::endl;
     }
     delete result_stream;
     if (err->GetType() != ErrorCode::kOK) {
