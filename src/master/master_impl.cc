@@ -4214,6 +4214,7 @@ void MasterImpl::MergeTabletUnloadCallback(TabletPtr tablet, TabletPtr tablet2, 
         return;
     }
 
+    // unload failed, merge failed
     if (failed) {
         LOG(WARNING) << "[merge] fail to unload tablet: "
             << sofa::pbrpc::RpcErrorCodeToString(error_code) << ", " << tablet;
@@ -4222,9 +4223,13 @@ void MasterImpl::MergeTabletUnloadCallback(TabletPtr tablet, TabletPtr tablet2, 
             << ", " << tablet;
     }
 
-    tablet->SetStatusIf(kTableOffLine, kTableUnLoading);
-    ProcessOffLineTablet(tablet);
-    TryLoadTablet(tablet);
+    // retry unload tablet1
+    ThreadPool::Task task =
+        boost::bind(&MasterImpl::RetryUnloadTablet, this,
+                    tablet, FLAGS_tera_master_impl_retry_times - 1);
+    m_thread_pool->DelayTask(
+        FLAGS_tera_master_control_tabletnode_retry_period, task);
+
     if (tablet2->GetStatus() == kTableOnMerge) {
         LOG(INFO) << "[merge] tablet2 unload succ, reload it: " << tablet2;
         mutex->Unlock();
