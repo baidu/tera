@@ -97,8 +97,8 @@ DEFINE_int32(tera_master_impl_retry_times, 5, "the max retry times when master i
 DEFINE_string(tera_master_meta_table_name, "meta_table", "the meta table name");
 DEFINE_string(tera_master_meta_table_path, "meta", "the path of meta table");
 
+DEFINE_double(tera_master_workload_split_threshold, 3.5, "if workload(wwl) > 3.5, halve the splitsize");
 DEFINE_int64(tera_master_split_tablet_size, 512, "the size (in MB) of tablet to trigger split");
-DEFINE_bool(tera_master_merge_enabled, false, "enable the auto-merge tablet");
 DEFINE_int64(tera_master_merge_tablet_size, 0, "the size (in MB) of tablet to trigger merge");
 DEFINE_string(tera_master_gc_strategy, "incremental", "gc strategy, [default, incremental]");
 
