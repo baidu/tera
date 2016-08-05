@@ -50,6 +50,7 @@ DECLARE_int32(tera_master_meta_retry_times);
 
 DECLARE_bool(tera_zk_enabled);
 
+DECLARE_double(tera_master_workload_split_threshold);
 DECLARE_int64(tera_master_split_tablet_size);
 DECLARE_int64(tera_master_merge_tablet_size);
 DECLARE_bool(tera_master_kick_tabletnode_enabled);
@@ -1872,9 +1873,15 @@ bool MasterImpl::TabletNodeLoadBalance(TabletNodePtr tabletnode, Scheduler* sche
             || tablet->GetTableName() == FLAGS_tera_master_meta_table_name) {
             continue;
         }
+        double write_workload = tablet->GetCounter().write_workload();
         int64_t split_size = FLAGS_tera_master_split_tablet_size;
         if (tablet->GetSchema().has_split_size() && tablet->GetSchema().split_size() > 0) {
             split_size = tablet->GetSchema().split_size();
+        }
+        if (write_workload > FLAGS_tera_master_workload_split_threshold) {
+            split_size /= 2;
+            VLOG(6) << tablet->GetPath() << " write_workload too large, split it by size: "
+                << split_size;
         }
         int64_t merge_size = FLAGS_tera_master_merge_tablet_size;
         if (tablet->GetSchema().has_merge_size() && tablet->GetSchema().merge_size() > 0) {
@@ -1888,7 +1895,12 @@ bool MasterImpl::TabletNodeLoadBalance(TabletNodePtr tabletnode, Scheduler* sche
             any_tablet_split = true;
             continue;
         } else if (tablet->GetDataSize() < (merge_size << 20)) {
-            TryMergeTablet(tablet);
+            if (write_workload < 1) {
+                TryMergeTablet(tablet);
+            } else {
+                VLOG(6) << "[merge] skip high workload tablet: "
+                    << tablet->GetPath() << ", write_workload " << write_workload;
+            }
             continue;
         }
         if (tablet->GetStatus() == kTableReady) {
@@ -4031,7 +4043,8 @@ bool MasterImpl::TryMergeTablet(TabletPtr tablet) {
     TabletPtr tablet2;
     if (!m_tablet_manager->PickMergeTablet(tablet, &tablet2) ||
         tablet2->GetStatus() != kTableReady ||
-        tablet2->IsBusy()) {
+        tablet2->IsBusy() ||
+        tablet2->GetCounter().write_workload() >= 1) {
         VLOG(20) << "[merge] merge failed, none proper tablet";
         return false;
     }
