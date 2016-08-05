@@ -213,12 +213,6 @@ bool ClientImpl::UpdateTable(const TableDescriptor& desc, ErrorCode* err) {
         return false;
     }
 
-    if (FLAGS_tera_online_schema_update_enabled && is_update_lg
-        && IsTableEnabled(desc.TableName(), err)) {
-        err->SetFailed(ErrorCode::kBadParam, "disable this table if you want to update Lg property(ies)");
-        return false;
-    }
-
     string reason;
     if (master_client.UpdateTable(&request, &response)) {
         if (CheckReturnValue(response.status(), reason, err)) {
