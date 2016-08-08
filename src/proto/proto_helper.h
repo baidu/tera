@@ -7,6 +7,7 @@
 
 #include <string>
 
+#include "proto/master_rpc.pb.h"
 #include "proto/table_meta.pb.h"
 #include "proto/tabletnode.pb.h"
 #include "proto/tabletnode_rpc.pb.h"
@@ -19,8 +20,12 @@ typedef ::google::protobuf::RepeatedPtrField< ::std::string> KeyList;
 typedef ::google::protobuf::RepeatedPtrField< ::tera::RowResult> RowResultList;
 typedef ::google::protobuf::RepeatedPtrField< ::tera::RowReaderInfo> RowReaderList;
 
-std::string StatusCodeToString(int32_t status);
+std::string StatusCodeToString(StatusCode status);
+std::string StatusCodeToString(TabletStatus status);
+std::string StatusCodeToString(TableStatus status);
+std::string StatusCodeToString(CompactStatus status);
 std::string StatusCodeToString(TabletNodeStatus status);
-} // namespace tera
+std::string StatusCodeToString(int32_t status);
 
+} // namespace tera
 #endif // TERA_PROTO_PROTO_HELPER_H_
