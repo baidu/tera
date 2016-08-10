@@ -352,8 +352,8 @@ StatusCode TabletWriter::FlushToDiskBatch(WriteTaskBuffer* task_buffer) {
                 status_vec[j] = kTableOk;
             }
         }
-        BatchRequest(commit_row_mu_vec, &batch);
     }
+    BatchRequest(commit_row_mu_vec, &batch);
 
     StatusCode status = kTableOk;
     const bool disable_wal = false;
