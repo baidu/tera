@@ -117,6 +117,7 @@ message TableMetaList {
 message TabletMetaList {
     repeated TabletMeta meta = 1;
     repeated TabletCounter counter = 2;
+    repeated int64 timestamp = 3;  // meta update timestamp
 }
 
 message SdkTabletCookie {
