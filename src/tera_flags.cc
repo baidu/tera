@@ -265,6 +265,8 @@ DEFINE_string(tera_ins_addr_list, "", "the ins cluster addr. e.g. abc.com:1234,a
 DEFINE_string(tera_ins_root_path, "", "root path on ins. e.g /ps/sandbox");
 DEFINE_bool(tera_ins_enabled, false, "option to open ins naming");
 
+DEFINE_int64(tera_sdk_status_timeout, 600, "(s) check tablet/tabletnode status timeout");
+
 /////////  http /////////
 DEFINE_string(tera_http_port, "8657", "the http proxy port of tera");
 DEFINE_int32(tera_http_request_thread_num, 30, "the http proxy thread num for handle client request");
