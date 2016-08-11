@@ -1177,6 +1177,7 @@ void MasterImpl::ShowTables(const ShowTablesRequest* request,
             tablet->ToMeta(&meta);
             tablet_meta_list->add_meta()->CopyFrom(meta);
             tablet_meta_list->add_counter()->CopyFrom(tablet->GetCounter());
+            tablet_meta_list->add_timestamp(tablet->UpdateTime());
         }
         response->set_is_more(is_more);
     } else {

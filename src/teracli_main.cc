@@ -47,6 +47,7 @@ DECLARE_string(tera_master_meta_table_name);
 DECLARE_string(tera_zk_addr_list);
 DECLARE_string(tera_zk_root_path);
 DECLARE_bool(tera_sdk_batch_scan_enabled);
+DECLARE_int64(tera_sdk_status_timeout);
 
 DEFINE_int32(tera_client_batch_put_num, 1000, "num of each batch in batch put mode");
 DEFINE_int32(tera_client_scan_package_size, 1024, "the package size (in KB) of each scan request");
@@ -1552,7 +1553,7 @@ int32_t ShowTabletNodesInfo(Client* client, bool is_x, ErrorCode* err) {
             row.clear();
             row.push_back(NumberToString(i));
             row.push_back(infos[i].addr());
-            if (now - infos[i].timestamp() > 600 * 1000000) {
+            if (now - (int64_t)infos[i].timestamp() > FLAGS_tera_sdk_status_timeout * 1000000) {
                 // tabletnode status timeout
                 row.push_back("kZombie");
             } else {
@@ -1591,7 +1592,7 @@ int32_t ShowTabletNodesInfo(Client* client, bool is_x, ErrorCode* err) {
             row.clear();
             row.push_back(NumberToString(i));
             row.push_back(infos[i].addr());
-            if (now - infos[i].timestamp() > 600 * 1000000) {
+            if (now - (int64_t)infos[i].timestamp() > FLAGS_tera_sdk_status_timeout * 1000000) {
                 row.push_back("kZombie");
             } else {
                 row.push_back(infos[i].status_m());
