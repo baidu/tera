@@ -48,6 +48,8 @@ namespace tera
   class ResultStream;
 }
 
+class ha_tera_format;
+
 /** @brief
   Tera_share is a class that will be shared among all open handlers.
   This example implements the minimum of what you will probably need.
@@ -73,10 +75,10 @@ class ha_tera: public handler
   Tera_share *get_share(const char* name); ///< Get the share
   tera::ResultStream* result_stream_;
   std::string last_key_;
-  uchar* field_buf_;
+  ha_tera_format* format_;
 
-  void mysql_buf_to_primary_data(const uchar* buf, std::string* key, std::string* value);
-  int primary_data_to_mysql_buf(const std::string& key, const std::string& value, uchar* buf);
+  int seek_row(const uchar *key, uint key_len);
+  int read_row(uchar* buf);
 
 public:
   ha_tera(handlerton *hton, TABLE_SHARE *table_arg);
@@ -106,6 +108,7 @@ public:
   {
     return HA_NO_TRANSACTIONS |  // not support txn
            HA_REC_NOT_IN_SEQ |   // support 'sort by', through position() and rnd_pos()
+           HA_REQUIRE_PRIMARY_KEY | // must have a primary key
            HA_BINLOG_STMT_CAPABLE;
   }
 
@@ -121,7 +124,8 @@ public:
   */
   ulong index_flags(uint inx, uint part, bool all_parts) const
   {
-    return 0;
+    return HA_READ_NEXT | HA_READ_ORDER | HA_READ_RANGE |
+           HA_ONLY_WHOLE_INDEX;
   }
 
   /** @brief
@@ -142,7 +146,7 @@ public:
     There is no need to implement ..._key_... methods if your engine doesn't
     support indexes.
    */
-  uint max_supported_keys()          const { return 0; }
+  uint max_supported_keys()          const { return 1; }
 
   /** @brief
     unireg.cc will call this to make sure that the storage engine can handle
@@ -153,7 +157,7 @@ public:
     There is no need to implement ..._key_... methods if your engine doesn't
     support indexes.
    */
-  uint max_supported_key_parts()     const { return 0; }
+  uint max_supported_key_parts()     const { return 1; }
 
   /** @brief
     unireg.cc will call this to make sure that the storage engine can handle
@@ -164,7 +168,7 @@ public:
     There is no need to implement ..._key_... methods if your engine doesn't
     support indexes.
    */
-  uint max_supported_key_length()    const { return 0; }
+  uint max_supported_key_length()    const { return 1024; }
 
   /** @brief
     Called in test_quick_select to determine if indexes should be used.
@@ -215,8 +219,8 @@ public:
     We implement this in ha_tera.cc. It's not an obligatory method;
     skip it and and MySQL will treat it as not implemented.
   */
-  int index_read_map(uchar *buf, const uchar *key,
-                     key_part_map keypart_map, enum ha_rkey_function find_flag);
+  int index_read(uchar *buf, const uchar *key, uint key_len,
+                 enum ha_rkey_function find_flag);
 
   /** @brief
     We implement this in ha_tera.cc. It's not an obligatory method;
