@@ -1,4 +1,4 @@
-#include "sdk/tera.h"
+#include "tera.h"
 
 int main() {
     tera::ErrorCode error_code;

@@ -11,7 +11,7 @@
 #include "common/mutex.h"
 #include "proto/tabletnode_rpc.pb.h"
 #include "sdk/sdk_task.h"
-#include "sdk/tera.h"
+#include "tera.h"
 #include "types.h"
 #include "utils/timer.h"
 

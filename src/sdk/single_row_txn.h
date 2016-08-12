@@ -8,7 +8,7 @@
 #include <string>
 
 #include "sdk/mutate_impl.h"
-#include "sdk/tera.h"
+#include "tera.h"
 
 namespace common {
 class ThreadPool;

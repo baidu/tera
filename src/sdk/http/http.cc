@@ -12,7 +12,7 @@
 #include "sofa/pbrpc/pbrpc.h"
 
 #include "proto/http.pb.h"
-#include "sdk/tera.h"
+#include "tera.h"
 #include "utils/counter.h"
 
 DECLARE_int32(tera_http_ctrl_thread_num);

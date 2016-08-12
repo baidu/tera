@@ -6,7 +6,7 @@
 #include "jni_tera_result_stream.h"
 #include "jni_tera_common.h"
 
-#include "sdk/tera.h"
+#include "tera.h"
 
 #define NativeDone \
     JNICALL Java_com_baidu_tera_client_ScanResultStreamImpl_nativeDone

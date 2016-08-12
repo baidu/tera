@@ -85,7 +85,7 @@ all: $(PROGRAM) $(LIBRARY) $(SOLIBRARY) $(TERA_C_SO) $(JNILIBRARY) $(BENCHMARK) 
 	cp $(LIBRARY) $(SOLIBRARY) $(TERA_C_SO) $(JNILIBRARY) build/lib
 	cp src/leveldb/tera_bench .
 	cp -r benchmark/*.sh $(BENCHMARK) build/benchmark
-	cp src/sdk/tera.h build/include
+	cp -r include build/
 	cp -r conf build
 	echo 'Done'
 

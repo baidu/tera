@@ -17,7 +17,7 @@
 #include <glog/logging.h>
 
 #include "common/mutex.h"
-#include "sdk/tera.h"
+#include "tera.h"
 #include "utils/counter.h"
 
 DECLARE_int64(pend_size);

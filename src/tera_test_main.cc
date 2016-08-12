@@ -21,7 +21,7 @@
 #include "common/mutex.h"
 #include "common/timer.h"
 #include "common/thread_pool.h"
-#include "sdk/tera.h"
+#include "tera.h"
 #include "version.h"
 
 DEFINE_string(table, "", "table name");

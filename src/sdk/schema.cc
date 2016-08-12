@@ -3,7 +3,7 @@
 // found in the LICENSE file.
 
 #include "sdk/schema_impl.h"
-#include "sdk/tera.h"
+#include "tera.h"
 
 namespace tera {
 
