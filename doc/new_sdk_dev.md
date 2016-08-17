@@ -21,11 +21,15 @@
   * 最外层增加一个include目录，表示对外接口
    * tera.h移至此目录
    * tera_easy.h/tera_ha.h等移至此目录
-   * build时，生效至output
+   * 编译时，生效至build目录
   * tera.h
-   * 拆分成若干文件，每个类一个文件
+   * 拆分成若干文件，按对象、功能划分文件
    * tera.h自身变成一个入口，使用时依然只需要include一个文件
   * 每个类内部（Table/Client/RowMutation等）
    * 按接口使用频率重新排序
-   * 未实现或不建议用户使用的放至末尾，加注释保证兼容性
+   * 接口分类
+    * 默认为已发布接口
+    * pre-release 待发布，正在测试中，鼓励试用
+    * developing 开发中接口，鼓励完善
+    * do-not-use 未实现或不建议用户使用，保证兼容性
   * 重写接口注释
