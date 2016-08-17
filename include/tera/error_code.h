@@ -1,6 +1,8 @@
 // Copyright (c) 2015, Baidu.com, Inc. All Rights Reserved
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
+//
+// A ErrorCode encapsulates the result of an operation.
 
 #ifndef  TERA_ERROR_CODE_H_
 #define  TERA_ERROR_CODE_H_
@@ -28,7 +30,7 @@ public:
     };
 
 public:
-    // Return a string include type&reason
+    // Returns a string includes type&reason
     // Format: "type [kOK], reason [success]"
     std::string ToString() const;
 
@@ -44,7 +46,7 @@ private:
     std::string _reason;
 };
 
-// deprecated, try error_code.ToString()
+// DEPRECATED. Use error_code.ToString() instead.
 const char* strerr(ErrorCode error_code);
 
 } // namespace tera
