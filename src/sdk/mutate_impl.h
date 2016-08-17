@@ -37,11 +37,10 @@ public:
 
     /// 修改一个列
     void Put(const std::string& family, const std::string& qualifier,
-             const std::string& value);
+             const std::string& value, int64_t timestamp);
 
-    /// 修改一个列
     void Put(const std::string& family, const std::string& qualifier,
-             const int64_t value);
+             const int64_t value, int64_t timestamp);
 
     /// 带TTL的修改一个列
     void Put(const std::string& family, const std::string& qualifier,
@@ -55,8 +54,6 @@ public:
     virtual void Put(const std::string& family, const std::string& qualifier,
                      int64_t timestamp, const std::string& value, int32_t ttl);
 
-    /// 修改默认列
-    void Put(const std::string& value);
     /// 修改默认列
     void Put(const int64_t value);
 
@@ -86,20 +83,12 @@ public:
     void DeleteColumn(const std::string& family, const std::string& qualifier,
                       int64_t timestamp);
 
-    /// 删除一个列的全部版本
-    void DeleteColumns(const std::string& family, const std::string& qualifier);
     /// 删除一个列的指定范围版本
     void DeleteColumns(const std::string& family, const std::string& qualifier,
                        int64_t timestamp);
 
-    /// 删除一个列族的所有列的全部版本
-    void DeleteFamily(const std::string& family);
-
     /// 删除一个列族的所有列的指定范围版本
     void DeleteFamily(const std::string& family, int64_t timestamp);
-
-    /// 删除整行的全部数据
-    void DeleteRow();
 
     /// 删除整行的指定范围版本
     void DeleteRow(int64_t timestamp);
