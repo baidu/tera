@@ -22,66 +22,63 @@
 #include "sql_plugin.h"
 #include "sql_table.h"
 
-void ha_tera_util::path_to_dbname(const char *path_name, char *dbname)
-{
-  char *end, *ptr, *tmp_name;
-  char tmp_buff[FN_REFLEN + 1];
+void ha_tera_util::path_to_dbname(const char *path_name, char *dbname) {
+    char *end, *ptr, *tmp_name;
+    char tmp_buff[FN_REFLEN + 1];
 
-  tmp_name= tmp_buff;
-  /* Scan name from the end */
-  ptr= strend(path_name)-1;
-  while (ptr >= path_name && *ptr != '\\' && *ptr != '/') {
+    tmp_name = tmp_buff;
+    /* Scan name from the end */
+    ptr = strend(path_name) - 1;
+    while (ptr >= path_name && *ptr != '\\' && *ptr != '/') {
+        ptr--;
+    }
     ptr--;
-  }
-  ptr--;
-  end= ptr;
-  while (ptr >= path_name && *ptr != '\\' && *ptr != '/') {
-    ptr--;
-  }
-  uint name_len= (uint)(end - ptr);
-  memcpy(tmp_name, ptr + 1, name_len);
-  tmp_name[name_len]= '\0';
-  filename_to_tablename(tmp_name, dbname, sizeof(tmp_buff) - 1);
+    end = ptr;
+    while (ptr >= path_name && *ptr != '\\' && *ptr != '/') {
+        ptr--;
+    }
+    uint name_len = (uint)(end - ptr);
+    memcpy(tmp_name, ptr + 1, name_len);
+    tmp_name[name_len] = '\0';
+    filename_to_tablename(tmp_name, dbname, sizeof(tmp_buff) - 1);
 }
 
 /**
   Set a given location from full pathname to table file.
 */
+void ha_tera_util::path_to_tabname(const char *path_name, char * tabname) {
+    char *end, *ptr, *tmp_name;
+    char tmp_buff[FN_REFLEN + 1];
 
-void ha_tera_util::path_to_tabname(const char *path_name, char * tabname)
-{
-  char *end, *ptr, *tmp_name;
-  char tmp_buff[FN_REFLEN + 1];
-
-  tmp_name= tmp_buff;
-  /* Scan name from the end */
-  end= strend(path_name)-1;
-  ptr= end;
-  while (ptr >= path_name && *ptr != '\\' && *ptr != '/') {
-    ptr--;
-  }
-  uint name_len= (uint)(end - ptr);
-  memcpy(tmp_name, ptr + 1, end - ptr);
-  tmp_name[name_len]= '\0';
-  filename_to_tablename(tmp_name, tabname, sizeof(tmp_buff) - 1);
+    tmp_name = tmp_buff;
+    /* Scan name from the end */
+    end = strend(path_name) - 1;
+    ptr = end;
+    while (ptr >= path_name && *ptr != '\\' && *ptr != '/') {
+        ptr--;
+    }
+    uint name_len = (uint)(end - ptr);
+    memcpy(tmp_name, ptr + 1, end - ptr);
+    tmp_name[name_len] = '\0';
+    filename_to_tablename(tmp_name, tabname, sizeof(tmp_buff) - 1);
 }
 
 void ha_tera_util::name_to_tera_tabname(const char* dbname, const char* tabname,
                                         char* tera_tabname) {
-  strcpy(tera_tabname, dbname);
-  strcat(tera_tabname, "_");
-  strcat(tera_tabname, tabname);
+    strcpy(tera_tabname, dbname);
+    strcat(tera_tabname, "_");
+    strcat(tera_tabname, tabname);
 }
 
 bool ha_tera_util::tera_tabname_to_name(const char* tera_tabname, char* dbname, char* tabname) {
-  const char* delim = strchr(tera_tabname, '_');
-  if (delim == NULL || delim == tera_tabname || *(delim + 1) == '\0') {
-    return false;
-  }
-  strncpy(dbname, tera_tabname, delim - tera_tabname);
-  dbname[delim - tera_tabname] = '\0';
-  strcpy(tabname, delim + 1);
-  return true;
+    const char* delim = strchr(tera_tabname, '_');
+    if (delim == NULL || delim == tera_tabname || *(delim + 1) == '\0') {
+        return false;
+    }
+    strncpy(dbname, tera_tabname, delim - tera_tabname);
+    dbname[delim - tera_tabname] = '\0';
+    strcpy(tabname, delim + 1);
+    return true;
 }
 
 std::string escape_string(const std::string& src) {

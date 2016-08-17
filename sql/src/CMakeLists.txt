@@ -16,5 +16,5 @@
 ADD_DEFINITIONS(-DMYSQL_SERVER)
 SET(CMAKE_CXX_FLAGS "-L. -ltera")
 SET(TERA_PLUGIN_DYNAMIC "ha_tera")
-SET(TERA_SOURCES ha_tera.cc ha_tera.h ha_tera_util.cc ha_tera_util.h)
+SET(TERA_SOURCES ha_tera.cc ha_tera.h ha_tera_util.cc ha_tera_util.h ha_tera_format.cc ha_tera_format.h)
 MYSQL_ADD_PLUGIN(tera ${TERA_SOURCES} STORAGE_ENGINE DEFAULT MODULE_ONLY RECOMPILE_FOR_EMBEDDED)
