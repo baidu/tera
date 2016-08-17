@@ -6,7 +6,7 @@
 #include "jni_tera_reader.h"
 #include "jni_tera_common.h"
 
-#include "sdk/tera.h"
+#include "tera.h"
 
 #define NativeAddColumn \
     JNICALL Java_com_baidu_tera_client_TeraReaderImpl_nativeAddColumn

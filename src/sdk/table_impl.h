@@ -14,7 +14,7 @@
 #include "sdk/client_impl.h"
 #include "sdk/sdk_task.h"
 #include "sdk/sdk_zk.h"
-#include "sdk/tera.h"
+#include "tera.h"
 #include "utils/counter.h"
 
 namespace tera {

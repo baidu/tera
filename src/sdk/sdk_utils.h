@@ -8,7 +8,7 @@
 #define  TERA_SDK_SDK_UTILS_H_
 
 #include "proto/table_meta.pb.h"
-#include "sdk/tera.h"
+#include "tera.h"
 #include "utils/prop_tree.h"
 
 using std::string;

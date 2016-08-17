@@ -19,7 +19,7 @@
 #include <time.h>
 #include <unistd.h>
 
-#include "sdk/tera.h"
+#include "tera.h"
 
 /// 创建一个表格
 int CreateTable(tera::Client* client) {

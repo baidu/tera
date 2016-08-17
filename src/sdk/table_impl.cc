@@ -2,7 +2,8 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include "sdk/table_impl.h"
+#include "table_impl.h"
+#include "tera.h"
 
 #include <errno.h>
 #include <fcntl.h>
@@ -31,7 +32,6 @@
 #include "sdk/scan_impl.h"
 #include "sdk/schema_impl.h"
 #include "sdk/sdk_zk.h"
-#include "sdk/tera.h"
 #include "utils/crypt.h"
 #include "utils/string_util.h"
 #include "utils/timer.h"

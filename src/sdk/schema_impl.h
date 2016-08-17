@@ -8,7 +8,7 @@
 #include <string>
 
 #include "proto/table_meta.pb.h"
-#include "sdk/tera.h"
+#include "tera.h"
 
 namespace tera {
 

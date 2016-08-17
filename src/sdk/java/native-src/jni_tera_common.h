@@ -12,7 +12,7 @@
 #include <map>
 #include <string>
 
-#include "sdk/tera.h"
+#include "tera.h"
 
 void SendErrorJ(JNIEnv *env, jobject jobj, std::string msg);
 

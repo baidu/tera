@@ -2,7 +2,7 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include "sdk/tera_c.h"
+#include "tera_c.h"
 
 #include <assert.h>
 #include <stdlib.h>
@@ -13,7 +13,7 @@
 
 #include "common/mutex.h"
 
-#include "sdk/tera.h"
+#include "tera.h"
 
 using tera::Client;
 using tera::ErrorCode;

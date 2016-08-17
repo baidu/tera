@@ -34,7 +34,7 @@
 #include "sdk/sdk_utils.h"
 #include "sdk/sdk_zk.h"
 #include "sdk/table_impl.h"
-#include "sdk/tera.h"
+#include "tera.h"
 #include "utils/crypt.h"
 #include "utils/string_util.h"
 #include "utils/tprinter.h"

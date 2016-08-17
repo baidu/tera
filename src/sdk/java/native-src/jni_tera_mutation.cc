@@ -6,7 +6,7 @@
 #include "jni_tera_mutation.h"
 #include "jni_tera_common.h"
 
-#include "sdk/tera.h"
+#include "tera.h"
 
 #define NativeAdd \
     JNICALL Java_com_baidu_tera_client_TeraMutationImpl_nativeAdd
