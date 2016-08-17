@@ -8,10 +8,93 @@ tera sdk中通过RowMutation结构描述一次行更新操作，包含删除操�
  
 ## API
 
-### Key-Value存储
+### 更新
 
+Key-value模式更新。若设定ttl，数据会在ttl时间超时后被淘汰。
+```
+void Put(const std::string& value, int32_t ttl = -1);
+```
+表格模式更新。若设定timestamp，数据会被更新至指定时间，危险，不建议使用。
+```
+void Put(const std::string& family, const std::string& qualifier, const std::string& value, int64_t timestamp = -1);
+```
+表格模式更新。Counter场景下使用，设定初始值
+```
+void Put(const std::string& family, const std::string& qualifier, int64_t value, int64_t timestamp = -1);
+```
+表格模式更新。Counter场景下使用，累加。
+```
+void Add(const std::string& family, const std::string& qualifier, const int64_t delta);
+```
+表格模式更新。若不存在，更新生效；否则更新数据不生效。
+```
+void PutIfAbsent(const std::string& family, const std::string& qualifier, const std::string& value);
+```
+表格模式更新。将value追加至此列原数据末尾。
+```
+void Append(const std::string& family, const std::string& qualifier, const std::string& value);
 ```
 
+### 删除
+
+删除整行。若设定timestamp，则删除此时间之前的所有更新。
+Key-value模式下timestamp不生效。
+```
+void DeleteRow(int64_t timestamp = -1);
+```
+删除某列族。若设定timestamp，则删除此时间之前的所有更新。
+```
+void DeleteFamily(const std::string& family, int64_t timestamp = -1);
+```
+删除某列所有版本。若设定timestamp，则删除此时间之前的所有更新。
+```
+void DeleteColumns(const std::string& family, const std::string& qualifier, int64_t timestamp = -1);
+```
+删除某列指定时间更新。
+```
+void DeleteColumn(const std::string& family, const std::string& qualifier, int64_t timestamp);
 ```
 
-### 表格存储
+### 异步
+
+若设定回调，则异步提交；否则同步提交。
+```
+typedef void (*Callback)(RowMutation* param);
+void SetCallBack(Callback callback);
+Callback GetCallBack();
+bool IsAsync(); 
+```
+
+### 超时设定
+
+设定单个mutation的超时时间。
+如没有特殊需要，不必要单独设定，使用sdk的统一超时即可。
+```
+void SetTimeOut(int64_t timeout_ms);
+int64_t TimeOut() = 0;
+```
+
+### 上下文设定
+
+用于回调中获取用户自定义上下文信息。
+内存由用户自己管理。
+
+```
+void SetContext(void* context);
+void* GetContext();
+```
+
+### 其它
+
+```
+uint32_t MutationNum();
+uint32_t Size();
+const RowMutation::Mutation& GetMutation(uint32_t index);
+```
+
+### 预发布
+
+获取所属事务
+```
+Transaction* GetTransaction();
+```
