@@ -193,9 +193,9 @@ class DBImpl : public DB {
   std::set<uint64_t> pending_outputs_;
 
   // Has a background compaction been scheduled or is running?
-  bool bg_compaction_scheduled_;
-  double bg_compaction_score_;
-  int64_t bg_schedule_id_;
+  int bg_compaction_scheduled_;
+  std::vector<double> bg_compaction_score_;
+  std::vector<int64_t> bg_schedule_id_;
 
   // Information for a manual compaction
   struct ManualCompaction {
