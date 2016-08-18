@@ -53,7 +53,7 @@ echo "tablet_set: len[$tablet_num], content[${tablet_set[*]}]"
 
 # calc idle ts set 
 ts_set=()
-tss=`./teracli showtsx --stdout_is_tty=false | sort -k6n | head -n $((tablet_num * 2)) | tail -n $((tablet_num * 2 - 1)) | sort -k20n | head -n $tablet_num | awk '{print $2}'`
+tss=`$teracli showtsx --stdout_is_tty=false | sort -k6n | head -n $((tablet_num * 2)) | tail -n $((tablet_num * 2 - 1)) | sort -k20n | head -n $tablet_num | awk '{print $2}'`
 ts_set=($tss)
 echo "ts_set: len[${#ts_set[@]}], content[${ts_set[*]}]"
 
