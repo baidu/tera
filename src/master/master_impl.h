@@ -164,6 +164,7 @@ private:
     typedef Closure<void, WriteTabletRequest*, WriteTabletResponse*, bool, int> WriteClosure;
     typedef Closure<void, ScanTabletRequest*, ScanTabletResponse*, bool, int> ScanClosure;
     typedef boost::function<void (std::string*, std::string*)> ToMetaFunc;
+    typedef boost::shared_ptr<Mutex> MutexPtr;
 
     enum MetaTaskType {
         kWrite = 0,
@@ -361,10 +362,11 @@ private:
 
     void MergeTabletAsync(TabletPtr tablet_p1, TabletPtr tablet_p2);
     void MergeTabletAsyncPhase2(TabletPtr tablet_p1, TabletPtr tablet_p2);
-    void MergeTabletUnloadCallback(TabletPtr tablet, TabletPtr tablet2, Mutex* mutex,
-                                           UnloadTabletRequest* request,
-                                           UnloadTabletResponse* response,
-                                           bool failed, int error_code);
+    void MergeTabletUnloadCallback(TabletPtr tablet, TabletPtr tablet2,
+                                   MutexPtr mutex,
+                                   UnloadTabletRequest* request,
+                                   UnloadTabletResponse* response,
+                                   bool failed, int error_code);
     void MergeTabletWriteMetaCallback(TabletMeta new_meta, TabletPtr tablet_p1,
                                       TabletPtr tablet_p2, int32_t retry_times,
                                       WriteTabletRequest* request,

@@ -50,6 +50,7 @@ DECLARE_int32(tera_master_meta_retry_times);
 
 DECLARE_bool(tera_zk_enabled);
 
+DECLARE_double(tera_master_workload_split_threshold);
 DECLARE_int64(tera_master_split_tablet_size);
 DECLARE_int64(tera_master_merge_tablet_size);
 DECLARE_bool(tera_master_kick_tabletnode_enabled);
@@ -1176,6 +1177,7 @@ void MasterImpl::ShowTables(const ShowTablesRequest* request,
             tablet->ToMeta(&meta);
             tablet_meta_list->add_meta()->CopyFrom(meta);
             tablet_meta_list->add_counter()->CopyFrom(tablet->GetCounter());
+            tablet_meta_list->add_timestamp(tablet->UpdateTime());
         }
         response->set_is_more(is_more);
     } else {
@@ -1872,9 +1874,15 @@ bool MasterImpl::TabletNodeLoadBalance(TabletNodePtr tabletnode, Scheduler* sche
             || tablet->GetTableName() == FLAGS_tera_master_meta_table_name) {
             continue;
         }
+        double write_workload = tablet->GetCounter().write_workload();
         int64_t split_size = FLAGS_tera_master_split_tablet_size;
         if (tablet->GetSchema().has_split_size() && tablet->GetSchema().split_size() > 0) {
             split_size = tablet->GetSchema().split_size();
+        }
+        if (write_workload > FLAGS_tera_master_workload_split_threshold) {
+            split_size /= 2;
+            VLOG(6) << tablet->GetPath() << " write_workload too large, split it by size: "
+                << split_size;
         }
         int64_t merge_size = FLAGS_tera_master_merge_tablet_size;
         if (tablet->GetSchema().has_merge_size() && tablet->GetSchema().merge_size() > 0) {
@@ -1888,7 +1896,12 @@ bool MasterImpl::TabletNodeLoadBalance(TabletNodePtr tabletnode, Scheduler* sche
             any_tablet_split = true;
             continue;
         } else if (tablet->GetDataSize() < (merge_size << 20)) {
-            TryMergeTablet(tablet);
+            if (write_workload < 1) {
+                TryMergeTablet(tablet);
+            } else {
+                VLOG(6) << "[merge] skip high workload tablet: "
+                    << tablet->GetPath() << ", write_workload " << write_workload;
+            }
             continue;
         }
         if (tablet->GetStatus() == kTableReady) {
@@ -4031,7 +4044,8 @@ bool MasterImpl::TryMergeTablet(TabletPtr tablet) {
     TabletPtr tablet2;
     if (!m_tablet_manager->PickMergeTablet(tablet, &tablet2) ||
         tablet2->GetStatus() != kTableReady ||
-        tablet2->IsBusy()) {
+        tablet2->IsBusy() ||
+        tablet2->GetCounter().write_workload() >= 1) {
         VLOG(20) << "[merge] merge failed, none proper tablet";
         return false;
     }
@@ -4045,7 +4059,7 @@ bool MasterImpl::TryMergeTablet(TabletPtr tablet) {
 void MasterImpl::MergeTabletAsync(TabletPtr tablet_p1, TabletPtr tablet_p2) {
     if (tablet_p1->SetStatusIf(kTableUnLoading, kTableReady) &&
         tablet_p2->SetStatusIf(kTableUnLoading, kTableReady)) {
-        Mutex* mu = new Mutex();
+        MutexPtr mu(new Mutex());
         UnloadClosure* done1 =
             NewClosure(this, &MasterImpl::MergeTabletUnloadCallback, tablet_p1, tablet_p2, mu);
         UnloadClosure* done2 =
@@ -4151,11 +4165,12 @@ void MasterImpl::MergeTabletAsyncPhase2(TabletPtr tablet_p1, TabletPtr tablet_p2
     meta_node_client.WriteTablet(request, response, done);
 }
 
-void MasterImpl::MergeTabletUnloadCallback(TabletPtr tablet, TabletPtr tablet2, Mutex* mutex,
+void MasterImpl::MergeTabletUnloadCallback(TabletPtr tablet, TabletPtr tablet2,
+                                           MutexPtr mutex,
                                            UnloadTabletRequest* request,
                                            UnloadTabletResponse* response,
                                            bool failed, int error_code) {
-    mutex->Lock();
+    MutexLock(mutex.get());
     CHECK(tablet->GetStatus() == kTableUnLoading);
     StatusCode status = response->status();
     delete request;
@@ -4173,18 +4188,13 @@ void MasterImpl::MergeTabletUnloadCallback(TabletPtr tablet, TabletPtr tablet2, 
         TryLoadTablet(tablet);
         if (tablet2->GetStatus() == kTableOnMerge) {
             LOG(WARNING) << "[merge] tablet2 unload succ, reload it: " << tablet2;
-            mutex->Unlock();
-            delete mutex;
             tablet2->SetStatusIf(kTableOffLine, kTableOnMerge);
             ProcessOffLineTablet(tablet2);
             TryLoadTablet(tablet2);
         } else if (tablet2->GetStatus() == kTableUnLoading) {
             LOG(WARNING) << "[merge] tablet2 still unloading: " << tablet2;
-            mutex->Unlock();
         } else {
             LOG(WARNING) << "[merge] tablet2 unloading failed: " << tablet2;
-            mutex->Unlock();
-            delete mutex;
         }
         return;
     }
@@ -4196,17 +4206,12 @@ void MasterImpl::MergeTabletUnloadCallback(TabletPtr tablet, TabletPtr tablet2, 
             << "[merge] tablet status not unloading";
         if (tablet2->GetStatus() == kTableOnMerge) {
             LOG(INFO) << "[merge] tablet2 unload succ, continue merge: " << tablet2;
-            mutex->Unlock();
-            delete mutex;
             MergeTabletAsyncPhase2(tablet, tablet2);
         } else if (tablet2->GetStatus() == kTableUnLoading) {
             // the other tablet have not unload, do nothing
             LOG(INFO) << "[merge] tablet2 still unloading: " << tablet2;
-            mutex->Unlock();
         } else {
             LOG(WARNING) << "[merge] tablet2 unloading failed: " << tablet2;
-            mutex->Unlock();
-            delete mutex;
             tablet->SetStatusIf(kTableOffLine, kTableOnMerge);
             ProcessOffLineTablet(tablet);
             TryLoadTablet(tablet);
@@ -4214,6 +4219,7 @@ void MasterImpl::MergeTabletUnloadCallback(TabletPtr tablet, TabletPtr tablet2, 
         return;
     }
 
+    // unload failed, merge failed
     if (failed) {
         LOG(WARNING) << "[merge] fail to unload tablet: "
             << sofa::pbrpc::RpcErrorCodeToString(error_code) << ", " << tablet;
@@ -4222,24 +4228,23 @@ void MasterImpl::MergeTabletUnloadCallback(TabletPtr tablet, TabletPtr tablet2, 
             << ", " << tablet;
     }
 
-    tablet->SetStatusIf(kTableOffLine, kTableUnLoading);
-    ProcessOffLineTablet(tablet);
-    TryLoadTablet(tablet);
+    // retry unload tablet1
+    ThreadPool::Task task =
+        boost::bind(&MasterImpl::RetryUnloadTablet, this,
+                    tablet, FLAGS_tera_master_impl_retry_times - 1);
+    m_thread_pool->DelayTask(
+        FLAGS_tera_master_control_tabletnode_retry_period, task);
+
     if (tablet2->GetStatus() == kTableOnMerge) {
         LOG(INFO) << "[merge] tablet2 unload succ, reload it: " << tablet2;
-        mutex->Unlock();
-        delete mutex;
         tablet2->SetStatusIf(kTableOffLine, kTableOnMerge);
         ProcessOffLineTablet(tablet2);
         TryLoadTablet(tablet2);
     } else if (tablet2->GetStatus() == kTableUnLoading) {
         // the other tablet have not unload, do nothing
         LOG(INFO) << "[merge] tablet2 still unloading: " << tablet2;
-        mutex->Unlock();
     } else {
         LOG(WARNING) << "[merge] tablet2 unloading failed, do nothing " << tablet2;
-        mutex->Unlock();
-        delete mutex;
     }
 }
 

@@ -6,10 +6,10 @@ set -e -u -E # this script will exit if any sub-command fails
 # download mysql source
 ########################################
 
-if [ ! -d "mysql-cluster-gpl-7.4.10" ]; then
-    wget -O mysql-cluster-gpl-7.4.10.tar.gz http://cdn.mysql.com//Downloads/MySQL-Cluster-7.4/mysql-cluster-gpl-7.4.10.tar.gz
-    rm -rf mysql-cluster-gpl-7.4.10
-    tar zxf mysql-cluster-gpl-7.4.10.tar.gz
+if [ ! -d "mysql-5.6.31" ]; then
+    wget -O mysql-5.6.31.tar.gz http://dev.mysql.com/get/Downloads/MySQL-5.6/mysql-5.6.31.tar.gz
+    rm -rf mysql-5.6.31
+    tar zxf mysql-5.6.31.tar.gz
 fi
 
 ########################################

@@ -2002,5 +2002,54 @@ void TabletIO::ApplySchema(const TableSchema& schema) {
     m_ldb_options.compact_strategy_factory->SetArg(&schema);
 }
 
+bool TabletIO::SingleRowTxnCheck(const std::string& row_key,
+                                 const SingleRowTxnReadInfo& txn_read_info,
+                                 StatusCode* status) {
+    // init scan_options
+    ScanOptions scan_options;
+    for (int32_t i = 0; i < txn_read_info.read_column_list_size(); ++i) {
+        const ColumnFamily& column_info = txn_read_info.read_column_list(i);
+        std::set<std::string>& qualifier_list =
+            scan_options.column_family_list[column_info.family_name()];
+        for (int32_t j = 0; j < column_info.qualifier_list_size(); ++j) {
+            qualifier_list.insert(column_info.qualifier_list(j));
+        }
+        scan_options.iter_cf_set.insert(column_info.family_name());
+    }
+    scan_options.max_versions = 1;
+
+    // read the row
+    std::string start_tera_key;
+    m_key_operator->EncodeTeraKey(row_key, "", "", kLatestTs,
+                                  leveldb::TKT_VALUE, &start_tera_key);
+    std::string end_row_key = row_key + '\0';
+    RowResult row_result;
+    uint32_t read_row_count = 0;
+    uint32_t read_bytes = 0;
+    bool is_complete = false;
+    if (!LowLevelScan(start_tera_key, end_row_key, scan_options,
+                      &row_result, NULL, &read_row_count, &read_bytes,
+                      &is_complete, status)) {
+        return false;
+    }
+
+    // verify value_list against txn_read_info
+    if (row_result.key_values_size() != txn_read_info.read_result().key_values_size()) {
+        SetStatusCode(kTxnFail, status);
+        return false;
+    }
+    for (int32_t i = 0; i < row_result.key_values_size(); ++i) {
+        const KeyValuePair& new_kv = row_result.key_values(i);
+        const KeyValuePair& old_kv = txn_read_info.read_result().key_values(i);
+        if (new_kv.column_family() != old_kv.column_family()
+            || new_kv.qualifier() != old_kv.qualifier()
+            || new_kv.timestamp() != old_kv.timestamp()) {
+            SetStatusCode(kTxnFail, status);
+            return false;
+        }
+    }
+    return true;
+}
+
 } // namespace io
 } // namespace tera

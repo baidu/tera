@@ -4,6 +4,7 @@ BIN_DIR=`pwd`
 ROOT_DIR=$BIN_DIR/..
 
 export LD_LIBRARY_PATH=$ROOT_DIR/lib/plugin:$LD_LIBRARY_PATH
+cp -f $ROOT_DIR/lib/plugin/tera.flag /tmp/tera.flag
 nohup \
 ./mysqld --port=8806 --user=$USER \
     --datadir=$ROOT_DIR/data \
@@ -16,6 +17,7 @@ nohup \
     --plugin-dir=$ROOT_DIR/lib/plugin \
     --plugin-load="ha_tera.so;libtera.so" \
     --old_passwords=2 \
-    --gdb --core-file --debug \
+    --gdb --core-file \
+    --debug=d:t:i:o,$ROOT_DIR/log/mysqld.trace \
     &> $ROOT_DIR/log/stderr &
 

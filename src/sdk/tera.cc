@@ -2,7 +2,7 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include "sdk/tera.h"
+#include "tera.h"
 
 #include <limits>
 
@@ -37,6 +37,9 @@ static const char* strerr(ErrorCode::ErrorCodeType type) {
         break;
     case ErrorCode::kNotImpl:
         ret = "Not Implement";
+        break;
+    case ErrorCode::kTxnFail:
+        ret = "TransactionFail";
         break;
     default:
         ret = "UnkownError";

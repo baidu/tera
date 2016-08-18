@@ -9,8 +9,8 @@
 
 #include "glog/logging.h"
 
-#include "sdk/tera.h"
 #include "sdk/sdk_utils.h"
+#include "tera.h"
 
 #define NativeNewClient \
     JNICALL Java_com_baidu_tera_client_TeraClientImpl_nativeNewClient

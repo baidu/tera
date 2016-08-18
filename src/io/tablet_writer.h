@@ -43,18 +43,19 @@ public:
     /// 初略计算一个request的数据大小
     static uint64_t CountRequestSize(std::vector<const RowMutationSequence*>& row_mutation_vec,
                                      bool kv_only);
-    /// 把一个request打到一个leveldbbatch里去, request是原子的, batch也是, so ..
-    bool BatchRequest(const std::vector<const RowMutationSequence*>& row_mutation_vec,
-                      leveldb::WriteBatch* batch,
-                      bool kv_only);
     void Start();
     void Stop();
 
 private:
     void DoWork();
     bool SwapActiveBuffer(bool force);
+    /// 把一个request打到一个leveldbbatch里去, request是原子的, batch也是, so ..
+    void BatchRequest(const std::vector<const RowMutationSequence*>& row_mutation_vec,
+                      leveldb::WriteBatch* batch);
+    bool CheckConflict(const RowMutationSequence& row_mu,
+                       std::set<std::string>* commit_row_key_set,
+                       StatusCode* status = NULL);
     /// 任务完成, 执行回调
-    void FinishTaskBatch(WriteTaskBuffer* task_buffer, StatusCode status);
     void FinishTask(const WriteTask& task, StatusCode status);
     /// 将buffer刷到磁盘(leveldb), 并sync
     StatusCode FlushToDiskBatch(WriteTaskBuffer* task_buffer);

@@ -149,9 +149,16 @@ message Mutation {
     optional int32 ttl = 8 [default = -1]; // -1 : 表示此key永不过期, 在TS中会存储过期时间为INT64_MAX.
 }
 
+message SingleRowTxnReadInfo {
+    optional bool has_read = 1 [default = false];
+    repeated ColumnFamily read_column_list = 2;
+    optional RowResult read_result = 3;
+}
+
 message RowMutationSequence {
     required bytes row_key = 1;
     repeated Mutation mutation_sequence = 2;
+    optional SingleRowTxnReadInfo txn_read_info = 3;
 }
 
 message WriteTabletRequest {

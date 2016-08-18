@@ -6,7 +6,7 @@
 #include "jni_tera_scan.h"
 #include "jni_tera_common.h"
 
-#include "sdk/tera.h"
+#include "tera.h"
 
 #define NativeNewScanDesc \
     JNICALL Java_com_baidu_tera_client_TeraScanImpl_nativeNewScanDesc

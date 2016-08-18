@@ -14,7 +14,7 @@
 #include "sdk/client_impl.h"
 #include "sdk/sdk_task.h"
 #include "sdk/sdk_zk.h"
-#include "sdk/tera.h"
+#include "tera.h"
 #include "utils/counter.h"
 
 namespace tera {
@@ -159,6 +159,11 @@ public:
     virtual int64_t IncrementColumnValue(const std::string& row, const std::string& family,
                                          const std::string& qualifier, int64_t amount,
                                          ErrorCode* err);
+
+    /// 创建事务
+    virtual Transaction* StartRowTransaction(const std::string& row_key);
+    /// 提交事务
+    virtual void CommitRowTransaction(Transaction* transaction);
 
     virtual void SetWriteTimeout(int64_t timeout_ms);
     virtual void SetReadTimeout(int64_t timeout_ms);
@@ -363,8 +368,7 @@ private:
     void DumpCookie();
     void DoDumpCookie();
     std::string GetCookieFileName(const std::string& tablename,
-                                  const std::string& zk_addr,
-                                  const std::string& zk_path,
+                                  const std::string& cluster_id,
                                   int64_t create_time);
     std::string GetCookieFilePathName();
     std::string GetCookieLockFilePathName();
@@ -428,9 +432,6 @@ private:
 
     master::MasterClient* _master_client;
     tabletnode::TabletNodeClient* _tabletnode_client;
-
-    std::string _zk_root_path;
-    std::string _zk_addr_list;
 
     ThreadPool* _thread_pool;
     mutable Mutex _delay_task_id_mutex;
@@ -557,6 +558,12 @@ public:
                                          const std::string& qualifier, int64_t amount,
                                          ErrorCode* err) {
         return _impl->IncrementColumnValue(row, family, qualifier, amount, err);
+    }
+    virtual Transaction* StartRowTransaction(const std::string& row_key) {
+        return _impl->StartRowTransaction(row_key);
+    }
+    virtual void CommitRowTransaction(Transaction* transaction) {
+        _impl->CommitRowTransaction(transaction);
     }
     virtual void SetWriteTimeout(int64_t timeout_ms) {
         _impl->SetWriteTimeout(timeout_ms);

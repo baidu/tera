@@ -38,7 +38,7 @@ public:
         std::vector<const RowMutationSequence*> row_mutation_vec;
         std::vector<StatusCode> row_status_vec;
         std::vector<int32_t> row_index_vec;
-        Counter row_done_counter;
+        Counter* row_done_counter;
 
         const WriteTabletRequest* request;
         WriteTabletResponse* response;
@@ -46,8 +46,8 @@ public:
         WriteRpcTimer* timer;
 
         WriteTabletTask(const WriteTabletRequest* req, WriteTabletResponse* resp,
-                   google::protobuf::Closure* d, WriteRpcTimer* t)
-            : request(req), response(resp), done(d), timer(t) {}
+                   google::protobuf::Closure* d, WriteRpcTimer* t, Counter* c)
+            : row_done_counter(c), request(req), response(resp), done(d), timer(t) {}
     };
 
     TabletNodeImpl(const TabletNodeInfo& tabletnode_info,

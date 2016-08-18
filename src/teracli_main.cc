@@ -34,7 +34,7 @@
 #include "sdk/sdk_utils.h"
 #include "sdk/sdk_zk.h"
 #include "sdk/table_impl.h"
-#include "sdk/tera.h"
+#include "tera.h"
 #include "utils/crypt.h"
 #include "utils/string_util.h"
 #include "utils/tprinter.h"
@@ -47,6 +47,7 @@ DECLARE_string(tera_master_meta_table_name);
 DECLARE_string(tera_zk_addr_list);
 DECLARE_string(tera_zk_root_path);
 DECLARE_bool(tera_sdk_batch_scan_enabled);
+DECLARE_int64(tera_sdk_status_timeout);
 
 DEFINE_int32(tera_client_batch_put_num, 1000, "num of each batch in batch put mode");
 DEFINE_int32(tera_client_scan_package_size, 1024, "the package size (in KB) of each scan request");
@@ -60,6 +61,10 @@ DEFINE_int32(lg, -1, "locality group number.");
 DEFINE_int32(concurrency, 1, "concurrency for compact table.");
 DEFINE_int64(timestamp, -1, "timestamp.");
 DEFINE_string(tablets_file, "", "tablet set file");
+
+DEFINE_bool(printable, true, "printable output");
+DEFINE_bool(print_data, true, "is print data when scan");
+DEFINE_bool(rowkey_count, false, "is print rowkey count when scan");
 
 // using FLAGS instead of isatty() for compatibility
 DEFINE_bool(stdout_is_tty, true, "is stdout connected to a tty");
@@ -81,6 +86,10 @@ using namespace tera;
 
 typedef boost::shared_ptr<Table> TablePtr;
 typedef boost::shared_ptr<TableImpl> TableImplPtr;
+
+/// global variables of single-row-txn used in interactive mode
+tera::Transaction* g_row_txn = NULL;
+Table* g_row_txn_table = NULL;
 
 const char* builtin_cmd_list[] = {
     "create",
@@ -201,6 +210,12 @@ const char* builtin_cmd_list[] = {
                get all tablets range.                                     \n\
                --reorder_tablets=true ordered tablets by ts addr          \n\
                (show more detail when using suffix \"x\")",
+
+    "txn",
+    "txn <operation> <params>                                             \n\
+         start      <tablename> <row_key>                                 \n\
+         commit                                                           \n\
+         (only support single row transaction)",
 
     "user",
     "user <operation> <params>                                            \n\
@@ -633,7 +648,15 @@ int32_t PutOp(Client* client, int32_t argc, char** argv, ErrorCode* err) {
     } else {
         mutation->Put(columnfamily, qualifier, FLAGS_timestamp, value);
     }
-    table->ApplyMutation(mutation);
+    if (g_row_txn != NULL) {
+        g_row_txn->ApplyMutation(mutation);
+    } else {
+        table->ApplyMutation(mutation);
+    }
+    if (mutation->GetError().GetType() != tera::ErrorCode::kOK) {
+        std::cout << mutation->GetError().ToString() << std::endl;
+    }
+    delete mutation;
     return 0;
 }
 
@@ -843,6 +866,14 @@ int32_t GetInt64Op(Client* client, int32_t argc, char** argv, ErrorCode* err) {
     return 0;
 }
 
+std::string PrintableFormatter(const std::string& value) {
+    if (FLAGS_printable) {
+        return DebugString(value);
+    } else {
+        return value;
+    }
+}
+
 int32_t GetOp(Client* client, int32_t argc, char** argv, ErrorCode* err) {
     if (argc != 4 && argc != 5) {
         LOG(ERROR) << "args number error: " << argc << ", need 5 | 6.";
@@ -873,13 +904,21 @@ int32_t GetOp(Client* client, int32_t argc, char** argv, ErrorCode* err) {
             reader->AddColumnFamily(columnfamily);
         }
     }
-    table->Get(reader);
+    if (g_row_txn != NULL) {
+        g_row_txn->Get(reader);
+    } else {
+        table->Get(reader);
+    }
     while (!reader->Done()) {
-        std::cout << reader->RowName() << ":"
-           << reader->ColumnName() << ":"
-           << reader->Timestamp() << ":"
-           << reader->Value() << std::endl;
+        std::cout << PrintableFormatter(reader->RowName()) << ":"
+            << PrintableFormatter(reader->ColumnName()) << ":"
+            << reader->Timestamp() << ":"
+            << PrintableFormatter(reader->Value()) << std::endl;
         reader->Next();
+    }
+    if (reader->GetError().GetType() != tera::ErrorCode::kOK
+        && reader->GetError().GetType() != tera::ErrorCode::kNotFound) {
+        std::cout << reader->GetError().ToString() << std::endl;
     }
     delete reader;
     return 0;
@@ -977,7 +1016,15 @@ int32_t DeleteOp(Client* client, int32_t argc, char** argv, ErrorCode* err) {
     } else {
         LOG(FATAL) << "should not run here.";
     }
-    table->ApplyMutation(mutation);
+    if (g_row_txn != NULL) {
+        g_row_txn->ApplyMutation(mutation);
+    } else {
+        table->ApplyMutation(mutation);
+    }
+    if (mutation->GetError().GetType() != tera::ErrorCode::kOK) {
+        std::cout << mutation->GetError().ToString() << std::endl;
+    }
+    delete mutation;
     return 0;
 }
 
@@ -993,7 +1040,15 @@ int32_t ScanRange(TablePtr& table, ScanDescriptor& desc, ErrorCode* err) {
         return -7;
     }
     g_start_time = time(NULL);
+
+    std::string last_key = "";
+    int64_t found_num = 0;
     while (!result_stream->Done(err)) {
+        if (result_stream->RowName() != last_key) {
+            found_num++;
+        }
+        last_key = result_stream->RowName();
+
         int32_t len = result_stream->RowName().size()
             + result_stream->ColumnName().size()
             + sizeof(result_stream->Timestamp())
@@ -1001,10 +1056,13 @@ int32_t ScanRange(TablePtr& table, ScanDescriptor& desc, ErrorCode* err) {
         g_total_size += len;
         g_key_num ++;
         g_cur_batch_num ++;
-        std::cout << result_stream->RowName() << ":"
-           << result_stream->ColumnName() << ":"
-           << result_stream->Timestamp() << ":"
-           << result_stream->Value() << std::endl;
+        if (FLAGS_print_data) {
+            std::cout << PrintableFormatter(result_stream->RowName()) << ":"
+                << PrintableFormatter(result_stream->ColumnName()) << ":"
+                << result_stream->Timestamp() << ":"
+                << PrintableFormatter(result_stream->Value()) << std::endl;
+        }
+
         result_stream->Next();
         if (g_cur_batch_num >= FLAGS_tera_client_batch_put_num) {
             int32_t time_cur=time(NULL);
@@ -1014,6 +1072,9 @@ int32_t ScanRange(TablePtr& table, ScanDescriptor& desc, ErrorCode* err) {
             g_cur_batch_num = 0;
             g_last_time = time_cur;
         }
+    }
+    if (FLAGS_rowkey_count) {
+        std::cout << found_num << std::endl;
     }
     delete result_stream;
     if (err->GetType() != ErrorCode::kOK) {
@@ -1492,7 +1553,7 @@ int32_t ShowTabletNodesInfo(Client* client, bool is_x, ErrorCode* err) {
             row.clear();
             row.push_back(NumberToString(i));
             row.push_back(infos[i].addr());
-            if (now - infos[i].timestamp() > 600 * 1000000) {
+            if (now - (int64_t)infos[i].timestamp() > FLAGS_tera_sdk_status_timeout * 1000000) {
                 // tabletnode status timeout
                 row.push_back("kZombie");
             } else {
@@ -1531,7 +1592,7 @@ int32_t ShowTabletNodesInfo(Client* client, bool is_x, ErrorCode* err) {
             row.clear();
             row.push_back(NumberToString(i));
             row.push_back(infos[i].addr());
-            if (now - infos[i].timestamp() > 600 * 1000000) {
+            if (now - (int64_t)infos[i].timestamp() > FLAGS_tera_sdk_status_timeout * 1000000) {
                 row.push_back("kZombie");
             } else {
                 row.push_back(infos[i].status_m());
@@ -2953,6 +3014,72 @@ int32_t RangeOp(Client* client, int32_t argc, char** argv, ErrorCode* err) {
     return 0;
 }
 
+int StartRowTxnOp(Client* client, int32_t argc, char** argv, ErrorCode* err) {
+    if (argc != 5) {
+        PrintCmdHelpInfo(argv[1]);
+        return -1;
+    }
+    if (g_row_txn != NULL) {
+        LOG(ERROR) << "txn has started";
+        return -1;
+    }
+
+    CHECK(g_row_txn_table == NULL);
+    std::string tablename = argv[3];
+    g_row_txn_table = client->OpenTable(tablename, err);
+    if (g_row_txn_table == NULL) {
+        LOG(ERROR) << "fail to open table";
+        return -1;
+    }
+
+    std::string row_key = argv[4];
+    g_row_txn = g_row_txn_table->StartRowTransaction(row_key);
+    if (g_row_txn == NULL) {
+        LOG(ERROR) << "fail to start row txn";
+        delete g_row_txn_table;
+        g_row_txn_table = NULL;
+        return -1;
+    }
+    return 0;
+}
+
+int CommitRowTxnOp(Client* client, int32_t argc, char** argv, ErrorCode* err) {
+    if (argc != 3) {
+        PrintCmdHelpInfo(argv[1]);
+        return -1;
+    }
+    if (g_row_txn == NULL) {
+        LOG(ERROR) << "txn has not started";
+        return -1;
+    }
+    g_row_txn_table->CommitRowTransaction(g_row_txn);
+    std::cout << g_row_txn->GetError().ToString() << std::endl;
+
+    delete g_row_txn;
+    g_row_txn = NULL;
+    delete g_row_txn_table;
+    g_row_txn_table = NULL;
+    return 0;
+}
+
+int TxnOp(Client* client, int32_t argc, char** argv, ErrorCode* err) {
+    if (argc < 3) {
+        LOG(ERROR) << "args number error: " << argc << ", need > 2";
+        PrintCmdHelpInfo(argv[1]);
+        return -1;
+    }
+
+    std::string txn_op = argv[2];
+    if (txn_op == "start") {
+        return StartRowTxnOp(client, argc, argv, err);
+    } else if (txn_op == "commit") {
+        return CommitRowTxnOp(client, argc, argv, err);
+    } else {
+        PrintCmdHelpInfo(argv[1]);
+        return -1;
+    }
+}
+
 int32_t HelpOp(int32_t argc, char** argv) {
     if (argc == 2) {
         PrintAllCmd();
@@ -3052,6 +3179,8 @@ int ExecuteCommand(Client* client, int argc, char* argv[]) {
         ret = SnapshotOp(client, argc, argv, &error_code);
     } else if (cmd == "range" || cmd == "rangex") {
         ret = RangeOp(client, argc, argv, &error_code);
+    } else if (cmd == "txn") {
+        ret = TxnOp(client, argc, argv, &error_code);
     } else if (cmd == "version") {
         PrintSystemVersion();
     } else if (cmd == "help") {

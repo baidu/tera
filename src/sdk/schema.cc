@@ -3,7 +3,7 @@
 // found in the LICENSE file.
 
 #include "sdk/schema_impl.h"
-#include "sdk/tera.h"
+#include "tera.h"
 
 namespace tera {
 
@@ -117,6 +117,14 @@ void TableDescriptor::DisableWal() {
 
 bool TableDescriptor::IsWalDisabled() const {
     return _impl->IsWalDisabled();
+}
+
+void TableDescriptor::EnableTxn() {
+    _impl->EnableTxn();
+}
+
+bool TableDescriptor::IsTxnEnabled() const {
+    return _impl->IsTxnEnabled();
 }
 
 int32_t TableDescriptor::AddSnapshot(uint64_t snapshot) {

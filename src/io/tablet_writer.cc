@@ -4,6 +4,8 @@
 
 #include "io/tablet_writer.h"
 
+#include <set>
+
 #include <boost/bind.hpp>
 #include <gflags/gflags.h>
 #include <glog/logging.h>
@@ -15,6 +17,7 @@
 #include "leveldb/lg_coding.h"
 #include "proto/proto_helper.h"
 #include "utils/counter.h"
+#include "utils/string_util.h"
 #include "utils/timer.h"
 
 DECLARE_int32(tera_asyncwriter_pending_limit);
@@ -190,15 +193,18 @@ bool TabletWriter::SwapActiveBuffer(bool force) {
     return true;
 }
 
-bool TabletWriter::BatchRequest(const std::vector<const RowMutationSequence*>& row_mutation_vec,
-                                leveldb::WriteBatch* batch, bool kv_only) {
+void TabletWriter::BatchRequest(const std::vector<const RowMutationSequence*>& row_mutation_vec,
+                                leveldb::WriteBatch* batch) {
     int64_t timestamp_old = 0;
 
     for (uint32_t i = 0; i < row_mutation_vec.size(); ++i) {
         const RowMutationSequence& row_mu = *row_mutation_vec[i];
         const std::string& row_key = row_mu.row_key();
         int32_t mu_num = row_mu.mutation_sequence().size();
-        if (kv_only) {
+        if (mu_num == 0) {
+            continue;
+        }
+        if (m_tablet->KvOnly()) {
             // only the last mutation take effect for kv
             const Mutation& mu = row_mu.mutation_sequence().Get(mu_num - 1);
             std::string tera_key;
@@ -253,7 +259,8 @@ bool TabletWriter::BatchRequest(const std::vector<const RowMutationSequence*>& r
                 }
                 int64_t timestamp = get_unique_micros(timestamp_old);
                 timestamp_old = timestamp;
-                if (mu.has_timestamp() && mu.timestamp() < timestamp) {
+                if (!m_tablet->GetSchema().enable_txn() &&
+                    mu.has_timestamp() && mu.timestamp() < timestamp) {
                     timestamp = mu.timestamp();
                 }
                 m_tablet->GetRawKeyOperator()->EncodeTeraKey(row_key, mu.family(), mu.qualifier(),
@@ -264,27 +271,55 @@ bool TabletWriter::BatchRequest(const std::vector<const RowMutationSequence*>& r
                     if (type != leveldb::TKT_DEL) {
                         lg_id = m_tablet->GetLGidByCFName(mu.family());
                         leveldb::PutFixed32LGId(&tera_key, lg_id);
-                        VLOG(10) << "Batch Request, key:" << row_key << ",family:"
-                            << mu.family() << ",lg_id:" << lg_id;
+                        VLOG(10) << "Batch Request, key: " << DebugString(row_key)
+                            << " family: " << mu.family() << ", lg_id: " << lg_id;
                         batch->Put(tera_key, mu.value());
                     } else {
                         // put row_del mark to all LGs
                         for (lg_id = 0; lg_id < lg_num; ++lg_id) {
                             std::string tera_key_tmp = tera_key;
                             leveldb::PutFixed32LGId(&tera_key_tmp, lg_id);
-                            VLOG(10) << "Batch Request, key:" << row_key << ",family:"
-                                << mu.family() << ",lg_id:" << lg_id;
+                            VLOG(10) << "Batch Request, key: " << DebugString(row_key)
+                                << " family: " << mu.family() << ", lg_id: " << lg_id;
                             batch->Put(tera_key_tmp, mu.value());
                         }
                     }
                 } else {
-                    VLOG(10) << "Batch Request, key:" << row_key << ",family:"
-                        << mu.family() << ",lg_id:" << lg_id;
+                    VLOG(10) << "Batch Request, key: " << DebugString(row_key)
+                        << " family: " << mu.family() << ", lg_id: " << lg_id;
                     batch->Put(tera_key, mu.value());
                 }
             }
         }
     }
+}
+
+bool TabletWriter::CheckConflict(const RowMutationSequence& row_mu,
+                                 std::set<std::string>* commit_row_key_set,
+                                 StatusCode* status) {
+    const std::string& row_key = row_mu.row_key();
+    if (row_mu.txn_read_info().has_read()) {
+        if (!m_tablet->GetSchema().enable_txn()) {
+            VLOG(10) << "txn of row " << DebugString(row_key)
+                     << " is interrupted: txn not enabled";
+            SetStatusCode(kTxnFail, status);
+            return false;
+        }
+        if (commit_row_key_set->find(row_key) != commit_row_key_set->end()) {
+            VLOG(10) << "txn of row " << DebugString(row_key)
+                     << " is interrupted: found same row in one batch";
+            SetStatusCode(kTxnFail, status);
+            return false;
+        }
+        if (!m_tablet->SingleRowTxnCheck(row_key, row_mu.txn_read_info(), status)) {
+            VLOG(10) << "txn of row " << DebugString(row_key)
+                     << " is interrupted: check fail, status: "
+                     << StatusCodeToString(*status);
+            return false;
+        }
+        VLOG(10) << "txn of row " << DebugString(row_key) << " check pass";
+    }
+    commit_row_key_set->insert(row_key);
     return true;
 }
 
@@ -293,7 +328,9 @@ void TabletWriter::FinishTask(const WriteTask& task, StatusCode status) {
     m_tablet->GetCounter().write_rows.Add(row_num);
     for (int32_t i = 0; i < row_num; i++) {
         m_tablet->GetCounter().write_kvs.Add((*task.row_mutation_vec)[i]->mutation_sequence_size());
-        (*task.status_vec)[i] = status;
+        if ((*task.status_vec)[i] == kTableOk) {
+            (*task.status_vec)[i] = status;
+        }
     }
     task.callback(task.row_mutation_vec, task.status_vec);
 }
@@ -302,10 +339,21 @@ StatusCode TabletWriter::FlushToDiskBatch(WriteTaskBuffer* task_buffer) {
     size_t task_num = task_buffer->size();
     leveldb::WriteBatch batch;
 
+    std::set<std::string> commit_row_key_set;
+    std::vector<const RowMutationSequence*> commit_row_mu_vec;
     for (size_t i = 0; i < task_num; ++i) {
-        const WriteTask& task = (*task_buffer)[i];
-        BatchRequest(*task.row_mutation_vec, &batch, m_tablet->KvOnly());
+        WriteTask& task = (*task_buffer)[i];
+        std::vector<const RowMutationSequence*>& row_mutation_vec = *task.row_mutation_vec;
+        std::vector<StatusCode>& status_vec = *task.status_vec;
+        for (size_t j = 0; j < row_mutation_vec.size(); ++j) {
+            const RowMutationSequence* row_mu = row_mutation_vec[j];
+            if (CheckConflict(*row_mu, &commit_row_key_set, &status_vec[j])) {
+                commit_row_mu_vec.push_back(row_mu);
+                status_vec[j] = kTableOk;
+            }
+        }
     }
+    BatchRequest(commit_row_mu_vec, &batch);
 
     StatusCode status = kTableOk;
     const bool disable_wal = false;

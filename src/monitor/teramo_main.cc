@@ -17,7 +17,7 @@
 #include "common/file/file_path.h"
 #include "proto/monitor.pb.h"
 #include "proto/tabletnode.pb.h"
-#include "sdk/tera.h"
+#include "tera.h"
 #include "utils/utils_cmd.h"
 #include "utils/timer.h"
 

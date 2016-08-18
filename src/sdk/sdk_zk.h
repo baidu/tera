@@ -19,9 +19,13 @@ public:
     virtual ~ClusterFinder() {}
     std::string MasterAddr(bool update = false);
     std::string RootTableAddr(bool update = false);
+    std::string ClusterId(); // cluster URI: <scheme>://<authority>/<path>
 
 private:
     virtual bool ReadNode(const std::string& path, std::string* value) = 0;
+    virtual std::string Name() = 0;
+    virtual std::string Authority() = 0;
+    virtual std::string Path() = 0;
 
     mutable Mutex _mutex;
     std::string _master_addr;
@@ -33,6 +37,9 @@ public:
     ZkClusterFinder(const std::string& zk_root_path, const std::string& zk_addr_list);
 private:
     virtual bool ReadNode(const std::string& path, std::string* value);
+    virtual std::string Name() { return "zk"; };
+    virtual std::string Authority() { return _zk_addr_list; }
+    virtual std::string Path() { return _zk_root_path; }
     std::string _zk_root_path;
     std::string _zk_addr_list;
 };
@@ -42,6 +49,9 @@ public:
     InsClusterFinder(const std::string& ins_root_path, const std::string& ins_addr_list);
 private:
     virtual bool ReadNode(const std::string& path, std::string* value);
+    virtual std::string Name() { return "ins"; };
+    virtual std::string Authority() { return _ins_addr_list; }
+    virtual std::string Path() { return _ins_root_path; }
     std::string _ins_root_path;
     std::string _ins_addr_list;
 };
@@ -51,6 +61,9 @@ public:
     FakeZkClusterFinder(const std::string& fake_zk_path_prefix);
 private:
     virtual bool ReadNode(const std::string& path, std::string* value);
+    virtual std::string Name() { return "fakezk"; };
+    virtual std::string Authority() { return "localhost"; }
+    virtual std::string Path() { return _fake_zk_path_prefix; }
     std::string _fake_zk_path_prefix;
 };
 

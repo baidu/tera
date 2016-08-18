@@ -97,8 +97,8 @@ DEFINE_int32(tera_master_impl_retry_times, 5, "the max retry times when master i
 DEFINE_string(tera_master_meta_table_name, "meta_table", "the meta table name");
 DEFINE_string(tera_master_meta_table_path, "meta", "the path of meta table");
 
+DEFINE_double(tera_master_workload_split_threshold, 3.5, "if workload(wwl) > 3.5, halve the splitsize");
 DEFINE_int64(tera_master_split_tablet_size, 512, "the size (in MB) of tablet to trigger split");
-DEFINE_bool(tera_master_merge_enabled, false, "enable the auto-merge tablet");
 DEFINE_int64(tera_master_merge_tablet_size, 0, "the size (in MB) of tablet to trigger merge");
 DEFINE_string(tera_master_gc_strategy, "incremental", "gc strategy, [default, incremental]");
 
@@ -264,3 +264,10 @@ DEFINE_int32(tera_sdk_max_batch_scan_req, 10, "the max number of concurrent scan
 DEFINE_string(tera_ins_addr_list, "", "the ins cluster addr. e.g. abc.com:1234,abb.com:1234");
 DEFINE_string(tera_ins_root_path, "", "root path on ins. e.g /ps/sandbox");
 DEFINE_bool(tera_ins_enabled, false, "option to open ins naming");
+
+DEFINE_int64(tera_sdk_status_timeout, 600, "(s) check tablet/tabletnode status timeout");
+
+/////////  http /////////
+DEFINE_string(tera_http_port, "8657", "the http proxy port of tera");
+DEFINE_int32(tera_http_request_thread_num, 30, "the http proxy thread num for handle client request");
+DEFINE_int32(tera_http_ctrl_thread_num, 10, "the http proxy thread num for it self");

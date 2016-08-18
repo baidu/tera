@@ -9,7 +9,7 @@
 #include "proto/master_rpc.pb.h"
 #include "proto/tabletnode_client.h"
 #include "sdk/sdk_zk.h"
-#include "sdk/tera.h"
+#include "tera.h"
 #include "utils/timer.h"
 
 using std::string;

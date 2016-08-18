@@ -231,6 +231,11 @@ private:
                      leveldb::Iterator* it,
                      KeyValuePair* next);
     void SetSchema(const TableSchema& schema);
+
+    bool SingleRowTxnCheck(const std::string& row_key,
+                           const SingleRowTxnReadInfo& txn_read_info,
+                           StatusCode* status);
+
 private:
     mutable Mutex m_mutex;
     TabletWriter* m_async_writer;

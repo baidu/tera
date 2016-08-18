@@ -4,20 +4,68 @@ package tera.http;
 
 option cc_generic_services = true;
 
+//enum HttpRowMutationType {
+//    kPut = 0;                 "put"
+//    kDeleteColumn = 1;
+//    kDeleteColumns = 2;       "del-col"
+//    kDeleteFamily = 3;
+//    kDeleteRow = 4;           "del-row"
+//    kAdd = 5;
+//    kPutIfAbsent = 6;
+//    kAppend = 7;
+//    kAddInt64 = 8;
+//}
+
+message MutationColumns {
+    optional string columnfamily = 1;
+    optional string qualifier = 2;
+    optional string value = 3;
+}
+
+message HttpRowMutation {
+    optional string rowkey = 1;
+    optional string type = 2;
+    repeated MutationColumns columns = 3;
+}
+
+message PutRequest {
+    optional string tablename = 1;
+    repeated HttpRowMutation mutation_list = 2;
+}
+
+message HttpRowMutationResult {
+    optional string rowkey = 1;
+    optional bool status = 2;
+    optional string reason = 3;
+}
+
+message PutResponse {
+    optional bool status = 1;
+    optional string reason = 2;
+    repeated HttpRowMutationResult results = 3;
+}
+
+message HttpColumnReader {
+    optional string rowkey = 1;
+    optional string columnfamily = 2;
+    optional string qualifier = 3;
+    optional string value = 4;  // used for response
+    optional bool status = 5;   // used for response
+    optional string reason = 6; // used for response, e.g. not found
+}
+
 message GetRequest {
-    optional string table_type = 1;
-    optional string tablename = 2;
-    optional string rowkey = 3;
-    optional string cf = 5;
-    optional string qu = 6;
+    optional string tablename = 1;
+    repeated HttpColumnReader reader_list = 2;
 }
 
 message GetResponse {
-    optional bool status = 1; // true | false
+    optional bool status = 1;
     optional string reason = 2;
-    optional string value = 3;
+    repeated HttpColumnReader results = 3;
 }
 
 service HttpProxy {
     rpc Get(GetRequest) returns(GetResponse);
+    rpc Put(PutRequest) returns(PutResponse);
 }

@@ -11,7 +11,7 @@
 #include "common/mutex.h"
 #include "proto/tabletnode_rpc.pb.h"
 #include "sdk/sdk_task.h"
-#include "sdk/tera.h"
+#include "tera.h"
 #include "types.h"
 #include "utils/timer.h"
 
@@ -146,6 +146,9 @@ public:
     /// 重试次数
     uint32_t RetryTimes();
 
+    /// 返回所属事务
+    Transaction* GetTransaction() { return _txn; }
+
 public:
     /// 以下接口仅内部使用，不开放给用户
 
@@ -173,6 +176,12 @@ public:
     void AddCommitTimes() { _commit_times++; }
     int64_t GetCommitTimes() { return _commit_times; }
 
+    /// 设置所属事务
+    void SetTransaction(Transaction* txn) { _txn = txn; }
+
+    /// 连接
+    void Concatenate(RowMutationImpl& row_mu);
+
 protected:
     /// 增加一个操作
     RowMutation::Mutation& AddMutation();
@@ -194,6 +203,9 @@ private:
 
     /// 记录此mutation被提交到ts的次数
     int64_t _commit_times;
+
+    /// 所属事务
+    Transaction* _txn;
 };
 
 void SerializeMutation(const RowMutation::Mutation& src, tera::Mutation* dst);

@@ -11,7 +11,7 @@
 #include "common/mutex.h"
 #include "proto/tabletnode_rpc.pb.h"
 #include "sdk/sdk_task.h"
-#include "sdk/tera.h"
+#include "tera.h"
 #include "types.h"
 #include "utils/timer.h"
 
@@ -48,6 +48,7 @@ public:
     void SetTimeOut(int64_t timeout_ms);
     /// 设置异步回调, 操作会异步返回
     void SetCallBack(RowReader::Callback callback);
+    RowReader::Callback GetCallBack();
     /// 设置用户上下文，可在回调函数中获取
     void SetContext(void* context);
     void* GetContext();
@@ -105,6 +106,13 @@ public:
     void AddCommitTimes() { _commit_times++; }
     int64_t GetCommitTimes() { return _commit_times; }
 
+    /// 重置result游标
+    void ResetResultPos() { _result_pos = 0; }
+    /// 返回所属事务
+    Transaction* GetTransaction() { return _txn; }
+    /// 设置所属事务
+    void SetTransaction(Transaction* txn) { _txn = txn; }
+
 private:
     std::string _row_key;
     RowReader::Callback _callback;
@@ -130,6 +138,9 @@ private:
 
     /// 记录此reader被提交到ts的次数
     int64_t _commit_times;
+
+    /// 所属事务
+    Transaction* _txn;
 };
 
 } // namespace tera

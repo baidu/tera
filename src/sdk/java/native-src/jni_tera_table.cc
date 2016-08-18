@@ -10,7 +10,7 @@
 
 #include "glog/logging.h"
 
-#include "sdk/tera.h"
+#include "tera.h"
 
 #define NativePut \
     JNICALL Java_com_baidu_tera_client_TeraTableImpl_nativePut

@@ -2,7 +2,7 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include "sdk/tera_c.h"
+#include "tera_c.h"
 
 #include <assert.h>
 #include <stdlib.h>
@@ -13,7 +13,7 @@
 
 #include "common/mutex.h"
 
-#include "sdk/tera.h"
+#include "tera.h"
 
 using tera::Client;
 using tera::ErrorCode;
@@ -232,12 +232,11 @@ void tera_row_reader_callback_stub(RowReader* reader) {
     void* c_reader = apair.first; // C tera_row_reader_t*
     ReaderCallbackType callback = (ReaderCallbackType)apair.second;
 
+    g_reader_callback_map.erase(it);
     g_reader_mutex.Unlock();
     // users use C tera_row_reader_t* to construct it's own object
     callback(c_reader);
     g_reader_mutex.Lock();
-
-    g_reader_callback_map.erase(it);
 }
 
 void tera_row_reader_set_callback(tera_row_reader_t* reader, ReaderCallbackType callback) {
@@ -345,12 +344,11 @@ void tera_row_mutation_callback_stub(RowMutation* mu) {
     void* c_mu = apair.first; // C tera_row_mutation_t*
     MutationCallbackType callback = (MutationCallbackType)apair.second;
 
+    g_mutation_callback_map.erase(it);
     g_mutation_mutex.Unlock();
     // users use C tera_row_mutation_t* to construct it's own object
     callback(c_mu);
     g_mutation_mutex.Lock();
-
-    g_mutation_callback_map.erase(it);
 }
 
 void tera_row_mutation_set_callback(tera_row_mutation_t* mu, MutationCallbackType callback) {
