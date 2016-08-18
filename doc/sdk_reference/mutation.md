@@ -6,11 +6,11 @@ tera sdk中通过RowMutation结构描述一次行更新操作，包含删除操�
  * 同一个RowMutation中的操作保证同时成功或失败。
  * 操作不存在的列会返回成功，但无法读取。
 
-## 创建
+## 创建与析构
 
-由tera::Table::NewRowMutation创建。
+由tera::Table::NewRowMutation创建，不能由用户创建。
 
-不能由用户创建。
+同步模式下会被自动析构，异步模式下需要用户自行析构。
  
 ## API
 
