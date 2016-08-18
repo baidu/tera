@@ -146,9 +146,7 @@ DBImpl::DBImpl(const Options& options, const std::string& dbname)
       log_(NULL),
       bound_log_size_(0),
       tmp_batch_(new WriteBatch),
-      bg_compaction_scheduled_(false),
-      bg_compaction_score_(0),
-      bg_schedule_id_(0),
+      bg_compaction_scheduled_(0),
       manual_compaction_(NULL),
       consecutive_compaction_errors_(0),
       flush_on_destroy_(false) {
@@ -173,9 +171,6 @@ Status DBImpl::Shutdown1() {
   shutting_down_.Release_Store(this);  // Any non-NULL value is ok
 
   Log(options_.info_log, "[%s] wait bg compact finish", dbname_.c_str());
-  if (bg_compaction_scheduled_) {
-    env_->ReSchedule(bg_schedule_id_, kDumpMemTableUrgentScore);
-  }
   while (bg_compaction_scheduled_) {
     bg_cv_.Wait();
   }
@@ -577,15 +572,21 @@ Status DBImpl::WriteLevel0Table(MemTable* mem, VersionEdit* edit,
   return s;
 }
 
+// multithread safe
 Status DBImpl::CompactMemTable() {
   mutex_.AssertHeld();
   assert(imm_ != NULL);
+  Status s;
+  if (imm_->BeingFlushed()) {
+    return s;
+  }
+  imm_->SetBeingFlushed(true);
 
   // Save the contents of the memtable as a new Table
   VersionEdit edit;
   Version* base = versions_->current();
   base->Ref();
-  Status s = WriteLevel0Table(imm_, &edit, base);
+  s = WriteLevel0Table(imm_, &edit, base);
   base->Unref();
 
   if (s.ok() && shutting_down_.Acquire_Load()) {
@@ -609,6 +610,9 @@ Status DBImpl::CompactMemTable() {
     imm_->Unref();
     imm_ = NULL;
     has_imm_.Release_Store(NULL);
+  } else {
+    // imm dump fail, reset being flush flag
+    imm_->SetBeingFlushed(false);
   }
 
   return s;
@@ -788,30 +792,21 @@ void DBImpl::MaybeScheduleCompaction() {
   if (shutting_down_.Acquire_Load()) {
     // DB is being deleted; no more background compactions
   } else {
-    double score = versions_->CompactionScore();
-    if (manual_compaction_ != NULL) {
-        score = kManualCompactScore;
+    double score = versions_->CompactionScore(); // Get Max score
+    if (manual_compaction_ != NULL && (score < kManualCompactScore)) {
+      score = kManualCompactScore;
     }
-    if (imm_ != NULL) {
-        score = kDumpMemTableScore;
+    if (imm_ != NULL && (score < kDumpMemTableScore)) {
+      score = kDumpMemTableScore;
     }
     if (score > 0) {
-        if (bg_compaction_scheduled_ && score <= bg_compaction_score_) {
-            // Already scheduled
-        } else if (bg_compaction_scheduled_) {
-            env_->ReSchedule(bg_schedule_id_, score);
-            Log(options_.info_log, "[%s] ReSchedule Compact[%ld] score= %.2f",
-                dbname_.c_str(), bg_schedule_id_, score);
-            bg_compaction_score_ = score;
-        } else {
-            bg_schedule_id_ = env_->Schedule(&DBImpl::BGWork, this, score);
-            Log(options_.info_log, "[%s] Schedule Compact[%ld] score= %.2f",
-                dbname_.c_str(), bg_schedule_id_, score);
-            bg_compaction_score_ = score;
-            bg_compaction_scheduled_ = true;
-        }
-    } else {
-      // No work to be done
+      if (bg_compaction_scheduled_ < (int)options_.max_background_compactions) {
+        bg_compaction_scheduled_++;
+
+        int64_t id = env_->Schedule(&DBImpl::BGWork,this, score);
+        Log(options_.info_log, "[%s] Schedule Compact[%ld] score= %.2f currency %d",
+          dbname_.c_str(), id, score, bg_compaction_scheduled_);
+      }
     }
   }
 }
@@ -823,7 +818,7 @@ void DBImpl::BGWork(void* db) {
 void DBImpl::BackgroundCall() {
   Log(options_.info_log, "[%s] BackgroundCall", dbname_.c_str());
   MutexLock l(&mutex_);
-  assert(bg_compaction_scheduled_);
+  assert(bg_compaction_scheduled_ > 0);
   if (!shutting_down_.Acquire_Load()) {
     Status s = BackgroundCompaction();
     if (s.ok()) {
@@ -854,7 +849,7 @@ void DBImpl::BackgroundCall() {
     }
   }
 
-  bg_compaction_scheduled_ = false;
+  bg_compaction_scheduled_--;
 
   // Previous compaction may have produced too many files in a level,
   // so reschedule another compaction if needed.
@@ -869,7 +864,7 @@ Status DBImpl::BackgroundCompaction() {
     return CompactMemTable();
   }
 
-  Compaction* c;
+  Compaction* c = NULL;
   bool is_manual = (manual_compaction_ != NULL);
   InternalKey manual_end;
   if (is_manual) {
@@ -908,10 +903,12 @@ Status DBImpl::BackgroundCompaction() {
         static_cast<unsigned long long>(f->file_size),
         status.ToString().c_str(),
         versions_->LevelSummary(&tmp));
+    versions_->ReleaseCompaction(c);
   } else {
     CompactionState* compact = new CompactionState(c);
     status = DoCompactionWork(compact);
     CleanupCompaction(compact);
+    versions_->ReleaseCompaction(c); // current_version has reference to c->inputs_[0,1]
     c->ReleaseInputs();
     DeleteObsoleteFiles();
   }
@@ -1072,6 +1069,7 @@ Status DBImpl::InstallCompactionResults(CompactionState* compact) {
   return versions_->LogAndApply(compact->compaction->edit(), &mutex_);
 }
 
+// *MUST* multi thread safe
 Status DBImpl::DoCompactionWork(CompactionState* compact) {
   const uint64_t start_micros = env_->NowMicros();
   int64_t imm_micros = 0;  // Micros spent doing imm_ compactions
@@ -1276,7 +1274,7 @@ Status DBImpl::DoCompactionWork(CompactionState* compact) {
   }
   VersionSet::LevelSummaryStorage tmp;
   Log(options_.info_log,
-      "[%s] compacted to: %s", dbname_.c_str(), versions_->LevelSummary(&tmp));
+      "[%s] compacted to: %s, compacte stat %s", dbname_.c_str(), versions_->LevelSummary(&tmp), status.ToString().c_str());
   return status;
 }
 
