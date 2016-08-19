@@ -26,11 +26,11 @@ void Put(const std::string& value, int32_t ttl = -1);
 ```
 void Put(const std::string& family, const std::string& qualifier, const std::string& value, int64_t timestamp = -1);
 ```
-表格模式更新。Counter场景下使用，设定初始值
+表格模式更新。Counter场景下使用，设定初始值。
 ```
 void Put(const std::string& family, const std::string& qualifier, int64_t value, int64_t timestamp = -1);
 ```
-表格模式更新。Counter场景下使用，累加。
+表格模式更新。Counter场景下使用，累加。若无初始值，会从0开始累加。
 ```
 void Add(const std::string& family, const std::string& qualifier, const int64_t delta);
 ```
@@ -38,7 +38,7 @@ void Add(const std::string& family, const std::string& qualifier, const int64_t 
 ```
 void PutIfAbsent(const std::string& family, const std::string& qualifier, const std::string& value);
 ```
-表格模式更新。将value追加至此列原数据末尾。
+表格模式更新。将value追加至此列原数据末尾；若原数据不存在，则与Put等效。
 ```
 void Append(const std::string& family, const std::string& qualifier, const std::string& value);
 ```
@@ -58,7 +58,7 @@ void DeleteFamily(const std::string& family, int64_t timestamp = -1);
 ```
 void DeleteColumns(const std::string& family, const std::string& qualifier, int64_t timestamp = -1);
 ```
-删除某列指定时间更新。
+删除某列指定时间更新。若不存在，则不生效。
 ```
 void DeleteColumn(const std::string& family, const std::string& qualifier, int64_t timestamp);
 ```
