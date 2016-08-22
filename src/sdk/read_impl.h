@@ -68,6 +68,7 @@ public:
     void Next();
     /// Row
     const std::string& RowName();
+    const std::string& RowKey();
     /// 读取的结果
     std::string Value();
     /// 读取的结果
@@ -83,6 +84,7 @@ public:
     /// 将结果转存到一个std::map中, 格式为: map<column, map<timestamp, value>>
     typedef std::map< std::string, std::map<int64_t, std::string> > Map;
     void ToMap(Map* rowmap);
+    void ToMap(TRow* rowmap);
 
     void SetResult(const RowResult& result);
 

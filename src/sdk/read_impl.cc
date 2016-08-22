@@ -147,6 +147,10 @@ const std::string& RowReaderImpl::RowName() {
     return _row_key;
 }
 
+const std::string& RowReaderImpl::RowKey() {
+    return _row_key;
+}
+
 /// Column cf:qualifier
 std::string RowReaderImpl::ColumnName() {
     std::string column;
@@ -198,6 +202,27 @@ void RowReaderImpl::ToMap(Map* rowmap) {
             timestamp = _result.key_values(i).timestamp();
         }
         value_map[timestamp] = _result.key_values(i).value();
+    }
+}
+
+void RowReaderImpl::ToMap(TRow* rowmap) {
+    for (int32_t i = 0; i < _result.key_values_size(); ++i) {
+        std::string cf, qu, value;
+        if (_result.key_values(i).has_column_family()) {
+            cf = _result.key_values(i).column_family();
+        } else {
+            cf = "";
+        }
+        TColumnFamily& tcf = (*rowmap)[cf];
+        if (_result.key_values(i).has_qualifier()) {
+            qu = _result.key_values(i).qualifier();
+        }
+        TColumn& tqu = tcf[qu];
+        int64_t timestamp = 0L;
+        if (_result.key_values(i).has_timestamp()) {
+            timestamp = _result.key_values(i).timestamp();
+        }
+        tqu[timestamp] = _result.key_values(i).value();
     }
 }
 
