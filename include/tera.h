@@ -19,5 +19,6 @@
 #include "tera/table.h"
 #include "tera/table_descriptor.h"
 #include "tera/transaction.h"
+#include "tera/utils.h"
 
 #endif  // TERA_TERA_H_
