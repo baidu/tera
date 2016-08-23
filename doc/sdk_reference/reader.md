@@ -12,11 +12,11 @@ tera sdk中通过RowReader结构描述一次行读取操作，并获取返回数
  
 ## API
 
-### 描述请求
+### 描述过滤条件
 
-通过相关的API可以描述返回的列、时间戳、版本等信息，对返回数据集合进行过滤。
+通过相关的API可以对列名、更新时间、版本数目等信息描述，从而对返回数据集合进行过滤。
 
-如果不进行过滤，默认返回此行所有数据。
+如果不进行任何描述，默认返回此行所有数据。
 
 #### AddColumnFamily
 
@@ -24,9 +24,11 @@ tera sdk中通过RowReader结构描述一次行读取操作，并获取返回数
 void AddColumnFamily(const std::string& family);
 ```
 
-增加一个列族。
+限定返回数据的列族为“family”。
 
-如此列族不存在，则不生效。
+可以增加多个列族。
+
+如此“family”不存在于表格的schema中，则不进行过滤。
 
 #### AddColumn
 
@@ -34,9 +36,9 @@ void AddColumnFamily(const std::string& family);
 void AddColumn(const std::string& family, const std::string& qualifier);
 ```
 
-增加一个列。
+与AddColumnFamily类似，除限定返回数据列族为“family”外，其列名必须为“qualifier”。
 
-如此列不存在，则不生效。
+此操作与AddColumnFamily共同生效，返回数据为二者并集。
 
 #### SetTimeRange
 
@@ -44,7 +46,7 @@ void AddColumn(const std::string& family, const std::string& qualifier);
 void SetTimeRange(int64_t ts_start, int64_t ts_end);
 ```
 
-设定数据更新时间范围。
+设定返回数据的更新时间范围。
 
 只返回更新时间在[ts_start, ts_end]范围内的数据。
 
