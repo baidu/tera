@@ -24,9 +24,9 @@ tera中的表格由TableDescriptor、LocalityGroupDescriptor、ColumnFamilyDescr
 
 #### TableDescriptor
 
-'''
+```
 TableDescriptor(const std::string& name);
-'''
+```
 
 构造表格名为“name”的表格描述符。
 
@@ -124,11 +124,62 @@ RawKeyType RawKey() const;
 
 决定了表格的存储及访问格式，推荐kBinary。
 
+#### SplitSize
+
 ```
+void SetSplitSize(int64_t size);
+int64_t SplitSize() const;
 ```
+
+分片分裂阈值。
+
+当分片数据量（物理存储）超过此阈值时，会被一分为二，并可能被两个不同服务器加载。
+
+此分裂阈值是一个基础参考值，系统会根据实际动态负载在此值基础上进行调整。
+
+#### MergeSize
+
 ```
+void SetMergeSize(int64_t size);
+int64_t MergeSize() const;
 ```
+
+分片合并阈值。
+
+当分片数据量（物理存储）低于此阈值时，会被合并至相临分片中。
+
+此值是一个基础参考值，系统会根据实际动态负载在此值基础上进行调整。
+
+需要小于分裂阈值的1/3，防止出现合并、分裂的循环出现。
+
+#### Write Ahead Log
+
 ```
+void DisableWal();         
+bool IsWalDisabled() const;
 ```
+
+配置日志开关，默认打开。
+
+当此表格数据没有强特久化需求时，可以选择关闭日志。
+
+会大幅提升写性能、降低系统IO消耗。
+
+当有服务器宕机时，内存中数据将丢失，谨慎关闭。
+
+#### Admin
+
 ```
+void SetAdmin(const std::string& name);
+std::string Admin() const;
+void SetAdminGroup(const std::string& name);
+std::string AdminGroup() const;
 ```
+
+设置表格ACL信息。
+
+## LocalityGroupDescriptor
+
+## ColumnFamilyDescriptor
+
+## 字符串描述
