@@ -58,7 +58,7 @@ DECLARE_bool(tera_tabletnode_cache_enabled);
 DECLARE_int32(tera_leveldb_env_local_seek_latency);
 DECLARE_int32(tera_leveldb_env_dfs_seek_latency);
 DECLARE_int32(tera_memenv_table_cache_size);
-DECLARE_int32(tera_memenv_block_cache_size);
+DECLARE_bool(tera_use_flash_for_memenv);
 
 DECLARE_bool(tera_tablet_use_memtable_on_leveldb);
 DECLARE_int64(tera_tablet_memtable_ldb_write_buffer_size);
@@ -76,7 +76,7 @@ TabletIO::TabletIO(const std::string& key_start, const std::string& key_end)
       m_compact_status(kTableNotCompact),
       m_status(kNotInit),
       m_ref_count(1), m_db_ref_count(0), m_db(NULL),
-      m_mem_store_activated(false),
+      m_memory_cache(NULL),
       m_kv_only(false),
       m_key_operator(NULL) {
 }
@@ -140,6 +140,9 @@ TabletIO::StatCounter& TabletIO::GetCounter() {
     return m_counter;
 }
 
+void TabletIO::SetMemoryCache(leveldb::Cache* cache) {
+    m_memory_cache = cache;
+}
 bool TabletIO::Load(const TableSchema& schema,
                     const std::string& path,
                     const std::vector<uint64_t>& parent_tablets,
@@ -336,10 +339,6 @@ bool TabletIO::Unload(StatusCode* status) {
     m_db = NULL;
 
     delete m_ldb_options.filter_policy;
-    if (m_mem_store_activated) {
-        delete m_ldb_options.block_cache;
-        m_mem_store_activated = false;
-    }
     TearDownOptionsForLG();
     LOG(INFO) << "[Unload] done " << m_tablet_path;
 
@@ -1655,22 +1654,24 @@ void TabletIO::SetupOptionsForLG() {
         leveldb::LG_info* lg_info = new leveldb::LG_info(lg_schema.id());
 
         if (store == MemoryStore) {
-            m_ldb_options.env = lg_info->env = LeveldbMemEnv();
-            m_ldb_options.seek_latency = 0;
-            m_ldb_options.block_cache =
-                leveldb::NewLRUCache(FLAGS_tera_memenv_block_cache_size * 1024 * 1024);
-            m_mem_store_activated = true;
+            if (FLAGS_tera_use_flash_for_memenv) {
+                lg_info->env = LeveldbFlashEnv();
+            } else {
+                lg_info->env = LeveldbMemEnv();
+            }
+            lg_info->seek_latency = 0;
+            lg_info->block_cache = m_memory_cache;
         } else if (store == FlashStore) {
             if (!FLAGS_tera_tabletnode_cache_enabled) {
-                m_ldb_options.env = lg_info->env = LeveldbFlashEnv();
+                 lg_info->env = LeveldbFlashEnv();
             } else {
                 LOG(INFO) << "activate block-level Cache store";
-                m_ldb_options.env = lg_info->env = leveldb::EnvThreeLevelCache();
+                lg_info->env = leveldb::EnvThreeLevelCache();
             }
-            m_ldb_options.seek_latency = FLAGS_tera_leveldb_env_local_seek_latency;
+            lg_info->seek_latency = FLAGS_tera_leveldb_env_local_seek_latency;
         } else {
-            m_ldb_options.env = lg_info->env = LeveldbBaseEnv();
-            m_ldb_options.seek_latency = FLAGS_tera_leveldb_env_dfs_seek_latency;
+            lg_info->env = LeveldbBaseEnv();
+            lg_info->seek_latency = FLAGS_tera_leveldb_env_dfs_seek_latency;
         }
 
         if (compress) {
@@ -1689,7 +1690,6 @@ void TabletIO::SetupOptionsForLG() {
                 << ", block_size:"  << lg_info->memtable_ldb_block_size;
         }
         lg_info->sst_size = lg_schema.sst_size();
-        m_ldb_options.sst_size = lg_schema.sst_size();
         // FLAGS_tera_tablet_write_buffer_size is the max buffer size
         int64_t max_size = FLAGS_tera_tablet_max_write_buffer_size * 1024 * 1024;
         if (lg_schema.sst_size() * 4 < max_size) {

@@ -202,6 +202,7 @@ private:
     RpcCompactor<MergeTabletResponse> m_merge_rpc_compactor;
     leveldb::Logger* m_ldb_logger;
     leveldb::Cache* m_ldb_block_cache;
+    leveldb::Cache* m_memory_cache;
     leveldb::TableCache* m_ldb_table_cache;
 };
 
