@@ -5,10 +5,6 @@
 #ifndef  TERA_CLIENT_H_
 #define  TERA_CLIENT_H_
 
-#include <stdint.h>
-#include <list>
-#include <map>
-#include <set>
 #include <string>
 #include <vector>
 
@@ -21,81 +17,88 @@ namespace tera {
 
 class Client {
 public:
-    /// 使用glog的用户必须调用此接口，避免glog被重复初始化
-    static void SetGlogIsInitialized();
-
+    // Create a new client
+    // User should delete Client* if it is no longer needed.
+    // A Client can be deleted iff all the tables it opened have been deleted.
     static Client* NewClient(const std::string& confpath,
                              const std::string& log_prefix,
                              ErrorCode* err = NULL);
 
     static Client* NewClient(const std::string& confpath,
                              ErrorCode* err = NULL);
-
     static Client* NewClient();
 
-    /// 创建表格
+    // Open a table by name.
+    // This operation could fail due to zookeeper down, meta not avaliable, table not exits, etc.
+    virtual Table* OpenTable(const std::string& table_name, ErrorCode* err) = 0;
+
+    // Create a new table with specified descriptor.
     virtual bool CreateTable(const TableDescriptor& desc, ErrorCode* err) = 0;
+    // Create a new table with multiple tablets pre-assigned by tablet_delim.
     virtual bool CreateTable(const TableDescriptor& desc,
                              const std::vector<std::string>& tablet_delim,
                              ErrorCode* err) = 0;
-    /// 更新表格Schema
-    virtual bool UpdateTable(const TableDescriptor& desc, ErrorCode* err) = 0;
+
+    // Update table schema. User should call UpdateCheck to check if the update operation is complete.
+    virtual bool UpdateTableSchema(const TableDescriptor& desc, ErrorCode* err) = 0;
     virtual bool UpdateCheck(const std::string& table_name, bool* done, ErrorCode* err) = 0;
-    /// 删除表格
-    virtual bool DeleteTable(const std::string& name, ErrorCode* err) = 0;
-    /// 停止表格服务
+    // Disable a table by name. A disabled table will not provide any service.
     virtual bool DisableTable(const std::string& name, ErrorCode* err) = 0;
-    /// 恢复表格服务
+    // Drop a table by name. Only a disabled table can be dropped.
+    virtual bool DropTable(const std::string& name, ErrorCode* err) = 0;
+    // Revive a disabled table.
     virtual bool EnableTable(const std::string& name, ErrorCode* err) = 0;
 
-    /// acl
-    virtual bool CreateUser(const std::string& user,
-                            const std::string& password, ErrorCode* err) = 0;
-    virtual bool DeleteUser(const std::string& user, ErrorCode* err) = 0;
-    virtual bool ChangePwd(const std::string& user,
-                           const std::string& password, ErrorCode* err) = 0;
-    virtual bool ShowUser(const std::string& user, std::vector<std::string>& user_groups,
-                          ErrorCode* err) = 0;
-    virtual bool AddUserToGroup(const std::string& user,
-                                const std::string& group, ErrorCode* err) = 0;
-    virtual bool DeleteUserFromGroup(const std::string& user,
-                                     const std::string& group, ErrorCode* err) = 0;
-    /// 打开表格, 失败返回NULL
-    virtual Table* OpenTable(const std::string& table_name, ErrorCode* err) = 0;
-    /// 获取表格分布信息
-    virtual bool GetTabletLocation(const std::string& table_name,
-                                   std::vector<TabletInfo>* tablets,
-                                   ErrorCode* err) = 0;
-    /// 获取表格Schema
-    virtual TableDescriptor* GetTableDescriptor(const std::string& table_name,
-                                                ErrorCode* err) = 0;
+    // Get the descriptor of the table
+    virtual TableDescriptor* GetTableDescriptor(const std::string& table_name, ErrorCode* err) = 0;
+    // List all tables.
+    virtual bool List(std::vector<TableInfo>* table_list, ErrorCode* err) = 0;
+    // Get table & table info for a specified table.
+    virtual bool List(const std::string& table_name, TableInfo* table_info,
+                      std::vector<TabletInfo>* tablet_list, ErrorCode* err) = 0;
 
-    virtual bool List(std::vector<TableInfo>* table_list,
-                      ErrorCode* err) = 0;
-
-    virtual bool List(const std::string& table_name,
-                      TableInfo* table_info,
-                      std::vector<TabletInfo>* tablet_list,
-                      ErrorCode* err) = 0;
-
+    // Check the table status by name.
     virtual bool IsTableExist(const std::string& table_name, ErrorCode* err) = 0;
-
     virtual bool IsTableEnabled(const std::string& table_name, ErrorCode* err) = 0;
-
     virtual bool IsTableEmpty(const std::string& table_name, ErrorCode* err) = 0;
 
+    virtual bool CmdCtrl(const std::string& command, const std::vector<std::string>& arg_list,
+                         bool* bool_result, std::string* str_result, ErrorCode* err) = 0;
+    // Users who use glog in their own program should call this method to prevent cnofilict.
+    static void SetGlogIsInitialized();
+
+    // User management.
+    virtual bool CreateUser(const std::string& user, const std::string& password, ErrorCode* err) = 0;
+    virtual bool DeleteUser(const std::string& user, ErrorCode* err) = 0;
+    virtual bool ChangePwd(const std::string& user, const std::string& password, ErrorCode* err) = 0;
+    virtual bool ShowUser(const std::string& user, std::vector<std::string>& user_groups,
+                          ErrorCode* err) = 0;
+    virtual bool AddUserToGroup(const std::string& user, const std::string& group, ErrorCode* err) = 0;
+    virtual bool DeleteUserFromGroup(const std::string& user,
+                                     const std::string& group, ErrorCode* err) = 0;
+
+    // EXPERIMENTAL
+
+    // Create a snapshot for the table.
     virtual bool GetSnapshot(const std::string& name, uint64_t* snapshot, ErrorCode* err) = 0;
-    virtual bool DelSnapshot(const std::string& name, uint64_t snapshot,ErrorCode* err) = 0;
+    // Delete a specified snapshot.
+    virtual bool DelSnapshot(const std::string& name, uint64_t snapshot, ErrorCode* err) = 0;
+    // Perform a rollback operation to a specified snapshot
     virtual bool Rollback(const std::string& name, uint64_t snapshot,
                           const std::string& rollback_name, ErrorCode* err) = 0;
 
-    virtual bool CmdCtrl(const std::string& command,
-                         const std::vector<std::string>& arg_list,
-                         bool* bool_result,
-                         std::string* str_result,
-                         ErrorCode* err) = 0;
-    virtual bool Rename(const std::string& old_table_name,
-                        const std::string& new_table_name,
+    // DEPRECATED
+
+    // Use DropTable instead.
+    virtual bool DeleteTable(const std::string& name, ErrorCode* err) = 0;
+    // Use UpdateTableSchema instead.
+    virtual bool UpdateTable(const TableDescriptor& desc, ErrorCode* err) = 0;
+    // Use List instead.
+    virtual bool GetTabletLocation(const std::string& table_name, std::vector<TabletInfo>* tablets,
+                                   ErrorCode* err) = 0;
+
+    // Rename a table.
+    virtual bool Rename(const std::string& old_table_name, const std::string& new_table_name,
                         ErrorCode* err) = 0 ;
     Client() {}
     virtual ~Client() {}
