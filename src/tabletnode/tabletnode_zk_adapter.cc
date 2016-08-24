@@ -363,14 +363,15 @@ void InsTabletNodeZkAdapter::Init() {
     // create session
     m_ins_sdk = new galaxy::ins::sdk::InsSDK(FLAGS_tera_ins_addr_list);
 
-    // get session id
-    std::string session_id = m_ins_sdk->GetSessionID();
-    m_tabletnode_impl->SetSessionId(session_id);
-    m_tabletnode_impl->SetTabletNodeStatus(TabletNodeImpl::kIsRunning);
-
     // create node
     std::string lock_key = root_path + kTsListPath + "/" + m_server_addr;
     CHECK(m_ins_sdk->Lock(lock_key, &err)) << "register fail";
+
+    // get session id
+    // session-id may be changed during Lock(), so we must be call Lock() first, and then get the session-id.
+    std::string session_id = m_ins_sdk->GetSessionID();
+    m_tabletnode_impl->SetSessionId(session_id);
+    m_tabletnode_impl->SetTabletNodeStatus(TabletNodeImpl::kIsRunning);
     LOG(INFO) << "create ts-node success: " << session_id;
 
     // create watch node
