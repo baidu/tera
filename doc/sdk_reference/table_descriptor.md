@@ -180,6 +180,99 @@ std::string AdminGroup() const;
 
 ## LocalityGroupDescriptor
 
+描述一个locality group的属性。
+
+### 创建与析构
+
+通过`TableDescriptor::AddLocalityGroup`进行创建。
+
+无须用户析构。
+ 
+### API
+
+#### Name
+
+```
+const std::string& Name() const;
+```
+
+获取此LG名字。
+
+#### Store
+
+```
+enum StoreType {                                                                    
+    kInDisk = 0,                                                                    
+    kInFlash = 1,                                                                   
+    kInMemory = 2,                                                                  
+};                                                                                  
+void SetStore(StoreType type);
+StoreType Store() const;
+```
+
+设定、获取存储介质，默认kInDisk。
+
+#### BlockSize、SstSize、BloomFilter
+
+```
+void SetBlockSize(int block_size);                                  
+int BlockSize() const;                                              
+```
+
+设定、获取物理文件内部block大小，单位KB，默认值：4。
+
+物理存储基于leveldb开发，此概念与leveldb中的block相似。
+
+```
+void SetSstSize(int sst_size);                                  
+int SstSize() const;                                              
+```
+
+设定、获取物理文件基础大小，单位MB，默认值：8。
+
+物理存储基于leveldb开发，此概念与leveldb中的level1文件大小相同。
+
+```
+void SetUseBloomfilter(bool use_bloomfilter);
+bool UseBloomfilter() const;
+```
+
+设定、获取是否使用bloom filter，默认不使用。
+
+物理存储基于leveldb开发，此概念与leveldb中的bloom filter。
+
+#### 内存内compact
+
+```
+bool UseMemtableOnLeveldb() const;
+void SetUseMemtableOnLeveldb(bool use_mem_ldb);
+```
+
+是否使用内存内compact。
+
+```
+int32_t MemtableLdbWriteBufferSize() const;
+void SetMemtableLdbWriteBufferSize(int32_t buffer_size);
+```
+
+设定、获取内存compact中写缓存大小，单位KB。
+
+```
+int32_t MemtableLdbBlockSize() const;
+void SetMemtableLdbBlockSize(int32_t block_size);
+```
+
+设定、获取内存compact中对应block大小，单位KB。
+
 ## ColumnFamilyDescriptor
 
+描述一个列族的属性。
+
+### 创建与析构
+
+通过`TableDescriptor::AddColumnFamily`进行创建。
+
+无须用户析构。
+ 
+### API
 ## 字符串描述
