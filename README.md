@@ -30,8 +30,8 @@ map<RowKey, map<ColummnFamily:Qualifier, map<Timestamp, Value> > >
 ![架构图](resources/images/arch.png)
 
 #系统依赖
- * 使用分布式文件系统（HDFS、NFS等）持久化数据与元信息
- * 使用分布式协调服务（[Nexus](https://github.com/baidu/ins/)或者[zookeeper](http://zookeeper.apache.org/)）选主与协调
+ * 使用分布式文件系统（[BFS](https://github.com/baidu/bfs)、HDFS等）持久化数据与元信息
+ * 使用分布式协调服务（[Nexus](https://github.com/baidu/ins/)或者Zookeeper）选主与协调
  * 使用[Sofa-pbrpc](https://github.com/baidu/sofa-pbrpc/)实现跨进程通信
 
 #系统构建

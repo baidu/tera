@@ -120,15 +120,9 @@ void RowMutationImpl::Append(const std::string& family, const std::string& quali
 
 /// 修改一个列
 void RowMutationImpl::Put(const std::string& family, const std::string& qualifier,
-                          const std::string& value) {
-    Put(family, qualifier, kLatestTimestamp, value);
-}
-
-/// 修改一个列
-void RowMutationImpl::Put(const std::string& family, const std::string& qualifier,
-                          const int64_t value) {
+                          const int64_t value, int64_t timestamp) {
     std::string value_str((char*)&value, sizeof(int64_t));
-    Put(family, qualifier, value_str);
+    Put(family, qualifier, value_str, timestamp);
 }
 
 /// 带TTL修改一个列
@@ -147,6 +141,23 @@ void RowMutationImpl::Put(const std::string& family, const std::string& qualifie
 
 /// 修改一个列的特定版本
 void RowMutationImpl::Put(const std::string& family, const std::string& qualifier,
+                          const std::string& value, int64_t timestamp) {
+    SetErrorIfInvalid(qualifier, kQualifier);
+    SetErrorIfInvalid(value, kValue);
+    RowMutation::Mutation& mutation = AddMutation();
+    mutation.type = RowMutation::kPut;
+    mutation.family = family;
+    mutation.qualifier = qualifier;
+    if (timestamp == -1) {
+        mutation.timestamp = kLatestTimestamp;
+    } else {
+        mutation.timestamp = timestamp;
+    }
+    mutation.value = value;
+    mutation.ttl = -1;
+}
+
+void RowMutationImpl::Put(const std::string& family, const std::string& qualifier,
                           int64_t timestamp, const std::string& value) {
     SetErrorIfInvalid(qualifier, kQualifier);
     SetErrorIfInvalid(value, kValue);
@@ -157,13 +168,6 @@ void RowMutationImpl::Put(const std::string& family, const std::string& qualifie
     mutation.timestamp = timestamp;
     mutation.value = value;
     mutation.ttl = -1;
-    /*
-    mutation.set_type(kPut);
-    mutation.set_family(family);
-    mutation.set_qualifier(qualifier);
-    mutation.set_timestamp(timestamp);
-    mutation.set_value(value);
-    */
 }
 
 /// 带TTL的修改一个列的特定版本
@@ -181,14 +185,9 @@ void RowMutationImpl::Put(const std::string& family, const std::string& qualifie
 }
 
 /// 修改默认列
-void RowMutationImpl::Put(const std::string& value) {
-    Put("", "", kLatestTimestamp, value);
-}
-
-/// 修改默认列
 void RowMutationImpl::Put(const int64_t value) {
     std::string value_str((char*)&value, sizeof(int64_t));
-    Put(value_str);
+    Put(value_str, -1);
 }
 
 /// 带TTL的修改默认列
@@ -226,12 +225,6 @@ void RowMutationImpl::DeleteColumn(const std::string& family,
     */
 }
 
-/// 删除一个列的全部版本
-void RowMutationImpl::DeleteColumns(const std::string& family,
-                                    const std::string& qualifier) {
-    DeleteColumns(family, qualifier, kLatestTimestamp);
-}
-
 /// 删除一个列的指定范围版本
 void RowMutationImpl::DeleteColumns(const std::string& family,
                                     const std::string& qualifier,
@@ -241,20 +234,11 @@ void RowMutationImpl::DeleteColumns(const std::string& family,
     mutation.type = RowMutation::kDeleteColumns;
     mutation.family = family;
     mutation.qualifier = qualifier;
-    mutation.timestamp = timestamp;
-
-    /*
-    mutation.set_type(kDeleteColumns);
-    mutation.set_family(family);
-    mutation.set_qualifier(qualifier);
-    mutation.set_ts_end(ts_end);
-    mutation.set_ts_start(ts_start);
-    */
-}
-
-/// 删除一个列族的所有列的全部版本
-void RowMutationImpl::DeleteFamily(const std::string& family) {
-    DeleteFamily(family, kLatestTimestamp);
+    if (timestamp == -1) {
+        mutation.timestamp = kLatestTimestamp;
+    } else {
+        mutation.timestamp = timestamp;
+    }
 }
 
 /// 删除一个列族的所有列的指定范围版本
@@ -263,18 +247,11 @@ void RowMutationImpl::DeleteFamily(const std::string& family,
     RowMutation::Mutation& mutation = AddMutation();
     mutation.type = RowMutation::kDeleteFamily;
     mutation.family = family;
-    mutation.timestamp = timestamp;
-    /*
-    mutation.set_type(kDeleteFamily);
-    mutation.set_family(family);
-    mutation.set_ts_end(ts_end);
-    mutation.set_ts_start(ts_start);
-    */
-}
-
-/// 删除整行的全部数据
-void RowMutationImpl::DeleteRow() {
-    DeleteRow(kLatestTimestamp);
+    if (timestamp == -1) {
+        mutation.timestamp = kLatestTimestamp;
+    } else {
+        mutation.timestamp = timestamp;
+    }
 }
 
 /// 删除整行的指定范围版本
@@ -282,11 +259,6 @@ void RowMutationImpl::DeleteRow(int64_t timestamp) {
     RowMutation::Mutation& mutation = AddMutation();
     mutation.type = RowMutation::kDeleteRow;
     mutation.timestamp = timestamp;
-    /*
-    mutation.set_type(kDeleteRow);
-    mutation.set_ts_end(ts_end);
-    mutation.set_ts_start(ts_start);
-    */
 }
 
 /// 修改锁住的行, 必须提供行锁

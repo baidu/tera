@@ -1,40 +1,44 @@
 // Copyright (c) 2015, Baidu.com, Inc. All Rights Reserved
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
+//
+// A ErrorCode encapsulates the result of an operation.
 
-#ifndef  TERA_ERROR_CODE_
-#define  TERA_ERROR_CODE_
+#ifndef  TERA_ERROR_CODE_H_
+#define  TERA_ERROR_CODE_H_
 
-#include <stdint.h>
-#include <list>
-#include <map>
-#include <set>
 #include <string>
-#include <vector>
 
 #pragma GCC visibility push(default)
+
 namespace tera {
 
 class ErrorCode {
 public:
     enum ErrorCodeType {
-        kOK = 0,
-        kNotFound,
-        kBadParam,
-        kSystem,
-        kTimeout,
-        kBusy,
-        kNoQuota,
-        kNoAuth,
-        kUnknown,
-        kNotImpl,
-        kTxnFail
+        kOK        = 0,
+        kNotFound  = 1,
+        kBadParam  = 2,
+        kSystem    = 3,
+        kTimeout   = 4,
+        kBusy      = 5,
+        kNoQuota   = 6,
+        kNoAuth    = 7,
+        kUnknown   = 8,
+        kNotImpl   = 9,
+        kTxnFail   = 10
     };
-    ErrorCode();
+
+public:
+    // Returns a string includes type&reason
+    // Format: "type [kOK], reason [success]"
     std::string ToString() const;
 
-    std::string GetReason() const;
     ErrorCodeType GetType() const;
+    std::string GetReason() const;
+
+    // Internal funcion, do not use
+    ErrorCode();
     void SetFailed(ErrorCodeType err, const std::string& reason = "");
 
 private:
@@ -42,9 +46,9 @@ private:
     std::string _reason;
 };
 
+// DEPRECATED. Use error_code.ToString() instead.
 const char* strerr(ErrorCode error_code);
 
 } // namespace tera
 #pragma GCC visibility pop
-
-#endif  // TERA_ERROR_CODE_
+#endif  // TERA_ERROR_CODE_H_

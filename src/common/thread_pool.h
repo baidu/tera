@@ -188,7 +188,7 @@ private:
             if (!time_queue_.empty()) {
                 int64_t now_time = timer::get_micros();
                 BGItem bg_item = time_queue_.top();
-                int64_t wait_time = (bg_item.exe_time - now_time) / 1000; // in ms
+                int64_t wait_time = bg_item.exe_time - now_time; // in us
                 if (wait_time <= 0) {
                     time_queue_.pop();
                     BGMap::iterator it = latest_.find(bg_item.id);
@@ -207,7 +207,7 @@ private:
                     }
                     continue;
                 } else if (queue_.empty() && !stop_) {
-                    work_cv_.TimeWait(wait_time, "ThreadProcTimeWait");
+                    work_cv_.TimeWaitInUs(wait_time, "ThreadProcTimeWait");
                     continue;
                 }
             }

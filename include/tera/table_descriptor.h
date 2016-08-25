@@ -1,32 +1,129 @@
 // Copyright (c) 2015, Baidu.com, Inc. All Rights Reserved
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
+//
+// TableDescriptor/LocalityGroupDescriptor/ColumnFamilyDescriptor are used to
+// describe the schema of a table.
+// It's not a nessesary to use these classes. User is encouraged to describe a table
+// by string which is easier. See more:
+//   https://github.com/baidu/tera/blob/master/doc/sdk_reference/table_descriptor.md
 
 #ifndef  TERA_TABLE_DESCRIPTOR_
 #define  TERA_TABLE_DESCRIPTOR_
 
-#include <stdint.h>
-#include <list>
-#include <map>
-#include <set>
 #include <string>
-#include <vector>
 
 #pragma GCC visibility push(default)
 namespace tera {
 
+extern const int64_t kLatestTimestamp;
+extern const int64_t kOldestTimestamp;
+
+struct ACL {
+    int32_t owner;
+    int32_t role;
+    int64_t acl;
+};
+
+class ColumnFamilyDescriptor {
+public:
+    // Returns name of this column family
+    virtual const std::string& Name() const = 0;
+
+    // Set/get TTL(in second) of cells of this column family.
+    virtual void SetTimeToLive(int32_t ttl) = 0;
+    virtual int32_t TimeToLive() const = 0;
+
+    // Set/get maximum versions of cells of this column family.
+    virtual void SetMaxVersions(int32_t max_versions) = 0;
+    virtual int32_t MaxVersions() const = 0;
+
+    // Get name of locality group which this column family belong to.
+    virtual const std::string& LocalityGroup() const = 0;
+
+    // Get internal id.
+    virtual int32_t Id() const = 0;
+
+    // DEVELOPING
+    virtual void SetType(const std::string& type) = 0;
+    virtual const std::string& Type() const = 0;
+    virtual void SetMinVersions(int32_t min_versions) = 0;
+    virtual int32_t MinVersions() const = 0;
+    virtual void SetDiskQuota(int64_t quota) = 0;
+    virtual int64_t DiskQuota() const = 0;
+    virtual void SetAcl(ACL acl) = 0;
+    virtual ACL Acl() const = 0;
+
+    ColumnFamilyDescriptor() {}
+    virtual ~ColumnFamilyDescriptor() {}
+
+private:
+    ColumnFamilyDescriptor(const ColumnFamilyDescriptor&);
+    void operator=(const ColumnFamilyDescriptor&);
+};
+
+// Describes compress type for a locality group
 enum CompressType {
     kNoneCompress = 1,
     kSnappyCompress = 2,
 };
 
+// Describes store type for a locality group
 enum StoreType {
     kInDisk = 0,
     kInFlash = 1,
     kInMemory = 2,
 };
 
-/// RawKey拼装模式，kReadable性能较高，但key中不允许'\0'，kBinary性能低一些，允许所有字符
+class LocalityGroupDescriptor {
+public:
+    // Returns name of this locality group
+    virtual const std::string& Name() const = 0;
+
+    // Set/get store medium.
+    virtual void SetStore(StoreType type) = 0;
+    virtual StoreType Store() const = 0;
+
+    // Set/get block size in KB.
+    virtual void SetBlockSize(int block_size) = 0;
+    virtual int BlockSize() const = 0;
+
+    // Set/get sst size in MB.
+    virtual int32_t SstSize() const = 0;
+    virtual void SetSstSize(int32_t sst_size) = 0;
+
+    // Set/get compress type.
+    virtual void SetCompress(CompressType type) = 0;
+    virtual CompressType Compress() const = 0;
+
+    // Set/get if use bloomfilter.
+    virtual void SetUseBloomfilter(bool use_bloomfilter) = 0;
+    virtual bool UseBloomfilter() const = 0;
+
+    // Memtable on leveldb (disable/enable)
+    virtual bool UseMemtableOnLeveldb() const = 0;
+    virtual void SetUseMemtableOnLeveldb(bool use_mem_ldb) = 0;
+
+    // Memtable-LDB write buffer size
+    virtual int32_t MemtableLdbWriteBufferSize() const = 0;
+    virtual void SetMemtableLdbWriteBufferSize(int32_t buffer_size) = 0;
+
+    // Memtable-LDB block size
+    virtual int32_t MemtableLdbBlockSize() const = 0;
+    virtual void SetMemtableLdbBlockSize(int32_t block_size) = 0;
+
+    // Get internal id.
+    virtual int32_t Id() const = 0;
+
+    LocalityGroupDescriptor() {}
+    virtual ~LocalityGroupDescriptor() {}
+
+private:
+    LocalityGroupDescriptor(const LocalityGroupDescriptor&);
+    void operator=(const LocalityGroupDescriptor&);
+};
+
+// Describes internal raw key type
 enum RawKeyType {
     kReadable = 0,
     kBinary = 1,
@@ -34,157 +131,86 @@ enum RawKeyType {
     kGeneralKv = 3,
 };
 
-extern const int64_t kLatestTimestamp;
-extern const int64_t kOldestTimestamp;
-
-/// ACL
-struct ACL {
-    int32_t owner;  ///< 所属用户id
-    int32_t role;
-    int64_t acl;
-};
-
-class ColumnFamilyDescriptor {
-public:
-    ColumnFamilyDescriptor() {}
-    virtual ~ColumnFamilyDescriptor() {}
-    virtual int32_t Id() const = 0;
-    virtual const std::string& Name() const = 0;
-    /// 属于哪个lg, 不可更改
-    virtual const std::string& LocalityGroup() const = 0;
-    /// 历史版本保留时间, 不设置时为0， 表示无限大永久保存
-    virtual void SetTimeToLive(int32_t ttl) = 0;
-    virtual int32_t TimeToLive() const = 0;
-    /// 在TTL内,最多存储的版本数, 默认3, 设为0时, 关闭多版本
-    virtual void SetMaxVersions(int32_t max_versions) = 0;
-    virtual int32_t MaxVersions() const = 0;
-    /// 最少存储的版本数,即使超出TTL,也至少保留min_versions个版本
-    virtual void SetMinVersions(int32_t min_versions) = 0;
-    virtual int32_t MinVersions() const = 0;
-    /// 存储限额, MBytes
-    virtual void SetDiskQuota(int64_t quota) = 0;
-    virtual int64_t DiskQuota() const = 0;
-    /// ACL
-    virtual void SetAcl(ACL acl) = 0;
-    virtual ACL Acl() const = 0;
-
-    virtual void SetType(const std::string& type) = 0;
-    virtual const std::string& Type() const = 0;
-
-private:
-    ColumnFamilyDescriptor(const ColumnFamilyDescriptor&);
-    void operator=(const ColumnFamilyDescriptor&);
-};
-
-/// 局部性群组描述
-class LocalityGroupDescriptor {
-public:
-    LocalityGroupDescriptor() {}
-    virtual ~LocalityGroupDescriptor() {}
-    /// Id read only
-    virtual int32_t Id() const = 0;
-    /// Name
-    virtual const std::string& Name() const = 0;
-    /// Compress type
-    virtual void SetCompress(CompressType type) = 0;
-    virtual CompressType Compress() const = 0;
-    /// Block size
-    virtual void SetBlockSize(int block_size) = 0;
-    virtual int BlockSize() const = 0;
-    /// Store type
-    virtual void SetStore(StoreType type) = 0;
-    virtual StoreType Store() const = 0;
-    /// Bloomfilter
-    virtual void SetUseBloomfilter(bool use_bloomfilter) = 0;
-    virtual bool UseBloomfilter() const = 0;
-    /// Memtable On Leveldb (disable/enable)
-    virtual bool UseMemtableOnLeveldb() const = 0;
-    virtual void SetUseMemtableOnLeveldb(bool use_mem_ldb) = 0;
-    /// Memtable-LDB WriteBuffer Size
-    virtual int32_t MemtableLdbWriteBufferSize() const = 0;
-    virtual void SetMemtableLdbWriteBufferSize(int32_t buffer_size) = 0;
-    /// Memtable-LDB Block Size
-    virtual int32_t MemtableLdbBlockSize() const = 0;
-    virtual void SetMemtableLdbBlockSize(int32_t block_size) = 0;
-
-    /// sst file size, in Bytes
-    virtual int32_t SstSize() const = 0;
-    virtual void SetSstSize(int32_t sst_size) = 0;
-
-private:
-    LocalityGroupDescriptor(const LocalityGroupDescriptor&);
-    void operator=(const LocalityGroupDescriptor&);
-};
-
 class TableDescImpl;
-
 class TableDescriptor {
 public:
-    /// 表格名字仅允许使用字母、数字和下划线构造,长度不超过256；默认是非kv表
-    TableDescriptor(const std::string& tb_name = "");
-
+    // Only {[a-z],[A-Z],[0-9],'_','-'} are allowed in table name.
+    // Length of a table name should be less than 256.
+    TableDescriptor(const std::string& name = "");
     ~TableDescriptor();
 
+    // Set/Get table name
     void SetTableName(const std::string& name);
     std::string TableName() const;
 
-    /// 增加一个localitygroup, 名字仅允许使用字母、数字和下划线构造,长度不超过256
+    // Add a locality group named "lg_name".
+    // Only {[a-z],[A-Z],[0-9],'_','-'} are allowed in locality group name.
+    // Length of a locality group name should be less than 256.
     LocalityGroupDescriptor* AddLocalityGroup(const std::string& lg_name);
-    LocalityGroupDescriptor* DefaultLocalityGroup();
-    /// 删除一个localitygroup, 当还有cf属于这个lg时, 会删除失败.
+    // Remove a locality group by name. Operation returns false if there is a
+    // column family in this locality group.
     bool RemoveLocalityGroup(const std::string& lg_name);
-    /// 获取id对应的localitygroup
+    // Get locality group handle by id.
     const LocalityGroupDescriptor* LocalityGroup(int32_t id) const;
+    // Get locality group handle by name.
     const LocalityGroupDescriptor* LocalityGroup(const std::string& lg_name) const;
-    /// LG数量
+    // Return locality group number in this table.
     int32_t LocalityGroupNum() const;
 
-    /// 增加一个columnfamily, 名字仅允许使用字母、数字和下划线构造,长度不超过256
+    // Add a column family named "cf_name" into the locality group named
+    // "lg_name".
+    // Only {[a-z],[A-Z],[0-9],'_','-'} are allowed in column family name.
+    // Length of a column family name should be less than 256.
     ColumnFamilyDescriptor* AddColumnFamily(const std::string& cf_name,
                                             const std::string& lg_name = "lg0");
-    /// 删除一个columnfamily
+    // Remove a column family by name.
     void RemoveColumnFamily(const std::string& cf_name);
-    /// 获取id对应的CF
+    // Get column family handle by id.
     const ColumnFamilyDescriptor* ColumnFamily(int32_t id) const;
+    // Get column family handle by name.
     const ColumnFamilyDescriptor* ColumnFamily(const std::string& cf_name) const;
-    ColumnFamilyDescriptor* DefaultColumnFamily();
-    /// CF数量
+    // Return column family number in this table.
     int32_t ColumnFamilyNum() const;
 
-    /// Raw Key Mode
+    // Set/get raw key type.
     void SetRawKey(RawKeyType type);
     RawKeyType RawKey() const;
 
+    // Set/get the split size in MB.
     void SetSplitSize(int64_t size);
     int64_t SplitSize() const;
 
+    // Set/get the merge size in MB.
+    // mergesize should be less than splitsize / 3.
     void SetMergeSize(int64_t size);
     int64_t MergeSize() const;
 
+    // Enable/disable write-ahead-log on this table.
     void DisableWal();
     bool IsWalDisabled() const;
 
-    // 事务
+    // Enable/disable transaction on this table.
     void EnableTxn();
     bool IsTxnEnabled() const;
 
-    /// 插入snapshot
-    int32_t AddSnapshot(uint64_t snapshot);
-    /// 获取snapshot
-    uint64_t Snapshot(int32_t id) const;
-    /// Snapshot数量
-    int32_t SnapshotNum() const;
-
-    /// acl
-    void SetAdminGroup(const std::string& name);
-    std::string AdminGroup() const;
-
+    // Set/get admin of this table.
     void SetAdmin(const std::string& name);
     std::string Admin() const;
 
-    /// alias
+    // Set/get admin group of this table.
+    void SetAdminGroup(const std::string& name);
+    std::string AdminGroup() const;
+
+    // DEVELOPING
+    int32_t AddSnapshot(uint64_t snapshot);
+    uint64_t Snapshot(int32_t id) const;
+    int32_t SnapshotNum() const;
+
+    // DEPRECATED
     void SetAlias(const std::string& alias);
     std::string Alias() const;
+    LocalityGroupDescriptor* DefaultLocalityGroup();
+    ColumnFamilyDescriptor* DefaultColumnFamily();
 
 private:
     TableDescriptor(const TableDescriptor&);
