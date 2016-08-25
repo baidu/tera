@@ -268,6 +268,8 @@ void SetMemtableLdbBlockSize(int32_t block_size);
 
 描述一个列族的属性。
 
+属性支持动态更新。更新状态为最终一致，过程中存在分片之前属性不一致情况，使用时需要注意。
+
 ### 创建与析构
 
 通过`TableDescriptor::AddColumnFamily`进行创建。
@@ -275,4 +277,74 @@ void SetMemtableLdbBlockSize(int32_t block_size);
 无须用户析构。
  
 ### API
+
+#### TTL
+
+```
+void SetTimeToLive(int32_t ttl);
+int32_t TimeToLive() const; 
+```
+
+设定列族内cell的TTL（time-to-live)，单位秒，默认无穷大。
+
+当列族内某cell的更新时间超过此值后，读取时被屏蔽，并在垃圾回收时物理删除。
+
+#### MaxVersion
+
+```
+void SetMaxVersions(int32_t max_versions);
+int32_t MaxVersions() const; 
+```
+
+设定列族内cell的最大版本数，默认为1。
+
+当某cell的版本数超过此限制后，会将最旧的版本进行屏蔽，并在垃圾回收时物理删除。
+
+此值不做最大值限制，但随着版本数大量增加，相应的随机读、扫描性能会下降，存储使用上升，用户可按实际情况调整。
+
 ## 字符串描述
+
+描述表格的字符串是一个支持描述节点属性的树结构，语法详见[PropTree](https://github.com/BaiduPS/tera/blob/master/doc/prop_tree.md)
+
+### 描述表格存储
+
+表格结构中包含表名、locality groups定义、column families定义，一个典型的表格定义如下（可写入文件）：
+
+    # tablet分裂阈值为4096M，合并阈值为512M
+    # 三个lg，分别配置为flash、flash、磁盘存储
+    table_hello <splitsize=4096, mergesize=512> {
+        lg_index <storage=flash, blocksize=4> {
+            update_flag <maxversions=1>
+        },
+        lg_props <storage=flash, blocksize=32> {
+            level<ttl=1000000>,
+            weight
+        },
+        lg_raw <storage=disk, blocksize=128> {
+            data <maxversions=10>
+        }
+    }
+
+如果无需配置LG，指定表名和所需列名即可（所有的属性可配）：
+
+    table_hello {cf0<ttl=10000>, cf1, cf2}
+
+### 描述key-value存储
+
+只需指定表名即可，若需要指定存储介质等属性，可选择性添加：
+
+    kv_hello                                                # 简单key-value
+    kv_hello <storage=flash, splitsize=2048, mergesize=128> # 配置若干属性
+
+### 属性及含义
+
+span | 属性名 | 意义 | 有效取值 | 单位 | 默认值 | 其它说明
+---  | ---    | ---  | ---      | ---  | ---    | ---
+table | splitsize | 某个tablet增大到此阈值时分裂为2个子tablets| >=0，等于0时关闭split | MB | 512 |
+table | mergesize | 某个tablet减小到此阈值时和相邻的1个tablet合并 | >=0，等于0时关闭merge | MB | 0 | splitsize至少要为mergesize的5倍
+lg    | storage   | 存储类型 | "disk" / "flash" / "memory" | - | "disk" |
+lg    | blocksize | LevelDB中block的大小       | >0 | KB | 4 |
+lg    | use_memtable_on_leveldb | 是否启用内存compact | "true" / "false" | - | false |
+lg    | sst_size  | 第一层sst文件大小 | >0 | MB | 8 |
+cf    | maxversions | 保存的最大版本数  | >0 | - | 1 |
+cf    | ttl | 数据有效时间 | >=0，等于0时此数据永远有效 | second | 0 |
