@@ -42,20 +42,20 @@ public:
     static void SetOption(int32_t max_inflow, int32_t max_outflow,
                           int32_t pending_buffer_size, int32_t thread_num) {
         if (-1 != max_inflow) {
-            m_rpc_client_options.max_throughput_in = max_inflow;
+            rpc_client_options_.max_throughput_in = max_inflow;
         }
         if (-1 != max_outflow) {
-            m_rpc_client_options.max_throughput_out = max_outflow;
+            rpc_client_options_.max_throughput_out = max_outflow;
         }
         if (-1 != pending_buffer_size) {
-            m_rpc_client_options.max_pending_buffer_size = pending_buffer_size;
+            rpc_client_options_.max_pending_buffer_size = pending_buffer_size;
         }
         if (-1 != thread_num) {
-            m_rpc_client_options.work_thread_num = thread_num;
+            rpc_client_options_.work_thread_num = thread_num;
         }
-        m_rpc_client.ResetOptions(m_rpc_client_options);
+        rpc_client_.ResetOptions(rpc_client_options_);
 
-        sofa::pbrpc::RpcClientOptions new_options = m_rpc_client.GetOptions();
+        sofa::pbrpc::RpcClientOptions new_options = rpc_client_.GetOptions();
         LOG(INFO) << "set rpc option: ("
             << "max_inflow: " << new_options.max_throughput_in
             << " MB/s, max_outflow: " << new_options.max_throughput_out
@@ -64,32 +64,32 @@ public:
             << ")";
     }
 
-    RpcClientBase() : m_rpc_channel(NULL) {}
+    RpcClientBase() : rpc_channel_(NULL) {}
     virtual ~RpcClientBase() {}
 
 protected:
     virtual void ResetClient(const std::string& server_addr) {
         std::map<std::string, sofa::pbrpc::RpcChannel*>::iterator it;
-        m_mutex.Lock();
-        it = m_rpc_channel_list.find(server_addr);
-        if (it != m_rpc_channel_list.end()) {
-            m_rpc_channel = it->second;
+        mutex_.Lock();
+        it = rpc_channel_list_.find(server_addr);
+        if (it != rpc_channel_list_.end()) {
+            rpc_channel_ = it->second;
         } else {
-            m_rpc_channel = m_rpc_channel_list[server_addr]
-                = new sofa::pbrpc::RpcChannel(&m_rpc_client, server_addr,
-                                              m_channel_options);
+            rpc_channel_ = rpc_channel_list_[server_addr]
+                = new sofa::pbrpc::RpcChannel(&rpc_client_, server_addr,
+                                              channel_options_);
         }
-        m_mutex.Unlock();
+        mutex_.Unlock();
     }
 
 protected:
-    sofa::pbrpc::RpcChannel* m_rpc_channel;
+    sofa::pbrpc::RpcChannel* rpc_channel_;
 
-    static sofa::pbrpc::RpcChannelOptions m_channel_options;
-    static std::map<std::string, sofa::pbrpc::RpcChannel*> m_rpc_channel_list;
-    static sofa::pbrpc::RpcClientOptions m_rpc_client_options;
-    static sofa::pbrpc::RpcClient m_rpc_client;
-    static Mutex m_mutex;
+    static sofa::pbrpc::RpcChannelOptions channel_options_;
+    static std::map<std::string, sofa::pbrpc::RpcChannel*> rpc_channel_list_;
+    static sofa::pbrpc::RpcClientOptions rpc_client_options_;
+    static sofa::pbrpc::RpcClient rpc_client_;
+    static Mutex mutex_;
 };
 
 template<class ServerType>
@@ -101,12 +101,12 @@ public:
     virtual ~RpcClient() {}
 
     std::string GetConnectAddr() const {
-        return m_server_addr;
+        return server_addr_;
     }
 
 protected:
     virtual void ResetClient(const std::string& server_addr) {
-        if (m_server_addr == server_addr) {
+        if (server_addr_ == server_addr) {
             // VLOG(5) << "address [" << server_addr << "] not be applied";
             return;
         }
@@ -118,8 +118,8 @@ protected:
         }
         */
         RpcClientBase::ResetClient(server_addr);
-        m_server_client.reset(new ServerType(m_rpc_channel));
-        m_server_addr = server_addr;
+        server_client_.reset(new ServerType(rpc_channel_));
+        server_addr_ = server_addr;
         // VLOG(5) << "reset connected address to: " << server_addr;
     }
 
@@ -130,7 +130,7 @@ protected:
                               const Request* request, Response* response,
                               Callback* closure, const std::string& tips,
                               int32_t rpc_timeout, ThreadPool* thread_pool = 0) {
-        if (NULL == m_server_client.get()) {
+        if (NULL == server_client_.get()) {
             // sync call
             if (closure == NULL) {
                 return false;
@@ -153,7 +153,7 @@ protected:
         google::protobuf::Closure* done = google::protobuf::NewCallback(
             &RpcClient::template RpcCallback<Request, Response, Callback>,
             this, param);
-        (m_server_client.get()->*func)(rpc_controller, request, response, done);
+        (server_client_.get()->*func)(rpc_controller, request, response, done);
 
         // sync call
         if (closure == NULL) {
@@ -212,8 +212,8 @@ protected:
     }
 
 private:
-    scoped_ptr<ServerType> m_server_client;
-    std::string m_server_addr;
+    scoped_ptr<ServerType> server_client_;
+    std::string server_addr_;
 
     bool sync_call_failed;
     AutoResetEvent sync_call_event;
