@@ -96,57 +96,57 @@ namespace tera {
 namespace tabletnode {
 
 TabletNodeSysInfo::TabletNodeSysInfo()
-    : m_mem_check_ts(0),
-      m_net_check_ts(0),
-      m_io_check_ts(0),
-      m_net_tx_total(0),
-      m_net_rx_total(0),
-      m_cpu_check_ts(0),
-      m_tablet_check_ts(0) {
+    : mem_check_ts_(0),
+      net_check_ts_(0),
+      io_check_ts_(0),
+      net_tx_total_(0),
+      net_rx_total_(0),
+      cpu_check_ts_(0),
+      tablet_check_ts_(0) {
 }
 
 TabletNodeSysInfo::TabletNodeSysInfo(const TabletNodeInfo& info)
-    : m_info(info),
-      m_mem_check_ts(0),
-      m_net_check_ts(0),
-      m_net_tx_total(0),
-      m_net_rx_total(0),
-      m_cpu_check_ts(0),
-      m_tablet_check_ts(0) {
+    : info_(info),
+      mem_check_ts_(0),
+      net_check_ts_(0),
+      net_tx_total_(0),
+      net_rx_total_(0),
+      cpu_check_ts_(0),
+      tablet_check_ts_(0) {
 }
 
 TabletNodeSysInfo::~TabletNodeSysInfo() {
 }
 
 void TabletNodeSysInfo::AddExtraInfo(const std::string& name, int64_t value) {
-    MutexLock lock(&m_mutex);
-    ExtraTsInfo* e_info = m_info.add_extra_info();
+    MutexLock lock(&mutex_);
+    ExtraTsInfo* e_info = info_.add_extra_info();
     e_info->set_name(name);
     e_info->set_value(value);
 }
 
 void TabletNodeSysInfo::SetCurrentTime() {
-    MutexLock lock(&m_mutex);
-    m_info.set_timestamp(get_micros());
+    MutexLock lock(&mutex_);
+    info_.set_timestamp(get_micros());
 }
 
 int64_t TabletNodeSysInfo::GetTimeStamp() {
-    return m_info.timestamp();
+    return info_.timestamp();
 }
 
 void TabletNodeSysInfo::SetTimeStamp(int64_t ts) {
-    MutexLock lock(&m_mutex);
-    m_info.set_timestamp(ts);
+    MutexLock lock(&mutex_);
+    info_.set_timestamp(ts);
 }
 
 void TabletNodeSysInfo::CollectTabletNodeInfo(TabletManager* tablet_manager,
                                               const string& server_addr) {
-    MutexLock lock(&m_mutex);
+    MutexLock lock(&mutex_);
     int64_t cur_ts = get_micros();
-    int64_t interval = cur_ts - m_tablet_check_ts;
-    m_tablet_check_ts = cur_ts;
+    int64_t interval = cur_ts - tablet_check_ts_;
+    tablet_check_ts_ = cur_ts;
 
-    m_tablet_list.Clear();
+    tablet_list_.Clear();
     int64_t total_size = 0;
     int64_t low_read_cell = 0;
     int64_t scan_rows = 0;
@@ -165,7 +165,7 @@ void TabletNodeSysInfo::CollectTabletNodeInfo(TabletManager* tablet_manager,
     std::vector<io::TabletIO*>::iterator it = tablet_ios.begin();
     for (; it != tablet_ios.end(); ++it) {
         io::TabletIO* tablet_io = *it;
-        TabletMeta* tablet_meta = m_tablet_list.add_meta();
+        TabletMeta* tablet_meta = tablet_list_.add_meta();
         tablet_meta->set_status(TabletStatus(tablet_io->GetStatus()));
         tablet_meta->set_server_addr(server_addr);
         tablet_meta->set_table_name(tablet_io->GetTableName());
@@ -183,7 +183,7 @@ void TabletNodeSysInfo::CollectTabletNodeInfo(TabletManager* tablet_manager,
         tablet_meta->set_compact_status(tablet_io->GetCompactStatus());
         total_size += tablet_meta->size();
 
-        TabletCounter* counter = m_tablet_list.add_counter();
+        TabletCounter* counter = tablet_list_.add_counter();
         tablet_io->GetAndClearCounter(counter);
         low_read_cell += counter->low_read_cell();
         scan_rows += counter->scan_rows();
@@ -201,39 +201,39 @@ void TabletNodeSysInfo::CollectTabletNodeInfo(TabletManager* tablet_manager,
         }
         tablet_io->DecRef();
     }
-    m_info.set_low_read_cell(low_read_cell * 1000000 / interval);
-    m_info.set_scan_rows(scan_rows * 1000000 / interval);
-    m_info.set_scan_kvs(scan_kvs * 1000000 / interval);
-    m_info.set_scan_size(scan_size * 1000000 / interval);
-    m_info.set_read_rows(read_rows * 1000000 / interval);
-    m_info.set_read_kvs(read_kvs * 1000000 / interval);
-    m_info.set_read_size(read_size * 1000000 / interval);
-    m_info.set_write_rows(write_rows * 1000000 / interval);
-    m_info.set_write_kvs(write_kvs * 1000000 / interval);
-    m_info.set_write_size(write_size * 1000000 / interval);
-    m_info.set_tablet_onbusy(busy_cnt);
+    info_.set_low_read_cell(low_read_cell * 1000000 / interval);
+    info_.set_scan_rows(scan_rows * 1000000 / interval);
+    info_.set_scan_kvs(scan_kvs * 1000000 / interval);
+    info_.set_scan_size(scan_size * 1000000 / interval);
+    info_.set_read_rows(read_rows * 1000000 / interval);
+    info_.set_read_kvs(read_kvs * 1000000 / interval);
+    info_.set_read_size(read_size * 1000000 / interval);
+    info_.set_write_rows(write_rows * 1000000 / interval);
+    info_.set_write_kvs(write_kvs * 1000000 / interval);
+    info_.set_write_size(write_size * 1000000 / interval);
+    info_.set_tablet_onbusy(busy_cnt);
 
     // refresh tabletnodeinfo
-    m_info.set_load(total_size);
-    m_info.set_tablet_total(tablet_ios.size());
+    info_.set_load(total_size);
+    info_.set_tablet_total(tablet_ios.size());
 
     int64_t tmp;
     tmp = leveldb::dfs_read_size_counter.Clear() * 1000000 / interval;
-    m_info.set_dfs_io_r(tmp);
+    info_.set_dfs_io_r(tmp);
     tmp = leveldb::dfs_write_size_counter.Clear() * 1000000 / interval;
-    m_info.set_dfs_io_w(tmp);
+    info_.set_dfs_io_w(tmp);
     tmp = leveldb::posix_read_size_counter.Clear() * 1000000 / interval;
-    m_info.set_local_io_r(tmp);
+    info_.set_local_io_r(tmp);
     tmp = leveldb::posix_write_size_counter.Clear() * 1000000 / interval;
-    m_info.set_local_io_w(tmp);
+    info_.set_local_io_w(tmp);
 
-    m_info.set_read_pending(read_pending_counter.Get());
-    m_info.set_write_pending(write_pending_counter.Get());
-    m_info.set_scan_pending(scan_pending_counter.Get());
+    info_.set_read_pending(read_pending_counter.Get());
+    info_.set_write_pending(write_pending_counter.Get());
+    info_.set_scan_pending(scan_pending_counter.Get());
 
     // collect extra infos
-    m_info.clear_extra_info();
-    ExtraTsInfo* einfo = m_info.add_extra_info();
+    info_.clear_extra_info();
+    ExtraTsInfo* einfo = info_.add_extra_info();
     if (read_rows == 0) {
         tmp = 0;
     } else {
@@ -242,7 +242,7 @@ void TabletNodeSysInfo::CollectTabletNodeInfo(TabletManager* tablet_manager,
     einfo->set_name("rand_read_delay");
     einfo->set_value(tmp / 1000);
 
-    einfo = m_info.add_extra_info();
+    einfo = info_.add_extra_info();
     if (read_rows == 0) {
         tmp = 0;
     } else {
@@ -251,27 +251,27 @@ void TabletNodeSysInfo::CollectTabletNodeInfo(TabletManager* tablet_manager,
     einfo->set_name("row_read_delay");
     einfo->set_value(tmp / 1000);
 
-    einfo = m_info.add_extra_info();
+    einfo = info_.add_extra_info();
     tmp = range_error_counter.Clear() * 1000000 / interval;
     einfo->set_name("range_error");
     einfo->set_value(tmp);
 
-    einfo = m_info.add_extra_info();
+    einfo = info_.add_extra_info();
     tmp = read_pending_counter.Get();
     einfo->set_name("read_pending");
     einfo->set_value(tmp);
 
-    einfo = m_info.add_extra_info();
+    einfo = info_.add_extra_info();
     tmp = write_pending_counter.Get();
     einfo->set_name("write_pending");
     einfo->set_value(tmp);
 
-    einfo = m_info.add_extra_info();
+    einfo = info_.add_extra_info();
     tmp = scan_pending_counter.Get();
     einfo->set_name("scan_pending");
     einfo->set_value(tmp);
 
-    einfo = m_info.add_extra_info();
+    einfo = info_.add_extra_info();
     tmp = compact_pending_counter.Get();
     einfo->set_name("compact_pending");
     einfo->set_value(tmp);
@@ -375,16 +375,16 @@ static float GetCpuUsage(int is_irix_on) {
 }
 
 void TabletNodeSysInfo::CollectHardwareInfo() {
-    MutexLock lock(&m_mutex);
+    MutexLock lock(&mutex_);
     int pid = getpid();
     FILE* f;
     std::ostringstream ss;
     ss << "/proc/" << pid << "/";
     int64_t cur_ts = get_micros();
 
-    int64_t interval = cur_ts - m_mem_check_ts;
+    int64_t interval = cur_ts - mem_check_ts_;
     if (interval / 1000000 > FLAGS_tera_tabletnode_sysinfo_mem_collect_interval) {
-        m_mem_check_ts = cur_ts;
+        mem_check_ts_ = cur_ts;
         int64_t mem;
         f = fopen((ss.str() + "statm").data(), "r");
         if (f == NULL) {
@@ -393,15 +393,15 @@ void TabletNodeSysInfo::CollectHardwareInfo() {
         fscanf(f, "%*d %ld", &mem);
         mem = mem * 4 * 1024;
         fclose(f);
-        m_info.set_mem_used(mem);
+        info_.set_mem_used(mem);
 
         VLOG(15) << "[HardWare System Info] Memory: " << mem * 4;
         return;
     }
 
-    interval = cur_ts - m_net_check_ts;
+    interval = cur_ts - net_check_ts_;
     if (interval / 1000000 > FLAGS_tera_tabletnode_sysinfo_net_collect_interval) {
-        m_net_check_ts = cur_ts;
+        net_check_ts_ = cur_ts;
         int64_t net_rx = 0, net_tx = 0;
         f = fopen((ss.str() + "net/dev").data(), "r");
         if (f == NULL) {
@@ -418,78 +418,78 @@ void TabletNodeSysInfo::CollectHardwareInfo() {
         fclose(f);
 
         int64_t tmp;
-        tmp = (net_rx - m_net_rx_total) * 1000000 / interval;
-        m_info.set_net_rx(tmp);
-        tmp = (net_tx - m_net_tx_total) * 1000000 / interval;
-        m_info.set_net_tx(tmp);
-        m_net_rx_total = net_rx;
-        m_net_tx_total = net_tx;
+        tmp = (net_rx - net_rx_total_) * 1000000 / interval;
+        info_.set_net_rx(tmp);
+        tmp = (net_tx - net_tx_total_) * 1000000 / interval;
+        info_.set_net_tx(tmp);
+        net_rx_total_ = net_rx;
+        net_tx_total_ = net_tx;
 
         VLOG(15) << "[HardWare System Info] Network RX/TX: " << net_rx << " / " << net_tx;
         return;
     }
 
-    interval = cur_ts - m_cpu_check_ts;
+    interval = cur_ts - cpu_check_ts_;
     if (interval / 1000000 > FLAGS_tera_tabletnode_sysinfo_cpu_collect_interval) {
-        m_cpu_check_ts = cur_ts;
+        cpu_check_ts_ = cur_ts;
         float cpu_usage = GetCpuUsage(0);
-        m_info.set_cpu_usage(cpu_usage);
+        info_.set_cpu_usage(cpu_usage);
         VLOG(15) << "[HardWare System Info] %CPU: "<< cpu_usage;
         return;
     }
 }
 
 void TabletNodeSysInfo::GetTabletNodeInfo(TabletNodeInfo* info) {
-    MutexLock lock(&m_mutex);
-    info->CopyFrom(m_info);
+    MutexLock lock(&mutex_);
+    info->CopyFrom(info_);
 }
 
 void TabletNodeSysInfo::GetTabletMetaList(TabletMetaList* meta_list) {
-    MutexLock lock(&m_mutex);
-    meta_list->CopyFrom(m_tablet_list);
+    MutexLock lock(&mutex_);
+    meta_list->CopyFrom(tablet_list_);
 }
 
 void TabletNodeSysInfo::SetStatus(TabletNodeStatus status) {
-    MutexLock lock(&m_mutex);
-    m_info.set_status_t(kTabletNodeRegistered);
+    MutexLock lock(&mutex_);
+    info_.set_status_t(kTabletNodeRegistered);
 }
 
 void TabletNodeSysInfo::DumpLog() {
-    MutexLock lock(&m_mutex);
+    MutexLock lock(&mutex_);
 
     double snappy_ratio = (double)leveldb::snappy_before_size_counter.Clear()
                           / leveldb::snappy_after_size_counter.Clear();
     LOG(INFO) << "[SysInfo]"
-        << " low_level " << m_info.low_read_cell()
-        << " read " << m_info.read_rows()
-        << " rspeed " << utils::ConvertByteToString(m_info.read_size())
-        << " write " << m_info.write_rows()
-        << " wspeed " << utils::ConvertByteToString(m_info.write_size())
-        << " scan " << m_info.scan_rows()
-        << " sspeed " << utils::ConvertByteToString(m_info.scan_size())
+        << " low_level " << info_.low_read_cell()
+        << " read " << info_.read_rows()
+        << " rspeed " << utils::ConvertByteToString(info_.read_size())
+        << " write " << info_.write_rows()
+        << " wspeed " << utils::ConvertByteToString(info_.write_size())
+        << " scan " << info_.scan_rows()
+        << " sspeed " << utils::ConvertByteToString(info_.scan_size())
         << " snappy " << snappy_ratio
         << " rawcomp " << leveldb::rawkey_compare_counter.Clear();
 
     // hardware info
     LOG(INFO) << "[HardWare Info] "
-        << " mem_used " << m_info.mem_used() << " "
-        << utils::ConvertByteToString(m_info.mem_used())
-        << " net_tx " << m_info.net_tx() << " "
-        << utils::ConvertByteToString(m_info.net_tx())
-        << " net_rx " << m_info.net_rx() << " "
-        << utils::ConvertByteToString(m_info.net_rx())
-        << " cpu_usage " << m_info.cpu_usage() << "%";
+        << " mem_used " << info_.mem_used() << " "
+        << utils::ConvertByteToString(info_.mem_used())
+        << " net_tx " << info_.net_tx() << " "
+        << utils::ConvertByteToString(info_.net_tx())
+        << " net_rx " << info_.net_rx() << " "
+        << utils::ConvertByteToString(info_.net_rx())
+        << " cpu_usage " << info_.cpu_usage() << "%";
 
     // net and io info
     LOG(INFO) << "[IO]"
-        << " dfs_r " << m_info.dfs_io_r() << " "
-        << utils::ConvertByteToString(m_info.dfs_io_r())
-        << " dfs_w " << m_info.dfs_io_w() << " "
-        << utils::ConvertByteToString(m_info.dfs_io_w())
-        << " local_r " << m_info.local_io_r() << " "
-        << utils::ConvertByteToString(m_info.local_io_r())
-        << " local_w " << m_info.local_io_w() << " "
-        << utils::ConvertByteToString(m_info.local_io_w())
+        << " dfs_r " << info_.dfs_io_r() << " "
+        << utils::ConvertByteToString(info_.dfs_io_r())
+        << " dfs_w " << info_.dfs_io_w() << " "
+        << utils::ConvertByteToString(info_.dfs_io_w())
+        << " local_r " << info_.local_io_r() << " "
+        << utils::ConvertByteToString(info_.local_io_r())
+        << " local_w " << info_.local_io_w() << " "
+        << utils::ConvertByteToString(info_.local_io_w())
         << " ssd_r " << leveldb::ssd_read_counter.Clear() << " "
         << utils::ConvertByteToString(leveldb::ssd_read_size_counter.Clear())
         << " ssd_w " << leveldb::ssd_write_counter.Clear() << " "
@@ -497,10 +497,10 @@ void TabletNodeSysInfo::DumpLog() {
 
     // extra info
     std::ostringstream ss;
-    int cols = m_info.extra_info_size();
+    int cols = info_.extra_info_size();
     ss << "[Pending]";
     for (int i = 0; i < cols; ++i) {
-        ss << m_info.extra_info(i).name() << " " << m_info.extra_info(i).value() << " ";
+        ss << info_.extra_info(i).name() << " " << info_.extra_info(i).value() << " ";
     }
     LOG(INFO) << ss.str();
 
