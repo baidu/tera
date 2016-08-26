@@ -137,15 +137,15 @@ private:
     static bool CheckStatusSwitch(TabletStatus old_status,
                                   TabletStatus new_status);
 
-    mutable Mutex m_mutex;
-    TabletMeta m_meta;
-    TablePtr m_table;
-    int64_t m_update_time;
-    int64_t m_load_time;
-    std::string m_server_id;
-    std::string m_expect_server_addr;
-    std::list<TabletCounter> m_counter_list;
-    TabletCounter m_average_counter;
+    mutable Mutex mutex_;
+    TabletMeta meta_;
+    TablePtr table_;
+    int64_t update_time_;
+    int64_t load_time_;
+    std::string server_id_;
+    std::string expect_server_addr_;
+    std::list<TabletCounter> counter_list_;
+    TabletCounter average_counter_;
     struct TabletAccumulateCounter {
         uint64_t low_read_cell;
         uint64_t scan_rows;
@@ -161,7 +161,7 @@ private:
         TabletAccumulateCounter() {
             memset(this, 0, sizeof(TabletAccumulateCounter));
         }
-    } m_accumu_counter;
+    } accumu_counter_;
 };
 
 typedef class boost::shared_ptr<Tablet> TabletPtr;
@@ -222,22 +222,22 @@ private:
     Table(const Table&) {}
     Table& operator=(const Table&) {return *this;}
     typedef std::map<std::string, TabletPtr> TabletList;
-    TabletList m_tablets_list;
-    mutable Mutex m_mutex;
-    std::string m_name;
-    TableSchema m_schema;
-    std::vector<uint64_t> m_snapshot_list;
-    std::vector<std::string> m_rollback_names;
-    TableStatus m_status;
-    uint32_t m_deleted_tablet_num;
-    uint64_t m_max_tablet_no;
-    int64_t m_create_time;
-    TableCounter m_counter;
-    bool m_schema_is_syncing; // is schema syncing to all ts(all tablets)
-    RangeFragment* m_rangefragment;
-    UpdateTableResponse* m_update_rpc_response;
-    google::protobuf::Closure* m_update_rpc_done;
-    TableSchema* m_old_schema;
+    TabletList tablets_list_;
+    mutable Mutex mutex_;
+    std::string name_;
+    TableSchema schema_;
+    std::vector<uint64_t> snapshot_list_;
+    std::vector<std::string> rollback_names_;
+    TableStatus status_;
+    uint32_t deleted_tablet_num_;
+    uint64_t max_tablet_no_;
+    int64_t create_time_;
+    TableCounter counter_;
+    bool schema_is_syncing_; // is schema syncing to all ts(all tablets)
+    RangeFragment* rangefragment_;
+    UpdateTableResponse* update_rpc_response_;
+    google::protobuf::Closure* update_rpc_done_;
+    TableSchema* old_schema_;
 };
 
 class TabletManager {
@@ -345,10 +345,10 @@ private:
 
 private:
     typedef std::map<std::string, TablePtr> TableList;
-    TableList m_all_tables;
-    mutable Mutex m_mutex;
-    Counter* m_this_sequence_id;
-    MasterImpl* m_master_impl;
+    TableList all_tables_;
+    mutable Mutex mutex_;
+    Counter* this_sequence_id_;
+    MasterImpl* master_impl_;
 };
 
 int64_t CounterWeightedSum(int64_t a1, int64_t a2);
