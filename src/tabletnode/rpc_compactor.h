@@ -19,65 +19,65 @@ template<class ResponseType>
 class RpcCompactor {
 public:
     RpcCompactor()
-        : m_last_success_response(new ResponseType()) {}
+        : last_success_response_(new ResponseType()) {}
     ~RpcCompactor() {}
 
     bool RpcExceptionHappened(uint64_t request_sequence_id,
                               ResponseType* response,
                               google::protobuf::Closure* done) {
-        MutexLock lock(&m_mutex);
-        if (request_sequence_id < m_last_success_sequence_id) {
+        MutexLock lock(&mutex_);
+        if (request_sequence_id < last_success_sequence_id_) {
             LOG(ERROR) << "invalid sequence id: " << request_sequence_id
-                << ", last succeed sequence is: " << m_last_success_sequence_id;
+                << ", last succeed sequence is: " << last_success_sequence_id_;
             response->set_status(kInvalidSequenceId);
             done->Run();
             return false;
-        } else if (request_sequence_id == m_last_success_sequence_id) {
-            response->CopyFrom(*m_last_success_response);
+        } else if (request_sequence_id == last_success_sequence_id_) {
+            response->CopyFrom(*last_success_response_);
             done->Run();
             return false;
-        } else if (request_sequence_id < m_curr_sequence_id) {
+        } else if (request_sequence_id < curr_sequence_id_) {
             LOG(ERROR) << "invalid sequence id: " << request_sequence_id
-                << ", current is: " << m_curr_sequence_id;
+                << ", current is: " << curr_sequence_id_;
             response->set_status(kInvalidSequenceId);
             done->Run();
-        } else if (request_sequence_id == m_curr_sequence_id) {
+        } else if (request_sequence_id == curr_sequence_id_) {
             LOG(WARNING) << "same sequence id: " << request_sequence_id;
             ResponseNode response_node(response, done);
-            m_done_list.push_back(response_node);
+            done_list_.push_back(response_node);
             return true;
         } else {
             LOG(WARNING) << "sequence id: " << request_sequence_id
-                << " should not larger than current: " << m_curr_sequence_id;
+                << " should not larger than current: " << curr_sequence_id_;
         }
-        CHECK(m_done_list.size() == 0);
-        m_curr_sequence_id = request_sequence_id;
+        CHECK(done_list_.size() == 0);
+        curr_sequence_id_ = request_sequence_id;
         ResponseNode response_node(response, done);
-        m_done_list.push_back(response_node);
+        done_list_.push_back(response_node);
 
         return true;
     }
 
     void FillResponseAndDone(ResponseType* response) {
-        MutexLock lock(&m_mutex);
-        m_last_success_response->CopyFrom(*response);
-        m_last_success_sequence_id = m_curr_sequence_id;
+        MutexLock lock(&mutex_);
+        last_success_response_->CopyFrom(*response);
+        last_success_sequence_id_ = curr_sequence_id_;
 
-        for (uint32_t i = 0; i < m_done_list.size(); ++i) {
-            m_done_list[i].first->CopyFrom(*response);
-            m_done_list[i].second->Run();
+        for (uint32_t i = 0; i < done_list_.size(); ++i) {
+            done_list_[i].first->CopyFrom(*response);
+            done_list_[i].second->Run();
         }
-        m_done_list.clear();
+        done_list_.clear();
     }
 
 private:
     typedef std::pair<ResponseType*, google::protobuf::Closure*> ResponseNode;
 
-    mutable Mutex m_mutex;
-    std::vector<ResponseNode> m_done_list;
-    uint64_t m_last_success_sequence_id;
-    uint64_t m_curr_sequence_id;
-    scoped_ptr<ResponseType> m_last_success_response;
+    mutable Mutex mutex_;
+    std::vector<ResponseNode> done_list_;
+    uint64_t last_success_sequence_id_;
+    uint64_t curr_sequence_id_;
+    scoped_ptr<ResponseType> last_success_response_;
 };
 
 } // namespace tabletnode
