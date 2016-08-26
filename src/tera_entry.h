@@ -27,8 +27,8 @@ private:
     bool ShouldShutdown();
 
 private:
-    Mutex m_mutex;
-    bool m_started;
+    Mutex mutex_;
+    bool started_;
 };
 
 }  // namespace tera
