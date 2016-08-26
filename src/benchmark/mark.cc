@@ -28,17 +28,17 @@ public:
 };
 
 Adapter::Adapter(tera::Table* table)
-    : m_table(table),
-      m_write_marker(PUT),
-      m_read_marker(GET),
-      m_scan_marker(SCN) {
-    pthread_mutex_init(&m_mutex, NULL);
-    pthread_cond_init(&m_cond, NULL);
+    : table_(table),
+      write_marker_(PUT),
+      read_marker_(GET),
+      scan_marker_(SCN) {
+    pthread_mutex_init(&mutex_, NULL);
+    pthread_cond_init(&cond_, NULL);
 }
 
 Adapter::~Adapter() {
-    pthread_mutex_destroy(&m_mutex);
-    pthread_cond_destroy(&m_cond);
+    pthread_mutex_destroy(&mutex_);
+    pthread_cond_destroy(&cond_);
 }
 
 void sdk_write_callback(tera::RowMutation* row_mu) {
@@ -53,7 +53,7 @@ void Adapter::Write(const std::string& row,
                     std::map<std::string, std::set<std::string> >& column,
                     uint64_t timestamp,
                     std::string& value) {
-    tera::RowMutation* row_mu = m_table->NewRowMutation(row);
+    tera::RowMutation* row_mu = table_->NewRowMutation(row);
     size_t req_size = row.size();
 
     if (column.size() == 0) {
@@ -81,47 +81,47 @@ void Adapter::Write(const std::string& row,
         }
     }
 
-    m_write_marker.CheckPending();
-    m_write_marker.CheckLimit();
-    m_write_marker.OnReceive(req_size);
-    m_pending_num.Inc();
+    write_marker_.CheckPending();
+    write_marker_.CheckLimit();
+    write_marker_.OnReceive(req_size);
+    pending_num_.Inc();
 
     if (type == ASYNC) {
         int64_t req_time = Now();
         Context* ctx = new Context(this, req_size, req_time);
         row_mu->SetCallBack(sdk_write_callback);
         row_mu->SetContext(ctx);
-        m_table->ApplyMutation(row_mu);
+        table_->ApplyMutation(row_mu);
     } else {
-        m_sync_mutations.push_back(row_mu);
-        m_sync_req_sizes.push_back(req_size);
-        if (m_sync_mutations.size() >= static_cast<unsigned long long>(FLAGS_batch_count)) {
+        sync_mutations_.push_back(row_mu);
+        sync_req_sizes_.push_back(req_size);
+        if (sync_mutations_.size() >= static_cast<unsigned long long>(FLAGS_batch_count)) {
             CommitSyncWrite();
         }
     }
 }
 
 void Adapter::CommitSyncWrite() {
-    if (m_sync_mutations.size() == 0) {
+    if (sync_mutations_.size() == 0) {
         return;
     }
-    CHECK_EQ(m_sync_mutations.size(), m_sync_req_sizes.size());
+    CHECK_EQ(sync_mutations_.size(), sync_req_sizes_.size());
     int64_t req_time = Now();
-    m_table->ApplyMutation(m_sync_mutations);
-    for (size_t i = 0; i < m_sync_mutations.size(); i++) {
-        WriteCallback(m_sync_mutations[i], m_sync_req_sizes[i], req_time);
+    table_->ApplyMutation(sync_mutations_);
+    for (size_t i = 0; i < sync_mutations_.size(); i++) {
+        WriteCallback(sync_mutations_[i], sync_req_sizes_[i], req_time);
     }
-    m_sync_mutations.clear();
-    m_sync_req_sizes.clear();
+    sync_mutations_.clear();
+    sync_req_sizes_.clear();
 }
 
 void Adapter::WriteCallback(tera::RowMutation* row_mu, size_t req_size,
                             int64_t req_time) {
     uint32_t latency = (Now() - req_time) / 1000;
-    m_write_marker.OnFinish(req_size, latency);
+    write_marker_.OnFinish(req_size, latency);
     tera::ErrorCode err = row_mu->GetError();
     if (err.GetType() == tera::ErrorCode::kOK) {
-        m_write_marker.OnSuccess(req_size, latency);
+        write_marker_.OnSuccess(req_size, latency);
     } else {
         /*std::cerr << "fail to write: row=[" << row << "], column=["
             << family << ":" << qualifier << "], timestamp=["
@@ -130,10 +130,10 @@ void Adapter::WriteCallback(tera::RowMutation* row_mu, size_t req_size,
     }
     delete row_mu;
 
-    if (0 == m_pending_num.Dec()) {
-        pthread_mutex_lock(&m_mutex);
-        pthread_cond_signal(&m_cond);
-        pthread_mutex_unlock(&m_mutex);
+    if (0 == pending_num_.Dec()) {
+        pthread_mutex_lock(&mutex_);
+        pthread_cond_signal(&cond_);
+        pthread_mutex_unlock(&mutex_);
     }
 }
 
@@ -149,7 +149,7 @@ void sdk_read_callback(tera::RowReader* row_rd) {
 void Adapter::Read(const std::string& row,
                    const std::map<std::string, std::set<std::string> >& column,
                    uint64_t largest_ts, uint64_t smallest_ts) {
-    tera::RowReader* reader = m_table->NewRowReader(row);
+    tera::RowReader* reader = table_->NewRowReader(row);
     size_t req_size = row.size();
 
     std::map<std::string, std::set<std::string> >::const_iterator it;
@@ -171,44 +171,44 @@ void Adapter::Read(const std::string& row,
     reader->SetTimeRange(smallest_ts, largest_ts);
     req_size += sizeof(smallest_ts) + sizeof(largest_ts);
 
-    m_read_marker.CheckPending();
-    m_read_marker.CheckLimit();
-    m_read_marker.OnReceive(req_size);
-    m_pending_num.Inc();
+    read_marker_.CheckPending();
+    read_marker_.CheckLimit();
+    read_marker_.OnReceive(req_size);
+    pending_num_.Inc();
 
     if (type == ASYNC) {
         int64_t req_time = Now();
         Context* ctx = new Context(this, req_size, req_time);
         reader->SetCallBack(sdk_read_callback);
         reader->SetContext(ctx);
-        m_table->Get(reader);
+        table_->Get(reader);
     } else {
-        m_sync_readers.push_back(reader);
-        m_sync_req_sizes.push_back(req_size);
-        if (m_sync_readers.size() >= static_cast<unsigned long long>(FLAGS_batch_count)) {
+        sync_readers_.push_back(reader);
+        sync_req_sizes_.push_back(req_size);
+        if (sync_readers_.size() >= static_cast<unsigned long long>(FLAGS_batch_count)) {
             CommitSyncRead();
         }
     }
 }
 
 void Adapter::CommitSyncRead() {
-    if (m_sync_readers.size() == 0) {
+    if (sync_readers_.size() == 0) {
         return;
     }
-    CHECK_EQ(m_sync_readers.size(), m_sync_req_sizes.size());
+    CHECK_EQ(sync_readers_.size(), sync_req_sizes_.size());
     int64_t req_time = Now();
-    m_table->Get(m_sync_readers);
-    for (size_t i = 0; i < m_sync_readers.size(); i++) {
-        ReadCallback(m_sync_readers[i], m_sync_req_sizes[i], req_time);
+    table_->Get(sync_readers_);
+    for (size_t i = 0; i < sync_readers_.size(); i++) {
+        ReadCallback(sync_readers_[i], sync_req_sizes_[i], req_time);
     }
-    m_sync_readers.clear();
-    m_sync_req_sizes.clear();
+    sync_readers_.clear();
+    sync_req_sizes_.clear();
 }
 
 void Adapter::ReadCallback(tera::RowReader* reader, size_t req_size,
                            int64_t req_time) {
     uint32_t latency = (Now() - req_time) / 1000;
-    m_read_marker.OnFinish(req_size, latency);
+    read_marker_.OnFinish(req_size, latency);
     const std::string& row = reader->RowName();
     tera::ErrorCode err = reader->GetError();
     if (err.GetType() == tera::ErrorCode::kOK) {
@@ -228,7 +228,7 @@ void Adapter::ReadCallback(tera::RowReader* reader, size_t req_size,
             reader->Next();
         }
         if (all_verified) {
-            m_read_marker.OnSuccess(req_size, latency);
+            read_marker_.OnSuccess(req_size, latency);
         }
     } else {
         std::cerr << "fail to read: row=[" << row << "], column=[";
@@ -262,17 +262,17 @@ void Adapter::ReadCallback(tera::RowReader* reader, size_t req_size,
     }
     delete reader;
 
-    if (0 == m_pending_num.Dec()) {
-        pthread_mutex_lock(&m_mutex);
-        pthread_cond_signal(&m_cond);
-        pthread_mutex_unlock(&m_mutex);
+    if (0 == pending_num_.Dec()) {
+        pthread_mutex_lock(&mutex_);
+        pthread_cond_signal(&cond_);
+        pthread_mutex_unlock(&mutex_);
     }
 }
 
 void Adapter::Delete(const std::string& row,
                      std::map<std::string, std::set<std::string> >& column,
                      uint64_t ts) {
-    tera::RowMutation* row_mu = m_table->NewRowMutation(row);
+    tera::RowMutation* row_mu = table_->NewRowMutation(row);
     size_t req_size = row.size();
 
     if (column.size() == 0) {
@@ -294,21 +294,21 @@ void Adapter::Delete(const std::string& row,
         }
     }
 
-    m_write_marker.CheckPending();
-    m_write_marker.CheckLimit();
-    m_write_marker.OnReceive(req_size);
-    m_pending_num.Inc();
+    write_marker_.CheckPending();
+    write_marker_.CheckLimit();
+    write_marker_.OnReceive(req_size);
+    pending_num_.Inc();
 
     if (type == ASYNC) {
         int64_t req_time = Now();
         Context* ctx = new Context(this, req_size, req_time);
         row_mu->SetCallBack(sdk_write_callback);
         row_mu->SetContext(ctx);
-        m_table->ApplyMutation(row_mu);
+        table_->ApplyMutation(row_mu);
     } else {
-        m_sync_mutations.push_back(row_mu);
-        m_sync_req_sizes.push_back(req_size);
-        if (m_sync_mutations.size() >= static_cast<unsigned long long>(FLAGS_batch_count)) {
+        sync_mutations_.push_back(row_mu);
+        sync_req_sizes_.push_back(req_size);
+        if (sync_mutations_.size() >= static_cast<unsigned long long>(FLAGS_batch_count)) {
             CommitSyncWrite();
         }
     }
@@ -325,7 +325,7 @@ void Adapter::Scan(const std::string& start_key, const std::string& end_key,
         scan_desp.AddColumnFamily(cf_list[i]);
     }
     tera::ErrorCode err;
-    tera::ResultStream* result = m_table->Scan(scan_desp, &err);
+    tera::ResultStream* result = table_->Scan(scan_desp, &err);
     if (result == NULL) {
         std::cerr << "fail to scan: " << tera::strerr(err);
         return;
@@ -341,19 +341,19 @@ void Adapter::Scan(const std::string& start_key, const std::string& end_key,
         size_t size = result->RowName().size() + result->Family().size()
                     + result->Qualifier().size() + sizeof(result->Timestamp())
                     + result->Value().size();
-        m_scan_marker.OnFinish(size, 0);
-        m_scan_marker.OnSuccess(size, 0);
+        scan_marker_.OnFinish(size, 0);
+        scan_marker_.OnSuccess(size, 0);
         result->Next();
     }
     delete result;
 }
 
 void Adapter::WaitComplete() {
-    pthread_mutex_lock(&m_mutex);
-    while (0 != m_pending_num.Get()) {
-        pthread_cond_wait(&m_cond, &m_mutex);
+    pthread_mutex_lock(&mutex_);
+    while (0 != pending_num_.Get()) {
+        pthread_cond_wait(&cond_, &mutex_);
     }
-    pthread_mutex_unlock(&m_mutex);
+    pthread_mutex_unlock(&mutex_);
 }
 
 void add_checksum(const std::string& rowkey, const std::string& family,
