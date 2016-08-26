@@ -172,26 +172,26 @@ private:
         kRepair
     };
     struct MetaTask {
-        MetaTaskType m_type;
+        MetaTaskType type_;
     };
     struct WriteTask {
-        MetaTaskType m_type;
-        WriteClosure* m_done;
-        std::vector<ToMetaFunc> m_meta_entries;
-        bool m_is_delete;
+        MetaTaskType type_;
+        WriteClosure* done_;
+        std::vector<ToMetaFunc> meta_entries_;
+        bool is_delete_;
     };
     struct ScanTask {
-        MetaTaskType m_type;
-        ScanClosure* m_done;
-        std::string m_table_name;
-        std::string m_tablet_key_start;
-        std::string m_tablet_key_end;
+        MetaTaskType type_;
+        ScanClosure* done_;
+        std::string table_name_;
+        std::string tablet_key_start_;
+        std::string tablet_key_end_;
     };
     struct RepairTask {
-        MetaTaskType m_type;
-        WriteClosure* m_done;
-        TabletPtr m_tablet;
-        ScanTabletResponse* m_scan_resp;
+        MetaTaskType type_;
+        WriteClosure* done_;
+        TabletPtr tablet_;
+        ScanTabletResponse* scan_resp_;
     };
     struct SnapshotTask {
         const GetSnapshotRequest* request;
@@ -564,60 +564,60 @@ private:
     bool IsUpdateCf(TablePtr table);
 
 private:
-    mutable Mutex m_status_mutex;
-    MasterStatus m_status;
-    std::string m_local_addr;
+    mutable Mutex status_mutex_;
+    MasterStatus status_;
+    std::string local_addr_;
 
-    mutable Mutex m_tabletnode_mutex;
-    bool m_restored;
-    boost::shared_ptr<TabletManager> m_tablet_manager;
-    boost::shared_ptr<TabletNodeManager> m_tabletnode_manager;
-    boost::shared_ptr<UserManager> m_user_manager;
-    scoped_ptr<MasterZkAdapterBase> m_zk_adapter;
-    scoped_ptr<Scheduler> m_size_scheduler;
-    scoped_ptr<Scheduler> m_load_scheduler;
+    mutable Mutex tabletnode_mutex_;
+    bool restored_;
+    boost::shared_ptr<TabletManager> tablet_manager_;
+    boost::shared_ptr<TabletNodeManager> tabletnode_manager_;
+    boost::shared_ptr<UserManager> user_manager_;
+    scoped_ptr<MasterZkAdapterBase> zk_adapter_;
+    scoped_ptr<Scheduler> size_scheduler_;
+    scoped_ptr<Scheduler> load_scheduler_;
 
-    Mutex m_mutex;
-    int64_t m_release_cache_timer_id;
-    Counter m_this_sequence_id;
+    Mutex mutex_;
+    int64_t release_cache_timer_id_;
+    Counter this_sequence_id_;
 
-    bool m_query_enabled;
-    scoped_ptr<ThreadPool> m_query_thread_pool;
-    int64_t m_start_query_time;
-    int64_t m_query_tabletnode_timer_id;
-    Counter m_query_pending_count;
+    bool query_enabled_;
+    scoped_ptr<ThreadPool> query_thread_pool_;
+    int64_t start_query_time_;
+    int64_t query_tabletnode_timer_id_;
+    Counter query_pending_count_;
 
-    bool m_load_balance_enabled;
-    int64_t m_load_balance_timer_id;
+    bool load_balance_enabled_;
+    int64_t load_balance_timer_id_;
 
-    scoped_ptr<ThreadPool> m_thread_pool;
-    AutoResetEvent m_query_event;
+    scoped_ptr<ThreadPool> thread_pool_;
+    AutoResetEvent query_event_;
 
-    mutable Mutex m_meta_task_mutex;
-    std::queue<MetaTask*> m_meta_task_queue;
+    mutable Mutex meta_task_mutex_;
+    std::queue<MetaTask*> meta_task_queue_;
 
-    mutable Mutex m_tabletnode_timer_mutex;
-    std::map<std::string, int64_t> m_tabletnode_timer_id_map;
+    mutable Mutex tabletnode_timer_mutex_;
+    std::map<std::string, int64_t> tabletnode_timer_id_map_;
 
-    mutable Mutex m_tablet_mutex;
+    mutable Mutex tablet_mutex_;
 
-    TabletPtr m_meta_tablet;
+    TabletPtr meta_tablet_;
 
     // stat table
-    bool m_is_stat_table;
-    std::map<std::string, int64_t> m_ts_stat_update_time;
-    mutable Mutex m_stat_table_mutex;
-    TableImpl* m_stat_table;
+    bool is_stat_table_;
+    std::map<std::string, int64_t> ts_stat_update_time_;
+    mutable Mutex stat_table_mutex_;
+    TableImpl* stat_table_;
 
     // tabletnode garbage clean
-    bool m_gc_enabled;
-    int64_t m_gc_timer_id;
-    bool m_gc_query_enable;
-    boost::shared_ptr<GcStrategy> m_gc_strategy;
-    std::map<std::string, std::string> m_alias;
-    mutable Mutex m_alias_mutex;
+    bool gc_enabled_;
+    int64_t gc_timer_id_;
+    bool gc_query_enable_;
+    boost::shared_ptr<GcStrategy> gc_strategy_;
+    std::map<std::string, std::string> alias_;
+    mutable Mutex alias_mutex_;
 
-    boost::shared_ptr<TabletAvailability> m_tablet_availability;
+    boost::shared_ptr<TabletAvailability> tablet_availability_;
 };
 
 } // namespace master
