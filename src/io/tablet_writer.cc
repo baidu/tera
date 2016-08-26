@@ -266,7 +266,7 @@ void TabletWriter::BatchRequest(const std::vector<const RowMutationSequence*>& r
                 tablet_->GetRawKeyOperator()->EncodeTeraKey(row_key, mu.family(), mu.qualifier(),
                                                             timestamp, type, &tera_key);
                 uint32_t lg_id = 0;
-                size_t lg_num = tablet_->m_ldb_options.exist_lg_list->size();
+                size_t lg_num = tablet_->ldb_options_.exist_lg_list->size();
                 if (lg_num > 1) {
                     if (type != leveldb::TKT_DEL) {
                         lg_id = tablet_->GetLGidByCFName(mu.family());
