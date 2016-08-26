@@ -19,17 +19,16 @@ class Client {
 public:
     // Create a new client
     // User should delete Client* if it is no longer needed.
-    // A Client can be deleted iff all the tables it opened have been deleted.
+    // A Client can only be deleted if ALL the tables it opened have been deleted.
     static Client* NewClient(const std::string& confpath,
                              const std::string& log_prefix,
                              ErrorCode* err = NULL);
-
     static Client* NewClient(const std::string& confpath,
                              ErrorCode* err = NULL);
     static Client* NewClient();
 
     // Open a table by name.
-    // This operation could fail due to zookeeper down, meta not avaliable, table not exits, etc.
+    // This operation could fail due to zookeeper down, meta not avaliable, table not exists, etc.
     virtual Table* OpenTable(const std::string& table_name, ErrorCode* err) = 0;
 
     // Create a new table with specified descriptor.
@@ -53,7 +52,7 @@ public:
     virtual TableDescriptor* GetTableDescriptor(const std::string& table_name, ErrorCode* err) = 0;
     // List all tables.
     virtual bool List(std::vector<TableInfo>* table_list, ErrorCode* err) = 0;
-    // Get table & table info for a specified table.
+    // Get table & tablet(s) info for a specified table.
     virtual bool List(const std::string& table_name, TableInfo* table_info,
                       std::vector<TabletInfo>* tablet_list, ErrorCode* err) = 0;
 
@@ -62,9 +61,10 @@ public:
     virtual bool IsTableEnabled(const std::string& table_name, ErrorCode* err) = 0;
     virtual bool IsTableEmpty(const std::string& table_name, ErrorCode* err) = 0;
 
+    // Send command to to server, like meta, tablet, etc.
     virtual bool CmdCtrl(const std::string& command, const std::vector<std::string>& arg_list,
                          bool* bool_result, std::string* str_result, ErrorCode* err) = 0;
-    // Users who use glog in their own program should call this method to prevent cnofilict.
+    // User who use glog besides tera should call this method to prevent conflict.
     static void SetGlogIsInitialized();
 
     // User management.

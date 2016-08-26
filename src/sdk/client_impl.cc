@@ -178,6 +178,7 @@ bool ClientImpl::CreateTable(const TableDescriptor& desc,
 bool ClientImpl::UpdateTableSchema(const TableDescriptor& desc, ErrorCode* err) {
     return UpdateTable(desc, err);
 }
+
 bool ClientImpl::UpdateTable(const TableDescriptor& desc, ErrorCode* err) {
     if (!IsTableExist(desc.TableName(), err)) {
         LOG(ERROR) << "table not exist: " << desc.TableName();
