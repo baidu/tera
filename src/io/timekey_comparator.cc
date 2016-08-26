@@ -13,7 +13,7 @@ namespace tera {
 namespace io {
 
 TimekeyComparator::TimekeyComparator(const leveldb::Comparator* comparator)
-    : m_comparator(comparator) {}
+    : comparator_(comparator) {}
 
 TimekeyComparator::~TimekeyComparator() {}
 
@@ -26,7 +26,7 @@ int TimekeyComparator::Compare(const leveldb::Slice& akey,
     if (akey.size() < sizeof(uint64_t) || bkey.size() < sizeof(uint64_t)) {
         return static_cast<int>(akey.size()) - static_cast<int>(bkey.size());
     }
-    int r = m_comparator->Compare(ExtractShortKey(akey), ExtractShortKey(bkey));
+    int r = comparator_->Compare(ExtractShortKey(akey), ExtractShortKey(bkey));
     if (r == 0) {
         const uint64_t anum = DecodeFixed64(akey.data() + akey.size() - 8);
         const uint64_t bnum = DecodeFixed64(bkey.data() + bkey.size() - 8);
@@ -45,9 +45,9 @@ void TimekeyComparator::FindShortestSeparator(std::string* start,
     leveldb::Slice user_limit = ExtractTimeKey(limit);
     std::string tmp(user_start.data(), user_start.size());
 
-    m_comparator->FindShortestSeparator(&tmp, user_limit);
+    comparator_->FindShortestSeparator(&tmp, user_limit);
     if (tmp.size() < user_start.size() &&
-        m_comparator->Compare(user_start, tmp) < 0) {
+        comparator_->Compare(user_start, tmp) < 0) {
         PutFixed64(&tmp, PackTimestampAndType(kMaxTimeStamp, UKT_FORSEEK));
         CHECK(this->Compare(*start, tmp) < 0);
         CHECK(this->Compare(tmp, limit) < 0);
@@ -59,9 +59,9 @@ void TimekeyComparator::FindShortSuccessor(std::string* key) const {
     leveldb::Slice user_key = ExtractTimeKey(*key);
     std::string tmp(user_key.data(), user_key.size());
 
-    m_comparator->FindShortSuccessor(&tmp);
+    comparator_->FindShortSuccessor(&tmp);
     if (tmp.size() < user_key.size() &&
-        m_comparator->Compare(user_key, tmp) < 0) {
+        comparator_->Compare(user_key, tmp) < 0) {
         PutFixed64(&tmp, PackTimestampAndType(kMaxTimeStamp, UKT_FORSEEK));
         CHECK(this->Compare(*key, tmp) < 0);
         key->swap(tmp);

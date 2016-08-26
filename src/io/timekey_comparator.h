@@ -26,7 +26,7 @@ public:
     void FindShortSuccessor(std::string* key) const;
 
 private:
-    const leveldb::Comparator* m_comparator;
+    const leveldb::Comparator* comparator_;
 };
 
 const TimekeyComparator* NewTimekeyComparator(const leveldb::Comparator* comparator);

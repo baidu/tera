@@ -77,7 +77,7 @@ public:
     virtual CompactStatus GetCompactStatus() const;
     virtual TableSchema GetSchema() const;
     RawKey RawKeyType() const;
-    bool KvOnly() const { return m_kv_only; }
+    bool KvOnly() const { return kv_only_; }
     StatCounter& GetCounter();
     // tablet
     virtual bool Load(const TableSchema& schema,
@@ -237,34 +237,34 @@ private:
                            StatusCode* status);
 
 private:
-    mutable Mutex m_mutex;
-    TabletWriter* m_async_writer;
-    ScanContextManager* m_scan_context_manager;
+    mutable Mutex mutex_;
+    TabletWriter* async_writer_;
+    ScanContextManager* scan_context_manager_;
 
-    std::string m_tablet_path;
-    const std::string m_start_key;
-    const std::string m_end_key;
-    std::string m_raw_start_key;
-    std::string m_raw_end_key;
-    CompactStatus m_compact_status;
+    std::string tablet_path_;
+    const std::string start_key_;
+    const std::string end_key_;
+    std::string raw_start_key_;
+    std::string raw_end_key_;
+    CompactStatus compact_status_;
 
-    TabletStatus m_status;
-    volatile int32_t m_ref_count;
-    volatile int32_t m_db_ref_count;
-    leveldb::Options m_ldb_options;
-    leveldb::DB* m_db;
-    bool m_mem_store_activated;
-    TableSchema m_table_schema;
-    bool m_kv_only;
+    TabletStatus status_;
+    volatile int32_t ref_count_;
+    volatile int32_t db_ref_count_;
+    leveldb::Options ldb_options_;
+    leveldb::DB* db_;
+    bool mem_store_activated_;
+    TableSchema table_schema_;
+    bool kv_only_;
     std::map<uint64_t, uint64_t> id_to_snapshot_num_;
     std::map<uint64_t, uint64_t> rollbacks_;
 
-    const leveldb::RawKeyOperator* m_key_operator;
+    const leveldb::RawKeyOperator* key_operator_;
 
-    std::map<std::string, uint32_t> m_cf_lg_map;
-    std::map<std::string, uint32_t> m_lg_id_map;
-    StatCounter m_counter;
-    mutable Mutex m_schema_mutex;
+    std::map<std::string, uint32_t> cf_lg_map_;
+    std::map<std::string, uint32_t> lg_id_map_;
+    StatCounter counter_;
+    mutable Mutex schema_mutex_;
 };
 
 } // namespace io
