@@ -20,13 +20,13 @@ namespace tera {
 namespace master {
 
 MasterEntry::MasterEntry()
-    : m_master_impl(NULL),
-      m_remote_master(NULL),
-      m_rpc_server(NULL) {
+    : master_impl_(NULL),
+      remote_master_(NULL),
+      rpc_server_(NULL) {
     sofa::pbrpc::RpcServerOptions rpc_options;
     rpc_options.max_throughput_in = FLAGS_tera_master_rpc_server_max_inflow;
     rpc_options.max_throughput_out = FLAGS_tera_master_rpc_server_max_outflow;
-    m_rpc_server.reset(new sofa::pbrpc::RpcServer(rpc_options));
+    rpc_server_.reset(new sofa::pbrpc::RpcServer(rpc_options));
 }
 
 MasterEntry::~MasterEntry() {}
@@ -35,15 +35,15 @@ bool MasterEntry::StartServer() {
     IpAddress master_addr("0.0.0.0", FLAGS_tera_master_port);
     LOG(INFO) << "Start master RPC server at: " << master_addr.ToString();
 
-    m_master_impl.reset(new MasterImpl());
-    m_remote_master = new RemoteMaster(m_master_impl.get());
+    master_impl_.reset(new MasterImpl());
+    remote_master_ = new RemoteMaster(master_impl_.get());
 
-    if (!m_master_impl->Init()) {
+    if (!master_impl_->Init()) {
         return false;
     }
 
-    m_rpc_server->RegisterService(m_remote_master);
-    if (!m_rpc_server->Start(master_addr.ToString())) {
+    rpc_server_->RegisterService(remote_master_);
+    if (!rpc_server_->Start(master_addr.ToString())) {
         LOG(ERROR) << "start RPC server error";
         return false;
     }
@@ -57,7 +57,7 @@ bool MasterEntry::Run() {
     ++timer_ticks;
 
     if (timer_ticks % 10 == 0) {
-        LOG(INFO) << "[ThreadPool schd/task/cnt] " << m_master_impl->ProfilingLog();
+        LOG(INFO) << "[ThreadPool schd/task/cnt] " << master_impl_->ProfilingLog();
     }
 
     ThisThread::Sleep(1000);
@@ -65,8 +65,8 @@ bool MasterEntry::Run() {
 }
 
 void MasterEntry::ShutdownServer() {
-    m_rpc_server->Stop();
-    m_master_impl.reset();
+    rpc_server_->Stop();
+    master_impl_.reset();
 }
 
 } // namespace master
