@@ -23,7 +23,7 @@ namespace master {
 
 MasterZkAdapter::MasterZkAdapter(MasterImpl * master_impl,
                                  const std::string& server_addr)
-    : m_master_impl(master_impl), m_server_addr(server_addr) {
+    : master_impl_(master_impl), server_addr_(server_addr) {
 }
 
 MasterZkAdapter::~MasterZkAdapter() {
@@ -32,7 +32,7 @@ MasterZkAdapter::~MasterZkAdapter() {
 bool MasterZkAdapter::Init(std::string* root_tablet_addr,
                            std::map<std::string, std::string>* tabletnode_list,
                            bool* safe_mode) {
-    MutexLock lock(&m_mutex);
+    MutexLock lock(&mutex_);
 
     if (!Setup()) {
         return false;
@@ -80,7 +80,7 @@ bool MasterZkAdapter::Setup() {
     while (!ZooKeeperAdapter::Init(FLAGS_tera_zk_addr_list,
                                    FLAGS_tera_zk_root_path,
                                    FLAGS_tera_zk_timeout,
-                                   m_server_addr, &zk_errno)) {
+                                   server_addr_, &zk_errno)) {
         if (retry_count++ >= FLAGS_tera_zk_retry_max_times) {
             LOG(ERROR) << "fail to init zk: " << zk::ZkErrnoToString(zk_errno);
             return false;
@@ -139,7 +139,7 @@ bool MasterZkAdapter::CreateMasterNode() {
     LOG(INFO) << "try create master node...";
     int32_t retry_count = 0;
     int zk_errno = zk::ZE_OK;
-    while (!CreateEphemeralNode(kMasterNodePath, m_server_addr, &zk_errno)) {
+    while (!CreateEphemeralNode(kMasterNodePath, server_addr_, &zk_errno)) {
         if (retry_count++ >= FLAGS_tera_zk_retry_max_times) {
             LOG(ERROR) << "fail to create master node";
             return false;
@@ -174,7 +174,7 @@ bool MasterZkAdapter::DeleteMasterNode() {
 
 bool MasterZkAdapter::KickTabletServer(const std::string& ts_host,
                                        const std::string& ts_zk_id) {
-    MutexLock lock(&m_mutex);
+    MutexLock lock(&mutex_);
     int32_t retry_count = 0;
     int zk_errno = zk::ZE_OK;
     while (!CreatePersistentNode(kKickPath + "/" + ts_zk_id, ts_host, &zk_errno)
@@ -193,7 +193,7 @@ bool MasterZkAdapter::KickTabletServer(const std::string& ts_host,
 }
 
 bool MasterZkAdapter::MarkSafeMode() {
-    MutexLock lock(&m_mutex);
+    MutexLock lock(&mutex_);
     LOG(INFO) << "try mark safemode...";
     int32_t retry_count = 0;
     int zk_errno = zk::ZE_OK;
@@ -213,7 +213,7 @@ bool MasterZkAdapter::MarkSafeMode() {
 }
 
 bool MasterZkAdapter::UnmarkSafeMode() {
-    MutexLock lock(&m_mutex);
+    MutexLock lock(&mutex_);
     LOG(INFO) << "try unmark safemode...";
     int zk_errno = zk::ZE_OK;
     int32_t retry_count = 0;
@@ -233,7 +233,7 @@ bool MasterZkAdapter::UnmarkSafeMode() {
 }
 
 bool MasterZkAdapter::UpdateRootTabletNode(const std::string& root_tablet_addr) {
-    MutexLock lock(&m_mutex);
+    MutexLock lock(&mutex_);
     LOG(INFO) << "try update root node...";
     int32_t retry_count = 0;
     int zk_errno = zk::ZE_OK;
@@ -388,8 +388,8 @@ void MasterZkAdapter::OnSafeModeMarkDeleted() {
 
 void MasterZkAdapter::OnMasterLockLost() {
     LOG(ERROR) << "master lock lost";
-    m_master_impl->SetMasterStatus(MasterImpl::kIsSecondary);
-    m_master_impl->DisableQueryTabletNodeTimer();
+    master_impl_->SetMasterStatus(MasterImpl::kIsSecondary);
+    master_impl_->DisableQueryTabletNodeTimer();
     DeleteMasterNode();
     Reset();
 }
@@ -397,8 +397,8 @@ void MasterZkAdapter::OnMasterLockLost() {
 void MasterZkAdapter::OnTabletNodeListDeleted() {
     LOG(ERROR) << "ts dir node is deleted";
     if (!MarkSafeMode()) {
-        m_master_impl->SetMasterStatus(MasterImpl::kIsSecondary);
-        m_master_impl->DisableQueryTabletNodeTimer();
+        master_impl_->SetMasterStatus(MasterImpl::kIsSecondary);
+        master_impl_->DisableQueryTabletNodeTimer();
         DeleteMasterNode();
         UnlockMasterLock();
         Reset();
@@ -408,10 +408,10 @@ void MasterZkAdapter::OnTabletNodeListDeleted() {
 void MasterZkAdapter::OnRootTabletNodeDeleted() {
     LOG(ERROR) << "root tablet node is deleted";
     std::string root_tablet_addr;
-    if (m_master_impl->GetMetaTabletAddr(&root_tablet_addr)) {
+    if (master_impl_->GetMetaTabletAddr(&root_tablet_addr)) {
         if (!UpdateRootTabletNode(root_tablet_addr)) {
-            m_master_impl->SetMasterStatus(MasterImpl::kIsSecondary);
-            m_master_impl->DisableQueryTabletNodeTimer();
+            master_impl_->SetMasterStatus(MasterImpl::kIsSecondary);
+            master_impl_->DisableQueryTabletNodeTimer();
             DeleteMasterNode();
             UnlockMasterLock();
             Reset();
@@ -423,8 +423,8 @@ void MasterZkAdapter::OnRootTabletNodeDeleted() {
 
 void MasterZkAdapter::OnMasterNodeDeleted() {
     LOG(ERROR) << "master node deleted";
-    m_master_impl->SetMasterStatus(MasterImpl::kIsSecondary);
-    m_master_impl->DisableQueryTabletNodeTimer();
+    master_impl_->SetMasterStatus(MasterImpl::kIsSecondary);
+    master_impl_->DisableQueryTabletNodeTimer();
     UnlockMasterLock();
     Reset();
 }
@@ -450,7 +450,7 @@ void MasterZkAdapter::OnChildrenChanged(const std::string& path,
     }
     std::map<std::string, std::string> ts_node_list;
 
-    m_mutex.Lock();
+    mutex_.Lock();
     size_t list_count = name_list.size();
     for (size_t i = 0; i < list_count; i++) {
         const std::string& name = name_list[i];
@@ -476,26 +476,26 @@ void MasterZkAdapter::OnChildrenChanged(const std::string& path,
         // TODO: check value
         ts_node_list[data] = name;
     }
-    m_mutex.Unlock();
-    m_master_impl->RefreshTabletNodeList(ts_node_list);
+    mutex_.Unlock();
+    master_impl_->RefreshTabletNodeList(ts_node_list);
 }
 
 void MasterZkAdapter::OnNodeValueChanged(const std::string& path,
                                          const std::string& value) {
     VLOG(5) << "OnNodeValueChanged: path=[" << path << "], value=["
         << value << "]";
-    MutexLock lock(&m_mutex);
+    MutexLock lock(&mutex_);
 }
 
 void MasterZkAdapter::OnNodeCreated(const std::string& path) {
     VLOG(5) << "OnNodeCreated: path=[" << path << "]";
-    MutexLock lock(&m_mutex);
+    MutexLock lock(&mutex_);
 }
 
 void MasterZkAdapter::OnNodeDeleted(const std::string& path) {
     VLOG(5) << "OnNodeDeleted: path=[" << path << "]";
 
-    MutexLock lock(&m_mutex);
+    MutexLock lock(&mutex_);
     if (path.compare(kSafeModeNodePath) == 0) {
         OnSafeModeMarkDeleted();
     } else if (path.compare(kTsListPath) == 0) {
@@ -512,7 +512,7 @@ void MasterZkAdapter::OnWatchFailed(const std::string& path, int watch_type,
                                     int err) {
     LOG(ERROR) << "OnWatchFailed: path=[" << path << "], watch_type="
         << watch_type << ", err=" << err;
-    // MutexLock lock(&m_mutex);
+    // MutexLock lock(&mutex_);
     _Exit(EXIT_FAILURE);
 }
 
@@ -524,8 +524,8 @@ void MasterZkAdapter::OnSessionTimeout() {
 
 FakeMasterZkAdapter::FakeMasterZkAdapter(MasterImpl * master_impl,
                                  const std::string& server_addr)
-    : m_master_impl(master_impl), m_server_addr(server_addr) {
-    m_fake_path = FLAGS_tera_fake_zk_path_prefix + "/";
+    : master_impl_(master_impl), server_addr_(server_addr) {
+    fake_path_ = FLAGS_tera_fake_zk_path_prefix + "/";
 }
 
 FakeMasterZkAdapter::~FakeMasterZkAdapter() {
@@ -534,25 +534,25 @@ FakeMasterZkAdapter::~FakeMasterZkAdapter() {
 bool FakeMasterZkAdapter::Init(std::string* root_tablet_addr,
                                std::map<std::string, std::string>* tabletnode_list,
                                bool* safe_mode) {
-    std::string master_lock = m_fake_path + kMasterLockPath;
-    std::string master_path = m_fake_path + kMasterNodePath;
-    std::string ts_list_path = m_fake_path + kTsListPath;
-    std::string kick_path = m_fake_path + kKickPath;
-    std::string root_path = m_fake_path + kRootTabletNodePath;
+    std::string master_lock = fake_path_ + kMasterLockPath;
+    std::string master_path = fake_path_ + kMasterNodePath;
+    std::string ts_list_path = fake_path_ + kTsListPath;
+    std::string kick_path = fake_path_ + kKickPath;
+    std::string root_path = fake_path_ + kRootTabletNodePath;
 
     // setup master-lock
     if (!IsEmpty(master_lock)) {
         LOG(ERROR) << "fake zk error: " << master_lock;
         _Exit(EXIT_FAILURE);
     }
-    if (!zk::FakeZkUtil::WriteNode(master_lock + "/0", m_server_addr)) {
+    if (!zk::FakeZkUtil::WriteNode(master_lock + "/0", server_addr_)) {
         LOG(ERROR) << "fake zk error: " << master_lock + "/0, "
-            << m_server_addr;
+            << server_addr_;
         _Exit(EXIT_FAILURE);
     }
-    if (!zk::FakeZkUtil::WriteNode(master_path, m_server_addr)) {
+    if (!zk::FakeZkUtil::WriteNode(master_path, server_addr_)) {
         LOG(ERROR) << "fake zk error: " << master_path + ", "
-            << m_server_addr;
+            << server_addr_;
         _Exit(EXIT_FAILURE);
     }
 
@@ -589,7 +589,7 @@ bool FakeMasterZkAdapter::UnmarkSafeMode() {
 }
 
 bool FakeMasterZkAdapter::UpdateRootTabletNode(const std::string& root_tablet_addr) {
-    std::string root_table = m_fake_path + kRootTabletNodePath;
+    std::string root_table = fake_path_ + kRootTabletNodePath;
     if (!zk::FakeZkUtil::WriteNode(root_table, root_tablet_addr)) {
         LOG(ERROR) << "fake zk error: " << root_table
             << ", " << root_tablet_addr;
@@ -629,7 +629,7 @@ void FakeMasterZkAdapter::OnSessionTimeout() {
 
 InsMasterZkAdapter::InsMasterZkAdapter(MasterImpl * master_impl,
                                  const std::string& server_addr)
-    : m_master_impl(master_impl), m_server_addr(server_addr) {
+    : master_impl_(master_impl), server_addr_(server_addr) {
 
 }
 
@@ -657,21 +657,21 @@ static void InsOnSessionTimeout(void * context) {
 bool InsMasterZkAdapter::Init(std::string* root_tablet_addr,
                                std::map<std::string, std::string>* tabletnode_list,
                                bool* safe_mode) {
-    MutexLock lock(&m_mutex);
-    m_ins_sdk = new galaxy::ins::sdk::InsSDK(FLAGS_tera_ins_addr_list);
+    MutexLock lock(&mutex_);
+    ins_sdk_ = new galaxy::ins::sdk::InsSDK(FLAGS_tera_ins_addr_list);
     std::string root_path = FLAGS_tera_ins_root_path;
     std::string master_lock = root_path + kMasterLockPath;
     std::string master_path = root_path + kMasterNodePath;
     std::string ts_list_path = root_path + kTsListPath;
     std::string kick_path = root_path + kKickPath;
     galaxy::ins::sdk::SDKError err;
-    CHECK(m_ins_sdk->Lock(master_lock, &err)) << "lock master_lock fail";
-    CHECK(m_ins_sdk->Put(master_path, m_server_addr, &err)) << "writer master fail";
-    CHECK(m_ins_sdk->Watch(master_lock, InsOnLockChange, this, &err))
+    CHECK(ins_sdk_->Lock(master_lock, &err)) << "lock master_lock fail";
+    CHECK(ins_sdk_->Put(master_path, server_addr_, &err)) << "writer master fail";
+    CHECK(ins_sdk_->Watch(master_lock, InsOnLockChange, this, &err))
          << "watch master-lock fail";
-    CHECK(m_ins_sdk->Watch(ts_list_path, &InsOnTsChange, this, &err))
+    CHECK(ins_sdk_->Watch(ts_list_path, &InsOnTsChange, this, &err))
          << "watch ts list failed";
-    galaxy::ins::sdk::ScanResult* result = m_ins_sdk->Scan(ts_list_path+"/!",
+    galaxy::ins::sdk::ScanResult* result = ins_sdk_->Scan(ts_list_path+"/!",
                                                            ts_list_path+"/~");
     while (!result->Done()) {
         CHECK_EQ(result->Error(), galaxy::ins::sdk::kOK);
@@ -683,7 +683,7 @@ bool InsMasterZkAdapter::Init(std::string* root_tablet_addr,
         result->Next();
     }
     delete result;
-    m_ins_sdk->RegisterSessionTimeout(InsOnSessionTimeout, this);
+    ins_sdk_->RegisterSessionTimeout(InsOnSessionTimeout, this);
     return true;
 }
 
@@ -693,9 +693,9 @@ void InsMasterZkAdapter::RefreshTabletNodeList() {
     std::string master_path = root_path + kMasterNodePath;
     std::string ts_list_path = root_path + kTsListPath;
     galaxy::ins::sdk::SDKError err;
-    CHECK(m_ins_sdk->Watch(ts_list_path, &InsOnTsChange,
+    CHECK(ins_sdk_->Watch(ts_list_path, &InsOnTsChange,
                      this, &err)) << "watch ts failed";
-    galaxy::ins::sdk::ScanResult* result = m_ins_sdk->Scan(ts_list_path+"/!",
+    galaxy::ins::sdk::ScanResult* result = ins_sdk_->Scan(ts_list_path+"/!",
                                                            ts_list_path+"/~");
 
     std::map<std::string, std::string> tabletnode_list;
@@ -709,11 +709,11 @@ void InsMasterZkAdapter::RefreshTabletNodeList() {
         result->Next();
     }
     delete result;
-    m_master_impl->RefreshTabletNodeList(tabletnode_list);
+    master_impl_->RefreshTabletNodeList(tabletnode_list);
 }
 
 void InsMasterZkAdapter::OnLockChange(std::string session_id, bool deleted) {
-    if (deleted || session_id != m_ins_sdk->GetSessionID()) {
+    if (deleted || session_id != ins_sdk_->GetSessionID()) {
         LOG(ERROR) << "master lock lost";
         exit(1);
     }
@@ -724,7 +724,7 @@ bool InsMasterZkAdapter::KickTabletServer(const std::string& ts_host,
     std::string root_path = FLAGS_tera_ins_root_path;
     std::string kick_path = root_path + kKickPath;
     galaxy::ins::sdk::SDKError err;
-    bool ret = m_ins_sdk->Put(kick_path + "/" + ts_zk_id, ts_host, &err);
+    bool ret = ins_sdk_->Put(kick_path + "/" + ts_zk_id, ts_host, &err);
     return ret;
 }
 
@@ -732,12 +732,12 @@ bool InsMasterZkAdapter::UpdateRootTabletNode(const std::string& root_tablet_add
     std::string root_path = FLAGS_tera_ins_root_path;
     std::string meta_path = root_path + kRootTabletNodePath;
     galaxy::ins::sdk::SDKError err;
-    bool ret = m_ins_sdk->Put(meta_path, root_tablet_addr, &err);
+    bool ret = ins_sdk_->Put(meta_path, root_tablet_addr, &err);
     return ret;
 }
 
 void InsMasterZkAdapter::OnSessionTimeout() {
-    MutexLock lock(&m_mutex);
+    MutexLock lock(&mutex_);
     LOG(ERROR) << "ins sessiont timeout";
     _Exit(EXIT_FAILURE);
 }
