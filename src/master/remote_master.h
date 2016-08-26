@@ -173,8 +173,8 @@ private:
                        OperateUserResponse* response,
                        google::protobuf::Closure* done);
 private:
-    MasterImpl* m_master_impl;
-    scoped_ptr<ThreadPool> m_thread_pool;
+    MasterImpl* master_impl_;
+    scoped_ptr<ThreadPool> thread_pool_;
 };
 
 
