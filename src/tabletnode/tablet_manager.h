@@ -75,9 +75,9 @@ public:
     uint32_t Size();
 
 private:
-    mutable Mutex m_mutex;
+    mutable Mutex mutex_;
 
-    std::map<TabletRange, io::TabletIO*> m_tablet_list;
+    std::map<TabletRange, io::TabletIO*> tablet_list_;
 };
 
 } // namespace tabletnode

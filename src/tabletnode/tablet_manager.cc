@@ -28,19 +28,19 @@ bool TabletManager::AddTablet(const std::string& table_name,
                               const std::string& key_end,
                               io::TabletIO** tablet_io,
                               StatusCode* status) {
-    MutexLock lock(&m_mutex);
+    MutexLock lock(&mutex_);
 
     TabletRange tablet_range(table_name, key_start, key_end);
     std::map<TabletRange, io::TabletIO*>::iterator it =
-        m_tablet_list.find(tablet_range);
-    if (it != m_tablet_list.end()) {
+        tablet_list_.find(tablet_range);
+    if (it != tablet_list_.end()) {
         LOG(ERROR) << "tablet exist: " << table_name << ", " << key_start;
         *tablet_io = it->second;
         (*tablet_io)->AddRef();
         SetStatusCode(kTableExist, status);
         return false;
     }
-    *tablet_io = m_tablet_list[tablet_range] = new io::TabletIO(key_start, key_end);
+    *tablet_io = tablet_list_[tablet_range] = new io::TabletIO(key_start, key_end);
     (*tablet_io)->AddRef();
     return true;
 }
@@ -51,10 +51,10 @@ bool TabletManager::RemoveTablet(const std::string& table_name,
                                  StatusCode* status) {
     io::TabletIO* tablet_io = NULL;
     {
-        MutexLock lock(&m_mutex);
+        MutexLock lock(&mutex_);
         std::map<TabletRange, io::TabletIO*>::iterator it =
-            m_tablet_list.lower_bound(TabletRange(table_name, key_start, key_end));
-        if (it == m_tablet_list.end() ||
+            tablet_list_.lower_bound(TabletRange(table_name, key_start, key_end));
+        if (it == tablet_list_.end() ||
             it->first.table_name != table_name ||
             it->first.key_start != key_start ||
             it->first.key_end != key_end) {
@@ -64,7 +64,7 @@ bool TabletManager::RemoveTablet(const std::string& table_name,
             return false;
         }
         tablet_io = it->second;
-        m_tablet_list.erase(it);
+        tablet_list_.erase(it);
     }
     tablet_io->DecRef();
     return true;
@@ -74,10 +74,10 @@ io::TabletIO* TabletManager::GetTablet(const std::string& table_name,
                                        const std::string& key_start,
                                        const std::string& key_end,
                                        StatusCode* status) {
-    MutexLock lock(&m_mutex);
+    MutexLock lock(&mutex_);
     std::map<TabletRange, io::TabletIO*>::iterator it =
-        m_tablet_list.lower_bound(TabletRange(table_name, key_start, key_end));
-    if (it == m_tablet_list.end() ||
+        tablet_list_.lower_bound(TabletRange(table_name, key_start, key_end));
+    if (it == tablet_list_.end() ||
         it->first.table_name != table_name ||
         it->first.key_start != key_start ||
         it->first.key_end != key_end) {
@@ -92,10 +92,10 @@ io::TabletIO* TabletManager::GetTablet(const std::string& table_name,
 io::TabletIO* TabletManager::GetTablet(const std::string& table_name,
                                        const std::string& key,
                                        StatusCode* status) {
-    MutexLock lock(&m_mutex);
+    MutexLock lock(&mutex_);
     std::map<TabletRange, io::TabletIO*>::iterator it =
-        m_tablet_list.upper_bound(TabletRange(table_name, key, key));
-    if (it == m_tablet_list.begin()) {
+        tablet_list_.upper_bound(TabletRange(table_name, key, key));
+    if (it == tablet_list_.begin()) {
         SetStatusCode(kKeyNotInRange, status);
         return NULL;
     } else {
@@ -113,9 +113,9 @@ io::TabletIO* TabletManager::GetTablet(const std::string& table_name,
 }
 
 void TabletManager::GetAllTabletMeta(std::vector<TabletMeta*>* tablet_meta_list) {
-    MutexLock lock(&m_mutex);
+    MutexLock lock(&mutex_);
     std::map<TabletRange, io::TabletIO*>::iterator it;
-    for (it = m_tablet_list.begin(); it != m_tablet_list.end(); ++it) {
+    for (it = tablet_list_.begin(); it != tablet_list_.end(); ++it) {
         const TabletRange& range = it->first;
         io::TabletIO*& tablet_io = it->second;
         if (tablet_io->GetStatus() != io::TabletIO::kReady) {
@@ -141,9 +141,9 @@ void TabletManager::GetAllTabletMeta(std::vector<TabletMeta*>* tablet_meta_list)
 }
 
 void TabletManager::GetAllTablets(std::vector<io::TabletIO*>* tablet_list) {
-    MutexLock lock(&m_mutex);
+    MutexLock lock(&mutex_);
     std::map<TabletRange, io::TabletIO*>::iterator it;
-    for (it = m_tablet_list.begin(); it != m_tablet_list.end(); ++it) {
+    for (it = tablet_list_.begin(); it != tablet_list_.end(); ++it) {
         it->second->AddRef();
         tablet_list->push_back(it->second);
     }
@@ -151,13 +151,13 @@ void TabletManager::GetAllTablets(std::vector<io::TabletIO*>* tablet_list) {
 
 bool TabletManager::RemoveAllTablets(bool force, StatusCode* status) {
     bool all_success = true;
-    MutexLock lock(&m_mutex);
+    MutexLock lock(&mutex_);
     std::map<TabletRange, io::TabletIO*>::iterator it;
-    for (it = m_tablet_list.begin(); it != m_tablet_list.end();) {
+    for (it = tablet_list_.begin(); it != tablet_list_.end();) {
         StatusCode code = kTableOk;
         if (it->second->Unload(&code) || force) {
             it->second->DecRef();
-            m_tablet_list.erase(it++);
+            tablet_list_.erase(it++);
         } else {
             if (all_success) {
                 SetStatusCode(code, status);
@@ -170,8 +170,8 @@ bool TabletManager::RemoveAllTablets(bool force, StatusCode* status) {
 }
 
 uint32_t TabletManager::Size() {
-    MutexLock lock(&m_mutex);
-    return m_tablet_list.size();
+    MutexLock lock(&mutex_);
+    return tablet_list_.size();
 }
 
 } // namespace tabletnode
