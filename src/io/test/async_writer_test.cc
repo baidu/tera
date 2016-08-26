@@ -46,7 +46,7 @@ public:
     }
 
     void Done() {
-        m_callback_count++;
+        callback_count_++;
     }
 
     void CreateTestData(const std::string& table_name,
@@ -175,7 +175,7 @@ public:
         EXPECT_TRUE(tablet.Unload());
     }
 protected:
-    uint32_t m_callback_count;
+    uint32_t callback_count_;
 };
 
 TEST_F(AsyncWriterTest, Instant) {
@@ -241,7 +241,7 @@ TEST_F(AsyncWriterTest, NotInstantToInstant) {
     VerifyOperation(table_name, 0, 20);
     CleanTestData(task_list);
 
-    LOG(INFO) << "m_callback_count = " << m_callback_count;
+    LOG(INFO) << "m_callback_count = " << callback_count_;
 }
 
 TEST_F(AsyncWriterTest, KeepOrderForInstant) {
@@ -257,7 +257,7 @@ TEST_F(AsyncWriterTest, KeepOrderForInstant) {
 //     VerifySingleOperation(table_name, 1, 10);
     CleanTestData(task_list);
 
-    LOG(INFO) << "m_callback_count = " << m_callback_count;
+    LOG(INFO) << "m_callback_count = " << callback_count_;
 }
 
 TEST_F(AsyncWriterTest, KeepOrderForNotInstant) {
