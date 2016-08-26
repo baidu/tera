@@ -44,7 +44,7 @@ private:
     std::string FileOpenModeToString(uint32_t flag);
 
 private:
-    FILE* m_fp;
+    FILE* fp_;
 };
 
 #endif // TERA_COMMON_FILE_FILE_STREAM_H_

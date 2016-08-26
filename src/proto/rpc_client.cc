@@ -6,10 +6,10 @@
 
 namespace tera {
 
-sofa::pbrpc::RpcChannelOptions RpcClientBase::m_channel_options;
-std::map<std::string, sofa::pbrpc::RpcChannel*> RpcClientBase::m_rpc_channel_list;
-sofa::pbrpc::RpcClientOptions RpcClientBase::m_rpc_client_options;
-sofa::pbrpc::RpcClient RpcClientBase::m_rpc_client;
-Mutex RpcClientBase::m_mutex;
+sofa::pbrpc::RpcChannelOptions RpcClientBase::channel_options_;
+std::map<std::string, sofa::pbrpc::RpcChannel*> RpcClientBase::rpc_channel_list_;
+sofa::pbrpc::RpcClientOptions RpcClientBase::rpc_client_options_;
+sofa::pbrpc::RpcClient RpcClientBase::rpc_client_;
+Mutex RpcClientBase::mutex_;
 
 } // namespace tera

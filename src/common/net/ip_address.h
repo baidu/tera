@@ -24,7 +24,7 @@ public:
     std::string GetPortString() const;
 
     bool IsValid() const {
-        return m_valid_address;
+        return valid_address_;
     }
 
     bool Assign(const std::string& ip_port);
@@ -32,10 +32,10 @@ public:
     bool Assign(const std::string& ip, uint16_t port);
 
 private:
-    std::string m_ip;
-    uint16_t m_port;
+    std::string ip_;
+    uint16_t port_;
 
-    bool m_valid_address;
+    bool valid_address_;
 };
 
 #endif // TERA_COMMON_NET_IP_ADDRESS_H_

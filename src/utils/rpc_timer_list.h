@@ -62,10 +62,10 @@ public:
     size_t Size();
 
 private:
-    mutable Mutex m_mutex;
-    RpcTimer* m_head;
-    RpcTimer* m_tail;
-    size_t m_size;
+    mutable Mutex mutex_;
+    RpcTimer* head_;
+    RpcTimer* tail_;
+    size_t size_;
     static RpcTimerList* s_instance;
 };
 
