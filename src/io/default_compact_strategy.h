@@ -53,26 +53,26 @@ private:
                                 const std::string& lower_bound);
 
 private:
-    std::map<std::string, int32_t> m_cf_indexs;
-    TableSchema m_schema;
-    const leveldb::RawKeyOperator* m_raw_key_operator;
+    std::map<std::string, int32_t> cf_indexs_;
+    TableSchema schema_;
+    const leveldb::RawKeyOperator* raw_key_operator_;
 
-    std::string m_last_key;
-    std::string m_last_col;
-    std::string m_last_qual;
-    int64_t m_last_ts;
-    leveldb::TeraKeyType m_last_type;
-    leveldb::TeraKeyType m_cur_type;
-    int64_t m_del_row_ts;
-    int64_t m_del_col_ts;
-    int64_t m_del_qual_ts;
-    int64_t m_cur_ts;
-    uint64_t m_del_row_seq;
-    uint64_t m_del_col_seq;
-    uint64_t m_del_qual_seq;
-    uint32_t m_version_num;
-    uint64_t m_snapshot;
-    bool m_has_put;
+    std::string last_key_;
+    std::string last_col_;
+    std::string last_qual_;
+    int64_t last_ts_;
+    leveldb::TeraKeyType last_type_;
+    leveldb::TeraKeyType cur_type_;
+    int64_t del_row_ts_;
+    int64_t del_col_ts_;
+    int64_t del_qual_ts_;
+    int64_t cur_ts_;
+    uint64_t del_row_seq_;
+    uint64_t del_col_seq_;
+    uint64_t del_qual_seq_;
+    uint32_t version_num_;
+    uint64_t snapshot_;
+    bool has_put_;
 };
 
 class DefaultCompactStrategyFactory : public leveldb::CompactStrategyFactory {
@@ -85,8 +85,8 @@ public:
     }
 
 private:
-    TableSchema m_schema;
-    mutable Mutex m_mutex;
+    TableSchema schema_;
+    mutable Mutex mutex_;
 };
 
 } // namespace io
