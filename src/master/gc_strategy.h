@@ -54,18 +54,18 @@ private:
     void CollectSingleDeadTablet(const std::string& tablename, uint64_t tabletnum);
     void DeleteObsoleteFiles();
 
-    boost::shared_ptr<TabletManager> m_tablet_manager;
+    boost::shared_ptr<TabletManager> tablet_manager_;
 
     // tabletnode garbage clean
     // first: live tablet, second: dead tablet
     typedef std::pair<std::set<uint64_t>, std::set<uint64_t> > GcTabletSet;
     typedef std::vector<std::set<uint64_t> > GcFileSet;
-    mutable Mutex m_gc_mutex;
-    std::map<std::string, GcTabletSet> m_gc_tablets;
-    std::map<std::string, GcFileSet> m_gc_live_files;
-    int64_t m_file_total_num;
-    int64_t m_file_delete_num;
-    tera::Counter m_list_count;
+    mutable Mutex gc_mutex_;
+    std::map<std::string, GcTabletSet> gc_tablets_;
+    std::map<std::string, GcFileSet> gc_live_files_;
+    int64_t file_total_num_;
+    int64_t file_delete_num_;
+    tera::Counter list_count_;
 };
 
 class IncrementalGcStrategy : public GcStrategy{
@@ -91,33 +91,33 @@ private:
     void DeleteTableFiles(const std::string& table_name);
 
     struct LgFileSet {
-        std::set<uint64_t> m_storage_files;
-        std::set<uint64_t> m_live_files;
+        std::set<uint64_t> storage_files_;
+        std::set<uint64_t> live_files_;
     };
 
     struct TabletFileSet {
-        int64_t m_dead_time;
-        int64_t m_ready_time;
-        std::map<int64_t, LgFileSet> m_files; // lg_no -> files
+        int64_t dead_time_;
+        int64_t ready_time_;
+        std::map<int64_t, LgFileSet> files_; // lg_no -> files
         TabletFileSet() {
-            m_dead_time = std::numeric_limits<int64_t>::max();
-            m_ready_time = 0;
+            dead_time_ = std::numeric_limits<int64_t>::max();
+            ready_time_ = 0;
         };
         TabletFileSet(int64_t dead_time, int64_t ready_time) {
-            m_dead_time = dead_time;
-            m_ready_time = ready_time;
+            dead_time_ = dead_time;
+            ready_time_ = ready_time;
         }
     };
 
     typedef std::map<int64_t, TabletFileSet> TabletFiles;  // tablet_number -> files
     typedef std::map<std::string, TabletFiles> TableFiles; // table_name -> files
-    mutable Mutex m_gc_mutex;
-    boost::shared_ptr<TabletManager> m_tablet_manager;
-    int64_t m_last_gc_time;
-    TableFiles m_dead_tablet_files;
-    TableFiles m_live_tablet_files;
-    int64_t m_max_ts;
-    tera::Counter m_list_count;
+    mutable Mutex gc_mutex_;
+    boost::shared_ptr<TabletManager> tablet_manager_;
+    int64_t last_gc_time_;
+    TableFiles dead_tablet_files_;
+    TableFiles live_tablet_files_;
+    int64_t max_ts_;
+    tera::Counter list_count_;
 };
 
 } // namespace master
