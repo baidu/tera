@@ -34,9 +34,9 @@ public:
 
     void SetProcessorAffinity();
 private:
-    scoped_ptr<TabletNodeImpl> m_tabletnode_impl;
-    RemoteTabletNode* m_remote_tabletnode;
-    scoped_ptr<sofa::pbrpc::RpcServer> m_rpc_server;
+    scoped_ptr<TabletNodeImpl> tabletnode_impl_;
+    RemoteTabletNode* remote_tabletnode_;
+    scoped_ptr<sofa::pbrpc::RpcServer> rpc_server_;
 };
 
 } // namespace tabletnode

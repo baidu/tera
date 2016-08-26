@@ -48,17 +48,17 @@ public:
     void DumpLog();
 
 private:
-    TabletNodeInfo m_info;
-    TabletMetaList m_tablet_list;
-    int64_t m_mem_check_ts;
-    int64_t m_net_check_ts;
-    int64_t m_io_check_ts;
-    int64_t m_net_tx_total;
-    int64_t m_net_rx_total;
-    int64_t m_cpu_check_ts;
+    TabletNodeInfo info_;
+    TabletMetaList tablet_list_;
+    int64_t mem_check_ts_;
+    int64_t net_check_ts_;
+    int64_t io_check_ts_;
+    int64_t net_tx_total_;
+    int64_t net_rx_total_;
+    int64_t cpu_check_ts_;
 
-    int64_t m_tablet_check_ts;
-    mutable Mutex m_mutex;
+    int64_t tablet_check_ts_;
+    mutable Mutex mutex_;
 };
 } // namespace tabletnode
 } // namespace tera

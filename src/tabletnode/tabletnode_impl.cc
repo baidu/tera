@@ -96,32 +96,32 @@ namespace tabletnode {
 
 TabletNodeImpl::TabletNodeImpl(const TabletNodeInfo& tabletnode_info,
                                TabletManager* tablet_manager)
-    : m_status(kNotInited),
-      m_tablet_manager(tablet_manager),
-      m_zk_adapter(NULL),
-      m_release_cache_timer_id(kInvalidTimerId),
-      m_sysinfo(tabletnode_info),
-      m_thread_pool(new ThreadPool(FLAGS_tera_tabletnode_impl_thread_max_num)) {
+    : status_(kNotInited),
+      tablet_manager_(tablet_manager),
+      zk_adapter_(NULL),
+      release_cache_timer_id_(kInvalidTimerId),
+      sysinfo_(tabletnode_info),
+      thread_pool_(new ThreadPool(FLAGS_tera_tabletnode_impl_thread_max_num)) {
     if (FLAGS_tera_local_addr == "") {
-        m_local_addr = utils::GetLocalHostName()+ ":" + FLAGS_tera_tabletnode_port;
+        local_addr_ = utils::GetLocalHostName()+ ":" + FLAGS_tera_tabletnode_port;
     } else {
-        m_local_addr = FLAGS_tera_local_addr + ":" + FLAGS_tera_tabletnode_port;
+        local_addr_ = FLAGS_tera_local_addr + ":" + FLAGS_tera_tabletnode_port;
     }
-    TabletNodeClient::SetThreadPool(m_thread_pool.get());
+    TabletNodeClient::SetThreadPool(thread_pool_.get());
 
     leveldb::Env::Default()->SetBackgroundThreads(FLAGS_tera_tabletnode_compact_thread_num);
     leveldb::Env::Default()->RenameFile(FLAGS_tera_leveldb_log_path,
                                         FLAGS_tera_leveldb_log_path + ".bak");
     leveldb::Status s =
-        leveldb::Env::Default()->NewLogger(FLAGS_tera_leveldb_log_path, &m_ldb_logger);
-    leveldb::Env::Default()->SetLogger(m_ldb_logger);
+        leveldb::Env::Default()->NewLogger(FLAGS_tera_leveldb_log_path, &ldb_logger_);
+    leveldb::Env::Default()->SetLogger(ldb_logger_);
 
-    m_ldb_block_cache =
+    ldb_block_cache_ =
         leveldb::NewLRUCache(FLAGS_tera_tabletnode_block_cache_size * 1024UL * 1024);
-    m_ldb_table_cache =
+    ldb_table_cache_ =
         new leveldb::TableCache(FLAGS_tera_tabletnode_table_cache_size);
     if (!s.ok()) {
-        m_ldb_logger = NULL;
+        ldb_logger_ = NULL;
     }
 
     if (FLAGS_tera_leveldb_env_type != "local") {
@@ -130,8 +130,8 @@ TabletNodeImpl::TabletNodeImpl(const TabletNodeInfo& tabletnode_info,
 
     InitCacheSystem();
 
-    if (m_tablet_manager.get() == NULL) {
-        m_tablet_manager.reset(new TabletManager());
+    if (tablet_manager_.get() == NULL) {
+        tablet_manager_.reset(new TabletManager());
     }
 
     if (FLAGS_tera_tabletnode_tcm_cache_release_enabled) {
@@ -154,17 +154,17 @@ TabletNodeImpl::~TabletNodeImpl() {
 
 bool TabletNodeImpl::Init() {
     if (FLAGS_tera_zk_enabled) {
-        m_zk_adapter.reset(new TabletNodeZkAdapter(this, m_local_addr));
+        zk_adapter_.reset(new TabletNodeZkAdapter(this, local_addr_));
     } else if(FLAGS_tera_ins_enabled) {
         LOG(INFO) << "ins mode!";
-        m_zk_adapter.reset(new InsTabletNodeZkAdapter(this, m_local_addr));
+        zk_adapter_.reset(new InsTabletNodeZkAdapter(this, local_addr_));
     } else {
         LOG(INFO) << "fake zk mode!";
-        m_zk_adapter.reset(new FakeTabletNodeZkAdapter(this, m_local_addr));
+        zk_adapter_.reset(new FakeTabletNodeZkAdapter(this, local_addr_));
     }
 
     SetTabletNodeStatus(kIsIniting);
-    m_thread_pool->AddTask(boost::bind(&TabletNodeZkAdapterBase::Init, m_zk_adapter.get()));
+    thread_pool_->AddTask(boost::bind(&TabletNodeZkAdapterBase::Init, zk_adapter_.get()));
     return true;
 }
 
@@ -198,10 +198,10 @@ void TabletNodeImpl::InitCacheSystem() {
 }
 
 bool TabletNodeImpl::Exit() {
-    m_thread_pool.reset();
+    thread_pool_.reset();
 
     std::vector<TabletMeta*> tablet_meta_list;
-    m_tablet_manager->GetAllTabletMeta(&tablet_meta_list);
+    tablet_manager_->GetAllTabletMeta(&tablet_meta_list);
     std::vector<TabletMeta*>::iterator it = tablet_meta_list.begin();
     for (; it != tablet_meta_list.end(); ++it) {
         TabletMeta*& tablet_meta = *it;
@@ -270,7 +270,7 @@ void TabletNodeImpl::LoadTablet(const LoadTabletRequest* request,
 
     io::TabletIO* tablet_io = NULL;
     StatusCode status = kTabletNodeOk;
-    if (!m_tablet_manager->AddTablet(request->tablet_name(), request->path(),
+    if (!tablet_manager_->AddTablet(request->tablet_name(), request->path(),
                                      key_start, key_end, &tablet_io, &status)) {
         LOG(ERROR) << "fail to add tablet: " << request->path()
             << " [" << DebugString(key_start) << ", "
@@ -279,14 +279,14 @@ void TabletNodeImpl::LoadTablet(const LoadTabletRequest* request,
         response->set_status((StatusCode)tablet_io->GetStatus());
         tablet_io->DecRef();
     } else if (!tablet_io->Load(schema, request->path(), parent_tablets,
-                                snapshots, rollbacks, m_ldb_logger,
-                                m_ldb_block_cache, m_ldb_table_cache, &status)) {
+                                snapshots, rollbacks, ldb_logger_,
+                                ldb_block_cache_, ldb_table_cache_, &status)) {
         tablet_io->DecRef();
         LOG(ERROR) << "fail to load tablet: " << request->path()
             << " [" << DebugString(key_start) << ", "
             << DebugString(key_end) << "], status: "
             << StatusCodeToString(status);
-        if (!m_tablet_manager->RemoveTablet(request->tablet_name(), key_start,
+        if (!tablet_manager_->RemoveTablet(request->tablet_name(), key_start,
                                             key_end, &status)) {
             LOG(ERROR) << "fail to remove tablet: " << request->path()
                 << " [" << DebugString(key_start) << ", "
@@ -308,7 +308,7 @@ bool TabletNodeImpl::UnloadTablet(const std::string& tablet_name,
                                   const std::string& start,
                                   const std::string& end,
                                   StatusCode* status) {
-    io::TabletIO* tablet_io = m_tablet_manager->GetTablet(
+    io::TabletIO* tablet_io = tablet_manager_->GetTablet(
         tablet_name, start, end, status);
     if (tablet_io == NULL) {
         LOG(WARNING) << "unload fail to get tablet: " << tablet_name
@@ -330,7 +330,7 @@ bool TabletNodeImpl::UnloadTablet(const std::string& tablet_name,
         << " [" << DebugString(start) << ", " << DebugString(end) << "]";
     tablet_io->DecRef();
 
-    if (!m_tablet_manager->RemoveTablet(tablet_name, start, end, status)) {
+    if (!tablet_manager_->RemoveTablet(tablet_name, start, end, status)) {
         LOG(ERROR) << "fail to remove tablet: " << tablet_name
             << " [" << DebugString(start) << ", " << DebugString(end)
             << "], status: " << StatusCodeToString(*status);
@@ -356,7 +356,7 @@ void TabletNodeImpl::CompactTablet(const CompactTabletRequest* request,
 {
     response->set_sequence_id(request->sequence_id());
     StatusCode status = kTabletNodeOk;
-    io::TabletIO* tablet_io = m_tablet_manager->GetTablet(
+    io::TabletIO* tablet_io = tablet_manager_->GetTablet(
         request->tablet_name(), request->key_range().key_start(),
         request->key_range().key_end(), &status);
     if (tablet_io == NULL) {
@@ -426,7 +426,7 @@ void TabletNodeImpl::ReadTablet(int64_t start_micros,
 
     for (int32_t i = 0; i < row_num; i++) {
         StatusCode row_status = kTabletNodeOk;
-        io::TabletIO* tablet_io = m_tablet_manager->GetTablet(
+        io::TabletIO* tablet_io = tablet_manager_->GetTablet(
             request->tablet_name(), request->row_info_list(i).key(), &row_status);
         if (tablet_io == NULL) {
             range_error_counter.Inc();
@@ -511,7 +511,7 @@ void TabletNodeImpl::WriteTablet(const WriteTabletRequest* request,
 
     Counter* row_done_counter = new Counter;
     for (int32_t i = 0; i < row_num; i++) {
-        io::TabletIO* tablet_io = m_tablet_manager->GetTablet(
+        io::TabletIO* tablet_io = tablet_manager_->GetTablet(
             request->tablet_name(), request->row_list(i).row_key(), &status);
         if (tablet_io == NULL) {
             range_error_counter.Inc();
@@ -592,7 +592,7 @@ void TabletNodeImpl::GetSnapshot(const SnapshotRequest* request,
                                  SnapshotResponse* response,
                                  google::protobuf::Closure* done) {
     StatusCode status = kTabletNodeOk;
-    io::TabletIO* tablet_io = m_tablet_manager->GetTablet(request->table_name(),
+    io::TabletIO* tablet_io = tablet_manager_->GetTablet(request->table_name(),
                                                           request->key_range().key_start(),
                                                           request->key_range().key_end(),
                                                           &status);
@@ -630,7 +630,7 @@ void TabletNodeImpl::ReleaseSnapshot(const ReleaseSnapshotRequest* request,
                                      ReleaseSnapshotResponse* response,
                                      google::protobuf::Closure* done) {
     StatusCode status = kTabletNodeOk;
-    io::TabletIO* tablet_io = m_tablet_manager->GetTablet(request->table_name(),
+    io::TabletIO* tablet_io = tablet_manager_->GetTablet(request->table_name(),
                                                           request->key_range().key_start(),
                                                           request->key_range().key_end(),
                                                           &status);
@@ -666,7 +666,7 @@ void TabletNodeImpl::ReleaseSnapshot(const ReleaseSnapshotRequest* request,
 void TabletNodeImpl::Rollback(const SnapshotRollbackRequest* request, SnapshotRollbackResponse* response,
                               google::protobuf::Closure* done) {
     StatusCode status = kTabletNodeOk;
-    io::TabletIO* tablet_io = m_tablet_manager->GetTablet(request->table_name(),
+    io::TabletIO* tablet_io = tablet_manager_->GetTablet(request->table_name(),
                                                           request->key_range().key_start(),
                                                           request->key_range().key_end(),
                                                           &status);
@@ -715,7 +715,7 @@ void TabletNodeImpl::CmdCtrl(const TsCmdCtrlRequest* request,
 
 bool TabletNodeImpl::ApplySchema(const UpdateRequest* request) {
     StatusCode status;
-    io::TabletIO* tablet_io = m_tablet_manager->GetTablet(
+    io::TabletIO* tablet_io = tablet_manager_->GetTablet(
         request->tablet_name(), request->key_range().key_start(), request->key_range().key_end(), &status);
     if (tablet_io == NULL) {
         LOG(INFO) << "[update] tablet not found";
@@ -733,9 +733,9 @@ void TabletNodeImpl::Query(const QueryRequest* request,
     response->set_status(kTabletNodeOk);
 
     TabletNodeInfo* ts_info = response->mutable_tabletnode_info();
-    m_sysinfo.GetTabletNodeInfo(ts_info);
+    sysinfo_.GetTabletNodeInfo(ts_info);
     TabletMetaList* meta_list = response->mutable_tabletmeta_list();
-    m_sysinfo.GetTabletMetaList(meta_list);
+    sysinfo_.GetTabletMetaList(meta_list);
 
     if (request->has_is_gc_query() && request->is_gc_query()) {
         std::vector<InheritedLiveFiles> inherited;
@@ -751,9 +751,9 @@ void TabletNodeImpl::Query(const QueryRequest* request,
 void TabletNodeImpl::RefreshSysInfo() {
     int64_t cur_ts = get_micros();
 
-    m_sysinfo.CollectTabletNodeInfo(m_tablet_manager.get(), m_local_addr);
-    m_sysinfo.CollectHardwareInfo();
-    m_sysinfo.SetTimeStamp(cur_ts);
+    sysinfo_.CollectTabletNodeInfo(tablet_manager_.get(), local_addr_);
+    sysinfo_.CollectHardwareInfo();
+    sysinfo_.SetTimeStamp(cur_ts);
 
     VLOG(15) << "collect sysinfo finished, time used: " << get_micros() - cur_ts << " us.";
 }
@@ -776,7 +776,7 @@ void TabletNodeImpl::ScanTablet(const ScanTabletRequest* request,
     }
     StatusCode status = kTabletNodeOk;
     io::TabletIO* tablet_io = NULL;
-    tablet_io = m_tablet_manager->GetTablet(request->table_name(),
+    tablet_io = tablet_manager_->GetTablet(request->table_name(),
                                             request->start(), &status);
 
     if (tablet_io == NULL) {
@@ -797,7 +797,7 @@ void TabletNodeImpl::SplitTablet(const SplitTabletRequest* request,
 
     std::string split_key, path;
     StatusCode status = kTabletNodeOk;
-    io::TabletIO* tablet_io = m_tablet_manager->GetTablet(request->tablet_name(),
+    io::TabletIO* tablet_io = tablet_manager_->GetTablet(request->tablet_name(),
                                                 request->key_range().key_start(),
                                                 request->key_range().key_end(),
                                                 &status);
@@ -852,7 +852,7 @@ void TabletNodeImpl::SplitTablet(const SplitTabletRequest* request,
         << ", " << DebugString(tablet_io->GetEndKey()) << "]";
     tablet_io->DecRef();
 
-    if (!m_tablet_manager->RemoveTablet(request->tablet_name(),
+    if (!tablet_manager_->RemoveTablet(request->tablet_name(),
                                         request->key_range().key_start(),
                                         request->key_range().key_end(),
                                         &status)) {
@@ -931,17 +931,17 @@ void TabletNodeImpl::ExitService() {
 }
 
 void TabletNodeImpl::SetTabletNodeStatus(const TabletNodeStatus& status) {
-    MutexLock lock(&m_status_mutex);
-    m_status = status;
+    MutexLock lock(&status_mutex_);
+    status_ = status;
 }
 
 TabletNodeImpl::TabletNodeStatus TabletNodeImpl::GetTabletNodeStatus() {
-    MutexLock lock(&m_status_mutex);
-    return m_status;
+    MutexLock lock(&status_mutex_);
+    return status_;
 }
 
 void TabletNodeImpl::SetRootTabletAddr(const std::string& root_tablet_addr) {
-    m_root_tablet_addr = root_tablet_addr;
+    root_tablet_addr_ = root_tablet_addr;
 }
 
 void TabletNodeImpl::UpdateMetaTableAsync(const SplitTabletRequest* rpc_request,
@@ -951,14 +951,14 @@ void TabletNodeImpl::UpdateMetaTableAsync(const SplitTabletRequest* rpc_request,
          const TabletMeta& meta) {
     WriteTabletRequest* request = new WriteTabletRequest;
     WriteTabletResponse* response = new WriteTabletResponse;
-    request->set_sequence_id(m_this_sequence_id++);
+    request->set_sequence_id(this_sequence_id_++);
     request->set_tablet_name(FLAGS_tera_master_meta_table_name);
     request->set_is_sync(true);
     request->set_is_instant(true);
 
     TabletMeta tablet_meta;
     tablet_meta.CopyFrom(meta);
-    tablet_meta.set_server_addr(m_local_addr);
+    tablet_meta.set_server_addr(local_addr_);
     tablet_meta.clear_parent_tablets();
     tablet_meta.add_parent_tablets(leveldb::GetTabletNumFromPath(path));
 
@@ -985,9 +985,9 @@ void TabletNodeImpl::UpdateMetaTableAsync(const SplitTabletRequest* rpc_request,
     // then write 1st half
     // update root_tablet_addr in fake zk mode
     if (!FLAGS_tera_zk_enabled) {
-        m_zk_adapter->GetRootTableAddr(&m_root_tablet_addr);
+        zk_adapter_->GetRootTableAddr(&root_tablet_addr_);
     }
-    TabletNodeClient meta_tablet_client(m_root_tablet_addr);
+    TabletNodeClient meta_tablet_client(root_tablet_addr_);
 
     tablet_meta.set_path(leveldb::GetChildTabletPath(path, rpc_request->child_tablets(1)));
     tablet_meta.set_size(first_size);
@@ -1073,7 +1073,7 @@ void TabletNodeImpl::GarbageCollect() {
     // get all active tablets
     std::vector<TabletMeta*> tablet_meta_list;
     std::set<std::string> active_tablets;
-    m_tablet_manager->GetAllTabletMeta(&tablet_meta_list);
+    tablet_manager_->GetAllTabletMeta(&tablet_meta_list);
     std::vector<TabletMeta*>::iterator it = tablet_meta_list.begin();
     for (; it != tablet_meta_list.end(); ++it) {
         VLOG(GC_LOG_LEVEL) << "[gc] Active Tablet: " << (*it)->path();
@@ -1155,25 +1155,25 @@ void TabletNodeImpl::GarbageCollectInPath(const std::string& path, leveldb::Env*
 }
 
 void TabletNodeImpl::SetSessionId(const std::string& session_id) {
-    MutexLock lock(&m_status_mutex);
-    m_session_id = session_id;
+    MutexLock lock(&status_mutex_);
+    session_id_ = session_id;
 }
 
 std::string TabletNodeImpl::GetSessionId() {
-    MutexLock lock(&m_status_mutex);
-    return m_session_id;
+    MutexLock lock(&status_mutex_);
+    return session_id_;
 }
 
 double TabletNodeImpl::GetBlockCacheHitRate() {
-    return m_ldb_block_cache->HitRate(true);
+    return ldb_block_cache_->HitRate(true);
 }
 
 double TabletNodeImpl::GetTableCacheHitRate() {
-    return m_ldb_table_cache->HitRate(true);
+    return ldb_table_cache_->HitRate(true);
 }
 
 TabletNodeSysInfo& TabletNodeImpl::GetSysInfo() {
-    return m_sysinfo;
+    return sysinfo_;
 }
 
 void TabletNodeImpl::TryReleaseMallocCache() {
@@ -1198,27 +1198,27 @@ void TabletNodeImpl::TryReleaseMallocCache() {
 }
 
 void TabletNodeImpl::ReleaseMallocCache() {
-    MutexLock locker(&m_mutex);
+    MutexLock locker(&mutex_);
 
     TryReleaseMallocCache();
 
-    m_release_cache_timer_id = kInvalidTimerId;
+    release_cache_timer_id_ = kInvalidTimerId;
     EnableReleaseMallocCacheTimer();
 }
 
 void TabletNodeImpl::EnableReleaseMallocCacheTimer(int32_t expand_factor) {
-    assert(m_release_cache_timer_id == kInvalidTimerId);
+    assert(release_cache_timer_id_ == kInvalidTimerId);
     ThreadPool::Task task =
         boost::bind(&TabletNodeImpl::ReleaseMallocCache, this);
     int64_t timeout_period = expand_factor * 1000 *
         FLAGS_tera_tabletnode_tcm_cache_release_period;
-    m_release_cache_timer_id = m_thread_pool->DelayTask(timeout_period, task);
+    release_cache_timer_id_ = thread_pool_->DelayTask(timeout_period, task);
 }
 
 void TabletNodeImpl::DisableReleaseMallocCacheTimer() {
-    if (m_release_cache_timer_id != kInvalidTimerId) {
-        m_thread_pool->CancelTask(m_release_cache_timer_id);
-        m_release_cache_timer_id = kInvalidTimerId;
+    if (release_cache_timer_id_ != kInvalidTimerId) {
+        thread_pool_->CancelTask(release_cache_timer_id_);
+        release_cache_timer_id_ = kInvalidTimerId;
     }
 }
 
@@ -1228,7 +1228,7 @@ void TabletNodeImpl::GetInheritedLiveFiles(std::vector<InheritedLiveFiles>& inhe
     std::map<std::string, TableSet> live;
 
     std::vector<io::TabletIO*> tablet_ios;
-    m_tablet_manager->GetAllTablets(&tablet_ios);
+    tablet_manager_->GetAllTablets(&tablet_ios);
     std::vector<io::TabletIO*>::iterator it = tablet_ios.begin();
     for (; it != tablet_ios.end(); ++it) {
         io::TabletIO* tablet_io = *it;

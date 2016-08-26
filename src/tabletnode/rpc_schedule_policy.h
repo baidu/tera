@@ -74,7 +74,7 @@ public:
 private:
     void UpdateEntity(FairScheduleEntity* entity);
 
-    int64_t m_min_elapse_time;
+    int64_t min_elapse_time_;
 };
 
 } // namespace tabletnode
