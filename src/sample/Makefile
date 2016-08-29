@@ -8,7 +8,7 @@ CXX = g++
 SHARED_CFLAGS = -fPIC
 SHARED_LDFLAGS = -shared -Wl,-soname -Wl,
 
-INCPATH += -I../ $(DEPS_INCPATH)
+INCPATH += -I../../include $(DEPS_INCPATH)
 CFLAGS += $(OPT) $(SHARED_CFLAGS) $(INCPATH)
 CXXFLAGS += $(OPT) $(SHARED_CFLAGS) $(INCPATH)
 LDFLAGS += ../../build/lib/libtera.a $(DEPS_LDPATH) $(DEPS_LDFLAGS) -lpthread -lz

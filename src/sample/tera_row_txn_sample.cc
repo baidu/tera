@@ -10,6 +10,7 @@ int main() {
     // Create table
     tera::TableDescriptor schema("employee");
     schema.EnableTxn();
+    schema.AddLocalityGroup("lg0");
     schema.AddColumnFamily("title");
     schema.AddColumnFamily("salary");
     client->CreateTable(schema, &error_code);
@@ -55,7 +56,7 @@ int main() {
         mutation->Put("salary", "", "300");
     }
     txn->ApplyMutation(mutation);
-    assert(reader->GetError().GetType() == tera::ErrorCode::kOK);
+    assert(mutation->GetError().GetType() == tera::ErrorCode::kOK);
     delete mutation;
 
     // txn commit
