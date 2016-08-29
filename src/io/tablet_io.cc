@@ -1521,7 +1521,12 @@ bool TabletIO::Scan(const ScanOption& option, KeyValueList* kv_list,
     for (; it->Valid(); it->Next()) {
         leveldb::Slice key = it->key();
         leveldb::Slice value = it->value();
-        *complete = (!noexist_end && key_operator_->Compare(key, end) >= 0);
+        if (RawKeyType() == TTLKv) {
+            // only compare row key
+            *complete = (!noexist_end && key_operator_->Compare(key, end) >= 0);
+        } else {
+            *complete = (!noexist_end && key.compare(end) >= 0);
+        }
         if (*complete || (option.size_limit() > 0 && pack_size > option.size_limit())) {
             break;
         } else {
