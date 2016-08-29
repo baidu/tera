@@ -41,9 +41,11 @@ public:
                              ErrorCode* err);
 
     virtual bool UpdateTable(const TableDescriptor& desc, ErrorCode* err);
+    virtual bool UpdateTableSchema(const TableDescriptor& desc, ErrorCode* err);
     virtual bool UpdateCheck(const std::string& table_name, bool* done, ErrorCode* err);
 
     virtual bool DeleteTable(const std::string& name, ErrorCode* err);
+    virtual bool DropTable(const std::string& name, ErrorCode* err);
 
     virtual bool DisableTable(const std::string& name, ErrorCode* err);
 
