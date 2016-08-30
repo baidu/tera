@@ -30,12 +30,12 @@ public:
     bool Finish();
 
 private:
-    std::string* m_merged_key;
-    std::string* m_merged_value;
-    leveldb::TeraKeyType m_latest_key_type;
-    int64_t m_counter; // for ADD
-    int64_t m_int64;   // for int64(add)
-    std::string m_append_buffer; // for Append
+    std::string* merged_key_;
+    std::string* merged_value_;
+    leveldb::TeraKeyType latest_key_type_;
+    int64_t counter_; // for ADD
+    int64_t int64_;   // for int64(add)
+    std::string append_buffer_; // for Append
 };
 
 } // namespace io

@@ -14,7 +14,7 @@ namespace tera {
 namespace tabletnode {
 
 FairSchedulePolicy::FairSchedulePolicy()
-    : m_min_elapse_time(0) {}
+    : min_elapse_time_(0) {}
 
 FairSchedulePolicy::~FairSchedulePolicy() {}
 
@@ -43,7 +43,7 @@ SchedulePolicy::ScheduleEntityList::iterator FairSchedulePolicy::Pick(
     if (pick != entity_list->end()) {
         FairScheduleEntity* pick_entity = (FairScheduleEntity*)pick->second;
         pick_entity->running_count++;
-        m_min_elapse_time = min_elapse_time;
+        min_elapse_time_ = min_elapse_time;
     }
     return pick;
 }
@@ -59,15 +59,15 @@ void FairSchedulePolicy::Enable(ScheduleEntity* entity) {
     FairScheduleEntity* fair_entity = (FairScheduleEntity*)entity;
     CHECK(!fair_entity->pickable);
     fair_entity->pickable = true;
-    fair_entity->elapse_time += m_min_elapse_time;
+    fair_entity->elapse_time += min_elapse_time_;
 }
 
 void FairSchedulePolicy::Disable(ScheduleEntity* entity) {
     FairScheduleEntity* fair_entity = (FairScheduleEntity*)entity;
     CHECK(fair_entity->pickable);
     fair_entity->pickable = false;
-    CHECK_GE(fair_entity->elapse_time, m_min_elapse_time);
-    fair_entity->elapse_time -= m_min_elapse_time;
+    CHECK_GE(fair_entity->elapse_time, min_elapse_time_);
+    fair_entity->elapse_time -= min_elapse_time_;
 }
 
 void FairSchedulePolicy::UpdateEntity(FairScheduleEntity* entity) {

@@ -19,10 +19,10 @@ bool IsAtomicOP(leveldb::TeraKeyType keyType) {
 }
 
 AtomicMergeStrategy::AtomicMergeStrategy()
-    : m_merged_key(NULL),
-      m_merged_value(NULL),
-      m_counter(0),
-      m_int64(0) {
+    : merged_key_(NULL),
+      merged_value_(NULL),
+      counter_(0),
+      int64_(0) {
 }
 
 void AtomicMergeStrategy::Init(std::string* merged_key,
@@ -30,28 +30,28 @@ void AtomicMergeStrategy::Init(std::string* merged_key,
                                const leveldb::Slice& latest_key,
                                const leveldb::Slice& latest_value,
                                leveldb::TeraKeyType latest_key_type) {
-    m_merged_key = merged_key;
-    m_merged_value = merged_value;
-    assert(m_merged_key);
-    assert(m_merged_value);
-    m_latest_key_type = latest_key_type;
+    merged_key_ = merged_key;
+    merged_value_ = merged_value;
+    assert(merged_key_);
+    assert(merged_value_);
+    latest_key_type_ = latest_key_type;
 
     switch (latest_key_type) {
         case leveldb::TKT_ADD:
-            m_merged_key->assign(latest_key.data(), latest_key.size());
-            m_counter = io::DecodeBigEndain(latest_value.data());
+            merged_key_->assign(latest_key.data(), latest_key.size());
+            counter_ = io::DecodeBigEndain(latest_value.data());
             break;
         case leveldb::TKT_ADDINT64:
-            m_merged_key->assign(latest_key.data(), latest_key.size());
-            m_int64 = *(int64_t*)latest_value.data();
+            merged_key_->assign(latest_key.data(), latest_key.size());
+            int64_ = *(int64_t*)latest_value.data();
             break;
         case leveldb::TKT_PUT_IFABSENT:
-            m_merged_key->assign(latest_key.data(), latest_key.size());
-            m_merged_value->assign(latest_value.data(), latest_value.size());
+            merged_key_->assign(latest_key.data(), latest_key.size());
+            merged_value_->assign(latest_value.data(), latest_value.size());
             break;
         case leveldb::TKT_APPEND:
-            m_merged_key->assign(latest_key.data(), latest_key.size());
-            m_append_buffer.assign(latest_value.data(), latest_value.size());
+            merged_key_->assign(latest_key.data(), latest_key.size());
+            append_buffer_.assign(latest_value.data(), latest_value.size());
             break;
         default:
             assert(0); // invalid status
@@ -62,25 +62,25 @@ void AtomicMergeStrategy::Init(std::string* merged_key,
 void AtomicMergeStrategy::MergeStep(const leveldb::Slice& key,
                                     const leveldb::Slice& value,
                                     leveldb::TeraKeyType key_type) {
-    switch (m_latest_key_type) {
+    switch (latest_key_type_) {
         case leveldb::TKT_ADD:
             if (key_type == leveldb::TKT_ADD || key_type == leveldb::TKT_VALUE) {
-                m_counter += io::DecodeBigEndain(value.data());
+                counter_ += io::DecodeBigEndain(value.data());
             }
             break;
         case leveldb::TKT_ADDINT64:
             if (key_type == leveldb::TKT_ADDINT64 || key_type == leveldb::TKT_VALUE) {
-                m_int64 += *(int64_t*)value.data();
+                int64_ += *(int64_t*)value.data();
             }
             break;
         case leveldb::TKT_PUT_IFABSENT:
             if (key_type == leveldb::TKT_PUT_IFABSENT || key_type == leveldb::TKT_VALUE) {
-                m_merged_value->assign(value.data(), value.size());
+                merged_value_->assign(value.data(), value.size());
             }
             break;
         case leveldb::TKT_APPEND:
             if (key_type == leveldb::TKT_APPEND || key_type == leveldb::TKT_VALUE) {
-                m_append_buffer.insert(0, std::string(value.data(), value.size()));
+                append_buffer_.insert(0, std::string(value.data(), value.size()));
             }
             break;
         default:
@@ -90,20 +90,20 @@ void AtomicMergeStrategy::MergeStep(const leveldb::Slice& key,
 }
 
 bool AtomicMergeStrategy::Finish() {
-    switch (m_latest_key_type) {
+    switch (latest_key_type_) {
         case leveldb::TKT_ADD:
             char buf[sizeof(int64_t)];
-            io::EncodeBigEndian(buf, m_counter);
-            m_merged_value->assign(buf, sizeof(buf));
+            io::EncodeBigEndian(buf, counter_);
+            merged_value_->assign(buf, sizeof(buf));
             break;
         case leveldb::TKT_ADDINT64:
-            m_merged_value->assign(std::string((char*)&m_int64, sizeof(int64_t)));
+            merged_value_->assign(std::string((char*)&int64_, sizeof(int64_t)));
             break;
         case leveldb::TKT_PUT_IFABSENT:
             // do nothing
             break;
         case leveldb::TKT_APPEND:
-            *m_merged_value = m_append_buffer;
+            *merged_value_ = append_buffer_;
             break;
         default:
             assert(0); // invalid status

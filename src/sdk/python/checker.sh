@@ -14,7 +14,7 @@
 #   lib.tera_client_open.argtypes = [c_char_p, c_char_p, POINTER(c_char_p)]
 #   lib.tera_client_open.restype = c_void_p
 
-grep "tera_.*(" src/sdk/tera_c.h | awk '{print $2}' | awk -F'(' '{print $1}' | while read afunc
+grep "tera_.*(" include/tera_c.h | awk '{print $2}' | awk -F'(' '{print $1}' | while read afunc
 do 
     if grep -q "lib.$afunc.argtypes " src/sdk/python/TeraSdk.py && grep -q "lib.$afunc.restype " src/sdk/python/TeraSdk.py
     then

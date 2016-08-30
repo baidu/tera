@@ -1,7 +1,7 @@
 # 使用tera的Python Sdk
 
 1. 下载[TeraSdk.py](https://github.com/baidu/tera/blob/master/src/sdk/python/TeraSdk.py)
-2. 编译（或从其它途径获取）得到libtera_c.so，与TeraSdk.py置于同一目录下
+2. 编译（或从其它途径获取）得到libtera_c.so；将.so与TeraSdk.py置于同一目录下，或者通过`LD_LIBRARY_PATH`环境变量等方法指定libtera_c.so的查找路径
 3. 编写应用程序
   1. 示例[sample](https://github.com/baidu/tera/blob/master/src/sdk/python/sample.py)
 

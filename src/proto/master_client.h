@@ -76,7 +76,7 @@ public:
     virtual bool RenameTable(const RenameTableRequest* request,
                              RenameTableResponse* response);
 private:
-    int32_t m_rpc_timeout;
+    int32_t rpc_timeout_;
 };
 
 } // namespace

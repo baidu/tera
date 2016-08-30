@@ -7,10 +7,10 @@
 namespace tera {
 namespace tabletnode {
 
-ThreadPool* TabletNodeClient::m_thread_pool = NULL;
+ThreadPool* TabletNodeClient::thread_pool_ = NULL;
 
 void TabletNodeClient::SetThreadPool(ThreadPool* thread_pool) {
-    m_thread_pool = thread_pool;
+    thread_pool_ = thread_pool;
 }
 
 void TabletNodeClient::SetRpcOption(int32_t max_inflow, int32_t max_outflow,
@@ -22,7 +22,7 @@ void TabletNodeClient::SetRpcOption(int32_t max_inflow, int32_t max_outflow,
 TabletNodeClient::TabletNodeClient(const std::string& server_addr,
                                              int32_t rpc_timeout)
     : RpcClient<TabletNodeServer::Stub>(server_addr),
-      m_rpc_timeout(rpc_timeout) {}
+      rpc_timeout_(rpc_timeout) {}
 
 TabletNodeClient::~TabletNodeClient() {}
 
@@ -31,7 +31,7 @@ bool TabletNodeClient::LoadTablet(const LoadTabletRequest* request,
                                        Closure<void, LoadTabletRequest*, LoadTabletResponse*, bool, int>* done) {
     return SendMessageWithRetry(&TabletNodeServer::Stub::LoadTablet,
                                 request, response, done, "LoadTablet",
-                                m_rpc_timeout, m_thread_pool);
+                                rpc_timeout_, thread_pool_);
 }
 
 bool TabletNodeClient::UnloadTablet(const UnloadTabletRequest* request,
@@ -39,7 +39,7 @@ bool TabletNodeClient::UnloadTablet(const UnloadTabletRequest* request,
                                          Closure<void, UnloadTabletRequest*, UnloadTabletResponse*, bool, int>* done) {
     return SendMessageWithRetry(&TabletNodeServer::Stub::UnloadTablet,
                                 request, response, done, "UnloadTablet",
-                                m_rpc_timeout, m_thread_pool);
+                                rpc_timeout_, thread_pool_);
 }
 
 bool TabletNodeClient::ReadTablet(const ReadTabletRequest* request,
@@ -47,7 +47,7 @@ bool TabletNodeClient::ReadTablet(const ReadTabletRequest* request,
                                        Closure<void, ReadTabletRequest*, ReadTabletResponse*, bool, int>* done) {
     return SendMessageWithRetry(&TabletNodeServer::Stub::ReadTablet,
                                 request, response, done, "ReadTablet",
-                                m_rpc_timeout, m_thread_pool);
+                                rpc_timeout_, thread_pool_);
 }
 
 bool TabletNodeClient::WriteTablet(const WriteTabletRequest* request,
@@ -55,7 +55,7 @@ bool TabletNodeClient::WriteTablet(const WriteTabletRequest* request,
                                         Closure<void, WriteTabletRequest*, WriteTabletResponse*, bool, int>* done) {
     return SendMessageWithRetry(&TabletNodeServer::Stub::WriteTablet,
                                 request, response, done, "WriteTablet",
-                                m_rpc_timeout, m_thread_pool);
+                                rpc_timeout_, thread_pool_);
 }
 
 bool TabletNodeClient::ScanTablet(const ScanTabletRequest* request,
@@ -63,7 +63,7 @@ bool TabletNodeClient::ScanTablet(const ScanTabletRequest* request,
                                        Closure<void, ScanTabletRequest*, ScanTabletResponse*, bool, int>* done) {
     return SendMessageWithRetry(&TabletNodeServer::Stub::ScanTablet,
                                 request, response, done, "ScanTablet",
-                                m_rpc_timeout, m_thread_pool);
+                                rpc_timeout_, thread_pool_);
 }
 
 bool TabletNodeClient::GetSnapshot(const SnapshotRequest* request,
@@ -71,7 +71,7 @@ bool TabletNodeClient::GetSnapshot(const SnapshotRequest* request,
                                         Closure<void, SnapshotRequest*, SnapshotResponse*, bool, int>* done) {
     return SendMessageWithRetry(&TabletNodeServer::Stub::GetSnapshot,
                                 request, response, done, "GetSnapshot",
-                                m_rpc_timeout, m_thread_pool);
+                                rpc_timeout_, thread_pool_);
 }
 
 bool TabletNodeClient::ReleaseSnapshot(const ReleaseSnapshotRequest* request,
@@ -79,7 +79,7 @@ bool TabletNodeClient::ReleaseSnapshot(const ReleaseSnapshotRequest* request,
                                             Closure<void, ReleaseSnapshotRequest*, ReleaseSnapshotResponse*, bool, int>* done) {
     return SendMessageWithRetry(&TabletNodeServer::Stub::ReleaseSnapshot,
                                 request, response, done, "ReleaseSnapshot",
-                                m_rpc_timeout, m_thread_pool);
+                                rpc_timeout_, thread_pool_);
 }
 
 bool TabletNodeClient::Rollback(const SnapshotRollbackRequest* request,
@@ -87,7 +87,7 @@ bool TabletNodeClient::Rollback(const SnapshotRollbackRequest* request,
                                 Closure<void, SnapshotRollbackRequest*, SnapshotRollbackResponse*, bool, int>* done) {
     return SendMessageWithRetry(&TabletNodeServer::Stub::Rollback,
                                 request, response, done, "Rollback",
-                                m_rpc_timeout, m_thread_pool);
+                                rpc_timeout_, thread_pool_);
 }
 
 bool TabletNodeClient::Query(ThreadPool* thread_pool, const QueryRequest* request,
@@ -95,7 +95,7 @@ bool TabletNodeClient::Query(ThreadPool* thread_pool, const QueryRequest* reques
                                   Closure<void, QueryRequest*, QueryResponse*, bool, int>* done) {
     return SendMessageWithRetry(&TabletNodeServer::Stub::Query,
                                 request, response, done, "Query",
-                                m_rpc_timeout, thread_pool);
+                                rpc_timeout_, thread_pool);
 }
 
 bool TabletNodeClient::SplitTablet(const SplitTabletRequest* request,
@@ -103,7 +103,7 @@ bool TabletNodeClient::SplitTablet(const SplitTabletRequest* request,
                                         Closure<void, SplitTabletRequest*, SplitTabletResponse*, bool, int>* done) {
     return SendMessageWithRetry(&TabletNodeServer::Stub::SplitTablet,
                                 request, response, done, "SplitTablet",
-                                m_rpc_timeout, m_thread_pool);
+                                rpc_timeout_, thread_pool_);
 }
 
 bool TabletNodeClient::CompactTablet(const CompactTabletRequest* request,
@@ -111,7 +111,7 @@ bool TabletNodeClient::CompactTablet(const CompactTabletRequest* request,
                                           Closure<void, CompactTabletRequest*, CompactTabletResponse*, bool, int>* done) {
     return SendMessageWithRetry(&TabletNodeServer::Stub::CompactTablet,
                                 request, response, done, "CompactTablet",
-                                m_rpc_timeout, m_thread_pool);
+                                rpc_timeout_, thread_pool_);
 }
 
 bool TabletNodeClient::Update(const UpdateRequest* request,
@@ -119,7 +119,7 @@ bool TabletNodeClient::Update(const UpdateRequest* request,
                                     Closure<void, UpdateRequest*, UpdateResponse*, bool, int>* done) {
     return SendMessageWithRetry(&TabletNodeServer::Stub::Update,
                                 request, response, done, "Update",
-                                m_rpc_timeout, m_thread_pool);
+                                rpc_timeout_, thread_pool_);
 }
 
 bool TabletNodeClient::CmdCtrl(const TsCmdCtrlRequest* request,
@@ -127,7 +127,7 @@ bool TabletNodeClient::CmdCtrl(const TsCmdCtrlRequest* request,
                                Closure<void, TsCmdCtrlRequest*, TsCmdCtrlResponse*, bool, int>* done) {
     return SendMessageWithRetry(&TabletNodeServer::Stub::CmdCtrl,
                                 request, response, done, "TsCmdCtrl",
-                                m_rpc_timeout, m_thread_pool);
+                                rpc_timeout_, thread_pool_);
 }
 
 } // namespace tabletnode

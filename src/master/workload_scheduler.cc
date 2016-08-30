@@ -28,26 +28,26 @@ public:
 class WorkloadLess {
 public:
     bool operator() (const TabletNodePtr& a, const TabletNodePtr& b) {
-        return m_comparator->Compare(a, b, m_table_name) < 0;
+        return comparator_->Compare(a, b, table_name_) < 0;
     }
     WorkloadLess(Comparator* comparator, const std::string& table_name = "")
-        : m_comparator(comparator), m_table_name(table_name) {}
+        : comparator_(comparator), table_name_(table_name) {}
 private:
-    Comparator* m_comparator;
-    std::string m_table_name;
+    Comparator* comparator_;
+    std::string table_name_;
 };
 
 class WorkloadGreater {
 public:
     bool operator() (const TabletNodePtr& a, const TabletNodePtr& b) {
-        return m_comparator->Compare(a, b, m_table_name) > 0;
+        return comparator_->Compare(a, b, table_name_) > 0;
     }
     WorkloadGreater(Comparator* comparator, const std::string& table_name = "")
-        : m_comparator(comparator), m_table_name(table_name) {}
+        : comparator_(comparator), table_name_(table_name) {}
 
 private:
-    Comparator* m_comparator;
-    std::string m_table_name;
+    Comparator* comparator_;
+    std::string table_name_;
 };
 
 /////////////////////////////////////////////////
@@ -97,14 +97,14 @@ bool SizeScheduler::FindBestNode(const std::vector<TabletNodePtr>& node_list,
             *best_index = i;
         } else if (r < 0) {
             // do nothing
-        } else if (node_list[*best_index]->GetAddr() <= m_last_choose_node
-            && node_list[i]->GetAddr() > m_last_choose_node) {
+        } else if (node_list[*best_index]->GetAddr() <= last_choose_node_
+            && node_list[i]->GetAddr() > last_choose_node_) {
             // round-robin
             *best_index = i;
         }
     }
-    m_last_choose_node = node_list[*best_index]->GetAddr();
-    VLOG(7) << "[size-sched] best node = " << m_last_choose_node;
+    last_choose_node_ = node_list[*best_index]->GetAddr();
+    VLOG(7) << "[size-sched] best node = " << last_choose_node_;
     return true;
 }
 
@@ -248,14 +248,14 @@ bool LoadScheduler::FindBestNode(const std::vector<TabletNodePtr>& node_list,
             *best_index = i;
         } else if (r < 0) {
             // do nothing
-        } else if (node_list[*best_index]->GetAddr() <= m_last_choose_node
-            && node_list[i]->GetAddr() > m_last_choose_node) {
+        } else if (node_list[*best_index]->GetAddr() <= last_choose_node_
+            && node_list[i]->GetAddr() > last_choose_node_) {
             // round-robin
             *best_index = i;
         }
     }
-    m_last_choose_node = node_list[*best_index]->GetAddr();
-    VLOG(7) << "[load-sched] best node : " << m_last_choose_node;
+    last_choose_node_ = node_list[*best_index]->GetAddr();
+    VLOG(7) << "[load-sched] best node : " << last_choose_node_;
     return true;
 }
 

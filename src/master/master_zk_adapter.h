@@ -87,9 +87,9 @@ protected:
     virtual void OnSessionTimeout();
 
 private:
-    mutable Mutex m_mutex;
-    MasterImpl * m_master_impl;
-    std::string m_server_addr;
+    mutable Mutex mutex_;
+    MasterImpl * master_impl_;
+    std::string server_addr_;
 };
 
 /*
@@ -126,10 +126,10 @@ private:
     virtual void OnSessionTimeout();
 
 private:
-    mutable Mutex m_mutex;
-    MasterImpl * m_master_impl;
-    std::string m_server_addr;
-    std::string m_fake_path;
+    mutable Mutex mutex_;
+    MasterImpl * master_impl_;
+    std::string server_addr_;
+    std::string fake_path_;
 };
 
 
@@ -161,10 +161,10 @@ private:
     virtual void OnWatchFailed(const std::string& path, int watch_type,
                                int err) {}
 private:
-    mutable Mutex m_mutex;
-    MasterImpl * m_master_impl;
-    std::string m_server_addr;
-    galaxy::ins::sdk::InsSDK* m_ins_sdk;
+    mutable Mutex mutex_;
+    MasterImpl * master_impl_;
+    std::string server_addr_;
+    galaxy::ins::sdk::InsSDK* ins_sdk_;
 };
 
 } // namespace master

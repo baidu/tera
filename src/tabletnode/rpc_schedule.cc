@@ -10,42 +10,42 @@ namespace tera {
 namespace tabletnode {
 
 RpcSchedule::RpcSchedule(SchedulePolicy* policy)
-    : m_policy(policy), m_pending_task_count(0), m_running_task_count(0) {}
+    : policy_(policy), pending_task_count_(0), running_task_count_(0) {}
 
 RpcSchedule::~RpcSchedule() {
-    delete m_policy;
+    delete policy_;
 }
 
 void RpcSchedule::EnqueueRpc(const std::string& table_name, RpcTask* rpc) {
-    MutexLock lock(&m_mutex);
+    MutexLock lock(&mutex_);
 
     ScheduleEntity* entity = NULL;
-    TableList::iterator it = m_table_list.find(table_name);
-    if (it != m_table_list.end()) {
+    TableList::iterator it = table_list_.find(table_name);
+    if (it != table_list_.end()) {
         entity = it->second;
     } else {
-        entity = m_table_list[table_name] = m_policy->NewScheEntity(new TaskQueue);
+        entity = table_list_[table_name] = policy_->NewScheEntity(new TaskQueue);
     }
 
     TaskQueue* task_queue = (TaskQueue*)entity->user_ptr;
     task_queue->push(rpc);
 
     task_queue->pending_count++;
-    m_pending_task_count++;
+    pending_task_count_++;
 
     if (task_queue->pending_count == 1) {
-        m_policy->Enable(entity);
+        policy_->Enable(entity);
     }
 }
 
 bool RpcSchedule::DequeueRpc(RpcTask** rpc) {
-    MutexLock lock(&m_mutex);
-    if (m_pending_task_count == 0) {
+    MutexLock lock(&mutex_);
+    if (pending_task_count_ == 0) {
         return false;
     }
 
-    TableList::iterator it = m_policy->Pick(&m_table_list);
-    CHECK(it != m_table_list.end());
+    TableList::iterator it = policy_->Pick(&table_list_);
+    CHECK(it != table_list_.end());
 
     ScheduleEntity* entity = (ScheduleEntity*)it->second;
     TaskQueue* task_queue = (TaskQueue*)entity->user_ptr;
@@ -56,37 +56,37 @@ bool RpcSchedule::DequeueRpc(RpcTask** rpc) {
 
     task_queue->pending_count--;
     task_queue->running_count++;
-    m_pending_task_count--;
-    m_running_task_count++;
+    pending_task_count_--;
+    running_task_count_++;
 
     if (task_queue->pending_count == 0) {
-        m_policy->Disable(entity);
+        policy_->Disable(entity);
     }
     return true;
 }
 
 bool RpcSchedule::FinishRpc(const std::string& table_name) {
-    MutexLock lock(&m_mutex);
-    if (m_running_task_count == 0) {
+    MutexLock lock(&mutex_);
+    if (running_task_count_ == 0) {
         return false;
     }
-    TableList::iterator it = m_table_list.find(table_name);
-    if (it == m_table_list.end()) {
+    TableList::iterator it = table_list_.find(table_name);
+    if (it == table_list_.end()) {
         return false;
     }
 
     ScheduleEntity* entity = (ScheduleEntity*)it->second;
-    m_policy->Done(entity);
+    policy_->Done(entity);
 
     TaskQueue* task_queue = (TaskQueue*)entity->user_ptr;
     task_queue->running_count--;
-    m_running_task_count--;
+    running_task_count_--;
 
     if (task_queue->running_count == 0
         && task_queue->pending_count == 0) {
         delete task_queue;
         delete entity;
-        m_table_list.erase(it);
+        table_list_.erase(it);
     }
     return true;
 }

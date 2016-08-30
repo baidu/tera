@@ -66,10 +66,10 @@ private:
     virtual void OnSessionTimeout();
 
 private:
-    TabletNodeImpl * m_tabletnode_impl;
-    std::string m_server_addr;
-    std::string m_serve_node_path;
-    std::string m_kick_node_path;
+    TabletNodeImpl * tabletnode_impl_;
+    std::string server_addr_;
+    std::string serve_node_path_;
+    std::string kick_node_path_;
 };
 
 class FakeTabletNodeZkAdapter : public TabletNodeZkAdapterBase {
@@ -93,12 +93,12 @@ private:
     virtual void OnSessionTimeout() {}
 
 private:
-    mutable Mutex m_mutex;
-    TabletNodeImpl * m_tabletnode_impl;
-    std::string m_server_addr;
-    std::string m_serve_node_path;
-    std::string m_kick_node_path;
-    std::string m_fake_path;
+    mutable Mutex mutex_;
+    TabletNodeImpl * tabletnode_impl_;
+    std::string server_addr_;
+    std::string serve_node_path_;
+    std::string kick_node_path_;
+    std::string fake_path_;
 };
 
 
@@ -124,12 +124,12 @@ private:
     virtual void OnSessionTimeout() {}
 
 private:
-    mutable Mutex m_mutex;
-    TabletNodeImpl * m_tabletnode_impl;
-    std::string m_server_addr;
-    std::string m_serve_node_path;
-    std::string m_kick_node_path;
-    galaxy::ins::sdk::InsSDK* m_ins_sdk;
+    mutable Mutex mutex_;
+    TabletNodeImpl * tabletnode_impl_;
+    std::string server_addr_;
+    std::string serve_node_path_;
+    std::string kick_node_path_;
+    galaxy::ins::sdk::InsSDK* ins_sdk_;
 };
 
 } // namespace tabletnode

@@ -40,8 +40,8 @@ public:
     }
 
 private:
-    std::string m_last_choose_node;
-    std::string m_last_choose_tablet;
+    std::string last_choose_node_;
+    std::string last_choose_tablet_;
 };
 
 class LoadScheduler : public Scheduler {
@@ -74,8 +74,8 @@ public:
     }
 
 private:
-    std::string m_last_choose_node;
-    std::string m_last_choose_tablet;
+    std::string last_choose_node_;
+    std::string last_choose_tablet_;
 };
 
 } // namespace master

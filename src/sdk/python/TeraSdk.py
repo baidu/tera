@@ -745,7 +745,8 @@ class TeraSdkException(Exception):
 # 以下代码用户不需要关心 #
 ##########################
 
-def init_function_prototype():
+def init_function_prototype_for_scan():
+    """ scan """
     ######################
     # scan result stream #
     ######################
@@ -834,9 +835,9 @@ def init_function_prototype():
     lib.tera_scan_descriptor_set_filter.argtypes = [c_void_p, c_char_p]
     lib.tera_scan_descriptor_set_filter.restype = c_bool
 
-    ##########
-    # client #
-    ##########
+
+def init_function_prototype_for_client():
+    """ client """
     lib.tera_client_open.argtypes = [c_char_p, c_char_p, POINTER(c_char_p)]
     lib.tera_client_open.restype = c_void_p
 
@@ -849,39 +850,9 @@ def init_function_prototype():
     lib.tera_table_close.argtypes = [c_void_p]
     lib.tera_table_close.restype = None
 
-    ################
-    # row_mutation #
-    ################
-    lib.tera_row_mutation_put.argtypes = [c_void_p, c_char_p,
-                                          c_char_p, c_uint64,
-                                          c_char_p, c_uint64]
-    lib.tera_row_mutation_put.restype = None
 
-    lib.tera_row_mutation_put_int64.argtypes = [c_void_p, c_char_p,
-                                                c_char_p, c_uint64, c_int64]
-    lib.tera_row_mutation_put_int64.restype = None
-
-    lib.tera_row_mutation_set_callback.argtypes = [c_void_p, MUTATION_CALLBACK]
-    lib.tera_row_mutation_set_callback.restype = None
-
-    lib.tera_row_mutation_delete_column.argtypes = [c_void_p, c_char_p,
-                                                    c_char_p, c_uint64]
-    lib.tera_row_mutation_delete_column.restype = None
-
-    lib.tera_row_mutation_delete_family.argtypes = [c_void_p, c_char_p]
-    lib.tera_row_mutation_delete_family.restype = None
-
-    lib.tera_row_mutation_delete_row.argtypes = [c_void_p]
-    lib.tera_row_mutation_delete_row.restype = None
-
-    lib.tera_row_mutation_rowkey.argtypes = [c_void_p,
-                                             POINTER(POINTER(c_ubyte)),
-                                             POINTER(c_uint64)]
-    lib.tera_row_mutation_rowkey.restype = None
-
-    #########
-    # table #
-    #########
+def init_function_prototype_for_table():
+    """ table """
     lib.tera_table_get.argtypes = [c_void_p, c_char_p, c_uint64,
                                    c_char_p, c_char_p, c_uint64,
                                    POINTER(POINTER(c_ubyte)),
@@ -933,9 +904,39 @@ def init_function_prototype():
     lib.tera_row_mutation_destroy.argtypes = [c_void_p]
     lib.tera_row_mutation_destroy.restype = None
 
-    ##############
-    # row_reader #
-    ##############
+
+def init_function_prototype_for_row_mutation():
+    """ row_mutation"""
+    lib.tera_row_mutation_put.argtypes = [c_void_p, c_char_p,
+                                          c_char_p, c_uint64,
+                                          c_char_p, c_uint64]
+    lib.tera_row_mutation_put.restype = None
+
+    lib.tera_row_mutation_put_int64.argtypes = [c_void_p, c_char_p,
+                                                c_char_p, c_uint64, c_int64]
+    lib.tera_row_mutation_put_int64.restype = None
+
+    lib.tera_row_mutation_set_callback.argtypes = [c_void_p, MUTATION_CALLBACK]
+    lib.tera_row_mutation_set_callback.restype = None
+
+    lib.tera_row_mutation_delete_column.argtypes = [c_void_p, c_char_p,
+                                                    c_char_p, c_uint64]
+    lib.tera_row_mutation_delete_column.restype = None
+
+    lib.tera_row_mutation_delete_family.argtypes = [c_void_p, c_char_p]
+    lib.tera_row_mutation_delete_family.restype = None
+
+    lib.tera_row_mutation_delete_row.argtypes = [c_void_p]
+    lib.tera_row_mutation_delete_row.restype = None
+
+    lib.tera_row_mutation_rowkey.argtypes = [c_void_p,
+                                             POINTER(POINTER(c_ubyte)),
+                                             POINTER(c_uint64)]
+    lib.tera_row_mutation_rowkey.restype = None
+
+
+def init_function_prototype_for_row_reader():
+    """ row_reader """
     lib.tera_row_reader.argtypes = [c_void_p, c_char_p, c_uint64]
     lib.tera_row_reader.restype = c_void_p
 
@@ -1002,6 +1003,14 @@ def init_function_prototype():
     lib.tera_row_reader_destroy.argtypes = [c_void_p]
     lib.tera_row_reader_destroy.restype = None
 
+
+def init_function_prototype():
+    init_function_prototype_for_client()
+    init_function_prototype_for_table()
+    init_function_prototype_for_row_reader()
+    init_function_prototype_for_row_mutation()
+    init_function_prototype_for_scan()
+
     libc.free.argtypes = [c_void_p]
     libc.free.restype = None
 
@@ -1012,7 +1021,11 @@ def copy_string_to_user(value, size):
     return result
 
 
-lib = cdll.LoadLibrary('./libtera_c.so')
+try:
+    lib = cdll.LoadLibrary('./libtera_c.so')
+except OSError:
+    lib = cdll.LoadLibrary('libtera_c.so')
+
 libc = cdll.LoadLibrary('libc.so.6')
 
 init_function_prototype()

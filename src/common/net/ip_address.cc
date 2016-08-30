@@ -14,44 +14,44 @@
 const std::string delim = ":";
 
 IpAddress::IpAddress()
-    : m_port(0), m_valid_address(false) {}
+    : port_(0), valid_address_(false) {}
 
 IpAddress::IpAddress(const std::string& ip_port)
-    : m_port(0), m_valid_address(false) {
+    : port_(0), valid_address_(false) {
     if (!ip_port.empty()) {
         Assign(ip_port);
     }
 }
 
 IpAddress::IpAddress(const std::string& ip, const std::string& port)
-    : m_port(0), m_valid_address(false) {
+    : port_(0), valid_address_(false) {
     Assign(ip, port);
 }
 
 IpAddress::IpAddress(const std::string& ip, uint16_t port)
-    : m_port(0), m_valid_address(false) {
+    : port_(0), valid_address_(false) {
     Assign(ip, port);
 }
 
 std::string IpAddress::ToString() const {
-    return m_ip + delim + GetPortString();
+    return ip_ + delim + GetPortString();
 }
 
 std::string IpAddress::GetIp() const {
-    return m_ip;
+    return ip_;
 }
 uint16_t IpAddress::GetPort() const {
-    return m_port;
+    return port_;
 }
 
 std::string IpAddress::GetPortString() const {
-    return NumberToString(m_port);
+    return NumberToString(port_);
 }
 
 
 bool IpAddress::Assign(const std::string& ip_port) {
     CHECK(!ip_port.empty());
-    m_valid_address = false;
+    valid_address_ = false;
     std::vector<std::string> items;
     SplitString(ip_port, delim, &items);
     if (items.size() != 2) {
@@ -59,29 +59,29 @@ bool IpAddress::Assign(const std::string& ip_port) {
         return false;
     }
 
-    if (!StringToNumber(items[1], &m_port)) {
+    if (!StringToNumber(items[1], &port_)) {
         LOG(ERROR) << "invalid port number: " << items[1];
         return false;
     }
-    m_ip = items[0];
-    m_valid_address = true;
-    return m_valid_address;
+    ip_ = items[0];
+    valid_address_ = true;
+    return valid_address_;
 }
 
 bool IpAddress::Assign(const std::string& ip, const std::string& port) {
-    m_valid_address = false;
-    if (!StringToNumber(port, &m_port)) {
+    valid_address_ = false;
+    if (!StringToNumber(port, &port_)) {
         LOG(ERROR) << "invalid port number: " << port;
-        return m_valid_address;
+        return valid_address_;
     }
-    m_ip = ip;
-    m_valid_address = true;
-    return m_valid_address;
+    ip_ = ip;
+    valid_address_ = true;
+    return valid_address_;
 }
 
 bool IpAddress::Assign(const std::string& ip, uint16_t port) {
-    m_ip = ip;
-    m_port = port;
-    m_valid_address = true;
-    return m_valid_address;
+    ip_ = ip;
+    port_ = port;
+    valid_address_ = true;
+    return valid_address_;
 }

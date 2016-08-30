@@ -29,10 +29,10 @@ private:
     bool InitZKAdaptor();
 
 private:
-    scoped_ptr<MasterImpl> m_master_impl;
-    // scoped_ptr<RemoteMaster> m_remote_master;
-    RemoteMaster* m_remote_master;
-    scoped_ptr<sofa::pbrpc::RpcServer> m_rpc_server;
+    scoped_ptr<MasterImpl> master_impl_;
+    // scoped_ptr<RemoteMaster> remote_master_;
+    RemoteMaster* remote_master_;
+    scoped_ptr<sofa::pbrpc::RpcServer> rpc_server_;
 };
 
 } // namespace master

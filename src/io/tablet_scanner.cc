@@ -19,16 +19,16 @@ namespace tera {
 namespace io {
 
 ScanContextManager::ScanContextManager() {
-    m_cache = leveldb::NewLRUCache(FLAGS_tera_tabletnode_scanner_cache_size);
+    cache_ = leveldb::NewLRUCache(FLAGS_tera_tabletnode_scanner_cache_size);
 }
 // when tabletio unload, because scan_context->m_it has reference of version,
 // so we shoud drop all cache it
 ScanContextManager::~ScanContextManager() {
-    MutexLock l(&m_lock);
-    delete m_cache;
+    MutexLock l(&lock_);
+    delete cache_;
 }
 
-// access in m_lock context
+// access in lock_ context
 static void LRUCacheDeleter(const ::leveldb::Slice& key, void* value) {
     ScanContext* context = reinterpret_cast<ScanContext*>(value);
     VLOG(10) << "evict from cache, " << context->session_id;
@@ -58,17 +58,17 @@ ScanContext* ScanContextManager::GetScanContext(TabletIO* tablet_io,
     response->set_status(kTabletNodeOk);
 
     // search from cache
-    MutexLock l(&m_lock);
+    MutexLock l(&lock_);
     char buf[sizeof(int64_t)];
     ::leveldb::EncodeFixed64(buf, request->session_id());
     ::leveldb::Slice key(buf, sizeof(buf));
-    handle = m_cache->Lookup(key);
+    handle = cache_->Lookup(key);
     if (handle) {
         // not first session rpc, no need init scan context
-        context = reinterpret_cast<ScanContext*>(m_cache->Value(handle));
+        context = reinterpret_cast<ScanContext*>(cache_->Value(handle));
         context->jobs.push(ScanJob(response, done));
         if (context->jobs.size() > 1) {
-            m_cache->Release(handle);
+            cache_->Release(handle);
             VLOG(10) << "push task into queue, " << request->session_id();
             return NULL;
         }
@@ -98,7 +98,7 @@ ScanContext* ScanContextManager::GetScanContext(TabletIO* tablet_io,
     context->complete = false;
     context->version_num = 1;
 
-    handle = m_cache->Insert(key, context, 1, &LRUCacheDeleter);
+    handle = cache_->Insert(key, context, 1, &LRUCacheDeleter);
     context->jobs.push(ScanJob(response, done));
     context->handle = handle;  // refer item in cache
     // init context other param in TabletIO context
@@ -111,7 +111,7 @@ bool ScanContextManager::ScheduleScanContext(ScanContext* context) {
         ScanTabletResponse* response;
         ::google::protobuf::Closure* done;
         {
-            MutexLock l(&m_lock);
+            MutexLock l(&lock_);
             response = context->jobs.front().first;
             done = context->jobs.front().second;
         }
@@ -128,7 +128,7 @@ bool ScanContextManager::ScheduleScanContext(ScanContext* context) {
         done->Run();// TODO: try async return, time consume need test
 
         {
-            MutexLock l(&m_lock);
+            MutexLock l(&lock_);
             context->jobs.pop();
 
             // complete or io error, return all the rest request to client
@@ -139,13 +139,13 @@ bool ScanContextManager::ScheduleScanContext(ScanContext* context) {
             if (context->jobs.size() == 0) {
                 ::leveldb::Cache::Handle* handle = context->handle;
                 context->handle = NULL;
-                m_cache->Release(handle); // unrefer cache item
+                cache_->Release(handle); // unrefer cache item
                 return true;
             }
         }
     }
     {
-        MutexLock l(&m_lock);
+        MutexLock l(&lock_);
         if (context->ret_code != kTabletNodeOk) {
             DeleteScanContext(context); // never use context
         }
@@ -153,7 +153,7 @@ bool ScanContextManager::ScheduleScanContext(ScanContext* context) {
     return true;
 }
 
-// access in m_lock context
+// access in lock_ context
 void ScanContextManager::DeleteScanContext(ScanContext* context) {
     uint32_t job_size = context->jobs.size();
     while (job_size) {
@@ -171,12 +171,12 @@ void ScanContextManager::DeleteScanContext(ScanContext* context) {
     VLOG(10) << "scan " << session_id << ", complete " << context->complete << ", ret " << StatusCode_Name(context->ret_code);
     ::leveldb::Cache::Handle* handle = context->handle;
     context->handle = NULL;
-    m_cache->Release(handle); // unrefer cache item, no more use context!!!
+    cache_->Release(handle); // unrefer cache item, no more use context!!!
 
     char buf[sizeof(int64_t)];
     ::leveldb::EncodeFixed64(buf, session_id);
     ::leveldb::Slice key(buf, sizeof(buf));
-    m_cache->Erase(key);
+    cache_->Erase(key);
 }
 
 } // namespace io
