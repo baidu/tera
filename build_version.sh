@@ -1,8 +1,8 @@
 #!/bin/bash
 
 # If release a new version, modify these infos
-VERSION_INFO="0.3.1"
-VERSION_ADDR="https://github.com/baidu/tera/archive/0.3.1.zip"
+VERSION_INFO="0.3.2"
+VERSION_ADDR="https://github.com/baidu/tera/archive/0.3.2.zip"
 
 BUILD_DATE_TIME=`date`
 BUILD_HOSTNAME=`hostname`
