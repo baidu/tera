@@ -99,12 +99,12 @@ delete client;                        // 注意回收内存
 tera::TableDescriptor table_desc("hello");
 
 // lg_1 设置为flash存储、block大小为 8K
-tera::LocalityGroupDescriptor* lg_desc = table_desc->AddLocalityGroup(“lg_1”);
+tera::LocalityGroupDescriptor* lg_desc = table_desc.AddLocalityGroup(“lg_1”);
 lg_desc->SetStore(tera::kInFlash);
 lg_desc->SetBlockSize(8);
 
 // cf_11 设置为最大版本数5，ttl为10000s
-tera::ColumnFamilyDescriptor* cf_t = table_desc->AddColumnFamily("cf_11", "lg_1");
+tera::ColumnFamilyDescriptor* cf_t = table_desc.AddColumnFamily("cf_11", "lg_1");
 cf_t->SetMaxVersions(5);
 cf_t->SetTimeToLive(10000);
 ```
@@ -218,8 +218,8 @@ for (size_t i = 0; i < mutations.size(); ++i) {
 // 闭开区间
 tera::ScanDescriptor desc(“rowkey1”);                    // scan 开始KEY，为空，则从表头开始scan
 desc.SetEnd("rowkey2");                                  // 结束行KEY，不包含rowkey2，为""，则至表尾
-desc->AddColumnFamily("family21");                       // 返回此cf中数据，若不设，返回所有列
-desc->AddColumn("family22", "qualifier22");
+desc.AddColumnFamily("family21");                        // 返回此cf中数据，若不设，返回所有列
+desc.AddColumn("family22", "qualifier22");
 ...
 tera::ResultStream* result_stream = table->Scan(desc, &error_code);
 while (!result_stream->Done()) {
