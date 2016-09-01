@@ -61,7 +61,7 @@ Copyright 2016, Baidu, Inc.
   ```
 
 * 能够避免“幻影读”现象  
-  下面的例子中，Session A在事务中读取了CF1的[C1 ~ C5)区间，区间内只有C2和C4两个列；Session B插入了一个新的列C4，导致Session A的事务提交失败：
+  下面的例子中，Session A在事务中读取了CF1的[C1 ~ C5)区间，区间内只有C2和C4两个列；Session B插入了一个新的列C3，导致Session A的事务提交失败：
   ```
              ----------------------------------
              |  ROW   |      CF1      |  CF2  |
