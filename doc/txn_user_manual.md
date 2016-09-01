@@ -127,7 +127,7 @@ class Transaction {
 
     /// 获得结果错误码
     virtual const ErrorCode& GetError() = 0;
-  }
+};
 ```
 
 ###使用示例
