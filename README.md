@@ -1,9 +1,25 @@
-[Tera - 高性能、可伸缩的结构化数据库](http://github.com/baidu/tera)
-====
+# Tera - An Internet-Scale Database
+
 [![Build Status](http://220.181.7.231/buildStatus/icon?job=tera_master_build)](http://220.181.7.231/job/tera_master_build/)  
 Copyright 2015, Baidu, Inc.
 
-#Overview
+Tera is a structured distributed database which is designed to manage trillions of links and webpages. Besides Webpage Database, Tera is used by many other Baidu products, including Baidu Trace System, Baidu User Behavior Analysis System, etc. Tera provides high performance and high scalability by taking fully advantage of new generation hardware.
+
+# Features
+* Automatic and configurable sharding
+* Ranged and hashed sharding strategies
+* Strong consistency
+* Online schema change
+* Snapshot
+* Multi-level cache and Bloom Filters to suport real-time queries
+
+# Contact Us
+{dist-lab, tera_dev, opensearch} at baidu.com
+
+
+[高性能、可伸缩的结构化数据库](http://github.com/baidu/tera)
+====
+
 Tera是一个高性能、可伸缩的结构化数据存储系统，被设计用来管理搜索引擎万亿量级的超链与网页信息。为实现数据的实时分析与高效访问，我们使用按行键、列名和时间戳全局排序的三维数据模型组织数据，使用多级Cache系统，充分利用新一代服务器硬件大内存、SSD盘和万兆网卡的性能优势，做到模型灵活的同时，实现了高吞吐与水平扩展。
 
 #特性
@@ -51,11 +67,13 @@ sh ./build.sh
 [其它文档](doc/README.md)
 
 #反馈与技术支持
-tera_dev@baidu.com
+tera_dev At baidu doT com
 
 #成为贡献者
 完成[5个小任务](doc/to_be_a_contributor.md),帮你一步步成为tera贡献者.
 
 #欢迎加入
 如果你热爱开源，热爱分布式技术，请将简历发送至： 
-dist-lab@baidu.com
+{dist-lab, tera_dev, opensearch} at baidu.com
+
+
