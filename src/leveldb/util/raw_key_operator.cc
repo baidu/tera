@@ -263,17 +263,9 @@ public:
 
     // only compare row_key
     virtual int Compare(const Slice& key1, const Slice& key2) const {
-        size_t min_len = (key1.size() < key2.size()) ? key1.size() : key2.size();
-        int r = memcmp(key1.data(), key2.data(), min_len);
-        if (r == 0) {
-            if (key1.size() < key2.size()) {
-                r = -1;
-            }
-            else if (key1.size() > key2.size()) {
-                r = +1;
-            }
-        }
-        return r;
+        leveldb::Slice key1_rowkey(key1.data(), key1.size() - sizeof(int64_t));
+        leveldb::Slice key2_rowkey(key2.data(), key2.size() - sizeof(int64_t));
+        return key1_rowkey.compare(key2_rowkey);
     }
 };
 
