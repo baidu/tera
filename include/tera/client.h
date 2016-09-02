@@ -5,6 +5,7 @@
 #ifndef  TERA_CLIENT_H_
 #define  TERA_CLIENT_H_
 
+#include <stdint.h>
 #include <string>
 #include <vector>
 

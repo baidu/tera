@@ -5,6 +5,7 @@
 #ifndef  TERA_TABLE_H_
 #define  TERA_TABLE_H_
 
+#include <stdint.h>
 #include <string>
 #include <vector>
 

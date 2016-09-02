@@ -9,6 +9,7 @@
 #ifndef  TERA_READER_H_
 #define  TERA_READER_H_
 
+#include <stdint.h>
 #include <map>
 #include <set>
 #include <string>

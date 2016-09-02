@@ -9,6 +9,7 @@
 #ifndef  TERA_MUTATION_H_
 #define  TERA_MUTATION_H_
 
+#include <stdint.h>
 #include <string>
 
 #include "error_code.h"

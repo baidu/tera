@@ -7,6 +7,7 @@
 #ifndef  TERA_UTILS_H_
 #define  TERA_UTILS_H_
 
+#include <stdint.h>
 #include <string>
 
 #pragma GCC visibility push(default)
