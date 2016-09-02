@@ -95,6 +95,9 @@ public:
     virtual void ApplyMutation(RowMutation* row_mu);
     virtual void ApplyMutation(const std::vector<RowMutation*>& row_mutations);
 
+    virtual void Put(RowMutation* row_mu);
+    virtual void Put(const std::vector<RowMutation*>& row_mutations);
+
     virtual bool Put(const std::string& row_key, const std::string& family,
                      const std::string& qualifier, const std::string& value,
                      ErrorCode* err);
@@ -137,10 +140,16 @@ public:
     virtual void Get(const std::vector<RowReader*>& row_readers);
     virtual bool Get(const std::string& row_key, const std::string& family,
                      const std::string& qualifier, std::string* value,
-                     ErrorCode* err, uint64_t snapshot_id = 0);
+                     ErrorCode* err);
     virtual bool Get(const std::string& row_key, const std::string& family,
                     const std::string& qualifier, int64_t* value,
-                    ErrorCode* err, uint64_t snapshot_id = 0);
+                    ErrorCode* err);
+    virtual bool Get(const std::string& row_key, const std::string& family,
+                     const std::string& qualifier, std::string* value,
+                     ErrorCode* err, uint64_t snapshot_id);
+    virtual bool Get(const std::string& row_key, const std::string& family,
+                    const std::string& qualifier, int64_t* value,
+                    ErrorCode* err, uint64_t snapshot_id);
 
     virtual bool IsPutFinished() { return _cur_commit_pending_counter.Get() == 0; }
 
@@ -464,6 +473,12 @@ public:
     virtual RowReader* NewRowReader(const std::string& row_key) {
         return _impl->NewRowReader(row_key);
     }
+    virtual void Put(RowMutation* row_mu) {
+        _impl->Put(row_mu);
+    }
+    virtual void Put(const std::vector<RowMutation*>& row_mu_list) {
+        _impl->Put(row_mu_list);
+    }
     virtual void ApplyMutation(RowMutation* row_mu) {
         _impl->ApplyMutation(row_mu);
     }
@@ -522,12 +537,22 @@ public:
     }
     virtual bool Get(const std::string& row_key, const std::string& family,
                      const std::string& qualifier, std::string* value,
-                     ErrorCode* err, uint64_t snapshot_id = 0) {
+                     ErrorCode* err) {
+        return _impl->Get(row_key, family, qualifier, value, err);
+    }
+    virtual bool Get(const std::string& row_key, const std::string& family,
+                     const std::string& qualifier, int64_t* value,
+                     ErrorCode* err) {
+        return _impl->Get(row_key, family, qualifier, value, err);
+    }
+    virtual bool Get(const std::string& row_key, const std::string& family,
+                     const std::string& qualifier, std::string* value,
+                     ErrorCode* err, uint64_t snapshot_id) {
         return _impl->Get(row_key, family, qualifier, value, err, snapshot_id);
     }
     virtual bool Get(const std::string& row_key, const std::string& family,
                      const std::string& qualifier, int64_t* value,
-                     ErrorCode* err, uint64_t snapshot_id = 0) {
+                     ErrorCode* err, uint64_t snapshot_id) {
         return _impl->Get(row_key, family, qualifier, value, err, snapshot_id);
     }
 
