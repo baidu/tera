@@ -16,6 +16,7 @@
 #include "db/table_cache.h"
 #include "io/io_utils.h"
 #include "io/utils_leveldb.h"
+#include "io/coding.h"
 #include "leveldb/cache.h"
 #include "leveldb/env_cache.h"
 #include "leveldb/env_dfs.h"
@@ -496,8 +497,27 @@ void TabletNodeImpl::WriteTablet(const WriteTabletRequest* request,
         int32_t mu_num = mu_seq.mutation_sequence_size();
         for (int32_t k = 0; k < mu_num; k++) {
             const Mutation& mu = mu_seq.mutation_sequence(k);
+
+            if ((mu_seq.row_key() == "i.youku.com/")
+                && (mu.family() == "total_num" || mu.family() == "total_fail_num")) {
+                int64_t counter = 0;
+
+                if (mu.value().size() != sizeof(int64_t)) {
+                    counter = -233;
+                    LOG(WARNING) << "oops invalid counter read, fail to parse";
+                } else {
+                    counter = io::DecodeBigEndainSign(mu.value().data());
+                }
+                if (mu.type() == kPut) {
+                    VLOG(7) << "oops put:" << counter << " " << mu.family();
+                } else if (mu.type() == kAdd) {
+                    VLOG(7) << "oops add:" << counter << " " << mu.family();
+                }
+            }
+
             if ((mu.qualifier().size() >= 64 * 1024)          // 64KB
                 || (mu.value().size() >= 32 * 1024 * 1024)) { // 32MB
+
                 response->set_status(kTableNotSupport);
                 done->Run();
                 if (NULL != timer) {
