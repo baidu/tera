@@ -638,8 +638,8 @@ int32_t PutCounterOp(Client* client, int32_t argc, char** argv, ErrorCode* err) 
 
     for (i = 0; i < 1000; i++) {
         RowReader* re = table->NewRowReader("i.youku.com/");
-        re->AddColumn("total_num", "");
-        re->AddColumn("total_fail_num", "");
+        re->AddColumnFamily("total_num");
+        re->AddColumnFamily("total_fail_num");
         re->SetCallBack(counter_read_callback);
         table->Get(re);
         usleep(10000); // 10ms
