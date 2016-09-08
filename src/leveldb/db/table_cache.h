@@ -25,7 +25,7 @@ class Env;
 
 class TableCache {
  public:
-  TableCache(int entries);
+  TableCache(size_t byte_size);
   ~TableCache();
 
   // Return an iterator for the specified file number (the corresponding

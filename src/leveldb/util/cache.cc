@@ -9,6 +9,7 @@
 #include <assert.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <cmath>
 
 #include "leveldb/cache.h"
 #include "port/port.h"
@@ -334,7 +335,7 @@ class ShardedLRUCache : public Cache {
     if (lookups_ > 0) {
       ret = (double)hits_ / (double)lookups_;
     } else {
-      ret = 0.0;
+      ret = NAN;
     }
     if (force_clear) {
       hits_ = 0;

@@ -63,6 +63,9 @@ class Table {
   // be close to the file length.
   uint64_t ApproximateOffsetOf(const Slice& key) const;
 
+  // Returns the bytes of index block.
+  uint64_t IndexBlockSize() const;
+
  private:
   struct Rep;
   Rep* rep_;

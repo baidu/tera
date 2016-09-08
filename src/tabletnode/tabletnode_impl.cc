@@ -119,7 +119,7 @@ TabletNodeImpl::TabletNodeImpl(const TabletNodeInfo& tabletnode_info,
     ldb_block_cache_ =
         leveldb::NewLRUCache(FLAGS_tera_tabletnode_block_cache_size * 1024UL * 1024);
     ldb_table_cache_ =
-        new leveldb::TableCache(FLAGS_tera_tabletnode_table_cache_size);
+        new leveldb::TableCache(FLAGS_tera_tabletnode_table_cache_size * 1024UL * 1024);
     if (!s.ok()) {
         ldb_logger_ = NULL;
     }
