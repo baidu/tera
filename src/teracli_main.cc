@@ -41,6 +41,8 @@
 #include "utils/utils_cmd.h"
 #include "version.h"
 
+DEFINE_int64(cw, 1, "");
+
 DECLARE_string(flagfile);
 DECLARE_string(log_dir);
 DECLARE_string(tera_master_meta_table_name);
@@ -576,7 +578,41 @@ int32_t PutInt64Op(Client* client, int32_t argc, char** argv, ErrorCode* err) {
     }
     return 0;
 }
-
+void counter_write_callback(RowMutation* mu) {
+    if (mu->GetError().GetType() != tera::ErrorCode::kOK) {
+        std::cout << mu->GetError().GetReason() << std::endl;
+        abort();
+    }
+}
+void counter_read_callback(RowReader* re) {
+    if (re->GetError().GetType() != tera::ErrorCode::kOK) {
+        if (re->GetError().GetType() == tera::ErrorCode::kNotFound) {
+            return;
+        }
+        std::cout << re->GetError().GetReason() << std::endl;
+        abort();
+    }
+    int64_t c1 = -1;
+    int64_t c2 = -1;
+    int64_t counter = 0;
+    while (!re->Done()) {
+        bool ret = tera::CounterCoding::DecodeCounter(re->Value(), &counter);
+        assert(ret);
+        if (re->Family() == "total_num") {
+            c1 = counter;
+        } else if (re->Family() == "total_fail_num") {
+            c2 = counter;
+        } else {
+            abort();
+        }
+        std::cout << re->Family() << " " << counter << std::endl;
+        re->Next();
+    }
+    if (c1 != c2) {
+        std::cout << c1 << " VS " << c2 << std::endl;
+        abort();
+    }
+}
 int32_t PutCounterOp(Client* client, int32_t argc, char** argv, ErrorCode* err) {
     if (argc != 5 && argc != 6) {
         LOG(ERROR) << "args number error: " << argc << ", need 5 | 6.";
@@ -590,6 +626,27 @@ int32_t PutCounterOp(Client* client, int32_t argc, char** argv, ErrorCode* err) 
         LOG(ERROR) << "fail to open table";
         return -1;
     }
+
+    int i = 0;
+    for (; i < FLAGS_cw; i++) {
+        RowMutation* mu = table->NewRowMutation("i.youku.com/");
+        mu->Add("total_num", "", 1);
+        mu->Add("total_fail_num", "", 1);
+        mu->SetCallBack(counter_write_callback);
+        table->ApplyMutation(mu);
+    }
+
+    for (i = 0; i < 1000; i++) {
+        RowReader* re = table->NewRowReader("i.youku.com/");
+        re->AddColumnFamily("total_num");
+        re->AddColumnFamily("total_fail_num");
+        re->SetCallBack(counter_read_callback);
+        table->Get(re);
+        usleep(10000); // 10ms
+    }
+    std::cout << "exit now..." << std::endl;
+    sleep(5);
+    return 0;
 
     std::string rowkey = argv[3];
     std::string columnfamily = "";

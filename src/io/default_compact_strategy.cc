@@ -5,6 +5,7 @@
 #include "db/dbformat.h"
 #include "io/atomic_merge_strategy.h"
 #include "io/default_compact_strategy.h"
+#include "io/coding.h"
 #include "leveldb/slice.h"
 
 namespace tera {
@@ -196,6 +197,7 @@ bool DefaultCompactStrategy::InternalMergeProcess(leveldb::Iterator* it,
     while (it->Valid()) {
         merged_num_t++;
         if (version_num >= 1) {
+            VLOG(7) << "break1";
             break; //avoid accumulate to many versions
         }
         Slice itkey = it->key();
@@ -217,16 +219,33 @@ bool DefaultCompactStrategy::InternalMergeProcess(leveldb::Iterator* it,
                 LOG(WARNING) << "invalid tera key: " << itkey.ToString();
                 break;
             }
+            int64_t counter = 0;
+
+            if (it->value().size() != sizeof(int64_t)) {
+                counter = -233;
+                LOG(WARNING) << "oops invalid counter read, fail to parse";
+            } else {
+                counter = io::DecodeBigEndainSign(it->value().ToString().data());
+            }
+            VLOG(7) << "oops merge key[" << key.ToString() << "]"
+                << " col[" << col.ToString() << "]"
+                << " qual[" << qual.ToString() << "]"
+                << " ts[" << ts << "]"
+                << " type[" << type << "]"
+                << " value[" << counter << "]";
         }
 
         if (last_qual_ != qual || last_col_ != col || last_key_ != key) {
+            VLOG(7) << "break2";
             break; // out of the current cell
         }
 
         if (!IsAtomicOP(type) && type != leveldb::TKT_VALUE) {
+            VLOG(7) << "break3";
             break;
         } else if (type == leveldb::TKT_VALUE) {
             if (!merge_put_flag || ++version_num > 1) {
+                VLOG(7) << "break4";
                 break;
             }
         }
@@ -236,11 +255,13 @@ bool DefaultCompactStrategy::InternalMergeProcess(leveldb::Iterator* it,
         }
         last_ts_atomic = ts;
         it->Next();
+        VLOG(7) << "break5";
     }
     atom_merge.Finish();
     if (merged_num) {
         *merged_num = merged_num_t;
     }
+    VLOG(7) << "break6";
     return true;
 }
 

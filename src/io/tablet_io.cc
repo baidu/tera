@@ -846,6 +846,9 @@ inline bool TabletIO::LowLevelScan(const std::string& start_tera_key,
     KeyValuePair next_start_kv_pair;
     VLOG(9) << "ll-scan timeout set to be " << scan_options.timeout;
 
+    if (end_row_key.compare(std::string("i.youku.com/") + '\0') == 0) {
+        VLOG(7) << "oops start";
+    }
     for (; it->Valid();) {
         bool has_merged = false;
         std::string merged_value;
@@ -864,6 +867,25 @@ inline bool TabletIO::LowLevelScan(const std::string& start_tera_key,
             continue;
         }
 
+        if ((key.compare("i.youku.com/") == 0)
+            && (col.compare("total_num") == 0 || col.compare("total_fail_num") == 0)) {
+            int64_t counter = 0;
+
+            if (value.size() != sizeof(int64_t)) {
+                counter = -233;
+                LOG(WARNING) << "oops invalid counter read, fail to parse";
+            } else {
+                counter = io::DecodeBigEndainSign(value.ToString().data());
+            }
+
+            VLOG(7) << "oops ll-scan: " << "tablet=[" << tablet_path_
+                << "] key=[" << DebugString(key.ToString())
+                << "] column=[" << DebugString(col.ToString())
+                << ":" << DebugString(qual.ToString())
+                << "] ts=[" << ts << "] type=[" << type << "]"
+                << " value:[" << counter << "]"
+                << " maxversion:" << scan_options.max_versions;
+        }
         VLOG(10) << "ll-scan: " << "tablet=[" << tablet_path_
             << "] key=[" << DebugString(key.ToString())
             << "] column=[" << DebugString(col.ToString())
@@ -938,6 +960,9 @@ inline bool TabletIO::LowLevelScan(const std::string& start_tera_key,
             has_merged =
                 compact_strategy->ScanMergedValue(it, &merged_value, &merged_num);
             VLOG(10) << "has_merged:" << has_merged;
+            if (end_row_key.compare(std::string("i.youku.com/") + '\0') == 0) {
+                VLOG(7) << "has_merged:" << has_merged;
+            }
             if (has_merged) {
                 counter_.low_read_cell.Add(merged_num);
                 value = merged_value;
@@ -947,6 +972,21 @@ inline bool TabletIO::LowLevelScan(const std::string& start_tera_key,
                 VLOG(10) << "ll-scan: merge: " << std::string(key.data())
                     << ":" << std::string(col.data())
                     << ":" << std::string(qual.data());
+                if (end_row_key.compare(std::string("i.youku.com/") + '\0') == 0) {
+
+                    int64_t counter = 0;
+
+                    if (value.size() != sizeof(int64_t)) {
+                        counter = -233;
+                        LOG(WARNING) << "oops invalid counter read, fail to parse";
+                    } else {
+                        counter = io::DecodeBigEndainSign(value.ToString().data());
+                    }
+                    VLOG(7) << "ll-scan: merge: " << DebugString(std::string(key.data()))
+                        << ":" << DebugString(std::string(col.data()))
+                        << ":" << DebugString(std::string(qual.data()))
+                        << ":" << counter;
+                }
             }
         }
 
@@ -976,6 +1016,9 @@ inline bool TabletIO::LowLevelScan(const std::string& start_tera_key,
     } else {
         // process the last row of tablet
         ProcessRowBuffer(row_buf, scan_options, value_list, &buffer_size, &number_limit);
+    }
+    if (end_row_key.compare(std::string("i.youku.com/") + '\0') == 0) {
+        VLOG(7) << "oops end";
     }
 
     leveldb::Status it_status;
@@ -1831,6 +1874,8 @@ void TabletIO::ProcessRowBuffer(std::list<KeyValuePair>& row_buf,
         return;
     }
 
+    int64_t counter1 = -1;
+    int64_t counter2 = -1;
     std::list<KeyValuePair>::iterator it;
     for (it = row_buf.begin(); it != row_buf.end(); ++it) {
         const std::string& key = it->key();
@@ -1838,6 +1883,30 @@ void TabletIO::ProcessRowBuffer(std::list<KeyValuePair>& row_buf,
         const std::string& qual = it->qualifier();
         const std::string& value = it->value();
         int64_t ts = it->timestamp();
+
+        if ((key.compare("i.youku.com/") == 0)
+            && (col.compare("total_num") == 0 || col.compare("total_fail_num") == 0)) {
+            int64_t counter = 0;
+
+            if (value.size() != sizeof(int64_t)) {
+                counter = -233;
+                LOG(WARNING) << "oops invalid counter read, fail to parse";
+            } else {
+                counter = io::DecodeBigEndainSign(value.data());
+            }
+            if (col.compare("total_num") == 0) {
+                counter1 = counter;
+            }
+            if (col.compare("total_fail_num") == 0) {
+                counter2 = counter;
+            }
+
+            VLOG(7) << "oops process: " << "tablet=[" << tablet_path_
+                << "] key=[" << DebugString(key)
+                << "] column=[" << DebugString(col)
+                << ":" << DebugString(qual)
+                << "] value:[" << counter << "]";
+        }
 
         // skip unnecessary columns and qualifiers
         if (scan_options.column_family_list.size() > 0) {
@@ -1862,6 +1931,9 @@ void TabletIO::ProcessRowBuffer(std::list<KeyValuePair>& row_buf,
         (*number_limit)++;
         *buffer_size += key.size() + col.size() + qual.size()
             + sizeof(ts) + value.size();
+    }
+    if (counter1 != counter2) {
+        VLOG(7) << "counter1:[" << counter1 << "] counter2:[" << counter2 << "]";
     }
 }
 
