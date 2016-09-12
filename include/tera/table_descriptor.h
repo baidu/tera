@@ -11,6 +11,7 @@
 #ifndef  TERA_TABLE_DESCRIPTOR_
 #define  TERA_TABLE_DESCRIPTOR_
 
+#include <stdint.h>
 #include <string>
 
 #pragma GCC visibility push(default)

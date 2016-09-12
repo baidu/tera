@@ -17,29 +17,40 @@
 #pragma GCC visibility push(default)
 namespace tera {
 
-/// 从表格里读取的结果流
+// Return a heap-allocated iterator over the contents of the table.
+// User must call Done() to check whether scan job is finished.
+//
+// Caller should delete iterator when it is no longer needed.
+// The returned iterator should be deleted before this table is deleted.
 class ResultStream {
 public:
-    virtual bool LookUp(const std::string& row_key) = 0;
-    /// 是否到达结束标记
-    virtual bool Done(ErrorCode* err = NULL) = 0;
-    /// 迭代下一个cell
-    virtual void Next() = 0;
-    /// RowKey
-    virtual std::string RowName() const = 0;
-    /// Column(格式为cf:qualifier)
-    virtual std::string ColumnName() const = 0;
-    /// Column family
-    virtual std::string Family() const = 0;
-    /// Qualifier
-    virtual std::string Qualifier() const = 0;
-    /// Cell对应的时间戳
-    virtual int64_t Timestamp() const = 0;
-    /// Value
-    virtual std::string Value() const = 0;
-    virtual int64_t ValueInt64() const = 0;
     ResultStream() {}
     virtual ~ResultStream() {}
+    // Check wether iterator was positioned at the end, and return error code for failure check.
+    virtual bool Done(ErrorCode* err = NULL) = 0;
+
+    // Moves to next cell. After this call, Done() is true iff
+    // the iterator was not positioned at the last cell in the source or scan error occurs.
+    virtual void Next() = 0;
+
+    // Return the row key name in current cell. The current cell's content changes only until
+    // the next modification of the iterator.
+    virtual std::string RowName() const = 0;
+    // Return column family in current cell.
+    virtual std::string Family() const = 0;
+    // Return qualifier in current cell.
+    virtual std::string Qualifier() const = 0;
+    // Return timestamp in current cell.
+    virtual int64_t Timestamp() const = 0;
+    // Return value in current cell.
+    virtual std::string Value() const = 0;
+    virtual int64_t ValueInt64() const = 0;
+
+    // DEPRECATED
+    virtual bool LookUp(const std::string& row_key) = 0;
+    // Return column in current cell, which looks like cf:qualifier.
+    // Use Family():Qualifier() instead.
+    virtual std::string ColumnName() const = 0;
 
 private:
     ResultStream(const ResultStream&);
@@ -47,46 +58,63 @@ private:
 };
 
 class ScanDescImpl;
+// Describe a scan job in tera client endian. Control scan behaviour.
 class ScanDescriptor {
 public:
-    /// 通过起始行构造
+    // 'rowkey' is the start row key in the scan job.
     ScanDescriptor(const std::string& rowkey);
     ~ScanDescriptor();
-    /// 设置scan的结束行(不包含在返回结果内), 非必要
+    // the end row key in the scan job, which means scan all keys less than the end row key.
+    // Not required.
     void SetEnd(const std::string& rowkey);
-    /// 设置要读取的cf, 可以添加多个
+
+    // Set target column family for the scan result,
+    // which likes the SQL statement (SELECT cf1, cf2, ..., cfn From Table).
     void AddColumnFamily(const std::string& cf);
-    /// 设置要读取的column(cf:qualifier)
+
+    // Set target column for the scan result,
+    // which likes the SQL statement (SELECT cf1:qu, cf2:qu, ..., cfn:qu From Table).
     void AddColumn(const std::string& cf, const std::string& qualifier);
-    /// 设置最多返回的版本数
+
+    // Set max version number per column.
     void SetMaxVersions(int32_t versions);
-    /// 设置scan的超时时间
-    void SetPackInterval(int64_t timeout);
-    /// 设置返回版本的时间范围
+
+    // Set time range for the scan result,
+    // which likes the SQL statement (SELECT * from Table WHERE timestamp in [ts_start, ts_end]).
+    // Return the newest value first.
     void SetTimeRange(int64_t ts_end, int64_t ts_start);
 
+    // Set batch scan mode, which largely speeds up scan task.
+    void SetAsync(bool async);
+    // Test the scan jobs, whether in batch scan mode.
+    bool IsAsync() const;
+
+    // Set timeout for each internal scan jobs, which avoids long-term scan jobs to trigger rpc's timeout.
+    // Not required.
+    void SetPackInterval(int64_t timeout);
+
+    // Set buffersize for each internal scan jobs, which avoids scan result buffer growing too much.
+    // Default: 64KB
+    void SetBufferSize(int64_t buf_size);
+
+    // Set the limitation of cell number for each internal scan jobs,
+    // which acquires lower latency in interactive scan task.
+    // Not required.
+    void SetNumberLimit(int64_t number_limit);
+    int64_t GetNumberLimit();
+
+    // EXPRIMENTAL
     bool SetFilter(const std::string& schema);
     typedef bool (*ValueConverter)(const std::string& in,
                                    const std::string& type,
                                    std::string* out);
-    /// 设置自定义类型转换函数（定义带类型过滤时使用）
+    // Set custom defined value convert funtion
     void SetValueConverter(ValueConverter converter);
 
-    void SetSnapshot(uint64_t snapshot_id);
-    /// 设置预读的buffer大小, 默认64K
-    void SetBufferSize(int64_t buf_size);
-
-    /// set number limit for each buffer
-    void SetNumberLimit(int64_t number_limit);
-    int64_t GetNumberLimit();
-
-    /// 设置async, 缺省true
-    void SetAsync(bool async);
-
-    /// 判断当前scan是否是async
-    bool IsAsync() const;
-
     ScanDescImpl* GetImpl() const;
+
+    // DEVELOPING
+    void SetSnapshot(uint64_t snapshot_id);
 
 private:
     ScanDescriptor(const ScanDescriptor&);

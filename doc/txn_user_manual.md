@@ -61,7 +61,7 @@ Copyright 2016, Baidu, Inc.
   ```
 
 * 能够避免“幻影读”现象  
-  下面的例子中，Session A在事务中读取了CF1的[C1 ~ C5)区间，区间内只有C2和C4两个列；Session B插入了一个新的列C4，导致Session A的事务提交失败：
+  下面的例子中，Session A在事务中读取了CF1的[C1 ~ C5)区间，区间内只有C2和C4两个列；Session B插入了一个新的列C3，导致Session A的事务提交失败：
   ```
              ----------------------------------
              |  ROW   |      CF1      |  CF2  |
@@ -119,10 +119,6 @@ class Transaction {
     virtual void SetCommitCallback(Callback callback) = 0;
     /// 获取提交回调
     virtual Callback GetCommitCallback() = 0;
-    /// 设置回滚回调, 回滚操作会异步返回
-    virtual void SetRollbackCallback(Callback callback) = 0;
-    /// 获取回滚回调
-    virtual Callback GetRollbackCallback() = 0;
 
     /// 设置用户上下文，可在回调函数中获取
     virtual void SetContext(void* context) = 0;
@@ -131,7 +127,7 @@ class Transaction {
 
     /// 获得结果错误码
     virtual const ErrorCode& GetError() = 0;
-  }
+};
 ```
 
 ###使用示例
@@ -147,8 +143,10 @@ int main() {
     
     // Create table
     tera::TableDescriptor schema("employee");
-    schema.AddColumnFamily("title");
-    schema.AddColumnFamily("salary");
+    schema.EnableTxn();
+    schema.AddLocalityGroup("lg0");
+    schema.AddColumnFamily("title", "lg0");
+    schema.AddColumnFamily("salary", "lg0");
     client->CreateTable(schema, &error_code);
     assert(error_code.GetType() == tera::ErrorCode::kOK);
     
@@ -165,9 +163,9 @@ int main() {
     delete init;
     
     // txn read the row
-    tera::Transaction* txn = table->StartRowTransaction();
+    tera::Transaction* txn = table->StartRowTransaction("Amy");
     tera::RowReader* reader = table->NewRowReader("Amy");
-    read->AddColumnFamily("title");
+    reader->AddColumnFamily("title");
     txn->Get(reader);
     assert(reader->GetError().GetType() == tera::ErrorCode::kOK);
     
@@ -175,7 +173,7 @@ int main() {
     std::string title;
     while (!reader->Done()) {
         if (reader->Family() == "title") {
-            title = read->Value();
+            title = reader->Value();
             break;
         }
         reader->Next();
@@ -192,11 +190,11 @@ int main() {
         mutation->Put("salary", "", "300");
     }
     txn->ApplyMutation(mutation);
-    assert(read->GetError().GetType() == tera::ErrorCode::kOK);
+    assert(mutation->GetError().GetType() == tera::ErrorCode::kOK);
     delete mutation;
     
     // txn commit
-    table->Commit(txn);
+    table->CommitRowTransaction(txn);
     printf("Transaction commit result %s\n", txn->GetError().ToString().c_str());
     delete txn;
     

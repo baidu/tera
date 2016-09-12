@@ -109,6 +109,14 @@ RowReader* TableImpl::NewRowReader(const std::string& row_key) {
     return row_rd;
 }
 
+void TableImpl::Put(RowMutation* row_mu) {
+    ApplyMutation(row_mu);
+}
+
+void TableImpl::Put(const std::vector<RowMutation*>& row_mutations) {
+    ApplyMutation(row_mutations);
+}
+
 void TableImpl::ApplyMutation(RowMutation* row_mu) {
     if (row_mu->GetError().GetType() != ErrorCode::kOK) {
         ThreadPool::Task task =
@@ -256,6 +264,18 @@ void TableImpl::Get(const std::vector<RowReader*>& row_readers) {
         row_reader_list[i] = static_cast<RowReaderImpl*>(row_readers[i]);
     }
     DistributeReaders(row_reader_list, true);
+}
+
+bool TableImpl::Get(const std::string& row_key, const std::string& family,
+                    const std::string& qualifier, int64_t* value,
+                    ErrorCode* err) {
+    return Get(row_key, family, qualifier, value, err, 0);
+}
+
+bool TableImpl::Get(const std::string& row_key, const std::string& family,
+                    const std::string& qualifier, std::string* value,
+                    ErrorCode* err) {
+    return Get(row_key, family, qualifier, value, err, 0);
 }
 
 bool TableImpl::Get(const std::string& row_key, const std::string& family,
