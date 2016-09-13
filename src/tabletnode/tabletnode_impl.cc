@@ -1164,12 +1164,20 @@ std::string TabletNodeImpl::GetSessionId() {
     return session_id_;
 }
 
-double TabletNodeImpl::GetBlockCacheHitRate() {
-    return ldb_block_cache_->HitRate(true);
+std::string TabletNodeImpl::BlockCacheProfileInfo() {
+    std::stringstream ss;
+    ss << ldb_block_cache_->HitRate(true);
+    ss << " " << ldb_block_cache_->Entries();
+    ss << " " << ldb_block_cache_->TotalCharge();
+    return ss.str();
 }
 
-double TabletNodeImpl::GetTableCacheHitRate() {
-    return ldb_table_cache_->HitRate(true);
+std::string TabletNodeImpl::TableCacheProfileInfo() {
+    std::stringstream ss;
+    ss << ldb_table_cache_->HitRate(true);
+    ss << " " << ldb_table_cache_->TableEntries();
+    ss << " " << ldb_table_cache_->ByteSize();
+    return ss.str();
 }
 
 TabletNodeSysInfo& TabletNodeImpl::GetSysInfo() {

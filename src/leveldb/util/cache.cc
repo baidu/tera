@@ -152,6 +152,8 @@ class LRUCache {
   Cache::Handle* Lookup(const Slice& key, uint32_t hash);
   void Release(Cache::Handle* handle);
   void Erase(const Slice& key, uint32_t hash);
+  size_t Entries();
+  size_t TotalCharge();
 
  private:
   void LRU_Remove(LRUHandle* e);
@@ -164,6 +166,7 @@ class LRUCache {
   // mutex_ protects the following state.
   port::Mutex mutex_;
   size_t usage_;
+  size_t entries_;
 
   // Dummy head of LRU list.
   // lru.prev is newest entry, lru.next is oldest entry.
@@ -173,7 +176,8 @@ class LRUCache {
 };
 
 LRUCache::LRUCache()
-    : usage_(0) {
+    : usage_(0),
+      entries_(0) {
   // Make empty circular linked list
   lru_.next = &lru_;
   lru_.prev = &lru_;
@@ -193,6 +197,7 @@ void LRUCache::Unref(LRUHandle* e) {
   e->refs--;
   if (e->refs <= 0) {
     usage_ -= e->charge;
+    entries_--;
     (*e->deleter)(e->key(), e->value);
     free(e);
   }
@@ -243,6 +248,7 @@ Cache::Handle* LRUCache::Insert(
   memcpy(e->key_data, key.data(), key.size());
   LRU_Append(e);
   usage_ += charge;
+  entries_++;
 
   LRUHandle* old = table_.Insert(e);
   if (old != NULL) {
@@ -267,6 +273,16 @@ void LRUCache::Erase(const Slice& key, uint32_t hash) {
     LRU_Remove(e);
     Unref(e);
   }
+}
+
+size_t LRUCache::Entries() {
+  MutexLock l(&mutex_);
+  return entries_;
+}
+
+size_t LRUCache::TotalCharge() {
+  MutexLock l(&mutex_);
+  return usage_;
 }
 
 static const int kNumShardBits = 4;
@@ -342,6 +358,20 @@ class ShardedLRUCache : public Cache {
       lookups_ = 0;
     }
     return ret;
+  }
+  virtual size_t Entries() {
+    size_t entries = 0;
+    for (int s = 0; s < kNumShards; s++) {
+      entries += shard_[s].Entries();
+    }
+    return entries;
+  }
+  virtual size_t TotalCharge() {
+    size_t total_charge = 0;
+    for (int s = 0; s < kNumShards; s++) {
+      total_charge += shard_[s].TotalCharge();
+    }
+    return total_charge;
   }
 };
 
