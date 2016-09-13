@@ -269,18 +269,24 @@ void TableImpl::Get(const std::vector<RowReader*>& row_readers) {
 bool TableImpl::Get(const std::string& row_key, const std::string& family,
                     const std::string& qualifier, int64_t* value,
                     ErrorCode* err) {
-    return Get(row_key, family, qualifier, value, err, 0);
+    return Get(row_key, family, qualifier, value, 0, err);
 }
 
 bool TableImpl::Get(const std::string& row_key, const std::string& family,
                     const std::string& qualifier, std::string* value,
                     ErrorCode* err) {
-    return Get(row_key, family, qualifier, value, err, 0);
+    return Get(row_key, family, qualifier, value, 0, err);
 }
 
 bool TableImpl::Get(const std::string& row_key, const std::string& family,
                     const std::string& qualifier, int64_t* value,
                     ErrorCode* err, uint64_t snapshot_id) {
+    return Get(row_key, family, qualifier, value, snapshot_id, err);
+}
+
+bool TableImpl::Get(const std::string& row_key, const std::string& family,
+                    const std::string& qualifier, int64_t* value,
+                    uint64_t snapshot_id, ErrorCode* err) {
     std::string value_str;
     if (Get(row_key, family, qualifier, &value_str, err, snapshot_id)
         && value_str.size() == sizeof(int64_t)) {
@@ -293,6 +299,12 @@ bool TableImpl::Get(const std::string& row_key, const std::string& family,
 bool TableImpl::Get(const std::string& row_key, const std::string& family,
                     const std::string& qualifier, std::string* value,
                     ErrorCode* err, uint64_t snapshot_id) {
+    return Get(row_key, family, qualifier, value, snapshot_id, err);
+}
+
+bool TableImpl::Get(const std::string& row_key, const std::string& family,
+                    const std::string& qualifier, std::string* value,
+                    uint64_t snapshot_id, ErrorCode* err) {
     RowReader* row_reader = NewRowReader(row_key);
     row_reader->AddColumn(family, qualifier);
     row_reader->SetSnapshot(snapshot_id);

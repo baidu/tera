@@ -44,12 +44,12 @@ public:
     // Return a row mutation handle. User should delete it when it is no longer
     // needed.
     virtual RowMutation* NewRowMutation(const std::string& row_key) = 0;
-    // Apply the specified cells to the database. Support batch put.
-    // User can set set a callback in "row_mutation" to activate async put.
+    // Apply the specified row_mutation(s) to the database. Support batch put.
+    // Users can set a callback in "row_mutation" to activate async put.
     // Use RowMutation::GetError() to check return code.
     virtual void Put(RowMutation* row_mutation) = 0;
     virtual void Put(const std::vector<RowMutation*>& row_mutations) = 0;
-    // Check if all put operations finished.
+    // Check if all put operations are finished.
     virtual bool IsPutFinished() = 0;
     // Easy synchronised interface. Returns true on success.
     virtual bool Put(const std::string& row_key, const std::string& family,
@@ -72,13 +72,13 @@ public:
     // needed.
     virtual RowReader* NewRowReader(const std::string& row_key) = 0;
     // Apply the specified reader to the database. Support batch get.
-    // User can set set a callback in "row_reader" to activate async get.
+    // Users can set a callback in "row_reader" to activate async get.
     // Use RowReader::GetError() to check return code.
     virtual void Get(RowReader* row_reader) = 0;
     virtual void Get(const std::vector<RowReader*>& row_readers) = 0;
-    // Check if all get operations finished.
+    // Check if all get operations are finished.
     virtual bool IsGetFinished() = 0;
-    // Easy synchronised interface. Returns true on success.
+    // Easy synchronized interface. Returns true on success.
     virtual bool Get(const std::string& row_key, const std::string& family,
                      const std::string& qualifier, std::string* value,
                      ErrorCode* err) = 0;
@@ -100,10 +100,11 @@ public:
     virtual void SetMaxReaderPendingNum(uint64_t max_pending_num) = 0;
     virtual bool Get(const std::string& row_key, const std::string& family,
                      const std::string& qualifier, std::string* value,
-                     ErrorCode* err, uint64_t snapshot_id) = 0;
+                     uint64_t snapshot_id, ErrorCode* err) = 0;
     virtual bool Get(const std::string& row_key, const std::string& family,
                      const std::string& qualifier, int64_t* value,
-                     ErrorCode* err, uint64_t snapshot_id) = 0;
+                     uint64_t snapshot_id, ErrorCode* err) = 0;
+    virtual bool GetDescriptor(TableDescriptor* desc, ErrorCode* err) = 0;
 
     // DEPRECATED
     // Use Put() instead.
@@ -119,7 +120,6 @@ public:
     virtual bool AddInt64(const std::string& row_key, const std::string& family,
                      const std::string& qualifier, int64_t delta,
                      ErrorCode* err) = 0;
-    virtual bool GetDescriptor(TableDescriptor* desc, ErrorCode* err) = 0;
     virtual bool GetTabletLocation(std::vector<TabletInfo>* tablets, ErrorCode* err) = 0;
     virtual bool GetStartEndKeys(std::string* start_key, std::string* end_key,
                                  ErrorCode* err) = 0;
@@ -133,6 +133,12 @@ public:
                                const std::string& value, const RowMutation& row_mu,
                                ErrorCode* err) = 0;
     virtual bool Flush() = 0;
+    virtual bool Get(const std::string& row_key, const std::string& family,
+                     const std::string& qualifier, std::string* value,
+                     ErrorCode* err, uint64_t snapshot_id) = 0;
+    virtual bool Get(const std::string& row_key, const std::string& family,
+                     const std::string& qualifier, int64_t* value,
+                     ErrorCode* err, uint64_t snapshot_id) = 0;
 
     Table() {}
     virtual ~Table() {}

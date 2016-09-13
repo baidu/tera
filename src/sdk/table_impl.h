@@ -145,8 +145,14 @@ public:
                     const std::string& qualifier, int64_t* value,
                     ErrorCode* err);
     virtual bool Get(const std::string& row_key, const std::string& family,
-                     const std::string& qualifier, std::string* value,
-                     ErrorCode* err, uint64_t snapshot_id);
+                    const std::string& qualifier, std::string* value,
+                    uint64_t snapshot_id, ErrorCode* err);
+    virtual bool Get(const std::string& row_key, const std::string& family,
+                    const std::string& qualifier, int64_t* value,
+                    uint64_t snapshot_id, ErrorCode* err);
+    virtual bool Get(const std::string& row_key, const std::string& family,
+                    const std::string& qualifier, std::string* value,
+                    ErrorCode* err, uint64_t snapshot_id);
     virtual bool Get(const std::string& row_key, const std::string& family,
                     const std::string& qualifier, int64_t* value,
                     ErrorCode* err, uint64_t snapshot_id);
@@ -548,12 +554,22 @@ public:
     virtual bool Get(const std::string& row_key, const std::string& family,
                      const std::string& qualifier, std::string* value,
                      ErrorCode* err, uint64_t snapshot_id) {
-        return _impl->Get(row_key, family, qualifier, value, err, snapshot_id);
+        return _impl->Get(row_key, family, qualifier, value, snapshot_id, err);
+    }
+    virtual bool Get(const std::string& row_key, const std::string& family,
+                     const std::string& qualifier, std::string* value,
+                     uint64_t snapshot_id, ErrorCode* err) {
+        return _impl->Get(row_key, family, qualifier, value, snapshot_id, err);
     }
     virtual bool Get(const std::string& row_key, const std::string& family,
                      const std::string& qualifier, int64_t* value,
                      ErrorCode* err, uint64_t snapshot_id) {
-        return _impl->Get(row_key, family, qualifier, value, err, snapshot_id);
+        return _impl->Get(row_key, family, qualifier, value, snapshot_id, err);
+    }
+    virtual bool Get(const std::string& row_key, const std::string& family,
+                     const std::string& qualifier, int64_t* value,
+                     uint64_t snapshot_id, ErrorCode* err) {
+        return _impl->Get(row_key, family, qualifier, value, snapshot_id, err);
     }
 
     virtual bool IsPutFinished() {
