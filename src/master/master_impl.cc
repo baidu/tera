@@ -122,6 +122,7 @@ MasterImpl::MasterImpl()
       query_thread_pool_(new ThreadPool(FLAGS_tera_master_impl_query_thread_num)),
       start_query_time_(0),
       query_tabletnode_timer_id_(kInvalidTimerId),
+      load_balance_scheduled_(false),
       load_balance_enabled_(false),
       thread_pool_(new ThreadPool(FLAGS_tera_master_impl_thread_max_num)),
       is_stat_table_(false),
@@ -1741,6 +1742,10 @@ void MasterImpl::ScheduleLoadBalance() {
         if (!load_balance_enabled_) {
             return;
         }
+        if (load_balance_scheduled_) {
+            return;
+        }
+        load_balance_scheduled_ = true;
     }
 
     ThreadPool::Task task =
@@ -1762,9 +1767,13 @@ void MasterImpl::LoadBalance() {
     {
         MutexLock locker(&mutex_);
         if (!load_balance_enabled_) {
+            load_balance_scheduled_ = false;
             return;
         }
     }
+
+    LOG(INFO) << "LoadBalance start";
+    int64_t start_time = get_micros();
 
     std::vector<TablePtr> all_table_list;
     std::vector<TabletPtr> all_tablet_list;
@@ -1798,6 +1807,14 @@ void MasterImpl::LoadBalance() {
     } else {
         max_move_num -= LoadBalance(size_scheduler_.get(), max_move_num, 3,
                                     all_node_list, all_tablet_list);
+    }
+
+    int64_t cost_time = get_micros() - start_time;
+    LOG(INFO) << "LoadBalance finish, cost " << cost_time / 1000000.0 << "s";
+
+    {
+        MutexLock locker(&mutex_);
+        load_balance_scheduled_ = false;
     }
 }
 
