@@ -904,24 +904,6 @@ void MasterImpl::DisableTable(const DisableTableRequest* request,
                    FLAGS_tera_master_meta_retry_times, response, done);
     BatchWriteMetaTableAsync(boost::bind(&Table::ToMetaTableKeyValue, table, _1, _2),
                              false, closure);
-
-    std::vector<TabletPtr> tablet_meta_list;
-    table->GetTablet(&tablet_meta_list);
-    for (uint32_t i = 0; i < tablet_meta_list.size(); ++i) {
-        TabletPtr tablet = tablet_meta_list[i];
-        if (tablet->SetStatusIf(kTableUnLoading, kTableReady, kTableDisable)) {
-            UnloadClosure* done =
-                NewClosure(this, &MasterImpl::UnloadTabletCallback, tablet,
-                           FLAGS_tera_master_impl_retry_times);
-            UnloadTabletAsync(tablet, done);
-        } else if (tablet->SetStatusIf(kTabletDisable, kTableOffLine, kTableDisable)) {
-            WriteClosure* closure =
-                NewClosure(this, &MasterImpl::UpdateTabletRecordCallback, tablet,
-                           FLAGS_tera_master_meta_retry_times);
-            BatchWriteMetaTableAsync(boost::bind(&Tablet::ToMetaTableKeyValue, tablet, _1, _2),
-                                     false, closure);
-        }
-    }
 }
 
 void MasterImpl::EnableTable(const EnableTableRequest* request,
@@ -964,18 +946,6 @@ void MasterImpl::EnableTable(const EnableTableRequest* request,
                    FLAGS_tera_master_meta_retry_times, response, done);
     BatchWriteMetaTableAsync(boost::bind(&Table::ToMetaTableKeyValue, table, _1, _2),
                              false, closure);
-
-    std::vector<TabletPtr> tablet_meta_list;
-    table->GetTablet(&tablet_meta_list);
-    for (uint32_t i = 0; i < tablet_meta_list.size(); ++i) {
-        TabletPtr tablet = tablet_meta_list[i];
-        if (tablet->SetStatusIf(kTableOffLine, kTabletDisable, kTableEnable)) {
-            TryLoadTablet(tablet, tablet->GetServerAddr());
-        } else {
-            LOG(ERROR) << "fail to load tablet: " << request->table_name()
-                << ", tablet status: " << StatusCodeToString(tablet->GetStatus());
-        }
-    }
 }
 
 void MasterImpl::UpdateCheck(const UpdateCheckRequest* request,
@@ -4479,6 +4449,21 @@ void MasterImpl::UpdateTableRecordForDisableCallback(TablePtr table, int32_t ret
     LOG(INFO) << "update meta table success, " << table;
     rpc_response->set_status(kMasterOk);
     rpc_done->Run();
+
+    // unload all tablet of this table
+    std::vector<TabletPtr> tablet_meta_list;
+    table->GetTablet(&tablet_meta_list);
+    for (uint32_t i = 0; i < tablet_meta_list.size(); ++i) {
+        TabletPtr tablet = tablet_meta_list[i];
+        if (tablet->SetStatusIf(kTableUnLoading, kTableReady, kTableDisable)) {
+            UnloadClosure* done =
+                NewClosure(this, &MasterImpl::UnloadTabletCallback, tablet,
+                           FLAGS_tera_master_impl_retry_times);
+            UnloadTabletAsync(tablet, done);
+        } else {
+            tablet->SetStatusIf(kTabletDisable, kTableOffLine, kTableDisable);
+        }
+    }
 }
 
 
@@ -4520,6 +4505,19 @@ void MasterImpl::UpdateTableRecordForEnableCallback(TablePtr table, int32_t retr
     LOG(INFO) << "update meta table success, " << table;
     rpc_response->set_status(kMasterOk);
     rpc_done->Run();
+
+    // load all tablet of this table
+    std::vector<TabletPtr> tablet_meta_list;
+    table->GetTablet(&tablet_meta_list);
+    for (uint32_t i = 0; i < tablet_meta_list.size(); ++i) {
+        TabletPtr tablet = tablet_meta_list[i];
+        if (tablet->SetStatusIf(kTableOffLine, kTabletDisable, kTableEnable)) {
+            TryLoadTablet(tablet, tablet->GetServerAddr());
+        } else {
+            LOG(ERROR) << "fail to load tablet: " << tablet->GetPath()
+                << ", tablet status: " << StatusCodeToString(tablet->GetStatus());
+        }
+    }
 }
 
 void MasterImpl::UpdateTableRecordForUpdateCallback(TablePtr table, int32_t retry_times,
