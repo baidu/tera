@@ -758,6 +758,10 @@ bool ClientImpl::DoShowTablesInfo(TableMetaList* table_list,
                     || (table_name == start_table_name && tablet_key >= start_tablet_key)) {
                     tablet_list->add_meta()->CopyFrom(response.tablet_meta_list().meta(i));
                     tablet_list->add_counter()->CopyFrom(response.tablet_meta_list().counter(i));
+                    // old tera master will not return timestamp #963
+                    if (response.tablet_meta_list().timestamp_size() > 0) {
+                        tablet_list->add_timestamp(response.tablet_meta_list().timestamp(i));
+                    }
                 }
                 if (i == response.tablet_meta_list().meta_size() - 1 ) {
                     std::string prev_table_name = start_table_name;

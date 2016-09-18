@@ -1133,10 +1133,28 @@ std::string BytesNumberToString(const uint64_t size) {
     return NumberToString(size);
 }
 
+static std::string GetTabletStatusString(const TabletMetaList& tablet_list, int64_t now, int32_t i) {
+    // old tera master will not return timestamp #963
+    if ((tablet_list.timestamp_size() > 0)) {
+        // new tera master
+        int64_t delta = now - tablet_list.timestamp(i);
+        TabletStatus status = tablet_list.meta(i).status();
+        if ((status == kTableReady) && (delta > FLAGS_tera_sdk_status_timeout * 1000000)) {
+            return "kUnknown";
+        } else {
+            return StatusCodeToString(tablet_list.meta(i).status());
+        }
+    } else {
+        // old tera master
+        return StatusCodeToString(tablet_list.meta(i).status());
+    }
+}
+
 int32_t ShowTabletList(const TabletMetaList& tablet_list, bool is_server_addr, bool is_x) {
     TPrinter printer;
     int cols;
     std::vector<string> row;
+    int64_t now = common::timer::get_micros();
     if (is_x) {
         if (is_server_addr) {
             cols = 14;
@@ -1160,7 +1178,7 @@ int32_t ShowTabletList(const TabletMetaList& tablet_list, bool is_server_addr, b
                 row.push_back(meta.server_addr());
             }
             row.push_back(meta.path());
-            row.push_back(StatusCodeToString(meta.status()));
+            row.push_back(GetTabletStatusString(tablet_list, now, i));
 
             uint64_t size = meta.size();
             std::string size_str =
@@ -1200,7 +1218,7 @@ int32_t ShowTabletList(const TabletMetaList& tablet_list, bool is_server_addr, b
             row.push_back(NumberToString(i));
             row.push_back(meta.server_addr());
             row.push_back(meta.path());
-            row.push_back(StatusCodeToString(meta.status()));
+            row.push_back(GetTabletStatusString(tablet_list, now, i));
 
             uint64_t size = meta.size();
             row.push_back(BytesNumberToString(size));
