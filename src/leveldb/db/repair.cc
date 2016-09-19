@@ -67,7 +67,7 @@ class Repairer {
     // TableCache can be small since we expect each table to be opened once.
     if (owns_table_cache_) {
       Log(options_.info_log, "[%s] create new table cache in repairer.", dbname_.c_str());
-      table_cache_ = new TableCache(100);
+      table_cache_ = new TableCache(100 * 2097152LL);
     }
   }
 
