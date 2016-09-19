@@ -95,14 +95,14 @@ uint64_t TabletNode::GetRowReadDelay() {
 
 uint32_t TabletNode::GetPlanToMoveInCount() {
     MutexLock lock(&mutex_);
-    VLOG(8) << "GetPlanToMoveInCount: " << addr_ << " " << plan_move_in_count_;
+    VLOG(16) << "GetPlanToMoveInCount: " << addr_ << " " << plan_move_in_count_;
     return plan_move_in_count_;
 }
 
 void TabletNode::PlanToMoveIn() {
     MutexLock lock(&mutex_);
     plan_move_in_count_++;
-    VLOG(8) << "PlanToMoveIn: " << addr_ << " " << plan_move_in_count_;
+    VLOG(16) << "PlanToMoveIn: " << addr_ << " " << plan_move_in_count_;
 }
 
 void TabletNode::DoneMoveIn() {
@@ -113,7 +113,7 @@ void TabletNode::DoneMoveIn() {
     if (plan_move_in_count_ > 0) {
         plan_move_in_count_--;
     }
-    VLOG(8) << "DoneMoveIn: " << addr_ << " " << plan_move_in_count_;
+    VLOG(16) << "DoneMoveIn: " << addr_ << " " << plan_move_in_count_;
 }
 
 bool TabletNode::MayLoadNow() {
@@ -125,7 +125,7 @@ bool TabletNode::MayLoadNow() {
         <= get_micros()) {
         return true;
     }
-    VLOG(8) << "MayLoadNow() " << addr_ << " last load time: "
+    VLOG(16) << "MayLoadNow() " << addr_ << " last load time: "
             << (get_micros() - recent_load_time_list_.front()) / 1000000 << " seconds ago";
     return false;
 }
@@ -474,7 +474,7 @@ bool TabletNodeManager::ShouldMoveData(Scheduler* scheduler, const std::string& 
                                        TabletNodePtr src_node, TabletNodePtr dst_node,
                                        const std::vector<TabletPtr>& tablet_candidates,
                                        size_t* tablet_index) {
-    VLOG(7) << "ShouldMoveData()";
+    VLOG(16) << "ShouldMoveData()";
     MutexLock lock(&mutex_);
     if (tablet_candidates.size() == 0) {
         return false;
