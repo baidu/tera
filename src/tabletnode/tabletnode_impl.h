@@ -126,9 +126,9 @@ public:
     void SetSessionId(const std::string& session_id);
     std::string GetSessionId();
 
-    double GetBlockCacheHitRate();
+    std::string BlockCacheProfileInfo();
 
-    double GetTableCacheHitRate();
+    std::string TableCacheProfileInfo();
 
     TabletNodeSysInfo& GetSysInfo();
 

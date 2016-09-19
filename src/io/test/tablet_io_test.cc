@@ -385,6 +385,11 @@ TEST_F(TabletIOTest, SplitToSubTable) {
     EXPECT_TRUE(PrepareTestData(&tablet, N / 2, 0));
     EXPECT_TRUE(PrepareTestData(&tablet, N, N / 2));
 
+    // make sure all data are dumped into sst
+    EXPECT_TRUE(tablet.Unload());
+    EXPECT_TRUE(tablet.Load(TableSchema(), tablet_path, std::vector<uint64_t>(),
+                            empty_snaphsots_, empty_rollback_, NULL, NULL, NULL, &status));
+
     // for first tablet
     tablet.GetDataSize(&size, NULL, &status);
     LOG(INFO) << "table[" << key_start << ", " << key_end

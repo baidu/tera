@@ -12,6 +12,7 @@
 
 #include "master/master_impl.h"
 #include "utils/crypt.h"
+#include "utils/network_utils.h"
 
 DECLARE_int32(tera_master_thread_min_num);
 DECLARE_int32(tera_master_thread_max_num);
@@ -30,7 +31,7 @@ void RemoteMaster::GetSnapshot(google::protobuf::RpcController* controller,
                                const GetSnapshotRequest* request,
                                GetSnapshotResponse* response,
                                google::protobuf::Closure* done) {
-    LOG(INFO) << "accept RPC (GetSnapshot)";
+    LOG(INFO) << "accept RPC (GetSnapshot): " << tera::utils::GetRemoteAddress(controller);
     ThreadPool::Task callback =
         boost::bind(&RemoteMaster::DoGetSnapshot, this, controller,
                     request, response, done);
@@ -41,7 +42,7 @@ void RemoteMaster::DelSnapshot(google::protobuf::RpcController* controller,
                                const DelSnapshotRequest* request,
                                DelSnapshotResponse* response,
                                google::protobuf::Closure* done) {
-    LOG(INFO) << "accept RPC (DelSnapshot)";
+    LOG(INFO) << "accept RPC (DelSnapshot): " << tera::utils::GetRemoteAddress(controller);
     ThreadPool::Task callback =
         boost::bind(&RemoteMaster::DoDelSnapshot, this, controller,
                     request, response, done);
@@ -52,7 +53,7 @@ void RemoteMaster::GetRollback(google::protobuf::RpcController* controller,
                                const RollbackRequest* request,
                                RollbackResponse* response,
                                google::protobuf::Closure* done) {
-    LOG(INFO) << "accept RPC (Rollback)";
+    LOG(INFO) << "accept RPC (Rollback): " << tera::utils::GetRemoteAddress(controller);
     ThreadPool::Task callback =
         boost::bind(&RemoteMaster::DoRollback, this, controller,
                     request, response, done);
@@ -63,7 +64,7 @@ void RemoteMaster::CreateTable(google::protobuf::RpcController* controller,
                                const CreateTableRequest* request,
                                CreateTableResponse* response,
                                google::protobuf::Closure* done) {
-    LOG(INFO) << "accept RPC (CreateTable)";
+    LOG(INFO) << "accept RPC (CreateTable): " << tera::utils::GetRemoteAddress(controller);
     ThreadPool::Task callback =
         boost::bind(&RemoteMaster::DoCreateTable, this, controller,
                     request, response, done);
@@ -74,7 +75,7 @@ void RemoteMaster::DeleteTable(google::protobuf::RpcController* controller,
                                const DeleteTableRequest* request,
                                DeleteTableResponse* response,
                                google::protobuf::Closure* done) {
-    LOG(INFO) << "accept RPC (DeleteTable)";
+    LOG(INFO) << "accept RPC (DeleteTable): " << tera::utils::GetRemoteAddress(controller);
     ThreadPool::Task callback =
         boost::bind(&RemoteMaster::DoDeleteTable, this, controller,
                     request, response, done);
@@ -85,7 +86,7 @@ void RemoteMaster::DisableTable(google::protobuf::RpcController* controller,
                                 const DisableTableRequest* request,
                                 DisableTableResponse* response,
                                 google::protobuf::Closure* done) {
-    LOG(INFO) << "accept RPC (DisableTable)";
+    LOG(INFO) << "accept RPC (DisableTable): " << tera::utils::GetRemoteAddress(controller);
     ThreadPool::Task callback =
         boost::bind(&RemoteMaster::DoDisableTable, this, controller,
                     request, response, done);
@@ -96,7 +97,7 @@ void RemoteMaster::EnableTable(google::protobuf::RpcController* controller,
                                const EnableTableRequest* request,
                                EnableTableResponse* response,
                                google::protobuf::Closure* done) {
-    LOG(INFO) << "accept RPC (EnableTable)";
+    LOG(INFO) << "accept RPC (EnableTable): " << tera::utils::GetRemoteAddress(controller);
     ThreadPool::Task callback =
         boost::bind(&RemoteMaster::DoEnableTable, this, controller,
                     request, response, done);
@@ -107,7 +108,7 @@ void RemoteMaster::UpdateTable(google::protobuf::RpcController* controller,
                                const UpdateTableRequest* request,
                                UpdateTableResponse* response,
                                google::protobuf::Closure* done) {
-    LOG(INFO) << "accept RPC (UpdateTable)";
+    LOG(INFO) << "accept RPC (UpdateTable): " << tera::utils::GetRemoteAddress(controller);
     ThreadPool::Task callback =
         boost::bind(&RemoteMaster::DoUpdateTable, this, controller,
                     request, response, done);
@@ -118,6 +119,7 @@ void RemoteMaster::UpdateCheck(google::protobuf::RpcController* controller,
                                const UpdateCheckRequest* request,
                                UpdateCheckResponse* response,
                                google::protobuf::Closure* done) {
+    LOG(INFO) << "accept RPC (UpdateCheck): " << tera::utils::GetRemoteAddress(controller);
     ThreadPool::Task callback =
         boost::bind(&RemoteMaster::DoUpdateCheck, this, controller,
                     request, response, done);
@@ -128,7 +130,7 @@ void RemoteMaster::CompactTable(google::protobuf::RpcController* controller,
                                 const CompactTableRequest* request,
                                 CompactTableResponse* response,
                                 google::protobuf::Closure* done) {
-    LOG(INFO) << "accept RPC (CompactTable)";
+    LOG(INFO) << "accept RPC (CompactTable): " << tera::utils::GetRemoteAddress(controller);
     ThreadPool::Task callback =
         boost::bind(&RemoteMaster::DoCompactTable, this, controller,
                     request, response, done);
@@ -139,7 +141,7 @@ void RemoteMaster::SearchTable(google::protobuf::RpcController* controller,
                                const SearchTableRequest* request,
                                SearchTableResponse* response,
                                google::protobuf::Closure* done) {
-    LOG(INFO) << "accept RPC (SearchTable)";
+    LOG(INFO) << "accept RPC (SearchTable): " << tera::utils::GetRemoteAddress(controller);
     ThreadPool::Task callback =
         boost::bind(&RemoteMaster::DoSearchTable, this, controller,
                     request, response, done);
@@ -150,7 +152,7 @@ void RemoteMaster::ShowTables(google::protobuf::RpcController* controller,
                               const ShowTablesRequest* request,
                               ShowTablesResponse* response,
                               google::protobuf::Closure* done) {
-    LOG(INFO) << "accept RPC (ShowTables)";
+    LOG(INFO) << "accept RPC (ShowTables): " << tera::utils::GetRemoteAddress(controller);
     ThreadPool::Task callback =
         boost::bind(&RemoteMaster::DoShowTables, this, controller,
                     request, response, done);
@@ -161,7 +163,7 @@ void RemoteMaster::ShowTabletNodes(google::protobuf::RpcController* controller,
                                    const ShowTabletNodesRequest* request,
                                    ShowTabletNodesResponse* response,
                                    google::protobuf::Closure* done) {
-    LOG(INFO) << "accept RPC (ShowTabletNodes)";
+    LOG(INFO) << "accept RPC (ShowTabletNodes): " << tera::utils::GetRemoteAddress(controller);
     ThreadPool::Task callback =
         boost::bind(&RemoteMaster::DoShowTabletNodes, this, controller,
                     request, response, done);
@@ -172,7 +174,7 @@ void RemoteMaster::CmdCtrl(google::protobuf::RpcController* controller,
                            const CmdCtrlRequest* request,
                            CmdCtrlResponse* response,
                            google::protobuf::Closure* done) {
-    LOG(INFO) << "accept RPC (CmdCtrl)";
+    LOG(INFO) << "accept RPC (CmdCtrl): " << tera::utils::GetRemoteAddress(controller);
     ThreadPool::Task callback =
         boost::bind(&RemoteMaster::DoCmdCtrl, this, controller,
                     request, response, done);
@@ -183,7 +185,7 @@ void RemoteMaster::OperateUser(google::protobuf::RpcController* controller,
                                const OperateUserRequest* request,
                                OperateUserResponse* response,
                                google::protobuf::Closure* done) {
-    LOG(INFO) << "accept RPC (OperateUser)";
+    LOG(INFO) << "accept RPC (OperateUser): " << tera::utils::GetRemoteAddress(controller);
     ThreadPool::Task callback =
         boost::bind(&RemoteMaster::DoOperateUser, this, controller,
                     request, response, done);
@@ -194,7 +196,7 @@ void RemoteMaster::RenameTable(google::protobuf::RpcController* controller,
                                const RenameTableRequest* request,
                                RenameTableResponse* response,
                                google::protobuf::Closure* done) {
-    LOG(INFO) << "accept RPC (RenameTable)";
+    LOG(INFO) << "accept RPC (RenameTable): " << tera::utils::GetRemoteAddress(controller);
     master_impl_->RenameTable(request, response, done);
     LOG(INFO) << "finish RPC (RenameTable)";
 }

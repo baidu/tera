@@ -34,8 +34,8 @@ static void UnrefEntry(void* arg1, void* arg2) {
   cache->Release(h);
 }
 
-TableCache::TableCache(int entries)
-    : cache_(NewLRUCache(entries)) {
+TableCache::TableCache(size_t byte_size)
+    : cache_(NewLRUCache(byte_size)) {
 }
 
 TableCache::~TableCache() {
@@ -101,7 +101,7 @@ Status TableCache::FindTable(const std::string& dbname, const Options* options,
         TableAndFile* tf = new TableAndFile;
         tf->file = file;
         tf->table = table;
-        *handle = cache_->Insert(key, tf, 1, &DeleteEntry);
+        *handle = cache_->Insert(key, tf, table->IndexBlockSize(), &DeleteEntry);
       }
       mu_.Lock();
       if (--w->wait_num == 0) {

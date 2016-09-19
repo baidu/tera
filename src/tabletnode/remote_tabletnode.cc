@@ -11,6 +11,7 @@
 
 #include "tabletnode/tabletnode_impl.h"
 #include "utils/counter.h"
+#include "utils/network_utils.h"
 #include "utils/timer.h"
 
 DECLARE_int32(tera_tabletnode_ctrl_thread_num);
@@ -81,7 +82,7 @@ void RemoteTabletNode::LoadTablet(google::protobuf::RpcController* controller,
                                   LoadTabletResponse* response,
                                   google::protobuf::Closure* done) {
     uint64_t id = request->sequence_id();
-    LOG(INFO) << "accept RPC (LoadTablet) id: " << id;
+    LOG(INFO) << "accept RPC (LoadTablet) id: " << id << ", src: " << tera::utils::GetRemoteAddress(controller);
     ThreadPool::Task callback =
         boost::bind(&RemoteTabletNode::DoLoadTablet, this, controller,
                    request, response, done);
@@ -93,7 +94,7 @@ void RemoteTabletNode::UnloadTablet(google::protobuf::RpcController* controller,
                                     UnloadTabletResponse* response,
                                     google::protobuf::Closure* done) {
     uint64_t id = request->sequence_id();
-    LOG(INFO) << "accept RPC (UnloadTablet) id: " << id;
+    LOG(INFO) << "accept RPC (UnloadTablet) id: " << id << ", src: " << tera::utils::GetRemoteAddress(controller);
     ThreadPool::Task callback =
         boost::bind(&RemoteTabletNode::DoUnloadTablet, this, controller,
                    request, response, done);
@@ -104,7 +105,7 @@ void RemoteTabletNode::ReadTablet(google::protobuf::RpcController* controller,
                                   const ReadTabletRequest* request,
                                   ReadTabletResponse* response,
                                   google::protobuf::Closure* done) {
-    VLOG(8) << "accept RPC (ReadTablet)";
+    VLOG(8) << "accept RPC (ReadTablet): " << tera::utils::GetRemoteAddress(controller);
     static uint32_t last_print = time(NULL);
     if (read_pending_counter.Get() > FLAGS_tera_request_pending_limit) {
         response->set_sequence_id(request->sequence_id());
@@ -135,7 +136,7 @@ void RemoteTabletNode::WriteTablet(google::protobuf::RpcController* controller,
                                    const WriteTabletRequest* request,
                                    WriteTabletResponse* response,
                                    google::protobuf::Closure* done) {
-    VLOG(8) << "accept RPC (WriteTablet)";
+    VLOG(8) << "accept RPC (WriteTablet): " << tera::utils::GetRemoteAddress(controller);
     static uint32_t last_print = time(NULL);
     if (write_pending_counter.Get() > FLAGS_tera_request_pending_limit) {
         response->set_sequence_id(request->sequence_id());
@@ -164,7 +165,7 @@ void RemoteTabletNode::ScanTablet(google::protobuf::RpcController* controller,
                                   const ScanTabletRequest* request,
                                   ScanTabletResponse* response,
                                   google::protobuf::Closure* done) {
-    VLOG(8) << "accept RPC (ScanTablet)";
+    VLOG(8) << "accept RPC (ScanTablet): " << tera::utils::GetRemoteAddress(controller);
     if (scan_pending_counter.Get() > FLAGS_tera_scan_request_pending_limit) {
         response->set_sequence_id(request->sequence_id());
         response->set_status(kTabletNodeIsBusy);
@@ -184,7 +185,7 @@ void RemoteTabletNode::GetSnapshot(google::protobuf::RpcController* controller,
                                   SnapshotResponse* response,
                                   google::protobuf::Closure* done) {
     uint64_t id = request->sequence_id();
-    LOG(INFO) << "accept RPC (GetSnapshot) id: " << id;
+    LOG(INFO) << "accept RPC (GetSnapshot) id: " << id << ", src: " << tera::utils::GetRemoteAddress(controller);
     ThreadPool::Task callback =
         boost::bind(&RemoteTabletNode::DoGetSnapshot, this, controller,
                     request, response, done);
@@ -196,7 +197,7 @@ void RemoteTabletNode::ReleaseSnapshot(google::protobuf::RpcController* controll
                                            ReleaseSnapshotResponse* response,
                                            google::protobuf::Closure* done) {
     uint64_t id = request->sequence_id();
-    LOG(INFO) << "accept RPC (ReleaseSnapshot) id: " << id;
+    LOG(INFO) << "accept RPC (ReleaseSnapshot) id: " << id << ", src: " << tera::utils::GetRemoteAddress(controller);
     ThreadPool::Task callback =
     boost::bind(&RemoteTabletNode::DoReleaseSnapshot, this, controller,
                request, response, done);
@@ -208,7 +209,7 @@ void RemoteTabletNode::Rollback(google::protobuf::RpcController* controller,
                                 SnapshotRollbackResponse* response,
                                 google::protobuf::Closure* done) {
     uint64_t id = request->sequence_id();
-    LOG(INFO) << "accept RPC (Rollback) id: " << id;
+    LOG(INFO) << "accept RPC (Rollback) id: " << id << ", src: " << tera::utils::GetRemoteAddress(controller);
     ThreadPool::Task callback =
     boost::bind(&RemoteTabletNode::DoRollback, this, controller,
                request, response, done);
@@ -221,7 +222,7 @@ void RemoteTabletNode::Query(google::protobuf::RpcController* controller,
                              QueryResponse* response,
                              google::protobuf::Closure* done) {
     uint64_t id = request->sequence_id();
-    LOG(INFO) << "accept RPC (Query) id: " << id;
+    LOG(INFO) << "accept RPC (Query) id: " << id << ", src: " << tera::utils::GetRemoteAddress(controller);
     ThreadPool::Task callback =
         boost::bind(&RemoteTabletNode::DoQuery, this, controller,
                    request, response, done);
@@ -233,7 +234,7 @@ void RemoteTabletNode::CmdCtrl(google::protobuf::RpcController* controller,
                                TsCmdCtrlResponse* response,
                                google::protobuf::Closure* done) {
     uint64_t id = request->sequence_id();
-    LOG(INFO) << "accept RPC (CmdCtrl) id: " << id;
+    LOG(INFO) << "accept RPC (CmdCtrl) id: " << id << ", src: " << tera::utils::GetRemoteAddress(controller);
     ThreadPool::Task callback =
         boost::bind(&RemoteTabletNode::DoCmdCtrl, this, controller,
                     request, response, done);
@@ -245,7 +246,7 @@ void RemoteTabletNode::SplitTablet(google::protobuf::RpcController* controller,
                                    SplitTabletResponse* response,
                                    google::protobuf::Closure* done) {
     uint64_t id = request->sequence_id();
-    LOG(INFO) << "accept RPC (SplitTablet) id: " << id;
+    LOG(INFO) << "accept RPC (SplitTablet) id: " << id << ", src: " << tera::utils::GetRemoteAddress(controller);
     ThreadPool::Task callback =
         boost::bind(&RemoteTabletNode::DoSplitTablet, this, controller,
                     request, response, done);
@@ -257,7 +258,7 @@ void RemoteTabletNode::CompactTablet(google::protobuf::RpcController* controller
                                    CompactTabletResponse* response,
                                    google::protobuf::Closure* done) {
     uint64_t id = request->sequence_id();
-    LOG(INFO) << "accept RPC (CompactTablet) id: " << id;
+    LOG(INFO) << "accept RPC (CompactTablet) id: " << id << ", src: " << tera::utils::GetRemoteAddress(controller);
     compact_pending_counter.Inc();
     ThreadPool::Task callback =
         boost::bind(&RemoteTabletNode::DoCompactTablet, this, controller,
@@ -269,6 +270,8 @@ void RemoteTabletNode::Update(google::protobuf::RpcController* controller,
                               const UpdateRequest* request,
                               UpdateResponse* response,
                               google::protobuf::Closure* done) {
+    uint64_t id = request->sequence_id();
+    LOG(INFO) << "accept RPC (Update) id: " << id << ", src: " << tera::utils::GetRemoteAddress(controller);
     ThreadPool::Task callback =
         boost::bind(&RemoteTabletNode::DoUpdate, this, controller,
                    request, response, done);

@@ -101,9 +101,9 @@ bool TabletNodeEntry::Run() {
     LOG(INFO) << "[ThreadPool schd/task/cnt] "
         << remote_tabletnode_->ProfilingLog();
 
-    LOG(INFO) << "[Cache HitRate] table_cache "
-        << tabletnode_impl_->GetTableCacheHitRate()
-        << ", block_cache " << tabletnode_impl_->GetBlockCacheHitRate();
+    LOG(INFO) << "[Cache HitRate/Cnt/Size] table_cache "
+        << tabletnode_impl_->TableCacheProfileInfo()
+        << ", block_cache " << tabletnode_impl_->BlockCacheProfileInfo();
 
     int64_t now_time = get_micros();
     int64_t earliest_rpc_time = now_time;

@@ -587,6 +587,7 @@ private:
     int64_t query_tabletnode_timer_id_;
     Counter query_pending_count_;
 
+    bool load_balance_scheduled_;
     bool load_balance_enabled_;
     int64_t load_balance_timer_id_;
 
