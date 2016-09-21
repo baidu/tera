@@ -13,6 +13,7 @@
 #include <glog/logging.h>
 #include <gperftools/malloc_extension.h>
 
+#include "common/timer.h"
 #include "db/filename.h"
 #include "io/io_utils.h"
 #include "io/utils_leveldb.h"
@@ -3485,13 +3486,20 @@ void MasterImpl::QueryTabletNodeCallback(std::string addr, QueryRequest* request
             } else if (tablet_manager_->FindTablet(table_name, key_start, &tablet)) {
                 int64_t pre_time = tablet->SetUpdateTime(start_query);
                 int64_t load_time = tablet->LoadTime();
-                if (load_time < start_query_time_ && pre_time > start_query_time_) {
-                    LOG(ERROR) << "caution: one tablet multi-loaded, path "
-                        << tablet->GetPath() << ", addr " << meta.server_addr()
-                        << " vs " << tablet->GetServerAddr()
+                if ((load_time < start_query_time_) && (start_query_time_ < pre_time)) {
+                    // pre_time: tablet status previous update time,
+                    // so, the pre_time should be earlier than start_query_time_
+                    //
+                    // if pre_time later than start_query_time_,
+                    // *maybe* another ts has reported this tablet
+                    bool caution = meta.server_addr() != tablet->GetServerAddr();
+                    LOG(INFO) << (caution ? "caution: one tablet multi-loaded" : "false alarm tablet")
+                        << ", path " << tablet->GetPath() << ", ts-reported-addr " << meta.server_addr()
+                        << " vs master-memory-addr " << tablet->GetServerAddr()
                         << ", start_query " << start_query_time_
-                        << ", pre_update " << pre_time
-                        << ", cur_time " << start_query;
+                        << ", previous_update " << pre_time
+                        << ", current_time " << start_query
+                        << ", load_time " << load_time;
                 }
                 if (tablet->Verify(table_name, key_start, key_end, meta.path(),
                                    meta.server_addr())) {
