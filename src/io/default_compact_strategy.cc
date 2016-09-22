@@ -184,15 +184,15 @@ bool DefaultCompactStrategy::InternalMergeProcess(leveldb::Iterator* it,
     }
     assert(merged_key);
     assert(merged_value);
+    assert(it->Valid());
+
+    bool first_one = true;
+    int64_t merged_num_t = 0;
+    int64_t last_ts_atomic = cur_ts_; // merge value use first item's ts and seq
+    int64_t version_num = 0;
+    uint64_t last_seq = 0;
 
     AtomicMergeStrategy atom_merge;
-    atom_merge.Init(merged_key, merged_value, it->key(), it->value(), cur_type_);
-
-    it->Next();
-    int64_t merged_num_t = 1;
-    int64_t last_ts_atomic = cur_ts_;
-    int64_t version_num = 0;
-
     while (it->Valid()) {
         merged_num_t++;
         if (version_num >= 1) {
@@ -208,32 +208,52 @@ bool DefaultCompactStrategy::InternalMergeProcess(leveldb::Iterator* it,
         if (is_internal_key) {
             leveldb::ParsedInternalKey ikey;
             leveldb::ParseInternalKey(itkey, &ikey);
-            if (!raw_key_operator_->ExtractTeraKey(ikey.user_key, &key, &col, &qual, &ts, &type)) {
+            if (!raw_key_operator_->ExtractTeraKey(ikey.user_key, &key, &col, &qual, &ts, &type) && !first_one) {
                 LOG(WARNING) << "invalid internal key for tera: " << itkey.ToString();
                 break;
             }
-        } else {
-            if (!raw_key_operator_->ExtractTeraKey(itkey, &key, &col, &qual, &ts, &type)) {
-                LOG(WARNING) << "invalid tera key: " << itkey.ToString();
+            if (!first_one && (last_seq <= (uint64_t)ikey.sequence)) {
+                VLOG(20) << "merge op, seq crazy, last_seq " << last_seq << ", cur_seq " << ikey.sequence
+                    << ", snapshot " << snapshot_ << ", last_ts " << last_ts_atomic << ", cur_ts " << ts;
                 break;
             }
-        }
-
-        if (last_qual_ != qual || last_col_ != col || last_key_ != key) {
-            break; // out of the current cell
-        }
-
-        if (!IsAtomicOP(type) && type != leveldb::TKT_VALUE) {
+            if (!first_one && (snapshot_ != leveldb::kMaxSequenceNumber) && (ikey.sequence > snapshot_)) {
+                VLOG(20) << "merge op, compact conflict with snapshot, seq " << ikey.sequence << ", snapshot " << snapshot_;
+                break;
+            }
+            if (last_seq > snapshot_ && ikey.sequence <= snapshot_) {
+                VLOG(20) << "merge op, occur snapshot_seq " << ikey.sequence << ", snapshot " << snapshot_
+                    << ", last_seq " << last_seq;
+                break;
+            }
+            VLOG(20) << "merge op, first " << first_one << ", ikey.seq " << ikey.sequence
+                << ", snapshot_ " << snapshot_ << ", last_seq " << last_seq;
+            last_seq = ikey.sequence;
+        } else if (!raw_key_operator_->ExtractTeraKey(itkey, &key, &col, &qual, &ts, &type) && !first_one) {
+            LOG(WARNING) << "invalid tera key: " << itkey.ToString();
             break;
-        } else if (type == leveldb::TKT_VALUE) {
-            if (!merge_put_flag || ++version_num > 1) {
+        }
+
+        if (first_one) {
+            atom_merge.Init(merged_key, merged_value, it->key(), it->value(), cur_type_);
+            first_one = false;
+        } else {
+            if (last_qual_ != qual || last_col_ != col || last_key_ != key) {
+                break; // out of the current cell
+            }
+
+            if (!IsAtomicOP(type) && type != leveldb::TKT_VALUE) {
                 break;
+            } else if (type == leveldb::TKT_VALUE) {
+                if (!merge_put_flag || ++version_num > 1) {
+                    break;
+                }
+            }
+            if (ts != last_ts_atomic || type ==  leveldb::TKT_VALUE) {
+                atom_merge.MergeStep(it->key(), it->value(), type);
             }
         }
 
-        if (ts != last_ts_atomic || type ==  leveldb::TKT_VALUE) {
-            atom_merge.MergeStep(it->key(), it->value(), type);
-        }
         last_ts_atomic = ts;
         it->Next();
     }
