@@ -17,6 +17,7 @@
 #include "common/base/string_format.h"
 #include "common/base/string_number.h"
 #include "common/file/file_path.h"
+#include "common/timer.h"
 #include "db/filename.h"
 #include "io/io_utils.h"
 #include "io/utils_leveldb.h"
@@ -59,13 +60,13 @@ std::ostream& operator << (std::ostream& o, const TabletPtr& tablet) {
 
 Tablet::Tablet(const TabletMeta& meta)
     : meta_(meta),
-      update_time_(0),
+      update_time_(common::timer::get_micros()),
       load_time_(std::numeric_limits<int64_t>::max()) {}
 
 Tablet::Tablet(const TabletMeta& meta, TablePtr table)
     : meta_(meta),
       table_(table),
-      update_time_(0),
+      update_time_(common::timer::get_micros()),
       load_time_(std::numeric_limits<int64_t>::max()) {}
 
 Tablet::~Tablet() {
