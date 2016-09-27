@@ -225,6 +225,7 @@ void TabletWriter::BatchRequest(const std::vector<const RowMutationSequence*>& r
                 batch->Delete(tera_key);
             }
         } else {
+            int64_t add_ts = 0, nonadd_ts = 0;
             for (int32_t t = 0; t < mu_num; ++t) {
                 const Mutation& mu = row_mu.mutation_sequence().Get(t);
                 std::string tera_key;
@@ -263,6 +264,19 @@ void TabletWriter::BatchRequest(const std::vector<const RowMutationSequence*>& r
                     mu.has_timestamp() && mu.timestamp() < timestamp) {
                     timestamp = mu.timestamp();
                 }
+                // for ADD ops, use first add's timestamp
+                if (type >= leveldb::TKT_ADD) {
+                    if (add_ts == 0) {
+                        add_ts = mu.timestamp();
+                    }
+                    timestamp = add_ts;
+                } else {
+                    if (nonadd_ts == 0) {
+                        nonadd_ts = timestamp;
+                    }
+                    timestamp = nonadd_ts;
+                }
+
                 tablet_->GetRawKeyOperator()->EncodeTeraKey(row_key, mu.family(), mu.qualifier(),
                                                             timestamp, type, &tera_key);
                 uint32_t lg_id = 0;

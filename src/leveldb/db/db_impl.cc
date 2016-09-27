@@ -139,7 +139,7 @@ DBImpl::DBImpl(const Options& options, const std::string& dbname)
       bg_cv_(&mutex_),
       writting_mem_cv_(&mutex_),
       is_writting_mem_(false),
-      mem_(NewMemTable()),
+      mem_(NULL),
       imm_(NULL), recover_mem_(NULL),
       logfile_(NULL),
       logfile_number_(0),
@@ -152,6 +152,7 @@ DBImpl::DBImpl(const Options& options, const std::string& dbname)
       manual_compaction_(NULL),
       consecutive_compaction_errors_(0),
       flush_on_destroy_(false) {
+  mem_ = NewMemTable();
   mem_->Ref();
   has_imm_.Release_Store(NULL);
 
@@ -1175,7 +1176,7 @@ Status DBImpl::DoCompactionWork(CompactionState* compact) {
         //     few iterations of this loop (by rule (A) above).
         // Therefore this deletion marker is obsolete and can be dropped.
         drop = true;
-      } else if (compact_strategy) {
+      } else if (compact_strategy && ikey.sequence <= compact->smallest_snapshot) {
         std::string lower_bound;
         if (options_.drop_base_level_del_in_compaction) {
             lower_bound = compact->compaction->drop_lower_bound();
@@ -1209,7 +1210,7 @@ Status DBImpl::DoCompactionWork(CompactionState* compact) {
       }
       compact->current_output()->largest.DecodeFrom(key);
 
-      if (compact_strategy) {
+      if (compact_strategy && ikey.sequence <= compact->smallest_snapshot) {
           std::string merged_value;
           std::string merged_key;
           has_atom_merged = compact_strategy->MergeAtomicOPs(
@@ -1793,12 +1794,17 @@ MemTable* DBImpl::NewMemTable() const {
                   options_.enable_strategy_when_get ? options_.compact_strategy_factory : NULL);
     } else {
         Logger* info_log = NULL;
-        // Logger* info_log = options_.info_log;
-        return new MemTableOnLevelDB(internal_comparator_,
-                                     options_.compact_strategy_factory,
-                                     options_.memtable_ldb_write_buffer_size,
-                                     options_.memtable_ldb_block_size,
-                                     info_log);
+        //Logger* info_log = options_.info_log;
+        MemTableOnLevelDB* new_mem =new MemTableOnLevelDB(internal_comparator_,
+                                    options_.compact_strategy_factory,
+                                    options_.memtable_ldb_write_buffer_size,
+                                    options_.memtable_ldb_block_size,
+                                    info_log);
+        std::multiset<uint64_t>::iterator i = snapshots_.begin();
+        for (; i != snapshots_.end(); ++i) {
+            new_mem->GetSnapshot(*i);
+        }
+        return new_mem;
     }
 }
 
