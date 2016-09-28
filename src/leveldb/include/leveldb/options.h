@@ -337,6 +337,11 @@ struct ReadOptions {
   // Default: NULL
   std::set<uint32_t>* target_lgs;
 
+  // if read a single row, optimization may be applied to this read
+  bool read_single_row;
+  std::string row_start_key;  // start key of this row
+  std::string row_end_key;    // start key of next row
+
   // db option
   const Options* db_opt;
 
@@ -345,6 +350,7 @@ struct ReadOptions {
         fill_cache(true),
         snapshot(kMaxSequenceNumber),
         target_lgs(NULL),
+        read_single_row(false),
         db_opt(db_option) {
   }
   ReadOptions() {

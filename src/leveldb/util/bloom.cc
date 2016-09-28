@@ -8,6 +8,7 @@
 
 #include "leveldb/filter_policy.h"
 
+#include "leveldb/raw_key_operator.h"
 #include "leveldb/slice.h"
 #include "util/hash.h"
 
@@ -99,6 +100,41 @@ class BloomFilterPolicy : public FilterPolicy {
     return true;
   }
 };
+
+class RowKeyBloomFilterPolicy : public BloomFilterPolicy {
+ private:
+  const RawKeyOperator* raw_key_operator_;
+
+ public:
+  explicit RowKeyBloomFilterPolicy(int bits_per_key, BloomHashMethod hash_method,
+                                   const RawKeyOperator* raw_key_operator)
+      : BloomFilterPolicy(bits_per_key, hash_method),
+        raw_key_operator_(raw_key_operator) {
+  }
+
+  virtual const char* Name() const {
+    return "tera.RowKeyBloomFilter";
+  }
+
+  virtual void CreateFilter(const Slice* keys, int n, std::string* dst) const {
+    Slice* row_keys = new Slice[n];
+    for (int i = 0; i < n; i++) {
+      raw_key_operator_->ExtractTeraKey(keys[i], &row_keys[i], NULL, NULL, NULL, NULL);
+    }
+    BloomFilterPolicy::CreateFilter(row_keys, n, dst);
+    delete[] row_keys;
+  }
+
+  virtual bool KeyMayMatch(const Slice& key, const Slice& bloom_filter) const {
+    Slice row_key;
+    if (raw_key_operator_->ExtractTeraKey(key, &row_key, NULL, NULL, NULL, NULL)) {
+      return BloomFilterPolicy::KeyMayMatch(row_key, bloom_filter);
+    } else {
+      return true;
+    }
+  }
+};
+
 }
 
 const FilterPolicy* NewBloomFilterPolicy(int bits_per_key) {
@@ -107,6 +143,10 @@ const FilterPolicy* NewBloomFilterPolicy(int bits_per_key) {
 
 const FilterPolicy* NewTTLKvBloomFilterPolicy(int bits_per_key) {
   return new BloomFilterPolicy(bits_per_key, TTLKvBloomHash);
+}
+
+const FilterPolicy* NewRowKeyBloomFilterPolicy(int bits_per_key, const RawKeyOperator* raw_key_operator) {
+  return new RowKeyBloomFilterPolicy(bits_per_key, BuiltInBloomHash, raw_key_operator);
 }
 
 }  // namespace leveldb

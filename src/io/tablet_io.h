@@ -184,6 +184,8 @@ private:
 
     void SetupIteratorOptions(const ScanOptions& scan_options,
                               leveldb::ReadOptions* leveldb_opts);
+    void SetupSingleRowIteratorOptions(const std::string& row_key,
+                                       leveldb::ReadOptions* opts);
     void TearDownIteratorOptions(leveldb::ReadOptions* opts);
 
     void ProcessRowBuffer(std::list<KeyValuePair>& row_buf,
@@ -192,9 +194,10 @@ private:
                           uint32_t* buffer_size,
                           int64_t* number_limit);
 
-    StatusCode InitedScanInterator(const std::string& start_tera_key,
-                                   const ScanOptions& scan_options,
-                                   leveldb::Iterator** scan_it);
+    StatusCode InitedScanIterator(const std::string& start_tera_key,
+                                  const std::string& end_row_key,
+                                  const ScanOptions& scan_options,
+                                  leveldb::Iterator** scan_it);
 
     bool ScanRowsRestricted(const ScanTabletRequest* request,
                             ScanTabletResponse* response,
