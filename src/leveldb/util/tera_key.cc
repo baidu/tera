@@ -11,6 +11,22 @@
 
 namespace leveldb {
 
+bool TeraKey::IsTypeAllowUserSetTimestamp(TeraKeyType type) {
+    bool is_allow = false;
+    switch (type) {
+    case TKT_DEL:
+    case TKT_DEL_COLUMN:
+    case TKT_DEL_QUALIFIERS:
+    case TKT_DEL_QUALIFIER:
+    case TKT_VALUE:
+        is_allow = true;
+        break;
+    default:
+        break;
+    }
+    return is_allow;
+}
+
 TeraKey::TeraKey(const RawKeyOperator* op)
     : operator_(op), is_empty_(true) {
 }

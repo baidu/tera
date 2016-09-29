@@ -934,19 +934,22 @@ inline bool TabletIO::LowLevelScan(const std::string& start_tera_key,
             last_col.assign(col.data(), col.size());
             last_qual.assign(qual.data(), qual.size());
             version_num = 1;
-            int64_t merged_num;
+            int64_t merged_num = 0;
             has_merged =
                 compact_strategy->ScanMergedValue(it, &merged_value, &merged_num);
-            VLOG(10) << "has_merged:" << has_merged;
             if (has_merged) {
-                counter_.low_read_cell.Add(merged_num);
+                counter_.low_read_cell.Add(merged_num - 1);
                 value = merged_value;
                 key = last_key;
                 col = last_col;
                 qual = last_qual;
-                VLOG(10) << "ll-scan: merge: " << std::string(key.data())
-                    << ":" << std::string(col.data())
-                    << ":" << std::string(qual.data());
+
+                VLOG(10) << "ll-scan merge: " << "key=[" << DebugString(key.ToString())
+                    << "] column=[" << DebugString(col.ToString())
+                    << ":" << DebugString(qual.ToString())
+                    << "] ts=[" << ts << "] type=[" << type << "]"
+                    << " value=[" << DebugString(value.ToString())
+                    << "] merged=" << merged_num;
             }
         }
 
@@ -1153,7 +1156,7 @@ bool TabletIO::LowLevelSeek(const std::string& row_key,
                 bool has_merged =
                     compact_strategy->ScanMergedValue(it_data, &merged_value, &merged_num);
                 if (has_merged) {
-                    counter_.low_read_cell.Add(merged_num);
+                    counter_.low_read_cell.Add(merged_num - 1);
                     kv->set_value(merged_value);
                 } else {
                     leveldb::Slice value = it_data->value();

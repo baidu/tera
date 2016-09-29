@@ -30,6 +30,8 @@ class RawKeyOperator;
 
 class TeraKey {
 public:
+    static bool IsTypeAllowUserSetTimestamp(TeraKeyType type);
+
     explicit TeraKey(const RawKeyOperator* op);
     explicit TeraKey(const TeraKey& tk);
     ~TeraKey();
