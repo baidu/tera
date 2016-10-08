@@ -662,7 +662,7 @@ public:
 
 private:
     Status OpenFile() {
-        if (dfs_env_->FileExists(fname_hdfs_)) {
+        if (dfs_env_->FileExists(fname_hdfs_).ok()) {
             Status s = dfs_env_->GetFileSize(fname_hdfs_, &size_);
             if (!s.ok()) {
                 return Status::IOError("hdfs GetFileSize fail: ", fname_hdfs_);
@@ -820,7 +820,7 @@ public:
 
 private:
     Status OpenFile() {
-        if (dfs_env_->FileExists(fname_hdfs_)) {
+        if (dfs_env_->FileExists(fname_hdfs_).ok()) {
             Status s = dfs_env_->GetFileSize(fname_hdfs_, &size_);
             if (!s.ok()) {
                 return Status::IOError("hdfs GetFileSize fail: ", fname_hdfs_);
@@ -998,7 +998,7 @@ Status ThreeLevelCacheEnv::NewWritableFile(const std::string& fname,
     return Status::OK();
 }
 
-bool ThreeLevelCacheEnv::FileExists(const std::string& fname) {
+Status ThreeLevelCacheEnv::FileExists(const std::string& fname) {
     return dfs_env_->FileExists(fname);
 }
 

@@ -1626,8 +1626,7 @@ TEST(DBTest, MissingSSTFile) {
   Options options = CurrentOptions();
   options.paranoid_checks = true;
   Status s = TryReopen(&options);
-  // caution: allow sst missing
-  ASSERT_TRUE(s.ok());
+  ASSERT_TRUE(!s.ok());
   //ASSERT_TRUE(s.ToString().find("issing") != std::string::npos)
   //    << s.ToString();
 }

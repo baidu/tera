@@ -101,7 +101,7 @@ class DBImpl : public DB {
                                 SequenceNumber* latest_snapshot);
 
   Status NewDB();
-  bool IsDbExist();
+  Status DbExists(bool* exists);
 
   void MaybeIgnoreError(Status* s) const;
 

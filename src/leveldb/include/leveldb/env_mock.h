@@ -1,9 +1,9 @@
-// Copyright (c) 2015, Baidu.com, Inc. All Rights Reserved
+// Copyright (c) 2016, Baidu.com, Inc. All Rights Reserved
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#ifndef  TERA_LEVELDB_ENV_DFS_H_
-#define  TERA_LEVELDB_ENV_DFS_H_
+#ifndef  TERA_LEVELDB_ENV_TEST_H_
+#define  TERA_LEVELDB_ENV_TEST_H_
 
 #include <stdio.h>
 #include <sys/syscall.h>
@@ -17,31 +17,30 @@
 #include "leveldb/dfs.h"
 #include "leveldb/env.h"
 #include "leveldb/status.h"
-#include "../../../utils/counter.h"
 
 namespace leveldb {
 
-class DfsEnv : public EnvWrapper {
+class MockEnv : public EnvWrapper {
 public:
-    DfsEnv(Dfs* dfs);
+    MockEnv();
 
-    virtual ~DfsEnv();
+    virtual ~MockEnv();
+    void SetPrefix(const std::string& p);
+    void ResetMock();
 
+    void SetNewSequentialFileFailedCallback(bool (*p)(int32_t i, const std::string& fname));
+    void SetSequentialFileReadCallback(bool (*p)(int32_t i, char* scratch, size_t* mock_size));
     virtual Status NewSequentialFile(const std::string& fname, SequentialFile** result);
 
     virtual Status NewRandomAccessFile(const std::string& fname, RandomAccessFile** result);
 
     virtual Status NewWritableFile(const std::string& fname, WritableFile** result);
 
-    // Returns:
-    //   OK:       exists
-    //   NotFound: not found
-    //   TimeOut:  timeout
-    //   IOError:  other errors
     virtual Status FileExists(const std::string& fname);
 
     bool CheckDelete(const std::string& fname, std::vector<std::string>* flags);
 
+    void SetGetChildrenCallback(bool (*p)(int32_t i, const std::string& fname));
     virtual Status GetChildren(const std::string& path, std::vector<std::string>* result);
 
     virtual Status DeleteFile(const std::string& fname);
@@ -66,21 +65,10 @@ public:
         pid_t tid = syscall(SYS_gettid);
         return tid;
     }
-private:
-    Dfs* dfs_;
 };
 
-/// Init dfs env
-void InitDfsEnv(const std::string& so_path, const std::string& conf);
-void InitHdfsEnv();
-void InitHdfs2Env(const std::string& namenode_list);
-void InitNfsEnv(const std::string& mountpoint,
-                const std::string& conf_path);
-/// default dfs env
-Env* EnvDfs();
-/// new dfs env
-Env* NewDfsEnv(Dfs*);
+Env* NewMockEnv();
 
-}  // namespace leveldb
+} // namespace leveldb
 
 #endif  // TERA_LEVELDB_ENV_DFS_H_

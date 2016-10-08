@@ -1123,7 +1123,8 @@ Status VersionSet::LogAndApply(VersionEdit* edit, port::Mutex* mu) {
   return s;
 }
 
-Status VersionSet::ReadCurrentFile(uint64_t tablet, std::string* dscname ) {
+// reads contents of CURRENT and stores to *dscname
+Status VersionSet::ReadCurrentFile(uint64_t tablet, std::string* dscname) {
   Status s;
   std::string pdbname;
   if (tablet > 0) {
@@ -1134,21 +1135,78 @@ Status VersionSet::ReadCurrentFile(uint64_t tablet, std::string* dscname ) {
   std::string current;
   s = ReadFileToString(env_, CurrentFileName(pdbname), &current);
   if (!s.ok()) {
-    Log(options_->info_log, "[%s] current file lost: %s.",
+    Log(options_->info_log, "[%s] read CURRENT failed: %s.",
         dbname_.c_str(), CurrentFileName(pdbname).c_str());
+    s = env_->FileExists(CurrentFileName(pdbname));
+    if (s.IsNotFound()) {
+      // lost CURRENT
+      if (options_->ignore_corruption_in_open) {
+        // try to failover: find and use the newest mainfest
+        Log(options_->info_log, "[%s] lost CURRENT but ignore_corruption_in_open: %s.",
+            dbname_.c_str(), CurrentFileName(pdbname).c_str());
+      } else {
+        Log(options_->info_log, "[%s] lost CURRENT and NOT ignore_corruption_in_open: %s.",
+            dbname_.c_str(), CurrentFileName(pdbname).c_str());
+        return Status::IOError("CURRENT lost");
+      }
+    } else {
+      // status of current is unknown
+      Log(options_->info_log, "[%s]status of CURRENT is unknown: %s.",
+          dbname_.c_str(), CurrentFileName(pdbname).c_str());
+      return Status::IOError("status of CURRENT is unknown");
+    }
   } else if (current.empty() || current[current.size()-1] != '\n') {
     Log(options_->info_log, "[%s] current file error: %s, content:\"%s\", size:%lu.",
         dbname_.c_str(), CurrentFileName(pdbname).c_str(),
         current.c_str(), current.size());
-    ArchiveFile(env_, CurrentFileName(pdbname));
+    if (options_->ignore_corruption_in_open) {
+      ArchiveFile(env_, CurrentFileName(pdbname));
+    } else {
+      return Status::Corruption("CURRENT corruption");
+    }
   } else {
     current.resize(current.size() - 1);
     *dscname = pdbname + "/" + current;
   }
 
+  // if program runs to here, there are only 2 possibilities
+  // 1). read CURRENT success
+  // 2). lost CURRENT and ignore_corruption_in_open
+  assert((s.ok())
+         || (options_->ignore_corruption_in_open && s.IsNotFound()));
+
+  if (s.ok()) {
+    // read CURRENT success
+    Status manifest_status = env_->FileExists(*dscname);
+
+    if (manifest_status.ok()) {
+      // read CURRENT success and manifest exists
+      // normal case
+      return Status::OK();
+    }
+
+    if (!manifest_status.ok() && !manifest_status.IsNotFound()) {
+      return Status::IOError("status of manifest the CURRENT pointed to is unknown");
+    }
+
+    // lost manifest
+
+    if (options_->ignore_corruption_in_open) {
+      s = Status::Corruption("lost manifest");
+    } else {
+      return Status::Corruption("lost manifest");
+    }
+  } else {
+    s = Status::Corruption("lost CURRENT");
+  }
+
+  // if program runs to here, there are only 2 possibilities
+  // 1). lost CURRENT
+  // 2). lost manifest
+
   // don't check manifest size because some dfs (eg. hdfs)
   // may return 0 even if the actual size is not 0
-  if (!s.ok() || !env_->FileExists(*dscname)) {
+  if (options_->ignore_corruption_in_open) {
     // manifest is not ready, now recover the backup manifest
     std::vector<std::string> files;
     env_->GetChildren(pdbname, &files);
@@ -1320,7 +1378,7 @@ Status VersionSet::Recover() {
     delete files[i];
     if (record_num == 0) {
       // empty manifest, delete it
-      ArchiveFile(env_, dscname[i]);
+      // ArchiveFile(env_, dscname[i]);
       return Status::Corruption("empty manifest:" + s.ToString());
     }
     if (s.ok()) {
@@ -1333,7 +1391,7 @@ Status VersionSet::Recover() {
     } else {
       Log(options_->info_log, "[%s] recover manifest fail %s, %s\n",
           dbname_.c_str(), dscname[i].c_str(), s.ToString().c_str());
-      ArchiveFile(env_, dscname[i]);
+      // ArchiveFile(env_, dscname[i]);
       return Status::Corruption("recover manifest fail:" + s.ToString());
     }
   }

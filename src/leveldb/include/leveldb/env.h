@@ -86,8 +86,12 @@ class Env {
   virtual Status NewWritableFile(const std::string& fname,
                                  WritableFile** result) = 0;
 
-  // Returns true iff the named file exists.
-  virtual bool FileExists(const std::string& fname) = 0;
+  // Returns:
+  //   OK:       exists
+  //   NotFound: not found
+  //   TimeOut:  timeout
+  //   IOError:  other errors
+  virtual Status FileExists(const std::string& fname) = 0;
 
   // Store in *result the names of the children of the specified directory.
   // The names are relative to "dir".
@@ -340,7 +344,7 @@ class EnvWrapper : public Env {
   Status NewWritableFile(const std::string& f, WritableFile** r) {
     return target_->NewWritableFile(f, r);
   }
-  bool FileExists(const std::string& f) { return target_->FileExists(f); }
+  Status FileExists(const std::string& f) { return target_->FileExists(f); }
   Status GetChildren(const std::string& dir, std::vector<std::string>* r) {
     return target_->GetChildren(dir, r);
   }

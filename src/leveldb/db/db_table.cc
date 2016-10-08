@@ -251,7 +251,7 @@ Status DBTable::Init() {
                 last_sequence_ = last_seq;
             }
         } else {
-            Log(options_.info_log, "[%s] fail to recover lg %d", dbname_.c_str(), i);
+            Log(options_.info_log, "[%s] fail to recover lg %d for %s", dbname_.c_str(), i, s.ToString().c_str());
             break;
         }
     }

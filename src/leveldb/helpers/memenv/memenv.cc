@@ -280,9 +280,13 @@ class MemoryEnv : public EnvWrapper {
     return Status::OK();
   }
 
-  virtual bool FileExists(const std::string& fname) {
+  virtual Status FileExists(const std::string& fname) {
     MutexLock lock(&mutex_);
-    return file_map_.find(fname) != file_map_.end();
+    if (file_map_.find(fname) != file_map_.end()) {
+      return Status::OK();
+    } else {
+      return Status::NotFound(fname);
+    }
   }
 
   virtual Status GetChildren(const std::string& dir, std::vector<std::string>* result) {

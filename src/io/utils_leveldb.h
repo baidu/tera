@@ -24,6 +24,10 @@ leveldb::Env* LeveldbMemEnv();
 // return the flash env leveldb used, singleton
 leveldb::Env* LeveldbFlashEnv();
 
+// return the mock env leveldb used, singleton
+// for testing
+leveldb::Env* LeveldbMockEnv();
+
 std::string GetTrashDir();
 
 bool MoveEnvDirToTrash(const std::string& subdir);
