@@ -19,6 +19,7 @@
 #include "leveldb/env_dfs.h"
 #include "leveldb/env_flash.h"
 #include "leveldb/env_inmem.h"
+#include "leveldb/env_mock.h"
 #include "leveldb/table_utils.h"
 #include "utils/timer.h"
 
@@ -89,6 +90,10 @@ leveldb::Env* LeveldbFlashEnv() {
     return flash_env;
 }
 
+leveldb::Env* LeveldbMockEnv() {
+    return leveldb::NewMockEnv();
+}
+
 std::string GetTrashDir() {
     const std::string trash("#trash");
     return FLAGS_tera_tabletnode_path_prefix + "/" + trash;
@@ -97,18 +102,31 @@ std::string GetTrashDir() {
 bool MoveEnvDirToTrash(const std::string& tablename) {
     leveldb::Env* env = LeveldbBaseEnv();
     std::string src_dir = FLAGS_tera_tabletnode_path_prefix + "/" + tablename;
-    if (!env->FileExists(src_dir)) {
+    leveldb::Status s = env->FileExists(src_dir);
+    if (s.ok()) {
+        // exists, do nothing in here
+    } else if(s.IsNotFound()) {
+        // not found, so no need to delete
         return true;
+    } else {
+        // unknown status
+        return false;
     }
 
     std::string trash_dir = GetTrashDir();
-    if (!env->FileExists(trash_dir)) {
+    s = env->FileExists(trash_dir);
+    if (s.IsNotFound()) {
         if (!env->CreateDir(trash_dir).ok()) {
             LOG(ERROR) << "fail to create trash dir: " << trash_dir;
             return false;
         } else {
             LOG(INFO) << "succeed in creating trash dir: " << trash_dir;
         }
+    } else if (s.ok()) {
+        // trash dir exists, do nothing in here
+    } else {
+        // unknown status
+        return false;
     }
 
     std::string time = get_curtime_str();

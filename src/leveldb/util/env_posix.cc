@@ -584,9 +584,16 @@ class PosixEnv : public Env {
     return s;
   }
 
-  virtual bool FileExists(const std::string& fname) {
+  virtual Status FileExists(const std::string& fname) {
     posix_exists_counter.Inc();
-    return access(fname.c_str(), F_OK) == 0;
+    int32_t retval = access(fname.c_str(), F_OK);
+    if (retval == 0) {
+      return Status::OK();
+    } else if (errno == ENOENT) {
+      return Status::NotFound("filestatus", fname);
+    } else {
+      return Status::IOError(fname);
+    }
   }
 
   virtual Status GetChildren(const std::string& dir, std::vector<std::string>* result) {

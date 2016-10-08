@@ -290,6 +290,17 @@ struct Options {
   // disable write-ahead-log
   bool disable_wal;
 
+  // Ignore data corruption in DB::Open
+  // Default: false
+  //   1). TODO(taocipian)
+  //       CURRENT corruption
+  //       try to use lastest valid manifest rebuild CURRENT
+  //   2). TODO(taocipian)
+  //       the manifest which CURRENT pointed to was lost
+  //       try to use lastest valid manifest
+  //   3). ignore sst lost
+  bool ignore_corruption_in_open;
+
   // Create an Options object with default values for all fields.
   Options();
 };

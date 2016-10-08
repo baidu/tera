@@ -32,7 +32,7 @@ public:
     virtual Status NewWritableFile(const std::string& fname,
             WritableFile** result);
 
-    virtual bool FileExists(const std::string& fname);
+    virtual Status FileExists(const std::string& fname);
 
     bool CheckDelete(const std::string& fname, std::vector<std::string>* flags);
 

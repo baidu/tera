@@ -49,7 +49,8 @@ Options::Options()
       sst_size(kDefaultSstSize),
       verify_checksums_in_compaction(false),
       ignore_corruption_in_compaction(false),
-      disable_wal(false) {
+      disable_wal(false),
+      ignore_corruption_in_open(false) {
 }
 
 }  // namespace leveldb
