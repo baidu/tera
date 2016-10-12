@@ -298,7 +298,7 @@ private:
         return (GetCharTypeMask(c) & mask) != 0;
     }
 
-    static bool CharIncludeAallTypeMask(char c, int mask)
+    static bool CharIncludeAllTypeMask(char c, int mask)
     {
         return (GetCharTypeMask(c) & mask) == mask;
     }
