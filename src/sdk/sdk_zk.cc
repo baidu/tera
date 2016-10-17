@@ -26,32 +26,32 @@ namespace sdk {
 
 std::string ClusterFinder::MasterAddr(bool update) {
     std::string master_addr;
-    if (update || _master_addr == "") {
+    if (update || master_addr_ == "") {
         if (!ReadNode(kMasterNodePath, &master_addr)) {
             master_addr = "";
         }
     }
     if (!master_addr.empty()) {
-        MutexLock lock(&_mutex);
-        _master_addr = master_addr;
-        LOG(INFO) << "master addr: " << _master_addr;
+        MutexLock lock(&mutex_);
+        master_addr_ = master_addr;
+        LOG(INFO) << "master addr: " << master_addr_;
     }
-    return _master_addr;
+    return master_addr_;
 }
 
 std::string ClusterFinder::RootTableAddr(bool update) {
     std::string root_table_addr;
-    if (update || _root_table_addr == "") {
+    if (update || root_table_addr_ == "") {
         if (!ReadNode(kRootTabletNodePath, &root_table_addr)) {
             root_table_addr = "";
         }
     }
     if (!root_table_addr.empty()) {
-        MutexLock lock(&_mutex);
-        _root_table_addr = root_table_addr;
-        LOG(INFO) << "root addr: " << _root_table_addr;
+        MutexLock lock(&mutex_);
+        root_table_addr_ = root_table_addr;
+        LOG(INFO) << "root addr: " << root_table_addr_;
     }
-    return _root_table_addr;
+    return root_table_addr_;
 }
 
 std::string ClusterFinder::ClusterId() {
@@ -71,7 +71,7 @@ std::string ClusterFinder::ClusterId() {
 
 ZkClusterFinder::ZkClusterFinder(const std::string& zk_root_path,
                                  const std::string& zk_addr_list)
-    : _zk_root_path(zk_root_path), _zk_addr_list(zk_addr_list) {
+    : zk_root_path_(zk_root_path), zk_addr_list_(zk_addr_list) {
 }
 
 static pthread_once_t zk_init_once = PTHREAD_ONCE_INIT;
@@ -85,7 +85,7 @@ bool ZkClusterFinder::ReadNode(const std::string& name, std::string* value) {
 
     int zk_errno = tera::zk::ZE_OK;
     zk::ZooKeeperLightAdapter zk_adapter;
-    if (!zk_adapter.Init(_zk_addr_list, _zk_root_path, 1000 * 15, "", &zk_errno)) {
+    if (!zk_adapter.Init(zk_addr_list_, zk_root_path_, 1000 * 15, "", &zk_errno)) {
         LOG(ERROR) << "Init zookeeper fail: " << tera::zk::ZkErrnoToString(zk_errno);
         return false;
     }
@@ -99,13 +99,13 @@ bool ZkClusterFinder::ReadNode(const std::string& name, std::string* value) {
 
 InsClusterFinder::InsClusterFinder(const std::string& ins_root_path,
                                    const std::string& ins_addr_list)
-    : _ins_root_path(ins_root_path), _ins_addr_list(ins_addr_list) {
+    : ins_root_path_(ins_root_path), ins_addr_list_(ins_addr_list) {
 }
 
 bool InsClusterFinder::ReadNode(const std::string& name, std::string* value) {
-    galaxy::ins::sdk::InsSDK ins_sdk(_ins_addr_list);
+    galaxy::ins::sdk::InsSDK ins_sdk(ins_addr_list_);
     galaxy::ins::sdk::SDKError err;
-    if (!ins_sdk.Get(_ins_root_path + name, value, &err)) {
+    if (!ins_sdk.Get(ins_root_path_ + name, value, &err)) {
         LOG(ERROR) << "ins read " << name << " fail: " << err;
         return false;
     }
@@ -113,11 +113,11 @@ bool InsClusterFinder::ReadNode(const std::string& name, std::string* value) {
 }
 
 FakeZkClusterFinder::FakeZkClusterFinder(const std::string& fake_zk_path_prefix)
-    : _fake_zk_path_prefix(fake_zk_path_prefix) {
+    : fake_zk_path_prefix_(fake_zk_path_prefix) {
 }
 
 bool FakeZkClusterFinder::ReadNode(const std::string& name, std::string* value) {
-    return zk::FakeZkUtil::ReadNode(_fake_zk_path_prefix + name, value);
+    return zk::FakeZkUtil::ReadNode(fake_zk_path_prefix_ + name, value);
 }
 
 ClusterFinder* NewClusterFinder() {

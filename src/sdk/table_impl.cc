@@ -64,28 +64,28 @@ namespace tera {
 TableImpl::TableImpl(const std::string& table_name,
                      common::ThreadPool* thread_pool,
                      sdk::ClusterFinder* cluster)
-    : _name(table_name),
-      _last_sequence_id(0),
-      _timeout(FLAGS_tera_sdk_timeout),
-      _commit_size(FLAGS_tera_sdk_batch_size),
-      _write_commit_timeout(FLAGS_tera_sdk_write_send_interval),
-      _read_commit_timeout(FLAGS_tera_sdk_read_send_interval),
-      _mutation_batch_seq(0),
-      _reader_batch_seq(0),
-      _max_commit_pending_num(FLAGS_tera_sdk_max_mutation_pending_num),
-      _max_reader_pending_num(FLAGS_tera_sdk_max_reader_pending_num),
-      _meta_cond(&_meta_mutex),
-      _meta_updating_count(0),
-      _table_meta_cond(&_table_meta_mutex),
-      _table_meta_updating(false),
-      _task_pool(thread_pool),
-      _thread_pool(thread_pool),
-      _cluster(cluster),
-      _cluster_private(false),
-      _pending_timeout_ms(FLAGS_tera_rpc_timeout_period) {
-    if (_cluster == NULL) {
-        _cluster = sdk::NewClusterFinder();
-        _cluster_private = true;
+    : name_(table_name),
+      last_sequence_id_(0),
+      timeout_(FLAGS_tera_sdk_timeout),
+      commit_size_(FLAGS_tera_sdk_batch_size),
+      write_commit_timeout_(FLAGS_tera_sdk_write_send_interval),
+      read_commit_timeout_(FLAGS_tera_sdk_read_send_interval),
+      mutation_batch_seq_(0),
+      reader_batch_seq_(0),
+      max_commit_pending_num_(FLAGS_tera_sdk_max_mutation_pending_num),
+      max_reader_pending_num_(FLAGS_tera_sdk_max_reader_pending_num),
+      meta_cond_(&meta_mutex_),
+      meta_updating_count_(0),
+      table_meta_cond_(&table_meta_mutex_),
+      table_meta_updating_(false),
+      task_pool_(thread_pool),
+      thread_pool_(thread_pool),
+      cluster_(cluster),
+      cluster_private_(false),
+      pending_timeout_ms_(FLAGS_tera_rpc_timeout_period) {
+    if (cluster_ == NULL) {
+        cluster_ = sdk::NewClusterFinder();
+        cluster_private_ = true;
     }
 }
 
@@ -94,8 +94,8 @@ TableImpl::~TableImpl() {
     if (FLAGS_tera_sdk_cookie_enabled) {
         DoDumpCookie();
     }
-    if (_cluster_private) {
-        delete _cluster;
+    if (cluster_private_) {
+        delete cluster_;
     }
 }
 
@@ -122,7 +122,7 @@ void TableImpl::ApplyMutation(RowMutation* row_mu) {
         ThreadPool::Task task =
             boost::bind(&RowMutationImpl::RunCallback,
                         static_cast<RowMutationImpl*>(row_mu));
-        _thread_pool->AddTask(task);
+        thread_pool_->AddTask(task);
         return;
     }
     std::vector<RowMutationImpl*> mu_list;
@@ -137,7 +137,7 @@ void TableImpl::ApplyMutation(const std::vector<RowMutation*>& row_mutations) {
             ThreadPool::Task task =
                 boost::bind(&RowMutationImpl::RunCallback,
                             static_cast<RowMutationImpl*>(row_mutations[i]));
-            _thread_pool->AddTask(task);
+            thread_pool_->AddTask(task);
             continue;
         }
         mu_list.push_back(static_cast<RowMutationImpl*>(row_mutations[i]));
@@ -319,9 +319,9 @@ bool TableImpl::Get(const std::string& row_key, const std::string& family,
 
 ResultStream* TableImpl::Scan(const ScanDescriptor& desc, ErrorCode* err) {
     ScanDescImpl * impl = desc.GetImpl();
-    impl->SetTableSchema(_table_schema);
+    impl->SetTableSchema(table_schema_);
     ResultStream * results = NULL;
-    if (desc.IsAsync() && (_table_schema.raw_key() != GeneralKv)) {
+    if (desc.IsAsync() && (table_schema_.raw_key() != GeneralKv)) {
         VLOG(6) << "activate async-scan";
         results = new ResultStreamBatchImpl(this, impl);
     } else {
@@ -345,8 +345,8 @@ void TableImpl::ScanTabletAsync(ResultStreamImpl* stream) {
 
 void TableImpl::ScanTabletAsync(ScanTask* scan_task, bool called_by_user) {
     if (called_by_user) {
-        scan_task->SetId(_next_task_id.Inc());
-        _task_pool.PutTask(scan_task);
+        scan_task->SetId(next_task_id_.Inc());
+        task_pool_.PutTask(scan_task);
     }
 
     const std::string& row_key = scan_task->stream->GetScanDesc()->GetStartRowKey();
@@ -365,8 +365,8 @@ void TableImpl::CommitScan(ScanTask* scan_task,
     response->Clear();
 
     ScanDescImpl* impl = stream->GetScanDesc();
-    request->set_sequence_id(_last_sequence_id++);
-    request->set_table_name(_name);
+    request->set_sequence_id(last_sequence_id_++);
+    request->set_table_name(name_);
     request->set_start(impl->GetStartRowKey());
     request->set_end(impl->GetEndRowKey());
     request->set_snapshot_id(impl->GetSnapshot());
@@ -412,8 +412,8 @@ void TableImpl::ScanCallBack(ScanTask* scan_task,
                              ScanTabletRequest* request,
                              ScanTabletResponse* response,
                              bool failed, int error_code) {
-    _perf_counter.rpc_s.Add(common::timer::get_micros() - request->timestamp());
-    _perf_counter.rpc_s_cnt.Inc();
+    perf_counter_.rpc_s.Add(common::timer::get_micros() - request->timestamp());
+    perf_counter_.rpc_s_cnt.Inc();
     ResultStreamImpl* stream = scan_task->stream;
 
     if (failed) {
@@ -436,7 +436,7 @@ void TableImpl::ScanCallBack(ScanTask* scan_task,
 
     StatusCode err = response->status();
     if (err != kTabletNodeOk && err != kSnapshotNotExist) {
-        VLOG(10) << "fail to scan table: " << _name
+        VLOG(10) << "fail to scan table: " << name_
             << " errcode: " << StatusCodeToString(err);
     }
 
@@ -450,7 +450,7 @@ void TableImpl::ScanCallBack(ScanTask* scan_task,
         }
         stream->OnFinish(request, response);
         stream->ReleaseRpcHandle(request, response);
-        _task_pool.PopTask(scan_task->GetId());
+        task_pool_.PopTask(scan_task->GetId());
         CHECK_EQ(scan_task->GetRef(), 2);
         delete scan_task;
     } else {
@@ -461,7 +461,7 @@ void TableImpl::ScanCallBack(ScanTask* scan_task,
         int64_t retry_interval =
             static_cast<int64_t>(pow(FLAGS_tera_sdk_delay_send_internal,
                                      scan_task->RetryTimes() - 1) * 1000);
-        _thread_pool->DelayTask(retry_interval, retry_task);
+        thread_pool_->DelayTask(retry_interval, retry_task);
     }
 }
 
@@ -494,7 +494,7 @@ bool TableImpl::OpenInternal(ErrorCode* err) {
     if (FLAGS_tera_sdk_perf_counter_enabled) {
         DumpPerfCounterLogDelay();
     }
-    LOG(INFO) << "open table " << _name << " at cluster " << _cluster->ClusterId();
+    LOG(INFO) << "open table " << name_ << " at cluster " << cluster_->ClusterId();
     return true;
 }
 
@@ -518,7 +518,7 @@ void TableImpl::DistributeMutations(const std::vector<RowMutationImpl*>& mu_list
             RowMutationImpl* row_mutation = (RowMutationImpl*)mu_list[i];
             if (!row_mutation->IsAsync()) {
                 sync_mu_list.push_back(row_mutation);
-                int64_t row_timeout = row_mutation->TimeOut() > 0 ? row_mutation->TimeOut() : _timeout;
+                int64_t row_timeout = row_mutation->TimeOut() > 0 ? row_mutation->TimeOut() : timeout_;
                 if (row_timeout > 0 && (sync_min_timeout <= 0 || sync_min_timeout > row_timeout)) {
                     sync_min_timeout = row_timeout;
                 }
@@ -528,35 +528,35 @@ void TableImpl::DistributeMutations(const std::vector<RowMutationImpl*>& mu_list
 
     for (uint32_t i = 0; i < mu_list.size(); i++) {
         RowMutationImpl* row_mutation = (RowMutationImpl*)mu_list[i];
-        _perf_counter.mutate_cnt.Inc();
+        perf_counter_.mutate_cnt.Inc();
         if (called_by_user) {
-            row_mutation->SetId(_next_task_id.Inc());
+            row_mutation->SetId(next_task_id_.Inc());
 
             int64_t row_timeout = -1;
             if (!row_mutation->IsAsync()) {
                 row_timeout = sync_min_timeout;
             } else {
-                row_timeout = row_mutation->TimeOut() > 0 ? row_mutation->TimeOut() : _timeout;
+                row_timeout = row_mutation->TimeOut() > 0 ? row_mutation->TimeOut() : timeout_;
             }
             SdkTask::TimeoutFunc task = boost::bind(&TableImpl::MutationTimeout, this, _1);
-            _task_pool.PutTask(row_mutation, row_timeout, task);
+            task_pool_.PutTask(row_mutation, row_timeout, task);
         }
 
         // flow control
         if (called_by_user
-            && _cur_commit_pending_counter.Add(row_mutation->MutationNum()) > _max_commit_pending_num
+            && cur_commit_pending_counter_.Add(row_mutation->MutationNum()) > max_commit_pending_num_
             && row_mutation->IsAsync()) {
             if (FLAGS_tera_sdk_async_blocking_enabled) {
-                while (_cur_commit_pending_counter.Get() > _max_commit_pending_num) {
+                while (cur_commit_pending_counter_.Get() > max_commit_pending_num_) {
                     usleep(100000);
                 }
             } else {
-                _cur_commit_pending_counter.Sub(row_mutation->MutationNum());
+                cur_commit_pending_counter_.Sub(row_mutation->MutationNum());
                 row_mutation->SetError(ErrorCode::kBusy, "pending too much mutations, try it later.");
                 ThreadPool::Task task =
                     boost::bind(&TableImpl::BreakRequest, this, row_mutation->GetId());
                 row_mutation->DecRef();
-                _thread_pool->AddTask(task);
+                thread_pool_->AddTask(task);
                 continue;
             }
         }
@@ -590,7 +590,7 @@ void TableImpl::DistributeMutations(const std::vector<RowMutationImpl*>& mu_list
 
     // 等待同步操作返回或超时
     for (uint32_t i = 0; i < sync_mu_list.size(); i++) {
-        while (_cur_commit_pending_counter.Get() > _max_commit_pending_num) {
+        while (cur_commit_pending_counter_.Get() > max_commit_pending_num_) {
             usleep(100000);
         }
 
@@ -603,7 +603,7 @@ void TableImpl::DistributeMutationsById(std::vector<int64_t>* mu_id_list) {
     std::vector<RowMutationImpl*> mu_list;
     for (uint32_t i = 0; i < mu_id_list->size(); ++i) {
         int64_t mu_id = (*mu_id_list)[i];
-        SdkTask* task = _task_pool.GetTask(mu_id);
+        SdkTask* task = task_pool_.GetTask(mu_id);
         if (task == NULL) {
             VLOG(10) << "mutation " << mu_id << " timeout when retry mutate";;
             continue;
@@ -619,21 +619,21 @@ void TableImpl::DistributeMutationsById(std::vector<int64_t>* mu_id_list) {
 void TableImpl::PackMutations(const std::string& server_addr,
                               std::vector<RowMutationImpl*>& mu_list,
                               bool flush) {
-    MutexLock lock(&_mutation_batch_mutex);
+    MutexLock lock(&mutation_batch_mutex_);
     TaskBatch* mutation_batch = NULL;
     for (size_t i = 0; i < mu_list.size(); ++i) {
         // find existing batch or create a new batch
         if (mutation_batch == NULL) {
-            std::map<std::string, TaskBatch>::iterator it = _mutation_batch_map.find(server_addr);
-            if (it != _mutation_batch_map.end()) {
+            std::map<std::string, TaskBatch>::iterator it = mutation_batch_map_.find(server_addr);
+            if (it != mutation_batch_map_.end()) {
                 mutation_batch = &it->second;
             } else {
-                mutation_batch = &_mutation_batch_map[server_addr];
-                mutation_batch->sequence_num = _mutation_batch_seq++;
+                mutation_batch = &mutation_batch_map_[server_addr];
+                mutation_batch->sequence_num = mutation_batch_seq_++;
                 mutation_batch->row_id_list = new std::vector<int64_t>;
                 ThreadPool::Task task = boost::bind(&TableImpl::MutationBatchTimeout, this,
                                                     server_addr, mutation_batch->sequence_num);
-                int64_t timer_id = _thread_pool->DelayTask(_write_commit_timeout, task);
+                int64_t timer_id = thread_pool_->DelayTask(write_commit_timeout_, task);
                 mutation_batch->timer_id = timer_id;
                 mutation_batch->byte_size = 0;
             }
@@ -652,20 +652,20 @@ void TableImpl::PackMutations(const std::string& server_addr,
         // 3) batch_row_num >= min_batch_row_num
         if (mutation_batch->byte_size >= kMaxRpcSize ||
             (i == mu_list.size() - 1 &&
-             (flush || mutation_batch->row_id_list->size() >= _commit_size))) {
+             (flush || mutation_batch->row_id_list->size() >= commit_size_))) {
             std::vector<int64_t>* mu_id_list = mutation_batch->row_id_list;
             uint64_t timer_id = mutation_batch->timer_id;
             const bool non_block_cancel = true;
             bool is_running = false;
-            if (!_thread_pool->CancelTask(timer_id, non_block_cancel, &is_running)) {
-                CHECK(is_running); // this delay task must be waiting for _mutation_batch_mutex
+            if (!thread_pool_->CancelTask(timer_id, non_block_cancel, &is_running)) {
+                CHECK(is_running); // this delay task must be waiting for mutation_batch_mutex_
             }
-            _mutation_batch_map.erase(server_addr);
-            _mutation_batch_mutex.Unlock();
+            mutation_batch_map_.erase(server_addr);
+            mutation_batch_mutex_.Unlock();
             CommitMutationsById(server_addr, *mu_id_list);
             delete mu_id_list;
             mutation_batch = NULL;
-            _mutation_batch_mutex.Lock();
+            mutation_batch_mutex_.Lock();
         }
     }
 }
@@ -673,10 +673,10 @@ void TableImpl::PackMutations(const std::string& server_addr,
 void TableImpl::MutationBatchTimeout(std::string server_addr, uint64_t batch_seq) {
     std::vector<int64_t>* mu_id_list = NULL;
     {
-        MutexLock lock(&_mutation_batch_mutex);
+        MutexLock lock(&mutation_batch_mutex_);
         std::map<std::string, TaskBatch>::iterator it =
-            _mutation_batch_map.find(server_addr);
-        if (it == _mutation_batch_map.end()) {
+            mutation_batch_map_.find(server_addr);
+        if (it == mutation_batch_map_.end()) {
             return;
         }
         TaskBatch* mutation_batch = &it->second;
@@ -684,7 +684,7 @@ void TableImpl::MutationBatchTimeout(std::string server_addr, uint64_t batch_seq
             return;
         }
         mu_id_list = mutation_batch->row_id_list;
-        _mutation_batch_map.erase(it);
+        mutation_batch_map_.erase(it);
     }
     CommitMutationsById(server_addr, *mu_id_list);
     delete mu_id_list;
@@ -695,7 +695,7 @@ void TableImpl::CommitMutationsById(const std::string& server_addr,
     std::vector<RowMutationImpl*> mu_list;
     for (size_t i = 0; i < mu_id_list.size(); i++) {
         int64_t mu_id = mu_id_list[i];
-        SdkTask* task = _task_pool.GetTask(mu_id);
+        SdkTask* task = task_pool_.GetTask(mu_id);
         if (task == NULL) {
             VLOG(10) << "mutation " << mu_id << " timeout";
             continue;
@@ -711,8 +711,8 @@ void TableImpl::CommitMutations(const std::string& server_addr,
     tabletnode::TabletNodeClient tabletnode_client_async(server_addr);
     WriteTabletRequest* request = new WriteTabletRequest;
     WriteTabletResponse* response = new WriteTabletResponse;
-    request->set_sequence_id(_last_sequence_id++);
-    request->set_tablet_name(_name);
+    request->set_sequence_id(last_sequence_id_++);
+    request->set_tablet_name(name_);
     request->set_is_sync(FLAGS_tera_sdk_write_sync);
 
     std::vector<int64_t>* mu_id_list = new std::vector<int64_t>;
@@ -745,8 +745,8 @@ void TableImpl::MutateCallBack(std::vector<int64_t>* mu_id_list,
                                WriteTabletRequest* request,
                                WriteTabletResponse* response,
                                bool failed, int error_code) {
-    _perf_counter.rpc_w.Add(common::timer::get_micros() - request->timestamp());
-    _perf_counter.rpc_w_cnt.Inc();
+    perf_counter_.rpc_w.Add(common::timer::get_micros() - request->timestamp());
+    perf_counter_.rpc_w_cnt.Inc();
     if (failed) {
         if (error_code == sofa::pbrpc::RPC_ERROR_SERVER_SHUTDOWN ||
             error_code == sofa::pbrpc::RPC_ERROR_SERVER_UNREACHABLE ||
@@ -776,8 +776,8 @@ void TableImpl::MutateCallBack(std::vector<int64_t>* mu_id_list,
         }
 
         if (err == kTabletNodeOk || err == kTxnFail) {
-            _perf_counter.mutate_ok_cnt.Inc();
-            SdkTask* task = _task_pool.PopTask(mu_id);
+            perf_counter_.mutate_ok_cnt.Inc();
+            SdkTask* task = task_pool_.PopTask(mu_id);
             if (task == NULL) {
                 VLOG(10) << "mutation " << mu_id << " finish but timeout: " << DebugString(row);
                 continue;
@@ -792,20 +792,20 @@ void TableImpl::MutateCallBack(std::vector<int64_t>* mu_id_list,
             }
 
             // only for flow control
-            _cur_commit_pending_counter.Sub(row_mutation->MutationNum());
+            cur_commit_pending_counter_.Sub(row_mutation->MutationNum());
             int64_t perf_time = common::timer::get_micros();
             row_mutation->RunCallback();
-            _perf_counter.user_callback.Add(common::timer::get_micros() - perf_time);
-            _perf_counter.user_callback_cnt.Inc();
+            perf_counter_.user_callback.Add(common::timer::get_micros() - perf_time);
+            perf_counter_.user_callback_cnt.Inc();
             continue;
         }
-        _perf_counter.mutate_fail_cnt.Inc();
+        perf_counter_.mutate_fail_cnt.Inc();
 
-        VLOG(10) << "fail to mutate table: " << _name
+        VLOG(10) << "fail to mutate table: " << name_
             << " row: " << DebugString(row)
             << " errcode: " << StatusCodeToString(err);
 
-        SdkTask* task = _task_pool.GetTask(mu_id);
+        SdkTask* task = task_pool_.GetTask(mu_id);
         if (task == NULL) {
             VLOG(10) << "mutation " << mu_id << " timeout: " << DebugString(row);
             continue;
@@ -815,7 +815,7 @@ void TableImpl::MutateCallBack(std::vector<int64_t>* mu_id_list,
         row_mutation->SetInternalError(err);
 
         if (err == kKeyNotInRange) {
-            _perf_counter.mutate_range_cnt.Inc();
+            perf_counter_.mutate_range_cnt.Inc();
             row_mutation->IncRetryTimes();
             not_in_range_list.push_back(row_mutation);
         } else {
@@ -843,7 +843,7 @@ void TableImpl::MutateCallBack(std::vector<int64_t>* mu_id_list,
             static_cast<int64_t>(pow(FLAGS_tera_sdk_delay_send_internal, it->first) * 1000);
         ThreadPool::Task retry_task =
             boost::bind(&TableImpl::DistributeMutationsById, this, it->second);
-        _thread_pool->DelayTask(retry_interval, retry_task);
+        thread_pool_->DelayTask(retry_interval, retry_task);
     }
 
     delete request;
@@ -852,7 +852,7 @@ void TableImpl::MutateCallBack(std::vector<int64_t>* mu_id_list,
 }
 
 void TableImpl::MutationTimeout(SdkTask* task) {
-    _perf_counter.mutate_timeout_cnt.Inc();
+    perf_counter_.mutate_timeout_cnt.Inc();
     CHECK_NOTNULL(task);
     CHECK_EQ(task->Type(), SdkTask::MUTATION);
 
@@ -865,22 +865,22 @@ void TableImpl::MutationTimeout(SdkTask* task) {
                            row_mutation->GetMetaTimeStamp());
     }
     if (row_mutation->RetryTimes() == 0) {
-        _perf_counter.mutate_queue_timeout_cnt.Inc();
+        perf_counter_.mutate_queue_timeout_cnt.Inc();
         std::string err_reason = StringFormat("commit %lld times, retry 0 times, in %u ms.",
-                                              row_mutation->GetCommitTimes(), _timeout);
+                                              row_mutation->GetCommitTimes(), timeout_);
         row_mutation->SetError(ErrorCode::kTimeout, err_reason);
     } else {
         std::string err_reason = StringFormat("commit %lld times, retry %u times, in %u ms. last error: %s",
                                               row_mutation->GetCommitTimes(), row_mutation->RetryTimes(),
-                                              _timeout, StatusCodeToString(err).c_str());
+                                              timeout_, StatusCodeToString(err).c_str());
         row_mutation->SetError(ErrorCode::kSystem, err_reason);
     }
     // only for flow control
-    _cur_commit_pending_counter.Sub(row_mutation->MutationNum());
+    cur_commit_pending_counter_.Sub(row_mutation->MutationNum());
     int64_t perf_time = common::timer::get_micros();
     row_mutation->RunCallback();
-    _perf_counter.user_callback.Add(common::timer::get_micros() - perf_time);
-    _perf_counter.user_callback_cnt.Inc();
+    perf_counter_.user_callback.Add(common::timer::get_micros() - perf_time);
+    perf_counter_.user_callback_cnt.Inc();
 }
 
 bool TableImpl::GetTabletLocation(std::vector<TabletInfo>* tablets,
@@ -907,7 +907,7 @@ void TableImpl::DistributeReaders(const std::vector<RowReaderImpl*>& row_reader_
                 continue;
             }
             sync_reader_list.push_back(row_reader);
-            int64_t row_timeout = row_reader->TimeOut() > 0 ? row_reader->TimeOut() : _timeout;
+            int64_t row_timeout = row_reader->TimeOut() > 0 ? row_reader->TimeOut() : timeout_;
             if (row_timeout > 0 && (sync_min_timeout <= 0 || sync_min_timeout > row_timeout)) {
                 sync_min_timeout = row_timeout;
             }
@@ -915,34 +915,34 @@ void TableImpl::DistributeReaders(const std::vector<RowReaderImpl*>& row_reader_
     }
 
     for (uint32_t i = 0; i < row_reader_list.size(); i++) {
-        _perf_counter.reader_cnt.Inc();
+        perf_counter_.reader_cnt.Inc();
         RowReaderImpl* row_reader = (RowReaderImpl*)row_reader_list[i];
         if (called_by_user) {
-            row_reader->SetId(_next_task_id.Inc());
+            row_reader->SetId(next_task_id_.Inc());
 
             int64_t row_timeout = sync_min_timeout;
             if (row_reader->IsAsync()) {
-                row_timeout = row_reader->TimeOut() > 0 ? row_reader->TimeOut() : _timeout;
+                row_timeout = row_reader->TimeOut() > 0 ? row_reader->TimeOut() : timeout_;
             }
             SdkTask::TimeoutFunc task = boost::bind(&TableImpl::ReaderTimeout, this, _1);
-            _task_pool.PutTask(row_reader, row_timeout, task);
+            task_pool_.PutTask(row_reader, row_timeout, task);
         }
 
         // flow control
         if (called_by_user
-            && _cur_reader_pending_counter.Inc() > _max_reader_pending_num
+            && cur_reader_pending_counter_.Inc() > max_reader_pending_num_
             && row_reader->IsAsync()) {
             if (FLAGS_tera_sdk_async_blocking_enabled) {
-                while (_cur_reader_pending_counter.Get() > _max_reader_pending_num) {
+                while (cur_reader_pending_counter_.Get() > max_reader_pending_num_) {
                     usleep(100000);
                 }
             } else {
-                _cur_reader_pending_counter.Dec();
+                cur_reader_pending_counter_.Dec();
                 row_reader->SetError(ErrorCode::kBusy, "pending too much readers, try it later.");
                 ThreadPool::Task task =
                     boost::bind(&TableImpl::BreakRequest, this, row_reader->GetId());
                 row_reader->DecRef();
-                _thread_pool->AddTask(task);
+                thread_pool_->AddTask(task);
                 continue;
             }
         }
@@ -971,7 +971,7 @@ void TableImpl::DistributeReaders(const std::vector<RowReaderImpl*>& row_reader_
 
     // 等待同步操作返回或超时
     for (uint32_t i = 0; i < sync_reader_list.size(); i++) {
-        while (_cur_reader_pending_counter.Get() > _max_reader_pending_num) {
+        while (cur_reader_pending_counter_.Get() > max_reader_pending_num_) {
             usleep(100000);
         }
 
@@ -982,18 +982,18 @@ void TableImpl::DistributeReaders(const std::vector<RowReaderImpl*>& row_reader_
 
 void TableImpl::PackReaders(const std::string& server_addr,
                             std::vector<RowReaderImpl*>& reader_list) {
-    MutexLock lock(&_reader_batch_mutex);
+    MutexLock lock(&reader_batch_mutex_);
     TaskBatch* reader_buffer = NULL;
-    std::map<std::string, TaskBatch>::iterator it = _reader_batch_map.find(server_addr);
-    if (it != _reader_batch_map.end()) {
+    std::map<std::string, TaskBatch>::iterator it = reader_batch_map_.find(server_addr);
+    if (it != reader_batch_map_.end()) {
         reader_buffer = &it->second;
     } else {
-        reader_buffer = &_reader_batch_map[server_addr];
-        reader_buffer->sequence_num = _reader_batch_seq++;
+        reader_buffer = &reader_batch_map_[server_addr];
+        reader_buffer->sequence_num = reader_batch_seq_++;
         reader_buffer->row_id_list = new std::vector<int64_t>;
         ThreadPool::Task task = boost::bind(&TableImpl::ReaderBatchTimeout, this,
                                             server_addr, reader_buffer->sequence_num);
-        uint64_t timer_id = _thread_pool->DelayTask(_read_commit_timeout, task);
+        uint64_t timer_id = thread_pool_->DelayTask(read_commit_timeout_, task);
         reader_buffer->timer_id = timer_id;
     }
 
@@ -1003,30 +1003,30 @@ void TableImpl::PackReaders(const std::string& server_addr,
         reader->DecRef();
     }
 
-    if (reader_buffer->row_id_list->size() >= _commit_size) {
+    if (reader_buffer->row_id_list->size() >= commit_size_) {
         std::vector<int64_t>* reader_id_list = reader_buffer->row_id_list;
         uint64_t timer_id = reader_buffer->timer_id;
         const bool non_block_cancel = true;
         bool is_running = false;
-        if (!_thread_pool->CancelTask(timer_id, non_block_cancel, &is_running)) {
-            CHECK(is_running); // this delay task must be waiting for _reader_batch_map
+        if (!thread_pool_->CancelTask(timer_id, non_block_cancel, &is_running)) {
+            CHECK(is_running); // this delay task must be waiting for reader_batch_map_
         }
-        _reader_batch_map.erase(server_addr);
-        _reader_batch_mutex.Unlock();
+        reader_batch_map_.erase(server_addr);
+        reader_batch_mutex_.Unlock();
         CommitReadersById(server_addr, *reader_id_list);
         delete reader_id_list;
         reader_buffer = NULL;
-        _reader_batch_mutex.Lock();
+        reader_batch_mutex_.Lock();
     }
 }
 
 void TableImpl::ReaderBatchTimeout(std::string server_addr, uint64_t batch_seq) {
     std::vector<int64_t>* reader_id_list = NULL;
     {
-        MutexLock lock(&_reader_batch_mutex);
+        MutexLock lock(&reader_batch_mutex_);
         std::map<std::string, TaskBatch>::iterator it =
-            _reader_batch_map.find(server_addr);
-        if (it == _reader_batch_map.end()) {
+            reader_batch_map_.find(server_addr);
+        if (it == reader_batch_map_.end()) {
             return;
         }
         TaskBatch* reader_buffer = &it->second;
@@ -1034,7 +1034,7 @@ void TableImpl::ReaderBatchTimeout(std::string server_addr, uint64_t batch_seq) 
             return;
         }
         reader_id_list = reader_buffer->row_id_list;
-        _reader_batch_map.erase(it);
+        reader_batch_map_.erase(it);
     }
     CommitReadersById(server_addr, *reader_id_list);
     delete reader_id_list;
@@ -1045,7 +1045,7 @@ void TableImpl::CommitReadersById(const std::string server_addr,
     std::vector<RowReaderImpl*> reader_list;
     for (size_t i = 0; i < reader_id_list.size(); ++i) {
         int64_t reader_id = reader_id_list[i];
-        SdkTask* task = _task_pool.GetTask(reader_id);
+        SdkTask* task = task_pool_.GetTask(reader_id);
         if (task == NULL) {
             VLOG(10) << "reader " << reader_id << " timeout when commit read";;
             continue;
@@ -1063,9 +1063,9 @@ void TableImpl::CommitReaders(const std::string server_addr,
     tabletnode::TabletNodeClient tabletnode_client_async(server_addr);
     ReadTabletRequest* request = new ReadTabletRequest;
     ReadTabletResponse* response = new ReadTabletResponse;
-    request->set_sequence_id(_last_sequence_id++);
-    request->set_tablet_name(_name);
-    request->set_client_timeout_ms(_pending_timeout_ms);
+    request->set_sequence_id(last_sequence_id_++);
+    request->set_tablet_name(name_);
+    request->set_client_timeout_ms(pending_timeout_ms_);
     for (uint32_t i = 0; i < reader_list.size(); ++i) {
         RowReaderImpl* row_reader = reader_list[i];
         RowReaderInfo* row_reader_info = request->add_row_info_list();
@@ -1086,8 +1086,8 @@ void TableImpl::ReaderCallBack(std::vector<int64_t>* reader_id_list,
                                ReadTabletRequest* request,
                                ReadTabletResponse* response,
                                bool failed, int error_code) {
-    _perf_counter.rpc_r.Add(common::timer::get_micros() - request->timestamp());
-    _perf_counter.rpc_r_cnt.Inc();
+    perf_counter_.rpc_r.Add(common::timer::get_micros() - request->timestamp());
+    perf_counter_.rpc_r_cnt.Inc();
     if (failed) {
         if (error_code == sofa::pbrpc::RPC_ERROR_SERVER_SHUTDOWN ||
             error_code == sofa::pbrpc::RPC_ERROR_SERVER_UNREACHABLE ||
@@ -1117,8 +1117,8 @@ void TableImpl::ReaderCallBack(std::vector<int64_t>* reader_id_list,
             err = response->detail().status(i);
         }
         if (err == kTabletNodeOk || err == kKeyNotExist || err == kSnapshotNotExist) {
-            _perf_counter.reader_ok_cnt.Inc();
-            SdkTask* task = _task_pool.PopTask(reader_id);
+            perf_counter_.reader_ok_cnt.Inc();
+            SdkTask* task = task_pool_.PopTask(reader_id);
             if (task == NULL) {
                 VLOG(10) << "reader " << reader_id << " success but timeout";
                 if (err == kTabletNodeOk) {
@@ -1141,18 +1141,18 @@ void TableImpl::ReaderCallBack(std::vector<int64_t>* reader_id_list,
             }
             int64_t perf_time = common::timer::get_micros();
             row_reader->RunCallback();
-            _perf_counter.user_callback.Add(common::timer::get_micros() - perf_time);
-            _perf_counter.user_callback_cnt.Inc();
+            perf_counter_.user_callback.Add(common::timer::get_micros() - perf_time);
+            perf_counter_.user_callback_cnt.Inc();
             // only for flow control
-            _cur_reader_pending_counter.Dec();
+            cur_reader_pending_counter_.Dec();
             continue;
         }
-        _perf_counter.reader_fail_cnt.Inc();
+        perf_counter_.reader_fail_cnt.Inc();
 
-        VLOG(10) << "fail to read table: " << _name
+        VLOG(10) << "fail to read table: " << name_
             << " errcode: " << StatusCodeToString(err);
 
-        SdkTask* task = _task_pool.GetTask(reader_id);
+        SdkTask* task = task_pool_.GetTask(reader_id);
         if (task == NULL) {
             VLOG(10) << "reader " << reader_id << " fail but timeout";
             continue;
@@ -1162,7 +1162,7 @@ void TableImpl::ReaderCallBack(std::vector<int64_t>* reader_id_list,
         row_reader->SetInternalError(err);
 
         if (err == kKeyNotInRange) {
-            _perf_counter.reader_range_cnt.Inc();
+            perf_counter_.reader_range_cnt.Inc();
             row_reader->IncRetryTimes();
             not_in_range_list.push_back(row_reader);
         } else {
@@ -1190,7 +1190,7 @@ void TableImpl::ReaderCallBack(std::vector<int64_t>* reader_id_list,
             static_cast<int64_t>(pow(FLAGS_tera_sdk_delay_send_internal, it->first) * 1000);
         ThreadPool::Task retry_task =
             boost::bind(&TableImpl::DistributeReadersById, this, it->second);
-        _thread_pool->DelayTask(retry_interval, retry_task);
+        thread_pool_->DelayTask(retry_interval, retry_task);
     }
 
     delete request;
@@ -1202,7 +1202,7 @@ void TableImpl::DistributeReadersById(std::vector<int64_t>* reader_id_list) {
     std::vector<RowReaderImpl*> reader_list;
     for (size_t i = 0; i < reader_id_list->size(); ++i) {
         int64_t reader_id = (*reader_id_list)[i];
-        SdkTask* task = _task_pool.GetTask(reader_id);
+        SdkTask* task = task_pool_.GetTask(reader_id);
         if (task == NULL) {
             VLOG(10) << "reader " << reader_id << " timeout when retry read";
             continue;
@@ -1215,7 +1215,7 @@ void TableImpl::DistributeReadersById(std::vector<int64_t>* reader_id_list) {
 }
 
 void TableImpl::ReaderTimeout(SdkTask* task) {
-    _perf_counter.reader_timeout_cnt.Inc();
+    perf_counter_.reader_timeout_cnt.Inc();
     CHECK_NOTNULL(task);
     CHECK_EQ(task->Type(), SdkTask::READ);
 
@@ -1228,26 +1228,26 @@ void TableImpl::ReaderTimeout(SdkTask* task) {
                            row_reader->GetMetaTimeStamp());
     }
     if (row_reader->RetryTimes() == 0) {
-        _perf_counter.reader_queue_timeout_cnt.Inc();
+        perf_counter_.reader_queue_timeout_cnt.Inc();
         std::string err_reason = StringFormat("commit %lld times, retry 0 times, in %u ms.",
-                                              row_reader->GetCommitTimes(), _timeout);
+                                              row_reader->GetCommitTimes(), timeout_);
         row_reader->SetError(ErrorCode::kTimeout, err_reason);
     } else {
         std::string err_reason = StringFormat("commit %lld times, retry %u times, in %u ms. last error: %s",
                                               row_reader->GetCommitTimes(),  row_reader->RetryTimes(),
-                                              _timeout, StatusCodeToString(err).c_str());
+                                              timeout_, StatusCodeToString(err).c_str());
         row_reader->SetError(ErrorCode::kSystem, err_reason);
     }
     int64_t perf_time = common::timer::get_micros();
     row_reader->RunCallback();
-    _perf_counter.user_callback.Add(common::timer::get_micros() - perf_time);
-    _perf_counter.user_callback_cnt.Inc();
+    perf_counter_.user_callback.Add(common::timer::get_micros() - perf_time);
+    perf_counter_.user_callback_cnt.Inc();
     // only for flow control
-    _cur_reader_pending_counter.Dec();
+    cur_reader_pending_counter_.Dec();
 }
 
 bool TableImpl::GetTabletMetaForKey(const std::string& key, TabletMeta* meta) {
-    MutexLock lock(&_meta_mutex);
+    MutexLock lock(&meta_mutex_);
     TabletMetaNode* node = GetTabletMetaNodeForKey(key);
     if (node == NULL) {
         VLOG(10) << "no meta for key: " << key;
@@ -1270,13 +1270,13 @@ bool TableImpl::GetTabletAddrOrScheduleUpdateMeta(const std::string& row,
                                                   SdkTask* task,
                                                   std::string* server_addr) {
     CHECK_NOTNULL(task);
-    MutexLock lock(&_meta_mutex);
+    MutexLock lock(&meta_mutex_);
     TabletMetaNode* node = GetTabletMetaNodeForKey(row);
     if (node == NULL) {
         VLOG(10) << "no meta for key: " << row;
-        _pending_task_id_list[row].push_back(task->GetId());
+        pending_task_id_list_[row].push_back(task->GetId());
         task->DecRef();
-        TabletMetaNode& new_node = _tablet_meta_list[row];
+        TabletMetaNode& new_node = tablet_meta_list_[row];
         new_node.meta.mutable_key_range()->set_key_start(row);
         new_node.meta.mutable_key_range()->set_key_end(row + '\0');
         new_node.status = WAIT_UPDATE;
@@ -1285,13 +1285,13 @@ bool TableImpl::GetTabletAddrOrScheduleUpdateMeta(const std::string& row,
     }
     if (node->status != NORMAL) {
         VLOG(10) << "abnormal meta for key: " << row;
-        _pending_task_id_list[row].push_back(task->GetId());
+        pending_task_id_list_[row].push_back(task->GetId());
         task->DecRef();
         return false;
     }
     if ((task->GetInternalError() == kKeyNotInRange || task->GetInternalError() == kConnectError)
             && task->GetMetaTimeStamp() >= node->update_time) {
-        _pending_task_id_list[row].push_back(task->GetId());
+        pending_task_id_list_[row].push_back(task->GetId());
         task->DecRef();
         int64_t update_interval = node->update_time
             + FLAGS_tera_sdk_update_meta_internal - get_micros() / 1000;
@@ -1306,7 +1306,7 @@ bool TableImpl::GetTabletAddrOrScheduleUpdateMeta(const std::string& row,
                 boost::bind(&TableImpl::DelayUpdateMeta, this,
                             node->meta.key_range().key_start(),
                             node->meta.key_range().key_end());
-            _thread_pool->DelayTask(update_interval, delay_task);
+            thread_pool_->DelayTask(update_interval, delay_task);
         }
         return false;
     }
@@ -1317,14 +1317,14 @@ bool TableImpl::GetTabletAddrOrScheduleUpdateMeta(const std::string& row,
 }
 
 TableImpl::TabletMetaNode* TableImpl::GetTabletMetaNodeForKey(const std::string& key) {
-    _meta_mutex.AssertHeld();
-    if (_tablet_meta_list.size() == 0) {
+    meta_mutex_.AssertHeld();
+    if (tablet_meta_list_.size() == 0) {
         VLOG(10) << "the meta list is empty";
         return NULL;
     }
     std::map<std::string, TabletMetaNode>::iterator it =
-        _tablet_meta_list.upper_bound(key);
-    if (it == _tablet_meta_list.begin()) {
+        tablet_meta_list_.upper_bound(key);
+    if (it == tablet_meta_list_.begin()) {
         return NULL;
     } else {
         --it;
@@ -1337,10 +1337,10 @@ TableImpl::TabletMetaNode* TableImpl::GetTabletMetaNodeForKey(const std::string&
 }
 
 void TableImpl::DelayUpdateMeta(std::string start_key, std::string end_key) {
-    MutexLock lock(&_meta_mutex);
+    MutexLock lock(&meta_mutex_);
     std::map<std::string, TabletMetaNode>::iterator it =
-            _tablet_meta_list.lower_bound(start_key);
-    for (; it != _tablet_meta_list.end(); ++it) {
+            tablet_meta_list_.lower_bound(start_key);
+    for (; it != tablet_meta_list_.end(); ++it) {
         TabletMetaNode& node = it->second;
         if (node.meta.key_range().key_end() > end_key) {
             break;
@@ -1354,16 +1354,16 @@ void TableImpl::DelayUpdateMeta(std::string start_key, std::string end_key) {
 }
 
 void TableImpl::UpdateMetaAsync() {
-    _meta_mutex.AssertHeld();
-    if (_meta_updating_count >= static_cast<uint32_t>(FLAGS_tera_sdk_update_meta_concurrency)) {
+    meta_mutex_.AssertHeld();
+    if (meta_updating_count_ >= static_cast<uint32_t>(FLAGS_tera_sdk_update_meta_concurrency)) {
         return;
     }
     bool need_update = false;
     std::string update_start_key;
     std::string update_end_key;
     std::string update_expand_end_key; // update more tablet than need
-    std::map<std::string, TabletMetaNode>::iterator it = _tablet_meta_list.begin();
-    for (; it != _tablet_meta_list.end(); ++it) {
+    std::map<std::string, TabletMetaNode>::iterator it = tablet_meta_list_.begin();
+    for (; it != tablet_meta_list_.end(); ++it) {
         TabletMetaNode& node = it->second;
         if (node.status != WAIT_UPDATE && need_update) {
             update_expand_end_key = node.meta.key_range().key_start();
@@ -1386,34 +1386,34 @@ void TableImpl::UpdateMetaAsync() {
     if (!need_update) {
         return;
     }
-    _meta_updating_count++;
+    meta_updating_count_++;
     ScanMetaTableAsync(update_start_key, update_end_key, update_expand_end_key, false);
 }
 
 void TableImpl::ScanMetaTable(const std::string& key_start,
                               const std::string& key_end) {
-    MutexLock lock(&_meta_mutex);
-    _meta_updating_count++;
+    MutexLock lock(&meta_mutex_);
+    meta_updating_count_++;
     ScanMetaTableAsync(key_start, key_end, key_end, false);
-    while (_meta_updating_count > 0) {
-        _meta_cond.Wait();
+    while (meta_updating_count_ > 0) {
+        meta_cond_.Wait();
     }
 }
 
 void TableImpl::ScanMetaTableAsyncInLock(std::string key_start, std::string key_end,
                                          std::string expand_key_end, bool zk_access) {
-    MutexLock lock(&_meta_mutex);
+    MutexLock lock(&meta_mutex_);
     ScanMetaTableAsync(key_start, key_end, expand_key_end, zk_access);
 }
 
 void TableImpl::ScanMetaTableAsync(const std::string& key_start, const std::string& key_end,
                                    const std::string& expand_key_end, bool zk_access) {
-    _meta_mutex.AssertHeld();
+    meta_mutex_.AssertHeld();
     CHECK(expand_key_end == "" || expand_key_end >= key_end);
 
-    std::string meta_addr = _cluster->RootTableAddr(zk_access);
+    std::string meta_addr = cluster_->RootTableAddr(zk_access);
     if (meta_addr.empty() && !zk_access) {
-        meta_addr = _cluster->RootTableAddr(true);
+        meta_addr = cluster_->RootTableAddr(true);
     }
 
     if (meta_addr.empty()) {
@@ -1422,7 +1422,7 @@ void TableImpl::ScanMetaTableAsync(const std::string& key_start, const std::stri
         ThreadPool::Task retry_task =
             boost::bind(&TableImpl::ScanMetaTableAsyncInLock, this, key_start, key_end,
                         expand_key_end, true);
-        _thread_pool->DelayTask(FLAGS_tera_sdk_update_meta_internal, retry_task);
+        thread_pool_->DelayTask(FLAGS_tera_sdk_update_meta_internal, retry_task);
         return;
     }
 
@@ -1430,9 +1430,9 @@ void TableImpl::ScanMetaTableAsync(const std::string& key_start, const std::stri
     tabletnode::TabletNodeClient tabletnode_client_async(meta_addr);
     ScanTabletRequest* request = new ScanTabletRequest;
     ScanTabletResponse* response = new ScanTabletResponse;
-    request->set_sequence_id(_last_sequence_id++);
+    request->set_sequence_id(last_sequence_id_++);
     request->set_table_name(FLAGS_tera_master_meta_table_name);
-    MetaTableScanRange(_name, key_start, expand_key_end,
+    MetaTableScanRange(name_, key_start, expand_key_end,
                        request->mutable_start(),
                        request->mutable_end());
     request->set_buffer_limit(FLAGS_tera_sdk_update_meta_buffer_limit);
@@ -1450,8 +1450,8 @@ void TableImpl::ScanMetaTableCallBack(std::string key_start,
                                       ScanTabletRequest* request,
                                       ScanTabletResponse* response,
                                       bool failed, int error_code) {
-    _perf_counter.get_meta.Add(::common::timer::get_micros() - start_time);
-    _perf_counter.get_meta_cnt.Inc();
+    perf_counter_.get_meta.Add(::common::timer::get_micros() - start_time);
+    perf_counter_.get_meta_cnt.Inc();
     if (failed) {
         if (error_code == sofa::pbrpc::RPC_ERROR_SERVER_SHUTDOWN ||
             error_code == sofa::pbrpc::RPC_ERROR_SERVER_UNREACHABLE ||
@@ -1475,13 +1475,13 @@ void TableImpl::ScanMetaTableCallBack(std::string key_start,
         VLOG(10) << "fail to scan meta table [" << request->start()
             << ", " << request->end() << "]: " << StatusCodeToString(err);
         {
-            MutexLock lock(&_meta_mutex);
+            MutexLock lock(&meta_mutex_);
             GiveupUpdateTabletMeta(key_start, key_end);
         }
         ThreadPool::Task retry_task =
             boost::bind(&TableImpl::ScanMetaTableAsyncInLock, this, key_start, key_end,
                         expand_key_end, true);
-        _thread_pool->DelayTask(FLAGS_tera_sdk_update_meta_internal, retry_task);
+        thread_pool_->DelayTask(FLAGS_tera_sdk_update_meta_internal, retry_task);
         delete request;
         delete response;
         return;
@@ -1502,7 +1502,7 @@ void TableImpl::ScanMetaTableCallBack(std::string key_start,
             return_end = meta.key_range().key_end();
         }
 
-        MutexLock lock(&_meta_mutex);
+        MutexLock lock(&meta_mutex_);
         UpdateTabletMetaList(meta);
     }
     VLOG(10) << "scan meta table [" << request->start()
@@ -1518,15 +1518,15 @@ void TableImpl::ScanMetaTableCallBack(std::string key_start,
         scan_meta_error = true;
     }
 
-    MutexLock lock(&_meta_mutex);
+    MutexLock lock(&meta_mutex_);
     if (scan_meta_error) {
         ScanMetaTableAsync(key_start, key_end, expand_key_end, false);
     } else if (!return_end.empty() && (key_end.empty() || return_end < key_end)) {
         CHECK(!response->complete());
         ScanMetaTableAsync(return_end, key_end, expand_key_end, false);
     } else {
-        _meta_updating_count--;
-        _meta_cond.Signal();
+        meta_updating_count_--;
+        meta_cond_.Signal();
         UpdateMetaAsync();
     }
     delete request;
@@ -1536,8 +1536,8 @@ void TableImpl::ScanMetaTableCallBack(std::string key_start,
 void TableImpl::GiveupUpdateTabletMeta(const std::string& key_start,
                                        const std::string& key_end) {
     std::map<std::string, std::list<int64_t> >::iterator ilist =
-            _pending_task_id_list.lower_bound(key_start);
-    while (ilist != _pending_task_id_list.end()) {
+            pending_task_id_list_.lower_bound(key_start);
+    while (ilist != pending_task_id_list_.end()) {
         if (!key_end.empty() && ilist->first >= key_end) {
             break;
         }
@@ -1545,7 +1545,7 @@ void TableImpl::GiveupUpdateTabletMeta(const std::string& key_start,
         for (std::list<int64_t>::iterator itask = task_id_list.begin();
                 itask != task_id_list.end();) {
             int64_t task_id = *itask;
-            SdkTask* task = _task_pool.GetTask(task_id);
+            SdkTask* task = task_pool_.GetTask(task_id);
             if (task == NULL) {
                 VLOG(10) << "task " << task_id << " timeout when update meta fail";
                 itask = task_id_list.erase(itask);
@@ -1555,7 +1555,7 @@ void TableImpl::GiveupUpdateTabletMeta(const std::string& key_start,
             ++itask;
         }
         if (task_id_list.empty()) {
-            _pending_task_id_list.erase(ilist++);
+            pending_task_id_list_.erase(ilist++);
         } else {
             ++ilist;
         }
@@ -1563,15 +1563,15 @@ void TableImpl::GiveupUpdateTabletMeta(const std::string& key_start,
 }
 
 void TableImpl::UpdateTabletMetaList(const TabletMeta& new_meta) {
-    _meta_mutex.AssertHeld();
+    meta_mutex_.AssertHeld();
     const std::string& new_start = new_meta.key_range().key_start();
     const std::string& new_end = new_meta.key_range().key_end();
     std::map<std::string, TabletMetaNode>::iterator it =
-        _tablet_meta_list.upper_bound(new_start);
-    if (_tablet_meta_list.size() > 0 && it != _tablet_meta_list.begin()) {
+        tablet_meta_list_.upper_bound(new_start);
+    if (tablet_meta_list_.size() > 0 && it != tablet_meta_list_.begin()) {
         --it;
     }
-    while (it != _tablet_meta_list.end()) {
+    while (it != tablet_meta_list_.end()) {
         TabletMetaNode& old_node = it->second;
         std::map<std::string, TabletMetaNode>::iterator tmp = it;
         ++it;
@@ -1601,7 +1601,7 @@ void TableImpl::UpdateTabletMetaList(const TabletMeta& new_meta) {
                 VLOG(10) << "meta [" << old_start << ", " << old_end << "] "
                     << "split to [" << old_start << ", " << new_start << "] "
                     << "and [" << new_end << ", " << old_end << "]";
-                TabletMetaNode& copy_node = _tablet_meta_list[new_end];
+                TabletMetaNode& copy_node = tablet_meta_list_[new_end];
                 copy_node = old_node;
                 copy_node.meta.mutable_key_range()->set_key_start(new_end);
                 old_node.meta.mutable_key_range()->set_key_end(new_start);
@@ -1614,7 +1614,7 @@ void TableImpl::UpdateTabletMetaList(const TabletMeta& new_meta) {
                 //*************************************************
                 VLOG(10) << "meta [" << old_start << ", " << old_end << "] "
                     << "is covered by [" << new_start << ", " << new_end << "]";
-                _tablet_meta_list.erase(tmp);
+                tablet_meta_list_.erase(tmp);
             } else {
                 //*************************************************
                 //*                  |-----old------|             *
@@ -1622,10 +1622,10 @@ void TableImpl::UpdateTabletMetaList(const TabletMeta& new_meta) {
                 //*************************************************
                 VLOG(10) << "meta [" << old_start << ", " << old_end << "] "
                     << "shrink to [" << new_end << ", " << old_end << "]";
-                TabletMetaNode& copy_node = _tablet_meta_list[new_end];
+                TabletMetaNode& copy_node = tablet_meta_list_[new_end];
                 copy_node = old_node;
                 copy_node.meta.mutable_key_range()->set_key_start(new_end);
-                _tablet_meta_list.erase(tmp);
+                tablet_meta_list_.erase(tmp);
             }
         } else { // !new_end.empty() && old_start >= new_end
             //*****************************************************
@@ -1636,7 +1636,7 @@ void TableImpl::UpdateTabletMetaList(const TabletMeta& new_meta) {
         }
     }
 
-    TabletMetaNode& new_node = _tablet_meta_list[new_start];
+    TabletMetaNode& new_node = tablet_meta_list_[new_start];
     new_node.meta.CopyFrom(new_meta);
     new_node.status = NORMAL;
     new_node.update_time = get_micros() / 1000;
@@ -1646,7 +1646,7 @@ void TableImpl::UpdateTabletMetaList(const TabletMeta& new_meta) {
 }
 
 void TableImpl::WakeUpPendingRequest(const TabletMetaNode& node) {
-    _meta_mutex.AssertHeld();
+    meta_mutex_.AssertHeld();
     const std::string& start_key = node.meta.key_range().key_start();
     const std::string& end_key = node.meta.key_range().key_end();
     const std::string& server_addr = node.meta.server_addr();
@@ -1656,8 +1656,8 @@ void TableImpl::WakeUpPendingRequest(const TabletMetaNode& node) {
     std::vector<RowReaderImpl*> reader_list;
 
     std::map<std::string, std::list<int64_t> >::iterator it =
-        _pending_task_id_list.lower_bound(start_key);
-    while (it != _pending_task_id_list.end()) {
+        pending_task_id_list_.lower_bound(start_key);
+    while (it != pending_task_id_list_.end()) {
         if (!end_key.empty() && it->first >= end_key) {
             break;
         }
@@ -1665,7 +1665,7 @@ void TableImpl::WakeUpPendingRequest(const TabletMetaNode& node) {
         for (std::list<int64_t>::iterator itask = task_id_list.begin();
                 itask != task_id_list.end(); ++itask) {
             int64_t task_id = *itask;
-            SdkTask* task = _task_pool.GetTask(task_id);
+            SdkTask* task = task_pool_.GetTask(task_id);
             if (task == NULL) {
                 VLOG(10) << "task " << task_id << " timeout when update meta success";
                 continue;
@@ -1692,7 +1692,7 @@ void TableImpl::WakeUpPendingRequest(const TabletMetaNode& node) {
         }
         std::map<std::string, std::list<int64_t> >::iterator tmp = it;
         ++it;
-        _pending_task_id_list.erase(tmp);
+        pending_task_id_list_.erase(tmp);
     }
 
     if (mutation_list.size() > 0) {
@@ -1706,10 +1706,10 @@ void TableImpl::WakeUpPendingRequest(const TabletMetaNode& node) {
 
 void TableImpl::ScheduleUpdateMeta(const std::string& row,
                                    int64_t meta_timestamp) {
-    MutexLock lock(&_meta_mutex);
+    MutexLock lock(&meta_mutex_);
     TabletMetaNode* node = GetTabletMetaNodeForKey(row);
     if (node == NULL) {
-        TabletMetaNode& new_node = _tablet_meta_list[row];
+        TabletMetaNode& new_node = tablet_meta_list_[row];
         new_node.meta.mutable_key_range()->set_key_start(row);
         new_node.meta.mutable_key_range()->set_key_end(row + '\0');
         new_node.status = WAIT_UPDATE;
@@ -1728,21 +1728,21 @@ void TableImpl::ScheduleUpdateMeta(const std::string& row,
                 boost::bind(&TableImpl::DelayUpdateMeta, this,
                             node->meta.key_range().key_start(),
                             node->meta.key_range().key_end());
-            _thread_pool->DelayTask(update_interval, delay_task);
+            thread_pool_->DelayTask(update_interval, delay_task);
         }
     }
 }
 
 bool TableImpl::UpdateTableMeta(ErrorCode* err) {
-    MutexLock lock(&_table_meta_mutex);
-    _table_meta_updating = true;
+    MutexLock lock(&table_meta_mutex_);
+    table_meta_updating_ = true;
 
-    _table_meta_mutex.Unlock();
+    table_meta_mutex_.Unlock();
     ReadTableMetaAsync(err, 0, false);
-    _table_meta_mutex.Lock();
+    table_meta_mutex_.Lock();
 
-    while (_table_meta_updating) {
-        _table_meta_cond.Wait();
+    while (table_meta_updating_) {
+        table_meta_cond_.Wait();
     }
     if (err->GetType() != ErrorCode::kOK) {
         return false;
@@ -1752,25 +1752,25 @@ bool TableImpl::UpdateTableMeta(ErrorCode* err) {
 
 void TableImpl::ReadTableMetaAsync(ErrorCode* ret_err, int32_t retry_times,
                                    bool zk_access) {
-    std::string meta_server = _cluster->RootTableAddr(zk_access);
+    std::string meta_server = cluster_->RootTableAddr(zk_access);
     if (meta_server.empty() && !zk_access) {
-        meta_server = _cluster->RootTableAddr(true);
+        meta_server = cluster_->RootTableAddr(true);
     }
     if (meta_server.empty()) {
         VLOG(10) << "root is empty";
 
-        MutexLock lock(&_table_meta_mutex);
-        CHECK(_table_meta_updating);
+        MutexLock lock(&table_meta_mutex_);
+        CHECK(table_meta_updating_);
         if (retry_times >= FLAGS_tera_sdk_retry_times) {
             ret_err->SetFailed(ErrorCode::kSystem);
-            _table_meta_updating = false;
-            _table_meta_cond.Signal();
+            table_meta_updating_ = false;
+            table_meta_cond_.Signal();
         } else {
             int64_t retry_interval =
                 static_cast<int64_t>(pow(FLAGS_tera_sdk_delay_send_internal, retry_times) * 1000);
             ThreadPool::Task retry_task =
                 boost::bind(&TableImpl::ReadTableMetaAsync, this, ret_err, retry_times + 1, true);
-            _thread_pool->DelayTask(retry_interval, retry_task);
+            thread_pool_->DelayTask(retry_interval, retry_task);
         }
         return;
     }
@@ -1778,10 +1778,10 @@ void TableImpl::ReadTableMetaAsync(ErrorCode* ret_err, int32_t retry_times,
     tabletnode::TabletNodeClient tabletnode_client_async(meta_server);
     ReadTabletRequest* request = new ReadTabletRequest;
     ReadTabletResponse* response = new ReadTabletResponse;
-    request->set_sequence_id(_last_sequence_id++);
+    request->set_sequence_id(last_sequence_id_++);
     request->set_tablet_name(FLAGS_tera_master_meta_table_name);
     RowReaderInfo* row_info = request->add_row_info_list();
-    MakeMetaTableKey(_name, row_info->mutable_key());
+    MakeMetaTableKey(name_, row_info->mutable_key());
 
     Closure<void, ReadTabletRequest*, ReadTabletResponse*, bool, int>* done =
         NewClosure(this, &TableImpl::ReadTableMetaCallBack, ret_err, retry_times);
@@ -1833,32 +1833,32 @@ void TableImpl::ReadTableMetaCallBack(ErrorCode* ret_err,
             << ", errcode: " << StatusCodeToString(err);
     }
 
-    MutexLock lock(&_table_meta_mutex);
-    CHECK(_table_meta_updating);
+    MutexLock lock(&table_meta_mutex_);
+    CHECK(table_meta_updating_);
 
     if (err == kTabletNodeOk) {
         TableMeta table_meta;
         const KeyValuePair& kv = response->detail().row_result(0).key_values(0);
         ParseMetaTableKeyValue(kv.key(), kv.value(), &table_meta);
-        _table_schema.CopyFrom(table_meta.schema());
-        _create_time = table_meta.create_time();
+        table_schema_.CopyFrom(table_meta.schema());
+        create_time_ = table_meta.create_time();
         ret_err->SetFailed(ErrorCode::kOK);
-        _table_meta_updating = false;
-        _table_meta_cond.Signal();
+        table_meta_updating_ = false;
+        table_meta_cond_.Signal();
     } else if (err == kKeyNotExist || err == kSnapshotNotExist) {
         ret_err->SetFailed(ErrorCode::kNotFound);
-        _table_meta_updating = false;
-        _table_meta_cond.Signal();
+        table_meta_updating_ = false;
+        table_meta_cond_.Signal();
     } else if (retry_times >= FLAGS_tera_sdk_retry_times) {
         ret_err->SetFailed(ErrorCode::kSystem);
-        _table_meta_updating = false;
-        _table_meta_cond.Signal();
+        table_meta_updating_ = false;
+        table_meta_cond_.Signal();
     } else {
         int64_t retry_interval =
             static_cast<int64_t>(pow(FLAGS_tera_sdk_delay_send_internal, retry_times) * 1000);
         ThreadPool::Task retry_task =
             boost::bind(&TableImpl::ReadTableMetaAsync, this, ret_err, retry_times + 1, true);
-        _thread_pool->DelayTask(retry_interval, retry_task);
+        thread_pool_->DelayTask(retry_interval, retry_task);
     }
 
     delete request;
@@ -1880,20 +1880,20 @@ bool TableImpl::RestoreCookie() {
     if (!::tera::sdk::RestoreCookie(cookie_file, true, &cookie)) {
         return true;
     }
-    if (cookie.table_name() != _name) {
+    if (cookie.table_name() != name_) {
         LOG(INFO) << "[SDK COOKIE] cookie name error: " << cookie.table_name()
-            << ", should be: " << _name;
+            << ", should be: " << name_;
         return true;
     }
 
-    MutexLock lock(&_meta_mutex);
+    MutexLock lock(&meta_mutex_);
     for (int i = 0; i < cookie.tablets_size(); ++i) {
         const TabletMeta& meta = cookie.tablets(i).meta();
         const std::string& start_key = meta.key_range().key_start();
         LOG(INFO) << "[SDK COOKIE] restore:" << meta.path()
             << " range [" << DebugString(start_key)
             << " : " << DebugString(meta.key_range().key_end()) << "]";
-        TabletMetaNode& node = _tablet_meta_list[start_key];
+        TabletMetaNode& node = tablet_meta_list_[start_key];
         node.meta = meta;
         node.update_time = cookie.tablets(i).update_time();
         node.status = NORMAL;
@@ -1904,7 +1904,7 @@ bool TableImpl::RestoreCookie() {
 
 std::string TableImpl::GetCookieFilePathName(void) {
     return FLAGS_tera_sdk_cookie_path + "/"
-        + GetCookieFileName(_name, _cluster->ClusterId(), _create_time);
+        + GetCookieFileName(name_, cluster_->ClusterId(), create_time_);
 }
 
 std::string TableImpl::GetCookieLockFilePathName(void) {
@@ -1915,11 +1915,11 @@ void TableImpl::DoDumpCookie() {
     std::string cookie_file = GetCookieFilePathName();
     std::string cookie_lock_file = GetCookieLockFilePathName();
     SdkCookie cookie;
-    cookie.set_table_name(_name);
+    cookie.set_table_name(name_);
     {
-        MutexLock lock(&_meta_mutex);
-        std::map<std::string, TabletMetaNode>::iterator it = _tablet_meta_list.begin();
-        for (; it != _tablet_meta_list.end(); ++it) {
+        MutexLock lock(&meta_mutex_);
+        std::map<std::string, TabletMetaNode>::iterator it = tablet_meta_list_.begin();
+        for (; it != tablet_meta_list_.end(); ++it) {
             const TabletMetaNode& node = it->second;
             if (!node.meta.has_table_name() || !node.meta.has_path()) {
                 continue;
@@ -1978,10 +1978,10 @@ void TableImpl::DumpPerfCounterLogDelay() {
 }
 
 void TableImpl::DoDumpPerfCounterLog() {
-    LOG(INFO) << "[table " << _name << " PerfCounter][pending]"
-        << " pending_r: " << _cur_reader_pending_counter.Get()
-        << " pending_w: " << _cur_commit_pending_counter.Get();
-    _perf_counter.DoDumpPerfCounterLog("[table " + _name + " PerfCounter]");
+    LOG(INFO) << "[table " << name_ << " PerfCounter][pending]"
+        << " pending_r: " << cur_reader_pending_counter_.Get()
+        << " pending_w: " << cur_commit_pending_counter_.Get();
+    perf_counter_.DoDumpPerfCounterLog("[table " + name_ + " PerfCounter]");
 }
 
 void TableImpl::PerfCounter::DoDumpPerfCounterLog(const std::string& log_prefix) {
@@ -2013,8 +2013,8 @@ void TableImpl::PerfCounter::DoDumpPerfCounterLog(const std::string& log_prefix)
 
 void TableImpl::DelayTaskWrapper(ThreadPool::Task task, int64_t task_id) {
     {
-        MutexLock lock(&_delay_task_id_mutex);
-        if (_delay_task_ids.erase(task_id) == 0) {
+        MutexLock lock(&delay_task_id_mutex_);
+        if (delay_task_ids_.erase(task_id) == 0) {
             // this task has been canceled
             return;
         }
@@ -2022,24 +2022,24 @@ void TableImpl::DelayTaskWrapper(ThreadPool::Task task, int64_t task_id) {
     task(task_id);
 }
 int64_t TableImpl::AddDelayTask(int64_t delay_time, ThreadPool::Task task) {
-    MutexLock lock(&_delay_task_id_mutex);
+    MutexLock lock(&delay_task_id_mutex_);
     ThreadPool::Task t =
         boost::bind(&TableImpl::DelayTaskWrapper, this, task, _1);
-    int64_t t_id = _thread_pool->DelayTask(delay_time, t);
-    _delay_task_ids.insert(t_id);
+    int64_t t_id = thread_pool_->DelayTask(delay_time, t);
+    delay_task_ids_.insert(t_id);
     return t_id;
 }
 void TableImpl::ClearDelayTask() {
-    MutexLock lock(&_delay_task_id_mutex);
-    std::set<int64_t>::iterator it = _delay_task_ids.begin();
-    for (; it != _delay_task_ids.end(); ++it) {
-        _thread_pool->CancelTask(*it);
+    MutexLock lock(&delay_task_id_mutex_);
+    std::set<int64_t>::iterator it = delay_task_ids_.begin();
+    for (; it != delay_task_ids_.end(); ++it) {
+        thread_pool_->CancelTask(*it);
     }
-    _delay_task_ids.clear();
+    delay_task_ids_.clear();
 }
 
 void TableImpl::BreakRequest(int64_t task_id) {
-    SdkTask* task = _task_pool.PopTask(task_id);
+    SdkTask* task = task_pool_.PopTask(task_id);
     if (task == NULL) {
         VLOG(10) << "task " << task_id << " timeout when brankrequest";
         return;
@@ -2060,7 +2060,7 @@ void TableImpl::BreakRequest(int64_t task_id) {
 
 /// 创建事务
 Transaction* TableImpl::StartRowTransaction(const std::string& row_key) {
-    return new SingleRowTxn(this, row_key, _thread_pool);
+    return new SingleRowTxn(this, row_key, thread_pool_);
 }
 
 /// 提交事务

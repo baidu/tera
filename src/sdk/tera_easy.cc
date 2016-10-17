@@ -26,24 +26,24 @@ namespace teraeasy {
 class TableImpl : public Table {
 public:
     TableImpl(tera::Table* table, tera::Client* client)
-        : _table(table),
-          _client(client),
-          _scanner(NULL) {
+        : table_(table),
+          client_(client),
+          scanner_(NULL) {
         ThreadPool::Task task = boost::bind(&TableImpl::PrintStatus, this);
-        _thread_pool.DelayTask(1000, task);
+        thread_pool_.DelayTask(1000, task);
     }
 
     ~TableImpl() {
         Flush();
-        delete _scanner;
-        delete _table;
-        delete _client;
+        delete scanner_;
+        delete table_;
+        delete client_;
     }
 
     bool Read(const Key& key, Record* record) {
         std::string value;
         tera::ErrorCode err;
-        if (!_table->Get(key, "", "", &value, &err)) {
+        if (!table_->Get(key, "", "", &value, &err)) {
             LOG(ERROR) << "fail to read: " << key
                 << ", reason: " << err.GetReason();
             return false;
@@ -52,10 +52,10 @@ public:
     }
 
     bool Write(const Key& key, const Record& record) {
-        CHECK(_s_pending_num.Get() >= 0) << "pending num < 0: " << _s_pending_num.Get();
-        CHECK(_s_pending_size.Get() >= 0) << "pending size < 0: " << _s_pending_size.Get();
-        while (_s_pending_num.Get() > FLAGS_tera_sdk_rpc_max_pending_num ||
-               _s_pending_size.Get() > FLAGS_tera_sdk_rpc_max_pending_buffer_size * 1024 * 1024) {
+        CHECK(s_pending_num_.Get() >= 0) << "pending num < 0: " << s_pending_num_.Get();
+        CHECK(s_pending_size_.Get() >= 0) << "pending size < 0: " << s_pending_size_.Get();
+        while (s_pending_num_.Get() > FLAGS_tera_sdk_rpc_max_pending_num ||
+               s_pending_size_.Get() > FLAGS_tera_sdk_rpc_max_pending_buffer_size * 1024 * 1024) {
             usleep(1000000);
         }
 
@@ -63,40 +63,40 @@ public:
         SerializeRecord(record, &value);
 
         {
-            tera::RowMutation* mutation = _table->NewRowMutation(key);
+            tera::RowMutation* mutation = table_->NewRowMutation(key);
             mutation->Put(value, FLAGS_tera_easy_ttl);
             mutation->SetCallBack(TableImpl::WriteCallback);
-            _table->ApplyMutation(mutation);
-            _s_pending_num.Inc();
-            _s_pending_size.Add(mutation->Size());
+            table_->ApplyMutation(mutation);
+            s_pending_num_.Inc();
+            s_pending_size_.Add(mutation->Size());
         }
         return true;
     }
 
     void Flush() {
-        while (_s_pending_num.Get() > 0) {
+        while (s_pending_num_.Get() > 0) {
             usleep(10000);
         }
     }
 
     // sync delete
     bool Delete(const Key& key) {
-        tera::RowMutation* mutation = _table->NewRowMutation(key);
+        tera::RowMutation* mutation = table_->NewRowMutation(key);
         mutation->DeleteRow();
-        _table->ApplyMutation(mutation);
+        table_->ApplyMutation(mutation);
         return true;
     }
 
     bool SetScanner(const Key& start, const Key& end) {
-        if (_scanner != NULL) {
-            delete _scanner;
+        if (scanner_ != NULL) {
+            delete scanner_;
         }
         tera::ErrorCode err;
         tera::ScanDescriptor desc(start);
         desc.SetEnd(end);
         desc.SetAsync(false);
 
-        if ((_scanner = _table->Scan(desc, &err)) == NULL) {
+        if ((scanner_ = table_->Scan(desc, &err)) == NULL) {
             LOG(ERROR) << "fail to scan the table, reason:" << err.GetReason();
             return false;
         }
@@ -104,34 +104,34 @@ public:
     }
 
     bool NextPair(KVPair* pair) {
-        if (_scanner == NULL) {
+        if (scanner_ == NULL) {
             LOG(ERROR) << "scanner is empty!";
             return false;
         }
-        if (!_scanner->Done()) {
+        if (!scanner_->Done()) {
             Record record;
-            DeSerializeRecord(_scanner->Value(), &record);
-            *pair = std::make_pair(_scanner->RowName(), record);
-            _scanner->Next();
+            DeSerializeRecord(scanner_->Value(), &record);
+            *pair = std::make_pair(scanner_->RowName(), record);
+            scanner_->Next();
             return true;
         }
-        delete _scanner;
-        _scanner = NULL;
+        delete scanner_;
+        scanner_ = NULL;
         return false;
     }
 
     static void WriteCallback(tera::RowMutation* mutation) {
         const tera::ErrorCode& error_code = mutation->GetError();
         if (error_code.GetType() != tera::ErrorCode::kOK) {
-            _s_write_fail_num.Inc();
+            s_write_fail_num_.Inc();
             VLOG(5)<< "write key failed: key(" << mutation->RowKey()
                 << "), reason:" << error_code.GetReason();
         } else {
-            _s_write_succ_num.Inc();
+            s_write_succ_num_.Inc();
         }
 
-        _s_pending_num.Dec();
-        _s_pending_size.Sub(mutation->Size());
+        s_pending_num_.Dec();
+        s_pending_size_.Sub(mutation->Size());
         delete mutation;
     }
 
@@ -200,30 +200,30 @@ private:
     }
 
     void PrintStatus() {
-        LOG(INFO) << "[TeraEasy] pending num " << _s_pending_num.Get()
-            << ", pending size " << _s_pending_size.Get()
-            << ", success " << _s_write_succ_num.Clear()
-            << ", fail " << _s_write_fail_num.Clear();
+        LOG(INFO) << "[TeraEasy] pending num " << s_pending_num_.Get()
+            << ", pending size " << s_pending_size_.Get()
+            << ", success " << s_write_succ_num_.Clear()
+            << ", fail " << s_write_fail_num_.Clear();
         ThreadPool::Task task = boost::bind(&TableImpl::PrintStatus, this);
-        _thread_pool.DelayTask(1000, task);
+        thread_pool_.DelayTask(1000, task);
     }
 
 private:
-    static tera::Counter _s_pending_num;
-    static tera::Counter _s_pending_size;
-    static tera::Counter _s_write_fail_num;
-    static tera::Counter _s_write_succ_num;
+    static tera::Counter s_pending_num_;
+    static tera::Counter s_pending_size_;
+    static tera::Counter s_write_fail_num_;
+    static tera::Counter s_write_succ_num_;
 
-    tera::Table* _table;
-    tera::Client* _client;
-    tera::ResultStream* _scanner;
-    ThreadPool _thread_pool;
+    tera::Table* table_;
+    tera::Client* client_;
+    tera::ResultStream* scanner_;
+    ThreadPool thread_pool_;
 };
 
-tera::Counter TableImpl::_s_pending_num;
-tera::Counter TableImpl::_s_pending_size;
-tera::Counter TableImpl::_s_write_fail_num;
-tera::Counter TableImpl::_s_write_succ_num;
+tera::Counter TableImpl::s_pending_num_;
+tera::Counter TableImpl::s_pending_size_;
+tera::Counter TableImpl::s_write_fail_num_;
+tera::Counter TableImpl::s_write_succ_num_;
 
 Table* OpenTable(const std::string& table_name, const std::string& conf_path) {
     std::string conf;

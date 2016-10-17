@@ -53,16 +53,16 @@ public:
     const std::string& Type() const;
 
 private:
-    int32_t _id;
-    std::string _name;
-    std::string _lg_name;
-    int32_t _max_versions;
-    int32_t _min_versions;
-    int32_t _ttl;
-    int64_t _acl;
-    int32_t _owner;
-    int32_t _disk_quota;
-    std::string _type;
+    int32_t id_;
+    std::string name_;
+    std::string lg_name_;
+    int32_t max_versions_;
+    int32_t min_versions_;
+    int32_t ttl_;
+    int64_t acl_;
+    int32_t owner_;
+    int32_t disk_quota_;
+    std::string type_;
 };
 
 /// 局部性群组描述
@@ -117,16 +117,16 @@ public:
     void SetSstSize(int32_t sst_size);
 
 private:
-    int32_t         _id;
-    std::string     _name;
-    CompressType    _compress_type;
-    StoreType       _store_type;
-    int             _block_size;
-    bool            _use_bloomfilter;
-    bool            _use_memtable_on_leveldb;
-    int32_t         _memtable_ldb_write_buffer_size;
-    int32_t         _memtable_ldb_block_size;
-    int32_t         _sst_size; // in bytes
+    int32_t         id_;
+    std::string     name_;
+    CompressType    compress_type_;
+    StoreType       store_type_;
+    int             block_size_;
+    bool            use_bloomfilter_;
+    bool            use_memtable_on_leveldb_;
+    int32_t         memtable_ldb_write_buffer_size_;
+    int32_t         memtable_ldb_block_size_;
+    int32_t         sst_size_; // in bytes
 };
 
 /// 表描述符.
@@ -194,24 +194,24 @@ public:
 private:
     typedef std::map<std::string, LGDescImpl*> LGMap;
     typedef std::map<std::string, CFDescImpl*> CFMap;
-    std::string     _name;
-    LGMap           _lg_map;
-    std::vector<LGDescImpl*> _lgs;
-    CFMap           _cf_map;
-    std::vector<CFDescImpl*> _cfs;
-    int32_t         _next_lg_id;
-    int32_t         _next_cf_id;
-    std::vector<uint64_t> _snapshots;
+    std::string     name_;
+    LGMap           lg_map_;
+    std::vector<LGDescImpl*> lgs_;
+    CFMap           cf_map_;
+    std::vector<CFDescImpl*> cfs_;
+    int32_t         next_lg_id_;
+    int32_t         next_cf_id_;
+    std::vector<uint64_t> snapshots_;
     static const std::string DEFAULT_LG_NAME;
     static const std::string DEFAULT_CF_NAME;
-    RawKeyType      _raw_key_type;
-    int64_t         _split_size;
-    int64_t         _merge_size;
-    bool            _disable_wal;
-    bool            _enable_txn;
-    std::string     _admin_group;
-    std::string     _admin;
-    std::string     _alias;
+    RawKeyType      raw_key_type_;
+    int64_t         split_size_;
+    int64_t         merge_size_;
+    bool            disable_wal_;
+    bool            enable_txn_;
+    std::string     admin_group_;
+    std::string     admin_;
+    std::string     alias_;
 };
 
 } // namespace tera

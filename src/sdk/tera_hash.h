@@ -16,18 +16,18 @@ namespace tera {
 class HashMethod {
 public:
     HashMethod(int32_t bulk_num = 0)
-        : _bulk_num(bulk_num) {}
+        : bulk_num_(bulk_num) {}
     virtual ~HashMethod() {}
 
     virtual std::string HashKey(const std::string& key) = 0;
     virtual std::string Key(const std::string& hash_key) = 0;
 
     int32_t GetBulkNum() const {
-        return _bulk_num;
+        return bulk_num_;
     }
 
 protected:
-    int32_t _bulk_num;
+    int32_t bulk_num_;
 };
 
 struct HashScanDesc {
@@ -116,16 +116,16 @@ private:
                       const std::string& err_reason);
 
 private:
-    Client* _client;
-    Table* _table;
-    ResultStream* _scan_stream;
-    std::string _table_name;
+    Client* client_;
+    Table* table_;
+    ResultStream* scan_stream_;
+    std::string table_name_;
 
-    HashMethod* _hash_method;
-    int32_t _bulk_num;
-    bool _is_created_client;
-    bool _is_created_hash_method;
-    std::map<std::string, std::string> _field_types;
+    HashMethod* hash_method_;
+    int32_t bulk_num_;
+    bool is_created_client_;
+    bool is_created_hash_method_;
+    std::map<std::string, std::string> field_types_;
 };
 
 } // namespace tera

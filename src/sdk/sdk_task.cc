@@ -11,29 +11,29 @@
 namespace tera {
 
 int64_t SdkTask::GetRef() {
-    MutexLock l(&_mutex);
-    return _ref;
+    MutexLock l(&mutex_);
+    return ref_;
 }
 
 void SdkTask::IncRef() {
-    MutexLock l(&_mutex);
-    ++_ref;
+    MutexLock l(&mutex_);
+    ++ref_;
 }
 
 void SdkTask::DecRef() {
-    MutexLock l(&_mutex);
-    CHECK_GT(_ref, 1);
-    if (--_ref == 1) {
-        _cond.Signal();
+    MutexLock l(&mutex_);
+    CHECK_GT(ref_, 1);
+    if (--ref_ == 1) {
+        cond_.Signal();
     }
 }
 
 void SdkTask::ExcludeOtherRef() {
-    MutexLock l(&_mutex);
-    while (_ref > 1) {
-        _cond.Wait();
+    MutexLock l(&mutex_);
+    while (ref_ > 1) {
+        cond_.Wait();
     }
-    CHECK_EQ(_ref, 1);
+    CHECK_EQ(ref_, 1);
 }
 
 int64_t GetSdkTaskId(SdkTask* task) {
@@ -45,29 +45,29 @@ uint64_t GetSdkTaskDueTime(SdkTask* task) {
 }
 
 SdkTimeoutManager::SdkTimeoutManager(ThreadPool* thread_pool)
-    : _thread_pool(thread_pool),
-      _stop(false),
-      _bg_exit(false),
-      _bg_cond(&_bg_mutex),
-      _bg_func_id(0),
-      _bg_func(boost::bind(&SdkTimeoutManager::CheckTimeout, this)) {
-    _thread_pool->AddTask(_bg_func);
+    : thread_pool_(thread_pool),
+      stop_(false),
+      bg_exit_(false),
+      bg_cond_(&bg_mutex_),
+      bg_func_id_(0),
+      bg_func_(boost::bind(&SdkTimeoutManager::CheckTimeout, this)) {
+    thread_pool_->AddTask(bg_func_);
 }
 
 SdkTimeoutManager::~SdkTimeoutManager() {
-    MutexLock l(&_bg_mutex);
-    _stop = true;
-    if (_bg_func_id > 0) {
+    MutexLock l(&bg_mutex_);
+    stop_ = true;
+    if (bg_func_id_ > 0) {
         bool non_block = true;
         bool is_running = false;
-        if (_thread_pool->CancelTask(_bg_func_id, non_block, &is_running)) {
-            _bg_exit = true;
+        if (thread_pool_->CancelTask(bg_func_id_, non_block, &is_running)) {
+            bg_exit_ = true;
         } else {
             CHECK(is_running);
         }
     }
-    while (!_bg_exit) {
-        _bg_cond.Wait();
+    while (!bg_exit_) {
+        bg_cond_.Wait();
     }
 }
 
@@ -81,8 +81,8 @@ bool SdkTimeoutManager::PutTask(SdkTask* task, int64_t timeout,
     }
 
     uint32_t shard_id = Shard(task_id);
-    TaskMap& map = _map_shard[shard_id];
-    Mutex& mutex = _mutex_shard[shard_id];
+    TaskMap& map = map_shard_[shard_id];
+    Mutex& mutex = mutex_shard_[shard_id];
 
     MutexLock l(&mutex);
     std::pair<TaskMap::iterator, bool> insert_ret;
@@ -96,8 +96,8 @@ bool SdkTimeoutManager::PutTask(SdkTask* task, int64_t timeout,
 
 SdkTask* SdkTimeoutManager::GetTask(int64_t task_id) {
     uint32_t shard_id = Shard(task_id);
-    TaskMap& map = _map_shard[shard_id];
-    Mutex& mutex = _mutex_shard[shard_id];
+    TaskMap& map = map_shard_[shard_id];
+    Mutex& mutex = mutex_shard_[shard_id];
 
     MutexLock l(&mutex);
     TaskIdIndex& id_index = map.get<INDEX_BY_ID>();
@@ -114,8 +114,8 @@ SdkTask* SdkTimeoutManager::GetTask(int64_t task_id) {
 
 SdkTask* SdkTimeoutManager::PopTask(int64_t task_id) {
     uint32_t shard_id = Shard(task_id);
-    TaskMap& map = _map_shard[shard_id];
-    Mutex& mutex = _mutex_shard[shard_id];
+    TaskMap& map = map_shard_[shard_id];
+    Mutex& mutex = mutex_shard_[shard_id];
 
     MutexLock l(&mutex);
     TaskIdIndex& id_index = map.get<INDEX_BY_ID>();
@@ -133,8 +133,8 @@ SdkTask* SdkTimeoutManager::PopTask(int64_t task_id) {
 void SdkTimeoutManager::CheckTimeout() {
     int64_t now_ms = get_millis();
     for (uint32_t shard_id = 0; shard_id < kShardNum; shard_id++) {
-        TaskMap& map = _map_shard[shard_id];
-        Mutex& mutex = _mutex_shard[shard_id];
+        TaskMap& map = map_shard_[shard_id];
+        Mutex& mutex = mutex_shard_[shard_id];
 
         MutexLock l(&mutex);
         while (!map.empty()) {
@@ -146,23 +146,23 @@ void SdkTimeoutManager::CheckTimeout() {
             }
             due_time_index.erase(it);
             mutex.Unlock();
-            _thread_pool->AddTask(boost::bind(&SdkTimeoutManager::RunTimeoutFunc, this, task));
+            thread_pool_->AddTask(boost::bind(&SdkTimeoutManager::RunTimeoutFunc, this, task));
             mutex.Lock();
         }
     }
 
-    MutexLock l(&_bg_mutex);
-    if (_stop) {
-        _bg_exit = true;
-        _bg_cond.Signal();
+    MutexLock l(&bg_mutex_);
+    if (stop_) {
+        bg_exit_ = true;
+        bg_cond_.Signal();
         return;
     }
 
     if (get_millis() == now_ms) {
-        _bg_func_id = _thread_pool->DelayTask(1, _bg_func);
+        bg_func_id_ = thread_pool_->DelayTask(1, bg_func_);
     } else {
-        _thread_pool->AddTask(_bg_func);
-        _bg_func_id = 0;
+        thread_pool_->AddTask(bg_func_);
+        bg_func_id_ = 0;
     }
 }
 

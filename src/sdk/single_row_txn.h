@@ -53,20 +53,20 @@ public:
     void Serialize(RowMutationSequence* mu_seq);
 
 private:
-    TableImpl* _table;
-    const std::string _row_key;
-    common::ThreadPool* _thread_pool;
+    TableImpl* table_;
+    const std::string row_key_;
+    common::ThreadPool* thread_pool_;
 
-    bool _has_read;
-    RowReader::Callback _user_reader_callback;
-    void* _user_reader_context;
-    RowReader::ReadColumnList _read_column_list;
+    bool has_read_;
+    RowReader::Callback user_reader_callback_;
+    void* user_reader_context_;
+    RowReader::ReadColumnList read_column_list_;
     typedef std::map<std::string, std::map<std::string, int64_t> > ReadResult;
-    ReadResult _read_result;
+    ReadResult read_result_;
 
-    RowMutationImpl _mutation_buffer;
-    Callback _user_commit_callback;
-    void* _user_commit_context;
+    RowMutationImpl mutation_buffer_;
+    Callback user_commit_callback_;
+    void* user_commit_context_;
 };
 
 } // namespace tera
