@@ -216,7 +216,7 @@ public:
 private:
     TableDescriptor(const TableDescriptor&);
     void operator=(const TableDescriptor&);
-    TableDescImpl* _impl;
+    TableDescImpl* impl_;
 };
 
 } // namespace tera

@@ -47,28 +47,28 @@ namespace tera {
 
 ClientImpl::ClientImpl(const std::string& user_identity,
                        const std::string& user_passcode)
-    : _thread_pool(FLAGS_tera_sdk_thread_max_num),
-      _user_identity(user_identity),
-      _user_passcode(user_passcode) {
-    tabletnode::TabletNodeClient::SetThreadPool(&_thread_pool);
+    : thread_pool_(FLAGS_tera_sdk_thread_max_num),
+      user_identity_(user_identity),
+      user_passcode_(user_passcode) {
+    tabletnode::TabletNodeClient::SetThreadPool(&thread_pool_);
     tabletnode::TabletNodeClient::SetRpcOption(
         FLAGS_tera_sdk_rpc_limit_enabled ? FLAGS_tera_sdk_rpc_limit_max_inflow : -1,
         FLAGS_tera_sdk_rpc_limit_enabled ? FLAGS_tera_sdk_rpc_limit_max_outflow : -1,
         FLAGS_tera_sdk_rpc_max_pending_buffer_size, FLAGS_tera_sdk_rpc_work_thread_num);
-    _cluster = sdk::NewClusterFinder();
+    cluster_ = sdk::NewClusterFinder();
 }
 
 ClientImpl::~ClientImpl() {
     {
-        MutexLock l(&_open_table_mutex);
-        if (!_open_table_map.empty()) {
-            std::map<std::string, TableHandle>::iterator it = _open_table_map.begin() ;
-            for (; it != _open_table_map.end(); ++it) {
+        MutexLock l(&open_table_mutex_);
+        if (!open_table_map_.empty()) {
+            std::map<std::string, TableHandle>::iterator it = open_table_map_.begin() ;
+            for (; it != open_table_map_.end(); ++it) {
                 LOG(ERROR) << "table should be delete first: " << it->first;
             }
         }
     }
-    delete _cluster;
+    delete cluster_;
 }
 
 bool ClientImpl::CreateTable(const TableDescriptor& desc, ErrorCode* err) {
@@ -135,7 +135,7 @@ bool ClientImpl::CreateTable(const TableDescriptor& desc,
     if (!CheckTableDescrptor(desc, err)) {
         return false;
     }
-    master::MasterClient master_client(_cluster->MasterAddr());
+    master::MasterClient master_client(cluster_->MasterAddr());
 
     CreateTableRequest request;
     CreateTableResponse response;
@@ -148,7 +148,7 @@ bool ClientImpl::CreateTable(const TableDescriptor& desc,
         internal_table_name = desc.TableName();
     }
     request.set_table_name(internal_table_name);
-    request.set_user_token(GetUserToken(_user_identity, _user_passcode));
+    request.set_user_token(GetUserToken(user_identity_, user_passcode_));
 
     TableSchema* schema = request.mutable_schema();
 
@@ -185,13 +185,13 @@ bool ClientImpl::UpdateTable(const TableDescriptor& desc, ErrorCode* err) {
         return false;
     }
 
-    master::MasterClient master_client(_cluster->MasterAddr());
+    master::MasterClient master_client(cluster_->MasterAddr());
 
     UpdateTableRequest request;
     UpdateTableResponse response;
     request.set_sequence_id(0);
     request.set_table_name(desc.TableName());
-    request.set_user_token(GetUserToken(_user_identity, _user_passcode));
+    request.set_user_token(GetUserToken(user_identity_, user_passcode_));
 
     TableSchema* schema = request.mutable_schema();
     TableDescToSchema(desc, schema);
@@ -232,12 +232,12 @@ bool ClientImpl::UpdateTable(const TableDescriptor& desc, ErrorCode* err) {
 }
 
 bool ClientImpl::UpdateCheck(const std::string& table_name, bool* done, ErrorCode* err) {
-    master::MasterClient master_client(_cluster->MasterAddr());
+    master::MasterClient master_client(cluster_->MasterAddr());
     UpdateCheckRequest request;
     UpdateCheckResponse response;
     request.set_sequence_id(0);
     request.set_table_name(table_name);
-    request.set_user_token(GetUserToken(_user_identity, _user_passcode));
+    request.set_user_token(GetUserToken(user_identity_, user_passcode_));
 
     string reason;
     if (master_client.UpdateCheck(&request, &response)) {
@@ -263,13 +263,13 @@ bool ClientImpl::DeleteTable(const std::string& name, ErrorCode* err) {
         LOG(ERROR) << "faild to scan meta schema";
         return false;
     }
-    master::MasterClient master_client(_cluster->MasterAddr());
+    master::MasterClient master_client(cluster_->MasterAddr());
 
     DeleteTableRequest request;
     DeleteTableResponse response;
     request.set_sequence_id(0);
     request.set_table_name(internal_table_name);
-    request.set_user_token(GetUserToken(_user_identity, _user_passcode));
+    request.set_user_token(GetUserToken(user_identity_, user_passcode_));
 
     string reason;
     if (master_client.DeleteTable(&request, &response)) {
@@ -290,13 +290,13 @@ bool ClientImpl::DisableTable(const std::string& name, ErrorCode* err) {
         LOG(ERROR) << "faild to scan meta schema";
         return false;
     }
-    master::MasterClient master_client(_cluster->MasterAddr());
+    master::MasterClient master_client(cluster_->MasterAddr());
 
     DisableTableRequest request;
     DisableTableResponse response;
     request.set_sequence_id(0);
     request.set_table_name(internal_table_name);
-    request.set_user_token(GetUserToken(_user_identity, _user_passcode));
+    request.set_user_token(GetUserToken(user_identity_, user_passcode_));
 
     string reason;
     if (master_client.DisableTable(&request, &response)) {
@@ -313,7 +313,7 @@ bool ClientImpl::DisableTable(const std::string& name, ErrorCode* err) {
 }
 
 bool ClientImpl::EnableTable(const std::string& name, ErrorCode* err) {
-    master::MasterClient master_client(_cluster->MasterAddr());
+    master::MasterClient master_client(cluster_->MasterAddr());
     std::string internal_table_name;
     if (!GetInternalTableName(name, err, &internal_table_name)) {
         LOG(ERROR) << "faild to scan meta schema";
@@ -323,7 +323,7 @@ bool ClientImpl::EnableTable(const std::string& name, ErrorCode* err) {
     EnableTableResponse response;
     request.set_sequence_id(0);
     request.set_table_name(internal_table_name);
-    request.set_user_token(GetUserToken(_user_identity, _user_passcode));
+    request.set_user_token(GetUserToken(user_identity_, user_passcode_));
 
     std::string reason;
     if (master_client.EnableTable(&request, &response)) {
@@ -353,11 +353,11 @@ void ClientImpl::DoShowUser(OperateUserResponse& response,
 
 bool ClientImpl::OperateUser(UserInfo& operated_user, UserOperateType type,
                              std::vector<std::string>& user_groups, ErrorCode* err) {
-    master::MasterClient master_client(_cluster->MasterAddr());
+    master::MasterClient master_client(cluster_->MasterAddr());
     OperateUserRequest request;
     OperateUserResponse response;
     request.set_sequence_id(0);
-    request.set_user_token(GetUserToken(_user_identity, _user_passcode));
+    request.set_user_token(GetUserToken(user_identity_, user_passcode_));
     request.set_op_type(type);
     UserInfo* user_info = request.mutable_user_info();
     user_info->CopyFrom(operated_user);
@@ -407,7 +407,7 @@ bool ClientImpl::ShowUser(const std::string& user, std::vector<std::string>& use
                           ErrorCode* err) {
     UserInfo user_info;
     user_info.set_user_name(user);
-    user_info.set_token(GetUserToken(_user_identity, _user_passcode));
+    user_info.set_token(GetUserToken(user_identity_, user_passcode_));
     return OperateUser(user_info, kShowUser, user_groups, err);
 }
 
@@ -432,7 +432,7 @@ bool ClientImpl::DeleteUserFromGroup(const std::string& user_name,
 bool ClientImpl::GetInternalTableName(const std::string& table_name, ErrorCode* err,
                                       std::string* internal_table_name) {
     *internal_table_name = table_name;
-    tabletnode::TabletNodeClient meta_client(_cluster->RootTableAddr(true));
+    tabletnode::TabletNodeClient meta_client(cluster_->RootTableAddr(true));
     ScanTabletRequest request;
     ScanTabletResponse response;
     request.set_sequence_id(0);
@@ -469,8 +469,8 @@ bool ClientImpl::GetInternalTableName(const std::string& table_name, ErrorCode* 
 
 Table* ClientImpl::OpenTable(const std::string& table_name,
                              ErrorCode* err) {
-    _open_table_mutex.Lock();
-    TableHandle& th = _open_table_map[table_name];
+    open_table_mutex_.Lock();
+    TableHandle& th = open_table_map_[table_name];
     th.ref++;
 
     if (th.mu == NULL) {
@@ -478,12 +478,12 @@ Table* ClientImpl::OpenTable(const std::string& table_name,
         CHECK(th.handle == NULL);
         th.mu = new Mutex();
         th.mu->Lock();
-        _open_table_mutex.Unlock();
+        open_table_mutex_.Unlock();
         VLOG(10) << "open a new table: " << table_name;
         th.handle = OpenTableInternal(table_name, &th.err);
         th.mu->Unlock();
     } else {
-        _open_table_mutex.Unlock();
+        open_table_mutex_.Unlock();
     }
 
     th.mu->Lock();
@@ -493,10 +493,10 @@ Table* ClientImpl::OpenTable(const std::string& table_name,
     if (th.handle == NULL) {
         VLOG(10) << "open null table: " << table_name;
         th.mu->Unlock();
-        MutexLock l(&_open_table_mutex);
+        MutexLock l(&open_table_mutex_);
         if (--th.ref == 0) {
             delete th.mu;
-            _open_table_map.erase(table_name);
+            open_table_map_.erase(table_name);
         }
         return NULL;
     }
@@ -518,7 +518,7 @@ TableImpl* ClientImpl::OpenTableInternal(const std::string& table_name,
         return NULL;
     }
     err->SetFailed(ErrorCode::kOK);
-    TableImpl* table = new TableImpl(internal_table_name, &_thread_pool, _cluster);
+    TableImpl* table = new TableImpl(internal_table_name, &thread_pool_, cluster_);
     if (table == NULL) {
         std::string reason = "fail to new TableImpl";
         if (err != NULL) {
@@ -535,17 +535,17 @@ TableImpl* ClientImpl::OpenTableInternal(const std::string& table_name,
 }
 
 void ClientImpl::CloseTable(const std::string& table_name) {
-    MutexLock l(&_open_table_mutex);
+    MutexLock l(&open_table_mutex_);
     std::map<std::string, TableHandle>::iterator it;
-    it = _open_table_map.find(table_name);
-    assert(it != _open_table_map.end());
+    it = open_table_map_.find(table_name);
+    assert(it != open_table_map_.end());
     TableHandle& h = it->second;
     h.ref--;
     if (h.ref == 0) {
         VLOG(10) << "close table: " << table_name;
         delete h.handle;
         delete h.mu;
-        _open_table_map.erase(it);
+        open_table_map_.erase(it);
     }
 }
 
@@ -586,7 +586,7 @@ TableDescriptor* ClientImpl::GetTableDescriptor(const string& table_name,
 //                      std::vector<TabletInfo>* tablet_list,
 //                      ErrorCode* err) {
 //      tabletnode::TabletNodeClient meta_client;
-//      meta_client.ResetTabletNodeClient(_cluster->RootTableAddr());
+//      meta_client.ResetTabletNodeClient(cluster_->RootTableAddr());
 //
 //      ScanTabletRequest request;
 //      ScanTabletResponse response;
@@ -634,7 +634,7 @@ bool ClientImpl::List(std::vector<TableInfo>* table_list, ErrorCode* err) {
 
 bool ClientImpl::ShowTableSchema(const string& name, TableSchema* schema,
                                  ErrorCode* err) {
-    tabletnode::TabletNodeClient meta_client(_cluster->RootTableAddr(true));
+    tabletnode::TabletNodeClient meta_client(cluster_->RootTableAddr(true));
     ScanTabletRequest request;
     ScanTabletResponse response;
     request.set_sequence_id(0);
@@ -710,7 +710,7 @@ bool ClientImpl::DoShowTablesInfo(TableMetaList* table_list,
     table_list->Clear();
     tablet_list->Clear();
 
-    master::MasterClient master_client(_cluster->MasterAddr());
+    master::MasterClient master_client(cluster_->MasterAddr());
     std::string start_tablet_key;
     std::string start_table_name = table_name; // maybe a empty string
     bool has_more = true;
@@ -727,7 +727,7 @@ bool ClientImpl::DoShowTablesInfo(TableMetaList* table_list,
         request.set_start_tablet_key(start_tablet_key);
         request.set_max_tablet_num(FLAGS_tera_sdk_show_max_num); //tablets be fetched at most in one RPC
         request.set_sequence_id(0);
-        request.set_user_token(GetUserToken(_user_identity, _user_passcode));
+        request.set_user_token(GetUserToken(user_identity_, user_passcode_));
         request.set_all_brief(is_brief);
 
         if (master_client.ShowTables(&request, &response) &&
@@ -810,14 +810,14 @@ bool ClientImpl::ShowTabletNodesInfo(const string& addr,
     info->Clear();
     tablet_list->Clear();
 
-    master::MasterClient master_client(_cluster->MasterAddr());
+    master::MasterClient master_client(cluster_->MasterAddr());
 
     ShowTabletNodesRequest request;
     ShowTabletNodesResponse response;
     request.set_sequence_id(0);
     request.set_addr(addr);
     request.set_is_showall(false);
-    request.set_user_token(GetUserToken(_user_identity, _user_passcode));
+    request.set_user_token(GetUserToken(user_identity_, user_passcode_));
 
     if (master_client.ShowTabletNodes(&request, &response) &&
         response.status() == kMasterOk) {
@@ -840,7 +840,7 @@ bool ClientImpl::ShowTabletNodesInfo(std::vector<TabletNodeInfo>* infos,
     }
     infos->clear();
 
-    master::MasterClient master_client(_cluster->MasterAddr());
+    master::MasterClient master_client(cluster_->MasterAddr());
 
     ShowTabletNodesRequest request;
     ShowTabletNodesResponse response;
@@ -938,7 +938,7 @@ bool ClientImpl::IsTableEmpty(const string& table_name, ErrorCode* err) {
 }
 
 bool ClientImpl::GetSnapshot(const string& name, uint64_t* snapshot, ErrorCode* err) {
-    master::MasterClient master_client(_cluster->MasterAddr());
+    master::MasterClient master_client(cluster_->MasterAddr());
 
     std::string internal_table_name;
     if (!GetInternalTableName(name, err, &internal_table_name)) {
@@ -963,7 +963,7 @@ bool ClientImpl::GetSnapshot(const string& name, uint64_t* snapshot, ErrorCode* 
 }
 
 bool ClientImpl::DelSnapshot(const string& name, uint64_t snapshot, ErrorCode* err) {
-    master::MasterClient master_client(_cluster->MasterAddr());
+    master::MasterClient master_client(cluster_->MasterAddr());
 
     std::string internal_table_name;
     if (!GetInternalTableName(name, err, &internal_table_name)) {
@@ -989,7 +989,7 @@ bool ClientImpl::DelSnapshot(const string& name, uint64_t snapshot, ErrorCode* e
 
 bool ClientImpl::Rollback(const string& name, uint64_t snapshot,
                           const std::string& rollback_name, ErrorCode* err) {
-    master::MasterClient master_client(_cluster->MasterAddr());
+    master::MasterClient master_client(cluster_->MasterAddr());
 
     std::string internal_table_name;
     if (!GetInternalTableName(name, err, &internal_table_name)) {
@@ -1020,7 +1020,7 @@ bool ClientImpl::CmdCtrl(const string& command,
                          bool* bool_result,
                          string* str_result,
                          ErrorCode* err) {
-    master::MasterClient master_client(_cluster->MasterAddr());
+    master::MasterClient master_client(cluster_->MasterAddr());
 
     CmdCtrlRequest request;
     CmdCtrlResponse response;
@@ -1049,7 +1049,7 @@ bool ClientImpl::CmdCtrl(const string& command,
 bool ClientImpl::Rename(const std::string& old_table_name,
                         const std::string& new_table_name,
                         ErrorCode* err) {
-    master::MasterClient master_client(_cluster->MasterAddr());
+    master::MasterClient master_client(cluster_->MasterAddr());
     RenameTableRequest request;
     RenameTableResponse response;
     uint64_t sequence_id = 0;
@@ -1073,7 +1073,7 @@ bool ClientImpl::ListInternal(std::vector<TableInfo>* table_list,
                               uint32_t max_table_found,
                               uint32_t max_tablet_found,
                               ErrorCode* err) {
-    master::MasterClient master_client(_cluster->MasterAddr());
+    master::MasterClient master_client(cluster_->MasterAddr());
 
     uint64_t sequence_id = 0;
     ShowTablesRequest request;
@@ -1083,7 +1083,7 @@ bool ClientImpl::ListInternal(std::vector<TableInfo>* table_list,
     request.set_max_tablet_num(max_tablet_found);
     request.set_start_table_name(start_table_name);
     request.set_start_tablet_key(start_tablet_key);
-    request.set_user_token(GetUserToken(_user_identity, _user_passcode));
+    request.set_user_token(GetUserToken(user_identity_, user_passcode_));
 
     bool is_more = true;
     while (is_more) {

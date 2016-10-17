@@ -119,7 +119,7 @@ public:
 private:
     ScanDescriptor(const ScanDescriptor&);
     void operator=(const ScanDescriptor&);
-    ScanDescImpl* _impl;
+    ScanDescImpl* impl_;
 };
 
 } // namespace tera

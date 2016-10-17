@@ -136,7 +136,7 @@ public:
     uint32_t RetryTimes();
 
     /// 返回所属事务
-    Transaction* GetTransaction() { return _txn; }
+    Transaction* GetTransaction() { return txn_; }
 
 public:
     /// 以下接口仅内部使用，不开放给用户
@@ -162,11 +162,11 @@ public:
     void SetErrorIfInvalid(const std::string& str,
                            const FieldLimit& field);
 
-    void AddCommitTimes() { _commit_times++; }
-    int64_t GetCommitTimes() { return _commit_times; }
+    void AddCommitTimes() { commit_times_++; }
+    int64_t GetCommitTimes() { return commit_times_; }
 
     /// 设置所属事务
-    void SetTransaction(Transaction* txn) { _txn = txn; }
+    void SetTransaction(Transaction* txn) { txn_ = txn; }
 
     /// 连接
     void Concatenate(RowMutationImpl& row_mu);
@@ -176,25 +176,25 @@ protected:
     RowMutation::Mutation& AddMutation();
 
 private:
-    TableImpl* _table;
-    std::string _row_key;
-    std::vector<RowMutation::Mutation> _mu_seq;
+    TableImpl* table_;
+    std::string row_key_;
+    std::vector<RowMutation::Mutation> mu_seq_;
 
-    RowMutation::Callback _callback;
-    void* _user_context;
-    int64_t _timeout_ms;
-    uint32_t _retry_times;
+    RowMutation::Callback callback_;
+    void* user_context_;
+    int64_t timeout_ms_;
+    uint32_t retry_times_;
 
-    bool _finish;
-    ErrorCode _error_code;
-    mutable Mutex _finish_mutex;
-    common::CondVar _finish_cond;
+    bool finish_;
+    ErrorCode error_code_;
+    mutable Mutex finish_mutex_;
+    common::CondVar finish_cond_;
 
     /// 记录此mutation被提交到ts的次数
-    int64_t _commit_times;
+    int64_t commit_times_;
 
     /// 所属事务
-    Transaction* _txn;
+    Transaction* txn_;
 };
 
 void SerializeMutation(const RowMutation::Mutation& src, tera::Mutation* dst);

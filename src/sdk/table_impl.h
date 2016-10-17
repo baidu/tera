@@ -41,40 +41,40 @@ class ReadTabletResponse;
 
 class SyncMutationBatch {
 public:
-    std::vector<RowMutation*> _row_list;
-    mutable Mutex _finish_mutex;
-    common::CondVar _finish_cond;
-    uint32_t _unfinished_count;
+    std::vector<RowMutation*> row_list_;
+    mutable Mutex finish_mutex_;
+    common::CondVar finish_cond_;
+    uint32_t unfinished_count_;
 
     SyncMutationBatch(const std::vector<RowMutation*>& row_list)
-        : _finish_cond(&_finish_mutex) {
+        : finish_cond_(&finish_mutex_) {
         for (uint32_t i = 0; i < row_list.size(); i++) {
             RowMutation* mutation = row_list[i];
             if (!mutation->IsAsync()) {
-                _row_list.push_back(mutation);
+                row_list_.push_back(mutation);
             }
         }
-        _unfinished_count = _row_list.size();
+        unfinished_count_ = row_list_.size();
     }
 
     void AddMutation(RowMutation* mutation) {
-        MutexLock lock(&_finish_mutex);
-        _row_list.push_back(mutation);
-        _unfinished_count++;
+        MutexLock lock(&finish_mutex_);
+        row_list_.push_back(mutation);
+        unfinished_count_++;
     }
 
     void WaitUntilFinish() {
-        _finish_mutex.Lock();
-        while (0 != _unfinished_count) {
-            _finish_cond.Wait();
+        finish_mutex_.Lock();
+        while (0 != unfinished_count_) {
+            finish_cond_.Wait();
         }
-        _finish_mutex.Unlock();
+        finish_mutex_.Unlock();
     }
 
     void OnFinishOne() {
-        MutexLock lock(&_finish_mutex);
-        if (--_unfinished_count == 0) {
-            _finish_cond.Signal();
+        MutexLock lock(&finish_mutex_);
+        if (--unfinished_count_ == 0) {
+            finish_cond_.Signal();
         }
     }
 };
@@ -157,13 +157,13 @@ public:
                     const std::string& qualifier, int64_t* value,
                     ErrorCode* err, uint64_t snapshot_id);
 
-    virtual bool IsPutFinished() { return _cur_commit_pending_counter.Get() == 0; }
+    virtual bool IsPutFinished() { return cur_commit_pending_counter_.Get() == 0; }
 
-    virtual bool IsGetFinished() { return _cur_reader_pending_counter.Get() == 0; }
+    virtual bool IsGetFinished() { return cur_reader_pending_counter_.Get() == 0; }
 
     virtual ResultStream* Scan(const ScanDescriptor& desc, ErrorCode* err);
 
-    virtual const std::string GetName() { return _name; }
+    virtual const std::string GetName() { return name_; }
 
     virtual bool Flush();
 
@@ -194,10 +194,10 @@ public:
     virtual bool GetDescriptor(TableDescriptor* desc, ErrorCode* err);
 
     virtual void SetMaxMutationPendingNum(uint64_t max_pending_num) {
-        _max_commit_pending_num = max_pending_num;
+        max_commit_pending_num_ = max_pending_num;
     }
     virtual void SetMaxReaderPendingNum(uint64_t max_pending_num) {
-        _max_reader_pending_num = max_pending_num;
+        max_reader_pending_num_ = max_pending_num;
     }
 
 public:
@@ -211,9 +211,9 @@ public:
 
     bool GetTabletMetaForKey(const std::string& key, TabletMeta* meta);
 
-    uint64_t GetMaxMutationPendingNum() { return _max_commit_pending_num; }
-    uint64_t GetMaxReaderPendingNum() { return _max_reader_pending_num; }
-    TableSchema GetTableSchema() { return  _table_schema; }
+    uint64_t GetMaxMutationPendingNum() { return max_commit_pending_num_; }
+    uint64_t GetMaxReaderPendingNum() { return max_reader_pending_num_; }
+    TableSchema GetTableSchema() { return  table_schema_; }
 
     struct PerfCounter {
         int64_t start_time;
@@ -408,118 +408,118 @@ private:
         std::vector<int64_t>* row_id_list;
     };
 
-    std::string _name;
-    int64_t _create_time;
-    uint64_t _last_sequence_id;
-    uint32_t _timeout;
+    std::string name_;
+    int64_t create_time_;
+    uint64_t last_sequence_id_;
+    uint32_t timeout_;
 
-    mutable Mutex _mutation_batch_mutex;
-    mutable Mutex _reader_batch_mutex;
-    uint32_t _commit_size;
-    uint64_t _write_commit_timeout;
-    uint64_t _read_commit_timeout;
-    std::map<std::string, TaskBatch> _mutation_batch_map;
-    std::map<std::string, TaskBatch> _reader_batch_map;
-    uint64_t _mutation_batch_seq;
-    uint64_t _reader_batch_seq;
-    Counter _cur_commit_pending_counter;
-    Counter _cur_reader_pending_counter;
-    int64_t _max_commit_pending_num;
-    int64_t _max_reader_pending_num;
+    mutable Mutex mutation_batch_mutex_;
+    mutable Mutex reader_batch_mutex_;
+    uint32_t commit_size_;
+    uint64_t write_commit_timeout_;
+    uint64_t read_commit_timeout_;
+    std::map<std::string, TaskBatch> mutation_batch_map_;
+    std::map<std::string, TaskBatch> reader_batch_map_;
+    uint64_t mutation_batch_seq_;
+    uint64_t reader_batch_seq_;
+    Counter cur_commit_pending_counter_;
+    Counter cur_reader_pending_counter_;
+    int64_t max_commit_pending_num_;
+    int64_t max_reader_pending_num_;
 
     // meta management
-    mutable Mutex _meta_mutex;
-    common::CondVar _meta_cond;
-    std::map<std::string, std::list<int64_t> > _pending_task_id_list;
-    uint32_t _meta_updating_count;
-    std::map<std::string, TabletMetaNode> _tablet_meta_list;
+    mutable Mutex meta_mutex_;
+    common::CondVar meta_cond_;
+    std::map<std::string, std::list<int64_t> > pending_task_id_list_;
+    uint32_t meta_updating_count_;
+    std::map<std::string, TabletMetaNode> tablet_meta_list_;
     // end of meta management
 
     // table meta managerment
-    mutable Mutex _table_meta_mutex;
-    common::CondVar _table_meta_cond;
-    bool _table_meta_updating;
-    TableSchema _table_schema;
+    mutable Mutex table_meta_mutex_;
+    common::CondVar table_meta_cond_;
+    bool table_meta_updating_;
+    TableSchema table_schema_;
     // end of table meta managerment
 
-    SdkTimeoutManager _task_pool;
-    Counter _next_task_id;
+    SdkTimeoutManager task_pool_;
+    Counter next_task_id_;
 
-    master::MasterClient* _master_client;
-    tabletnode::TabletNodeClient* _tabletnode_client;
+    master::MasterClient* master_client_;
+    tabletnode::TabletNodeClient* tabletnode_client_;
 
-    ThreadPool* _thread_pool;
-    mutable Mutex _delay_task_id_mutex;
-    std::set<int64_t> _delay_task_ids;
-    /// _cluster could cache the master_addr & root_table_addr.
-    /// if there is no _cluster,
+    ThreadPool* thread_pool_;
+    mutable Mutex delay_task_id_mutex_;
+    std::set<int64_t> delay_task_ids_;
+    /// cluster_ could cache the master_addr & root_table_addr.
+    /// if there is no cluster_,
     ///    we have to access zookeeper whenever we need master_addr or root_table_addr.
-    /// if there is _cluster,
-    ///    we save master_addr & root_table_addr in _cluster, access zookeeper only once.
-    sdk::ClusterFinder* _cluster;
-    bool _cluster_private;
+    /// if there is cluster_,
+    ///    we save master_addr & root_table_addr in cluster_, access zookeeper only once.
+    sdk::ClusterFinder* cluster_;
+    bool cluster_private_;
 
-    PerfCounter _perf_counter;  // calc time consumption, for performance analysis
+    PerfCounter perf_counter_;  // calc time consumption, for performance analysis
 
     /// read request will contain this member,
     /// so tabletnodes can drop the read-request that timeouted
-    uint64_t _pending_timeout_ms;
+    uint64_t pending_timeout_ms_;
 };
 
 class TableWrapper: public Table {
 public:
     explicit TableWrapper(Table* impl, ClientImpl* client)
-        : _impl(impl), _client(client) {}
+        : impl_(impl), client_(client) {}
     virtual ~TableWrapper() {
-        _client->CloseTable(_impl->GetName());
+        client_->CloseTable(impl_->GetName());
     }
     virtual RowMutation* NewRowMutation(const std::string& row_key) {
-        return _impl->NewRowMutation(row_key);
+        return impl_->NewRowMutation(row_key);
     }
     virtual RowReader* NewRowReader(const std::string& row_key) {
-        return _impl->NewRowReader(row_key);
+        return impl_->NewRowReader(row_key);
     }
     virtual void Put(RowMutation* row_mu) {
-        _impl->Put(row_mu);
+        impl_->Put(row_mu);
     }
     virtual void Put(const std::vector<RowMutation*>& row_mu_list) {
-        _impl->Put(row_mu_list);
+        impl_->Put(row_mu_list);
     }
     virtual void ApplyMutation(RowMutation* row_mu) {
-        _impl->ApplyMutation(row_mu);
+        impl_->ApplyMutation(row_mu);
     }
     virtual void ApplyMutation(const std::vector<RowMutation*>& row_mu_list) {
-        _impl->ApplyMutation(row_mu_list);
+        impl_->ApplyMutation(row_mu_list);
     }
     virtual bool Put(const std::string& row_key, const std::string& family,
                      const std::string& qualifier, const std::string& value,
                      ErrorCode* err) {
-        return _impl->Put(row_key, family, qualifier, value, err);
+        return impl_->Put(row_key, family, qualifier, value, err);
     }
     virtual bool Put(const std::string& row_key, const std::string& family,
                      const std::string& qualifier, const int64_t value,
                      ErrorCode* err) {
-        return _impl->Put(row_key, family, qualifier, value, err);
+        return impl_->Put(row_key, family, qualifier, value, err);
     }
     virtual bool Put(const std::string& row_key, const std::string& family,
                      const std::string& qualifier, const std::string& value,
                      int32_t ttl, ErrorCode* err) {
-        return _impl->Put(row_key, family, qualifier, value, ttl, err);
+        return impl_->Put(row_key, family, qualifier, value, ttl, err);
     }
     virtual bool Put(const std::string& row_key, const std::string& family,
                      const std::string& qualifier, const std::string& value,
                      int64_t timestamp, int32_t ttl, ErrorCode* err) {
-        return _impl->Put(row_key, family, qualifier, value, timestamp, ttl, err);
+        return impl_->Put(row_key, family, qualifier, value, timestamp, ttl, err);
     }
     virtual bool Add(const std::string& row_key, const std::string& family,
                      const std::string& qualifier, int64_t delta,
                      ErrorCode* err) {
-        return _impl->Add(row_key, family, qualifier, delta, err);
+        return impl_->Add(row_key, family, qualifier, delta, err);
     }
     virtual bool AddInt64(const std::string& row_key, const std::string& family,
                      const std::string& qualifier, int64_t delta,
                      ErrorCode* err) {
-        return _impl->AddInt64(row_key, family, qualifier, delta, err);
+        return impl_->AddInt64(row_key, family, qualifier, delta, err);
     }
 
     virtual bool PutIfAbsent(const std::string& row_key,
@@ -527,119 +527,119 @@ public:
                              const std::string& qualifier,
                              const std::string& value,
                              ErrorCode* err) {
-        return _impl->PutIfAbsent(row_key, family, qualifier, value, err);
+        return impl_->PutIfAbsent(row_key, family, qualifier, value, err);
     }
 
     virtual bool Append(const std::string& row_key, const std::string& family,
                         const std::string& qualifier, const std::string& value,
                         ErrorCode* err) {
-        return _impl->Append(row_key, family, qualifier, value, err);
+        return impl_->Append(row_key, family, qualifier, value, err);
     }
     virtual void Get(RowReader* row_reader) {
-        _impl->Get(row_reader);
+        impl_->Get(row_reader);
     }
     virtual void Get(const std::vector<RowReader*>& row_readers) {
-        _impl->Get(row_readers);
+        impl_->Get(row_readers);
     }
     virtual bool Get(const std::string& row_key, const std::string& family,
                      const std::string& qualifier, std::string* value,
                      ErrorCode* err) {
-        return _impl->Get(row_key, family, qualifier, value, err);
+        return impl_->Get(row_key, family, qualifier, value, err);
     }
     virtual bool Get(const std::string& row_key, const std::string& family,
                      const std::string& qualifier, int64_t* value,
                      ErrorCode* err) {
-        return _impl->Get(row_key, family, qualifier, value, err);
+        return impl_->Get(row_key, family, qualifier, value, err);
     }
     virtual bool Get(const std::string& row_key, const std::string& family,
                      const std::string& qualifier, std::string* value,
                      ErrorCode* err, uint64_t snapshot_id) {
-        return _impl->Get(row_key, family, qualifier, value, snapshot_id, err);
+        return impl_->Get(row_key, family, qualifier, value, snapshot_id, err);
     }
     virtual bool Get(const std::string& row_key, const std::string& family,
                      const std::string& qualifier, std::string* value,
                      uint64_t snapshot_id, ErrorCode* err) {
-        return _impl->Get(row_key, family, qualifier, value, snapshot_id, err);
+        return impl_->Get(row_key, family, qualifier, value, snapshot_id, err);
     }
     virtual bool Get(const std::string& row_key, const std::string& family,
                      const std::string& qualifier, int64_t* value,
                      ErrorCode* err, uint64_t snapshot_id) {
-        return _impl->Get(row_key, family, qualifier, value, snapshot_id, err);
+        return impl_->Get(row_key, family, qualifier, value, snapshot_id, err);
     }
     virtual bool Get(const std::string& row_key, const std::string& family,
                      const std::string& qualifier, int64_t* value,
                      uint64_t snapshot_id, ErrorCode* err) {
-        return _impl->Get(row_key, family, qualifier, value, snapshot_id, err);
+        return impl_->Get(row_key, family, qualifier, value, snapshot_id, err);
     }
 
     virtual bool IsPutFinished() {
-        return _impl->IsPutFinished();
+        return impl_->IsPutFinished();
     }
     virtual bool IsGetFinished() {
-        return _impl->IsGetFinished();
+        return impl_->IsGetFinished();
     }
 
     virtual ResultStream* Scan(const ScanDescriptor& desc, ErrorCode* err) {
-        return _impl->Scan(desc, err);
+        return impl_->Scan(desc, err);
     }
 
     virtual const std::string GetName() {
-        return _impl->GetName();
+        return impl_->GetName();
     }
 
     virtual bool Flush() {
-        return _impl->Flush();
+        return impl_->Flush();
     }
     virtual bool CheckAndApply(const std::string& rowkey, const std::string& cf_c,
                                const std::string& value, const RowMutation& row_mu,
                                ErrorCode* err) {
-        return _impl->CheckAndApply(rowkey, cf_c, value, row_mu, err);
+        return impl_->CheckAndApply(rowkey, cf_c, value, row_mu, err);
     }
     virtual int64_t IncrementColumnValue(const std::string& row, const std::string& family,
                                          const std::string& qualifier, int64_t amount,
                                          ErrorCode* err) {
-        return _impl->IncrementColumnValue(row, family, qualifier, amount, err);
+        return impl_->IncrementColumnValue(row, family, qualifier, amount, err);
     }
     virtual Transaction* StartRowTransaction(const std::string& row_key) {
-        return _impl->StartRowTransaction(row_key);
+        return impl_->StartRowTransaction(row_key);
     }
     virtual void CommitRowTransaction(Transaction* transaction) {
-        _impl->CommitRowTransaction(transaction);
+        impl_->CommitRowTransaction(transaction);
     }
     virtual void SetWriteTimeout(int64_t timeout_ms) {
-        _impl->SetWriteTimeout(timeout_ms);
+        impl_->SetWriteTimeout(timeout_ms);
     }
     virtual void SetReadTimeout(int64_t timeout_ms) {
-        _impl->SetReadTimeout(timeout_ms);
+        impl_->SetReadTimeout(timeout_ms);
     }
 
     virtual bool LockRow(const std::string& rowkey, RowLock* lock, ErrorCode* err) {
-        return _impl->LockRow(rowkey, lock, err);
+        return impl_->LockRow(rowkey, lock, err);
     }
 
     virtual bool GetStartEndKeys(std::string* start_key, std::string* end_key,
                                  ErrorCode* err) {
-        return _impl->GetStartEndKeys(start_key, end_key, err);
+        return impl_->GetStartEndKeys(start_key, end_key, err);
     }
 
     virtual bool GetTabletLocation(std::vector<TabletInfo>* tablets,
                                    ErrorCode* err) {
-        return _impl->GetTabletLocation(tablets, err);
+        return impl_->GetTabletLocation(tablets, err);
     }
     virtual bool GetDescriptor(TableDescriptor* desc, ErrorCode* err) {
-        return _impl->GetDescriptor(desc, err);
+        return impl_->GetDescriptor(desc, err);
     }
 
     virtual void SetMaxMutationPendingNum(uint64_t max_pending_num) {
-        _impl->SetMaxMutationPendingNum(max_pending_num);
+        impl_->SetMaxMutationPendingNum(max_pending_num);
     }
     virtual void SetMaxReaderPendingNum(uint64_t max_pending_num) {
-        _impl->SetMaxReaderPendingNum(max_pending_num);
+        impl_->SetMaxReaderPendingNum(max_pending_num);
     }
 
 private:
-    Table* _impl;
-    ClientImpl* _client;
+    Table* impl_;
+    ClientImpl* client_;
 };
 
 } // namespace tera

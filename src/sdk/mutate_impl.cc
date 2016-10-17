@@ -11,15 +11,15 @@ namespace tera {
 
 RowMutationImpl::RowMutationImpl(TableImpl* table, const std::string& row_key)
     : SdkTask(SdkTask::MUTATION),
-      _table(table),
-      _row_key(row_key),
-      _callback(NULL),
-      _timeout_ms(0),
-      _retry_times(0),
-      _finish(false),
-      _finish_cond(&_finish_mutex),
-      _commit_times(0),
-      _txn(NULL) {
+      table_(table),
+      row_key_(row_key),
+      callback_(NULL),
+      timeout_ms_(0),
+      retry_times_(0),
+      finish_(false),
+      finish_cond_(&finish_mutex_),
+      commit_times_(0),
+      txn_(NULL) {
     SetErrorIfInvalid(row_key, kRowkey);
 }
 
@@ -28,36 +28,36 @@ RowMutationImpl::~RowMutationImpl() {
 
 /// 重置，复用前必须调用
 void RowMutationImpl::Reset(const std::string& row_key) {
-    _row_key = row_key;
-    _mu_seq.clear();
-    _callback = NULL;
-    _timeout_ms = 0;
-    _retry_times = 0;
-    _finish = false;
-    _error_code.SetFailed(ErrorCode::kOK);
-    _commit_times = 0;
+    row_key_ = row_key;
+    mu_seq_.clear();
+    callback_ = NULL;
+    timeout_ms_ = 0;
+    retry_times_ = 0;
+    finish_ = false;
+    error_code_.SetFailed(ErrorCode::kOK);
+    commit_times_ = 0;
 }
 
 void RowMutationImpl::SetErrorIfInvalid(const std::string& str,
                                         const FieldLimit& field) {
-    std::string reason = _error_code.GetReason();
+    std::string reason = error_code_.GetReason();
     switch (field) {
     case kRowkey: {
         if (str.size() >= kRowkeySize) {
             reason.append(" Bad parameters: rowkey should < 64KB");
-            _error_code.SetFailed(ErrorCode::kBadParam, reason);
+            error_code_.SetFailed(ErrorCode::kBadParam, reason);
         }
     } break;
     case kQualifier: {
         if (str.size() >= kQualifierSize) {
             reason.append(" Bad parameters: qualifier should < 64KB");
-            _error_code.SetFailed(ErrorCode::kBadParam, reason);
+            error_code_.SetFailed(ErrorCode::kBadParam, reason);
         }
     } break;
     case kValue: {
         if (str.size() >= kValueSize) {
             reason.append(" Bad parameters: value should < 32MB");
-            _error_code.SetFailed(ErrorCode::kBadParam, reason);
+            error_code_.SetFailed(ErrorCode::kBadParam, reason);
         }
     } break;
     default: {
@@ -267,109 +267,109 @@ void RowMutationImpl::SetLock(RowLock* rowlock) {
 
 /// 设置超时时间(只影响当前操作,不影响Table::SetWriteTimeout设置的默认写超时)
 void RowMutationImpl::SetTimeOut(int64_t timeout_ms) {
-    _timeout_ms = timeout_ms;
+    timeout_ms_ = timeout_ms;
 }
 
 int64_t RowMutationImpl::TimeOut() {
-    return _timeout_ms;
+    return timeout_ms_;
 }
 
 /// 设置异步回调, 操作会异步返回
 void RowMutationImpl::SetCallBack(RowMutation::Callback callback) {
-    _callback = callback;
+    callback_ = callback;
 }
 
 /// 获得回调函数
 RowMutation::Callback RowMutationImpl::GetCallBack() {
-    return _callback;
+    return callback_;
 }
 
 /// 设置用户上下文，可在回调函数中获取
 void RowMutationImpl::SetContext(void* context) {
-    _user_context = context;
+    user_context_ = context;
 }
 
 /// 获得用户上下文
 void* RowMutationImpl::GetContext() {
-    return _user_context;
+    return user_context_;
 }
 
 /// 获得结果错误码
 const ErrorCode& RowMutationImpl::GetError() {
-    return _error_code;
+    return error_code_;
 }
 
 /// 是否异步操作
 bool RowMutationImpl::IsAsync() {
-    return (_callback != NULL);
+    return (callback_ != NULL);
 }
 
 /// 异步操作是否完成
 bool RowMutationImpl::IsFinished() const {
-    MutexLock lock(&_finish_mutex);
-    return _finish;
+    MutexLock lock(&finish_mutex_);
+    return finish_;
 }
 
 /// 返回row_key
 const std::string& RowMutationImpl::RowKey() {
-    return _row_key;
+    return row_key_;
 }
 
 /// mutation数量
 uint32_t RowMutationImpl::MutationNum() {
-    return _mu_seq.size();
+    return mu_seq_.size();
 }
 
 /// mutation总大小
 uint32_t RowMutationImpl::Size() {
     uint32_t total_size = 0;
-    for (size_t i = 0; i < _mu_seq.size(); ++i) {
+    for (size_t i = 0; i < mu_seq_.size(); ++i) {
         total_size +=
-            + _row_key.size()
-            + _mu_seq[i].family.size()
-            + _mu_seq[i].qualifier.size()
-            + _mu_seq[i].value.size()
-            + sizeof(_mu_seq[i].timestamp);
+            + row_key_.size()
+            + mu_seq_[i].family.size()
+            + mu_seq_[i].qualifier.size()
+            + mu_seq_[i].value.size()
+            + sizeof(mu_seq_[i].timestamp);
     }
     return total_size;
 }
 
 /// 返回mutation
 const RowMutation::Mutation& RowMutationImpl::GetMutation(uint32_t index) {
-    return _mu_seq[index];
+    return mu_seq_[index];
 }
 
 /// 重试次数
 uint32_t RowMutationImpl::RetryTimes() {
-    return _retry_times;
+    return retry_times_;
 }
 
 /// 重试计数加一
 void RowMutationImpl::IncRetryTimes() {
-    _retry_times++;
+    retry_times_++;
 }
 
 /// 设置错误码
 void RowMutationImpl::SetError(ErrorCode::ErrorCodeType err,
                                const std::string& reason) {
-    _error_code.SetFailed(err, reason);
+    error_code_.SetFailed(err, reason);
 }
 
 /// 等待结束
 void RowMutationImpl::Wait() {
-    MutexLock lock(&_finish_mutex);
-    while (!_finish) {
-        _finish_cond.Wait();
+    MutexLock lock(&finish_mutex_);
+    while (!finish_) {
+        finish_cond_.Wait();
     }
 }
 
 void RowMutationImpl::RunCallback() {
-    if (_callback) {
-        _callback(this);
+    if (callback_) {
+        callback_(this);
     } else {
-        MutexLock lock(&_finish_mutex);
-        _finish = true;
-        _finish_cond.Signal();
+        MutexLock lock(&finish_mutex_);
+        finish_ = true;
+        finish_cond_.Signal();
     }
 }
 
@@ -381,8 +381,8 @@ void RowMutationImpl::Concatenate(RowMutationImpl& row_mu) {
 }
 
 RowMutation::Mutation& RowMutationImpl::AddMutation() {
-    _mu_seq.resize(_mu_seq.size() + 1);
-    return _mu_seq.back();
+    mu_seq_.resize(mu_seq_.size() + 1);
+    return mu_seq_.back();
 }
 
 void SerializeMutation(const RowMutation::Mutation& src, tera::Mutation* dst) {

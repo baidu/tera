@@ -18,99 +18,99 @@ class RowMutationReplicateImpl : public RowMutationReplicate {
 public:
     RowMutationReplicateImpl(const std::vector<RowMutation*>& row_mutations,
                              const std::vector<Table*>& tables)
-        : _row_mutations(row_mutations),
-          _tables(tables),
-          _user_callback(NULL),
-          _user_context(NULL),
-          _finish_cond(&_mutex),
-          _finish_count(0),
-          _success_row_mutation(NULL),
-          _fail_row_mutation(NULL) {
-        CHECK_GT(_row_mutations.size(), 0u);
-        for (size_t i = 0; i < _row_mutations.size(); i++) {
-            _row_mutations[i]->SetCallBack(RowMutationCallback);
-            _row_mutations[i]->SetContext(this);
+        : row_mutations_(row_mutations),
+          tables_(tables),
+          user_callback_(NULL),
+          user_context_(NULL),
+          finish_cond_(&mutex_),
+          finish_count_(0),
+          success_row_mutation_(NULL),
+          fail_row_mutation_(NULL) {
+        CHECK_GT(row_mutations_.size(), 0u);
+        for (size_t i = 0; i < row_mutations_.size(); i++) {
+            row_mutations_[i]->SetCallBack(RowMutationCallback);
+            row_mutations_[i]->SetContext(this);
         }
     }
 
     virtual ~RowMutationReplicateImpl() {
-        for (size_t i = 0; i < _row_mutations.size(); i++) {
-            delete _row_mutations[i];
+        for (size_t i = 0; i < row_mutations_.size(); i++) {
+            delete row_mutations_[i];
         }
     }
 
     virtual const std::string& RowKey() {
-        return _row_mutations[0]->RowKey();
+        return row_mutations_[0]->RowKey();
     }
 
     virtual void Put(const std::string& value) {
-        for (size_t i = 0; i < _row_mutations.size(); i++) {
-            _row_mutations[i]->Put(value);
+        for (size_t i = 0; i < row_mutations_.size(); i++) {
+            row_mutations_[i]->Put(value);
         }
     }
 
     virtual void Put(const std::string& value, int32_t ttl) {
-        for (size_t i = 0; i < _row_mutations.size(); i++) {
-            _row_mutations[i]->Put(value, ttl);
+        for (size_t i = 0; i < row_mutations_.size(); i++) {
+            row_mutations_[i]->Put(value, ttl);
         }
     }
 
     virtual void DeleteRow() {
-        for (size_t i = 0; i < _row_mutations.size(); i++) {
-            _row_mutations[i]->DeleteRow();
+        for (size_t i = 0; i < row_mutations_.size(); i++) {
+            row_mutations_[i]->DeleteRow();
         }
     }
 
     virtual void SetCallBack(Callback callback) {
-        _user_callback = callback;
+        user_callback_ = callback;
     }
 
     virtual Callback GetCallBack() {
-        return _user_callback;
+        return user_callback_;
     }
 
     virtual void SetContext(void* context) {
-        _user_context = context;
+        user_context_ = context;
     }
 
     virtual void* GetContext() {
-        return _user_context;
+        return user_context_;
     }
 
     virtual const ErrorCode& GetError() {
-        if (_fail_row_mutation == NULL) {
-            CHECK_NOTNULL(_success_row_mutation);
-            return _success_row_mutation->GetError();
+        if (fail_row_mutation_ == NULL) {
+            CHECK_NOTNULL(success_row_mutation_);
+            return success_row_mutation_->GetError();
         }
-        if (_success_row_mutation == NULL) {
-            CHECK_NOTNULL(_fail_row_mutation);
-            return _fail_row_mutation->GetError();
+        if (success_row_mutation_ == NULL) {
+            CHECK_NOTNULL(fail_row_mutation_);
+            return fail_row_mutation_->GetError();
         }
         if (FLAGS_tera_replication_write_need_all_success) {
-            return _fail_row_mutation->GetError();
+            return fail_row_mutation_->GetError();
         } else {
-            return _success_row_mutation->GetError();
+            return success_row_mutation_->GetError();
         }
     }
 
 public:
     const std::vector<RowMutation*>& GetRowMutationList() {
-        return _row_mutations;
+        return row_mutations_;
     }
 
     const std::vector<Table*>& GetTableList() {
-        return _tables;
+        return tables_;
     }
 
     bool IsAsync() {
-        return (_user_callback != NULL);
+        return (user_callback_ != NULL);
     }
 
     void Wait() {
-        CHECK(_user_callback == NULL);
-        MutexLock l(&_mutex);
-        while (_finish_count < _row_mutations.size()) {
-            _finish_cond.Wait();
+        CHECK(user_callback_ == NULL);
+        MutexLock l(&mutex_);
+        while (finish_count_ < row_mutations_.size()) {
+            finish_cond_.Wait();
         }
     }
 
@@ -124,108 +124,108 @@ private:
     }
 
     void ProcessCallback(RowMutation* mutation) {
-        _mutex.Lock();
+        mutex_.Lock();
         if (mutation->GetError().GetType() == tera::ErrorCode::kOK) {
-            if (_success_row_mutation == NULL) {
-                _success_row_mutation = mutation;
+            if (success_row_mutation_ == NULL) {
+                success_row_mutation_ = mutation;
             }
         } else {
-            if (_fail_row_mutation == NULL) {
-                _fail_row_mutation = mutation;
+            if (fail_row_mutation_ == NULL) {
+                fail_row_mutation_ = mutation;
             }
         }
-        if (++_finish_count == _row_mutations.size()) {
-            if (_user_callback != NULL) {
-                _mutex.Unlock(); // remember to unlock
-                _user_callback(this);
+        if (++finish_count_ == row_mutations_.size()) {
+            if (user_callback_ != NULL) {
+                mutex_.Unlock(); // remember to unlock
+                user_callback_(this);
                 return; // remember to return
             } else {
-                _finish_cond.Signal();
+                finish_cond_.Signal();
             }
         }
-        _mutex.Unlock();
+        mutex_.Unlock();
     }
 
-    std::vector<RowMutation*> _row_mutations;
-    std::vector<Table*> _tables;
-    RowMutationReplicate::Callback _user_callback;
-    void* _user_context;
+    std::vector<RowMutation*> row_mutations_;
+    std::vector<Table*> tables_;
+    RowMutationReplicate::Callback user_callback_;
+    void* user_context_;
 
-    Mutex _mutex;
-    CondVar _finish_cond;
-    uint32_t _finish_count;
-    RowMutation* _success_row_mutation;
-    RowMutation* _fail_row_mutation;
+    Mutex mutex_;
+    CondVar finish_cond_;
+    uint32_t finish_count_;
+    RowMutation* success_row_mutation_;
+    RowMutation* fail_row_mutation_;
 };
 
 class RowReaderReplicateImpl : public RowReaderReplicate {
 public:
     RowReaderReplicateImpl(const std::vector<RowReader*>& row_readers,
                            const std::vector<Table*>& tables)
-        : _row_readers(row_readers),
-          _tables(tables),
-          _user_callback(NULL),
-          _user_context(NULL),
-          _finish_cond(&_mutex),
-          _finish_count(0),
-          _valid_row_reader(NULL) {
-        CHECK_GT(_row_readers.size(), 0u);
-        for (size_t i = 0; i < _row_readers.size(); i++) {
-            _row_readers[i]->SetCallBack(RowReaderCallback);
-            _row_readers[i]->SetContext(this);
+        : row_readers_(row_readers),
+          tables_(tables),
+          user_callback_(NULL),
+          user_context_(NULL),
+          finish_cond_(&mutex_),
+          finish_count_(0),
+          valid_row_reader_(NULL) {
+        CHECK_GT(row_readers_.size(), 0u);
+        for (size_t i = 0; i < row_readers_.size(); i++) {
+            row_readers_[i]->SetCallBack(RowReaderCallback);
+            row_readers_[i]->SetContext(this);
         }
     }
 
     virtual ~RowReaderReplicateImpl() {
-        for (size_t i = 0; i < _row_readers.size(); i++) {
-            delete _row_readers[i];
+        for (size_t i = 0; i < row_readers_.size(); i++) {
+            delete row_readers_[i];
         }
     }
 
     virtual const std::string& RowName() {
-        return _row_readers[0]->RowName();
+        return row_readers_[0]->RowName();
     }
 
     virtual void SetCallBack(Callback callback) {
-        _user_callback = callback;
+        user_callback_ = callback;
     }
 
     virtual void SetContext(void* context) {
-        _user_context = context;
+        user_context_ = context;
     }
 
     virtual void* GetContext() {
-        return _user_context;
+        return user_context_;
     }
 
     virtual ErrorCode GetError() {
-        CHECK_NOTNULL(_valid_row_reader);
-        return _valid_row_reader->GetError();
+        CHECK_NOTNULL(valid_row_reader_);
+        return valid_row_reader_->GetError();
     }
 
     virtual std::string Value() {
-        CHECK_NOTNULL(_valid_row_reader);
-        return _valid_row_reader->Value();
+        CHECK_NOTNULL(valid_row_reader_);
+        return valid_row_reader_->Value();
     }
 
 public:
     const std::vector<RowReader*>& GetRowReaderList() {
-        return _row_readers;
+        return row_readers_;
     }
 
     const std::vector<Table*>& GetTableList() {
-        return _tables;
+        return tables_;
     }
 
     bool IsAsync() {
-        return (_user_callback != NULL);
+        return (user_callback_ != NULL);
     }
 
     void Wait() {
-        CHECK(_user_callback == NULL);
-        MutexLock l(&_mutex);
-        while (_finish_count < _row_readers.size()) {
-            _finish_cond.Wait();
+        CHECK(user_callback_ == NULL);
+        MutexLock l(&mutex_);
+        while (finish_count_ < row_readers_.size()) {
+            finish_cond_.Wait();
         }
     }
 
@@ -239,54 +239,54 @@ private:
     }
 
     void ProcessCallback(RowReader* reader) {
-        _mutex.Lock();
-        if (_valid_row_reader == NULL && reader->GetError().GetType() == tera::ErrorCode::kOK) {
-            _valid_row_reader = reader;
+        mutex_.Lock();
+        if (valid_row_reader_ == NULL && reader->GetError().GetType() == tera::ErrorCode::kOK) {
+            valid_row_reader_ = reader;
         }
-        if (++_finish_count == _row_readers.size()) {
+        if (++finish_count_ == row_readers_.size()) {
             // if all readers fail, use readers[0]
-            if (_valid_row_reader == NULL) {
-                _valid_row_reader = _row_readers[0];
+            if (valid_row_reader_ == NULL) {
+                valid_row_reader_ = row_readers_[0];
             }
-            if (_user_callback != NULL) {
-                _mutex.Unlock(); // remember to unlock
-                _user_callback(this);
+            if (user_callback_ != NULL) {
+                mutex_.Unlock(); // remember to unlock
+                user_callback_(this);
                 return; // remember to return
             } else {
-                _finish_cond.Signal();
+                finish_cond_.Signal();
             }
         }
-        _mutex.Unlock();
+        mutex_.Unlock();
     }
 
-    std::vector<RowReader*> _row_readers;
-    std::vector<Table*> _tables;
-    RowReaderReplicate::Callback _user_callback;
-    void* _user_context;
+    std::vector<RowReader*> row_readers_;
+    std::vector<Table*> tables_;
+    RowReaderReplicate::Callback user_callback_;
+    void* user_context_;
 
-    Mutex _mutex;
-    CondVar _finish_cond;
-    uint32_t _finish_count;
-    RowReader* _valid_row_reader;
+    Mutex mutex_;
+    CondVar finish_cond_;
+    uint32_t finish_count_;
+    RowReader* valid_row_reader_;
 };
 
 
 /// 表接口
 class TableReplicateImpl : public TableReplicate {
 public:
-    TableReplicateImpl(std::vector<Table*> tables) : _tables(tables) {}
+    TableReplicateImpl(std::vector<Table*> tables) : tables_(tables) {}
     virtual ~TableReplicateImpl() {
-        for (size_t i = 0; i < _tables.size(); i++) {
-            delete _tables[i];
+        for (size_t i = 0; i < tables_.size(); i++) {
+            delete tables_[i];
         }
     }
 
     virtual RowMutationReplicate* NewRowMutation(const std::string& row_key) {
         std::vector<RowMutation*> row_mutations;
-        for (size_t i = 0; i < _tables.size(); i++) {
-            row_mutations.push_back(_tables[i]->NewRowMutation(row_key));
+        for (size_t i = 0; i < tables_.size(); i++) {
+            row_mutations.push_back(tables_[i]->NewRowMutation(row_key));
         }
-        return new RowMutationReplicateImpl(row_mutations, _tables);
+        return new RowMutationReplicateImpl(row_mutations, tables_);
     }
 
     virtual void ApplyMutation(RowMutationReplicate* mutation_rep) {
@@ -310,14 +310,14 @@ public:
         std::vector<RowReader*> row_readers;
         std::vector<Table*> tables;
         if (FLAGS_tera_replication_read_try_all) {
-            for (size_t i = 0; i < _tables.size(); i++) {
-                row_readers.push_back(_tables[i]->NewRowReader(row_key));
-                tables.push_back(_tables[i]);
+            for (size_t i = 0; i < tables_.size(); i++) {
+                row_readers.push_back(tables_[i]->NewRowReader(row_key));
+                tables.push_back(tables_[i]);
             }
         } else {
-            size_t i = random() % _tables.size();
-            row_readers.push_back(_tables[i]->NewRowReader(row_key));
-            tables.push_back(_tables[i]);
+            size_t i = random() % tables_.size();
+            row_readers.push_back(tables_[i]->NewRowReader(row_key));
+            tables.push_back(tables_[i]);
         }
         return new RowReaderReplicateImpl(row_readers, tables);
     }
@@ -340,7 +340,7 @@ private:
     TableReplicateImpl(const TableReplicateImpl&);
     void operator=(const TableReplicateImpl&);
 
-    std::vector<Table*> _tables;
+    std::vector<Table*> tables_;
 };
 
 class ClientReplicateImpl : public ClientReplicate {
@@ -348,8 +348,8 @@ public:
     /// 打开表格, 失败返回NULL
     virtual TableReplicate* OpenTable(const std::string& table_name, ErrorCode* err) {
         std::vector<Table*> tables;
-        for (size_t i = 0; i < _clients.size(); i++) {
-            Table* table = _clients[i]->OpenTable(table_name, err);
+        for (size_t i = 0; i < clients_.size(); i++) {
+            Table* table = clients_[i]->OpenTable(table_name, err);
             if (table == NULL) {
                 for (size_t j = 0; j < tables.size(); j++) {
                     delete tables[j];
@@ -361,10 +361,10 @@ public:
         return new TableReplicateImpl(tables);
     }
 
-    ClientReplicateImpl(const std::vector<Client*>& clients) : _clients(clients) {}
+    ClientReplicateImpl(const std::vector<Client*>& clients) : clients_(clients) {}
     virtual ~ClientReplicateImpl() {
-        for (size_t i = 0; i < _clients.size(); i++) {
-            delete _clients[i];
+        for (size_t i = 0; i < clients_.size(); i++) {
+            delete clients_[i];
         }
     }
 
@@ -372,7 +372,7 @@ private:
     ClientReplicateImpl(const ClientReplicateImpl&);
     void operator=(const ClientReplicateImpl&);
 
-    std::vector<Client*> _clients;
+    std::vector<Client*> clients_;
 };
 
 void ClientReplicate::SetGlogIsInitialized() {

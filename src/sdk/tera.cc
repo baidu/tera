@@ -47,30 +47,30 @@ static const char* strerr(ErrorCode::ErrorCodeType type) {
     return ret;
 }
 
-ErrorCode::ErrorCode() : _err(kOK) {
+ErrorCode::ErrorCode() : err_(kOK) {
 }
 
 void ErrorCode::SetFailed(ErrorCodeType err, const std::string& reason) {
-    _err= err;
-    _reason = reason;
+    err_ = err;
+    reason_ = reason;
 }
 
 std::string ErrorCode::ToString() const {
     std::string ret;
     ret.append("type [");
-    ret.append(strerr(_err));
+    ret.append(strerr(err_));
     ret.append("], reason [");
-    ret.append(_reason);
+    ret.append(reason_);
     ret.append("].");
     return ret;
 }
 
 std::string ErrorCode::GetReason() const {
-    return _reason;
+    return reason_;
 }
 
 ErrorCode::ErrorCodeType ErrorCode::GetType() const {
-    return _err;
+    return err_;
 }
 
 const char* strerr(ErrorCode error_code) {

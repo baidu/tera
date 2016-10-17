@@ -27,18 +27,18 @@ namespace tera {
 
 ResultStreamImpl::ResultStreamImpl(TableImpl* table,
                                    ScanDescImpl* scan_desc_impl)
-    : _scan_desc_impl(new ScanDescImpl(*scan_desc_impl)),
-      _table_ptr(table) {
+    : scan_desc_impl_(new ScanDescImpl(*scan_desc_impl)),
+      table_ptr_(table) {
 }
 
 ResultStreamImpl::~ResultStreamImpl() {
-    if (_scan_desc_impl != NULL) {
-        delete _scan_desc_impl;
+    if (scan_desc_impl_ != NULL) {
+        delete scan_desc_impl_;
     }
 }
 
 ScanDescImpl* ResultStreamImpl::GetScanDesc() {
-    return _scan_desc_impl;
+    return scan_desc_impl_;
 }
 
 /*
@@ -60,7 +60,7 @@ ScanDescImpl* ResultStreamImpl::GetScanDesc() {
 std::string ResultStreamImpl::GetNextStartPoint(const std::string& str) {
     const static std::string x0("\x0", 1);
     const static std::string x1("\x1");
-    RawKey rawkey_type = _table_ptr->GetTableSchema().raw_key();
+    RawKey rawkey_type = table_ptr_->GetTableSchema().raw_key();
     return rawkey_type == Readable ? str + x1 : str + x0;
 }
 
@@ -72,7 +72,7 @@ ResultStreamBatchImpl::ResultStreamBatchImpl(TableImpl* table, ScanDescImpl* sca
     cv_(&mu_), ref_count_(1) {
     // do something startup
     sliding_window_.resize(FLAGS_tera_sdk_max_batch_scan_req);
-    session_end_key_ = _scan_desc_impl->GetStartRowKey();
+    session_end_key_ = scan_desc_impl_->GetStartRowKey();
     mu_.Lock();
     ScanSessionReset();
     mu_.Unlock();
@@ -193,13 +193,13 @@ void ResultStreamBatchImpl::ScanSessionReset() {
     }
 
     ref_count_ += FLAGS_tera_sdk_max_batch_scan_req;
-    _scan_desc_impl->SetStart(session_end_key_);
+    scan_desc_impl_->SetStart(session_end_key_);
     VLOG(28) << "scan session reset, start key " << session_end_key_
         << ", ref_count " << ref_count_;
     mu_.Unlock();
     // do io, release lock
     for (int32_t i = 0; i < FLAGS_tera_sdk_max_batch_scan_req; i++) {
-        _table_ptr->ScanTabletAsync(this);
+        table_ptr_->ScanTabletAsync(this);
         part_of_session_ = true;
     }
     mu_.Lock();
@@ -218,7 +218,7 @@ void ResultStreamBatchImpl::ClearAndScanNextSlot(bool scan_next) {
     if (scan_next) {
         ref_count_++;
         mu_.Unlock();
-        _table_ptr->ScanTabletAsync(this);
+        table_ptr_->ScanTabletAsync(this);
         mu_.Lock();
     }
     return;
@@ -269,7 +269,7 @@ bool ResultStreamBatchImpl::Done(ErrorCode* error) {
         }
 
         // scan finish, exit
-        const string& scan_end_key = _scan_desc_impl->GetEndRowKey();
+        const string& scan_end_key = scan_desc_impl_->GetEndRowKey();
         if (session_end_key_ == "" || (scan_end_key != "" && session_end_key_ >= scan_end_key)) {
             VLOG(28) << "scan done, scan_end_key " << scan_end_key << ", session_end_key " << session_end_key_;
             return true;
@@ -316,16 +316,16 @@ int64_t ResultStreamBatchImpl::ValueInt64() const {
 ResultStreamSyncImpl::ResultStreamSyncImpl(TableImpl* table,
                                            ScanDescImpl* scan_desc_impl)
     : ResultStreamImpl(table, scan_desc_impl),
-      _response(new tera::ScanTabletResponse),
-      _result_pos(0),
-      _finish_cond(&_finish_mutex),
-      _finish(false) {
-    _table_ptr->ScanTabletSync(this);
+      response_(new tera::ScanTabletResponse),
+      result_pos_(0),
+      finish_cond_(&finish_mutex_),
+      finish_(false) {
+    table_ptr_->ScanTabletSync(this);
 }
 
 ResultStreamSyncImpl::~ResultStreamSyncImpl() {
-    if (_response != NULL) {
-        delete _response;
+    if (response_ != NULL) {
+        delete response_;
     }
 }
 
@@ -335,20 +335,20 @@ bool ResultStreamSyncImpl::LookUp(const string& row_key) {
 
 bool ResultStreamSyncImpl::Done(ErrorCode* err) {
     while (1) {
-        const string& scan_end_key = _scan_desc_impl->GetEndRowKey();
+        const string& scan_end_key = scan_desc_impl_->GetEndRowKey();
         /// scan failed
-        if (_response->status() != kTabletNodeOk) {
+        if (response_->status() != kTabletNodeOk) {
             if (err) {
                 err->SetFailed(ErrorCode::kSystem,
-                               StatusCodeToString(_response->status()));
+                               StatusCodeToString(response_->status()));
             }
             return true;
         }
-        if (_result_pos < _response->results().key_values_size()) {
+        if (result_pos_ < response_->results().key_values_size()) {
             break;
         }
-        const string& tablet_end_key = _response->end();
-        if (_response->complete() &&
+        const string& tablet_end_key = response_->end();
+        if (response_->complete() &&
             (tablet_end_key == "" || (scan_end_key != "" && tablet_end_key >= scan_end_key))) {
             if (err) {
                 err->SetFailed(ErrorCode::kOK);
@@ -357,51 +357,51 @@ bool ResultStreamSyncImpl::Done(ErrorCode* err) {
         }
 
         // Newer version of TS will return next_start_point when the opration is timeout
-        if (!_response->complete()) {
+        if (!response_->complete()) {
             // Without next_start_point, kv is the last kv pair from last scan
-            if (_response->next_start_point().key() == "") {
-                const KeyValuePair& kv = _response->results().key_values(_result_pos - 1);
-                if (_scan_desc_impl->IsKvOnlyTable()) {
-                    _scan_desc_impl->SetStart(GetNextStartPoint(kv.key()), kv.column_family(),
+            if (response_->next_start_point().key() == "") {
+                const KeyValuePair& kv = response_->results().key_values(result_pos_ - 1);
+                if (scan_desc_impl_->IsKvOnlyTable()) {
+                    scan_desc_impl_->SetStart(GetNextStartPoint(kv.key()), kv.column_family(),
                                               kv.qualifier(), kv.timestamp());
                 } else if (kv.timestamp() == 0) {
-                    _scan_desc_impl->SetStart(kv.key(), kv.column_family(),
+                    scan_desc_impl_->SetStart(kv.key(), kv.column_family(),
                                               GetNextStartPoint(kv.qualifier()), kv.timestamp());
                 } else {
-                    _scan_desc_impl->SetStart(kv.key(), kv.column_family(),
+                    scan_desc_impl_->SetStart(kv.key(), kv.column_family(),
                                               kv.qualifier(), kv.timestamp() - 1);
                 }
             // next_start_point is where the next scan should start
             } else {
-                const KeyValuePair& kv = _response->next_start_point();
-                _scan_desc_impl->SetStart(kv.key(), kv.column_family(),
+                const KeyValuePair& kv = response_->next_start_point();
+                scan_desc_impl_->SetStart(kv.key(), kv.column_family(),
                                           kv.qualifier(), kv.timestamp());
             }
         } else {
-            _scan_desc_impl->SetStart(tablet_end_key);
+            scan_desc_impl_->SetStart(tablet_end_key);
         }
-        _result_pos = 0;
-        delete _response;
-        _response = new tera::ScanTabletResponse;
+        result_pos_ = 0;
+        delete response_;
+        response_ = new tera::ScanTabletResponse;
         Reset();
-        _table_ptr->ScanTabletSync(this);
+        table_ptr_->ScanTabletSync(this);
     }
     return false;
 }
 
 void ResultStreamSyncImpl::Next() {
-    ++_result_pos;
+    ++result_pos_;
 }
 
 string ResultStreamSyncImpl::RowName() const {
-    return _response->results().key_values(_result_pos).key();
+    return response_->results().key_values(result_pos_).key();
 }
 
 string ResultStreamSyncImpl::ColumnName() const {
-    if (_response->results().key_values(_result_pos).has_column_family()) {
-        const string& family =  _response->results().key_values(_result_pos).column_family();
-        if (_response->results().key_values(_result_pos).has_qualifier()) {
-            return (family + ":" + _response->results().key_values(_result_pos).qualifier());
+    if (response_->results().key_values(result_pos_).has_column_family()) {
+        const string& family =  response_->results().key_values(result_pos_).column_family();
+        if (response_->results().key_values(result_pos_).has_qualifier()) {
+            return (family + ":" + response_->results().key_values(result_pos_).qualifier());
         }
         return family;
     }
@@ -409,37 +409,37 @@ string ResultStreamSyncImpl::ColumnName() const {
 }
 
 string ResultStreamSyncImpl::Family() const {
-    if (_response->results().key_values(_result_pos).has_column_family()) {
-        return _response->results().key_values(_result_pos).column_family();
+    if (response_->results().key_values(result_pos_).has_column_family()) {
+        return response_->results().key_values(result_pos_).column_family();
     }
     return "";
 }
 
 string ResultStreamSyncImpl::Qualifier() const {
-    if (_response->results().key_values(_result_pos).has_qualifier()) {
-        return _response->results().key_values(_result_pos).qualifier();
+    if (response_->results().key_values(result_pos_).has_qualifier()) {
+        return response_->results().key_values(result_pos_).qualifier();
     }
     return "";
 }
 
 int64_t ResultStreamSyncImpl::Timestamp() const {
-    if (_response->results().key_values(_result_pos).has_timestamp()) {
-        return _response->results().key_values(_result_pos).timestamp();
+    if (response_->results().key_values(result_pos_).has_timestamp()) {
+        return response_->results().key_values(result_pos_).timestamp();
     }
     return 0;
 }
 
 string ResultStreamSyncImpl::Value() const {
-    if (_response->results().key_values(_result_pos).has_value()) {
-        return _response->results().key_values(_result_pos).value();
+    if (response_->results().key_values(result_pos_).has_value()) {
+        return response_->results().key_values(result_pos_).value();
     }
     return "";
 }
 
 int64_t ResultStreamSyncImpl::ValueInt64() const {
     std::string v;
-    if (_response->results().key_values(_result_pos).has_value()) {
-        v = _response->results().key_values(_result_pos).value();
+    if (response_->results().key_values(result_pos_).has_value()) {
+        v = response_->results().key_values(result_pos_).value();
     }
     return (v.size() == sizeof(int64_t)) ? *(int64_t*)v.c_str() : 0;
 }
@@ -447,7 +447,7 @@ int64_t ResultStreamSyncImpl::ValueInt64() const {
 void ResultStreamSyncImpl::GetRpcHandle(ScanTabletRequest** request,
                                     ScanTabletResponse** response) {
     *request = new ScanTabletRequest;
-    *response = _response;
+    *response = response_;
 }
 
 void ResultStreamSyncImpl::ReleaseRpcHandle(ScanTabletRequest* request,
@@ -461,85 +461,85 @@ void ResultStreamSyncImpl::OnFinish(ScanTabletRequest* request,
 }
 
 void ResultStreamSyncImpl::Wait() {
-    MutexLock locker(&_finish_mutex);
-    while (!_finish) {
-        _finish_cond.Wait();
+    MutexLock locker(&finish_mutex_);
+    while (!finish_) {
+        finish_cond_.Wait();
     }
 }
 
 void ResultStreamSyncImpl::Signal() {
-    MutexLock locker(&_finish_mutex);
-    _finish = true;
-    _finish_cond.Signal();
+    MutexLock locker(&finish_mutex_);
+    finish_ = true;
+    finish_cond_.Signal();
 }
 
 void ResultStreamSyncImpl::Reset() {
-    MutexLock locker(&_finish_mutex);
-    _finish = false;
+    MutexLock locker(&finish_mutex_);
+    finish_ = false;
 }
 
 ///////////////////////// ScanDescImpl ///////////////////////
 
 ScanDescImpl::ScanDescImpl(const string& rowkey)
-    : _start_timestamp(0),
-      _timer_range(NULL),
-      _buf_size(FLAGS_tera_sdk_scan_buffer_size),
-      _number_limit(FLAGS_tera_sdk_scan_number_limit),
-      _is_async(FLAGS_tera_sdk_batch_scan_enabled),
-      _max_version(1),
-      _pack_interval(5000),
-      _snapshot(0),
-      _value_converter(&DefaultValueConverter) {
+    : start_timestamp_(0),
+      timer_range_(NULL),
+      buf_size_(FLAGS_tera_sdk_scan_buffer_size),
+      number_limit_(FLAGS_tera_sdk_scan_number_limit),
+      is_async_(FLAGS_tera_sdk_batch_scan_enabled),
+      max_version_(1),
+      pack_interval_(5000),
+      snapshot_(0),
+      value_converter_(&DefaultValueConverter) {
     SetStart(rowkey);
 }
 
 ScanDescImpl::ScanDescImpl(const ScanDescImpl& impl)
-    : _start_key(impl._start_key),
-      _end_key(impl._end_key),
-      _start_column_family(impl._start_column_family),
-      _start_qualifier(impl._start_qualifier),
-      _start_timestamp(impl._start_timestamp),
-      _buf_size(impl._buf_size),
-      _number_limit(impl._number_limit),
-      _is_async(impl._is_async),
-      _max_version(impl._max_version),
-      _pack_interval(impl._pack_interval),
-      _snapshot(impl._snapshot),
-      _table_schema(impl._table_schema) {
-    _value_converter = impl.GetValueConverter();
-    _filter_string = impl.GetFilterString();
-    _filter_list = impl.GetFilterList();
+    : start_key_(impl.start_key_),
+      end_key_(impl.end_key_),
+      start_column_family_(impl.start_column_family_),
+      start_qualifier_(impl.start_qualifier_),
+      start_timestamp_(impl.start_timestamp_),
+      buf_size_(impl.buf_size_),
+      number_limit_(impl.number_limit_),
+      is_async_(impl.is_async_),
+      max_version_(impl.max_version_),
+      pack_interval_(impl.pack_interval_),
+      snapshot_(impl.snapshot_),
+      table_schema_(impl.table_schema_) {
+    value_converter_ = impl.GetValueConverter();
+    filter_string_ = impl.GetFilterString();
+    filter_list_ = impl.GetFilterList();
     if (impl.GetTimerRange() != NULL) {
-        _timer_range = new tera::TimeRange;
-        _timer_range->CopyFrom(*(impl.GetTimerRange()));
+        timer_range_ = new tera::TimeRange;
+        timer_range_->CopyFrom(*(impl.GetTimerRange()));
     } else {
-        _timer_range = NULL;
+        timer_range_ = NULL;
     }
     for (int32_t i = 0; i < impl.GetSizeofColumnFamilyList(); ++i) {
-        _cf_list.push_back(new tera::ColumnFamily(*(impl.GetColumnFamily(i))));
+        cf_list_.push_back(new tera::ColumnFamily(*(impl.GetColumnFamily(i))));
     }
 }
 
 ScanDescImpl::~ScanDescImpl() {
-    if (_timer_range != NULL) {
-        delete _timer_range;
+    if (timer_range_ != NULL) {
+        delete timer_range_;
     }
-    for (uint32_t i = 0; i < _cf_list.size(); ++i) {
-        delete _cf_list[i];
+    for (uint32_t i = 0; i < cf_list_.size(); ++i) {
+        delete cf_list_[i];
     }
 }
 
 void ScanDescImpl::SetStart(const string& row_key, const string& column_family,
                             const string& qualifier, int64_t time_stamp)
 {
-    _start_key = row_key;
-    _start_column_family = column_family;
-    _start_qualifier = qualifier;
-    _start_timestamp = time_stamp;
+    start_key_ = row_key;
+    start_column_family_ = column_family;
+    start_qualifier_ = qualifier;
+    start_timestamp_ = time_stamp;
 }
 
 void ScanDescImpl::SetEnd(const string& rowkey) {
-    _end_key = rowkey;
+    end_key_ = rowkey;
 }
 
 void ScanDescImpl::AddColumnFamily(const string& cf) {
@@ -547,10 +547,10 @@ void ScanDescImpl::AddColumnFamily(const string& cf) {
 }
 
 void ScanDescImpl::AddColumn(const string& cf, const string& qualifier) {
-    for (uint32_t i = 0; i < _cf_list.size(); ++i) {
-        if (_cf_list[i]->family_name() == cf) {
+    for (uint32_t i = 0; i < cf_list_.size(); ++i) {
+        if (cf_list_[i]->family_name() == cf) {
             if (qualifier != "") {
-                _cf_list[i]->add_qualifier_list(qualifier);
+                cf_list_[i]->add_qualifier_list(qualifier);
             }
             return;
         }
@@ -560,122 +560,122 @@ void ScanDescImpl::AddColumn(const string& cf, const string& qualifier) {
     if (qualifier != "") {
         column_family->add_qualifier_list(qualifier);
     }
-    _cf_list.push_back(column_family);
+    cf_list_.push_back(column_family);
 }
 
 void ScanDescImpl::SetMaxVersions(int32_t versions) {
-    _max_version = versions;
+    max_version_ = versions;
 }
 
 void ScanDescImpl::SetPackInterval(int64_t interval) {
-    _pack_interval = interval;
+    pack_interval_ = interval;
 }
 
 void ScanDescImpl::SetTimeRange(int64_t ts_end, int64_t ts_start) {
-    if (_timer_range == NULL) {
-        _timer_range = new tera::TimeRange;
+    if (timer_range_ == NULL) {
+        timer_range_ = new tera::TimeRange;
     }
-    _timer_range->set_ts_start(ts_start);
-    _timer_range->set_ts_end(ts_end);
+    timer_range_->set_ts_start(ts_start);
+    timer_range_->set_ts_end(ts_end);
 }
 
 void ScanDescImpl::SetValueConverter(ValueConverter convertor) {
-    _value_converter = convertor;
+    value_converter_ = convertor;
 }
 
 void ScanDescImpl::SetSnapshot(uint64_t snapshot_id) {
-    _snapshot = snapshot_id;
+    snapshot_ = snapshot_id;
 }
 
 uint64_t ScanDescImpl::GetSnapshot() const {
-    return _snapshot;
+    return snapshot_;
 }
 
 void ScanDescImpl::SetBufferSize(int64_t buf_size) {
-    _buf_size = buf_size;
+    buf_size_ = buf_size;
 }
 
 void ScanDescImpl::SetNumberLimit(int64_t number_limit) {
-    _number_limit = number_limit;
+    number_limit_ = number_limit;
 }
 
 void ScanDescImpl::SetAsync(bool async) {
-    _is_async = async;
+    is_async_ = async;
 }
 
 const string& ScanDescImpl::GetStartRowKey() const {
-    return _start_key;
+    return start_key_;
 }
 
 const string& ScanDescImpl::GetEndRowKey() const {
-    return _end_key;
+    return end_key_;
 }
 
 const string& ScanDescImpl::GetStartColumnFamily() const {
-    return _start_column_family;
+    return start_column_family_;
 }
 
 const string& ScanDescImpl::GetStartQualifier() const {
-    return _start_qualifier;
+    return start_qualifier_;
 }
 
 int64_t ScanDescImpl::GetStartTimeStamp() const {
-    return _start_timestamp;
+    return start_timestamp_;
 }
 
 int32_t ScanDescImpl::GetSizeofColumnFamilyList() const {
-    return _cf_list.size();
+    return cf_list_.size();
 }
 
 const tera::ColumnFamily* ScanDescImpl::GetColumnFamily(int32_t num) const {
-    if (static_cast<uint64_t>(num) >= _cf_list.size()) {
+    if (static_cast<uint64_t>(num) >= cf_list_.size()) {
         return NULL;
     }
-    return _cf_list[num];
+    return cf_list_[num];
 }
 
 int32_t ScanDescImpl::GetMaxVersion() const {
-    return _max_version;
+    return max_version_;
 }
 
 int64_t ScanDescImpl::GetPackInterval() const {
-    return _pack_interval;
+    return pack_interval_;
 }
 
 const tera::TimeRange* ScanDescImpl::GetTimerRange() const {
-    return _timer_range;
+    return timer_range_;
 }
 
 const string& ScanDescImpl::GetFilterString() const {
-    return _filter_string;
+    return filter_string_;
 }
 
 const FilterList& ScanDescImpl::GetFilterList() const {
-    return _filter_list;
+    return filter_list_;
 }
 
 const ValueConverter ScanDescImpl::GetValueConverter() const {
-    return _value_converter;
+    return value_converter_;
 }
 
 int64_t ScanDescImpl::GetBufferSize() const {
-    return _buf_size;
+    return buf_size_;
 }
 
 int64_t ScanDescImpl::GetNumberLimit() {
-    return _number_limit;
+    return number_limit_;
 }
 
 bool ScanDescImpl::IsAsync() const {
-    return _is_async;
+    return is_async_;
 }
 
 void ScanDescImpl::SetTableSchema(const TableSchema& schema) {
-    _table_schema = schema;
+    table_schema_ = schema;
 }
 
 bool ScanDescImpl::IsKvOnlyTable() {
-    return IsKvTable(_table_schema);
+    return IsKvTable(table_schema_);
 }
 
 // SELECT * WHERE <type> <cf0> <op0> <value0> AND <type> <cf1> <op1> <value1>
@@ -708,7 +708,7 @@ bool ScanDescImpl::SetFilter(const std::string& schema) {
     }
     // parse where
     if (where != "") {
-        _filter_string = where;
+        filter_string_ = where;
         if (!ParseFilterString()) {
             return false;
         }
@@ -718,13 +718,13 @@ bool ScanDescImpl::SetFilter(const std::string& schema) {
 
 bool ScanDescImpl::ParseFilterString() {
     const char* and_op = " AND ";
-    _filter_list.Clear();
+    filter_list_.Clear();
     std::vector<string> filter_v;
-    SplitString(_filter_string, and_op, &filter_v);
+    SplitString(filter_string_, and_op, &filter_v);
     for (size_t i = 0; i < filter_v.size(); ++i) {
         Filter filter;
         if (ParseSubFilterString(filter_v[i], &filter)) {
-            Filter* pf = _filter_list.add_filter();
+            Filter* pf = filter_list_.add_filter();
             pf->CopyFrom(filter);
         } else {
             LOG(ERROR) << "fail to parse expression: " << filter_v[i];
@@ -762,7 +762,7 @@ bool ScanDescImpl::ParseValueCompareFilter(const string& filter_str,
         return false;
     }
 
-    if (_max_version != 1) {
+    if (max_version_ != 1) {
         LOG(ERROR) << "only support 1 version scan if there is a value filter: "
             << filter_str;
         return false;
@@ -817,7 +817,7 @@ bool ScanDescImpl::ParseValueCompareFilter(const string& filter_str,
     }
 
     string value_internal;
-    if (!_value_converter(value, type, &value_internal)) {
+    if (!value_converter_(value, type, &value_internal)) {
         LOG(ERROR) << "fail to convert value: \""<< value << "\"(" << type << ")";
         return false;
     }
