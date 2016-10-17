@@ -215,12 +215,17 @@ bool MasterImpl::Restore(const std::map<std::string, std::string>& tabletnode_li
         SetMasterStatus(kOnWait);
         return false;
     }
+
+    SetMasterStatus(kIsReadonly);
+
     user_manager_->SetupRootUser();
     tablet_manager_->FindTablet(FLAGS_tera_master_meta_table_name, "", &meta_tablet_);
     zk_adapter_->UpdateRootTabletNode(meta_tablet_addr);
 
     RestoreUserTablet(tablet_list);
 
+    TryLeaveSafeMode();
+    EnableAvailabilityCheck();
     RefreshTableCounter();
 
     // restore success
@@ -345,6 +350,9 @@ void MasterImpl::RestoreUserTablet(const std::vector<TabletMeta>& report_meta_li
     for (; meta_it != report_meta_list.end(); ++meta_it) {
         const TabletMeta& meta = *meta_it;
         const std::string& table_name = meta.table_name();
+        if (table_name == FLAGS_tera_master_meta_table_name) {
+            continue;
+        }
         const std::string& key_start = meta.key_range().key_start();
         const std::string& key_end = meta.key_range().key_end();
         const std::string& path = meta.path();
@@ -370,59 +378,39 @@ void MasterImpl::RestoreUserTablet(const std::vector<TabletMeta>& report_meta_li
         }
     }
 
-    std::vector<TabletPtr> dead_node_tablet_list;
     std::vector<TabletPtr> all_tablet_list;
     tablet_manager_->ShowTable(NULL, &all_tablet_list);
     std::vector<TabletPtr>::iterator it;
     for (it = all_tablet_list.begin(); it != all_tablet_list.end(); ++it) {
         TabletPtr tablet = *it;
+        if (tablet->GetTableName() == FLAGS_tera_master_meta_table_name) {
+            continue;
+        }
         const std::string& server_addr = tablet->GetServerAddr();
         if (tablet->GetStatus() == kTableReady) {
             VLOG(8) << "READY Tablet, " << tablet;
             continue;
         }
         tablet_availability_->AddNotReadyTablet(tablet->GetPath());
-        // meta table may be manipulated by other threads during restore
-        if (tablet->GetTableName() == FLAGS_tera_master_meta_table_name) {
-            continue;
-        }
         CHECK(tablet->GetStatus() == kTableNotInit);
-        tablet->SetStatus(kTableOffLine);
-        VLOG(8) << "OFFLINE Tablet, " << tablet;
 
         TabletNodePtr node;
-        if (!server_addr.empty()
-            && tabletnode_manager_->FindTabletNode(server_addr, &node)
-            && node->state_ == kReady) {
+        if (server_addr.empty()) {
+            tablet->SetStatus(kTableOffLine);
+            VLOG(8) << "OFFLINE Tablet with empty addr, " << tablet;
+        } else if (!tabletnode_manager_->FindTabletNode(server_addr, &node)) {
+            tablet->SetStatus(kTableOffLine);
+            VLOG(8) << "OFFLINE Tablet of Dead TS, " << tablet;
+        } else if (node->state_ == kReady) {
+            tablet->SetStatus(kTableOffLine);
+            VLOG(8) << "OFFLINE Tablet of Alive TS, " << tablet;
             TryLoadTablet(tablet, server_addr);
-        } else if (server_addr.empty()) {
-            TryLoadTablet(tablet);
         } else {
-            dead_node_tablet_list.push_back(tablet);
+            // Ts not response, we count its tablets as Ready and wait for it to be kicked.
+            tablet->SetStatus(kTableReady);
+            VLOG(8) << "UNKNOWN Tablet of No-Response TS, " << tablet;
         }
     }
-
-    double tablet_locality_ratio = 1.0 - (
-        (double)dead_node_tablet_list.size() / all_tablet_list.size());
-    LOG(INFO) << "tablet locality ratio: " << tablet_locality_ratio;
-    if (tablet_locality_ratio < FLAGS_tera_safemode_tablet_locality_ratio) {
-        LOG(WARNING) << kSms << "enter safemode: " << tablet_locality_ratio;
-        EnterSafeMode();
-        return;
-    }
-
-    it = dead_node_tablet_list.begin();
-    for (; it != dead_node_tablet_list.end(); ++it) {
-        TabletPtr tablet = *it;
-        TryLoadTablet(tablet);
-    }
-    SetMasterStatus(kIsRunning);
-    zk_adapter_->UnmarkSafeMode();
-    tablet_manager_->Init();
-    EnableQueryTabletNodeTimer();
-    EnableTabletNodeGcTimer();
-    EnableLoadBalance();
-    EnableAvailabilityCheck();
 }
 
 void MasterImpl::LoadAllOffLineTablet() {
@@ -2090,36 +2078,14 @@ void MasterImpl::TabletNodeRecoveryCallback(std::string addr,
     }
     node->ResetQueryFailCount();
 
-    // recovery offline tablets
-    // unload should-not-exist tablets
+    // New tabletnode should not have any tablet.
     uint32_t meta_num = response->tabletmeta_list().meta_size();
-    for (uint32_t i = 0; i < meta_num; i++) {
-        const TabletMeta& meta = response->tabletmeta_list().meta(i);
-        const std::string& key_start = meta.key_range().key_start();
-        const std::string& key_end = meta.key_range().key_end();
-        TabletPtr tablet;
-        if (!tablet_manager_->FindTablet(meta.table_name(), key_start, &tablet)
-            || !tablet->Verify(meta.table_name(), key_start, key_end,
-                               meta.path(), addr)) {
-            LOG(WARNING) << "fail to match tablet: " << meta.table_name()
-                << ", path: " << meta.path()
-                << ", range: [" << DebugString(key_start)
-                << ", " << DebugString(key_end)
-                << "], size: " << meta.size()
-                << ", addr: " << meta.server_addr();
-            TabletPtr unload_tablet(new Tablet(meta));
-            unload_tablet->SetStatus(kTableUnLoading);
-            UnloadClosure* done =
-                NewClosure(this, &MasterImpl::UnloadTabletCallback, unload_tablet,
-                           FLAGS_tera_master_impl_retry_times);
-            UnloadTabletAsync(unload_tablet, done);
-        } else if (tablet->SetStatusIf(kTableReady, kTabletPending)
-            || tablet->SetStatusIf(kTableReady, kTableOffLine)) {
-            tablet->UpdateSize(meta);
-            tablet->SetCompactStatus(meta.compact_status());
-            ProcessReadyTablet(tablet);
-            VLOG(8) << "[query] " << tablet;
-        }
+    if (meta_num > 0) {
+        LOG(WARNING) << "new tabletnode " << addr << " has " << meta_num << " tablets";
+        TryKickTabletNode(node->GetAddr());
+        delete request;
+        delete response;
+        return;
     }
 
     // update tabletnode info
@@ -2134,23 +2100,7 @@ void MasterImpl::TabletNodeRecoveryCallback(std::string addr,
     state.data_size_ = 0;
     state.qps_ = 0;
     state.update_time_ = update_time.tv_sec * 1000 + update_time.tv_usec / 1000;
-    // calculate data_size of tabletnode
-    // only count Ready/OnLoad tablet
-    std::vector<TabletPtr> tablet_list;
-    tablet_manager_->FindTablet(addr, &tablet_list);
-    std::vector<TabletPtr>::iterator it;
-    for (it = tablet_list.begin(); it != tablet_list.end(); ++it) {
-        TabletPtr tablet = *it;
-        TabletStatus tablet_status = tablet->GetStatus();
-        if (tablet_status == kTableReady || tablet_status == kTableOnLoad) {
-            state.data_size_ += tablet->GetDataSize();
-            if (state.table_size_.find(tablet->GetTableName()) != state.table_size_.end()) {
-                state.table_size_[tablet->GetTableName()] += tablet->GetDataSize();
-            } else {
-                state.table_size_[tablet->GetTableName()] = tablet->GetDataSize();
-            }
-        }
-    }
+
     tabletnode_manager_->UpdateTabletNode(addr, state);
     NodeState old_state;
     node->SetState(kReady, &old_state);
@@ -2169,8 +2119,10 @@ void MasterImpl::TabletNodeRecoveryCallback(std::string addr,
         TryLoadTablet(meta_tablet);
     }
 
-    // load the rest offline tablets
-    it = tablet_list.begin();
+    // load offline tablets
+    std::vector<TabletPtr> tablet_list;
+    tablet_manager_->FindTablet(addr, &tablet_list);
+    std::vector<TabletPtr>::iterator it = tablet_list.begin();
     for (; it != tablet_list.end(); ++it) {
         TabletPtr tablet = *it;
         if (tablet->SetStatusIf(kTableOffLine, kTabletPending)) {
