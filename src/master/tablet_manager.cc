@@ -49,7 +49,8 @@ std::ostream& operator << (std::ostream& o, const Tablet& tablet) {
       << DebugString(tablet.meta_.key_range().key_start()) << ", "
       << DebugString(tablet.meta_.key_range().key_end()) << "], path: "
       << tablet.meta_.path() << ", server: "
-      << tablet.meta_.server_addr();
+      << tablet.meta_.server_addr() << ", serverid: "
+      << tablet.server_id_;
     return o;
 }
 
