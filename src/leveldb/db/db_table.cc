@@ -335,6 +335,7 @@ Status DBTable::Init() {
             dbname_.c_str(), options_.compact_strategy_factory->Name(),
             options_.flush_triggered_log_num);
 
+        commit_snapshot_ = last_sequence_;
         Log(options_.info_log, "[%s] Init() done, last_seq=%llu", dbname_.c_str(),
             static_cast<unsigned long long>(last_sequence_));
     } else {
@@ -643,7 +644,6 @@ Iterator* DBTable::NewIterator(const ReadOptions& options) {
     } else if (commit_snapshot_ != kMaxSequenceNumber) {
         new_options.snapshot = commit_snapshot_;
     }
-    mutex_.Unlock();
     it = options_.exist_lg_list->begin();
     for (; it != options_.exist_lg_list->end(); ++it) {
         if (options.target_lgs) {
@@ -655,6 +655,7 @@ Iterator* DBTable::NewIterator(const ReadOptions& options) {
         }
         list.push_back(lg_list_[*it]->NewIterator(new_options));
     }
+    mutex_.Unlock();
     return NewMergingIterator(options_.comparator, &list[0], list.size());
 }
 

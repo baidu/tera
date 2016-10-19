@@ -39,7 +39,7 @@ public:
 
     const uint64_t GetSnapshot(uint64_t last_sequence);
 
-    void TryReleaseSnapshot(uint64_t sequence_number);
+    void ReleaseSnapshot(uint64_t sequence_number);
 
 private:
     Env* GetBaseEnv();

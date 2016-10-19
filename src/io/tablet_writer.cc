@@ -260,6 +260,7 @@ void TabletWriter::BatchRequest(const std::vector<const RowMutationSequence*>& r
                 int64_t timestamp = get_unique_micros(timestamp_old);
                 timestamp_old = timestamp;
                 if (!tablet_->GetSchema().enable_txn() &&
+                    leveldb::TeraKey::IsTypeAllowUserSetTimestamp(type) &&
                     mu.has_timestamp() && mu.timestamp() < timestamp) {
                     timestamp = mu.timestamp();
                 }

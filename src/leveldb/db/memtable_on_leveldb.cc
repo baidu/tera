@@ -93,8 +93,8 @@ const uint64_t MemTableOnLevelDB::GetSnapshot(uint64_t last_sequence) {
     return memdb_->GetSnapshot(last_sequence);
 }
 
-void MemTableOnLevelDB::TryReleaseSnapshot(uint64_t sequence_number) {
-    return memdb_->TryReleaseSnapshot(sequence_number);
+void MemTableOnLevelDB::ReleaseSnapshot(uint64_t sequence_number) {
+    return memdb_->ReleaseSnapshot(sequence_number);
 }
 
 static pthread_once_t mem_base_env_once = PTHREAD_ONCE_INIT;

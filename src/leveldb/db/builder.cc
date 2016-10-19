@@ -46,8 +46,6 @@ Status BuildTable(const std::string& dbname,
       compact_strategy->SetSnapshot(snapshot);
     }
 
-    // meta->smallest和meta->largest的范围可以向两侧伸长,但如果比实际范围小就是bug.
-    // 这里暂且根据drop结果收窄largest而不收窄smallest,保证足够简单可靠.
     TableBuilder* builder = new TableBuilder(options, file);
     meta->smallest.DecodeFrom(iter->key());
     for (;iter->Valid();) {
@@ -60,9 +58,7 @@ Status BuildTable(const std::string& dbname,
       const uint64_t sequence_id = tag >> 8;
       bool has_atom_merged = false;
 
-      // type==kTypeValue, 且drop==true的记录可以被丢弃,
-      // 其他记录均正常进入Memtable compact SST流程.
-      if (static_cast<ValueType>(tag & 0xff) == kTypeValue && compact_strategy) {
+      if (static_cast<ValueType>(tag & 0xff) == kTypeValue && compact_strategy && sequence_id <= snapshot) {
         bool drop = compact_strategy->Drop(raw_key, sequence_id);
         if (drop) {
             iter->Next();
@@ -81,8 +77,7 @@ Status BuildTable(const std::string& dbname,
             }
         }
       }
-      // 极端情况下, 整个Memtable全部被Drop(与strategy实现相关), 那么就不需要生成
-      // SST了, 也不需要修改manifest, 当作什么也没发生过.
+
       if (!has_atom_merged) {
           meta->largest.DecodeFrom(key);
           builder->Add(key, iter->value());
