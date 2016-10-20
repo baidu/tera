@@ -1752,12 +1752,21 @@ void MasterImpl::LoadBalance() {
     std::vector<TabletNodePtr> all_node_list;
     tabletnode_manager_->GetAllTabletNodeInfo(&all_node_list);
 
+    // Make a constant copy of tablet nodes to make sure that the returned value
+    // of GetSize, GetQps, ... remain unchanged every time they are called during
+    // the load balance process so as not to cause exceptions of std::sort().
+    std::vector<TabletNodePtr> all_node_list_copy;
+    for (size_t i = 0; i < all_node_list.size(); i++) {
+        TabletNodePtr node_copy(new TabletNode(*all_node_list[i]));
+        all_node_list_copy.push_back(node_copy);
+    }
+
     uint32_t max_move_num = FLAGS_tera_master_max_move_concurrency;
 
     // Run qps-based-sheduler first, then size-based-scheduler
     // If read_pending occured, process it first
     max_move_num -= LoadBalance(load_scheduler_.get(), max_move_num, 1,
-                                all_node_list, all_tablet_list);
+                                all_node_list_copy, all_tablet_list);
 
     if (FLAGS_tera_master_load_balance_table_grained) {
         for (size_t i = 0; i < all_table_list.size(); ++i) {
@@ -1772,11 +1781,11 @@ void MasterImpl::LoadBalance() {
             std::vector<TabletPtr> tablet_list;
             table->GetTablet(&tablet_list);
             max_move_num -= LoadBalance(size_scheduler_.get(), max_move_num, 3,
-                                        all_node_list, tablet_list, table->GetTableName());
+                                        all_node_list_copy, tablet_list, table->GetTableName());
         }
     } else {
         max_move_num -= LoadBalance(size_scheduler_.get(), max_move_num, 3,
-                                    all_node_list, all_tablet_list);
+                                    all_node_list_copy, all_tablet_list);
     }
 
     int64_t cost_time = get_micros() - start_time;
@@ -1790,7 +1799,7 @@ void MasterImpl::LoadBalance() {
 
 uint32_t MasterImpl::LoadBalance(Scheduler* scheduler,
                                  uint32_t max_move_num, uint32_t max_round_num,
-                                 std::vector<TabletNodePtr>& tabletnode_list,
+                                 std::vector<TabletNodePtr>& tabletnode_list_copy,
                                  std::vector<TabletPtr>& tablet_list,
                                  const std::string& table_name) {
     std::map<std::string, std::vector<TabletPtr> > node_tablet_list;
@@ -1800,13 +1809,13 @@ uint32_t MasterImpl::LoadBalance(Scheduler* scheduler,
         node_tablet_list[tablet->GetServerAddr()].push_back(tablet);
     }
 
-    if (!scheduler->NeedSchedule(tabletnode_list, table_name)) {
+    if (!scheduler->NeedSchedule(tabletnode_list_copy, table_name)) {
         return 0;
     }
 
     // descending sort the node according to workload,
     // so that the node with heaviest workload will be scheduled first
-    scheduler->DescendingSort(tabletnode_list, table_name);
+    scheduler->DescendingSort(tabletnode_list_copy, table_name);
 
     uint32_t round_count = 0;
     uint32_t total_move_count = 0;
@@ -1815,15 +1824,19 @@ uint32_t MasterImpl::LoadBalance(Scheduler* scheduler,
                   << " round " << round_count << " start";
 
         uint32_t round_move_count = 0;
-        std::vector<TabletNodePtr>::iterator node_it = tabletnode_list.begin();
-        while (total_move_count < max_move_num && node_it != tabletnode_list.end()) {
-            TabletNodePtr node = *node_it;
-            const std::vector<TabletPtr>& tablet_list = node_tablet_list[node->GetAddr()];
-            if (TabletNodeLoadBalance(node, scheduler, tablet_list, table_name)) {
-                round_move_count++;
-                total_move_count++;
+        std::vector<TabletNodePtr>::iterator node_copy_it = tabletnode_list_copy.begin();
+        while (total_move_count < max_move_num && node_copy_it != tabletnode_list_copy.end()) {
+            TabletNodePtr node;
+            if (tabletnode_manager_->FindTabletNode((*node_copy_it)->GetAddr(), &node)
+                && (*node_copy_it)->GetId() == node->GetId()
+                && node->GetState() == kReady) {
+                const std::vector<TabletPtr>& tablet_list = node_tablet_list[node->GetAddr()];
+                if (TabletNodeLoadBalance(node, scheduler, tablet_list, table_name)) {
+                    round_move_count++;
+                    total_move_count++;
+                }
             }
-            ++node_it;
+            ++node_copy_it;
         }
 
         VLOG(20) << "LoadBalance (" << scheduler->Name() << ") " << table_name

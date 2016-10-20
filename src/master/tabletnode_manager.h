@@ -74,6 +74,7 @@ struct TabletNode {
 
     TabletNode();
     TabletNode(const std::string& addr, const std::string& uuid);
+    TabletNode(const TabletNode& t);
     ~TabletNode();
 
     TabletNodeInfo GetInfo();
@@ -113,7 +114,6 @@ struct TabletNode {
     void ResetQueryFailCount();
 
 private:
-    TabletNode(const TabletNode& t);
     TabletNode& operator=(const TabletNode& t);
 };
 
