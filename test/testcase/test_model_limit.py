@@ -13,10 +13,9 @@ table = None
 
 
 def setUp():
-    
     #clear env
     common.drop_table("model_table")
-    
+
     #set env
     cmd = "./teracli create 'model_table{lg0{cf0}}'"
     common.exe_and_check_res(cmd)
