@@ -15,7 +15,7 @@
 namespace leveldb {
 
 // Tag numbers for serialized VersionEdit.  These numbers are written to
-// disk and should not be changed.
+// disk and should not be changed. max tag number = 4096, min tag number = 1
 enum Tag {
   kComparator           = 1,
   kLogNumber            = 2,
@@ -28,6 +28,8 @@ enum Tag {
   kPrevLogNumber        = 9,
   kNewFile              = 10,
   kDeletedFile          = 11,
+  // no more than 4096
+  kMaxTag               = 1 << 20,
 };
 
 void VersionEdit::Clear() {
@@ -47,60 +49,92 @@ void VersionEdit::Clear() {
 
 void VersionEdit::EncodeTo(std::string* dst) const {
   if (has_comparator_) {
+    std::string str;
+    PutLengthPrefixedSlice(&str, comparator_);
+
+    PutVarint32(dst, str.size() + kMaxTag);
     PutVarint32(dst, kComparator);
-    PutLengthPrefixedSlice(dst, comparator_);
+    dst->append(str.data(), str.size());
   }
   if (has_log_number_) {
+    std::string str;
+    PutVarint64(&str, log_number_);
+
+    PutVarint32(dst, str.size() + kMaxTag);
     PutVarint32(dst, kLogNumber);
-    PutVarint64(dst, log_number_);
+    dst->append(str.data(), str.size());
   }
   if (has_prev_log_number_) {
+    std::string str;
+    PutVarint64(&str, prev_log_number_);
+
+    PutVarint32(dst, str.size() + kMaxTag);
     PutVarint32(dst, kPrevLogNumber);
-    PutVarint64(dst, prev_log_number_);
+    dst->append(str.data(), str.size());
   }
   if (has_next_file_number_) {
+    std::string str;
+    PutVarint64(&str, next_file_number_);
+
+    PutVarint32(dst, str.size() + kMaxTag);
     PutVarint32(dst, kNextFileNumber);
-    PutVarint64(dst, next_file_number_);
+    dst->append(str.data(), str.size());
   }
   if (has_last_sequence_) {
+    std::string str;
+    PutVarint64(&str, last_sequence_);
+
+    PutVarint32(dst, str.size() + kMaxTag);
     PutVarint32(dst, kLastSequence);
-    PutVarint64(dst, last_sequence_);
+    dst->append(str.data(), str.size());
   }
 
   for (size_t i = 0; i < compact_pointers_.size(); i++) {
+    std::string str;
+    PutVarint32(&str, compact_pointers_[i].first);  // level
+    PutLengthPrefixedSlice(&str, compact_pointers_[i].second.Encode());
+
+    PutVarint32(dst, str.size() + kMaxTag);
     PutVarint32(dst, kCompactPointer);
-    PutVarint32(dst, compact_pointers_[i].first);  // level
-    PutLengthPrefixedSlice(dst, compact_pointers_[i].second.Encode());
+    dst->append(str.data(), str.size());
   }
 
   for (size_t i = 0; i < deleted_files_.size(); i++) {
+    std::string str;
     const FileMetaData& f = deleted_files_[i].second;
+    PutVarint32(&str, deleted_files_[i].first);  // level
+    PutVarint64(&str, f.number);
+    PutVarint64(&str, f.file_size);
+    PutLengthPrefixedSlice(&str, f.smallest.Encode());
+    PutLengthPrefixedSlice(&str, f.largest.Encode());
+
+    PutVarint32(dst, str.size() + kMaxTag);
     PutVarint32(dst, kDeletedFile);
-    PutVarint32(dst, deleted_files_[i].first);  // level
-    PutVarint64(dst, f.number);
-    PutVarint64(dst, f.file_size);
-    PutLengthPrefixedSlice(dst, f.smallest.Encode());
-    PutLengthPrefixedSlice(dst, f.largest.Encode());
+    dst->append(str.data(), str.size());
   }
 
   for (size_t i = 0; i < new_files_.size(); i++) {
+    std::string str;
     const FileMetaData& f = new_files_[i].second;
-    PutVarint32(dst, kNewFile);
-    PutVarint32(dst, new_files_[i].first);  // level
-    PutVarint64(dst, f.number);
-    PutVarint64(dst, f.file_size);
-    PutLengthPrefixedSlice(dst, f.smallest.Encode());
-    PutLengthPrefixedSlice(dst, f.largest.Encode());
+    PutVarint32(&str, new_files_[i].first);  // level
+    PutVarint64(&str, f.number);
+    PutVarint64(&str, f.file_size);
+    PutLengthPrefixedSlice(&str, f.smallest.Encode());
+    PutLengthPrefixedSlice(&str, f.largest.Encode());
     if (f.smallest_fake) {
-      PutVarint32(dst, 1);
+      PutVarint32(&str, 1);
     } else {
-      PutVarint32(dst, 0);
+      PutVarint32(&str, 0);
     }
     if (f.largest_fake) {
-      PutVarint32(dst, 1);
+      PutVarint32(&str, 1);
     } else {
-      PutVarint32(dst, 0);
+      PutVarint32(&str, 0);
     }
+
+    PutVarint32(dst, str.size() + kMaxTag);
+    PutVarint32(dst, kNewFile);
+    dst->append(str.data(), str.size());
   }
 }
 
@@ -139,6 +173,11 @@ Status VersionEdit::DecodeFrom(const Slice& src) {
   InternalKey key;
 
   while (msg == NULL && GetVarint32(&input, &tag)) {
+    uint32_t len = 0;
+    if (tag > kMaxTag) {
+        len = tag - kMaxTag;
+        GetVarint32(&input, &tag);
+    }
     switch (tag) {
       case kComparator:
         if (GetLengthPrefixedSlice(&input, &str)) {
@@ -252,7 +291,9 @@ Status VersionEdit::DecodeFrom(const Slice& src) {
         }
         break;
 
-      default:
+      default: // tag not know, skip it.
+        input.remove_prefix(len);
+        fprintf(stderr, "VersionEdit, skip unknow tag %d, len %d\n", tag, len);
         break;
     }
   }
