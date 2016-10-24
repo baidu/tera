@@ -52,6 +52,7 @@ class MetaTable;
 class Scheduler;
 class TabletManager;
 class TabletNodeManager;
+class MasterImplTest;
 
 class MasterImpl {
 public:
@@ -153,6 +154,7 @@ public:
     std::string ProfilingLog();
 
 private:
+    friend class MasterImplTest;
     typedef Closure<void, SnapshotRequest*, SnapshotResponse*, bool, int> SnapshotClosure;
     typedef Closure<void, SnapshotRollbackRequest*, SnapshotRollbackResponse*, bool, int> RollbackClosure;
     typedef Closure<void, ReleaseSnapshotRequest*, ReleaseSnapshotResponse*, bool, int> DelSnapshotClosure;
