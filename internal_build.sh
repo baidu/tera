@@ -29,12 +29,12 @@ cd ${DEPS_SOURCE}
 git pull
 
 # boost
-if [ ! -f "${FLAG_DIR}/boost_1_57_0" ] \
-    || [ ! -d "${DEPS_PREFIX}/boost_1_57_0/boost" ]; then
-    tar zxf boost_1_57_0.tar.gz
-    rm -rf ${DEPS_PREFIX}/boost_1_57_0
-    mv boost_1_57_0 ${DEPS_PREFIX}
-    touch "${FLAG_DIR}/boost_1_57_0"
+if [ ! -f "${FLAG_DIR}/boost_1_58_0" ] \
+    || [ ! -d "${DEPS_PREFIX}/boost_1_58_0/boost" ]; then
+    tar xjf boost_1_58_0.tar.bz2
+    rm -rf ${DEPS_PREFIX}/boost_1_58_0
+    mv boost_1_58_0 ${DEPS_PREFIX}
+    touch "${FLAG_DIR}/boost_1_58_0"
 fi
 
 # protobuf
@@ -83,16 +83,16 @@ if [ ! -f "${FLAG_DIR}/sofa-pbrpc_1_1_0" ] \
 fi
 
 # zookeeper
-if [ ! -f "${FLAG_DIR}/zookeeper_3_4_6" ] \
+if [ ! -f "${FLAG_DIR}/zookeeper_3_4_9" ] \
     || [ ! -f "${DEPS_PREFIX}/lib/libzookeeper_mt.a" ] \
     || [ ! -d "${DEPS_PREFIX}/include/zookeeper" ]; then
-    tar zxf zookeeper-3.4.6.tar.gz
-    cd zookeeper-3.4.6/src/c
+    tar zxf zookeeper-3.4.9.tar.gz
+    cd zookeeper-3.4.9/src/c
     ./configure ${DEPS_CONFIG}
     make -j4
     make install
     cd -
-    touch "${FLAG_DIR}/zookeeper_3_4_6"
+    touch "${FLAG_DIR}/zookeeper_3_4_9"
 fi
 
 # cmake for gflags
@@ -135,13 +135,21 @@ fi
 if [ ! -f "${FLAG_DIR}/gtest_1_7_0" ] \
     || [ ! -f "${DEPS_PREFIX}/lib/libgtest.a" ] \
     || [ ! -d "${DEPS_PREFIX}/include/gtest" ]; then
-    unzip gtest-1.7.0.zip
-    cd gtest-1.7.0
-    ./configure ${DEPS_CONFIG}
+    unzip googletest-release-1.7.0.zip
+    cd googletest-release-1.7.0
+
+    # XXX make gcc3 happy; what's the cmake way?
+    sed -i 's/ -Wno-missing-field-initializers/ /' cmake/internal_utils.cmake
+
+    mkdir tmpbuild
+    cd tmpbuild
+    cmake -DCMAKE_C_FLAGS="-fPIC" -DCMAKE_CXX_FLAGS="-fPIC" ..
     make
-    cp -af lib/.libs/* ${DEPS_PREFIX}/lib
+    cd ..
+    cp -af tmpbuild/libgtest.a ${DEPS_PREFIX}/lib
+    cp -af tmpbuild/libgtest_main.a ${DEPS_PREFIX}/lib
     cp -af include/gtest ${DEPS_PREFIX}/include
-    cd -
+    cd ..
     touch "${FLAG_DIR}/gtest_1_7_0"
 fi
 
@@ -149,8 +157,8 @@ fi
 if [ ! -f "${FLAG_DIR}/libunwind_0_99_beta" ] \
     || [ ! -f "${DEPS_PREFIX}/lib/libunwind.a" ] \
     || [ ! -f "${DEPS_PREFIX}/include/libunwind.h" ]; then
-    tar zxf libunwind-0.99-beta.tar.gz
-    cd libunwind-0.99-beta
+    tar zxf libunwind-0.99.tar.gz
+    cd libunwind-0.99
     ./configure ${DEPS_CONFIG}
     make CFLAGS=-fPIC -j4
     make CFLAGS=-fPIC install
