@@ -3775,8 +3775,6 @@ void MasterImpl::SplitTabletCallback(TabletPtr tablet,
         // tabletnode refused to split and didn't unload the tablet
         tablet->SetStatusIf(kTableReady, kTableOnSplit);
         ProcessReadyTablet(tablet);
-        LOG(ERROR) << "ts refused to split tablet: "
-            << StatusCodeToString(status) << ", " << tablet;
     } else {
         CHECK(status == kMetaTabletError);
         // meta table is not ok
@@ -3788,6 +3786,8 @@ void MasterImpl::SplitTabletCallback(TabletPtr tablet,
     if (tabletnode_manager_->FindTabletNode(server_addr, &node)
         && node->uuid_ == tablet->GetServerId()) {
         node->FinishSplit(tablet);
+
+        // schedule next split task
         TabletPtr next_tablet;
         while (node->SplitNextWaitTablet(&next_tablet)) {
             if (next_tablet->SetStatusIf(kTableOnSplit, kTableReady)) {
@@ -3797,9 +3797,17 @@ void MasterImpl::SplitTabletCallback(TabletPtr tablet,
             }
             node->FinishSplit(next_tablet);
         }
+    } else { // server down or restart
+        if (tablet->SetStatusIf(kTableOffLine, kTableReady)) {
+            ProcessOffLineTablet(tablet);
+            TryLoadTablet(tablet, tablet->GetServerAddr());
+        }
     }
 
     if (status == kTableNotSupport) {
+        LOG(ERROR) << "ts refused to split tablet: "
+            << StatusCodeToString(status) << ", " << tablet
+            << ", tablet status " << StatusCodeToString(tablet->GetStatus());
         return;
     }
 
