@@ -1131,19 +1131,11 @@ void MasterImpl::ShowTables(const ShowTablesRequest* request,
         TableMetaList* table_meta_list = response->mutable_table_meta_list();
         for (uint32_t i = 0; i < table_list.size(); ++i) {
             TablePtr table = table_list[i];
-            // if a user has NO permission on a table,
-            // he/she should not notice this table
-            if (!HasPermissionOnTable(request, table)) {
-                continue;
-            }
             CopyTableMetaToUser(table, table_meta_list->add_meta());
         }
         TabletMetaList* tablet_meta_list = response->mutable_tablet_meta_list();
         for (uint32_t i = 0; i < tablet_list.size(); ++i) {
             TabletPtr tablet = tablet_list[i];
-            if (!HasPermissionOnTable(request, tablet->GetTable())) {
-                continue;
-            }
             TabletMeta meta;
             tablet->ToMeta(&meta);
             tablet_meta_list->add_meta()->CopyFrom(meta);
@@ -1179,11 +1171,6 @@ void MasterImpl::ShowTablesBrief(const ShowTablesRequest* request,
     TableMetaList* table_meta_list = response->mutable_table_meta_list();
     for (uint32_t i = 0; i < table_list.size(); ++i) {
         TablePtr table = table_list[i];
-        // if a user has NO permission on a table,
-        // he/she should not notice this table
-        if (!HasPermissionOnTable(request, table)) {
-            continue;
-        }
         table->ToMeta(table_meta_list->add_meta());
         table_meta_list->add_counter()->CopyFrom(table->GetCounter());
     }
@@ -1227,9 +1214,6 @@ void MasterImpl::ShowTabletNodes(const ShowTabletNodesRequest* request,
         std::vector<TabletPtr> tablet_list;
         tablet_manager_->FindTablet(request->addr(), &tablet_list);
         for (size_t i = 0; i < tablet_list.size(); ++i) {
-            if (!HasPermissionOnTable(request, tablet_list[i]->GetTable())) {
-                continue;
-            }
             TabletMeta* meta = response->mutable_tabletmeta_list()->add_meta();
             TabletCounter* counter = response->mutable_tabletmeta_list()->add_counter();
             tablet_list[i]->ToMeta(meta);
