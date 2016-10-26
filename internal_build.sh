@@ -72,7 +72,7 @@ if [ ! -f "${FLAG_DIR}/sofa-pbrpc_1_1_0" ] \
     sed -i '/BOOST_HEADER_DIR=/ d' depends.mk
     sed -i '/PROTOBUF_DIR=/ d' depends.mk
     sed -i '/SNAPPY_DIR=/ d' depends.mk
-    echo "BOOST_HEADER_DIR=${DEPS_PREFIX}/boost_1_57_0" >> depends.mk
+    echo "BOOST_HEADER_DIR=${DEPS_PREFIX}/boost_1_58_0" >> depends.mk
     echo "PROTOBUF_DIR=${DEPS_PREFIX}" >> depends.mk
     echo "SNAPPY_DIR=${DEPS_PREFIX}" >> depends.mk
     echo "PREFIX=${DEPS_PREFIX}" >> depends.mk
@@ -179,16 +179,16 @@ if [ ! -f "${FLAG_DIR}/gperftools_2_2_1" ] \
 fi
 
 # ins
-if [ ! -f "${FLAG_DIR}/ins_0_13" ] \
+if [ ! -f "${FLAG_DIR}/ins_0_14" ] \
     || [ ! -f "${DEPS_PREFIX}/lib/libins_sdk.a" ] \
     || [ ! -f "${DEPS_PREFIX}/include/ins_sdk.h" ]; then
-    tar zxf ins-0.13.tar.gz
-    cd ins-0.13
+    tar zxf ins-0.14.tar.gz
+    cd ins-0.14
     sed -i "s|^PREFIX=.*|PREFIX=${DEPS_PREFIX}|" Makefile
     sed -i "s|^PROTOC=.*|PROTOC=${DEPS_PREFIX}/bin/protoc|" Makefile
-    BOOST_PATH=${DEPS_PREFIX}/boost_1_57_0 make -j4 install_sdk
+    BOOST_PATH=${DEPS_PREFIX}/boost_1_58_0 make -j4 install_sdk
     cd -
-    touch "${FLAG_DIR}/ins_0_13"
+    touch "${FLAG_DIR}/ins_0_14"
 fi
 
 # functional test: nose
