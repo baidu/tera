@@ -195,18 +195,18 @@ if [ ! -f "${FLAG_DIR}/gperftools_2_2_1" ] \
 fi
 
 # ins
-if [ ! -f "${FLAG_DIR}/ins_0_13" ] \
+if [ ! -f "${FLAG_DIR}/ins_0_14" ] \
     || [ ! -f "${DEPS_PREFIX}/lib/libins_sdk.a" ] \
     || [ ! -f "${DEPS_PREFIX}/include/ins_sdk.h" ]; then
-    wget --no-check-certificate -O ins-0.13.tar.gz https://github.com/baidu/ins/archive/0.13.tar.gz
-    tar zxf ins-0.13.tar.gz
-    cd ins-0.13
+    wget --no-check-certificate -O ins-0.14.tar.gz https://github.com/baidu/ins/archive/0.14.tar.gz
+    tar zxf ins-0.14.tar.gz
+    cd ins-0.14
     sed -i "s|^PREFIX=.*|PREFIX=${DEPS_PREFIX}|" Makefile
     sed -i "s|^PROTOC=.*|PROTOC=${DEPS_PREFIX}/bin/protoc|" Makefile
     BOOST_PATH=${DEPS_PREFIX}/boost_1_58_0 make install_sdk
     make -j4 install_sdk
     cd -
-    touch "${FLAG_DIR}/ins_0_13"
+    touch "${FLAG_DIR}/ins_0_14"
 fi
 
 cd ${WORK_DIR}
