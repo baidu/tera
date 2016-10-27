@@ -87,9 +87,13 @@ all: $(PROGRAM) $(LIBRARY) $(SOLIBRARY) $(TERA_C_SO) $(JNILIBRARY) $(BENCHMARK)
 	cp -r conf build
 	echo 'Done'
 
-check: $(TESTS)
+test: $(TESTS)
 	mkdir -p $(UNITTEST_OUTPUT)
 	cp $(TESTS) $(UNITTEST_OUTPUT)
+	$(MAKE) test -C src/leveldb
+	cp src/leveldb/*_test $(UNITTEST_OUTPUT)
+
+check: test
 	( cd $(UNITTEST_OUTPUT); \
 	for t in $(TESTS); do echo "***** Running $$t"; ./$$t || exit 1; done )
 	$(MAKE) check -C src/leveldb

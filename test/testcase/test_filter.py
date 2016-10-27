@@ -10,7 +10,7 @@ from TeraSdk import Client, TeraSdkException
 
 
 def setUp():
-    common.drop_table("filter_table") 
+    common.drop_table("filter_table")
     common.runcmd("./teracli create 'filter_table{lg0{cf0,cf1}}'")
 
 def tearDown():
