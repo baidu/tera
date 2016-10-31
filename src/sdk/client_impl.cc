@@ -3,6 +3,7 @@
 // found in the LICENSE file.
 
 #include "sdk/client_impl.h"
+#include "version.h"
 
 #include <iostream>
 
@@ -45,6 +46,12 @@ DECLARE_bool(tera_online_schema_update_enabled);
 
 namespace tera {
 
+static pthread_once_t sdk_client_once_control = PTHREAD_ONCE_INIT;
+
+void LogSdkVersionInfo() {
+    LOG(INFO) << "\n" << SystemVersionInfo();
+}
+
 ClientImpl::ClientImpl(const std::string& user_identity,
                        const std::string& user_passcode)
     : thread_pool_(FLAGS_tera_sdk_thread_max_num),
@@ -56,6 +63,7 @@ ClientImpl::ClientImpl(const std::string& user_identity,
         FLAGS_tera_sdk_rpc_limit_enabled ? FLAGS_tera_sdk_rpc_limit_max_outflow : -1,
         FLAGS_tera_sdk_rpc_max_pending_buffer_size, FLAGS_tera_sdk_rpc_work_thread_num);
     cluster_ = sdk::NewClusterFinder();
+    pthread_once(&sdk_client_once_control, LogSdkVersionInfo);
 }
 
 ClientImpl::~ClientImpl() {
