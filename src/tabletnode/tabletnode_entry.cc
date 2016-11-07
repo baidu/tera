@@ -38,12 +38,12 @@ namespace tera {
 namespace tabletnode {
 
 TabletNodeEntry::TabletNodeEntry()
-    : m_tabletnode_impl(NULL),
-      m_remote_tabletnode(NULL) {
+    : tabletnode_impl_(NULL),
+      remote_tabletnode_(NULL) {
     sofa::pbrpc::RpcServerOptions rpc_options;
     rpc_options.max_throughput_in = FLAGS_tera_tabletnode_rpc_server_max_inflow;
     rpc_options.max_throughput_out = FLAGS_tera_tabletnode_rpc_server_max_outflow;
-    m_rpc_server.reset(new sofa::pbrpc::RpcServer(rpc_options));
+    rpc_server_.reset(new sofa::pbrpc::RpcServer(rpc_options));
 }
 
 TabletNodeEntry::~TabletNodeEntry() {}
@@ -58,17 +58,17 @@ bool TabletNodeEntry::StartServer() {
     TabletNodeInfo tabletnode_info;
     tabletnode_info.set_addr(tabletnode_addr.ToString());
 
-    m_tabletnode_impl.reset(new TabletNodeImpl(tabletnode_info));
-    m_remote_tabletnode = new RemoteTabletNode(m_tabletnode_impl.get());
+    tabletnode_impl_.reset(new TabletNodeImpl(tabletnode_info));
+    remote_tabletnode_ = new RemoteTabletNode(tabletnode_impl_.get());
 
     // 注册给rpcserver, rpcserver会负责delete
-    m_rpc_server->RegisterService(m_remote_tabletnode);
-    if (!m_rpc_server->Start(tabletnode_addr.ToString())) {
+    rpc_server_->RegisterService(remote_tabletnode_);
+    if (!rpc_server_->Start(tabletnode_addr.ToString())) {
         LOG(ERROR) << "start RPC server error";
         return false;
     }
 
-    if (!m_tabletnode_impl->Init()) { //register on ZK
+    if (!tabletnode_impl_->Init()) { //register on ZK
         LOG(ERROR) << "fail to init tabletnode_impl";
         return false;
     }
@@ -79,9 +79,9 @@ bool TabletNodeEntry::StartServer() {
 void TabletNodeEntry::ShutdownServer() {
     LOG(INFO) << "shut down server";
     // StopServer要保证调用后, 不会再调用serveice的任何方法.
-    m_rpc_server->Stop();
-    m_tabletnode_impl->Exit();
-    m_tabletnode_impl.reset();
+    rpc_server_->Stop();
+    tabletnode_impl_->Exit();
+    tabletnode_impl_.reset();
     LOG(INFO) << "TabletNodeEntry stop done!";
 }
 
@@ -93,17 +93,17 @@ bool TabletNodeEntry::Run() {
     const int garbage_collect_period = (FLAGS_tera_garbage_collect_period)?
                                         FLAGS_tera_garbage_collect_period : 60;
     if (timer_ticks % garbage_collect_period == 0) {
-        m_tabletnode_impl->GarbageCollect();
+        tabletnode_impl_->GarbageCollect();
     }
 
-    m_tabletnode_impl->RefreshSysInfo();
-    m_tabletnode_impl->GetSysInfo().DumpLog();
+    tabletnode_impl_->RefreshSysInfo();
+    tabletnode_impl_->GetSysInfo().DumpLog();
     LOG(INFO) << "[ThreadPool schd/task/cnt] "
-        << m_remote_tabletnode->ProfilingLog();
+        << remote_tabletnode_->ProfilingLog();
 
-    LOG(INFO) << "[Cache HitRate] table_cache "
-        << m_tabletnode_impl->GetTableCacheHitRate()
-        << ", block_cache " << m_tabletnode_impl->GetBlockCacheHitRate();
+    LOG(INFO) << "[Cache HitRate/Cnt/Size] table_cache "
+        << tabletnode_impl_->TableCacheProfileInfo()
+        << ", block_cache " << tabletnode_impl_->BlockCacheProfileInfo();
 
     int64_t now_time = get_micros();
     int64_t earliest_rpc_time = now_time;

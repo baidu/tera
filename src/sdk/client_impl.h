@@ -9,7 +9,7 @@
 #include "proto/master_rpc.pb.h"
 #include "proto/tabletnode_client.h"
 #include "sdk/sdk_zk.h"
-#include "sdk/tera.h"
+#include "tera.h"
 #include "utils/timer.h"
 
 using std::string;
@@ -41,9 +41,11 @@ public:
                              ErrorCode* err);
 
     virtual bool UpdateTable(const TableDescriptor& desc, ErrorCode* err);
+    virtual bool UpdateTableSchema(const TableDescriptor& desc, ErrorCode* err);
     virtual bool UpdateCheck(const std::string& table_name, bool* done, ErrorCode* err);
 
     virtual bool DeleteTable(const std::string& name, ErrorCode* err);
+    virtual bool DropTable(const std::string& name, ErrorCode* err);
 
     virtual bool DisableTable(const std::string& name, ErrorCode* err);
 
@@ -148,19 +150,19 @@ private:
 private:
     ClientImpl(const ClientImpl&);
     void operator=(const ClientImpl&);
-    ThreadPool _thread_pool;
+    ThreadPool thread_pool_;
 
-    std::string _user_identity;
-    std::string _user_passcode;
+    std::string user_identity_;
+    std::string user_passcode_;
 
-    /// _cluster could cache the master_addr & root_table_addr.
-    /// if there is no _cluster,
+    /// cluster_ could cache the master_addr & root_table_addr.
+    /// if there is no cluster_,
     ///    we have to access zookeeper whenever we need master_addr or root_table_addr.
-    /// if there is _cluster,
-    ///    we save master_addr & root_table_addr in _cluster, access zookeeper only once.
-    sdk::ClusterFinder* _cluster;
+    /// if there is cluster_,
+    ///    we save master_addr & root_table_addr in cluster_, access zookeeper only once.
+    sdk::ClusterFinder* cluster_;
 
-    Mutex _open_table_mutex;
+    Mutex open_table_mutex_;
     struct TableHandle {
         Table* handle;
         Mutex* mu;
@@ -168,7 +170,7 @@ private:
         ErrorCode err;
         TableHandle() : handle(NULL), mu(NULL), ref(0) {}
     };
-    std::map<std::string, TableHandle> _open_table_map;
+    std::map<std::string, TableHandle> open_table_map_;
 };
 
 } // namespace tera

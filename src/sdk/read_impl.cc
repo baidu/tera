@@ -9,19 +9,20 @@ namespace tera {
 /// 读取操作
 RowReaderImpl::RowReaderImpl(Table* table, const std::string& row_key)
     : SdkTask(SdkTask::READ),
-      _row_key(row_key),
-      _callback(NULL),
-      _user_context(NULL),
-      _finish(false),
-      _finish_cond(&_finish_mutex),
-      _ts_start(kOldestTs),
-      _ts_end(kLatestTs),
-      _max_version(1),
-      _snapshot_id(0),
-      _timeout_ms(0),
-      _retry_times(0),
-      _result_pos(0),
-      _commit_times(0) {
+      row_key_(row_key),
+      callback_(NULL),
+      user_context_(NULL),
+      finish_(false),
+      finish_cond_(&finish_mutex_),
+      ts_start_(kOldestTs),
+      ts_end_(kLatestTs),
+      max_version_(1),
+      snapshot_id_(0),
+      timeout_ms_(0),
+      retry_times_(0),
+      result_pos_(0),
+      commit_times_(0),
+      txn_(NULL) {
 }
 
 RowReaderImpl::~RowReaderImpl() {
@@ -33,58 +34,62 @@ void RowReaderImpl::SetTimestamp(int64_t ts) {
 }
 
 int64_t RowReaderImpl::GetTimestamp() {
-    return _ts_start;
+    return ts_start_;
 }
 
 void RowReaderImpl::AddColumnFamily(const std::string& cf_name) {
-    _family_map[cf_name].clear();
+    family_map_[cf_name].clear();
 }
 
 void RowReaderImpl::AddColumn(const std::string& cf_name,
                               const std::string& qualifier) {
-    QualifierSet& qualifier_set = _family_map[cf_name];
+    QualifierSet& qualifier_set = family_map_[cf_name];
     qualifier_set.insert(qualifier);
 }
 
 void RowReaderImpl::SetTimeRange(int64_t ts_start, int64_t ts_end) {
-    _ts_start = ts_start;
-    _ts_end = ts_end;
+    ts_start_ = ts_start;
+    ts_end_ = ts_end;
 }
 
 void RowReaderImpl::GetTimeRange(int64_t* ts_start, int64_t* ts_end) {
     if (NULL != ts_start) {
-        *ts_start = _ts_start;
+        *ts_start = ts_start_;
     }
     if (NULL != ts_end) {
-        *ts_end = _ts_end;
+        *ts_end = ts_end_;
     }
 }
 
 void RowReaderImpl::SetMaxVersions(uint32_t max_version) {
-    _max_version = max_version;
+    max_version_ = max_version;
 }
 
 uint32_t RowReaderImpl::GetMaxVersions() {
-    return _max_version;
+    return max_version_;
 }
 
 
 /// 设置超时时间(只影响当前操作,不影响Table::SetReadTimeout设置的默认读超时)
 void RowReaderImpl::SetTimeOut(int64_t timeout_ms) {
-    _timeout_ms = timeout_ms;
+    timeout_ms_ = timeout_ms;
 }
 
 void RowReaderImpl::SetCallBack(RowReader::Callback callback) {
-    _callback = callback;
+    callback_ = callback;
+}
+
+RowReader::Callback RowReaderImpl::GetCallBack() {
+    return callback_;
 }
 
 /// 设置用户上下文，可在回调函数中获取
 void RowReaderImpl::SetContext(void* context) {
-    _user_context = context;
+    user_context_ = context;
 }
 
 void* RowReaderImpl::GetContext() {
-    return _user_context;
+    return user_context_;
 }
 /// 设置异步返回
 void RowReaderImpl::SetAsync() {
@@ -92,18 +97,18 @@ void RowReaderImpl::SetAsync() {
 
 /// 异步操作是否完成
 bool RowReaderImpl::IsFinished() const {
-    MutexLock lock(&_finish_mutex);
-    return _finish;
+    MutexLock lock(&finish_mutex_);
+    return finish_;
 }
 
 /// 获得结果错误码
 ErrorCode RowReaderImpl::GetError() {
-    return _error_code;
+    return error_code_;
 }
 
 /// 是否到达结束标记
 bool RowReaderImpl::Done() {
-    if (_result_pos < _result.key_values_size()) {
+    if (result_pos_ < result_.key_values_size()) {
          return false;
     }
     return true;
@@ -111,13 +116,13 @@ bool RowReaderImpl::Done() {
 
 /// 迭代下一个cell
 void RowReaderImpl::Next() {
-    _result_pos++;
+    result_pos_++;
 }
 
 /// 读取的结果
 std::string RowReaderImpl::Value() {
-    if (_result.key_values(_result_pos).has_value()) {
-        return _result.key_values(_result_pos).value();
+    if (result_.key_values(result_pos_).has_value()) {
+        return result_.key_values(result_pos_).value();
     } else {
         return "";
     }
@@ -131,36 +136,40 @@ int64_t RowReaderImpl::ValueInt64() {
 
 /// Timestamp
 int64_t RowReaderImpl::Timestamp() {
-    if (_result.key_values(_result_pos).has_timestamp()) {
-        return _result.key_values(_result_pos).timestamp();
+    if (result_.key_values(result_pos_).has_timestamp()) {
+        return result_.key_values(result_pos_).timestamp();
     } else {
         return 0L;
     }
 }
 
 const std::string& RowReaderImpl::RowName() {
-    return _row_key;
+    return row_key_;
+}
+
+const std::string& RowReaderImpl::RowKey() {
+    return row_key_;
 }
 
 /// Column cf:qualifier
 std::string RowReaderImpl::ColumnName() {
     std::string column;
-    if (_result.key_values(_result_pos).has_column_family()) {
-        column =  _result.key_values(_result_pos).column_family();
+    if (result_.key_values(result_pos_).has_column_family()) {
+        column =  result_.key_values(result_pos_).column_family();
     } else {
         return column = "";
     }
 
-    if (_result.key_values(_result_pos).has_qualifier()) {
-        column += ":" + _result.key_values(_result_pos).qualifier();
+    if (result_.key_values(result_pos_).has_qualifier()) {
+        column += ":" + result_.key_values(result_pos_).qualifier();
     }
     return column;
 }
 
 /// Column family
 std::string RowReaderImpl::Family() {
-    if (_result.key_values(_result_pos).has_column_family()) {
-        return _result.key_values(_result_pos).column_family();
+    if (result_.key_values(result_pos_).has_column_family()) {
+        return result_.key_values(result_pos_).column_family();
     } else {
         return "";
     }
@@ -168,31 +177,52 @@ std::string RowReaderImpl::Family() {
 
 /// Qualifier
 std::string RowReaderImpl::Qualifier() {
-    if (_result.key_values(_result_pos).has_qualifier()) {
-        return _result.key_values(_result_pos).qualifier();
+    if (result_.key_values(result_pos_).has_qualifier()) {
+        return result_.key_values(result_pos_).qualifier();
     } else {
         return "";
     }
 }
 
 void RowReaderImpl::ToMap(Map* rowmap) {
-    for (int32_t i = 0; i < _result.key_values_size(); ++i) {
+    for (int32_t i = 0; i < result_.key_values_size(); ++i) {
 
         std::string column;
-        if (_result.key_values(i).has_column_family()) {
-            column = _result.key_values(i).column_family();
+        if (result_.key_values(i).has_column_family()) {
+            column = result_.key_values(i).column_family();
         } else {
             column = "";
         }
-        if (_result.key_values(i).has_qualifier()) {
-            column += ":" + _result.key_values(i).qualifier();
+        if (result_.key_values(i).has_qualifier()) {
+            column += ":" + result_.key_values(i).qualifier();
         }
         std::map<int64_t, std::string>& value_map = (*rowmap)[column];
         int64_t timestamp = 0L;
-        if (_result.key_values(i).has_timestamp()) {
-            timestamp = _result.key_values(i).timestamp();
+        if (result_.key_values(i).has_timestamp()) {
+            timestamp = result_.key_values(i).timestamp();
         }
-        value_map[timestamp] = _result.key_values(i).value();
+        value_map[timestamp] = result_.key_values(i).value();
+    }
+}
+
+void RowReaderImpl::ToMap(TRow* rowmap) {
+    for (int32_t i = 0; i < result_.key_values_size(); ++i) {
+        std::string cf, qu, value;
+        if (result_.key_values(i).has_column_family()) {
+            cf = result_.key_values(i).column_family();
+        } else {
+            cf = "";
+        }
+        TColumnFamily& tcf = (*rowmap)[cf];
+        if (result_.key_values(i).has_qualifier()) {
+            qu = result_.key_values(i).qualifier();
+        }
+        TColumn& tqu = tcf[qu];
+        int64_t timestamp = 0L;
+        if (result_.key_values(i).has_timestamp()) {
+            timestamp = result_.key_values(i).timestamp();
+        }
+        tqu[timestamp] = result_.key_values(i).value();
     }
 }
 
@@ -200,72 +230,72 @@ void RowReaderImpl::SetResult(const RowResult& result) {
     int32_t num = result.key_values_size();
     for (int32_t i = 0; i < num; ++i) {
         const std::string& key = result.key_values(i).key();
-        CHECK(_row_key == key) << "FATAL: rowkey[" << _row_key
+        CHECK(row_key_ == key) << "FATAL: rowkey[" << row_key_
                 << "] vs result[" << key << "]";
     }
-    return _result.CopyFrom(result);
+    return result_.CopyFrom(result);
 }
 
 
 /// 重试计数加一
 void RowReaderImpl::IncRetryTimes() {
-    _retry_times++;
+    retry_times_++;
 }
 
 /// 设置错误码
 void RowReaderImpl::SetError(ErrorCode::ErrorCodeType err,
                              const std::string& reason) {
-    _error_code.SetFailed(err, reason);
+    error_code_.SetFailed(err, reason);
 }
 
 uint32_t RowReaderImpl::RetryTimes() {
-    return _retry_times;
+    return retry_times_;
 }
 
 bool RowReaderImpl::IsAsync() {
-    return (_callback != NULL);
+    return (callback_ != NULL);
 }
 
 int64_t RowReaderImpl::TimeOut() {
-    return _timeout_ms;
+    return timeout_ms_;
 }
 
 void RowReaderImpl::RunCallback() {
-    if (_callback) {
-        _callback(this);
+    if (callback_) {
+        callback_(this);
     } else {
-        MutexLock lock(&_finish_mutex);
-        _finish = true;
-        _finish_cond.Signal();
+        MutexLock lock(&finish_mutex_);
+        finish_ = true;
+        finish_cond_.Signal();
     }
 }
 
 void RowReaderImpl::Wait() {
-    MutexLock lock(&_finish_mutex);
-    while (!_finish) {
-        _finish_cond.Wait();
+    MutexLock lock(&finish_mutex_);
+    while (!finish_) {
+        finish_cond_.Wait();
     }
 }
 
 /// Get数量
 uint32_t RowReaderImpl::GetReadColumnNum() {
-    return _family_map.size();
+    return family_map_.size();
 }
 
 /// 返回Get
 const RowReader::ReadColumnList& RowReaderImpl::GetReadColumnList() {
-    return _family_map;
+    return family_map_;
 }
 
 /// 序列化
 void RowReaderImpl::ToProtoBuf(RowReaderInfo* info) {
-    info->set_key(_row_key);
-    info->set_max_version(_max_version);
-    info->mutable_time_range()->set_ts_start(_ts_start);
-    info->mutable_time_range()->set_ts_end(_ts_end);
+    info->set_key(row_key_);
+    info->set_max_version(max_version_);
+    info->mutable_time_range()->set_ts_start(ts_start_);
+    info->mutable_time_range()->set_ts_end(ts_end_);
 
-    FamilyMap::iterator f_it = _family_map.begin();
-    for (; f_it != _family_map.end(); ++f_it) {
+    FamilyMap::iterator f_it = family_map_.begin();
+    for (; f_it != family_map_.end(); ++f_it) {
         const std::string& family = f_it->first;
         const QualifierSet& qualifier_set = f_it->second;
 

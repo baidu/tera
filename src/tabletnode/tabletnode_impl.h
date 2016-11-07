@@ -126,9 +126,9 @@ public:
     void SetSessionId(const std::string& session_id);
     std::string GetSessionId();
 
-    double GetBlockCacheHitRate();
+    std::string BlockCacheProfileInfo();
 
-    double GetTableCacheHitRate();
+    std::string TableCacheProfileInfo();
 
     TabletNodeSysInfo& GetSysInfo();
 
@@ -182,27 +182,27 @@ private:
 
     bool ApplySchema(const UpdateRequest* request);
 private:
-    mutable Mutex m_status_mutex;
-    TabletNodeStatus m_status;
-    Mutex m_mutex;
+    mutable Mutex status_mutex_;
+    TabletNodeStatus status_;
+    Mutex mutex_;
 
-    scoped_ptr<TabletManager> m_tablet_manager;
-    scoped_ptr<TabletNodeZkAdapterBase> m_zk_adapter;
+    scoped_ptr<TabletManager> tablet_manager_;
+    scoped_ptr<TabletNodeZkAdapterBase> zk_adapter_;
 
-    uint64_t m_this_sequence_id;
-    std::string m_local_addr;
-    std::string m_root_tablet_addr;
-    std::string m_session_id;
-    int64_t m_release_cache_timer_id;
+    uint64_t this_sequence_id_;
+    std::string local_addr_;
+    std::string root_tablet_addr_;
+    std::string session_id_;
+    int64_t release_cache_timer_id_;
 
-    TabletNodeSysInfo m_sysinfo;
+    TabletNodeSysInfo sysinfo_;
 
-    scoped_ptr<ThreadPool> m_thread_pool;
+    scoped_ptr<ThreadPool> thread_pool_;
 
-    RpcCompactor<MergeTabletResponse> m_merge_rpc_compactor;
-    leveldb::Logger* m_ldb_logger;
-    leveldb::Cache* m_ldb_block_cache;
-    leveldb::TableCache* m_ldb_table_cache;
+    RpcCompactor<MergeTabletResponse> merge_rpc_compactor_;
+    leveldb::Logger* ldb_logger_;
+    leveldb::Cache* ldb_block_cache_;
+    leveldb::TableCache* ldb_table_cache_;
 };
 
 } // namespace tabletnode

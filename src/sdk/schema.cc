@@ -3,156 +3,164 @@
 // found in the LICENSE file.
 
 #include "sdk/schema_impl.h"
-#include "sdk/tera.h"
+#include "tera.h"
 
 namespace tera {
 
 TableDescriptor::TableDescriptor(const std::string& tb_name) {
-    _impl = new TableDescImpl(tb_name);
+    impl_ = new TableDescImpl(tb_name);
 }
 TableDescriptor::~TableDescriptor() {
-    delete _impl;
-    _impl = NULL;
+    delete impl_;
+    impl_ = NULL;
 }
 
 /*
 TableDescriptor::TableDescriptor(const TableDescriptor& desc) {
-    _impl = new TableDescImpl(desc._impl->TableName());
-    *_impl = *desc._impl;
+    impl_ = new TableDescImpl(desc.impl_->TableName());
+    *impl_ = *desc.impl_;
 }
 
 TableDescriptor& TableDescriptor::operator=(const TableDescriptor& desc) {
-    delete _impl;
-    _impl = new TableDescImpl(desc._impl->TableName());
-    *_impl = *desc._impl;
+    delete impl_;
+    impl_ = new TableDescImpl(desc.impl_->TableName());
+    *impl_ = *desc.impl_;
     return *this;
 }
 */
 
 void TableDescriptor::SetTableName(const std::string& name) {
-    return _impl->SetTableName(name);
+    return impl_->SetTableName(name);
 }
 
 std::string TableDescriptor::TableName() const {
-    return _impl->TableName();
+    return impl_->TableName();
 }
 
 /// 增加一个localitygroup, 名字仅允许使用字母、数字和下划线构造,长度不超过256
 LocalityGroupDescriptor* TableDescriptor::AddLocalityGroup(const std::string& lg_name) {
-    return _impl->AddLocalityGroup(lg_name);
+    return impl_->AddLocalityGroup(lg_name);
 }
 LocalityGroupDescriptor* TableDescriptor::DefaultLocalityGroup() {
-    return _impl->DefaultLocalityGroup();
+    return impl_->DefaultLocalityGroup();
 }
 /// 删除一个localitygroup,
 bool TableDescriptor::RemoveLocalityGroup(const std::string& lg_name) {
-    return _impl->RemoveLocalityGroup(lg_name);
+    return impl_->RemoveLocalityGroup(lg_name);
 }
 /// 获取localitygroup
 const LocalityGroupDescriptor* TableDescriptor::LocalityGroup(int32_t id) const {
-    return _impl->LocalityGroup(id);
+    return impl_->LocalityGroup(id);
 }
 const LocalityGroupDescriptor* TableDescriptor::LocalityGroup(const std::string& name) const {
-    return _impl->LocalityGroup(name);
+    return impl_->LocalityGroup(name);
 }
 
 /// LG数量
 int32_t TableDescriptor::LocalityGroupNum() const {
-    return _impl->LocalityGroupNum();
+    return impl_->LocalityGroupNum();
 }
 
 /// 增加一个columnfamily, 名字仅允许使用字母、数字和下划线构造,长度不超过256
 ColumnFamilyDescriptor* TableDescriptor::AddColumnFamily(const std::string& cf_name,
             const std::string& lg_name) {
-    return _impl->AddColumnFamily(cf_name, lg_name);
+    return impl_->AddColumnFamily(cf_name, lg_name);
 }
 ColumnFamilyDescriptor* TableDescriptor::DefaultColumnFamily() {
-    return _impl->DefaultColumnFamily();
+    return impl_->DefaultColumnFamily();
 }
 /// 删除一个columnfamily
 void TableDescriptor::RemoveColumnFamily(const std::string& cf_name) {
-    return _impl->RemoveColumnFamily(cf_name);
+    return impl_->RemoveColumnFamily(cf_name);
 }
 /// 获取所有的colmnfamily
 const ColumnFamilyDescriptor* TableDescriptor::ColumnFamily(int32_t id) const {
-    return _impl->ColumnFamily(id);
+    return impl_->ColumnFamily(id);
 }
 
 const ColumnFamilyDescriptor* TableDescriptor::ColumnFamily(const std::string& cf_name) const {
-    return _impl->ColumnFamily(cf_name);
+    return impl_->ColumnFamily(cf_name);
 }
 
 /// CF数量
 int32_t TableDescriptor::ColumnFamilyNum() const {
-    return _impl->ColumnFamilyNum();
+    return impl_->ColumnFamilyNum();
 }
 
 void TableDescriptor::SetRawKey(RawKeyType type) {
-    _impl->SetRawKey(type);
+    impl_->SetRawKey(type);
 }
 
 RawKeyType TableDescriptor::RawKey() const {
-    return _impl->RawKey();
+    return impl_->RawKey();
 }
 
 void TableDescriptor::SetSplitSize(int64_t size) {
-    _impl->SetSplitSize(size);
+    impl_->SetSplitSize(size);
 }
 
 int64_t TableDescriptor::SplitSize() const {
-    return _impl->SplitSize();
+    return impl_->SplitSize();
 }
 
 void TableDescriptor::SetMergeSize(int64_t size) {
-    _impl->SetMergeSize(size);
+    impl_->SetMergeSize(size);
 }
 
 int64_t TableDescriptor::MergeSize() const {
-    return _impl->MergeSize();
+    return impl_->MergeSize();
 }
 
 void TableDescriptor::DisableWal() {
-    _impl->DisableWal();
+    impl_->DisableWal();
 }
 
 bool TableDescriptor::IsWalDisabled() const {
-    return _impl->IsWalDisabled();
+    return impl_->IsWalDisabled();
+}
+
+void TableDescriptor::EnableTxn() {
+    impl_->EnableTxn();
+}
+
+bool TableDescriptor::IsTxnEnabled() const {
+    return impl_->IsTxnEnabled();
 }
 
 int32_t TableDescriptor::AddSnapshot(uint64_t snapshot) {
-    return _impl->AddSnapshot(snapshot);
+    return impl_->AddSnapshot(snapshot);
 }
 
 uint64_t TableDescriptor::Snapshot(int32_t id) const {
-    return _impl->Snapshot(id);
+    return impl_->Snapshot(id);
 }
 /// Snapshot数量
 int32_t TableDescriptor::SnapshotNum() const {
-    return _impl->SnapshotNum();
+    return impl_->SnapshotNum();
 }
 
 void TableDescriptor::SetAdminGroup(const std::string& name) {
-    return _impl->SetAdminGroup(name);
+    return impl_->SetAdminGroup(name);
 }
 
 void TableDescriptor::SetAdmin(const std::string& name) {
-    return _impl->SetAdmin(name);
+    return impl_->SetAdmin(name);
 }
 
 std::string TableDescriptor::AdminGroup() const {
-    return _impl->AdminGroup();
+    return impl_->AdminGroup();
 }
 
 std::string TableDescriptor::Admin() const {
-    return _impl->Admin();
+    return impl_->Admin();
 }
 
 void TableDescriptor::SetAlias(const std::string& alias) {
-    return _impl->SetAlias(alias);
+    return impl_->SetAlias(alias);
 }
 
 std::string TableDescriptor::Alias() const {
-    return _impl->Alias();
+    return impl_->Alias();
 }
 
 } // namespace tera

@@ -11,7 +11,7 @@
 #include "common/mutex.h"
 #include "proto/tabletnode_rpc.pb.h"
 #include "sdk/sdk_task.h"
-#include "sdk/tera.h"
+#include "tera.h"
 #include "types.h"
 #include "utils/timer.h"
 
@@ -37,11 +37,10 @@ public:
 
     /// 修改一个列
     void Put(const std::string& family, const std::string& qualifier,
-             const std::string& value);
+             const std::string& value, int64_t timestamp);
 
-    /// 修改一个列
     void Put(const std::string& family, const std::string& qualifier,
-             const int64_t value);
+             const int64_t value, int64_t timestamp);
 
     /// 带TTL的修改一个列
     void Put(const std::string& family, const std::string& qualifier,
@@ -55,8 +54,6 @@ public:
     virtual void Put(const std::string& family, const std::string& qualifier,
                      int64_t timestamp, const std::string& value, int32_t ttl);
 
-    /// 修改默认列
-    void Put(const std::string& value);
     /// 修改默认列
     void Put(const int64_t value);
 
@@ -86,20 +83,12 @@ public:
     void DeleteColumn(const std::string& family, const std::string& qualifier,
                       int64_t timestamp);
 
-    /// 删除一个列的全部版本
-    void DeleteColumns(const std::string& family, const std::string& qualifier);
     /// 删除一个列的指定范围版本
     void DeleteColumns(const std::string& family, const std::string& qualifier,
                        int64_t timestamp);
 
-    /// 删除一个列族的所有列的全部版本
-    void DeleteFamily(const std::string& family);
-
     /// 删除一个列族的所有列的指定范围版本
     void DeleteFamily(const std::string& family, int64_t timestamp);
-
-    /// 删除整行的全部数据
-    void DeleteRow();
 
     /// 删除整行的指定范围版本
     void DeleteRow(int64_t timestamp);
@@ -146,6 +135,9 @@ public:
     /// 重试次数
     uint32_t RetryTimes();
 
+    /// 返回所属事务
+    Transaction* GetTransaction() { return txn_; }
+
 public:
     /// 以下接口仅内部使用，不开放给用户
 
@@ -170,30 +162,39 @@ public:
     void SetErrorIfInvalid(const std::string& str,
                            const FieldLimit& field);
 
-    void AddCommitTimes() { _commit_times++; }
-    int64_t GetCommitTimes() { return _commit_times; }
+    void AddCommitTimes() { commit_times_++; }
+    int64_t GetCommitTimes() { return commit_times_; }
+
+    /// 设置所属事务
+    void SetTransaction(Transaction* txn) { txn_ = txn; }
+
+    /// 连接
+    void Concatenate(RowMutationImpl& row_mu);
 
 protected:
     /// 增加一个操作
     RowMutation::Mutation& AddMutation();
 
 private:
-    TableImpl* _table;
-    std::string _row_key;
-    std::vector<RowMutation::Mutation> _mu_seq;
+    TableImpl* table_;
+    std::string row_key_;
+    std::vector<RowMutation::Mutation> mu_seq_;
 
-    RowMutation::Callback _callback;
-    void* _user_context;
-    int64_t _timeout_ms;
-    uint32_t _retry_times;
+    RowMutation::Callback callback_;
+    void* user_context_;
+    int64_t timeout_ms_;
+    uint32_t retry_times_;
 
-    bool _finish;
-    ErrorCode _error_code;
-    mutable Mutex _finish_mutex;
-    common::CondVar _finish_cond;
+    bool finish_;
+    ErrorCode error_code_;
+    mutable Mutex finish_mutex_;
+    common::CondVar finish_cond_;
 
     /// 记录此mutation被提交到ts的次数
-    int64_t _commit_times;
+    int64_t commit_times_;
+
+    /// 所属事务
+    Transaction* txn_;
 };
 
 void SerializeMutation(const RowMutation::Mutation& src, tera::Mutation* dst);

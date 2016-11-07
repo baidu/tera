@@ -84,8 +84,8 @@ public:
                       Closure<void, UpdateRequest*, UpdateResponse*, bool, int>* done = NULL);
 
 private:
-    int32_t m_rpc_timeout;
-    static ThreadPool* m_thread_pool;
+    int32_t rpc_timeout_;
+    static ThreadPool* thread_pool_;
 };
 
 } // namespace sdk

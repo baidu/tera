@@ -88,6 +88,12 @@ class Cache {
   // Return the look-up hit rate.
   virtual double HitRate(bool force_clear = false) = 0;
 
+  // Return quantity of entries.
+  virtual size_t Entries() = 0;
+
+  // Return the total charge.
+  virtual size_t TotalCharge() = 0;
+
  private:
   void LRU_Remove(Handle* e);
   void LRU_Append(Handle* e);

@@ -31,49 +31,50 @@ enum NodeState {
 std::string NodeStateToString(NodeState state);
 
 struct TabletNode {
-    mutable Mutex m_mutex;
-    std::string m_addr;
-    std::string m_uuid;
-    NodeState m_state;
+    mutable Mutex mutex_;
+    std::string addr_;
+    std::string uuid_;
+    NodeState state_;
 
     // updated by query
-    TabletNodeStatus m_report_status;
-    TabletNodeInfo m_info;
-    uint64_t m_data_size;
-    uint64_t m_qps;
-    uint64_t m_load;
-    uint64_t m_update_time;
-    std::map<std::string, uint64_t> m_table_size;
-    std::map<std::string, uint64_t> m_table_qps;
+    TabletNodeStatus report_status_;
+    TabletNodeInfo info_;
+    uint64_t data_size_;
+    uint64_t qps_;
+    uint64_t load_;
+    uint64_t update_time_;
+    std::map<std::string, uint64_t> table_size_;
+    std::map<std::string, uint64_t> table_qps_;
 
     struct MutableCounter {
-        uint64_t m_read_pending;
-        uint64_t m_write_pending;
-        uint64_t m_scan_pending;
-        uint64_t m_row_read_delay; // micros
+        uint64_t read_pending_;
+        uint64_t write_pending_;
+        uint64_t scan_pending_;
+        uint64_t row_read_delay_; // micros
 
         MutableCounter() {
             memset(this, 0, sizeof(MutableCounter));
         }
     };
-    MutableCounter m_average_counter;
-    MutableCounter m_accumulate_counter;
-    std::list<MutableCounter> m_counter_list;
+    MutableCounter average_counter_;
+    MutableCounter accumulate_counter_;
+    std::list<MutableCounter> counter_list_;
 
-    uint32_t m_query_fail_count;
-    uint32_t m_onload_count;
-    uint32_t m_onsplit_count;
-    uint32_t m_plan_move_in_count;
-    std::list<TabletPtr> m_wait_load_list;
-    std::list<TabletPtr> m_wait_split_list;
+    uint32_t query_fail_count_;
+    uint32_t onload_count_;
+    uint32_t onsplit_count_;
+    uint32_t plan_move_in_count_;
+    std::list<TabletPtr> wait_load_list_;
+    std::list<TabletPtr> wait_split_list_;
 
     // The start time of recent load operation.
     // Used to tell if node load too many tablets within short time.
     // Keep FLAGS_tera_master_max_load_concurrency items at maximum.
-    std::list<int64_t> m_recent_load_time_list;
+    std::list<int64_t> recent_load_time_list_;
 
     TabletNode();
     TabletNode(const std::string& addr, const std::string& uuid);
+    TabletNode(const TabletNode& t);
     ~TabletNode();
 
     TabletNodeInfo GetInfo();
@@ -113,7 +114,6 @@ struct TabletNode {
     void ResetQueryFailCount();
 
 private:
-    TabletNode(const TabletNode& t);
     TabletNode& operator=(const TabletNode& t);
 };
 
@@ -146,11 +146,11 @@ public:
     bool CheckStateSwitch(NodeState old_state, NodeState new_state);
 
 private:
-    mutable Mutex m_mutex;
-    MasterImpl* m_master_impl;
+    mutable Mutex mutex_;
+    MasterImpl* master_impl_;
 
     typedef std::map<std::string, TabletNodePtr> TabletNodeList;
-    TabletNodeList m_tabletnode_list;
+    TabletNodeList tabletnode_list_;
 };
 
 } // namespace master

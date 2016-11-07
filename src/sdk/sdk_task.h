@@ -17,7 +17,7 @@
 #include "common/thread_pool.h"
 
 #include "proto/table_meta.pb.h"
-#include "sdk/tera.h"
+#include "tera.h"
 
 namespace tera {
 
@@ -29,22 +29,22 @@ public:
         MUTATION,
         SCAN
     };
-    TYPE Type() { return _type; }
+    TYPE Type() { return type_; }
 
-    void SetInternalError(StatusCode err) { _internal_err = err; }
-    StatusCode GetInternalError() { return _internal_err; }
+    void SetInternalError(StatusCode err) { internal_err_ = err; }
+    StatusCode GetInternalError() { return internal_err_; }
 
-    void SetMetaTimeStamp(int64_t meta_ts) { _meta_timestamp = meta_ts; }
-    int64_t GetMetaTimeStamp() { return _meta_timestamp; }
+    void SetMetaTimeStamp(int64_t meta_ts) { meta_timestamp_ = meta_ts; }
+    int64_t GetMetaTimeStamp() { return meta_timestamp_; }
 
-    void SetId(int64_t id) { _id = id; }
-    int64_t GetId() { return _id; }
+    void SetId(int64_t id) { id_ = id; }
+    int64_t GetId() { return id_; }
 
-    void SetDueTime(uint64_t due_time) { _due_time_ms = due_time; }
-    uint64_t DueTime() { return _due_time_ms; }
+    void SetDueTime(uint64_t due_time) { due_time_ms_ = due_time; }
+    uint64_t DueTime() { return due_time_ms_; }
 
-    void SetTimeoutFunc(TimeoutFunc timeout_func) { _timeout_func = timeout_func; }
-    TimeoutFunc GetTimeoutFunc() { return _timeout_func; }
+    void SetTimeoutFunc(TimeoutFunc timeout_func) { timeout_func_ = timeout_func; }
+    TimeoutFunc GetTimeoutFunc() { return timeout_func_; }
 
     int64_t GetRef();
     void IncRef();
@@ -53,26 +53,26 @@ public:
 
 protected:
     SdkTask(TYPE type)
-        : _type(type),
-          _internal_err(kTabletNodeOk),
-          _meta_timestamp(0),
-          _id(-1),
-          _due_time_ms(UINT64_MAX),
-          _cond(&_mutex),
-          _ref(1) {}
+        : type_(type),
+          internal_err_(kTabletNodeOk),
+          meta_timestamp_(0),
+          id_(-1),
+          due_time_ms_(UINT64_MAX),
+          cond_(&mutex_),
+          ref_(1) {}
     virtual ~SdkTask() {}
 
 private:
-    TYPE _type;
-    StatusCode _internal_err;
-    int64_t _meta_timestamp;
-    int64_t _id;
-    uint64_t _due_time_ms; // timestamp of timeout
-    TimeoutFunc _timeout_func;
+    TYPE type_;
+    StatusCode internal_err_;
+    int64_t meta_timestamp_;
+    int64_t id_;
+    uint64_t due_time_ms_; // timestamp of timeout
+    TimeoutFunc timeout_func_;
 
-    Mutex _mutex;
-    CondVar _cond;
-    int64_t _ref;
+    Mutex mutex_;
+    CondVar cond_;
+    int64_t ref_;
 };
 
 int64_t GetSdkTaskId(SdkTask* task);
@@ -102,11 +102,11 @@ private:
     typedef boost::multi_index_container<
         SdkTask*,
         boost::multi_index::indexed_by<
-            // hashed on SdkTask::_id
+            // hashed on SdkTask::id_
             boost::multi_index::hashed_unique<
                 boost::multi_index::global_fun<SdkTask*, int64_t, &GetSdkTaskId> >,
 
-            // sort by less<int64_t> on SdkTask::_due_time_ms
+            // sort by less<int64_t> on SdkTask::due_time_ms_
             boost::multi_index::ordered_non_unique<
                 boost::multi_index::global_fun<SdkTask*, uint64_t, &GetSdkTaskDueTime> >
         >
@@ -117,16 +117,16 @@ private:
     };
     typedef TaskMap::nth_index<INDEX_BY_ID>::type TaskIdIndex;
     typedef TaskMap::nth_index<INDEX_BY_DUE_TIME>::type TaskDueTimeIndex;
-    TaskMap _map_shard[kShardNum];
-    mutable Mutex _mutex_shard[kShardNum];
-    ThreadPool* _thread_pool;
+    TaskMap map_shard_[kShardNum];
+    mutable Mutex mutex_shard_[kShardNum];
+    ThreadPool* thread_pool_;
 
-    mutable Mutex _bg_mutex;
-    bool _stop;
-    bool _bg_exit;
-    CondVar _bg_cond;
-    int64_t _bg_func_id;
-    const ThreadPool::Task _bg_func;
+    mutable Mutex bg_mutex_;
+    bool stop_;
+    bool bg_exit_;
+    CondVar bg_cond_;
+    int64_t bg_func_id_;
+    const ThreadPool::Task bg_func_;
 };
 
 } // namespace tera

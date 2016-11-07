@@ -43,20 +43,20 @@ public:
     bool BeginLock(int* zk_errno);
     bool CancelLock(int* zk_errno);
     bool Unlock(int* zk_errno);
-    bool IsAcquired() {return m_is_acquired;}
+    bool IsAcquired() {return is_acquired_;}
     void OnWatchNodeDeleted(const std::string& path);
 
 private:
-    ZooKeeperAdapter * m_adapter;
-    std::string m_lock_path;
-    struct SeqNode m_self_node;
-    std::priority_queue<SeqNode, std::vector<SeqNode>, SeqNodeComp> m_node_list;
-    std::string m_watch_path;
-    pthread_mutex_t m_mutex;
+    ZooKeeperAdapter * adapter_;
+    std::string lock_path_;
+    struct SeqNode self_node_;
+    std::priority_queue<SeqNode, std::vector<SeqNode>, SeqNodeComp> node_list_;
+    std::string watch_path_;
+    pthread_mutex_t mutex_;
 
-    volatile bool m_is_acquired;
-    LOCK_CALLBACK m_callback_func;
-    void * m_callback_param;
+    volatile bool is_acquired_;
+    LOCK_CALLBACK callback_func_;
+    void * callback_param_;
 };
 
 struct LockCompletion
@@ -69,10 +69,10 @@ public:
     void Signal(int err);
 
 private:
-    ZooKeeperLock * m_lock;
-    int m_errno;
-    pthread_mutex_t m_mutex;
-    pthread_cond_t m_cond;
+    ZooKeeperLock * lock_;
+    int errno_;
+    pthread_mutex_t mutex_;
+    pthread_cond_t cond_;
 };
 
 } // namespace zk

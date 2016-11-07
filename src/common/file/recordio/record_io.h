@@ -25,7 +25,7 @@ private:
     bool Write(const char *data, uint32_t size);
 
 private:
-    FileStream* m_file;
+    FileStream* file_;
 };
 
 class RecordReader {
@@ -49,11 +49,11 @@ private:
     bool Read(char *data, uint32_t size);
 
 private:
-    FileStream* m_file;
-    scoped_array<char> m_buffer;
-    uint32_t m_file_size;
-    uint32_t m_buffer_size;
-    uint32_t m_data_size;
+    FileStream* file_;
+    scoped_array<char> buffer_;
+    uint32_t file_size_;
+    uint32_t buffer_size_;
+    uint32_t data_size_;
 };
 
 #endif // TERA_COMMON_FILE_RECORDIO_RECORD_IO_H_

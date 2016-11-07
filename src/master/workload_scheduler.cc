@@ -28,26 +28,26 @@ public:
 class WorkloadLess {
 public:
     bool operator() (const TabletNodePtr& a, const TabletNodePtr& b) {
-        return m_comparator->Compare(a, b, m_table_name) < 0;
+        return comparator_->Compare(a, b, table_name_) < 0;
     }
     WorkloadLess(Comparator* comparator, const std::string& table_name = "")
-        : m_comparator(comparator), m_table_name(table_name) {}
+        : comparator_(comparator), table_name_(table_name) {}
 private:
-    Comparator* m_comparator;
-    std::string m_table_name;
+    Comparator* comparator_;
+    std::string table_name_;
 };
 
 class WorkloadGreater {
 public:
     bool operator() (const TabletNodePtr& a, const TabletNodePtr& b) {
-        return m_comparator->Compare(a, b, m_table_name) > 0;
+        return comparator_->Compare(a, b, table_name_) > 0;
     }
     WorkloadGreater(Comparator* comparator, const std::string& table_name = "")
-        : m_comparator(comparator), m_table_name(table_name) {}
+        : comparator_(comparator), table_name_(table_name) {}
 
 private:
-    Comparator* m_comparator;
-    std::string m_table_name;
+    Comparator* comparator_;
+    std::string table_name_;
 };
 
 /////////////////////////////////////////////////
@@ -72,10 +72,10 @@ public:
 
 bool SizeScheduler::MayMoveOut(const TabletNodePtr& node,
                                const std::string& table_name) {
-    VLOG(7) << "[size-sched] MayMoveOut()";
+    VLOG(16) << "[size-sched] MayMoveOut()";
     int64_t node_size = node->GetSize(table_name);
     if (node_size <= 0) {
-        VLOG(7) << "[size-sched] node has no data";
+        VLOG(16) << "[size-sched] node has no data";
         return false;
     }
     return true;
@@ -84,7 +84,7 @@ bool SizeScheduler::MayMoveOut(const TabletNodePtr& node,
 bool SizeScheduler::FindBestNode(const std::vector<TabletNodePtr>& node_list,
                                  const std::string& table_name,
                                  size_t* best_index) {
-    VLOG(7) << "[size-sched] FindBestNode()";
+    VLOG(16) << "[size-sched] FindBestNode()";
     if (node_list.size() == 0) {
         return false;
     }
@@ -97,14 +97,14 @@ bool SizeScheduler::FindBestNode(const std::vector<TabletNodePtr>& node_list,
             *best_index = i;
         } else if (r < 0) {
             // do nothing
-        } else if (node_list[*best_index]->GetAddr() <= m_last_choose_node
-            && node_list[i]->GetAddr() > m_last_choose_node) {
+        } else if (node_list[*best_index]->GetAddr() <= last_choose_node_
+            && node_list[i]->GetAddr() > last_choose_node_) {
             // round-robin
             *best_index = i;
         }
     }
-    m_last_choose_node = node_list[*best_index]->GetAddr();
-    VLOG(7) << "[size-sched] best node = " << m_last_choose_node;
+    last_choose_node_ = node_list[*best_index]->GetAddr();
+    VLOG(16) << "[size-sched] best node = " << last_choose_node_;
     return true;
 }
 
@@ -113,7 +113,7 @@ bool SizeScheduler::FindBestTablet(const TabletNodePtr& src_node,
                                    const std::vector<TabletPtr>& tablet_list,
                                    const std::string& table_name,
                                    size_t* best_index) {
-    VLOG(7) << "[size-sched] FindBestTablet() " << src_node->GetAddr()
+    VLOG(16) << "[size-sched] FindBestTablet() " << src_node->GetAddr()
             << " -> " << dst_node->GetAddr();
 
     int64_t src_node_size = src_node->GetSize(table_name);
@@ -121,13 +121,13 @@ bool SizeScheduler::FindBestTablet(const TabletNodePtr& src_node,
 
     const double& size_ratio = FLAGS_tera_master_load_balance_size_ratio_trigger;
     if ((double)src_node_size < (double)dst_node_size * size_ratio) {
-        VLOG(7) << "[size-sched] size ratio not reach threshold: " << src_node_size
+        VLOG(16) << "[size-sched] size ratio not reach threshold: " << src_node_size
                 << " : " << dst_node_size;
         return false;
     }
 
     int64_t ideal_move_size = (src_node_size - dst_node_size) / 2;
-    VLOG(7) << "[size-sched] size = " << src_node_size << " : " << dst_node_size
+    VLOG(16) << "[size-sched] size = " << src_node_size << " : " << dst_node_size
             << " ideal_move_size = " << ideal_move_size;
 
     int64_t best_tablet_index = -1;
@@ -149,7 +149,7 @@ bool SizeScheduler::FindBestTablet(const TabletNodePtr& src_node,
     }
     *best_index = best_tablet_index;
     TabletPtr best_tablet = tablet_list[best_tablet_index];
-    VLOG(7) << "[size-sched] best tablet = " << best_tablet->GetPath()
+    VLOG(16) << "[size-sched] best tablet = " << best_tablet->GetPath()
             << " size = " << best_tablet_size
             << " qps = " << best_tablet_qps;
     return true;
@@ -218,15 +218,15 @@ public:
 };
 
 bool LoadScheduler::MayMoveOut(const TabletNodePtr& node, const std::string& table_name) {
-    VLOG(7) << "[load-sched] MayMoveOut()";
+    VLOG(16) << "[load-sched] MayMoveOut()";
     int64_t node_read_pending = GetPending(node);
     if (node_read_pending <= FLAGS_tera_master_load_balance_ts_load_threshold) {
-        VLOG(7) << "[load-sched] node do not need loadbalance: " << node_read_pending;
+        VLOG(16) << "[load-sched] node do not need loadbalance: " << node_read_pending;
         return false;
     }
     int64_t node_qps = node->GetQps(table_name);
     if (node_qps <= 0) {
-        VLOG(7) << "[load-sched] node has 0 qps.";
+        VLOG(16) << "[load-sched] node has 0 qps.";
         return false;
     }
     return true;
@@ -235,7 +235,7 @@ bool LoadScheduler::MayMoveOut(const TabletNodePtr& node, const std::string& tab
 bool LoadScheduler::FindBestNode(const std::vector<TabletNodePtr>& node_list,
                                  const std::string& table_name,
                                  size_t* best_index) {
-    VLOG(7) << "[load-sched] FindBestNode()";
+    VLOG(16) << "[load-sched] FindBestNode()";
     if (node_list.size() == 0) {
         return false;
     }
@@ -248,14 +248,14 @@ bool LoadScheduler::FindBestNode(const std::vector<TabletNodePtr>& node_list,
             *best_index = i;
         } else if (r < 0) {
             // do nothing
-        } else if (node_list[*best_index]->GetAddr() <= m_last_choose_node
-            && node_list[i]->GetAddr() > m_last_choose_node) {
+        } else if (node_list[*best_index]->GetAddr() <= last_choose_node_
+            && node_list[i]->GetAddr() > last_choose_node_) {
             // round-robin
             *best_index = i;
         }
     }
-    m_last_choose_node = node_list[*best_index]->GetAddr();
-    VLOG(7) << "[load-sched] best node : " << m_last_choose_node;
+    last_choose_node_ = node_list[*best_index]->GetAddr();
+    VLOG(16) << "[load-sched] best node : " << last_choose_node_;
     return true;
 }
 
@@ -264,18 +264,18 @@ bool LoadScheduler::FindBestTablet(const TabletNodePtr& src_node,
                                    const std::vector<TabletPtr>& tablet_list,
                                    const std::string& table_name,
                                    size_t* best_index) {
-    VLOG(7) << "[load-sched] FindBestTablet() " << src_node->GetAddr()
+    VLOG(16) << "[load-sched] FindBestTablet() " << src_node->GetAddr()
             << " -> " << dst_node->GetAddr();
 
     int64_t src_node_read_pending = GetPending(src_node);
     int64_t dst_node_read_pending = GetPending(dst_node);
     if (src_node_read_pending <= 0 || dst_node_read_pending > 0) {
-        VLOG(7) << "[load-sched] read pending not reach threshold: " << src_node_read_pending
+        VLOG(16) << "[load-sched] read pending not reach threshold: " << src_node_read_pending
                 << " : " << dst_node_read_pending;
         return false;
     }
 
-    VLOG(7) << "[load-sched]"
+    VLOG(16) << "[load-sched]"
             << " rpending = " <<  src_node_read_pending << " : " << dst_node_read_pending
             << " delay = " << src_node->GetRowReadDelay() << " : " << dst_node->GetRowReadDelay()
             << " qps = " << src_node->GetQps(table_name) << " : " << dst_node->GetQps(table_name);
@@ -292,12 +292,12 @@ bool LoadScheduler::FindBestTablet(const TabletNodePtr& src_node,
     int64_t best_tablet_qps = it->first;
     int64_t best_tablet_index = it->second;
     if (best_tablet_qps == 0) {
-        VLOG(7) << "[load-sched] no need to move 0 QPS tablet";
+        VLOG(16) << "[load-sched] no need to move 0 QPS tablet";
         return false;
     }
     *best_index = best_tablet_index;
     TabletPtr best_tablet = tablet_list[best_tablet_index];
-    VLOG(7) << "[load-sched] best tablet = " << best_tablet->GetPath()
+    VLOG(16) << "[load-sched] best tablet = " << best_tablet->GetPath()
             << " size = " << best_tablet->GetDataSize()
             << " qps = " << best_tablet_qps;
     return true;

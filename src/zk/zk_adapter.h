@@ -134,31 +134,31 @@ protected:
     void SessionTimeoutWrapper();
 
 private:
-    static FILE* m_lib_log_output;
-    static Mutex m_lib_log_mutex;
+    static FILE* lib_log_output_;
+    static Mutex lib_log_mutex_;
 
-    // protected by m_state_mutex
-    Mutex m_state_mutex;
-    std::string m_id;
-    std::string m_server_list;
-    std::string m_root_path;
-    zhandle_t * m_handle;
-    volatile int m_state;
-    volatile int64_t m_session_id;
-    common::CondVar m_state_cond;
-    uint32_t m_session_timeout;
-    int64_t m_session_timer_id;
-    ThreadPool m_thread_pool;
+    // protected by state_mutex_
+    Mutex state_mutex_;
+    std::string id_;
+    std::string server_list_;
+    std::string root_path_;
+    zhandle_t * handle_;
+    volatile int state_;
+    volatile int64_t session_id_;
+    common::CondVar state_cond_;
+    uint32_t session_timeout_;
+    int64_t session_timer_id_;
+    ThreadPool thread_pool_;
 
-    // protected by m_watcher_lock
+    // protected by watcher_lock_
     typedef std::map<std::string, ZooKeeperWatch*> WatcherMap;
-    WatcherMap m_watchers;
-    pthread_rwlock_t m_watcher_lock;
+    WatcherMap watchers_;
+    pthread_rwlock_t watcher_lock_;
 
-    // protected by m_locks_lock
+    // protected by locks_lock_
     typedef std::map<std::string, ZooKeeperLock*> LockMap;
-    LockMap m_locks;
-    pthread_rwlock_t m_locks_lock;
+    LockMap locks_;
+    pthread_rwlock_t locks_lock_;
 };
 
 class ZooKeeperLightAdapter : public ZooKeeperAdapter {

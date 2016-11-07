@@ -11,17 +11,17 @@ namespace tera {
 namespace io {
 
 DefaultCompactStrategy::DefaultCompactStrategy(const TableSchema& schema)
-    : m_schema(schema),
-      m_raw_key_operator(GetRawKeyOperatorFromSchema(m_schema)),
-      m_last_ts(-1), m_del_row_ts(-1), m_del_col_ts(-1), m_del_qual_ts(-1), m_cur_ts(-1),
-      m_del_row_seq(0), m_del_col_seq(0), m_del_qual_seq(0), m_version_num(0),
-      m_snapshot(leveldb::kMaxSequenceNumber) {
+    : schema_(schema),
+      raw_key_operator_(GetRawKeyOperatorFromSchema(schema_)),
+      last_ts_(-1), del_row_ts_(-1), del_col_ts_(-1), del_qual_ts_(-1), cur_ts_(-1),
+      del_row_seq_(0), del_col_seq_(0), del_qual_seq_(0), version_num_(0),
+      snapshot_(leveldb::kMaxSequenceNumber) {
     // build index
-    for (int32_t i = 0; i < m_schema.column_families_size(); ++i) {
-        const std::string name = m_schema.column_families(i).name();
-        m_cf_indexs[name] = i;
+    for (int32_t i = 0; i < schema_.column_families_size(); ++i) {
+        const std::string name = schema_.column_families(i).name();
+        cf_indexs_[name] = i;
     }
-    m_has_put = false;
+    has_put_ = false;
     VLOG(11) << "DefaultCompactStrategy construct";
 }
 
@@ -33,7 +33,7 @@ const char* DefaultCompactStrategy::Name() const {
 
 void DefaultCompactStrategy::SetSnapshot(uint64_t snapshot) {
     VLOG(11) << "tera.DefaultCompactStrategy: set snapshot to " << snapshot;
-    m_snapshot = snapshot;
+    snapshot_ = snapshot;
 }
 
 bool DefaultCompactStrategy::Drop(const Slice& tera_key, uint64_t n,
@@ -42,13 +42,13 @@ bool DefaultCompactStrategy::Drop(const Slice& tera_key, uint64_t n,
     int64_t ts = -1;
     leveldb::TeraKeyType type;
 
-    if (!m_raw_key_operator->ExtractTeraKey(tera_key, &key, &col, &qual, &ts, &type)) {
+    if (!raw_key_operator_->ExtractTeraKey(tera_key, &key, &col, &qual, &ts, &type)) {
         LOG(WARNING) << "invalid tera key: " << tera_key.ToString();
         return true;
     }
 
-    m_cur_type = type;
-    m_cur_ts = ts;
+    cur_type_ = type;
+    cur_ts_ = ts;
     int32_t cf_id = -1;
     if (type != leveldb::TKT_DEL && DropIllegalColumnFamily(col.ToString(), &cf_id)) {
         // drop illegal column family
@@ -60,98 +60,98 @@ bool DefaultCompactStrategy::Drop(const Slice& tera_key, uint64_t n,
         return true;
     }
 
-    if (key.compare(m_last_key) != 0) {
+    if (key.compare(last_key_) != 0) {
         // reach a new row
-        m_last_key.assign(key.data(), key.size());
-        m_last_col.assign(col.data(), col.size());
-        m_last_qual.assign(qual.data(), qual.size());
-        m_del_row_ts = m_del_col_ts = m_del_qual_ts = -1;
-        m_version_num = 0;
-        m_has_put = false;
+        last_key_.assign(key.data(), key.size());
+        last_col_.assign(col.data(), col.size());
+        last_qual_.assign(qual.data(), qual.size());
+        del_row_ts_ = del_col_ts_ = del_qual_ts_ = -1;
+        version_num_ = 0;
+        has_put_ = false;
         // no break in switch: need to set multiple variables
         switch (type) {
             case leveldb::TKT_DEL:
-                m_del_row_ts = ts;
-                m_del_row_seq = n;
+                del_row_ts_ = ts;
+                del_row_seq_ = n;
             case leveldb::TKT_DEL_COLUMN:
-                m_del_col_ts = ts;
-                m_del_col_seq = n;
+                del_col_ts_ = ts;
+                del_col_seq_ = n;
             case leveldb::TKT_DEL_QUALIFIERS: {
-                m_del_qual_ts = ts;
-                m_del_qual_seq = n;
-                if (CheckCompactLowerBound(key, lower_bound) && m_snapshot == leveldb::kMaxSequenceNumber) {
+                del_qual_ts_ = ts;
+                del_qual_seq_ = n;
+                if (CheckCompactLowerBound(key, lower_bound) && snapshot_ == leveldb::kMaxSequenceNumber) {
                     VLOG(15) << "tera.DefaultCompactStrategy: can drop delete row tag";
                     return true;
                 }
             }
             default:;
         }
-    } else if (m_del_row_ts >= ts && m_del_row_seq <= m_snapshot) {
+    } else if (del_row_ts_ >= ts && del_row_seq_ <= snapshot_) {
         // skip deleted row and the same row_del mark
         return true;
-    } else if (col.compare(m_last_col) != 0) {
+    } else if (col.compare(last_col_) != 0) {
         // reach a new column family
-        m_last_col.assign(col.data(), col.size());
-        m_last_qual.assign(qual.data(), qual.size());
-        m_del_col_ts = m_del_qual_ts = -1;
-        m_version_num = 0;
-        m_has_put = false;
+        last_col_.assign(col.data(), col.size());
+        last_qual_.assign(qual.data(), qual.size());
+        del_col_ts_ = del_qual_ts_ = -1;
+        version_num_ = 0;
+        has_put_ = false;
         // no break in switch: need to set multiple variables
         switch (type) {
             case leveldb::TKT_DEL_COLUMN:
-                m_del_col_ts = ts;
-                m_del_col_seq = n;
+                del_col_ts_ = ts;
+                del_col_seq_ = n;
             case leveldb::TKT_DEL_QUALIFIERS: {
-                m_del_qual_ts = ts;
-                m_del_qual_seq = n;
-                if (CheckCompactLowerBound(key, lower_bound) && m_snapshot == leveldb::kMaxSequenceNumber) {
+                del_qual_ts_ = ts;
+                del_qual_seq_ = n;
+                if (CheckCompactLowerBound(key, lower_bound) && snapshot_ == leveldb::kMaxSequenceNumber) {
                   VLOG(15) << "tera.DefaultCompactStrategy: can drop delete col tag";
                   return true;
                 }
             }
             default:;
         }
-    } else if (m_del_col_ts > ts && m_del_col_seq <= m_snapshot) {
+    } else if (del_col_ts_ > ts && del_col_seq_ <= snapshot_) {
         // skip deleted column family
         return true;
-    } else if (qual.compare(m_last_qual) != 0) {
+    } else if (qual.compare(last_qual_) != 0) {
         // reach a new qualifier
-        m_last_qual.assign(qual.data(), qual.size());
-        m_del_qual_ts = -1;
-        m_version_num = 0;
-        m_has_put = false;
+        last_qual_.assign(qual.data(), qual.size());
+        del_qual_ts_ = -1;
+        version_num_ = 0;
+        has_put_ = false;
         if (type == leveldb::TKT_DEL_QUALIFIERS) {
-            m_del_qual_ts = ts;
-            m_del_qual_seq = n;
-            if (CheckCompactLowerBound(key, lower_bound) && m_snapshot == leveldb::kMaxSequenceNumber) {
+            del_qual_ts_ = ts;
+            del_qual_seq_ = n;
+            if (CheckCompactLowerBound(key, lower_bound) && snapshot_ == leveldb::kMaxSequenceNumber) {
               VLOG(15) << "tera.DefaultCompactStrategy: can drop delete qualifier tag";
               return true;
             }
         }
-    } else if (m_del_qual_ts > ts && m_del_qual_seq <= m_snapshot) {
+    } else if (del_qual_ts_ > ts && del_qual_seq_ <= snapshot_) {
         // skip deleted qualifier
         return true;
     }
 
     if (type == leveldb::TKT_VALUE) {
-        m_has_put = true;
-        if (n <= m_snapshot) {
-            if (++m_version_num > static_cast<uint32_t>(m_schema.column_families(cf_id).max_versions())) {
+        has_put_ = true;
+        if (n <= snapshot_) {
+            if (++version_num_ > static_cast<uint32_t>(schema_.column_families(cf_id).max_versions())) {
                 // drop out-of-range version
                 VLOG(20) << "compact drop true: " << key.ToString()
-                    << ", version " << m_version_num
+                    << ", version " << version_num_
                     << ", timestamp " << ts;
                 return true;
             }
         }
     }
 
-    if (IsAtomicOP(type) && m_has_put) {
+    if (IsAtomicOP(type) && has_put_) {
         // drop ADDs which is later than Put
         return true;
     }
     VLOG(20) << "compact drop false: " << key.ToString()
-        << ", version " << m_version_num
+        << ", version " << version_num_
         << ", timestamp " << ts;
     return false;
 }
@@ -179,22 +179,21 @@ bool DefaultCompactStrategy::InternalMergeProcess(leveldb::Iterator* it,
                                                   bool merge_put_flag,
                                                   bool is_internal_key,
                                                   int64_t* merged_num) {
-    if (!tera::io::IsAtomicOP(m_cur_type)) {
+    if (!tera::io::IsAtomicOP(cur_type_)) {
         return false;
     }
     assert(merged_key);
     assert(merged_value);
 
     AtomicMergeStrategy atom_merge;
-    atom_merge.Init(merged_key, merged_value, it->key(), it->value(), m_cur_type);
+    atom_merge.Init(merged_key, merged_value, it->key(), it->value(), cur_type_);
 
     it->Next();
     int64_t merged_num_t = 1;
-    int64_t last_ts_atomic = m_cur_ts;
+    int64_t last_ts_atomic = cur_ts_;
     int64_t version_num = 0;
 
     while (it->Valid()) {
-        merged_num_t++;
         if (version_num >= 1) {
             break; //avoid accumulate to many versions
         }
@@ -208,18 +207,21 @@ bool DefaultCompactStrategy::InternalMergeProcess(leveldb::Iterator* it,
         if (is_internal_key) {
             leveldb::ParsedInternalKey ikey;
             leveldb::ParseInternalKey(itkey, &ikey);
-            if (!m_raw_key_operator->ExtractTeraKey(ikey.user_key, &key, &col, &qual, &ts, &type)) {
+            if (ikey.sequence > snapshot_) {
+                break;
+            }
+            if (!raw_key_operator_->ExtractTeraKey(ikey.user_key, &key, &col, &qual, &ts, &type)) {
                 LOG(WARNING) << "invalid internal key for tera: " << itkey.ToString();
                 break;
             }
         } else {
-            if (!m_raw_key_operator->ExtractTeraKey(itkey, &key, &col, &qual, &ts, &type)) {
+            if (!raw_key_operator_->ExtractTeraKey(itkey, &key, &col, &qual, &ts, &type)) {
                 LOG(WARNING) << "invalid tera key: " << itkey.ToString();
                 break;
             }
         }
 
-        if (m_last_qual != qual || m_last_col != col || m_last_key != key) {
+        if (last_qual_ != qual || last_col_ != col || last_key_ != key) {
             break; // out of the current cell
         }
 
@@ -236,6 +238,7 @@ bool DefaultCompactStrategy::InternalMergeProcess(leveldb::Iterator* it,
         }
         last_ts_atomic = ts;
         it->Next();
+        merged_num_t++;
     }
     atom_merge.Finish();
     if (merged_num) {
@@ -249,14 +252,14 @@ bool DefaultCompactStrategy::ScanDrop(const Slice& tera_key, uint64_t n) {
     int64_t ts = -1;
     leveldb::TeraKeyType type;
 
-    if (!m_raw_key_operator->ExtractTeraKey(tera_key, &key, &col, &qual, &ts, &type)) {
+    if (!raw_key_operator_->ExtractTeraKey(tera_key, &key, &col, &qual, &ts, &type)) {
         LOG(WARNING) << "invalid tera key: " << tera_key.ToString();
         return true;
     }
 
-    m_cur_type = type;
-    m_last_ts = m_cur_ts;
-    m_cur_ts = ts;
+    cur_type_ = type;
+    last_ts_ = cur_ts_;
+    cur_ts_ = ts;
     int32_t cf_id = -1;
     if (type != leveldb::TKT_DEL && DropIllegalColumnFamily(col.ToString(), &cf_id)) {
         // drop illegal column family
@@ -268,73 +271,73 @@ bool DefaultCompactStrategy::ScanDrop(const Slice& tera_key, uint64_t n) {
         return true;
     }
 
-    if (key.compare(m_last_key) != 0) {
+    if (key.compare(last_key_) != 0) {
         // reach a new row
-        m_last_key.assign(key.data(), key.size());
-        m_last_col.assign(col.data(), col.size());
-        m_last_qual.assign(qual.data(), qual.size());
-        m_last_type = type;
-        m_version_num = 0;
-        m_del_row_ts = m_del_col_ts = m_del_qual_ts = -1;
-        m_has_put = false;
+        last_key_.assign(key.data(), key.size());
+        last_col_.assign(col.data(), col.size());
+        last_qual_.assign(qual.data(), qual.size());
+        last_type_ = type;
+        version_num_ = 0;
+        del_row_ts_ = del_col_ts_ = del_qual_ts_ = -1;
+        has_put_ = false;
 
         // no break in switch: need to set multiple variables
         switch (type) {
             case leveldb::TKT_DEL:
-                m_del_row_ts = ts;
+                del_row_ts_ = ts;
             case leveldb::TKT_DEL_COLUMN:
-                m_del_col_ts = ts;
+                del_col_ts_ = ts;
             case leveldb::TKT_DEL_QUALIFIERS:
-                m_del_qual_ts = ts;
+                del_qual_ts_ = ts;
             default:;
         }
-    } else if (m_del_row_ts >= ts) {
+    } else if (del_row_ts_ >= ts) {
         // skip deleted row and the same row_del mark
         return true;
-    } else if (col.compare(m_last_col) != 0) {
+    } else if (col.compare(last_col_) != 0) {
         // reach a new column family
-        m_last_col.assign(col.data(), col.size());
-        m_last_qual.assign(qual.data(), qual.size());
-        m_last_type = type;
-        m_version_num = 0;
-        m_del_col_ts = m_del_qual_ts = -1;
-        m_has_put = false;
+        last_col_.assign(col.data(), col.size());
+        last_qual_.assign(qual.data(), qual.size());
+        last_type_ = type;
+        version_num_ = 0;
+        del_col_ts_ = del_qual_ts_ = -1;
+        has_put_ = false;
         // set both variables when type is leveldb::TKT_DEL_COLUMN
         switch (type) {
             case leveldb::TKT_DEL_COLUMN:
-                m_del_col_ts = ts;
+                del_col_ts_ = ts;
             case leveldb::TKT_DEL_QUALIFIERS:
-                m_del_qual_ts = ts;
+                del_qual_ts_ = ts;
             default:;
         }
-    } else if (m_del_col_ts > ts) {
+    } else if (del_col_ts_ > ts) {
         // skip deleted column family
         return true;
-    } else if (qual.compare(m_last_qual) != 0) {
+    } else if (qual.compare(last_qual_) != 0) {
         // reach a new qualifier
-        m_last_qual.assign(qual.data(), qual.size());
-        m_last_type = type;
-        m_version_num = 0;
-        m_del_qual_ts = -1;
-        m_has_put = false;
+        last_qual_.assign(qual.data(), qual.size());
+        last_type_ = type;
+        version_num_ = 0;
+        del_qual_ts_ = -1;
+        has_put_ = false;
         if (type == leveldb::TKT_DEL_QUALIFIERS) {
-            m_del_qual_ts = ts;
+            del_qual_ts_ = ts;
         }
-    } else if (m_del_qual_ts > ts) {
+    } else if (del_qual_ts_ > ts) {
         // skip deleted qualifier
         return true;
     } else if (type == leveldb::TKT_DEL_QUALIFIERS) {
         // reach a delete-all-qualifier mark
-        m_del_qual_ts = ts;
-    } else if (m_last_type == leveldb::TKT_DEL_QUALIFIER) {
+        del_qual_ts_ = ts;
+    } else if (last_type_ == leveldb::TKT_DEL_QUALIFIER) {
         // skip latest deleted version
-        m_last_type = type;
+        last_type_ = type;
         if (type == leveldb::TKT_VALUE) {
-            m_version_num++;
+            version_num_++;
         }
         return true;
     } else {
-        m_last_type = type;
+        last_type_ = type;
     }
 
     if (type != leveldb::TKT_VALUE && !IsAtomicOP(type)) {
@@ -342,32 +345,32 @@ bool DefaultCompactStrategy::ScanDrop(const Slice& tera_key, uint64_t n) {
     }
 
     if (type == leveldb::TKT_VALUE) {
-        m_has_put = true;
+        has_put_ = true;
     }
 
-    if (IsAtomicOP(type) && m_has_put) {
+    if (IsAtomicOP(type) && has_put_) {
         return true;
     }
 
     CHECK(cf_id >= 0) << "illegel column family";
     if (type == leveldb::TKT_VALUE) {
-        if (m_cur_ts == m_last_ts && m_last_qual == qual.ToString() &&
-            m_last_col == col.ToString() && m_last_key == key.ToString()) {
+        if (cur_ts_ == last_ts_ && last_qual_ == qual.ToString() &&
+            last_col_ == col.ToString() && last_key_ == key.ToString()) {
             // this is the same key, do not chang version num
         } else {
-            m_version_num++;
+            version_num_++;
         }
-        if (m_version_num >
-            static_cast<uint32_t>(m_schema.column_families(cf_id).max_versions())) {
+        if (version_num_ >
+            static_cast<uint32_t>(schema_.column_families(cf_id).max_versions())) {
             // drop out-of-range version
             VLOG(20) << "scan drop true: " << key.ToString()
-                << ", version " << m_version_num
+                << ", version " << version_num_
                 << ", timestamp " << ts;
             return true;
         }
     }
     VLOG(20) << "scan drop false: " << key.ToString()
-        << ", version " << m_version_num
+        << ", version " << version_num_
         << ", timestamp " << ts;
     return false;
 }
@@ -375,8 +378,8 @@ bool DefaultCompactStrategy::ScanDrop(const Slice& tera_key, uint64_t n) {
 bool DefaultCompactStrategy::DropIllegalColumnFamily(const std::string& column_family,
                                                 int32_t* cf_idx) const {
     std::map<std::string, int32_t>::const_iterator it =
-        m_cf_indexs.find(column_family);
-    if (it == m_cf_indexs.end()) {
+        cf_indexs_.find(column_family);
+    if (it == cf_indexs_.end()) {
         return true;
     }
     if (cf_idx) {
@@ -386,7 +389,7 @@ bool DefaultCompactStrategy::DropIllegalColumnFamily(const std::string& column_f
 }
 
 bool DefaultCompactStrategy::DropByLifeTime(int32_t cf_idx, int64_t timestamp) const {
-    int64_t ttl = m_schema.column_families(cf_idx).time_to_live() * 1000000LL;
+    int64_t ttl = schema_.column_families(cf_idx).time_to_live() * 1000000LL;
     if (ttl <= 0) {
         // do not drop
         return false;
@@ -406,7 +409,7 @@ bool DefaultCompactStrategy::CheckCompactLowerBound(const Slice& cur_key,
     }
 
     Slice rkey;
-    CHECK (m_raw_key_operator->ExtractTeraKey(lower_bound, &rkey, NULL, NULL, NULL, NULL));
+    CHECK (raw_key_operator_->ExtractTeraKey(lower_bound, &rkey, NULL, NULL, NULL, NULL));
     int res = rkey.compare(cur_key);
     if (res > 0) {
         return true;
@@ -416,16 +419,16 @@ bool DefaultCompactStrategy::CheckCompactLowerBound(const Slice& cur_key,
 }
 
 DefaultCompactStrategyFactory::DefaultCompactStrategyFactory(const TableSchema& schema)
-    : m_schema(schema) {}
+    : schema_(schema) {}
 
 void DefaultCompactStrategyFactory::SetArg(const void* arg) {
-    MutexLock lock(&m_mutex);
-    m_schema.CopyFrom(*(TableSchema*)arg);
+    MutexLock lock(&mutex_);
+    schema_.CopyFrom(*(TableSchema*)arg);
 }
 
 DefaultCompactStrategy* DefaultCompactStrategyFactory::NewInstance() {
-    MutexLock lock(&m_mutex);
-    return new DefaultCompactStrategy(m_schema);
+    MutexLock lock(&mutex_);
+    return new DefaultCompactStrategy(schema_);
 }
 
 } // namespace io

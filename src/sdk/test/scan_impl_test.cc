@@ -16,37 +16,37 @@ class ScanDescImplTest : public ::testing::Test, public ScanDescImpl {
 public:
     ScanDescImplTest() : ScanDescImpl("row") {
         CreateSchema();
-        SetTableSchema(_table_schema);
+        SetTableSchema(table_schema_);
     }
 
     ~ScanDescImplTest() {}
 
     void CreateSchema() {
-        _table_schema.set_name("linkcache");
-        LocalityGroupSchema* lg = _table_schema.add_locality_groups();
+        table_schema_.set_name("linkcache");
+        LocalityGroupSchema* lg = table_schema_.add_locality_groups();
         lg->set_name("lg0");
-        ColumnFamilySchema* cf = _table_schema.add_column_families();
+        ColumnFamilySchema* cf = table_schema_.add_column_families();
         cf->set_name("cf0");
         cf->set_locality_group("lg0");
         cf->set_type("int32");
 
-        cf = _table_schema.add_column_families();
+        cf = table_schema_.add_column_families();
         cf->set_name("cf1");
         cf->set_locality_group("lg0");
         cf->set_type("uint64");
 
-        cf = _table_schema.add_column_families();
+        cf = table_schema_.add_column_families();
         cf->set_name("cf2");
         cf->set_locality_group("lg0");
         cf->set_type("binary");
     }
 
     const TableSchema& GetSchema() const {
-        return _table_schema;
+        return table_schema_;
     }
 
 private:
-    TableSchema _table_schema;
+    TableSchema table_schema_;
 };
 
 TEST_F(ScanDescImplTest, GetCfType) {
@@ -122,7 +122,7 @@ TEST_F(ScanDescImplTest, ParseFilterString) {
     filter_str = "cf0 < 10 AND cf1 >100 AND cf2 == world";
     SetFilterString(filter_str);
     EXPECT_TRUE(ParseFilterString());
-    EXPECT_EQ(_filter_list.filter_size(), 3);
+    EXPECT_EQ(filter_list_.filter_size(), 3);
 
     filter_str = "cf < 10 AND cf1 >100 AND cf2 == world";
     SetFilterString(filter_str);

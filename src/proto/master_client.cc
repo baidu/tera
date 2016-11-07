@@ -19,7 +19,7 @@ namespace master {
 MasterClient::MasterClient(const std::string& server_addr,
                            int32_t rpc_timeout)
     : RpcClient<MasterServer::Stub>(server_addr),
-      m_rpc_timeout(rpc_timeout) {}
+      rpc_timeout_(rpc_timeout) {}
 
 MasterClient::~MasterClient() {}
 
@@ -28,7 +28,7 @@ bool MasterClient::GetSnapshot(const GetSnapshotRequest* request,
     return SendMessageWithRetry(&MasterServer::Stub::GetSnapshot,
                                 request, response,
                                 (Closure<void, GetSnapshotRequest*, GetSnapshotResponse*, bool, int>*)NULL,
-                                "GetSnapshot", m_rpc_timeout);
+                                "GetSnapshot", rpc_timeout_);
 }
 
 bool MasterClient::DelSnapshot(const DelSnapshotRequest* request,
@@ -36,7 +36,7 @@ bool MasterClient::DelSnapshot(const DelSnapshotRequest* request,
     return SendMessageWithRetry(&MasterServer::Stub::DelSnapshot,
                                 request, response,
                                 (Closure<void, DelSnapshotRequest*, DelSnapshotResponse*, bool, int>*)NULL,
-                                "DelSnapshot", m_rpc_timeout);
+                                "DelSnapshot", rpc_timeout_);
 }
 
 bool MasterClient::GetRollback(const RollbackRequest* request,
@@ -44,7 +44,7 @@ bool MasterClient::GetRollback(const RollbackRequest* request,
     return SendMessageWithRetry(&MasterServer::Stub::GetRollback,
                                 request, response,
                                 (Closure<void, RollbackRequest*, RollbackResponse*, bool, int>*)NULL,
-                                "GetRollback", m_rpc_timeout);
+                                "GetRollback", rpc_timeout_);
 }
 
 bool MasterClient::CreateTable(const CreateTableRequest* request,
@@ -52,7 +52,7 @@ bool MasterClient::CreateTable(const CreateTableRequest* request,
     return SendMessageWithRetry(&MasterServer::Stub::CreateTable,
                                 request, response,
                                 (Closure<void, CreateTableRequest*, CreateTableResponse*, bool, int>*)NULL,
-                                "CreateTable", m_rpc_timeout);
+                                "CreateTable", rpc_timeout_);
 }
 
 bool MasterClient::DeleteTable(const DeleteTableRequest* request,
@@ -60,7 +60,7 @@ bool MasterClient::DeleteTable(const DeleteTableRequest* request,
     return SendMessageWithRetry(&MasterServer::Stub::DeleteTable,
                                 request, response,
                                 (Closure<void, DeleteTableRequest*, DeleteTableResponse*, bool, int>*)NULL,
-                                "DeleteTable", m_rpc_timeout);
+                                "DeleteTable", rpc_timeout_);
 }
 
 bool MasterClient::DisableTable(const DisableTableRequest* request,
@@ -68,7 +68,7 @@ bool MasterClient::DisableTable(const DisableTableRequest* request,
     return SendMessageWithRetry(&MasterServer::Stub::DisableTable,
                                 request, response,
                                 (Closure<void, DisableTableRequest*, DisableTableResponse*, bool, int>*)NULL,
-                                "DisableTable", m_rpc_timeout);
+                                "DisableTable", rpc_timeout_);
 }
 
 bool MasterClient::EnableTable(const EnableTableRequest* request,
@@ -76,7 +76,7 @@ bool MasterClient::EnableTable(const EnableTableRequest* request,
     return SendMessageWithRetry(&MasterServer::Stub::EnableTable,
                                 request, response,
                                 (Closure<void, EnableTableRequest*, EnableTableResponse*, bool, int>*)NULL,
-                                "EnableTable", m_rpc_timeout);
+                                "EnableTable", rpc_timeout_);
 }
 
 bool MasterClient::UpdateTable(const UpdateTableRequest* request,
@@ -84,7 +84,7 @@ bool MasterClient::UpdateTable(const UpdateTableRequest* request,
     return SendMessageWithRetry(&MasterServer::Stub::UpdateTable,
                                 request, response,
                                 (Closure<void, UpdateTableRequest*, UpdateTableResponse*, bool, int>*)NULL,
-                                "UpdateTable", m_rpc_timeout);
+                                "UpdateTable", rpc_timeout_);
 }
 
 bool MasterClient::UpdateCheck(const UpdateCheckRequest* request,
@@ -92,7 +92,7 @@ bool MasterClient::UpdateCheck(const UpdateCheckRequest* request,
     return SendMessageWithRetry(&MasterServer::Stub::UpdateCheck,
                                 request, response,
                                 (Closure<void, UpdateCheckRequest*, UpdateCheckResponse*, bool, int>*)NULL,
-                                "UpdateCheck", m_rpc_timeout);
+                                "UpdateCheck", rpc_timeout_);
 }
 
 bool MasterClient::SearchTable(const SearchTableRequest* request,
@@ -100,7 +100,7 @@ bool MasterClient::SearchTable(const SearchTableRequest* request,
     return SendMessageWithRetry(&MasterServer::Stub::SearchTable,
                                 request, response,
                                 (Closure<void, SearchTableRequest*, SearchTableResponse*, bool, int>*)NULL,
-                                "SearchTable", m_rpc_timeout);
+                                "SearchTable", rpc_timeout_);
 }
 
 bool MasterClient::CompactTable(const CompactTableRequest* request,
@@ -108,7 +108,7 @@ bool MasterClient::CompactTable(const CompactTableRequest* request,
     return SendMessageWithRetry(&MasterServer::Stub::CompactTable,
                                 request, response,
                                 (Closure<void, CompactTableRequest*, CompactTableResponse*, bool, int>*)NULL,
-                                "CompactTable", m_rpc_timeout);
+                                "CompactTable", rpc_timeout_);
 }
 
 bool MasterClient::ShowTables(const ShowTablesRequest* request,
@@ -116,7 +116,7 @@ bool MasterClient::ShowTables(const ShowTablesRequest* request,
     return SendMessageWithRetry(&MasterServer::Stub::ShowTables,
                                 request, response,
                                 (Closure<void, ShowTablesRequest*, ShowTablesResponse*, bool, int>*)NULL,
-                                "ShowTables", m_rpc_timeout);
+                                "ShowTables", rpc_timeout_);
 }
 
 bool MasterClient::ShowTabletNodes(const ShowTabletNodesRequest* request,
@@ -124,7 +124,7 @@ bool MasterClient::ShowTabletNodes(const ShowTabletNodesRequest* request,
     return SendMessageWithRetry(&MasterServer::Stub::ShowTabletNodes,
                                 request, response,
                                 (Closure<void, ShowTabletNodesRequest*, ShowTabletNodesResponse*, bool, int>*)NULL,
-                                "ShowTabletNodes", m_rpc_timeout);
+                                "ShowTabletNodes", rpc_timeout_);
 }
 
 bool MasterClient::Register(const RegisterRequest* request,
@@ -132,7 +132,7 @@ bool MasterClient::Register(const RegisterRequest* request,
     return SendMessageWithRetry(&MasterServer::Stub::Register,
                                 request, response,
                                 (Closure<void, RegisterRequest*, RegisterResponse*, bool, int>*)NULL,
-                                "Register", m_rpc_timeout);
+                                "Register", rpc_timeout_);
 }
 
 bool MasterClient::Report(const ReportRequest* request,
@@ -140,7 +140,7 @@ bool MasterClient::Report(const ReportRequest* request,
     return SendMessageWithRetry(&MasterServer::Stub::Report,
                                 request, response,
                                 (Closure<void, ReportRequest*, ReportResponse*, bool, int>*)NULL,
-                                "Report", m_rpc_timeout);
+                                "Report", rpc_timeout_);
 }
 
 bool MasterClient::CmdCtrl(const CmdCtrlRequest* request,
@@ -148,7 +148,7 @@ bool MasterClient::CmdCtrl(const CmdCtrlRequest* request,
     return SendMessageWithRetry(&MasterServer::Stub::CmdCtrl,
                                 request, response,
                                 (Closure<void, CmdCtrlRequest*, CmdCtrlResponse*, bool, int>*)NULL,
-                                "CmdCtrl", m_rpc_timeout);
+                                "CmdCtrl", rpc_timeout_);
 }
 
 bool MasterClient::OperateUser(const OperateUserRequest* request,
@@ -156,7 +156,7 @@ bool MasterClient::OperateUser(const OperateUserRequest* request,
     return SendMessageWithRetry(&MasterServer::Stub::OperateUser,
                                 request, response,
                                 (Closure<void, OperateUserRequest*, OperateUserResponse*, bool, int>*)NULL,
-                                "OperateUser", m_rpc_timeout);
+                                "OperateUser", rpc_timeout_);
 }
 
 bool MasterClient::RenameTable(const RenameTableRequest* request,
@@ -165,7 +165,7 @@ bool MasterClient::RenameTable(const RenameTableRequest* request,
                                 request, response,
                                 (Closure<void, RenameTableRequest*,
                                          RenameTableResponse*, bool, int>*)NULL,
-                                "RenameTable", m_rpc_timeout);
+                                "RenameTable", rpc_timeout_);
 }
 
 } // namespace master

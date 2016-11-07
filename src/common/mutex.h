@@ -131,13 +131,13 @@ public:
         PthreadCall("condvar wait", pthread_cond_wait(&cond_, &mu_->mu_));
         mu_->AfterLock(msg, msg_threshold);
     }
-    // Time wait in ms
+    // Time wait in us
     // timeout < 0 would cause ETIMEOUT and return false immediately
-    bool TimeWait(int timeout, const char* msg = NULL) {
+    bool TimeWaitInUs(int timeout, const char* msg = NULL) {
         timespec ts;
         struct timeval tv;
         gettimeofday(&tv, NULL);
-        int64_t usec = tv.tv_usec + timeout * 1000LL;
+        int64_t usec = tv.tv_usec + timeout;
         ts.tv_sec = tv.tv_sec + usec / 1000000;
         ts.tv_nsec = (usec % 1000000) * 1000;
         int64_t msg_threshold = mu_->msg_threshold_;
@@ -145,6 +145,11 @@ public:
         int ret = pthread_cond_timedwait(&cond_, &mu_->mu_, &ts);
         mu_->AfterLock(msg, msg_threshold);
         return (ret == 0);
+    }
+    // Time wait in ms
+    // timeout < 0 would cause ETIMEOUT and return false immediately
+    bool TimeWait(int timeout, const char* msg = NULL) {
+        return TimeWaitInUs(timeout * 1000LL, msg);
     }
     void Signal() {
         PthreadCall("signal", pthread_cond_signal(&cond_));

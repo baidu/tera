@@ -17,7 +17,7 @@
 #include <glog/logging.h>
 
 #include "common/mutex.h"
-#include "sdk/tera.h"
+#include "tera.h"
 #include "utils/counter.h"
 
 DECLARE_int64(pend_size);
@@ -54,12 +54,12 @@ int64_t Now();
 class Marker {
 public:
     Marker(uint32_t max_latency)
-        : m_latency_limit(max_latency),
-          m_operation_count(0),
-          m_total_latency(0),
-          m_min_latency(0) {
-        m_latency_vector = new uint64_t[max_latency + 1];
-        memset(m_latency_vector, 0, (max_latency + 1) * sizeof(uint64_t));
+        : latency_limit_(max_latency),
+          operation_count_(0),
+          total_latency_(0),
+          min_latency_(0) {
+        latency_vector_ = new uint64_t[max_latency + 1];
+        memset(latency_vector_, 0, (max_latency + 1) * sizeof(uint64_t));
         for (int i = 0; i < 11; i++) {
             m_ten_percentile_latency[i] = 0;
             m_ten_percentile_latency_count_sum[i] = 0;
@@ -67,22 +67,22 @@ public:
     }
 
     ~Marker() {
-        delete[] m_latency_vector;
+        delete[] latency_vector_;
     }
 
     void AddLatency(uint32_t latency) {
-        if (latency > m_latency_limit) {
-            latency = m_latency_limit;
+        if (latency > latency_limit_) {
+            latency = latency_limit_;
         }
-        MutexLock lock(&m_mutex);
-        m_latency_vector[latency]++;
-        m_operation_count++;
-        m_total_latency += latency;
-        if (m_operation_count == 1) {
-            m_min_latency = latency;
+        MutexLock lock(&mutex_);
+        latency_vector_[latency]++;
+        operation_count_++;
+        total_latency_ += latency;
+        if (operation_count_ == 1) {
+            min_latency_ = latency;
         }
-        if (m_min_latency > latency) {
-            m_min_latency = latency;
+        if (min_latency_ > latency) {
+            min_latency_ = latency;
         }
         for (int i = 1; i < 11; i++) {
             if (m_ten_percentile_latency[i] < latency) {
@@ -103,20 +103,20 @@ public:
     }
 
     double AverageLatency() {
-        if (m_operation_count == 0) {
+        if (operation_count_ == 0) {
             return 0;
         }
-        MutexLock lock(&m_mutex);
-        return (double)m_total_latency / m_operation_count;
+        MutexLock lock(&mutex_);
+        return (double)total_latency_ / operation_count_;
     }
 
     uint32_t PercentileLatency(uint32_t percentile) {
-        MutexLock lock(&m_mutex);
+        MutexLock lock(&mutex_);
         if (percentile > 100) {
             percentile = 100;
         }
         if (percentile == 0) {
-            return m_min_latency;
+            return min_latency_;
         }
         if (percentile % 10 == 0) {
             return m_ten_percentile_latency[percentile / 10];
@@ -126,7 +126,7 @@ public:
 
 private:
     uint32_t NormalPercentileLatency(uint32_t percentile) {
-        uint64_t percentile_operation_count = percentile * m_operation_count / 100;
+        uint64_t percentile_operation_count = percentile * operation_count_ / 100;
         int ten_percentile = percentile / 10 + 1;
         uint32_t latency = m_ten_percentile_latency[ten_percentile];
         if (percentile_operation_count == 0) {
@@ -135,23 +135,23 @@ private:
         uint64_t count_sum = m_ten_percentile_latency_count_sum[ten_percentile];
         while (count_sum >= percentile_operation_count) {
             latency--;
-            while (m_latency_vector[latency] == 0) {
+            while (latency_vector_[latency] == 0) {
                 latency--;
             }
-            count_sum -= m_latency_vector[latency];
+            count_sum -= latency_vector_[latency];
         }
         return latency;
     }
 
     void MoveTenPercentileLatencyRight(int ten_percentile) {
-        uint64_t percentile_operation_count = ten_percentile * m_operation_count / 10;
+        uint64_t percentile_operation_count = ten_percentile * operation_count_ / 10;
         uint32_t latency = m_ten_percentile_latency[ten_percentile];
         while (m_ten_percentile_latency_count_sum[ten_percentile]
-               + m_latency_vector[latency]
+               + latency_vector_[latency]
                < percentile_operation_count) {
-            m_ten_percentile_latency_count_sum[ten_percentile] += m_latency_vector[latency];
+            m_ten_percentile_latency_count_sum[ten_percentile] += latency_vector_[latency];
             latency++;
-            while (m_latency_vector[latency] == 0) {
+            while (latency_vector_[latency] == 0) {
                 latency++;
             }
         }
@@ -159,7 +159,7 @@ private:
     }
 
     void MoveTenPercentileLatencyLeft(int ten_percentile) {
-        uint64_t percentile_operation_count = ten_percentile * m_operation_count / 10;
+        uint64_t percentile_operation_count = ten_percentile * operation_count_ / 10;
         if (percentile_operation_count == 0) {
             return;
         }
@@ -167,103 +167,103 @@ private:
         while (m_ten_percentile_latency_count_sum[ten_percentile]
                >= percentile_operation_count) {
             latency--;
-            while (m_latency_vector[latency] == 0) {
+            while (latency_vector_[latency] == 0) {
                 latency--;
             }
-            m_ten_percentile_latency_count_sum[ten_percentile] -= m_latency_vector[latency];
+            m_ten_percentile_latency_count_sum[ten_percentile] -= latency_vector_[latency];
         }
         m_ten_percentile_latency[ten_percentile] = latency;
     }
 
 private:
-    const uint32_t m_latency_limit;
+    const uint32_t latency_limit_;
 
-    uint64_t m_operation_count;
-    uint64_t m_total_latency;
-    uint32_t m_min_latency;
-    uint64_t* m_latency_vector;
+    uint64_t operation_count_;
+    uint64_t total_latency_;
+    uint32_t min_latency_;
+    uint64_t* latency_vector_;
 
     uint32_t m_ten_percentile_latency[11]; // 0, 10, 20, ..., 90, 100
     uint64_t m_ten_percentile_latency_count_sum[11];
 
-    mutable Mutex m_mutex;
+    mutable Mutex mutex_;
 };
 
 class Statistic {
 public:
     Statistic(int opt)
-        : m_opt(opt),
-          m_last_send_size(0),
-          m_last_send_time(0),
-          m_last_total_count(0),
-          m_last_total_size(0),
-          m_last_finish_count(0),
-          m_last_finish_size(0),
-          m_last_success_count(0),
-          m_last_success_size(0),
-          m_finish_marker(1000000),
-          m_success_marker(1000000) {}
+        : opt_(opt),
+          last_send_size_(0),
+          last_send_time_(0),
+          last_total_count_(0),
+          last_total_size_(0),
+          last_finish_count_(0),
+          last_finish_size_(0),
+          last_success_count_(0),
+          last_success_size_(0),
+          finish_marker_(1000000),
+          success_marker_(1000000) {}
 
     int GetOpt() {
-        return m_opt;
+        return opt_;
     }
 
     void GetStatistic(int64_t* total_count, int64_t* total_size,
                       int64_t* finish_count, int64_t* finish_size,
                       int64_t* success_count, int64_t* success_size) {
-        *total_count = m_last_total_count = m_total_count.Get();
-        *total_size = m_last_total_size = m_total_size.Get();
-        *finish_count = m_last_finish_count = m_finish_count.Get();
-        *finish_size = m_last_finish_size = m_finish_size.Get();
-        *success_count = m_last_success_count = m_success_count.Get();
-        *success_size = m_last_success_size = m_success_size.Get();
+        *total_count = last_total_count_ = total_count_.Get();
+        *total_size = last_total_size_ = total_size_.Get();
+        *finish_count = last_finish_count_ = finish_count_.Get();
+        *finish_size = last_finish_size_ = finish_size_.Get();
+        *success_count = last_success_count_ = success_count_.Get();
+        *success_size = last_success_size_ = success_size_.Get();
     }
 
     void GetLastStatistic(int64_t* total_count, int64_t* total_size,
                           int64_t* finish_count, int64_t* finish_size,
                           int64_t* success_count, int64_t* success_size) {
-        *total_count = m_last_total_count;
-        *total_size = m_last_total_size;
-        *finish_count = m_last_finish_count;
-        *finish_size = m_last_finish_size;
-        *success_count = m_last_success_count;
-        *success_size = m_last_success_size;
+        *total_count = last_total_count_;
+        *total_size = last_total_size_;
+        *finish_count = last_finish_count_;
+        *finish_size = last_finish_size_;
+        *success_count = last_success_count_;
+        *success_size = last_success_size_;
     }
 
     Marker* GetFinishMarker() {
-        return &m_finish_marker;
+        return &finish_marker_;
     }
 
     Marker* GetSuccessMarker() {
-        return &m_success_marker;
+        return &success_marker_;
     }
 
     void OnReceive(size_t size) {
-        m_last_send_time = Now();
-        m_last_send_size = size;
-        m_total_count.Inc();
-        m_total_size.Add(size);
+        last_send_time_ = Now();
+        last_send_size_ = size;
+        total_count_.Inc();
+        total_size_.Add(size);
     }
 
     void OnFinish(size_t size, uint32_t latency) {
-        m_finish_count.Inc();
-        m_finish_size.Add(size);
-        m_finish_marker.AddLatency(latency);
+        finish_count_.Inc();
+        finish_size_.Add(size);
+        finish_marker_.AddLatency(latency);
     }
 
     void OnSuccess(size_t size, uint32_t latency) {
-        m_success_count.Inc();
-        m_success_size.Add(size);
-        m_success_marker.AddLatency(latency);
+        success_count_.Inc();
+        success_size_.Add(size);
+        success_marker_.AddLatency(latency);
     }
 
     void CheckPending() {
         int64_t max_pend_count = FLAGS_pend_count;
         int64_t max_pend_size = FLAGS_pend_size << 20;
-        while (m_total_count.Get() - m_finish_count.Get() > max_pend_count) {
+        while (total_count_.Get() - finish_count_.Get() > max_pend_count) {
             usleep(1000);
         }
-        while (m_total_size.Get() - m_finish_size.Get() > max_pend_size) {
+        while (total_size_.Get() - finish_size_.Get() > max_pend_size) {
             usleep(1000);
         }
     }
@@ -273,15 +273,15 @@ public:
         int64_t max_rate = FLAGS_max_rate;
         if (max_outflow > 0) {
             int64_t sleep_micros =
-                (int64_t)(m_last_send_time +
-                        (double)m_last_send_size * 1000000.0 / max_outflow - Now());
+                (int64_t)(last_send_time_ +
+                        (double)last_send_size_ * 1000000.0 / max_outflow - Now());
             if (sleep_micros > 0) {
                 usleep(sleep_micros);
             }
         }
         if (max_rate > 0) {
             int64_t sleep_micros =
-                (int64_t)(m_last_send_time + (double)1000000.0 / max_rate - Now());
+                (int64_t)(last_send_time_ + (double)1000000.0 / max_rate - Now());
             if (sleep_micros > 0) {
                 usleep(sleep_micros);
             }
@@ -289,27 +289,27 @@ public:
     }
 
 private:
-    int m_opt;
+    int opt_;
 
-    tera::Counter m_total_count;
-    tera::Counter m_total_size;
-    tera::Counter m_finish_count;
-    tera::Counter m_finish_size;
-    tera::Counter m_success_count;
-    tera::Counter m_success_size;
+    tera::Counter total_count_;
+    tera::Counter total_size_;
+    tera::Counter finish_count_;
+    tera::Counter finish_size_;
+    tera::Counter success_count_;
+    tera::Counter success_size_;
 
-    size_t m_last_send_size;
-    int64_t m_last_send_time;
+    size_t last_send_size_;
+    int64_t last_send_time_;
 
-    int64_t m_last_total_count;
-    int64_t m_last_total_size;
-    int64_t m_last_finish_count;
-    int64_t m_last_finish_size;
-    int64_t m_last_success_count;
-    int64_t m_last_success_size;
+    int64_t last_total_count_;
+    int64_t last_total_size_;
+    int64_t last_finish_count_;
+    int64_t last_finish_size_;
+    int64_t last_success_count_;
+    int64_t last_success_size_;
 
-    Marker m_finish_marker;
-    Marker m_success_marker;
+    Marker finish_marker_;
+    Marker success_marker_;
 };
 
 class Adapter {
@@ -346,30 +346,30 @@ public:
     void WaitComplete();
 
     Statistic* GetWriteMarker() {
-        return &m_write_marker;
+        return &write_marker_;
     }
 
     Statistic* GetReadMarker() {
-        return &m_read_marker;
+        return &read_marker_;
     }
 
     Statistic* GetScanMarker() {
-        return &m_scan_marker;
+        return &scan_marker_;
     }
 
 private:
-    tera::Counter m_pending_num;
-    pthread_mutex_t m_mutex;
-    pthread_cond_t m_cond;
-    tera::Table* m_table;
+    tera::Counter pending_num_;
+    pthread_mutex_t mutex_;
+    pthread_cond_t cond_;
+    tera::Table* table_;
 
-    Statistic m_write_marker;
-    Statistic m_read_marker;
-    Statistic m_scan_marker;
+    Statistic write_marker_;
+    Statistic read_marker_;
+    Statistic scan_marker_;
 
-    std::vector<tera::RowMutation*> m_sync_mutations;
-    std::vector<tera::RowReader*> m_sync_readers;
-    std::vector<size_t> m_sync_req_sizes;
+    std::vector<tera::RowMutation*> sync_mutations_;
+    std::vector<tera::RowReader*> sync_readers_;
+    std::vector<size_t> sync_req_sizes_;
 };
 
 void add_checksum(const std::string& rowkey, const std::string& family,

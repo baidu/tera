@@ -10,20 +10,24 @@ Tera构建手册
 操作系统
 * Linux系统
 第三方软件
-* sofa-pbrpc (1.0.0 or newer)
-  https://github.com/BaiduPS/sofa-pbrpc/
-* Protocol Buffers (2.4.1 or newer)
+* sofa-pbrpc (1.1.0 or newer)
+  https://github.com/baidu/sofa-pbrpc/
+* Protocol Buffers (2.6.1 or newer)
   https://developers.google.com/protocol-buffers/
 * snappy (1.1.1 or newer)
-  https://code.google.com/p/snappy/
+  http://google.github.io/snappy/
 * zookeeper (3.3.3 or newer)
   https://zookeeper.apache.org/
 * gflags (2.1.1 or newer)
   https://github.com/gflags/gflags/
 * glog (0.3.3 or newer)
   https://github.com/google/glog/
+* googletest (1.7.0 or newer)
+  https://github.com/google/googletest/
 * gperftools (2.2.1 only)
   https://code.google.com/p/gperftools/
+* ins (0.14 or newer)
+  https://github.com/baidu/ins/
 * boost (1.53.0 or newer)
   http://www.boost.org/
 
@@ -39,27 +43,36 @@ Tera构建手册
 * ncurses
   https://www.gnu.org/software/ncurses/
 
+编译上述某些库时需要用到cmake，如果系统中没有预装，也需要自行安装。
+* cmake (3.2.x or newer)
+  https://cmake.org/
+
 编译步骤
 ========
 
 1. 编辑depends.mk
-1.1. 在以下变量的=右边填上对应软件的安装路径
+1.1. 打开默认的depends.mk
+如果源码目录下没有depends.mk，将depends.mk.template拷贝成
+depends.mk
+1.2. 在以下变量的"="右边填上对应软件的安装路径
   SOFA_PBRPC_PREFIX=
   PROTOBUF_PREFIX=
   SNAPPY_PREFIX=
   ZOOKEEPER_PREFIX=
   GFLAGS_PREFIX=
-  GLOG_PREFIX=.
+  GLOG_PREFIX=
+  GTEST_PREFIX=
   GPERFTOOLS_PREFIX=
+  INS_PREFIX=
 以"SNAPPY_PREFIX="为例，假设snappy安装在/usr/local，那么这一行
 应该改为：
   SNAPPY_PREFIX=/usr/local
 
-1.2. 在"BOOST_INCDIR="右边填上boost源代码的存放路径
+1.3. 在"BOOST_INCDIR="右边填上boost源代码的存放路径
 例如，boost源代码放在/usr/src/boost_1_57_0，那么这一行应该改为：
   BOOST_INCDIR=/usr/src/boost_1_57_0
 
-1.3. 其它变量仅在特殊情况下需要修改
+1.4. 其它变量仅在特殊情况下需要修改
 一般情况下软件的头文件和库文件分别位于安装目录下的include和lib，
 仅在不是这种情况时才需要单独修改相应的*_INCDIR或*_LIBDIR变量。
 

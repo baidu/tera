@@ -17,6 +17,7 @@
 #include "common/base/string_format.h"
 #include "common/base/string_number.h"
 #include "common/file/file_path.h"
+#include "common/timer.h"
 #include "db/filename.h"
 #include "io/io_utils.h"
 #include "io/utils_leveldb.h"
@@ -43,12 +44,13 @@ namespace tera {
 namespace master {
 
 std::ostream& operator << (std::ostream& o, const Tablet& tablet) {
-    MutexLock lock(&tablet.m_mutex);
-    o << "table: " << tablet.m_meta.table_name() << ", range: ["
-      << DebugString(tablet.m_meta.key_range().key_start()) << ", "
-      << DebugString(tablet.m_meta.key_range().key_end()) << "], path: "
-      << tablet.m_meta.path() << ", server: "
-      << tablet.m_meta.server_addr();
+    MutexLock lock(&tablet.mutex_);
+    o << "table: " << tablet.meta_.table_name() << ", range: ["
+      << DebugString(tablet.meta_.key_range().key_start()) << ", "
+      << DebugString(tablet.meta_.key_range().key_end()) << "], path: "
+      << tablet.meta_.path() << ", server: "
+      << tablet.meta_.server_addr() << ", serverid: "
+      << tablet.server_id_;
     return o;
 }
 
@@ -58,195 +60,195 @@ std::ostream& operator << (std::ostream& o, const TabletPtr& tablet) {
 }
 
 Tablet::Tablet(const TabletMeta& meta)
-    : m_meta(meta),
-      m_update_time(0),
-      m_load_time(std::numeric_limits<int64_t>::max()) {}
+    : meta_(meta),
+      update_time_(common::timer::get_micros()),
+      load_time_(std::numeric_limits<int64_t>::max()) {}
 
 Tablet::Tablet(const TabletMeta& meta, TablePtr table)
-    : m_meta(meta),
-      m_table(table),
-      m_update_time(0),
-      m_load_time(std::numeric_limits<int64_t>::max()) {}
+    : meta_(meta),
+      table_(table),
+      update_time_(common::timer::get_micros()),
+      load_time_(std::numeric_limits<int64_t>::max()) {}
 
 Tablet::~Tablet() {
-    m_table.reset();
+    table_.reset();
 }
 
 void Tablet::ToMeta(TabletMeta* meta) {
-    MutexLock lock(&m_mutex);
-    meta->CopyFrom(m_meta);
+    MutexLock lock(&mutex_);
+    meta->CopyFrom(meta_);
 }
 
 const std::string& Tablet::GetTableName() {
-    MutexLock lock(&m_mutex);
-    return m_meta.table_name();
+    MutexLock lock(&mutex_);
+    return meta_.table_name();
 }
 
 const std::string& Tablet::GetServerAddr() {
-    MutexLock lock(&m_mutex);
-    return m_meta.server_addr();
+    MutexLock lock(&mutex_);
+    return meta_.server_addr();
 }
 
 std::string Tablet::GetServerId() {
-    MutexLock lock(&m_mutex);
-    return m_server_id;
+    MutexLock lock(&mutex_);
+    return server_id_;
 }
 
 const std::string& Tablet::GetPath() {
-    MutexLock lock(&m_mutex);
-    return m_meta.path();
+    MutexLock lock(&mutex_);
+    return meta_.path();
 }
 
 int64_t Tablet::GetDataSize() {
-    MutexLock lock(&m_mutex);
-    return m_meta.size();
+    MutexLock lock(&mutex_);
+    return meta_.size();
 }
 
 void Tablet::GetDataSize(int64_t* size, std::vector<int64_t>* lg_size) {
-    MutexLock lock(&m_mutex);
+    MutexLock lock(&mutex_);
     if (size) {
-        *size = m_meta.size();
+        *size = meta_.size();
     }
     if (lg_size) {
         lg_size->clear();
-        for (int64_t i = 0; i < m_meta.lg_size_size(); ++i) {
-            lg_size->push_back(m_meta.lg_size(i));
+        for (int64_t i = 0; i < meta_.lg_size_size(); ++i) {
+            lg_size->push_back(meta_.lg_size(i));
         }
     }
 }
 
 int64_t Tablet::GetQps() {
-    MutexLock lock(&m_mutex);
-    return m_average_counter.read_rows() + m_average_counter.write_rows()
-        + m_average_counter.scan_rows();
+    MutexLock lock(&mutex_);
+    return average_counter_.read_rows() + average_counter_.write_rows()
+        + average_counter_.scan_rows();
 }
 
 const std::string& Tablet::GetKeyStart() {
-    MutexLock lock(&m_mutex);
-    return m_meta.key_range().key_start();
+    MutexLock lock(&mutex_);
+    return meta_.key_range().key_start();
 }
 
 const std::string& Tablet::GetKeyEnd() {
-    MutexLock lock(&m_mutex);
-    return m_meta.key_range().key_end();
+    MutexLock lock(&mutex_);
+    return meta_.key_range().key_end();
 }
 
 const KeyRange& Tablet::GetKeyRange() {
-    MutexLock lock(&m_mutex);
-    return m_meta.key_range();
+    MutexLock lock(&mutex_);
+    return meta_.key_range();
 }
 
 const TableSchema& Tablet::GetSchema() {
-    return m_table->GetSchema();
+    return table_->GetSchema();
 }
 
 const TabletCounter& Tablet::GetCounter() {
-    MutexLock lock(&m_mutex);
-    if (m_counter_list.size() > 0) {
-        return m_counter_list.back();
+    MutexLock lock(&mutex_);
+    if (counter_list_.size() > 0) {
+        return counter_list_.back();
     } else {
-        return m_average_counter;
+        return average_counter_;
     }
 }
 
 const TabletCounter& Tablet::GetAverageCounter() {
-    MutexLock lock(&m_mutex);
-    return m_average_counter;
+    MutexLock lock(&mutex_);
+    return average_counter_;
 }
 
 TabletStatus Tablet::GetStatus() {
-    MutexLock lock(&m_mutex);
-    return m_meta.status();
+    MutexLock lock(&mutex_);
+    return meta_.status();
 }
 
 CompactStatus Tablet::GetCompactStatus() {
-    MutexLock lock(&m_mutex);
-    return m_meta.compact_status();
+    MutexLock lock(&mutex_);
+    return meta_.compact_status();
 }
 
 std::string Tablet::GetExpectServerAddr() {
-    MutexLock lock(&m_mutex);
-    return m_expect_server_addr;
+    MutexLock lock(&mutex_);
+    return expect_server_addr_;
 }
 
 TablePtr Tablet::GetTable() {
-    return m_table;
+    return table_;
 }
 
 bool Tablet::IsBusy() {
-    MutexLock lock(&m_mutex);
-    if (m_counter_list.size() > 0) {
-        return m_counter_list.back().is_on_busy();
+    MutexLock lock(&mutex_);
+    if (counter_list_.size() > 0) {
+        return counter_list_.back().is_on_busy();
     } else {
         return false;
     }
 }
 
 std::string Tablet::DebugString() {
-    MutexLock lock(&m_mutex);
-    return m_meta.DebugString();
+    MutexLock lock(&mutex_);
+    return meta_.DebugString();
 }
 
 void Tablet::SetCounter(const TabletCounter& counter) {
-    MutexLock lock(&m_mutex);
-    m_average_counter.set_low_read_cell(
-        CounterWeightedSum(counter.low_read_cell(), m_average_counter.low_read_cell()));
-    m_average_counter.set_scan_rows(
-        CounterWeightedSum(counter.scan_rows(), m_average_counter.scan_rows()));
-    m_average_counter.set_scan_kvs(
-        CounterWeightedSum(counter.scan_kvs(), m_average_counter.scan_kvs()));
-    m_average_counter.set_scan_size(
-        CounterWeightedSum(counter.scan_size(), m_average_counter.scan_size()));
-    m_average_counter.set_read_rows(
-        CounterWeightedSum(counter.read_rows(), m_average_counter.read_rows()));
-    m_average_counter.set_read_kvs(
-        CounterWeightedSum(counter.read_kvs(), m_average_counter.read_kvs()));
-    m_average_counter.set_read_size(
-        CounterWeightedSum(counter.read_size(), m_average_counter.read_size()));
-    m_average_counter.set_write_rows(
-        CounterWeightedSum(counter.write_rows(), m_average_counter.write_rows()));
-    m_average_counter.set_write_kvs(
-        CounterWeightedSum(counter.write_kvs(), m_average_counter.write_kvs()));
-    m_average_counter.set_write_size(
-        CounterWeightedSum(counter.write_size(), m_average_counter.write_size()));
-    m_average_counter.set_write_workload(counter.write_workload());
-    m_average_counter.set_is_on_busy(
-        CounterWeightedSum(counter.is_on_busy(), m_average_counter.is_on_busy()));
+    MutexLock lock(&mutex_);
+    average_counter_.set_low_read_cell(
+        CounterWeightedSum(counter.low_read_cell(), average_counter_.low_read_cell()));
+    average_counter_.set_scan_rows(
+        CounterWeightedSum(counter.scan_rows(), average_counter_.scan_rows()));
+    average_counter_.set_scan_kvs(
+        CounterWeightedSum(counter.scan_kvs(), average_counter_.scan_kvs()));
+    average_counter_.set_scan_size(
+        CounterWeightedSum(counter.scan_size(), average_counter_.scan_size()));
+    average_counter_.set_read_rows(
+        CounterWeightedSum(counter.read_rows(), average_counter_.read_rows()));
+    average_counter_.set_read_kvs(
+        CounterWeightedSum(counter.read_kvs(), average_counter_.read_kvs()));
+    average_counter_.set_read_size(
+        CounterWeightedSum(counter.read_size(), average_counter_.read_size()));
+    average_counter_.set_write_rows(
+        CounterWeightedSum(counter.write_rows(), average_counter_.write_rows()));
+    average_counter_.set_write_kvs(
+        CounterWeightedSum(counter.write_kvs(), average_counter_.write_kvs()));
+    average_counter_.set_write_size(
+        CounterWeightedSum(counter.write_size(), average_counter_.write_size()));
+    average_counter_.set_write_workload(counter.write_workload());
+    average_counter_.set_is_on_busy(
+        CounterWeightedSum(counter.is_on_busy(), average_counter_.is_on_busy()));
 }
 
 void Tablet::UpdateSize(const TabletMeta& meta) {
-    MutexLock lock(&m_mutex);
-    m_meta.set_size(meta.size());
-    m_meta.mutable_lg_size()->CopyFrom(meta.lg_size());
+    MutexLock lock(&mutex_);
+    meta_.set_size(meta.size());
+    meta_.mutable_lg_size()->CopyFrom(meta.lg_size());
 }
 
 void Tablet::SetCompactStatus(CompactStatus compact_status) {
-    MutexLock lock(&m_mutex);
-    m_meta.set_compact_status(compact_status);
+    MutexLock lock(&mutex_);
+    meta_.set_compact_status(compact_status);
 }
 
 void Tablet::SetAddr(const std::string& server_addr) {
-    MutexLock lock(&m_mutex);
-    m_meta.set_server_addr(server_addr);
+    MutexLock lock(&mutex_);
+    meta_.set_server_addr(server_addr);
 }
 
 void Tablet::SetServerId(const std::string& server_id) {
-    MutexLock lock(&m_mutex);
-    m_server_id = server_id;
+    MutexLock lock(&mutex_);
+    server_id_ = server_id;
 }
 
 void Tablet::SetExpectServerAddr(const std::string& server_addr) {
-    MutexLock lock(&m_mutex);
-    m_expect_server_addr = server_addr;
+    MutexLock lock(&mutex_);
+    expect_server_addr_ = server_addr;
 }
 
 bool Tablet::SetStatus(TabletStatus new_status, TabletStatus* old_status) {
-    MutexLock lock(&m_mutex);
+    MutexLock lock(&mutex_);
     if (NULL != old_status) {
-        *old_status = m_meta.status();
+        *old_status = meta_.status();
     }
-    if (CheckStatusSwitch(m_meta.status(), new_status)) {
-        m_meta.set_status(new_status);
+    if (CheckStatusSwitch(meta_.status(), new_status)) {
+        meta_.set_status(new_status);
         return true;
     }
     return false;
@@ -254,13 +256,13 @@ bool Tablet::SetStatus(TabletStatus new_status, TabletStatus* old_status) {
 
 bool Tablet::SetStatusIf(TabletStatus new_status, TabletStatus if_status,
                          TabletStatus* old_status) {
-    MutexLock lock(&m_mutex);
+    MutexLock lock(&mutex_);
     if (NULL != old_status) {
-        *old_status = m_meta.status();
+        *old_status = meta_.status();
     }
-    if (m_meta.status() == if_status
-        && CheckStatusSwitch(m_meta.status(), new_status)) {
-        m_meta.set_status(new_status);
+    if (meta_.status() == if_status
+        && CheckStatusSwitch(meta_.status(), new_status)) {
+        meta_.set_status(new_status);
         return true;
     }
     return false;
@@ -271,14 +273,14 @@ bool Tablet::SetStatusIf(TabletStatus new_status, TabletStatus if_status,
     if (!IsBound()) {
         return false;
     }
-    MutexLock lock(&m_table->m_mutex);
-    MutexLock lock2(&m_mutex);
+    MutexLock lock(&table_->mutex_);
+    MutexLock lock2(&mutex_);
     if (NULL != old_status) {
-        *old_status = m_meta.status();
+        *old_status = meta_.status();
     }
-    if (m_meta.status() == if_status && m_table->m_status == if_table_status
-        && CheckStatusSwitch(m_meta.status(), new_status)) {
-        m_meta.set_status(new_status);
+    if (meta_.status() == if_status && table_->status_ == if_table_status
+        && CheckStatusSwitch(meta_.status(), new_status)) {
+        meta_.set_status(new_status);
         return true;
     }
     return false;
@@ -286,12 +288,12 @@ bool Tablet::SetStatusIf(TabletStatus new_status, TabletStatus if_status,
 
 bool Tablet::SetAddrIf(const std::string& server_addr, TabletStatus if_status,
                        TabletStatus* old_status) {
-    MutexLock lock(&m_mutex);
+    MutexLock lock(&mutex_);
     if (NULL != old_status) {
-        *old_status = m_meta.status();
+        *old_status = meta_.status();
     }
-    if (m_meta.status() == if_status) {
-        m_meta.set_server_addr(server_addr);
+    if (meta_.status() == if_status) {
+        meta_.set_server_addr(server_addr);
         return true;
     }
     return false;
@@ -300,13 +302,13 @@ bool Tablet::SetAddrIf(const std::string& server_addr, TabletStatus if_status,
 bool Tablet::SetAddrAndStatus(const std::string& server_addr,
                               TabletStatus new_status,
                               TabletStatus* old_status) {
-    MutexLock lock(&m_mutex);
+    MutexLock lock(&mutex_);
     if (NULL != old_status) {
-        *old_status = m_meta.status();
+        *old_status = meta_.status();
     }
-    if (CheckStatusSwitch(m_meta.status(), new_status)) {
-        m_meta.set_status(new_status);
-        m_meta.set_server_addr(server_addr);
+    if (CheckStatusSwitch(meta_.status(), new_status)) {
+        meta_.set_status(new_status);
+        meta_.set_server_addr(server_addr);
         return true;
     }
     return false;
@@ -315,89 +317,89 @@ bool Tablet::SetAddrAndStatus(const std::string& server_addr,
 bool Tablet::SetAddrAndStatusIf(const std::string& server_addr,
                                 TabletStatus new_status, TabletStatus if_status,
                                 TabletStatus* old_status) {
-    MutexLock lock(&m_mutex);
+    MutexLock lock(&mutex_);
     if (NULL != old_status) {
-        *old_status = m_meta.status();
+        *old_status = meta_.status();
     }
-    if (m_meta.status() == if_status
-        && CheckStatusSwitch(m_meta.status(), new_status)) {
-        m_meta.set_status(new_status);
-        m_meta.set_server_addr(server_addr);
+    if (meta_.status() == if_status
+        && CheckStatusSwitch(meta_.status(), new_status)) {
+        meta_.set_status(new_status);
+        meta_.set_server_addr(server_addr);
         return true;
     }
     return false;
 }
 
 int64_t Tablet::UpdateTime() {
-    MutexLock lock(&m_mutex);
-    return m_update_time;
+    MutexLock lock(&mutex_);
+    return update_time_;
 }
 
 int64_t Tablet::SetUpdateTime(int64_t timestamp) {
-    MutexLock lock(&m_mutex);
-    int64_t ts = m_update_time;
-    m_update_time = timestamp;
+    MutexLock lock(&mutex_);
+    int64_t ts = update_time_;
+    update_time_ = timestamp;
     return ts;
 }
 
 int64_t Tablet::LoadTime() {
-    MutexLock lock(&m_mutex);
-    if (m_meta.status() != kTableReady) {
+    MutexLock lock(&mutex_);
+    if (meta_.status() != kTableReady) {
         return std::numeric_limits<int>::max();
     } else {
-        return m_load_time;
+        return load_time_;
     }
 }
 
 int64_t Tablet::SetLoadTime(int64_t timestamp) {
-    MutexLock lock(&m_mutex);
-    int64_t ts = m_load_time;
-    m_load_time = timestamp;
+    MutexLock lock(&mutex_);
+    int64_t ts = load_time_;
+    load_time_ = timestamp;
     return ts;
 }
 
 int32_t Tablet::AddSnapshot(uint64_t snapshot) {
-    MutexLock lock(&m_mutex);
-    m_meta.add_snapshot_list(snapshot);
-    return m_meta.snapshot_list_size() - 1;
+    MutexLock lock(&mutex_);
+    meta_.add_snapshot_list(snapshot);
+    return meta_.snapshot_list_size() - 1;
 }
 
 void Tablet::ListSnapshot(std::vector<uint64_t>* snapshot) {
-    MutexLock lock(&m_mutex);
-    for (int i = 0; i < m_meta.snapshot_list_size(); i++) {
-        snapshot->push_back(m_meta.snapshot_list(i));
+    MutexLock lock(&mutex_);
+    for (int i = 0; i < meta_.snapshot_list_size(); i++) {
+        snapshot->push_back(meta_.snapshot_list(i));
     }
 }
 
 void Tablet::DelSnapshot(int32_t id) {
-    MutexLock lock(&m_mutex);
+    MutexLock lock(&mutex_);
     google::protobuf::RepeatedField<google::protobuf::uint64>* snapshot_list =
-        m_meta.mutable_snapshot_list();
+        meta_.mutable_snapshot_list();
     assert(id < snapshot_list->size());
     snapshot_list->SwapElements(id, snapshot_list->size() - 1);
     snapshot_list->RemoveLast();
 }
 
 int32_t Tablet::AddRollback(std::string name, uint64_t snapshot_id, uint64_t rollback_point) {
-    MutexLock lock(&m_mutex);
+    MutexLock lock(&mutex_);
     Rollback rollback;
     rollback.set_name(name);
     rollback.set_snapshot_id(snapshot_id);
     rollback.set_rollback_point(rollback_point);
-    m_meta.add_rollbacks()->CopyFrom(rollback);
-    return m_meta.rollbacks_size() - 1;
+    meta_.add_rollbacks()->CopyFrom(rollback);
+    return meta_.rollbacks_size() - 1;
 }
 
 void Tablet::ListRollback(std::vector<Rollback>* rollbacks) {
-    MutexLock lock(&m_mutex);
-    for (int i = 0; i < m_meta.rollbacks_size(); i++) {
-        rollbacks->push_back(m_meta.rollbacks(i));
+    MutexLock lock(&mutex_);
+    for (int i = 0; i < meta_.rollbacks_size(); i++) {
+        rollbacks->push_back(meta_.rollbacks(i));
     }
 }
 
 bool Tablet::IsBound() {
     TablePtr null_ptr;
-    if (m_table != null_ptr) {
+    if (table_ != null_ptr) {
         return true;
     }
     return false;
@@ -406,19 +408,19 @@ bool Tablet::IsBound() {
 bool Tablet::Verify(const std::string& table_name, const std::string& key_start,
             const std::string& key_end, const std::string& path,
             const std::string& server_addr, StatusCode* ret_status) {
-    MutexLock lock(&m_mutex);
-    if (m_meta.table_name() != table_name
-        || m_meta.key_range().key_start() != key_start
-        || m_meta.key_range().key_end() != key_end
-        || m_meta.path() != path
-        || m_meta.server_addr() != server_addr) {
+    MutexLock lock(&mutex_);
+    if (meta_.table_name() != table_name
+        || meta_.key_range().key_start() != key_start
+        || meta_.key_range().key_end() != key_end
+        || meta_.path() != path
+        || meta_.server_addr() != server_addr) {
         SetStatusCode(kTableInvalidArg, ret_status);
         LOG(WARNING) << "tablet verify failed ["
-            << m_meta.table_name() << ","
-            << m_meta.key_range().key_start() << ","
-            << m_meta.key_range().key_end() << ","
-            << m_meta.path() << ","
-            << m_meta.server_addr() << "] vs ["
+            << meta_.table_name() << ","
+            << meta_.key_range().key_start() << ","
+            << meta_.key_range().key_end() << ","
+            << meta_.path() << ","
+            << meta_.server_addr() << "] vs ["
             << table_name << ","
             << key_start << ","
             << key_end << ","
@@ -431,8 +433,8 @@ bool Tablet::Verify(const std::string& table_name, const std::string& key_start,
 
 void Tablet::ToMetaTableKeyValue(std::string* packed_key,
                                  std::string* packed_value) {
-    MutexLock lock(&m_mutex);
-    MakeMetaTableKeyValue(m_meta, packed_key, packed_value);
+    MutexLock lock(&mutex_);
+    MakeMetaTableKeyValue(meta_, packed_key, packed_value);
 }
 
 bool Tablet::CheckStatusSwitch(TabletStatus old_status,
@@ -536,9 +538,9 @@ bool Tablet::CheckStatusSwitch(TabletStatus old_status,
 }
 
 std::ostream& operator << (std::ostream& o, const Table& table) {
-    MutexLock lock(&table.m_mutex);
-    o << "table: " << table.m_name << ", schema: "
-        << table.m_schema.ShortDebugString();
+    MutexLock lock(&table.mutex_);
+    o << "table: " << table.name_ << ", schema: "
+        << table.schema_.ShortDebugString();
     return o;
 }
 
@@ -548,20 +550,20 @@ std::ostream& operator << (std::ostream& o, const TablePtr& table) {
 }
 
 Table::Table(const std::string& table_name)
-    : m_name(table_name),
-      m_status(kTableEnable),
-      m_deleted_tablet_num(0),
-      m_max_tablet_no(0),
-      m_create_time((int64_t)time(NULL)),
-      m_schema_is_syncing(false),
-      m_rangefragment(NULL),
-      m_old_schema(NULL) {
+    : name_(table_name),
+      status_(kTableEnable),
+      deleted_tablet_num_(0),
+      max_tablet_no_(0),
+      create_time_((int64_t)time(NULL)),
+      schema_is_syncing_(false),
+      rangefragment_(NULL),
+      old_schema_(NULL) {
 }
 
 bool Table::FindTablet(const std::string& key_start, TabletPtr* tablet) {
-    MutexLock lock(&m_mutex);
-    Table::TabletList::iterator it2 = m_tablets_list.find(key_start);
-    if (it2 == m_tablets_list.end()) {
+    MutexLock lock(&mutex_);
+    Table::TabletList::iterator it2 = tablets_list_.find(key_start);
+    if (it2 == tablets_list_.end()) {
         return false;
     }
     *tablet = it2->second;
@@ -570,44 +572,44 @@ bool Table::FindTablet(const std::string& key_start, TabletPtr* tablet) {
 
 void Table::FindTablet(const std::string& server_addr,
                        std::vector<TabletPtr>* tablet_meta_list) {
-    MutexLock lock(&m_mutex);
-    Table::TabletList::iterator it2 = m_tablets_list.begin();
-    for (; it2 != m_tablets_list.end(); ++it2) {
+    MutexLock lock(&mutex_);
+    Table::TabletList::iterator it2 = tablets_list_.begin();
+    for (; it2 != tablets_list_.end(); ++it2) {
         TabletPtr tablet = it2->second;
-        tablet->m_mutex.Lock();
-        if (tablet->m_meta.server_addr() == server_addr) {
+        tablet->mutex_.Lock();
+        if (tablet->meta_.server_addr() == server_addr) {
             tablet_meta_list->push_back(tablet);
         }
-        tablet->m_mutex.Unlock();
+        tablet->mutex_.Unlock();
     }
 }
 
 void Table::GetTablet(std::vector<TabletPtr>* tablet_meta_list) {
-    MutexLock lock(&m_mutex);
-    Table::TabletList::iterator it2 = m_tablets_list.begin();
-    for (; it2 != m_tablets_list.end(); ++it2) {
+    MutexLock lock(&mutex_);
+    Table::TabletList::iterator it2 = tablets_list_.begin();
+    for (; it2 != tablets_list_.end(); ++it2) {
         TabletPtr tablet = it2->second;
         tablet_meta_list->push_back(tablet);
     }
 }
 
 const std::string& Table::GetTableName() {
-    MutexLock lock(&m_mutex);
-    return m_name;
+    MutexLock lock(&mutex_);
+    return name_;
 }
 
 TableStatus Table::GetStatus() {
-    MutexLock lock(&m_mutex);
-    return m_status;
+    MutexLock lock(&mutex_);
+    return status_;
 }
 
 bool Table::SetStatus(TableStatus new_status, TableStatus* old_status) {
-    MutexLock lock(&m_mutex);
+    MutexLock lock(&mutex_);
     if (NULL != old_status) {
-        *old_status = m_status;
+        *old_status = status_;
     }
-    if (CheckStatusSwitch(m_status, new_status)) {
-        m_status = new_status;
+    if (CheckStatusSwitch(status_, new_status)) {
+        status_ = new_status;
         return true;
     }
     return false;
@@ -643,68 +645,68 @@ bool Table::CheckStatusSwitch(TableStatus old_status,
 }
 
 const TableSchema& Table::GetSchema() {
-    MutexLock lock(&m_mutex);
-    return m_schema;
+    MutexLock lock(&mutex_);
+    return schema_;
 }
 
 void Table::SetSchema(const TableSchema& schema) {
-    MutexLock lock(&m_mutex);
-    m_schema.CopyFrom(schema);
+    MutexLock lock(&mutex_);
+    schema_.CopyFrom(schema);
 }
 
 const TableCounter& Table::GetCounter() {
-    MutexLock lock(&m_mutex);
-    return m_counter;
+    MutexLock lock(&mutex_);
+    return counter_;
 }
 
 int32_t Table::AddSnapshot(uint64_t snapshot) {
-    MutexLock lock(&m_mutex);
-    m_snapshot_list.push_back(snapshot);
-    return m_snapshot_list.size() - 1;
+    MutexLock lock(&mutex_);
+    snapshot_list_.push_back(snapshot);
+    return snapshot_list_.size() - 1;
 }
 
 int32_t Table::DelSnapshot(uint64_t snapshot) {
-    MutexLock lock(&m_mutex);
+    MutexLock lock(&mutex_);
     std::vector<uint64_t>::iterator it =
-        std::find(m_snapshot_list.begin(), m_snapshot_list.end(), snapshot);
-    if (it == m_snapshot_list.end()) {
+        std::find(snapshot_list_.begin(), snapshot_list_.end(), snapshot);
+    if (it == snapshot_list_.end()) {
         return -1;
     } else {
-        int id = it - m_snapshot_list.begin();
-        m_snapshot_list[id] = m_snapshot_list[m_snapshot_list.size()-1];
-        m_snapshot_list.resize(m_snapshot_list.size()-1);
+        int id = it - snapshot_list_.begin();
+        snapshot_list_[id] = snapshot_list_[snapshot_list_.size()-1];
+        snapshot_list_.resize(snapshot_list_.size()-1);
         return id;
     }
 }
 void Table::ListSnapshot(std::vector<uint64_t>* snapshots) {
-    MutexLock lock(&m_mutex);
-    *snapshots = m_snapshot_list;
+    MutexLock lock(&mutex_);
+    *snapshots = snapshot_list_;
 }
 
 int32_t Table::AddRollback(std::string rollback_name) {
-    MutexLock lock(&m_mutex);
-    m_rollback_names.push_back(rollback_name);
-    return m_rollback_names.size() - 1;
+    MutexLock lock(&mutex_);
+    rollback_names_.push_back(rollback_name);
+    return rollback_names_.size() - 1;
 }
 
 void Table::ListRollback(std::vector<std::string>* rollback_names) {
-    MutexLock lock(&m_mutex);
-    *rollback_names = m_rollback_names;
+    MutexLock lock(&mutex_);
+    *rollback_names = rollback_names_;
 }
 
 int64_t Table::GetTabletsCount() {
-    MutexLock lock(&m_mutex);
-    return m_tablets_list.size();
+    MutexLock lock(&mutex_);
+    return tablets_list_.size();
 }
 
 void Table::AddDeleteTabletCount() {
-    MutexLock lock(&m_mutex);
-    m_deleted_tablet_num++;
+    MutexLock lock(&mutex_);
+    deleted_tablet_num_++;
 }
 
 bool Table::NeedDelete() {
-    MutexLock lock(&m_mutex);
-    if (m_deleted_tablet_num == m_tablets_list.size()) {
+    MutexLock lock(&mutex_);
+    if (deleted_tablet_num_ == tablets_list_.size()) {
         return true;
     }
     return false;
@@ -712,7 +714,7 @@ bool Table::NeedDelete() {
 
 void Table::ToMetaTableKeyValue(std::string* packed_key,
                                 std::string* packed_value) {
-    MutexLock lock(&m_mutex);
+    MutexLock lock(&mutex_);
     TableMeta meta;
     ToMeta(&meta);
     MakeMetaTableKeyValue(meta, packed_key, packed_value);
@@ -742,31 +744,31 @@ void Table::CommitUpdate() {
 }
 
 void Table::ToMeta(TableMeta* meta) {
-    meta->set_table_name(m_name);
-    meta->set_status(m_status);
-    meta->mutable_schema()->CopyFrom(m_schema);
-    meta->set_create_time(m_create_time);
-    for (size_t i = 0; i < m_snapshot_list.size(); i++) {
-        meta->add_snapshot_list(m_snapshot_list[i]);
+    meta->set_table_name(name_);
+    meta->set_status(status_);
+    meta->mutable_schema()->CopyFrom(schema_);
+    meta->set_create_time(create_time_);
+    for (size_t i = 0; i < snapshot_list_.size(); i++) {
+        meta->add_snapshot_list(snapshot_list_[i]);
     }
-    for (size_t i = 0; i < m_rollback_names.size(); ++i) {
-        meta->add_rollback_names(m_rollback_names[i]);
+    for (size_t i = 0; i < rollback_names_.size(); ++i) {
+        meta->add_rollback_names(rollback_names_[i]);
     }
 }
 
 uint64_t Table::GetNextTabletNo() {
-    MutexLock lock(&m_mutex);
-    m_max_tablet_no++;
-    LOG(INFO) << "generate new tablet number: " << m_max_tablet_no;
-    return m_max_tablet_no;
+    MutexLock lock(&mutex_);
+    max_tablet_no_++;
+    LOG(INFO) << "generate new tablet number: " << max_tablet_no_;
+    return max_tablet_no_;
 }
 
 bool Table::GetTabletsForGc(std::set<uint64_t>* live_tablets,
                             std::set<uint64_t>* dead_tablets) {
-    MutexLock lock(&m_mutex);
+    MutexLock lock(&mutex_);
     std::vector<TabletPtr> tablet_list;
-    Table::TabletList::iterator it = m_tablets_list.begin();
-    for (; it != m_tablets_list.end(); ++it) {
+    Table::TabletList::iterator it = tablets_list_.begin();
+    for (; it != tablets_list_.end(); ++it) {
         TabletPtr tablet = it->second;
         if (tablet->GetStatus() != kTableReady) {
             // any tablet not ready, stop gc
@@ -779,7 +781,7 @@ bool Table::GetTabletsForGc(std::set<uint64_t>* live_tablets,
 
     std::vector<std::string> children;
     leveldb::Env* env = io::LeveldbBaseEnv();
-    std::string table_path = FLAGS_tera_tabletnode_path_prefix + m_name;
+    std::string table_path = FLAGS_tera_tabletnode_path_prefix + name_;
     env->GetChildren(table_path, &children);
     for (size_t i = 0; i < children.size(); ++i) {
         if (children[i].size() < 5) {
@@ -794,97 +796,97 @@ bool Table::GetTabletsForGc(std::set<uint64_t>* live_tablets,
         }
     }
     if (dead_tablets->size() == 0) {
-        VLOG(10) << "[gc] there is none dead tablets: " << m_name;
+        VLOG(10) << "[gc] there is none dead tablets: " << name_;
         return false;
     }
     return true;
 }
 
 bool Table::GetSchemaIsSyncing() {
-    MutexLock lock(&m_mutex);
-    return m_schema_is_syncing;
+    MutexLock lock(&mutex_);
+    return schema_is_syncing_;
 }
 
 bool Table::GetSchemaSyncLockOrFailed() {
-    MutexLock lock(&m_mutex);
-    if (m_schema_is_syncing) {
+    MutexLock lock(&mutex_);
+    if (schema_is_syncing_) {
         return false;
     }
-    m_schema_is_syncing = true;
+    schema_is_syncing_ = true;
     return true;
 }
 
 void Table::SetOldSchema(TableSchema* schema) {
-    MutexLock lock(&m_mutex);
-    delete m_old_schema;
-    m_old_schema = schema;
+    MutexLock lock(&mutex_);
+    delete old_schema_;
+    old_schema_ = schema;
 }
 
 bool Table::GetOldSchema(TableSchema* schema) {
-    MutexLock lock(&m_mutex);
-    if ((schema != NULL) && (m_old_schema != NULL)) {
-        schema->CopyFrom(*m_old_schema);
+    MutexLock lock(&mutex_);
+    if ((schema != NULL) && (old_schema_ != NULL)) {
+        schema->CopyFrom(*old_schema_);
         return true;
     }
     return false;
 }
 
 void Table::ClearOldSchema() {
-    MutexLock lock(&m_mutex);
-    delete m_old_schema;
-    m_old_schema = NULL;
+    MutexLock lock(&mutex_);
+    delete old_schema_;
+    old_schema_ = NULL;
 }
 
 void Table::ResetRangeFragment() {
-    MutexLock lock(&m_mutex);
-    delete m_rangefragment;
-    m_rangefragment = new RangeFragment;
+    MutexLock lock(&mutex_);
+    delete rangefragment_;
+    rangefragment_ = new RangeFragment;
 }
 
 RangeFragment* Table::GetRangeFragment() {
-    MutexLock lock(&m_mutex);
-    return m_rangefragment;
+    MutexLock lock(&mutex_);
+    return rangefragment_;
 }
 
 bool Table::AddToRange(const std::string& start, const std::string& end) {
-    MutexLock lock(&m_mutex);
-    return m_rangefragment->AddToRange(start, end);
+    MutexLock lock(&mutex_);
+    return rangefragment_->AddToRange(start, end);
 }
 
 bool Table::IsCompleteRange() const {
-    MutexLock lock(&m_mutex);
-    return m_rangefragment->IsCompleteRange();
+    MutexLock lock(&mutex_);
+    return rangefragment_->IsCompleteRange();
 }
 
 bool Table::IsSchemaSyncedAtRange(const std::string& start, const std::string& end) {
-    MutexLock lock(&m_mutex);
-    return m_rangefragment->IsCoverRange(start, end);
+    MutexLock lock(&mutex_);
+    return rangefragment_->IsCoverRange(start, end);
 }
 
 void Table::StoreUpdateRpc(UpdateTableResponse* response, google::protobuf::Closure* done) {
-    MutexLock lock(&m_mutex);
-    m_update_rpc_response = response;
-    m_update_rpc_done = done;
+    MutexLock lock(&mutex_);
+    update_rpc_response_ = response;
+    update_rpc_done_ = done;
 }
 
 void Table::UpdateRpcDone() {
-    MutexLock lock(&m_mutex);
-    if (m_update_rpc_response != NULL) {
-        m_update_rpc_response->set_status(kMasterOk);
-        m_update_rpc_done->Run();
+    MutexLock lock(&mutex_);
+    if (update_rpc_response_ != NULL) {
+        update_rpc_response_->set_status(kMasterOk);
+        update_rpc_done_->Run();
 
-        m_update_rpc_response = NULL;
-        m_update_rpc_done = NULL;
+        update_rpc_response_ = NULL;
+        update_rpc_done_ = NULL;
     }
 }
 
 void Table::SetSchemaIsSyncing(bool flag) {
-    MutexLock lock(&m_mutex);
-    m_schema_is_syncing = flag;
+    MutexLock lock(&mutex_);
+    schema_is_syncing_ = flag;
 }
 
 void Table::RefreshCounter() {
-    MutexLock lock(&m_mutex);
+    MutexLock lock(&mutex_);
     int64_t size = 0;
     int64_t tablet_num = 0;
     int64_t notready = 0;
@@ -902,8 +904,8 @@ void Table::RefreshCounter() {
     std::vector<int64_t> lg_size;
 
     std::vector<TabletPtr> tablet_list;
-    Table::TabletList::iterator it = m_tablets_list.begin();
-    for (; it != m_tablets_list.end(); ++it) {
+    Table::TabletList::iterator it = tablets_list_.begin();
+    for (; it != tablets_list_.end(); ++it) {
         tablet_num++;
         TabletPtr tablet = it->second;
         if (tablet->GetStatus() != kTableReady) {
@@ -943,30 +945,30 @@ void Table::RefreshCounter() {
         sspeed += counter.scan_size();
     }
 
-    m_counter.set_size(size);
-    m_counter.set_tablet_num(tablet_num);
-    m_counter.set_notready_num(notready);
-    m_counter.set_lread(lread);
-    m_counter.set_read_rows(read);
-    m_counter.set_read_max(rmax);
-    m_counter.set_read_size(rspeed);
-    m_counter.set_write_rows(write);
-    m_counter.set_write_max(wmax);
-    m_counter.set_write_size(wspeed);
-    m_counter.set_scan_rows(scan);
-    m_counter.set_scan_max(smax);
-    m_counter.set_scan_size(sspeed);
-    m_counter.clear_lg_size();
+    counter_.set_size(size);
+    counter_.set_tablet_num(tablet_num);
+    counter_.set_notready_num(notready);
+    counter_.set_lread(lread);
+    counter_.set_read_rows(read);
+    counter_.set_read_max(rmax);
+    counter_.set_read_size(rspeed);
+    counter_.set_write_rows(write);
+    counter_.set_write_max(wmax);
+    counter_.set_write_size(wspeed);
+    counter_.set_scan_rows(scan);
+    counter_.set_scan_max(smax);
+    counter_.set_scan_size(sspeed);
+    counter_.clear_lg_size();
     for (size_t l = 0; l < lg_num; ++l) {
-        m_counter.add_lg_size(lg_size[l]);
+        counter_.add_lg_size(lg_size[l]);
     }
 }
 
 TabletManager::TabletManager(Counter* sequence_id,
                              MasterImpl* master_impl,
                              ThreadPool* thread_pool)
-    : m_this_sequence_id(sequence_id),
-      m_master_impl(master_impl) {}
+    : this_sequence_id_(sequence_id),
+      master_impl_(master_impl) {}
 
 TabletManager::~TabletManager() {
     ClearTableList();
@@ -982,15 +984,15 @@ bool TabletManager::AddTable(const std::string& table_name,
                              const TableMeta& meta,
                              TablePtr* table, StatusCode* ret_status) {
     // lock table list
-    m_mutex.Lock();
+    mutex_.Lock();
 
     // search table
     TablePtr null_table;
     std::pair<TableList::iterator, bool> ret =
-        m_all_tables.insert(std::pair<std::string, TablePtr>(table_name, null_table));
+        all_tables_.insert(std::pair<std::string, TablePtr>(table_name, null_table));
     TableList::iterator it = ret.first;
     if (!ret.second) {
-        m_mutex.Unlock();
+        mutex_.Unlock();
         LOG(WARNING) << "table: " << table_name << " exist";
         SetStatusCode(kTableExist, ret_status);
         return false;
@@ -998,41 +1000,41 @@ bool TabletManager::AddTable(const std::string& table_name,
 
     it->second.reset(new Table(table_name));
     *table = it->second;
-    (*table)->m_mutex.Lock();
-    m_mutex.Unlock();
-    (*table)->m_schema.CopyFrom(meta.schema());
-    (*table)->m_status = meta.status();
-    (*table)->m_create_time = meta.create_time();
+    (*table)->mutex_.Lock();
+    mutex_.Unlock();
+    (*table)->schema_.CopyFrom(meta.schema());
+    (*table)->status_ = meta.status();
+    (*table)->create_time_ = meta.create_time();
     for (int32_t i = 0; i < meta.snapshot_list_size(); ++i) {
-        (*table)->m_snapshot_list.push_back(meta.snapshot_list(i));
+        (*table)->snapshot_list_.push_back(meta.snapshot_list(i));
         LOG(INFO) << table_name << " add snapshot " << meta.snapshot_list(i);
     }
     for (int32_t i = 0; i < meta.rollback_names_size(); ++i) {
-        (*table)->m_rollback_names.push_back(meta.rollback_names(i));
+        (*table)->rollback_names_.push_back(meta.rollback_names(i));
         LOG(INFO) << table_name << " add rollback " << meta.rollback_names(i);
     }
-    (*table)->m_mutex.Unlock();
+    (*table)->mutex_.Unlock();
     return true;
 }
 
 bool TabletManager::AddTablet(const TabletMeta& meta, const TableSchema& schema,
                               TabletPtr* tablet, StatusCode* ret_status) {
     // lock table list
-    m_mutex.Lock();
+    mutex_.Lock();
 
     // search table
     TablePtr null_table;
     std::pair<TableList::iterator, bool> ret =
-        m_all_tables.insert(std::pair<std::string, TablePtr>(meta.table_name(), null_table));
+        all_tables_.insert(std::pair<std::string, TablePtr>(meta.table_name(), null_table));
     TableList::iterator it = ret.first;
     std::string key_start = meta.key_range().key_start();
     if (!ret.second) {
         // search tablet
         Table& table = *it->second;
-        table.m_mutex.Lock();
-        m_mutex.Unlock();
-        if (table.m_tablets_list.end() != table.m_tablets_list.find(key_start)) {
-            table.m_mutex.Unlock();
+        table.mutex_.Lock();
+        mutex_.Unlock();
+        if (table.tablets_list_.end() != table.tablets_list_.find(key_start)) {
+            table.mutex_.Unlock();
             LOG(WARNING) << "table: " << meta.table_name() << ", start: ["
                 << DebugString(key_start) << "] exist";
             SetStatusCode(kTableExist, ret_status);
@@ -1041,19 +1043,19 @@ bool TabletManager::AddTablet(const TabletMeta& meta, const TableSchema& schema,
     } else {
         it->second.reset(new Table(meta.table_name()));
         Table& table = *it->second;
-        table.m_mutex.Lock();
-        m_mutex.Unlock();
-        table.m_schema.CopyFrom(schema);
-        table.m_status = kTableEnable;
+        table.mutex_.Lock();
+        mutex_.Unlock();
+        table.schema_.CopyFrom(schema);
+        table.status_ = kTableEnable;
     }
     TablePtr table = it->second;
     tablet->reset(new Tablet(meta, table));
     uint64_t tablet_num = leveldb::GetTabletNumFromPath(meta.path());
-    if (table->m_max_tablet_no < tablet_num) {
-        table->m_max_tablet_no = tablet_num;
+    if (table->max_tablet_no_ < tablet_num) {
+        table->max_tablet_no_ = tablet_num;
     }
-    table->m_tablets_list[key_start] = *tablet;
-    table->m_mutex.Unlock();
+    table->tablets_list_[key_start] = *tablet;
+    table->mutex_.Unlock();
     return true;
 }
 
@@ -1074,10 +1076,10 @@ bool TabletManager::AddTablet(const std::string& table_name,
 }
 
 int64_t TabletManager::GetAllTabletsCount() {
-    MutexLock lock(&m_mutex);
+    MutexLock lock(&mutex_);
     int64_t count = 0;
     TableList::iterator it;
-    for (it = m_all_tables.begin(); it != m_all_tables.end(); ++it) {
+    for (it = all_tables_.begin(); it != all_tables_.end(); ++it) {
         count += it->second->GetTabletsCount();
     }
     return count;
@@ -1087,12 +1089,12 @@ bool TabletManager::FindTablet(const std::string& table_name,
                                const std::string& key_start,
                                TabletPtr* tablet, StatusCode* ret_status) {
     // lock table list
-    m_mutex.Lock();
+    mutex_.Lock();
 
     // search table
-    TableList::iterator it = m_all_tables.find(table_name);
-    if (it == m_all_tables.end()) {
-        m_mutex.Unlock();
+    TableList::iterator it = all_tables_.find(table_name);
+    if (it == all_tables_.end()) {
+        mutex_.Unlock();
         VLOG(5) << "tablet: " << table_name << " [start: "
             << DebugString(key_start) << "] not exist";
         SetStatusCode(kTableNotFound, ret_status);
@@ -1101,60 +1103,60 @@ bool TabletManager::FindTablet(const std::string& table_name,
     Table& table = *it->second;
 
     // lock table
-    table.m_mutex.Lock();
-    m_mutex.Unlock();
+    table.mutex_.Lock();
+    mutex_.Unlock();
 
     // search tablet
-    Table::TabletList::iterator it2 = table.m_tablets_list.find(key_start);
-    if (it2 == table.m_tablets_list.end()) {
-        table.m_mutex.Unlock();
+    Table::TabletList::iterator it2 = table.tablets_list_.find(key_start);
+    if (it2 == table.tablets_list_.end()) {
+        table.mutex_.Unlock();
         VLOG(5) << "table: " << table_name << "[start: "
             << DebugString(key_start) << "] not exist";
         SetStatusCode(kTableNotFound, ret_status);
         return false;
     }
     *tablet = it2->second;
-    table.m_mutex.Unlock();
+    table.mutex_.Unlock();
     return true;
 }
 
 void TabletManager::FindTablet(const std::string& server_addr,
                                std::vector<TabletPtr>* tablet_meta_list,
                                bool all_tables) {
-    m_mutex.Lock();
-    TableList::iterator it = m_all_tables.begin();
-    for (; it != m_all_tables.end(); ++it) {
+    mutex_.Lock();
+    TableList::iterator it = all_tables_.begin();
+    for (; it != all_tables_.end(); ++it) {
         Table& table = *it->second;
-        table.m_mutex.Lock();
-        if (table.m_status == kTableDisable && !all_tables) {
-            VLOG(10) << "FindTablet skip disable table: " << table.m_name;
-            table.m_mutex.Unlock();
+        table.mutex_.Lock();
+        if (table.status_ == kTableDisable && !all_tables) {
+            VLOG(10) << "FindTablet skip disable table: " << table.name_;
+            table.mutex_.Unlock();
             continue;
         }
-        Table::TabletList::iterator it2 = table.m_tablets_list.begin();
-        for (; it2 != table.m_tablets_list.end(); ++it2) {
+        Table::TabletList::iterator it2 = table.tablets_list_.begin();
+        for (; it2 != table.tablets_list_.end(); ++it2) {
             TabletPtr tablet = it2->second;
-            tablet->m_mutex.Lock();
-            if (tablet->m_meta.server_addr() == server_addr) {
+            tablet->mutex_.Lock();
+            if (tablet->meta_.server_addr() == server_addr) {
                 tablet_meta_list->push_back(tablet);
             }
-            tablet->m_mutex.Unlock();
+            tablet->mutex_.Unlock();
         }
-        table.m_mutex.Unlock();
+        table.mutex_.Unlock();
     }
-    m_mutex.Unlock();
+    mutex_.Unlock();
 }
 
 bool TabletManager::FindTable(const std::string& table_name,
                               std::vector<TabletPtr>* tablet_meta_list,
                               StatusCode* ret_status) {
     // lock table list
-    m_mutex.Lock();
+    mutex_.Lock();
 
     // search table
-    TableList::iterator it = m_all_tables.find(table_name);
-    if (it == m_all_tables.end()) {
-        m_mutex.Unlock();
+    TableList::iterator it = all_tables_.find(table_name);
+    if (it == all_tables_.end()) {
+        mutex_.Unlock();
         LOG(WARNING) << "table: " << table_name << " not exist";
         SetStatusCode(kTableNotFound, ret_status);
         return false;
@@ -1162,30 +1164,30 @@ bool TabletManager::FindTable(const std::string& table_name,
     Table& table = *it->second;
 
     // lock table
-    table.m_mutex.Lock();
-    m_mutex.Unlock();
+    table.mutex_.Lock();
+    mutex_.Unlock();
 
     // search tablet
-    Table::TabletList::iterator it2 = table.m_tablets_list.begin();
-    for (; it2 != table.m_tablets_list.end(); ++it2) {
+    Table::TabletList::iterator it2 = table.tablets_list_.begin();
+    for (; it2 != table.tablets_list_.end(); ++it2) {
         TabletPtr tablet = it2->second;
         tablet_meta_list->push_back(tablet);
     }
 
-    table.m_mutex.Unlock();
+    table.mutex_.Unlock();
     return true;
 }
 
 bool TabletManager::FindTable(const std::string& table_name, TablePtr* tablet) {
-    m_mutex.Lock();
-    TableList::iterator it = m_all_tables.find(table_name);
-    if (it == m_all_tables.end()) {
-        m_mutex.Unlock();
+    mutex_.Lock();
+    TableList::iterator it = all_tables_.find(table_name);
+    if (it == all_tables_.end()) {
+        mutex_.Unlock();
         VLOG(5) << "table: " << table_name << " not exist";
         return false;
     }
     *tablet = it->second;
-    m_mutex.Unlock();
+    mutex_.Unlock();
     return true;
 }
 
@@ -1201,11 +1203,11 @@ int64_t TabletManager::SearchTable(std::vector<TabletPtr>* tablet_meta_list,
         return 0;
     }
 
-    m_mutex.Lock();
+    mutex_.Lock();
 
-    TableList::iterator lower_it = m_all_tables.lower_bound(start_table_name);
-    TableList::iterator upper_it = m_all_tables.upper_bound(prefix_table_name + "\xFF");
-    if (upper_it == m_all_tables.begin() || lower_it == m_all_tables.end()) {
+    TableList::iterator lower_it = all_tables_.lower_bound(start_table_name);
+    TableList::iterator upper_it = all_tables_.upper_bound(prefix_table_name + "\xFF");
+    if (upper_it == all_tables_.begin() || lower_it == all_tables_.end()) {
         SetStatusCode(kTableNotFound, ret_status);
         return -1;
     }
@@ -1214,27 +1216,27 @@ int64_t TabletManager::SearchTable(std::vector<TabletPtr>* tablet_meta_list,
     for (TableList::iterator it = lower_it; it != upper_it; ++it) {
         Table& table = *it->second;
         Table::TabletList::iterator it2;
-        table.m_mutex.Lock();
+        table.mutex_.Lock();
         if (start_table_name == it->first) {
-            it2 = table.m_tablets_list.lower_bound(start_tablet_key);
+            it2 = table.tablets_list_.lower_bound(start_tablet_key);
         } else {
-            it2 = table.m_tablets_list.begin();
+            it2 = table.tablets_list_.begin();
         }
 
-        for (; it2 != table.m_tablets_list.end(); ++it2) {
+        for (; it2 != table.tablets_list_.end(); ++it2) {
             TabletPtr tablet = it2->second;
             tablet_meta_list->push_back(tablet);
             if (++found_num >= max_found) {
                 break;
             }
         }
-        table.m_mutex.Unlock();
+        table.mutex_.Unlock();
         if (found_num >= max_found) {
             break;
         }
     }
 
-    m_mutex.Unlock();
+    mutex_.Unlock();
     return found_num;
 }
 
@@ -1246,11 +1248,11 @@ bool TabletManager::ShowTable(std::vector<TablePtr>* table_meta_list,
                               uint32_t max_tablet_found,
                               bool* is_more, StatusCode* ret_status) {
     // lock table list
-    m_mutex.Lock();
+    mutex_.Lock();
 
-    TableList::iterator it = m_all_tables.lower_bound(start_table_name);
-    if (it == m_all_tables.end()) {
-        m_mutex.Unlock();
+    TableList::iterator it = all_tables_.lower_bound(start_table_name);
+    if (it == all_tables_.end()) {
+        mutex_.Unlock();
         LOG(ERROR) << "table not found: " << start_table_name;
         SetStatusCode(kTableNotFound, ret_status);
         return false;
@@ -1258,21 +1260,21 @@ bool TabletManager::ShowTable(std::vector<TablePtr>* table_meta_list,
 
     uint32_t table_found_num = 0;
     uint32_t tablet_found_num = 0;
-    for (; it != m_all_tables.end(); ++it) {
+    for (; it != all_tables_.end(); ++it) {
         TablePtr table = it->second;
         Table::TabletList::iterator it2;
 
-        table->m_mutex.Lock();
+        table->mutex_.Lock();
         if (table_meta_list != NULL) {
             table_meta_list->push_back(table);
         }
         table_found_num++;
         if (table_found_num == 1) {
-            it2 = table->m_tablets_list.lower_bound(start_tablet_key);
+            it2 = table->tablets_list_.lower_bound(start_tablet_key);
         } else {
-            it2 = table->m_tablets_list.begin();
+            it2 = table->tablets_list_.begin();
         }
-        for (; it2 != table->m_tablets_list.end(); ++it2) {
+        for (; it2 != table->tablets_list_.end(); ++it2) {
             if (tablet_found_num >= max_tablet_found) {
                 break;
             }
@@ -1282,24 +1284,24 @@ bool TabletManager::ShowTable(std::vector<TablePtr>* table_meta_list,
                 tablet_meta_list->push_back(tablet);
             }
         }
-        table->m_mutex.Unlock();
+        table->mutex_.Unlock();
         if (table_found_num >= max_table_found) {
             break;
         }
     }
 
-    m_mutex.Unlock();
+    mutex_.Unlock();
     return true;
 }
 
 bool TabletManager::DeleteTable(const std::string& table_name,
                                 StatusCode* ret_status) {
     // lock table list
-    MutexLock lock(&m_mutex);
+    MutexLock lock(&mutex_);
 
     // search table
-    TableList::iterator it = m_all_tables.find(table_name);
-    if (it == m_all_tables.end()) {
+    TableList::iterator it = all_tables_.find(table_name);
+    if (it == all_tables_.end()) {
         LOG(WARNING) << "table: " << table_name << " not exist";
         SetStatusCode(kTableNotFound, ret_status);
         return true;
@@ -1307,23 +1309,23 @@ bool TabletManager::DeleteTable(const std::string& table_name,
     Table& table = *it->second;
 
     // make sure no other thread ref this table
-    table.m_mutex.Lock();
-    table.m_mutex.Unlock();
+    table.mutex_.Lock();
+    table.mutex_.Unlock();
 
-    table.m_tablets_list.clear();
+    table.tablets_list_.clear();
 //    // delete every tablet
-//    Table::TabletList::iterator it2 = table.m_tablets_list.begin();
-//    for (; it2 != table.m_tablets_list.end(); ++it) {
+//    Table::TabletList::iterator it2 = table.tablets_list_.begin();
+//    for (; it2 != table.tablets_list_.end(); ++it) {
 //        Tablet& tablet = *it2->second;
 //        // make sure no other thread ref this tablet
-//        tablet.m_mutex.Lock();
-//        tablet.m_mutex.Unlock();
+//        tablet.mutex_.Lock();
+//        tablet.mutex_.Unlock();
 //        delete &tablet;
-//        table.m_tablets_list.erase(it2);
+//        table.tablets_list_.erase(it2);
 //    }
 
     // delete &table;
-    m_all_tables.erase(it);
+    all_tables_.erase(it);
     return true;
 }
 
@@ -1331,11 +1333,11 @@ bool TabletManager::DeleteTablet(const std::string& table_name,
                                  const std::string& key_start,
                                  StatusCode* ret_status) {
     // lock table list
-    MutexLock lock(&m_mutex);
+    MutexLock lock(&mutex_);
 
     // search table
-    TableList::iterator it = m_all_tables.find(table_name);
-    if (it == m_all_tables.end()) {
+    TableList::iterator it = all_tables_.find(table_name);
+    if (it == all_tables_.end()) {
         LOG(WARNING) << "table: " << table_name << " [start: "
             << DebugString(key_start) << "] not exist";
         SetStatusCode(kTableNotFound, ret_status);
@@ -1344,12 +1346,12 @@ bool TabletManager::DeleteTablet(const std::string& table_name,
     Table& table = *it->second;
 
     // make sure no other thread ref this table
-    table.m_mutex.Lock();
-    table.m_mutex.Unlock();
+    table.mutex_.Lock();
+    table.mutex_.Unlock();
 
     // search tablet
-    Table::TabletList::iterator it2 = table.m_tablets_list.find(key_start);
-    if (it2 == table.m_tablets_list.end()) {
+    Table::TabletList::iterator it2 = table.tablets_list_.find(key_start);
+    if (it2 == table.tablets_list_.end()) {
         LOG(WARNING) << "table: " << table_name << " [start: "
             << DebugString(key_start) << "] not exist";
         SetStatusCode(kTableNotFound, ret_status);
@@ -1357,12 +1359,12 @@ bool TabletManager::DeleteTablet(const std::string& table_name,
     }
 //    Tablet& tablet = *it2->second;
 //    // make sure no other thread ref this tablet
-//    tablet.m_mutex.Lock();
-//    tablet.m_mutex.Unlock();
+//    tablet.mutex_.Lock();
+//    tablet.mutex_.Unlock();
 //    delete &tablet;
-    table.m_tablets_list.erase(it2);
+    table.tablets_list_.erase(it2);
 
-    if (table.m_tablets_list.empty()) {
+    if (table.tablets_list_.empty()) {
         // clean up specific table dir in file system
         if (FLAGS_tera_delete_obsolete_tabledir_enabled &&
             !io::MoveEnvDirToTrash(table.GetTableName())) {
@@ -1370,7 +1372,7 @@ bool TabletManager::DeleteTablet(const std::string& table_name,
                 << table.GetTableName();
         }
         // delete &table;
-        m_all_tables.erase(it);
+        all_tables_.erase(it);
     }
     return true;
 }
@@ -1473,7 +1475,7 @@ bool TabletManager::ClearMetaTable(const std::string& meta_tablet_addr,
 
     ScanTabletRequest scan_request;
     ScanTabletResponse scan_response;
-    scan_request.set_sequence_id(m_this_sequence_id->Inc());
+    scan_request.set_sequence_id(this_sequence_id_->Inc());
     scan_request.set_table_name(FLAGS_tera_master_meta_table_name);
     scan_request.set_start("");
     scan_request.set_end("");
@@ -1506,7 +1508,7 @@ bool TabletManager::ClearMetaTable(const std::string& meta_tablet_addr,
         std::string next_record_key = NextKey(last_record_key);
         scan_request.set_start(next_record_key);
         scan_request.set_end("");
-        scan_request.set_sequence_id(m_this_sequence_id->Inc());
+        scan_request.set_sequence_id(this_sequence_id_->Inc());
         scan_response.Clear();
     }
 
@@ -1517,7 +1519,7 @@ bool TabletManager::ClearMetaTable(const std::string& meta_tablet_addr,
         return false;
     }
 
-    write_request.set_sequence_id(m_this_sequence_id->Inc());
+    write_request.set_sequence_id(this_sequence_id_->Inc());
     write_request.set_tablet_name(FLAGS_tera_master_meta_table_name);
     if (!meta_node_client.WriteTablet(&write_request, &write_response)) {
         SetStatusCode(kRPCError, ret_status);
@@ -1548,7 +1550,7 @@ bool TabletManager::DumpMetaTable(const std::string& meta_tablet_addr,
 
     WriteTabletRequest request;
     WriteTabletResponse response;
-    request.set_sequence_id(m_this_sequence_id->Inc());
+    request.set_sequence_id(this_sequence_id_->Inc());
     request.set_tablet_name(FLAGS_tera_master_meta_table_name);
     request.set_is_sync(true);
     request.set_is_instant(true);
@@ -1571,7 +1573,7 @@ bool TabletManager::DumpMetaTable(const std::string& meta_tablet_addr,
         if (tablets[i]->GetPath().empty()) {
             std::string path = leveldb::GetTabletPathFromNum(tablets[i]->GetTableName(),
                                                              tablets[i]->GetTable()->GetNextTabletNo());
-            tablets[i]->m_meta.set_path(path);
+            tablets[i]->meta_.set_path(path);
         }
         tablets[i]->ToMetaTableKeyValue(&packed_key, &packed_value);
         RowMutationSequence* mu_seq = request.add_row_list();
@@ -1610,16 +1612,16 @@ bool TabletManager::DumpMetaTable(const std::string& meta_tablet_addr,
 }
 
 void TabletManager::ClearTableList() {
-    MutexLock lock(&m_mutex);
-    TableList::iterator it = m_all_tables.begin();
-    for (; it != m_all_tables.end(); ++it) {
+    MutexLock lock(&mutex_);
+    TableList::iterator it = all_tables_.begin();
+    for (; it != all_tables_.end(); ++it) {
         Table& table = *it->second;
-        table.m_mutex.Lock();
-        table.m_mutex.Unlock();
-        table.m_tablets_list.clear();
+        table.mutex_.Lock();
+        table.mutex_.Unlock();
+        table.tablets_list_.clear();
         //delete &table;
     }
-    m_all_tables.clear();
+    all_tables_.clear();
 }
 
 void TabletManager::PackTabletMeta(TabletMeta* meta,
@@ -1653,34 +1655,34 @@ bool TabletManager::GetMetaTabletAddr(std::string* addr) {
 }
 
 bool TabletManager::PickMergeTablet(TabletPtr& tablet, TabletPtr* tablet2) {
-    MutexLock lock(&m_mutex);
+    MutexLock lock(&mutex_);
     std::string table_name = tablet->GetTableName();
 
     // search table
-    TableList::iterator it = m_all_tables.find(table_name);
-    if (it == m_all_tables.end()) {
+    TableList::iterator it = all_tables_.find(table_name);
+    if (it == all_tables_.end()) {
         LOG(ERROR) << "[merge] table: " << table_name << " not exist";
         return false;
     }
     Table& table = *it->second;
-    if (table.m_tablets_list.size() < 2) {
+    if (table.tablets_list_.size() < 2) {
         VLOG(20) << "[merge] table: " << table_name << " only have 1 tablet.";
         return false;
     }
 
     // make sure no other thread ref this table
-    table.m_mutex.Lock();
-    table.m_mutex.Unlock();
+    table.mutex_.Lock();
+    table.mutex_.Unlock();
 
     // search tablet
-    Table::TabletList::iterator it2 = table.m_tablets_list.find(tablet->GetKeyStart());
-    if (it2 == table.m_tablets_list.end()) {
+    Table::TabletList::iterator it2 = table.tablets_list_.find(tablet->GetKeyStart());
+    if (it2 == table.tablets_list_.end()) {
         LOG(ERROR) << "[merge] table: " << table_name << " [start: "
             << DebugString(tablet->GetKeyStart()) << "] not exist";
         return false;
     }
     TabletPtr prev, next;
-    if (it2 != table.m_tablets_list.begin()) {
+    if (it2 != table.tablets_list_.begin()) {
         it2--;
         prev = it2->second;
         it2++;
@@ -1693,7 +1695,7 @@ bool TabletManager::PickMergeTablet(TabletPtr& tablet, TabletPtr* tablet2) {
         }
         return true;
     }
-    if (++it2 != table.m_tablets_list.end()) {
+    if (++it2 != table.tablets_list_.end()) {
         next = it2->second;
     } else {
         // only have 1 neighbour tablet
@@ -1721,21 +1723,21 @@ bool TabletManager::RpcChannelHealth(int32_t err_code) {
 }
 
 void TabletManager::TryMajorCompact(Tablet* tablet) {
-    VLOG(5) << "TryMajorCompact() for " << tablet->m_meta.path();
-    MutexLock lock(&tablet->m_mutex);
-    if (!tablet || tablet->m_meta.compact_status() != kTableNotCompact) {
+    VLOG(5) << "TryMajorCompact() for " << tablet->meta_.path();
+    MutexLock lock(&tablet->mutex_);
+    if (!tablet || tablet->meta_.compact_status() != kTableNotCompact) {
         return;
     } else {
-        tablet->m_meta.set_compact_status(kTableOnCompact);
+        tablet->meta_.set_compact_status(kTableOnCompact);
     }
 
     CompactTabletRequest* request = new CompactTabletRequest;
     CompactTabletResponse* response = new CompactTabletResponse;
-    request->set_sequence_id(m_this_sequence_id->Inc());
-    request->set_tablet_name(tablet->m_meta.table_name());
-    request->mutable_key_range()->CopyFrom(tablet->m_meta.key_range());
+    request->set_sequence_id(this_sequence_id_->Inc());
+    request->set_tablet_name(tablet->meta_.table_name());
+    request->mutable_key_range()->CopyFrom(tablet->meta_.key_range());
 
-    tabletnode::TabletNodeClient node_client(tablet->m_meta.server_addr());
+    tabletnode::TabletNodeClient node_client(tablet->meta_.server_addr());
     Closure<void, CompactTabletRequest*, CompactTabletResponse*, bool, int>* done =
         NewClosure(this, &TabletManager::MajorCompactCallback, tablet,
                    FLAGS_tera_master_impl_retry_times);
@@ -1746,12 +1748,12 @@ void TabletManager::MajorCompactCallback(Tablet* tb, int32_t retry,
                                          CompactTabletRequest* request,
                                          CompactTabletResponse* response,
                                          bool failed, int error_code) {
-    VLOG(9) << "MajorCompactCallback() for " << tb->m_meta.path()
-        << ", status: " << StatusCodeToString(tb->m_meta.compact_status())
+    VLOG(9) << "MajorCompactCallback() for " << tb->meta_.path()
+        << ", status: " << StatusCodeToString(tb->meta_.compact_status())
         << ", retry: " << retry;
     {
-        MutexLock lock(&tb->m_mutex);
-        if (tb->m_meta.compact_status() == kTableCompacted) {
+        MutexLock lock(&tb->mutex_);
+        if (tb->meta_.compact_status() == kTableCompacted) {
             return;
         }
     }
@@ -1759,7 +1761,7 @@ void TabletManager::MajorCompactCallback(Tablet* tb, int32_t retry,
     if (failed || response->status() != kTabletNodeOk
         || response->compact_status() == kTableOnCompact
         || response->compact_size() == 0) {
-        LOG(ERROR) << "fail to major compact for " << tb->m_meta.path()
+        LOG(ERROR) << "fail to major compact for " << tb->meta_.path()
             << ", rpc status: " << StatusCodeToString(response->status())
             << ", compact status: " << StatusCodeToString(response->compact_status());
         if (retry <= 0 || !RpcChannelHealth(error_code)) {
@@ -1769,7 +1771,7 @@ void TabletManager::MajorCompactCallback(Tablet* tb, int32_t retry,
             int64_t wait_time = FLAGS_tera_tabletnode_connect_retry_period
                 * (FLAGS_tera_master_impl_retry_times - retry);
             ThisThread::Sleep(wait_time);
-            tabletnode::TabletNodeClient node_client(tb->m_meta.server_addr());
+            tabletnode::TabletNodeClient node_client(tb->meta_.server_addr());
             Closure<void, CompactTabletRequest*, CompactTabletResponse*, bool, int>* done =
                 NewClosure(this, &TabletManager::MajorCompactCallback, tb, retry - 1);
             node_client.CompactTablet(request, response, done);
@@ -1779,29 +1781,29 @@ void TabletManager::MajorCompactCallback(Tablet* tb, int32_t retry,
     delete request;
     delete response;
 
-    MutexLock lock(&tb->m_mutex);
-    tb->m_meta.set_compact_status(kTableCompacted);
-    VLOG(5) << "compact success: " << tb->m_meta.path();
+    MutexLock lock(&tb->mutex_);
+    tb->meta_.set_compact_status(kTableCompacted);
+    VLOG(5) << "compact success: " << tb->meta_.path();
 }
 
 double TabletManager::OfflineTabletRatio() {
     uint32_t offline_tablet_count = 0, tablet_count = 0;
-    m_mutex.Lock();
-    TableList::iterator it = m_all_tables.begin();
-    for (; it != m_all_tables.end(); ++it) {
+    mutex_.Lock();
+    TableList::iterator it = all_tables_.begin();
+    for (; it != all_tables_.end(); ++it) {
         Table& table = *it->second;
-        table.m_mutex.Lock();
-        Table::TabletList::iterator it2 = table.m_tablets_list.begin();
-        for (; it2 != table.m_tablets_list.end(); ++it2) {
+        table.mutex_.Lock();
+        Table::TabletList::iterator it2 = table.tablets_list_.begin();
+        for (; it2 != table.tablets_list_.end(); ++it2) {
             TabletPtr tablet = it2->second;
             if (tablet->GetStatus() == kTableOffLine) {
                 offline_tablet_count++;
             }
             tablet_count++;
         }
-        table.m_mutex.Unlock();
+        table.mutex_.Unlock();
     }
-    m_mutex.Unlock();
+    mutex_.Unlock();
 
     if (tablet_count == 0) {
         return 0;

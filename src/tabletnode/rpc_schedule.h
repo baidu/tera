@@ -32,8 +32,8 @@ public:
     bool FinishRpc(const std::string& table_name);
 
 private:
-    mutable Mutex m_mutex;
-    SchedulePolicy* m_policy;
+    mutable Mutex mutex_;
+    SchedulePolicy* policy_;
 
     typedef std::string TableName;
     struct TaskQueue : public std::queue<RpcTask*> {
@@ -45,9 +45,9 @@ private:
 
     typedef std::map<TableName, ScheduleEntity*> TableList;
 
-    TableList m_table_list;
-    uint64_t m_pending_task_count;
-    uint64_t m_running_task_count;
+    TableList table_list_;
+    uint64_t pending_task_count_;
+    uint64_t running_task_count_;
 };
 
 } // namespace tabletnode

@@ -43,40 +43,41 @@ public:
     /// 初略计算一个request的数据大小
     static uint64_t CountRequestSize(std::vector<const RowMutationSequence*>& row_mutation_vec,
                                      bool kv_only);
-    /// 把一个request打到一个leveldbbatch里去, request是原子的, batch也是, so ..
-    bool BatchRequest(const std::vector<const RowMutationSequence*>& row_mutation_vec,
-                      leveldb::WriteBatch* batch,
-                      bool kv_only);
     void Start();
     void Stop();
 
 private:
     void DoWork();
     bool SwapActiveBuffer(bool force);
+    /// 把一个request打到一个leveldbbatch里去, request是原子的, batch也是, so ..
+    void BatchRequest(const std::vector<const RowMutationSequence*>& row_mutation_vec,
+                      leveldb::WriteBatch* batch);
+    bool CheckConflict(const RowMutationSequence& row_mu,
+                       std::set<std::string>* commit_row_key_set,
+                       StatusCode* status = NULL);
     /// 任务完成, 执行回调
-    void FinishTaskBatch(WriteTaskBuffer* task_buffer, StatusCode status);
     void FinishTask(const WriteTask& task, StatusCode status);
     /// 将buffer刷到磁盘(leveldb), 并sync
     StatusCode FlushToDiskBatch(WriteTaskBuffer* task_buffer);
 
 private:
-    TabletIO* m_tablet;
+    TabletIO* tablet_;
 
-    mutable Mutex m_task_mutex;
-    mutable Mutex m_status_mutex;
-    AutoResetEvent m_write_event;       ///< 有数据可写
-    AutoResetEvent m_worker_done_event; ///< worker退出
+    mutable Mutex task_mutex_;
+    mutable Mutex status_mutex_;
+    AutoResetEvent write_event_;       ///< 有数据可写
+    AutoResetEvent worker_done_event_; ///< worker退出
 
-    bool m_stopped;
-    common::Thread m_thread;
+    bool stopped_;
+    common::Thread thread_;
 
-    WriteTaskBuffer* m_active_buffer;   ///< 前台buffer,接收写请求
-    WriteTaskBuffer* m_sealed_buffer;   ///< 后台buffer,等待刷到磁盘
-    int64_t m_sync_timestamp;
+    WriteTaskBuffer* active_buffer_;   ///< 前台buffer,接收写请求
+    WriteTaskBuffer* sealed_buffer_;   ///< 后台buffer,等待刷到磁盘
+    int64_t sync_timestamp_;
 
-    bool m_active_buffer_instant;      ///< active_buffer包含instant请求
-    uint64_t m_active_buffer_size;      ///< active_buffer的数据大小
-    bool m_tablet_busy;                 ///< tablet处于忙碌状态
+    bool active_buffer_instant_;      ///< active_buffer包含instant请求
+    uint64_t active_buffer_size_;      ///< active_buffer的数据大小
+    bool tablet_busy_;                 ///< tablet处于忙碌状态
 };
 
 } // namespace tabletnode

@@ -8,7 +8,7 @@
 namespace tera {
 
 TeraEntry::TeraEntry()
-    : m_started(false) {}
+    : started_(false) {}
 
 TeraEntry::~TeraEntry() {}
 
@@ -33,20 +33,20 @@ bool TeraEntry::Shutdown() {
 }
 
 bool TeraEntry::ShouldStart() {
-    MutexLock lock(&m_mutex);
-    if (m_started) {
+    MutexLock lock(&mutex_);
+    if (started_) {
         return false;
     }
-    m_started = true;
+    started_ = true;
     return true;
 }
 
 bool TeraEntry::ShouldShutdown() {
-    MutexLock lock(&m_mutex);
-    if (!m_started) {
+    MutexLock lock(&mutex_);
+    if (!started_) {
         return false;
     }
-    m_started = false;
+    started_ = false;
     return true;
 }
 

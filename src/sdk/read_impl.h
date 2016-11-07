@@ -11,7 +11,7 @@
 #include "common/mutex.h"
 #include "proto/tabletnode_rpc.pb.h"
 #include "sdk/sdk_task.h"
-#include "sdk/tera.h"
+#include "tera.h"
 #include "types.h"
 #include "utils/timer.h"
 
@@ -28,9 +28,9 @@ public:
     /// 返回读取时间戳
     int64_t GetTimestamp();
 
-    void SetSnapshot(uint64_t snapshot_id) { _snapshot_id = snapshot_id; }
+    void SetSnapshot(uint64_t snapshot_id) { snapshot_id_ = snapshot_id; }
 
-    uint64_t GetSnapshot() { return _snapshot_id; }
+    uint64_t GetSnapshot() { return snapshot_id_; }
 
     /// 设置读取CF
     void AddColumnFamily(const std::string& cf_name);
@@ -48,6 +48,7 @@ public:
     void SetTimeOut(int64_t timeout_ms);
     /// 设置异步回调, 操作会异步返回
     void SetCallBack(RowReader::Callback callback);
+    RowReader::Callback GetCallBack();
     /// 设置用户上下文，可在回调函数中获取
     void SetContext(void* context);
     void* GetContext();
@@ -67,6 +68,7 @@ public:
     void Next();
     /// Row
     const std::string& RowName();
+    const std::string& RowKey();
     /// 读取的结果
     std::string Value();
     /// 读取的结果
@@ -82,6 +84,7 @@ public:
     /// 将结果转存到一个std::map中, 格式为: map<column, map<timestamp, value>>
     typedef std::map< std::string, std::map<int64_t, std::string> > Map;
     void ToMap(Map* rowmap);
+    void ToMap(TRow* rowmap);
 
     void SetResult(const RowResult& result);
 
@@ -102,34 +105,44 @@ public:
     /// 序列化
     void ToProtoBuf(RowReaderInfo* info);
 
-    void AddCommitTimes() { _commit_times++; }
-    int64_t GetCommitTimes() { return _commit_times; }
+    void AddCommitTimes() { commit_times_++; }
+    int64_t GetCommitTimes() { return commit_times_; }
+
+    /// 重置result游标
+    void ResetResultPos() { result_pos_ = 0; }
+    /// 返回所属事务
+    Transaction* GetTransaction() { return txn_; }
+    /// 设置所属事务
+    void SetTransaction(Transaction* txn) { txn_ = txn; }
 
 private:
-    std::string _row_key;
-    RowReader::Callback _callback;
-    void* _user_context;
+    std::string row_key_;
+    RowReader::Callback callback_;
+    void* user_context_;
 
-    bool _finish;
-    ErrorCode _error_code;
-    mutable Mutex _finish_mutex;
-    common::CondVar _finish_cond;
+    bool finish_;
+    ErrorCode error_code_;
+    mutable Mutex finish_mutex_;
+    common::CondVar finish_cond_;
 
     typedef std::set<std::string> QualifierSet;
     typedef std::map<std::string, QualifierSet> FamilyMap;
-    FamilyMap _family_map;
-    int64_t _ts_start;
-    int64_t _ts_end;
-    uint32_t _max_version;
-    uint64_t _snapshot_id;
+    FamilyMap family_map_;
+    int64_t ts_start_;
+    int64_t ts_end_;
+    uint32_t max_version_;
+    uint64_t snapshot_id_;
 
-    int64_t _timeout_ms;
-    uint32_t _retry_times;
-    int32_t _result_pos;
-    RowResult _result;
+    int64_t timeout_ms_;
+    uint32_t retry_times_;
+    int32_t result_pos_;
+    RowResult result_;
 
     /// 记录此reader被提交到ts的次数
-    int64_t _commit_times;
+    int64_t commit_times_;
+
+    /// 所属事务
+    Transaction* txn_;
 };
 
 } // namespace tera

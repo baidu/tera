@@ -84,8 +84,8 @@ private:
 
     // <session_id, ScanContext>
 
-    Mutex m_lock;
-    ::leveldb::Cache* m_cache;
+    Mutex lock_;
+    ::leveldb::Cache* cache_;
 };
 
 } // namespace io

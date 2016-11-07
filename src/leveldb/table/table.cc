@@ -392,4 +392,8 @@ uint64_t Table::ApproximateOffsetOf(const Slice& key) const {
   return result;
 }
 
+uint64_t Table::IndexBlockSize() const {
+    return rep_->index_block->size();
+}
+
 }  // namespace leveldb
