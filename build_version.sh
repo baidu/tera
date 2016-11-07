@@ -6,7 +6,6 @@ VERSION_ADDR="https://github.com/baidu/tera"
 
 BUILD_DATE_TIME=`date`
 BUILD_HOSTNAME=`hostname`
-BUILD_GCC_VERSION=`gcc --version | head -n 1`
 
 gen_info_template_header ()
 {
@@ -25,7 +24,7 @@ gen_info_template_foot ()
     echo "extern const char kBuildTime[] = \"$BUILD_DATE_TIME\";"
     echo "extern const char kBuilderName[] = \"$USER\";"
     echo "extern const char kHostName[] = \"$BUILD_HOSTNAME\";"
-    echo "extern const char kCompiler[] = \"$BUILD_GCC_VERSION\";"
+    echo "extern const char kCompiler[] = __VERSION__;"
 }
 
 gen_info_print_template ()
@@ -33,8 +32,8 @@ gen_info_print_template ()
     echo "std::string SystemVersionInfo() {"
     echo "    std::stringstream ss;"
     echo "    ss << \"=====  Version Info ===== \" << std::endl;"
-    echo "    ss << \"Version: master\" << std::endl;"
-    echo "    ss << \"Address: https://github.com/baidu/tera\" << std::endl;"
+    echo "    ss << \"Version: $VERSION_INFO\" << std::endl;"
+    echo "    ss << \"Address: $VERSION_ADDR\" << std::endl;"
     echo "    ss << std::endl;"
     echo "    ss << \"=====  Git Info ===== \" << std::endl;"
     echo "    ss << kGitInfo << std::endl;"
