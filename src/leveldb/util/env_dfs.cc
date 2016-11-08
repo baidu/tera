@@ -210,7 +210,9 @@ private:
         tera::AutoCounter ac(&dfs_info_hang_counter, "GetFileSize", filename_.c_str());
         dfs_info_counter.Inc();
         uint64_t size = 0;
-        fs_->GetFileSize(filename_, &size);
+        if (fs_->GetFileSize(filename_, &size) != 0) {
+            return -1;
+        }
         return size;
     }
 };
@@ -282,7 +284,7 @@ public:
         Status s;
         tera::Counter dfs_sync_counter;
         uint64_t t = EnvDfs()->NowMicros();
-        if (file_->Sync() == -1) {
+        if (file_->Sync() != 0) {
             Log("[env_dfs] dfs sync fail: %s\n", filename_.c_str());
             s = IOError(filename_, errno);
         }
