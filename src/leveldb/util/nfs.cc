@@ -64,7 +64,7 @@ void* ResolveSymbol(void* dl, const char* sym) {
 
 void Nfs::LoadSymbol() {
   dlerror();
-  void* dl = dlopen("libnfs.so", RTLD_NOW | RTLD_GLOBAL);
+  void* dl = dlopen("libnfs.so", RTLD_NOW | RTLD_LOCAL | RTLD_DEEPBIND);
   if (dl == NULL) {
     fprintf(stderr, "dlopen libnfs.so error: %s\n", dlerror());
     abort();
