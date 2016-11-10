@@ -19,6 +19,7 @@ DEFINE_string(start_key, "", "start key");
 DEFINE_string(end_key, "", "end_key");
 DEFINE_uint64(snapshot, 0, "snapshot");
 DEFINE_string(fields, "", "fields");
+DEFINE_int64(max_row_num, 0, "max row num returns");
 
 using namespace tera;
 
@@ -69,7 +70,16 @@ int main(int argc, char** argv)
     desc.SetEnd(FLAGS_end_key);
     GetAllScanFields(&desc);
     ResultStream* result_stream = target_table->Scan(desc, &error_code);
+    std::string last_row_name;
+    int64_t cur_row_num = 0;
     while (!result_stream->Done()) {
+        if (result_stream->RowName() != last_row_name) {
+            last_row_name = result_stream->RowName();
+            cur_row_num++;
+        }
+        if (FLAGS_max_row_num > 0 && cur_row_num > FLAGS_max_row_num) {
+            break;
+        }
         std::cout << result_stream->RowName() << ":" << result_stream->ColumnName()
                   << ":" << result_stream->Timestamp() << "  "
                   << result_stream->Value() << std::endl;
