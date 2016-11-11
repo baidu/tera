@@ -253,8 +253,9 @@ const char* builtin_cmd_list[] = {
                 find the address of master",
 
     "findts",
-    "findts <tablename> <rowkey>                                          \n\
-            find the specify tabletnode serving 'rowkey'.",
+    "findts <tablename> [rowkey]                                          \n\
+            find the specify tabletnode serving 'rowkey'.                 \n\
+            if 'rowkey' is omited, read from stdin with one rowkey per line.",
 
     "reload",
     "reload config hostname:port                                          \n\
@@ -2501,7 +2502,7 @@ int32_t FindMasterOp(Client* client, int32_t argc, char** argv, ErrorCode* err) 
 }
 
 int32_t FindTsOp(Client* client, int32_t argc, char** argv, ErrorCode* err) {
-    if (argc != 4) {
+    if (argc != 3 && argc != 4) {
         PrintCmdHelpInfo(argv[1]);
         return -1;
     }
@@ -2514,15 +2515,31 @@ int32_t FindTsOp(Client* client, int32_t argc, char** argv, ErrorCode* err) {
         return -1;
     }
 
-    std::string rowkey = argv[3];
-    table->ScanMetaTable(rowkey, rowkey + '\0');
+    if (argc == 4) {
+        std::string rowkey = argv[3];
+        table->ScanMetaTable(rowkey, rowkey + '\0');
 
-    TabletMeta meta;
-    if (!table->GetTabletMetaForKey(rowkey, &meta)) {
-        LOG(ERROR) << "fail to get tablet meta for " << rowkey;
-        return -1;
+        TabletMeta meta;
+        if (!table->GetTabletMetaForKey(rowkey, &meta)) {
+            LOG(ERROR) << "fail to get tablet meta for " << rowkey;
+            return -1;
+        }
+        std::cout << meta.server_addr() << "\t" << meta.path() << std::endl;
+        return 0;
     }
-    std::cout << meta.server_addr() << "/" << meta.path() << std::endl;
+
+    table->ScanMetaTable("", "");
+    const int32_t buf_size = 1024 * 1024;
+    char rowkey[buf_size];
+    while (std::cin.getline(rowkey, buf_size)) {
+        TabletMeta meta;
+        if (!table->GetTabletMetaForKey(rowkey, &meta)) {
+            LOG(ERROR) << "fail to get tablet meta for " << rowkey;
+            continue;
+        }
+        std::cout << rowkey << "\t" << meta.server_addr() << "\t" << meta.path() << std::endl;
+    }
+
     return 0;
 }
 
