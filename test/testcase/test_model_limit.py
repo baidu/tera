@@ -30,9 +30,9 @@ def setUp():
 def tearDown():
     pass
 
-    '''
-    64KB rowkey
-    '''
+'''
+64KB rowkey
+'''
 def test_rowkey_size_0():
 
     try:
@@ -42,18 +42,18 @@ def test_rowkey_size_0():
         return
     nose.tools.assert_true(False)
 
-    '''
-    64KB - 1 rowkey
-    '''
+'''
+64KB - 1 rowkey
+'''
 def test_rowkey_size_1():
 
     table.Put("a" * (64 * 1024 - 1), "cf0", "qu0", "value_0")
     nose.tools.assert_equal(table.Get("a" * (64 * 1024 - 1), "cf0", "qu0", 0),
                             "value_0")
 
-    '''
-    64KB qualifier
-    '''
+'''
+64KB qualifier
+'''
 def test_qualifier_size_0():
 
     try:
@@ -63,18 +63,18 @@ def test_qualifier_size_0():
         return
     nose.tools.assert_true(False)
 
-    '''
-    64KB - 1 qualifier
-    '''
+'''
+64KB - 1 qualifier
+'''
 def test_qualifier_size_1():
 
     table.Put("row_qu_size", "cf0", "b" * (64 * 1024 - 1), "value_0")
     nose.tools.assert_equal(table.Get("row_qu_size", "cf0", "b" * (64 * 1024 - 1), 0),
                             "value_0")
 
-    '''
-    32MB value
-    '''
+'''
+32MB value
+'''
 def test_value_size_0():
 
     try:
@@ -84,9 +84,9 @@ def test_value_size_0():
         return
     nose.tools.assert_true(False)
 
-    '''
-    32MB - 1 value
-    '''
+'''
+32MB - 1 value
+'''
 def test_value_size_1():
 
     table.Put("row_qu_size", "cf0", "qu0", "v" * (32 * 1024 * 1024 - 1))
