@@ -258,7 +258,11 @@ void RowMutationImpl::DeleteFamily(const std::string& family,
 void RowMutationImpl::DeleteRow(int64_t timestamp) {
     RowMutation::Mutation& mutation = AddMutation();
     mutation.type = RowMutation::kDeleteRow;
-    mutation.timestamp = timestamp;
+    if (timestamp == -1) {
+        mutation.timestamp = kLatestTimestamp;
+    } else {
+        mutation.timestamp = timestamp;
+    }
 }
 
 /// 修改锁住的行, 必须提供行锁
