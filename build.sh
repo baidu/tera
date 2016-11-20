@@ -31,7 +31,7 @@ cd ${DEPS_SOURCE}
 if [ ! -f "${FLAG_DIR}/boost_${BOOST_VERSION}" ] \
     || [ ! -d "${DEPS_PREFIX}/boost_${BOOST_VERSION}/boost" ]; then
     wget --no-check-certificate -O boost_${BOOST_VERSION}.tar.bz2 ${BOOST_URL}
-    tar xjf boost_${BOOST_VERSION}.tar.bz2
+    tar xjf boost_${BOOST_VERSION}.tar.bz2 --recursive-unlink
     rm -rf ${DEPS_PREFIX}/boost_${BOOST_VERSION}
     mv boost_${BOOST_VERSION} ${DEPS_PREFIX}
     touch "${FLAG_DIR}/boost_${BOOST_VERSION}"
@@ -42,7 +42,7 @@ if [ ! -f "${FLAG_DIR}/protobuf_${PROTOBUF_VERSION}" ] \
     || [ ! -f "${DEPS_PREFIX}/lib/libprotobuf.a" ] \
     || [ ! -d "${DEPS_PREFIX}/include/google/protobuf" ]; then
     wget --no-check-certificate -O protobuf-${PROTOBUF_VERSION}.tar.bz2 ${PROTOBUF_URL}
-    tar jxf protobuf-${PROTOBUF_VERSION}.tar.bz2
+    tar jxf protobuf-${PROTOBUF_VERSION}.tar.bz2 --recursive-unlink
     cd protobuf-${PROTOBUF_VERSION}
     ./configure ${DEPS_CONFIG}
     make -j4
@@ -56,7 +56,7 @@ if [ ! -f "${FLAG_DIR}/snappy_${SNAPPY_VERSION}" ] \
     || [ ! -f "${DEPS_PREFIX}/lib/libsnappy.a" ] \
     || [ ! -f "${DEPS_PREFIX}/include/snappy.h" ]; then
     wget --no-check-certificate -O snappy-${SNAPPY_VERSION}.tar.gz ${SNAPPY_URL}
-    tar zxf snappy-${SNAPPY_VERSION}.tar.gz
+    tar zxf snappy-${SNAPPY_VERSION}.tar.gz --recursive-unlink
     cd snappy-${SNAPPY_VERSION}
     ./configure ${DEPS_CONFIG}
     make -j4
@@ -70,7 +70,7 @@ if [ ! -f "${FLAG_DIR}/sofa-pbrpc_${SOFA_PBRPC_VERSION}" ] \
     || [ ! -f "${DEPS_PREFIX}/lib/libsofa-pbrpc.a" ] \
     || [ ! -d "${DEPS_PREFIX}/include/sofa/pbrpc" ]; then
     wget --no-check-certificate -O sofa-pbrpc-${SOFA_PBRPC_VERSION}.tar.gz ${SOFA_PBRPC_URL}
-    tar zxf sofa-pbrpc-${SOFA_PBRPC_VERSION}.tar.gz
+    tar zxf sofa-pbrpc-${SOFA_PBRPC_VERSION}.tar.gz --recursive-unlink
     cd sofa-pbrpc-${SOFA_PBRPC_VERSION}
     sed -i '/BOOST_HEADER_DIR=/ d' depends.mk
     sed -i '/PROTOBUF_DIR=/ d' depends.mk
@@ -90,7 +90,7 @@ if [ ! -f "${FLAG_DIR}/zookeeper_${ZOOKEEPER_VERSION}" ] \
     || [ ! -f "${DEPS_PREFIX}/lib/libzookeeper_mt.a" ] \
     || [ ! -d "${DEPS_PREFIX}/include/zookeeper" ]; then
     wget --no-check-certificate -O zookeeper-${ZOOKEEPER_VERSION}.tar.gz ${ZOOKEEPER_URL}
-    tar zxf zookeeper-${ZOOKEEPER_VERSION}.tar.gz
+    tar zxf zookeeper-${ZOOKEEPER_VERSION}.tar.gz --recursive-unlink
     cd zookeeper-${ZOOKEEPER_VERSION}/src/c
     ./configure ${DEPS_CONFIG}
     make -j4
@@ -103,7 +103,7 @@ fi
 if [ ! -f "${FLAG_DIR}/cmake_${CMAKE_VERSION}" ] \
     || [ ! -f "${DEPS_PREFIX}/bin/cmake" ]; then
     wget --no-check-certificate -O CMake-${CMAKE_VERSION}.tar.gz ${CMAKE_URL}
-    tar zxf CMake-${CMAKE_VERSION}.tar.gz
+    tar zxf CMake-${CMAKE_VERSION}.tar.gz --recursive-unlink
     cd CMake-${CMAKE_VERSION}
     ./configure --prefix=${DEPS_PREFIX}
     make -j4
@@ -117,7 +117,7 @@ if [ ! -f "${FLAG_DIR}/gflags_${GFLAGS_VERSION}" ] \
     || [ ! -f "${DEPS_PREFIX}/lib/libgflags.a" ] \
     || [ ! -d "${DEPS_PREFIX}/include/gflags" ]; then
     wget --no-check-certificate -O gflags-${GFLAGS_VERSION}.tar.gz ${GFLAGS_URL}
-    tar zxf gflags-${GFLAGS_VERSION}.tar.gz
+    tar zxf gflags-${GFLAGS_VERSION}.tar.gz --recursive-unlink
     cd gflags-${GFLAGS_VERSION}
     cmake -DCMAKE_INSTALL_PREFIX=${DEPS_PREFIX} -DGFLAGS_NAMESPACE=google -DCMAKE_CXX_FLAGS=-fPIC
     make -j4
@@ -131,7 +131,7 @@ if [ ! -f "${FLAG_DIR}/glog_${GLOG_VERSION}" ] \
     || [ ! -f "${DEPS_PREFIX}/lib/libglog.a" ] \
     || [ ! -d "${DEPS_PREFIX}/include/glog" ]; then
     wget --no-check-certificate -O glog-${GLOG_VERSION}.tar.gz ${GLOG_URL}
-    tar zxf glog-${GLOG_VERSION}.tar.gz
+    tar zxf glog-${GLOG_VERSION}.tar.gz --recursive-unlink
     cd glog-${GLOG_VERSION}
     ./configure ${DEPS_CONFIG} CPPFLAGS=-I${DEPS_PREFIX}/include LDFLAGS=-L${DEPS_PREFIX}/lib
     make -j4
@@ -145,7 +145,7 @@ if [ ! -f "${FLAG_DIR}/gtest_${GTEST_VERSION}" ] \
     || [ ! -f "${DEPS_PREFIX}/lib/libgtest.a" ] \
     || [ ! -d "${DEPS_PREFIX}/include/gtest" ]; then
     wget --no-check-certificate -O googletest-release-${GTEST_VERSION}.tar.gz ${GTEST_URL}
-    tar zxf googletest-release-${GTEST_VERSION}.tar.gz
+    tar zxf googletest-release-${GTEST_VERSION}.tar.gz --recursive-unlink
     cd googletest-release-${GTEST_VERSION}/googletest
 
     # XXX make gcc3 happy; what's the cmake way?
@@ -168,7 +168,7 @@ if [ ! -f "${FLAG_DIR}/libunwind_${LIBUNWIND_VERSION}" ] \
     || [ ! -f "${DEPS_PREFIX}/lib/libunwind.a" ] \
     || [ ! -f "${DEPS_PREFIX}/include/libunwind.h" ]; then
     wget --no-check-certificate -O libunwind-${LIBUNWIND_VERSION}.tar.gz ${LIBUNWIND_URL}
-    tar xzf libunwind-${LIBUNWIND_VERSION}.tar.gz
+    tar xzf libunwind-${LIBUNWIND_VERSION}.tar.gz --recursive-unlink
     cd libunwind-${LIBUNWIND_VERSION}
     ./configure ${DEPS_CONFIG}
     make CFLAGS=-fPIC -j4
@@ -181,7 +181,7 @@ fi
 if [ ! -f "${FLAG_DIR}/gperftools_${GPERFTOOLS_VERSION}" ] \
     || [ ! -f "${DEPS_PREFIX}/lib/libtcmalloc_minimal.a" ]; then
     wget --no-check-certificate -O gperftools-${GPERFTOOLS_VERSION}.tar.gz ${GPERFTOOLS_URL}
-    tar zxf gperftools-${GPERFTOOLS_VERSION}.tar.gz
+    tar zxf gperftools-${GPERFTOOLS_VERSION}.tar.gz --recursive-unlink
     cd gperftools-${GPERFTOOLS_VERSION}
     ./configure ${DEPS_CONFIG} CPPFLAGS=-I${DEPS_PREFIX}/include LDFLAGS=-L${DEPS_PREFIX}/lib
     make -j4
@@ -195,7 +195,7 @@ if [ ! -f "${FLAG_DIR}/ins_${INS_VERSION}" ] \
     || [ ! -f "${DEPS_PREFIX}/lib/libins_sdk.a" ] \
     || [ ! -f "${DEPS_PREFIX}/include/ins_sdk.h" ]; then
     wget --no-check-certificate -O ins-${INS_VERSION}.tar.gz ${INS_URL}
-    tar zxf ins-${INS_VERSION}.tar.gz
+    tar zxf ins-${INS_VERSION}.tar.gz --recursive-unlink
     cd ins-${INS_VERSION}
     sed -i "s|^PREFIX=.*|PREFIX=${DEPS_PREFIX}|" Makefile
     sed -i "s|^PROTOC=.*|PROTOC=${DEPS_PREFIX}/bin/protoc|" Makefile
@@ -203,6 +203,20 @@ if [ ! -f "${FLAG_DIR}/ins_${INS_VERSION}" ] \
     make -j4 install_sdk
     cd -
     touch "${FLAG_DIR}/ins_${INS_VERSION}"
+fi
+
+# nose (for test)
+if [ ! -f "${FLAG_DIR}/nose_${NOSE_VERSION}" ] \
+    || [ ! -f "${DEPS_PREFIX}/bin/nosetests" ] \
+    || [ ! -d "${DEPS_PREFIX}/lib/nose" ]; then
+    wget --no-check-certificate -O nose-${NOSE_VERSION}.tar.gz ${NOSE_URL}
+    tar zxf nose-${NOSE_VERSION}.tar.gz --recursive-unlink
+    cd nose-${NOSE_VERSION}
+    python setup.py build
+    cp -af build/script*/nosetests ${DEPS_PREFIX}/bin
+    cp -arf build/lib/nose ${DEPS_PREFIX}/lib
+    cd -
+    touch "${FLAG_DIR}/nose_${NOSE_VERSION}"
 fi
 
 cd ${WORK_DIR}
