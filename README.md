@@ -1,79 +1,89 @@
-# Tera - An Internet-Scale Database
+# Tera - A High Performance, Internet-Scale Database for Structured Data
 
-[![Build Status](http://220.181.7.231/buildStatus/icon?job=tera_master_build)](http://220.181.7.231/job/tera_master_build/)  
+[![Build Status](http://220.181.7.231/buildStatus/icon?job=tera_master_build)](http://220.181.7.231/job/tera_master_build/) 
+
 Copyright 2015, Baidu, Inc.
 
-Tera is a structured distributed database which is designed to manage trillions of links and webpages. Besides Webpage Database, Tera is used by many other Baidu products, including Baidu Trace System, Baidu User Behavior Analysis System, etc. Tera provides high performance and high scalability by taking fully advantage of new generation hardware.
+Tera is a high performance distributed NoSQL database, which is inspired by google's [BigTable](http://static.googleusercontent.com/media/research.google.com/zh-CN//archive/bigtable-osdi06.pdf) and designed for real-time applications. Tera can easily scale to __petabytes__ of data across __thousands__ of commodity servers. Besides, Tera is widely used in many Baidu products with varied demands，which range from throughput-oriented applications to latency-sensitive service, including web indexing, WebPage DB, LinkBase DB, etc. ([中文](readme-cn.md))
 
-# Features
+## Features
+
+* Linear and modular scalability
 * Automatic and configurable sharding
 * Ranged and hashed sharding strategies
-* Strong consistency
+* MVCC
+* Column-oriented storage and locality group support
+* Strictly consistent
+* Automatic failover support
 * Online schema change
-* Snapshot
-* Multi-level cache and Bloom Filters to suport real-time queries
+* Snapshot support
+* Support RAMDISK/SSD/DFS tiered cache
+* Block cache and Bloom Filters for real-time queries
+* Multi-type table support (RAMDISK/SSD/DISK table)
+* Easy to use [C++](doc/sdk_dev_guide.md)/[Java](sdk_dev_guide_for_java.md)/[Python](sdk_dev_guide_for_python.md)/[REST-ful](doc/http_proxy.md) API for client access
 
-# Contact Us
-{dist-lab, tera_dev, opensearch} at baidu.com
+## Data model
 
+Tera is the collection of many sparse, distributed, multidimensional tables. The table is indexed by a row key, column key, and a timestamp; each value in the table is an uninterpreted array of bytes.
 
-[高性能、可伸缩的结构化数据库](http://github.com/baidu/tera)
-====
+* (row:string, (column family+qualifier):string, time:int64) → string
 
-Tera是一个高性能、可伸缩的结构化数据存储系统，被设计用来管理搜索引擎万亿量级的超链与网页信息。为实现数据的实时分析与高效访问，我们使用按行键、列名和时间戳全局排序的三维数据模型组织数据，使用多级Cache系统，充分利用新一代服务器硬件大内存、SSD盘和万兆网卡的性能优势，做到模型灵活的同时，实现了高吞吐与水平扩展。
+To learn more about the schema, you can refer to [BigTable](http://static.googleusercontent.com/media/research.google.com/zh-CN//archive/bigtable-osdi06.pdf).
 
-#特性
- * 全局有序
- * 热点自动分片
- * 数据强一致
- * 多版本,自动垃圾收集
- * 按列存储,支持内存表
- * 动态schema
- * 支持表格快照
- * 高效随机读写
-
-#数据模型
-Tera使用了bigtable的数据模型，可以将一张表格理解为这样一种数据结构：
-```
-map<RowKey, map<ColummnFamily:Qualifier, map<Timestamp, Value> > >
-```
-其中RowKey、ColumnFamily、Qualifier和Value是字符串，Timestamp是一个64位整形。ColumnFamliy需要建表时指定，是访问控制、版本保留等策略的基本单位。
-
-#系统架构
-系统主要由Tabletserver、Master和ClientSDK三部分构成。其中Tabletserver是核心服务器，承载着所有的数据管理与访问；Master是系统的仲裁者，负责表格的创建、schema更新与负载均衡；ClientSDK包含供管理员使用的命令行工具teracli和给用户使用的SDK。
-表格被按RowKey全局排序，并横向切分成多个Tablet，每个Tablet负责服务RowKey的一个区间，表格又被纵向且分为多个LocalityGroup，一个Tablet的多个Localitygroup在物理上单独存储，可以选择不同的存储介质，以优化访问效率。
+## Architecture
 
 ![架构图](resources/images/arch.png)
 
-#系统依赖
- * 使用分布式文件系统（[BFS](https://github.com/baidu/bfs)、HDFS等）持久化数据与元信息
- * 使用分布式协调服务（[Nexus](https://github.com/baidu/ins/)或者Zookeeper）选主与协调
- * 使用[Sofa-pbrpc](https://github.com/baidu/sofa-pbrpc/)实现跨进程通信
+Tera has three major components: sdk, master and tablet servers.
 
-#系统构建
-sh ./build.sh  
-参考[BUILD](BUILD)
+- __SDK__: a library that is linked into every application client to access Tera cluster.
+- __Master__: master is responsible for managing tablet servers and tablets, automatic load balance and garbage collection of files in filesystem.
+- __Tablet Server__: tablet server is the core module in tera, and it uses an __enhance__ [Leveldb](https://github.com/google/leveldb) as a basic storage engine. Tablet server manages a set of tablets, handles read/write/scan requests and schedule tablet split and merge online.
 
-#使用示例
+## Building blocks
+Tera is built on several pieces of open source infrastructure.
 
-[体验单机Tera](doc/onebox.md)
+- __Filesystem__ (required)
 
-[通过docker体验Tera](example/docker)
+	Tera uses the distributed file system to store transaction log and data files. So Tera uses an abstract file system interface, called Env, to adapt to different implementations of file systems (e.g., [BFS](https://github.com/baidu/bfs), HDFS, HDFS2, POXIS filesystem).
 
-[主要api使用方法](doc/sdk_dev_guide.md)
+- __Distributed lock service__ (required)
 
-[客户端teracli使用方法](doc/teracli.md)
+	Tera relies on a highly-available and persistent distributed lock service, which is used for a variety of tasks: to ensure that there is at most one active master at any time; to store meta table's location, to discover new tablet server and finalize tablet server deaths. Tera has an adapter class to adapt to different implementations of lock service (e.g., ZooKeeper, [Nexus](https://github.com/baidu/ins))
 
-[其它文档](doc/README.md)
+- __High performance RPC framework__ (required)
 
-#反馈与技术支持
-tera_dev At baidu doT com
+	Tera is designed to handle a variety of demanding workloads, which range from throughput-oriented applications to latency-sensitive service. So Tera needs a high performance network programming framework. Now Tera heavily relies on [Sofa-pbrpc](https://github.com/baidu/sofa-pbrpc/) to meet the performance demand.
+	
+- __Cluster management system__ (not necessary)
+		
+	A Tera cluster in Baidu typically operates in a shared pool of machines
+that runs a wide variety of other distributed applications. So Tera can be deployed in a cluster management system [Galaxy](https://github.com/baidu/galaxy), which uses for scheduling jobs, managing resources on shared machines, dealing with machine failures, and monitoring machine status. Besides, Tera can also be deployed on RAW machine or in Docker container.
 
-#成为贡献者
-完成[5个小任务](doc/to_be_a_contributor.md),帮你一步步成为tera贡献者.
+## Documents
 
-#欢迎加入
-如果你热爱开源，热爱分布式技术，请将简历发送至： 
-{dist-lab, tera_dev, opensearch} at baidu.com
+* [Developer Doc](doc/README.md)
 
+## Quick start
+* __How to build__
+
+	Use sh [./build.sh](BUILD) to build Tera.
+
+* __How to deploy__
+
+	[Pseudo Distributed Mode](doc/onebox.md)
+
+	[Build on Docker](example/docker)
+	
+* __How to access__
+	
+	[teracli](doc/teracli.md)
+	
+	[API](doc/sdk_dev_guide.md)
+
+## Contributing to Tera  
+Contributions are welcomed and greatly appreciated. See [Contributions](doc/to_be_a_contributor.md) for more details.
+
+## Follow us
+To join us, please send resume to {dist-lab, tera_dev, opensearch} at baidu.com.
 
