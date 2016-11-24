@@ -1,4 +1,4 @@
-# Tera - A High Performance, Internet-Scale Database for Structured Data
+# Tera - An Internet-Scale Database
 
 [![Build Status](http://220.181.7.231/buildStatus/icon?job=tera_master_build)](http://220.181.7.231/job/tera_master_build/) 
 
@@ -20,7 +20,7 @@ Tera is a high performance distributed NoSQL database, which is inspired by goog
 * Support RAMDISK/SSD/DFS tiered cache
 * Block cache and Bloom Filters for real-time queries
 * Multi-type table support (RAMDISK/SSD/DISK table)
-* Easy to use [C++](doc/sdk_dev_guide.md)/[Java](sdk_dev_guide_for_java.md)/[Python](sdk_dev_guide_for_python.md)/[REST-ful](doc/http_proxy.md) API for client access
+* Easy to use C++/Java/Python/REST-ful API
 
 ## Data model
 
@@ -82,7 +82,7 @@ that runs a wide variety of other distributed applications. So Tera can be deplo
 	[API](doc/sdk_dev_guide.md)
 
 ## Contributing to Tera  
-Contributions are welcomed and greatly appreciated. See [Contributions](doc/to_be_a_contributor.md) for more details.
+Contributions are welcomed and greatly appreciated. See [Contributions](doc/contributor.md) for more details.
 
 ## Follow us
 To join us, please send resume to {dist-lab, tera_dev, opensearch} at baidu.com.
