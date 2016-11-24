@@ -783,6 +783,10 @@ class PosixEnv : public Env {
   }
 
   virtual Status NewLogger(const std::string& fname, Logger** result) {
+    *result = new EnhancePosixLogger(fname, &PosixEnv::gettid);
+    return Status::OK();
+
+    /*
     FILE* f = fopen(fname.c_str(), "w");
     if (f == NULL) {
       *result = NULL;
@@ -791,6 +795,7 @@ class PosixEnv : public Env {
       *result = new PosixLogger(f, &PosixEnv::gettid);
       return Status::OK();
     }
+    */
   }
   virtual void SetLogger(Logger* logger) {
     Logger::SetDefaultLogger(logger);
