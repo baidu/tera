@@ -32,7 +32,7 @@ map<RowKey, map<ColummnFamily:Qualifier, map<Timestamp, Value> > >
 
 #系统构建
 sh ./build.sh  
-参考[BUILD](BUILD)
+参考[BUILD](BUILD-cn)
 
 #使用示例
 
