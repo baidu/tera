@@ -1,52 +1,46 @@
-# Tera文档专区
+# Tera Docs
 
-## 简介
+## Introduction
 
-[系统设计](tera_design.md)
+[Tera Design](tera_design.md)
+[Data Model and Implementation](data_model.md)
 
-[Tera表格数据模型及实现](data_model.md)
+## User Manual
 
-[master、ts、client的交互](master-ts-client-interactive.md)
+[Pseudo Distributed Mode](onebox.md)
 
-## 使用帮助
+[Distributed Mode](cluster_setup.md)
 
-[体验单机Tera](onebox.md)
+[API Manual](sdk_dev_guide.md)
 
-[命令行工具teracli使用方法](teracli.md)
+[Teracli Manual](teracli.md)
 
-[主要api使用方法](sdk_dev_guide.md)
+[Flag Manual](tera_flag.md)
 
-[搭建tera集群](cluster_setup.md)
+## Performance Profiling
 
-[各flag配置项含义介绍](tera_flag.md)
+[Read/Write](perf_opz.md)
 
-## 性能优化
+## Inside Tera
 
-[针对表格不同读写特性的性能优化建议](perf_opz.md)
+[Design and Implementation of Load Balance](load-balance.md)
 
-## 功能实现
+[How Delete Data Works](data-deletion-in-tera.md)
 
-[动态负载均衡](load-balance.md)
+[How Tablet Availability Check Works](tablet-availability.md)
 
-[数据删除的实现](data-deletion-in-tera.md)
+[Interaction Between Master, Tablet Server and Client](master-ts-client-interactive.md)
 
-[tablet的可用性统计实现](tablet-availability.md)
+## Version Management
 
-## 版本发布
+[Release Management](release_management.md)
 
-[版本发布及管理](release_management.md)
+## More Docs(Todo List)
 
-## 源码相关
-
-[源码目录结构](../src/README.md)
-
-[LevelDB](../src/leveldb/README.md)
-
-## TodoList
-1. Master的设计与实现（职责、功能、每个功能怎么实现的、为什么这么实现、还有哪些遗留问题）
-1. Tabletserver设计与实现
-1. SDK的结构化文档（可折叠，可搜索，类是windows的帮助）
-1. 性能数据，不同场景下的测试数，瓶颈分析
-1. 性能方面设计折衷（怎样实现的高性能随机读写）
-1. 监控系统的安装和使用
-1. 快速、低成本Split&Merge的实现原理
+1. Design and implementation of master
+1. Design and implementation of tablet server
+1. SDK manual(user friendly: e.g. searchable, foldable)
+1. Performance benchmark on various environment
+1. Design trade-off about performance(how to implement high perfromance random read/write)
+1. Monitor manual
+1. How fast and low cost split & merge works
