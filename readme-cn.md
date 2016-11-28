@@ -40,7 +40,7 @@ sh ./build.sh
 
 [通过docker体验Tera](example/docker)
 
-[主要api使用方法](doc/sdk_dev_guide.md)
+[主要api使用方法](doc/cn/sdk_guide.md)
 
 [客户端teracli使用方法](doc/teracli.md)
 

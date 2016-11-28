@@ -20,7 +20,7 @@ Tera is a high performance distributed NoSQL database, which is inspired by goog
 * Support RAMDISK/SSD/DFS tiered cache
 * Block cache and Bloom Filters for real-time queries
 * Multi-type table support (RAMDISK/SSD/DISK table)
-* Easy to use C++/Java/Python/REST-ful API
+* Easy to use [C++](doc/en/sdk_guide.md)/[Java](doc/en/sdk_guide_java.md)/[Python](doc/en/sdk_guide_python.md)/[REST-ful](doc/en/sdk_guide_http.md) API
 
 ## Data model
 
@@ -79,7 +79,7 @@ that runs a wide variety of other distributed applications. So Tera can be deplo
 	
 	[teracli](doc/teracli.md)
 	
-	[API](doc/sdk_dev_guide.md)
+	[API](doc/en/sdk_guide.md)
 
 ## Contributing to Tera  
 Contributions are welcomed and greatly appreciated. See [Contributions](doc/contributor.md) for more details.
