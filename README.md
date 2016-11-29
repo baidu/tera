@@ -77,7 +77,7 @@ that runs a wide variety of other distributed applications. So Tera can be deplo
 	
 * __How to access__
 	
-	[teracli](doc/teracli.md)
+	[teracli](doc/en/teracli.md)
 	
 	[API](doc/en/sdk_guide.md)
 
