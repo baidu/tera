@@ -99,19 +99,6 @@ if [ ! -f "${FLAG_DIR}/zookeeper_${ZOOKEEPER_VERSION}" ] \
     touch "${FLAG_DIR}/zookeeper_${ZOOKEEPER_VERSION}"
 fi
 
-# cmake for gflags
-if [ ! -f "${FLAG_DIR}/cmake_${CMAKE_VERSION}" ] \
-    || [ ! -f "${DEPS_PREFIX}/bin/cmake" ]; then
-    wget --no-check-certificate -O CMake-${CMAKE_VERSION}.tar.gz ${CMAKE_URL}
-    tar zxf CMake-${CMAKE_VERSION}.tar.gz --recursive-unlink
-    cd CMake-${CMAKE_VERSION}
-    ./configure --prefix=${DEPS_PREFIX}
-    make -j4
-    make install
-    cd -
-    touch "${FLAG_DIR}/cmake_${CMAKE_VERSION}"
-fi
-
 # gflags
 if [ ! -f "${FLAG_DIR}/gflags_${GFLAGS_VERSION}" ] \
     || [ ! -f "${DEPS_PREFIX}/lib/libgflags.a" ] \

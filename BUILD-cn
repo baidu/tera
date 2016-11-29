@@ -9,8 +9,17 @@ Tera构建手册
 
 操作系统
 * Linux系统
+
+构建工具
+* GCC (4.8.2 or newer)
+  https://gcc.gnu.org/
+* CMake (3.2.x or newer)
+  https://cmake.org/
+* Python (2.7.x only)
+  https://www.python.org/
+
 第三方软件
-* sofa-pbrpc (1.1.0 or newer)
+* sofa-pbrpc (1.1.1 or newer)
   https://github.com/baidu/sofa-pbrpc/
 * Protocol Buffers (2.6.1 or newer)
   https://developers.google.com/protocol-buffers/
@@ -42,10 +51,6 @@ Tera构建手册
   https://cnswww.cns.cwru.edu/php/chet/readline/rltop.html
 * ncurses
   https://www.gnu.org/software/ncurses/
-
-编译上述某些库时需要用到cmake，如果系统中没有预装，也需要自行安装。
-* cmake (3.2.x or newer)
-  https://cmake.org/
 
 编译步骤
 ========

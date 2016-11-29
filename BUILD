@@ -10,8 +10,17 @@ Pre-requisite
 
 Operating System
 * Linux
+
+Build Essential
+* GCC (4.8.2 or newer)
+  https://gcc.gnu.org/
+* CMake (3.2.x or newer)
+  https://cmake.org/
+* Python (2.7.x only)
+  https://www.python.org/
+
 Dependency Overview
-* sofa-pbrpc (1.1.0 or newer)
+* sofa-pbrpc (1.1.1 or newer)
   https://github.com/baidu/sofa-pbrpc/
 * Protocol Buffers (2.6.1 or newer)
   https://developers.google.com/protocol-buffers/
@@ -43,10 +52,6 @@ pre-installed. But if they are not, install them by yourself.
   https://cnswww.cns.cwru.edu/php/chet/readline/rltop.html
 * ncurses
   https://www.gnu.org/software/ncurses/
-
-Some dependencies mentioned above may need cmake to build.
-* cmake (3.2.x or newer)
-  https://cmake.org/
 
 Basic Build
 ===========
