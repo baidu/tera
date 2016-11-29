@@ -14,6 +14,7 @@ RowMutationImpl::RowMutationImpl(TableImpl* table, const std::string& row_key)
       table_(table),
       row_key_(row_key),
       callback_(NULL),
+      user_context_(NULL),
       timeout_ms_(0),
       retry_times_(0),
       finish_(false),
