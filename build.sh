@@ -212,9 +212,8 @@ if [ ! -f "${FLAG_DIR}/nose_${NOSE_VERSION}" ] \
     wget --no-check-certificate -O nose-${NOSE_VERSION}.tar.gz ${NOSE_URL}
     tar zxf nose-${NOSE_VERSION}.tar.gz --recursive-unlink
     cd nose-${NOSE_VERSION}
-    python setup.py build
-    cp -af build/script*/nosetests ${DEPS_PREFIX}/bin
-    cp -arf build/lib/nose ${DEPS_PREFIX}/lib
+    export PYTHONPATH=${DEPS_PREFIX}/lib
+    python setup.py install --prefix=. --install-scripts=${DEPS_PREFIX}/bin --install-lib=${DEPS_PREFIX}/lib
     cd -
     touch "${FLAG_DIR}/nose_${NOSE_VERSION}"
 fi
@@ -240,4 +239,5 @@ sed -i "s:^INS_PREFIX=.*:INS_PREFIX=$DEPS_PREFIX:" depends.mk
 # build tera
 ########################################
 
+make clean
 make -j4

@@ -1,3 +1,3 @@
 #!/bin/bash
 
-sh -$- build.sh baidu
+source ./build.sh baidu
