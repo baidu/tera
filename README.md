@@ -1,6 +1,7 @@
 # Tera - An Internet-Scale Database
 
-[![Build Status](http://220.181.7.231/buildStatus/icon?job=tera_master_build)](http://220.181.7.231/job/tera_master_build/) 
+[![Build Status](https://travis-ci.org/baidu/tera.svg?branch=master)](https://travis-ci.org/baidu/tera)
+[![Coverity Scan Build Status](https://scan.coverity.com/projects/10959/badge.svg)](https://scan.coverity.com/projects/tera)
 
 Copyright 2015, Baidu, Inc.
 
