@@ -281,7 +281,7 @@ public:
 
     void FindTablet(const std::string& server_addr,
                     std::vector<TabletPtr>* tablet_meta_list,
-                    bool all_tables = false);
+                    bool need_disabled_tables);
 
     bool FindTable(const std::string& table_name,
                    std::vector<TabletPtr>* tablet_meta_list,
