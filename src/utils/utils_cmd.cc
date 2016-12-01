@@ -24,8 +24,10 @@ namespace tera {
 namespace utils {
 
 std::string GetBinaryLocationDir() {
-    char exec_full_path[1024] = {'\0'};
-    readlink("/proc/self/exe", exec_full_path, 1024);
+    char exec_full_path[1024];
+    int32_t path_size = readlink("/proc/self/exe", exec_full_path, 1024 - 1);
+    CHECK(path_size > 0);
+    exec_full_path[path_size] = '\0';
     VLOG(5) << "current binary location: " << exec_full_path;
 
     std::string full_dir;

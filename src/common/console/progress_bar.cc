@@ -23,7 +23,9 @@ ProgressBar::ProgressBar(DisplayMode mode,
       unit_(unit),
       char_1_(ch1),
       char_2_(ch2),
-      start_time_(0) {
+      start_time_(0),
+      cur_time_(0),
+      flush_buffer_(NULL) {
     if (bar_length_ <= 0) {
         if (mode_ == BRIEF) {
             bar_length_ = 80;
@@ -39,6 +41,11 @@ ProgressBar::~ProgressBar() {
 }
 
 void ProgressBar::Refresh(int32_t cur_size) {
+    if (start_time_ == 0) {
+        fflush(NULL);
+        start_time_ = time(NULL);
+    }
+
     if (cur_size > total_size_) {
         cur_size = total_size_;
     } else if (cur_size < 0) {
@@ -51,11 +58,6 @@ void ProgressBar::Refresh(int32_t cur_size) {
     }
     cur_time_ = time(NULL);
 
-    if (start_time_ == 0) {
-        fflush(NULL);
-        start_time_ = time(NULL);
-        cur_time_ = start_time_;
-    }
     putchar('\r');
     if (mode_ == BRIEF) {
         FillFlushBufferBrief(cur_size);

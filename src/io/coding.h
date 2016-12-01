@@ -84,7 +84,7 @@ enum UserKeyType {
 };
 
 inline uint64_t PackTimestampAndType(int64_t timestamp, UserKeyType key_type) {
-    uint64_t stamp;
+    uint64_t stamp = 0;
     if (timestamp >= 0) {
         stamp = static_cast<uint64_t>(timestamp);
     }
