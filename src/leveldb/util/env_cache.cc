@@ -716,7 +716,7 @@ private:
 
     Status LoadMissingFromRemote(uint32_t block_no, Slice* result, char* scratch) {
         Slice block_slice;
-        uint64_t offset = block_no * block_size_;
+        uint64_t offset = (uint64_t)block_no * block_size_;
         Status s = hdfs_file_->Read(offset, block_size_, &block_slice, scratch);
         if (s.ok()) {
             *result = Slice(scratch, block_size_);

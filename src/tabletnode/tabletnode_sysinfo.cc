@@ -109,6 +109,7 @@ TabletNodeSysInfo::TabletNodeSysInfo(const TabletNodeInfo& info)
     : info_(info),
       mem_check_ts_(0),
       net_check_ts_(0),
+      io_check_ts_(0),
       net_tx_total_(0),
       net_rx_total_(0),
       cpu_check_ts_(0),

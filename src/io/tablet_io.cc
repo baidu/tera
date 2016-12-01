@@ -71,6 +71,7 @@ namespace io {
 
 TabletIO::TabletIO(const std::string& key_start, const std::string& key_end)
     : async_writer_(NULL),
+      scan_context_manager_(NULL),
       start_key_(key_start),
       end_key_(key_end),
       compact_status_(kTableNotCompact),

@@ -19,7 +19,9 @@ template<class ResponseType>
 class RpcCompactor {
 public:
     RpcCompactor()
-        : last_success_response_(new ResponseType()) {}
+        : last_success_sequence_id_(0),
+          curr_sequence_id_(0),
+          last_success_response_(new ResponseType()) {}
     ~RpcCompactor() {}
 
     bool RpcExceptionHappened(uint64_t request_sequence_id,

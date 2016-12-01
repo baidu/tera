@@ -26,6 +26,8 @@ CFDescImpl::CFDescImpl(const std::string& cf_name,
       max_versions_(1),
       min_versions_(1),
       ttl_(0),
+      acl_(0),
+      owner_(0),
       disk_quota_(-1),
       type_("") {
 }
@@ -101,6 +103,7 @@ LGDescImpl::LGDescImpl(const std::string& lg_name, int32_t id)
       compress_type_(kSnappyCompress),
       store_type_(kInDisk),
       block_size_(FLAGS_tera_tablet_write_block_size),
+      use_bloomfilter_(false),
       use_memtable_on_leveldb_(false),
       memtable_ldb_write_buffer_size_(0),
       memtable_ldb_block_size_(0),
