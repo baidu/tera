@@ -1,14 +1,28 @@
 language: cpp
 compiler: gcc
+env:
+  global:
+    - secure: "EBGwhqHaPbERmOAPA7a1IprZZdFjEZqnuekgkNTBtzmGTaIYuh1BbSNGmVtnj3DuXuqAusiYN6olW2lMax15Fqw3Mwh++vh6DJFQ4wePImCzot7D4fTcopmNS2yoPl0IeyL/sLyQrxjflBfoTzw6DUZAXiU55gGB1faqCAfM5sQ="
 addons:
   apt:
     packages:
       - gdb
       - apport
+  coverity_scan:
+    project:
+      name: "baidu/tera"
+      description: "An Internet-Scale Database."
+    notification_email: tera@users.noreply.github.com
+    build_command_prepend: "make clean"
+    build_command:   "make -j4"
+    branch_pattern: coverity_scan
 
 before_install:
     - ulimit -c unlimited -S
     - ulimit -a
+    - echo -n | openssl s_client -connect scan.coverity.com:443 | 
+      sed -ne '/-BEGIN CERTIFICATE-/,/-END CERTIFICATE-/p' | 
+      sudo tee -a /etc/ssl/certs/ca-
 
 install:
     - bash -x build.sh origin
