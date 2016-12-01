@@ -1122,13 +1122,13 @@ bool TabletManager::FindTablet(const std::string& table_name,
 
 void TabletManager::FindTablet(const std::string& server_addr,
                                std::vector<TabletPtr>* tablet_meta_list,
-                               bool all_tables) {
+                               bool need_disabled_tables) {
     mutex_.Lock();
     TableList::iterator it = all_tables_.begin();
     for (; it != all_tables_.end(); ++it) {
         Table& table = *it->second;
         table.mutex_.Lock();
-        if (table.status_ == kTableDisable && !all_tables) {
+        if (table.status_ == kTableDisable && !need_disabled_tables) {
             VLOG(10) << "FindTablet skip disable table: " << table.name_;
             table.mutex_.Unlock();
             continue;

@@ -1200,7 +1200,9 @@ void MasterImpl::ShowTabletNodes(const ShowTabletNodesRequest* request,
         }
         response->add_tabletnode_info()->CopyFrom(tabletnode->GetInfo());
         std::vector<TabletPtr> tablet_list;
-        tablet_manager_->FindTablet(request->addr(), &tablet_list);
+        tablet_manager_->FindTablet(request->addr(),
+                                    &tablet_list,
+                                    false);  // don't need disabled tables/tablets
         for (size_t i = 0; i < tablet_list.size(); ++i) {
             TabletMeta* meta = response->mutable_tabletmeta_list()->add_meta();
             TabletCounter* counter = response->mutable_tabletmeta_list()->add_counter();
@@ -2118,7 +2120,9 @@ void MasterImpl::TabletNodeRecoveryCallback(std::string addr,
 
     // load offline tablets
     std::vector<TabletPtr> tablet_list;
-    tablet_manager_->FindTablet(addr, &tablet_list);
+    tablet_manager_->FindTablet(addr,
+                                &tablet_list,
+                                true);  // need disabled table/tablets
     std::vector<TabletPtr>::iterator it = tablet_list.begin();
     for (; it != tablet_list.end(); ++it) {
         TabletPtr tablet = *it;
@@ -2149,7 +2153,9 @@ void MasterImpl::DeleteTabletNode(const std::string& tabletnode_addr) {
 
     // move all tablets on the deleted tabletnode
     std::vector<TabletPtr> tablet_list;
-    tablet_manager_->FindTablet(tabletnode_addr, &tablet_list, true);
+    tablet_manager_->FindTablet(tabletnode_addr,
+                                &tablet_list,
+                                true);  // need disabled tables/tablets
     std::vector<TabletPtr>::iterator it;
     for (it = tablet_list.begin(); it != tablet_list.end(); ++it) {
         TabletPtr tablet = *it;
@@ -2200,7 +2206,9 @@ void MasterImpl::DeleteTabletNode(const std::string& tabletnode_addr) {
 
 void MasterImpl::TryMovePendingTablets(std::string tabletnode_addr) {
     std::vector<TabletPtr> tablet_list;
-    tablet_manager_->FindTablet(tabletnode_addr, &tablet_list);
+    tablet_manager_->FindTablet(tabletnode_addr,
+                                &tablet_list,
+                                true);  // need disabled tables/tablets
     std::vector<TabletPtr>::const_iterator it;
     for (it = tablet_list.begin(); it != tablet_list.end(); ++it) {
         TabletPtr tablet = *it;
@@ -3495,7 +3503,9 @@ void MasterImpl::QueryTabletNodeCallback(std::string addr, QueryRequest* request
         // calculate data_size of tabletnode
         // count both Ready/OnLoad and OffLine tablet
         std::vector<TabletPtr> tablet_list;
-        tablet_manager_->FindTablet(addr, &tablet_list);
+        tablet_manager_->FindTablet(addr,
+                                    &tablet_list,
+                                    false);  // don't need disabled tables/tablets
         std::vector<TabletPtr>::iterator it;
         for (it = tablet_list.begin(); it != tablet_list.end(); ++it) {
             TabletPtr tablet = *it;
