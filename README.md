@@ -55,15 +55,15 @@ Tera is built on several pieces of open source infrastructure.
 - __High performance RPC framework__ (required)
 
 	Tera is designed to handle a variety of demanding workloads, which range from throughput-oriented applications to latency-sensitive service. So Tera needs a high performance network programming framework. Now Tera heavily relies on [Sofa-pbrpc](https://github.com/baidu/sofa-pbrpc/) to meet the performance demand.
-	
+
 - __Cluster management system__ (not necessary)
-		
+
 	A Tera cluster in Baidu typically operates in a shared pool of machines
 that runs a wide variety of other distributed applications. So Tera can be deployed in a cluster management system [Galaxy](https://github.com/baidu/galaxy), which uses for scheduling jobs, managing resources on shared machines, dealing with machine failures, and monitoring machine status. Besides, Tera can also be deployed on RAW machine or in Docker container.
 
 ## Documents
 
-* [Developer Doc](doc/README.md)
+* [Developer Doc](doc/en/README.md)
 
 ## Quick start
 * __How to build__
@@ -72,18 +72,18 @@ that runs a wide variety of other distributed applications. So Tera can be deplo
 
 * __How to deploy__
 
-	[Pseudo Distributed Mode](doc/onebox.md)
+	[Pseudo Distributed Mode](doc/en/onebox.md)
 
 	[Build on Docker](example/docker)
-	
+
 * __How to access__
-	
+
 	[teracli](doc/en/teracli.md)
-	
+
 	[API](doc/en/sdk_guide.md)
 
-## Contributing to Tera  
-Contributions are welcomed and greatly appreciated. See [Contributions](doc/contributor.md) for more details.
+## Contributing to Tera
+Contributions are welcomed and greatly appreciated. See [Contributions](doc/en/contributor.md) for more details.
 
 ## Follow us
 To join us, please send resume to {dist-lab, tera_dev, opensearch} at baidu.com.
