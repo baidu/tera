@@ -42,14 +42,14 @@ done
 set -x -e
 
 if ! $run_without_fetch; then
-    if [ -d "$test_dir" ]; then
-        echo "path already exists, please delete it manually before run this script: "$test_dir
-        exit 65
-    fi
+    rm -rf $test_dir
+    mkdir -p $test_dir/bin
+    cp example/onebox/bin/kill_tera.sh $test_dir/bin
+    cp example/onebox/bin/launch_tera.sh $test_dir/bin
+    cp example/onebox/bin/config $test_dir/bin
+    mkdir -p $test_dir/conf
+    cp example/onebox/conf/tera.flag $test_dir/conf
 
-    mkdir -p $test_dir
-
-    cp -r example/onebox/* $test_dir
     cp build/bin/teracli $test_dir/bin
     cp build/bin/tera_main $test_dir/bin
     cp build/bin/tera_test $test_dir/bin
@@ -69,14 +69,15 @@ if $fetch_without_run; then
 fi
 
 cd $test_dir/bin/
-sh kill_tera.sh
-sh launch_tera.sh
+./kill_tera.sh
+./launch_tera.sh
 sleep 2
 
-export PYTHONPATH=$PYTHONPATH:../../../thirdparty/include/; export PATH=$PATH:../../../thirdparty/bin/
+export PYTHONPATH=../../../thirdparty/lib/:$PYTHONPATH
+export PATH=../../../thirdparty/bin/:$PATH
 
 nosetests -s -v -x $case_name > ../log/test.log
 
-sh kill_tera.sh
+./kill_tera.sh
 cd ../../..
 rm -rf $test_dir
