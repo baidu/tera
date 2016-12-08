@@ -2923,7 +2923,7 @@ void MasterImpl::GetSnapshot(const GetSnapshotRequest* request,
     task->task_num = 0;
     task->finish_num = 0;
     task->aborted = false;
-    MutexLock lock(&task->mutex);
+    task->mutex.Lock();
     int64_t snapshot_id = get_micros();
     for (uint32_t i = 0; i < task->tablets.size(); ++i) {
         TabletPtr tablet = task->tablets[i];
@@ -2940,12 +2940,15 @@ void MasterImpl::GetSnapshot(const GetSnapshotRequest* request,
         GetSnapshotAsync(tablet, snapshot_id, 3000, closure);
     }
     if (task->task_num == 0) {
+        task->mutex.Unlock();
+        delete task;
         LOG(WARNING) << "fail to create snapshot: " << request->table_name()
             << ", all tables kTabletNodeOffLine";
         response->set_status(kTabletNodeOffLine);
         done->Run();
         return;
     }
+    task->mutex.Unlock();
 }
 
 void MasterImpl::GetSnapshotAsync(TabletPtr tablet, int64_t snapshot_id, int32_t timeout,
@@ -3124,7 +3127,7 @@ void MasterImpl::GetRollback(const RollbackRequest* request,
     task->task_num = 0;
     task->finish_num = 0;
     task->aborted = false;
-    MutexLock lock(&task->mutex);
+    task->mutex.Lock();
     for (uint32_t i = 0; i < task->tablets.size(); ++i) {
         TabletPtr tablet = task->tablets[i];
         ++task->task_num;
@@ -3133,12 +3136,15 @@ void MasterImpl::GetRollback(const RollbackRequest* request,
         RollbackAsync(tablet, request->snapshot_id(), 3000, closure);
     }
     if (task->task_num == 0) {
+        task->mutex.Unlock();
+        delete task;
         LOG(WARNING) << "fail to rollback to snapshot: " << request->table_name()
             << ", all tables kTabletNodeOffLine";
         response->set_status(kTabletNodeOffLine);
         done->Run();
         return;
     }
+    task->mutex.Unlock();
 }
 
 void MasterImpl::RollbackAsync(TabletPtr tablet, uint64_t snapshot_id,

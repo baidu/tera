@@ -12,10 +12,12 @@
 
 namespace leveldb {
 
+static void* handle = NULL;
+
 Dfs* Dfs::NewDfs(const std::string& so_path, const std::string& conf) {
     dlerror();
     fprintf(stderr, "Open %s\n", so_path.c_str());
-    void* handle = dlopen(so_path.c_str(), RTLD_LAZY | RTLD_LOCAL | RTLD_DEEPBIND);
+    handle = dlopen(so_path.c_str(), RTLD_LAZY | RTLD_LOCAL | RTLD_DEEPBIND);
     const char* err = dlerror();
     if (handle == NULL) {
         fprintf(stderr, "Open %s fail: %s\n", so_path.c_str(), err);

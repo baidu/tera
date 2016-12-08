@@ -42,9 +42,11 @@ static int (*hdfsHSync)(hdfsFS fs, hdfsFile file);
 static tOffset (*hdfsTell)(hdfsFS fs, hdfsFile file);
 static int (*hdfsSeek)(hdfsFS fs, hdfsFile file, tOffset desiredPos);
 
+static void* dl = NULL;
+
 bool Hdfs2::LoadSymbol() {
   dlerror();
-  void* dl = dlopen("libhdfs.so", RTLD_NOW | RTLD_GLOBAL);
+  dl = dlopen("libhdfs.so", RTLD_NOW | RTLD_GLOBAL);
   if (dl == NULL) {
     fprintf(stderr, "dlopen libhdfs.so error: %s\n", dlerror());
     return false;

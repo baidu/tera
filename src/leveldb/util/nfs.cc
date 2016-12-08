@@ -47,6 +47,8 @@ static int (*nfsSeek)(nfs::NFSFILE* stream, uint64_t offset);
 
 static void (*nfsSetAssignNamespaceIdFunc)(nfs::AssignNamespaceIdFunc func);
 
+static void* dl = NULL;
+
 void* ResolveSymbol(void* dl, const char* sym) {
   dlerror();
   void* sym_ptr = dlsym(dl, sym);
@@ -65,7 +67,7 @@ void* ResolveSymbol(void* dl, const char* sym) {
 
 void Nfs::LoadSymbol() {
   dlerror();
-  void* dl = dlopen("libnfs.so", RTLD_NOW | RTLD_LOCAL | RTLD_DEEPBIND);
+  dl = dlopen("libnfs.so", RTLD_NOW | RTLD_LOCAL | RTLD_DEEPBIND);
   if (dl == NULL) {
     fprintf(stderr, "dlopen libnfs.so error: %s\n", dlerror());
     abort();
