@@ -1940,7 +1940,7 @@ void MasterImpl::EnableReleaseCacheTimer() {
     assert(release_cache_timer_id_ == kInvalidTimerId);
     ThreadPool::Task task =
         boost::bind(&MasterImpl::ReleaseCacheWrapper, this);
-    int64_t timeout_period = 1000 *
+    int64_t timeout_period = 1000LL *
         FLAGS_tera_master_cache_release_period;
     release_cache_timer_id_ = thread_pool_->DelayTask(
         timeout_period, task);

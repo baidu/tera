@@ -1723,9 +1723,13 @@ bool TabletManager::RpcChannelHealth(int32_t err_code) {
 }
 
 void TabletManager::TryMajorCompact(Tablet* tablet) {
+    if (!tablet) {
+        VLOG(5) << "TryMajorCompact() tablet is NULL";
+        return;
+    }
     VLOG(5) << "TryMajorCompact() for " << tablet->meta_.path();
     MutexLock lock(&tablet->mutex_);
-    if (!tablet || tablet->meta_.compact_status() != kTableNotCompact) {
+    if (tablet->meta_.compact_status() != kTableNotCompact) {
         return;
     } else {
         tablet->meta_.set_compact_status(kTableOnCompact);

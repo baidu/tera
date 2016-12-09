@@ -199,7 +199,6 @@ private:
 
     scoped_ptr<ThreadPool> thread_pool_;
 
-    RpcCompactor<MergeTabletResponse> merge_rpc_compactor_;
     leveldb::Logger* ldb_logger_;
     leveldb::Cache* ldb_block_cache_;
     leveldb::TableCache* ldb_table_cache_;
