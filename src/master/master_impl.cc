@@ -2168,6 +2168,10 @@ void MasterImpl::DeleteTabletNode(const std::string& tabletnode_addr) {
             ProcessOffLineTablet(tablet);
         }
 
+        if (tablet->GetStatus() == kTableUnLoadFail && tablet->GetMergeParam() != NULL) {
+            MergeTabletUnloadCallback(tablet);
+        }
+
         if (tablet->SetStatusIf(kTableOffLine, kTableLoadFail)
             || tablet->SetStatusIf(kTableOffLine, kTableUnLoadFail)) {
             ProcessOffLineTablet(tablet);
@@ -2671,7 +2675,10 @@ void MasterImpl::UnloadTabletCallback(TabletPtr tablet, int32_t retry,
     TabletNodePtr node;
     if (!tabletnode_manager_->FindTabletNode(server_addr, &node)) {
         LOG(ERROR) << "abort UnloadTablet: server down, " << tablet;
-        if (tablet->SetAddrAndStatusIf("", kTableOffLine, kTableUnLoading)) {
+        if (tablet->GetMergeParam() != NULL) {
+            CHECK(tablet->GetStatus() == kTableUnLoading);
+            MergeTabletUnloadCallback(tablet);
+        } else if (tablet->SetAddrAndStatusIf("", kTableOffLine, kTableUnLoading)) {
             ProcessOffLineTablet(tablet);
             TryLoadTablet(tablet);
         } else if (tablet->SetAddrAndStatusIf("", kTableOffLine, kTableOnLoad)) {
@@ -2700,7 +2707,10 @@ void MasterImpl::UnloadTabletCallback(TabletPtr tablet, int32_t retry,
     if (!failed && (status == kTabletNodeOk || status == kKeyNotInRange)) {
         LOG(INFO) << "unload tablet success, " << tablet;
         tablet_availability_->AddNotReadyTablet(tablet->GetPath());
-        if (tablet->SetStatusIf(kTableOffLine, kTableUnLoading)) {
+        if (tablet->GetMergeParam() != NULL) {
+            CHECK(tablet->GetStatus() == kTableUnLoading);
+            MergeTabletUnloadCallback(tablet);
+        } else if (tablet->SetStatusIf(kTableOffLine, kTableUnLoading)) {
             ProcessOffLineTablet(tablet);
             // unload success, try load
             TryLoadTablet(tablet);
@@ -4020,10 +4030,16 @@ void MasterImpl::MergeTabletAsync(TabletPtr tablet_p1, TabletPtr tablet_p2) {
     if (tablet_p1->SetStatusIf(kTableUnLoading, kTableReady) &&
         tablet_p2->SetStatusIf(kTableUnLoading, kTableReady)) {
         MutexPtr mu(new Mutex());
+        MergeParam* param1 = new MergeParam(mu, tablet_p2);
+        MergeParam* param2 = new MergeParam(mu, tablet_p1);
+        tablet_p1->SetMergeParam(param1);
+        tablet_p2->SetMergeParam(param2);
         UnloadClosure* done1 =
-            NewClosure(this, &MasterImpl::MergeTabletUnloadCallback, tablet_p1, tablet_p2, mu);
+            NewClosure(this, &MasterImpl::UnloadTabletCallback, tablet_p1,
+                       FLAGS_tera_master_impl_retry_times);
         UnloadClosure* done2 =
-            NewClosure(this, &MasterImpl::MergeTabletUnloadCallback, tablet_p2, tablet_p1, mu);
+            NewClosure(this, &MasterImpl::UnloadTabletCallback, tablet_p2,
+                       FLAGS_tera_master_impl_retry_times);
         UnloadTabletAsync(tablet_p1, done1);
         UnloadTabletAsync(tablet_p2, done2);
     } else {
@@ -4125,86 +4141,28 @@ void MasterImpl::MergeTabletAsyncPhase2(TabletPtr tablet_p1, TabletPtr tablet_p2
     meta_node_client.WriteTablet(request, response, done);
 }
 
-void MasterImpl::MergeTabletUnloadCallback(TabletPtr tablet, TabletPtr tablet2,
-                                           MutexPtr mutex,
-                                           UnloadTabletRequest* request,
-                                           UnloadTabletResponse* response,
-                                           bool failed, int error_code) {
-    MutexLock(mutex.get());
-    CHECK(tablet->GetStatus() == kTableUnLoading);
-    StatusCode status = response->status();
-    delete request;
-    delete response;
+void MasterImpl::MergeTabletUnloadCallback(TabletPtr tablet) {
+    MergeParam* merge_param = (MergeParam*)tablet->GetMergeParam();
+    CHECK_NOTNULL(merge_param);
+    MutexPtr mutex = merge_param->mutex;
+    TabletPtr tablet2 = merge_param->counter_part;
+    delete merge_param;
+    tablet->SetMergeParam(NULL);
 
-    // tablet server addr may change later, so copy one
-    std::string server_addr = tablet->GetServerAddr();
+    MutexLock l(mutex.get());
+    CHECK(tablet->GetStatus() == kTableUnLoading
+          || tablet->GetStatus() == kTableUnLoadFail);
 
-    // server down, reload the other tablet
-    TabletNodePtr node;
-    if (!tabletnode_manager_->FindTabletNode(server_addr, &node)) {
-        LOG(ERROR) << "[merge] abort UnloadTablet: server down, " << tablet;
-        tablet->SetAddrAndStatusIf("", kTableOffLine, kTableUnLoading);
-        ProcessOffLineTablet(tablet);
-        TryLoadTablet(tablet);
-        if (tablet2->GetStatus() == kTableOnMerge) {
-            LOG(WARNING) << "[merge] tablet2 unload succ, reload it: " << tablet2;
-            tablet2->SetStatusIf(kTableOffLine, kTableOnMerge);
-            ProcessOffLineTablet(tablet2);
-            TryLoadTablet(tablet2);
-        } else if (tablet2->GetStatus() == kTableUnLoading) {
-            LOG(WARNING) << "[merge] tablet2 still unloading: " << tablet2;
-        } else {
-            LOG(WARNING) << "[merge] tablet2 unloading failed: " << tablet2;
-        }
-        return;
-    }
-
-    // unload success
-    if (!failed && (status == kTabletNodeOk || status == kKeyNotInRange)) {
-        LOG(INFO) << "[merge] unload tablet success, " << tablet;
-        CHECK(tablet->SetStatusIf(kTableOnMerge, kTableUnLoading))
-            << "[merge] tablet status not unloading";
-        if (tablet2->GetStatus() == kTableOnMerge) {
-            LOG(INFO) << "[merge] tablet2 unload succ, continue merge: " << tablet2;
-            MergeTabletAsyncPhase2(tablet, tablet2);
-        } else if (tablet2->GetStatus() == kTableUnLoading) {
-            // the other tablet have not unload, do nothing
-            LOG(INFO) << "[merge] tablet2 still unloading: " << tablet2;
-        } else {
-            LOG(WARNING) << "[merge] tablet2 unloading failed: " << tablet2;
-            tablet->SetStatusIf(kTableOffLine, kTableOnMerge);
-            ProcessOffLineTablet(tablet);
-            TryLoadTablet(tablet);
-        }
-        return;
-    }
-
-    // unload failed, merge failed
-    if (failed) {
-        LOG(WARNING) << "[merge] fail to unload tablet: "
-            << sofa::pbrpc::RpcErrorCodeToString(error_code) << ", " << tablet;
-    } else {
-        LOG(WARNING) << "[merge] fail to unload tablet: " << StatusCodeToString(status)
-            << ", " << tablet;
-    }
-
-    // retry unload tablet1
-    ThreadPool::Task task =
-        boost::bind(&MasterImpl::RetryUnloadTablet, this,
-                    tablet, FLAGS_tera_master_impl_retry_times - 1);
-    thread_pool_->DelayTask(
-        FLAGS_tera_master_control_tabletnode_retry_period, task);
+    LOG(INFO) << "[merge] unload tablet finish, " << tablet;
+    tablet->SetStatus(kTableOnMerge);
 
     if (tablet2->GetStatus() == kTableOnMerge) {
-        LOG(INFO) << "[merge] tablet2 unload succ, reload it: " << tablet2;
-        tablet2->SetStatusIf(kTableOffLine, kTableOnMerge);
-        ProcessOffLineTablet(tablet2);
-        TryLoadTablet(tablet2);
-    } else if (tablet2->GetStatus() == kTableUnLoading) {
-        // the other tablet have not unload, do nothing
-        LOG(INFO) << "[merge] tablet2 still unloading: " << tablet2;
+        LOG(INFO) << "[merge] tablet2 unload finish, continue merge: " << tablet2;
+        MergeTabletAsyncPhase2(tablet, tablet2);
     } else {
-        LOG(WARNING) << "[merge] tablet2 unloading failed, do nothing " << tablet2;
+        CHECK(tablet2->GetStatus() == kTableUnLoading
+              || tablet2->GetStatus() == kTableUnLoadFail);
+        LOG(INFO) << "[merge] tablet2 still unloading: " << tablet2;
     }
 }
 
