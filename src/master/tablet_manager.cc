@@ -62,13 +62,15 @@ std::ostream& operator << (std::ostream& o, const TabletPtr& tablet) {
 Tablet::Tablet(const TabletMeta& meta)
     : meta_(meta),
       update_time_(common::timer::get_micros()),
-      load_time_(std::numeric_limits<int64_t>::max()) {}
+      load_time_(std::numeric_limits<int64_t>::max()),
+      merge_param_(NULL) {}
 
 Tablet::Tablet(const TabletMeta& meta, TablePtr table)
     : meta_(meta),
       table_(table),
       update_time_(common::timer::get_micros()),
-      load_time_(std::numeric_limits<int64_t>::max()) {}
+      load_time_(std::numeric_limits<int64_t>::max()),
+      merge_param_(NULL) {}
 
 Tablet::~Tablet() {
     table_.reset();
@@ -437,6 +439,16 @@ void Tablet::ToMetaTableKeyValue(std::string* packed_key,
     MakeMetaTableKeyValue(meta_, packed_key, packed_value);
 }
 
+void* Tablet::GetMergeParam() {
+    MutexLock lock(&mutex_);
+    return merge_param_;
+}
+
+void Tablet::SetMergeParam(void* merge_param) {
+    MutexLock lock(&mutex_);
+    merge_param_ = merge_param;
+}
+
 bool Tablet::CheckStatusSwitch(TabletStatus old_status,
                                TabletStatus new_status) {
     switch (old_status) {
@@ -513,7 +525,8 @@ bool Tablet::CheckStatusSwitch(TabletStatus old_status,
         }
         break;
     case kTableUnLoadFail:
-        if (new_status == kTableOffLine) {        // tabletnode is killed, ready to load
+        if (new_status == kTableOffLine           // tabletnode is killed, ready to load
+            || new_status == kTableOnMerge) {     // tabletnode is killed, ready to merge phase2
             return true;
         }
         break;
