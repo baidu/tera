@@ -67,7 +67,7 @@ public:
     };
 
     MasterImpl();
-    ~MasterImpl();
+    virtual ~MasterImpl();
 
     bool Init();
 
@@ -221,6 +221,12 @@ private:
         bool aborted;
     };
 
+    struct MergeParam {
+        MutexPtr mutex;
+        TabletPtr counter_part;
+        MergeParam(MutexPtr mu, TabletPtr tb) : mutex(mu), counter_part(tb) {}
+    };
+
     void SafeModeCmdCtrl(const CmdCtrlRequest* request,
                          CmdCtrlResponse* response);
     void ReloadConfig(CmdCtrlResponse* response);
@@ -363,12 +369,8 @@ private:
                              int error_code);
 
     void MergeTabletAsync(TabletPtr tablet_p1, TabletPtr tablet_p2);
-    void MergeTabletAsyncPhase2(TabletPtr tablet_p1, TabletPtr tablet_p2);
-    void MergeTabletUnloadCallback(TabletPtr tablet, TabletPtr tablet2,
-                                   MutexPtr mutex,
-                                   UnloadTabletRequest* request,
-                                   UnloadTabletResponse* response,
-                                   bool failed, int error_code);
+    virtual void MergeTabletAsyncPhase2(TabletPtr tablet_p1, TabletPtr tablet_p2);
+    void MergeTabletUnloadCallback(TabletPtr tablet);
     void MergeTabletWriteMetaCallback(TabletMeta new_meta, TabletPtr tablet_p1,
                                       TabletPtr tablet_p2, int32_t retry_times,
                                       WriteTabletRequest* request,
