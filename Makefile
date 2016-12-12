@@ -41,6 +41,9 @@ MONITOR_SRC := src/monitor/teramo_main.cc
 MARK_SRC := src/benchmark/mark.cc src/benchmark/mark_main.cc
 TEST_SRC := src/utils/test/prop_tree_test.cc src/utils/test/tprinter_test.cc \
             src/io/test/tablet_io_test.cc src/io/test/tablet_scanner_test.cc
+SEEKONE_SRC := src/tool/seekone.cc
+SEEKSIGN_SRC := src/tool/seeksign.cc
+MULTISEEK_SRC := src/tool/multiseek.cc
 
 TEST_OUTPUT := test_output
 UNITTEST_OUTPUT := $(TEST_OUTPUT)/unittest
@@ -61,9 +64,13 @@ MONITOR_OBJ := $(MONITOR_SRC:.cc=.o)
 MARK_OBJ := $(MARK_SRC:.cc=.o)
 HTTP_OBJ := $(HTTP_SRC:.cc=.o)
 TEST_OBJ := $(TEST_SRC:.cc=.o)
+SEEKONE_OBJ := $(SEEKONE_SRC:.cc=.o)
+SEEKSIGN_OBJ := $(SEEKSIGN_SRC:.cc=.o)
+MULTISEEK_OBJ := $(MULTISEEK_SRC:.cc=.o)
 ALL_OBJ := $(MASTER_OBJ) $(TABLETNODE_OBJ) $(IO_OBJ) $(SDK_OBJ) $(PROTO_OBJ) \
            $(JNI_TERA_OBJ) $(OTHER_OBJ) $(COMMON_OBJ) $(SERVER_OBJ) $(CLIENT_OBJ) \
-           $(TEST_CLIENT_OBJ) $(TERA_C_OBJ) $(MONITOR_OBJ) $(MARK_OBJ) $(TEST_OBJ)
+           $(TEST_CLIENT_OBJ) $(TERA_C_OBJ) $(MONITOR_OBJ) $(MARK_OBJ) $(TEST_OBJ) \
+           $(SEEKONE_OBJ) $(SEEKSIGN_OBJ) $(MULTISEEK_OBJ)
 LEVELDB_LIB := src/leveldb/libleveldb.a
 
 PROGRAM = tera_main teracli teramo tera_test
@@ -74,10 +81,11 @@ JNILIBRARY = libjni_tera.so
 BENCHMARK = tera_bench tera_mark
 TESTS = prop_tree_test tprinter_test string_util_test tablet_io_test \
         tablet_scanner_test fragment_test progress_bar_test
+TOOL = seekone seeksign multiseek
 
 .PHONY: all clean cleanall test
 
-all: $(PROGRAM) $(LIBRARY) $(SOLIBRARY) $(TERA_C_SO) $(JNILIBRARY) $(BENCHMARK)
+all: $(PROGRAM) $(LIBRARY) $(SOLIBRARY) $(TERA_C_SO) $(JNILIBRARY) $(BENCHMARK) $(TOOL)
 	mkdir -p build/include build/lib build/bin build/log build/benchmark
 	cp $(PROGRAM) build/bin
 	cp $(LIBRARY) $(SOLIBRARY) $(TERA_C_SO) $(JNILIBRARY) build/lib
@@ -102,7 +110,7 @@ check: test
 clean:
 	rm -rf $(ALL_OBJ) $(PROTO_OUT_CC) $(PROTO_OUT_H) $(TEST_OUTPUT)
 	$(MAKE) clean -C src/leveldb
-	rm -rf $(PROGRAM) $(LIBRARY) $(SOLIBRARY) $(TERA_C_SO) $(JNILIBRARY) $(BENCHMARK) $(TESTS) terahttp
+	rm -rf $(PROGRAM) $(LIBRARY) $(SOLIBRARY) $(TERA_C_SO) $(JNILIBRARY) $(BENCHMARK) $(TESTS) $(TOOL) terahttp
 
 cleanall:
 	$(MAKE) clean
@@ -166,6 +174,15 @@ progress_bar_test: src/common/console/progress_bar_test.o src/common/console/pro
 
 tablet_scanner_test: src/io/test/tablet_scanner_test.o src/tabletnode/tabletnode_sysinfo.o \
                      $(IO_OBJ) $(PROTO_OBJ) $(OTHER_OBJ) $(COMMON_OBJ) $(LEVELDB_LIB)
+	$(CXX) -o $@ $^ $(LDFLAGS)
+
+seekone: src/tool/seekone.o $(LIBRARY)
+	$(CXX) -o $@ $^ $(LDFLAGS)
+
+seeksign: src/tool/seeksign.o $(LIBRARY)
+	$(CXX) -o $@ $^ $(LDFLAGS)
+
+multiseek: src/tool/multiseek.o $(LIBRARY)
 	$(CXX) -o $@ $^ $(LDFLAGS)
 
 $(ALL_OBJ): %.o: %.cc $(PROTO_OUT_H)
