@@ -46,7 +46,39 @@ class VersionEdit {
   ~VersionEdit() { }
 
   void Clear();
+  void ClearFile();
 
+  void SetBaseSnapshot() {
+    if (has_base_snapshot_) {
+      return;
+    }
+    assert(has_prepare_create_snapshot_);
+    has_prepare_create_snapshot_ = false;
+    has_base_snapshot_ = true;
+    base_snapshot_.name = prepare_create_snapshot_.name;
+    base_snapshot_.timestamp = prepare_create_snapshot_.timestamp;
+  }
+  void SetBaseSnapshot(const Slice& name, int64_t timestamp) {
+    has_prepare_create_snapshot_ = false;
+    has_base_snapshot_ = true;
+    base_snapshot_.name = name.ToString();
+    base_snapshot_.timestamp = timestamp;
+  }
+  void SetPrepareCreateSnapshot(const Slice& name, int64_t timestamp) {
+    has_prepare_create_snapshot_ = true;
+    prepare_create_snapshot_.name = name.ToString();
+    prepare_create_snapshot_.timestamp = timestamp;
+  }
+  void SetCommitCreateSnapshot(const Slice& name, int64_t timestamp) {
+    has_commit_create_snapshot_ = true;
+    commit_create_snapshot_.name = name.ToString();
+    commit_create_snapshot_.timestamp = timestamp;
+  }
+  void SetRollbackCreateSnapshot(const Slice& name, int64_t timestamp) {
+    has_rollback_create_snapshot_ = true;
+    rollback_create_snapshot_.name = name.ToString();
+    rollback_create_snapshot_.timestamp = timestamp;
+  }
   void SetComparatorName(const Slice& name) {
     has_comparator_ = true;
     comparator_ = name.ToString();
@@ -77,6 +109,9 @@ class VersionEdit {
   uint64_t GetLogNumber() const {
     return log_number_;
   }
+  uint64_t GetPrevLogNumber() const {
+    return prev_log_number_;
+  }
   uint64_t GetNextFileNumber() const {
     return next_file_number_;
   }
@@ -93,9 +128,13 @@ class VersionEdit {
   bool HasLogNumber() const {
     return has_log_number_;
   }
+  bool HasPrevLogNumber() const {
+    return has_prev_log_number_;
+  }
   bool HasComparator() const {
     return has_comparator_;
   }
+  bool HasCompactPointer(int level);
   bool HasFiles(std::vector<uint64_t>* deleted_files,
                 std::vector<uint64_t>* added_files) {
       bool has_files = deleted_files_.size() > 0
@@ -114,6 +153,18 @@ class VersionEdit {
     //    }
     //  }
       return has_files;
+  }
+  bool HasPrepareCreateSnapshot() {
+    return has_prepare_create_snapshot_;
+  }
+  bool HasCommitCreateSnapshot() {
+    return has_commit_create_snapshot_;
+  }
+  bool HasRollbackCreateSnapshot() {
+    return has_rollback_create_snapshot_;
+  }
+  bool HasBaseSnapshot() {
+    return has_base_snapshot_;
   }
 
   void ModifyForMerge(std::map<uint64_t, uint64_t> num_map) {
@@ -191,6 +242,21 @@ class VersionEdit {
   bool has_prev_log_number_;
   bool has_next_file_number_;
   bool has_last_sequence_;
+
+  // version snapshot impl
+  bool has_prepare_create_snapshot_;
+  bool has_commit_create_snapshot_;
+  bool has_rollback_create_snapshot_;
+  bool has_base_snapshot_;
+
+  struct SnapshotEdit {
+    std::string name;
+    int64_t timestamp;
+  };
+  SnapshotEdit prepare_create_snapshot_;
+  SnapshotEdit commit_create_snapshot_;
+  SnapshotEdit rollback_create_snapshot_;
+  SnapshotEdit base_snapshot_;
 
   std::vector< std::pair<int, InternalKey> > compact_pointers_;
 

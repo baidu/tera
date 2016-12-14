@@ -305,6 +305,12 @@ class VersionSet {
 
   bool ModifyFileSize(FileMetaData* f);
 
+  // version snapshot impl
+  void CreateVersionSnapshot(VersionEdit* edit, Version* v);
+  void MergeVersionEdit(VersionEdit* dest, VersionEdit* src);
+  void InstallVersionSnapshot(Version* v, VersionEdit* edit);
+  void ReleaseVersionSnapshot();
+
   Env* const env_;
   const std::string dbname_;
   const Options* const options_;
@@ -325,6 +331,10 @@ class VersionSet {
   log::Writer* descriptor_log_;
   Version dummy_versions_;  // Head of circular doubly-linked list of versions.
   Version* current_;        // == dummy_versions_.prev_
+
+  // version snapshot impl
+  std::map<std::string, std::pair<Version*, std::string> > version_snapshot_prepare_;
+  std::map<std::string, std::pair<Version*, std::string> > version_snapshot_;
 
   // Per-level key at which the next compaction at that level should start.
   // Either an empty string, or a valid InternalKey.

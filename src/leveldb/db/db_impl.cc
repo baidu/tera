@@ -579,7 +579,8 @@ Status DBImpl::WriteLevel0Table(MemTable* mem, VersionEdit* edit,
   return s;
 }
 
-Status DBImpl::CompactMemTable() {
+// dump memtable and snapshot
+Status DBImpl::CompactMemTable(Snapshot* snapshot) {
   mutex_.AssertHeld();
   assert(imm_ != NULL);
 
@@ -600,6 +601,9 @@ Status DBImpl::CompactMemTable() {
     edit.SetLogNumber(logfile_number_);  // Earlier logs no longer needed
     if (imm_->GetLastSequence()) {
       edit.SetLastSequence(imm_->GetLastSequence());
+    }
+    if (snapshot) {
+      edit.SetPrepareCreateSnapshot(snapshot->name, snapshot->timestamp);
     }
     Log(options_.info_log, "[%s] CompactMemTable SetLastSequence %lu",
         dbname_.c_str(), edit.GetLastSequence());
@@ -688,6 +692,69 @@ Status DBImpl::TEST_CompactMemTable() {
   }
   return s;
 }
+
+// impl snapshot
+Status DBImpl::ShowSanpshot(std::vector<Snapshot*>* snapshot_list = NULL);
+Status DBImpl::ShowAllSanpshot(std::vector<Snapshot*>* snapshot_list = NULL);
+
+Status DBImpl::PrepareCheckoutSanpshot(Snapshot* dest_snapshot, Snapshot* src_snapshot);
+Status DBImpl::CommitCheckoutSanpshot(Snapshot* dest_snapshot, Snapshot* src_snapshot);
+Status DBImpl::RollbackCheckoutSanpshot(Snapshot* dest_snapshot, Snapshot* src_snapshot);
+
+Status DBImpl::PrepareCreateSanpshot(Snapshot* snapshot) {
+  assert(snapshot);
+  MutexLock l(&mutex_);
+
+  Status s;
+  Log(options_.info_log, "[%s] prepare create snapshot, dump mem table", dbname_.c_str());
+  if (!snapshot->dump_mem_on_snapshot) {
+    VersionEdit edit;
+    edit.SetPrepareCreateSnapshot(snapshot->name, snapshot->timestamp);
+    s = versions_->LogAndApply(&edit, &mutex_);
+    return s;
+  }
+
+  if (imm_ != NULL) {
+    s = CompactMemTable();
+  }
+  if (s.ok()) {
+    assert(imm_ == NULL);
+    while (is_writting_mem_) {
+      writting_mem_cv_.Wait();
+    }
+    imm_ = mem_;
+    has_imm_.Release_Store(imm_);
+    mem_ = NewMemTable();
+    mem_->Ref();
+    bound_log_size_ = 0;
+    s = CompactMemTable(snapshot);
+  }
+  return s;
+}
+Status DBImpl::CommitCreateSanpshot(Snapshot* snapshot) {
+  assert(snapshot);
+  MutexLock l(&mutex_);
+  Status s;
+
+  VersionEdit edit;
+  edit.SetCommitCreateSnapshot(snapshot->name, snapshot->timestamp);
+  s = versions_->LogAndApply(&edit, &mutex_);
+  return s;
+}
+Status DBImpl::RollbackCreateSanpshot(Snapshot* snapshot) {
+  assert(snapshot);
+  MutexLock l(&mutex_);
+  Status s;
+
+  VersionEdit edit;
+  edit.SetRollbackCreateSnapshot(snapshot->name, snapshot->timestamp);
+  s = versions_->LogAndApply(&edit, &mutex_);
+  return s;
+}
+
+Status DBImpl::PrepareDeleteSanpshot(Snapshot* snapshot);
+Status DBImpl::CommitDeleteSanpshot(Snapshot* snapshot);
+Status DBImpl::RollbackDeleteSanpshot(Snapshot* snapshot);
 
 // tera-specific
 
@@ -1482,7 +1549,6 @@ Status DBImpl::Write(const WriteOptions& options, WriteBatch* my_batch) {
   if (w.done) {
     return w.status;
   }
-
 
   // May temporarily unlock and wait.
   Status status = MakeRoomForWrite(my_batch == NULL);

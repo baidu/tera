@@ -28,7 +28,13 @@ enum Tag {
   kPrevLogNumber        = 9,
   kNewFile              = 10,
   kDeletedFile          = 11,
-  // no more than 4096
+
+  kPrepareCreateSnapshot    = 12,
+  kCommitCreateSnapshot     = 13,
+  kRollbackCreateSnapshot   = 14,
+  kBaseSnapshot             = 15,
+
+  // no more than 100w
   kMaxTag               = 1 << 20,
 };
 
@@ -43,10 +49,28 @@ void VersionEdit::Clear() {
   has_prev_log_number_ = false;
   has_next_file_number_ = false;
   has_last_sequence_ = false;
+
+  has_prepare_create_snapshot_    = false;
+  has_commit_create_snapshot_     = false;
+  has_rollback_create_snapshot_   = false;
+  has_base_snapshot_              = false;
+
   deleted_files_.clear();
   new_files_.clear();
 }
+void VersionEdit::ClearFile() {
+  new_files_.clear();
+  deleted_files_.clear();
+}
 
+bool VersionEdit::HasCompactPointer(int level) {
+  for (size_t i = 0; i < compact_pointers_.size(); i++) {
+    if (compact_pointers_[i].first == level) {
+      return true;
+    }
+  }
+  return false;
+}
 void VersionEdit::EncodeTo(std::string* dst) const {
   if (has_comparator_) {
     std::string str;
@@ -134,6 +158,44 @@ void VersionEdit::EncodeTo(std::string* dst) const {
 
     PutVarint32(dst, str.size() + kMaxTag);
     PutVarint32(dst, kNewFile);
+    dst->append(str.data(), str.size());
+  }
+
+  // use 2pc impl snapshot create
+  if (has_prepare_create_snapshot_) {
+    std::string str;
+    PutLengthPrefixedSlice(&str, prepare_create_snapshot_.name);
+    PutVarint64(&str, prepare_create_snapshot_.timestamp);
+
+    PutVarint32(dst, str.size() + kMaxTag);
+    PutVarint32(dst, kPrepareCreateSnapshot);
+    dst->append(str.data(), str.size());
+  }
+  if (has_commit_create_snapshot_) {
+    std::string str;
+    PutLengthPrefixedSlice(&str, commit_create_snapshot_.name);
+    PutVarint64(&str, commit_create_snapshot_.timestamp);
+
+    PutVarint32(dst, str.size() + kMaxTag);
+    PutVarint32(dst, kCommitCreateSnapshot);
+    dst->append(str.data(), str.size());
+  } else if (has_rollback_create_snapshot_) {
+    std::string str;
+    PutLengthPrefixedSlice(&str, rollback_create_snapshot_.name);
+    PutVarint64(&str, rollback_create_snapshot_.timestamp);
+
+    PutVarint32(dst, str.size() + kMaxTag);
+    PutVarint32(dst, kRollbackCreateSnapshot);
+    dst->append(str.data(), str.size());
+  }
+
+  if (has_base_snapshot_) {
+    std::string str;
+    PutLengthPrefixedSlice(&str, base_snapshot_.name);
+    PutVarint64(&str, base_snapshot_.timestamp);
+
+    PutVarint32(dst, str.size() + kMaxTag);
+    PutVarint32(dst, kBaseSnapshot);
     dst->append(str.data(), str.size());
   }
 }
@@ -289,6 +351,34 @@ Status VersionEdit::DecodeFrom(const Slice& src) {
         } else {
           msg = "deleted file";
         }
+        break;
+
+      case kPrepareCreateSnapshot:
+        has_prepare_create_snapshot_ = true;
+        GetLengthPrefixedSlice(&input, &str);
+        prepare_create_snapshot_.name = str.ToString();
+        GetVarint64(&input, &prepare_create_snapshot_.timestamp);
+        break;
+
+      case kCommitCreateSnapshot:
+        has_commit_create_snapshot_ = true;
+        GetLengthPrefixedSlice(&input, &str);
+        commit_create_snapshot_.name = str.ToString();
+        GetVarint64(&input, &commit_create_snapshot_.timestamp);
+        break;
+
+      case kRollbackCreateSnapshot:
+        has_rollback_create_snapshot_ = true;
+        GetLengthPrefixedSlice(&input, &str);
+        rollback_create_snapshot_.name = str.ToString();
+        GetVarint64(&input, &rollback_create_snapshot_.timestamp);
+        break;
+
+      case kBaseSnapshot:
+        has_base_snapshot_ = true;
+        GetLengthPrefixedSlice(&input, &str);
+        base_snapshot_.name = str.ToString();
+        GetVarint64(&input, &base_snapshot_.timestamp);
         break;
 
       default: // tag not know, skip it.
