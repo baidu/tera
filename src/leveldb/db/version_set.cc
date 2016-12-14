@@ -1051,7 +1051,16 @@ void VersionSet::InstallVersionSnapshot(Version* v, VersionEdit* edit) {
   }
 }
 
-// dump version and snapshot
+// multi thread safe
+// Information kept for every waiting manifest writer
+struct VersionSet::ManifestWriter {
+  Status status;
+  VersionEdit* edit;
+  bool done;
+  port::CondVar cv;
+
+  explicit ManifestWriter(port::Mutex* mu) : done(false), cv(mu) { }
+};
 Status VersionSet::LogAndApply(VersionEdit* edit, port::Mutex* mu) {
   if (edit->has_log_number_) {
     assert(edit->log_number_ >= log_number_);
@@ -1074,6 +1083,17 @@ Status VersionSet::LogAndApply(VersionEdit* edit, port::Mutex* mu) {
     edit->SetLastSequence(last_sequence_);
   }
 
+  mu->AssertHeld();
+  // multi write control, do not batch edit write, but multi thread safety
+  ManifestWriter w(mu);
+  w.edit = edit;
+  manifest_writers_.push_back(&w);
+  while (!w.done && &w != manifest_writers_.front()) {
+    w.cv.Wait();
+  }
+  assert(manifest_writers_.front() == &w);
+
+  // first manifest writer, batch edit
   Version* v = new Version(this);
   {
     VersionSetBuilder builder(this, current_);
@@ -1189,6 +1209,11 @@ Status VersionSet::LogAndApply(VersionEdit* edit, port::Mutex* mu) {
     Log(options_->info_log, "[%s][dfs error] set force_switch_manifest", dbname_.c_str());
   }
 
+  // TODO: batch write manifest finish, no need
+  manifest_writers_.pop_front();
+  if (!manifest_writers_.empty()) {
+    manifest_writers_.front()->cv.Signal();
+  }
   return s;
 }
 

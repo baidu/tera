@@ -710,7 +710,7 @@ Status DBImpl::PrepareCreateSanpshot(Snapshot* snapshot) {
   if (!snapshot->dump_mem_on_snapshot) {
     VersionEdit edit;
     edit.SetPrepareCreateSnapshot(snapshot->name, snapshot->timestamp);
-    s = versions_->LogAndApply(&edit, &mutex_);
+    s = versions_->LogAndApply(&edit, &mutex_); // multi-thread safe
     return s;
   }
 
