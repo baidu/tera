@@ -1175,7 +1175,7 @@ static int SpecifiedFlagfileCount(const std::string& confpath) {
     if (!confpath.empty()) {
         count++;
     }
-    if (!FLAGS_tera_sdk_conf_file.empty()) {
+    if (!FLAGS_tera_sdk_conf_file.empty() && confpath != FLAGS_tera_sdk_conf_file) {
         count++;
     }
     return count;
