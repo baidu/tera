@@ -221,7 +221,8 @@ void TabletNodeImpl::LoadTablet(const LoadTabletRequest* request,
     response->set_sequence_id(request->sequence_id());
     std::string sid = GetSessionId();
     if (!request->has_session_id() ||
-        request->session_id() != sid) {
+        (sid.size() == 0) ||
+        request->session_id().compare(0, sid.size(), sid) != 0) {
         LOG(WARNING) << "load session id not match: tablet " << request->path()
            << ", session_id " << request->session_id() << ", ts_id " << sid;
         response->set_status(kIllegalAccess);
