@@ -13,8 +13,8 @@
 >     * Read
 >     * Write
 >     * Scan
->  3. [Java SDK](../sdk_dev_guide_for_java.md)
->  4. [Python SDK](../sdk_dev_guide_for_python.md)
+>  3. [Java SDK](sdk_guide_java.md)
+>  4. [Python SDK](sdk_guide_python.md)
 
 <a name="interfaces"></a>
 ## 1. Interfaces
