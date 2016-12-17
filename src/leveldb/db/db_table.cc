@@ -26,6 +26,7 @@
 #include "leveldb/table_utils.h"
 #include "table/merger.h"
 #include "util/string_ext.h"
+#include "../common/timer.h"
 
 namespace leveldb {
 
@@ -250,6 +251,7 @@ Status DBTable::Init() {
             if (last_sequence_ < last_seq) {
                 last_sequence_ = last_seq;
             }
+            last_timestamp_ = last_sequence_;
         } else {
             Log(options_.info_log, "[%s] fail to recover lg %d", dbname_.c_str(), i);
             break;
@@ -317,7 +319,7 @@ Status DBTable::Init() {
     }
 
     if (s.ok() && !options_.disable_wal) {
-        std::string log_file_name = LogHexFileName(dbname_, last_sequence_ + 1);
+        std::string log_file_name = LogHexFileName(dbname_, GetNewSequenceNumber());
         s = options_.env->NewWritableFile(log_file_name, &logfile_);
         if (s.ok()) {
             //Log(options_.info_log, "[%s] open logfile %s",
@@ -403,9 +405,11 @@ Status DBTable::Write(const WriteOptions& options, WriteBatch* my_batch) {
 
     RecordWriter* last_writer = &w;
     WriteBatch* updates = NULL;
+    SequenceNumber batch_seq = GetNewSequenceNumber();
     if (s.ok()) {
         updates = GroupWriteBatch(&last_writer);
-        WriteBatchInternal::SetSequence(updates, last_sequence_ + 1);
+        Log(options_.info_log, "[%s] LL: set sequence to: %lu", dbname_.c_str(), batch_seq);
+        WriteBatchInternal::SetSequence(updates, batch_seq);
     }
 
     if (s.ok() && !options_.disable_wal && !options.disable_wal) {
@@ -415,6 +419,8 @@ Status DBTable::Write(const WriteOptions& options, WriteBatch* my_batch) {
                 s = Status::IOError(dbname_ + ": fail to open log: ", s.ToString());
             } else {
                 force_switch_log_ = false;
+                // after SwitchLog, set current batch's seq to log number
+                WriteBatchInternal::SetSequence(updates, last_sequence_);
             }
             mutex_.Lock();
         }
@@ -436,6 +442,8 @@ Status DBTable::Write(const WriteOptions& options, WriteBatch* my_batch) {
                     dbname_.c_str(), current_log_size_, slice.size(), wait_sec);
                 int ret = SwitchLog(true);
                 if (ret == 0) {
+                    // after SwitchLog, set current batch's seq to log number
+                    WriteBatchInternal::SetSequence(updates, last_sequence_);
                     continue;
                 } else if (ret == 1) {
                     s = log_->WaitDone(-1);
@@ -520,7 +528,7 @@ Status DBTable::Write(const WriteOptions& options, WriteBatch* my_batch) {
             for (uint32_t i = 0; i < lg_list_.size(); ++i) {
                 lg_list_[i]->ReleaseSnapshot(commit_snapshot_);
             }
-            commit_snapshot_ = last_sequence_ + WriteBatchInternal::Count(updates);
+            commit_snapshot_ = batch_seq;
         }
 
         if (created_new_wb) {
@@ -535,7 +543,10 @@ Status DBTable::Write(const WriteOptions& options, WriteBatch* my_batch) {
 
     // Update last_sequence
     if (updates) {
-        last_sequence_ += WriteBatchInternal::Count(updates);
+        if (WriteBatchInternal::Count(updates) != 0) {
+            last_sequence_ = batch_seq;
+        }
+        Log(options_.info_log, "[%s] LL: set last_sequence_->%lu", dbname_.c_str(), last_sequence_);
         current_log_size_ += WriteBatchInternal::ByteSize(updates);
     }
     if (updates == tmp_batch_) tmp_batch_->Clear();
@@ -764,6 +775,7 @@ void DBTable::CompactRange(const Slice* begin, const Slice* end, int lg_no) {
 // @begin_num:  the 1st record(sequence number) should be recover
 Status DBTable::GatherLogFile(uint64_t begin_num,
                               std::vector<uint64_t>* logfiles) {
+    Log(options_.info_log, "[%s] LL: GatherLogFile begin_num=%lu", dbname_.c_str(), begin_num);
     std::vector<std::string> files;
     Status s = env_->GetChildren(dbname_, &files);
     if (!s.ok()) {
@@ -779,9 +791,13 @@ Status DBTable::GatherLogFile(uint64_t begin_num,
         if (ParseFileName(files[i], &number, &type)
             && type == kLogFile
             && number >= begin_num) {
+            Log(options_.info_log, "[%s] LL: GatherLogFile push file=%lu", dbname_.c_str(), number);
             logfiles->push_back(number);
         } else if (type == kLogFile && number > last_number) {
             last_number = number;
+            Log(options_.info_log, "[%s] LL: GatherLogFile set last_number=%lu", dbname_.c_str(), number);
+        } else {
+            Log(options_.info_log, "[%s] LL: GatherLogFile other", dbname_.c_str());
         }
     }
     std::sort(logfiles->begin(), logfiles->end());
@@ -855,18 +871,18 @@ Status DBTable::RecoverLogFile(uint64_t log_number, uint64_t recover_limit,
             continue;
         }
         WriteBatchInternal::SetContents(&batch, record);
-        uint64_t first_seq = WriteBatchInternal::Sequence(&batch);
-        uint64_t last_seq = first_seq + WriteBatchInternal::Count(&batch) - 1;
-        //Log(options_.info_log, "[%s] batch_seq= %lu, last_seq= %lu, count=%d",
-        //    dbname_.c_str(), batch_seq, last_sequence_, WriteBatchInternal::Count(&batch));
-        if (last_seq >= recover_limit) {
-            Log(options_.info_log, "[%s] exceed limit %lu, ignore %lu ~ %lu",
-                        dbname_.c_str(), recover_limit, first_seq, last_seq);
-            continue;
+        uint64_t batch_seq = WriteBatchInternal::Sequence(&batch);
+        Log(options_.info_log, "[%s] recover batch_seq= %lu, count=%d",
+            dbname_.c_str(), batch_seq, WriteBatchInternal::Count(&batch));
+
+        assert(batch_seq <= recover_limit);
+        if (batch_seq == recover_limit) {
+            Log(options_.info_log, "[%s] on limit, batch_seq=%lu recover_limit=%lu",
+                        dbname_.c_str(), batch_seq, recover_limit);
         }
 
-        if (last_seq > last_sequence_) {
-            last_sequence_ = last_seq;
+        if (batch_seq > last_sequence_) {
+            last_sequence_ = batch_seq;
         }
 
         std::vector<WriteBatch*> lg_updates;
@@ -889,18 +905,24 @@ Status DBTable::RecoverLogFile(uint64_t log_number, uint64_t recover_limit,
                 if (lg_updates[i] == NULL) {
                     continue;
                 }
-                if (last_seq <= lg_list_[i]->GetLastSequence()) {
+                if (batch_seq < lg_list_[i]->GetLastSequence() &&
+                    recover_limit != kMaxSequenceNumber) {
+                    Log(options_.info_log, "[%s] LL: lg %d seq gone back!! batch_seq=%lu lg_last=%lu recover_limit=%lu now=%lu",
+                        dbname_.c_str(), i, batch_seq, lg_list_[i]->GetLastSequence(), recover_limit, common::timer::get_micros());
+                    // assert(0);
                     continue;
+                } else {
+                    Log(options_.info_log, "[%s] LL: lg %d batch_seq=%lu lg_last=%lu recover_limit=%lu now=%lu",
+                        dbname_.c_str(), i, batch_seq, lg_list_[i]->GetLastSequence(), recover_limit, common::timer::get_micros());
                 }
-                uint64_t first = WriteBatchInternal::Sequence(lg_updates[i]);
-                uint64_t last = first + WriteBatchInternal::Count(lg_updates[i]) - 1;
-                // Log(options_.info_log, "[%s] recover log batch first= %lu, last= %lu\n",
-                //     dbname_.c_str(), first, last);
+                uint64_t lg_batch_seq = WriteBatchInternal::Sequence(lg_updates[i]);
+                Log(options_.info_log, "[%s] LL: recover log lg = %d batch = %lu, count = %d\n",
+                    dbname_.c_str(), i, lg_batch_seq, WriteBatchInternal::Count(lg_updates[i]));
 
                 Status lg_s = lg_list_[i]->RecoverInsertMem(lg_updates[i], (*edit_list)[i]);
                 if (!lg_s.ok()) {
-                    Log(options_.info_log, "[%s] recover log fail batch first= %lu, last= %lu\n",
-                        dbname_.c_str(), first, last);
+                    Log(options_.info_log, "[%s] LL: recover log lg = %d fail batch = %lu, count = %d\n",
+                        dbname_.c_str(), i, lg_batch_seq, WriteBatchInternal::Count(lg_updates[i]));
                     status = lg_s;
                 }
             }
@@ -1009,6 +1031,18 @@ void DBTable::ArchiveFile(const std::string& fname) {
         fname.c_str(), s.ToString().c_str());
 }
 
+uint64_t DBTable::GetNewSequenceNumber() {
+    uint64_t now = static_cast<uint64_t>(common::timer::get_micros());
+    if (now <= last_timestamp_) {
+        last_timestamp_ += 1;
+        Log(options_.info_log, "[%s] LL: Got %lu, set last_timestamp_ to %lu",
+            dbname_.c_str(), now, last_timestamp_);
+        return last_timestamp_;
+    }
+    Log(options_.info_log, "[%s] LL: GetNewSequenceNumber %lu", dbname_.c_str(), now);
+    return now;
+}
+
 // tera-specific
 bool DBTable::FindSplitKey(double ratio,
                            std::string* split_key) {
@@ -1115,10 +1149,12 @@ int DBTable::SwitchLog(bool blocked_switch) {
     if (!blocked_switch ||
         log::AsyncWriter::BlockLogNum() < options_.max_block_log_number) {
         if (current_log_size_ == 0) {
-            last_sequence_++;
+            last_sequence_ = GetNewSequenceNumber();
+            Log(options_.info_log, "[%s] LL: new log name = %lu", dbname_.c_str(), last_sequence_);
         }
         WritableFile* logfile = NULL;
-        std::string log_file_name = LogHexFileName(dbname_, last_sequence_ + 1);
+        Log(options_.info_log, "[%s] LL: log name = %lu", dbname_.c_str(), last_sequence_);
+        std::string log_file_name = LogHexFileName(dbname_, last_sequence_);
         Status s = env_->NewWritableFile(log_file_name, &logfile);
         if (s.ok()) {
             log_->Stop(blocked_switch);

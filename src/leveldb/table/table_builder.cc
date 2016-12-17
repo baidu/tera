@@ -106,9 +106,11 @@ void TableBuilder::Add(const Slice& key, const Slice& value) {
   Rep* r = rep_;
   assert(!r->closed);
   if (!ok()) return;
+  /** one batch has the same seq, Compare does not work
   if (r->num_entries > 0) {
     assert(r->options.comparator->Compare(key, Slice(r->last_key)) > 0);
   }
+  */
 
   if (r->pending_index_entry) {
     assert(r->data_block.empty());

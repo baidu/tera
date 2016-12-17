@@ -738,16 +738,9 @@ Status DBImpl::RecoverInsertMem(WriteBatch* batch, VersionEdit* edit) {
         recover_mem_ = NewMemTable();
         recover_mem_->Ref();
     }
-    uint64_t log_sequence = WriteBatchInternal::Sequence(batch);
-    uint64_t last_sequence = log_sequence + WriteBatchInternal::Count(batch) - 1;
 
-    // if duplicate record, ignore
-    if (log_sequence <= recover_mem_->GetLastSequence()) {
-        assert (last_sequence <= recover_mem_->GetLastSequence());
-        Log(options_.info_log, "[%s] duplicate record, ignore %lu ~ %lu",
-            dbname_.c_str(), log_sequence, last_sequence);
-        return Status::OK();
-    }
+    // checked by db_table
+    assert(WriteBatchInternal::Sequence(batch) >= recover_mem_->GetLastSequence());
 
     Status status = WriteBatchInternal::InsertInto(batch, recover_mem_);
     MaybeIgnoreError(&status);
@@ -1369,7 +1362,7 @@ Status DBImpl::Get(const ReadOptions& options,
   {
     mutex_.Unlock();
     // First look in the memtable, then in the immutable memtable (if any).
-    LookupKey lkey(key, snapshot);
+    LookupKey lkey(key, snapshot, mem->GetLastInternalSeq());
     if (mem->Get(lkey, value, options.rollbacks, &s)) {
       // Done
     } else if (imm != NULL && imm->Get(lkey, value, options.rollbacks, &s)) {
@@ -1763,10 +1756,13 @@ uint64_t DBImpl::GetLastSequence(bool is_locked) {
   }
   uint64_t retval;
   if (mem_->GetLastSequence() > 0) {
+    Log(options_.info_log, "[%s] LL: mem seq=%lu", dbname_.c_str(), mem_->GetLastSequence());
     retval = mem_->GetLastSequence();
   } else if (imm_ != NULL && imm_->GetLastSequence()) {
+    Log(options_.info_log, "[%s] LL: imm seq=%lu", dbname_.c_str(), imm_->GetLastSequence());
     retval = imm_->GetLastSequence();
   } else {
+    Log(options_.info_log, "[%s] LL: version seq=%lu", dbname_.c_str(), versions_->LastSequence());
     retval = versions_->LastSequence();
   }
   if (is_locked) {

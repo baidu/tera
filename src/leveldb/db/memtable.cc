@@ -28,7 +28,8 @@ MemTable::MemTable(const InternalKeyComparator& cmp, CompactStrategyFactory* com
       refs_(0),
       table_(comparator_, &arena_),
       empty_(true),
-      compact_strategy_factory_(compact_strategy_factory) {
+      compact_strategy_factory_(compact_strategy_factory),
+      internal_seq_(0) {
 }
 
 MemTable::~MemTable() {
@@ -42,7 +43,7 @@ int MemTable::KeyComparator::operator()(const char* aptr, const char* bptr)
   // Internal keys are encoded as length-prefixed strings.
   Slice a = GetLengthPrefixedSlice(aptr);
   Slice b = GetLengthPrefixedSlice(bptr);
-  return comparator.Compare(a, b);
+  return comparator.CompareWithInternalSeq(a, b);
 }
 
 // Encode a suitable internal key target for "target" and return it.
@@ -50,8 +51,12 @@ int MemTable::KeyComparator::operator()(const char* aptr, const char* bptr)
 // into this scratch space.
 static const char* EncodeKey(std::string* scratch, const Slice& target) {
   scratch->clear();
-  PutVarint32(scratch, target.size());
+  PutVarint32(scratch, target.size() + 8);
   scratch->append(target.data(), target.size());
+  char seq[8];
+  EncodeFixed64(seq, kMaxSequenceNumber);
+  Slice seq_slice(seq, 8);
+  scratch->append(seq_slice.data(), seq_slice.size());
   return scratch->data();
 }
 
@@ -65,7 +70,10 @@ class MemTableIterator: public Iterator {
   virtual void SeekToLast() { iter_.SeekToLast(); }
   virtual void Next() { iter_.Next(); }
   virtual void Prev() { iter_.Prev(); }
-  virtual Slice key() const { return GetLengthPrefixedSlice(iter_.key()); }
+  virtual Slice key() const {
+    Slice internal_key = GetLengthPrefixedSlice(iter_.key());
+    return Slice(internal_key.data(), internal_key.size() - 8);
+  }
   virtual Slice value() const {
     Slice key_slice = GetLengthPrefixedSlice(iter_.key());
     return GetLengthPrefixedSlice(key_slice.data() + key_slice.size());
@@ -96,7 +104,7 @@ void MemTable::Add(SequenceNumber s, ValueType type,
   //  value bytes  : char[value.size()]
   size_t key_size = key.size();
   size_t val_size = value.size();
-  size_t internal_key_size = key_size + 8;
+  size_t internal_key_size = key_size + 8 + 8; /* key_size + seq_type_size + internal_seq_size*/
   const size_t encoded_len =
       VarintLength(internal_key_size) + internal_key_size +
       VarintLength(val_size) + val_size;
@@ -106,25 +114,28 @@ void MemTable::Add(SequenceNumber s, ValueType type,
   p += key_size;
   EncodeFixed64(p, (s << 8) | type);
   p += 8;
+  EncodeFixed64(p, internal_seq_);
+  p += 8;
   p = EncodeVarint32(p, val_size);
   memcpy(p, value.data(), val_size);
   assert(static_cast<size_t>((p + val_size) - buf) == encoded_len);
   table_.Insert(buf);
-  assert(last_seq_ < s || s == 0);
+  assert(last_seq_ <= s || s == 0);
   last_seq_ = s;
+  ++internal_seq_;
 }
 
 bool MemTable::Get(const LookupKey& key, std::string* value, const std::map<uint64_t, uint64_t>& rollbacks, Status* s) {
   Slice memkey = key.memtable_key();
   Table::Iterator iter(&table_);
   iter.Seek(memkey.data());
-  if (iter.Valid()) {
-    // entry format is:
-    //    klength  varint32
-    //    userkey  char[klength]
-    //    tag      uint64
-    //    vlength  varint32
-    //    value    char[vlength]
+  if (iter.Valid()) {    // entry format is:
+    //    klength       varint32
+    //    userkey       char[klength]
+    //    tag           uint64
+    //    internal_seq  uint64
+    //    vlength       varint32
+    //    value         char[vlength]
     // Check that it belongs to same user key.  We do not check the
     // sequence number since the Seek() call above should have skipped
     // all entries with overly large sequence numbers.
@@ -132,6 +143,7 @@ bool MemTable::Get(const LookupKey& key, std::string* value, const std::map<uint
 
     uint32_t key_length;
     const char* key_ptr = GetVarint32Ptr(entry, entry+5, &key_length);
+    key_length -= 8; /* jump over internal_seq */
     ParsedInternalKey ikey;
     ParseInternalKey(Slice(key_ptr, key_length), &ikey);
     if (RollbackDrop(ikey.sequence, rollbacks)) {
@@ -144,7 +156,7 @@ bool MemTable::Get(const LookupKey& key, std::string* value, const std::map<uint
       const uint64_t tag = DecodeFixed64(key_ptr + key_length - 8);
       switch (static_cast<ValueType>(tag & 0xff)) {
         case kTypeValue: {
-          Slice v = GetLengthPrefixedSlice(key_ptr + key_length);
+          Slice v = GetLengthPrefixedSlice(key_ptr + key_length + 8/* jump over internal_seq */);
           CompactStrategy* strategy = compact_strategy_factory_ ?
                   compact_strategy_factory_->NewInstance() : NULL;
           if (!strategy || !strategy->Drop(Slice(key_ptr, key_length - 8), 0)) {

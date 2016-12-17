@@ -1001,10 +1001,12 @@ Status VersionSet::LogAndApply(VersionEdit* edit, port::Mutex* mu) {
   edit->SetNextFile(next_file_number_);
 
   if (edit->HasLastSequence()) {
-    Log(options_->info_log, "[%s] LogLastSequence %lu",
+    Log(options_->info_log, "[%s] LL: editHas LogLastSequence %lu",
         dbname_.c_str(), edit->GetLastSequence());
     assert(edit->GetLastSequence() >= last_sequence_);
   } else {
+    Log(options_->info_log, "[%s] LL: edit!Has LogLastSequence %lu",
+        dbname_.c_str(), last_sequence_);
     edit->SetLastSequence(last_sequence_);
   }
 
@@ -1449,8 +1451,9 @@ void VersionSet::Finalize(Version* v) {
       //
       // (3) More level0 files means write hotspot.
       // We give lower score to avoid too much level0 compaction.
-      score = sqrt(v->files_[level].size() /
-          static_cast<double>(config::kL0_CompactionTrigger));
+      //score = sqrt(v->files_[level].size() /
+          //static_cast<double>(config::kL0_CompactionTrigger));
+      score = v->files_[level].size() / static_cast<double>(config::kL0_CompactionTrigger);
     } else {
       // Compute the ratio of current size to size limit.
       const uint64_t level_bytes = TotalFileSize(v->files_[level]);

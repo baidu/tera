@@ -72,6 +72,9 @@ class MemTable {
   SequenceNumber GetLastSequence() const {
       return last_seq_;
   }
+  SequenceNumber GetLastInternalSeq() const {
+      return internal_seq_;
+  }
   bool Empty() {
     return empty_;
   }
@@ -102,6 +105,7 @@ class MemTable {
   Table table_;
   bool empty_;
   CompactStrategyFactory* compact_strategy_factory_;
+  SequenceNumber internal_seq_;
 
   // No copying allowed
   MemTable(const MemTable&);
