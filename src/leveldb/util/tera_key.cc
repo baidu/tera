@@ -5,9 +5,10 @@
 #include "leveldb/tera_key.h"
 
 #include <pthread.h>
+
 #include "coding.h"
-#include "logging.h"
 #include "leveldb/raw_key_operator.h"
+#include "logging.h"
 
 namespace leveldb {
 
@@ -28,7 +29,10 @@ bool TeraKey::IsTypeAllowUserSetTimestamp(TeraKeyType type) {
 }
 
 TeraKey::TeraKey(const RawKeyOperator* op)
-    : operator_(op), is_empty_(true) {
+    : operator_(op),
+      timestamp_(-1),
+      type_(TKT_FORSEEK),
+      is_empty_(true) {
 }
 
 TeraKey::TeraKey(const TeraKey& tk) {
