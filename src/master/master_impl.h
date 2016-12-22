@@ -230,6 +230,8 @@ private:
     void SafeModeCmdCtrl(const CmdCtrlRequest* request,
                          CmdCtrlResponse* response);
     void ReloadConfig(CmdCtrlResponse* response);
+    void KickTabletNodeCmdCtrl(const CmdCtrlRequest* request,
+                               CmdCtrlResponse* response);
     void TabletCmdCtrl(const CmdCtrlRequest* request,
                        CmdCtrlResponse* response);
     void MetaCmdCtrl(const CmdCtrlRequest* request,

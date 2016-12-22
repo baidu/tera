@@ -262,6 +262,12 @@ const char* builtin_cmd_list[] = {
             notify master | ts reload flag file                           \n\
             *** at your own risk ***",
 
+    "kick",
+    "kick hostname:port                                                   \n\
+          ask master to kick a tabletserver                               \n\
+          *** at your own risk ***",
+
+
     "findtablet",
     "findtablet <tablename> <rowkey-prefix>                               \n\
                 <tablename> <start-key> <end-key>",
@@ -2143,6 +2149,23 @@ int32_t CookieOp(int32_t argc, char** argv) {
     return -1;
 }
 
+// e.g. ./teracli kick <hostname>:<port>
+int32_t KickTabletServerOp(Client* client, int32_t argc, char** argv, ErrorCode* err) {
+    if ((argc != 3)) {
+        PrintCmdHelpInfo(argv[1]);
+        return -1;
+    }
+    std::string addr(argv[2]);
+    std::vector<std::string> arg_list;
+    arg_list.push_back(addr);
+    if (!client->CmdCtrl("kick", arg_list, NULL, NULL, err)) {
+        LOG(ERROR) << "fail to kick tabletserver: " << addr;
+        return -1;
+    }
+    std::cout << "master will kick: " << addr << std::endl;
+    return 0;
+}
+
 int32_t ReloadConfigOp(Client* client, int32_t argc, char** argv, ErrorCode* err) {
     if ((argc != 4) || (std::string(argv[2]) != "config")) {
         PrintCmdHelpInfo(argv[1]);
@@ -3208,6 +3231,8 @@ int ExecuteCommand(Client* client, int argc, char* argv[]) {
         ret = UserOp(client, argc, argv, &error_code);
     } else if (cmd == "reload") {
         ret = ReloadConfigOp(client, argc, argv, &error_code);
+    } else if (cmd == "kick") {
+        ret = KickTabletServerOp(client, argc, argv, &error_code);
     } else if (cmd == "cookie") {
         ret = CookieOp(argc, argv);
     } else if (cmd == "snapshot") {

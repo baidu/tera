@@ -1216,6 +1216,18 @@ void MasterImpl::ShowTabletNodes(const ShowTabletNodesRequest* request,
     }
 }
 
+void MasterImpl::KickTabletNodeCmdCtrl(const CmdCtrlRequest* request,
+                                       CmdCtrlResponse* response) {
+    if (request->arg_list_size() == 1) {
+        TryKickTabletNode(request->arg_list(0));
+        response->set_status(kMasterOk);
+        return;
+    } else {
+        response->set_status(kInvalidArgument);
+        return;
+    }
+}
+
 void MasterImpl::CmdCtrl(const CmdCtrlRequest* request,
                          CmdCtrlResponse* response) {
     std::string cmd_line;
@@ -1236,6 +1248,8 @@ void MasterImpl::CmdCtrl(const CmdCtrlRequest* request,
         MetaCmdCtrl(request, response);
     } else if (request->command() == "reload config") {
         ReloadConfig(response);
+    } else if (request->command() == "kick") {
+        KickTabletNodeCmdCtrl(request, response);
     } else {
         response->set_status(kInvalidArgument);
     }
