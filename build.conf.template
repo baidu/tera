@@ -5,6 +5,7 @@ if [ $# -lt 1 ]; then
 fi
 MIRROR=$1
 
+## Set XX_VERSION=DISABLE to void building specified dependency
 BOOST_VERSION=1_58_0
 PROTOBUF_VERSION=2.6.1
 SNAPPY_VERSION=1.1.3
