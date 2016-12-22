@@ -2,11 +2,11 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include <glog/logging.h>
-
 #include "common/file/recordio/record_io.h"
 
-RecordWriter::RecordWriter() {}
+#include <glog/logging.h>
+
+RecordWriter::RecordWriter(): file_(NULL) {}
 
 RecordWriter::~RecordWriter() {}
 
@@ -63,12 +63,14 @@ bool RecordWriter::Write(const char *data, uint32_t size) {
 
 
 RecordReader::RecordReader()
-    : buffer_size_(1 * 1024 * 1024) {
+    : file_(NULL),
+      file_size_(0),
+      buffer_size_(1 * 1024 * 1024),
+      data_size_(0) {
     buffer_.reset(new char[buffer_size_]);
 }
 
-RecordReader::~RecordReader() {
-}
+RecordReader::~RecordReader() {}
 
 bool RecordReader::Reset(FileStream *file) {
     DCHECK(file != NULL);

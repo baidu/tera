@@ -2,17 +2,19 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include "db/filename.h"
+
 #include <ctype.h>
 #include <limits.h>
 #include <stdint.h>
 #include <stdio.h>
 
-#include "db/filename.h"
+#include <iostream>
+
 #include "db/dbformat.h"
 #include "leveldb/env.h"
 #include "util/string_ext.h"
 
-#include <iostream>
 namespace leveldb {
 
 // A utility routine: write "data" to the named file and Sync() it.
@@ -205,8 +207,7 @@ const char* FileTypeToString(FileType type) {
     return "kTempFile";
   case kInfoLogFile:
     return "kInfoLogFile";
-  default:
-    return "kUnknown";
+  default:;
   }
   return "kUnknown";
 }

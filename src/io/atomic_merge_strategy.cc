@@ -3,6 +3,7 @@
 // found in the LICENSE file.
 
 #include "atomic_merge_strategy.h"
+
 #include "io/coding.h"
 
 namespace tera {
@@ -21,6 +22,7 @@ bool IsAtomicOP(leveldb::TeraKeyType keyType) {
 AtomicMergeStrategy::AtomicMergeStrategy()
     : merged_key_(NULL),
       merged_value_(NULL),
+      latest_key_type_(leveldb::TKT_FORSEEK),
       counter_(0),
       int64_(0) {
 }
