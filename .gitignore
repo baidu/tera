@@ -14,3 +14,4 @@ src/leveldb/leveldbutil
 src/leveldb/tera_bench
 
 depends.mk
+build.conf
