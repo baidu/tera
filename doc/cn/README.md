@@ -12,7 +12,7 @@
 
 [命令行工具teracli使用方法](teracli.md)
 
-[主要api使用方法](sdk_dev_guide.md)
+[主要api使用方法](sdk_guide.md)
 
 [搭建tera集群](cluster_setup.md)
 
