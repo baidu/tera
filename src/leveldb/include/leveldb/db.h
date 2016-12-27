@@ -35,6 +35,12 @@ struct Range {
   Range(const Slice& s, const Slice& l) : start(s), limit(l) { }
 };
 
+struct Snapshot {
+  Slice name;
+  int64_t timestamp;
+  bool dump_mem_on_snapshot;
+};
+
 // A DB is a persistent ordered map from keys to values.
 // A DB is safe for concurrent access from multiple threads without
 // any external synchronization.
@@ -101,6 +107,22 @@ class DB {
   // Caller should delete the iterator when it is no longer needed.
   // The returned iterator should be deleted before this db is deleted.
   virtual Iterator* NewIterator(const ReadOptions& options) = 0;
+
+  // Database support snapshot
+  virtual Status ShowSanpshot(std::vector<Snapshot*>* snapshot_list = NULL) = 0;
+  virtual Status ShowAllSanpshot(std::vector<Snapshot*>* snapshot_list = NULL) = 0;
+
+  virtual Status PrepareCheckoutSanpshot(Snapshot* dest_snapshot, Snapshot* src_snapshot) = 0;
+  virtual Status CommitCheckoutSanpshot(Snapshot* dest_snapshot, Snapshot* src_snapshot) = 0;
+  virtual Status RollbackCheckoutSanpshot(Snapshot* dest_snapshot, Snapshot* src_snapshot) = 0;
+
+  virtual Status PrepareCreateSanpshot(Snapshot* parent_snapshot, Snapshot* snapshot) = 0;
+  virtual Status CommitCreateSanpshot(Snapshot* snapshot) = 0;
+  virtual Status RollbackCreateSanpshot(Snapshot* snapshot) = 0;
+
+  virtual Status PrepareDeleteSanpshot(Snapshot* snapshot) = 0;
+  virtual Status CommitDeleteSanpshot(Snapshot* snapshot) = 0;
+  virtual Status RollbackDeleteSanpshot(Snapshot* snapshot) = 0;
 
   // Return a handle to the current DB state.  Iterators created with
   // this handle will all observe a stable snapshot of the current DB

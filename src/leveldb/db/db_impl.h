@@ -54,6 +54,22 @@ class DBImpl : public DB {
 
   void AddBoundLogSize(uint64_t size);
 
+  // impl snapshot
+  virtual Status ShowSanpshot(std::vector<Snapshot*>* snapshot_list = NULL);
+  virtual Status ShowAllSanpshot(std::vector<Snapshot*>* snapshot_list = NULL);
+
+  virtual Status PrepareCheckoutSanpshot(Snapshot* dest_snapshot, Snapshot* src_snapshot);
+  virtual Status CommitCheckoutSanpshot(Snapshot* dest_snapshot, Snapshot* src_snapshot);
+  virtual Status RollbackCheckoutSanpshot(Snapshot* dest_snapshot, Snapshot* src_snapshot);
+
+  virtual Status PrepareCreateSanpshot(Snapshot* parent_snapshot, Snapshot* snapshot);
+  virtual Status CommitCreateSanpshot(Snapshot* snapshot);
+  virtual Status RollbackCreateSanpshot(Snapshot* snapshot);
+
+  virtual Status PrepareDeleteSanpshot(Snapshot* snapshot);
+  virtual Status CommitDeleteSanpshot(Snapshot* snapshot);
+  virtual Status RollbackDeleteSanpshot(Snapshot* snapshot);
+
   // tera-specific
   virtual bool BusyWrite();
   virtual void Workload(double* write_workload);
@@ -110,7 +126,7 @@ class DBImpl : public DB {
 
   // Compact the in-memory write buffer to disk.  Switches to a new
   // log-file/memtable and writes a new descriptor iff successful.
-  Status CompactMemTable()
+  Status CompactMemTable(Snapshot* snapshot = NULL)
       EXCLUSIVE_LOCKS_REQUIRED(mutex_);
 
   Status WriteLevel0Table(MemTable* mem, VersionEdit* edit, Version* base)

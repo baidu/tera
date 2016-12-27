@@ -279,6 +279,7 @@ class VersionSet {
   friend class Compaction;
   friend class Version;
   friend class VersionSetBuilder;
+  struct ManifestWriter;
 
   void Finalize(Version* v);
 
@@ -305,6 +306,12 @@ class VersionSet {
 
   bool ModifyFileSize(FileMetaData* f);
 
+  // version snapshot impl
+  void CreateVersionSnapshot(VersionEdit* edit, Version* v);
+  void MergeVersionEdit(VersionEdit* dest, VersionEdit* src);
+  void InstallVersionSnapshot(Version* v, VersionEdit* edit);
+  void ReleaseVersionSnapshot();
+
   Env* const env_;
   const std::string dbname_;
   const Options* const options_;
@@ -320,11 +327,17 @@ class VersionSet {
   uint64_t log_number_;
   uint64_t prev_log_number_;  // 0 or backing store for memtable being compacted
 
+  std::deque<ManifestWriter*> manifest_writers_;
+
   // Opened lazily
   WritableFile* descriptor_file_;
   log::Writer* descriptor_log_;
   Version dummy_versions_;  // Head of circular doubly-linked list of versions.
   Version* current_;        // == dummy_versions_.prev_
+
+  // version snapshot impl
+  std::map<std::string, std::pair<Version*, std::string> > version_snapshot_prepare_;
+  std::map<std::string, std::pair<Version*, std::string> > version_snapshot_;
 
   // Per-level key at which the next compaction at that level should start.
   // Either an empty string, or a valid InternalKey.

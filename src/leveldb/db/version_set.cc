@@ -964,6 +964,7 @@ VersionSet::~VersionSet() {
     }
   }
   current_->Unref();
+  ReleaseVersionSnapshot();
   assert(dummy_versions_.next_ == &dummy_versions_);  // List must be empty
   delete descriptor_log_;
   delete descriptor_file_;
@@ -985,7 +986,81 @@ void VersionSet::AppendVersion(Version* v) {
   v->prev_->next_ = v;
   v->next_->prev_ = v;
 }
+void VersionSet::ReleaseVersionSnapshot() {
+  std::map<std::string, std::pair<Version*, std::string> >::iterator it;
+  it = version_snapshot_prepare_.begin();
+  for (it != version_snapshot_prepare_.end(); ++it) {
+    Version* v = it->second.first;
+    v.Unref();
+  }
+  it = version_snapshot_.begin();
+  for (it != version_snapshot_.end(); ++it) {
+    Version* v = it->second.first;
+    v.Unref();
+  }
+}
+void VersionSet::InstallVersionSnapshot(Version* v, VersionEdit* edit) {
+  if (edit->has_prepare_create_snapshot_) {
+    std::string vkey;
+    PutVarint64(&vkey, edit->prepare_create_snapshot_.timestamp);
+    vkey.append(edit->prepare_create_snapshot_.name.data(),
+                edit->prepare_create_snapshot_.name.size());
+    assert(version_snapshot_prepare_.find(vkey) == version_snapshot_prepare_.end());
 
+    std::string record;
+    edit->EncodeTo(&record);
+    // insert into prepare list
+    version_snapshot_prepare_[vkey] = std::pair<Version*, std::string>(v, record);
+    v->Ref(); // ref vesion
+  } else if (edit->has_base_snapshot_) {
+    std::string vkey;
+    PutVarint64(&vkey, edit->base_snapshot_.timestamp);
+    vkey.append(edit->base_snapshot_.name.data(),
+                edit->base_snapshot_.name.size());
+    assert(version_snapshot_.find(vkey) == version_snapshot_.end());
+
+    std::string record;
+    edit->EncodeTo(&record);
+    // insert into commit list
+    version_snapshot_[vkey] = std::pair<Version*, std::string>(v, record);
+    v->Ref(); // ref vesion
+  } else if (edit->has_commit_create_snapshot_) {
+    std::string vkey;
+    PutVarint64(&vkey, edit->commit_create_snapshot_.timestamp);
+    vkey.append(edit->commit_create_snapshot_.name.data(),
+                edit->commit_create_snapshot_.name.size());
+    std::map<std::string, std::pair<Version*, std::string> > it = version_snapshot_prepare_.find(vkey);
+    assert(it != version_snapshot_prepare_.end());
+
+    assert(version_snapshot_.find(vkey) == version_snapshot_.end());
+    // move sv from prepare to commit list
+    version_snapshot_[vkey] = it->second;
+    version_snapshot_prepare_.erase(it);
+  } else if (edit->has_rollback_create_snapshot_) {
+    std::string vkey;
+    PutVarint64(&vkey, edit->rollback_create_snapshot_.timestamp);
+    vkey.append(edit->rollback_create_snapshot_.name.data(),
+                edit->rollback_create_snapshot_.name.size());
+    std::map<std::string, std::pair<Version*, std::string> > it = version_snapshot_prepare_.find(vkey);
+    assert(it != version_snapshot_prepare_.end());
+
+    Version* sv = it->second.first;
+    // delete from prepare list
+    version_snapshot_prepare_.erase(it);
+    sv->Unref(); // unref version
+  }
+}
+
+// multi thread safe
+// Information kept for every waiting manifest writer
+struct VersionSet::ManifestWriter {
+  Status status;
+  VersionEdit* edit;
+  bool done;
+  port::CondVar cv;
+
+  explicit ManifestWriter(port::Mutex* mu) : done(false), cv(mu) { }
+};
 Status VersionSet::LogAndApply(VersionEdit* edit, port::Mutex* mu) {
   if (edit->has_log_number_) {
     assert(edit->log_number_ >= log_number_);
@@ -1008,6 +1083,17 @@ Status VersionSet::LogAndApply(VersionEdit* edit, port::Mutex* mu) {
     edit->SetLastSequence(last_sequence_);
   }
 
+  mu->AssertHeld();
+  // multi write control, do not batch edit write, but multi thread safety
+  ManifestWriter w(mu);
+  w.edit = edit;
+  manifest_writers_.push_back(&w);
+  while (!w.done && &w != manifest_writers_.front()) {
+    w.cv.Wait();
+  }
+  assert(manifest_writers_.front() == &w);
+
+  // first manifest writer, batch edit
   Version* v = new Version(this);
   {
     VersionSetBuilder builder(this, current_);
@@ -1060,6 +1146,9 @@ Status VersionSet::LogAndApply(VersionEdit* edit, port::Mutex* mu) {
 
     // Write new record to MANIFEST log
     if (s.ok()) {
+      if (edit->has_prepare_create_snapshot_) {
+        CreateVersionSnapshot(edit, v); // create a new version
+      }
       std::string record;
       edit->EncodeTo(&record);
       s = descriptor_log_->AddRecord(record);
@@ -1095,14 +1184,12 @@ Status VersionSet::LogAndApply(VersionEdit* edit, port::Mutex* mu) {
     }
 
     // write manifest error, cause switch
-    if (!s.ok()) {
-      if (!new_manifest_file.empty()) {
-        delete descriptor_log_;
-        delete descriptor_file_;
-        descriptor_log_ = NULL;
-        descriptor_file_ = NULL;
-        env_->DeleteFile(new_manifest_file);
-      }
+    if (!s.ok() && !new_manifest_file.empty()) {
+      delete descriptor_log_;
+      delete descriptor_file_;
+      descriptor_log_ = NULL;
+      descriptor_file_ = NULL;
+      env_->DeleteFile(new_manifest_file);
     }
 
     mu->Lock();
@@ -1111,6 +1198,8 @@ Status VersionSet::LogAndApply(VersionEdit* edit, port::Mutex* mu) {
   // Install the new version
   if (s.ok()) {
     AppendVersion(v);
+    InstallVersionSnapshot(v, edit);
+
     log_number_ = edit->log_number_;
     prev_log_number_ = edit->prev_log_number_;
     last_sequence_ = edit->GetLastSequence();
@@ -1120,6 +1209,11 @@ Status VersionSet::LogAndApply(VersionEdit* edit, port::Mutex* mu) {
     Log(options_->info_log, "[%s][dfs error] set force_switch_manifest", dbname_.c_str());
   }
 
+  // TODO: batch write manifest finish, no need
+  manifest_writers_.pop_front();
+  if (!manifest_writers_.empty()) {
+    manifest_writers_.front()->cv.Signal();
+  }
   return s;
 }
 
@@ -1256,8 +1350,14 @@ Status VersionSet::Recover() {
   uint64_t log_number = 0;
   uint64_t prev_log_number = 0;
 
+  std::string current_name = "Tera.current_version";
+  std::map<std::string, std::vector<std::pair<std::string, VersionSetBuilder*> > > builder_map;
+  std::vector<Status> status_vec;
   for (size_t i = 0; i < files.size(); ++i) {
-    VersionSetBuilder builder(this, current_);
+    // new an empty version
+    AppendVersion(new Version(this));
+    VersionSetBuilder* builder = new VersionSetBuilder(this, current_);
+
     LogReporter reporter;
     reporter.status = &s;
     log::Reader reader(files[i], &reporter, true/*checksum*/, 0/*initial_offset*/);
@@ -1286,7 +1386,33 @@ Status VersionSet::Recover() {
       }
 
       if (s.ok()) {
-        builder.Apply(&edit);
+        if (edit.has_prepare_create_snapshot_ || edit.has_base_snapshot_) {
+          // delete all previous edit, and evict base_version with an empty version
+          delete builder;
+          AppendVersion(new Version(this));
+          builder = new VersionSetBuilder(this, current_); // current_ = empty version
+          builder->Apply(&edit);
+          Version* sv = new Version(this);
+          builder.SaveTo(sv);
+          Finalize(sv);
+          AppendVersion(sv);
+
+          std::string name = edit.has_prepare_create_snapshot_?
+                                  edit.prepare_snapshot.name:
+                                  edit.base_snapshot_.name;
+          int64_t ts = edit.has_prepare_create_snapshot_?
+                                  edit.prepare_snapshot.timestamp:
+                                  edit.base_snapshot.timestamp;
+          std::string vkey;
+          PutVarint64(&vkey, ts);
+          vkey.append(name.data(), name.size());
+          builder_map[vkey].push_back(
+                      std::pair<std::string, VersionSetBuilder*>(record.ToString(), builder));
+
+          builder = new VersionSetBuilder(this, current_); // current_ = sv
+        } else {
+          builder->Apply(&edit);
+        }
       }
 
       if (edit.has_log_number_) {
@@ -1320,22 +1446,70 @@ Status VersionSet::Recover() {
     delete files[i];
     if (record_num == 0) {
       // empty manifest, delete it
-      ArchiveFile(env_, dscname[i]);
-      return Status::Corruption("empty manifest:" + s.ToString());
+      s = Status::Corruption("empty manifest:" + s.ToString());
+      status_vec.push_back(s);
     }
     if (s.ok()) {
       Version* v = new Version(this);
       builder.SaveTo(v);
       Finalize(v);
       AppendVersion(v);
+
+      std::string e;
+      builder_map[current_name].push_back(
+          std::pair<std::string, VersionSetBuilder*>(e, builder));
       Log(options_->info_log, "[%s] recover manifest finish: %s\n",
           dbname_.c_str(), dscname[i].c_str());
-    } else {
+    }
+    //delete builder;
+
+    if (!s.ok()) {
       Log(options_->info_log, "[%s] recover manifest fail %s, %s\n",
           dbname_.c_str(), dscname[i].c_str(), s.ToString().c_str());
       ArchiveFile(env_, dscname[i]);
-      return Status::Corruption("recover manifest fail:" + s.ToString());
+      status_vec.push_back(Status::Corruption("recover manifest fail:" + s.ToString()));
     }
+  }
+
+  // merge version snapshot and current_
+  std::map<std::string, std::vector<std::pair<std::string, VersionSetBuilder*> > >::iterator it = builder_map.begin();
+  for (; it != builder_map.end(); ++it) {
+    if (it->first != current_name) { // merge version snapshot
+      std::vector<std::pair<std::string, VersionSetBuilder*> >::iterator it_vec = it->second.begin();
+      Version* sv = new Version(this);
+      VersionEdit e;
+      for (; it_vec != it->second.end(); ++it_vec) {
+        VersionSetBuilder* builder = it_vec->second;
+        builder.SaveTo(sv);
+        VersoinEdit part_edit;
+        part_edit.DecodeFrom(it_vec->first);
+        MergeVersionEdit(&e, &part_edit);
+        delete builder;
+      }
+      Finalize(sv);
+      AppendVersion(sv);
+
+      CreateVersionSnapshot(&e, sv);
+      InstallVersionSnapshot(sv, &e);
+    }
+  }
+  it = builder_map.find(current_name);
+  assert(it != builder_map.end());
+  if (it->first == current_name) { // merge version snapshot
+    std::vector<std::pair<std::string, VersionSetBuilder*> >::iterator it_vec = it->second.begin();
+    Version* sv = new Version(this);
+    for (; it_vec != it->second.end(); ++it_vec) {
+      VersionSetBuilder* builder = it_vec->second;
+      builder.SaveTo(sv);
+      delete builder;
+    }
+    Finalize(sv);
+    AppendVersion(sv);
+  }
+
+  if (status_vec.size() > 0) {
+    // recover fail
+    return status_vec[0];
   }
 
   if (s.ok()) {
@@ -1468,8 +1642,102 @@ void VersionSet::Finalize(Version* v) {
   v->compaction_score_ = best_score;
 }
 
+void VersionSet::MergeVersionEdit(VersionEdit* dest, VersionEdit* src) {
+  if (!dest->has_base_snapshot_) {
+   if (src->has_prepare_create_snapshot_) {
+      dest->SetPrepareCreateSnapshot(src->prepare_create_snapshot_.name,
+                                     src->prepare_create_snapshot_.timestamp);
+   }
+   if (src->has_base_snapshot_) {
+      dest->SetBaseSnapshot(src->base_snapshot_.name,
+                            src->base_snapshot_.timestamp);
+   }
+  }
+  // Save metadata
+  assert(src->GetComparatorName());
+  dest->SetComparatorName(src->GetComparatorName());
+  assert(src->HasNextFile())
+  if (!dest->HasNextFile() || dest->GetNextFileNumber() < src->GetNextFileNumber()) {
+    dest->SetNextFile(src->GetNextFileNumber());
+  }
+  assert(src->HasLastSequence());
+  if (!dest->HasLastSequence() || dest->GetLastSequence() < src->GetLastSequence()) {
+    dest->SetLastSequence(src->GetLastSequence());
+  }
+  assert(src->HasLogNumber());
+  if (!dest->HasLogNumber() || dest->GetLogNumber() < src->GetLogNumber()) {
+    dest->SetLogNumber(src->GetLogNumber());
+  }
+  assert(src->HasPrevLogNumber());
+  if (!dest->HasPrevLogNumber() || dest->GetPrevLogNumber() < src->GetPrevLogNumber()) {
+    dest->SetPrevLogNumber(src->GetPrevLogNumber());
+  }
+}
+void VersionSet::CreateVersionSnapshot(VersionEdit* edit, Version* v) {
+  // Save metadata
+  if (!edit->HasComparator()) {
+    edit->SetComparatorName(icmp_.user_comparator()->Name());
+  }
+  if (!edit->HasNextFile()) {
+    edit->SetNextFile(next_file_number_);
+  }
+  if (!edit->HasLastSequence()) {
+    edit->SetLastSequence(last_sequence_);
+  }
+  if (!edit->HasLogNumber()) {
+    edit->SetLogNumber(log_number_);
+  }
+  if (!edit->HasPrevLogNumber()) {
+    edit->SetPrevLogNumber(prev_log_number_);
+  }
+
+  // Save compaction pointers
+  for (int level = 0; level < config::kNumLevels; level++) {
+    if (!compact_pointer_[level].empty()) {
+      InternalKey key;
+      key.DecodeFrom(compact_pointer_[level]);
+      if (!edit->HasCompactPointer(level)) {
+        edit->SetCompactPointer(level, key);
+      }
+    }
+  }
+
+  // Save files
+  for (int level = 0; level < config::kNumLevels; level++) {
+    const std::vector<FileMetaData*>& files = v->files_[level];
+    for (size_t i = 0; i < files.size(); i++) {
+      edit->ClearFile();
+      edit->AddFile(level, *files[i]);
+    }
+  }
+  return;
+}
 Status VersionSet::WriteSnapshot(log::Writer* log) {
   // TODO: Break up into multiple records to reduce memory usage on recovery?
+
+  // dump version snapshot
+  std::map<std::string, std::pair<Version*, std::string> > it;
+  it = version_snapshot_prepare_.begin();
+  for (; it != version_snapshot_prepare_.end(); ++it) {
+    Status s = log->AddRecord(it->second.second);
+    if (!s.ok()) {
+      return s;
+    }
+  }
+  it = version_snapshot_.begin();
+  for (; it != version_snapshot_.end(); ++it) {
+    Status s;
+    VersionEdit e;
+    // set prepare into commit edit
+    s = e.DecodeFrom(it->second.second);
+    e.SetBaseSnapshot();
+    std::string r;
+    e.EncodeTo(&r);
+    s = log->AddRecord(r);
+    if (!s.ok()) {
+      return s;
+    }
+  }
 
   // Save metadata
   VersionEdit edit;
