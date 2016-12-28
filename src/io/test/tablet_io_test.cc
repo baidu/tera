@@ -145,7 +145,9 @@ TEST_F(TabletIOTest, Split) {
     split_key.clear();
     EXPECT_TRUE(other_tablet.Split(&split_key, &status));
     LOG(INFO) << "split key = " << split_key << ", code " << StatusCodeToString(status);
-    EXPECT_EQ(split_key, "6");
+    //EXPECT_LG(split_key, "6");
+    EXPECT_LT(key_start, split_key);
+    EXPECT_LT(split_key, key_end);
     EXPECT_TRUE(other_tablet.Unload());
 
     key_start = "";
@@ -455,7 +457,9 @@ TEST_F(TabletIOTest, FindAverageKey) {
     start = "abc";
     end = "abe";
     ASSERT_TRUE(TabletIO::FindAverageKey(start, end, &ave));
-    ASSERT_EQ(ave, "abd");
+    //ASSERT_EQ(ave, "abd");
+    ASSERT_LT(start, ave);
+    ASSERT_LT(ave, end);
 
     start = "helloa";
     end = "hellob";
@@ -471,31 +475,38 @@ TEST_F(TabletIOTest, FindAverageKey) {
     // b(0x62), 1(0x31)
     end = "ab";
     ASSERT_TRUE(TabletIO::FindAverageKey(start, end, &ave));
-    ASSERT_EQ(ave, "a1");
+    ASSERT_LT(start, ave);
+    ASSERT_LT(ave, end);
 
     // _(0x5F)
     start = "a\x10";
     end = "b";
     ASSERT_TRUE(TabletIO::FindAverageKey(start, end, &ave));
-    ASSERT_EQ(ave, "a\x88");
+    //ASSERT_EQ(ave, "a\x88");
+    ASSERT_LT(start, ave);
+    ASSERT_LT(ave, end);
 
     start = "";
     end = "";
     ASSERT_TRUE(TabletIO::FindAverageKey(start, end, &ave));
-    ASSERT_EQ(ave, "\x7F");
+    ASSERT_EQ(ave, "\x7F\x80");
 
     start = "";
     end = "b";
     ASSERT_TRUE(TabletIO::FindAverageKey(start, end, &ave));
-    ASSERT_EQ(ave, "1");
+    ASSERT_EQ(ave[0], '1');
+    ASSERT_EQ(ave[1], '\0');
 
     start = "b";
     end = "";
     ASSERT_TRUE(TabletIO::FindAverageKey(start, end, &ave));
-    ASSERT_EQ(ave, "\xb0");
+    //ASSERT_EQ(ave, "\xb0");
+    ASSERT_LT(start, ave);
+    ASSERT_NE(ave, start);
+    std::cout << start << ", " << ave << ", " << std::endl;
 
     start = "000000000000001480186993";
-    end = "000000000000002147352684";
+    end =   "000000000000002147352684";
     ASSERT_TRUE(TabletIO::FindAverageKey(start, end, &ave));
     ASSERT_LT(start, ave);
     ASSERT_LT(ave, end);
@@ -520,6 +531,16 @@ TEST_F(TabletIOTest, FindAverageKey) {
     start = "";
     end = std::string("\x0", 1);
     ASSERT_FALSE(TabletIO::FindAverageKey(start, end, &ave));
+
+    start = "aaa";
+    end = "aaa";
+    end.append(1, '\0');
+    ASSERT_FALSE(TabletIO::FindAverageKey(start, end, &ave));
+
+    start = "a\xff\xff";
+    end = "b";
+    ASSERT_TRUE(TabletIO::FindAverageKey(start, end, &ave));
+    ASSERT_EQ(ave, "a\xff\xff\x80");
 }
 } // namespace io
 } // namespace tera

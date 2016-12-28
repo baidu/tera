@@ -368,41 +368,31 @@ bool TabletIO::FindAverageKey(const std::string& start, const std::string& end,
     max_len++;  // max_len should be >0
     s.resize(max_len, '\x00');
     e.resize(max_len, '\x00');
-
     if (s == e) {
         // find failed, e.g. s == "a" && e == "a\0"
         return false;
     }
 
-    std::string ave;
-    for (int i = 0; i < max_len; ++i) {
-        if (s[i] == e[i]) {
-            ave.append(1, s[i]);
-            continue;
-        } else if ((uint32_t)(unsigned char)s[i] + 1 < (uint32_t)(unsigned char)e[i]) {
-            // find success
-            char c = (char)(((uint32_t)(unsigned char)s[i]
-                             + (uint32_t)(unsigned char)(e[i])) / 2);
-            ave.append(1, c);
-            break;
-        } else {
-            // find success
-            CHECK((uint32_t)(unsigned char)s[i] == (uint32_t)(unsigned char)e[i] - 1
-                  && i < max_len - 1);
-            uint32_t c_int = ((uint32_t)(unsigned char)s[i + 1]
-                             + (uint32_t)(unsigned char)e[i + 1] + 0x100) / 2;
-            if (c_int < 0x100) {
-                ave.append(1, s[i]);
-            } else {
-                ave.append(1, e[i]);
-            }
-            char c = (char)(c_int);
-            ave.append(1, c);
-            break;
-        }
+    // algorithm: use big number ADD and division
+    unsigned int carry[max_len + 1];
+    unsigned int sum[max_len];
+    carry[max_len] = 0;
+    for (int i = max_len - 1; i >= 0; --i) {
+        sum[i] = (unsigned char)s[i] + (unsigned char)e[i] + carry[i + 1];
+        carry[i] = sum[i] / 256;
+        sum[i] %= 256;
     }
-    CHECK(ave > start && (end == "" || ave < end));
-    *res = ave;
+    memset((char*)carry + sizeof(int), '\0', (max_len) * sizeof(int));
+    for (int i = 0; i < max_len; ++i) {
+        carry[i + 1] = (sum[i] + carry[i] * 256) % 2;
+        sum[i] = (sum[i] + carry[i] * 256) / 2;
+    }
+    std::string ave_key;
+    for (int i = 0; i < max_len; ++i) {
+        ave_key.append(1, char(sum[i]));
+    }
+    CHECK(ave_key > start && (end == "" || ave_key < end));
+    *res = ave_key;
     return true;
 }
 
