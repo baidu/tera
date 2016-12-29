@@ -329,7 +329,7 @@ void TabletWriter::FinishTask(const WriteTask& task, StatusCode status) {
     tablet_->GetCounter().write_rows.Add(row_num);
     for (int32_t i = 0; i < row_num; i++) {
         tablet_->GetCounter().write_kvs.Add((*task.row_mutation_vec)[i]->mutation_sequence_size());
-        if ((*task.status_vec)[i] == kTableOk) {
+        if ((*task.status_vec)[i] == kTabletNodeOk) {
             (*task.status_vec)[i] = status;
         }
     }
@@ -350,13 +350,13 @@ StatusCode TabletWriter::FlushToDiskBatch(WriteTaskBuffer* task_buffer) {
             const RowMutationSequence* row_mu = row_mutation_vec[j];
             if (CheckConflict(*row_mu, &commit_row_key_set, &status_vec[j])) {
                 commit_row_mu_vec.push_back(row_mu);
-                status_vec[j] = kTableOk;
+                status_vec[j] = kTabletNodeOk;
             }
         }
     }
     BatchRequest(commit_row_mu_vec, &batch);
 
-    StatusCode status = kTableOk;
+    StatusCode status = kTabletNodeOk;
     const bool disable_wal = false;
     tablet_->WriteBatch(&batch, disable_wal, FLAGS_tera_sync_log, &status);
     batch.Clear();
