@@ -70,6 +70,9 @@ public:
     TabletIO(const std::string& key_start, const std::string& key_end);
     virtual ~TabletIO();
 
+    // for testing
+    void SetMockEnv(leveldb::Env* e);
+
     std::string GetTableName() const;
     std::string GetTablePath() const;
     std::string GetStartKey() const;
@@ -265,6 +268,8 @@ private:
     std::map<std::string, uint32_t> lg_id_map_;
     StatCounter counter_;
     mutable Mutex schema_mutex_;
+
+    leveldb::Env* mock_env_; // mock env for testing
 };
 
 } // namespace io

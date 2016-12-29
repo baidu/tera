@@ -23,6 +23,7 @@
 #include "leveldb/env_dfs.h"
 #include "leveldb/env_flash.h"
 #include "leveldb/env_inmem.h"
+#include "leveldb/env_mock.h"
 #include "leveldb/filter_policy.h"
 #include "types.h"
 #include "utils/counter.h"
@@ -79,7 +80,8 @@ TabletIO::TabletIO(const std::string& key_start, const std::string& key_end)
       ref_count_(1), db_ref_count_(0), db_(NULL),
       mem_store_activated_(false),
       kv_only_(false),
-      key_operator_(NULL) {
+      key_operator_(NULL),
+      mock_env_(NULL) {
 }
 
 TabletIO::~TabletIO() {
@@ -91,6 +93,10 @@ TabletIO::~TabletIO() {
         }
         delete db_;
     }
+}
+
+void TabletIO::SetMockEnv(leveldb::Env* e) {
+    mock_env_ = e;
 }
 
 std::string TabletIO::GetTableName() const {
@@ -1663,7 +1669,11 @@ void TabletIO::SetupOptionsForLG() {
 
         leveldb::LG_info* lg_info = new leveldb::LG_info(lg_schema.id());
 
-        if (store == MemoryStore) {
+        if (mock_env_ != NULL) {
+            // for testing
+            LOG(INFO) << "mock env used";
+            ldb_options_.env = LeveldbMockEnv();
+        } else if (store == MemoryStore) {
             ldb_options_.env = lg_info->env = LeveldbMemEnv();
             ldb_options_.seek_latency = 0;
             ldb_options_.block_cache =
