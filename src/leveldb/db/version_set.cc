@@ -1185,7 +1185,7 @@ Status VersionSet::ReadCurrentFile(uint64_t tablet, std::string* dscname) {
       return Status::OK();
     }
 
-    if (!manifest_status.ok() && !manifest_status.IsNotFound()) {
+    if (!manifest_status.IsNotFound()) {
       return Status::IOError("status of manifest the CURRENT pointed to is unknown");
     }
 
@@ -1203,37 +1203,35 @@ Status VersionSet::ReadCurrentFile(uint64_t tablet, std::string* dscname) {
   // if program runs to here, there are only 2 possibilities
   // 1). lost CURRENT
   // 2). lost manifest
+  assert(options_->ignore_corruption_in_open);
 
   // don't check manifest size because some dfs (eg. hdfs)
   // may return 0 even if the actual size is not 0
-  if (options_->ignore_corruption_in_open) {
-    // manifest is not ready, now recover the backup manifest
-    std::vector<std::string> files;
-    env_->GetChildren(pdbname, &files);
-    std::set<std::string> manifest_set;
-    for (size_t i = 0; i < files.size(); ++i) {
-      uint64_t number;
-      FileType type;
-      if (ParseFileName(files[i], &number, &type)) {
-        if (type == kDescriptorFile) {
-          manifest_set.insert(files[i]);
-        }
+  // manifest is not ready, now recover the backup manifest
+  std::vector<std::string> files;
+  env_->GetChildren(pdbname, &files);
+  std::set<std::string> manifest_set;
+  for (size_t i = 0; i < files.size(); ++i) {
+    uint64_t number;
+    FileType type;
+    if (ParseFileName(files[i], &number, &type)) {
+      if (type == kDescriptorFile) {
+        manifest_set.insert(files[i]);
       }
     }
-    if (manifest_set.size() < 1) {
-      Log(options_->info_log, "[%s] none available manifest file.",
-          dbname_.c_str());
-      ArchiveFile(env_, CurrentFileName(pdbname));
-      return Status::Corruption("DB has none available manifest file.");
-    }
-    // select the largest manifest number
-    std::set<std::string>::reverse_iterator it = manifest_set.rbegin();
-    *dscname = pdbname + "/" + *it;
-    Log(options_->info_log, "[%s] use backup manifest: %s.",
-        dbname_.c_str(), dscname->c_str());
-    return Status::OK();
   }
-  return s;
+  if (manifest_set.size() < 1) {
+    Log(options_->info_log, "[%s] none available manifest file.",
+        dbname_.c_str());
+    ArchiveFile(env_, CurrentFileName(pdbname));
+    return Status::Corruption("DB has none available manifest file.");
+  }
+  // select the largest manifest number
+  std::set<std::string>::reverse_iterator it = manifest_set.rbegin();
+  *dscname = pdbname + "/" + *it;
+  Log(options_->info_log, "[%s] use backup manifest: %s.",
+      dbname_.c_str(), dscname->c_str());
+  return Status::OK();
 }
 
 Status VersionSet::Recover() {
