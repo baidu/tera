@@ -200,13 +200,13 @@ class Stats {
   Stats() { Start(); }
 
   void Start() {
+    start_ = Env::Default()->NowMicros();
     next_report_ = 100;
     last_op_finish_ = start_;
     hist_.Clear();
     done_ = 0;
     bytes_ = 0;
     seconds_ = 0;
-    start_ = Env::Default()->NowMicros();
     finish_ = start_;
     message_.clear();
   }

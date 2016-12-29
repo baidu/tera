@@ -5,12 +5,13 @@
 #ifndef TERA_VERSION_H_
 #define TERA_VERSION_H_
 
-extern const char kSvnInfo[];
+extern const char kGitInfo[];
 extern const char kBuildType[];
 extern const char kBuildTime[];
 extern const char kBuilderName[];
 extern const char kHostName[];
 extern const char kCompiler[];
 void PrintSystemVersion();
+std::string SystemVersionInfo();
 
 #endif // TERA_VERSION_H_

@@ -130,6 +130,9 @@ public:
     int64_t LoadTime();
     int64_t SetLoadTime(int64_t timestamp);
 
+    void* GetMergeParam();
+    void SetMergeParam(void* merge_param);
+
 private:
     Tablet(const Tablet&) {}
     Tablet& operator=(const Tablet&) {return *this;}
@@ -162,6 +165,7 @@ private:
             memset(this, 0, sizeof(TabletAccumulateCounter));
         }
     } accumu_counter_;
+    void* merge_param_;
 };
 
 typedef class boost::shared_ptr<Tablet> TabletPtr;
@@ -281,7 +285,7 @@ public:
 
     void FindTablet(const std::string& server_addr,
                     std::vector<TabletPtr>* tablet_meta_list,
-                    bool all_tables = false);
+                    bool need_disabled_tables);
 
     bool FindTable(const std::string& table_name,
                    std::vector<TabletPtr>* tablet_meta_list,

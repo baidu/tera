@@ -68,6 +68,10 @@ struct TableBuilder::Rep {
         pending_index_entry(false) {
     index_block_options.block_restart_interval = 1;
   }
+
+  ~Rep() {
+    delete filter_block;
+  }
 };
 
 TableBuilder::TableBuilder(const Options& options, WritableFile* file)
@@ -79,7 +83,6 @@ TableBuilder::TableBuilder(const Options& options, WritableFile* file)
 
 TableBuilder::~TableBuilder() {
   assert(rep_->closed);  // Catch errors where caller forgot to call Finish()
-  delete rep_->filter_block;
   delete rep_;
 }
 

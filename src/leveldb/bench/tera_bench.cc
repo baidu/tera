@@ -150,8 +150,11 @@ class Benchmark {
   Benchmark()
   : num_(FLAGS_num),
     reads_(FLAGS_reads < 0 ? FLAGS_num : FLAGS_reads),
+    start_(0.0),
     bytes_(0),
-    rand_(FLAGS_key_seed) {
+    rand_(FLAGS_key_seed),
+    done_(0),
+    next_report_(0) {
     tablet_rand_vector_ = new Random*[FLAGS_tablet_num];
     for (int i = 0; i < FLAGS_tablet_num; i++) {
       tablet_rand_vector_[i] = new Random(FLAGS_key_seed);

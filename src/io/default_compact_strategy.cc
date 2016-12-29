@@ -194,7 +194,6 @@ bool DefaultCompactStrategy::InternalMergeProcess(leveldb::Iterator* it,
     int64_t version_num = 0;
 
     while (it->Valid()) {
-        merged_num_t++;
         if (version_num >= 1) {
             break; //avoid accumulate to many versions
         }
@@ -208,6 +207,9 @@ bool DefaultCompactStrategy::InternalMergeProcess(leveldb::Iterator* it,
         if (is_internal_key) {
             leveldb::ParsedInternalKey ikey;
             leveldb::ParseInternalKey(itkey, &ikey);
+            if (ikey.sequence > snapshot_) {
+                break;
+            }
             if (!raw_key_operator_->ExtractTeraKey(ikey.user_key, &key, &col, &qual, &ts, &type)) {
                 LOG(WARNING) << "invalid internal key for tera: " << itkey.ToString();
                 break;
@@ -236,6 +238,7 @@ bool DefaultCompactStrategy::InternalMergeProcess(leveldb::Iterator* it,
         }
         last_ts_atomic = ts;
         it->Next();
+        merged_num_t++;
     }
     atom_merge.Finish();
     if (merged_num) {

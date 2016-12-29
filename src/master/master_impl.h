@@ -52,6 +52,7 @@ class MetaTable;
 class Scheduler;
 class TabletManager;
 class TabletNodeManager;
+class MasterImplTest;
 
 class MasterImpl {
 public:
@@ -66,7 +67,7 @@ public:
     };
 
     MasterImpl();
-    ~MasterImpl();
+    virtual ~MasterImpl();
 
     bool Init();
 
@@ -153,6 +154,7 @@ public:
     std::string ProfilingLog();
 
 private:
+    friend class MasterImplTest;
     typedef Closure<void, SnapshotRequest*, SnapshotResponse*, bool, int> SnapshotClosure;
     typedef Closure<void, SnapshotRollbackRequest*, SnapshotRollbackResponse*, bool, int> RollbackClosure;
     typedef Closure<void, ReleaseSnapshotRequest*, ReleaseSnapshotResponse*, bool, int> DelSnapshotClosure;
@@ -217,6 +219,12 @@ private:
         int finish_num;
         mutable Mutex mutex;
         bool aborted;
+    };
+
+    struct MergeParam {
+        MutexPtr mutex;
+        TabletPtr counter_part;
+        MergeParam(MutexPtr mu, TabletPtr tb) : mutex(mu), counter_part(tb) {}
     };
 
     void SafeModeCmdCtrl(const CmdCtrlRequest* request,
@@ -361,12 +369,8 @@ private:
                              int error_code);
 
     void MergeTabletAsync(TabletPtr tablet_p1, TabletPtr tablet_p2);
-    void MergeTabletAsyncPhase2(TabletPtr tablet_p1, TabletPtr tablet_p2);
-    void MergeTabletUnloadCallback(TabletPtr tablet, TabletPtr tablet2,
-                                   MutexPtr mutex,
-                                   UnloadTabletRequest* request,
-                                   UnloadTabletResponse* response,
-                                   bool failed, int error_code);
+    virtual void MergeTabletAsyncPhase2(TabletPtr tablet_p1, TabletPtr tablet_p2);
+    void MergeTabletUnloadCallback(TabletPtr tablet);
     void MergeTabletWriteMetaCallback(TabletMeta new_meta, TabletPtr tablet_p1,
                                       TabletPtr tablet_p2, int32_t retry_times,
                                       WriteTabletRequest* request,

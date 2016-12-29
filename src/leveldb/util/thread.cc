@@ -7,7 +7,8 @@
 namespace leveldb {
 
 Thread::Thread()
-    : started_(false) {}
+    : started_(false),
+      id_(0) {}
 
 Thread::~Thread() {
     Cancel();

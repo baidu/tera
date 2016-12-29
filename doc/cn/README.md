@@ -6,15 +6,13 @@
 
 [Tera表格数据模型及实现](data_model.md)
 
-[master、ts、client的交互](master-ts-client-interactive.md)
-
 ## 使用帮助
 
 [体验单机Tera](onebox.md)
 
 [命令行工具teracli使用方法](teracli.md)
 
-[主要api使用方法](sdk_dev_guide.md)
+[主要api使用方法](sdk_guide.md)
 
 [搭建tera集群](cluster_setup.md)
 
@@ -32,15 +30,11 @@
 
 [tablet的可用性统计实现](tablet-availability.md)
 
+[master、ts、client的交互](master-ts-client-interactive.md)
+
 ## 版本发布
 
 [版本发布及管理](release_management.md)
-
-## 源码相关
-
-[源码目录结构](../src/README.md)
-
-[LevelDB](../src/leveldb/README.md)
 
 ## TodoList
 1. Master的设计与实现（职责、功能、每个功能怎么实现的、为什么这么实现、还有哪些遗留问题）

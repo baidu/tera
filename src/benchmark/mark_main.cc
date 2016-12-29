@@ -263,9 +263,11 @@ void print_size_and_count(int64_t size, int64_t count) {
         dsize /= 1024;
         unit_index++;
     }
+    std::ios::fmtflags cout_flag(std::cout.flags());
     std::cout << std::fixed << std::setprecision(3) << dsize
         << unit[unit_index];
     std::cout << "(" << count << ")";
+    std::cout.flags(cout_flag);
 }
 
 void print_statistic(Statistic* statistic) {

@@ -12,6 +12,7 @@
 #include "util/hash.h"
 #include "util/mutexlock.h"
 #include "util/string_ext.h"
+#include "../common/timer.h"
 #include "../utils/counter.h"
 
 namespace leveldb {
@@ -46,6 +47,8 @@ static int (*nfsSeek)(nfs::NFSFILE* stream, uint64_t offset);
 
 static void (*nfsSetAssignNamespaceIdFunc)(nfs::AssignNamespaceIdFunc func);
 
+static void* dl = NULL;
+
 void* ResolveSymbol(void* dl, const char* sym) {
   dlerror();
   void* sym_ptr = dlsym(dl, sym);
@@ -64,7 +67,7 @@ void* ResolveSymbol(void* dl, const char* sym) {
 
 void Nfs::LoadSymbol() {
   dlerror();
-  void* dl = dlopen("libnfs.so", RTLD_NOW | RTLD_GLOBAL);
+  dl = dlopen("libnfs.so", RTLD_NOW | RTLD_LOCAL | RTLD_DEEPBIND);
   if (dl == NULL) {
     fprintf(stderr, "dlopen libnfs.so error: %s\n", dlerror());
     abort();
@@ -234,6 +237,7 @@ int32_t Nfs::CreateDirectory(const std::string& name) {
     if (0 != (*nfsAccess)(path.c_str(), F_OK) && (*nfsGetErrno)() == ENOENT) {
       if (0 != (*nfsMkdir)(path.c_str()) && (*nfsGetErrno)() != EEXIST) {
         errno = (*nfsGetErrno)();
+        fprintf(stderr, "[%s] Createdir %s fail: %d\n", common::timer::get_curtime_str().c_str(), name.c_str(), errno);
         return -1;
       }
     }
@@ -245,6 +249,7 @@ int32_t Nfs::DeleteDirectory(const std::string& name) {
   int32_t retval = (*nfsRmdir)(name.c_str());
   if (retval != 0) {
     errno = (*nfsGetErrno)();
+    fprintf(stderr, "[%s] DeleteDirectory %s fail: %d\n", common::timer::get_curtime_str().c_str(), name.c_str(), errno);
   }
   return retval;
 }
@@ -252,6 +257,7 @@ int32_t Nfs::Exists(const std::string& filename) {
   int32_t retval = (*nfsAccess)(filename.c_str(), F_OK);
   if (retval != 0) {
     errno = (*nfsGetErrno)();
+    fprintf(stderr, "[%s] Exists %s fail: %d\n", common::timer::get_curtime_str().c_str(), filename.c_str(), errno);
   }
   return retval;
 }
@@ -259,6 +265,7 @@ int32_t Nfs::Delete(const std::string& filename) {
   int32_t retval = (*nfsUnlink)(filename.c_str());
   if (retval != 0) {
     errno = (*nfsGetErrno)();
+    fprintf(stderr, "[%s] Delete %s fail: %d\n", common::timer::get_curtime_str().c_str(), filename.c_str(), errno);
   }
   return retval;
 }
@@ -269,6 +276,7 @@ int32_t Nfs::GetFileSize(const std::string& filename, uint64_t* size) {
     *size = fileinfo.st_size;
   } else {
     errno = (*nfsGetErrno)();
+    fprintf(stderr, "[%s] Getfilesize %s fail: %d\n", common::timer::get_curtime_str().c_str(), filename.c_str(), errno);
   }
   return retval;
 }
@@ -276,6 +284,7 @@ int32_t Nfs::Rename(const std::string& from, const std::string& to) {
   int32_t retval = (*nfsRename)(from.c_str(), to.c_str());
   if (retval != 0) {
     errno = (*nfsGetErrno)();
+    fprintf(stderr, "[%s] Rename %s to %s fail: %d\n", common::timer::get_curtime_str().c_str(), from.c_str(), to.c_str(), errno);
   }
   return retval;
 }
@@ -292,6 +301,7 @@ DfsFile* Nfs::OpenFile(const std::string& filename, int32_t flags) {
     return new NFile(file, filename);
   }
   errno = (*nfsGetErrno)();
+  fprintf(stderr, "[%s] Openfile %s fail: %d\n", common::timer::get_curtime_str().c_str(), filename.c_str(), errno);
   return NULL;
 }
 
@@ -303,8 +313,8 @@ int32_t Nfs::ListDirectory(const std::string& path,
                            std::vector<std::string>* result) {
   nfs::NFSDIR* dir = (*nfsOpendir)(path.c_str());
   if (NULL == dir) {
-    fprintf(stderr, "Opendir %s fail\n", path.c_str());
     errno = (*nfsGetErrno)();
+    fprintf(stderr, "[%s] Opendir %s fail: %d\n", common::timer::get_curtime_str().c_str(), path.c_str(), errno);
     return -1;
   }
   struct ::dirent* dir_info = NULL;
@@ -314,9 +324,9 @@ int32_t Nfs::ListDirectory(const std::string& path,
       result->push_back(pathname);
     }
   }
-  if (0 != (*nfsGetErrno)()) {
-    fprintf(stderr, "List %s error: %d\n", path.c_str(), (*nfsGetErrno)());
-    errno = (*nfsGetErrno)();
+  errno = (*nfsGetErrno)();
+  if (0 != errno) {
+    fprintf(stderr, "[%s] List %s error: %d\n", common::timer::get_curtime_str().c_str(), path.c_str(), errno);
     (*nfsClosedir)(dir);
     return -1;
   }

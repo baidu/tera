@@ -30,58 +30,58 @@ public:
 };
 
 
-Mutex _s_mutex;
-int32_t _s_pending_num = 0;
-int32_t _s_pending_size = 0;
+Mutex s_mutex_;
+int32_t s_pending_num_ = 0;
+int32_t s_pending_size_ = 0;
 
 HashClient::HashClient(HashMethod* hash_method,
                        const std::string& table_name,
                        Client* client_impl)
-    : _table(NULL), _scan_stream(NULL), _table_name(table_name),
-      _hash_method(hash_method), _is_created_client(false),
-      _is_created_hash_method(false) {
-    if (_hash_method == NULL) {
-        _hash_method = new NullHashMethod();
-        _is_created_hash_method = true;
+    : table_(NULL), scan_stream_(NULL), table_name_(table_name),
+      hash_method_(hash_method), is_created_client_(false),
+      is_created_hash_method_(false) {
+    if (hash_method_ == NULL) {
+        hash_method_ = new NullHashMethod();
+        is_created_hash_method_ = true;
     }
     ErrorCode err;
     if (client_impl) {
-        _client = client_impl;
+        client_ = client_impl;
     } else {
-        _client = Client::NewClient("./tera.flag", "tera_hash", &err);
-        _is_created_client = true;
+        client_ = Client::NewClient("./tera.flag", "tera_hash", &err);
+        is_created_client_ = true;
     }
-    CHECK(_client && err.GetType() == ErrorCode::kOK) << strerr(err);
+    CHECK(client_ && err.GetType() == ErrorCode::kOK) << strerr(err);
 }
 
 HashClient::~HashClient() {
-    if (_is_created_hash_method) {
-        delete _hash_method;
+    if (is_created_hash_method_) {
+        delete hash_method_;
     }
-    if (_is_created_client) {
-        delete _client;
+    if (is_created_client_) {
+        delete client_;
     }
 
-    if (_table) {
-        delete _table;
+    if (table_) {
+        delete table_;
     }
 }
 
 bool HashClient::OpenTable(ErrorCode* err) {
-    if (_table) {
+    if (table_) {
         return true;
     }
 
-    if (!_client->IsTableExist(_table_name, err)) {
+    if (!client_->IsTableExist(table_name_, err)) {
         return false;
     }
 
-    _table = _client->OpenTable(_table_name, err);
-    if (_table == NULL) {
+    table_ = client_->OpenTable(table_name_, err);
+    if (table_ == NULL) {
         return false;
     }
 
-    CHECK(GetColumnFamilyList(&_field_types, err));
+    CHECK(GetColumnFamilyList(&field_types_, err));
 
     return true;
 }
@@ -95,12 +95,12 @@ bool HashClient::Put(const std::string& row_key,
 bool HashClient::Put(const std::string& row_key, const std::string& family,
                      const std::string& qualifier, const std::string& value,
                      ErrorCode* err) {
-    if (!_table) {
-        LOG(ERROR) << "table not open: " << _table_name;
-        SetErrorCode(err, ErrorCode::kSystem, "tail not open: " + _table_name);
+    if (!table_) {
+        LOG(ERROR) << "table not open: " << table_name_;
+        SetErrorCode(err, ErrorCode::kSystem, "tail not open: " + table_name_);
         return false;
     }
-    return _table->Put(_hash_method->HashKey(row_key), family, qualifier, value, err);
+    return table_->Put(hash_method_->HashKey(row_key), family, qualifier, value, err);
 }
 
 bool HashClient::Write(const std::string& row_key, const std::string& family,
@@ -112,14 +112,14 @@ bool HashClient::Write(const std::string& row_key, const std::string& family,
 bool HashClient::Write(const std::string& row_key, const std::string& family,
                        const std::string& qualifier, const std::string& value,
                        UserContext* context, ErrorCode* err) {
-    if (!_table) {
-        LOG(ERROR) << "table not open: " << _table_name;
-        SetErrorCode(err, ErrorCode::kSystem, "tail not open: " + _table_name);
+    if (!table_) {
+        LOG(ERROR) << "table not open: " << table_name_;
+        SetErrorCode(err, ErrorCode::kSystem, "tail not open: " + table_name_);
         return false;
     }
 
-    while (_s_pending_num > FLAGS_tera_hash_sdk_rpc_max_pending_num
-           || _s_pending_size > FLAGS_tera_sdk_rpc_max_pending_buffer_size * 1024 * 1024) {
+    while (s_pending_num_ > FLAGS_tera_hash_sdk_rpc_max_pending_num
+           || s_pending_size_ > FLAGS_tera_sdk_rpc_max_pending_buffer_size * 1024 * 1024) {
         usleep(1000000);
     }
 
@@ -134,13 +134,13 @@ bool HashClient::Write(const std::string& row_key, const std::string& family,
 }
 
 void HashClient::Flush(uint64_t sleep_time) {
-    while (_s_pending_num > 0) {
+    while (s_pending_num_ > 0) {
         usleep(sleep_time);
     }
 }
 
 RowMutation* HashClient::NewMutation(const std::string& row_key) {
-    return _table->NewRowMutation(_hash_method->HashKey(row_key));
+    return table_->NewRowMutation(hash_method_->HashKey(row_key));
 }
 
 void HashClient::ApplyMutation(UserContext* context, RowMutation* mutation,
@@ -151,14 +151,14 @@ void HashClient::ApplyMutation(UserContext* context, RowMutation* mutation,
     } else {
         mutation->SetContext(NULL);
     }
-    MutexLock locker(&_s_mutex);
-    _s_pending_num++;
-    _s_pending_size += value_size;
-    _table->ApplyMutation(mutation);
+    MutexLock locker(&s_mutex_);
+    s_pending_num_++;
+    s_pending_size_ += value_size;
+    table_->ApplyMutation(mutation);
 }
 
 void HashClient::WriteCallback(tera::RowMutation* mutation) {
-    MutexLock locker(&_s_mutex);
+    MutexLock locker(&s_mutex_);
     const tera::ErrorCode& error_code = mutation->GetError();
     if (error_code.GetType() != tera::ErrorCode::kOK) {
         LOG(ERROR) << "write failed: key = " << mutation->RowKey()
@@ -173,8 +173,8 @@ void HashClient::WriteCallback(tera::RowMutation* mutation) {
         delete context;
     }
 
-    _s_pending_num--;
-    _s_pending_size -= mutation->Size();
+    s_pending_num_--;
+    s_pending_size_ -= mutation->Size();
     delete mutation;
 }
 
@@ -186,27 +186,27 @@ bool HashClient::Get(const std::string& row_key,
 bool HashClient::Get(const std::string& row_key, const std::string& family,
                      const std::string& qualifier, std::string* value,
                      ErrorCode* err) {
-    if (!_table) {
-        LOG(ERROR) << "table not open: " << _table_name;
-        SetErrorCode(err, ErrorCode::kSystem, "tail not open: " + _table_name);
+    if (!table_) {
+        LOG(ERROR) << "table not open: " << table_name_;
+        SetErrorCode(err, ErrorCode::kSystem, "tail not open: " + table_name_);
         return false;
     }
 
-    return _table->Get(_hash_method->HashKey(row_key), family, qualifier, value, err);
+    return table_->Get(hash_method_->HashKey(row_key), family, qualifier, value, err);
 }
 
 bool HashClient::Get(const std::string& row_key, void* obj,
                      void (*callback)(void*, const std::string& family, const std::string& qualifer,
                                       const std::string& value, const std::string& value_type)) {
-    RowReader* row_reader = _table->NewRowReader(_hash_method->HashKey(row_key));
+    RowReader* row_reader = table_->NewRowReader(hash_method_->HashKey(row_key));
     row_reader->SetMaxVersions(1);
     row_reader->SetTimeOut(5000);
-    _table->Get(row_reader);
+    table_->Get(row_reader);
 
     while(!row_reader->Done()) {
         std::string type;
-        std::map<std::string, std::string>::iterator it = _field_types.find(row_reader->Family());
-        if (it != _field_types.end()) {
+        std::map<std::string, std::string>::iterator it = field_types_.find(row_reader->Family());
+        if (it != field_types_.end()) {
             type = it->second;
         }
         callback(obj, row_reader->Family(), row_reader->Qualifier(), row_reader->Value(), type);
@@ -218,9 +218,9 @@ bool HashClient::Get(const std::string& row_key, void* obj,
 }
 
 bool HashClient::Delete(const std::string& row_key, ErrorCode* err) {
-    RowMutation* mutation = _table->NewRowMutation(_hash_method->HashKey(row_key));
+    RowMutation* mutation = table_->NewRowMutation(hash_method_->HashKey(row_key));
     mutation->DeleteRow();
-    _table->ApplyMutation(mutation);
+    table_->ApplyMutation(mutation);
     delete mutation;
     return true;
 }
@@ -259,41 +259,41 @@ bool HashClient::Seek(const HashScanDesc& desc, ErrorCode* err) {
         }
     }
 
-    _scan_stream = _table->Scan(scan_desc, err);
-    return _scan_stream != NULL;
+    scan_stream_ = table_->Scan(scan_desc, err);
+    return scan_stream_ != NULL;
 }
 
 bool HashClient::Current(std::string* key, std::string* value,
                          ErrorCode* err) {
-    if (_scan_stream->Done()) {
+    if (scan_stream_->Done()) {
         SetErrorCode(err, ErrorCode::kSystem, "not more record");
         return false;
     }
-    *key = _hash_method->Key(_scan_stream->RowName());
-    *value = _scan_stream->Value();
+    *key = hash_method_->Key(scan_stream_->RowName());
+    *value = scan_stream_->Value();
     return true;
 }
 
 bool HashClient::Current(std::string* row_key, std::string* family, std::string* qualifier,
                          std::string* value, ErrorCode* err) {
-    if (!_scan_stream) {
+    if (!scan_stream_) {
         SetErrorCode(err, ErrorCode::kSystem, "scan not ready");
         return false;
     }
-    if (_scan_stream->Done()) {
+    if (scan_stream_->Done()) {
         SetErrorCode(err, ErrorCode::kSystem, "not more record");
         return false;
     }
 
-    *row_key = _hash_method->Key(_scan_stream->RowName());
+    *row_key = hash_method_->Key(scan_stream_->RowName());
     if (family) {
-        *family = _scan_stream->Family();
+        *family = scan_stream_->Family();
     }
     if (qualifier) {
-        *qualifier = _scan_stream->Qualifier();
+        *qualifier = scan_stream_->Qualifier();
     }
     if (value) {
-        *value = _scan_stream->Value();
+        *value = scan_stream_->Value();
     }
     return true;
 }
@@ -303,45 +303,45 @@ bool HashClient::Current(std::string* row_key, void* obj,
                                           const std::string& qualifier,
                                           const std::string& value,
                                           const std::string& type)) {
-    if (_scan_stream->Done()) {
+    if (scan_stream_->Done()) {
         return false;
     }
     std::string type;
-    std::map<std::string, std::string>::iterator it = _field_types.find(_scan_stream->Family());
-    if (it != _field_types.end()) {
+    std::map<std::string, std::string>::iterator it = field_types_.find(scan_stream_->Family());
+    if (it != field_types_.end()) {
         type = it->second;
     }
-    *row_key = _hash_method->Key(_scan_stream->RowName());
-    callback(obj, _scan_stream->Family(), _scan_stream->Qualifier(),
-             _scan_stream->Value(), type);
+    *row_key = hash_method_->Key(scan_stream_->RowName());
+    callback(obj, scan_stream_->Family(), scan_stream_->Qualifier(),
+             scan_stream_->Value(), type);
     return true;
 }
 
 bool HashClient::Next(ErrorCode* err) {
-    if (_scan_stream->Done()) {
+    if (scan_stream_->Done()) {
         SetErrorCode(err, ErrorCode::kSystem, "not more record");
         return false;
     }
-    _scan_stream->Next();
+    scan_stream_->Next();
 
-    if (_scan_stream->Done()) {
+    if (scan_stream_->Done()) {
         return false;
     }
     return true;
 }
 
 const Table* HashClient::GetTable() {
-    return _table;
+    return table_;
 }
 
 bool HashClient::CreateTable(const std::map<std::string, std::string>& cf_list,
                              ErrorCode* err) {
-    if (_client->IsTableExist(_table_name, err)) {
-        LOG(ERROR) << "table '" << _table_name << "' already exist";
+    if (client_->IsTableExist(table_name_, err)) {
+        LOG(ERROR) << "table '" << table_name_ << "' already exist";
         return false;
     }
 
-    TableDescriptor table_desc(_table_name);
+    TableDescriptor table_desc(table_name_);
     table_desc.SetRawKey(kBinary);
 
     std::string sf_lg_name = "sf_lg";
@@ -361,11 +361,11 @@ bool HashClient::CreateTable(const std::map<std::string, std::string>& cf_list,
     }
 
     std::vector<std::string> delimiters;
-    for (int32_t i = 0; i < _hash_method->GetBulkNum(); ++i) {
+    for (int32_t i = 0; i < hash_method_->GetBulkNum(); ++i) {
         delimiters.push_back(StringFormat("%08llu", i));
     }
 
-    if (!_client->CreateTable(table_desc, delimiters, err)) {
+    if (!client_->CreateTable(table_desc, delimiters, err)) {
         return false;
     }
     return true;
@@ -377,7 +377,7 @@ bool HashClient::DeleteTable(ErrorCode* err) {
 
 bool HashClient::GetColumnFamilyList(std::map<std::string, std::string>* cf_list,
                                      ErrorCode* err) {
-    TableDescriptor* table_desc = _client->GetTableDescriptor(_table_name, err);
+    TableDescriptor* table_desc = client_->GetTableDescriptor(table_name_, err);
     if (!table_desc) {
         return false;
     }

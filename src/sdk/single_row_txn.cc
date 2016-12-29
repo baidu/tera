@@ -18,15 +18,15 @@ namespace tera {
 
 SingleRowTxn::SingleRowTxn(TableImpl* table, const std::string& row_key,
                            common::ThreadPool* thread_pool)
-    : _table(table),
-      _row_key(row_key),
-      _thread_pool(thread_pool),
-      _has_read(false),
-      _user_reader_callback(NULL),
-      _user_reader_context(NULL),
-      _mutation_buffer(table, row_key),
-      _user_commit_callback(NULL),
-      _user_commit_context(NULL) {
+    : table_(table),
+      row_key_(row_key),
+      thread_pool_(thread_pool),
+      has_read_(false),
+      user_reader_callback_(NULL),
+      user_reader_context_(NULL),
+      mutation_buffer_(table, row_key),
+      user_commit_callback_(NULL),
+      user_commit_context_(NULL) {
 }
 
 SingleRowTxn::~SingleRowTxn() {
@@ -37,8 +37,8 @@ void SingleRowTxn::ApplyMutation(RowMutation* row_mu) {
     RowMutationImpl* row_mu_impl = static_cast<RowMutationImpl*>(row_mu);
     row_mu_impl->SetTransaction(this);
 
-    if (row_mu->RowKey() == _row_key) {
-        _mutation_buffer.Concatenate(*row_mu_impl);
+    if (row_mu->RowKey() == row_key_) {
+        mutation_buffer_.Concatenate(*row_mu_impl);
         row_mu_impl->SetError(ErrorCode::kOK);
     } else {
         row_mu_impl->SetError(ErrorCode::kBadParam, "not same row");
@@ -46,7 +46,7 @@ void SingleRowTxn::ApplyMutation(RowMutation* row_mu) {
 
     if (row_mu->IsAsync()) {
         ThreadPool::Task task = boost::bind(&RowMutationImpl::RunCallback, row_mu_impl);
-        _thread_pool->AddTask(task);
+        thread_pool_->AddTask(task);
     }
 }
 
@@ -66,9 +66,9 @@ void SingleRowTxn::Get(RowReader* row_reader) {
     reader_impl->GetTimeRange(&ts_start, &ts_end);
 
     // safe check
-    if (reader_impl->RowName() != _row_key) {
+    if (reader_impl->RowName() != row_key_) {
         reader_impl->SetError(ErrorCode::kBadParam, "not same row");
-    } else if (_has_read) {
+    } else if (has_read_) {
         reader_impl->SetError(ErrorCode::kBadParam, "not support read more than once in txn");
     } else if (ts_start > kOldestTs || ts_end < kLatestTs) {
         reader_impl->SetError(ErrorCode::kBadParam, "not support read a time range in txn");
@@ -80,20 +80,20 @@ void SingleRowTxn::Get(RowReader* row_reader) {
     if (reader_impl->GetError().GetType() != ErrorCode::kOK) {
         if (is_async) {
             ThreadPool::Task task = boost::bind(&RowReaderImpl::RunCallback, reader_impl);
-            _thread_pool->AddTask(task);
+            thread_pool_->AddTask(task);
         }
         return;
     }
 
     // save user's callback & context
-    _user_reader_callback = reader_impl->GetCallBack();
-    _user_reader_context = reader_impl->GetContext();
+    user_reader_callback_ = reader_impl->GetCallBack();
+    user_reader_context_ = reader_impl->GetContext();
 
     // use our callback wrapper
     reader_impl->SetCallBack(ReadCallbackWrapper);
     reader_impl->SetContext(this);
 
-    _table->Get(reader_impl);
+    table_->Get(reader_impl);
     if (!is_async) {
         reader_impl->Wait();
     }
@@ -101,49 +101,49 @@ void SingleRowTxn::Get(RowReader* row_reader) {
 
 /// 设置提交回调, 提交操作会异步返回
 void SingleRowTxn::SetCommitCallback(Callback callback) {
-    _user_commit_callback = callback;
+    user_commit_callback_ = callback;
 }
 
 /// 获取提交回调
 Transaction::Callback SingleRowTxn::GetCommitCallback() {
-    return _user_commit_callback;
+    return user_commit_callback_;
 }
 
 /// 设置用户上下文，可在回调函数中获取
 void SingleRowTxn::SetContext(void* context) {
-    _user_commit_context = context;
+    user_commit_context_ = context;
 }
 
 /// 获取用户上下文
 void* SingleRowTxn::GetContext() {
-    return _user_commit_context;
+    return user_commit_context_;
 }
 
 /// 获得结果错误码
 const ErrorCode& SingleRowTxn::GetError() {
-    return _mutation_buffer.GetError();
+    return mutation_buffer_.GetError();
 }
 
 /// 内部读操作回调
 void SingleRowTxn::ReadCallback(RowReaderImpl* reader_impl) {
     // restore user's callback & context
-    reader_impl->SetCallBack(_user_reader_callback);
-    reader_impl->SetContext(_user_reader_context);
+    reader_impl->SetCallBack(user_reader_callback_);
+    reader_impl->SetContext(user_reader_context_);
 
     // save results for commit check
     ErrorCode::ErrorCodeType code = reader_impl->GetError().GetType();
     if (code == ErrorCode::kOK || code == ErrorCode::kNotFound) {
-        _has_read = true;
+        has_read_ = true;
 
         // copy read_column_list
-        _read_column_list = reader_impl->GetReadColumnList();
+        read_column_list_ = reader_impl->GetReadColumnList();
 
         // copy read result (not including value)
         while (!reader_impl->Done()) {
             const std::string& family = reader_impl->Family();
             const std::string& qualifier = reader_impl->Qualifier();
             int64_t timestamp = reader_impl->Timestamp();
-            _read_result[family][qualifier] = timestamp;
+            read_result_[family][qualifier] = timestamp;
             reader_impl->Next();
         }
         reader_impl->ResetResultPos();
@@ -161,38 +161,38 @@ void CommitCallbackWrapper(RowMutation* row_mu) {
 
 /// 提交事务
 void SingleRowTxn::Commit() {
-    if (_mutation_buffer.MutationNum() > 0) {
-        if (_user_commit_callback != NULL) {
+    if (mutation_buffer_.MutationNum() > 0) {
+        if (user_commit_callback_ != NULL) {
             // use our callback wrapper
-            _mutation_buffer.SetCallBack(CommitCallbackWrapper);
-            _mutation_buffer.SetContext(this);
+            mutation_buffer_.SetCallBack(CommitCallbackWrapper);
+            mutation_buffer_.SetContext(this);
         }
-        _mutation_buffer.SetTransaction(this);
-        _table->ApplyMutation(&_mutation_buffer);
+        mutation_buffer_.SetTransaction(this);
+        table_->ApplyMutation(&mutation_buffer_);
     } else {
-        if (_user_commit_callback != NULL) {
-            ThreadPool::Task task = boost::bind(_user_commit_callback, this);
-            _thread_pool->AddTask(task);
+        if (user_commit_callback_ != NULL) {
+            ThreadPool::Task task = boost::bind(user_commit_callback_, this);
+            thread_pool_->AddTask(task);
         }
     }
 }
 
 /// 内部提交回调
 void SingleRowTxn::CommitCallback(RowMutationImpl* mu_impl) {
-    CHECK_EQ(&_mutation_buffer, mu_impl);
-    CHECK_NOTNULL(_user_commit_callback);
+    CHECK_EQ(&mutation_buffer_, mu_impl);
+    CHECK_NOTNULL(user_commit_callback_);
     // run user's commit callback
-    _user_commit_callback(this);
+    user_commit_callback_(this);
 }
 
 /// 序列化
 void SingleRowTxn::Serialize(RowMutationSequence* mu_seq) {
     SingleRowTxnReadInfo* pb_read_info = mu_seq->mutable_txn_read_info();
-    pb_read_info->set_has_read(_has_read);
+    pb_read_info->set_has_read(has_read_);
 
     // serialize read_clumn_list
-    RowReader::ReadColumnList::iterator column_it = _read_column_list.begin();
-    for (; column_it != _read_column_list.end(); ++column_it) {
+    RowReader::ReadColumnList::iterator column_it = read_column_list_.begin();
+    for (; column_it != read_column_list_.end(); ++column_it) {
         const std::string& family = column_it->first;
         std::set<std::string>& qualifier_set = column_it->second;
 
@@ -206,8 +206,8 @@ void SingleRowTxn::Serialize(RowMutationSequence* mu_seq) {
     }
 
     // serialize read_result (only family & qualifier & timestamp)
-    ReadResult::iterator cf_it = _read_result.begin();
-    for (; cf_it != _read_result.end(); ++cf_it) {
+    ReadResult::iterator cf_it = read_result_.begin();
+    for (; cf_it != read_result_.end(); ++cf_it) {
         const std::string& family = cf_it->first;
         std::map<std::string, int64_t>& qualifier_map = cf_it->second;
 

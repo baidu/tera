@@ -18,11 +18,10 @@ DECLARE_string(tera_role);
 DECLARE_string(tera_log_prefix);
 DECLARE_string(tera_local_addr);
 
-bool g_quit = false;
+volatile sig_atomic_t g_quit = 0;
 
 static void SignalIntHandler(int sig) {
-    LOG(INFO) << "receive interrupt signal from user, will stop";
-    g_quit = true;
+    g_quit = 1;
 }
 
 tera::TeraEntry* SwitchTeraEntry() {
@@ -77,6 +76,9 @@ int main(int argc, char** argv) {
         signal(SIGINT, SignalIntHandler);
         signal(SIGTERM, SignalIntHandler);
         // signal(SIGSEGV, SIG_DFL); // 如果这个被改回SIG_DFL, jvm会core, 不知道为啥...
+    }
+    if (g_quit) {
+        LOG(INFO) << "received interrupt signal from user, will stop";
     }
 
     if (!entry->Shutdown()) {

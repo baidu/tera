@@ -1166,7 +1166,7 @@ Status DBImpl::DoCompactionWork(CompactionState* compact) {
   assert(compact->builder == NULL);
   assert(compact->outfile == NULL);
   if (snapshots_.empty()) {
-    compact->smallest_snapshot = GetLastSequence(false);
+    compact->smallest_snapshot = kMaxSequenceNumber;
   } else {
     compact->smallest_snapshot = *(snapshots_.begin());
   }
@@ -1237,7 +1237,8 @@ Status DBImpl::DoCompactionWork(CompactionState* compact) {
 
       if (RollbackDrop(ikey.sequence, rollbacks_)) {
         drop = true;
-      } else if (last_sequence_for_key <= compact->smallest_snapshot) {
+      } else if (last_sequence_for_key <= compact->smallest_snapshot &&
+                 last_sequence_for_key != kMaxSequenceNumber) {
         // Hidden by an newer entry for same user key
         drop = true;    // (A)
       } else if (ikey.type == kTypeDeletion &&
@@ -1252,7 +1253,7 @@ Status DBImpl::DoCompactionWork(CompactionState* compact) {
         //     few iterations of this loop (by rule (A) above).
         // Therefore this deletion marker is obsolete and can be dropped.
         drop = true;
-      } else if (compact_strategy) {
+      } else if (compact_strategy && ikey.sequence <= compact->smallest_snapshot) {
         std::string lower_bound;
         if (options_.drop_base_level_del_in_compaction) {
             lower_bound = compact->compaction->drop_lower_bound();
@@ -1286,7 +1287,7 @@ Status DBImpl::DoCompactionWork(CompactionState* compact) {
       }
       compact->current_output()->largest.DecodeFrom(key);
 
-      if (compact_strategy) {
+      if (compact_strategy && ikey.sequence <= compact->smallest_snapshot) {
           std::string merged_value;
           std::string merged_key;
           has_atom_merged = compact_strategy->MergeAtomicOPs(
@@ -1494,27 +1495,14 @@ const uint64_t DBImpl::GetSnapshot(uint64_t last_sequence) {
   return last_sequence;
 }
 
-void DBImpl::TryReleaseSnapshot(uint64_t sequence_number) {
-  // In mem compaction, may release a snapshot which is not exist.
-
-  //Log(options_.info_log,
-  //    "[%s] release snapshot: %llu,  size %llu", dbname_.c_str(),
-  //    (unsigned long long)sequence_number,
-  //    (unsigned long long)snapshots_.size());
-  std::multiset<uint64_t>::iterator it = snapshots_.find(sequence_number);
-  if (it != snapshots_.end()) {
-    snapshots_.erase(it);
-  }
-}
-
 void DBImpl::ReleaseSnapshot(uint64_t sequence_number) {
   MutexLock l(&mutex_);
   if (options_.use_memtable_on_leveldb) {
     if (mem_) {
-      ((MemTableOnLevelDB*)mem_)->TryReleaseSnapshot(sequence_number);
+      ((MemTableOnLevelDB*)mem_)->ReleaseSnapshot(sequence_number);
     }
     if (imm_) {
-      ((MemTableOnLevelDB*)imm_)->TryReleaseSnapshot(sequence_number);
+      ((MemTableOnLevelDB*)imm_)->ReleaseSnapshot(sequence_number);
     }
   }
   std::multiset<uint64_t>::iterator it = snapshots_.find(sequence_number);
@@ -1871,11 +1859,16 @@ MemTable* DBImpl::NewMemTable() const {
     } else {
         Logger* info_log = NULL;
         // Logger* info_log = options_.info_log;
-        return new MemTableOnLevelDB(internal_comparator_,
+        MemTableOnLevelDB* new_mem = new MemTableOnLevelDB(internal_comparator_,
                                      options_.compact_strategy_factory,
                                      options_.memtable_ldb_write_buffer_size,
                                      options_.memtable_ldb_block_size,
                                      info_log);
+        std::multiset<uint64_t>::iterator i = snapshots_.begin();
+        for (; i != snapshots_.end(); ++i) {
+          new_mem->GetSnapshot(*i);
+        }
+        return new_mem;
     }
 }
 

@@ -49,7 +49,8 @@ std::ostream& operator << (std::ostream& o, const Tablet& tablet) {
       << DebugString(tablet.meta_.key_range().key_start()) << ", "
       << DebugString(tablet.meta_.key_range().key_end()) << "], path: "
       << tablet.meta_.path() << ", server: "
-      << tablet.meta_.server_addr();
+      << tablet.meta_.server_addr() << ", serverid: "
+      << tablet.server_id_;
     return o;
 }
 
@@ -61,13 +62,15 @@ std::ostream& operator << (std::ostream& o, const TabletPtr& tablet) {
 Tablet::Tablet(const TabletMeta& meta)
     : meta_(meta),
       update_time_(common::timer::get_micros()),
-      load_time_(std::numeric_limits<int64_t>::max()) {}
+      load_time_(std::numeric_limits<int64_t>::max()),
+      merge_param_(NULL) {}
 
 Tablet::Tablet(const TabletMeta& meta, TablePtr table)
     : meta_(meta),
       table_(table),
       update_time_(common::timer::get_micros()),
-      load_time_(std::numeric_limits<int64_t>::max()) {}
+      load_time_(std::numeric_limits<int64_t>::max()),
+      merge_param_(NULL) {}
 
 Tablet::~Tablet() {
     table_.reset();
@@ -436,6 +439,16 @@ void Tablet::ToMetaTableKeyValue(std::string* packed_key,
     MakeMetaTableKeyValue(meta_, packed_key, packed_value);
 }
 
+void* Tablet::GetMergeParam() {
+    MutexLock lock(&mutex_);
+    return merge_param_;
+}
+
+void Tablet::SetMergeParam(void* merge_param) {
+    MutexLock lock(&mutex_);
+    merge_param_ = merge_param;
+}
+
 bool Tablet::CheckStatusSwitch(TabletStatus old_status,
                                TabletStatus new_status) {
     switch (old_status) {
@@ -512,7 +525,8 @@ bool Tablet::CheckStatusSwitch(TabletStatus old_status,
         }
         break;
     case kTableUnLoadFail:
-        if (new_status == kTableOffLine) {        // tabletnode is killed, ready to load
+        if (new_status == kTableOffLine           // tabletnode is killed, ready to load
+            || new_status == kTableOnMerge) {     // tabletnode is killed, ready to merge phase2
             return true;
         }
         break;
@@ -1121,13 +1135,13 @@ bool TabletManager::FindTablet(const std::string& table_name,
 
 void TabletManager::FindTablet(const std::string& server_addr,
                                std::vector<TabletPtr>* tablet_meta_list,
-                               bool all_tables) {
+                               bool need_disabled_tables) {
     mutex_.Lock();
     TableList::iterator it = all_tables_.begin();
     for (; it != all_tables_.end(); ++it) {
         Table& table = *it->second;
         table.mutex_.Lock();
-        if (table.status_ == kTableDisable && !all_tables) {
+        if (table.status_ == kTableDisable && !need_disabled_tables) {
             VLOG(10) << "FindTablet skip disable table: " << table.name_;
             table.mutex_.Unlock();
             continue;
@@ -1722,9 +1736,13 @@ bool TabletManager::RpcChannelHealth(int32_t err_code) {
 }
 
 void TabletManager::TryMajorCompact(Tablet* tablet) {
+    if (!tablet) {
+        VLOG(5) << "TryMajorCompact() tablet is NULL";
+        return;
+    }
     VLOG(5) << "TryMajorCompact() for " << tablet->meta_.path();
     MutexLock lock(&tablet->mutex_);
-    if (!tablet || tablet->meta_.compact_status() != kTableNotCompact) {
+    if (tablet->meta_.compact_status() != kTableNotCompact) {
         return;
     } else {
         tablet->meta_.set_compact_status(kTableOnCompact);

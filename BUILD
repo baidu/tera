@@ -1,83 +1,107 @@
-Tera构建手册
-============
+Tera Build Manual
+=================
 
-本文件指导你从Tera源代码构建出Tera的SDK头文件、SDK库文件、服务端
-可执行程序、以及其它工具。
+This document is written for people who intend to build the SDK
+libraries, server binaries and other utilities of Tera from the
+source code.
 
-系统要求
-========
+Pre-requisite
+=============
 
-操作系统
-* Linux系统
-第三方软件
-* sofa-pbrpc (1.0.0 or newer)
-  https://github.com/BaiduPS/sofa-pbrpc/
-* Protocol Buffers (2.4.1 or newer)
+Operating System
+* Linux
+
+Build Essential
+* GCC (4.8.2 or newer)
+  https://gcc.gnu.org/
+* CMake (3.2.x or newer)
+  https://cmake.org/
+* Python (2.7.x only)
+  https://www.python.org/
+
+Dependency Overview
+* sofa-pbrpc (1.1.1 or newer)
+  https://github.com/baidu/sofa-pbrpc/
+* Protocol Buffers (2.6.1 or newer)
   https://developers.google.com/protocol-buffers/
 * snappy (1.1.1 or newer)
-  https://code.google.com/p/snappy/
+  http://google.github.io/snappy/
 * zookeeper (3.3.3 or newer)
   https://zookeeper.apache.org/
 * gflags (2.1.1 or newer)
   https://github.com/gflags/gflags/
 * glog (0.3.3 or newer)
   https://github.com/google/glog/
+* googletest (1.7.0 or newer)
+  https://github.com/google/googletest/
 * gperftools (2.2.1 only)
   https://code.google.com/p/gperftools/
+* ins (0.14 or newer)
+  https://github.com/baidu/ins/
 * boost (1.53.0 or newer)
   http://www.boost.org/
 
-此外，在64位系统中，gperftools可能依赖以下软件，请参见gperftools
-的安装说明。
+On a 64-bit system, the following library is strongly recommended
+by gperftools. See INSTALL document of gperftools for more details.
 * libunwind (0.99 only)
   http://www.nongnu.org/libunwind/
 
-下列必需的开发库在多数Linux发行版中会默认预装，但在某些发行版中
-可能需要自行安装。
+Most Linux distributions have the following libraries
+pre-installed. But if they are not, install them by yourself.
 * readline
   https://cnswww.cns.cwru.edu/php/chet/readline/rltop.html
 * ncurses
   https://www.gnu.org/software/ncurses/
 
-编译步骤
-========
+Basic Build
+===========
 
-1. 编辑depends.mk
-1.1. 在以下变量的=右边填上对应软件的安装路径
+1. Edit depends.mk
+1.1. Open depends.mk
+If there is no file named 'depends.mk' under project's root directory,
+type 'cp depends.mk.template depends.mk' to create one.
+1.2. Fill the right side of '=' of the following lines with the
+locations of corresponding dependencies.
   SOFA_PBRPC_PREFIX=
   PROTOBUF_PREFIX=
   SNAPPY_PREFIX=
   ZOOKEEPER_PREFIX=
   GFLAGS_PREFIX=
-  GLOG_PREFIX=.
+  GLOG_PREFIX=
+  GTEST_PREFIX=
   GPERFTOOLS_PREFIX=
-以"SNAPPY_PREFIX="为例，假设snappy安装在/usr/local，那么这一行
-应该改为：
+  INS_PREFIX=
+Take 'SNAPPY_PREFIX=' as an example. Assume snappy is installed under
+/usr/local, then modify this line to:
   SNAPPY_PREFIX=/usr/local
 
-1.2. 在"BOOST_INCDIR="右边填上boost源代码的存放路径
-例如，boost源代码放在/usr/src/boost_1_57_0，那么这一行应该改为：
+1.3. Fill 'BOOST_INCDIR=' with the location of boost source code.
+For example, if boost source code is under /usr/src/boost_1_57_0,
+then this line should be modified to:
   BOOST_INCDIR=/usr/src/boost_1_57_0
 
-1.3. 其它变量仅在特殊情况下需要修改
-一般情况下软件的头文件和库文件分别位于安装目录下的include和lib，
-仅在不是这种情况时才需要单独修改相应的*_INCDIR或*_LIBDIR变量。
+1.4. Normally, other variables do not need to be modified.
+In general, the headers and libraries of a software should be found
+under 'include' and 'lib' of its installation directory, respectively.
+*_INCDIR or *_LIBDIR need to be modified only if exceptions occur.
 
-2. 执行以下命令
+2. Type 'make' to compile the package.
   make -j4
 
-一键构建
-========
+One-command Build
+=================
 
-为了方便快速试用，我们提供了一键构建功能，执行下面这个命令：
+For convenience, we provide an one-command build script. Run the script:
   sh build.sh
-它会自动下载所有第三方软件，安装在thirdparty目录下，并以静态连接
-方式生成Tera的可执行程序。
+It will automatically download the tarballs of all the needed dependencies,
+install them under 'thirdparty' directory and link their static libraries
+into Tera.
 
-构建结果
-========
+Output of Build
+===============
 
-如果构建成功，构建结果将位于build目录下，目录结构如下：
-* include: SDK头文件
-* lib: SDK库文件
-* bin: 可执行程序，包括服务端程序和其它工具
+After success build, the output will be put under 'build' directory.
+The structure of the directory is as below:
+* include: SDK headers
+* lib: SDK libraries
+* bin: executable program, including servers and utilities

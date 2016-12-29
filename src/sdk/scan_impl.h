@@ -52,8 +52,8 @@ public:
     std::string GetNextStartPoint(const std::string& str);
 
 protected:
-    tera::ScanDescImpl* _scan_desc_impl;
-    TableImpl* _table_ptr;
+    tera::ScanDescImpl* scan_desc_impl_;
+    TableImpl* table_ptr_;
 
 private:
     ResultStreamImpl(const ResultStreamImpl&);
@@ -155,11 +155,11 @@ private:
     void Reset();
 
 private:
-    tera::ScanTabletResponse* _response;
-    int32_t _result_pos;
-    mutable Mutex _finish_mutex;
-    common::CondVar _finish_cond;
-    bool _finish;
+    tera::ScanTabletResponse* response_;
+    int32_t result_pos_;
+    mutable Mutex finish_mutex_;
+    common::CondVar finish_cond_;
+    bool finish_;
 };
 
 struct ScanTask : public SdkTask {
@@ -258,23 +258,23 @@ private:
     bool ParseValueCompareFilter(const std::string& filter_str, Filter* filter);
 
 private:
-    std::string _start_key;
-    std::string _end_key;
-    std::string _start_column_family;
-    std::string _start_qualifier;
-    int64_t _start_timestamp;
-    std::vector<tera::ColumnFamily*> _cf_list;
-    tera::TimeRange* _timer_range;
-    int64_t _buf_size;
-    int64_t _number_limit;
-    bool _is_async;
-    int32_t _max_version;
-    int64_t _pack_interval;
-    uint64_t _snapshot;
-    std::string _filter_string;
-    FilterList _filter_list;
-    ValueConverter _value_converter;
-    TableSchema _table_schema;
+    std::string start_key_;
+    std::string end_key_;
+    std::string start_column_family_;
+    std::string start_qualifier_;
+    int64_t start_timestamp_;
+    std::vector<tera::ColumnFamily*> cf_list_;
+    tera::TimeRange* timer_range_;
+    int64_t buf_size_;
+    int64_t number_limit_;
+    bool is_async_;
+    int32_t max_version_;
+    int64_t pack_interval_;
+    uint64_t snapshot_;
+    std::string filter_string_;
+    FilterList filter_list_;
+    ValueConverter value_converter_;
+    TableSchema table_schema_;
 };
 
 } // namespace tera

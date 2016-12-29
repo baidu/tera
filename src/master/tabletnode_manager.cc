@@ -18,7 +18,7 @@ namespace tera {
 namespace master {
 
 TabletNode::TabletNode() : state_(kOffLine),
-    report_status_(kTabletNodeInit), data_size_(0), load_(0),
+    report_status_(kTabletNodeInit), data_size_(0), qps_(0), load_(0),
     update_time_(0), query_fail_count_(0), onload_count_(0),
     onsplit_count_(0), plan_move_in_count_(0) {
     info_.set_addr("");
@@ -26,10 +26,35 @@ TabletNode::TabletNode() : state_(kOffLine),
 
 TabletNode::TabletNode(const std::string& addr, const std::string& uuid)
     : addr_(addr), uuid_(uuid), state_(kOffLine),
-      report_status_(kTabletNodeInit), data_size_(0), load_(0),
+      report_status_(kTabletNodeInit), data_size_(0), qps_(0), load_(0),
       update_time_(0), query_fail_count_(0), onload_count_(0),
       onsplit_count_(0), plan_move_in_count_(0) {
     info_.set_addr(addr);
+}
+
+TabletNode::TabletNode(const TabletNode& t) {
+    MutexLock lock(&t.mutex_);
+    addr_ = t.addr_;
+    uuid_ = t.uuid_;
+    state_ = t.state_;
+    report_status_ = t.report_status_;
+    info_ = t.info_;
+    data_size_ = t.data_size_;
+    qps_ = t.qps_;
+    load_ = t.load_;
+    update_time_ = t.update_time_;
+    table_size_ = t.table_size_;
+    table_qps_ = t.table_qps_;
+    average_counter_ = t.average_counter_;
+    accumulate_counter_ = t.accumulate_counter_;
+    counter_list_ = t.counter_list_;
+    query_fail_count_ = t.query_fail_count_;
+    onload_count_ = t.onload_count_;
+    onsplit_count_ = t.onsplit_count_;
+    plan_move_in_count_ = t.plan_move_in_count_;
+    wait_load_list_ = t.wait_load_list_;
+    wait_split_list_ = t.wait_split_list_;
+    recent_load_time_list_ = t.recent_load_time_list_;
 }
 
 TabletNode::~TabletNode() {}

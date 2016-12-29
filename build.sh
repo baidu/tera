@@ -2,11 +2,21 @@
 
 set -e -u -E # this script will exit if any sub-command fails
 
+MIRROR=china
+if [ $# -ge 1 ]; then
+    MIRROR=$1
+fi
+
+WORK_DIR=$(cd $(dirname $0); pwd)
+if [ ! -f "${WORK_DIR}/build.conf" ]; then
+    cp ${WORK_DIR}/build.conf.template ${WORK_DIR}/build.conf
+fi
+source ./build.conf ${MIRROR}
+
 ########################################
 # download & build depend software
 ########################################
 
-WORK_DIR=$(cd $(dirname $0); pwd)
 DEPS_SOURCE=$WORK_DIR/thirdsrc
 DEPS_PREFIX=$WORK_DIR/thirdparty
 DEPS_CONFIG="--prefix=${DEPS_PREFIX} --disable-shared --with-pic"
@@ -22,186 +32,205 @@ fi
 cd ${DEPS_SOURCE}
 
 # boost
-if [ ! -f "${FLAG_DIR}/boost_1_57_0" ] \
-    || [ ! -d "${DEPS_PREFIX}/boost_1_57_0/boost" ]; then
-    wget -O boost_1_57_0.tar.gz http://superb-dca2.dl.sourceforge.net/project/boost/boost/1.57.0/boost_1_57_0.tar.gz
-    tar zxf boost_1_57_0.tar.gz
-    rm -rf ${DEPS_PREFIX}/boost_1_57_0
-    mv boost_1_57_0 ${DEPS_PREFIX}
-    touch "${FLAG_DIR}/boost_1_57_0"
+if [ ${BOOST_VERSION} == "DISABLE" ]; then
+    echo "Disable boost."
+elif [ ! -f "${FLAG_DIR}/boost_${BOOST_VERSION}" ] \
+    || [ ! -d "${DEPS_PREFIX}/boost_${BOOST_VERSION}/boost" ]; then
+    wget --no-check-certificate -O boost_${BOOST_VERSION}.tar.bz2 ${BOOST_URL}
+    tar xjf boost_${BOOST_VERSION}.tar.bz2 --recursive-unlink
+    rm -rf ${DEPS_PREFIX}/boost_${BOOST_VERSION}
+    mv boost_${BOOST_VERSION} ${DEPS_PREFIX}
+    touch "${FLAG_DIR}/boost_${BOOST_VERSION}"
 fi
 
 # protobuf
-if [ ! -f "${FLAG_DIR}/protobuf_2_6_1" ] \
+if [ ${PROTOBUF_VERSION} == "DISABLE" ]; then
+    echo "Disable protobuf."
+elif [ ! -f "${FLAG_DIR}/protobuf_${PROTOBUF_VERSION}" ] \
     || [ ! -f "${DEPS_PREFIX}/lib/libprotobuf.a" ] \
     || [ ! -d "${DEPS_PREFIX}/include/google/protobuf" ]; then
-    # wget --no-check-certificate https://github.com/google/protobuf/releases/download/v2.6.1/protobuf-2.6.1.tar.gz
-    rm -rf protobuf
-    git clone --depth=1 https://github.com/00k/protobuf
-    mv protobuf/protobuf-2.6.1.tar.gz .
-    tar zxf protobuf-2.6.1.tar.gz
-    cd protobuf-2.6.1
+    wget --no-check-certificate -O protobuf-${PROTOBUF_VERSION}.tar.bz2 ${PROTOBUF_URL}
+    tar jxf protobuf-${PROTOBUF_VERSION}.tar.bz2 --recursive-unlink
+    cd protobuf-${PROTOBUF_VERSION}
     ./configure ${DEPS_CONFIG}
     make -j4
     make install
     cd -
-    touch "${FLAG_DIR}/protobuf_2_6_1"
+    touch "${FLAG_DIR}/protobuf_${PROTOBUF_VERSION}"
 fi
 
 # snappy
-if [ ! -f "${FLAG_DIR}/snappy_1_1_1" ] \
+if [ ${SNAPPY_VERSION} == "DISABLE" ]; then
+    echo "Disable snappy."
+elif [ ! -f "${FLAG_DIR}/snappy_${SNAPPY_VERSION}" ] \
     || [ ! -f "${DEPS_PREFIX}/lib/libsnappy.a" ] \
     || [ ! -f "${DEPS_PREFIX}/include/snappy.h" ]; then
-    # wget --no-check-certificate https://snappy.googlecode.com/files/snappy-1.1.1.tar.gz
-    rm -rf snappy
-    git clone --depth=1 https://github.com/00k/snappy
-    mv snappy/snappy-1.1.1.tar.gz .
-    tar zxf snappy-1.1.1.tar.gz
-    cd snappy-1.1.1
+    wget --no-check-certificate -O snappy-${SNAPPY_VERSION}.tar.gz ${SNAPPY_URL}
+    tar zxf snappy-${SNAPPY_VERSION}.tar.gz --recursive-unlink
+    cd snappy-${SNAPPY_VERSION}
     ./configure ${DEPS_CONFIG}
     make -j4
     make install
     cd -
-    touch "${FLAG_DIR}/snappy_1_1_1"
+    touch "${FLAG_DIR}/snappy_${SNAPPY_VERSION}"
 fi
 
 # sofa-pbrpc
-if [ ! -f "${FLAG_DIR}/sofa-pbrpc_1_1_0" ] \
+if [ ${SOFA_PBRPC_VERSION} == "DISABLE" ]; then
+    echo "Disable sofa-pbrpc."
+elif [ ! -f "${FLAG_DIR}/sofa-pbrpc_${SOFA_PBRPC_VERSION}" ] \
     || [ ! -f "${DEPS_PREFIX}/lib/libsofa-pbrpc.a" ] \
     || [ ! -d "${DEPS_PREFIX}/include/sofa/pbrpc" ]; then
-    wget --no-check-certificate -O sofa-pbrpc-1.1.0.tar.gz https://github.com/baidu/sofa-pbrpc/archive/v1.1.0.tar.gz
-    tar zxf sofa-pbrpc-1.1.0.tar.gz
-    cd sofa-pbrpc-1.1.0
+    wget --no-check-certificate -O sofa-pbrpc-${SOFA_PBRPC_VERSION}.tar.gz ${SOFA_PBRPC_URL}
+    tar zxf sofa-pbrpc-${SOFA_PBRPC_VERSION}.tar.gz --recursive-unlink
+    cd sofa-pbrpc-${SOFA_PBRPC_VERSION}
     sed -i '/BOOST_HEADER_DIR=/ d' depends.mk
     sed -i '/PROTOBUF_DIR=/ d' depends.mk
     sed -i '/SNAPPY_DIR=/ d' depends.mk
-    echo "BOOST_HEADER_DIR=${DEPS_PREFIX}/boost_1_57_0" >> depends.mk
+    echo "BOOST_HEADER_DIR=${DEPS_PREFIX}/boost_${BOOST_VERSION}" >> depends.mk
     echo "PROTOBUF_DIR=${DEPS_PREFIX}" >> depends.mk
     echo "SNAPPY_DIR=${DEPS_PREFIX}" >> depends.mk
     echo "PREFIX=${DEPS_PREFIX}" >> depends.mk
-    cd src
-    PROTOBUF_DIR=${DEPS_PREFIX} sh compile_proto.sh
-    cd ..
     make -j4
     make install
     cd ..
-    touch "${FLAG_DIR}/sofa-pbrpc_1_1_0"
+    touch "${FLAG_DIR}/sofa-pbrpc_${SOFA_PBRPC_VERSION}"
 fi
 
 # zookeeper
-if [ ! -f "${FLAG_DIR}/zookeeper_3_4_6" ] \
+if [ ${ZOOKEEPER_VERSION} == "DISABLE" ]; then
+    echo "Disable zookeeper."
+elif [ ! -f "${FLAG_DIR}/zookeeper_${ZOOKEEPER_VERSION}" ] \
     || [ ! -f "${DEPS_PREFIX}/lib/libzookeeper_mt.a" ] \
     || [ ! -d "${DEPS_PREFIX}/include/zookeeper" ]; then
-    wget -O zookeeper-3.4.6.tar.gz http://www.us.apache.org/dist/zookeeper/stable/zookeeper-3.4.6.tar.gz
-    tar zxf zookeeper-3.4.6.tar.gz
-    cd zookeeper-3.4.6/src/c
+    wget --no-check-certificate -O zookeeper-${ZOOKEEPER_VERSION}.tar.gz ${ZOOKEEPER_URL}
+    tar zxf zookeeper-${ZOOKEEPER_VERSION}.tar.gz --recursive-unlink
+    cd zookeeper-${ZOOKEEPER_VERSION}/src/c
     ./configure ${DEPS_CONFIG}
     make -j4
     make install
     cd -
-    touch "${FLAG_DIR}/zookeeper_3_4_6"
-fi
-
-# cmake for gflags
-if ! which cmake ; then
-    wget --no-check-certificate -O CMake-3.2.1.tar.gz https://github.com/Kitware/CMake/archive/v3.2.1.tar.gz
-    tar zxf CMake-3.2.1.tar.gz
-    cd CMake-3.2.1
-    ./configure --prefix=${DEPS_PREFIX}
-    make -j4
-    make install
-    cd -
+    touch "${FLAG_DIR}/zookeeper_${ZOOKEEPER_VERSION}"
 fi
 
 # gflags
-if [ ! -f "${FLAG_DIR}/gflags_2_1_1" ] \
+if [ ${GFLAGS_VERSION} == "DISABLE" ]; then
+    echo "Disable gflags."
+elif [ ! -f "${FLAG_DIR}/gflags_${GFLAGS_VERSION}" ] \
     || [ ! -f "${DEPS_PREFIX}/lib/libgflags.a" ] \
     || [ ! -d "${DEPS_PREFIX}/include/gflags" ]; then
-    wget --no-check-certificate -O gflags-2.1.1.tar.gz https://github.com/schuhschuh/gflags/archive/v2.1.1.tar.gz
-    tar zxf gflags-2.1.1.tar.gz
-    cd gflags-2.1.1
+    wget --no-check-certificate -O gflags-${GFLAGS_VERSION}.tar.gz ${GFLAGS_URL}
+    tar zxf gflags-${GFLAGS_VERSION}.tar.gz --recursive-unlink
+    cd gflags-${GFLAGS_VERSION}
     cmake -DCMAKE_INSTALL_PREFIX=${DEPS_PREFIX} -DGFLAGS_NAMESPACE=google -DCMAKE_CXX_FLAGS=-fPIC
     make -j4
     make install
     cd -
-    touch "${FLAG_DIR}/gflags_2_1_1"
+    touch "${FLAG_DIR}/gflags_${GFLAGS_VERSION}"
 fi
 
 # glog
-if [ ! -f "${FLAG_DIR}/glog_0_3_3" ] \
+if [ ${GLOG_VERSION} == "DISABLE" ]; then
+    echo "Disable glog."
+elif [ ! -f "${FLAG_DIR}/glog_${GLOG_VERSION}" ] \
     || [ ! -f "${DEPS_PREFIX}/lib/libglog.a" ] \
     || [ ! -d "${DEPS_PREFIX}/include/glog" ]; then
-    wget --no-check-certificate -O glog-0.3.3.tar.gz https://github.com/google/glog/archive/v0.3.3.tar.gz
-    tar zxf glog-0.3.3.tar.gz
-    cd glog-0.3.3
+    wget --no-check-certificate -O glog-${GLOG_VERSION}.tar.gz ${GLOG_URL}
+    tar zxf glog-${GLOG_VERSION}.tar.gz --recursive-unlink
+    cd glog-${GLOG_VERSION}
     ./configure ${DEPS_CONFIG} CPPFLAGS=-I${DEPS_PREFIX}/include LDFLAGS=-L${DEPS_PREFIX}/lib
     make -j4
     make install
     cd -
-    touch "${FLAG_DIR}/glog_0_3_3"
+    touch "${FLAG_DIR}/glog_${GLOG_VERSION}"
 fi
 
 # gtest
-if [ ! -f "${FLAG_DIR}/gtest_1_7_0" ] \
+if [ ${GTEST_VERSION} == "DISABLE" ]; then
+    echo "Disable gtest."
+elif [ ! -f "${FLAG_DIR}/gtest_${GTEST_VERSION}" ] \
     || [ ! -f "${DEPS_PREFIX}/lib/libgtest.a" ] \
     || [ ! -d "${DEPS_PREFIX}/include/gtest" ]; then
-    # wget --no-check-certificate https://googletest.googlecode.com/files/gtest-1.7.0.zip
-    rm -rf gtest_archive gtest-1.7.0.zip gtest-1.7.0
-    git clone --depth=1 https://github.com/xupeilin/gtest_archive
-    mv gtest_archive/gtest-1.7.0.zip .
-    unzip gtest-1.7.0.zip
-    cd gtest-1.7.0
-    ./configure ${DEPS_CONFIG}
+    wget --no-check-certificate -O googletest-release-${GTEST_VERSION}.tar.gz ${GTEST_URL}
+    tar zxf googletest-release-${GTEST_VERSION}.tar.gz --recursive-unlink
+    cd googletest-release-${GTEST_VERSION}/googletest
+
+    # XXX make gcc3 happy; what's the cmake way?
+    sed -i 's/ -Wno-missing-field-initializers/ /' cmake/internal_utils.cmake
+
+    mkdir tmpbuild
+    cd tmpbuild
+    cmake -DCMAKE_C_FLAGS="-fPIC" -DCMAKE_CXX_FLAGS="-fPIC" ..
     make
-    cp -af lib/.libs/* ${DEPS_PREFIX}/lib
+    cd ..
+    cp -af tmpbuild/libgtest.a ${DEPS_PREFIX}/lib
+    cp -af tmpbuild/libgtest_main.a ${DEPS_PREFIX}/lib
     cp -af include/gtest ${DEPS_PREFIX}/include
-    cd -
-    touch "${FLAG_DIR}/gtest_1_7_0"
+    cd ../..
+    touch "${FLAG_DIR}/gtest_${GTEST_VERSION}"
 fi
 
 # libunwind for gperftools
-if [ ! -f "${FLAG_DIR}/libunwind_0_99_beta" ] \
+if [ ${LIBUNWIND_VERSION} == "DISABLE" ]; then
+    echo "Disable libunwind."
+elif [ ! -f "${FLAG_DIR}/libunwind_${LIBUNWIND_VERSION}" ] \
     || [ ! -f "${DEPS_PREFIX}/lib/libunwind.a" ] \
     || [ ! -f "${DEPS_PREFIX}/include/libunwind.h" ]; then
-    wget -O libunwind-0.99-beta.tar.gz http://download.savannah.gnu.org/releases/libunwind/libunwind-0.99-beta.tar.gz
-    tar zxf libunwind-0.99-beta.tar.gz
-    cd libunwind-0.99-beta
+    wget --no-check-certificate -O libunwind-${LIBUNWIND_VERSION}.tar.gz ${LIBUNWIND_URL}
+    tar xzf libunwind-${LIBUNWIND_VERSION}.tar.gz --recursive-unlink
+    cd libunwind-${LIBUNWIND_VERSION}
     ./configure ${DEPS_CONFIG}
     make CFLAGS=-fPIC -j4
     make CFLAGS=-fPIC install
     cd -
-    touch "${FLAG_DIR}/libunwind_0_99_beta"
+    touch "${FLAG_DIR}/libunwind_${LIBUNWIND_VERSION}"
 fi
 
 # gperftools (tcmalloc)
-if [ ! -f "${FLAG_DIR}/gperftools_2_2_1" ] \
+if [ ${GPERFTOOLS_VERSION} == "DISABLE" ]; then
+    echo "Disable gperftools."
+elif [ ! -f "${FLAG_DIR}/gperftools_${GPERFTOOLS_VERSION}" ] \
     || [ ! -f "${DEPS_PREFIX}/lib/libtcmalloc_minimal.a" ]; then
-    # wget --no-check-certificate https://googledrive.com/host/0B6NtGsLhIcf7MWxMMF9JdTN3UVk/gperftools-2.2.1.tar.gz
-    rm -rf gperftools
-    git clone --depth=1 https://github.com/00k/gperftools
-    mv gperftools/gperftools-2.2.1.tar.gz .
-    tar zxf gperftools-2.2.1.tar.gz
-    cd gperftools-2.2.1
+    wget --no-check-certificate -O gperftools-${GPERFTOOLS_VERSION}.tar.gz ${GPERFTOOLS_URL}
+    tar zxf gperftools-${GPERFTOOLS_VERSION}.tar.gz --recursive-unlink
+    cd gperftools-${GPERFTOOLS_VERSION}
     ./configure ${DEPS_CONFIG} CPPFLAGS=-I${DEPS_PREFIX}/include LDFLAGS=-L${DEPS_PREFIX}/lib
     make -j4
     make install
     cd -
-    touch "${FLAG_DIR}/gperftools_2_2_1"
+    touch "${FLAG_DIR}/gperftools_${GPERFTOOLS_VERSION}"
 fi
 
 # ins
-if [ ! -f "${FLAG_DIR}/ins_0_13" ] \
+if [ ${INS_VERSION} == "DISABLE" ]; then
+    echo "Disable ins."
+elif [ ! -f "${FLAG_DIR}/ins_${INS_VERSION}" ] \
     || [ ! -f "${DEPS_PREFIX}/lib/libins_sdk.a" ] \
     || [ ! -f "${DEPS_PREFIX}/include/ins_sdk.h" ]; then
-    wget --no-check-certificate -O ins-0.13.tar.gz https://github.com/baidu/ins/archive/0.13.tar.gz
-    tar zxf ins-0.13.tar.gz
-    cd ins-0.13
+    wget --no-check-certificate -O ins-${INS_VERSION}.tar.gz ${INS_URL}
+    tar zxf ins-${INS_VERSION}.tar.gz --recursive-unlink
+    cd ins-${INS_VERSION}
     sed -i "s|^PREFIX=.*|PREFIX=${DEPS_PREFIX}|" Makefile
     sed -i "s|^PROTOC=.*|PROTOC=${DEPS_PREFIX}/bin/protoc|" Makefile
-    BOOST_PATH=${DEPS_PREFIX}/boost_1_57_0 make install_sdk
+    BOOST_PATH=${DEPS_PREFIX}/boost_${BOOST_VERSION} make install_sdk
     make -j4 install_sdk
     cd -
-    touch "${FLAG_DIR}/ins_0_13"
+    touch "${FLAG_DIR}/ins_${INS_VERSION}"
+fi
+
+# nose (for test)
+if [ ${NOSE_VERSION} == "DISABLE" ]; then
+    echo "Disable nose."
+elif [ ! -f "${FLAG_DIR}/nose_${NOSE_VERSION}" ] \
+    || [ ! -f "${DEPS_PREFIX}/bin/nosetests" ] \
+    || [ ! -d "${DEPS_PREFIX}/lib/nose" ]; then
+    wget --no-check-certificate -O nose-${NOSE_VERSION}.tar.gz ${NOSE_URL}
+    tar zxf nose-${NOSE_VERSION}.tar.gz --recursive-unlink
+    cd nose-${NOSE_VERSION}
+    export PYTHONPATH=${DEPS_PREFIX}/lib
+    python setup.py install --prefix=. --install-scripts=${DEPS_PREFIX}/bin --install-lib=${DEPS_PREFIX}/lib
+    cd -
+    touch "${FLAG_DIR}/nose_${NOSE_VERSION}"
 fi
 
 cd ${WORK_DIR}
@@ -218,11 +247,12 @@ sed -i "s:^GFLAGS_PREFIX=.*:GFLAGS_PREFIX=$DEPS_PREFIX:" depends.mk
 sed -i "s:^GLOG_PREFIX=.*:GLOG_PREFIX=$DEPS_PREFIX:" depends.mk
 sed -i "s:^GTEST_PREFIX=.*:GTEST_PREFIX=$DEPS_PREFIX:" depends.mk
 sed -i "s:^GPERFTOOLS_PREFIX=.*:GPERFTOOLS_PREFIX=$DEPS_PREFIX:" depends.mk
-sed -i "s:^BOOST_INCDIR=.*:BOOST_INCDIR=$DEPS_PREFIX/boost_1_57_0:" depends.mk
+sed -i "s:^BOOST_INCDIR=.*:BOOST_INCDIR=$DEPS_PREFIX/boost_${BOOST_VERSION}:" depends.mk
 sed -i "s:^INS_PREFIX=.*:INS_PREFIX=$DEPS_PREFIX:" depends.mk
 
 ########################################
 # build tera
 ########################################
 
+make clean
 make -j4

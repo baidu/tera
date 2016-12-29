@@ -42,8 +42,8 @@ public:
     void SetFailed(ErrorCodeType err, const std::string& reason = "");
 
 private:
-    ErrorCodeType _err;
-    std::string _reason;
+    ErrorCodeType err_;
+    std::string reason_;
 };
 
 // DEPRECATED. Use error_code.ToString() instead.
