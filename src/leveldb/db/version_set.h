@@ -19,6 +19,7 @@
 #ifndef STORAGE_LEVELDB_DB_VERSION_SET_H_
 #define STORAGE_LEVELDB_DB_VERSION_SET_H_
 
+#include <deque>
 #include <map>
 #include <set>
 #include <vector>
@@ -140,15 +141,19 @@ class Version {
   // Level that should be compacted next and its compaction score.
   // Score < 1 means compaction is not strictly needed.  These fields
   // are initialized by Finalize().
-  double compaction_score_;
-  int compaction_level_;
+  std::vector<double> compaction_score_;
+  std::vector<int> compaction_level_;
 
   explicit Version(VersionSet* vset)
       : vset_(vset), next_(this), prev_(this), refs_(0),
         file_to_compact_(NULL),
-        file_to_compact_level_(-1),
-        compaction_score_(-1),
-        compaction_level_(-1) {
+        file_to_compact_level_(-1) {
+    compaction_score_.resize(config::kNumLevels);
+    compaction_level_.resize(config::kNumLevels);
+    for (size_t i = 0; i < config::kNumLevels; i++) {
+      compaction_score_[i] = -1.0;
+      compaction_level_[i] = -1;
+    }
   }
 
   ~Version();
@@ -171,6 +176,8 @@ class VersionSet {
   // current version.  Will release *mu while actually writing to the file.
   // REQUIRES: *mu is held on entry.
   // REQUIRES: no other thread concurrently calls LogAndApply()
+  void LogAndApplyHelper(VersionSetBuilder* builder,
+                         VersionEdit* edit);
   Status LogAndApply(VersionEdit* edit, port::Mutex* mu)
       EXCLUSIVE_LOCKS_REQUIRED(mu);
 
@@ -235,6 +242,9 @@ class VersionSet {
       const InternalKey* begin,
       const InternalKey* end);
 
+  // release file's being_compacted flag, and release level0's lock
+  void ReleaseCompaction(Compaction* c);
+
   // Return the maximum overlapping data (in bytes) at next level for any
   // file at a level >= 1.
   int64_t MaxNextLevelOverlappingBytes();
@@ -246,17 +256,23 @@ class VersionSet {
   // Returns true iff some level needs a compaction.
   bool NeedsCompaction() const {
     Version* v = current_;
-    return (v->compaction_score_ >= 1) || (v->file_to_compact_ != NULL);
+    return (v->compaction_score_[0] >= 1) || (v->file_to_compact_ != NULL);
   }
 
+  // return total score in all level
   double CompactionScore() const {
     Version* v = current_;
-    if (v->compaction_score_ >= 1) {
-        return v->compaction_score_;
-    } else if (v->file_to_compact_ != NULL) {
-        return 0.1f;
+    double score = 0;
+    for (size_t i = 0; i < v->compaction_score_.size(); i++) {
+      score += v->compaction_score_[i];
     }
-    return -1.0;
+    if (score < 0.0000001) {
+      if (v->file_to_compact_) {
+        return 0.1f;
+      }
+      return -1.0;
+    }
+    return score;
   }
 
   // Add all files listed in any live version to *live.
@@ -279,6 +295,7 @@ class VersionSet {
   friend class Compaction;
   friend class Version;
   friend class VersionSetBuilder;
+  struct ManifestWriter;
 
   void Finalize(Version* v);
 
@@ -305,6 +322,11 @@ class VersionSet {
 
   bool ModifyFileSize(FileMetaData* f);
 
+  // milti thread compaction relatively
+  bool FilesInCompaction(const std::vector<FileMetaData*>& inputs);
+  bool RangeInCompaction(const InternalKey* smallest, const InternalKey* largest, int level);
+  bool PickCompactionBySize(int level, std::vector<FileMetaData*>* inputs);
+
   Env* const env_;
   const std::string dbname_;
   const Options* const options_;
@@ -320,6 +342,8 @@ class VersionSet {
   uint64_t log_number_;
   uint64_t prev_log_number_;  // 0 or backing store for memtable being compacted
 
+  std::deque<ManifestWriter*> manifest_writers_;
+
   // Opened lazily
   WritableFile* descriptor_file_;
   log::Writer* descriptor_log_;
@@ -329,6 +353,7 @@ class VersionSet {
   // Per-level key at which the next compaction at that level should start.
   // Either an empty string, or a valid InternalKey.
   std::string compact_pointer_[config::kNumLevels];
+  std::vector<Compaction*> level0_compactions_in_progress_;
 
   // No copying allowed
   VersionSet(const VersionSet&);
@@ -372,6 +397,8 @@ class Compaction {
   // Returns true iff we should stop building the current output
   // before processing "internal_key".
   bool ShouldStopBefore(const Slice& internal_key);
+
+  void MarkBeingCompacted(bool flag = true);
 
   // Release the input version for the compaction, once the compaction
   // is successful.

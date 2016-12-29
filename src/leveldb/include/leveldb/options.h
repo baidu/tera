@@ -290,6 +290,14 @@ struct Options {
   // disable write-ahead-log
   bool disable_wal;
 
+  // Max thread alloc for lg's compaction
+  // Default: 1
+  uint32_t max_background_compactions;
+
+  // if level0's file num >= limit, use sqrt slow down level score
+  // Default: 30
+  int slow_down_level0_score_limit;
+
   // Create an Options object with default values for all fields.
   Options();
 };
