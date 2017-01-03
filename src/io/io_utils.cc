@@ -29,30 +29,6 @@ void SetStatusCode(const io::TabletIO::TabletStatus& tablet_status, StatusCode* 
     }
 }
 
-void SetStatusCode(const StatusCode& code, StatusCode* tera_status) {
-    if (tera_status) {
-        *tera_status = code;
-    }
-}
-
-void SetStatusCode(const CompactStatus& compact_status, StatusCode* tera_status) {
-    if (tera_status) {
-        *tera_status = static_cast<StatusCode>(compact_status);
-    }
-}
-
-void SetStatusCode(const TabletStatus& tablet_status, StatusCode* tera_status) {
-    if (tera_status) {
-        *tera_status = static_cast<StatusCode>(tablet_status);
-    }
-}
-
-void SetStatusCode(const TableStatus& table_status, StatusCode* tera_status) {
-    if (tera_status) {
-        *tera_status = static_cast<StatusCode>(table_status);
-    }
-}
-
 const leveldb::RawKeyOperator* GetRawKeyOperatorFromSchema(TableSchema& schema) {
     // key_translator should be lg property, but here only support table
     // property. In future work, key_translator should be done in leveldb.

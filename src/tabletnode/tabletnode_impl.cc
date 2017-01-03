@@ -94,19 +94,18 @@ static const int GC_LOG_LEVEL = FLAGS_tera_tabletnode_gc_log_level;
 namespace tera {
 namespace tabletnode {
 
-TabletNodeImpl::TabletNodeImpl(const TabletNodeInfo& tabletnode_info,
-                               TabletManager* tablet_manager)
+TabletNodeImpl::TabletNodeImpl()
     : status_(kNotInited),
-      tablet_manager_(tablet_manager),
+      tablet_manager_(new TabletManager()),
       zk_adapter_(NULL),
       release_cache_timer_id_(kInvalidTimerId),
-      sysinfo_(tabletnode_info),
       thread_pool_(new ThreadPool(FLAGS_tera_tabletnode_impl_thread_max_num)) {
     if (FLAGS_tera_local_addr == "") {
         local_addr_ = utils::GetLocalHostName()+ ":" + FLAGS_tera_tabletnode_port;
     } else {
         local_addr_ = FLAGS_tera_local_addr + ":" + FLAGS_tera_tabletnode_port;
     }
+    sysinfo_.SetServerAddr(local_addr_);
     TabletNodeClient::SetThreadPool(thread_pool_.get());
 
     leveldb::Env::Default()->SetBackgroundThreads(FLAGS_tera_tabletnode_compact_thread_num);
@@ -129,10 +128,6 @@ TabletNodeImpl::TabletNodeImpl(const TabletNodeInfo& tabletnode_info,
     }
 
     InitCacheSystem();
-
-    if (tablet_manager_.get() == NULL) {
-        tablet_manager_.reset(new TabletManager());
-    }
 
     if (FLAGS_tera_tabletnode_tcm_cache_release_enabled) {
         LOG(INFO) << "enable tcmalloc cache release timer";

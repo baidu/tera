@@ -1221,6 +1221,7 @@ int64_t TabletManager::SearchTable(std::vector<TabletPtr>* tablet_meta_list,
     TableList::iterator lower_it = all_tables_.lower_bound(start_table_name);
     TableList::iterator upper_it = all_tables_.upper_bound(prefix_table_name + "\xFF");
     if (upper_it == all_tables_.begin() || lower_it == all_tables_.end()) {
+        mutex_.Unlock();
         SetStatusCode(kTableNotFound, ret_status);
         return -1;
     }
@@ -1282,7 +1283,7 @@ bool TabletManager::ShowTable(std::vector<TablePtr>* table_meta_list,
             table_meta_list->push_back(table);
         }
         table_found_num++;
-        if (table_found_num == 1) {
+        if (it->first == start_tablet_key) {
             it2 = table->tablets_list_.lower_bound(start_tablet_key);
         } else {
             it2 = table->tablets_list_.begin();
@@ -1785,7 +1786,7 @@ void TabletManager::MajorCompactCallback(Tablet* tb, int32_t retry,
             delete request;
             delete response;
         } else {
-            int64_t wait_time = FLAGS_tera_tabletnode_connect_retry_period
+            int32_t wait_time = FLAGS_tera_tabletnode_connect_retry_period
                 * (FLAGS_tera_master_impl_retry_times - retry);
             ThisThread::Sleep(wait_time);
             tabletnode::TabletNodeClient node_client(tb->meta_.server_addr());

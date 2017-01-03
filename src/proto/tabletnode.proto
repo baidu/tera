@@ -1,14 +1,6 @@
-package tera;
+import "status_code.proto";
 
-enum TabletNodeStatus {
-    kTabletNodeInit = 1;
-    kTabletNodeRegistered = 2;
-    kTabletNodeRunning = 3;
-    kTabletNodeTimeout = 4;
-    kTabletNodeFrozen = 5;
-    kTabletNodeRestore = 6;
-    kTabletNodeOffline = 7;
-}
+package tera;
 
 message ExtraTsInfo {
     optional string name = 1;
@@ -17,7 +9,7 @@ message ExtraTsInfo {
 
 message TabletNodeInfo {
     required string addr = 1;
-    optional TabletNodeStatus status_t = 2;
+    optional StatusCode status_t = 2;
     optional uint64 load = 3;
     optional uint64 timestamp = 4;
     optional uint32 tablet_total = 5;

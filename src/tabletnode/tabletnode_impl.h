@@ -50,8 +50,7 @@ public:
             : row_done_counter(c), request(req), response(resp), done(d), timer(t) {}
     };
 
-    TabletNodeImpl(const TabletNodeInfo& tabletnode_info,
-                   TabletManager* tablet_manager = NULL);
+    TabletNodeImpl();
     ~TabletNodeImpl();
 
     bool Init();

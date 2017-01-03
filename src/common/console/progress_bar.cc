@@ -6,6 +6,7 @@
 
 #include "progress_bar.h"
 
+#include <assert.h>
 #include <sys/ioctl.h>
 
 namespace common {
@@ -26,6 +27,7 @@ ProgressBar::ProgressBar(DisplayMode mode,
       start_time_(0),
       cur_time_(0),
       flush_buffer_(NULL) {
+    assert(total_size_ > 0);
     if (bar_length_ <= 0) {
         if (mode_ == BRIEF) {
             bar_length_ = 80;

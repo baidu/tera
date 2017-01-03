@@ -15,6 +15,7 @@ namespace common {
 
 class Thread {
 public:
+    Thread() : tid_(0) {}
     bool Start(boost::function<void()> thread_proc) {
         user_proc_ = thread_proc;
         int ret = pthread_create(&tid_, NULL, ProcWrapper, this);

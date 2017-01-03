@@ -256,9 +256,11 @@ bool IncrementalGcStrategy::PreQuery () {
 
         // erase newly dead tablets from live tablets
         for (TabletFiles::iterator it = live_tablet_files_[table_name].begin();
-             it != live_tablet_files_[table_name].end(); ++it) {
+             it != live_tablet_files_[table_name].end();) {
             if (dead_tablet_files_[table_name].find(static_cast<uint64_t>(it->first)) != dead_tablet_files_[table_name].end()) {
-                live_tablet_files_[table_name].erase(it);
+                live_tablet_files_[table_name].erase(it++);
+            } else {
+                ++it;
             }
         }
 

@@ -18,7 +18,7 @@ namespace tera {
 namespace master {
 
 TabletNode::TabletNode() : state_(kOffLine),
-    report_status_(kTabletNodeInit), data_size_(0), qps_(0), load_(0),
+    report_status_(kTabletNodeIsRunning), data_size_(0), qps_(0), load_(0),
     update_time_(0), query_fail_count_(0), onload_count_(0),
     onsplit_count_(0), plan_move_in_count_(0) {
     info_.set_addr("");
@@ -26,7 +26,7 @@ TabletNode::TabletNode() : state_(kOffLine),
 
 TabletNode::TabletNode(const std::string& addr, const std::string& uuid)
     : addr_(addr), uuid_(uuid), state_(kOffLine),
-      report_status_(kTabletNodeInit), data_size_(0), qps_(0), load_(0),
+      report_status_(kTabletNodeIsRunning), data_size_(0), qps_(0), load_(0),
       update_time_(0), query_fail_count_(0), onload_count_(0),
       onsplit_count_(0), plan_move_in_count_(0) {
     info_.set_addr(addr);
@@ -262,14 +262,14 @@ bool TabletNode::SetState(NodeState new_state, NodeState* old_state) {
     }
     if (CheckStateSwitch(state_, new_state)) {
         LOG(INFO) << addr_ << " state switch "
-            << StatusCodeToString(state_) << " to "
-            << StatusCodeToString(new_state);
+            << StatusCodeToString(static_cast<StatusCode>(state_)) << " to "
+            << StatusCodeToString(static_cast<StatusCode>(new_state));
         state_ = new_state;
         return true;
     }
     VLOG(5) << addr_ << " not support state switch "
-        << StatusCodeToString(state_) << " to "
-        << StatusCodeToString(new_state);
+        << StatusCodeToString(static_cast<StatusCode>(state_)) << " to "
+        << StatusCodeToString(static_cast<StatusCode>(new_state));
     return false;
 }
 

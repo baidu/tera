@@ -242,7 +242,7 @@ private:
             }
         }
 
-        BGItem() {}
+        BGItem() : id(0), exe_time(0) {}
         BGItem(int64_t id_t, int64_t exe_time_t, const Task& task_t)
             : id(id_t), exe_time(exe_time_t), task(task_t) {}
     };

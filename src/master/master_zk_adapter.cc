@@ -629,7 +629,7 @@ void FakeMasterZkAdapter::OnSessionTimeout() {
 
 InsMasterZkAdapter::InsMasterZkAdapter(MasterImpl * master_impl,
                                  const std::string& server_addr)
-    : master_impl_(master_impl), server_addr_(server_addr) {
+    : master_impl_(master_impl), server_addr_(server_addr), ins_sdk_(NULL) {
 
 }
 

@@ -37,7 +37,7 @@ struct TabletNode {
     NodeState state_;
 
     // updated by query
-    TabletNodeStatus report_status_;
+    StatusCode report_status_;
     TabletNodeInfo info_;
     uint64_t data_size_;
     uint64_t qps_;

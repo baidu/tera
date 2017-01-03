@@ -19,14 +19,6 @@ void SetStatusCode(const leveldb::Status& db_status, StatusCode* tera_status);
 
 void SetStatusCode(const io::TabletIO::TabletStatus& tablet_status, StatusCode* tera_status);
 
-void SetStatusCode(const StatusCode& code, StatusCode* tera_status);
-
-void SetStatusCode(const CompactStatus& code, StatusCode* tera_status);
-
-void SetStatusCode(const TabletStatus& tablet_status, StatusCode* tera_status);
-
-void SetStatusCode(const TableStatus& table_status, StatusCode* tera_status);
-
 const leveldb::RawKeyOperator* GetRawKeyOperatorFromSchema(TableSchema& schema);
 
 } // namespace tera

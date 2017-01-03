@@ -669,7 +669,7 @@ void MasterImpl::CreateTable(const CreateTableRequest* request,
     MasterStatus master_status = GetMasterStatus();
     if (master_status != kIsRunning) {
         LOG(ERROR) << "master is not ready, status_ = "
-            << StatusCodeToString(master_status);
+            << StatusCodeToString(static_cast<StatusCode>(master_status));
         response->set_status(static_cast<StatusCode>(master_status));
         done->Run();
         return;
@@ -804,7 +804,7 @@ void MasterImpl::DeleteTable(const DeleteTableRequest* request,
     MasterStatus master_status = GetMasterStatus();
     if (master_status != kIsRunning) {
         LOG(ERROR) << "master is not ready, status_ = "
-            << StatusCodeToString(master_status);
+            << StatusCodeToString(static_cast<StatusCode>(master_status));
         response->set_status(static_cast<StatusCode>(master_status));
         done->Run();
         return;
@@ -861,7 +861,7 @@ void MasterImpl::DisableTable(const DisableTableRequest* request,
     MasterStatus master_status = GetMasterStatus();
     if (master_status != kIsRunning) {
         LOG(ERROR) << "master is not ready, status_ = "
-            << StatusCodeToString(master_status);
+            << StatusCodeToString(static_cast<StatusCode>(master_status));
         response->set_status(static_cast<StatusCode>(master_status));
         done->Run();
         return;
@@ -902,7 +902,7 @@ void MasterImpl::EnableTable(const EnableTableRequest* request,
     MasterStatus master_status = GetMasterStatus();
     if (master_status != kIsRunning) {
         LOG(ERROR) << "master is not ready, status_ = "
-            << StatusCodeToString(master_status);
+            << StatusCodeToString(static_cast<StatusCode>(master_status));
         response->set_status(static_cast<StatusCode>(master_status));
         done->Run();
         return;
@@ -972,7 +972,7 @@ void MasterImpl::UpdateTable(const UpdateTableRequest* request,
     MasterStatus master_status = GetMasterStatus();
     if (master_status != kIsRunning) {
         LOG(ERROR) << "master is not ready, status_ = "
-            << StatusCodeToString(master_status);
+            << StatusCodeToString(static_cast<StatusCode>(master_status));
         response->set_status(static_cast<StatusCode>(master_status));
         done->Run();
         return;
@@ -1025,7 +1025,7 @@ void MasterImpl::SearchTable(const SearchTableRequest* request,
     MasterStatus master_status = GetMasterStatus();
     if (master_status != kIsRunning) {
         LOG(ERROR) << "master is not ready, status_ = "
-            << StatusCodeToString(master_status);
+            << StatusCodeToString(static_cast<StatusCode>(master_status));
         response->set_status(static_cast<StatusCode>(master_status));
         done->Run();
         return;
@@ -1083,7 +1083,7 @@ void MasterImpl::ShowTables(const ShowTablesRequest* request,
     MasterStatus master_status = GetMasterStatus();
     if (master_status != kIsRunning && master_status != kIsReadonly) {
         LOG(ERROR) << "master is not ready, status_ = "
-            << StatusCodeToString(master_status);
+            << StatusCodeToString(static_cast<StatusCode>(master_status));
         response->set_status(static_cast<StatusCode>(master_status));
         done->Run();
         return;
@@ -1147,7 +1147,7 @@ void MasterImpl::ShowTablesBrief(const ShowTablesRequest* request,
     MasterStatus master_status = GetMasterStatus();
     if (master_status != kIsRunning && master_status != kIsReadonly) {
         LOG(ERROR) << "master is not ready, status_ = "
-            << StatusCodeToString(master_status);
+            << StatusCodeToString(static_cast<StatusCode>(master_status));
         response->set_status(static_cast<StatusCode>(master_status));
         done->Run();
         return;
@@ -1175,7 +1175,7 @@ void MasterImpl::ShowTabletNodes(const ShowTabletNodesRequest* request,
     MasterStatus master_status = GetMasterStatus();
     if (master_status != kIsRunning && master_status != kIsReadonly) {
         LOG(ERROR) << "master is not ready, status_ = "
-            << StatusCodeToString(master_status);
+            << StatusCodeToString(static_cast<StatusCode>(master_status));
         response->set_status(static_cast<StatusCode>(master_status));
         done->Run();
         return;
@@ -1302,7 +1302,7 @@ void MasterImpl::OperateUser(const OperateUserRequest* request,
     MasterStatus master_status = GetMasterStatus();
     if (master_status != kIsRunning) {
         LOG(ERROR) << "master is not ready, status_ = "
-            << StatusCodeToString(master_status);
+            << StatusCodeToString(static_cast<StatusCode>(master_status));
         response->set_status(static_cast<StatusCode>(master_status));
         done->Run();
         return;
@@ -1517,8 +1517,9 @@ bool MasterImpl::SetMasterStatus(const MasterStatus& new_status,
         *old_status = status_;
     }
     if (CheckStatusSwitch(status_, new_status)) {
-        LOG(INFO) << "master status switch " << StatusCodeToString(status_)
-            << " to " << StatusCodeToString(new_status);
+        LOG(INFO) << "master status switch "
+            << StatusCodeToString(static_cast<StatusCode>(status_))
+            << " to " << StatusCodeToString(static_cast<StatusCode>(new_status));
         status_ = new_status;
         return true;
     }
@@ -1569,8 +1570,8 @@ bool MasterImpl::CheckStatusSwitch(MasterStatus old_status,
     }
 
     LOG(ERROR) << "not support master status switch "
-        << StatusCodeToString(old_status) << " to "
-        << StatusCodeToString(new_status);
+        << StatusCodeToString(static_cast<StatusCode>(old_status)) << " to "
+        << StatusCodeToString(static_cast<StatusCode>(new_status));
     return false;
 }
 
@@ -2375,7 +2376,7 @@ void MasterImpl::TryKickTabletNode(const std::string& tabletnode_addr) {
     NodeState old_state;
     if (!tabletnode->SetState(kWaitKick, &old_state)) {
         LOG(WARNING) << "cancel kick tabletnode " << tabletnode_addr
-            << " state: " << StatusCodeToString(old_state);
+            << " state: " << StatusCodeToString(static_cast<StatusCode>(old_state));
         return;
     }
     KickTabletNode(tabletnode);
@@ -2389,7 +2390,7 @@ void MasterImpl::KickTabletNode(TabletNodePtr node) {
         MasterStatus status = GetMasterStatus();
         if (status == kIsReadonly) {
             LOG(WARNING) << "cancel kick tabletnode " << node->addr_
-                << ", master state: " << StatusCodeToString(status);
+                << ", master state: " << StatusCodeToString(static_cast<StatusCode>(status));
             return;
         }
         TryEnterSafeMode();
@@ -2398,7 +2399,7 @@ void MasterImpl::KickTabletNode(TabletNodePtr node) {
     NodeState old_state;
     if (!node->SetState(kOnKick, &old_state)) {
         LOG(WARNING) << "cancel kick, tabletnode " << node->addr_
-            << " state: " << StatusCodeToString(old_state);
+            << " state: " << StatusCodeToString(static_cast<StatusCode>(old_state));
         return;
     }
     if (!zk_adapter_->KickTabletServer(node->addr_, node->uuid_)) {
@@ -2794,7 +2795,7 @@ void MasterImpl::DelSnapshot(const DelSnapshotRequest* request,
     MasterStatus master_status = GetMasterStatus();
     if (master_status != kIsRunning) {
         LOG(WARNING) << "master is not ready, status_ = "
-            << StatusCodeToString(master_status);
+            << StatusCodeToString(static_cast<StatusCode>(master_status));
         response->set_status(static_cast<StatusCode>(master_status));
         done->Run();
         return;
@@ -2905,7 +2906,7 @@ void MasterImpl::GetSnapshot(const GetSnapshotRequest* request,
     MasterStatus master_status = GetMasterStatus();
     if (master_status != kIsRunning) {
         LOG(WARNING) << "master is not ready, status_ = "
-            << StatusCodeToString(master_status);
+            << StatusCodeToString(static_cast<StatusCode>(master_status));
         response->set_status(static_cast<StatusCode>(master_status));
         done->Run();
         return;
@@ -3109,7 +3110,7 @@ void MasterImpl::GetRollback(const RollbackRequest* request,
     MasterStatus master_status = GetMasterStatus();
     if (master_status != kIsRunning) {
         LOG(WARNING) << "master is not ready, status_ = "
-            << StatusCodeToString(master_status);
+            << StatusCodeToString(static_cast<StatusCode>(master_status));
         response->set_status(static_cast<StatusCode>(master_status));
         done->Run();
         return;
@@ -5273,7 +5274,7 @@ void MasterImpl::RenameTable(const RenameTableRequest* request,
     MasterStatus master_status = GetMasterStatus();
     if (master_status != kIsRunning) {
         LOG(ERROR) << "master is not ready, status_ = "
-            << StatusCodeToString(master_status);
+            << StatusCodeToString(static_cast<StatusCode>(master_status));
         response->set_status(static_cast<StatusCode>(master_status));
         done->Run();
         return;
@@ -5359,5 +5360,6 @@ std::string MasterImpl::ProfilingLog() {
     return "[main : " + thread_pool_->ProfilingLog() + "] [query : "
         + query_thread_pool_->ProfilingLog() + "]";
 }
+
 } // namespace master
 } // namespace tera
