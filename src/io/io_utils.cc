@@ -8,7 +8,7 @@ namespace tera {
 
 StatusCode LeveldbCodeToTeraCode(const leveldb::Status& status) {
     if (status.ok()) {
-        return kTableOk;
+        return kTabletNodeOk;
     } else if (status.IsNotFound()) {
         return kKeyNotExist;
     } else if (status.IsCorruption()) {

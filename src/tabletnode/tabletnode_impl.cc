@@ -205,7 +205,7 @@ bool TabletNodeImpl::Exit() {
     std::vector<TabletMeta*>::iterator it = tablet_meta_list.begin();
     for (; it != tablet_meta_list.end(); ++it) {
         TabletMeta*& tablet_meta = *it;
-        StatusCode status = kTableOk;
+        StatusCode status = kTabletNodeOk;
         bool ret = UnloadTablet(tablet_meta->table_name(),
             tablet_meta->key_range().key_start(),
             tablet_meta->key_range().key_end(), &status);
