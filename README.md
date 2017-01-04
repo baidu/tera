@@ -85,7 +85,7 @@ that runs a wide variety of other distributed applications. So Tera can be deplo
 ## Contributing to Tera
 Contributions are welcomed and greatly appreciated.
 
-Read [Roadmap](doc/en/roadmap.md) to get a general knowledge about our development plans.
+Read [Roadmap](doc/en/roadmap.md) to get a general knowledge about our development plan.
 
 See [Contributions](doc/en/contributor.md) for more details.
 
