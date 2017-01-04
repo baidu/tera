@@ -63,6 +63,12 @@ def main():
     # sync get
     sync_get(table)
 
+    # sync put batch
+    sync_put_batch(table)
+
+    # sync get batch
+    sync_get_batch(table)
+
     # scan (stream)
     scan(table)
 
@@ -95,6 +101,50 @@ def sync_get(table):
             pass
         else:
             return
+
+
+def sync_put_batch(table):
+    print("\nsync put batch")
+    mutation_list = list()
+    for i in range(1, 1001):
+        if i == 3:
+            # valid rowkey should < 64K, otherwise an invalid argument
+            # mock error for batch put
+            mutation = table.NewRowMutation("k" * 64 * 1024 + "k")
+        else:
+            mutation = table.NewRowMutation(str(i))
+        mutation.Put("cf0", "qu0", "value" + str(i))
+        mutation_list.append(mutation)
+    table.BatchPut(mutation_list)
+    for m in mutation_list:
+        status = m.GetStatus()
+        if status.GetReasonNumber() != Status.OK:
+            print("put/write failed for key<" + m.RowKey()
+                  + "> due to:" + status.GetReasonString())
+        m.Destroy()
+
+
+def sync_get_batch(table):
+    print("\nsync get batch")
+    s1 = long(time.time() * 1000)
+    reader_list = list()
+    for i in range(1, 1001):
+        reader = table.NewRowReader(str(i))
+        # read column cf0:qu0
+        reader.AddColumn("cf0", "qu0")
+        reader_list.append(reader)
+    table.BatchGet(reader_list)
+    for r in reader_list:
+        status = r.GetStatus()
+        if status.GetReasonNumber() != Status.OK:
+            print("get/read failed for key<" + r.RowKey()
+                  + "> due to:" + status.GetReasonString())
+        else:
+            # print(r.Value())
+            pass
+        r.Destroy()
+    e1 = long(time.time() * 1000)
+    print(str(e1 - s1) + " ms")
 
 
 def async_put(table):
