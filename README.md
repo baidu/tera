@@ -83,7 +83,11 @@ that runs a wide variety of other distributed applications. So Tera can be deplo
 	[API](doc/en/sdk_guide.md)
 
 ## Contributing to Tera
-Contributions are welcomed and greatly appreciated. See [Contributions](doc/en/contributor.md) for more details.
+Contributions are welcomed and greatly appreciated.
+
+Read [Roadmap](doc/en/roadmap.md) to get a general knowledge about our development plans.
+
+See [Contributions](doc/en/contributor.md) for more details.
 
 ## Follow us
 To join us, please send resume to {dist-lab, tera_dev, opensearch} at baidu.com.
