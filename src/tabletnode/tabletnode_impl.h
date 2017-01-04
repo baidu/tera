@@ -201,6 +201,7 @@ private:
 
     leveldb::Logger* ldb_logger_;
     leveldb::Cache* ldb_block_cache_;
+    leveldb::Cache* m_memory_cache;
     leveldb::TableCache* ldb_table_cache_;
 };
 
