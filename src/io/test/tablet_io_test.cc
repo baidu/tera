@@ -489,7 +489,7 @@ TEST_F(TabletIOTest, FindAverageKey) {
     start = "";
     end = "";
     ASSERT_TRUE(TabletIO::FindAverageKey(start, end, &ave));
-    ASSERT_EQ(ave, "\x7F\x80");
+    ASSERT_EQ(ave, "\x7F");
 
     start = "";
     end = "b";
@@ -526,7 +526,7 @@ TEST_F(TabletIOTest, FindAverageKey) {
     start = "";
     end = "\x1";
     ASSERT_TRUE(TabletIO::FindAverageKey(start, end, &ave));
-    ASSERT_EQ(ave, std::string("\x0\x80", 2));
+    ASSERT_EQ(ave, std::string("\x0", 1));
 
     start = "";
     end = std::string("\x0", 1);

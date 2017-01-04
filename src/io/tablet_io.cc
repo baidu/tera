@@ -390,6 +390,9 @@ bool TabletIO::FindAverageKey(const std::string& start, const std::string& end,
     std::string ave_key;
     for (int i = 0; i < max_len; ++i) {
         ave_key.append(1, char(sum[i]));
+        if (ave_key > start && (end == "" || ave_key < end)) {
+            break;
+        }
     }
     CHECK(ave_key > start && (end == "" || ave_key < end));
     *res = ave_key;
