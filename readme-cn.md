@@ -51,6 +51,7 @@ tera_dev at baidu.com
 
 #成为贡献者
 阅读[RoadMap](roadmap-cn.md)文件或者源代码，了解我们当前的开发方向。
+
 完成[5个小任务](doc/to_be_a_contributor.md),帮你一步步成为tera贡献者。
 
 #欢迎加入
