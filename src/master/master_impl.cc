@@ -4127,8 +4127,8 @@ void MasterImpl::MergeTabletAsyncPhase2(TabletPtr tablet_p1, TabletPtr tablet_p2
     new_meta.set_path(new_path);
     new_meta.set_size(tablet_p1->GetDataSize() + tablet_p2->GetDataSize());
 
-    Tablet tablet_c(new_meta, tablet_p1->GetTable());
-    tablet_c.ToMetaTableKeyValue(&packed_key, &packed_value);
+    TabletPtr tablet_c(new Tablet(new_meta, tablet_p1->GetTable()));
+    tablet_c->ToMetaTableKeyValue(&packed_key, &packed_value);
     mu_seq = request->add_row_list();
     mu_seq->set_row_key(packed_key);
     mutation = mu_seq->add_mutation_sequence();
@@ -4136,7 +4136,7 @@ void MasterImpl::MergeTabletAsyncPhase2(TabletPtr tablet_p1, TabletPtr tablet_p2
     mutation->set_value(packed_value);
 
     WriteClosure* done =
-        NewClosure(this, &MasterImpl::MergeTabletWriteMetaCallback, new_meta,
+        NewClosure(this, &MasterImpl::MergeTabletWriteMetaCallback, tablet_c,
                    tablet_p1, tablet_p2, FLAGS_tera_master_meta_retry_times);
     tabletnode::TabletNodeClient meta_node_client(meta_addr);
     meta_node_client.WriteTablet(request, response, done);
@@ -4167,7 +4167,7 @@ void MasterImpl::MergeTabletUnloadCallback(TabletPtr tablet) {
     }
 }
 
-void MasterImpl::MergeTabletWriteMetaCallback(TabletMeta new_meta,
+void MasterImpl::MergeTabletWriteMetaCallback(TabletPtr tablet_c,
                                               TabletPtr tablet_p1,
                                               TabletPtr tablet_p2,
                                               int32_t retry_times,
@@ -4184,11 +4184,11 @@ void MasterImpl::MergeTabletWriteMetaCallback(TabletMeta new_meta,
         if (failed) {
             LOG(ERROR) << "[merge] fail to add to meta tablet: "
                 << sofa::pbrpc::RpcErrorCodeToString(error_code) << ", "
-                << new_meta.ShortDebugString();
+                << tablet_c;
         } else {
             LOG(ERROR) << "[merge] fail to add to meta tablet: "
                 << StatusCodeToString(status) << ", "
-                << new_meta.ShortDebugString();
+                << tablet_c;
         }
         if (retry_times <= 0) {
             LOG(ERROR) << "[merge] fail to update meta";
@@ -4197,7 +4197,7 @@ void MasterImpl::MergeTabletWriteMetaCallback(TabletMeta new_meta,
             std::string meta_addr;
             if (tablet_manager_->GetMetaTabletAddr(&meta_addr)) {
                 WriteClosure* done =
-                    NewClosure(this, &MasterImpl::MergeTabletWriteMetaCallback, new_meta,
+                    NewClosure(this, &MasterImpl::MergeTabletWriteMetaCallback, tablet_c,
                                tablet_p1, tablet_p2, retry_times - 1);
                 tabletnode::TabletNodeClient meta_node_client(meta_addr);
                 meta_node_client.WriteTablet(request, response, done);
@@ -4212,8 +4212,9 @@ void MasterImpl::MergeTabletWriteMetaCallback(TabletMeta new_meta,
         return;
     }
 
-    TabletPtr tablet_c;
-    if (tablet_p1->GetKeyStart() == new_meta.key_range().key_start()) {
+    TabletMeta new_meta;
+    tablet_c->ToMeta(&new_meta);
+    if (tablet_p1->GetKeyStart() == tablet_c->GetKeyStart()) {
         DeleteTablet(tablet_p1);
         tablet_manager_->AddTablet(new_meta, TableSchema(), &tablet_c);
         DeleteTablet(tablet_p2);

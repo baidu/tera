@@ -371,7 +371,7 @@ private:
     void MergeTabletAsync(TabletPtr tablet_p1, TabletPtr tablet_p2);
     virtual void MergeTabletAsyncPhase2(TabletPtr tablet_p1, TabletPtr tablet_p2);
     void MergeTabletUnloadCallback(TabletPtr tablet);
-    void MergeTabletWriteMetaCallback(TabletMeta new_meta, TabletPtr tablet_p1,
+    void MergeTabletWriteMetaCallback(TabletPtr tablet_c, TabletPtr tablet_p1,
                                       TabletPtr tablet_p2, int32_t retry_times,
                                       WriteTabletRequest* request,
                                       WriteTabletResponse* response,

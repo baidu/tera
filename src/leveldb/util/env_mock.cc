@@ -236,10 +236,10 @@ Status MockEnv::NewSequentialFile(const std::string& fname, SequentialFile** res
     if (f == NULL) {
       *result = NULL;
       return IOError(MockPath(fname), errno);
-      abort();
     } else {
       if (NewSequentialFileFailed && NewSequentialFileFailed(iNewSequentialFile, fname)) {
         std::cerr << "[mockenv] NewSequentialFile failed" << std::endl;
+        fclose(f);
         return Status::IOError("open failed: " + fname);
       } else {
         *result = new MockSequentialFile(MockPath(fname), f);

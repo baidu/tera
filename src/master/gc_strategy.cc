@@ -193,7 +193,7 @@ void BatchGcStrategy::CollectSingleDeadTablet(const std::string& tablename, uint
             GcFileSet& file_set = gc_live_files_[tablename];
             if (file_set.size() == 0) {
                 TablePtr table;
-                tablet_manager_->FindTable(tablename, &table);
+                CHECK(tablet_manager_->FindTable(tablename, &table));
                 file_set.resize(table->GetSchema().locality_groups_size());
                 VLOG(10) << "[gc] resize : " << tablename
                     << " fileset lg size: " << file_set.size();
