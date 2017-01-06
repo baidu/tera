@@ -39,7 +39,9 @@ public:
 
     void SetTimeStamp(int64_t ts);
 
-    void SetStatus(TabletNodeStatus status);
+    void SetServerAddr(const std::string& addr);
+
+    void SetStatus(StatusCode status);
 
     void GetTabletNodeInfo(TabletNodeInfo* info);
 

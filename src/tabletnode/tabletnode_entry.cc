@@ -55,10 +55,7 @@ bool TabletNodeEntry::StartServer() {
     IpAddress tabletnode_addr("0.0.0.0", FLAGS_tera_tabletnode_port);
     LOG(INFO) << "Start RPC server at: " << tabletnode_addr.ToString();
 
-    TabletNodeInfo tabletnode_info;
-    tabletnode_info.set_addr(tabletnode_addr.ToString());
-
-    tabletnode_impl_.reset(new TabletNodeImpl(tabletnode_info));
+    tabletnode_impl_.reset(new TabletNodeImpl());
     remote_tabletnode_ = new RemoteTabletNode(tabletnode_impl_.get());
 
     // 注册给rpcserver, rpcserver会负责delete

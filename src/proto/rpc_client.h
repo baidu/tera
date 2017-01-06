@@ -95,7 +95,8 @@ protected:
 template<class ServerType>
 class RpcClient : public RpcClientBase {
 public:
-    RpcClient(const std::string& addr) {
+    RpcClient(const std::string& addr)
+        : sync_call_failed(false) {
         ResetClient(addr);
     }
     virtual ~RpcClient() {}

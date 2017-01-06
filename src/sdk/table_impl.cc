@@ -1943,12 +1943,12 @@ void TableImpl::DoDumpCookie() {
 void TableImpl::DumpCookie() {
     DoDumpCookie();
     ThreadPool::Task task = boost::bind(&TableImpl::DumpCookie, this);
-    AddDelayTask(FLAGS_tera_sdk_cookie_update_interval * 1000, task);
+    AddDelayTask(FLAGS_tera_sdk_cookie_update_interval * 1000LL, task);
 }
 
 void TableImpl::EnableCookieUpdateTimer() {
     ThreadPool::Task task = boost::bind(&TableImpl::DumpCookie, this);
-    AddDelayTask(FLAGS_tera_sdk_cookie_update_interval * 1000, task);
+    AddDelayTask(FLAGS_tera_sdk_cookie_update_interval * 1000LL, task);
 }
 
 std::string TableImpl::GetCookieFileName(const std::string& tablename,

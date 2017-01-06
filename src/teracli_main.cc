@@ -3263,16 +3263,16 @@ int main(int argc, char* argv[]) {
             }
             if (arg_list.size() == 2 &&
                 (strcmp(arg_list[1], "quit") == 0 || strcmp(arg_list[1], "exit") == 0)) {
-                delete[] line_copy;
-                delete[] line;
+                free(line_copy);
+                free(line);
                 break;
             }
             if (arg_list.size() > 1) {
                 add_history(line_copy);
                 ret = ExecuteCommand(client, arg_list.size(), &arg_list[0]);
             }
-            delete[] line_copy;
-            delete[] line;
+            free(line_copy);
+            free(line);
         }
     } else {
         ret = ExecuteCommand(client, argc, argv);

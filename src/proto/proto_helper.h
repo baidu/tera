@@ -24,8 +24,11 @@ std::string StatusCodeToString(StatusCode status);
 std::string StatusCodeToString(TabletStatus status);
 std::string StatusCodeToString(TableStatus status);
 std::string StatusCodeToString(CompactStatus status);
-std::string StatusCodeToString(TabletNodeStatus status);
-std::string StatusCodeToString(int32_t status);
+
+void SetStatusCode(const StatusCode& code, StatusCode* tera_status);
+void SetStatusCode(const TabletStatus& tablet_status, StatusCode* tera_status);
+void SetStatusCode(const TableStatus& table_status, StatusCode* tera_status);
+void SetStatusCode(const CompactStatus& code, StatusCode* tera_status);
 
 } // namespace tera
 #endif // TERA_PROTO_PROTO_HELPER_H_

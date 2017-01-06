@@ -408,11 +408,12 @@ void TabletNodeSysInfo::CollectHardwareInfo() {
         if (f == NULL) {
             return;
         }
-        fseek(f, 327, SEEK_SET);
+        int ret = fseek(f, 327, SEEK_SET);
+        CHECK_EQ(ret, 0);
         for (int i = 0; i < 10; i++) {
             while (':' != fgetc(f));
-            fscanf(f, "%ld%*d%*d%*d%*d%*d%*d%*d%ld", &net_rx, &net_tx);
-            if (net_rx > 0 && net_tx > 0) {
+            ret = fscanf(f, "%ld%*d%*d%*d%*d%*d%*d%*d%ld", &net_rx, &net_tx);
+            if (ret >= 2 && net_rx > 0 && net_tx > 0) {
                 break;
             }
         }
@@ -450,9 +451,14 @@ void TabletNodeSysInfo::GetTabletMetaList(TabletMetaList* meta_list) {
     meta_list->CopyFrom(tablet_list_);
 }
 
-void TabletNodeSysInfo::SetStatus(TabletNodeStatus status) {
+void TabletNodeSysInfo::SetServerAddr(const std::string& addr) {
     MutexLock lock(&mutex_);
-    info_.set_status_t(kTabletNodeRegistered);
+    info_.set_addr(addr);
+}
+
+void TabletNodeSysInfo::SetStatus(StatusCode status) {
+    MutexLock lock(&mutex_);
+    info_.set_status_t(status);
 }
 
 void TabletNodeSysInfo::DumpLog() {

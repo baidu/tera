@@ -1179,14 +1179,13 @@ Status DBImpl::DoCompactionWork(CompactionState* compact) {
     } else {
       compact_strategy->SetSnapshot(*(snapshots_.begin()));
     }
+    Log(options_.info_log,  "[%s] Compact strategy: %s",
+      dbname_.c_str(),
+      compact_strategy->Name());
   }
 
   // Release mutex while we're actually doing the compaction work
   mutex_.Unlock();
-
-  Log(options_.info_log,  "[%s] Compact strategy: %s",
-    dbname_.c_str(),
-    compact_strategy->Name());
 
   Iterator* input = versions_->MakeInputIterator(compact->compaction);
   input->SeekToFirst();

@@ -193,7 +193,7 @@ void BatchGcStrategy::CollectSingleDeadTablet(const std::string& tablename, uint
             GcFileSet& file_set = gc_live_files_[tablename];
             if (file_set.size() == 0) {
                 TablePtr table;
-                tablet_manager_->FindTable(tablename, &table);
+                CHECK(tablet_manager_->FindTable(tablename, &table));
                 file_set.resize(table->GetSchema().locality_groups_size());
                 VLOG(10) << "[gc] resize : " << tablename
                     << " fileset lg size: " << file_set.size();
@@ -256,9 +256,11 @@ bool IncrementalGcStrategy::PreQuery () {
 
         // erase newly dead tablets from live tablets
         for (TabletFiles::iterator it = live_tablet_files_[table_name].begin();
-             it != live_tablet_files_[table_name].end(); ++it) {
+             it != live_tablet_files_[table_name].end();) {
             if (dead_tablet_files_[table_name].find(static_cast<uint64_t>(it->first)) != dead_tablet_files_[table_name].end()) {
-                live_tablet_files_[table_name].erase(it);
+                live_tablet_files_[table_name].erase(it++);
+            } else {
+                ++it;
             }
         }
 

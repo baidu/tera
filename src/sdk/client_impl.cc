@@ -109,7 +109,7 @@ bool ClientImpl::CheckReturnValue(StatusCode status, std::string& reason, ErrorC
             reason = "table not found.";
             err->SetFailed(ErrorCode::kBadParam, reason);
             break;
-        case kTableDisable:
+        case kTableStatusDisable:
             reason = "table status: disable.";
             err->SetFailed(ErrorCode::kBadParam, reason);
             break;
@@ -740,7 +740,7 @@ bool ClientImpl::DoShowTablesInfo(TableMetaList* table_list,
 
         if (master_client.ShowTables(&request, &response) &&
             response.status() == kMasterOk) {
-            if (tablet_list == NULL && response.all_brief()) {
+            if (response.all_brief()) {
                 // show all table brief
                 table_list->CopyFrom(response.table_meta_list());
                 return true;

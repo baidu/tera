@@ -488,7 +488,7 @@ public:
 
 private:
     Status OpenFile() {
-        fps_ = (FILE**)malloc(file_num_ * sizeof(FILE));
+        fps_ = (FILE**)malloc(file_num_ * sizeof(FILE*));
         for (uint32_t i = 0; i < file_num_; ++i) {
             std::string cache_file = CacheName(fname_, i);
             fps_[i] = fopen(cache_file.c_str(), "w+");

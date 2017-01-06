@@ -61,6 +61,7 @@ void PrintStat() {
 
 class KeySet {
 public:
+    KeySet() : key_num_(0) {}
     void Init(const uint32_t key_num) {
         key_num_ = key_num;
 
