@@ -986,7 +986,7 @@ inline bool TabletIO::LowLevelScan(const std::string& start_tera_key,
     }
 
     // check if scan finished
-    SetStatusCode(kTableOk, status);
+    SetStatusCode(kTabletNodeOk, status);
     if ((buffer_size < scan_options.max_size) &&
         (number_limit < scan_options.number_limit) &&
         (now_time <= time_out)) {
@@ -1014,7 +1014,7 @@ bool TabletIO::LowLevelSeek(const std::string& row_key,
                             RowResult* value_list,
                             StatusCode* status) {
     StatusCode s;
-    SetStatusCode(kTableOk, &s);
+    SetStatusCode(kTabletNodeOk, &s);
     value_list->clear_key_values();
 
     // create tera iterator
@@ -1057,7 +1057,7 @@ bool TabletIO::LowLevelSeek(const std::string& row_key,
     } else {
         SetStatusCode(kKeyNotExist, &s);
     }
-    if (s != kTableOk) {
+    if (s != kTabletNodeOk) {
         delete compact_strategy;
         delete it_data;
         SetStatusCode(s, status);
@@ -1162,7 +1162,7 @@ bool TabletIO::LowLevelSeek(const std::string& row_key,
     delete it_data;
 
     SetStatusCode(s, status);
-    if (s == kTableOk) {
+    if (s == kTabletNodeOk) {
         return true;
     } else {
         return false;
@@ -1300,7 +1300,7 @@ bool TabletIO::WriteBatch(leveldb::WriteBatch* batch, bool disable_wal, bool syn
         SetStatusCode(kIOError, status);
         return false;
     }
-    SetStatusCode(kTableOk, status);
+    SetStatusCode(kTabletNodeOk, status);
     return true;
 }
 

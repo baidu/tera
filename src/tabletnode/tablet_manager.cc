@@ -154,7 +154,7 @@ bool TabletManager::RemoveAllTablets(bool force, StatusCode* status) {
     MutexLock lock(&m_mutex);
     std::map<TabletRange, io::TabletIO*>::iterator it;
     for (it = m_tablet_list.begin(); it != m_tablet_list.end();) {
-        StatusCode code = kTableOk;
+        StatusCode code = kTabletNodeOk;
         if (it->second->Unload(&code) || force) {
             it->second->DecRef();
             m_tablet_list.erase(it++);

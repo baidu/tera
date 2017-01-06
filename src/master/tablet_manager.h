@@ -30,7 +30,7 @@ class UpdateTableResponse;
 namespace master {
 
 
-// kTableOk = 40;
+// kTabletNodeOk = 40;
 // kTableNotInit = 41;
 // kTableReady = 42;
 // kTableOnLoad = 43;
