@@ -3,6 +3,7 @@
 // found in the LICENSE file.
 
 
+#define private public
 #include "utils/fragment.h"
 
 #include <gtest/gtest.h>

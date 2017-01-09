@@ -50,9 +50,6 @@ std::string StatusCodeToString(int32_t status) {
         return "kTabletNodeWaitKick";
 
     // table status
-    case kTableOk:
-        return "kTableOk";
-
     case kTableNotFound:
         return "kTableNotFound";
     case kTableCorrupt:
@@ -97,8 +94,8 @@ std::string StatusCodeToString(int32_t status) {
 
     //// tablet node rpc ////
     // response
-    // case kTabletNodeOk:
-    //     return "kTabletNodeOk";
+    case kTabletNodeOk:
+        return "kTabletNodeOk";
 
     // key
     case kKeyNotExist:
