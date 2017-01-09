@@ -289,8 +289,8 @@ void TabletNodeImpl::LoadTablet(const LoadTabletRequest* request,
         ///TODO: User per user memery_cache according to user quota.
         tablet_io->SetMemoryCache(m_memory_cache);
         if (!tablet_io->Load(schema, request->path(), parent_tablets,
-                                snapshots, rollbacks, ldb_logger_,
-                                ldb_block_cache_, ldb_table_cache_, &status)) {
+                             snapshots, rollbacks, ldb_logger_,
+                             ldb_block_cache_, ldb_table_cache_, &status)) {
             tablet_io->DecRef();
             LOG(ERROR) << "fail to load tablet: " << request->path()
                 << " [" << DebugString(key_start) << ", "
