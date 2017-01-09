@@ -76,6 +76,9 @@ struct LG_info {
 
   int32_t write_buffer_size;
 
+  Cache* block_cache;
+
+  int64_t seek_latency;
   // Other LG properties
   // ...
 
@@ -88,7 +91,9 @@ struct LG_info {
         memtable_ldb_write_buffer_size(1 << 20),
         memtable_ldb_block_size(kDefaultBlockSize),
         sst_size(kDefaultSstSize),
-        write_buffer_size(32 << 20) {}
+        write_buffer_size(32 << 20),
+        block_cache(NULL),
+        seek_latency(0) {}
 };
 
 // Options to control the behavior of a database (passed to DB::Open)
