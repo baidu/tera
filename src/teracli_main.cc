@@ -229,6 +229,8 @@ const char* builtin_cmd_list[] = {
     "tablet",
     "tablet <operation> <params>                                          \n\
             move    <tablet_path> <target_addr>                           \n\
+            reload  <tablet_path>                                         \n\
+                    force to unload and load on the same ts               \n\
             compact <tablet_path>                                         \n\
             split   <tablet_path>                                         \n\
             merge   <tablet_path>                                         \n\
@@ -2335,7 +2337,7 @@ int32_t ScanTabletOp(Client* client, int32_t argc, char** argv, ErrorCode* err) 
 }
 
 int32_t TabletOp(Client* client, int32_t argc, char** argv, ErrorCode* err) {
-    if (argc != 4 && argc != 5) {
+    if ((argc != 4) && (argc != 5)) {
         PrintCmdHelpInfo(argv[1]);
         return -1;
     }
@@ -2346,7 +2348,7 @@ int32_t TabletOp(Client* client, int32_t argc, char** argv, ErrorCode* err) {
         return CompactTabletOp(client, argc, argv, err);
     } else if (op == "scan" || op == "scanallv") {
         return ScanTabletOp(client, argc, argv, err);
-    } else if (op != "move" && op != "split" && op != "merge") {
+    } else if (op != "move" && op != "split" && op != "merge" && op != "reload") {
         PrintCmdHelpInfo(argv[1]);
         return -1;
     }

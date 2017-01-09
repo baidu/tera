@@ -249,7 +249,7 @@ private:
     void RetryUnloadTablet(TabletPtr tablet, int32_t retry_times);
     bool TrySplitTablet(TabletPtr tablet);
     bool TryMergeTablet(TabletPtr tablet);
-    void TryMoveTablet(TabletPtr tablet, const std::string& server_addr = "");
+    void TryMoveTablet(TabletPtr tablet, const std::string& server_addr = "", bool in_place = false);
 
     void TryReleaseCache(bool enbaled_debug = false);
     void ReleaseCacheWrapper();

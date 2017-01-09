@@ -1453,7 +1453,13 @@ void MasterImpl::TabletCmdCtrl(const CmdCtrlRequest* request,
         return;
     }
 
-    if (request->arg_list(0) == "move") {
+    if (request->arg_list(0) == "reload") {
+        std::string current_server_addr = tablet->GetServerAddr();
+        TryMoveTablet(tablet,
+                      current_server_addr,
+                      true);  // force to unload and load tablet even it on the same ts
+
+    } else if (request->arg_list(0) == "move") {
         if (request->arg_list_size() > 3) {
             response->set_status(kInvalidArgument);
             return;
@@ -5054,8 +5060,8 @@ void MasterImpl::ResumeMetaOperation() {
     meta_task_mutex_.Unlock();
 }
 
-void MasterImpl::TryMoveTablet(TabletPtr tablet, const std::string& server_addr) {
-    if (tablet->GetServerAddr() == server_addr) {
+void MasterImpl::TryMoveTablet(TabletPtr tablet, const std::string& server_addr, bool in_place) {
+    if (!in_place && (tablet->GetServerAddr() == server_addr)) {
         return;
     }
     LOG(INFO) << "Move " << tablet << " from " << tablet->GetServerAddr()
