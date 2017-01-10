@@ -5,7 +5,8 @@
 #ifndef TEAR_C_H_
 #define TEAR_C_H_
 
-#include "tera.h"
+#include <stdbool.h>
+#include <stdint.h>
 
 #pragma GCC visibility push(default)
 

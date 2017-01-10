@@ -12,6 +12,7 @@
 #include <map>
 
 #include "common/mutex.h"
+#include "common/timer.h"
 
 #include "tera.h"
 
@@ -33,22 +34,28 @@ struct tera_scan_descriptor_t { ScanDescriptor* rep; };
 struct tera_table_t           { Table*          rep; };
 
 static bool SaveError(char** errptr, const ErrorCode& s) {
-  assert(errptr != NULL);
-  if (s.GetType() == ErrorCode::kOK) {
-    return false;
-  } else if (*errptr == NULL) {
-    *errptr = strdup(s.GetReason().c_str());
-  } else {
-    free(*errptr);
-    *errptr = strdup(s.GetReason().c_str());
-  }
-  return true;
+    if (s.GetType() == ErrorCode::kOK) {
+        return false;
+    }
+    if (errptr == NULL) {
+        fprintf(stderr, "%s tera error: %s.\n",
+                common::timer::get_curtime_str().c_str(), s.GetReason().c_str());
+        return true;
+    }
+
+    if (*errptr == NULL) {
+        *errptr = strdup(s.GetReason().c_str());
+    } else {
+        free(*errptr);
+        *errptr = strdup(s.GetReason().c_str());
+    }
+    return true;
 }
 
 static char* CopyString(const std::string& str) {
-  char* result = reinterpret_cast<char*>(malloc(sizeof(char) * str.size()));
-  memcpy(result, str.data(), sizeof(char) * str.size());
-  return result;
+    char* result = reinterpret_cast<char*>(malloc(sizeof(char) * str.size()));
+    memcpy(result, str.data(), sizeof(char) * str.size());
+    return result;
 }
 
 //           <RowMutation*, <tera_row_mutation_t*, user_callback> >
