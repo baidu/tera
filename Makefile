@@ -193,3 +193,11 @@ proto: $(PROTO_OUT_CC) $(PROTO_OUT_H)
 	$(PROTOC) --proto_path=./src/proto/ --proto_path=$(PROTOBUF_INCDIR) \
               --proto_path=$(SOFA_PBRPC_INCDIR) \
               --cpp_out=./src/proto/ $<
+
+# install output into system directories
+.PHONY: install
+install: $(PROGRAM) $(LIBRARY) $(SOLIBRARY) $(TERA_C_SO) $(JNILIBRARY)
+	mkdir -p $(INSTALL_PREFIX)/bin $(INSTALL_PREFIX)/include $(INSTALL_PREFIX)/lib
+	cp -rf $(PROGRAM) $(INSTALL_PREFIX)/bin
+	cp -rf include/* $(INSTALL_PREFIX)/include
+	cp -rf $(LIBRARY) $(SOLIBRARY) $(TERA_C_SO) $(JNILIBRARY) $(INSTALL_PREFIX)/lib

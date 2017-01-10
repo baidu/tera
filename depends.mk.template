@@ -53,3 +53,8 @@ DEPS_LDPATH = -L$(SOFA_PBRPC_LIBDIR) -L$(PROTOBUF_LIBDIR) \
 SO_DEPS_LDFLAGS = -lins_sdk -lsofa-pbrpc -lprotobuf -lsnappy -lzookeeper_mt \
                   -lgtest_main -lgtest -lglog -lgflags
 DEPS_LDFLAGS = $(SO_DEPS_LDFLAGS) -ltcmalloc_minimal -lunwind
+
+################################################################
+# Install prefix
+################################################################
+INSTALL_PREFIX=/usr/local
