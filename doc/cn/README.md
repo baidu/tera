@@ -47,4 +47,4 @@ sh ./build.sh
 
 [客户端teracli使用方法](teracli.md)
 
-[其它文档](index.md)
+[文档索引](index.md)
