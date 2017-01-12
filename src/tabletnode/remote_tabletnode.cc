@@ -4,7 +4,7 @@
 
 #include "tabletnode/remote_tabletnode.h"
 
-#include <boost/bind.hpp>
+#include <functional>
 
 #include "gflags/gflags.h"
 #include "glog/logging.h"
@@ -84,8 +84,8 @@ void RemoteTabletNode::LoadTablet(google::protobuf::RpcController* controller,
     uint64_t id = request->sequence_id();
     LOG(INFO) << "accept RPC (LoadTablet) id: " << id << ", src: " << tera::utils::GetRemoteAddress(controller);
     ThreadPool::Task callback =
-        boost::bind(&RemoteTabletNode::DoLoadTablet, this, controller,
-                   request, response, done);
+        std::bind(&RemoteTabletNode::DoLoadTablet, this, controller,
+                  request, response, done);
     ctrl_thread_pool_->AddTask(callback);
 }
 
@@ -96,8 +96,8 @@ void RemoteTabletNode::UnloadTablet(google::protobuf::RpcController* controller,
     uint64_t id = request->sequence_id();
     LOG(INFO) << "accept RPC (UnloadTablet) id: " << id << ", src: " << tera::utils::GetRemoteAddress(controller);
     ThreadPool::Task callback =
-        boost::bind(&RemoteTabletNode::DoUnloadTablet, this, controller,
-                   request, response, done);
+        std::bind(&RemoteTabletNode::DoUnloadTablet, this, controller,
+                  request, response, done);
     ctrl_thread_pool_->AddTask(callback);
 }
 
@@ -127,8 +127,8 @@ void RemoteTabletNode::ReadTablet(google::protobuf::RpcController* controller,
         ReadRpc* rpc = new ReadRpc(controller, request, response, done,
                                    timer, start_micros);
         read_rpc_schedule_->EnqueueRpc(request->tablet_name(), rpc);
-        read_thread_pool_->AddTask(boost::bind(&RemoteTabletNode::DoScheduleRpc, this,
-                                                read_rpc_schedule_.get()));
+        read_thread_pool_->AddTask(std::bind(&RemoteTabletNode::DoScheduleRpc, this,
+                                             read_rpc_schedule_.get()));
     }
 }
 
@@ -155,8 +155,8 @@ void RemoteTabletNode::WriteTablet(google::protobuf::RpcController* controller,
         WriteRpcTimer* timer = new WriteRpcTimer(request, response, done, start_micros);
         RpcTimerList::Instance()->Push(timer);
         ThreadPool::Task callback =
-            boost::bind(&RemoteTabletNode::DoWriteTablet, this,
-                       controller, request, response, done, timer);
+            std::bind(&RemoteTabletNode::DoWriteTablet, this,
+                      controller, request, response, done, timer);
         write_thread_pool_->AddTask(callback);
     }
 }
@@ -175,8 +175,8 @@ void RemoteTabletNode::ScanTablet(google::protobuf::RpcController* controller,
         scan_pending_counter.Inc();
         ScanRpc* rpc = new ScanRpc(controller, request, response, done);
         scan_rpc_schedule_->EnqueueRpc(request->table_name(), rpc);
-        scan_thread_pool_->AddTask(boost::bind(&RemoteTabletNode::DoScheduleRpc,
-                                                this, scan_rpc_schedule_.get()));
+        scan_thread_pool_->AddTask(std::bind(&RemoteTabletNode::DoScheduleRpc,
+                                             this, scan_rpc_schedule_.get()));
     }
 }
 
@@ -187,8 +187,8 @@ void RemoteTabletNode::GetSnapshot(google::protobuf::RpcController* controller,
     uint64_t id = request->sequence_id();
     LOG(INFO) << "accept RPC (GetSnapshot) id: " << id << ", src: " << tera::utils::GetRemoteAddress(controller);
     ThreadPool::Task callback =
-        boost::bind(&RemoteTabletNode::DoGetSnapshot, this, controller,
-                    request, response, done);
+        std::bind(&RemoteTabletNode::DoGetSnapshot, this, controller,
+                  request, response, done);
     write_thread_pool_->AddPriorityTask(callback);
 }
 
@@ -199,8 +199,8 @@ void RemoteTabletNode::ReleaseSnapshot(google::protobuf::RpcController* controll
     uint64_t id = request->sequence_id();
     LOG(INFO) << "accept RPC (ReleaseSnapshot) id: " << id << ", src: " << tera::utils::GetRemoteAddress(controller);
     ThreadPool::Task callback =
-    boost::bind(&RemoteTabletNode::DoReleaseSnapshot, this, controller,
-               request, response, done);
+    std::bind(&RemoteTabletNode::DoReleaseSnapshot, this, controller,
+              request, response, done);
     write_thread_pool_->AddPriorityTask(callback);
 }
 
@@ -211,8 +211,8 @@ void RemoteTabletNode::Rollback(google::protobuf::RpcController* controller,
     uint64_t id = request->sequence_id();
     LOG(INFO) << "accept RPC (Rollback) id: " << id << ", src: " << tera::utils::GetRemoteAddress(controller);
     ThreadPool::Task callback =
-    boost::bind(&RemoteTabletNode::DoRollback, this, controller,
-               request, response, done);
+    std::bind(&RemoteTabletNode::DoRollback, this, controller,
+              request, response, done);
     write_thread_pool_->AddPriorityTask(callback);
 }
 
@@ -224,8 +224,8 @@ void RemoteTabletNode::Query(google::protobuf::RpcController* controller,
     uint64_t id = request->sequence_id();
     LOG(INFO) << "accept RPC (Query) id: " << id << ", src: " << tera::utils::GetRemoteAddress(controller);
     ThreadPool::Task callback =
-        boost::bind(&RemoteTabletNode::DoQuery, this, controller,
-                   request, response, done);
+        std::bind(&RemoteTabletNode::DoQuery, this, controller,
+                  request, response, done);
     ctrl_thread_pool_->AddPriorityTask(callback);
 }
 
@@ -237,8 +237,8 @@ void RemoteTabletNode::CmdCtrl(google::protobuf::RpcController* controller,
     LOG(INFO) << "accept RPC (CmdCtrl) id: " << id << ", [" << request->command()
         << "] src: " << tera::utils::GetRemoteAddress(controller);
     ThreadPool::Task callback =
-        boost::bind(&RemoteTabletNode::DoCmdCtrl, this, controller,
-                    request, response, done);
+        std::bind(&RemoteTabletNode::DoCmdCtrl, this, controller,
+                  request, response, done);
     ctrl_thread_pool_->AddPriorityTask(callback);
 }
 
@@ -249,8 +249,8 @@ void RemoteTabletNode::SplitTablet(google::protobuf::RpcController* controller,
     uint64_t id = request->sequence_id();
     LOG(INFO) << "accept RPC (SplitTablet) id: " << id << ", src: " << tera::utils::GetRemoteAddress(controller);
     ThreadPool::Task callback =
-        boost::bind(&RemoteTabletNode::DoSplitTablet, this, controller,
-                    request, response, done);
+        std::bind(&RemoteTabletNode::DoSplitTablet, this, controller,
+                  request, response, done);
     ctrl_thread_pool_->AddTask(callback);
 }
 
@@ -262,8 +262,8 @@ void RemoteTabletNode::CompactTablet(google::protobuf::RpcController* controller
     LOG(INFO) << "accept RPC (CompactTablet) id: " << id << ", src: " << tera::utils::GetRemoteAddress(controller);
     compact_pending_counter.Inc();
     ThreadPool::Task callback =
-        boost::bind(&RemoteTabletNode::DoCompactTablet, this, controller,
-                   request, response, done);
+        std::bind(&RemoteTabletNode::DoCompactTablet, this, controller,
+                  request, response, done);
     compact_thread_pool_->AddTask(callback);
 }
 
@@ -274,8 +274,8 @@ void RemoteTabletNode::Update(google::protobuf::RpcController* controller,
     uint64_t id = request->sequence_id();
     LOG(INFO) << "accept RPC (Update) id: " << id << ", src: " << tera::utils::GetRemoteAddress(controller);
     ThreadPool::Task callback =
-        boost::bind(&RemoteTabletNode::DoUpdate, this, controller,
-                   request, response, done);
+        std::bind(&RemoteTabletNode::DoUpdate, this, controller,
+                  request, response, done);
     ctrl_thread_pool_->AddTask(callback);
 }
 

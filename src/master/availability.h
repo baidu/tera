@@ -16,14 +16,14 @@ namespace master {
 
 class TabletAvailability {
 public:
-    TabletAvailability(boost::shared_ptr<TabletManager> t) : tablet_manager_(t) {}
+    TabletAvailability(std::shared_ptr<TabletManager> t) : tablet_manager_(t) {}
     void LogAvailability();
     void AddNotReadyTablet(const std::string& id);
     void EraseNotReadyTablet(const std::string& id);
 
 private:
     Mutex mutex_;
-    boost::shared_ptr<TabletManager> tablet_manager_;
+    std::shared_ptr<TabletManager> tablet_manager_;
     std::map<std::string, int64_t> tablets_;
 };
 

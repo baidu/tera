@@ -4,7 +4,7 @@
 
 #include <iostream>
 
-#include "boost/bind.hpp"
+#include "functional"
 #include "common/mutex.h"
 #include "common/thread_pool.h"
 #include "gflags/gflags.h"
@@ -80,7 +80,7 @@ private:
         VLOG(25) << "accept RPC (Get)";
         read_request_counter.Add(1);
         common::ThreadPool::Task callback =
-            boost::bind(&HttpProxyImpl::DoGet, this, controller, request, response, done);
+            std::bind(&HttpProxyImpl::DoGet, this, controller, request, response, done);
         request_pool_->AddTask(callback);
     }
     virtual void DoGet(google::protobuf::RpcController* controller,
@@ -95,7 +95,7 @@ private:
         VLOG(25) << "accept RPC (Put)";
         write_request_counter.Add(1);
         common::ThreadPool::Task callback =
-            boost::bind(&HttpProxyImpl::DoPut, this, controller, request, response, done);
+            std::bind(&HttpProxyImpl::DoPut, this, controller, request, response, done);
         request_pool_->AddTask(callback);
     }
     virtual void DoPut(google::protobuf::RpcController* controller,
@@ -236,7 +236,7 @@ void HttpProxyImpl::LogCounter() {
     LOG(INFO) << "[read] request: " << read_request_counter.Clear()
         << " response: " << read_response_counter.Clear();
     common::ThreadPool::Task callback =
-         boost::bind(&HttpProxyImpl::LogCounter, this);
+         std::bind(&HttpProxyImpl::LogCounter, this);
     ctrl_pool_->DelayTask(1000, callback);
 }
 

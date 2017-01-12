@@ -2,7 +2,7 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include <boost/bind.hpp>
+#include <functional>
 
 #include "common/thread_pool.h"
 #include "common/base/string_format.h"
@@ -45,7 +45,7 @@ void SingleRowTxn::ApplyMutation(RowMutation* row_mu) {
     }
 
     if (row_mu->IsAsync()) {
-        ThreadPool::Task task = boost::bind(&RowMutationImpl::RunCallback, row_mu_impl);
+        ThreadPool::Task task = std::bind(&RowMutationImpl::RunCallback, row_mu_impl);
         thread_pool_->AddTask(task);
     }
 }
@@ -79,7 +79,7 @@ void SingleRowTxn::Get(RowReader* row_reader) {
     }
     if (reader_impl->GetError().GetType() != ErrorCode::kOK) {
         if (is_async) {
-            ThreadPool::Task task = boost::bind(&RowReaderImpl::RunCallback, reader_impl);
+            ThreadPool::Task task = std::bind(&RowReaderImpl::RunCallback, reader_impl);
             thread_pool_->AddTask(task);
         }
         return;
@@ -171,7 +171,7 @@ void SingleRowTxn::Commit() {
         table_->ApplyMutation(&mutation_buffer_);
     } else {
         if (user_commit_callback_ != NULL) {
-            ThreadPool::Task task = boost::bind(user_commit_callback_, this);
+            ThreadPool::Task task = std::bind(user_commit_callback_, this);
             thread_pool_->AddTask(task);
         }
     }

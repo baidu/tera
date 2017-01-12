@@ -230,6 +230,7 @@ void Adapter::ReadCallback(tera::RowReader* reader, size_t req_size,
         if (all_verified) {
             read_marker_.OnSuccess(req_size, latency);
         }
+    } else if (true) {
     } else {
         std::cerr << "fail to read: row=[" << row << "], column=[";
         const tera::RowReader::ReadColumnList& read_list = reader->GetReadColumnList();
