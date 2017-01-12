@@ -2,7 +2,7 @@
 
 [![Build Status](https://travis-ci.org/baidu/tera.svg?branch=master)](https://travis-ci.org/baidu/tera)
 [![Coverity Scan Build Status](https://scan.coverity.com/projects/10959/badge.svg)](https://scan.coverity.com/projects/tera)
-[![Documentation Status](https://img.shields.io/badge/中文文档-最新-brightgreen.svg)](https://github.com/xupeilin/tera/tree/master/doc/cn)
+[![Documentation Status](https://img.shields.io/badge/中文文档-最新-brightgreen.svg)](doc/cn)
 
 Copyright 2015, Baidu, Inc.
 
