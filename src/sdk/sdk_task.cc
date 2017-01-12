@@ -8,6 +8,8 @@
 
 #include "utils/timer.h"
 
+DECLARE_int32(tera_sdk_timeout_precision);
+
 namespace tera {
 
 int64_t SdkTask::GetRef() {
@@ -46,12 +48,19 @@ uint64_t GetSdkTaskDueTime(SdkTask* task) {
 
 SdkTimeoutManager::SdkTimeoutManager(ThreadPool* thread_pool)
     : thread_pool_(thread_pool),
+      timeout_precision_(FLAGS_tera_sdk_timeout_precision),
       stop_(false),
       bg_exit_(false),
       bg_cond_(&bg_mutex_),
       bg_func_id_(0),
       bg_func_(boost::bind(&SdkTimeoutManager::CheckTimeout, this)) {
-    thread_pool_->AddTask(bg_func_);
+    if (timeout_precision_ <= 0) {
+        timeout_precision_ = 1;
+    }
+    if (timeout_precision_ > 1000) {
+        timeout_precision_ = 1000;
+    }
+    bg_func_id_ = thread_pool_->DelayTask(timeout_precision_, bg_func_);
 }
 
 SdkTimeoutManager::~SdkTimeoutManager() {
@@ -158,12 +167,7 @@ void SdkTimeoutManager::CheckTimeout() {
         return;
     }
 
-    if (get_millis() == now_ms) {
-        bg_func_id_ = thread_pool_->DelayTask(1, bg_func_);
-    } else {
-        thread_pool_->AddTask(bg_func_);
-        bg_func_id_ = 0;
-    }
+    bg_func_id_ = thread_pool_->DelayTask(timeout_precision_, bg_func_);
 }
 
 void SdkTimeoutManager::RunTimeoutFunc(SdkTask* sdk_task) {
