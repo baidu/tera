@@ -570,6 +570,8 @@ Table::Table(const std::string& table_name)
       create_time_((int64_t)time(NULL)),
       schema_is_syncing_(false),
       rangefragment_(NULL),
+      update_rpc_response_(NULL),
+      update_rpc_done_(NULL),
       old_schema_(NULL) {
 }
 

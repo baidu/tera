@@ -1224,7 +1224,7 @@ void TabletNodeImpl::EnableReleaseMallocCacheTimer(int32_t expand_factor) {
     assert(release_cache_timer_id_ == kInvalidTimerId);
     ThreadPool::Task task =
         boost::bind(&TabletNodeImpl::ReleaseMallocCache, this);
-    int64_t timeout_period = expand_factor * 1000 *
+    int64_t timeout_period = expand_factor * 1000LL *
         FLAGS_tera_tabletnode_tcm_cache_release_period;
     release_cache_timer_id_ = thread_pool_->DelayTask(timeout_period, task);
 }

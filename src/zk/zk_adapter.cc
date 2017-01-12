@@ -61,7 +61,12 @@ bool ZooKeeperAdapter::Init(const std::string& server_list,
 
     server_list_ = server_list;
     root_path_ = root_path;
-    if (*root_path_.end() == '/') {
+    if (root_path_.size() < 1) {
+        LOG(ERROR) << "zookeeper_init fail : invalid <root_path>";
+        SetZkAdapterCode(ZE_ARG, zk_errno);
+        return false;
+    }
+    if (root_path_[root_path_.size() - 1] == '/') {
         root_path_.resize(root_path_.size() - 1);
     }
     id_ = id;
