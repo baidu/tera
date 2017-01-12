@@ -4,9 +4,9 @@
 
 #include "io/tablet_io.h"
 
+#include <functional>
 #include <stdlib.h>
 
-#include <boost/bind.hpp>
 #include "gflags/gflags.h"
 #include "glog/logging.h"
 #include "gtest/gtest.h"
@@ -251,7 +251,7 @@ TEST_F(TabletScannerTest, CacheEvict) {
     ThreadPool pool(nr_thread);
     for (uint32_t i = 0; i < nr_thread; i++) {
         ThreadPool::Task task =
-            boost::bind(&TabletScannerTest::MultiScan, this, &tablet);
+            std::bind(&TabletScannerTest::MultiScan, this, &tablet);
         pool.AddTask(task);
     }
     pool.Stop(true);

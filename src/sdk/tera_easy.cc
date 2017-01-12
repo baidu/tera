@@ -6,8 +6,8 @@
 
 #include "tera_easy.h"
 
+#include <functional>
 #include <iostream>
-#include <boost/bind.hpp>
 #include <gflags/gflags.h>
 #include <glog/logging.h>
 
@@ -29,7 +29,7 @@ public:
         : table_(table),
           client_(client),
           scanner_(NULL) {
-        ThreadPool::Task task = boost::bind(&TableImpl::PrintStatus, this);
+        ThreadPool::Task task = std::bind(&TableImpl::PrintStatus, this);
         thread_pool_.DelayTask(1000, task);
     }
 
@@ -204,7 +204,7 @@ private:
             << ", pending size " << s_pending_size_.Get()
             << ", success " << s_write_succ_num_.Clear()
             << ", fail " << s_write_fail_num_.Clear();
-        ThreadPool::Task task = boost::bind(&TableImpl::PrintStatus, this);
+        ThreadPool::Task task = std::bind(&TableImpl::PrintStatus, this);
         thread_pool_.DelayTask(1000, task);
     }
 

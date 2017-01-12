@@ -54,7 +54,7 @@ void User::ToMetaTableKeyValue(std::string* packed_key,
 
 bool UserManager::AddUser(const std::string& user_name, const UserInfo& user_info) {
     MutexLock locker(&mutex_);
-    boost::shared_ptr<User> user(new User(user_name, user_info));
+    std::shared_ptr<User> user(new User(user_name, user_info));
     user->SetUserInfo(user_info);
 
     std::pair<UserList::iterator, bool> ret =

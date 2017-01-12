@@ -23,14 +23,14 @@ struct TimeStatistic {
 };
 class TabletAvailability {
 public:
-    TabletAvailability(boost::shared_ptr<TabletManager> t);
+    TabletAvailability(std::shared_ptr<TabletManager> t);
     void LogAvailability();
     void AddNotReadyTablet(const std::string& id);
     void EraseNotReadyTablet(const std::string& id);
 
 private:
     Mutex mutex_;
-    boost::shared_ptr<TabletManager> tablet_manager_;
+    std::shared_ptr<TabletManager> tablet_manager_;
     std::map<std::string, int64_t> tablets_;
 
     int64_t start_ts_;

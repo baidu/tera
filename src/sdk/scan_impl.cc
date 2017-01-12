@@ -4,7 +4,7 @@
 
 #include "sdk/scan_impl.h"
 
-#include <boost/bind.hpp>
+#include <functional>
 
 #include "common/this_thread.h"
 #include "common/base/closure.h"
