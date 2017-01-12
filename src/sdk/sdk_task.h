@@ -120,6 +120,7 @@ private:
     TaskMap map_shard_[kShardNum];
     mutable Mutex mutex_shard_[kShardNum];
     ThreadPool* thread_pool_;
+    int32_t timeout_precision_;
 
     mutable Mutex bg_mutex_;
     bool stop_;

@@ -236,7 +236,8 @@ DEFINE_int32(tera_sdk_rpc_max_pending_buffer_size, 200, "max pending buffer size
 DEFINE_int32(tera_sdk_rpc_work_thread_num, 8, "thread num of sdk rpc client");
 DEFINE_int32(tera_sdk_update_meta_internal, 10000, "the sdk update meta table internal time(ms)");
 DEFINE_int32(tera_sdk_check_timer_internal, 100, "the sdk check the resend quest queue internal time");
-DEFINE_int32(tera_sdk_timeout, 60000, "timeout of wait in sync reader&mutation mode");
+DEFINE_int32(tera_sdk_timeout, 60000, "timeout of sdk read/write request (in ms)");
+DEFINE_int32(tera_sdk_timeout_precision, 10, "precision of sdk read/write timeout detector (in ms)");
 DEFINE_int32(tera_sdk_delay_send_internal, 2, "the sdk resend the request internal time(s)");
 DEFINE_int32(tera_sdk_scan_buffer_limit, 2048000, "the pack size limit for scan operation");
 DEFINE_bool(tera_sdk_write_sync, false, "sync flag for write");
