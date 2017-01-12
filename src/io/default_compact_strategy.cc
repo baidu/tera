@@ -13,7 +13,8 @@ namespace io {
 DefaultCompactStrategy::DefaultCompactStrategy(const TableSchema& schema)
     : schema_(schema),
       raw_key_operator_(GetRawKeyOperatorFromSchema(schema_)),
-      last_ts_(-1), del_row_ts_(-1), del_col_ts_(-1), del_qual_ts_(-1), cur_ts_(-1),
+      last_ts_(-1), last_type_(leveldb::TKT_FORSEEK), cur_type_(leveldb::TKT_FORSEEK),
+      del_row_ts_(-1), del_col_ts_(-1), del_qual_ts_(-1), cur_ts_(-1),
       del_row_seq_(0), del_col_seq_(0), del_qual_seq_(0), version_num_(0),
       snapshot_(leveldb::kMaxSequenceNumber) {
     // build index

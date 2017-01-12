@@ -332,7 +332,7 @@ bool FakeTabletNodeZkAdapter::GetRootTableAddr(std::string* root_table_addr) {
 
 InsTabletNodeZkAdapter::InsTabletNodeZkAdapter(TabletNodeImpl* tabletnode_impl,
                                                const std::string& server_addr)
-    : tabletnode_impl_(tabletnode_impl), server_addr_(server_addr) {
+    : tabletnode_impl_(tabletnode_impl), server_addr_(server_addr), ins_sdk_(NULL)  {
 
 }
 

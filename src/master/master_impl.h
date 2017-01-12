@@ -595,7 +595,6 @@ private:
 
     bool load_balance_scheduled_;
     bool load_balance_enabled_;
-    int64_t load_balance_timer_id_;
 
     scoped_ptr<ThreadPool> thread_pool_;
     AutoResetEvent query_event_;
