@@ -317,6 +317,15 @@ class RowMutation(object):
     def __init__(self, mutation):
         self.mutation = mutation
 
+    def PutKV(self, value, ttl):
+        """ 写入（修改）值为<value>
+
+        Args:
+            value(string): cell的值
+            ttl: value 过期时间
+        """
+        lib.tera_row_mutation_put_kv(self.mutation, value, c_uint64(len(value)), c_int32(ttl))
+
     def Put(self, cf, qu, value):
         """ 写入（修改）这一行上
             ColumnFamily为<cf>, Qualifier为<qu>的cell值为<value>
@@ -941,6 +950,11 @@ def init_function_prototype_for_table():
                                    POINTER(c_char_p)]
     lib.tera_table_put.restype = c_bool
 
+    lib.tera_table_put_kv.argtypes = [c_void_p, c_char_p, c_uint64, 
+                                      c_char_p, c_uint64, c_int32,
+                                      POINTER(c_char_p)]
+    lib.tera_table_put_kv.restype = c_bool
+
     lib.tera_table_putint64.argtypes = [c_void_p, c_char_p, c_uint64, c_char_p,
                                         c_char_p, c_uint64, c_int64,
                                         POINTER(c_char_p)]
@@ -951,7 +965,7 @@ def init_function_prototype_for_table():
 
     lib.tera_table_delete.argtypes = [c_void_p, c_char_p, c_uint64,
                                       c_char_p, c_char_p, c_uint64]
-    lib.tera_table_delete.restype = None
+    lib.tera_table_delete.restype = c_bool
 
     lib.tera_table_apply_mutation.argtypes = [c_void_p, c_void_p]
     lib.tera_table_apply_mutation.restype = None
@@ -985,6 +999,9 @@ def init_function_prototype_for_table():
 
 def init_function_prototype_for_row_mutation():
     """ row_mutation"""
+    lib.tera_row_mutation_put_kv.argtypes = [c_void_p, c_char_p, c_uint64, c_int32]
+    lib.tera_row_mutation_put_kv.restype = None
+
     lib.tera_row_mutation_put.argtypes = [c_void_p, c_char_p,
                                           c_char_p, c_uint64,
                                           c_char_p, c_uint64]

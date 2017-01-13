@@ -160,7 +160,11 @@ bool tera_table_put_kv(tera_table_t* table, const char* key, uint64_t keylen,
     RowMutation* mutation = table->rep->NewRowMutation(key);
     mutation->Put(val_str, ttl);
     table->rep->ApplyMutation(mutation);
+    err = mutation->GetError();
+    delete mutation;
     if (SaveError(errptr, err)) {
+        fprintf(stderr, "%s tera error: %s.\n",
+                common::timer::get_curtime_str().c_str(), err.GetReason().c_str());
         return false;
     }
     return true;
@@ -189,7 +193,11 @@ bool tera_table_delete(tera_table_t* table, const char* row_key, uint64_t keylen
     RowMutation* mutation = table->rep->NewRowMutation(key_str);
     mutation->DeleteColumn(family, qu_str);
     table->rep->ApplyMutation(mutation);
+    err = mutation->GetError();
+    delete mutation;
     if (SaveError(NULL, err)) {
+        fprintf(stderr, "%s tera delete error: %s.\n",
+                common::timer::get_curtime_str().c_str(), err.GetReason().c_str());
         return false;
     }
     return true;
