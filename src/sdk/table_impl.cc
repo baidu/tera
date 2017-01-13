@@ -501,17 +501,10 @@ bool TableImpl::OpenInternal(ErrorCode* err) {
     return true;
 }
 
-struct MuFlushPair {
-    std::vector<RowMutationImpl*> mu_list;
-    bool flush;
-    MuFlushPair() : flush(false) {}
-};
-
 void TableImpl::DistributeMutations(const std::vector<RowMutationImpl*>& mu_list,
                                     bool called_by_user) {
-    typedef std::map<std::string, MuFlushPair> TsMuMap;
+    typedef std::map<std::string, std::vector<RowMutationImpl*> > TsMuMap;
     TsMuMap ts_mu_list;
-
     int64_t sync_min_timeout = -1;
     std::vector<RowMutationImpl*> sync_mu_list;
 
@@ -570,19 +563,12 @@ void TableImpl::DistributeMutations(const std::vector<RowMutationImpl*>& mu_list
             continue;
         }
 
-        MuFlushPair& mu_flush_pair = ts_mu_list[server_addr];
-        std::vector<RowMutationImpl*>& ts_row_mutations = mu_flush_pair.mu_list;
-        ts_row_mutations.push_back(row_mutation);
-
-        if (!row_mutation->IsAsync()) {
-            mu_flush_pair.flush = true;
-        }
+        ts_mu_list[server_addr].push_back(row_mutation);
     }
 
     TsMuMap::iterator it = ts_mu_list.begin();
     for (; it != ts_mu_list.end(); ++it) {
-        MuFlushPair& mu_flush_pair = it->second;
-        PackMutations(it->first, mu_flush_pair.mu_list, mu_flush_pair.flush);
+        PackMutations(it->first, it->second);
     }
     // 从现在开始，所有异步的row_mutation都不可以再操作了，因为随时会被用户释放
 
@@ -620,10 +606,10 @@ void TableImpl::DistributeMutationsById(std::vector<int64_t>* mu_id_list) {
 }
 
 void TableImpl::PackMutations(const std::string& server_addr,
-                              std::vector<RowMutationImpl*>& mu_list,
-                              bool flush) {
+                              std::vector<RowMutationImpl*>& mu_list) {
     MutexLock lock(&mutation_batch_mutex_);
     TaskBatch* mutation_batch = NULL;
+    bool is_instant = false;
     for (size_t i = 0; i < mu_list.size(); ++i) {
         // find existing batch or create a new batch
         if (mutation_batch == NULL) {
@@ -646,6 +632,7 @@ void TableImpl::PackMutations(const std::string& server_addr,
         RowMutationImpl* row_mutation = mu_list[i];
         mutation_batch->row_id_list->push_back(row_mutation->GetId());
         mutation_batch->byte_size += row_mutation->Size();
+        is_instant |= !row_mutation->IsAsync();
         row_mutation->DecRef();
 
         // commit the batch if:
@@ -655,7 +642,7 @@ void TableImpl::PackMutations(const std::string& server_addr,
         // 3) batch_row_num >= min_batch_row_num
         if (mutation_batch->byte_size >= kMaxRpcSize ||
             (i == mu_list.size() - 1 &&
-             (flush || mutation_batch->row_id_list->size() >= commit_size_))) {
+             (is_instant || mutation_batch->row_id_list->size() >= commit_size_))) {
             std::vector<int64_t>* mu_id_list = mutation_batch->row_id_list;
             uint64_t timer_id = mutation_batch->timer_id;
             const bool non_block_cancel = true;
@@ -668,6 +655,7 @@ void TableImpl::PackMutations(const std::string& server_addr,
             CommitMutationsById(server_addr, *mu_id_list);
             delete mu_id_list;
             mutation_batch = NULL;
+            is_instant = false;
             mutation_batch_mutex_.Lock();
         }
     }
@@ -718,6 +706,7 @@ void TableImpl::CommitMutations(const std::string& server_addr,
     request->set_tablet_name(name_);
     request->set_is_sync(FLAGS_tera_sdk_write_sync);
 
+    bool is_instant = false;
     std::vector<int64_t>* mu_id_list = new std::vector<int64_t>;
     for (uint32_t i = 0; i < mu_list.size(); ++i) {
         RowMutationImpl* row_mutation = mu_list[i];
@@ -733,9 +722,11 @@ void TableImpl::CommitMutations(const std::string& server_addr,
             txn->Serialize(mu_seq);
         }
         mu_id_list->push_back(row_mutation->GetId());
+        is_instant |= !row_mutation->IsAsync();
         row_mutation->AddCommitTimes();
         row_mutation->DecRef();
     }
+    request->set_is_instant(is_instant);
 
     VLOG(20) << "commit " << mu_list.size() << " mutations to " << server_addr;
     request->set_timestamp(common::timer::get_micros());
@@ -1000,13 +991,15 @@ void TableImpl::PackReaders(const std::string& server_addr,
         reader_buffer->timer_id = timer_id;
     }
 
+    bool is_instant = false;
     for (size_t i = 0; i < reader_list.size(); ++i) {
         RowReaderImpl* reader = reader_list[i];
         reader_buffer->row_id_list->push_back(reader->GetId());
+        is_instant |= !reader->IsAsync();
         reader->DecRef();
     }
 
-    if (reader_buffer->row_id_list->size() >= commit_size_) {
+    if (reader_buffer->row_id_list->size() >= commit_size_ || is_instant) {
         std::vector<int64_t>* reader_id_list = reader_buffer->row_id_list;
         uint64_t timer_id = reader_buffer->timer_id;
         const bool non_block_cancel = true;
@@ -1699,8 +1692,7 @@ void TableImpl::WakeUpPendingRequest(const TabletMetaNode& node) {
     }
 
     if (mutation_list.size() > 0) {
-        // TODO: flush ?
-        PackMutations(server_addr, mutation_list, false);
+        PackMutations(server_addr, mutation_list);
     }
     if (reader_list.size() > 0) {
         PackReaders(server_addr, reader_list);

@@ -267,8 +267,7 @@ private:
 
     // 分配完成后将mutation打包
     void PackMutations(const std::string& server_addr,
-                       std::vector<RowMutationImpl*>& mu_list,
-                       bool flush);
+                       std::vector<RowMutationImpl*>& mu_list);
 
     // mutation打包不满但到达最大等待时间
     void MutationBatchTimeout(std::string server_addr, uint64_t batch_seq);
