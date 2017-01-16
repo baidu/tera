@@ -193,6 +193,8 @@ private:
     /// 记录此mutation被提交到ts的次数
     int64_t commit_times_;
 
+    int64_t start_ts_;
+
     /// 所属事务
     Transaction* txn_;
 };

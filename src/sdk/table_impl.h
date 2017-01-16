@@ -16,6 +16,7 @@
 #include "sdk/sdk_zk.h"
 #include "tera.h"
 #include "utils/counter.h"
+#include "utils/histogram.h"
 
 namespace tera {
 
@@ -81,6 +82,8 @@ public:
 
 class TableImpl : public Table {
     friend class MutationCommitBuffer;
+    friend class RowMutationImpl;
+    friend class RowReaderImpl;
 public:
     TableImpl(const std::string& table_name,
               ThreadPool* thread_pool,
@@ -215,6 +218,7 @@ public:
     uint64_t GetMaxReaderPendingNum() { return max_reader_pending_num_; }
     TableSchema GetTableSchema() { return  table_schema_; }
 
+    void StatUserPerfCounter(enum SdkTask::TYPE op, ErrorCode::ErrorCodeType code, int64_t cost_time);
     struct PerfCounter {
         int64_t start_time;
         Counter rpc_r;                    // 读取的耗时
@@ -245,6 +249,17 @@ public:
         Counter reader_range_cnt;         // reader回调失败-原因为not in range
         Counter reader_timeout_cnt;       // reader在sdk队列中超时
         Counter reader_queue_timeout_cnt; // raader在sdk队列中超时，且之前从未被重试过
+
+        Counter user_mu_cnt;
+        Counter user_mu_suc;
+        Counter user_mu_fail;
+        Histogram hist_mu_cost;
+
+        Counter user_read_cnt;
+        Counter user_read_suc;
+        Counter user_read_notfound;
+        Counter user_read_fail;
+        Histogram hist_read_cost;
 
         void DoDumpPerfCounterLog(const std::string& log_prefix);
 

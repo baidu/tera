@@ -5,6 +5,7 @@
 #include "common/base/string_format.h"
 #include "io/coding.h"
 #include "sdk/mutate_impl.h"
+#include "sdk/table_impl.h"
 #include "utils/timer.h"
 
 namespace tera {
@@ -20,6 +21,7 @@ RowMutationImpl::RowMutationImpl(TableImpl* table, const std::string& row_key)
       finish_(false),
       finish_cond_(&finish_mutex_),
       commit_times_(0),
+      start_ts_(get_micros()),
       txn_(NULL) {
     SetErrorIfInvalid(row_key, kRowkey);
 }
@@ -369,6 +371,8 @@ void RowMutationImpl::Wait() {
 }
 
 void RowMutationImpl::RunCallback() {
+    // staticstic
+    table_->StatUserPerfCounter(SdkTask::MUTATION, error_code_.GetType(), get_micros() - start_ts_);
     if (callback_) {
         callback_(this);
     } else {
