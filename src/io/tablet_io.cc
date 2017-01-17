@@ -1714,6 +1714,7 @@ void TabletIO::SetupOptionsForLG() {
         exist_lg_list->insert(lg_i);
         (*lg_info_list)[lg_i] = lg_info;
     }
+    ldb_options_.env = LeveldbBaseEnv();
 
     if (exist_lg_list->size() == 0) {
         delete exist_lg_list;
