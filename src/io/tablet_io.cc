@@ -1665,7 +1665,7 @@ void TabletIO::SetupOptionsForLG() {
         if (mock_env_ != NULL) {
             // for testing
             LOG(INFO) << "mock env used";
-            ldb_options_.env = LeveldbMockEnv();
+            lg_info->env = LeveldbMockEnv();
         } else if (store == MemoryStore) {
             if (FLAGS_tera_use_flash_for_memenv) {
                 lg_info->env = LeveldbFlashEnv();
@@ -1684,7 +1684,7 @@ void TabletIO::SetupOptionsForLG() {
             lg_info->seek_latency = FLAGS_tera_leveldb_env_local_seek_latency;
         } else {
             lg_info->env = LeveldbBaseEnv();
-            ldb_options_.seek_latency = FLAGS_tera_leveldb_env_dfs_seek_latency;
+            lg_info->seek_latency = FLAGS_tera_leveldb_env_dfs_seek_latency;
         }
 
         if (compress) {
@@ -1713,6 +1713,11 @@ void TabletIO::SetupOptionsForLG() {
         triggered_log_size += lg_info->write_buffer_size;
         exist_lg_list->insert(lg_i);
         (*lg_info_list)[lg_i] = lg_info;
+    }
+    if (mock_env_ != NULL) {
+        ldb_options_.env = LeveldbMockEnv();
+    } else {
+        ldb_options_.env = LeveldbBaseEnv();
     }
 
     if (exist_lg_list->size() == 0) {

@@ -97,6 +97,7 @@ Options InitOptionsLG(const Options& options, uint32_t lg_id) {
   opt.memtable_ldb_block_size = lg_info->memtable_ldb_block_size;
   opt.sst_size = lg_info->sst_size;
   opt.write_buffer_size = lg_info->write_buffer_size;
+  opt.seek_latency = lg_info->seek_latency;
   return opt;
 }
 
