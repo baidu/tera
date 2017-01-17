@@ -288,9 +288,11 @@ static long long ProcessCpuTick() {
     if (fp == NULL) {
         return 0;
     }
-    long long utime, stime;
-    fscanf(fp, "%*s %*s %*s %*s %*s %*s %*s %*s %*s %*s %*s %*s %*s %lld %lld",
-        &utime, &stime);
+    long long utime = 0, stime = 0;
+    if (fscanf(fp, "%*s %*s %*s %*s %*s %*s %*s %*s %*s %*s %*s %*s %*s %lld %lld",
+               &utime, &stime) < 2) {
+        LOG(ERROR) << "get cpu tick from /proc/" << getpid() << "/stat failed.";
+    }
     fclose(fp);
     return utime + stime;
 }

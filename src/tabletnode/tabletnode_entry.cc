@@ -131,8 +131,11 @@ void TabletNodeEntry::SetProcessorAffinity() {
     SplitString(FLAGS_tera_tabletnode_cpu_affinity_set, ",", &cpu_set);
     for (uint32_t i = 0; i < cpu_set.size(); ++i) {
         int32_t cpu_id;
-        StringToNumber(cpu_set[i], &cpu_id);
-        thread_attr.SetCpuMask(cpu_id);
+        if (StringToNumber(cpu_set[i], &cpu_id)) {
+            thread_attr.SetCpuMask(cpu_id);
+        } else {
+            LOG(ERROR) << "invalid cpu affinity id: " << cpu_set[i];
+        }
     }
 
     if (!thread_attr.SetCpuAffinity()) {
