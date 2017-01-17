@@ -86,6 +86,7 @@ class PosixSequentialFile: public SequentialFile {
       }
     }
     posix_read_size_counter.Add(r);
+    posix_fadvise(fileno(file_), 0, 0, POSIX_FADV_DONTNEED);
     return s;
   }
 
@@ -121,6 +122,7 @@ class PosixRandomAccessFile: public RandomAccessFile {
     } else {
       posix_read_size_counter.Add(r);
     }
+    posix_fadvise(fd_, 0, 0, POSIX_FADV_DONTNEED);
     return s;
   }
 };
