@@ -14,9 +14,16 @@
 namespace tera {
 namespace master {
 
+struct TimeStatistic {
+    int64_t total;
+    int64_t start_ts;
+    int64_t nr_notready;
+    int64_t nr_reready;
+    TimeStatistic() : total(0), start_ts(0), nr_notready(0), nr_reready(0) {}
+};
 class TabletAvailability {
 public:
-    TabletAvailability(boost::shared_ptr<TabletManager> t) : tablet_manager_(t) {}
+    TabletAvailability(boost::shared_ptr<TabletManager> t);
     void LogAvailability();
     void AddNotReadyTablet(const std::string& id);
     void EraseNotReadyTablet(const std::string& id);
@@ -25,6 +32,9 @@ private:
     Mutex mutex_;
     boost::shared_ptr<TabletManager> tablet_manager_;
     std::map<std::string, int64_t> tablets_;
+
+    int64_t start_ts_;
+    std::map<std::string, TimeStatistic> tablets_hist_cost_;
 };
 
 } // master

@@ -141,6 +141,8 @@ public:
 public:
     /// 以下接口仅内部使用，不开放给用户
 
+    void Prepare();
+
     /// 重试计数加一
     void IncRetryTimes();
 

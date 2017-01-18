@@ -21,12 +21,15 @@ RowMutationImpl::RowMutationImpl(TableImpl* table, const std::string& row_key)
       finish_(false),
       finish_cond_(&finish_mutex_),
       commit_times_(0),
-      start_ts_(get_micros()),
       txn_(NULL) {
     SetErrorIfInvalid(row_key, kRowkey);
 }
 
 RowMutationImpl::~RowMutationImpl() {
+}
+
+void RowMutationImpl::Prepare() {
+    start_ts_ = get_micros();
 }
 
 /// 重置，复用前必须调用

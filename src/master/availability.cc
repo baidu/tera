@@ -24,14 +24,32 @@ DECLARE_string(tera_master_meta_table_path);
 namespace tera {
 namespace master {
 
+TabletAvailability::TabletAvailability(boost::shared_ptr<TabletManager> t)
+    : tablet_manager_(t) {
+    start_ts_ = get_micros();
+}
+
 void TabletAvailability::AddNotReadyTablet(const std::string& path) {
     MutexLock lock(&mutex_);
-    tablets_.insert(std::pair<std::string, int64_t>(path, get_micros()));
+    int64_t ts = get_micros();
+    tablets_.insert(std::pair<std::string, int64_t>(path, ts));
+
+    tablets_hist_cost_[path].start_ts = ts;
+    tablets_hist_cost_[path].nr_notready++;
 }
 
 void TabletAvailability::EraseNotReadyTablet(const std::string& path) {
     MutexLock lock(&mutex_);
     tablets_.erase(path);
+
+    int64_t ts = get_micros();
+    if (tablets_hist_cost_[path].start_ts) {
+        tablets_hist_cost_[path].total += ts - tablets_hist_cost_[path].start_ts;
+    } else {
+        tablets_hist_cost_[path].total += ts - start_ts_;
+    }
+    tablets_hist_cost_[path].start_ts = 0;
+    tablets_hist_cost_[path].nr_reready++;
 }
 
 static std::string GetNameFromPath(const std::string& path) {
@@ -80,7 +98,7 @@ void TabletAvailability::LogAvailability() {
             not_avai_warning++;
         }
     }
-    int64_t cost = ::common::timer::get_micros() - start;
+
     int64_t all_tablets = tablet_manager_->GetAllTabletsCount();
     LOG(INFO) << "[availability][current-status] fatal=" << not_avai_fatal
         << " f-ratio=" << RoundNumberToNDecimalPlaces((double)not_avai_fatal/all_tablets, 6)
@@ -92,6 +110,43 @@ void TabletAvailability::LogAvailability() {
     LOG(INFO) << "[availability][current-status] (not-available/not-ready/all-tablets: "
         << not_avai_count << "/" << tablets_.size() << "/" << all_tablets << ")"
         << " available tablets percentage: " << 1 - not_avai_count/(double)all_tablets;
+
+    int64_t total_ts = 0, all_ts = start - start_ts_;
+    start_ts_ = start;
+    int64_t nr_notready_tablets = tablets_hist_cost_.size();
+    int64_t total_notready = 0, total_reready = 0;
+    std::map<std::string, TimeStatistic>::iterator stat_it;
+    for (stat_it = tablets_hist_cost_.begin();
+         stat_it != tablets_hist_cost_.end();) {
+        if (stat_it->second.start_ts) {
+            stat_it->second.total = start - stat_it->second.start_ts;
+        }
+
+        total_ts += stat_it->second.total;
+        total_notready += stat_it->second.nr_notready;
+        total_reready += stat_it->second.nr_reready;
+
+        if (stat_it->second.start_ts) {
+            stat_it->second.total = 0;
+            stat_it->second.start_ts = start;
+            stat_it->second.nr_notready = 1;
+            stat_it->second.nr_reready = 0;
+            ++stat_it;
+        } else {
+            tablets_hist_cost_.erase(stat_it++);
+        }
+    }
+    LOG(INFO) << "[availability][tablet_sla] time_interval: " << (double)all_ts/1000
+      << ", total_notready_time: " << total_ts/1000
+      << ", total_service_time: " << (all_ts * all_tablets + 1)/1000
+      << ", ready_time_percent: " << RoundNumberToNDecimalPlaces(1.0 - (double)total_ts / (all_ts * all_tablets + 1), 6)
+      << ", total_notready_tablets: " << nr_notready_tablets
+      << ", total_tabltes: " << all_tablets
+      << ", ready_tablets_percent: " << RoundNumberToNDecimalPlaces(1.0 - (double)nr_notready_tablets / (all_tablets + 1), 6)
+      << ", total_notready_count: " << total_notready
+      << ", total_reready_count: " << total_reready;
+
+    int64_t cost = ::common::timer::get_micros() - start;
     LOG(INFO) << "[availability] cost time:" << cost/1000 << " ms";
 }
 

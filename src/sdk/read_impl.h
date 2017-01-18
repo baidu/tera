@@ -88,6 +88,8 @@ public:
 
     void SetResult(const RowResult& result);
 
+    void Prepare();
+
     void IncRetryTimes();
 
     uint32_t RetryTimes();

@@ -24,11 +24,14 @@ RowReaderImpl::RowReaderImpl(TableImpl* table, const std::string& row_key)
       retry_times_(0),
       result_pos_(0),
       commit_times_(0),
-      start_ts_(get_micros()),
       txn_(NULL) {
 }
 
 RowReaderImpl::~RowReaderImpl() {
+}
+
+void RowReaderImpl::Prepare() {
+    start_ts_ = get_micros();
 }
 
 /// 设置读取特定版本
