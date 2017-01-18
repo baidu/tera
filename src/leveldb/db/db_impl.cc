@@ -1282,7 +1282,7 @@ Status DBImpl::DoCompactionWork(CompactionState* compact) {
           break;
         }
       }
-      check(compact->builder);
+      assert(compact->builder);
       if (compact->builder->NumEntries() == 0) {
         compact->current_output()->smallest.DecodeFrom(key);
       }
