@@ -120,9 +120,21 @@ void TableImpl::Put(const std::vector<RowMutation*>& row_mutations) {
     ApplyMutation(row_mutations);
 }
 
+void OpStatCallback(Table* table, SdkTask* task) {
+    if (task->Type() == SdkTask::MUTATION) {
+        ((TableImpl*)table)->StatUserPerfCounter(task->Type(),
+                                      ((RowMutationImpl*)task)->GetError().GetType(),
+                                      common::timer::get_micros() - ((RowMutationImpl*)task)->GetStartTime());
+    } else if (task->Type() == SdkTask::READ) {
+        ((TableImpl*)table)->StatUserPerfCounter(task->Type(),
+                                      ((RowReaderImpl*)task)->GetError().GetType(),
+                                      common::timer::get_micros() - ((RowReaderImpl*)task)->GetStartTime());
+    }
+}
+
 void TableImpl::ApplyMutation(RowMutation* row_mu) {
     perf_counter_.user_mu_cnt.Add(1);
-    ((RowMutationImpl*)row_mu)->Prepare();
+    ((RowMutationImpl*)row_mu)->Prepare(OpStatCallback);
     if (row_mu->GetError().GetType() != ErrorCode::kOK) {
         ThreadPool::Task task =
             boost::bind(&RowMutationImpl::RunCallback,
@@ -139,7 +151,7 @@ void TableImpl::ApplyMutation(const std::vector<RowMutation*>& row_mutations) {
     std::vector<RowMutationImpl*> mu_list;
     for (uint32_t i = 0; i < row_mutations.size(); i++) {
         perf_counter_.user_mu_cnt.Add(1);
-        ((RowMutationImpl*)row_mutations[i])->Prepare();
+        ((RowMutationImpl*)row_mutations[i])->Prepare(OpStatCallback);
         if (row_mutations[i]->GetError().GetType() != ErrorCode::kOK) {
             ThreadPool::Task task =
                 boost::bind(&RowMutationImpl::RunCallback,
@@ -261,7 +273,7 @@ void TableImpl::SetWriteTimeout(int64_t timeout_ms) {
 
 void TableImpl::Get(RowReader* row_reader) {
     perf_counter_.user_read_cnt.Add(1);
-    ((RowReaderImpl*)row_reader)->Prepare();
+    ((RowReaderImpl*)row_reader)->Prepare(OpStatCallback);
     std::vector<RowReaderImpl*> row_reader_list;
     row_reader_list.push_back(static_cast<RowReaderImpl*>(row_reader));
     DistributeReaders(row_reader_list, true);
@@ -271,7 +283,7 @@ void TableImpl::Get(const std::vector<RowReader*>& row_readers) {
     std::vector<RowReaderImpl*> row_reader_list(row_readers.size());
     for (uint32_t i = 0; i < row_readers.size(); ++i) {
         perf_counter_.user_read_cnt.Add(1);
-        ((RowReaderImpl*)row_readers[i])->Prepare();
+        ((RowReaderImpl*)row_readers[i])->Prepare(OpStatCallback);
         row_reader_list[i] = static_cast<RowReaderImpl*>(row_readers[i]);
     }
     DistributeReaders(row_reader_list, true);
@@ -2119,7 +2131,7 @@ void TableImpl::StatUserPerfCounter(enum SdkTask::TYPE op, ErrorCode::ErrorCodeT
 
 /// 创建事务
 Transaction* TableImpl::StartRowTransaction(const std::string& row_key) {
-    return new SingleRowTxn(this, row_key, thread_pool_);
+    return new SingleRowTxn((Table*)this, row_key, thread_pool_);
 }
 
 /// 提交事务

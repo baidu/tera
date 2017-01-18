@@ -88,7 +88,8 @@ public:
 
     void SetResult(const RowResult& result);
 
-    void Prepare();
+    void Prepare(StatCallback cb);
+    int64_t GetStartTime() { return start_ts_;}
 
     void IncRetryTimes();
 
@@ -144,6 +145,7 @@ private:
     /// 记录此reader被提交到ts的次数
     int64_t commit_times_;
 
+    StatCallback on_finish_callback_;
     int64_t start_ts_;
 
     /// 所属事务

@@ -16,7 +16,7 @@
 
 namespace tera {
 
-SingleRowTxn::SingleRowTxn(TableImpl* table, const std::string& row_key,
+SingleRowTxn::SingleRowTxn(Table* table, const std::string& row_key,
                            common::ThreadPool* thread_pool)
     : table_(table),
       row_key_(row_key),

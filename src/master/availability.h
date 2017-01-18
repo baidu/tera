@@ -17,9 +17,9 @@ namespace master {
 struct TimeStatistic {
     int64_t total;
     int64_t start_ts;
-    int64_t nr_notready;
-    int64_t nr_reready;
-    TimeStatistic() : total(0), start_ts(0), nr_notready(0), nr_reready(0) {}
+    int64_t notready_num;
+    int64_t reready_num;
+    TimeStatistic() : total(0), start_ts(0), notready_num(0), reready_num(0) {}
 };
 class TabletAvailability {
 public:

@@ -20,7 +20,7 @@ class TableImpl;
 
 class SingleRowTxn : public Transaction {
 public:
-    SingleRowTxn(TableImpl* table, const std::string& row_key,
+    SingleRowTxn(Table* table, const std::string& row_key,
                  common::ThreadPool* thread_pool);
     virtual ~SingleRowTxn();
 
@@ -53,7 +53,7 @@ public:
     void Serialize(RowMutationSequence* mu_seq);
 
 private:
-    TableImpl* table_;
+    Table* table_;
     const std::string row_key_;
     common::ThreadPool* thread_pool_;
 

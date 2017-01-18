@@ -9,6 +9,7 @@
 #include "common/timer.h"
 #include "common/thread_pool.h"
 
+#include "leveldb/util/histogram.h"
 #include "proto/table_meta.pb.h"
 #include "proto/tabletnode_rpc.pb.h"
 #include "sdk/client_impl.h"
@@ -16,7 +17,6 @@
 #include "sdk/sdk_zk.h"
 #include "tera.h"
 #include "utils/counter.h"
-#include "utils/histogram.h"
 
 namespace tera {
 
@@ -253,13 +253,13 @@ public:
         Counter user_mu_cnt;
         Counter user_mu_suc;
         Counter user_mu_fail;
-        Histogram hist_mu_cost;
+        ::leveldb::Histogram hist_mu_cost;
 
         Counter user_read_cnt;
         Counter user_read_suc;
         Counter user_read_notfound;
         Counter user_read_fail;
-        Histogram hist_read_cost;
+        ::leveldb::Histogram hist_read_cost;
 
         void DoDumpPerfCounterLog(const std::string& log_prefix);
 

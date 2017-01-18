@@ -24,13 +24,15 @@ RowReaderImpl::RowReaderImpl(TableImpl* table, const std::string& row_key)
       retry_times_(0),
       result_pos_(0),
       commit_times_(0),
+      on_finish_callback_(NULL),
       txn_(NULL) {
 }
 
 RowReaderImpl::~RowReaderImpl() {
 }
 
-void RowReaderImpl::Prepare() {
+void RowReaderImpl::Prepare(StatCallback cb) {
+    on_finish_callback_ = cb;
     start_ts_ = get_micros();
 }
 
@@ -267,7 +269,9 @@ int64_t RowReaderImpl::TimeOut() {
 }
 
 void RowReaderImpl::RunCallback() {
-    table_->StatUserPerfCounter(SdkTask::READ, error_code_.GetType(), get_micros() - start_ts_);
+    if (on_finish_callback_) {
+        on_finish_callback_(table_, this);
+    }
     if (callback_) {
         callback_(this);
     } else {

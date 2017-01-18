@@ -5,12 +5,11 @@
 #include "common/base/string_format.h"
 #include "io/coding.h"
 #include "sdk/mutate_impl.h"
-#include "sdk/table_impl.h"
 #include "utils/timer.h"
 
 namespace tera {
 
-RowMutationImpl::RowMutationImpl(TableImpl* table, const std::string& row_key)
+RowMutationImpl::RowMutationImpl(Table* table, const std::string& row_key)
     : SdkTask(SdkTask::MUTATION),
       table_(table),
       row_key_(row_key),
@@ -21,6 +20,7 @@ RowMutationImpl::RowMutationImpl(TableImpl* table, const std::string& row_key)
       finish_(false),
       finish_cond_(&finish_mutex_),
       commit_times_(0),
+      on_finish_callback_(NULL),
       txn_(NULL) {
     SetErrorIfInvalid(row_key, kRowkey);
 }
@@ -28,7 +28,8 @@ RowMutationImpl::RowMutationImpl(TableImpl* table, const std::string& row_key)
 RowMutationImpl::~RowMutationImpl() {
 }
 
-void RowMutationImpl::Prepare() {
+void RowMutationImpl::Prepare(StatCallback cb) {
+    on_finish_callback_ = cb;
     start_ts_ = get_micros();
 }
 
@@ -375,7 +376,9 @@ void RowMutationImpl::Wait() {
 
 void RowMutationImpl::RunCallback() {
     // staticstic
-    table_->StatUserPerfCounter(SdkTask::MUTATION, error_code_.GetType(), get_micros() - start_ts_);
+    if (on_finish_callback_) {
+        on_finish_callback_(table_, this);
+    }
     if (callback_) {
         callback_(this);
     } else {
