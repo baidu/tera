@@ -142,6 +142,7 @@ TabletNodeImpl::TabletNodeImpl()
     size_t tcm_t;
     CHECK(MallocExtension::instance()->GetNumericProperty(tcm_property, &tcm_t));
     LOG(INFO) << tcm_property << "=" << tcm_t;
+    sysinfo_.SetProcessStartTime(get_micros());
 }
 
 TabletNodeImpl::~TabletNodeImpl() {

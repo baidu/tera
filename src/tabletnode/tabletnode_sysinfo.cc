@@ -126,13 +126,9 @@ void TabletNodeSysInfo::AddExtraInfo(const std::string& name, int64_t value) {
     e_info->set_value(value);
 }
 
-void TabletNodeSysInfo::SetCurrentTime() {
+void TabletNodeSysInfo::SetProcessStartTime(int64_t ts) {
     MutexLock lock(&mutex_);
-    info_.set_timestamp(get_micros());
-}
-
-int64_t TabletNodeSysInfo::GetTimeStamp() {
-    return info_.timestamp();
+    info_.set_process_start_time(ts);
 }
 
 void TabletNodeSysInfo::SetTimeStamp(int64_t ts) {
