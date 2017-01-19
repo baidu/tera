@@ -1142,6 +1142,13 @@ std::string BytesNumberToString(const uint64_t size) {
     return NumberToString(size);
 }
 
+std::string DateNumberToString(int64_t ts) {
+    if (FLAGS_stdout_is_tty) {
+        return common::timer::get_time_str(ts);
+    }
+    return NumberToString(ts);
+}
+
 static std::string GetTabletStatusString(const TabletMetaList& tablet_list, int64_t now, int32_t i) {
     // old tera master will not return timestamp #963
     if ((tablet_list.timestamp_size() > 0)) {
@@ -1562,13 +1569,13 @@ int32_t ShowTabletNodesInfo(Client* client, bool is_x, ErrorCode* err) {
     int cols;
     TPrinter printer;
     if (is_x) {
-        cols = 24;
+        cols = 25;
         printer.Reset(cols,
                        " ", "address", "status", "size", "num",
                        "lread", "r", "rspd", "w", "wspd",
                        "s", "sspd", "rdly", "rp", "wp",
                        "sp", "ld", "bs", "mem", "cpu",
-                       "net_tx", "net_rx", "dfs_r", "dfs_w");
+                       "net_tx", "net_rx", "dfs_r", "dfs_w", "start_time");
         std::vector<string> row;
         for (size_t i = 0; i < infos.size(); ++i) {
             std::map<string, string> extra;
@@ -1607,6 +1614,7 @@ int32_t ShowTabletNodesInfo(Client* client, bool is_x, ErrorCode* err) {
             row.push_back(BytesNumberToString(infos[i].net_rx()));
             row.push_back(BytesNumberToString(infos[i].dfs_io_r()));
             row.push_back(BytesNumberToString(infos[i].dfs_io_w()));
+            row.push_back(DateNumberToString(infos[i].process_start_time() / 1000 / 1000));
             printer.AddRow(row);
         }
     } else {

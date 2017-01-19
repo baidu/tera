@@ -33,10 +33,6 @@ public:
 
     void Reset();
 
-    void SetCurrentTime();
-
-    int64_t GetTimeStamp();
-
     void SetTimeStamp(int64_t ts);
 
     void SetServerAddr(const std::string& addr);
@@ -48,6 +44,8 @@ public:
     void GetTabletMetaList(TabletMetaList* meta_list);
 
     void DumpLog();
+
+    void SetProcessStartTime(int64_t ts);
 
 private:
     TabletNodeInfo info_;
