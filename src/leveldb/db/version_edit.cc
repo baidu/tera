@@ -176,7 +176,9 @@ Status VersionEdit::DecodeFrom(const Slice& src) {
     uint32_t len = 0;
     if (tag > kMaxTag) {
         len = tag - kMaxTag;
-        GetVarint32(&input, &tag);
+        if (!GetVarint32(&input, &tag)) {
+          break;
+        }
     }
     switch (tag) {
       case kComparator:

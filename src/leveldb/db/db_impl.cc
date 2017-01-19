@@ -87,6 +87,7 @@ struct DBImpl::CompactionState {
 
   explicit CompactionState(Compaction* c)
       : compaction(c),
+        smallest_snapshot(kMaxSequenceNumber),
         outfile(NULL),
         builder(NULL),
         total_bytes(0) {
@@ -1281,6 +1282,7 @@ Status DBImpl::DoCompactionWork(CompactionState* compact) {
           break;
         }
       }
+      assert(compact->builder);
       if (compact->builder->NumEntries() == 0) {
         compact->current_output()->smallest.DecodeFrom(key);
       }
