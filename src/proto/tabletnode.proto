@@ -45,7 +45,7 @@ message TabletNodeInfo {
     optional uint32 scan_pending = 43;
 
     optional float cpu_usage = 44;
-    optional int64 process_start_time = 45;  // Unix time in ms
+    optional int64 process_start_time = 45;  // Unix time in us
 }
 
 message LgInheritedLiveFiles {
