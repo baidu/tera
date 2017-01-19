@@ -144,6 +144,32 @@ def create_kv_table():
     print ''.join(ret.stderr.readlines())
 
 
+def create_ttlkv_table():
+    """
+    create ttlkv
+    """
+    print 'print ttlkv table'
+    cleanup()
+    ret = subprocess.Popen(const.teracli_binary + ' create "test<rawkey=ttlkv>"', \
+                           stdout=subprocess.PIPE, \
+                           stderr=subprocess.PIPE, shell=True)
+    print ''.join(ret.stdout.readlines())
+    print ''.join(ret.stderr.readlines())
+
+
+def create_multilg_table():
+    """
+    multilg
+    """
+    print 'print single version table'
+    cleanup()
+    ret = subprocess.Popen(const.teracli_binary + ' create "test{lg0<storage=flash, \
+                           use_memtable_on_leveldb=true>{cf0, cf1}, lg1{cf2}}"',\
+    stdout=subprocess.PIPE, stderr=subprocess.PIPE, shell=True)
+    print ''.join(ret.stdout.readlines())
+    print ''.join(ret.stderr.readlines())
+
+
 def create_singleversion_table():
     print 'create single version table'
     cleanup()
