@@ -5,12 +5,9 @@
 #ifndef  TERA_SDK_SDK_TASK_H_
 #define  TERA_SDK_SDK_TASK_H_
 
-#include <boost/function.hpp>
-#include <boost/multi_index_container.hpp>
-#include <boost/multi_index/global_fun.hpp>
-#include <boost/multi_index/hashed_index.hpp>
-#include <boost/multi_index/indexed_by.hpp>
-#include <boost/multi_index/ordered_index.hpp>
+#include <functional>
+#include <set>
+#include <unordered_map>
 
 #include "common/base/stdint.h"
 #include "common/mutex.h"
@@ -23,7 +20,7 @@ namespace tera {
 
 class SdkTask {
 public:
-    typedef boost::function<void (SdkTask*)> TimeoutFunc;
+    typedef std::function<void (SdkTask*)> TimeoutFunc;
     enum TYPE {
         READ,
         MUTATION,
@@ -75,9 +72,11 @@ private:
     int64_t ref_;
 };
 
-int64_t GetSdkTaskId(SdkTask* task);
-
-uint64_t GetSdkTaskDueTime(SdkTask* task);
+struct SdkTaskDueTimeComp {
+    bool operator() (SdkTask* lhs, SdkTask* rhs) {
+        return lhs->DueTime() < rhs->DueTime();
+    }
+};
 
 class SdkTimeoutManager {
 public:
@@ -99,24 +98,14 @@ private:
 private:
     const static uint32_t kShardBits = 6;
     const static uint32_t kShardNum = (1 << kShardBits);
-    typedef boost::multi_index_container<
-        SdkTask*,
-        boost::multi_index::indexed_by<
-            // hashed on SdkTask::id_
-            boost::multi_index::hashed_unique<
-                boost::multi_index::global_fun<SdkTask*, int64_t, &GetSdkTaskId> >,
 
-            // sort by less<int64_t> on SdkTask::due_time_ms_
-            boost::multi_index::ordered_non_unique<
-                boost::multi_index::global_fun<SdkTask*, uint64_t, &GetSdkTaskDueTime> >
-        >
-    > TaskMap;
-    enum {
-        INDEX_BY_ID = 0,
-        INDEX_BY_DUE_TIME = 1,
+    typedef std::multiset<SdkTask*, SdkTaskDueTimeComp> DueTimeMap;
+    typedef std::unordered_map<int64_t, SdkTask*> IdHashMap;
+    struct TaskMap {
+        DueTimeMap due_time_map;
+        IdHashMap id_hash_map;
     };
-    typedef TaskMap::nth_index<INDEX_BY_ID>::type TaskIdIndex;
-    typedef TaskMap::nth_index<INDEX_BY_DUE_TIME>::type TaskDueTimeIndex;
+
     TaskMap map_shard_[kShardNum];
     mutable Mutex mutex_shard_[kShardNum];
     ThreadPool* thread_pool_;

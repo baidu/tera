@@ -13,9 +13,9 @@
 #include <iomanip>
 #include <iostream>
 #include <limits>
+#include <memory>
 #include <sstream>
 
-#include <boost/shared_ptr.hpp>
 #include <gflags/gflags.h>
 #include <glog/logging.h>
 
@@ -84,8 +84,8 @@ tera::TPrinter::PrintOpt g_printer_opt;
 
 using namespace tera;
 
-typedef boost::shared_ptr<Table> TablePtr;
-typedef boost::shared_ptr<TableImpl> TableImplPtr;
+typedef std::shared_ptr<Table> TablePtr;
+typedef std::shared_ptr<TableImpl> TableImplPtr;
 
 /// global variables of single-row-txn used in interactive mode
 tera::Transaction* g_row_txn = NULL;
@@ -2503,7 +2503,7 @@ int32_t CompactOp(Client* client, int32_t argc, char** argv, ErrorCode* err) {
     std::vector<TabletInfo>::iterator tablet_it = tablet_list.begin();
     for (; tablet_it != tablet_list.end(); ++tablet_it) {
         ThreadPool::Task task =
-                boost::bind(&CompactTablet, *tablet_it, FLAGS_lg);
+                std::bind(&CompactTablet, *tablet_it, FLAGS_lg);
         thread_pool.AddTask(task);
     }
     while (thread_pool.PendingNum() > 0) {

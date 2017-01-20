@@ -35,7 +35,7 @@ public:
 
 class BatchGcStrategy : public GcStrategy {
 public:
-    BatchGcStrategy (boost::shared_ptr<TabletManager> tablet_manager);
+    BatchGcStrategy (std::shared_ptr<TabletManager> tablet_manager);
     virtual ~BatchGcStrategy() {}
 
     // get file system image before query
@@ -54,7 +54,7 @@ private:
     void CollectSingleDeadTablet(const std::string& tablename, uint64_t tabletnum);
     void DeleteObsoleteFiles();
 
-    boost::shared_ptr<TabletManager> tablet_manager_;
+    std::shared_ptr<TabletManager> tablet_manager_;
 
     // tabletnode garbage clean
     // first: live tablet, second: dead tablet
@@ -70,7 +70,7 @@ private:
 
 class IncrementalGcStrategy : public GcStrategy{
 public:
-    IncrementalGcStrategy(boost::shared_ptr<TabletManager> tablet_manager);
+    IncrementalGcStrategy(std::shared_ptr<TabletManager> tablet_manager);
     virtual ~IncrementalGcStrategy() {}
 
     // get dead tablets
@@ -112,7 +112,7 @@ private:
     typedef std::map<int64_t, TabletFileSet> TabletFiles;  // tablet_number -> files
     typedef std::map<std::string, TabletFiles> TableFiles; // table_name -> files
     mutable Mutex gc_mutex_;
-    boost::shared_ptr<TabletManager> tablet_manager_;
+    std::shared_ptr<TabletManager> tablet_manager_;
     int64_t last_gc_time_;
     TableFiles dead_tablet_files_;
     TableFiles live_tablet_files_;

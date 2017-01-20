@@ -165,8 +165,8 @@ private:
     typedef Closure<void, SplitTabletRequest*, SplitTabletResponse*, bool, int> SplitClosure;
     typedef Closure<void, WriteTabletRequest*, WriteTabletResponse*, bool, int> WriteClosure;
     typedef Closure<void, ScanTabletRequest*, ScanTabletResponse*, bool, int> ScanClosure;
-    typedef boost::function<void (std::string*, std::string*)> ToMetaFunc;
-    typedef boost::shared_ptr<Mutex> MutexPtr;
+    typedef std::function<void (std::string*, std::string*)> ToMetaFunc;
+    typedef std::shared_ptr<Mutex> MutexPtr;
 
     enum MetaTaskType {
         kWrite = 0,
@@ -576,9 +576,9 @@ private:
 
     mutable Mutex tabletnode_mutex_;
     bool restored_;
-    boost::shared_ptr<TabletManager> tablet_manager_;
-    boost::shared_ptr<TabletNodeManager> tabletnode_manager_;
-    boost::shared_ptr<UserManager> user_manager_;
+    std::shared_ptr<TabletManager> tablet_manager_;
+    std::shared_ptr<TabletNodeManager> tabletnode_manager_;
+    std::shared_ptr<UserManager> user_manager_;
     scoped_ptr<MasterZkAdapterBase> zk_adapter_;
     scoped_ptr<Scheduler> size_scheduler_;
     scoped_ptr<Scheduler> load_scheduler_;
@@ -620,11 +620,11 @@ private:
     bool gc_enabled_;
     int64_t gc_timer_id_;
     bool gc_query_enable_;
-    boost::shared_ptr<GcStrategy> gc_strategy_;
+    std::shared_ptr<GcStrategy> gc_strategy_;
     std::map<std::string, std::string> alias_;
     mutable Mutex alias_mutex_;
 
-    boost::shared_ptr<TabletAvailability> tablet_availability_;
+    std::shared_ptr<TabletAvailability> tablet_availability_;
 };
 
 } // namespace master

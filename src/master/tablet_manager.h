@@ -8,12 +8,11 @@
 #include <limits>
 #include <list>
 #include <map>
+#include <memory>
 #include <set>
 #include <stdint.h>
 #include <string>
 #include <vector>
-
-#include <boost/shared_ptr.hpp>
 
 #include "common/base/closure.h"
 #include "common/mutex.h"
@@ -52,7 +51,7 @@ namespace master {
 
 class MasterImpl;
 class Table;
-typedef boost::shared_ptr<Table> TablePtr;
+typedef std::shared_ptr<Table> TablePtr;
 
 class Tablet {
     friend class TabletManager;
@@ -168,7 +167,7 @@ private:
     void* merge_param_;
 };
 
-typedef class boost::shared_ptr<Tablet> TabletPtr;
+typedef class std::shared_ptr<Tablet> TabletPtr;
 std::ostream& operator << (std::ostream& o, const TabletPtr& tablet);
 std::ostream& operator << (std::ostream& o, const TablePtr& table);
 

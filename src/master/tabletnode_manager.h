@@ -7,10 +7,9 @@
 
 #include <list>
 #include <map>
+#include <memory>
 #include <string>
 #include <vector>
-
-#include <boost/shared_ptr.hpp>
 
 #include "common/mutex.h"
 #include "common/thread_pool.h"
@@ -117,7 +116,7 @@ private:
     TabletNode& operator=(const TabletNode& t);
 };
 
-typedef boost::shared_ptr<TabletNode> TabletNodePtr;
+typedef std::shared_ptr<TabletNode> TabletNodePtr;
 
 class WorkloadGetter;
 class Scheduler;

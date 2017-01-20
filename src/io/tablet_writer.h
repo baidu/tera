@@ -5,6 +5,8 @@
 #ifndef TERA_TABLETNODE_TABLET_WRITER_H_
 #define TERA_TABLETNODE_TABLET_WRITER_H_
 
+#include <functional>
+
 #include "common/event.h"
 #include "common/mutex.h"
 #include "common/thread.h"
@@ -23,8 +25,8 @@ class TabletIO;
 
 class TabletWriter {
 public:
-    typedef boost::function<void (std::vector<const RowMutationSequence*>*, \
-                                  std::vector<StatusCode>*)> WriteCallback;
+    typedef std::function<void (std::vector<const RowMutationSequence*>*, \
+                                std::vector<StatusCode>*)> WriteCallback;
 
     struct WriteTask {
         std::vector<const RowMutationSequence*>* row_mutation_vec;

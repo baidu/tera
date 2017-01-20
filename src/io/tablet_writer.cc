@@ -6,7 +6,6 @@
 
 #include <set>
 
-#include <boost/bind.hpp>
 #include <gflags/gflags.h>
 #include <glog/logging.h>
 
@@ -56,7 +55,7 @@ void TabletWriter::Start() {
         stopped_ = false;
     }
     LOG(INFO) << "start tablet writer ...";
-    thread_.Start(boost::bind(&TabletWriter::DoWork, this));
+    thread_.Start(std::bind(&TabletWriter::DoWork, this));
     ThisThread::Yield();
 }
 
