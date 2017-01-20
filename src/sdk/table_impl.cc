@@ -120,7 +120,21 @@ void TableImpl::Put(const std::vector<RowMutation*>& row_mutations) {
     ApplyMutation(row_mutations);
 }
 
+void OpStatCallback(Table* table, SdkTask* task) {
+    if (task->Type() == SdkTask::MUTATION) {
+        ((TableImpl*)table)->StatUserPerfCounter(task->Type(),
+                                      ((RowMutationImpl*)task)->GetError().GetType(),
+                                      common::timer::get_micros() - ((RowMutationImpl*)task)->GetStartTime());
+    } else if (task->Type() == SdkTask::READ) {
+        ((TableImpl*)table)->StatUserPerfCounter(task->Type(),
+                                      ((RowReaderImpl*)task)->GetError().GetType(),
+                                      common::timer::get_micros() - ((RowReaderImpl*)task)->GetStartTime());
+    }
+}
+
 void TableImpl::ApplyMutation(RowMutation* row_mu) {
+    perf_counter_.user_mu_cnt.Add(1);
+    ((RowMutationImpl*)row_mu)->Prepare(OpStatCallback);
     if (row_mu->GetError().GetType() != ErrorCode::kOK) {
         ThreadPool::Task task =
             boost::bind(&RowMutationImpl::RunCallback,
@@ -136,6 +150,8 @@ void TableImpl::ApplyMutation(RowMutation* row_mu) {
 void TableImpl::ApplyMutation(const std::vector<RowMutation*>& row_mutations) {
     std::vector<RowMutationImpl*> mu_list;
     for (uint32_t i = 0; i < row_mutations.size(); i++) {
+        perf_counter_.user_mu_cnt.Add(1);
+        ((RowMutationImpl*)row_mutations[i])->Prepare(OpStatCallback);
         if (row_mutations[i]->GetError().GetType() != ErrorCode::kOK) {
             ThreadPool::Task task =
                 boost::bind(&RowMutationImpl::RunCallback,
@@ -256,6 +272,8 @@ void TableImpl::SetWriteTimeout(int64_t timeout_ms) {
 }
 
 void TableImpl::Get(RowReader* row_reader) {
+    perf_counter_.user_read_cnt.Add(1);
+    ((RowReaderImpl*)row_reader)->Prepare(OpStatCallback);
     std::vector<RowReaderImpl*> row_reader_list;
     row_reader_list.push_back(static_cast<RowReaderImpl*>(row_reader));
     DistributeReaders(row_reader_list, true);
@@ -264,6 +282,8 @@ void TableImpl::Get(RowReader* row_reader) {
 void TableImpl::Get(const std::vector<RowReader*>& row_readers) {
     std::vector<RowReaderImpl*> row_reader_list(row_readers.size());
     for (uint32_t i = 0; i < row_readers.size(); ++i) {
+        perf_counter_.user_read_cnt.Add(1);
+        ((RowReaderImpl*)row_readers[i])->Prepare(OpStatCallback);
         row_reader_list[i] = static_cast<RowReaderImpl*>(row_readers[i]);
     }
     DistributeReaders(row_reader_list, true);
@@ -2004,6 +2024,29 @@ void TableImpl::PerfCounter::DoDumpPerfCounterLog(const std::string& log_prefix)
         << " range: " << reader_range_cnt.Clear()
         << " timeout: " << reader_timeout_cnt.Clear()
         << " queue_timeout: " << reader_queue_timeout_cnt.Clear();
+
+    LOG(INFO) << log_prefix << "[user_mu]"
+        << " cnt: " << user_mu_cnt.Clear()
+        << " suc: " << user_mu_suc.Clear()
+        << " fail: " << user_mu_fail.Clear();
+    LOG(INFO) << log_prefix << "[user_mu_cost]"
+        << " cost_ave: " << hist_mu_cost.Average()
+        << " cost_50: " << hist_mu_cost.Percentile(0.5)
+        << " cost_90: " << hist_mu_cost.Percentile(0.9)
+        << " cost_99: " << hist_mu_cost.Percentile(0.99);
+    hist_mu_cost.Clear();
+
+    LOG(INFO) << log_prefix << "[user_rd]"
+        << " cnt: " << user_read_cnt.Clear()
+        << " suc: " << user_read_suc.Clear()
+        << " notfound: " << user_read_notfound.Clear()
+        << " fail: " << user_read_fail.Clear();
+    LOG(INFO) << log_prefix << "[user_rd_cost]"
+        << " cost_ave: " << hist_read_cost.Average()
+        << " cost_50: " << hist_read_cost.Percentile(0.5)
+        << " cost_90: " << hist_read_cost.Percentile(0.9)
+        << " cost_99: " << hist_read_cost.Percentile(0.99);
+    hist_read_cost.Clear();
 }
 
 void TableImpl::DelayTaskWrapper(ThreadPool::Task task, int64_t task_id) {
@@ -2053,9 +2096,34 @@ void TableImpl::BreakRequest(int64_t task_id) {
     }
 }
 
+void TableImpl::StatUserPerfCounter(enum SdkTask::TYPE op, ErrorCode::ErrorCodeType code, int64_t cost_time) {
+    switch (op) {
+    case SdkTask::MUTATION:
+        if (code == ErrorCode::kOK) {
+            perf_counter_.user_mu_suc.Inc();
+        } else {
+            perf_counter_.user_mu_fail.Inc();
+        }
+        perf_counter_.hist_mu_cost.Add(cost_time);
+        break;
+    case SdkTask::READ:
+        if (code == ErrorCode::kOK) {
+            perf_counter_.user_read_suc.Inc();
+        } else if (code == ErrorCode::kNotFound) {
+            perf_counter_.user_read_notfound.Inc();
+        } else {
+            perf_counter_.user_read_fail.Inc();
+        }
+        perf_counter_.hist_read_cost.Add(cost_time);
+        break;
+    default:
+        break;
+    }
+}
+
 /// 创建事务
 Transaction* TableImpl::StartRowTransaction(const std::string& row_key) {
-    return new SingleRowTxn(this, row_key, thread_pool_);
+    return new SingleRowTxn((Table*)this, row_key, thread_pool_);
 }
 
 /// 提交事务

@@ -75,6 +75,8 @@ private:
     int64_t ref_;
 };
 
+typedef void (*StatCallback)(Table* table, SdkTask* task);
+
 int64_t GetSdkTaskId(SdkTask* task);
 
 uint64_t GetSdkTaskDueTime(SdkTask* task);

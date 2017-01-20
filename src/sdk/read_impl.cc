@@ -3,12 +3,14 @@
 // found in the LICENSE file.
 
 #include "sdk/read_impl.h"
+#include "sdk/table_impl.h"
 
 namespace tera {
 
 /// 读取操作
-RowReaderImpl::RowReaderImpl(Table* table, const std::string& row_key)
+RowReaderImpl::RowReaderImpl(TableImpl* table, const std::string& row_key)
     : SdkTask(SdkTask::READ),
+      table_(table),
       row_key_(row_key),
       callback_(NULL),
       user_context_(NULL),
@@ -22,10 +24,16 @@ RowReaderImpl::RowReaderImpl(Table* table, const std::string& row_key)
       retry_times_(0),
       result_pos_(0),
       commit_times_(0),
+      on_finish_callback_(NULL),
       txn_(NULL) {
 }
 
 RowReaderImpl::~RowReaderImpl() {
+}
+
+void RowReaderImpl::Prepare(StatCallback cb) {
+    on_finish_callback_ = cb;
+    start_ts_ = get_micros();
 }
 
 /// 设置读取特定版本
@@ -261,6 +269,9 @@ int64_t RowReaderImpl::TimeOut() {
 }
 
 void RowReaderImpl::RunCallback() {
+    if (on_finish_callback_) {
+        on_finish_callback_(table_, this);
+    }
     if (callback_) {
         callback_(this);
     } else {
