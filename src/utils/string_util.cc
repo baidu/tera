@@ -13,7 +13,7 @@
 namespace tera {
 
 bool IsVisible(char c) {
-    return (c >= 0x20 && c <= 0x7E);
+    return (c >= 0x21 && c <= 0x7E); // exclude space (0x20)
 }
 
 char IsHex(uint8_t i) {
@@ -68,12 +68,12 @@ bool ParseDebugString(const std::string& src, std::string* dst) {
     std::string tmp;
     tmp.resize(src_len);
 
-    int state = 0; // 0: normal, 1: \, 2: \x, 3: \xF
+    int state = 0; // 0: normal, 1: \, 2: \x, 3: \x[0-9a-fAZ-F]
     char bin_char = 0;
     size_t j = 0;
     for (size_t i = 0; i < src_len; i++) {
         uint8_t c = src[i];
-        if (!IsVisible(c)) {
+        if (!IsVisible(c) && !isspace(c)) {
             return false;
         }
         switch (state) {
