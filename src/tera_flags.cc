@@ -50,11 +50,16 @@ DEFINE_bool(tera_io_cache_path_vanish_allowed, false, "if true, allow cache path
 
 DEFINE_string(tera_dfs_so_path, "", "the dfs implementation path");
 DEFINE_string(tera_dfs_conf, "", "the dfs configuration file path");
-DEFINE_string(tera_leveldb_env_type, "dfs", "the default type for leveldb IO environment, should be [local | dfs]");
-DEFINE_string(tera_leveldb_env_dfs_type, "hdfs", "the default type for leveldb IO dfs environment, [hdfs | nfs]");
+DEFINE_string(tera_leveldb_env_type, "dfs", "the default type for leveldb base IO environment, should be [local | dfs]");
+DEFINE_string(tera_leveldb_env_dfs_type, "generic", "the default type for leveldb base IO dfs environment, [generic | hdfs | nfs]");
 DEFINE_string(tera_leveldb_env_hdfs2_nameservice_list, "default", "the nameservice list of hdfs2");
 DEFINE_string(tera_leveldb_env_nfs_mountpoint, "/disk/tera", "the mountpoint of nfs");
 DEFINE_string(tera_leveldb_env_nfs_conf_path, "../conf/nfs.conf", "the config file path of nfs");
+
+DEFINE_string(tera_cache_dfs_so_path, "", "the cache dfs implementation path");
+DEFINE_string(tera_cache_dfs_conf, "", "the cache dfs configuration file path");
+DEFINE_string(tera_cache_env_type, "local", "the default type for leveldb cache IO environment, should be [local | dfs]");
+
 DEFINE_string(tera_leveldb_log_path, "../log/leveldb.log", "the default path for leveldb logger");
 DEFINE_int32(tera_io_retry_period, 100, "the retry interval period (in ms) when operate file");
 DEFINE_int32(tera_io_retry_max_times, 20, "the max retry times when meets trouble");

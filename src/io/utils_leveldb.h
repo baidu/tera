@@ -13,7 +13,9 @@
 namespace tera {
 namespace io {
 
-void InitDfsEnv();
+void InitBaseEnv();
+
+void InitCacheEnv();
 
 // return the base env leveldb used (dfs/local), singleton
 leveldb::Env* LeveldbBaseEnv();

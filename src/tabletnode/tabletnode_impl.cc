@@ -78,7 +78,6 @@ DECLARE_int32(tera_tabletnode_cache_update_thread_num);
 DECLARE_bool(tera_tabletnode_cache_force_read_from_cache);
 DECLARE_int32(tera_tabletnode_gc_log_level);
 
-DECLARE_string(tera_leveldb_env_type);
 DECLARE_string(tera_local_addr);
 DECLARE_bool(tera_ins_enabled);
 
@@ -126,10 +125,7 @@ TabletNodeImpl::TabletNodeImpl()
         ldb_logger_ = NULL;
     }
 
-    if (FLAGS_tera_leveldb_env_type != "local") {
-        io::InitDfsEnv();
-    }
-
+    io::InitBaseEnv();
     InitCacheSystem();
 
     if (FLAGS_tera_tabletnode_tcm_cache_release_enabled) {
@@ -168,6 +164,8 @@ bool TabletNodeImpl::Init() {
 }
 
 void TabletNodeImpl::InitCacheSystem() {
+    io::InitCacheEnv();
+
     if (!FLAGS_tera_tabletnode_cache_enabled) {
         // compitable with legacy FlashEnv
         leveldb::FlashEnv* flash_env = (leveldb::FlashEnv*)io::LeveldbFlashEnv();

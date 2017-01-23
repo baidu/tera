@@ -85,7 +85,6 @@ DECLARE_int64(tera_master_stat_table_splitsize);
 DECLARE_int32(tera_master_gc_period);
 
 DECLARE_string(tera_tabletnode_path_prefix);
-DECLARE_string(tera_leveldb_env_type);
 
 DECLARE_string(tera_zk_root_path);
 DECLARE_string(tera_zk_addr_list);
@@ -141,9 +140,7 @@ MasterImpl::MasterImpl()
     }
     tabletnode::TabletNodeClient::SetThreadPool(thread_pool_.get());
 
-    if (FLAGS_tera_leveldb_env_type != "local") {
-        io::InitDfsEnv();
-    }
+    io::InitBaseEnv();
 
     if (FLAGS_tera_master_gc_strategy == "default") {
         LOG(INFO) << "[gc] gc strategy is BatchGcStrategy";

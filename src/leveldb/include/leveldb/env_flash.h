@@ -19,7 +19,7 @@ namespace leveldb {
 
 class FlashEnv : public EnvWrapper{
 public:
-    FlashEnv(Env* base_env);
+    FlashEnv(Env* base_env, Env* cache_env);
 
     ~FlashEnv();
 
@@ -100,7 +100,7 @@ private:
 };
 
 /// new flash env
-Env* NewFlashEnv(Env* base_env);
+Env* NewFlashEnv(Env* base_env, Env* cache_env);
 }  // namespace leveldb
 
 #endif  //__LEVELDB_ENV_FLASH_H_
