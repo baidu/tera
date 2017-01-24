@@ -51,10 +51,7 @@ const static std::string mark_file_name = "/__oops";
 
 // Information kept for every waiting writer
 struct DBImpl::Writer {
-  Status status;
   WriteBatch* batch;
-  bool sync;
-  bool done;
   port::CondVar cv;
 
   explicit Writer(port::Mutex* mu) : cv(mu) { }
@@ -161,7 +158,6 @@ DBImpl::DBImpl(const Options& options, const std::string& dbname)
       logfile_number_(0),
       log_(NULL),
       bound_log_size_(0),
-      tmp_batch_(new WriteBatch),
       bg_compaction_scheduled_(false),
       bg_compaction_score_(0),
       bg_schedule_id_(0),
@@ -254,7 +250,6 @@ DBImpl::~DBImpl() {
   if (mem_ != NULL) mem_->Unref();
   if (imm_ != NULL) imm_->Unref();
   if (recover_mem_ != NULL) recover_mem_->Unref();
-  delete tmp_batch_;
   delete log_;
   delete logfile_;
   if (owns_table_cache_) {
@@ -1549,28 +1544,19 @@ void DBImpl::Workload(double* write_workload) {
 Status DBImpl::Write(const WriteOptions& options, WriteBatch* my_batch) {
   Writer w(&mutex_);
   w.batch = my_batch;
-  w.sync = options.sync;
-  w.done = false;
 
   MutexLock l(&mutex_);
   writers_.push_back(&w);
-  while (!w.done && &w != writers_.front()) {
+  while (&w != writers_.front()) {
     w.cv.Wait();
   }
-  if (w.done) {
-    return w.status;
-  }
-
 
   // May temporarily unlock and wait.
   Status status = MakeRoomForWrite(my_batch == NULL);
 
-  Writer* last_writer = &w;
   if (status.ok() && my_batch != NULL) {  // NULL batch is for compactions
     uint64_t batch_sequence = WriteBatchInternal::Sequence(my_batch);
-    WriteBatch* updates = BuildBatchGroup(&last_writer);
-    WriteBatchInternal::SetSequence(updates, batch_sequence);
-    assert(writers_.size() == 1);
+    WriteBatch* updates = my_batch;
 
     // Apply to memtable.  We can release the lock
     // during this phase since &w is currently responsible for logging
@@ -1582,7 +1568,6 @@ Status DBImpl::Write(const WriteOptions& options, WriteBatch* my_batch) {
     status = WriteBatchInternal::InsertInto(updates, mem_);
     mutex_.Lock();
 
-    if (updates == tmp_batch_) tmp_batch_->Clear();
     if (WriteBatchInternal::Count(updates) > 0) {
       mem_->SetNonEmpty();
     }
@@ -1591,16 +1576,8 @@ Status DBImpl::Write(const WriteOptions& options, WriteBatch* my_batch) {
     }
   }
 
-  while (true) {
-    Writer* ready = writers_.front();
-    writers_.pop_front();
-    if (ready != &w) {
-      ready->status = status;
-      ready->done = true;
-      ready->cv.Signal();
-    }
-    if (ready == last_writer) break;
-  }
+  assert(writers_.front() == &w);
+  writers_.pop_front();
 
   // Notify new head of write queue
   if (!writers_.empty()) {
@@ -1610,57 +1587,6 @@ Status DBImpl::Write(const WriteOptions& options, WriteBatch* my_batch) {
   is_writting_mem_ = false;
   writting_mem_cv_.Signal();
   return status;
-}
-
-// REQUIRES: Writer list must be non-empty
-// REQUIRES: First writer must have a non-NULL batch
-WriteBatch* DBImpl::BuildBatchGroup(Writer** last_writer) {
-  assert(!writers_.empty());
-  Writer* first = writers_.front();
-  WriteBatch* result = first->batch;
-  assert(result != NULL);
-
-  size_t size = WriteBatchInternal::ByteSize(first->batch);
-
-  // Allow the group to grow up to a maximum size, but if the
-  // original write is small, limit the growth so we do not slow
-  // down the small write too much.
-  size_t max_size = 1 << 20;
-  if (size <= (128<<10)) {
-    max_size = size + (128<<10);
-  }
-
-  *last_writer = first;
-  std::deque<Writer*>::iterator iter = writers_.begin();
-  ++iter;  // Advance past "first"
-  for (; iter != writers_.end(); ++iter) {
-    Writer* w = *iter;
-    if (w->sync && !first->sync) {
-      // Do not include a sync write into a batch handled by a non-sync write.
-      break;
-    }
-
-    if (w->batch != NULL) {
-      size += WriteBatchInternal::ByteSize(w->batch);
-      if (size > max_size) {
-        // Do not make batch too big
-        break;
-      }
-
-      // Append to *reuslt
-      if (result == first->batch) {
-        // Switch to temporary batch instead of disturbing caller's batch
-        result = tmp_batch_;
-        assert(WriteBatchInternal::Count(result) == 0);
-        WriteBatchInternal::Append(result, first->batch);
-      }
-      WriteBatchInternal::Append(result, w->batch);
-    } else {
-      break;
-    }
-    *last_writer = w;
-  }
-  return result;
 }
 
 // REQUIRES: mutex_ is held
