@@ -178,15 +178,14 @@ void CleanTrashDir() {
     }
     for (size_t i = 0; i < children.size(); ++i) {
         std::string c_dir = trash_dir + '/' + children[i];
-        DeleteEnvDir(c_dir);
+        DeleteEnvDir(c_dir, env);
     }
     return;
 }
 
-bool DeleteEnvDir(const std::string& dir) {
+bool DeleteEnvDir(const std::string& dir, leveldb::Env* env) {
     static bool is_support_rmdir = true;
 
-    leveldb::Env* env = LeveldbBaseEnv();
     leveldb::Status s;
     if (env->DeleteFile(dir).ok()) {
         LOG(INFO) << "[gc] delete: " << dir;
@@ -212,7 +211,7 @@ bool DeleteEnvDir(const std::string& dir) {
     }
     for (size_t i = 0; i < children.size(); ++i) {
         std::string c_dir = dir + '/' + children[i];
-        DeleteEnvDir(c_dir);
+        DeleteEnvDir(c_dir, env);
     }
     if (env->DeleteDir(dir).ok()) {
         LOG(INFO) << "[gc] delete: " << dir;

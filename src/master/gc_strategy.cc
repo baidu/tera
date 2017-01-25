@@ -10,16 +10,18 @@
 #include "db/filename.h"
 #include "io/utils_leveldb.h"
 
-
-DECLARE_string(tera_tabletnode_path_prefix);
 DECLARE_string(tera_master_meta_table_name);
 DECLARE_int32(tera_garbage_collect_debug_log);
 
 namespace tera {
 namespace master {
 
-BatchGcStrategy::BatchGcStrategy (boost::shared_ptr<TabletManager> tablet_manager)
+BatchGcStrategy::BatchGcStrategy(boost::shared_ptr<TabletManager> tablet_manager,
+                                 const std::string& path_prefix,
+                                 leveldb::Env* env)
     : tablet_manager_(tablet_manager),
+      path_prefix_(path_prefix),
+      env_(env),
       file_total_num_(0),
       file_delete_num_(0) {}
 
@@ -38,7 +40,7 @@ bool BatchGcStrategy::PreQuery () {
             continue;
         }
         GcTabletSet& tablet_set = gc_tablets_[tables[i]->GetTableName()];
-        if (!tables[i]->GetTabletsForGc(&tablet_set.first, &tablet_set.second)) {
+        if (!tables[i]->GetTabletsForGc(&tablet_set.first, &tablet_set.second, env_, path_prefix_)) {
             // tablet not ready or there is none dead tablets
             gc_tablets_.erase(tables[i]->GetTableName());
             continue;
@@ -141,9 +143,9 @@ void BatchGcStrategy::CollectDeadTabletsFiles() {
 }
 
 void BatchGcStrategy::CollectSingleDeadTablet(const std::string& tablename, uint64_t tabletnum) {
-    std::string tablepath = FLAGS_tera_tabletnode_path_prefix + tablename;
+    std::string tablepath = path_prefix_ + "/" + tablename;
     std::string tablet_path = leveldb::GetTabletPathFromNum(tablepath, tabletnum);
-    leveldb::Env* env = io::LeveldbBaseEnv();
+    leveldb::Env* env = env_;
     std::vector<std::string> children;
     env->GetChildren(tablet_path, &children);
     list_count_.Inc();
@@ -185,7 +187,7 @@ void BatchGcStrategy::CollectSingleDeadTablet(const std::string& tablename, uint
             if (!ParseFileName(files[f], &number, &type) ||
                 type != leveldb::kTableFile) {
                 // only keep sst, delete rest files
-                io::DeleteEnvDir(file_path);
+                io::DeleteEnvDir(file_path, env_);
                 continue;
             }
 
@@ -206,10 +208,10 @@ void BatchGcStrategy::CollectSingleDeadTablet(const std::string& tablename, uint
 }
 
 void BatchGcStrategy::DeleteObsoleteFiles() {
-    leveldb::Env* env = io::LeveldbBaseEnv();
+    leveldb::Env* env = env_;
     std::map<std::string, GcFileSet>::iterator table_it = gc_live_files_.begin();
     for (; table_it != gc_live_files_.end(); ++table_it) {
-        std::string tablepath = FLAGS_tera_tabletnode_path_prefix + table_it->first;
+        std::string tablepath = path_prefix_ + "/" + table_it->first;
         GcFileSet& file_set = table_it->second;
         for (size_t lg = 0; lg < file_set.size(); ++lg) {
             std::set<uint64_t>::iterator it = file_set[lg].begin();
@@ -223,8 +225,12 @@ void BatchGcStrategy::DeleteObsoleteFiles() {
     }
 }
 
-IncrementalGcStrategy::IncrementalGcStrategy(boost::shared_ptr<TabletManager> tablet_manager)
+IncrementalGcStrategy::IncrementalGcStrategy(boost::shared_ptr<TabletManager> tablet_manager,
+                                             const std::string& path_prefix,
+                                             leveldb::Env* env)
     :   tablet_manager_(tablet_manager),
+        path_prefix_(path_prefix),
+        env_(env),
         last_gc_time_(std::numeric_limits<int64_t>::max()),
         max_ts_(std::numeric_limits<int64_t>::max()) {}
 
@@ -241,7 +247,7 @@ bool IncrementalGcStrategy::PreQuery () {
         live_tablet_files_.insert(std::make_pair(table_name, tablet_files));
 
         std::set<uint64_t> live_tablets, dead_tablets;
-        tables[i]->GetTabletsForGc(&live_tablets, &dead_tablets);
+        tables[i]->GetTabletsForGc(&live_tablets, &dead_tablets, env_, path_prefix_);
         std::set<uint64_t>::iterator it;
         // update dead tablets
         for (it = dead_tablets.begin(); it != dead_tablets.end(); ++it) {
@@ -395,8 +401,8 @@ void IncrementalGcStrategy::Clear(std::string tablename) {
 }
 
 void IncrementalGcStrategy::DeleteTableFiles(const std::string& table_name) {
-    std::string table_path = FLAGS_tera_tabletnode_path_prefix + table_name;
-    leveldb::Env* env = io::LeveldbBaseEnv();
+    std::string table_path = path_prefix_ + "/" + table_name;
+    leveldb::Env* env = env_;
     TabletFiles& dead_tablets = dead_tablet_files_[table_name];
     TabletFiles& live_tablets = live_tablet_files_[table_name];
     int64_t earliest_ready_time = max_ts_;
@@ -480,9 +486,9 @@ void IncrementalGcStrategy::DeleteTableFiles(const std::string& table_name) {
 }
 
 void IncrementalGcStrategy::CollectSingleDeadTablet(const std::string& tablename, uint64_t tabletnum) {
-    std::string tablepath = FLAGS_tera_tabletnode_path_prefix + tablename;
+    std::string tablepath = path_prefix_ + "/" + tablename;
     std::string tablet_path = leveldb::GetTabletPathFromNum(tablepath, tabletnum);
-    leveldb::Env* env = io::LeveldbBaseEnv();
+    leveldb::Env* env = env_;
     std::vector<std::string> children;
     env->GetChildren(tablet_path, &children);
     list_count_.Inc();
@@ -520,7 +526,7 @@ void IncrementalGcStrategy::CollectSingleDeadTablet(const std::string& tablename
             if (!ParseFileName(files[f], &number, &type) ||
                 type != leveldb::kTableFile) {
                 // only keep sst, delete rest files
-                io::DeleteEnvDir(file_path);
+                io::DeleteEnvDir(file_path, env_);
                 continue;
             }
 

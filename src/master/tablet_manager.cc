@@ -779,7 +779,9 @@ uint64_t Table::GetNextTabletNo() {
 }
 
 bool Table::GetTabletsForGc(std::set<uint64_t>* live_tablets,
-                            std::set<uint64_t>* dead_tablets) {
+                            std::set<uint64_t>* dead_tablets,
+                            leveldb::Env* env,
+                            const std::string& path_prefix) {
     MutexLock lock(&mutex_);
     std::vector<TabletPtr> tablet_list;
     Table::TabletList::iterator it = tablets_list_.begin();
@@ -795,8 +797,7 @@ bool Table::GetTabletsForGc(std::set<uint64_t>* live_tablets,
     }
 
     std::vector<std::string> children;
-    leveldb::Env* env = io::LeveldbBaseEnv();
-    std::string table_path = FLAGS_tera_tabletnode_path_prefix + name_;
+    std::string table_path = path_prefix + "/" + name_;
     env->GetChildren(table_path, &children);
     for (size_t i = 0; i < children.size(); ++i) {
         if (children[i].size() < 5) {
