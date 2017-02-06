@@ -620,7 +620,6 @@ private:
     int64_t gc_timer_id_;
     bool gc_query_enable_;
     boost::shared_ptr<GcStrategy> gc_strategy_;
-    boost::shared_ptr<GcStrategy> cache_gc_strategy_;
     std::map<std::string, std::string> alias_;
     mutable Mutex alias_mutex_;
 

@@ -250,14 +250,17 @@ public:
             flash_file_last_check_micros_ = Env::Default()->NowMicros();
         }
 
+        Status flash_status = Status::IOError("cache file not opened");
+        Status dfs_status = Status::IOError("base file not opened");
+
         // use flash file
         if (flash_file_ != NULL && !flash_file_corrupt_) {
             // add ref for read
             ++flash_file_ref_;
             mutex_.Unlock();
-            Status read_status = flash_file_->Read(offset, n, result, scratch);
+            flash_status = flash_file_->Read(offset, n, result, scratch);
             mutex_.Lock();
-            if (read_status.ok()) {
+            if (flash_status.ok()) {
                 ssd_read_counter.Inc();
                 ssd_read_size_counter.Add(result->size());
             } else if (!flash_file_corrupt_) {
@@ -280,34 +283,38 @@ public:
                     flash_env_->CacheEnv()->DeleteFile(local_fname_);
                 }
             }
-            return read_status;
         }
 
         // if flash file is not exist or is corrupt, use dfs file
-        ++read_dfs_count_;
-        if (dfs_file_ == NULL) {
-            Status s = flash_env_->BaseEnv()->NewRandomAccessFile(fname_, &dfs_file_);
-            if (s.ok()) {
-                // add ref for keep dfs file opened
-                dfs_file_ref_ = 1;
-                Log("[env_flash] base file opened: %s\n", fname_.c_str());
+        if (!flash_status.ok()) {
+            ++read_dfs_count_;
+            if (dfs_file_ == NULL) {
+                Status s = flash_env_->BaseEnv()->NewRandomAccessFile(fname_, &dfs_file_);
+                if (s.ok()) {
+                    // add ref for keep dfs file opened
+                    dfs_file_ref_ = 1;
+                    Log("[env_flash] base file opened: %s\n", fname_.c_str());
+                }
+            }
+            if (dfs_file_ != NULL) {
+                // add ref for read
+                ++dfs_file_ref_;
+                mutex_.Unlock();
+                dfs_status = dfs_file_->Read(offset, n, result, scratch);
+                mutex_.Lock();
+                // unref for read
+                if (--dfs_file_ref_ == 0) {
+                    delete dfs_file_;
+                    dfs_file_ = NULL;
+                    Log("[env_flash] base file closed: %s\n", fname_.c_str());
+                }
             }
         }
-        if (dfs_file_ != NULL) {
-            // add ref for read
-            ++dfs_file_ref_;
-            mutex_.Unlock();
-            Status read_status = dfs_file_->Read(offset, n, result, scratch);
-            mutex_.Lock();
-            // unref for read
-            if (--dfs_file_ref_ == 0) {
-                delete dfs_file_;
-                dfs_file_ = NULL;
-                Log("[env_flash] base file closed: %s\n", fname_.c_str());
-            }
-            return read_status;
+
+        if (flash_status.ok() || dfs_status.ok()) {
+            return Status::OK();
         }
-        return Status::IOError("neither base or cache file is available");
+        return Status::IOError(flash_status.ToString(), dfs_status.ToString());
     }
     bool isValid() {
         MutexLock l(&mutex_);
