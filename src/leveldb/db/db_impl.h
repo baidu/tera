@@ -119,7 +119,6 @@ class DBImpl : public DB {
 
   Status MakeRoomForWrite(bool force /* compact even if there is room? */)
       EXCLUSIVE_LOCKS_REQUIRED(mutex_);
-  WriteBatch* BuildBatchGroup(Writer** last_writer);
 
   void MaybeScheduleCompaction() EXCLUSIVE_LOCKS_REQUIRED(mutex_);
   static void BGWork(void* db);
@@ -183,7 +182,6 @@ class DBImpl : public DB {
 
   // Queue of writers.
   std::deque<Writer*> writers_;
-  WriteBatch* tmp_batch_;
 
   std::multiset<uint64_t> snapshots_;
   std::map<uint64_t, uint64_t> rollbacks_;
