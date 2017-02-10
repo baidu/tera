@@ -2,9 +2,9 @@
 
 ## 简介
 
-[系统设计](tera_design.md)
+[系统设计](../tera_design.md)
 
-[Tera表格数据模型及实现](data_model.md)
+[Tera表格数据模型及实现](../data_model.md)
 
 ## 使用帮助
 
