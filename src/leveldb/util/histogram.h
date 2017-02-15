@@ -35,6 +35,7 @@ class Histogram {
   static const double kBucketLimit[kNumBuckets];
   double buckets_[kNumBuckets];
 
+ public:
   double Median() const;
   double Percentile(double p) const;
   double Average() const;
