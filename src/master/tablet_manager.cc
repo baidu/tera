@@ -779,15 +779,18 @@ uint64_t Table::GetNextTabletNo() {
 }
 
 bool Table::GetTabletsForGc(std::set<uint64_t>* live_tablets,
-                            std::set<uint64_t>* dead_tablets) {
+                            std::set<uint64_t>* dead_tablets,
+                            bool ignore_not_ready) {
     MutexLock lock(&mutex_);
     std::vector<TabletPtr> tablet_list;
     Table::TabletList::iterator it = tablets_list_.begin();
     for (; it != tablets_list_.end(); ++it) {
         TabletPtr tablet = it->second;
         if (tablet->GetStatus() != kTableReady) {
-            // any tablet not ready, stop gc
-            return false;
+            if (!ignore_not_ready) {
+                // any tablet not ready, stop gc
+                return false;
+            }
         }
         const std::string& path = tablet->GetPath();
         live_tablets->insert(leveldb::GetTabletNumFromPath(path));
