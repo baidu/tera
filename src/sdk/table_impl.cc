@@ -2050,15 +2050,13 @@ void TableImpl::PerfCounter::DoDumpPerfCounterLog(const std::string& log_prefix)
 }
 
 void TableImpl::DelayTaskWrapper(ThreadPool::Task task, int64_t task_id) {
+    task(task_id);
     {
         MutexLock lock(&delay_task_id_mutex_);
-        if (delay_task_ids_.erase(task_id) == 0) {
-            // this task has been canceled
-            return;
-        }
+        delay_task_ids_.erase(task_id);
     }
-    task(task_id);
 }
+
 int64_t TableImpl::AddDelayTask(int64_t delay_time, ThreadPool::Task task) {
     MutexLock lock(&delay_task_id_mutex_);
     ThreadPool::Task t =
@@ -2067,13 +2065,21 @@ int64_t TableImpl::AddDelayTask(int64_t delay_time, ThreadPool::Task task) {
     delay_task_ids_.insert(t_id);
     return t_id;
 }
+
 void TableImpl::ClearDelayTask() {
     MutexLock lock(&delay_task_id_mutex_);
     std::set<int64_t>::iterator it = delay_task_ids_.begin();
-    for (; it != delay_task_ids_.end(); ++it) {
-        thread_pool_->CancelTask(*it);
+    while (it != delay_task_ids_.end()) {
+        int64_t task_id = *it;
+        // may deadlock, MUST unlock
+        delay_task_id_mutex_.Unlock();
+        bool cancelled = thread_pool_->CancelTask(*it);
+        delay_task_id_mutex_.Lock();
+        if (cancelled) {
+            delay_task_ids_.erase(task_id);
+        }
+        it = delay_task_ids_.begin();
     }
-    delay_task_ids_.clear();
 }
 
 void TableImpl::BreakRequest(int64_t task_id) {
