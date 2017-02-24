@@ -664,8 +664,17 @@ bool UpdateKvTableProperties(const PropTree::Node* table_node, TableDescriptor* 
     LocalityGroupDescriptor* lg_desc =
         const_cast<LocalityGroupDescriptor*>(table_desc->LocalityGroup("kv"));
     if (lg_desc == NULL) {
-        LOG(ERROR) << "[update] fail to get locality group: kv";
-        return false;
+        LOG(ERROR) << "[update][WARNING] can not get locality group: kv(kv table)";
+
+        // maybe this is a old kv table, it's LocalityGroup name is 'lg0'
+        lg_desc =
+            const_cast<LocalityGroupDescriptor*>(table_desc->LocalityGroup("lg0"));
+        if (lg_desc == NULL) {
+            LOG(ERROR) << "[update] fail to get locality group: lg0(kv table)";
+            return false;
+        } else {
+            LOG(ERROR) << "[update][WARNING] it seems this is a old-style kv table";
+        }
     }
     for (std::map<string, string>::const_iterator i = table_node->properties_.begin();
          i != table_node->properties_.end(); ++i) {
