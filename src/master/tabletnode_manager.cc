@@ -319,19 +319,20 @@ TabletNodeManager::~TabletNodeManager() {
     MutexLock lock(&mutex_);
 }
 
-void TabletNodeManager::AddTabletNode(const std::string& addr,
-                                      const std::string& uuid) {
+TabletNodePtr TabletNodeManager::AddTabletNode(const std::string& addr,
+                                               const std::string& uuid) {
     MutexLock lock(&mutex_);
     TabletNodePtr null_ptr;
     std::pair<TabletNodeList::iterator, bool> ret = tabletnode_list_.insert(
         std::pair<std::string, TabletNodePtr>(addr, null_ptr));
     if (!ret.second) {
         LOG(ERROR) << "tabletnode [" << addr << "] exists";
-        return;
+        return ret.first->second;
     }
     TabletNodePtr& state = ret.first->second;
     state.reset(new TabletNode(addr, uuid));
     LOG(INFO) << "add tabletnode : " << addr << ", id : " << uuid;
+    return state;
 }
 
 void TabletNodeManager::DelTabletNode(const std::string& addr) {

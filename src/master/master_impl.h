@@ -357,13 +357,9 @@ private:
                                    QueryRequest* request,
                                    QueryResponse* response, bool failed,
                                    int error_code);
-    void TabletNodeRecoveryCallback(std::string addr, QueryRequest* request,
-                                    QueryResponse* response, bool failed,
-                                    int error_code);
     void RetryCollectTabletInfo(std::string addr,
                                 std::vector<TabletMeta>* tablet_list,
                                 sem_t* finish_counter, Mutex* mutex);
-    void RetryQueryNewTabletNode(std::string addr);
 
     void SplitTabletAsync(TabletPtr tablet);
     void SplitTabletCallback(TabletPtr tablet, SplitTabletRequest* request,
