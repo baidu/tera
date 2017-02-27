@@ -14,6 +14,7 @@
 #include <iostream>
 #include <limits>
 #include <sstream>
+#include <map>
 
 #include <boost/shared_ptr.hpp>
 #include <gflags/gflags.h>
@@ -86,6 +87,12 @@ using namespace tera;
 
 typedef boost::shared_ptr<Table> TablePtr;
 typedef boost::shared_ptr<TableImpl> TableImplPtr;
+typedef std::map<std::string, int32_t(*)(Client*, int32_t, char**, ErrorCode*)> CommandTable_t;
+
+static CommandTable_t& GetCommandTable(){
+	static CommandTable_t command_table;
+	return command_table;
+}
 
 /// global variables of single-row-txn used in interactive mode
 tera::Transaction* g_row_txn = NULL;
@@ -2142,7 +2149,7 @@ int32_t SafeModeOp(Client* client, int32_t argc, char** argv, ErrorCode* err) {
     return 0;
 }
 
-int32_t CookieOp(int32_t argc, char** argv) {
+int32_t CookieOp(Client* client, int32_t argc, char** argv, ErrorCode* err) {
     std::string command;
     if (argc == 4) {
         command = argv[2];
@@ -2804,7 +2811,7 @@ int32_t MetaOp(Client* client, int32_t argc, char** argv, ErrorCode* err) {
     return 0;
 }
 
-int32_t FindTabletOp(int32_t argc, char** argv, ErrorCode* err) {
+int32_t FindTabletOp(Client* client, int32_t argc, char** argv, ErrorCode* err) {
     if ((argc != 4) && (argc != 5)) {
         PrintCmdHelpInfo(argv[1]);
         return -1;
@@ -2889,7 +2896,7 @@ int32_t FindTabletOp(int32_t argc, char** argv, ErrorCode* err) {
     return 0;
 }
 
-int32_t Meta2Op(Client *client, int32_t argc, char** argv) {
+int32_t Meta2Op(Client *client, int32_t argc, char** argv, ErrorCode* err) {
     if (argc < 3) {
         PrintCmdHelpInfo("meta");
         return -1;
@@ -3159,105 +3166,74 @@ int32_t HelpOp(int32_t argc, char** argv) {
     return 0;
 }
 
-int ExecuteCommand(Client* client, int argc, char* argv[]) {
-    int ret = 0;
-    ErrorCode error_code;
-    std::string cmd = argv[1];
-    if (cmd == "create") {
-        ret = CreateOp(client, argc, argv, &error_code);
-    } else if (cmd == "createbyfile") {
-        ret = CreateByFileOp(client, argc, argv, &error_code);
-    } else if (cmd == "update") {
-        ret = UpdateOp(client, argc, argv, &error_code);
-    } else if (cmd == "update-check") {
-        ret = UpdateCheckOp(client, argc, argv, &error_code);
-    } else if (cmd == "drop") {
-        ret = DropOp(client, argc, argv, &error_code);
-    } else if (cmd == "enable") {
-        ret = EnableOp(client, argc, argv, &error_code);
-    } else if (cmd == "disable") {
-        ret = DisableOp(client, argc, argv, &error_code);
-    } else if (cmd == "show" || cmd == "showx" || cmd == "showall") {
-        ret = ShowOp(client, argc, argv, &error_code);
-    } else if (cmd == "showschema" || cmd == "showschemax") {
-        ret = ShowSchemaOp(client, argc, argv, &error_code);
-    } else if (cmd == "showts" || cmd == "showtsx") {
-        ret = ShowTabletNodesOp(client, argc, argv, &error_code);
-    } else if (cmd == "put") {
-        ret = PutOp(client, argc, argv, &error_code);
-    } else if (cmd == "putint64") {
-        ret = PutInt64Op(client, argc, argv, &error_code);
-    } else if (cmd == "put-ttl") {
-        ret = PutTTLOp(client, argc, argv, &error_code);
-    } else if (cmd == "put_counter") {
-        ret = PutCounterOp(client, argc, argv, &error_code);
-    } else if (cmd == "add") {
-        ret = AddOp(client, argc, argv, &error_code);
-    } else if (cmd == "addint64") {
-        ret = AddInt64Op(client, argc, argv, &error_code);
-    } else if (cmd == "putif") {
-        ret = PutIfAbsentOp(client, argc, argv, &error_code);
-    } else if (cmd == "append") {
-        ret = AppendOp(client, argc, argv, &error_code);
-    } else if (cmd == "get") {
-        ret = GetOp(client, argc, argv, &error_code);
-    } else if (cmd == "getint64") {
-        ret = GetInt64Op(client, argc, argv, &error_code);
-    } else if (cmd == "get_counter") {
-        ret = GetCounterOp(client, argc, argv, &error_code);
-    } else if (cmd == "delete" || cmd == "delete1v") {
-        ret = DeleteOp(client, argc, argv, &error_code);
-    } else if (cmd == "batchput") {
-        ret = BatchPutOp(client, argc, argv, &error_code);
-    } else if (cmd == "batchputint64") {
-        ret = BatchPutInt64Op(client, argc, argv, &error_code);
-    } else if (cmd == "batchget") {
-        ret = BatchGetOp(client, argc, argv, &error_code);
-    } else if (cmd == "batchgetint64") {
-        ret = BatchGetInt64Op(client, argc, argv, &error_code);
-    } else if (cmd == "scan" || cmd == "scanallv") {
-        ret = ScanOp(client, argc, argv, &error_code);
-    } else if (cmd == "safemode") {
-        ret = SafeModeOp(client, argc, argv, &error_code);
-    } else if (cmd == "tablet") {
-        ret = TabletOp(client, argc, argv, &error_code);
-    } else if (cmd == "rename") {
-        ret = RenameOp(client, argc, argv, &error_code);
-    } else if (cmd == "meta") {
-        ret = MetaOp(client, argc, argv, &error_code);
-    } else if (cmd == "compact") {
-        ret = CompactOp(client, argc, argv, &error_code);
-    } else if (cmd == "findmaster") {
-        // get master addr(hostname:port)
-        ret = FindMasterOp(client, argc, argv, &error_code);
-    } else if (cmd == "findts") {
-        // get tabletnode addr from a key
-        ret = FindTsOp(client, argc, argv, &error_code);
-    } else if (cmd == "findtablet") {
-        ret = FindTabletOp(argc, argv, &error_code);
-    } else if (cmd == "meta2") {
-        ret = Meta2Op(client, argc, argv);
-    } else if (cmd == "user") {
-        ret = UserOp(client, argc, argv, &error_code);
-    } else if (cmd == "reload") {
-        ret = ReloadConfigOp(client, argc, argv, &error_code);
-    } else if (cmd == "kick") {
-        ret = KickTabletServerOp(client, argc, argv, &error_code);
-    } else if (cmd == "cookie") {
-        ret = CookieOp(argc, argv);
-    } else if (cmd == "snapshot") {
-        ret = SnapshotOp(client, argc, argv, &error_code);
-    } else if (cmd == "range" || cmd == "rangex") {
-        ret = RangeOp(client, argc, argv, &error_code);
-    } else if (cmd == "txn") {
-        ret = TxnOp(client, argc, argv, &error_code);
-    } else if (cmd == "version") {
-        PrintSystemVersion();
-    } else if (cmd == "help") {
-        HelpOp(argc, argv);
-    } else {
-        PrintUnknownCmdHelpInfo(argv[1]);
-    }
+static void InitializeCommandTable(){
+	CommandTable_t& command_table = GetCommandTable();
+	command_table["create"] = CreateOp;
+	command_table["createbyfile"] = CreateByFileOp;
+	command_table["update"] = UpdateOp;
+	command_table["update-check"] = UpdateCheckOp;
+	command_table["drop"] = DropOp;
+	command_table["enable"] = EnableOp;
+	command_table["disable"] = DisableOp;
+	command_table["show"] = ShowOp;
+	command_table["showx"] = ShowOp;
+	command_table["showall"] = ShowOp;
+	command_table["showschema"] = ShowSchemaOp;
+	command_table["showschemax"] = ShowSchemaOp;
+	command_table["showts"] = ShowTabletNodesOp;
+	command_table["showtsx"] = ShowTabletNodesOp;
+	command_table["put"] = PutOp;
+	command_table["putint64"] = PutInt64Op;
+	command_table["put-ttl"] = PutTTLOp;
+	command_table["put_counter"] = PutCounterOp;
+	command_table["add"] = AddOp;
+	command_table["addint64"] = AddInt64Op;
+	command_table["putif"] = PutIfAbsentOp;
+	command_table["append"] = AppendOp;
+	command_table["get"] = GetOp;
+	command_table["getint64"] = GetInt64Op;
+	command_table["get_counter"] = GetCounterOp;
+	command_table["delete"] = DeleteOp;
+	command_table["delete1v"] = DeleteOp;
+	command_table["batchput"] = BatchPutOp;
+	command_table["batchputint64"] = BatchPutInt64Op;
+	command_table["batchget"] = BatchGetOp;
+	command_table["batchgetint64"] = BatchGetInt64Op;
+	command_table["scan"] = ScanOp;
+	command_table["scanallv"] = ScanOp;
+	command_table["safemode"] = SafeModeOp;
+	command_table["tablet"] = TabletOp;
+	command_table["rename"] = RenameOp;
+	command_table["meta"] = MetaOp;
+	command_table["compact"] = CompactOp;
+	command_table["findmaster"] = FindMasterOp;
+	command_table["findts"] = FindTsOp;
+	command_table["findtablet"] = FindTabletOp;
+	command_table["meta2"] = Meta2Op;
+	command_table["user"] = UserOp;
+	command_table["reload"] = ReloadConfigOp;
+	command_table["kick"] = KickTabletServerOp;
+	command_table["cookie"] = CookieOp;
+	command_table["snapshot"] = SnapshotOp;
+	command_table["range"] = RangeOp;
+	command_table["rangex"] = RangeOp;
+	command_table["txn"] = TxnOp;
+}
+
+int ExecuteCommand(Client* client, int argc, char* argv[]){
+	int ret = 0;
+	ErrorCode error_code;
+	std::string cmd = argv[1];
+	CommandTable_t& command_table = GetCommandTable();
+	if(command_table.find(cmd) != command_table.end()){
+		ret = command_table[cmd](client, argc, argv, &error_code);
+	} else if(cmd == "version"){
+		PrintSystemVersion();
+	} else if(cmd == "help"){
+		HelpOp(argc, argv);
+	} else {
+		PrintUnknownCmdHelpInfo(argv[1]);
+	}
     if (error_code.GetType() != ErrorCode::kOK) {
         LOG(ERROR) << "fail reason: " << error_code.ToString();
     }
@@ -3275,6 +3251,8 @@ int main(int argc, char* argv[]) {
         HelpOp(argc, argv);
         return 0;
     }
+
+	InitializeCommandTable();
 
     Client* client = Client::NewClient(FLAGS_flagfile, NULL);
     if (client == NULL) {
