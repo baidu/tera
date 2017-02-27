@@ -729,6 +729,7 @@ bool ClientImpl::DoShowTablesInfo(TableMetaList* table_list,
     bool table_meta_copied = false;
     std::string err_msg;
     while(has_more && !has_error) {
+        VLOG(7) << "round more " << has_more << ", " << DebugString(start_tablet_key);
         ShowTablesRequest request;
         ShowTablesResponse response;
         if (!table_name.empty()) {
@@ -780,7 +781,9 @@ bool ClientImpl::DoShowTablesInfo(TableMetaList* table_list,
                     std::string last_key = response.tablet_meta_list().meta(i).key_range().key_start();
                     if (prev_table_name > start_table_name
                         || (prev_table_name == start_table_name && last_key <= start_tablet_key)) {
-                        LOG(WARNING) << "the master has older version";
+                        LOG(WARNING) << "the master has older version, pre_table " << prev_table_name
+                          << ", start_table " << start_table_name << ", last_key " << DebugString(last_key)
+                          << ", start_key " << DebugString(start_tablet_key);
                         has_more = false;
                         break;
                     }

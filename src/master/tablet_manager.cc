@@ -1285,7 +1285,7 @@ bool TabletManager::ShowTable(std::vector<TablePtr>* table_meta_list,
             table_meta_list->push_back(table);
         }
         table_found_num++;
-        if (it->first == start_tablet_key) {
+        if (it->first == start_table_name) {
             it2 = table->tablets_list_.lower_bound(start_tablet_key);
         } else {
             it2 = table->tablets_list_.begin();
