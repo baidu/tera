@@ -133,6 +133,14 @@ class DBImpl : public DB {
   Status InstallCompactionResults(CompactionState* compact)
       EXCLUSIVE_LOCKS_REQUIRED(mutex_);
 
+  // Returns:
+  //   Status OK: iff *exists == true  -> exists
+  //       iff *exists == false -> not exists
+  //   Status not OK:
+  //       1). Status::Corruption -> CURRENT lost,
+  //       2). Status::IOError    -> Maybe request timeout, don't use *exists
+  Status ParentCurrentStatus(uint64_t parent_no, bool* exists);
+
   State state_;
 
   // tera-specific
