@@ -16,6 +16,7 @@
 #include "glog/logging.h"
 #include "utils/string_util.h"
 
+#include "sdk/schema_impl.h"
 #include "sdk/filter_utils.h"
 
 DECLARE_int64(tera_tablet_write_block_size);
@@ -664,8 +665,17 @@ bool UpdateKvTableProperties(const PropTree::Node* table_node, TableDescriptor* 
     LocalityGroupDescriptor* lg_desc =
         const_cast<LocalityGroupDescriptor*>(table_desc->LocalityGroup("kv"));
     if (lg_desc == NULL) {
-        LOG(ERROR) << "[update] fail to get locality group: kv";
-        return false;
+        LOG(ERROR) << "[update][WARNING] can not get locality group: kv(kv table)";
+
+        // maybe this is a old kv table, it's LocalityGroup name is TableDescImpl::DEFAULT_LG_NAME
+        lg_desc =
+            const_cast<LocalityGroupDescriptor*>(table_desc->LocalityGroup(TableDescImpl::DEFAULT_LG_NAME));
+        if (lg_desc == NULL) {
+            LOG(ERROR) << "[update] fail to get locality group: " << TableDescImpl::DEFAULT_LG_NAME;
+            return false;
+        } else {
+            LOG(ERROR) << "[update][WARNING] it seems this is a old-style kv table";
+        }
     }
     for (std::map<string, string>::const_iterator i = table_node->properties_.begin();
          i != table_node->properties_.end(); ++i) {
@@ -755,9 +765,9 @@ bool FillTableDescriptor(PropTree& schema_tree, TableDescriptor* table_desc) {
         // simple table mode, have 1 default lg
         // e.g. table1{cf1, cf2, cf3}
         LocalityGroupDescriptor* lg_desc;
-        lg_desc = table_desc->AddLocalityGroup("lg0");
+        lg_desc = table_desc->AddLocalityGroup(TableDescImpl::DEFAULT_LG_NAME);
         if (lg_desc == NULL) {
-            LOG(ERROR) << "fail to add locality group: lg0";
+            LOG(ERROR) << "fail to add locality group: " << TableDescImpl::DEFAULT_LG_NAME;
             return false;
         }
         // add all column families and properties
