@@ -28,7 +28,7 @@ if [ $MIRROR == "china" ]; then
     GFLAGS_URL=https://github.com/schuhschuh/gflags/archive/v${GFLAGS_VERSION}.tar.gz
     GLOG_URL=https://github.com/google/glog/archive/v${GLOG_VERSION}.tar.gz
     GTEST_URL=https://github.com/google/googletest/archive/release-${GTEST_VERSION}.tar.gz
-    LIBUNWIND_URL=http://mirrors.163.com/gentoo/distfiles/libunwind-${LIBUNWIND_VERSION}.tar.gz
+    LIBUNWIND_URL=http://repository.timesys.com/buildsources/l/libunwind/libunwind-${LIBUNWIND_VERSION}/libunwind-${LIBUNWIND_VERSION}.tar.gz
     GPERFTOOLS_URL=https://github.com/00k/gperftools/raw/master/gperftools-${GPERFTOOLS_VERSION}.tar.gz
     INS_URL=https://github.com/baidu/ins/archive/${INS_VERSION}.tar.gz
     NOSE_URL=http://mirrors.163.com/gentoo/distfiles/nose-${NOSE_VERSION}.tar.gz
