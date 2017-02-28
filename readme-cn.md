@@ -36,15 +36,15 @@ sh ./build.sh
 
 #使用示例
 
-[体验单机Tera](doc/onebox.md)
+[体验单机Tera](doc/cn/onebox.md)
 
 [通过docker体验Tera](example/docker)
 
 [主要api使用方法](doc/cn/sdk_guide.md)
 
-[客户端teracli使用方法](doc/teracli.md)
+[客户端teracli使用方法](doc/cn/teracli.md)
 
-[其它文档](doc/README.md)
+[其它文档](doc/cn/README.md)
 
 #反馈与技术支持
 tera_dev at baidu.com

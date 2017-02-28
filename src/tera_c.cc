@@ -151,6 +151,25 @@ bool tera_table_put(tera_table_t* table,
     return result;
 }
 
+bool tera_table_put_kv(tera_table_t* table, const char* key, uint64_t keylen,
+                       const char* value, uint64_t vallen, int32_t ttl,
+                       char** errptr) {
+    ErrorCode err;
+    std::string key_str(key, keylen);
+    std::string val_str(value, vallen);
+    RowMutation* mutation = table->rep->NewRowMutation(key);
+    mutation->Put(val_str, ttl);
+    table->rep->ApplyMutation(mutation);
+    err = mutation->GetError();
+    delete mutation;
+    if (SaveError(errptr, err)) {
+        fprintf(stderr, "%s tera error: %s.\n",
+                common::timer::get_curtime_str().c_str(), err.GetReason().c_str());
+        return false;
+    }
+    return true;
+}
+
 bool tera_table_putint64(tera_table_t* table,
                          const char* row_key, uint64_t keylen,
                          const char* family, const char* qualifier,
@@ -166,7 +185,7 @@ bool tera_table_putint64(tera_table_t* table,
     return result;
 }
 
-void tera_table_delete(tera_table_t* table, const char* row_key, uint64_t keylen,
+bool tera_table_delete(tera_table_t* table, const char* row_key, uint64_t keylen,
                        const char* family, const char* qualifier, uint64_t qulen) {
     ErrorCode err;
     std::string key_str(row_key, keylen);
@@ -174,6 +193,14 @@ void tera_table_delete(tera_table_t* table, const char* row_key, uint64_t keylen
     RowMutation* mutation = table->rep->NewRowMutation(key_str);
     mutation->DeleteColumn(family, qu_str);
     table->rep->ApplyMutation(mutation);
+    err = mutation->GetError();
+    delete mutation;
+    if (SaveError(NULL, err)) {
+        fprintf(stderr, "%s tera delete error: %s.\n",
+                common::timer::get_curtime_str().c_str(), err.GetReason().c_str());
+        return false;
+    }
+    return true;
 }
 
 tera_row_mutation_t* tera_row_mutation(tera_table_t* table, const char* row_key, uint64_t keylen) {
@@ -330,6 +357,11 @@ bool tera_table_is_put_finished(tera_table_t* table) {
 
 bool tera_table_is_get_finished(tera_table_t* table) {
     return table->rep->IsGetFinished();
+}
+
+void tera_row_mutation_put_kv(tera_row_mutation_t* mu, 
+                              const char* val, uint64_t vallen, int32_t ttl) {
+    mu->rep->Put(std::string(val, vallen), ttl);
 }
 
 void tera_row_mutation_put_int64(tera_row_mutation_t* mu, const char* cf,

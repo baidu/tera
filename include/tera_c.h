@@ -47,13 +47,17 @@ bool tera_table_put(tera_table_t* table,
                     uint64_t qulen, const char* value, uint64_t vallen,
                     char** errptr);
 
+bool tera_table_put_kv(tera_table_t* table, const char* key, uint64_t keylen,
+                       const char* value, uint64_t vallen, int32_t ttl,
+                       char** errptr);
+
 bool tera_table_putint64(tera_table_t* table,
                          const char* row_key, uint64_t keylen,
                          const char* family, const char* qualifier,
                          uint64_t qulen, int64_t value,
                          char** errptr);
 
-void tera_table_delete(tera_table_t* table, const char* row_key, uint64_t keylen,
+bool tera_table_delete(tera_table_t* table, const char* row_key, uint64_t keylen,
                        const char* family, const char* qualifier, uint64_t qulen);
 
 bool tera_table_is_put_finished(tera_table_t* table);
@@ -64,6 +68,8 @@ void tera_table_apply_reader_batch(tera_table_t* table, tera_row_reader_t** read
 tera_row_mutation_t* tera_row_mutation(tera_table_t* table, const char* row_key, uint64_t keylen);
 void tera_table_apply_mutation(tera_table_t* table, tera_row_mutation_t* mutation);
 void tera_table_apply_mutation_batch(tera_table_t* table, tera_row_mutation_t** mutation_batch, int64_t num);
+void tera_row_mutation_put_kv(tera_row_mutation_t* mu, 
+		                          const char* val, uint64_t vallen, int32_t ttl);
 void tera_row_mutation_put(tera_row_mutation_t* mu, const char* cf,
                            const char* qu, uint64_t qulen,
                            const char* val, uint64_t vallen);

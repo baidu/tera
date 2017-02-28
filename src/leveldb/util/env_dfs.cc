@@ -394,11 +394,16 @@ Status DfsEnv::GetChildren(const std::string& path, std::vector<std::string>* re
 {
     tera::AutoCounter ac(&dfs_list_hang_counter, "ListDirectory", path.c_str());
     dfs_list_counter.Inc();
-    if (0 != dfs_->ListDirectory(path, result)) {
-        Log("GetChildren call with path not exists: %s\n", path.data());
+    if (0 == dfs_->ListDirectory(path, result)) {
+        return Status::OK();
+    }
+    if (errno == ETIMEDOUT)  {
+        Log("[env_dfs] GetChildren timeout: %s\n", path.c_str());
+        return Status::TimeOut("ListDirectory", path);
+    } else {
+        Log("[env_dfs] GetChildren call with path not exists: %s\n", path.data());
         return Status::IOError("Path not exist", path);
     }
-    return Status::OK();
 }
 
 bool DfsEnv::CheckDelete(const std::string& fname, std::vector<std::string>* flags)
