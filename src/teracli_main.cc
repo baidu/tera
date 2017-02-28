@@ -62,6 +62,7 @@ DEFINE_int32(concurrency, 1, "concurrency for compact table.");
 DEFINE_int64(timestamp, -1, "timestamp.");
 DEFINE_string(tablets_file, "", "tablet set file");
 
+DEFINE_bool(readable, true, "readable input");
 DEFINE_bool(printable, true, "printable output");
 DEFINE_bool(print_data, true, "is print data when scan");
 DEFINE_bool(rowkey_count, false, "is print rowkey count when scan");
@@ -301,6 +302,10 @@ static void PrintCmdHelpInfo(const char* msg) {
     }
 }
 
+static void PrintCmdHelpInfo(const std::string& msg) {
+    PrintCmdHelpInfo(msg.c_str());
+}
+
 static void PrintAllCmd() {
     std::cout << "there is cmd list:" << std::endl;
     int count = sizeof(builtin_cmd_list)/sizeof(char*);
@@ -350,7 +355,7 @@ static void PrintUnknownCmdHelpInfo(const char* msg) {
     PrintAllCmd();
 }
 
-int32_t CreateOp(Client* client, int32_t argc, char** argv, ErrorCode* err) {
+int32_t CreateOp(Client* client, int32_t argc, std::string* argv, ErrorCode* err) {
     if (argc < 3) {
         PrintCmdHelpInfo(argv[1]);
         return -1;
@@ -381,7 +386,7 @@ int32_t CreateOp(Client* client, int32_t argc, char** argv, ErrorCode* err) {
     return 0;
 }
 
-int32_t CreateByFileOp(Client* client, int32_t argc, char** argv, ErrorCode* err) {
+int32_t CreateByFileOp(Client* client, int32_t argc, std::string* argv, ErrorCode* err) {
     if (argc < 3) {
         PrintCmdHelpInfo(argv[1]);
         return -1;
@@ -412,7 +417,7 @@ int32_t CreateByFileOp(Client* client, int32_t argc, char** argv, ErrorCode* err
     return 0;
 }
 
-int32_t UpdateCheckOp(Client* client, int32_t argc, char** argv, ErrorCode* err) {
+int32_t UpdateCheckOp(Client* client, int32_t argc, std::string* argv, ErrorCode* err) {
     if (argc != 3) {
         PrintCmdHelpInfo(argv[1]);
         return -1;
@@ -426,7 +431,7 @@ int32_t UpdateCheckOp(Client* client, int32_t argc, char** argv, ErrorCode* err)
     return 0;
 }
 
-int32_t UpdateOp(Client* client, int32_t argc, char** argv, ErrorCode* err) {
+int32_t UpdateOp(Client* client, int32_t argc, std::string* argv, ErrorCode* err) {
     if (argc != 3) {
         PrintCmdHelpInfo(argv[1]);
         return -1;
@@ -459,7 +464,7 @@ int32_t UpdateOp(Client* client, int32_t argc, char** argv, ErrorCode* err) {
     return 0;
 }
 
-int32_t DropOp(Client* client, int32_t argc, char** argv, ErrorCode* err) {
+int32_t DropOp(Client* client, int32_t argc, std::string* argv, ErrorCode* err) {
     if (argc < 3) {
         PrintCmdHelpInfo(argv[1]);
         return -1;
@@ -473,7 +478,7 @@ int32_t DropOp(Client* client, int32_t argc, char** argv, ErrorCode* err) {
     return 0;
 }
 
-int32_t EnableOp(Client* client, int32_t argc, char** argv, ErrorCode* err) {
+int32_t EnableOp(Client* client, int32_t argc, std::string* argv, ErrorCode* err) {
     if (argc < 3) {
         PrintCmdHelpInfo(argv[1]);
         return -1;
@@ -487,7 +492,7 @@ int32_t EnableOp(Client* client, int32_t argc, char** argv, ErrorCode* err) {
     return 0;
 }
 
-int32_t DisableOp(Client* client, int32_t argc, char** argv, ErrorCode* err) {
+int32_t DisableOp(Client* client, int32_t argc, std::string* argv, ErrorCode* err) {
     if (argc < 3) {
         PrintCmdHelpInfo(argv[1]);
         return -1;
@@ -549,7 +554,7 @@ void ParseCfQualifier(const std::string& input, std::string* columnfamily,
     }
 }
 
-int32_t PutInt64Op(Client* client, int32_t argc, char** argv, ErrorCode* err) {
+int32_t PutInt64Op(Client* client, int32_t argc, std::string* argv, ErrorCode* err) {
     if (argc != 5 && argc != 6) {
         LOG(ERROR) << "args number error: " << argc << ", need 5 | 6.";
         PrintCmdHelpInfo(argv[1]);
@@ -586,7 +591,7 @@ int32_t PutInt64Op(Client* client, int32_t argc, char** argv, ErrorCode* err) {
     return 0;
 }
 
-int32_t PutCounterOp(Client* client, int32_t argc, char** argv, ErrorCode* err) {
+int32_t PutCounterOp(Client* client, int32_t argc, std::string* argv, ErrorCode* err) {
     if (argc != 5 && argc != 6) {
         LOG(ERROR) << "args number error: " << argc << ", need 5 | 6.";
         PrintCmdHelpInfo(argv[1]);
@@ -625,7 +630,7 @@ int32_t PutCounterOp(Client* client, int32_t argc, char** argv, ErrorCode* err) 
     return 0;
 }
 
-int32_t PutOp(Client* client, int32_t argc, char** argv, ErrorCode* err) {
+int32_t PutOp(Client* client, int32_t argc, std::string* argv, ErrorCode* err) {
     if (argc != 5 && argc != 6) {
         LOG(ERROR) << "args number error: " << argc << ", need 5 | 6.";
         PrintCmdHelpInfo(argv[1]);
@@ -669,7 +674,7 @@ int32_t PutOp(Client* client, int32_t argc, char** argv, ErrorCode* err) {
     return 0;
 }
 
-int32_t PutTTLOp(Client* client, int32_t argc, char** argv, ErrorCode* err) {
+int32_t PutTTLOp(Client* client, int32_t argc, std::string* argv, ErrorCode* err) {
     if (argc != 6 && argc != 7) {
         LOG(ERROR) << "args number error: " << argc << ", need 5 | 6.";
         PrintCmdHelpInfo(argv[1]);
@@ -691,11 +696,11 @@ int32_t PutTTLOp(Client* client, int32_t argc, char** argv, ErrorCode* err) {
     if (argc == 6) {
         // use table as kv
         value = argv[4];
-        ttl = atoi(argv[5]);
+        ttl = atoi(argv[5].c_str());
     } else if (argc == 7) {
         ParseCfQualifier(argv[4], &columnfamily, &qualifier);
         value = argv[5];
-        ttl = atoi(argv[6]);
+        ttl = atoi(argv[6].c_str());
     }
     if (!table->Put(rowkey, columnfamily, qualifier, value, ttl, err)) {
         LOG(ERROR) << "fail to put record to table: " << tablename;
@@ -704,7 +709,7 @@ int32_t PutTTLOp(Client* client, int32_t argc, char** argv, ErrorCode* err) {
     return 0;
 }
 
-int32_t AppendOp(Client* client, int32_t argc, char** argv, ErrorCode* err) {
+int32_t AppendOp(Client* client, int32_t argc, std::string* argv, ErrorCode* err) {
     if (argc != 5 && argc != 6) {
         LOG(ERROR) << "args number error: " << argc << ", need 5 | 6.";
         PrintCmdHelpInfo(argv[1]);
@@ -736,7 +741,7 @@ int32_t AppendOp(Client* client, int32_t argc, char** argv, ErrorCode* err) {
     return 0;
 }
 
-int32_t PutIfAbsentOp(Client* client, int32_t argc, char** argv, ErrorCode* err) {
+int32_t PutIfAbsentOp(Client* client, int32_t argc, std::string* argv, ErrorCode* err) {
     if (argc != 5 && argc != 6) {
         LOG(ERROR) << "args number error: " << argc << ", need 5 | 6.";
         PrintCmdHelpInfo(argv[1]);
@@ -768,7 +773,7 @@ int32_t PutIfAbsentOp(Client* client, int32_t argc, char** argv, ErrorCode* err)
     return 0;
 }
 
-int32_t AddOp(Client* client, int32_t argc, char** argv, ErrorCode* err) {
+int32_t AddOp(Client* client, int32_t argc, std::string* argv, ErrorCode* err) {
     if (argc != 5 && argc != 6) {
         LOG(ERROR)<< "args number error: " << argc << ", need 5 | 6.";
         PrintCmdHelpInfo(argv[1]);
@@ -805,7 +810,7 @@ int32_t AddOp(Client* client, int32_t argc, char** argv, ErrorCode* err) {
     return 0;
 }
 
-int32_t AddInt64Op(Client* client, int32_t argc, char** argv, ErrorCode* err) {
+int32_t AddInt64Op(Client* client, int32_t argc, std::string* argv, ErrorCode* err) {
     if (argc != 5 && argc != 6) {
         LOG(ERROR)<< "args number error: " << argc << ", need 5 | 6.";
         PrintCmdHelpInfo(argv[1]);
@@ -842,7 +847,7 @@ int32_t AddInt64Op(Client* client, int32_t argc, char** argv, ErrorCode* err) {
     return 0;
 }
 
-int32_t GetInt64Op(Client* client, int32_t argc, char** argv, ErrorCode* err) {
+int32_t GetInt64Op(Client* client, int32_t argc, std::string* argv, ErrorCode* err) {
     if (argc != 4 && argc != 5) {
         LOG(ERROR) << "args number error: " << argc << ", need 5 | 6.";
         PrintCmdHelpInfo(argv[1]);
@@ -883,7 +888,7 @@ std::string PrintableFormatter(const std::string& value) {
     }
 }
 
-int32_t GetOp(Client* client, int32_t argc, char** argv, ErrorCode* err) {
+int32_t GetOp(Client* client, int32_t argc, std::string* argv, ErrorCode* err) {
     if (argc != 4 && argc != 5) {
         LOG(ERROR) << "args number error: " << argc << ", need 5 | 6.";
         PrintCmdHelpInfo(argv[1]);
@@ -933,7 +938,7 @@ int32_t GetOp(Client* client, int32_t argc, char** argv, ErrorCode* err) {
     return 0;
 }
 
-int32_t GetCounterOp(Client* client, int32_t argc, char** argv, ErrorCode* err) {
+int32_t GetCounterOp(Client* client, int32_t argc, std::string* argv, ErrorCode* err) {
     if (argc != 4 && argc != 5) {
         LOG(ERROR) << "args number error: " << argc << ", need 5 | 6.";
         PrintCmdHelpInfo(argv[1]);
@@ -973,7 +978,7 @@ int32_t GetCounterOp(Client* client, int32_t argc, char** argv, ErrorCode* err) 
 }
 
 
-int32_t DeleteOp(Client* client, int32_t argc, char** argv, ErrorCode* err) {
+int32_t DeleteOp(Client* client, int32_t argc, std::string* argv, ErrorCode* err) {
     if (argc != 4 && argc != 5) {
         PrintCmdHelpInfo("delete");
         return -1;
@@ -1097,7 +1102,7 @@ int32_t ScanRange(TablePtr& table, ScanDescriptor& desc, ErrorCode* err) {
     return 0;
 }
 
-int32_t ScanOp(Client* client, int32_t argc, char** argv, ErrorCode* err) {
+int32_t ScanOp(Client* client, int32_t argc, std::string* argv, ErrorCode* err) {
     if (argc != 5 && argc != 6) {
         PrintCmdHelpInfo("scan");
         return -1;
@@ -1238,8 +1243,8 @@ int32_t ShowTabletList(const TabletMetaList& tablet_list, bool is_server_addr, b
 
             uint64_t size = meta.size();
             row.push_back(BytesNumberToString(size));
-            row.push_back(DebugString(meta.key_range().key_start()).substr(0, 20));
-            row.push_back(DebugString(meta.key_range().key_end()).substr(0, 20));
+            row.push_back(DebugString(meta.key_range().key_start()));
+            row.push_back(DebugString(meta.key_range().key_end()));
             printer.AddRow(row);
         }
     }
@@ -1644,7 +1649,7 @@ int32_t ShowTabletNodesInfo(Client* client, bool is_x, ErrorCode* err) {
     return 0;
 }
 
-int32_t ShowTabletNodesOp(Client* client, int32_t argc, char** argv, ErrorCode* err) {
+int32_t ShowTabletNodesOp(Client* client, int32_t argc, std::string* argv, ErrorCode* err) {
     if (argc < 2) {
         LOG(ERROR) << "args number error: " << argc << ", need >2.";
         PrintCmdHelpInfo(argv[1]);
@@ -1662,7 +1667,7 @@ int32_t ShowTabletNodesOp(Client* client, int32_t argc, char** argv, ErrorCode* 
     return ret_val;
 }
 
-int32_t ShowOp(Client* client, int32_t argc, char** argv, ErrorCode* err) {
+int32_t ShowOp(Client* client, int32_t argc, std::string* argv, ErrorCode* err) {
     if (argc < 2) {
         LOG(ERROR) << "args number error: " << argc << ", need >2.";
         PrintCmdHelpInfo(argv[1]);
@@ -1682,7 +1687,7 @@ int32_t ShowOp(Client* client, int32_t argc, char** argv, ErrorCode* err) {
     return ret_val;
 }
 
-int32_t ShowSchemaOp(Client* client, int32_t argc, char** argv, ErrorCode* err) {
+int32_t ShowSchemaOp(Client* client, int32_t argc, std::string* argv, ErrorCode* err) {
     if (argc < 3) {
         PrintCmdHelpInfo("showschema");
         return -1;
@@ -1725,7 +1730,7 @@ void BatchPutCallBack(RowMutation* mutation) {
     delete mutation;
 }
 
-int32_t BatchPutOp(Client* client, int32_t argc, char** argv, ErrorCode* err) {
+int32_t BatchPutOp(Client* client, int32_t argc, std::string* argv, ErrorCode* err) {
     if (argc != 4) {
         LOG(ERROR) << "args number error: " << argc << ", need 4.";
         PrintCmdHelpInfo(argv[1]);
@@ -1753,10 +1758,18 @@ int32_t BatchPutOp(Client* client, int32_t argc, char** argv, ErrorCode* err) {
             LOG(ERROR) << "input file format error, skip it: " << buf;
             continue;
         }
-        std::string& rowkey = input_v[0];
+        std::string rowkey = input_v[0];
+        if (FLAGS_readable && !ParseDebugString(input_v[0], &rowkey)) {
+            LOG(ERROR) << "input file format error, skip it: " << buf;
+            continue;
+        }
         std::string family;
         std::string qualifier;
-        std::string& value = input_v[input_v.size() - 1];
+        std::string value = input_v[input_v.size() - 1];
+        if (FLAGS_readable && !ParseDebugString(input_v[input_v.size() - 1], &value)) {
+            LOG(ERROR) << "input file format error, skip it: " << buf;
+            continue;
+        }
         RowMutation* mutation = table->NewRowMutation(rowkey);
         if (input_v.size() == 2) {
             // for kv mode
@@ -1779,7 +1792,7 @@ int32_t BatchPutOp(Client* client, int32_t argc, char** argv, ErrorCode* err) {
     return 0;
 }
 
-int32_t BatchPutInt64Op(Client* client, int32_t argc, char** argv, ErrorCode* err) {
+int32_t BatchPutInt64Op(Client* client, int32_t argc, std::string* argv, ErrorCode* err) {
     if (argc != 4) {
         LOG(ERROR) << "args number error: " << argc << ", need 4.";
         PrintCmdHelpInfo(argv[1]);
@@ -1807,10 +1820,18 @@ int32_t BatchPutInt64Op(Client* client, int32_t argc, char** argv, ErrorCode* er
             LOG(ERROR) << "input file format error, skip it: " << buf;
             continue;
         }
-        std::string& rowkey = input_v[0];
+        std::string rowkey = input_v[0];
+        if (FLAGS_readable && !ParseDebugString(input_v[0], &rowkey)) {
+            LOG(ERROR) << "input file format error, skip it: " << buf;
+            continue;
+        }
         std::string family;
         std::string qualifier;
-        std::string& value = input_v[input_v.size() - 1];
+        std::string value = input_v[input_v.size() - 1];
+        if (FLAGS_readable && !ParseDebugString(input_v[input_v.size() - 1], &value)) {
+            LOG(ERROR) << "input file format error, skip it: " << buf;
+            continue;
+        }
         RowMutation* mutation = table->NewRowMutation(rowkey);
         int64_t value_int;
         if (!StringToNumber(value.c_str(), &value_int)) {
@@ -1865,7 +1886,7 @@ void BatchGetCallBack(RowReader* reader) {
     delete reader;
 }
 
-int32_t BatchGetOp(Client* client, int32_t argc, char** argv, ErrorCode* err) {
+int32_t BatchGetOp(Client* client, int32_t argc, std::string* argv, ErrorCode* err) {
     if (argc != 4 && argc != 5) {
         LOG(ERROR) << "args number error: " << argc << ", need 4 | 5.";
         PrintCmdHelpInfo(argv[1]);
@@ -1899,7 +1920,11 @@ int32_t BatchGetOp(Client* client, int32_t argc, char** argv, ErrorCode* err) {
             LOG(ERROR) << "input file format error: " << buf;
             continue;
         }
-        std::string& rowkey = input_v[0];
+        std::string rowkey = input_v[0];
+        if (FLAGS_readable && !ParseDebugString(input_v[0], &rowkey)) {
+            LOG(ERROR) << "input file format error, skip it: " << buf;
+            continue;
+        }
         RowReader* reader = table->NewRowReader(rowkey);
         for (size_t i = 1; i < input_v.size(); ++i) {
             std::string& cfqu = input_v[i];
@@ -1955,7 +1980,7 @@ void BatchGetInt64CallBack(RowReader* reader) {
     delete reader;
 }
 
-int32_t BatchGetInt64Op(Client* client, int32_t argc, char** argv, ErrorCode* err) {
+int32_t BatchGetInt64Op(Client* client, int32_t argc, std::string* argv, ErrorCode* err) {
     if (argc != 4 && argc != 5) {
         LOG(ERROR) << "args number error: " << argc << ", need 4 | 5.";
         PrintCmdHelpInfo(argv[1]);
@@ -1989,7 +2014,11 @@ int32_t BatchGetInt64Op(Client* client, int32_t argc, char** argv, ErrorCode* er
             LOG(ERROR) << "input file format error: " << buf;
             continue;
         }
-        std::string& rowkey = input_v[0];
+        std::string rowkey = input_v[0];
+        if (FLAGS_readable && !ParseDebugString(input_v[0], &rowkey)) {
+            LOG(ERROR) << "input file format error, skip it: " << buf;
+            continue;
+        }
         if (input_v.size() == 1) {
             // only rowkey explicit, scan all records out
             ScanDescriptor desc(rowkey);
@@ -2070,7 +2099,7 @@ int32_t GetRandomNumKey(int32_t key_size,std::string *p_key){
     return 0;
 }
 
-int32_t SnapshotOp(Client* client, int32_t argc, char** argv, ErrorCode* err) {
+int32_t SnapshotOp(Client* client, int32_t argc, std::string* argv, ErrorCode* err) {
     if (argc < 4) {
       PrintCmdHelpInfo(argv[1]);
       return -1;
@@ -2078,19 +2107,19 @@ int32_t SnapshotOp(Client* client, int32_t argc, char** argv, ErrorCode* err) {
 
     std::string tablename = argv[2];
     uint64_t snapshot = 0;
-    if (argc == 5 && strcmp(argv[3], "del") == 0) {
+    if (argc == 5 && strcmp(argv[3].c_str(), "del") == 0) {
         if (!client->DelSnapshot(tablename, FLAGS_snapshot, err)) {
             LOG(ERROR) << "fail to del snapshot: " << FLAGS_snapshot << " ," << err->ToString();
             return -1;
         }
         std::cout << "Del snapshot " << snapshot << std::endl;
-    } else if (strcmp(argv[3], "create") == 0) {
+    } else if (strcmp(argv[3].c_str(), "create") == 0) {
         if (!client->GetSnapshot(tablename, &snapshot, err)) {
             LOG(ERROR) << "fail to get snapshot: " << err->ToString();
             return -1;
         }
         std::cout << "new snapshot: " << snapshot << std::endl;
-    }  else if (FLAGS_rollback_switch == "open" && strcmp(argv[3], "rollback") == 0) {
+    }  else if (FLAGS_rollback_switch == "open" && strcmp(argv[3].c_str(), "rollback") == 0) {
         if (FLAGS_snapshot == 0) {
             std::cerr << "missing or invalid --snapshot option" << std::endl;
             return -1;
@@ -2110,7 +2139,7 @@ int32_t SnapshotOp(Client* client, int32_t argc, char** argv, ErrorCode* err) {
     return 0;
 }
 
-int32_t SafeModeOp(Client* client, int32_t argc, char** argv, ErrorCode* err) {
+int32_t SafeModeOp(Client* client, int32_t argc, std::string* argv, ErrorCode* err) {
     if (argc < 3) {
         PrintCmdHelpInfo(argv[1]);
         return -1;
@@ -2142,7 +2171,7 @@ int32_t SafeModeOp(Client* client, int32_t argc, char** argv, ErrorCode* err) {
     return 0;
 }
 
-int32_t CookieOp(int32_t argc, char** argv) {
+int32_t CookieOp(int32_t argc, std::string* argv) {
     std::string command;
     if (argc == 4) {
         command = argv[2];
@@ -2160,7 +2189,7 @@ int32_t CookieOp(int32_t argc, char** argv) {
 }
 
 // e.g. ./teracli kick <hostname>:<port>
-int32_t KickTabletServerOp(Client* client, int32_t argc, char** argv, ErrorCode* err) {
+int32_t KickTabletServerOp(Client* client, int32_t argc, std::string* argv, ErrorCode* err) {
     if ((argc != 3)) {
         PrintCmdHelpInfo(argv[1]);
         return -1;
@@ -2176,7 +2205,7 @@ int32_t KickTabletServerOp(Client* client, int32_t argc, char** argv, ErrorCode*
     return 0;
 }
 
-int32_t ReloadConfigOp(Client* client, int32_t argc, char** argv, ErrorCode* err) {
+int32_t ReloadConfigOp(Client* client, int32_t argc, std::string* argv, ErrorCode* err) {
     if ((argc != 4) || (std::string(argv[2]) != "config")) {
         PrintCmdHelpInfo(argv[1]);
         return -1;
@@ -2251,7 +2280,7 @@ int32_t CompactTablet(TabletInfo& tablet, int lg) {
     return 0;
 }
 
-int32_t CompactTabletOp(Client* client, int32_t argc, char** argv, ErrorCode* err) {
+int32_t CompactTabletOp(Client* client, int32_t argc, std::string* argv, ErrorCode* err) {
     if (argc != 4) {
         PrintCmdHelpInfo(argv[1]);
         return -1;
@@ -2324,7 +2353,7 @@ bool GetTabletInfo(Client* client, const std::string& tablename,
     return true;
 }
 
-int32_t ScanTabletOp(Client* client, int32_t argc, char** argv, ErrorCode* err) {
+int32_t ScanTabletOp(Client* client, int32_t argc, std::string* argv, ErrorCode* err) {
     if (argc < 4) {
         PrintCmdHelpInfo(argv[1]);
         return -1;
@@ -2367,7 +2396,7 @@ int32_t ScanTabletOp(Client* client, int32_t argc, char** argv, ErrorCode* err) 
     return ret;
 }
 
-int32_t TabletOp(Client* client, int32_t argc, char** argv, ErrorCode* err) {
+int32_t TabletOp(Client* client, int32_t argc, std::string* argv, ErrorCode* err) {
     if ((argc != 4) && (argc != 5)) {
         PrintCmdHelpInfo(argv[1]);
         return -1;
@@ -2403,7 +2432,7 @@ int32_t TabletOp(Client* client, int32_t argc, char** argv, ErrorCode* err) {
     return 0;
 }
 
-int32_t RenameOp(Client* client, int32_t argc, char** argv, ErrorCode* err) {
+int32_t RenameOp(Client* client, int32_t argc, std::string* argv, ErrorCode* err) {
     if (argc != 4 ) {
         PrintCmdHelpInfo(argv[1]);
         return -1;
@@ -2485,7 +2514,7 @@ bool FiltrateTabletsByFile(std::vector<TabletInfo>& tablet_list) {
     return true;
 }
 
-int32_t CompactOp(Client* client, int32_t argc, char** argv, ErrorCode* err) {
+int32_t CompactOp(Client* client, int32_t argc, std::string* argv, ErrorCode* err) {
     if (argc != 3) {
         PrintCmdHelpInfo(argv[1]);
         return -1;
@@ -2524,7 +2553,7 @@ int32_t CompactOp(Client* client, int32_t argc, char** argv, ErrorCode* err) {
     return 0;
 }
 
-int32_t FindMasterOp(Client* client, int32_t argc, char** argv, ErrorCode* err) {
+int32_t FindMasterOp(Client* client, int32_t argc, std::string* argv, ErrorCode* err) {
     if (argc != 2) {
         PrintCmdHelpInfo(argv[1]);
         return -1;
@@ -2534,7 +2563,7 @@ int32_t FindMasterOp(Client* client, int32_t argc, char** argv, ErrorCode* err) 
     return 0;
 }
 
-int32_t FindTsOp(Client* client, int32_t argc, char** argv, ErrorCode* err) {
+int32_t FindTsOp(Client* client, int32_t argc, std::string* argv, ErrorCode* err) {
     if (argc != 3 && argc != 4) {
         PrintCmdHelpInfo(argv[1]);
         return -1;
@@ -2766,7 +2795,7 @@ int32_t ProcessMeta(const std::string& op, const TableMetaList& table_list,
     return 0;
 }
 
-int32_t MetaOp(Client* client, int32_t argc, char** argv, ErrorCode* err) {
+int32_t MetaOp(Client* client, int32_t argc, std::string* argv, ErrorCode* err) {
     if (argc != 4 && argc != 3) {
         PrintCmdHelpInfo(argv[1]);
         return -1;
@@ -2804,7 +2833,7 @@ int32_t MetaOp(Client* client, int32_t argc, char** argv, ErrorCode* err) {
     return 0;
 }
 
-int32_t FindTabletOp(int32_t argc, char** argv, ErrorCode* err) {
+int32_t FindTabletOp(int32_t argc, std::string* argv, ErrorCode* err) {
     if ((argc != 4) && (argc != 5)) {
         PrintCmdHelpInfo(argv[1]);
         return -1;
@@ -2889,7 +2918,7 @@ int32_t FindTabletOp(int32_t argc, char** argv, ErrorCode* err) {
     return 0;
 }
 
-int32_t Meta2Op(Client *client, int32_t argc, char** argv) {
+int32_t Meta2Op(Client *client, int32_t argc, std::string* argv) {
     if (argc < 3) {
         PrintCmdHelpInfo("meta");
         return -1;
@@ -3022,7 +3051,7 @@ static int32_t DeleteUserFromGroup(Client* client, const std::string& user,
     return 0;
 }
 
-int32_t UserOp(Client* client, int32_t argc, char** argv, ErrorCode* err) {
+int32_t UserOp(Client* client, int32_t argc, std::string* argv, ErrorCode* err) {
     if (argc < 4) {
         PrintCmdHelpInfo(argv[1]);
         return -1;
@@ -3045,7 +3074,7 @@ int32_t UserOp(Client* client, int32_t argc, char** argv, ErrorCode* err) {
     return -1;
 }
 
-int32_t RangeOp(Client* client, int32_t argc, char** argv, ErrorCode* err) {
+int32_t RangeOp(Client* client, int32_t argc, std::string* argv, ErrorCode* err) {
     if (argc != 3) {
         PrintCmdHelpInfo(argv[1]);
         return -1;
@@ -3082,7 +3111,7 @@ int32_t RangeOp(Client* client, int32_t argc, char** argv, ErrorCode* err) {
     return 0;
 }
 
-int StartRowTxnOp(Client* client, int32_t argc, char** argv, ErrorCode* err) {
+int StartRowTxnOp(Client* client, int32_t argc, std::string* argv, ErrorCode* err) {
     if (argc != 5) {
         PrintCmdHelpInfo(argv[1]);
         return -1;
@@ -3111,7 +3140,7 @@ int StartRowTxnOp(Client* client, int32_t argc, char** argv, ErrorCode* err) {
     return 0;
 }
 
-int CommitRowTxnOp(Client* client, int32_t argc, char** argv, ErrorCode* err) {
+int CommitRowTxnOp(Client* client, int32_t argc, std::string* argv, ErrorCode* err) {
     if (argc != 3) {
         PrintCmdHelpInfo(argv[1]);
         return -1;
@@ -3130,7 +3159,7 @@ int CommitRowTxnOp(Client* client, int32_t argc, char** argv, ErrorCode* err) {
     return 0;
 }
 
-int TxnOp(Client* client, int32_t argc, char** argv, ErrorCode* err) {
+int TxnOp(Client* client, int32_t argc, std::string* argv, ErrorCode* err) {
     if (argc < 3) {
         LOG(ERROR) << "args number error: " << argc << ", need > 2";
         PrintCmdHelpInfo(argv[1]);
@@ -3159,9 +3188,39 @@ int32_t HelpOp(int32_t argc, char** argv) {
     return 0;
 }
 
-int ExecuteCommand(Client* client, int argc, char* argv[]) {
+int32_t HelpOp(int32_t argc, std::string* argv) {
+    if (argc == 2) {
+        PrintAllCmd();
+    } else if (argc == 3) {
+        PrintCmdHelpInfo(argv[2]);
+    } else {
+        PrintCmdHelpInfo("help");
+    }
+    return 0;
+}
+
+bool ParseCommand(int argc, char** arg_list, std::vector<std::string>* parsed_arg_list) {
+    for (int i = 0; i < argc; i++) {
+        std::string parsed_arg = arg_list[i];
+        if (FLAGS_readable && !ParseDebugString(arg_list[i], &parsed_arg)) {
+            std::cout << "invalid debug format of argument: " << arg_list[i] << std::endl;
+            return false;
+        }
+        parsed_arg_list->push_back(parsed_arg);
+    }
+    return true;
+}
+
+int ExecuteCommand(Client* client, int argc, char** arg_list) {
     int ret = 0;
     ErrorCode error_code;
+
+    std::vector<std::string> parsed_arg_list;
+    if (!ParseCommand(argc, arg_list, &parsed_arg_list)) {
+        return 1;
+    }
+    std::string* argv = &parsed_arg_list[0];
+
     std::string cmd = argv[1];
     if (cmd == "create") {
         ret = CreateOp(client, argc, argv, &error_code);
@@ -3256,7 +3315,8 @@ int ExecuteCommand(Client* client, int argc, char* argv[]) {
     } else if (cmd == "help") {
         HelpOp(argc, argv);
     } else {
-        PrintUnknownCmdHelpInfo(argv[1]);
+        PrintUnknownCmdHelpInfo(argv[1].c_str());
+        ret = 1;
     }
     if (error_code.GetType() != ErrorCode::kOK) {
         LOG(ERROR) << "fail reason: " << error_code.ToString();
