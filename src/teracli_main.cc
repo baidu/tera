@@ -88,7 +88,7 @@ using namespace tera;
 
 typedef boost::shared_ptr<Table> TablePtr;
 typedef boost::shared_ptr<TableImpl> TableImplPtr;
-typedef std::map<std::string, int32_t(*)(Client*, int32_t, std::string*, ErrorCode*)> CommandTableT;
+typedef std::map<std::string, int32_t(*)(Client*, int32_t, std::string*, ErrorCode*)> CommandTable;
 
 /// global variables of single-row-txn used in interactive mode
 tera::Transaction* g_row_txn = NULL;
