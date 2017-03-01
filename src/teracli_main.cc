@@ -3275,16 +3275,14 @@ int ExecuteCommand(Client* client, int argc, char** arg_list) {
     if (!ParseCommand(argc, arg_list, &parsed_arg_list)) {
         return 1;
     }
-
     std::string* argv = &parsed_arg_list[0];
-    std::string cmd = argv[1];
 
     CommandTable_t& command_table = GetCommandTable();
-
+    std::string cmd = argv[1];
     if (cmd == "version") {
         PrintSystemVersion();
 	} else if (command_table.find(cmd) != command_table.end()) {
-        command_table[cmd](client, argc, argv, &error_code);
+        ret = command_table[cmd](client, argc, argv, &error_code);
     } else {
         PrintUnknownCmdHelpInfo(argv[1].c_str());
         ret = 1;
