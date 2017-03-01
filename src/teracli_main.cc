@@ -94,8 +94,8 @@ typedef std::map<std::string, int32_t(*)(Client*, int32_t, std::string*, ErrorCo
 tera::Transaction* g_row_txn = NULL;
 Table* g_row_txn_table = NULL;
 
-static CommandTableT& GetCommandTable(){
-    static CommandTableT command_table;
+static CommandTable& GetCommandTable(){
+    static CommandTable command_table;
     return command_table;
 }
 
@@ -3213,7 +3213,7 @@ bool ParseCommand(int argc, char** arg_list, std::vector<std::string>* parsed_ar
 }
 
 static void InitializeCommandTable(){
-    CommandTableT& command_table = GetCommandTable();
+    CommandTable& command_table = GetCommandTable();
     command_table["create"] = CreateOp;
     command_table["createbyfile"] = CreateByFileOp;
     command_table["update"] = UpdateOp;
@@ -3277,7 +3277,7 @@ int ExecuteCommand(Client* client, int argc, char** arg_list) {
     }
     std::string* argv = &parsed_arg_list[0];
 
-    CommandTableT& command_table = GetCommandTable();
+    CommandTable& command_table = GetCommandTable();
     std::string cmd = argv[1];
     if (cmd == "version") {
         PrintSystemVersion();
