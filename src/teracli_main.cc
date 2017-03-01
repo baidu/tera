@@ -13,8 +13,8 @@
 #include <iomanip>
 #include <iostream>
 #include <limits>
-#include <sstream>
 #include <map>
+#include <sstream>
 
 #include <boost/shared_ptr.hpp>
 #include <gflags/gflags.h>
@@ -88,14 +88,14 @@ using namespace tera;
 
 typedef boost::shared_ptr<Table> TablePtr;
 typedef boost::shared_ptr<TableImpl> TableImplPtr;
-typedef std::map<std::string, int32_t(*)(Client*, int32_t, std::string*, ErrorCode*)> CommandTable_t;
+typedef std::map<std::string, int32_t(*)(Client*, int32_t, std::string*, ErrorCode*)> CommandTableT;
 
 /// global variables of single-row-txn used in interactive mode
 tera::Transaction* g_row_txn = NULL;
 Table* g_row_txn_table = NULL;
 
-static CommandTable_t& GetCommandTable(){
-    static CommandTable_t command_table;
+static CommandTableT& GetCommandTable(){
+    static CommandTableT command_table;
     return command_table;
 }
 
@@ -3196,7 +3196,7 @@ int32_t HelpOp(Client*, int32_t argc, std::string* argv, ErrorCode*) {
 }
 
 int32_t HelpOp(int32_t argc, char** argv) {
-	std::vector<std::string> argv_svec(argv, argv + argc);
+    std::vector<std::string> argv_svec(argv, argv + argc);
     return HelpOp(NULL, argc, &argv_svec[0], NULL);
 }
 
@@ -3213,7 +3213,7 @@ bool ParseCommand(int argc, char** arg_list, std::vector<std::string>* parsed_ar
 }
 
 static void InitializeCommandTable(){
-    CommandTable_t& command_table = GetCommandTable();
+    CommandTableT& command_table = GetCommandTable();
     command_table["create"] = CreateOp;
     command_table["createbyfile"] = CreateByFileOp;
     command_table["update"] = UpdateOp;
@@ -3264,7 +3264,7 @@ static void InitializeCommandTable(){
     command_table["range"] = RangeOp;
     command_table["rangex"] = RangeOp;
     command_table["txn"] = TxnOp;
-	command_table["help"] = HelpOp;
+    command_table["help"] = HelpOp;
 }
 
 int ExecuteCommand(Client* client, int argc, char** arg_list) {
@@ -3277,11 +3277,11 @@ int ExecuteCommand(Client* client, int argc, char** arg_list) {
     }
     std::string* argv = &parsed_arg_list[0];
 
-    CommandTable_t& command_table = GetCommandTable();
+    CommandTableT& command_table = GetCommandTable();
     std::string cmd = argv[1];
     if (cmd == "version") {
         PrintSystemVersion();
-	} else if (command_table.find(cmd) != command_table.end()) {
+    } else if (command_table.find(cmd) != command_table.end()) {
         ret = command_table[cmd](client, argc, argv, &error_code);
     } else {
         PrintUnknownCmdHelpInfo(argv[1].c_str());
@@ -3313,7 +3313,7 @@ int main(int argc, char* argv[]) {
     }
     g_printer_opt.print_head = FLAGS_stdout_is_tty;
 
-	InitializeCommandTable();
+    InitializeCommandTable();
 
     int ret  = 0;
     if (argc == 1) {
