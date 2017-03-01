@@ -74,11 +74,9 @@ bool TabletNodeEntry::StartServer() {
 }
 
 void TabletNodeEntry::ShutdownServer() {
-    LOG(INFO) << "shut down server";
-    // StopServer要保证调用后, 不会再调用serveice的任何方法.
-    rpc_server_->Stop();
     tabletnode_impl_->Exit();
-    tabletnode_impl_.reset();
+    LOG(INFO) << "shut down server";
+    rpc_server_->Stop();
     LOG(INFO) << "TabletNodeEntry stop done!";
 }
 

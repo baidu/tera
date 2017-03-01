@@ -70,11 +70,20 @@ extern tera::Counter row_read_delay;
 namespace tera {
 namespace io {
 
-TabletIO::TabletIO(const std::string& key_start, const std::string& key_end)
+std::ostream& operator << (std::ostream& o, const TabletIO& tablet_io) {
+    o << tablet_io.short_path_
+      << " [" << DebugString(tablet_io.start_key_)
+      << ", " << DebugString(tablet_io.end_key_) << "]";
+    return o;
+}
+
+TabletIO::TabletIO(const std::string& key_start, const std::string& key_end,
+                   const std::string& path)
     : async_writer_(NULL),
       scan_context_manager_(NULL),
       start_key_(key_start),
       end_key_(key_end),
+      short_path_(path),
       compact_status_(kTableNotCompact),
       status_(kNotInit),
       ref_count_(1), db_ref_count_(0), db_(NULL),
