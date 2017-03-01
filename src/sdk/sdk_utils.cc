@@ -941,9 +941,15 @@ bool ParseDelimiterFile(const string& filename, std::vector<string>* delims) {
     bool is_delim_error = false;
     for (size_t i = 1; i < delimiters.size(); i++) {
         if (delimiters[i] <= delimiters[i-1]) {
-            LOG(ERROR) << "delimiter error: line: " << i + 1
-                << ", [" << delimiters[i] << "]";
+            LOG(ERROR) << "line[" << i << "]" << " SHOULD less than line[" << i + 1
+                << "] (bitwise comparison, maybe LC_ALL=C if you use command sort(1))";
+            LOG(ERROR) << "line[" << i << "]: (" << delimiters[i-1] << ")";
+            LOG(ERROR) << "line[" << i + 1 << "]: (" << delimiters[i] << ")";
             is_delim_error = true;
+            // just print the 1st invalid input case,
+            // if print all invalid input,
+            //   it will print too many log to read/understand
+            break;
         }
     }
     if (is_delim_error) {
