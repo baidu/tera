@@ -2727,7 +2727,6 @@ void MasterImpl::UnloadTabletCallback(TabletPtr tablet, int32_t retry,
     // success
     if (!failed && (status == kTabletNodeOk || status == kKeyNotInRange)) {
         LOG(INFO) << "unload tablet success, " << tablet;
-        tablet_availability_->AddNotReadyTablet(tablet->GetPath());
         if (tablet->GetMergeParam() != NULL) {
             CHECK(tablet->GetStatus() == kTableUnLoading);
             MergeTabletUnloadCallback(tablet);
@@ -3723,6 +3722,7 @@ void MasterImpl::SplitTabletAsync(TabletPtr tablet) {
 
     LOG(INFO) << "SplitTabletAsync id: " << request->sequence_id() << ", "
         << tablet;
+    tablet_availability_->AddNotReadyTablet(tablet->GetPath());
     node_client.SplitTablet(request, response, done);
 }
 
@@ -3795,6 +3795,7 @@ void MasterImpl::SplitTabletCallback(TabletPtr tablet,
         LOG(ERROR) << "ts refused to split tablet: "
             << StatusCodeToString(status) << ", " << tablet
             << ", tablet status " << StatusCodeToString(tablet->GetStatus());
+        tablet_availability_->EraseNotReadyTablet(tablet->GetPath());
         return;
     }
 
@@ -4061,6 +4062,9 @@ void MasterImpl::MergeTabletAsync(TabletPtr tablet_p1, TabletPtr tablet_p2) {
         UnloadClosure* done2 =
             NewClosure(this, &MasterImpl::UnloadTabletCallback, tablet_p2,
                        FLAGS_tera_master_impl_retry_times);
+
+        tablet_availability_->AddNotReadyTablet(tablet_p1->GetPath());
+        tablet_availability_->AddNotReadyTablet(tablet_p2->GetPath());
         UnloadTabletAsync(tablet_p1, done1);
         UnloadTabletAsync(tablet_p2, done2);
     } else {
@@ -4243,6 +4247,7 @@ void MasterImpl::MergeTabletWriteMetaCallback(TabletPtr tablet_c,
         tablet_manager_->AddTablet(new_meta, TableSchema(), &tablet_c);
         DeleteTablet(tablet_p1);
     }
+    tablet_availability_->AddNotReadyTablet(tablet_c->GetPath());
     ProcessOffLineTablet(tablet_c);
     TryLoadTablet(tablet_c);
     delete request;
@@ -4882,7 +4887,10 @@ void MasterImpl::ScanMetaCallbackForSplit(TabletPtr tablet,
     first_meta.set_status(kTableOffLine);
     tablet_manager_->AddTablet(first_meta, TableSchema(), &first_tablet);
 
-    LOG(INFO) << "try load child tablets, \nfirst: " << first_meta.ShortDebugString()
+    tablet_availability_->AddNotReadyTablet(first_tablet->GetPath());
+    tablet_availability_->AddNotReadyTablet(second_tablet->GetPath());
+    LOG(INFO) << "split finish, " << tablet << ", try load child tablets, "
+        << "\nfirst: " << first_meta.ShortDebugString()
         << "\nsecond: " << second_meta.ShortDebugString();
     ProcessOffLineTablet(first_tablet);
     TryLoadTablet(first_tablet, server_addr);
@@ -5087,6 +5095,7 @@ void MasterImpl::TryMoveTablet(TabletPtr tablet, const std::string& server_addr,
             tabletnode_manager_->FindTabletNode(server_addr, &node)) {
             node->PlanToMoveIn();
         }
+        tablet_availability_->AddNotReadyTablet(tablet->GetPath());
         UnloadClosure* done =
             NewClosure(this, &MasterImpl::UnloadTabletCallback, tablet,
                        FLAGS_tera_master_impl_retry_times);
