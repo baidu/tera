@@ -14,6 +14,7 @@
 
 #include "db/filename.h"
 #include "db/table_cache.h"
+#include "common/thread.h"
 #include "io/io_utils.h"
 #include "io/utils_leveldb.h"
 #include "leveldb/cache.h"
@@ -198,21 +199,47 @@ void TabletNodeImpl::InitCacheSystem() {
 }
 
 bool TabletNodeImpl::Exit() {
-    thread_pool_.reset();
+    std::vector<io::TabletIO*> tablet_ios;
+    tablet_manager_->GetAllTablets(&tablet_ios);
 
-    std::vector<TabletMeta*> tablet_meta_list;
-    tablet_manager_->GetAllTabletMeta(&tablet_meta_list);
-    std::vector<TabletMeta*>::iterator it = tablet_meta_list.begin();
-    for (; it != tablet_meta_list.end(); ++it) {
-        TabletMeta*& tablet_meta = *it;
-        StatusCode status = kTabletNodeOk;
-        bool ret = UnloadTablet(tablet_meta->table_name(),
-            tablet_meta->key_range().key_start(),
-            tablet_meta->key_range().key_end(), &status);
-        LOG(INFO) << "unload tablet [" << tablet_meta->path() << "] return " << ret;
-        delete tablet_meta;
+    std::vector<common::Thread> unload_threads;
+    unload_threads.resize(tablet_ios.size());
+
+    Counter worker_count;
+    worker_count.Set(tablet_ios.size());
+
+    for (uint32_t i = 0; i < tablet_ios.size(); ++i) {
+        io::TabletIO* tablet_io = tablet_ios[i];
+        common::Thread& thread = unload_threads[i];
+        thread.Start(boost::bind(&TabletNodeImpl::UnloadTabletProc,
+                                 this, tablet_io, &worker_count));
+    }
+    int64_t print_ms_ = get_millis();
+    int64_t left = 0;
+    while ((left = worker_count.Get()) > 0) {
+        if (get_millis() - print_ms_ > 1000) {
+            LOG(INFO) << "[Exit] " << left << " tablets are still unloading ...";
+            print_ms_ = get_millis();
+        }
+        ThisThread::Sleep(100);
+    }
+    for (uint32_t i = 0; i < tablet_ios.size(); ++i) {
+        unload_threads[i].Join();
     }
     return true;
+}
+
+void TabletNodeImpl::UnloadTabletProc(io::TabletIO* tablet_io, Counter* worker_count) {
+    LOG(INFO) << "begin to unload tablet: " << *tablet_io;
+    StatusCode status;
+    if (!tablet_io->Unload(&status)) {
+        LOG(ERROR) << "fail to unload tablet: " << *tablet_io
+            << ", status: " << StatusCodeToString(status);
+    } else {
+        LOG(INFO) << "unload tablet success: " << *tablet_io;
+    }
+    tablet_io->DecRef();
+    worker_count->Dec();
 }
 
 void TabletNodeImpl::LoadTablet(const LoadTabletRequest* request,

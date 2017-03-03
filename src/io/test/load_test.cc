@@ -95,7 +95,7 @@ TEST_F(TabletIOTest, General) {
     std::string key_end = "";
     StatusCode status;
 
-    TabletIO tablet(key_start, key_end);
+    TabletIO tablet(key_start, key_end, tablet_path);
     leveldb::MockEnv* env = (leveldb::MockEnv*)LeveldbMockEnv();
     env->SetPrefix(mock_env_prefix);
     tablet.SetMockEnv(env);
@@ -136,7 +136,7 @@ TEST_F(TabletIOTest, CurrentLost) {
     std::string key_end = "";
     StatusCode status;
 
-    TabletIO tablet(key_start, key_end);
+    TabletIO tablet(key_start, key_end, tablet_path);
     leveldb::MockEnv* env = (leveldb::MockEnv*)LeveldbMockEnv();
     env->SetPrefix(mock_env_prefix);
     env->SetGetChildrenCallback(DropCurrent);
@@ -167,7 +167,7 @@ TEST_F(TabletIOTest, CurrentReadFailed) {
     std::string key_end = "";
     StatusCode status;
 
-    TabletIO tablet(key_start, key_end);
+    TabletIO tablet(key_start, key_end, tablet_path);
     leveldb::MockEnv* env = (leveldb::MockEnv*)LeveldbMockEnv();
     env->SetPrefix(mock_env_prefix);
     env->SetNewSequentialFileFailedCallback(CannotReadCurrent);
@@ -204,7 +204,7 @@ TEST_F(TabletIOTest, CurrentCorrupted) {
     std::string key_end = "";
     StatusCode status;
 
-    TabletIO tablet(key_start, key_end);
+    TabletIO tablet(key_start, key_end, tablet_path);
     leveldb::MockEnv* env = (leveldb::MockEnv*)LeveldbMockEnv();
     env->SetPrefix(mock_env_prefix);
 
@@ -242,7 +242,7 @@ TEST_F(TabletIOTest, ManifestLost) {
     std::string key_end = "";
     StatusCode status;
 
-    TabletIO tablet(key_start, key_end);
+    TabletIO tablet(key_start, key_end, tablet_path);
     leveldb::MockEnv* env = (leveldb::MockEnv*)LeveldbMockEnv();
     env->SetPrefix(mock_env_prefix);
 
@@ -273,7 +273,7 @@ TEST_F(TabletIOTest, ManifestReadFailed) {
     std::string key_end = "";
     StatusCode status;
 
-    TabletIO tablet(key_start, key_end);
+    TabletIO tablet(key_start, key_end, tablet_path);
     leveldb::MockEnv* env = (leveldb::MockEnv*)LeveldbMockEnv();
     env->SetPrefix(mock_env_prefix);
     env->SetNewSequentialFileFailedCallback(CannotReadManifest);
@@ -310,7 +310,7 @@ TEST_F(TabletIOTest, ManifestCorrupted) {
     std::string key_end = "";
     StatusCode status;
 
-    TabletIO tablet(key_start, key_end);
+    TabletIO tablet(key_start, key_end, tablet_path);
     leveldb::MockEnv* env = (leveldb::MockEnv*)LeveldbMockEnv();
     env->SetPrefix(mock_env_prefix);
 
@@ -341,7 +341,7 @@ TEST_F(TabletIOTest, SstLost) {
     std::string key_end = "";
     StatusCode status;
 
-    TabletIO tablet(key_start, key_end);
+    TabletIO tablet(key_start, key_end, tablet_path);
     leveldb::MockEnv* env = (leveldb::MockEnv*)LeveldbMockEnv();
     env->SetPrefix(mock_env_prefix);
 
@@ -364,7 +364,7 @@ TEST_F(TabletIOTest, SstLostButIgnore) {
     std::string key_end = "";
     StatusCode status;
 
-    TabletIO tablet(key_start, key_end);
+    TabletIO tablet(key_start, key_end, tablet_path);
     leveldb::MockEnv* env = (leveldb::MockEnv*)LeveldbMockEnv();
 
     std::string fname = mock_env_prefix + tablet_path + "/0/__oops";

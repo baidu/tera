@@ -181,6 +181,9 @@ private:
                               const std::set<std::string> active_tablets);
 
     bool ApplySchema(const UpdateRequest* request);
+
+    void UnloadTabletProc(io::TabletIO* tablet_io, Counter* worker_count);
+
 private:
     mutable Mutex status_mutex_;
     TabletNodeStatus status_;

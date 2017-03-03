@@ -90,7 +90,7 @@ TEST_F(TabletIOTest, General) {
     std::string key_end = "";
     StatusCode status;
 
-    TabletIO tablet(key_start, key_end);
+    TabletIO tablet(key_start, key_end, tablet_path);
     EXPECT_TRUE(tablet.Load(TableSchema(), tablet_path, std::vector<uint64_t>(),
                             empty_snaphsots_, empty_rollback_, NULL, NULL, NULL, &status));
 
@@ -115,7 +115,7 @@ TEST_F(TabletIOTest, Split) {
     StatusCode status;
     uint64_t size = 0;
 
-    TabletIO tablet(key_start, key_end);
+    TabletIO tablet(key_start, key_end, tablet_path);
     EXPECT_TRUE(tablet.Load(TableSchema(), tablet_path, std::vector<uint64_t>(),
                             empty_snaphsots_, empty_rollback_, NULL, NULL, NULL, &status));
 
@@ -136,7 +136,7 @@ TEST_F(TabletIOTest, Split) {
     // open tablet for other key scope
     key_start = "5000";
     key_end = "8000";
-    TabletIO other_tablet(key_start, key_end);
+    TabletIO other_tablet(key_start, key_end, tablet_path);
     EXPECT_TRUE(other_tablet.Load(TableSchema(), tablet_path, std::vector<uint64_t>(),
                             empty_snaphsots_, empty_rollback_, NULL, NULL, NULL, &status));
     other_tablet.GetDataSize(&size, NULL, &status);
@@ -150,7 +150,7 @@ TEST_F(TabletIOTest, Split) {
 
     key_start = "";
     key_end = "5000";
-    TabletIO l_tablet(key_start, key_end);
+    TabletIO l_tablet(key_start, key_end, tablet_path);
     EXPECT_TRUE(l_tablet.Load(TableSchema(), tablet_path, std::vector<uint64_t>(),
                             empty_snaphsots_, empty_rollback_, NULL, NULL, NULL, &status));
     l_tablet.GetDataSize(&size, NULL, &status);
@@ -160,7 +160,7 @@ TEST_F(TabletIOTest, Split) {
 
     key_start = "8000";
     key_end = "";
-    TabletIO r_tablet(key_start, key_end);
+    TabletIO r_tablet(key_start, key_end, tablet_path);
     EXPECT_TRUE(r_tablet.Load(TableSchema(), tablet_path, std::vector<uint64_t>(),
                             empty_snaphsots_, empty_rollback_, NULL, NULL, NULL, &status));
     r_tablet.GetDataSize(&size, NULL, &status);
@@ -177,7 +177,7 @@ TEST_F(TabletIOTest, SplitAndCheckSize) {
     StatusCode status;
     uint64_t size = 0;
 
-    TabletIO tablet(key_start, key_end);
+    TabletIO tablet(key_start, key_end, tablet_path);
     EXPECT_TRUE(tablet.Load(TableSchema(), tablet_path, std::vector<uint64_t>(),
                             empty_snaphsots_, empty_rollback_, NULL, NULL, NULL, &status));
 
@@ -197,7 +197,7 @@ TEST_F(TabletIOTest, SplitAndCheckSize) {
     EXPECT_TRUE(tablet.Unload());
 
     // open from split key to check scope size
-    TabletIO l_tablet(key_start, split_key);
+    TabletIO l_tablet(key_start, split_key, tablet_path);
     EXPECT_TRUE(l_tablet.Load(TableSchema(), tablet_path, std::vector<uint64_t>(),
                             empty_snaphsots_, empty_rollback_, NULL, NULL, NULL, &status));
     l_tablet.GetDataSize(&size, NULL, &status);
@@ -205,7 +205,7 @@ TEST_F(TabletIOTest, SplitAndCheckSize) {
         << "]: size = " << size;
     EXPECT_TRUE(l_tablet.Unload());
 
-    TabletIO r_tablet(split_key, key_end);
+    TabletIO r_tablet(split_key, key_end, tablet_path);
     EXPECT_TRUE(r_tablet.Load(TableSchema(), tablet_path, std::vector<uint64_t>(),
                             empty_snaphsots_, empty_rollback_, NULL, NULL, NULL, &status));
     r_tablet.GetDataSize(&size, NULL, &status);
@@ -222,7 +222,7 @@ TEST_F(TabletIOTest, OverWrite) {
     std::string key_end = "";
     StatusCode status;
 
-    TabletIO tablet(key_start, key_end);
+    TabletIO tablet(key_start, key_end, tablet_path);
     EXPECT_TRUE(tablet.Load(TableSchema(), tablet_path, std::vector<uint64_t>(),
                             empty_snaphsots_, empty_rollback_, NULL, NULL, NULL, &status));
 
@@ -248,7 +248,7 @@ TEST_F(TabletIOTest, Compact) {
     std::string key_end = "";
     StatusCode status;
 
-    TabletIO tablet(key_start, key_end);
+    TabletIO tablet(key_start, key_end, tablet_path);
     EXPECT_TRUE(tablet.Load(TableSchema(), tablet_path, std::vector<uint64_t>(),
                             empty_snaphsots_, empty_rollback_, NULL, NULL, NULL, &status));
 
@@ -264,7 +264,7 @@ TEST_F(TabletIOTest, Compact) {
     // open another scope
     std::string new_key_start = StringFormat("%011llu", 5); // NumberToString(500);
     std::string new_key_end = StringFormat("%011llu", 50); // NumberToString(800);
-    TabletIO new_tablet(new_key_start, new_key_end);
+    TabletIO new_tablet(new_key_start, new_key_end, tablet_path);
     EXPECT_TRUE(new_tablet.Load(TableSchema(), tablet_path, std::vector<uint64_t>(),
                             empty_snaphsots_, empty_rollback_, NULL, NULL, NULL, &status));
     EXPECT_TRUE(new_tablet.Compact(0, &status));
@@ -294,7 +294,7 @@ TEST_F(TabletIOTest, LowLevelScan) {
     std::string key_end = "";
     StatusCode status;
 
-    TabletIO tablet(key_start, key_end);
+    TabletIO tablet(key_start, key_end, tablet_path);
     EXPECT_TRUE(tablet.Load(GetTableSchema(), tablet_path, std::vector<uint64_t>(),
                             empty_snaphsots_, empty_rollback_, NULL, NULL, NULL, &status));
 
@@ -377,7 +377,7 @@ TEST_F(TabletIOTest, SplitToSubTable) {
     StatusCode status;
     uint64_t size = 0;
 
-    TabletIO tablet(key_start, key_end);
+    TabletIO tablet(key_start, key_end, tablet_path);
     EXPECT_TRUE(tablet.Load(TableSchema(), tablet_path, std::vector<uint64_t>(),
                             empty_snaphsots_, empty_rollback_, NULL, NULL, NULL, &status));
 
@@ -413,7 +413,7 @@ TEST_F(TabletIOTest, SplitToSubTable) {
     parent_tablet.push_back(1);
 
     // 1. load sub-table 1
-    TabletIO l_tablet(key_start, split_key);
+    TabletIO l_tablet(key_start, split_key, split_path_1);
     EXPECT_TRUE(l_tablet.Load(TableSchema(), split_path_1, parent_tablet,
                             empty_snaphsots_, empty_rollback_, NULL, NULL, NULL, &status));
     l_tablet.GetDataSize(&size, NULL, &status);
@@ -431,7 +431,7 @@ TEST_F(TabletIOTest, SplitToSubTable) {
     EXPECT_TRUE(l_tablet.Unload());
 
     // 2. load sub-table 2
-    TabletIO r_tablet(split_key, key_end);
+    TabletIO r_tablet(split_key, key_end, split_path_2);
     EXPECT_TRUE(r_tablet.Load(TableSchema(), split_path_2, parent_tablet,
                             empty_snaphsots_, empty_rollback_, NULL, NULL, NULL, &status));
     r_tablet.GetDataSize(&size, NULL, &status);
