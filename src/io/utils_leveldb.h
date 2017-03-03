@@ -13,10 +13,15 @@
 namespace tera {
 namespace io {
 
-void InitDfsEnv();
+void InitBaseEnv();
+
+void InitCacheEnv();
 
 // return the base env leveldb used (dfs/local), singleton
 leveldb::Env* LeveldbBaseEnv();
+
+// return the cache env leveldb used (dfs/local), singleton
+leveldb::Env* LeveldbCacheEnv();
 
 // return the mem env leveldb used, singleton
 leveldb::Env* LeveldbMemEnv();
@@ -34,7 +39,7 @@ bool MoveEnvDirToTrash(const std::string& subdir);
 
 void CleanTrashDir();
 
-bool DeleteEnvDir(const std::string& subdir);
+bool DeleteEnvDir(const std::string& subdir, leveldb::Env* env);
 
 } // namespace io
 } // namespace tera

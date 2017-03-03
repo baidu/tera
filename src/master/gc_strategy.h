@@ -9,6 +9,10 @@
 #include "types.h"
 #include "utils/counter.h"
 
+namespace leveldb {
+class Env;
+}
+
 namespace tera {
 namespace master {
 
@@ -35,7 +39,9 @@ public:
 
 class BatchGcStrategy : public GcStrategy {
 public:
-    BatchGcStrategy (boost::shared_ptr<TabletManager> tablet_manager);
+    BatchGcStrategy (boost::shared_ptr<TabletManager> tablet_manager,
+                     const std::string& path_prefix,
+                     leveldb::Env* env);
     virtual ~BatchGcStrategy() {}
 
     // get file system image before query
@@ -55,6 +61,8 @@ private:
     void DeleteObsoleteFiles();
 
     boost::shared_ptr<TabletManager> tablet_manager_;
+    std::string path_prefix_;
+    leveldb::Env* env_;
 
     // tabletnode garbage clean
     // first: live tablet, second: dead tablet
@@ -70,7 +78,9 @@ private:
 
 class IncrementalGcStrategy : public GcStrategy{
 public:
-    IncrementalGcStrategy(boost::shared_ptr<TabletManager> tablet_manager);
+    IncrementalGcStrategy(boost::shared_ptr<TabletManager> tablet_manager,
+                          const std::string& path_prefix,
+                          leveldb::Env* env);
     virtual ~IncrementalGcStrategy() {}
 
     // get dead tablets
@@ -113,11 +123,57 @@ private:
     typedef std::map<std::string, TabletFiles> TableFiles; // table_name -> files
     mutable Mutex gc_mutex_;
     boost::shared_ptr<TabletManager> tablet_manager_;
+    std::string path_prefix_;
+    leveldb::Env* env_;
     int64_t last_gc_time_;
     TableFiles dead_tablet_files_;
     TableFiles live_tablet_files_;
     int64_t max_ts_;
     tera::Counter list_count_;
+};
+
+class GcStrategyWrapper {
+public:
+    GcStrategyWrapper() {}
+
+    void AddGcStrategy(GcStrategy* gc) {
+        gc_list_.push_back(gc);
+    }
+
+    virtual ~GcStrategyWrapper() {
+        for (uint32_t i = 0; i < gc_list_.size(); i++) {
+            delete gc_list_[i];
+        }
+    }
+
+    virtual bool PreQuery () {
+        bool need_gc = false;
+        for (uint32_t i = 0; i < gc_list_.size(); i++) {
+            need_gc |= gc_list_[i]->PreQuery();
+        }
+        return need_gc;
+    }
+
+    virtual void ProcessQueryCallbackForGc(QueryResponse* response) {
+        for (uint32_t i = 0; i < gc_list_.size(); i++) {
+            gc_list_[i]->ProcessQueryCallbackForGc(response);
+        }
+    }
+
+    virtual void PostQuery () {
+        for (uint32_t i = 0; i < gc_list_.size(); i++) {
+            gc_list_[i]->PostQuery();
+        }
+    }
+
+    virtual void Clear(std::string tablename) {
+        for (uint32_t i = 0; i < gc_list_.size(); i++) {
+            gc_list_[i]->Clear(tablename);
+        }
+    }
+
+private:
+    std::vector<GcStrategy*> gc_list_;
 };
 
 } // namespace master

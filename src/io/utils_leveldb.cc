@@ -32,11 +32,17 @@ DECLARE_string(tera_tabletnode_path_prefix);
 DECLARE_string(tera_dfs_so_path);
 DECLARE_string(tera_dfs_conf);
 
+DECLARE_string(tera_cache_env_type);
+DECLARE_string(tera_cache_dfs_so_path);
+DECLARE_string(tera_cache_dfs_conf);
+
 namespace tera {
 namespace io {
 
-void InitDfsEnv() {
-    if (FLAGS_tera_leveldb_env_dfs_type == "nfs") {
+void InitBaseEnv() {
+    if (FLAGS_tera_leveldb_env_type == "local") {
+        // do nothing
+    } else if (FLAGS_tera_leveldb_env_dfs_type == "nfs") {
         if (access(FLAGS_tera_leveldb_env_nfs_conf_path.c_str(), R_OK) == 0) {
             LOG(INFO) << "init nfs system: use configure file "
                 << FLAGS_tera_leveldb_env_nfs_conf_path;
@@ -58,11 +64,31 @@ void InitDfsEnv() {
     }
 }
 
+static leveldb::Env* cache_dfs_env = NULL;
+
+void InitCacheEnv() {
+    if (FLAGS_tera_cache_env_type != "local") {
+        LOG(INFO) << "Init cache dfs system: " << FLAGS_tera_cache_dfs_so_path << "("
+                  << FLAGS_tera_cache_dfs_conf << ")";
+        leveldb::Dfs* dfs = leveldb::Dfs::NewDfs(FLAGS_tera_cache_dfs_so_path,
+                                                 FLAGS_tera_cache_dfs_conf);
+        cache_dfs_env = leveldb::NewDfsEnv(dfs);
+    }
+}
+
 leveldb::Env* LeveldbBaseEnv() {
     if (FLAGS_tera_leveldb_env_type == "local") {
         return leveldb::Env::Default();
     } else {
         return leveldb::EnvDfs();
+    }
+}
+
+leveldb::Env* LeveldbCacheEnv() {
+    if (FLAGS_tera_cache_env_type == "local") {
+        return leveldb::Env::Default();
+    } else {
+        return cache_dfs_env;
     }
 }
 
@@ -85,8 +111,9 @@ leveldb::Env* LeveldbFlashEnv() {
     if (flash_env) {
         return flash_env;
     }
+    leveldb::Env* cache_env = LeveldbCacheEnv();
     leveldb::Env* base_env = LeveldbBaseEnv();
-    flash_env = leveldb::NewFlashEnv(base_env);
+    flash_env = leveldb::NewFlashEnv(base_env, cache_env);
     return flash_env;
 }
 
@@ -151,15 +178,14 @@ void CleanTrashDir() {
     }
     for (size_t i = 0; i < children.size(); ++i) {
         std::string c_dir = trash_dir + '/' + children[i];
-        DeleteEnvDir(c_dir);
+        DeleteEnvDir(c_dir, env);
     }
     return;
 }
 
-bool DeleteEnvDir(const std::string& dir) {
+bool DeleteEnvDir(const std::string& dir, leveldb::Env* env) {
     static bool is_support_rmdir = true;
 
-    leveldb::Env* env = LeveldbBaseEnv();
     leveldb::Status s;
     if (env->DeleteFile(dir).ok()) {
         LOG(INFO) << "[gc] delete: " << dir;
@@ -185,7 +211,7 @@ bool DeleteEnvDir(const std::string& dir) {
     }
     for (size_t i = 0; i < children.size(); ++i) {
         std::string c_dir = dir + '/' + children[i];
-        DeleteEnvDir(c_dir);
+        DeleteEnvDir(c_dir, env);
     }
     if (env->DeleteDir(dir).ok()) {
         LOG(INFO) << "[gc] delete: " << dir;

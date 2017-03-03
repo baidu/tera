@@ -10,6 +10,7 @@
 #include "glog/logging.h"
 
 #include "io/io_utils.h"
+#include "leveldb/env.h"
 #include "proto/proto_helper.h"
 
 DECLARE_int32(tera_io_retry_period);

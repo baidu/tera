@@ -83,9 +83,10 @@ DECLARE_bool(tera_master_stat_table_enabled);
 DECLARE_int64(tera_master_stat_table_splitsize);
 
 DECLARE_int32(tera_master_gc_period);
+DECLARE_string(tera_cache_env_type);
 
 DECLARE_string(tera_tabletnode_path_prefix);
-DECLARE_string(tera_leveldb_env_type);
+DECLARE_string(tera_tabletnode_cache_paths);
 
 DECLARE_string(tera_zk_root_path);
 DECLARE_string(tera_zk_addr_list);
@@ -141,19 +142,40 @@ MasterImpl::MasterImpl()
     }
     tabletnode::TabletNodeClient::SetThreadPool(thread_pool_.get());
 
-    if (FLAGS_tera_leveldb_env_type != "local") {
-        io::InitDfsEnv();
-    }
 
+    GcStrategyWrapper* gc_strategy = new GcStrategyWrapper;
+    io::InitBaseEnv();
     if (FLAGS_tera_master_gc_strategy == "default") {
         LOG(INFO) << "[gc] gc strategy is BatchGcStrategy";
-        gc_strategy_ = boost::shared_ptr<GcStrategy>(new BatchGcStrategy(tablet_manager_));
+        gc_strategy->AddGcStrategy(new BatchGcStrategy(tablet_manager_,
+                                                       FLAGS_tera_tabletnode_path_prefix,
+                                                       io::LeveldbBaseEnv()));
     } else if (FLAGS_tera_master_gc_strategy == "incremental") {
         LOG(INFO) << "[gc] gc strategy is IncrementalGcStrategy";
-        gc_strategy_ = boost::shared_ptr<GcStrategy>(new IncrementalGcStrategy(tablet_manager_));
+        gc_strategy->AddGcStrategy(new IncrementalGcStrategy(tablet_manager_,
+                                                             FLAGS_tera_tabletnode_path_prefix,
+                                                             io::LeveldbBaseEnv()));
     } else {
-        LOG(ERROR) << "Unknown gc strategy";
+        LOG(FATAL) << "Unknown gc strategy";
     }
+
+    if (FLAGS_tera_cache_env_type != "local") {
+        io::InitCacheEnv();
+        std::string path_prefix = FLAGS_tera_tabletnode_cache_paths + "/" + FLAGS_tera_tabletnode_path_prefix;
+        if (FLAGS_tera_master_gc_strategy == "default") {
+            LOG(INFO) << "[gc] cache gc strategy is BatchGcStrategy";
+            gc_strategy->AddGcStrategy(new BatchGcStrategy(tablet_manager_, path_prefix,
+                                                           io::LeveldbCacheEnv()));
+        } else if (FLAGS_tera_master_gc_strategy == "incremental") {
+            LOG(INFO) << "[gc] cache gc strategy is IncrementalGcStrategy";
+            gc_strategy->AddGcStrategy(new IncrementalGcStrategy(tablet_manager_, path_prefix,
+                                                                 io::LeveldbCacheEnv()));
+        } else {
+            LOG(FATAL) << "Unknown gc strategy";
+        }
+    }
+
+    gc_strategy_.reset((GcStrategy*)gc_strategy);
 }
 
 MasterImpl::~MasterImpl() {

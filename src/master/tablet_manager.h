@@ -25,6 +25,10 @@
 #include "utils/counter.h"
 #include "utils/fragment.h"
 
+namespace leveldb {
+class Env;
+}
+
 namespace tera {
 class UpdateTableResponse;
 namespace master {
@@ -202,7 +206,9 @@ public:
     void ToMeta(TableMeta* meta);
     uint64_t GetNextTabletNo();
     bool GetTabletsForGc(std::set<uint64_t>* live_tablets,
-                         std::set<uint64_t>* dead_tablets);
+                         std::set<uint64_t>* dead_tablets,
+                         leveldb::Env* env,
+                         const std::string& path_prefix);
     void RefreshCounter();
     int64_t GetTabletsCount();
     bool GetSchemaIsSyncing();
