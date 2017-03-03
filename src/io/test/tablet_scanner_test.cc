@@ -219,7 +219,7 @@ TEST_F(TabletScannerTest, General) {
     std::string key_end = "";
     StatusCode status;
 
-    TabletIO tablet(key_start, key_end);
+    TabletIO tablet(key_start, key_end, tablet_path);
     EXPECT_TRUE(tablet.Load(GetTableSchema(), tablet_path, std::vector<uint64_t>(),
                             empty_snaphsots_, empty_rollback_, NULL, NULL, NULL, &status));
 
@@ -240,7 +240,7 @@ TEST_F(TabletScannerTest, CacheEvict) {
     std::string key_end = "";
     StatusCode status;
 
-    TabletIO tablet(key_start, key_end);
+    TabletIO tablet(key_start, key_end, tablet_path);
     EXPECT_TRUE(tablet.Load(GetTableSchema(), tablet_path, std::vector<uint64_t>(),
                             empty_snaphsots_, empty_rollback_, NULL, NULL, NULL, &status));
 
