@@ -34,22 +34,41 @@ void TabletAvailability::AddNotReadyTablet(const std::string& path) {
     int64_t ts = get_micros();
     tablets_.insert(std::pair<std::string, int64_t>(path, ts));
 
+    if (tablets_hist_cost_[path].start_ts > 0) {
+        VLOG(10) << "notready again " << path;
+        return;
+    }
+
     tablets_hist_cost_[path].start_ts = ts;
     tablets_hist_cost_[path].notready_num++;
+    VLOG(10) << "addnotready " << path
+        << ", total_cost " << tablets_hist_cost_[path].total
+        << ", start_ts " << tablets_hist_cost_[path].start_ts
+        << ", notready " << tablets_hist_cost_[path].notready_num
+        << ", reready " << tablets_hist_cost_[path].reready_num;
 }
 
 void TabletAvailability::EraseNotReadyTablet(const std::string& path) {
     MutexLock lock(&mutex_);
     tablets_.erase(path);
 
+    if (tablets_hist_cost_.find(path) == tablets_hist_cost_.end() ||
+        tablets_hist_cost_[path].start_ts == 0) {
+        VLOG(10) << "reready again " << path;
+        return;
+    }
+
     int64_t ts = get_micros();
     if (tablets_hist_cost_[path].start_ts > 0) {
         tablets_hist_cost_[path].total += ts - tablets_hist_cost_[path].start_ts;
-    } else {
-        tablets_hist_cost_[path].total += ts - start_ts_;
     }
     tablets_hist_cost_[path].start_ts = 0;
     tablets_hist_cost_[path].reready_num++;
+    VLOG(10) << "delnotready " << path
+        << ", total_cost " << tablets_hist_cost_[path].total
+        << ", start_ts " << tablets_hist_cost_[path].start_ts
+        << ", notready " << tablets_hist_cost_[path].notready_num
+        << ", reready " << tablets_hist_cost_[path].reready_num;
 }
 
 static std::string GetNameFromPath(const std::string& path) {
@@ -113,7 +132,6 @@ void TabletAvailability::LogAvailability() {
 
     int64_t total_time = 0, all_time = start - start_ts_;
     start_ts_ = start;
-    int64_t nr_notready_tablets = tablets_hist_cost_.size();
     int64_t total_notready = 0, total_reready = 0;
     std::map<std::string, TimeStatistic>::iterator stat_it;
     for (stat_it = tablets_hist_cost_.begin();
@@ -136,6 +154,7 @@ void TabletAvailability::LogAvailability() {
             tablets_hist_cost_.erase(stat_it++);
         }
     }
+    int64_t nr_notready_tablets = tablets_hist_cost_.size();
     LOG(INFO) << "[availability][tablet_staticstic] time_interval: " << all_time / 1000
       << ", notready_time: " << total_time / 1000
       << ", total_time: " << (all_time * all_tablets) / 1000
