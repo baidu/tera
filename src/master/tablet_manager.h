@@ -202,7 +202,8 @@ public:
     void ToMeta(TableMeta* meta);
     uint64_t GetNextTabletNo();
     bool GetTabletsForGc(std::set<uint64_t>* live_tablets,
-                         std::set<uint64_t>* dead_tablets);
+                         std::set<uint64_t>* dead_tablets,
+                         bool ignore_not_ready);
     void RefreshCounter();
     int64_t GetTabletsCount();
     bool GetSchemaIsSyncing();

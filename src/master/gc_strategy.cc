@@ -38,7 +38,7 @@ bool BatchGcStrategy::PreQuery () {
             continue;
         }
         GcTabletSet& tablet_set = gc_tablets_[tables[i]->GetTableName()];
-        if (!tables[i]->GetTabletsForGc(&tablet_set.first, &tablet_set.second)) {
+        if (!tables[i]->GetTabletsForGc(&tablet_set.first, &tablet_set.second, false)) {
             // tablet not ready or there is none dead tablets
             gc_tablets_.erase(tables[i]->GetTableName());
             continue;
@@ -241,7 +241,7 @@ bool IncrementalGcStrategy::PreQuery () {
         live_tablet_files_.insert(std::make_pair(table_name, tablet_files));
 
         std::set<uint64_t> live_tablets, dead_tablets;
-        tables[i]->GetTabletsForGc(&live_tablets, &dead_tablets);
+        tables[i]->GetTabletsForGc(&live_tablets, &dead_tablets, true);
         std::set<uint64_t>::iterator it;
         // update dead tablets
         for (it = dead_tablets.begin(); it != dead_tablets.end(); ++it) {
