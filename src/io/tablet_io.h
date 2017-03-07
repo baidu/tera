@@ -66,8 +66,11 @@ public:
     typedef boost::function<void (std::vector<const RowMutationSequence*>*,
                                   std::vector<StatusCode>*)> WriteCallback;
 
+    friend std::ostream& operator << (std::ostream& o, const TabletIO& tablet_io);
+
 public:
-    TabletIO(const std::string& key_start, const std::string& key_end);
+    TabletIO(const std::string& key_start, const std::string& key_end,
+             const std::string& path);
     virtual ~TabletIO();
 
     // for testing
@@ -249,6 +252,7 @@ private:
     std::string tablet_path_;
     const std::string start_key_;
     const std::string end_key_;
+    const std::string short_path_;
     std::string raw_start_key_;
     std::string raw_end_key_;
     CompactStatus compact_status_;

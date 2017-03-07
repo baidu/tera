@@ -40,7 +40,7 @@ bool TabletManager::AddTablet(const std::string& table_name,
         SetStatusCode(kTableExist, status);
         return false;
     }
-    *tablet_io = tablet_list_[tablet_range] = new io::TabletIO(key_start, key_end);
+    *tablet_io = tablet_list_[tablet_range] = new io::TabletIO(key_start, key_end, table_path);
     (*tablet_io)->AddRef();
     return true;
 }
