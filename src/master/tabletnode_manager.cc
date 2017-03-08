@@ -22,6 +22,8 @@ TabletNode::TabletNode() : state_(kOffLine),
     update_time_(0), query_fail_count_(0), onload_count_(0),
     onsplit_count_(0), plan_move_in_count_(0) {
     info_.set_addr("");
+    info_.set_status_m(NodeStateToString(state_));
+    info_.set_timestamp(get_micros());
 }
 
 TabletNode::TabletNode(const std::string& addr, const std::string& uuid)
@@ -30,6 +32,8 @@ TabletNode::TabletNode(const std::string& addr, const std::string& uuid)
       update_time_(0), query_fail_count_(0), onload_count_(0),
       onsplit_count_(0), plan_move_in_count_(0) {
     info_.set_addr(addr);
+    info_.set_status_m(NodeStateToString(state_));
+    info_.set_timestamp(get_micros());
 }
 
 TabletNode::TabletNode(const TabletNode& t) {
