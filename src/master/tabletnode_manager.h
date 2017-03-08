@@ -128,7 +128,7 @@ public:
     explicit TabletNodeManager(MasterImpl* master_impl);
     ~TabletNodeManager();
 
-    void AddTabletNode(const std::string& addr, const std::string& uuid);
+    TabletNodePtr AddTabletNode(const std::string& addr, const std::string& uuid);
     void DelTabletNode(const std::string& addr);
     void UpdateTabletNode(const std::string& addr, const TabletNode& info);
     bool FindTabletNode(const std::string& addr, TabletNodePtr* info);
