@@ -2052,96 +2052,38 @@ void MasterImpl::AddTabletNode(const std::string& tabletnode_addr,
         }
     }
 
-    tabletnode_manager_->AddTabletNode(tabletnode_addr, tabletnode_uuid);
-    QueryClosure* done =
-        NewClosure(this, &MasterImpl::TabletNodeRecoveryCallback, tabletnode_addr);
-    QueryTabletNodeAsync(tabletnode_addr,
-                         FLAGS_tera_master_collect_info_timeout, false, done);
-}
-
-void MasterImpl::TabletNodeRecoveryCallback(std::string addr,
-                                            QueryRequest* request,
-                                            QueryResponse* response,
-                                            bool failed, int error_code) {
-    TabletNodePtr node;
-    if (!tabletnode_manager_->FindTabletNode(addr, &node)) {
-        LOG(WARNING) << "fail to query: server down, id: "
-            << request->sequence_id() << ", server: " << addr;
-        delete request;
-        delete response;
-        return;
-    }
-
-    if (failed || response->status() != kTabletNodeOk) {
-        if (failed) {
-            LOG(WARNING) << "fail to query: "
-                << sofa::pbrpc::RpcErrorCodeToString(error_code)
-                << ", id: " << request->sequence_id() << ", server: " << addr;
-        } else {
-            LOG(WARNING) << "fail to query: "
-                << StatusCodeToString(response->status())
-                << ", id: " << request->sequence_id() << ", server: " << addr;
-        }
-        int32_t fail_count = node->IncQueryFailCount();
-        if (fail_count >= FLAGS_tera_master_collect_info_retry_times) {
-            LOG(ERROR) << kSms << "fail to query " << addr
-                << " for " << fail_count << " times";
-            TryKickTabletNode(addr);
-        } else {
-            ThreadPool::Task task =
-                boost::bind(&MasterImpl::RetryQueryNewTabletNode, this, addr);
-            thread_pool_->DelayTask(FLAGS_tera_master_collect_info_retry_period, task);
-        }
-        delete request;
-        delete response;
-        return;
-    }
-    node->ResetQueryFailCount();
-
-    // New tabletnode should not have any tablet.
-    uint32_t meta_num = response->tabletmeta_list().meta_size();
-    if (meta_num > 0) {
-        LOG(WARNING) << "new tabletnode " << addr << " has " << meta_num << " tablets";
-        TryKickTabletNode(node->GetAddr());
-        delete request;
-        delete response;
-        return;
-    }
+    TabletNodePtr node = tabletnode_manager_->AddTabletNode(tabletnode_addr, tabletnode_uuid);
 
     // update tabletnode info
     timeval update_time;
     gettimeofday(&update_time, NULL);
     TabletNode state;
-    state.addr_ = addr;
-    state.report_status_ = response->tabletnode_info().status_t();
-    state.info_ = response->tabletnode_info();
-    state.info_.set_addr(addr);
-    state.load_ = response->tabletnode_info().load();
+    state.addr_ = tabletnode_addr;
+    state.report_status_ = kTabletNodeReady;
+    state.info_.set_addr(tabletnode_addr);
     state.data_size_ = 0;
     state.qps_ = 0;
     state.update_time_ = update_time.tv_sec * 1000 + update_time.tv_usec / 1000;
 
-    tabletnode_manager_->UpdateTabletNode(addr, state);
+    tabletnode_manager_->UpdateTabletNode(tabletnode_addr, state);
     NodeState old_state;
     node->SetState(kReady, &old_state);
 
-    delete request;
-    delete response;
 
     // If all tabletnodes restart in one zk callback,
     // master will not enter restore/wait state;
     // meta table must be scheduled to load from here.
     TabletPtr meta_tablet;
     if (tablet_manager_->FindTablet(FLAGS_tera_master_meta_table_name, "",
-                                     &meta_tablet)
+                                    &meta_tablet)
         && meta_tablet->GetStatus() == kTableOffLine) {
-        LOG(INFO) << "try load meta tablet on new ts: " << addr;
+        LOG(INFO) << "try load meta tablet on new ts: " << tabletnode_addr;
         TryLoadTablet(meta_tablet);
     }
 
     // load offline tablets
     std::vector<TabletPtr> tablet_list;
-    tablet_manager_->FindTablet(addr,
+    tablet_manager_->FindTablet(tabletnode_addr,
                                 &tablet_list,
                                 true);  // need disabled table/tablets
     std::vector<TabletPtr>::iterator it = tablet_list.begin();
@@ -2152,17 +2094,11 @@ void MasterImpl::TabletNodeRecoveryCallback(std::string addr,
         }
         if (tablet->GetStatus() == kTableOffLine) {
             LOG(INFO) << "try load, " << tablet;
-            TryLoadTablet(tablet, addr);
+            TryLoadTablet(tablet, tabletnode_addr);
         }
     }
 
     TryLeaveSafeMode();
-}
-
-void MasterImpl::RetryQueryNewTabletNode(std::string addr) {
-    QueryClosure* done =
-        NewClosure(this, &MasterImpl::TabletNodeRecoveryCallback, addr);
-    QueryTabletNodeAsync(addr, FLAGS_tera_master_collect_info_timeout, false, done);
 }
 
 void MasterImpl::DeleteTabletNode(const std::string& tabletnode_addr) {
