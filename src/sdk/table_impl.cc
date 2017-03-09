@@ -2029,7 +2029,7 @@ void TableImpl::PerfCounter::DoDumpPerfCounterLog(const std::string& log_prefix)
         << " cnt: " << user_mu_cnt.Clear()
         << " suc: " << user_mu_suc.Clear()
         << " fail: " << user_mu_fail.Clear();
-    LOG(INFO) << log_prefix << "[user_mu_cost]"
+    LOG(INFO) << log_prefix << "[user_mu_cost]" << std::fixed
         << " cost_ave: " << hist_mu_cost.Average()
         << " cost_50: " << hist_mu_cost.Percentile(0.5)
         << " cost_90: " << hist_mu_cost.Percentile(0.9)
@@ -2041,7 +2041,7 @@ void TableImpl::PerfCounter::DoDumpPerfCounterLog(const std::string& log_prefix)
         << " suc: " << user_read_suc.Clear()
         << " notfound: " << user_read_notfound.Clear()
         << " fail: " << user_read_fail.Clear();
-    LOG(INFO) << log_prefix << "[user_rd_cost]"
+    LOG(INFO) << log_prefix << "[user_rd_cost]" << std::fixed
         << " cost_ave: " << hist_read_cost.Average()
         << " cost_50: " << hist_read_cost.Percentile(0.5)
         << " cost_90: " << hist_read_cost.Percentile(0.9)
