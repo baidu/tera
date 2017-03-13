@@ -455,7 +455,7 @@ void IncrementalGcStrategy::DeleteTableFiles(const std::string& table_name) {
                 std::string lg_str = boost::lexical_cast<std::string>(lg_it->first);
                 std::string lg_path = tablet_path + "/" + lg_str;
                 LOG(INFO) << "[gc] delete empty lg dir: " << lg_path;
-                env->DeleteDir(lg_path);
+                io::DeleteEnvDir(lg_path);
                 lg_files.erase(lg_it++);
             } else {
                 lg_it++;
@@ -519,8 +519,7 @@ void IncrementalGcStrategy::CollectSingleDeadTablet(const std::string& tablename
             number = 0;
             if (!ParseFileName(files[f], &number, &type) ||
                 type != leveldb::kTableFile) {
-                // only keep sst, delete rest files
-                io::DeleteEnvDir(file_path);
+                // skip manifest/CURRENT
                 continue;
             }
 
