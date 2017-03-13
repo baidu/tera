@@ -455,7 +455,7 @@ void IncrementalGcStrategy::DeleteTableFiles(const std::string& table_name) {
                 std::string lg_str = boost::lexical_cast<std::string>(lg_it->first);
                 std::string lg_path = tablet_path + "/" + lg_str;
                 LOG(INFO) << "[gc] delete empty lg dir: " << lg_path;
-                env->DeleteDir(lg_path);
+                io::DeleteEnvDir(lg_path);
                 lg_files.erase(lg_it++);
             } else {
                 lg_it++;
@@ -487,8 +487,6 @@ void IncrementalGcStrategy::CollectSingleDeadTablet(const std::string& tablename
     env->GetChildren(tablet_path, &children);
     list_count_.Inc();
 
-    std::vector<std::string> not_sst;
-    bool has_sst = false;
     for (size_t lg = 0; lg < children.size(); ++lg) {
         std::string lg_path = tablet_path + "/" + children[lg];
         leveldb::FileType type = leveldb::kUnknown;
@@ -521,19 +519,12 @@ void IncrementalGcStrategy::CollectSingleDeadTablet(const std::string& tablename
             number = 0;
             if (!ParseFileName(files[f], &number, &type) ||
                 type != leveldb::kTableFile) {
-                // keep all manifest/others until all sst files are deleted
-                not_sst.push_back(file_path);
+                // skip manifest/CURRENT
                 continue;
             }
 
             uint64_t full_number = leveldb::BuildFullFileNumber(lg_path, number);
             temp_lg_files_set.storage_files_.insert(full_number);
-            has_sst = true;
-        }
-    }
-    if (!has_sst) {
-        for (size_t i = 0; i < not_sst.size(); ++i) {
-            io::DeleteEnvDir(not_sst[i]);
         }
     }
 }
