@@ -695,7 +695,6 @@ Status DBImpl::WriteLevel0Table(MemTable* mem, VersionEdit* edit,
   delete iter;
   pending_outputs_.erase(meta.number);
 
-
   // Note that if file_size is zero, the file has been deleted and
   // should not be added to the manifest.
   int level = 0;

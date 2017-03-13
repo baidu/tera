@@ -214,7 +214,7 @@ TEST(CorruptionTest, Recovery) {
 TEST(CorruptionTest, RecoverWriteError) {
   env_.writable_file_error_ = true;
   Status s = TryReopen();
-  ASSERT_TRUE(!s.ok());
+  ASSERT_TRUE(s.ok());
 }
 
 TEST(CorruptionTest, NewFileErrorDuringWrite) {

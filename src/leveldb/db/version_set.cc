@@ -1021,24 +1021,27 @@ Status VersionSet::LogAndApply(VersionEdit* edit, port::Mutex* mu) {
       last_switch_manifest_ + switch_interval < env_->NowMicros()) {
     force_switch_manifest_ = true;
   }
-  // timeout cause switch or failure cause switch
-  if (force_switch_manifest_) {
-    manifest_file_number_ = NewFileNumber();
-    last_switch_manifest_ = env_->NowMicros();
-  }
 
-  std::string new_manifest_file;
+  int retry_count = 0;
   Status s;
   // Unlock during expensive MANIFEST log write
-  {
+  do {
+    s = Status::OK();
+    std::string new_manifest_file;
+    // timeout cause switch or failure cause switch
+    if (force_switch_manifest_) {
+      manifest_file_number_ = NewFileNumber();
+      last_switch_manifest_ = env_->NowMicros();
+    }
     mu->Unlock();
+
     if (force_switch_manifest_) {
       delete descriptor_log_;
       delete descriptor_file_;
       descriptor_log_ = NULL;
       descriptor_file_ = NULL;
       Log(options_->info_log, "[%s] force switch MANIFEST to %lu",
-          dbname_.c_str(), manifest_file_number_);
+        dbname_.c_str(), manifest_file_number_);
       force_switch_manifest_ = false;
     }
 
@@ -1052,9 +1055,13 @@ Status VersionSet::LogAndApply(VersionEdit* edit, port::Mutex* mu) {
       if (s.ok()) {
         descriptor_log_ = new log::Writer(descriptor_file_);
         s = WriteSnapshot(descriptor_log_);
+        if (!s.ok()) {
+          Log(options_->info_log, "[%s][dfs error] writesnapshot MANIFEST[%s] error, status[%s].\n",
+            dbname_.c_str(), new_manifest_file.c_str(), s.ToString().c_str());
+        }
       } else {
         Log(options_->info_log, "[%s][dfs error] open MANIFEST[%s] error, status[%s].\n",
-            dbname_.c_str(), new_manifest_file.c_str(), s.ToString().c_str());
+          dbname_.c_str(), new_manifest_file.c_str(), s.ToString().c_str());
       }
     }
 
@@ -1065,48 +1072,48 @@ Status VersionSet::LogAndApply(VersionEdit* edit, port::Mutex* mu) {
       s = descriptor_log_->AddRecord(record);
       if (s.ok()) {
         s = descriptor_file_->Sync();
-      }
-      if (!s.ok()) {
-        Log(options_->info_log, "[%s][dfs error] MANIFEST sync error: %s\n",
+        if (!s.ok()) {
+          Log(options_->info_log, "[%s][dfs error] MANIFEST sync error: %s\n",
             dbname_.c_str(), s.ToString().c_str());
-        if (ManifestContains(record)) {
-          Log(options_->info_log,
-              "[%s] MANIFEST contains log record despite error; advancing to new "
-              "version to prevent mismatch between in-memory and logged state",
-              dbname_.c_str());
-          s = Status::OK();
         }
+      } else {
+        Log(options_->info_log, "[%s][dfs error] AddRecord MANIFEST error: %s\n",
+          dbname_.c_str(), s.ToString().c_str());
       }
     }
 
-    // If we just created a new descriptor file, install it by writing a
-    // new CURRENT file that points to it.
     if (s.ok() && !new_manifest_file.empty()) {
       s = SetCurrentFile(env_, dbname_, manifest_file_number_);
       if (s.ok()) {
         Log(options_->info_log, "[%s] set CURRENT to %llu\n",
-            dbname_.c_str(), static_cast<unsigned long long>(manifest_file_number_));
+          dbname_.c_str(), static_cast<unsigned long long>(manifest_file_number_));
       } else {
         Log(options_->info_log, "[%s][dfs error] set CURRENT error: %s\n",
-            dbname_.c_str(), s.ToString().c_str());
+          dbname_.c_str(), s.ToString().c_str());
       }
-      // No need to double-check MANIFEST in case of error since it
-      // will be discarded below.
     }
 
-    // write manifest error, cause switch
     if (!s.ok()) {
+      force_switch_manifest_ = true;
       if (!new_manifest_file.empty()) {
-        delete descriptor_log_;
-        delete descriptor_file_;
-        descriptor_log_ = NULL;
-        descriptor_file_ = NULL;
         env_->DeleteFile(new_manifest_file);
       }
     }
 
+    // retry until success
+    if (force_switch_manifest_) {
+      retry_count++;
+      int sec = 1;
+      for (int i = 1; i < retry_count && i < 4; i++) {
+        sec *= 2;
+      }
+      Log(options_->info_log, "[%s] Waiting after %d, LogAndApply sync error: %s, retry: %d",
+        dbname_.c_str(), sec, s.ToString().c_str(), retry_count);
+      env_->SleepForMicroseconds(sec * 1000000);
+    }
+
     mu->Lock();
-  }
+  } while (force_switch_manifest_);
 
   // Install the new version
   if (s.ok()) {

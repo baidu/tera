@@ -85,6 +85,9 @@ class SpecialEnv : public EnvWrapper {
   AtomicCounter sleep_counter_;
   AtomicCounter sleep_time_counter_;
 
+  AtomicCounter sync_retry_c_;
+  AtomicCounter write_retry_c_;
+
   explicit SpecialEnv(Env* base) : EnvWrapper(base) {
     delay_sstable_sync_.Release_Store(NULL);
     no_space_.Release_Store(NULL);
@@ -131,7 +134,9 @@ class SpecialEnv : public EnvWrapper {
       ManifestFile(SpecialEnv* env, WritableFile* b) : env_(env), base_(b) { }
       ~ManifestFile() { delete base_; }
       Status Append(const Slice& data) {
-        if (env_->manifest_write_error_.Acquire_Load() != NULL) {
+        env_->write_retry_c_.Increment();
+        if (env_->manifest_write_error_.Acquire_Load() != NULL &&
+            env_->write_retry_c_.Read() < 10) {
           return Status::IOError("simulated writer error");
         } else {
           return base_->Append(data);
@@ -140,7 +145,9 @@ class SpecialEnv : public EnvWrapper {
       Status Close() { return base_->Close(); }
       Status Flush() { return base_->Flush(); }
       Status Sync() {
-        if (env_->manifest_sync_error_.Acquire_Load() != NULL) {
+        env_->sync_retry_c_.Increment();
+        if (env_->manifest_sync_error_.Acquire_Load() != NULL &&
+            env_->sync_retry_c_.Read() < 10) {
           return Status::IOError("simulated sync error");
         } else {
           return base_->Sync();
