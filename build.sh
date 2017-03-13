@@ -122,8 +122,7 @@ elif [ ! -f "${FLAG_DIR}/gflags_${GFLAGS_VERSION}" ] \
     wget --no-check-certificate -O gflags-${GFLAGS_VERSION}.tar.gz ${GFLAGS_URL}
     tar zxf gflags-${GFLAGS_VERSION}.tar.gz --recursive-unlink
     cd gflags-${GFLAGS_VERSION}
-    #cmake -DCMAKE_INSTALL_PREFIX=${DEPS_PREFIX} -DGFLAGS_NAMESPACE=google -DCMAKE_CXX_FLAGS=-fPIC
-    $HOME/git/dfs/thirdparty/bin/cmake -DCMAKE_INSTALL_PREFIX=${DEPS_PREFIX} -DGFLAGS_NAMESPACE=google -DCMAKE_CXX_FLAGS=-fPIC
+    cmake -DCMAKE_INSTALL_PREFIX=${DEPS_PREFIX} -DGFLAGS_NAMESPACE=google -DCMAKE_CXX_FLAGS=-fPIC
     make -j4
     make install
     cd -
@@ -161,10 +160,7 @@ elif [ ! -f "${FLAG_DIR}/gtest_${GTEST_VERSION}" ] \
 
     mkdir tmpbuild
     cd tmpbuild
-    #/home/work/git/tera/thirdsrc/googletest-release-1.8.0/googletest/tmpbuild
-    #cp ../../CMakeLists.txt .
-    #cmake -DCMAKE_C_FLAGS="-fPIC" -DCMAKE_CXX_FLAGS="-fPIC" ..
-    $HOME/git/dfs/thirdparty/bin/cmake -DCMAKE_INSTALL_PREFIX=${DEPS_PREFIX} -DGFLAGS_NAMESPACE=google -DCMAKE_CXX_FLAGS=-fPIC ..
+    cmake -DCMAKE_C_FLAGS="-fPIC" -DCMAKE_CXX_FLAGS="-fPIC" ..
     make
     cd ..
     cp -af tmpbuild/libgtest.a ${DEPS_PREFIX}/lib
