@@ -41,9 +41,12 @@ ubuntu安装tera(单机和集群)
   4). 提示错误：fatal error: readline/history.h：
   sudo apt-get install libreadline-dev
   
-  5). 提示缺少ncurses包：、
+  5). 提示缺少ncurses包：
   sudo apt-get install libncurses5-dev
   
+  6). 提示 "cmake: command not found":
+  sudo apt-get install cmake
+
 3. 等待编译结束 & 单机体验
 
   将编译生成的tera_main和teracli文件copy到example/onebox/bin目录下，进入目录执行：sh launch_tera.sh。然后执行./teracli进终端交互。Have fun！

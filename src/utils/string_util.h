@@ -12,7 +12,11 @@ namespace tera {
     extern const size_t kNameLenMin;
     extern const size_t kNameLenMax;
 
+    // binary string to debug string
     std::string DebugString(const std::string& src);
+    // debug string to binary string
+    bool ParseDebugString(const std::string& src, std::string* dst);
+
     bool IsValidName(const std::string& str);
     bool IsValidTableName(const std::string& str);
     bool IsValidGroupName(const std::string& name);

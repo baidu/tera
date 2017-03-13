@@ -118,7 +118,6 @@ class DBImpl : public DB {
 
   Status MakeRoomForWrite(bool force /* compact even if there is room? */)
       EXCLUSIVE_LOCKS_REQUIRED(mutex_);
-  WriteBatch* BuildBatchGroup(Writer** last_writer);
 
   void MaybeScheduleCompaction() EXCLUSIVE_LOCKS_REQUIRED(mutex_);
   static void BGWork(void* db);
@@ -133,6 +132,14 @@ class DBImpl : public DB {
   Status FinishCompactionOutputFile(CompactionState* compact, Iterator* input);
   Status InstallCompactionResults(CompactionState* compact)
       EXCLUSIVE_LOCKS_REQUIRED(mutex_);
+
+  // Returns:
+  //   Status OK: iff *exists == true  -> exists
+  //       iff *exists == false -> not exists
+  //   Status not OK:
+  //       1). Status::Corruption -> CURRENT lost,
+  //       2). Status::IOError    -> Maybe request timeout, don't use *exists
+  Status ParentCurrentStatus(uint64_t parent_no, bool* exists);
 
   State state_;
 
@@ -184,7 +191,6 @@ class DBImpl : public DB {
 
   // Queue of writers.
   std::deque<Writer*> writers_;
-  WriteBatch* tmp_batch_;
 
   // Set of table files to protect from deletion because they are
   // part of ongoing compactions.

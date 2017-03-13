@@ -257,7 +257,9 @@ int32_t Nfs::Exists(const std::string& filename) {
   int32_t retval = (*nfsAccess)(filename.c_str(), F_OK);
   if (retval != 0) {
     errno = (*nfsGetErrno)();
+    int errno_saved = errno;
     fprintf(stderr, "[%s] Exists %s fail: %d\n", common::timer::get_curtime_str().c_str(), filename.c_str(), errno);
+    errno = errno_saved;
   }
   return retval;
 }
@@ -314,7 +316,9 @@ int32_t Nfs::ListDirectory(const std::string& path,
   nfs::NFSDIR* dir = (*nfsOpendir)(path.c_str());
   if (NULL == dir) {
     errno = (*nfsGetErrno)();
+    int errno_saved = errno;
     fprintf(stderr, "[%s] Opendir %s fail: %d\n", common::timer::get_curtime_str().c_str(), path.c_str(), errno);
+    errno = errno_saved;
     return -1;
   }
   struct ::dirent* dir_info = NULL;
@@ -325,9 +329,11 @@ int32_t Nfs::ListDirectory(const std::string& path,
     }
   }
   errno = (*nfsGetErrno)();
+  int errno_saved = errno;
   if (0 != errno) {
     fprintf(stderr, "[%s] List %s error: %d\n", common::timer::get_curtime_str().c_str(), path.c_str(), errno);
     (*nfsClosedir)(dir);
+    errno = errno_saved;
     return -1;
   }
   (*nfsClosedir)(dir);
