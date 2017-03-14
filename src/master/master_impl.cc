@@ -3974,7 +3974,10 @@ bool MasterImpl::TryMergeTablet(TabletPtr tablet) {
         tablet2->GetStatus() != kTableReady ||
         tablet2->IsBusy() ||
         tablet2->GetCounter().write_workload() >= 1) {
-        VLOG(20) << "[merge] merge failed, none proper tablet";
+        VLOG(20) << "[merge] merge failed, none proper tablet."
+            << " status:" << tablet2->GetStatus()
+            << " isbusy:" << tablet2->IsBusy()
+            << " write workload:" << tablet2->GetCounter().write_workload();
         return false;
     }
 
@@ -3985,29 +3988,41 @@ bool MasterImpl::TryMergeTablet(TabletPtr tablet) {
 }
 
 void MasterImpl::MergeTabletAsync(TabletPtr tablet_p1, TabletPtr tablet_p2) {
-    if (tablet_p1->SetStatusIf(kTableUnLoading, kTableReady) &&
-        tablet_p2->SetStatusIf(kTableUnLoading, kTableReady)) {
-        MutexPtr mu(new Mutex());
-        MergeParam* param1 = new MergeParam(mu, tablet_p2);
-        MergeParam* param2 = new MergeParam(mu, tablet_p1);
-        tablet_p1->SetMergeParam(param1);
-        tablet_p2->SetMergeParam(param2);
-        UnloadClosure* done1 =
-            NewClosure(this, &MasterImpl::UnloadTabletCallback, tablet_p1,
-                       FLAGS_tera_master_impl_retry_times);
-        UnloadClosure* done2 =
-            NewClosure(this, &MasterImpl::UnloadTabletCallback, tablet_p2,
-                       FLAGS_tera_master_impl_retry_times);
+    bool switch_ok = false;
 
-        tablet_availability_->AddNotReadyTablet(tablet_p1->GetPath());
-        tablet_availability_->AddNotReadyTablet(tablet_p2->GetPath());
-        UnloadTabletAsync(tablet_p1, done1);
-        UnloadTabletAsync(tablet_p2, done2);
-    } else {
-        LOG(WARNING) << "[merge] tablet not ready, merge failed and rollback.";
-        tablet_p1->SetStatusIf(kTableReady, kTableUnLoading);
-        tablet_p2->SetStatusIf(kTableReady, kTableUnLoading);
+    // prepare
+    switch_ok = tablet_p1->SetStatusIf(kTableUnLoading, kTableReady);
+    if (!switch_ok) {
+        // why this tablet is not Ready? maybe someone changes it's state
+        LOG(WARNING) << "[merge] tablet not ready, merge failed:" << tablet_p1;
+        return;
     }
+    switch_ok = tablet_p2->SetStatusIf(kTableUnLoading, kTableReady);
+    if (!switch_ok) {
+        // why this tablet is not Ready? maybe someone changes it's state
+        LOG(WARNING) << "[merge] tablet not ready, merge failed:" << tablet_p2;
+        // rollback
+        CHECK(tablet_p1->SetStatusIf(kTableReady, kTableUnLoading));
+        return;
+    }
+
+    // commit
+    MutexPtr mu(new Mutex());
+    MergeParam* param1 = new MergeParam(mu, tablet_p2);
+    MergeParam* param2 = new MergeParam(mu, tablet_p1);
+    tablet_p1->SetMergeParam(param1);
+    tablet_p2->SetMergeParam(param2);
+    UnloadClosure* done1 =
+        NewClosure(this, &MasterImpl::UnloadTabletCallback, tablet_p1,
+                   FLAGS_tera_master_impl_retry_times);
+    UnloadClosure* done2 =
+        NewClosure(this, &MasterImpl::UnloadTabletCallback, tablet_p2,
+                   FLAGS_tera_master_impl_retry_times);
+
+    tablet_availability_->AddNotReadyTablet(tablet_p1->GetPath());
+    tablet_availability_->AddNotReadyTablet(tablet_p2->GetPath());
+    UnloadTabletAsync(tablet_p1, done1);
+    UnloadTabletAsync(tablet_p2, done2);
 }
 
 void MasterImpl::MergeTabletAsyncPhase2(TabletPtr tablet_p1, TabletPtr tablet_p2) {
