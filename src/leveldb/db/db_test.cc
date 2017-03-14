@@ -1287,8 +1287,11 @@ TEST(DBTest, DeletionMarkers2) {
   ASSERT_OK(dbfull()->TEST_CompactMemTable());  // Moves to level last-2
   ASSERT_EQ(AllEntriesFor("foo"), "[ DEL, v1 ]");
   dbfull()->TEST_CompactRange(last-2, NULL, NULL);
+  sleep(3); // del compaction stragety will be auto trigger.
+
   // DEL kept: "last" file overlaps
-  ASSERT_EQ(AllEntriesFor("foo"), "[ DEL, v1 ]");
+  //ASSERT_EQ(AllEntriesFor("foo"), "[ DEL, v1 ]");
+  ASSERT_EQ(AllEntriesFor("foo"), "[ ]");
   dbfull()->TEST_CompactRange(last-1, NULL, NULL);
   // Merging last-1 w/ last, so we are the base level for "foo", so
   // DEL is removed.  (as is v1).
@@ -1839,6 +1842,7 @@ class ModelDB: public DB {
     snapshots_.insert(std::pair<uint64_t, ModelSnapshot*>(++snapshot_id_, snapshot));
     return snapshot_id_;
   }
+  void ScheduleCompaction() {}
 
   virtual void ReleaseSnapshot(uint64_t snapshot) {
     std::multimap<uint64_t, ModelSnapshot*>::iterator it = snapshots_.find(snapshot);

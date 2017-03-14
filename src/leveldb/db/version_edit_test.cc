@@ -12,7 +12,7 @@
 namespace leveldb {
 
 // Tag numbers for serialized VersionEdit.  These numbers are written to
-// disk and should not be changed. max tag number = 4096, min tag number = 1
+// disk and should not be changed. max tag number = 1<<20, min tag number = 1
 enum Tag {
   kComparator           = 1,
   kLogNumber            = 2,
@@ -25,7 +25,9 @@ enum Tag {
   kPrevLogNumber        = 9,
   kNewFile              = 10,
   kDeletedFile          = 11,
-  // no more than 4096
+  kNewFileInfo        = 12,
+
+  // no more than 1<<20
   kMaxTag               = 1 << 20,
 };
 enum EditTestTag {
@@ -108,10 +110,10 @@ static void TestEncodeDecode(const VersionEditTest& edit) {
 }
 static void CreateEditContent(VersionEditTest* edit) {
   for (int i = 0; i < 5; i++) {
-        TestEncodeDecode(*edit);
-        edit->AddFile(i, 100 + i, 200 + i,
-                InternalKey("aoo", 300 + i, kTypeValue),
-                InternalKey("zoo", 400 + i, kTypeDeletion));
+    TestEncodeDecode(*edit);
+    edit->AddFile(i, 100 + i, 200 + i,
+                  InternalKey("aoo", 300 + i, kTypeValue),
+                  InternalKey("zoo", 400 + i, kTypeDeletion));
     edit->DeleteFile(i, 500 + i);
     edit->SetCompactPointer(i, InternalKey("x00", 600 + i, kTypeValue));
   }
@@ -128,6 +130,30 @@ static void CreateEditContentV2(VersionEditTest* edit) {
   edit->SetNextFile(800);
   edit->SetLastSequence(900);
   TestEncodeDecode(*edit);
+}
+static void CreateEditWithTtlInfo(VersionEditTest* edit) {
+  for (int i = 0; i < 5; i++) {
+    TestEncodeDecode(*edit);
+    edit->AddFile(i, 100 + i, 200 + i,
+                  InternalKey("apple", 300 + i, kTypeValue),
+                  InternalKey("zookeeper", 400 + i, kTypeDeletion),
+                  20 + i/* del percentage */,
+                  1000000000 + i/* timeout */,
+                  50 + i/* del percentage */);
+    edit->DeleteFile(i, 500 + i);
+    edit->SetCompactPointer(i, InternalKey("x00", 600 + i, kTypeValue));
+  }
+
+  edit->SetComparatorName("test_nil_cmp");
+  edit->SetLogNumber(700);
+  edit->SetNextFile(800);
+  edit->SetLastSequence(900);
+  TestEncodeDecode(*edit);
+}
+TEST(VersionEditTest, EncodeFileInfoTag) {
+  VersionEditTest edit;
+  CreateEditWithTtlInfo(&edit);
+  fprintf(stderr, "%s\n", edit.DebugString().c_str());
 }
 TEST(VersionEditTest, OldFormatRead) {
   VersionEditTest edit;

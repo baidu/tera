@@ -488,7 +488,7 @@ bool TabletIO::Split(std::string* split_key, StatusCode* status) {
     }
 }
 
-bool TabletIO::Compact(int lg_no, StatusCode* status) {
+bool TabletIO::Compact(int lg_no, StatusCode* status, CompactionType type) {
     {
         MutexLock lock(&mutex_);
         if (status_ != kReady) {
@@ -502,30 +502,17 @@ bool TabletIO::Compact(int lg_no, StatusCode* status) {
         db_ref_count_++;
     }
     CHECK_NOTNULL(db_);
-    db_->CompactRange(NULL, NULL, lg_no);
+    if (type == kManualCompaction) {
+        db_->CompactRange(NULL, NULL, lg_no);
+    } else if (type == kMinorCompaction) {
+        db_->MinorCompact();
+    } else if (type == kTimeoutCompaction) {
+        db_->ScheduleCompaction();
+    }
 
     {
         MutexLock lock(&mutex_);
         compact_status_ = kTableCompacted;
-        db_ref_count_--;
-    }
-    return true;
-}
-
-bool TabletIO::CompactMinor(StatusCode* status) {
-    {
-        MutexLock lock(&mutex_);
-        if (status_ != kReady) {
-            SetStatusCode(status_, status);
-            return false;
-        }
-        db_ref_count_++;
-    }
-
-    CHECK_NOTNULL(db_);
-    db_->MinorCompact();
-    {
-        MutexLock lock(&mutex_);
         db_ref_count_--;
     }
     return true;

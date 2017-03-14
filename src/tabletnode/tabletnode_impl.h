@@ -169,6 +169,11 @@ private:
 
     void InitCacheSystem();
 
+    // timeout compaction
+    void ScheduleTimeoutCompact();
+    void EnableScheduleTimeoutCompact();
+    void DisableScheduleTimeoutCompact();
+
     void ReleaseMallocCache();
     void EnableReleaseMallocCacheTimer(int32_t expand_factor = 1);
     void DisableReleaseMallocCacheTimer();
@@ -196,6 +201,7 @@ private:
     std::string root_tablet_addr_;
     std::string session_id_;
     int64_t release_cache_timer_id_;
+    int64_t timeout_compact_id_;
 
     TabletNodeSysInfo sysinfo_;
 

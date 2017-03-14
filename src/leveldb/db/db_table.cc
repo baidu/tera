@@ -753,6 +753,13 @@ void DBTable::GetApproximateSizes(uint64_t* size, std::vector<uint64_t>* lgsize)
   }
 }
 
+void DBTable::ScheduleCompaction() {
+    std::set<uint32_t>::iterator it = options_.exist_lg_list->begin();
+    for (; it != options_.exist_lg_list->end(); ++it) {
+        lg_list_[*it]->ScheduleCompaction();
+    }
+}
+
 void DBTable::CompactRange(const Slice* begin, const Slice* end, int lg_no) {
   std::vector<LGCompactThread*> lg_threads;
   std::set<uint32_t>::iterator it = options_.exist_lg_list->begin();

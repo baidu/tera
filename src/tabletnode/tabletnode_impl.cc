@@ -41,6 +41,9 @@ DECLARE_int64(tera_heartbeat_period);
 DECLARE_int64(tera_heartbeat_retry_period_factor);
 DECLARE_int32(tera_heartbeat_retry_times);
 
+DECLARE_bool(tera_tabletnode_timeout_compact_enabled);
+DECLARE_int32(tera_tabletnode_timeout_compact_period);
+
 DECLARE_bool(tera_tabletnode_tcm_cache_release_enabled);
 DECLARE_int32(bobby_sofa_server_max_pending_buffer_size);
 DECLARE_int32(tera_tabletnode_tcm_cache_release_period);
@@ -101,6 +104,7 @@ TabletNodeImpl::TabletNodeImpl()
       tablet_manager_(new TabletManager()),
       zk_adapter_(NULL),
       release_cache_timer_id_(kInvalidTimerId),
+      timeout_compact_id_(kInvalidTimerId),
       thread_pool_(new ThreadPool(FLAGS_tera_tabletnode_impl_thread_max_num)) {
     if (FLAGS_tera_local_addr == "") {
         local_addr_ = utils::GetLocalHostName()+ ":" + FLAGS_tera_tabletnode_port;
@@ -132,6 +136,11 @@ TabletNodeImpl::TabletNodeImpl()
     }
 
     InitCacheSystem();
+
+    if (FLAGS_tera_tabletnode_timeout_compact_enabled) {
+        LOG(INFO) << "enable timeout compaction timer";
+        EnableScheduleTimeoutCompact();
+    }
 
     if (FLAGS_tera_tabletnode_tcm_cache_release_enabled) {
         LOG(INFO) << "enable tcmalloc cache release timer";
@@ -198,6 +207,9 @@ void TabletNodeImpl::InitCacheSystem() {
 }
 
 bool TabletNodeImpl::Exit() {
+    DisableScheduleTimeoutCompact();
+    DisableReleaseMallocCacheTimer();
+
     std::vector<io::TabletIO*> tablet_ios;
     tablet_manager_->GetAllTablets(&tablet_ios);
 
@@ -226,6 +238,33 @@ bool TabletNodeImpl::Exit() {
         unload_threads[i].Join();
     }
     return true;
+}
+
+void TabletNodeImpl::ScheduleTimeoutCompact() {
+    std::vector<io::TabletIO*> tablet_list;
+    tablet_manager_->GetAllTablets(&tablet_list);
+    std::vector<io::TabletIO*>::iterator it = tablet_list.begin();
+    for (; it != tablet_list.end(); ++it) {
+        (*it)->Compact(-1, NULL, io::TabletIO::kTimeoutCompaction);
+        (*it)->DecRef();
+    }
+    timeout_compact_id_ = kInvalidTimerId;
+    EnableScheduleTimeoutCompact();
+}
+
+void TabletNodeImpl::EnableScheduleTimeoutCompact() {
+    assert(timeout_compact_id_ == kInvalidTimerId);
+    ThreadPool::Task task =
+        boost::bind(&TabletNodeImpl::ScheduleTimeoutCompact, this);
+    int64_t timeout_period = 1000 * FLAGS_tera_tabletnode_timeout_compact_period;
+    timeout_compact_id_ = thread_pool_->DelayTask(timeout_period, task); // delay in (ms)
+}
+
+void TabletNodeImpl::DisableScheduleTimeoutCompact() {
+    if (timeout_compact_id_ != kInvalidTimerId) {
+        thread_pool_->CancelTask(timeout_compact_id_);
+        timeout_compact_id_ = kInvalidTimerId;
+    }
 }
 
 void TabletNodeImpl::UnloadTabletProc(io::TabletIO* tablet_io, Counter* worker_count) {

@@ -158,6 +158,7 @@ class DB {
   // Therefore the following call will compact the entire database:
   //    db->CompactRange(NULL, NULL);
   virtual void CompactRange(const Slice* begin, const Slice* end, int lg_no = -1) = 0;
+  virtual void ScheduleCompaction() = 0;
 
   // tera-specific
   // Too busy to write

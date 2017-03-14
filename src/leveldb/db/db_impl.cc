@@ -70,7 +70,13 @@ struct DBImpl::CompactionState {
   struct Output {
     uint64_t number;
     uint64_t file_size;
+    int64_t del_num;         // statistic: delete tag's percentage in sst
+    std::vector<int64_t> ttls; // use for calculate timeout percentage
+    int64_t entries;
     InternalKey smallest, largest;
+
+    Output(): del_num(0),
+      entries(0) {}
   };
   std::vector<Output> outputs;
 
@@ -751,6 +757,11 @@ Status DBImpl::CompactMemTable() {
   return s;
 }
 
+void DBImpl::ScheduleCompaction() {
+    MutexLock l(&mutex_);
+    MaybeScheduleCompaction();
+}
+
 void DBImpl::CompactRange(const Slice* begin, const Slice* end, int lg_no) {
   int max_level_with_files = 1;
   {
@@ -1034,14 +1045,14 @@ Status DBImpl::BackgroundCompaction() {
     assert(c->num_input_files(0) == 1);
     FileMetaData* f = c->input(0, 0);
     c->edit()->DeleteFile(c->level(), *f);
-    c->edit()->AddFile(c->level() + 1, *f);
+    c->edit()->AddFile(c->output_level(), *f);
     status = versions_->LogAndApply(c->edit(), &mutex_);
     VersionSet::LevelSummaryStorage tmp;
     Log(options_.info_log, "[%s] Moved #%08u, %08u to level-%d %lld bytes %s: %s\n",
         dbname_.c_str(),
         static_cast<uint32_t>(f->number >> 32 & 0x7fffffff),  //tablet number
         static_cast<uint32_t>(f->number & 0xffffffff),        //sst number
-        c->level() + 1,
+        c->output_level(),
         static_cast<unsigned long long>(f->file_size),
         status.ToString().c_str(),
         versions_->LevelSummary(&tmp));
@@ -1140,6 +1151,7 @@ Status DBImpl::FinishCompactionOutputFile(CompactionState* compact,
       s = input->status();
   }
   const uint64_t current_entries = compact->builder->NumEntries();
+  compact->current_output()->entries = current_entries;
   if (s.ok()) {
     s = compact->builder->Finish();
   } else {
@@ -1186,7 +1198,6 @@ Status DBImpl::FinishCompactionOutputFile(CompactionState* compact,
   return s;
 }
 
-
 Status DBImpl::InstallCompactionResults(CompactionState* compact) {
   mutex_.AssertHeld();
   Log(options_.info_log,  "[%s] Compacted %d@%d + %d@%d files => %lld bytes",
@@ -1194,17 +1205,24 @@ Status DBImpl::InstallCompactionResults(CompactionState* compact) {
       compact->compaction->num_input_files(0),
       compact->compaction->level(),
       compact->compaction->num_input_files(1),
-      compact->compaction->level() + 1,
+      compact->compaction->output_level(),
       static_cast<long long>(compact->total_bytes));
 
-  // Add compaction outputs
+  // Add compaction outputs, skip file without entries
   compact->compaction->AddInputDeletions(compact->compaction->edit());
-  const int level = compact->compaction->level();
   for (size_t i = 0; i < compact->outputs.size(); i++) {
-    const CompactionState::Output& out = compact->outputs[i];
+    CompactionState::Output& out = compact->outputs[i];
+    if (out.entries <= 0) {
+        continue;
+    }
+    std::sort(out.ttls.begin(), out.ttls.end());
+    uint32_t idx = out.ttls.size() * options_.ttl_percentage / 100 ;
     compact->compaction->edit()->AddFile(
-        level + 1, BuildFullFileNumber(dbname_, out.number),
-        out.file_size, out.smallest, out.largest);
+      compact->compaction->output_level(), BuildFullFileNumber(dbname_, out.number),
+      out.file_size, out.smallest, out.largest,
+      out.del_num * 100 / out.entries /* delete tag percentage */,
+      out.ttls.size() > 0 ? out.ttls[idx] : 0 /* sst's check ttl's time */,
+      out.ttls.size() > 0 ? idx * 100 / out.ttls.size() : 0 /* delete tag percentage */);
   }
   return versions_->LogAndApply(compact->compaction->edit(), &mutex_);
 }
@@ -1218,7 +1236,7 @@ Status DBImpl::DoCompactionWork(CompactionState* compact) {
       compact->compaction->num_input_files(0),
       compact->compaction->level(),
       compact->compaction->num_input_files(1),
-      compact->compaction->level() + 1);
+      compact->compaction->output_level());
 
   assert(versions_->NumLevelFiles(compact->compaction->level()) > 0);
   assert(compact->builder == NULL);
@@ -1268,7 +1286,7 @@ Status DBImpl::DoCompactionWork(CompactionState* compact) {
 
     Slice key = input->key();
     if (compact->compaction->ShouldStopBefore(key) &&
-        compact->builder != NULL) {
+        compact->builder != NULL) { // should not overlap level() + 2 too much
       status = FinishCompactionOutputFile(compact, input);
       if (!status.ok()) {
         break;
@@ -1357,7 +1375,17 @@ Status DBImpl::DoCompactionWork(CompactionState* compact) {
       }
 
       if (!has_atom_merged) {
-          compact->builder->Add(key, input->value());
+        // check del tag and ttl tag
+        bool del_tag = false;
+        int64_t ttl = -1;
+        compact_strategy && compact_strategy->CheckTag(ikey.user_key, &del_tag, &ttl);
+        if (ikey.type == kTypeDeletion || del_tag) {
+          compact->current_output()->del_num++;
+        }
+        if (ttl > 0) {
+          compact->current_output()->ttls.push_back(ttl);
+        }
+        compact->builder->Add(key, input->value());
       }
       // Close output file if it is big enough
       if (compact->builder->FileSize() >=
@@ -1407,7 +1435,7 @@ Status DBImpl::DoCompactionWork(CompactionState* compact) {
   }
 
   mutex_.Lock();
-  stats_[compact->compaction->level() + 1].Add(stats);
+  stats_[compact->compaction->output_level()].Add(stats);
 
   if (status.ok()) {
     status = InstallCompactionResults(compact);
