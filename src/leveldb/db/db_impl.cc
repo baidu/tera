@@ -759,6 +759,8 @@ Status DBImpl::CompactMemTable() {
 
 void DBImpl::ScheduleCompaction() {
     MutexLock l(&mutex_);
+    Log(options_.info_log, "[%s] TryScheduleCompaction\n",
+        dbname_.c_str());
     MaybeScheduleCompaction();
 }
 
@@ -1223,6 +1225,17 @@ Status DBImpl::InstallCompactionResults(CompactionState* compact) {
       out.del_num * 100 / out.entries /* delete tag percentage */,
       out.ttls.size() > 0 ? out.ttls[idx] : 0 /* sst's check ttl's time */,
       out.ttls.size() > 0 ? idx * 100 / out.ttls.size() : 0 /* delete tag percentage */);
+      Log(options_.info_log, "[%s] AddFile, level %d, number %lu, entries %ld, del_nr %lu"
+                             ", ttl_nr %lu, del_p %lu, ttl_check_ts %lu, ttl_p %lu\n",
+          dbname_.c_str(),
+          compact->compaction->output_level(),
+          out.number,
+          out.entries,
+          out.del_num,
+          out.ttls.size(),
+          out.del_num * 100 / out.entries,
+          out.ttls.size() > 0 ? out.ttls[idx] : 0,
+          out.ttls.size() > 0 ? idx * 100 / out.ttls.size() : 0);
   }
   return versions_->LogAndApply(compact->compaction->edit(), &mutex_);
 }
@@ -1380,9 +1393,13 @@ Status DBImpl::DoCompactionWork(CompactionState* compact) {
         int64_t ttl = -1;
         compact_strategy && compact_strategy->CheckTag(ikey.user_key, &del_tag, &ttl);
         if (ikey.type == kTypeDeletion || del_tag) {
+          //Log(options_.info_log, "[%s] add del_tag %d, key_type %d\n",
+          //    dbname_.c_str(), del_tag, ikey.type);
           compact->current_output()->del_num++;
         }
         if (ttl > 0) {
+          //Log(options_.info_log, "[%s] add ttl_tag %ld\n",
+          //    dbname_.c_str(), ttl);
           compact->current_output()->ttls.push_back(ttl);
         }
         compact->builder->Add(key, input->value());

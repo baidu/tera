@@ -1434,9 +1434,12 @@ Status VersionSet::Recover() {
       FileMetaData* f = files[i];
       ModifyFileSize(f);
       // Debug
-      Log(options_->info_log, "[%s] recover: %s, level: %d, s: %d %s, l: %d %s\n",
+      Log(options_->info_log, "[%s] recover: %s, level: %d, del_p: %lu, check_ttl_ts %lu, ttl_p %lu, s: %d %s, l: %d %s\n",
           dbname_.c_str(),
           FileNumberDebugString(f->number).c_str(), level,
+          f->del_percentage,
+          f->check_ttl_ts,
+          f->ttl_percentage,
           f->smallest_fake, f->smallest.user_key().ToString().data(),
           f->largest_fake, f->largest.user_key().ToString().data());
     }
@@ -1553,10 +1556,25 @@ void VersionSet::Finalize(Version* v) {
   if (best_del_level >= 0) {
     v->del_trigger_compact_ = v->files_[best_del_level][best_del_idx];
     v->del_trigger_compact_level_ = best_del_level;
+    Log(options_->info_log,
+        "[%s] del_stragety(current), level %d, num %lu, file_size %lu, del_p %lu\n",
+        dbname_.c_str(),
+        v->del_trigger_compact_level_,
+        (v->del_trigger_compact_->number) & 0xffffffff,
+        v->del_trigger_compact_->file_size,
+        v->del_trigger_compact_->del_percentage);
   }
   if (best_ttl_level >= 0) {
     v->ttl_trigger_compact_ = v->files_[best_ttl_level][best_ttl_idx];
     v->ttl_trigger_compact_level_ = best_ttl_level;
+    Log(options_->info_log,
+        "[%s] ttl_stragety(current), level %d, num %lu, file_size %lu, ttl_p %lu, check_ts %lu\n",
+        dbname_.c_str(),
+        v->ttl_trigger_compact_level_,
+        (v->ttl_trigger_compact_->number) & 0xffffffff,
+        v->ttl_trigger_compact_->file_size,
+        v->ttl_trigger_compact_->ttl_percentage,
+        v->ttl_trigger_compact_->check_ttl_ts);
   }
 }
 
@@ -1807,7 +1825,7 @@ double VersionSet::CompactionScore() const {
       return (double)(v->del_trigger_compact_->del_percentage / 100.0);
   } else if (v->ttl_trigger_compact_ != NULL &&
              env_->NowMicros() > v->ttl_trigger_compact_->check_ttl_ts) {
-      return (double)(v->ttl_trigger_compact_->ttl_percentage / 100.0);
+      return (double)((v->ttl_trigger_compact_->ttl_percentage + 1) / 100.0);
   } else if (v->file_to_compact_ != NULL) {
       return 0.1f;
   }
@@ -1853,6 +1871,13 @@ Compaction* VersionSet::PickCompaction() {
     if (level == config::kNumLevels - 1) {// level in last level
         c->set_output_level(level);
     }
+    Log(options_->info_log,
+        "[%s] compact trigger by del stragety, level %d, num %lu, file_size %lu, del_p %lu\n",
+        dbname_.c_str(),
+        current_->del_trigger_compact_level_,
+        (current_->del_trigger_compact_->number) & 0xffffffff,
+        current_->del_trigger_compact_->file_size,
+        current_->del_trigger_compact_->del_percentage);
   } else if (ttl_compaction) {
     // compaction trigger by ttl tags percentage
     // TODO: multithread should lock it
@@ -1863,6 +1888,14 @@ Compaction* VersionSet::PickCompaction() {
     if (level == config::kNumLevels - 1) {// level in last level
         c->set_output_level(level);
     }
+    Log(options_->info_log,
+        "[%s] compact trigger by ttl stragety, level %d, num %lu, file_size %lu, ttl_p %lu, check_ts %lu\n",
+        dbname_.c_str(),
+        current_->ttl_trigger_compact_level_,
+        (current_->ttl_trigger_compact_->number) & 0xffffffff,
+        current_->ttl_trigger_compact_->file_size,
+        current_->ttl_trigger_compact_->ttl_percentage,
+        current_->ttl_trigger_compact_->check_ttl_ts);
   } else if (seek_compaction) {
     // compaction trigger by seek percentage
     // TODO: multithread should lock it

@@ -389,7 +389,7 @@ void TabletNodeManager::UpdateTabletNode(const std::string& addr,
         CounterWeightedSum(state.info_.scan_pending(),
                            node->average_counter_.scan_pending_);
     node->average_counter_.row_read_delay_ =
-        CounterWeightedSum(state.info_.extra_info(1).value(),
+        CounterWeightedSum(state.info_.extra_info_size() > 1 ? state.info_.extra_info(1).value() : 0,
                            node->average_counter_.row_read_delay_);
     VLOG(15) << "update tabletnode : " << addr;
 }

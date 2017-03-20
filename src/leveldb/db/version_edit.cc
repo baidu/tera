@@ -303,6 +303,9 @@ Status VersionEdit::DecodeFrom(const Slice& src) {
                 break;
 
               default:
+                fprintf(stderr, "NewFile %lu without info, skip tag %d, len %d\n",
+                        f.number & 0xffffffff,
+                        tag, file_tag);
                 break;
             }
             new_files_.push_back(std::make_pair(level, f));

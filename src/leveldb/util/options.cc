@@ -52,7 +52,7 @@ Options::Options()
       disable_wal(false),
       ignore_corruption_in_open(false),
       ttl_percentage(10),
-      del_percentage(10) {
+      del_percentage(8) {
 }
 
 }  // namespace leveldb
