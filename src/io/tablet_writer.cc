@@ -287,7 +287,8 @@ void TabletWriter::BatchRequest(const std::vector<const RowMutationSequence*>& r
                     }
                 } else {
                     VLOG(10) << "Batch Request, key: " << DebugString(row_key)
-                        << " family: " << mu.family() << ", lg_id: " << lg_id;
+                        << " family: " << mu.family() << ", qualifier " << mu.qualifier()
+                        << ", ts " << timestamp << ", type " << type << ", lg_id: " << lg_id;
                     batch->Put(tera_key, mu.value());
                 }
             }

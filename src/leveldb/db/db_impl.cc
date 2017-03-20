@@ -759,8 +759,6 @@ Status DBImpl::CompactMemTable() {
 
 void DBImpl::ScheduleCompaction() {
     MutexLock l(&mutex_);
-    Log(options_.info_log, "[%s] TryScheduleCompaction\n",
-        dbname_.c_str());
     MaybeScheduleCompaction();
 }
 

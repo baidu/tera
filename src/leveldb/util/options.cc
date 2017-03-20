@@ -51,7 +51,7 @@ Options::Options()
       ignore_corruption_in_compaction(false),
       disable_wal(false),
       ignore_corruption_in_open(false),
-      ttl_percentage(10),
+      ttl_percentage(95),
       del_percentage(8) {
 }
 

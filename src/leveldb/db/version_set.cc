@@ -1502,7 +1502,7 @@ void VersionSet::Finalize(Version* v) {
   int best_ttl_level = -1;
   int best_ttl_idx = -1;
 
-  for (int level = 0; level < config::kNumLevels-1; level++) {
+  for (int level = 0; level < config::kNumLevels; level++) {
     double score;
     if (level == 0) {
       // We treat level-0 specially by bounding the number of files
@@ -1844,8 +1844,9 @@ Compaction* VersionSet::PickCompaction() {
   const bool ttl_compaction = (current_->ttl_trigger_compact_ != NULL);
   if (size_compaction) {
     level = current_->compaction_level_;
-    assert(level >= 0);
-    assert(level+1 < config::kNumLevels);
+    assert(level < config::kNumLevels);
+    //assert(level >= 0);
+    //assert(level+1 < config::kNumLevels);
     c = new Compaction(level);
 
     // Pick the first file that comes after compact_pointer_[level]
@@ -1860,6 +1861,10 @@ Compaction* VersionSet::PickCompaction() {
     if (c->inputs_[0].empty()) {
       // Wrap-around to the beginning of the key space
       c->inputs_[0].push_back(current_->files_[level][0]);
+    }
+    if (level == config::kNumLevels - 1) {// level in last level
+      c->SetNonTrivial(true);
+      c->set_output_level(level);
     }
   } else if (del_compaction) {
     // compaction trigger by delete tags percentage;
