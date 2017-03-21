@@ -433,6 +433,9 @@ Status DBImpl::DbExists(bool* exists) {
 
   bool current_exists = false;
   bool manifest_exists = false;
+
+  std::vector<uint64_t> manifest_numbers;
+
   std::vector<std::string> files;
   Status s = env_->GetChildren(dbname_, &files);
   if (!s.ok()) {
@@ -450,6 +453,7 @@ Status DBImpl::DbExists(bool* exists) {
     if (type == kCurrentFile) {
       current_exists = true;
     } else if (type == kDescriptorFile) {
+      manifest_numbers.push_back(number);
       manifest_exists = true;
     }
   }
@@ -463,16 +467,33 @@ Status DBImpl::DbExists(bool* exists) {
   } else {
     // CURRENT is not found
     if (manifest_exists) {
-      // CURRENT file lost, but MANIFEST exist, maybe still open it
-      if (options_.ignore_corruption_in_open) {
-        Log(options_.info_log, "[%s] CURRENT file lost, but MANIFEST exists",
-            dbname_.c_str());
-        options_.parent_tablets.resize(0);
-        *exists = true;
-        return Status::OK();
-      } else {
-        return Status::Corruption("CURRENT file lost");
+      // There is 2 cases:
+      // 1. This is a new DB(has not been opened successfully before now)
+      //    and crashed between writing a MANIFEST and setting a CURRENT
+      // 2. The CURRENT was lost
+      //
+      assert(manifest_numbers.size() > 0);
+      std::sort(manifest_numbers.begin(), manifest_numbers.end());
+
+      // Try resetting CURRENT
+      // for case 1.
+      //   Resetting CURRENT will roll forward, it's ok
+      // for case 2.
+      //   2.1 only the CURRENT was lost, Resetting CURRENT is also ok
+      //       TODO(taocipian) don't cover problems of file system
+      //   2.2 CURRENT and other files were lost, we can detect this error below,
+      //       resetting CURRENT will not cause more error
+      // So, whatever cases we are meeting, resetting CURRENT is ok
+      Log(options_.info_log, "[%s] WARNING CURRENT not found, try reset as: %lu",
+          dbname_.c_str(), manifest_numbers[manifest_numbers.size() - 1]);
+      Status s = SetCurrentFile(env_, dbname_, manifest_numbers[manifest_numbers.size() - 1]);
+      if (!s.ok()) {
+        Log(options_.info_log, "[%s] reset CURRENT failed", dbname_.c_str());
+        return s;
       }
+      options_.parent_tablets.resize(0);
+      *exists = true;
+      return Status::OK();
     } else {
       // maybe
       // 1.this is a new db:
