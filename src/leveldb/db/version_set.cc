@@ -1502,7 +1502,8 @@ void VersionSet::Finalize(Version* v) {
   int best_ttl_level = -1;
   int best_ttl_idx = -1;
 
-  for (int level = 0; level < config::kNumLevels; level++) {
+  int base_level =  -1;
+  for (int level = config::kNumLevels - 1; level >= 0; level--) {
     double score;
     if (level == 0) {
       // We treat level-0 specially by bounding the number of files
@@ -1528,20 +1529,36 @@ void VersionSet::Finalize(Version* v) {
           / MaxBytesForLevel(level, options_->sst_size);
     }
 
-    if (score > best_score) {
+    // size compaction does not allow trigger by base level
+    if ((score > best_score) && (level < config::kNumLevels - 1)) {
       best_level = level;
       best_score = score;
     }
 
     // try set del and ttl filemeta
+    if (v->files_[level].size() > 0 && base_level < 0) {
+      base_level = level;
+    }
     for (size_t i = 0; i < v->files_[level].size(); i++) {
       FileMetaData* f = v->files_[level][i];
-      if ((f->del_percentage > options_->del_percentage) &&
+
+      if ((level > 0) && (f->del_percentage > options_->del_percentage) &&
           (best_del_level < 0 ||
            v->files_[best_del_level][best_del_idx]->del_percentage < f->del_percentage)) {
-        best_del_level = level;
-        best_del_idx = i;
+        // In base, need check best.largest_key < next.smallest_key, Otherwise falls into a loop
+        FileMetaData* next_f = ((i + 1) < v->files_[level].size()) ? v->files_[level][i + 1] : NULL;
+        bool del_compact_enable = (level < base_level) ||
+                                  ((level == base_level) &&
+                                    (next_f == NULL ||
+                                    icmp_.user_comparator()->Compare(f->largest.user_key(),
+                                                               next_f->smallest.user_key()) < 0));
+        if (del_compact_enable) {
+          best_del_level = level;
+          best_del_idx = i;
+        }
       }
+
+      // ttl compaction can trigger in base level
       if ((f->check_ttl_ts > 0) &&
           (best_ttl_level < 0 ||
            v->files_[best_ttl_level][best_ttl_idx]->check_ttl_ts > f->check_ttl_ts)) {
@@ -1557,7 +1574,7 @@ void VersionSet::Finalize(Version* v) {
     v->del_trigger_compact_ = v->files_[best_del_level][best_del_idx];
     v->del_trigger_compact_level_ = best_del_level;
     Log(options_->info_log,
-        "[%s] del_stragety(current), level %d, num %lu, file_size %lu, del_p %lu\n",
+        "[%s] del_stragety(current), level %d, num #%lu, file_size %lu, del_p %lu\n",
         dbname_.c_str(),
         v->del_trigger_compact_level_,
         (v->del_trigger_compact_->number) & 0xffffffff,
@@ -1568,7 +1585,7 @@ void VersionSet::Finalize(Version* v) {
     v->ttl_trigger_compact_ = v->files_[best_ttl_level][best_ttl_idx];
     v->ttl_trigger_compact_level_ = best_ttl_level;
     Log(options_->info_log,
-        "[%s] ttl_stragety(current), level %d, num %lu, file_size %lu, ttl_p %lu, check_ts %lu\n",
+        "[%s] ttl_stragety(current), level %d, num #%lu, file_size %lu, ttl_p %lu, check_ts %lu\n",
         dbname_.c_str(),
         v->ttl_trigger_compact_level_,
         (v->ttl_trigger_compact_->number) & 0xffffffff,
@@ -1844,9 +1861,8 @@ Compaction* VersionSet::PickCompaction() {
   const bool ttl_compaction = (current_->ttl_trigger_compact_ != NULL);
   if (size_compaction) {
     level = current_->compaction_level_;
-    assert(level < config::kNumLevels);
-    //assert(level >= 0);
-    //assert(level+1 < config::kNumLevels);
+    assert(level >= 0);
+    assert(level+1 < config::kNumLevels);
     c = new Compaction(level);
 
     // Pick the first file that comes after compact_pointer_[level]
@@ -1862,22 +1878,19 @@ Compaction* VersionSet::PickCompaction() {
       // Wrap-around to the beginning of the key space
       c->inputs_[0].push_back(current_->files_[level][0]);
     }
-    if (level == config::kNumLevels - 1) {// level in last level
-      c->SetNonTrivial(true);
-      c->set_output_level(level);
-    }
   } else if (del_compaction) {
     // compaction trigger by delete tags percentage;
     // TODO: multithread should lock it
     level = current_->del_trigger_compact_level_;
+    assert(level >= 0);
     c = new Compaction(level);
     c->SetNonTrivial(true);
     c->inputs_[0].push_back(current_->del_trigger_compact_);
-    if (level == config::kNumLevels - 1) {// level in last level
-        c->set_output_level(level);
+    if (level == config::kNumLevels - 1) {
+      c->set_output_level(level);
     }
     Log(options_->info_log,
-        "[%s] compact trigger by del stragety, level %d, num %lu, file_size %lu, del_p %lu\n",
+        "[%s] compact trigger by del stragety, level %d, num #%lu, file_size %lu, del_p %lu\n",
         dbname_.c_str(),
         current_->del_trigger_compact_level_,
         (current_->del_trigger_compact_->number) & 0xffffffff,
@@ -1887,14 +1900,15 @@ Compaction* VersionSet::PickCompaction() {
     // compaction trigger by ttl tags percentage
     // TODO: multithread should lock it
     level = current_->ttl_trigger_compact_level_;
+    assert(level >= 0);
     c = new Compaction(level);
     c->SetNonTrivial(true);
     c->inputs_[0].push_back(current_->ttl_trigger_compact_);
     if (level == config::kNumLevels - 1) {// level in last level
-        c->set_output_level(level);
+      c->set_output_level(level);
     }
     Log(options_->info_log,
-        "[%s] compact trigger by ttl stragety, level %d, num %lu, file_size %lu, ttl_p %lu, check_ts %lu\n",
+        "[%s] compact trigger by ttl stragety, level %d, num #%lu, file_size %lu, ttl_p %lu, check_ts %lu\n",
         dbname_.c_str(),
         current_->ttl_trigger_compact_level_,
         (current_->ttl_trigger_compact_->number) & 0xffffffff,
@@ -2026,9 +2040,31 @@ void VersionSet::SetupCompactionBoundary(Compaction* c) {
   }
 
   // could not calculate input[1].large key.
+  // consider case:
+  // level:             sst: 100---------200  sst:200--------300
+  // level + 1:         sst: 100------------------------250
+  // if use 250 as lower_bound, then 200's del tag may miss
+  bool keep_0 = c->level_ != c->output_level();
+  const Comparator* user_cmp = icmp_.user_comparator();
   int input0_size = c->inputs_[0].size();
-  FileMetaData* last_file = c->inputs_[0][input0_size - 1];
-  c->set_drop_lower_bound(last_file->largest.user_key().ToString());
+  FileMetaData* last_file_0 = c->inputs_[0][input0_size - 1];
+  for (size_t i = 0; !keep_0 && i < current_->files_[c->level_].size(); i++) {
+    FileMetaData* f = current_->files_[c->level_][i];
+    if (last_file_0 == f) {
+      if (i + 1 == current_->files_[c->level_].size() ||
+          user_cmp->Compare(last_file_0->largest.user_key(),
+                            current_->files_[c->level_][i + 1]->smallest.user_key()) < 0) {
+        c->unbound_ = true;
+      } else {
+        keep_0 = true;
+      }
+      break;
+    }
+  }
+  // In self compaction, check last_file.largest_key < next_file.smallest_key
+  if (keep_0) {
+    c->set_drop_lower_bound(last_file_0->largest.user_key().ToString());
+  }
   return;
 }
 
@@ -2081,6 +2117,7 @@ Compaction::Compaction(int level)
       grandparent_index_(0),
       seen_key_(false),
       overlapped_bytes_(0),
+      unbound_(false),
       force_non_trivial_(false) {
   for (int i = 0; i < config::kNumLevels; i++) {
     level_ptrs_[i] = 0;

@@ -380,6 +380,7 @@ class Compaction {
   void set_drop_lower_bound(const std::string& lower_bound) {
     drop_lower_bound_ = lower_bound;
   }
+  bool unbound() { return unbound_; }
 
  private:
   friend class Version;
@@ -417,6 +418,7 @@ class Compaction {
   // If delete mark is not less than this lower_bound, do not drop it.
   // If compaction is not on base level, this is an empty string.
   std::string drop_lower_bound_;
+  bool unbound_;
 
   // support self compaction
   bool force_non_trivial_;

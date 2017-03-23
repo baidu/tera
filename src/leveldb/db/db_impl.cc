@@ -1215,6 +1215,7 @@ Status DBImpl::InstallCompactionResults(CompactionState* compact) {
     if (out.entries <= 0) {
         continue;
     }
+
     std::sort(out.ttls.begin(), out.ttls.end());
     uint32_t idx = out.ttls.size() * options_.ttl_percentage / 100 ;
     compact->compaction->edit()->AddFile(
@@ -1223,7 +1224,7 @@ Status DBImpl::InstallCompactionResults(CompactionState* compact) {
       out.del_num * 100 / out.entries /* delete tag percentage */,
       out.ttls.size() > 0 ? out.ttls[idx] : 0 /* sst's check ttl's time */,
       out.ttls.size() > 0 ? idx * 100 / out.ttls.size() : 0 /* delete tag percentage */);
-      Log(options_.info_log, "[%s] AddFile, level %d, number %lu, entries %ld, del_nr %lu"
+      Log(options_.info_log, "[%s] AddFile, level %d, number #%lu, entries %ld, del_nr %lu"
                              ", ttl_nr %lu, del_p %lu, ttl_check_ts %lu, ttl_p %lu\n",
           dbname_.c_str(),
           compact->compaction->output_level(),
@@ -1341,10 +1342,12 @@ Status DBImpl::DoCompactionWork(CompactionState* compact) {
         drop = true;
       } else if (compact_strategy && ikey.sequence <= compact->smallest_snapshot) {
         std::string lower_bound;
+        bool unbound = false;
         if (options_.drop_base_level_del_in_compaction) {
-            lower_bound = compact->compaction->drop_lower_bound();
+          lower_bound = compact->compaction->drop_lower_bound();
+          unbound = compact->compaction->unbound();
         }
-        drop = compact_strategy->Drop(ikey.user_key, ikey.sequence, lower_bound);
+        drop = compact_strategy->Drop(ikey.user_key, ikey.sequence, lower_bound, unbound);
       }
 
       last_sequence_for_key = ikey.sequence;

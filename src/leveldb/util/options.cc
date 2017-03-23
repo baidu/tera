@@ -51,8 +51,8 @@ Options::Options()
       ignore_corruption_in_compaction(false),
       disable_wal(false),
       ignore_corruption_in_open(false),
-      ttl_percentage(95),
-      del_percentage(8) {
+      ttl_percentage(99),
+      del_percentage(20) {
 }
 
 }  // namespace leveldb
