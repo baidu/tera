@@ -25,7 +25,7 @@ enum Tag {
   kPrevLogNumber        = 9,
   kNewFile              = 10,
   kDeletedFile          = 11,
-  kNewFileInfo        = 12,
+  kNewFileInfo          = 12,
 
   // no more than 1<<20
   kMaxTag               = 1 << 20,
