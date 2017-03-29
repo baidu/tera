@@ -51,7 +51,7 @@ public:
 
 private:
     void CollectDeadTabletsFiles();
-    void CollectSingleDeadTablet(const std::string& tablename, uint64_t tabletnum);
+    bool CollectSingleDeadTablet(const std::string& tablename, uint64_t tabletnum);
     void DeleteObsoleteFiles();
 
     boost::shared_ptr<TabletManager> tablet_manager_;
@@ -87,7 +87,7 @@ public:
 
 private:
     void DEBUG_print_files(bool print_dead);
-    void CollectSingleDeadTablet(const std::string& tablename, uint64_t tabletnum);
+    bool CollectSingleDeadTablet(const std::string& tablename, uint64_t tabletnum);
     void DeleteTableFiles(const std::string& table_name);
 
     struct LgFileSet {
