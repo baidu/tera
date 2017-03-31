@@ -1529,33 +1529,26 @@ void VersionSet::Finalize(Version* v) {
           / MaxBytesForLevel(level, options_->sst_size);
     }
 
+    // locate base level
+    if (v->files_[level].size() > 0 && base_level < 0) {
+      base_level = level;
+    }
+
     // size compaction does not allow trigger by base level
-    if ((score > best_score) && (level < config::kNumLevels - 1)) {
+    if ((score > best_score) && (level < base_level)) {
       best_level = level;
       best_score = score;
     }
 
-    // try set del and ttl filemeta
-    if (v->files_[level].size() > 0 && base_level < 0) {
-      base_level = level;
-    }
     for (size_t i = 0; i < v->files_[level].size(); i++) {
       FileMetaData* f = v->files_[level][i];
-
-      if ((level > 0) && (f->del_percentage > options_->del_percentage) &&
+      // del compaction does not allow trigger by base level
+      if ((level > 0) && (level < base_level) &&
+          (f->del_percentage > options_->del_percentage) &&
           (best_del_level < 0 ||
            v->files_[best_del_level][best_del_idx]->del_percentage < f->del_percentage)) {
-        // In base, need check best.largest_key < next.smallest_key, Otherwise falls into a loop
-        FileMetaData* next_f = ((i + 1) < v->files_[level].size()) ? v->files_[level][i + 1] : NULL;
-        bool del_compact_enable = (level < base_level) ||
-                                  ((level == base_level) &&
-                                    (next_f == NULL ||
-                                    icmp_.user_comparator()->Compare(f->largest.user_key(),
-                                                               next_f->smallest.user_key()) < 0));
-        if (del_compact_enable) {
-          best_del_level = level;
-          best_del_idx = i;
-        }
+        best_del_level = level;
+        best_del_idx = i;
       }
 
       // ttl compaction can trigger in base level
