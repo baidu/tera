@@ -24,7 +24,7 @@ DECLARE_string(tera_master_meta_table_path);
 namespace tera {
 namespace master {
 
-TabletAvailability::TabletAvailability(boost::shared_ptr<TabletManager> t)
+TabletAvailability::TabletAvailability(std::shared_ptr<TabletManager> t)
     : tablet_manager_(t) {
     start_ts_ = get_micros();
 }
