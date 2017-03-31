@@ -198,8 +198,6 @@ void TabletNodeImpl::InitCacheSystem() {
 }
 
 bool TabletNodeImpl::Exit() {
-    DisableReleaseMallocCacheTimer();
-
     std::vector<io::TabletIO*> tablet_ios;
     tablet_manager_->GetAllTablets(&tablet_ios);
 
