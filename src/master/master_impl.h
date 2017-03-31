@@ -244,8 +244,6 @@ private:
                           const std::string& key_start,
                           const std::string& key_end,
                           const std::string& server_addr, StatusCode* status);
-    void UnloadTabletAsync(std::string table_name, std::string key_start,
-                           std::string server_addr, int32_t retry);
 
     void RetryLoadTablet(TabletPtr tablet, int32_t retry_times);
     void RetryUnloadTablet(TabletPtr tablet, int32_t retry_times);
@@ -272,7 +270,7 @@ private:
                             int error_code);
 
     bool RemoveTablet(const TabletMeta& meta, StatusCode* status);
-    void UnloadTabletAsync(TabletPtr tablet, UnloadClosure* done);
+    virtual void UnloadTabletAsync(TabletPtr tablet, UnloadClosure* done);
     void UnloadTabletCallback(TabletPtr tablet, int32_t retry,
                               UnloadTabletRequest* request,
                               UnloadTabletResponse* response, bool failed,

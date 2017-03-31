@@ -337,7 +337,9 @@ void IncrementalGcStrategy::ProcessQueryCallbackForGc(QueryResponse* response) {
                 temp_tablet_file_set.files_[lg_no].live_files_.insert(file_number);
                 VLOG(12) << "[gc] insert live file " << tablet_number << "/" << lg_no << "/" << file;
                 const LgFileSet& check = ((dead_tablet_files_[table_name][tablet_number]).files_)[lg_no];
-                CHECK(check.storage_files_.find(file_number) != check.storage_files_.end()) << "[gc] insert error";
+                if (check.storage_files_.find(file_number) == check.storage_files_.end()) {
+                    LOG(WARNING) << "[gc] insert error " << table_name <<  "/" << tablet_number << "/" << lg_no << "/" << file;
+                }
             }
         }
         // update live files in dead tablets

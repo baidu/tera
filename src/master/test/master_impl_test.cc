@@ -91,6 +91,55 @@ public:
         UnloadTabletCallback(tablet_p2, retry, request, response, failed, error_code);
         EXPECT_TRUE(merge_enter_phase2);
     }
+
+    TabletPtr MakeTabletPtr(const std::string& start, const std::string& end, TablePtr table) {
+        TabletMeta meta;
+        meta.mutable_key_range()->set_key_start(start);
+        meta.mutable_key_range()->set_key_end(end);
+        TabletPtr tablet(new Tablet(meta, table));
+        return tablet;
+    }
+
+    // This unload function will not send unload request
+    // Tablet will stay in kTableUnLoading status forever
+    // It can be used to simulate a slow unload
+    virtual void UnloadTabletAsync(TabletPtr tablet, UnloadClosure* done) {
+        LOG(ERROR) << "dummy UnloadTabletAsync...";
+    }
+
+    void MergeTabletBorkenTest() {
+        TablePtr table(new Table("mergetest"));
+        TabletPtr t1 = MakeTabletPtr("", "a", table);
+        t1->SetStatus(kTableReady);
+
+        TabletPtr t2 = MakeTabletPtr("a", "z", table);
+        t2->SetStatus(kTableReady);
+
+        TabletPtr t3 = MakeTabletPtr("z", "", table);
+        t3->SetStatus(kTableReady);
+
+        LOG(ERROR) << t1->GetStatus() << ";" << t2->GetStatus() << ";" << t3->GetStatus();
+
+        MergeTabletAsync(t1, t2);
+        LOG(ERROR) << t1->GetStatus() << ";" << t2->GetStatus() << ";" << t3->GetStatus();
+        EXPECT_TRUE((t1->GetStatus() == kTableUnLoading)
+                    && (t2->GetStatus() == kTableUnLoading)
+                    && (t3->GetStatus() == kTableReady));
+
+        // t2 & t3's merge should fail since t1 & t2 is merging
+        MergeTabletAsync(t2, t3);
+        LOG(ERROR) << t1->GetStatus() << ";" << t2->GetStatus() << ";" << t3->GetStatus();
+        EXPECT_TRUE((t1->GetStatus() == kTableUnLoading)
+                    && (t2->GetStatus() == kTableUnLoading)
+                    && (t3->GetStatus() == kTableReady));
+
+        // t3 & t2's merge should fail since t1 & t2 is merging
+        MergeTabletAsync(t3, t2);
+        LOG(ERROR) << t1->GetStatus() << ";" << t2->GetStatus() << ";" << t3->GetStatus();
+        EXPECT_TRUE((t1->GetStatus() == kTableUnLoading)
+                    && (t2->GetStatus() == kTableUnLoading)
+                    && (t3->GetStatus() == kTableReady));
+    }
 };
 
 TEST_F(MasterImplTest, SplitTest) {
@@ -99,6 +148,10 @@ TEST_F(MasterImplTest, SplitTest) {
 
 TEST_F(MasterImplTest, MergeTest) {
     MergeTabletTest();
+}
+
+TEST_F(MasterImplTest, MergeTabletBorkenTest) {
+    MergeTabletBorkenTest();
 }
 
 } // master

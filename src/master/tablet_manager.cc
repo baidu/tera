@@ -45,12 +45,10 @@ namespace master {
 
 std::ostream& operator << (std::ostream& o, const Tablet& tablet) {
     MutexLock lock(&tablet.mutex_);
-    o << "table: " << tablet.meta_.table_name() << ", range: ["
+    o << tablet.meta_.path() << " ["
       << DebugString(tablet.meta_.key_range().key_start()) << ", "
-      << DebugString(tablet.meta_.key_range().key_end()) << "], path: "
-      << tablet.meta_.path() << ", server: "
-      << tablet.meta_.server_addr() << ", serverid: "
-      << tablet.server_id_;
+      << DebugString(tablet.meta_.key_range().key_end()) << "] @ "
+      << tablet.meta_.server_addr() << "/" << tablet.server_id_;
     return o;
 }
 
@@ -62,14 +60,14 @@ std::ostream& operator << (std::ostream& o, const TabletPtr& tablet) {
 Tablet::Tablet(const TabletMeta& meta)
     : meta_(meta),
       update_time_(common::timer::get_micros()),
-      load_time_(std::numeric_limits<int64_t>::max()),
+      ready_time_(std::numeric_limits<int64_t>::max()),
       merge_param_(NULL) {}
 
 Tablet::Tablet(const TabletMeta& meta, TablePtr table)
     : meta_(meta),
       table_(table),
       update_time_(common::timer::get_micros()),
-      load_time_(std::numeric_limits<int64_t>::max()),
+      ready_time_(std::numeric_limits<int64_t>::max()),
       merge_param_(NULL) {}
 
 Tablet::~Tablet() {
@@ -251,6 +249,9 @@ bool Tablet::SetStatus(TabletStatus new_status, TabletStatus* old_status) {
     }
     if (CheckStatusSwitch(meta_.status(), new_status)) {
         meta_.set_status(new_status);
+        if (new_status == kTableReady) {
+            ready_time_ = get_micros();
+        }
         return true;
     }
     return false;
@@ -265,6 +266,9 @@ bool Tablet::SetStatusIf(TabletStatus new_status, TabletStatus if_status,
     if (meta_.status() == if_status
         && CheckStatusSwitch(meta_.status(), new_status)) {
         meta_.set_status(new_status);
+        if (new_status == kTableReady) {
+            ready_time_ = get_micros();
+        }
         return true;
     }
     return false;
@@ -283,6 +287,9 @@ bool Tablet::SetStatusIf(TabletStatus new_status, TabletStatus if_status,
     if (meta_.status() == if_status && table_->status_ == if_table_status
         && CheckStatusSwitch(meta_.status(), new_status)) {
         meta_.set_status(new_status);
+        if (new_status == kTableReady) {
+            ready_time_ = get_micros();
+        }
         return true;
     }
     return false;
@@ -311,6 +318,9 @@ bool Tablet::SetAddrAndStatus(const std::string& server_addr,
     if (CheckStatusSwitch(meta_.status(), new_status)) {
         meta_.set_status(new_status);
         meta_.set_server_addr(server_addr);
+        if (new_status == kTableReady) {
+            ready_time_ = get_micros();
+        }
         return true;
     }
     return false;
@@ -327,6 +337,9 @@ bool Tablet::SetAddrAndStatusIf(const std::string& server_addr,
         && CheckStatusSwitch(meta_.status(), new_status)) {
         meta_.set_status(new_status);
         meta_.set_server_addr(server_addr);
+        if (new_status == kTableReady) {
+            ready_time_ = get_micros();
+        }
         return true;
     }
     return false;
@@ -344,20 +357,13 @@ int64_t Tablet::SetUpdateTime(int64_t timestamp) {
     return ts;
 }
 
-int64_t Tablet::LoadTime() {
+int64_t Tablet::ReadyTime() {
     MutexLock lock(&mutex_);
     if (meta_.status() != kTableReady) {
         return std::numeric_limits<int>::max();
     } else {
-        return load_time_;
+        return ready_time_;
     }
-}
-
-int64_t Tablet::SetLoadTime(int64_t timestamp) {
-    MutexLock lock(&mutex_);
-    int64_t ts = load_time_;
-    load_time_ = timestamp;
-    return ts;
 }
 
 int32_t Tablet::AddSnapshot(uint64_t snapshot) {
@@ -1163,6 +1169,42 @@ void TabletManager::FindTablet(const std::string& server_addr,
         table.mutex_.Unlock();
     }
     mutex_.Unlock();
+}
+
+bool TabletManager::FindOverlappedTablets(const std::string& table_name,
+                                          const std::string& key_start,
+                                          const std::string& key_end,
+                                          std::vector<TabletPtr>* tablets,
+                                          StatusCode* ret_status) {
+    // lock table list
+    mutex_.Lock();
+
+    // search table
+    TableList::iterator it = all_tables_.find(table_name);
+    if (it == all_tables_.end()) {
+        mutex_.Unlock();
+        VLOG(5) << "table: " << table_name << " not exist";
+        SetStatusCode(kTableNotFound, ret_status);
+        return false;
+    }
+    Table& table = *it->second;
+
+    // lock table
+    table.mutex_.Lock();
+    mutex_.Unlock();
+
+    // search tablet
+    Table::TabletList::iterator it2 = table.tablets_list_.upper_bound(key_start);
+    CHECK(it2 != table.tablets_list_.begin());
+    --it2;
+    while (it2 != table.tablets_list_.end() &&
+           (key_end.empty() || it2->second->meta_.key_range().key_start() < key_end)) {
+        tablets->push_back(it2->second);
+        ++it2;
+    }
+    table.mutex_.Unlock();
+    CHECK_GT(tablets->size(), 0u);
+    return true;
 }
 
 bool TabletManager::FindTable(const std::string& table_name,
