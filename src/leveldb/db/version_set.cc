@@ -1535,7 +1535,7 @@ void VersionSet::Finalize(Version* v) {
     }
 
     // size compaction does not allow trigger by base level
-    if ((score > best_score) && (level < base_level)) {
+    if ((score > best_score) && (level < config::kNumLevels - 1)) {
       best_level = level;
       best_score = score;
     }
@@ -1827,17 +1827,24 @@ Iterator* VersionSet::MakeInputIterator(Compaction* c) {
 }
 
 double VersionSet::CompactionScore() const {
+  uint64_t ts = env_->NowMicros();
   Version* v = current_;
   if (v->compaction_score_ >= 1) {
-      return v->compaction_score_;
+    return v->compaction_score_;
   } else if (v->del_trigger_compact_ != NULL &&
-      v->del_trigger_compact_->del_percentage > options_->del_percentage) {
-      return (double)(v->del_trigger_compact_->del_percentage / 100.0);
+            v->del_trigger_compact_->del_percentage > options_->del_percentage) {
+    return (double)(v->del_trigger_compact_->del_percentage / 100.0);
   } else if (v->ttl_trigger_compact_ != NULL &&
-             env_->NowMicros() > v->ttl_trigger_compact_->check_ttl_ts) {
-      return (double)((v->ttl_trigger_compact_->ttl_percentage + 1) / 100.0);
+            ts >= v->ttl_trigger_compact_->check_ttl_ts) {
+    return (double)((v->ttl_trigger_compact_->ttl_percentage + 1) / 100.0);
   } else if (v->file_to_compact_ != NULL) {
-      return 0.1f;
+    return 0.1f;
+  }
+
+  if (v->ttl_trigger_compact_ != NULL &&
+     ts < v->ttl_trigger_compact_->check_ttl_ts) {
+    uint64_t ts_diff = v->ttl_trigger_compact_->check_ttl_ts - ts;
+    return (double)(ts_diff < 1000000 ? -1000000.0 : (-1.0 * ts_diff - 1000000.0));
   }
   return -1.0;
 }
@@ -1876,12 +1883,10 @@ Compaction* VersionSet::PickCompaction() {
     // TODO: multithread should lock it
     level = current_->del_trigger_compact_level_;
     assert(level >= 0);
+    assert(level+1 < config::kNumLevels);
     c = new Compaction(level);
     c->SetNonTrivial(true);
     c->inputs_[0].push_back(current_->del_trigger_compact_);
-    if (level == config::kNumLevels - 1) {
-      c->set_output_level(level);
-    }
     Log(options_->info_log,
         "[%s] compact trigger by del stragety, level %d, num #%lu, file_size %lu, del_p %lu\n",
         dbname_.c_str(),

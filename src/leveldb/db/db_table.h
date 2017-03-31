@@ -129,7 +129,6 @@ public:
     // Therefore the following call will compact the entire database:
     //    db->CompactRange(NULL, NULL);
     virtual void CompactRange(const Slice* begin, const Slice* end, int lg_no);
-    virtual void ScheduleCompaction();
 
     // tera-specific
     virtual bool FindSplitKey(double ratio, std::string* split_key);

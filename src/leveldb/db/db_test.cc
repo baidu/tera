@@ -1842,7 +1842,6 @@ class ModelDB: public DB {
     snapshots_.insert(std::pair<uint64_t, ModelSnapshot*>(++snapshot_id_, snapshot));
     return snapshot_id_;
   }
-  void ScheduleCompaction() {}
 
   virtual void ReleaseSnapshot(uint64_t snapshot) {
     std::multimap<uint64_t, ModelSnapshot*>::iterator it = snapshots_.find(snapshot);

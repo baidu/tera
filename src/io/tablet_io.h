@@ -43,7 +43,6 @@ public:
     enum CompactionType {
         kManualCompaction = 1,
         kMinorCompaction = 2,
-        kTimeoutCompaction = 3,
     };
 
     enum TabletStatus {

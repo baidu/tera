@@ -506,8 +506,6 @@ bool TabletIO::Compact(int lg_no, StatusCode* status, CompactionType type) {
         db_->CompactRange(NULL, NULL, lg_no);
     } else if (type == kMinorCompaction) {
         db_->MinorCompact();
-    } else if (type == kTimeoutCompaction) {
-        db_->ScheduleCompaction();
     }
 
     {

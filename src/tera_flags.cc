@@ -209,8 +209,6 @@ DEFINE_int32(tera_tabletnode_cache_update_thread_num, 4, "thread num for update 
 DEFINE_bool(tera_tabletnode_cache_force_read_from_cache, true, "force update cache before any read");
 DEFINE_int32(tera_tabletnode_gc_log_level, 15, "the vlog level [0 - 16] for cache gc.");
 
-DEFINE_bool(tera_tabletnode_timeout_compact_enabled, true, "enable the timer to compact timeout compaction");
-DEFINE_int32(tera_tabletnode_timeout_compact_period, 60, "the period (in sec) to try trigger timeout compaction");
 DEFINE_bool(tera_tabletnode_tcm_cache_release_enabled, true, "enable the timer to release tcmalloc cache");
 DEFINE_int32(tera_tabletnode_tcm_cache_release_period, 180, "the period (in sec) to try release tcmalloc cache");
 DEFINE_int64(tera_tabletnode_tcm_cache_size, 838860800, "TCMALLOC_MAX_TOTAL_THREAD_CACHE_BYTES");

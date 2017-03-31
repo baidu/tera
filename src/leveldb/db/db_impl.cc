@@ -167,6 +167,8 @@ DBImpl::DBImpl(const Options& options, const std::string& dbname)
       bg_compaction_scheduled_(false),
       bg_compaction_score_(0),
       bg_schedule_id_(0),
+      timeout_scheduled_(false),
+      timeout_schedule_id_(0),
       manual_compaction_(NULL),
       consecutive_compaction_errors_(0),
       flush_on_destroy_(false) {
@@ -193,6 +195,12 @@ Status DBImpl::Shutdown1() {
   shutting_down_.Release_Store(this);  // Any non-NULL value is ok
 
   Log(options_.info_log, "[%s] wait bg compact finish", dbname_.c_str());
+  if (timeout_scheduled_) {
+    env_->ReSchedule(timeout_schedule_id_, kDeleteLogUrgentScore, 0);
+  }
+  while (timeout_scheduled_) {
+    bg_cv_.Wait();
+  }
   if (bg_compaction_scheduled_) {
     env_->ReSchedule(bg_schedule_id_, kDumpMemTableUrgentScore);
   }
@@ -757,9 +765,14 @@ Status DBImpl::CompactMemTable() {
   return s;
 }
 
-void DBImpl::ScheduleCompaction() {
+void DBImpl::TimeoutCompaction(void* db) {
+  reinterpret_cast<DBImpl*>(db)->TimeoutScheduleCompaction();
+}
+void DBImpl::TimeoutScheduleCompaction() {
     MutexLock l(&mutex_);
+    timeout_scheduled_ = false;
     MaybeScheduleCompaction();
+    bg_cv_.SignalAll();
 }
 
 void DBImpl::CompactRange(const Slice* begin, const Slice* end, int lg_no) {
@@ -958,8 +971,23 @@ void DBImpl::MaybeScheduleCompaction() {
             bg_compaction_score_ = score;
             bg_compaction_scheduled_ = true;
         }
+    } else if (score + 1000000.0 < 1e-4) {
+        // timeout compaction
+        int64_t timeout = (int64_t)(score * (-1.0));
+        assert(timeout > 0);
+        if (timeout_scheduled_) {
+            env_->ReSchedule(timeout_schedule_id_, kDeleteLogUrgentScore, timeout / 1000);
+            Log(options_.info_log, "[%s] ReSchedule Timeout Compact[%ld] after %ld",
+                dbname_.c_str(), timeout_schedule_id_, timeout / 1000);
+        } else {
+            timeout_schedule_id_  = env_->Schedule(&DBImpl::TimeoutCompaction, this,
+                                                   kDeleteLogUrgentScore, timeout / 1000);
+            Log(options_.info_log, "[%s] Schedule Timeout Compact[%ld] after %ld",
+                dbname_.c_str(), timeout_schedule_id_, timeout / 1000);
+            timeout_scheduled_ = true;
+        }
     } else {
-      // No work to be done
+        // No work to be done
     }
   }
 }
