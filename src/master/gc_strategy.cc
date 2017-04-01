@@ -459,7 +459,7 @@ void IncrementalGcStrategy::DeleteTableFiles(const std::string& table_name) {
                         // TODO: if failed due to timeout but delete ok in DFS, it will always retry
                     }
                 } else {
-                    ++file_it
+                    ++file_it;
                 }
             }
             if (lg_file_set.storage_files_.size() == 0) {
