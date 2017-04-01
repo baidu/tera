@@ -454,13 +454,13 @@ void IncrementalGcStrategy::DeleteTableFiles(const std::string& table_name) {
                     if (env->DeleteFile(file_path).ok()) {
                         lg_file_set.storage_files_.erase(file_it++);
                     } else {
-                        file_it++;
+                        ++file_it;
                         // do nothing, try to delete next time
                         // TODO: if retry times > MAX ?
                         // TODO: if failed due to timeout but delete ok in DFS, it will always retry
                     }
                 } else {
-                    file_it++;
+                    ++file_it
                 }
             }
             if (lg_file_set.storage_files_.size() == 0) {
@@ -476,14 +476,14 @@ void IncrementalGcStrategy::DeleteTableFiles(const std::string& table_name) {
                     if (io::DeleteEnvDir(lg_path)) {
                         lg_files.erase(lg_it++);
                     } else {
-                        lg_it++;
+                        ++lg_it;
                         // do nothing, try to delete next time
                         // TODO: iff retry times > MAX ?
                         // TODO: if failed due to timeout but delete ok in DFS, it will always retry
                     }
                 }
             } else {
-                lg_it++;
+                ++lg_it;
             }
         }
 
