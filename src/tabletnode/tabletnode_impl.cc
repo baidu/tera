@@ -4,10 +4,10 @@
 
 #include "tabletnode/tabletnode_impl.h"
 
+#include <functional>
 #include <set>
 #include <vector>
 
-#include <boost/bind.hpp>
 #include <gflags/gflags.h>
 #include <glog/logging.h>
 #include <gperftools/malloc_extension.h>
@@ -88,6 +88,8 @@ DECLARE_int64(tera_tabletnode_tcm_cache_size);
 
 DECLARE_string(flagfile);
 
+using namespace std::placeholders;
+
 extern tera::Counter range_error_counter;
 extern tera::Counter rand_read_delay;
 
@@ -164,7 +166,7 @@ bool TabletNodeImpl::Init() {
     }
 
     SetTabletNodeStatus(kIsIniting);
-    thread_pool_->AddTask(boost::bind(&TabletNodeZkAdapterBase::Init, zk_adapter_.get()));
+    thread_pool_->AddTask(std::bind(&TabletNodeZkAdapterBase::Init, zk_adapter_.get()));
     return true;
 }
 
@@ -210,8 +212,8 @@ bool TabletNodeImpl::Exit() {
     for (uint32_t i = 0; i < tablet_ios.size(); ++i) {
         io::TabletIO* tablet_io = tablet_ios[i];
         common::Thread& thread = unload_threads[i];
-        thread.Start(boost::bind(&TabletNodeImpl::UnloadTabletProc,
-                                 this, tablet_io, &worker_count));
+        thread.Start(std::bind(&TabletNodeImpl::UnloadTabletProc,
+                               this, tablet_io, &worker_count));
     }
     int64_t print_ms_ = get_millis();
     int64_t left = 0;
@@ -582,8 +584,8 @@ void TabletNodeImpl::WriteTablet(const WriteTabletRequest* request,
         } else if (!tablet_io->Write(&tablet_task->row_mutation_vec,
                                      &tablet_task->row_status_vec,
                                      request->is_instant(),
-                                     boost::bind(&TabletNodeImpl::WriteTabletCallback, this,
-                                                 tablet_task, _1, _2),
+                                     std::bind(&TabletNodeImpl::WriteTabletCallback, this,
+                                               tablet_task, _1, _2),
                                      &status)) {
             tablet_io->DecRef();
             WriteTabletFail(tablet_task, status);
@@ -1251,7 +1253,7 @@ void TabletNodeImpl::ReleaseMallocCache() {
 void TabletNodeImpl::EnableReleaseMallocCacheTimer(int32_t expand_factor) {
     assert(release_cache_timer_id_ == kInvalidTimerId);
     ThreadPool::Task task =
-        boost::bind(&TabletNodeImpl::ReleaseMallocCache, this);
+        std::bind(&TabletNodeImpl::ReleaseMallocCache, this);
     int64_t timeout_period = expand_factor * 1000LL *
         FLAGS_tera_tabletnode_tcm_cache_release_period;
     release_cache_timer_id_ = thread_pool_->DelayTask(timeout_period, task);

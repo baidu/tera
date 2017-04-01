@@ -1,11 +1,15 @@
-language: cpp
-compiler: gcc
 env:
   global:
     - secure: "EBGwhqHaPbERmOAPA7a1IprZZdFjEZqnuekgkNTBtzmGTaIYuh1BbSNGmVtnj3DuXuqAusiYN6olW2lMax15Fqw3Mwh++vh6DJFQ4wePImCzot7D4fTcopmNS2yoPl0IeyL/sLyQrxjflBfoTzw6DUZAXiU55gGB1faqCAfM5sQ="
+    - CC=gcc-4.8
+    - CXX=g++-4.8
 addons:
   apt:
+    sources:
+      - ubuntu-toolchain-r-test
     packages:
+      - gcc-4.8
+      - g++-4.8
       - gdb
       - apport
   coverity_scan:

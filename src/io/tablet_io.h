@@ -5,14 +5,12 @@
 #ifndef TERA_IO_TABLET_IO_H_
 #define TERA_IO_TABLET_IO_H_
 
+#include <functional>
 #include <list>
 #include <map>
 #include <set>
 #include <string>
 #include <vector>
-
-#include <boost/bind.hpp>
-#include <boost/function.hpp>
 
 #include "common/base/scoped_ptr.h"
 #include "common/mutex.h"
@@ -63,8 +61,8 @@ public:
         tera::Counter write_size;
     };
 
-    typedef boost::function<void (std::vector<const RowMutationSequence*>*,
-                                  std::vector<StatusCode>*)> WriteCallback;
+    typedef std::function<void (std::vector<const RowMutationSequence*>*,
+                                std::vector<StatusCode>*)> WriteCallback;
 
     friend std::ostream& operator << (std::ostream& o, const TabletIO& tablet_io);
 

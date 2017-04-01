@@ -4,13 +4,17 @@ include depends.mk
 OPT ?= -g2 -Wall -Werror        # (B) Debug mode, w/ full line-level debugging symbols
 # OPT ?= -O2 -g2 -DNDEBUG   # (C) Profiling mode: opt, but w/debugging symbols
 
-CC = cc
-CXX = g++
+ifndef CXX
+    CXX = g++
+endif
+ifndef CC
+    CC = gcc
+endif
 
 INCPATH += -I./src -I./include -I./src/leveldb/include -I./src/leveldb \
            -I./src/sdk/java/native-src $(DEPS_INCPATH) 
 CFLAGS += $(OPT) $(INCPATH) -fPIC -fvisibility=hidden # hide internal symbol of tera
-CXXFLAGS += $(CFLAGS)
+CXXFLAGS += -std=gnu++11 $(CFLAGS)
 LDFLAGS += -rdynamic $(DEPS_LDPATH) $(DEPS_LDFLAGS) -lpthread -lrt -lz -ldl \
            -lreadline -lncurses
 SO_LDFLAGS += -rdynamic $(DEPS_LDPATH) $(SO_DEPS_LDFLAGS) -lpthread -lrt -lz -ldl \
@@ -142,7 +146,7 @@ libjni_tera.so: $(JNI_TERA_OBJ) $(LIBRARY)
 	$(CXX) -o $@ $^ $(SO_LDFLAGS)
 
 src/leveldb/libleveldb.a: FORCE
-	$(MAKE) -C src/leveldb
+	CC=$(CC) CXX=$(CXX) $(MAKE) -C src/leveldb
 
 tera_bench:
 

@@ -5,7 +5,7 @@
 #include <stdint.h>
 #include <stdio.h>
 
-#include <boost/bind.hpp>
+#include <functional>
 
 #include "gtest/gtest.h"
 
@@ -69,17 +69,17 @@ TEST(CounterTest, Basic) {
     Counter counter;
     ThreadPool* pool = new ThreadPool(thread_num);
     for (int i = 0; i < thread_num / 4; ++i) {
-        boost::function<void ()> callback =
-            boost::bind(&callback_add, &counter);
+        std::function<void ()> callback =
+            std::bind(&callback_add, &counter);
         pool->AddTask(callback);
 
-        callback = boost::bind(&callback_sub, &counter);
+        callback = std::bind(&callback_sub, &counter);
         pool->AddTask(callback);
 
-        callback = boost::bind(&callback_inc, &counter);
+        callback = std::bind(&callback_inc, &counter);
         pool->AddTask(callback);
 
-        callback = boost::bind(&callback_dec, &counter);
+        callback = std::bind(&callback_dec, &counter);
         pool->AddTask(callback);
 
         MutexLock locker(&mutex);
@@ -99,14 +99,14 @@ TEST(CounterTest, Clear) {
     Counter counter;
     ThreadPool* pool = new ThreadPool(thread_num);
     for (int i = 0; i < thread_num / 3; ++i) {
-        boost::function<void ()> callback =
-            boost::bind(&callback_add, &counter);
+        std::function<void ()> callback =
+            std::bind(&callback_add, &counter);
         pool->AddTask(callback);
 
-        callback = boost::bind(&callback_inc, &counter);
+        callback = std::bind(&callback_inc, &counter);
         pool->AddTask(callback);
 
-        callback = boost::bind(&callback_clear, &counter);
+        callback = std::bind(&callback_clear, &counter);
         pool->AddTask(callback);
 
         MutexLock lock(&mutex);

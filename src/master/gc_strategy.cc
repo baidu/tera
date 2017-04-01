@@ -5,7 +5,6 @@
 #include "master/gc_strategy.h"
 
 #include <gflags/gflags.h>
-#include <boost/lexical_cast.hpp>
 
 #include "db/filename.h"
 #include "io/utils_leveldb.h"
@@ -18,7 +17,7 @@ DECLARE_int32(tera_garbage_collect_debug_log);
 namespace tera {
 namespace master {
 
-BatchGcStrategy::BatchGcStrategy (boost::shared_ptr<TabletManager> tablet_manager)
+BatchGcStrategy::BatchGcStrategy (std::shared_ptr<TabletManager> tablet_manager)
     : tablet_manager_(tablet_manager),
       file_total_num_(0),
       file_delete_num_(0) {}
@@ -224,7 +223,7 @@ void BatchGcStrategy::DeleteObsoleteFiles() {
     }
 }
 
-IncrementalGcStrategy::IncrementalGcStrategy(boost::shared_ptr<TabletManager> tablet_manager)
+IncrementalGcStrategy::IncrementalGcStrategy(std::shared_ptr<TabletManager> tablet_manager)
     :   tablet_manager_(tablet_manager),
         last_gc_time_(std::numeric_limits<int64_t>::max()),
         max_ts_(std::numeric_limits<int64_t>::max()) {}
@@ -447,7 +446,7 @@ void IncrementalGcStrategy::DeleteTableFiles(const std::string& table_name) {
                     for (std::set<uint64_t>::iterator it = lg_file_set.live_files_.begin(); it != lg_file_set.live_files_.end(); ++it) {
                         uint64_t file_no;
                         leveldb::ParseFullFileNumber(*it, NULL, &file_no);
-                        debug_str += " " + boost::lexical_cast<std::string>(file_no);
+                        debug_str += " " + std::to_string(file_no);
                     }
                     // VLOG(12) << "[gc] live = " << debug_str;
                     LOG(INFO) << "[gc] delete: " << file_path;
@@ -470,7 +469,7 @@ void IncrementalGcStrategy::DeleteTableFiles(const std::string& table_name) {
                     leveldb::ParseFullFileNumber(full_number, &tablet_number, &file_number);
                     LOG(ERROR) << "[gc] empty tablet still has live files: " << tablet_number << "/" << lg_it->first << "/" << file_number;
                 } else {
-                    std::string lg_str = boost::lexical_cast<std::string>(lg_it->first);
+                    std::string lg_str = std::to_string(lg_it->first);
                     std::string lg_path = tablet_path + "/" + lg_str;
                     LOG(INFO) << "[gc] delete empty lg dir: " << lg_path;
                     if (io::DeleteEnvDir(lg_path)) {
@@ -543,7 +542,7 @@ bool IncrementalGcStrategy::CollectSingleDeadTablet(const std::string& tablename
         env->GetChildren(lg_path, &files);
         list_count_.Inc();
 
-        int64_t lg_no = boost::lexical_cast<int64_t>(children[lg]);
+        int64_t lg_no = std::stoll(children[lg]);
         std::map<int64_t, LgFileSet>& tablet_files = dead_tablet_files_[tablename][tabletnum].files_;
         LgFileSet lg_file_set;
         tablet_files.insert(std::make_pair(lg_no, lg_file_set));
@@ -592,7 +591,7 @@ void IncrementalGcStrategy::DEBUG_print_files(bool print_dead) {
                 for (std::set<uint64_t>::iterator it = f.begin(); it != f.end(); ++it) {
                     uint64_t file_no;
                     leveldb::ParseFullFileNumber(*it, NULL, &file_no);
-                    debug_str += " " + boost::lexical_cast<std::string>(file_no);
+                    debug_str += " " + std::to_string(file_no);
                 }
                 LOG(INFO) << "[gc]     lg stor -- " << lg_it->first << "-" << (lg_it->second).storage_files_.size() << debug_str;
                 f = (lg_it->second).live_files_;
@@ -600,7 +599,7 @@ void IncrementalGcStrategy::DEBUG_print_files(bool print_dead) {
                 for (std::set<uint64_t>::iterator it = f.begin(); it != f.end(); ++it) {
                     uint64_t file_no;
                     leveldb::ParseFullFileNumber(*it, NULL, &file_no);
-                    debug_str += " " + boost::lexical_cast<std::string>(file_no);
+                    debug_str += " " + std::to_string(file_no);
                 }
                 LOG(INFO) << "[gc]     lg live -- " << lg_it->first << "-" << (lg_it->second).live_files_.size() << debug_str;
             }
