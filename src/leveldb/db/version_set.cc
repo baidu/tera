@@ -1826,7 +1826,9 @@ Iterator* VersionSet::MakeInputIterator(Compaction* c) {
   return result;
 }
 
-double VersionSet::CompactionScore() const {
+// timeout for usec
+double VersionSet::CompactionScore(uint64_t* timeout) const {
+  *timeout = 0;
   uint64_t ts = env_->NowMicros();
   Version* v = current_;
   if (v->compaction_score_ >= 1) {
@@ -1841,11 +1843,14 @@ double VersionSet::CompactionScore() const {
     return 0.1f;
   }
 
+  // delay task
   if (v->ttl_trigger_compact_ != NULL &&
      ts < v->ttl_trigger_compact_->check_ttl_ts) {
-    uint64_t ts_diff = v->ttl_trigger_compact_->check_ttl_ts - ts;
-    return (double)(ts_diff < 1000000 ? -1000000.0 : (-1.0 * ts_diff - 1000000.0));
+    *timeout = v->ttl_trigger_compact_->check_ttl_ts - ts + 1000000;
+    return (double)((v->ttl_trigger_compact_->ttl_percentage + 1) / 100.0);
   }
+
+  // nothing to do
   return -1.0;
 }
 

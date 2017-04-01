@@ -59,12 +59,12 @@ void CondVar::Wait() {
   PthreadCall("wait", pthread_cond_wait(&cv_, &mu_->mu_));
 }
 
-bool CondVar::Wait(int32_t wait_millisec) {
+bool CondVar::Wait(int64_t wait_millisec) {
   assert(wait_millisec >= 0);
   struct timespec ts;
   struct timeval tp;
   gettimeofday(&tp, NULL);
-  uint32_t usec = tp.tv_usec + wait_millisec * 1000;
+  uint64_t usec = tp.tv_usec + wait_millisec * 1000;
   ts.tv_sec = tp.tv_sec + usec / 1000000;
   ts.tv_nsec = (usec % 1000000) * 1000;
   return (0 == pthread_cond_timedwait(&cv_, &mu_->mu_, &ts));

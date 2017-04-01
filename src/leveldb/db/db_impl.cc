@@ -166,9 +166,8 @@ DBImpl::DBImpl(const Options& options, const std::string& dbname)
       bound_log_size_(0),
       bg_compaction_scheduled_(false),
       bg_compaction_score_(0),
+      bg_compaction_timeout_(0),
       bg_schedule_id_(0),
-      timeout_scheduled_(false),
-      timeout_schedule_id_(0),
       manual_compaction_(NULL),
       consecutive_compaction_errors_(0),
       flush_on_destroy_(false) {
@@ -195,14 +194,8 @@ Status DBImpl::Shutdown1() {
   shutting_down_.Release_Store(this);  // Any non-NULL value is ok
 
   Log(options_.info_log, "[%s] wait bg compact finish", dbname_.c_str());
-  if (timeout_scheduled_) {
-    env_->ReSchedule(timeout_schedule_id_, kDeleteLogUrgentScore, 0);
-  }
-  while (timeout_scheduled_) {
-    bg_cv_.Wait();
-  }
   if (bg_compaction_scheduled_) {
-    env_->ReSchedule(bg_schedule_id_, kDumpMemTableUrgentScore);
+    env_->ReSchedule(bg_schedule_id_, kDumpMemTableUrgentScore, 0);
   }
   while (bg_compaction_scheduled_) {
     bg_cv_.Wait();
@@ -765,16 +758,6 @@ Status DBImpl::CompactMemTable() {
   return s;
 }
 
-void DBImpl::TimeoutCompaction(void* db) {
-  reinterpret_cast<DBImpl*>(db)->TimeoutScheduleCompaction();
-}
-void DBImpl::TimeoutScheduleCompaction() {
-    MutexLock l(&mutex_);
-    timeout_scheduled_ = false;
-    MaybeScheduleCompaction();
-    bg_cv_.SignalAll();
-}
-
 void DBImpl::CompactRange(const Slice* begin, const Slice* end, int lg_no) {
   int max_level_with_files = 1;
   {
@@ -949,45 +932,41 @@ void DBImpl::MaybeScheduleCompaction() {
   if (shutting_down_.Acquire_Load()) {
     // DB is being deleted; no more background compactions
   } else {
-    double score = versions_->CompactionScore();
+    uint64_t timeout = 0;
+    double score = versions_->CompactionScore(&timeout);
     if (manual_compaction_ != NULL) {
-        score = kManualCompactScore;
+      score = kManualCompactScore;
     }
     if (imm_ != NULL) {
-        score = kDumpMemTableScore;
+      score = kDumpMemTableScore;
     }
     if (score > 0) {
-        if (bg_compaction_scheduled_ && score <= bg_compaction_score_) {
-            // Already scheduled
-        } else if (bg_compaction_scheduled_) {
-            env_->ReSchedule(bg_schedule_id_, score);
-            Log(options_.info_log, "[%s] ReSchedule Compact[%ld] score= %.2f",
-                dbname_.c_str(), bg_schedule_id_, score);
-            bg_compaction_score_ = score;
-        } else {
-            bg_schedule_id_ = env_->Schedule(&DBImpl::BGWork, this, score);
-            Log(options_.info_log, "[%s] Schedule Compact[%ld] score= %.2f",
-                dbname_.c_str(), bg_schedule_id_, score);
-            bg_compaction_score_ = score;
-            bg_compaction_scheduled_ = true;
+      if (!bg_compaction_scheduled_) {
+        bg_schedule_id_ = env_->Schedule(&DBImpl::BGWork, this, score, timeout);
+        Log(options_.info_log, "[%s] Schedule Compact[%ld] score= %.2f, timeout=%lu",
+            dbname_.c_str(), bg_schedule_id_, score, timeout);
+        bg_compaction_score_ = score;
+        bg_compaction_timeout_ = timeout;
+        bg_compaction_scheduled_ = true;
+      } else {
+        // use the same way to compute priority score, like util/thread_pool.h
+        bool need_resched = false;
+        if (timeout != bg_compaction_timeout_) {
+          need_resched = timeout < bg_compaction_timeout_;
+        } else if (score != bg_compaction_score_) {
+          need_resched = score > bg_compaction_score_;
         }
-    } else if (score + 1000000.0 < 1e-4) {
-        // timeout compaction
-        int64_t timeout = (int64_t)(score * (-1.0));
-        assert(timeout > 0);
-        if (timeout_scheduled_) {
-            env_->ReSchedule(timeout_schedule_id_, kDeleteLogUrgentScore, timeout / 1000);
-            Log(options_.info_log, "[%s] ReSchedule Timeout Compact[%ld] after %ld",
-                dbname_.c_str(), timeout_schedule_id_, timeout / 1000);
-        } else {
-            timeout_schedule_id_  = env_->Schedule(&DBImpl::TimeoutCompaction, this,
-                                                   kDeleteLogUrgentScore, timeout / 1000);
-            Log(options_.info_log, "[%s] Schedule Timeout Compact[%ld] after %ld",
-                dbname_.c_str(), timeout_schedule_id_, timeout / 1000);
-            timeout_scheduled_ = true;
+
+        if (need_resched) {
+          env_->ReSchedule(bg_schedule_id_, score, timeout);
+          Log(options_.info_log, "[%s] ReSchedule Compact[%ld] score= %.2f, timeout=%lu",
+              dbname_.c_str(), bg_schedule_id_, score, timeout);
+          bg_compaction_score_ = score;
+          bg_compaction_timeout_ = timeout;
         }
+      }
     } else {
-        // No work to be done
+      // No work to be done
     }
   }
 }
@@ -1669,7 +1648,8 @@ bool DBImpl::BusyWrite() {
 
 void DBImpl::Workload(double* write_workload) {
   MutexLock l(&mutex_);
-  double wwl = versions_->CompactionScore();
+  uint64_t timeout = 0;
+  double wwl = versions_->CompactionScore(&timeout);
   if (wwl >= 0) {
     *write_workload = wwl;
   } else {

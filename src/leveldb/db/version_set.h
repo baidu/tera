@@ -231,7 +231,7 @@ class VersionSet {
   // being compacted, or zero if there is no such log file.
   uint64_t PrevLogNumber() const { return prev_log_number_; }
 
-  double CompactionScore() const;
+  double CompactionScore(uint64_t* timeout) const;
   // Pick level and inputs for a new compaction.
   // Returns NULL if there is no compaction to be done.
   // Otherwise returns a pointer to a heap-allocated object that

@@ -119,10 +119,8 @@ class DBImpl : public DB {
   Status MakeRoomForWrite(bool force /* compact even if there is room? */)
       EXCLUSIVE_LOCKS_REQUIRED(mutex_);
 
-  void TimeoutScheduleCompaction();
   void MaybeScheduleCompaction() EXCLUSIVE_LOCKS_REQUIRED(mutex_);
   static void BGWork(void* db);
-  static void TimeoutCompaction(void* db);
   void BackgroundCall();
   Status BackgroundCompaction() EXCLUSIVE_LOCKS_REQUIRED(mutex_);
   void CleanupCompaction(CompactionState* compact)
@@ -201,10 +199,8 @@ class DBImpl : public DB {
   // Has a background compaction been scheduled or is running?
   bool bg_compaction_scheduled_;
   double bg_compaction_score_;
+  uint64_t bg_compaction_timeout_;
   int64_t bg_schedule_id_;
-
-  bool timeout_scheduled_;
-  int64_t timeout_schedule_id_;
 
   // Information for a manual compaction
   struct ManualCompaction {
