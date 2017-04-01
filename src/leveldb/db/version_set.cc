@@ -1826,7 +1826,7 @@ Iterator* VersionSet::MakeInputIterator(Compaction* c) {
   return result;
 }
 
-// timeout for usec
+// timeout for micro_second
 double VersionSet::CompactionScore(uint64_t* timeout) const {
   *timeout = 0;
   uint64_t ts = env_->NowMicros();
@@ -1846,7 +1846,7 @@ double VersionSet::CompactionScore(uint64_t* timeout) const {
   // delay task
   if (v->ttl_trigger_compact_ != NULL &&
      ts < v->ttl_trigger_compact_->check_ttl_ts) {
-    *timeout = v->ttl_trigger_compact_->check_ttl_ts - ts + 1000000;
+    *timeout = (v->ttl_trigger_compact_->check_ttl_ts - ts + 1000000) / 1000;
     return (double)((v->ttl_trigger_compact_->ttl_percentage + 1) / 100.0);
   }
 
@@ -1883,6 +1883,12 @@ Compaction* VersionSet::PickCompaction() {
       // Wrap-around to the beginning of the key space
       c->inputs_[0].push_back(current_->files_[level][0]);
     }
+  } else if (seek_compaction) {
+    // compaction trigger by seek percentage
+    // TODO: multithread should lock it
+    level = current_->file_to_compact_level_;
+    c = new Compaction(level);
+    c->inputs_[0].push_back(current_->file_to_compact_);
   } else if (del_compaction) {
     // compaction trigger by delete tags percentage;
     // TODO: multithread should lock it
@@ -1918,12 +1924,6 @@ Compaction* VersionSet::PickCompaction() {
         current_->ttl_trigger_compact_->file_size,
         current_->ttl_trigger_compact_->ttl_percentage,
         current_->ttl_trigger_compact_->check_ttl_ts);
-  } else if (seek_compaction) {
-    // compaction trigger by seek percentage
-    // TODO: multithread should lock it
-    level = current_->file_to_compact_level_;
-    c = new Compaction(level);
-    c->inputs_[0].push_back(current_->file_to_compact_);
   } else {
     return NULL;
   }
