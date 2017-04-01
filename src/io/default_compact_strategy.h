@@ -23,7 +23,7 @@ public:
     virtual ~DefaultCompactStrategy();
 
     virtual bool Drop(const Slice& k, uint64_t n,
-                      const std::string& lower_bound, bool unbound);
+                      const std::string& lower_bound);
 
     // tera-specific, based on all-level iterators.
     // used in LowLevelScan
@@ -52,8 +52,7 @@ private:
                               int64_t* merged_num);
 
     bool CheckCompactLowerBound(const Slice& cur_key,
-                                const std::string& lower_bound,
-                                bool unbound);
+                                const std::string& lower_bound);
 
 private:
     std::map<std::string, int32_t> cf_indexs_;

@@ -41,7 +41,7 @@ bool KvCompactStrategy::CheckTag(const Slice& tera_key, bool* del_tag, int64_t* 
 }
 
 bool KvCompactStrategy::Drop(const leveldb::Slice& tera_key, uint64_t n,
-                             const std::string& lower_bound, bool unbound) {
+                             const std::string& lower_bound) {
     leveldb::Slice row_key;
     int64_t expire_timestamp;
     raw_key_operator_->ExtractTeraKey(tera_key, &row_key, NULL, NULL,
@@ -62,7 +62,7 @@ bool KvCompactStrategy::Drop(const leveldb::Slice& tera_key, uint64_t n,
 }
 
 bool KvCompactStrategy::ScanDrop(const leveldb::Slice& tera_key, uint64_t n) {
-    return Drop(tera_key, n, "", false); // used in scan.
+    return Drop(tera_key, n, ""); // used in scan.
 }
 
 bool KvCompactStrategy::ScanMergedValue(Iterator* it, std::string* merged_value,

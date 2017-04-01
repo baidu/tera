@@ -38,7 +38,7 @@ void DefaultCompactStrategy::SetSnapshot(uint64_t snapshot) {
 }
 
 bool DefaultCompactStrategy::Drop(const Slice& tera_key, uint64_t n,
-                                  const std::string& lower_bound, bool unbound) {
+                                  const std::string& lower_bound) {
     Slice key, col, qual;
     int64_t ts = -1;
     leveldb::TeraKeyType type;
@@ -80,7 +80,7 @@ bool DefaultCompactStrategy::Drop(const Slice& tera_key, uint64_t n,
             case leveldb::TKT_DEL_QUALIFIERS: {
                 del_qual_ts_ = ts;
                 del_qual_seq_ = n;
-                if (CheckCompactLowerBound(key, lower_bound, unbound) && snapshot_ == leveldb::kMaxSequenceNumber) {
+                if (CheckCompactLowerBound(key, lower_bound) && snapshot_ == leveldb::kMaxSequenceNumber) {
                     VLOG(15) << "tera.DefaultCompactStrategy: can drop delete row tag";
                     return true;
                 }
@@ -105,7 +105,7 @@ bool DefaultCompactStrategy::Drop(const Slice& tera_key, uint64_t n,
             case leveldb::TKT_DEL_QUALIFIERS: {
                 del_qual_ts_ = ts;
                 del_qual_seq_ = n;
-                if (CheckCompactLowerBound(key, lower_bound, unbound) && snapshot_ == leveldb::kMaxSequenceNumber) {
+                if (CheckCompactLowerBound(key, lower_bound) && snapshot_ == leveldb::kMaxSequenceNumber) {
                   VLOG(15) << "tera.DefaultCompactStrategy: can drop delete col tag";
                   return true;
                 }
@@ -124,7 +124,7 @@ bool DefaultCompactStrategy::Drop(const Slice& tera_key, uint64_t n,
         if (type == leveldb::TKT_DEL_QUALIFIERS) {
             del_qual_ts_ = ts;
             del_qual_seq_ = n;
-            if (CheckCompactLowerBound(key, lower_bound, unbound) && snapshot_ == leveldb::kMaxSequenceNumber) {
+            if (CheckCompactLowerBound(key, lower_bound) && snapshot_ == leveldb::kMaxSequenceNumber) {
               VLOG(15) << "tera.DefaultCompactStrategy: can drop delete qualifier tag";
               return true;
             }
@@ -435,11 +435,7 @@ bool DefaultCompactStrategy::CheckTag(const Slice& tera_key, bool* del_tag, int6
 }
 
 bool DefaultCompactStrategy::CheckCompactLowerBound(const Slice& cur_key,
-                                                    const std::string& lower_bound,
-                                                    bool unbound) {
-    if (unbound) {
-      return true;
-    }
+                                                    const std::string& lower_bound) {
     if (lower_bound.empty()) {
         return false;
     }

@@ -21,7 +21,7 @@ public:
 
     virtual bool CheckTag(const leveldb::Slice& tera_key, bool* del_tag, int64_t* ttl_tag);
     virtual bool Drop(const leveldb::Slice& k, uint64_t n,
-                      const std::string& lower_bound, bool unbound);
+                      const std::string& lower_bound);
 
     // tera-specific, based on all-level iterators.
     // used in LowLevelScan

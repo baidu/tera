@@ -2042,32 +2042,14 @@ void VersionSet::SetupCompactionBoundary(Compaction* c) {
     return;
   }
 
-  // could not calculate input[1].large key.
   // consider case:
   // level:             sst: 100---------200  sst:200--------300
   // level + 1:         sst: 100------------------------250
   // if use 250 as lower_bound, then 200's del tag may miss
-  bool keep_0 = c->level_ != c->output_level();
-  const Comparator* user_cmp = icmp_.user_comparator();
+  // could not calculate input[1].large key.
   int input0_size = c->inputs_[0].size();
-  FileMetaData* last_file_0 = c->inputs_[0][input0_size - 1];
-  for (size_t i = 0; !keep_0 && i < current_->files_[c->level_].size(); i++) {
-    FileMetaData* f = current_->files_[c->level_][i];
-    if (last_file_0 == f) {
-      if (i + 1 == current_->files_[c->level_].size() ||
-          user_cmp->Compare(last_file_0->largest.user_key(),
-                            current_->files_[c->level_][i + 1]->smallest.user_key()) < 0) {
-        c->unbound_ = true;
-      } else {
-        keep_0 = true;
-      }
-      break;
-    }
-  }
-  // In self compaction, check last_file.largest_key < next_file.smallest_key
-  if (keep_0) {
-    c->set_drop_lower_bound(last_file_0->largest.user_key().ToString());
-  }
+  FileMetaData* last_file = c->inputs_[0][input0_size - 1];
+  c->set_drop_lower_bound(last_file->largest.user_key().ToString());
   return;
 }
 
@@ -2120,7 +2102,6 @@ Compaction::Compaction(int level)
       grandparent_index_(0),
       seen_key_(false),
       overlapped_bytes_(0),
-      unbound_(false),
       force_non_trivial_(false) {
   for (int i = 0; i < config::kNumLevels; i++) {
     level_ptrs_[i] = 0;

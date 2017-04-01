@@ -1353,12 +1353,10 @@ Status DBImpl::DoCompactionWork(CompactionState* compact) {
         drop = true;
       } else if (compact_strategy && ikey.sequence <= compact->smallest_snapshot) {
         std::string lower_bound;
-        bool unbound = false;
         if (options_.drop_base_level_del_in_compaction) {
           lower_bound = compact->compaction->drop_lower_bound();
-          unbound = compact->compaction->unbound();
         }
-        drop = compact_strategy->Drop(ikey.user_key, ikey.sequence, lower_bound, unbound);
+        drop = compact_strategy->Drop(ikey.user_key, ikey.sequence, lower_bound);
       }
 
       last_sequence_for_key = ikey.sequence;
@@ -1408,8 +1406,7 @@ Status DBImpl::DoCompactionWork(CompactionState* compact) {
           //Log(options_.info_log, "[%s] add del_tag %d, key_type %d\n",
           //    dbname_.c_str(), del_tag, ikey.type);
           compact->current_output()->del_num++;
-        }
-        if (ttl > 0) {
+        } else if (ttl > 0) { // del tag has not ttl
           //Log(options_.info_log, "[%s] add ttl_tag %ld\n",
           //    dbname_.c_str(), ttl);
           compact->current_output()->ttls.push_back(ttl);
