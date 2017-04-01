@@ -118,10 +118,16 @@ class RowKeyBloomFilterPolicy : public BloomFilterPolicy {
 
   virtual void CreateFilter(const Slice* keys, int n, std::string* dst) const {
     Slice* row_keys = new Slice[n];
+    int row_key_num = 0;
+
     for (int i = 0; i < n; i++) {
-      raw_key_operator_->ExtractTeraKey(keys[i], &row_keys[i], NULL, NULL, NULL, NULL);
+      Slice row_key;
+      raw_key_operator_->ExtractTeraKey(keys[i], &row_key, NULL, NULL, NULL, NULL);
+      if (row_key_num == 0 || row_key.compare(row_keys[row_key_num - 1]) != 0) {
+        row_keys[row_key_num++] = row_key;
+      }
     }
-    BloomFilterPolicy::CreateFilter(row_keys, n, dst);
+    BloomFilterPolicy::CreateFilter(row_keys, row_key_num, dst);
     delete[] row_keys;
   }
 
