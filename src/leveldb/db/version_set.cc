@@ -1567,7 +1567,7 @@ void VersionSet::Finalize(Version* v) {
     v->del_trigger_compact_ = v->files_[best_del_level][best_del_idx];
     v->del_trigger_compact_level_ = best_del_level;
     Log(options_->info_log,
-        "[%s] del_stragety(current), level %d, num #%lu, file_size %lu, del_p %lu\n",
+        "[%s] del_strategy(current), level %d, num #%lu, file_size %lu, del_p %lu\n",
         dbname_.c_str(),
         v->del_trigger_compact_level_,
         (v->del_trigger_compact_->number) & 0xffffffff,
@@ -1578,7 +1578,7 @@ void VersionSet::Finalize(Version* v) {
     v->ttl_trigger_compact_ = v->files_[best_ttl_level][best_ttl_idx];
     v->ttl_trigger_compact_level_ = best_ttl_level;
     Log(options_->info_log,
-        "[%s] ttl_stragety(current), level %d, num #%lu, file_size %lu, ttl_p %lu, check_ts %lu\n",
+        "[%s] ttl_strategy(current), level %d, num #%lu, file_size %lu, ttl_p %lu, check_ts %lu\n",
         dbname_.c_str(),
         v->ttl_trigger_compact_level_,
         (v->ttl_trigger_compact_->number) & 0xffffffff,

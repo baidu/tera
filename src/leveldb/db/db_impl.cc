@@ -936,9 +936,11 @@ void DBImpl::MaybeScheduleCompaction() {
     double score = versions_->CompactionScore(&timeout);
     if (manual_compaction_ != NULL) {
       score = kManualCompactScore;
+      timeout = 0;
     }
     if (imm_ != NULL) {
       score = kDumpMemTableScore;
+      timeout = 0;
     }
     if (score > 0) {
       if (!bg_compaction_scheduled_) {
@@ -948,6 +950,7 @@ void DBImpl::MaybeScheduleCompaction() {
         bg_compaction_score_ = score;
         bg_compaction_timeout_ = timeout;
         bg_compaction_scheduled_ = true;
+        assert(score <= 1 || timeout == 0); // if score > 1, then timeout MUST be 0
       } else {
         // use the same way to compute priority score, like util/thread_pool.h
         bool need_resched = false;
@@ -963,6 +966,7 @@ void DBImpl::MaybeScheduleCompaction() {
               dbname_.c_str(), bg_schedule_id_, score, timeout);
           bg_compaction_score_ = score;
           bg_compaction_timeout_ = timeout;
+          assert(score <= 1 || timeout == 0); // if score > 1, then timeout MUST be 0
         }
       }
     } else {
