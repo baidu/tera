@@ -37,6 +37,8 @@ DECLARE_int64(tera_tablet_log_file_size);
 DECLARE_int64(tera_tablet_max_write_buffer_size);
 DECLARE_int64(tera_tablet_write_block_size);
 DECLARE_int32(tera_tablet_level0_file_limit);
+DECLARE_int32(tera_tablet_ttl_percentage);
+DECLARE_int32(tera_tablet_del_percentage);
 DECLARE_int32(tera_tablet_max_block_log_number);
 DECLARE_int64(tera_tablet_write_log_time_out);
 DECLARE_bool(tera_log_async_mode);
@@ -222,6 +224,8 @@ bool TabletIO::Load(const TableSchema& schema,
     ldb_options_.key_start = raw_start_key_;
     ldb_options_.key_end = raw_end_key_;
     ldb_options_.l0_slowdown_writes_trigger = FLAGS_tera_tablet_level0_file_limit;
+    ldb_options_.ttl_percentage = FLAGS_tera_tablet_ttl_percentage;
+    ldb_options_.del_percentage = FLAGS_tera_tablet_del_percentage;
     ldb_options_.block_size = FLAGS_tera_tablet_write_block_size * 1024;
     ldb_options_.max_block_log_number = FLAGS_tera_tablet_max_block_log_number;
     ldb_options_.write_log_time_out = FLAGS_tera_tablet_write_log_time_out;

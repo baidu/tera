@@ -1233,8 +1233,8 @@ Status DBImpl::InstallCompactionResults(CompactionState* compact) {
       compact->compaction->output_level(), BuildFullFileNumber(dbname_, out.number),
       out.file_size, out.smallest, out.largest,
       out.del_num * 100 / out.entries /* delete tag percentage */,
-      out.ttls.size() > 0 ? out.ttls[idx] : 0 /* sst's check ttl's time */,
-      out.ttls.size() > 0 ? idx * 100 / out.ttls.size() : 0 /* delete tag percentage */);
+      ((out.ttls.size() > 0) && (idx < out.ttls.size())) ? out.ttls[idx] : 0 /* sst's check ttl's time */,
+      ((out.ttls.size() > 0) && (idx < out.ttls.size())) ? idx * 100 / out.ttls.size() : 0 /* delete tag percentage */);
       Log(options_.info_log, "[%s] AddFile, level %d, number #%lu, entries %ld, del_nr %lu"
                              ", ttl_nr %lu, del_p %lu, ttl_check_ts %lu, ttl_p %lu\n",
           dbname_.c_str(),
@@ -1244,8 +1244,8 @@ Status DBImpl::InstallCompactionResults(CompactionState* compact) {
           out.del_num,
           out.ttls.size(),
           out.del_num * 100 / out.entries,
-          out.ttls.size() > 0 ? out.ttls[idx] : 0,
-          out.ttls.size() > 0 ? idx * 100 / out.ttls.size() : 0);
+          ((out.ttls.size() > 0) && (idx < out.ttls.size())) ? out.ttls[idx] : 0,
+          ((out.ttls.size() > 0) && (idx < out.ttls.size())) ? idx * 100 / out.ttls.size() : 0);
   }
   return versions_->LogAndApply(compact->compaction->edit(), &mutex_);
 }
