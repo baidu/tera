@@ -199,6 +199,7 @@ class DBImpl : public DB {
   // Has a background compaction been scheduled or is running?
   bool bg_compaction_scheduled_;
   double bg_compaction_score_;
+  uint64_t bg_compaction_timeout_;
   int64_t bg_schedule_id_;
 
   // Information for a manual compaction

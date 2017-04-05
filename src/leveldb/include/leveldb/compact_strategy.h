@@ -39,6 +39,8 @@ public:
     // are protected by snpashot
     virtual void SetSnapshot(uint64_t snapshot) = 0;
 
+    virtual bool CheckTag(const Slice& tera_key, bool* del_tag, int64_t* ttl_tag) = 0;
+
     virtual const char* Name() const = 0;
 };
 
@@ -71,6 +73,12 @@ public:
     virtual bool ScanMergedValue(Iterator* it, std::string* merged_value,
                                  int64_t* merged_num) {
         return false;
+    }
+
+    virtual bool CheckTag(const Slice& tera_key, bool* del_tag, int64_t* ttl_tag) {
+        *del_tag = false;
+        *ttl_tag = -1;
+        return true;
     }
 };
 

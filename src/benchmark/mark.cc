@@ -74,7 +74,7 @@ void Adapter::Write(const std::string& row,
             if (FLAGS_verify) {
                 add_checksum(row, family, qualifier, &value);
             }
-            row_mu->Put(family, qualifier, timestamp, value);
+            row_mu->Put(family, qualifier, value, (int64_t)timestamp);
             if (FLAGS_verify) {
                 remove_checksum(&value);
             }

@@ -15,7 +15,7 @@
 namespace leveldb {
 
 // Tag numbers for serialized VersionEdit.  These numbers are written to
-// disk and should not be changed. max tag number = 4096, min tag number = 1
+// disk and should not be changed. max tag number = 1<<20, min tag number = 1
 enum Tag {
   kComparator           = 1,
   kLogNumber            = 2,
@@ -28,7 +28,9 @@ enum Tag {
   kPrevLogNumber        = 9,
   kNewFile              = 10,
   kDeletedFile          = 11,
-  // no more than 4096
+  kNewFileInfo          = 12,
+
+  // no more than 1<<20
   kMaxTag               = 1 << 20,
 };
 
@@ -134,6 +136,16 @@ void VersionEdit::EncodeTo(std::string* dst) const {
 
     PutVarint32(dst, str.size() + kMaxTag);
     PutVarint32(dst, kNewFile);
+    dst->append(str.data(), str.size());
+
+    // add statictis info
+    str.clear();
+    PutVarint64(&str, f.del_percentage);
+    PutVarint64(&str, f.ttl_percentage);
+    PutVarint64(&str, f.check_ttl_ts);
+
+    PutVarint32(dst, str.size() + kMaxTag);
+    PutVarint32(dst, kNewFileInfo);
     dst->append(str.data(), str.size());
   }
 }
@@ -272,6 +284,30 @@ Status VersionEdit::DecodeFrom(const Slice& src) {
             } else {
               f.largest_fake = true;
             }
+
+            // new file format parser
+            Slice file_ptr = input;
+            uint32_t file_tag;
+            GetVarint32(&file_ptr, &file_tag);
+            if (file_tag > kMaxTag) {
+              // file_tag - kMaxTag;
+              GetVarint32(&file_ptr, &tag);
+            }
+            switch (tag) {
+              case kNewFileInfo:
+                GetVarint32(&input, &tag);// ignore len
+                GetVarint32(&input, &tag);// ignore tag
+                GetVarint64(&input, &f.del_percentage);
+                GetVarint64(&input, &f.ttl_percentage);
+                GetVarint64(&input, &f.check_ttl_ts);
+                break;
+
+              default:
+                fprintf(stderr, "NewFile %lu without info, skip tag %d, len %d\n",
+                        f.number & 0xffffffff,
+                        tag, file_tag);
+                break;
+            }
             new_files_.push_back(std::make_pair(level, f));
           } else {
             msg = "new-file entry 1";
@@ -368,6 +404,12 @@ std::string VersionEdit::DebugString() const {
     r.append(f.smallest.DebugString());
     r.append(" .. ");
     r.append(f.largest.DebugString());
+    r.append(" del_percentage ");
+    AppendNumberTo(&r, f.del_percentage);
+    r.append(" ttl_percentage ");
+    AppendNumberTo(&r, f.ttl_percentage);
+    r.append(" ttl_check_ts ");
+    AppendNumberTo(&r, f.check_ttl_ts);
   }
   r.append("\n}\n");
   return r;

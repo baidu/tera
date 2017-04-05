@@ -38,6 +38,11 @@ class ScanContextManager;
 
 class TabletIO {
 public:
+    enum CompactionType {
+        kManualCompaction = 1,
+        kMinorCompaction = 2,
+    };
+
     enum TabletStatus {
         kNotInit = kTabletNotInit,
         kReady = kTabletReady,
@@ -97,8 +102,7 @@ public:
                       StatusCode* status = NULL);
     virtual bool Unload(StatusCode* status = NULL);
     virtual bool Split(std::string* split_key, StatusCode* status = NULL);
-    virtual bool Compact(int lg_no = -1, StatusCode* status = NULL);
-    bool CompactMinor(StatusCode* status = NULL);
+    virtual bool Compact(int lg_no = -1, StatusCode* status = NULL, CompactionType type = kManualCompaction);
     bool Destroy(StatusCode* status = NULL);
     virtual bool GetDataSize(uint64_t* size, std::vector<uint64_t>* lgsize = NULL,
                              StatusCode* status = NULL);

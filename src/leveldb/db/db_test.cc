@@ -1287,8 +1287,11 @@ TEST(DBTest, DeletionMarkers2) {
   ASSERT_OK(dbfull()->TEST_CompactMemTable());  // Moves to level last-2
   ASSERT_EQ(AllEntriesFor("foo"), "[ DEL, v1 ]");
   dbfull()->TEST_CompactRange(last-2, NULL, NULL);
+  sleep(3); // del compaction stragety will be auto trigger.
+
   // DEL kept: "last" file overlaps
-  ASSERT_EQ(AllEntriesFor("foo"), "[ DEL, v1 ]");
+  //ASSERT_EQ(AllEntriesFor("foo"), "[ DEL, v1 ]");
+  ASSERT_EQ(AllEntriesFor("foo"), "[ ]");
   dbfull()->TEST_CompactRange(last-1, NULL, NULL);
   // Merging last-1 w/ last, so we are the base level for "foo", so
   // DEL is removed.  (as is v1).

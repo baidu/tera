@@ -306,6 +306,14 @@ struct Options {
   //   3). ignore sst lost
   bool ignore_corruption_in_open;
 
+  // Statistic: By default, if 10% entry timeout, will trigger compaction
+  // Default: 10 %
+  uint64_t ttl_percentage;
+
+  // Statistic: delete tag's percentage in sst
+  // Default: 10 %
+  uint64_t del_percentage;
+
   // Create an Options object with default values for all fields.
   Options();
 };
