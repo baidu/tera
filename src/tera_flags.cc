@@ -127,7 +127,7 @@ DEFINE_int32(tera_master_load_rpc_timeout, 60000, "the timeout period (in ms) fo
 DEFINE_int32(tera_master_unload_rpc_timeout, 60000, "the timeout period (in ms) for unload rpc");
 DEFINE_int32(tera_master_split_rpc_timeout, 120000, "the timeout period (in ms) for split rpc");
 DEFINE_int32(tera_master_tabletnode_timeout, 60000, "the timeout period (in ms) for move tablet after tabletnode down");
-DEFINE_int32(tera_master_collect_info_timeout, 6000, "the timeout period (in ms) for collect tabletnode info");
+DEFINE_int32(tera_master_collect_info_timeout, 3000, "the timeout period (in ms) for collect tabletnode info");
 DEFINE_int32(tera_master_collect_info_retry_period, 3000, "the retry period (in ms) for collect tabletnode info");
 DEFINE_int32(tera_master_collect_info_retry_times, 10, "the max retry times for collect tabletnode info");
 DEFINE_int32(tera_master_load_slow_retry_times, 60, "the max retry times when master load very slow tablet");
