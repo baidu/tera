@@ -27,6 +27,8 @@ static int (*nfsRmdir)(const char* path);
 static nfs::NFSDIR* (*nfsOpendir)(const char* path);
 static struct ::dirent* (*nfsReaddir)(nfs::NFSDIR* dir);
 static int (*nfsClosedir)(nfs::NFSDIR* dir);
+static int (*nfsSetDirOwner)(const char* path);
+static int (*nfsClearDirOwner)(const char* path);
 
 static int (*nfsStat)(const char* path, struct ::stat* stat);
 static int (*nfsUnlink)(const char* path);
@@ -35,6 +37,7 @@ static int (*nfsRename)(const char* oldpath, const char* newpath);
 
 static nfs::NFSFILE* (*nfsOpen)(const char* path, const char* mode);
 static int (*nfsClose)(nfs::NFSFILE* stream);
+static int (*nfsForceRelease)(const char* path);
 
 static ssize_t (*nfsRead)(nfs::NFSFILE* stream, void* ptr, size_t size);
 static ssize_t (*nfsPRead)(nfs::NFSFILE* stream, void* ptr, size_t size,
@@ -84,12 +87,15 @@ void Nfs::LoadSymbol() {
   *(void**)(&nfsOpendir) = ResolveSymbol(dl, "Opendir");
   *(void**)(&nfsReaddir) = ResolveSymbol(dl, "Readdir");
   *(void**)(&nfsClosedir) = ResolveSymbol(dl, "Closedir");
+  *(void**)(&nfsSetDirOwner) = ResolveSymbol(dl, "SetDirOwner");
+  *(void**)(&nfsClearDirOwner) = ResolveSymbol(dl, "ClearDirOwner");
   *(void**)(&nfsStat) = ResolveSymbol(dl, "Stat");
   *(void**)(&nfsUnlink) = ResolveSymbol(dl, "Unlink");
   *(void**)(&nfsAccess) = ResolveSymbol(dl, "Access");
   *(void**)(&nfsRename) = ResolveSymbol(dl, "Rename");
   *(void**)(&nfsOpen) = ResolveSymbol(dl, "Open");
   *(void**)(&nfsClose) = ResolveSymbol(dl, "Close");
+  *(void**)(&nfsForceRelease) = ResolveSymbol(dl, "ForceRelease");
   *(void**)(&nfsRead) = ResolveSymbol(dl, "Read");
   *(void**)(&nfsPRead) = ResolveSymbol(dl, "PRead");
   *(void**)(&nfsWrite) = ResolveSymbol(dl, "Write");
@@ -338,6 +344,94 @@ int32_t Nfs::ListDirectory(const std::string& path,
   }
   (*nfsClosedir)(dir);
   return 0;
+}
+
+int32_t Nfs::LockDirectory(const std::string& path) {
+  int ret = 0;
+  const int max_retry_times = 5;
+  int cur_retry_times = 0;
+  do {
+    ret = (*nfsSetDirOwner)(path.c_str());
+  } while (ret != 0 && ++cur_retry_times < max_retry_times);
+  if (ret != 0) {
+    fprintf(stderr, "[LockDirectory] lock dir %s fail, errno: %d",
+        path.c_str(), errno);
+    return -1;
+  }
+
+  std::vector<std::string> lg_and_log;
+  cur_retry_times = 0;
+  do {
+    ret = ListDirectory(path, &lg_and_log);
+  } while (ret != 0 && ++cur_retry_times < max_retry_times);
+  if (ret != 0) {
+    fprintf(stderr, "[LockDirectory] list dir %s fail, errno: %d",
+        path.c_str(), errno);
+    return -1;
+  }
+
+  for (size_t i = 0; i < lg_and_log.size(); i++) {
+    if (lg_and_log[i].find(".log") != std::string::npos) {
+      std::string log_file = path + "/" + lg_and_log[i];
+      cur_retry_times = 0;
+      do {
+        ret = (*nfsForceRelease)(log_file.c_str());
+      } while (ret != 0 && ++cur_retry_times < max_retry_times);
+      if (ret != 0) {
+        fprintf(stderr, "[LockDirectory] force release file %s fail, errno: %d",
+            log_file.c_str(), errno);
+        return -1;
+      }
+    } else {
+      std::string lg_path = path + "/" + lg_and_log[i];
+      std::vector<std::string> lg_files;
+
+      cur_retry_times = 0;
+      struct stat fileinfo;
+      do {
+        ret = (*nfsStat)(lg_path.c_str(), &fileinfo);
+      } while (ret != 0 && ++cur_retry_times < max_retry_times);
+      if (ret != 0) {
+        fprintf(stderr, "[LockDirectory] stat file %s fail, errno: %d",
+            lg_path.c_str(), errno);
+        return -1;
+      }
+
+      if (!S_ISDIR(fileinfo.st_mode)) {
+        continue;
+      }
+
+      cur_retry_times = 0;
+      do {
+        ret = ListDirectory(lg_path, &lg_files);
+      } while (ret != 0 && ++cur_retry_times < max_retry_times);
+      if (ret != 0) {
+        fprintf(stderr, "[LockDirectory] list directory %s fail, errno: %d",
+            lg_path.c_str(), errno);
+        return -1;
+      }
+
+      for (size_t j = 0; j < lg_files.size(); j++) {
+        if (lg_files[j].find("MANIFEST") != std::string::npos) {
+          std::string manifest_file = lg_path + "/" + lg_files[j];
+          cur_retry_times = 0;
+          do {
+            ret = (*nfsForceRelease)(manifest_file.c_str());
+          } while (ret != 0 && ++cur_retry_times < max_retry_times);
+          if (ret != 0) {
+            fprintf(stderr, "[LockDirectory] force release file %s fail, errno: %d",
+                manifest_file.c_str(), errno);
+            return -1;
+          }
+        }
+      }
+    }
+  }
+  return 0;
+}
+
+int32_t Nfs::UnlockDirectory(const std::string& path) {
+  return (*nfsClearDirOwner)(path.c_str());
 }
 
 }

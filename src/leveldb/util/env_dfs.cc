@@ -308,6 +308,12 @@ public:
     }
 };
 
+class DfsFileLock : public FileLock {
+public:
+    DfsFileLock(const std::string& path) : dir_path_(path) {}
+    std::string dir_path_;
+};
+
 DfsEnv::DfsEnv(Dfs* dfs)
   : EnvWrapper(Env::Default()), dfs_(dfs) {
 }
@@ -495,13 +501,25 @@ Status DfsEnv::RenameFile(const std::string& src, const std::string& target)
 
 Status DfsEnv::LockFile(const std::string& fname, FileLock** lock)
 {
-    *lock = NULL;
+    std::string dir_path(fname.c_str(), fname.find("LOCK"));
+    if (dfs_->LockDirectory(dir_path) != 0) {
+        return Status::IOError("lock " + fname);
+    }
+    *lock = new DfsFileLock(dir_path);
     return Status::OK();
 }
 
 Status DfsEnv::UnlockFile(FileLock* lock)
 {
-    return Status::OK();
+    if (DfsFileLock* dfs_lock = dynamic_cast<DfsFileLock*>(lock)) {
+        const std::string& dir_path = dfs_lock->dir_path_;
+        dfs_->UnlockDirectory(dir_path.c_str());
+        delete lock;
+        return Status::OK();
+    } else {
+        Log("[env_dfs]: wrong file lock at %p\n", lock);
+        abort();
+    }
 }
 
 static bool inited = false;
