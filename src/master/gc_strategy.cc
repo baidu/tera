@@ -419,7 +419,7 @@ void IncrementalGcStrategy::DeleteTableFiles(const std::string& table_name) {
     if (earliest_ready_time != max_ts_) {
         VLOG(12) << "[gc] earliest ready time " << earliest_ready_time << " : " << common::timer::get_time_str(earliest_ready_time);
     } else {
-        VLOG(12) << "[gc] " << table_name << "'s some tablet not ready";
+        VLOG(12) << "[gc] " << table_name << "'s tablets not ready";
     }
     std::set<int64_t> gc_tablets;
     for (tablet_it = dead_tablets.begin(); tablet_it != dead_tablets.end(); ++tablet_it) {
