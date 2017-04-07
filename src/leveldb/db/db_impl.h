@@ -167,9 +167,6 @@ class DBImpl : public DB {
   TableCache* table_cache_;
   bool owns_table_cache_;
 
-  // Lock over the persistent DB state.  Non-NULL iff successfully acquired.
-  FileLock* db_lock_;
-
   // State below is protected by mutex_
   port::Mutex mutex_;
   port::AtomicPointer shutting_down_;
