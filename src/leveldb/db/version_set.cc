@@ -173,14 +173,27 @@ class Version::LevelFileNumIterator : public Iterator {
  public:
   LevelFileNumIterator(const InternalKeyComparator& icmp,
                        const std::vector<FileMetaData*>* flist,
-                       const std::string& dbname)
+                       const std::string& dbname,
+                       const ReadOptions& opts)
       : icmp_(icmp),
         flist_(flist),
         dbname_(dbname),
-        index_(flist->size()) {        // Marks as invalid
+        index_(flist->size()),   // Marks as invalid
+        read_single_row_(opts.read_single_row),
+        row_start_key_(opts.row_start_key, kMaxSequenceNumber, kValueTypeForSeek),
+        row_end_key_(opts.row_end_key, kMaxSequenceNumber, kValueTypeForSeek) {
   }
   virtual bool Valid() const {
-    return index_ < flist_->size();
+    if (index_ >= flist_->size()) {
+      return false;
+    }
+    FileMetaData* f = (*flist_)[index_];
+    if (read_single_row_ &&
+        (icmp_.InternalKeyComparator::Compare(f->largest.Encode(), row_start_key_.Encode()) < 0 ||
+         icmp_.InternalKeyComparator::Compare(f->smallest.Encode(), row_end_key_.Encode()) >= 0)) {
+      return false;
+    }
+    return true;
   }
   virtual void Seek(const Slice& target) {
     index_ = FindFile(icmp_, *flist_, target);
@@ -227,6 +240,9 @@ class Version::LevelFileNumIterator : public Iterator {
   const std::vector<FileMetaData*>* const flist_;
   const std::string dbname_;
   uint32_t index_;
+  bool read_single_row_;
+  InternalKey row_start_key_;
+  InternalKey row_end_key_;
 
   // Backing store for value().  Holds the file number and size.
   mutable std::string value_buf_;
@@ -257,7 +273,7 @@ Iterator* Version::NewConcatenatingIterator(const ReadOptions& options,
   ReadOptions opts = options;
   opts.db_opt = vset_->options_;
   return NewTwoLevelIterator(
-      new LevelFileNumIterator(vset_->icmp_, &files_[level], vset_->dbname_),
+      new LevelFileNumIterator(vset_->icmp_, &files_[level], vset_->dbname_, opts),
       &GetFileIterator, vset_->table_cache_, opts);
 }
 
@@ -1815,7 +1831,7 @@ Iterator* VersionSet::MakeInputIterator(Compaction* c) {
       } else {
         // Create concatenating iterator for the files from this level
         list[num++] = NewTwoLevelIterator(
-            new Version::LevelFileNumIterator(icmp_, &c->inputs_[which], dbname_),
+            new Version::LevelFileNumIterator(icmp_, &c->inputs_[which], dbname_, options),
             &GetFileIterator, table_cache_, options);
       }
     }

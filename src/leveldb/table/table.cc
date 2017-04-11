@@ -137,6 +137,132 @@ class TableIter : public Iterator {
   std::string largest_;
 };
 
+class IndexBlockIter : public Iterator {
+ public:
+    IndexBlockIter(const ReadOptions& opts,
+                   Block* index_block,
+                   FilterBlockReader* filter)
+      : valid_(false),
+        iter_(index_block->NewIterator(opts.db_opt->comparator)),
+        comparator_(opts.db_opt->comparator),
+        filter_(filter),
+        read_single_row_(opts.read_single_row),
+        row_start_key_(opts.row_start_key, kMaxSequenceNumber, kValueTypeForSeek),
+        row_end_key_(opts.row_end_key, kMaxSequenceNumber, kValueTypeForSeek) {
+  }
+  virtual ~IndexBlockIter() {
+    delete iter_;
+  }
+  virtual void Seek(const Slice& target) {
+    iter_->Seek(target);
+    SkipUnmatchedBlocksForward();
+  }
+  virtual void SeekToFirst() {
+    iter_->SeekToFirst();
+    SkipUnmatchedBlocksForward();
+  }
+  virtual void SeekToLast() {
+    iter_->SeekToLast();
+    SkipUnmatchedBlocksBackward();
+  }
+  virtual void Next() {
+    iter_->Next();
+    SkipUnmatchedBlocksForward();
+  }
+  virtual void Prev() {
+    iter_->Prev();
+    SkipUnmatchedBlocksBackward();
+  }
+  virtual bool Valid() const {
+    return valid_;
+  }
+  virtual Slice key() const {
+    assert(Valid());
+    return iter_->key();
+  }
+  virtual Slice value() const {
+    assert(Valid());
+    return iter_->value();
+  }
+  virtual Status status() const {
+    return iter_->status();
+  }
+
+ private:
+  void SkipUnmatchedBlocksForward() {
+    valid_ = false;
+    while (iter_->Valid()) {
+      if (!read_single_row_) {
+        valid_ = true;
+        break;
+      }
+      if (!valid_index_key_.empty() && comparator_->Compare(iter_->key(), valid_index_key_) > 0) {
+        //Log("bloomfilter: skip block by range");
+        break;
+      }
+      if (comparator_->Compare(iter_->key(), row_end_key_.Encode()) >= 0 &&
+          (valid_index_key_.empty() || comparator_->Compare(iter_->key(), valid_index_key_) < 0)) {
+        valid_index_key_ = iter_->key().ToString();
+      }
+      if (CheckFilter()) {
+        valid_ = true;
+        //Log("bloomfilter: valid block");
+        break;
+      }
+      //Log("bloomfilter: skip block by bloom");
+      iter_->Next();
+    }
+  }
+  void SkipUnmatchedBlocksBackward() {
+    valid_ = false;
+    while (iter_->Valid()) {
+      if (!read_single_row_) {
+        valid_ = true;
+        break;
+      }
+      if (comparator_->Compare(iter_->key(), row_start_key_.Encode()) < 0) {
+        //Log("bloomfilter: skip block by range");
+        break;
+      }
+      if (comparator_->Compare(iter_->key(), row_end_key_.Encode()) >= 0 &&
+          (valid_index_key_.empty() || comparator_->Compare(iter_->key(), valid_index_key_) < 0)) {
+        valid_index_key_ = iter_->key().ToString();
+      }
+      if (CheckFilter()) {
+        valid_ = true;
+        //Log("bloomfilter: valid block");
+        break;
+      }
+      //Log("bloomfilter: skip block by bloom");
+      iter_->Prev();
+    }
+  }
+  bool CheckFilter() {
+    assert(iter_->Valid());
+    Slice handle_value = iter_->value();
+    BlockHandle handle;
+    if (!read_single_row_ ||
+        filter_ == NULL ||
+        !handle.DecodeFrom(&handle_value).ok() ||
+        filter_->KeyMayMatch(handle.offset(), row_start_key_.Encode())) {
+      return true;
+    }
+    return false;
+  }
+
+ private:
+  bool valid_;
+  Iterator* iter_;
+  const Comparator* comparator_;
+  FilterBlockReader* filter_;
+  bool read_single_row_;
+  InternalKey row_start_key_;
+  InternalKey row_end_key_;
+
+  // smallest index key which is larger than row end key
+  std::string valid_index_key_;
+};
+
 Status Table::Open(const Options& options,
                    RandomAccessFile* file,
                    uint64_t size,
@@ -314,9 +440,7 @@ Iterator* Table::BlockReader(void* arg,
 }
 
 Iterator* Table::NewIterator(const ReadOptions& options) const {
-  return NewTwoLevelIterator(
-      rep_->index_block->NewIterator(options.db_opt->comparator),
-      &Table::BlockReader, const_cast<Table*>(this), options);
+  return NewIterator(options, Slice(), Slice());
 }
 
 Iterator* Table::NewIterator(const ReadOptions& options,
@@ -324,9 +448,9 @@ Iterator* Table::NewIterator(const ReadOptions& options,
                              const Slice& largest) const {
   return new TableIter(
       NewTwoLevelIterator(
-          rep_->index_block->NewIterator(options.db_opt->comparator),
+          new IndexBlockIter(options, rep_->index_block, rep_->filter),
           &Table::BlockReader, const_cast<Table*>(this), options),
-      options.db_opt->comparator, smallest, largest);
+          options.db_opt->comparator, smallest, largest);
 }
 
 Status Table::InternalGet(const ReadOptions& options, const Slice& k,
