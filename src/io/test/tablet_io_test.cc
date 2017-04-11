@@ -20,6 +20,7 @@
 #include "proto/status_code.pb.h"
 #include "utils/timer.h"
 #include "utils/utils_cmd.h"
+#include "utils/string_util.h"
 #include "io/tablet_scanner.h"
 
 DECLARE_string(tera_tabletnode_path_prefix);
@@ -47,8 +48,8 @@ public:
     }
 
     ~TabletIOTest() {
-         std::string cmd = std::string("rm -rf ") + working_dir;
-         system(cmd.c_str());
+        std::string cmd = std::string("rm -rf ") + working_dir;
+        system(cmd.c_str());
     }
 
     const TableSchema& GetTableSchema() {
@@ -503,7 +504,7 @@ TEST_F(TabletIOTest, FindAverageKey) {
     //ASSERT_EQ(ave, "\xb0");
     ASSERT_LT(start, ave);
     ASSERT_NE(ave, start);
-    std::cout << start << ", " << ave << ", " << std::endl;
+    std::cout << DebugString(start) << ", " << DebugString(ave) << ", " << std::endl;
 
     start = "000000000000001480186993";
     end =   "000000000000002147352684";
@@ -542,6 +543,71 @@ TEST_F(TabletIOTest, FindAverageKey) {
     ASSERT_TRUE(TabletIO::FindAverageKey(start, end, &ave));
     ASSERT_EQ(ave, "a\xff\xff\x80");
 }
+
+TEST_F(TabletIOTest, RowBloomFilter) {
+    const int32_t NR = 10000;
+    const int32_t CR = 10;
+    std::string tablet_path = working_dir + "row_bloomfilter";
+    std::string key_start = "";
+    std::string key_end = "";
+    StatusCode status;
+
+    TabletIO tablet(key_start, key_end, tablet_path);
+    EXPECT_TRUE(tablet.Load(GetTableSchema(), tablet_path, std::vector<uint64_t>(),
+                            empty_snaphsots_, empty_rollback_, NULL, NULL, NULL, &status));
+
+    // prepare data
+    leveldb::WriteBatch batch;
+    for (int32_t i = 0; i < NR; i++) {
+        char buf[16];
+        snprintf(buf, sizeof(buf), "%06d", i);
+        std::string row(buf);
+
+        for (int32_t j = 0; j < CR; j++) {
+            char buf[16];
+            snprintf(buf, sizeof(buf), "%03d", j);
+            std::string col(buf);
+
+            std::string tera_key;
+            tablet.GetRawKeyOperator()->EncodeTeraKey(row, "column", col, get_micros(),
+                                                      leveldb::TKT_VALUE, &tera_key);
+            batch.Put(tera_key, "");
+        }
+    }
+    ASSERT_TRUE(tablet.WriteBatch(&batch, false, true, NULL));
+
+    // read and verify
+    for (int32_t i = 0; i < NR; i++) {
+        char buf[16];
+        snprintf(buf, sizeof(buf), "%06d", i);
+        std::string row(buf);
+
+        std::string start_tera_key;
+        tablet.GetRawKeyOperator()->EncodeTeraKey(row, "", "", kLatestTs, leveldb::TKT_FORSEEK,
+                                                  &start_tera_key);
+        std::string end_row_key = row + '\0';
+
+        RowResult value_list;
+        KeyValuePair next_start_point;
+        uint32_t read_row_count = 0;
+        uint32_t read_bytes = 0;
+        bool is_complete = false;
+        ASSERT_TRUE(tablet.LowLevelScan(start_tera_key, end_row_key, ScanOptions(), &value_list,
+                                        &next_start_point, &read_row_count, &read_bytes,
+                                        &is_complete, NULL));
+        ASSERT_EQ(value_list.key_values_size(), CR);
+        for (int32_t j = 0; j < CR; j++) {
+            char buf[16];
+            snprintf(buf, sizeof(buf), "%03d", j);
+            std::string col(buf);
+
+            const KeyValuePair& kv = value_list.key_values(j);
+            EXPECT_EQ(kv.key(), row);
+            EXPECT_EQ(kv.qualifier(), col);
+        }
+    }
+}
+
 } // namespace io
 } // namespace tera
 
