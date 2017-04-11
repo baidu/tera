@@ -403,6 +403,16 @@ int32_t Nfs::LockDirectory(const std::string& path) {
 
       cur_retry_times = 0;
       do {
+        ret = (*nfsSetDirOwner)(lg_path.c_str());
+      } while (ret != 0 && ++cur_retry_times < max_retry_times);
+      if (ret != 0) {
+        fprintf(stderr, "[LockDirectory] lock dir %s fail, errno: %d",
+            lg_path.c_str(), errno);
+        return -1;
+      }
+
+      cur_retry_times = 0;
+      do {
         ret = ListDirectory(lg_path, &lg_files);
       } while (ret != 0 && ++cur_retry_times < max_retry_times);
       if (ret != 0) {
