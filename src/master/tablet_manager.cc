@@ -1724,24 +1724,24 @@ bool TabletManager::GetMetaTabletAddr(std::string* addr) {
 }
 
 bool TabletManager::PickMergeTablet(TabletPtr& tablet, TabletPtr* tablet2) {
-    MutexLock lock(&mutex_);
     std::string table_name = tablet->GetTableName();
 
+    mutex_.Lock();
     // search table
     TableList::iterator it = all_tables_.find(table_name);
     if (it == all_tables_.end()) {
+        mutex_.Unlock();
         LOG(ERROR) << "[merge] table: " << table_name << " not exist";
         return false;
     }
     Table& table = *it->second;
+    MutexLock table_lock(&table.mutex_);
+    mutex_.Unlock();
+
     if (table.tablets_list_.size() < 2) {
         VLOG(20) << "[merge] table: " << table_name << " only have 1 tablet.";
         return false;
     }
-
-    // make sure no other thread ref this table
-    table.mutex_.Lock();
-    table.mutex_.Unlock();
 
     // search tablet
     Table::TabletList::iterator it2 = table.tablets_list_.find(tablet->GetKeyStart());
