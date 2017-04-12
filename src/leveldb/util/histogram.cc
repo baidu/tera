@@ -35,6 +35,7 @@ const double Histogram::kBucketLimit[kNumBuckets] = {
 };
 
 void Histogram::Clear() {
+  MutexLock lock(&mutex_);
   min_ = kBucketLimit[kNumBuckets-1];
   max_ = 0;
   num_ = 0;
@@ -46,6 +47,7 @@ void Histogram::Clear() {
 }
 
 void Histogram::Add(double value) {
+  MutexLock lock(&mutex_);
   // Linear search is fast enough for our usage in db_bench
   int b = 0;
   while (b < kNumBuckets - 1 && kBucketLimit[b] <= value) {
@@ -60,6 +62,7 @@ void Histogram::Add(double value) {
 }
 
 void Histogram::Merge(const Histogram& other) {
+  MutexLock lock(&mutex_);
   if (other.min_ < min_) min_ = other.min_;
   if (other.max_ > max_) max_ = other.max_;
   num_ += other.num_;
@@ -75,6 +78,7 @@ double Histogram::Median() const {
 }
 
 double Histogram::Percentile(double p) const {
+  MutexLock lock(&mutex_);
   double threshold = num_ * (p / 100.0);
   double sum = 0;
   for (int b = 0; b < kNumBuckets; b++) {
@@ -96,11 +100,13 @@ double Histogram::Percentile(double p) const {
 }
 
 double Histogram::Average() const {
+  MutexLock lock(&mutex_);
   if (num_ == 0.0) return 0;
   return sum_ / num_;
 }
 
 double Histogram::StandardDeviation() const {
+  MutexLock lock(&mutex_);
   if (num_ == 0.0) return 0;
   double variance = (sum_squares_ * num_ - sum_ * sum_) / (num_ * num_);
   return sqrt(variance);

@@ -11,6 +11,7 @@
 #include <sys/file.h>
 #include <sys/stat.h>
 #include <sys/types.h>
+#include <iomanip>
 #include <fstream>
 #include <sstream>
 
@@ -1096,6 +1097,7 @@ void TableImpl::CommitReaders(const std::string server_addr,
         row_reader->AddCommitTimes();
         row_reader->DecRef();
     }
+    VLOG(20) << "commit " << reader_list.size() << " reads to " << server_addr;
     request->set_timestamp(common::timer::get_micros());
     Closure<void, ReadTabletRequest*, ReadTabletResponse*, bool, int>* done =
         NewClosure(this, &TableImpl::ReaderCallBack, reader_id_list);
@@ -1982,14 +1984,6 @@ std::string TableImpl::GetCookieFileName(const std::string& tablename,
     return fname.str();
 }
 
-static int64_t CalcAverage(Counter& sum, Counter& cnt, int64_t interval) {
-    if (cnt.Get() == 0 || interval == 0) {
-        return 0;
-    } else {
-        return sum.Clear() * 1000 / cnt.Clear() / interval / 1000;
-    }
-}
-
 void TableImpl::DumpPerfCounterLogDelay() {
     DoDumpPerfCounterLog();
     ThreadPool::Task task =
@@ -2005,14 +1999,12 @@ void TableImpl::DoDumpPerfCounterLog() {
 }
 
 void TableImpl::PerfCounter::DoDumpPerfCounterLog(const std::string& log_prefix) {
-    int64_t ts = common::timer::get_micros();
-    int64_t interval = (ts - start_time) / 1000;
     LOG(INFO) << log_prefix << "[delay](ms)"
-        << " get meta: " << CalcAverage(get_meta, get_meta_cnt, interval)
-        << " callback: " << CalcAverage(user_callback, user_callback_cnt, interval)
-        << " rpc_r: " << CalcAverage(rpc_r, rpc_r_cnt, interval)
-        << " rpc_w: " << CalcAverage(rpc_w, rpc_w_cnt, interval)
-        << " rpc_s: " << CalcAverage(rpc_s, rpc_s_cnt, interval);
+        << " get meta: " << (get_meta_cnt.Get() > 0 ? get_meta.Clear() /  get_meta_cnt.Clear() / 1000 : 0)
+        << " callback: " << (user_callback_cnt.Get() > 0 ? user_callback.Clear() / user_callback_cnt.Clear() / 1000 : 0)
+        << " rpc_r: " << (rpc_r_cnt.Get() > 0 ? rpc_r.Clear() / rpc_r_cnt.Clear() / 1000 : 0)
+        << " rpc_w: " << (rpc_w_cnt.Get() > 0 ? rpc_w.Clear() / rpc_w_cnt.Clear() / 1000 : 0)
+        << " rpc_s: " << (rpc_s_cnt.Get() > 0 ? rpc_s.Clear() / rpc_s_cnt.Clear() / 1000 : 0);
 
     LOG(INFO) << log_prefix << "[mutation]"
         << " all: " << mutate_cnt.Clear()
@@ -2034,11 +2026,11 @@ void TableImpl::PerfCounter::DoDumpPerfCounterLog(const std::string& log_prefix)
         << " cnt: " << user_mu_cnt.Clear()
         << " suc: " << user_mu_suc.Clear()
         << " fail: " << user_mu_fail.Clear();
-    LOG(INFO) << log_prefix << "[user_mu_cost]" << std::fixed
+    LOG(INFO) << log_prefix << "[user_mu_cost]" << std::fixed << std::setprecision(2)
         << " cost_ave: " << hist_mu_cost.Average()
-        << " cost_50: " << hist_mu_cost.Percentile(0.5)
-        << " cost_90: " << hist_mu_cost.Percentile(0.9)
-        << " cost_99: " << hist_mu_cost.Percentile(0.99);
+        << " cost_50: " << hist_mu_cost.Percentile(50)
+        << " cost_90: " << hist_mu_cost.Percentile(90)
+        << " cost_99: " << hist_mu_cost.Percentile(99);
     hist_mu_cost.Clear();
 
     LOG(INFO) << log_prefix << "[user_rd]"
@@ -2046,11 +2038,11 @@ void TableImpl::PerfCounter::DoDumpPerfCounterLog(const std::string& log_prefix)
         << " suc: " << user_read_suc.Clear()
         << " notfound: " << user_read_notfound.Clear()
         << " fail: " << user_read_fail.Clear();
-    LOG(INFO) << log_prefix << "[user_rd_cost]" << std::fixed
+    LOG(INFO) << log_prefix << "[user_rd_cost]" << std::fixed << std::setprecision(2)
         << " cost_ave: " << hist_read_cost.Average()
-        << " cost_50: " << hist_read_cost.Percentile(0.5)
-        << " cost_90: " << hist_read_cost.Percentile(0.9)
-        << " cost_99: " << hist_read_cost.Percentile(0.99);
+        << " cost_50: " << hist_read_cost.Percentile(50)
+        << " cost_90: " << hist_read_cost.Percentile(90)
+        << " cost_99: " << hist_read_cost.Percentile(99);
     hist_read_cost.Clear();
 }
 
