@@ -73,11 +73,11 @@ void Histogram::Merge(const Histogram& other) {
   }
 }
 
-double Histogram::Median() {
+double Histogram::Median() const {
   return Percentile(50.0);
 }
 
-double Histogram::Percentile(double p) {
+double Histogram::Percentile(double p) const {
   MutexLock lock(&mutex_);
   double threshold = num_ * (p / 100.0);
   double sum = 0;
@@ -99,20 +99,20 @@ double Histogram::Percentile(double p) {
   return max_;
 }
 
-double Histogram::Average() {
+double Histogram::Average() const {
   MutexLock lock(&mutex_);
   if (num_ == 0.0) return 0;
   return sum_ / num_;
 }
 
-double Histogram::StandardDeviation() {
+double Histogram::StandardDeviation() const {
   MutexLock lock(&mutex_);
   if (num_ == 0.0) return 0;
   double variance = (sum_squares_ * num_ - sum_ * sum_) / (num_ * num_);
   return sqrt(variance);
 }
 
-std::string Histogram::ToString() {
+std::string Histogram::ToString() const {
   std::string r;
   char buf[200];
   snprintf(buf, sizeof(buf),

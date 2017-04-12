@@ -24,10 +24,10 @@ class Histogram {
   void Add(double value);
   void Merge(const Histogram& other);
 
-  std::string ToString();
+  std::string ToString() const;
 
  private:
-  port::Mutex mutex_;
+  mutable port::Mutex mutex_;
   double min_;
   double max_;
   double num_;
@@ -39,10 +39,10 @@ class Histogram {
   double buckets_[kNumBuckets];
 
  public:
-  double Median();
-  double Percentile(double p);
-  double Average();
-  double StandardDeviation();
+  double Median() const;
+  double Percentile(double p) const;
+  double Average() const;
+  double StandardDeviation() const;
 };
 
 }  // namespace leveldb
