@@ -3986,8 +3986,12 @@ bool MasterImpl::TryMergeTablet(TabletPtr tablet) {
     }
 
     TabletPtr tablet2;
-    if (!tablet_manager_->PickMergeTablet(tablet, &tablet2) ||
-        tablet2->GetStatus() != kTableReady ||
+    if (!tablet_manager_->PickMergeTablet(tablet, &tablet2)) {
+        VLOG(20) << "[merge] merge failed, no proper tablet for " << tablet;
+        return false;
+    }
+
+    if (tablet2->GetStatus() != kTableReady ||
         tablet2->IsBusy() ||
         tablet2->GetCounter().write_workload() >= 1) {
         VLOG(20) << "[merge] merge failed, none proper tablet."
