@@ -61,7 +61,7 @@ message QueryResponse {
 }
 
 enum UpdateType {
-    kUpdateSchema = 0; 
+    kUpdateSchema = 0;
 }
 
 message UpdateRequest {
@@ -69,7 +69,7 @@ message UpdateRequest {
     optional UpdateType type = 2;
     optional TableSchema schema = 3;
     optional string tablet_name = 4;
-    optional KeyRange key_range = 5; 
+    optional KeyRange key_range = 5;
 }
 
 message UpdateResponse {
@@ -81,7 +81,7 @@ message UpdateResponse {
 message LoadTabletRequest {
     required uint64 sequence_id = 1;
     required string tablet_name = 2;
-    optional KeyRange key_range = 3; 
+    optional KeyRange key_range = 3;
     optional string path = 4;
     optional string session_id = 6;
     optional TableSchema schema = 8;
@@ -163,7 +163,7 @@ message RowMutationSequence {
 
 message WriteTabletRequest {
     optional uint64 sequence_id = 1;
-    required string tablet_name = 2;    
+    required string tablet_name = 2;
     //repeated KeyValuePair pair_list = 3;  // for compatible
     optional bool is_sync = 4 [default = false];
     optional bool is_instant = 5 [default = false];
@@ -241,7 +241,7 @@ message ResultCell {
 message ScanTabletRequest {
     optional uint64 sequence_id = 1;
     optional string table_name = 2;
-    //optional KeyRange key_range = 3; 
+    //optional KeyRange key_range = 3;
     optional uint32 max_version = 4;
     optional uint32 buffer_limit = 5 [default = 102400];
     optional bytes start = 6;
@@ -283,7 +283,7 @@ message RowReaderInfo {
 message ReadTabletRequest {
     optional uint64 sequence_id = 1;
     required string tablet_name = 2;
-    //repeated bytes key_list = 3; 
+    //repeated bytes key_list = 3;
     repeated RowReaderInfo row_info_list = 4;
     //repeated KeyValuePair key_values = 5;
     optional uint64 snapshot_id = 6;
@@ -304,6 +304,7 @@ message SplitTabletRequest {
     required KeyRange key_range = 3;
     optional TabletMeta tablet_meta = 4;
     repeated uint64 child_tablets = 5;
+    optional bytes split_key = 6;
 }
 
 message SplitTabletResponse {

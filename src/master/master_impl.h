@@ -247,7 +247,7 @@ private:
 
     void RetryLoadTablet(TabletPtr tablet, int32_t retry_times);
     void RetryUnloadTablet(TabletPtr tablet, int32_t retry_times);
-    bool TrySplitTablet(TabletPtr tablet);
+    bool TrySplitTablet(TabletPtr tablet, const std::string& split_key = "");
     bool TryMergeTablet(TabletPtr tablet);
     void TryMoveTablet(TabletPtr tablet, const std::string& server_addr = "", bool in_place = false);
 
@@ -359,7 +359,7 @@ private:
                                 std::vector<TabletMeta>* tablet_list,
                                 sem_t* finish_counter, Mutex* mutex);
 
-    void SplitTabletAsync(TabletPtr tablet);
+    void SplitTabletAsync(TabletPtr tablet, const std::string& split_key = "");
     void SplitTabletCallback(TabletPtr tablet, SplitTabletRequest* request,
                              SplitTabletResponse* response, bool failed,
                              int error_code);

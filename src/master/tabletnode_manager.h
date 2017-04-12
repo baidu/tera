@@ -64,7 +64,7 @@ struct TabletNode {
     uint32_t onsplit_count_;
     uint32_t plan_move_in_count_;
     std::list<TabletPtr> wait_load_list_;
-    std::list<TabletPtr> wait_split_list_;
+    std::list<std::pair<TabletPtr, std::string> > wait_split_list_; // (tablet, split_key)
 
     // The start time of recent load operation.
     // Used to tell if node load too many tablets within short time.
@@ -100,9 +100,9 @@ struct TabletNode {
     bool FinishLoad(TabletPtr tablet);
     bool LoadNextWaitTablet(TabletPtr* tablet);
 
-    bool TrySplit(TabletPtr tablet);
-    bool FinishSplit(TabletPtr tablet);
-    bool SplitNextWaitTablet(TabletPtr* tablet);
+    bool TrySplit(TabletPtr tablet, const std::string& split_key = "");
+    bool FinishSplit();
+    bool SplitNextWaitTablet(TabletPtr* tablet, std::string* split_key);
 
     NodeState GetState();
     bool SetState(NodeState new_state, NodeState* old_state);
