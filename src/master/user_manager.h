@@ -5,7 +5,7 @@
 #ifndef TERA_MASTER_USER_MANAGER_H_
 #define TERA_MASTER_USER_MANAGER_H_
 
-#include <boost/shared_ptr.hpp>
+#include <memory>
 
 #include "common/base/scoped_ptr.h"
 #include "common/mutex.h"
@@ -34,7 +34,7 @@ private:
     std::string name_;
     UserInfo user_info_;
 };
-typedef boost::shared_ptr<User> UserPtr;
+typedef std::shared_ptr<User> UserPtr;
 
 class UserManager {
 public:

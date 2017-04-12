@@ -6,6 +6,7 @@
 #define TERA_IO_DEFAULT_COMPACT_STRATEGY_H_
 
 #include "leveldb/compact_strategy.h"
+#include "leveldb/slice.h"
 
 #include "common/mutex.h"
 #include "io/io_utils.h"
@@ -31,6 +32,7 @@ public:
     virtual const char* Name() const;
 
     virtual void SetSnapshot(uint64_t snapshot);
+    virtual bool CheckTag(const leveldb::Slice& tera_key, bool* del_tag, int64_t* ttl_tag);
 
     virtual bool ScanMergedValue(leveldb::Iterator* it,
                                  std::string* merged_value,

@@ -6,7 +6,6 @@
 
 #include <set>
 
-#include <boost/bind.hpp>
 #include <gflags/gflags.h>
 #include <glog/logging.h>
 
@@ -56,7 +55,7 @@ void TabletWriter::Start() {
         stopped_ = false;
     }
     LOG(INFO) << "start tablet writer ...";
-    thread_.Start(boost::bind(&TabletWriter::DoWork, this));
+    thread_.Start(std::bind(&TabletWriter::DoWork, this));
     ThisThread::Yield();
 }
 
@@ -287,7 +286,8 @@ void TabletWriter::BatchRequest(const std::vector<const RowMutationSequence*>& r
                     }
                 } else {
                     VLOG(10) << "Batch Request, key: " << DebugString(row_key)
-                        << " family: " << mu.family() << ", lg_id: " << lg_id;
+                        << " family: " << mu.family() << ", qualifier " << mu.qualifier()
+                        << ", ts " << timestamp << ", type " << type << ", lg_id: " << lg_id;
                     batch->Put(tera_key, mu.value());
                 }
             }

@@ -25,6 +25,7 @@
 #include "leveldb/env_inmem.h"
 #include "leveldb/env_mock.h"
 #include "leveldb/filter_policy.h"
+#include "leveldb/raw_key_operator.h"
 #include "types.h"
 #include "utils/counter.h"
 #include "utils/scan_filter.h"
@@ -37,6 +38,8 @@ DECLARE_int64(tera_tablet_log_file_size);
 DECLARE_int64(tera_tablet_max_write_buffer_size);
 DECLARE_int64(tera_tablet_write_block_size);
 DECLARE_int32(tera_tablet_level0_file_limit);
+DECLARE_int32(tera_tablet_ttl_percentage);
+DECLARE_int32(tera_tablet_del_percentage);
 DECLARE_int32(tera_tablet_max_block_log_number);
 DECLARE_int64(tera_tablet_write_log_time_out);
 DECLARE_bool(tera_log_async_mode);
@@ -222,6 +225,8 @@ bool TabletIO::Load(const TableSchema& schema,
     ldb_options_.key_start = raw_start_key_;
     ldb_options_.key_end = raw_end_key_;
     ldb_options_.l0_slowdown_writes_trigger = FLAGS_tera_tablet_level0_file_limit;
+    ldb_options_.ttl_percentage = FLAGS_tera_tablet_ttl_percentage;
+    ldb_options_.del_percentage = FLAGS_tera_tablet_del_percentage;
     ldb_options_.block_size = FLAGS_tera_tablet_write_block_size * 1024;
     ldb_options_.max_block_log_number = FLAGS_tera_tablet_max_block_log_number;
     ldb_options_.write_log_time_out = FLAGS_tera_tablet_write_log_time_out;
@@ -241,8 +246,15 @@ bool TabletIO::Load(const TableSchema& schema,
 
     if (kv_only_ && table_schema_.raw_key() == TTLKv) {
         ldb_options_.filter_policy = leveldb::NewTTLKvBloomFilterPolicy(10);
-    } else {
+    } else if (kv_only_) {
         ldb_options_.filter_policy = leveldb::NewBloomFilterPolicy(10);
+    } else if (table_schema_.raw_key() == Readable) {
+        ldb_options_.filter_policy =
+            leveldb::NewRowKeyBloomFilterPolicy(10, leveldb::ReadableRawKeyOperator());
+    } else {
+        CHECK_EQ(table_schema_.raw_key(), Binary);
+        ldb_options_.filter_policy =
+            leveldb::NewRowKeyBloomFilterPolicy(10, leveldb::BinaryRawKeyOperator());
     }
     ldb_options_.block_cache = block_cache;
     ldb_options_.table_cache = table_cache;
@@ -488,7 +500,7 @@ bool TabletIO::Split(std::string* split_key, StatusCode* status) {
     }
 }
 
-bool TabletIO::Compact(int lg_no, StatusCode* status) {
+bool TabletIO::Compact(int lg_no, StatusCode* status, CompactionType type) {
     {
         MutexLock lock(&mutex_);
         if (status_ != kReady) {
@@ -502,30 +514,15 @@ bool TabletIO::Compact(int lg_no, StatusCode* status) {
         db_ref_count_++;
     }
     CHECK_NOTNULL(db_);
-    db_->CompactRange(NULL, NULL, lg_no);
+    if (type == kManualCompaction) {
+        db_->CompactRange(NULL, NULL, lg_no);
+    } else if (type == kMinorCompaction) {
+        db_->MinorCompact();
+    }
 
     {
         MutexLock lock(&mutex_);
         compact_status_ = kTableCompacted;
-        db_ref_count_--;
-    }
-    return true;
-}
-
-bool TabletIO::CompactMinor(StatusCode* status) {
-    {
-        MutexLock lock(&mutex_);
-        if (status_ != kReady) {
-            SetStatusCode(status_, status);
-            return false;
-        }
-        db_ref_count_++;
-    }
-
-    CHECK_NOTNULL(db_);
-    db_->MinorCompact();
-    {
-        MutexLock lock(&mutex_);
         db_ref_count_--;
     }
     return true;
@@ -644,9 +641,10 @@ bool TabletIO::Read(const leveldb::Slice& key, std::string* value,
     return true;
 }
 
-StatusCode TabletIO::InitedScanInterator(const std::string& start_tera_key,
-                                         const ScanOptions& scan_options,
-                                         leveldb::Iterator** scan_it) {
+StatusCode TabletIO::InitedScanIterator(const std::string& start_tera_key,
+                                        const std::string& end_row_key,
+                                        const ScanOptions& scan_options,
+                                        leveldb::Iterator** scan_it) {
     leveldb::Slice start_key, start_col, start_qual;
     key_operator_->ExtractTeraKey(start_tera_key, &start_key, &start_col,
                                    &start_qual, NULL, NULL);
@@ -662,6 +660,10 @@ StatusCode TabletIO::InitedScanInterator(const std::string& start_tera_key,
         }
     }
     read_option.rollbacks = rollbacks_;
+    // single row scan
+    if (start_key.ToString() + '\0' == end_row_key) {
+        SetupSingleRowIteratorOptions(start_key.ToString(), &read_option);
+    }
     *scan_it = db_->NewIterator(read_option);
     TearDownIteratorOptions(&read_option);
 
@@ -685,7 +687,7 @@ bool TabletIO::LowLevelScan(const std::string& start_tera_key,
                             bool* is_complete,
                             StatusCode* status) {
     leveldb::Iterator* it = NULL;
-    StatusCode ret_code = InitedScanInterator(start_tera_key, scan_options, &it);
+    StatusCode ret_code = InitedScanIterator(start_tera_key, end_row_key, scan_options, &it);
     if (ret_code != kTabletNodeOk) {
         SetStatusCode(ret_code, status);
         return false;
@@ -1047,6 +1049,7 @@ bool TabletIO::LowLevelSeek(const std::string& row_key,
         }
     }
     read_option.rollbacks = rollbacks_;
+    SetupSingleRowIteratorOptions(row_key, &read_option);
     leveldb::Iterator* it_data = db_->NewIterator(read_option);
     TearDownIteratorOptions(&read_option);
 
@@ -1450,12 +1453,10 @@ bool TabletIO::HandleScan(const ScanTabletRequest* request,
 
     // first rpc init iterator and scan parameter
     if (context->it == NULL) {
-        std::string start_tera_key;
-        std::string end_row_key;
         SetupScanInternalTeraKey(request, &(context->start_tera_key), &(context->end_row_key));
         SetupScanRowOptions(request, &(context->scan_options));
-        context->ret_code = InitedScanInterator(context->start_tera_key, context->scan_options,
-                                      &(context->it));
+        context->ret_code = InitedScanIterator(context->start_tera_key, context->end_row_key,
+                                               context->scan_options, &(context->it));
         context->compact_strategy = ldb_options_.compact_strategy_factory->NewInstance();
     }
     // schedule scan context
@@ -1803,6 +1804,18 @@ void TabletIO::SetupIteratorOptions(const ScanOptions& scan_options,
     if (target_lgs.size() > 0) {
         leveldb_opts->target_lgs = new std::set<uint32_t>(target_lgs);
     }
+}
+
+void TabletIO::SetupSingleRowIteratorOptions(const std::string& row_key,
+                                             leveldb::ReadOptions* opts) {
+    std::string row_start_key, row_end_key;
+    key_operator_->EncodeTeraKey(row_key, "", "", kLatestTs,
+                                 leveldb::TKT_FORSEEK, &row_start_key);
+    key_operator_->EncodeTeraKey(row_key + '\0', "", "", kLatestTs,
+                                 leveldb::TKT_FORSEEK, &row_end_key);
+    opts->read_single_row = true;
+    opts->row_start_key = row_start_key;
+    opts->row_end_key = row_end_key;
 }
 
 void TabletIO::TearDownIteratorOptions(leveldb::ReadOptions* opts) {

@@ -6,8 +6,8 @@
 #include "tabletnode/tablet_manager.h"
 
 #include <algorithm>
-#include <boost/bind.hpp>
 #include <fstream>
+#include <functional>
 
 #include <gflags/gflags.h>
 #include <glog/logging.h>
@@ -106,6 +106,8 @@ DECLARE_int32(tera_master_schema_update_retry_times);
 DECLARE_int64(tera_master_availability_check_period);
 DECLARE_bool(tera_master_availability_check_enabled);
 
+using namespace std::placeholders;
+
 namespace tera {
 namespace master {
 
@@ -147,10 +149,10 @@ MasterImpl::MasterImpl()
 
     if (FLAGS_tera_master_gc_strategy == "default") {
         LOG(INFO) << "[gc] gc strategy is BatchGcStrategy";
-        gc_strategy_ = boost::shared_ptr<GcStrategy>(new BatchGcStrategy(tablet_manager_));
+        gc_strategy_ = std::shared_ptr<GcStrategy>(new BatchGcStrategy(tablet_manager_));
     } else if (FLAGS_tera_master_gc_strategy == "incremental") {
         LOG(INFO) << "[gc] gc strategy is IncrementalGcStrategy";
-        gc_strategy_ = boost::shared_ptr<GcStrategy>(new IncrementalGcStrategy(tablet_manager_));
+        gc_strategy_ = std::shared_ptr<GcStrategy>(new IncrementalGcStrategy(tablet_manager_));
     } else {
         LOG(ERROR) << "Unknown gc strategy";
     }
@@ -174,7 +176,7 @@ bool MasterImpl::Init() {
 
     LOG(INFO) << "[acl] " << (FLAGS_tera_acl_enabled ? "enabled" : "disabled");
     SetMasterStatus(kIsSecondary);
-    thread_pool_->AddTask(boost::bind(&MasterImpl::InitAsync, this));
+    thread_pool_->AddTask(std::bind(&MasterImpl::InitAsync, this));
     return true;
 }
 
@@ -892,7 +894,7 @@ void MasterImpl::DisableTable(const DisableTableRequest* request,
     WriteClosure* closure =
         NewClosure(this, &MasterImpl::UpdateTableRecordForDisableCallback, table,
                    FLAGS_tera_master_meta_retry_times, response, done);
-    BatchWriteMetaTableAsync(boost::bind(&Table::ToMetaTableKeyValue, table, _1, _2),
+    BatchWriteMetaTableAsync(std::bind(&Table::ToMetaTableKeyValue, table, _1, _2),
                              false, closure);
 }
 
@@ -934,7 +936,7 @@ void MasterImpl::EnableTable(const EnableTableRequest* request,
     WriteClosure* closure =
         NewClosure(this, &MasterImpl::UpdateTableRecordForEnableCallback, table,
                    FLAGS_tera_master_meta_retry_times, response, done);
-    BatchWriteMetaTableAsync(boost::bind(&Table::ToMetaTableKeyValue, table, _1, _2),
+    BatchWriteMetaTableAsync(std::bind(&Table::ToMetaTableKeyValue, table, _1, _2),
                              false, closure);
 }
 
@@ -1009,7 +1011,7 @@ void MasterImpl::UpdateTable(const UpdateTableRequest* request,
     WriteClosure* closure =
         NewClosure(this, &MasterImpl::UpdateTableRecordForUpdateCallback, table,
                    FLAGS_tera_master_meta_retry_times, response, done);
-    BatchWriteMetaTableAsync(boost::bind(&Table::ToMetaTableKeyValue, table, _1, _2),
+    BatchWriteMetaTableAsync(std::bind(&Table::ToMetaTableKeyValue, table, _1, _2),
                              false, closure);
     return;
 }
@@ -1283,7 +1285,7 @@ void MasterImpl::AddUserInfoToMetaCallback(UserPtr user_ptr,
             WriteClosure* done =
                 NewClosure(this, &MasterImpl::AddUserInfoToMetaCallback, user_ptr,
                            retry_times - 1, rpc_request, rpc_response, rpc_done);
-            SuspendMetaOperation(boost::bind(&User::ToMetaTableKeyValue, user_ptr, _1, _2),
+            SuspendMetaOperation(std::bind(&User::ToMetaTableKeyValue, user_ptr, _1, _2),
                                  rpc_request->op_type() == kDeleteUser, done);
         }
         return;
@@ -1401,7 +1403,7 @@ void MasterImpl::OperateUser(const OperateUserRequest* request,
     WriteClosure* closure =
         NewClosure(this, &MasterImpl::AddUserInfoToMetaCallback, user_ptr,
                    FLAGS_tera_master_meta_retry_times, request, response, done);
-    BatchWriteMetaTableAsync(boost::bind(&User::ToMetaTableKeyValue, user_ptr, _1, _2),
+    BatchWriteMetaTableAsync(std::bind(&User::ToMetaTableKeyValue, user_ptr, _1, _2),
                              is_delete, closure);
 }
 
@@ -1679,7 +1681,7 @@ void MasterImpl::ScheduleQueryTabletNode() {
 
     LOG(INFO) << "schedule query tabletnodes after " << schedule_delay << "ms.";
 
-    ThreadPool::Task task = boost::bind(&MasterImpl::QueryTabletNode, this);
+    ThreadPool::Task task = std::bind(&MasterImpl::QueryTabletNode, this);
     query_tabletnode_timer_id_ = thread_pool_->DelayTask(schedule_delay, task);
 }
 
@@ -1715,7 +1717,7 @@ void MasterImpl::ScheduleLoadBalance() {
     }
 
     ThreadPool::Task task =
-        boost::bind(&MasterImpl::LoadBalance, this);
+        std::bind(static_cast<void(MasterImpl::*)()>(&MasterImpl::LoadBalance), this);
     thread_pool_->AddTask(task);
 }
 
@@ -1961,7 +1963,7 @@ void MasterImpl::ReleaseCacheWrapper() {
 void MasterImpl::EnableReleaseCacheTimer() {
     assert(release_cache_timer_id_ == kInvalidTimerId);
     ThreadPool::Task task =
-        boost::bind(&MasterImpl::ReleaseCacheWrapper, this);
+        std::bind(&MasterImpl::ReleaseCacheWrapper, this);
     int64_t timeout_period = 1000LL *
         FLAGS_tera_master_cache_release_period;
     release_cache_timer_id_ = thread_pool_->DelayTask(
@@ -2156,7 +2158,7 @@ void MasterImpl::DeleteTabletNode(const std::string& tabletnode_addr) {
             << "(ms) later";
         MutexLock lock(&tabletnode_timer_mutex_);
         ThreadPool::Task task =
-            boost::bind(&MasterImpl::TryMovePendingTablets, this, tabletnode_addr);
+            std::bind(&MasterImpl::TryMovePendingTablets, this, tabletnode_addr);
         int64_t timer_id = thread_pool_->DelayTask(
             FLAGS_tera_master_tabletnode_timeout, task);
         tabletnode_timer_id_map_[tabletnode_addr] = timer_id;
@@ -2522,7 +2524,7 @@ void MasterImpl::LoadTabletCallback(TabletPtr tablet, int32_t retry,
                 WriteClosure* done =
                     NewClosure(this, &MasterImpl::UpdateMetaForLoadCallback,
                                next_tablet, FLAGS_tera_master_meta_retry_times);
-                BatchWriteMetaTableAsync(boost::bind(&Tablet::ToMetaTableKeyValue, next_tablet, _1, _2),
+                BatchWriteMetaTableAsync(std::bind(&Tablet::ToMetaTableKeyValue, next_tablet, _1, _2),
                                          false, done);
                 break;
             }
@@ -2565,7 +2567,7 @@ void MasterImpl::LoadTabletCallback(TabletPtr tablet, int32_t retry,
 
     // retry
     ThreadPool::Task task =
-        boost::bind(&MasterImpl::RetryLoadTablet, this, tablet, retry + 1);
+        std::bind(&MasterImpl::RetryLoadTablet, this, tablet, retry + 1);
     thread_pool_->DelayTask(
         FLAGS_tera_master_control_tabletnode_retry_period, task);
 }
@@ -2684,7 +2686,7 @@ void MasterImpl::UnloadTabletCallback(TabletPtr tablet, int32_t retry,
                     WriteClosure* done =
                         NewClosure(this, &MasterImpl::UpdateMetaForLoadCallback,
                                    next_tablet, FLAGS_tera_master_meta_retry_times);
-                    BatchWriteMetaTableAsync(boost::bind(&Tablet::ToMetaTableKeyValue, next_tablet, _1, _2),
+                    BatchWriteMetaTableAsync(std::bind(&Tablet::ToMetaTableKeyValue, next_tablet, _1, _2),
                                              false, done);
                     break;
                 }
@@ -2738,7 +2740,7 @@ void MasterImpl::UnloadTabletCallback(TabletPtr tablet, int32_t retry,
 
     // retry
     ThreadPool::Task task =
-        boost::bind(&MasterImpl::RetryUnloadTablet, this, tablet, retry - 1);
+        std::bind(&MasterImpl::RetryUnloadTablet, this, tablet, retry - 1);
     thread_pool_->DelayTask(
         FLAGS_tera_master_control_tabletnode_retry_period, task);
 }
@@ -3285,7 +3287,7 @@ void MasterImpl::UpdateSchemaCallback(std::string table_name,
                 NewClosure(this, &MasterImpl::UpdateSchemaCallback, tablet->GetTableName(),
                            tablet->GetPath(), tablet->GetKeyStart(), tablet->GetKeyEnd(), retry_times + 1);
             ThreadPool::Task task =
-                boost::bind(&MasterImpl::NoticeTabletNodeSchemaUpdatedAsync, this, tablet, done);
+                std::bind(&MasterImpl::NoticeTabletNodeSchemaUpdatedAsync, this, tablet, done);
             thread_pool_->DelayTask(FLAGS_tera_master_schema_update_retry_period * 1000, task);
         }
         return;
@@ -3622,8 +3624,8 @@ void MasterImpl::CollectTabletInfoCallback(std::string addr,
             TryKickTabletNode(addr);
         } else {
             ThreadPool::Task task =
-                boost::bind(&MasterImpl::RetryCollectTabletInfo, this, addr,
-                            tablet_list, finish_counter, mutex);
+                std::bind(&MasterImpl::RetryCollectTabletInfo, this, addr,
+                          tablet_list, finish_counter, mutex);
             thread_pool_->DelayTask(FLAGS_tera_master_collect_info_retry_period,
                                      task);
             delete request;
@@ -3791,7 +3793,7 @@ void MasterImpl::TryLoadTablet(TabletPtr tablet, std::string server_addr) {
             LOG(INFO) << "load tablet " << tablet << " on " << server_addr
                 << " " << FLAGS_tera_master_tabletnode_timeout << "(ms) later";
             ThreadPool::Task task =
-                boost::bind(&MasterImpl::TryMovePendingTablet, this, tablet);
+                std::bind(&MasterImpl::TryMovePendingTablet, this, tablet);
             thread_pool_->DelayTask(FLAGS_tera_master_tabletnode_timeout, task);
             return;
         } else if (GetMasterStatus() == kIsRunning) {
@@ -3867,7 +3869,7 @@ void MasterImpl::TryLoadTablet(TabletPtr tablet, std::string server_addr) {
                 WriteClosure* done =
                     NewClosure(this, &MasterImpl::UpdateMetaForLoadCallback,
                                next_tablet, FLAGS_tera_master_meta_retry_times);
-                BatchWriteMetaTableAsync(boost::bind(&Tablet::ToMetaTableKeyValue, next_tablet, _1, _2),
+                BatchWriteMetaTableAsync(std::bind(&Tablet::ToMetaTableKeyValue, next_tablet, _1, _2),
                                          false, done);
                 break;
             }
@@ -3881,7 +3883,7 @@ void MasterImpl::TryLoadTablet(TabletPtr tablet, std::string server_addr) {
     WriteClosure* done =
         NewClosure(this, &MasterImpl::UpdateMetaForLoadCallback, tablet,
                    FLAGS_tera_master_meta_retry_times);
-    BatchWriteMetaTableAsync(boost::bind(&Tablet::ToMetaTableKeyValue, tablet, _1, _2),
+    BatchWriteMetaTableAsync(std::bind(&Tablet::ToMetaTableKeyValue, tablet, _1, _2),
                              false, done);
     return;
 }
@@ -4247,11 +4249,11 @@ void MasterImpl::BatchWriteMetaTableAsync(TablePtr table,
     std::vector<ToMetaFunc> meta_entries;
     TablePtr null_ptr;
     if (table != null_ptr) {
-        meta_entries.push_back(boost::bind(&Table::ToMetaTableKeyValue, table, _1, _2));
+        meta_entries.push_back(std::bind(&Table::ToMetaTableKeyValue, table, _1, _2));
     }
     if (tablets.size() != 0) {
         for (size_t i = 0; i < tablets.size(); ++i) {
-            meta_entries.push_back(boost::bind(&Tablet::ToMetaTableKeyValue, tablets[i], _1, _2));
+            meta_entries.push_back(std::bind(&Tablet::ToMetaTableKeyValue, tablets[i], _1, _2));
         }
     }
     BatchWriteMetaTableAsync(meta_entries, is_delete, done);
@@ -4381,7 +4383,7 @@ void MasterImpl::UpdateTableRecordForDisableCallback(TablePtr table, int32_t ret
             WriteClosure* done =
                 NewClosure(this, &MasterImpl::UpdateTableRecordForDisableCallback,
                            table, retry_times - 1, rpc_response, rpc_done);
-            SuspendMetaOperation(boost::bind(&Table::ToMetaTableKeyValue, table, _1, _2),
+            SuspendMetaOperation(std::bind(&Table::ToMetaTableKeyValue, table, _1, _2),
                                  false, done);
         }
         return;
@@ -4437,7 +4439,7 @@ void MasterImpl::UpdateTableRecordForEnableCallback(TablePtr table, int32_t retr
             WriteClosure* done =
                 NewClosure(this, &MasterImpl::UpdateTableRecordForEnableCallback,
                            table, retry_times - 1, rpc_response, rpc_done);
-            SuspendMetaOperation(boost::bind(&Table::ToMetaTableKeyValue, table, _1, _2),
+            SuspendMetaOperation(std::bind(&Table::ToMetaTableKeyValue, table, _1, _2),
                                  false, done);
         }
         return;
@@ -4492,7 +4494,7 @@ void MasterImpl::UpdateTableRecordForUpdateCallback(TablePtr table, int32_t retr
             WriteClosure* done =
                 NewClosure(this, &MasterImpl::UpdateTableRecordForUpdateCallback,
                            table, retry_times - 1, rpc_response, rpc_done);
-            SuspendMetaOperation(boost::bind(&Table::ToMetaTableKeyValue, table, _1, _2),
+            SuspendMetaOperation(std::bind(&Table::ToMetaTableKeyValue, table, _1, _2),
                                  false, done);
         }
         return;
@@ -4556,7 +4558,7 @@ void MasterImpl::UpdateTableRecordForRenameCallback(TablePtr table, int32_t retr
                 NewClosure(this, &MasterImpl::UpdateTableRecordForRenameCallback,
                            table, retry_times - 1, rpc_response, rpc_done,
                            old_alias, new_alias);
-            SuspendMetaOperation(boost::bind(&Table::ToMetaTableKeyValue, table, _1, _2),
+            SuspendMetaOperation(std::bind(&Table::ToMetaTableKeyValue, table, _1, _2),
                                  false, done);
         }
         return;
@@ -4598,7 +4600,7 @@ void MasterImpl::UpdateTabletRecordCallback(TabletPtr tablet, int32_t retry_time
             WriteClosure* done =
                 NewClosure(this, &MasterImpl::UpdateTabletRecordCallback,
                            tablet, retry_times - 1);
-            SuspendMetaOperation(boost::bind(&Tablet::ToMetaTableKeyValue, tablet, _1, _2),
+            SuspendMetaOperation(std::bind(&Tablet::ToMetaTableKeyValue, tablet, _1, _2),
                                  false, done);
         }
         return;
@@ -4647,7 +4649,7 @@ void MasterImpl::UpdateMetaForLoadCallback(TabletPtr tablet, int32_t retry_times
                         WriteClosure* done =
                             NewClosure(this, &MasterImpl::UpdateMetaForLoadCallback,
                                        next_tablet, FLAGS_tera_master_meta_retry_times);
-                        BatchWriteMetaTableAsync(boost::bind(&Tablet::ToMetaTableKeyValue, next_tablet, _1, _2),
+                        BatchWriteMetaTableAsync(std::bind(&Tablet::ToMetaTableKeyValue, next_tablet, _1, _2),
                                                  false, done);
                         break;
                     }
@@ -4658,7 +4660,7 @@ void MasterImpl::UpdateMetaForLoadCallback(TabletPtr tablet, int32_t retry_times
             WriteClosure* done =
                 NewClosure(this, &MasterImpl::UpdateMetaForLoadCallback,
                            tablet, retry_times - 1);
-            SuspendMetaOperation(boost::bind(&Tablet::ToMetaTableKeyValue, tablet, _1, _2),
+            SuspendMetaOperation(std::bind(&Tablet::ToMetaTableKeyValue, tablet, _1, _2),
                                  false, done);
         }
         return;
@@ -4956,10 +4958,10 @@ void MasterImpl::SuspendMetaOperation(TablePtr table, const std::vector<TabletPt
     std::vector<ToMetaFunc> meta_entries;
     TablePtr null_ptr;
     if (table != null_ptr) {
-        meta_entries.push_back(boost::bind(&Table::ToMetaTableKeyValue, table, _1, _2));
+        meta_entries.push_back(std::bind(&Table::ToMetaTableKeyValue, table, _1, _2));
     }
     for (size_t i = 0; i < tablets.size(); ++i) {
-        meta_entries.push_back(boost::bind(&Tablet::ToMetaTableKeyValue, tablets[i], _1, _2));
+        meta_entries.push_back(std::bind(&Tablet::ToMetaTableKeyValue, tablets[i], _1, _2));
     }
     SuspendMetaOperation(meta_entries, is_delete, done);
 }
@@ -5177,7 +5179,7 @@ void MasterImpl::ScheduleTabletNodeGc() {
     mutex_.AssertHeld();
     LOG(INFO) << "[gc] ScheduleTabletNodeGcTimer";
     ThreadPool::Task task =
-        boost::bind(&MasterImpl::DoTabletNodeGc, this);
+        std::bind(&MasterImpl::DoTabletNodeGc, this);
     gc_timer_id_ = thread_pool_->DelayTask(
         FLAGS_tera_master_gc_period, task);
 }
@@ -5201,7 +5203,7 @@ void MasterImpl::DoAvailableCheck() {
 void MasterImpl::ScheduleAvailableCheck() {
     mutex_.AssertHeld();
     ThreadPool::Task task =
-        boost::bind(&MasterImpl::DoAvailableCheck, this);
+        std::bind(&MasterImpl::DoAvailableCheck, this);
     thread_pool_->DelayTask(
         FLAGS_tera_master_availability_check_period * 1000, task);
 }
@@ -5331,7 +5333,7 @@ void MasterImpl::RenameTable(const RenameTableRequest* request,
         NewClosure(this, &MasterImpl::UpdateTableRecordForRenameCallback, table,
                    FLAGS_tera_master_meta_retry_times, response, done,
                    old_alias, new_alias);
-    BatchWriteMetaTableAsync(boost::bind(&Table::ToMetaTableKeyValue, table, _1, _2),
+    BatchWriteMetaTableAsync(std::bind(&Table::ToMetaTableKeyValue, table, _1, _2),
                              false, closure);
 }
 
@@ -5345,7 +5347,7 @@ void MasterImpl::RefreshTableCounter() {
 
     // Set refresh interval as  query-interval / 2, because each table counter
     // changed after query callback reached.
-    ThreadPool::Task task = boost::bind(&MasterImpl::RefreshTableCounter, this);
+    ThreadPool::Task task = std::bind(&MasterImpl::RefreshTableCounter, this);
     thread_pool_->DelayTask(FLAGS_tera_master_query_tabletnode_period / 2, task);
     LOG(INFO) << "RefreshTableCounter, cost: "
         << ((get_micros() - start) / 1000) << "ms.";

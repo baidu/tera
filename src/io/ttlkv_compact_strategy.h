@@ -8,6 +8,7 @@
 #include "common/mutex.h"
 #include "leveldb/compact_strategy.h"
 #include "leveldb/raw_key_operator.h"
+#include "leveldb/slice.h"
 #include "proto/table_schema.pb.h"
 
 namespace tera {
@@ -18,6 +19,7 @@ public:
     KvCompactStrategy(const TableSchema& schema);
     virtual ~KvCompactStrategy();
 
+    virtual bool CheckTag(const leveldb::Slice& tera_key, bool* del_tag, int64_t* ttl_tag);
     virtual bool Drop(const leveldb::Slice& k, uint64_t n,
                       const std::string& lower_bound);
 

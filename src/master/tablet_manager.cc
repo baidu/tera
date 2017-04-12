@@ -788,6 +788,18 @@ bool Table::GetTabletsForGc(std::set<uint64_t>* live_tablets,
                             std::set<uint64_t>* dead_tablets,
                             bool ignore_not_ready) {
     MutexLock lock(&mutex_);
+
+    std::vector<std::string> children;
+    leveldb::Env* env = io::LeveldbBaseEnv();
+    std::string table_path = FLAGS_tera_tabletnode_path_prefix + name_;
+    mutex_.Unlock();
+    leveldb::Status s = env->GetChildren(table_path, &children);
+    mutex_.Lock();
+    if (!s.ok()) {
+        LOG(ERROR) << "[gc] fail to list directory: " << table_path;
+        return false;
+    }
+
     std::vector<TabletPtr> tablet_list;
     Table::TabletList::iterator it = tablets_list_.begin();
     for (; it != tablets_list_.end(); ++it) {
@@ -800,13 +812,9 @@ bool Table::GetTabletsForGc(std::set<uint64_t>* live_tablets,
         }
         const std::string& path = tablet->GetPath();
         live_tablets->insert(leveldb::GetTabletNumFromPath(path));
-        VLOG(10) << "[gc] add live tablet: " << path;
+        VLOG(20) << "[gc] add live tablet: " << path;
     }
 
-    std::vector<std::string> children;
-    leveldb::Env* env = io::LeveldbBaseEnv();
-    std::string table_path = FLAGS_tera_tabletnode_path_prefix + name_;
-    env->GetChildren(table_path, &children);
     for (size_t i = 0; i < children.size(); ++i) {
         if (children[i].size() < 5) {
             // skip directory . and ..

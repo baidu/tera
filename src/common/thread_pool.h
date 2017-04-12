@@ -8,12 +8,13 @@
 #define  TERA_COMMON_THREAD_POOL_H_
 
 #include <deque>
+#include <functional>
 #include <map>
 #include <queue>
 #include <set>
 #include <sstream>
 #include <vector>
-#include <boost/function.hpp>
+
 #include "mutex.h"
 #include "timer.h"
 
@@ -60,7 +61,8 @@ public:
     bool Stop(bool wait) {
         if (wait) {
             while (pending_num_ > 0) {
-                usleep(10000);
+                struct timespec ts = {0, 10000000};
+                nanosleep(&ts, NULL);
             }
         }
 
@@ -77,7 +79,7 @@ public:
     }
 
     // Task definition.
-    typedef boost::function<void (int64_t)> Task;
+    typedef std::function<void (int64_t)> Task;
 
     // Add a task to the thread pool.
     void AddTask(const Task& task) {
