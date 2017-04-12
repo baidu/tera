@@ -10,6 +10,8 @@
 #define STORAGE_LEVELDB_UTIL_HISTOGRAM_H_
 
 #include <string>
+#include "port/port_posix.h"
+#include "util/mutexlock.h"
 
 namespace leveldb {
 
@@ -22,9 +24,10 @@ class Histogram {
   void Add(double value);
   void Merge(const Histogram& other);
 
-  std::string ToString() const;
+  std::string ToString();
 
  private:
+  port::Mutex mutex_;
   double min_;
   double max_;
   double num_;
@@ -36,10 +39,10 @@ class Histogram {
   double buckets_[kNumBuckets];
 
  public:
-  double Median() const;
-  double Percentile(double p) const;
-  double Average() const;
-  double StandardDeviation() const;
+  double Median();
+  double Percentile(double p);
+  double Average();
+  double StandardDeviation();
 };
 
 }  // namespace leveldb

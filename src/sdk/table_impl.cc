@@ -1094,6 +1094,7 @@ void TableImpl::CommitReaders(const std::string server_addr,
         row_reader->AddCommitTimes();
         row_reader->DecRef();
     }
+    VLOG(20) << "commit " << reader_list.size() << " reads to " << server_addr;
     request->set_timestamp(common::timer::get_micros());
     Closure<void, ReadTabletRequest*, ReadTabletResponse*, bool, int>* done =
         NewClosure(this, &TableImpl::ReaderCallBack, reader_id_list);
@@ -1983,7 +1984,7 @@ static int64_t CalcAverage(Counter& sum, Counter& cnt, int64_t interval) {
     if (cnt.Get() == 0 || interval == 0) {
         return 0;
     } else {
-        return sum.Clear() * 1000 / cnt.Clear() / interval / 1000;
+        return sum.Clear() / cnt.Clear() / 1000;
     }
 }
 
@@ -2033,9 +2034,9 @@ void TableImpl::PerfCounter::DoDumpPerfCounterLog(const std::string& log_prefix)
         << " fail: " << user_mu_fail.Clear();
     LOG(INFO) << log_prefix << "[user_mu_cost]" << std::fixed
         << " cost_ave: " << hist_mu_cost.Average()
-        << " cost_50: " << hist_mu_cost.Percentile(0.5)
-        << " cost_90: " << hist_mu_cost.Percentile(0.9)
-        << " cost_99: " << hist_mu_cost.Percentile(0.99);
+        << " cost_50: " << hist_mu_cost.Percentile(50)
+        << " cost_90: " << hist_mu_cost.Percentile(90)
+        << " cost_99: " << hist_mu_cost.Percentile(99);
     hist_mu_cost.Clear();
 
     LOG(INFO) << log_prefix << "[user_rd]"
@@ -2045,9 +2046,9 @@ void TableImpl::PerfCounter::DoDumpPerfCounterLog(const std::string& log_prefix)
         << " fail: " << user_read_fail.Clear();
     LOG(INFO) << log_prefix << "[user_rd_cost]" << std::fixed
         << " cost_ave: " << hist_read_cost.Average()
-        << " cost_50: " << hist_read_cost.Percentile(0.5)
-        << " cost_90: " << hist_read_cost.Percentile(0.9)
-        << " cost_99: " << hist_read_cost.Percentile(0.99);
+        << " cost_50: " << hist_read_cost.Percentile(50)
+        << " cost_90: " << hist_read_cost.Percentile(90)
+        << " cost_99: " << hist_read_cost.Percentile(99);
     hist_read_cost.Clear();
 }
 
