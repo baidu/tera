@@ -70,7 +70,7 @@ ALL_OBJ := $(MASTER_OBJ) $(TABLETNODE_OBJ) $(IO_OBJ) $(SDK_OBJ) $(PROTO_OBJ) \
            $(JNI_TERA_OBJ) $(OTHER_OBJ) $(COMMON_OBJ) $(SERVER_OBJ) $(CLIENT_OBJ) \
            $(TEST_CLIENT_OBJ) $(TERA_C_OBJ) $(MONITOR_OBJ) $(MARK_OBJ) $(TEST_OBJ)
 LEVELDB_LIB := src/leveldb/libleveldb.a
-LEVELDB_UTIL := src/leveldb/util/histogram.o
+LEVELDB_UTIL := src/leveldb/util/histogram.o src/leveldb/port/port_posix.o
 
 PROGRAM = tera_main teracli teramo tera_test
 LIBRARY = libtera.a
