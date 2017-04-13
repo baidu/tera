@@ -224,7 +224,7 @@ DBTable::~DBTable() {
 Status DBTable::Init() {
   std::vector<VersionEdit*> lg_edits;
   Log(options_.info_log, "[%s] start Init()", dbname_.c_str());
-  Status s = env_->LockFile(dbname_ + "/LOCK", &db_lock_);
+  Status s = env_->LockFile(LockFileName(dbname_), &db_lock_);
   if (!s.ok()) {
       Log(options_.info_log, "[%s] Get db lock fail", dbname_.c_str());
       return s;

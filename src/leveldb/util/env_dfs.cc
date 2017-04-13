@@ -501,7 +501,7 @@ Status DfsEnv::RenameFile(const std::string& src, const std::string& target)
 
 Status DfsEnv::LockFile(const std::string& fname, FileLock** lock)
 {
-    std::string dir_path(fname.c_str(), fname.find("LOCK"));
+    std::string dir_path(fname.c_str(), fname.find_last_of("/"));
     if (dfs_->LockDirectory(dir_path) != 0) {
         return Status::IOError("lock " + dir_path);
     }
