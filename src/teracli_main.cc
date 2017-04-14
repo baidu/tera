@@ -72,6 +72,9 @@ DEFINE_bool(rowkey_count, false, "is print rowkey count when scan");
 DEFINE_bool(stdout_is_tty, true, "is stdout connected to a tty");
 DEFINE_bool(reorder_tablets, false, "reorder tablets by ts list");
 
+DEFINE_string(txntest, "", "for test");
+DEFINE_int64(txnts, 42, "for test");
+
 volatile int32_t g_start_time = 0;
 volatile int32_t g_end_time = 0;
 volatile int32_t g_used_time = 0;
@@ -3166,6 +3169,95 @@ int CommitRowTxnOp(Client* client, int32_t argc, std::string* argv, ErrorCode* e
     return 0;
 }
 
+int XtxnOp(Client* client, int32_t argc, std::string* argv, ErrorCode* err) {
+    TablePtr table(client->OpenTable("xtxn", err));
+    if (table == NULL) {
+        LOG(ERROR) << "fail to open table";
+        return -1;
+    }
+    if (FLAGS_txntest == "w1") {
+        Transaction* t = NewTransaction(FLAGS_txnts);
+        assert(t != NULL);
+
+        RowMutation* mu0 = table->NewRowMutation("row1");
+        mu0->Put("cf0", "qu0", "v1");
+        t->ApplyMutation(mu0);
+
+        *err = t->Commit();
+        delete t;
+    } else if (FLAGS_txntest == "w2"){
+        Transaction* t = NewTransaction(FLAGS_txnts);
+        assert(t != NULL);
+
+        RowMutation* mu0 = table->NewRowMutation("row2");
+        mu0->Put("cf0", "qu0", "v2");
+        t->ApplyMutation(mu0);
+
+        RowMutation* mu1 = table->NewRowMutation("row3");
+        mu1->Put("cf0", "qu0", "v3");
+        t->ApplyMutation(mu1);
+
+        *err = t->Commit();
+        delete t;
+    } else if (FLAGS_txntest == "r1"){
+        Transaction* t = NewTransaction(FLAGS_txnts);
+        assert(t != NULL);
+
+        RowReader* r0 = table->NewRowReader("row1");
+        r0->AddColumn("cf0", "qu0");
+        t->Get(r0);
+        if (r0->GetError().GetType() == ErrorCode::kOK) {
+            while (!r0->Done()) {
+                std::cout << r0->RowKey() << ":" << r0->Family() << ":" << r0->Qualifier() << ":" << r0->Timestamp() << ":" << r0->Value() << std::endl;
+                r0->Next();
+            }
+        } else {
+            std::cerr << r0->GetError().GetReason() << std::endl;
+        }
+        delete t;
+    } else if (FLAGS_txntest == "r2"){
+        Transaction* t = NewTransaction(FLAGS_txnts);
+        assert(t != NULL);
+
+        RowReader* r0 = table->NewRowReader("row2");
+        r0->AddColumn("cf0", "qu0");
+        t->Get(r0);
+        if (r0->GetError().GetType() == ErrorCode::kOK) {
+            while (!r0->Done()) {
+                std::cout << r0->RowKey() << ":" << r0->Family() << ":" << r0->Qualifier() << ":" << r0->Timestamp() << ":" << r0->Value() << std::endl;
+                r0->Next();
+            }
+        } else {
+            std::cerr << r0->GetError().GetReason() << std::endl;
+        }
+        delete t;
+    } else if (FLAGS_txntest == "r3"){
+        Transaction* t = NewTransaction(FLAGS_txnts);
+        assert(t != NULL);
+
+        RowReader* r0 = table->NewRowReader("row3");
+        r0->AddColumn("cf0", "qu0");
+        t->Get(r0);
+        if (r0->GetError().GetType() == ErrorCode::kOK) {
+            while (!r0->Done()) {
+                std::cout << r0->RowKey() << ":" << r0->Family() << ":" << r0->Qualifier() << ":" << r0->Timestamp() << ":" << r0->Value() << std::endl;
+                r0->Next();
+            }
+        } else {
+            std::cerr << r0->GetError().GetReason() << std::endl;
+        }
+        delete t;
+    } else {
+        std::cerr << "unknown flag";
+        return 43;
+    }
+
+    if (err->GetType() != ErrorCode::kOK) {
+        return 67;
+    }
+    return 0;
+}
+
 int TxnOp(Client* client, int32_t argc, std::string* argv, ErrorCode* err) {
     if (argc < 3) {
         LOG(ERROR) << "args number error: " << argc << ", need > 2";
@@ -3264,6 +3356,7 @@ static void InitializeCommandTable(){
     command_table["range"] = RangeOp;
     command_table["rangex"] = RangeOp;
     command_table["txn"] = TxnOp;
+    command_table["xtxn"] = XtxnOp;
     command_table["help"] = HelpOp;
 }
 

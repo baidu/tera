@@ -138,6 +138,9 @@ public:
     /// 返回所属事务
     Transaction* GetTransaction() { return txn_; }
 
+    Table* GetTable() const { return (Table*)table_; }
+
+
 public:
     /// 以下接口仅内部使用，不开放给用户
 

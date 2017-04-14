@@ -42,6 +42,9 @@ public:
     /// 获得结果错误码
     virtual const ErrorCode& GetError() = 0;
 
+    /// 提交事务
+    virtual ErrorCode Commit() = 0;
+
     Transaction() {}
     virtual ~Transaction() {}
 
@@ -49,6 +52,8 @@ private:
     Transaction(const Transaction&);
     void operator=(const Transaction&);
 };
+
+Transaction* NewTransaction(int64_t ts = -1);
 
 } // namespace tera
 #pragma GCC visibility pop

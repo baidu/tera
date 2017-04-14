@@ -160,7 +160,7 @@ void CommitCallbackWrapper(RowMutation* row_mu) {
 }
 
 /// 提交事务
-void SingleRowTxn::Commit() {
+ErrorCode SingleRowTxn::Commit() {
     if (mutation_buffer_.MutationNum() > 0) {
         if (user_commit_callback_ != NULL) {
             // use our callback wrapper
@@ -175,6 +175,7 @@ void SingleRowTxn::Commit() {
             thread_pool_->AddTask(task);
         }
     }
+    return GetError();
 }
 
 /// 内部提交回调

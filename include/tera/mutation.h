@@ -131,6 +131,8 @@ public:
     virtual void SetLock(RowLock* rowlock) = 0;
     virtual bool IsAsync() = 0;
 
+    virtual Table* GetTable() const = 0;
+
     RowMutation() {};
     virtual ~RowMutation() {};
 

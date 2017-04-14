@@ -42,11 +42,11 @@ public:
     /// 获得结果错误码
     virtual const ErrorCode& GetError();
 
+    /// 提交事务
+    virtual ErrorCode Commit();
 public:
     /// 内部读操作回调
     void ReadCallback(RowReaderImpl* reader_impl);
-    /// 提交事务
-    virtual void Commit();
     /// 内部提交回调
     void CommitCallback(RowMutationImpl* mu_impl);
     /// 序列化

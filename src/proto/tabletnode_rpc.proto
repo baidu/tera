@@ -149,6 +149,17 @@ message Mutation {
     optional int32 ttl = 8 [default = -1]; // -1 : 表示此key永不过期, 在TS中会存储过期时间为INT64_MAX.
 }
 
+message MultiRowTxnPrimaryLockInfo {
+    optional string cluster_info = 1;
+    optional string table_name = 2;
+    optional string row = 3;
+    optional string family = 4;
+    optional bytes qualifier = 5;
+    optional string ip = 6;
+    optional string port = 7;
+    optional int64 timestamp = 8;
+}
+
 message SingleRowTxnReadInfo {
     optional bool has_read = 1 [default = false];
     repeated ColumnFamily read_column_list = 2;

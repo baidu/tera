@@ -258,10 +258,16 @@ void TabletWriter::BatchRequest(const std::vector<const RowMutationSequence*>& r
                 }
                 int64_t timestamp = get_unique_micros(timestamp_old);
                 timestamp_old = timestamp;
-                if (!tablet_->GetSchema().enable_txn() &&
-                    leveldb::TeraKey::IsTypeAllowUserSetTimestamp(type) &&
-                    mu.has_timestamp() && mu.timestamp() < timestamp) {
-                    timestamp = mu.timestamp();
+                if (tablet_->GetSchema().enable_txn()) {
+                    // XXX kLatestTimestamp
+                    if (mu.has_timestamp() && (mu.timestamp() != std::numeric_limits<long int>::max())) {
+                        timestamp = mu.timestamp();
+                    }
+                } else {
+                    if (leveldb::TeraKey::IsTypeAllowUserSetTimestamp(type) &&
+                        mu.has_timestamp() && mu.timestamp() < timestamp) {
+                        timestamp = mu.timestamp();
+                    }
                 }
                 tablet_->GetRawKeyOperator()->EncodeTeraKey(row_key, mu.family(), mu.qualifier(),
                                                             timestamp, type, &tera_key);
