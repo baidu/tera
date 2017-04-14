@@ -109,6 +109,7 @@ public:
     virtual uint32_t Size() = 0;
     // Get a mutation specified by "index".
     virtual const RowMutation::Mutation& GetMutation(uint32_t index) = 0;
+    virtual Table* GetTable() = 0;
 
     // DEVELOPING
     virtual void Reset(const std::string& row_key) = 0;
