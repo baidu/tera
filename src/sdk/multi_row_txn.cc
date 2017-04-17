@@ -67,8 +67,11 @@ void MultiRowTxnSync::ApplyMutation(RowMutation* row_mu) {
     writes_.push_back(row_mu);
 }
 
-void MultiRowTxnSync::Get(RowReader* row_reader) {
+ErrorCode MultiRowTxnSync::Get(RowReader* row_reader) {
     assert(row_reader != NULL);
+
+    ErrorCode status;
+    return status;
 }
 
 } // namespace tera

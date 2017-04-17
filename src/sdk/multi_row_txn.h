@@ -19,7 +19,7 @@ public:
     /// 提交一个修改操作
     virtual void ApplyMutation(RowMutation* row_mu) = 0;
     /// 读取操作
-    virtual void Get(RowReader* row_reader) = 0;
+    virtual ErrorCode Get(RowReader* row_reader) = 0;
 
     /// 回调函数原型
     typedef void (*Callback)(Transaction* transaction);
@@ -54,7 +54,7 @@ public:
     static Transaction* NewMultiRowTxnSync();
     virtual ~MultiRowTxnSync();
 
-    virtual void Get(RowReader* row_reader);
+    virtual ErrorCode Get(RowReader* row_reader);
     virtual void ApplyMutation(RowMutation* row_mu);
     virtual ErrorCode Commit();
 

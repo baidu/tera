@@ -27,7 +27,7 @@ public:
     /// 提交一个修改操作
     virtual void ApplyMutation(RowMutation* row_mu);
     /// 读取操作
-    virtual void Get(RowReader* row_reader);
+    virtual ErrorCode Get(RowReader* row_reader);
 
     /// 设置提交回调, 提交操作会异步返回
     virtual void SetCommitCallback(Callback callback);

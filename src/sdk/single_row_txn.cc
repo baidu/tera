@@ -57,7 +57,7 @@ void ReadCallbackWrapper(RowReader* row_reader) {
 }
 
 /// 读取操作
-void SingleRowTxn::Get(RowReader* row_reader) {
+ErrorCode SingleRowTxn::Get(RowReader* row_reader) {
     RowReaderImpl* reader_impl = static_cast<RowReaderImpl*>(row_reader);
     reader_impl->SetTransaction(this);
     bool is_async = reader_impl->IsAsync();
@@ -82,7 +82,7 @@ void SingleRowTxn::Get(RowReader* row_reader) {
             ThreadPool::Task task = std::bind(&RowReaderImpl::RunCallback, reader_impl);
             thread_pool_->AddTask(task);
         }
-        return;
+        return reader_impl->GetError();
     }
 
     // save user's callback & context
@@ -97,6 +97,7 @@ void SingleRowTxn::Get(RowReader* row_reader) {
     if (!is_async) {
         reader_impl->Wait();
     }
+    return reader_impl->GetError();
 }
 
 /// 设置提交回调, 提交操作会异步返回
