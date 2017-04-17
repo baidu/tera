@@ -7,28 +7,28 @@
 #include "sdk/read_impl.h"
 #include "sdk/single_row_txn.h"
 #include "sdk/table_impl.h"
-#include "sdk/cross_row_txn.h"
+#include "sdk/multi_row_txn.h"
 
 namespace tera {
 
 Transaction* NewTransaction() {
-    return CrossRowTxnSync::NewCrossRowTxnSync();
+    return MultiRowTxnSync::NewMultiRowTxnSync();
 }
 
-Transaction* CrossRowTxnSync::NewCrossRowTxnSync() {
+Transaction* MultiRowTxnSync::NewMultiRowTxnSync() {
     // int64_t start_ts = TimeOracle::GetTimestamp();
     int64_t start_ts = 42;
     if (start_ts > 0) {
-        return new CrossRowTxnSync(start_ts);
+        return new MultiRowTxnSync(start_ts);
     } else {
         return NULL;
     }
 }
 
-CrossRowTxnSync::CrossRowTxnSync(int64_t start_ts)
+MultiRowTxnSync::MultiRowTxnSync(int64_t start_ts)
    : start_ts_(start_ts) {}
 
-CrossRowTxnSync::~CrossRowTxnSync() {}
+MultiRowTxnSync::~MultiRowTxnSync() {}
 
 std::string LockColumnName(const std::string& c) {
     return c + "__l__"; // lock
@@ -38,36 +38,36 @@ std::string WriteColumnName(const std::string& c) {
     return c + "__w__"; // write
 }
 
-bool CrossRowTxnSync::IsWritingByOthers(RowMutation* row_mu, RowReader* reader) {
+bool MultiRowTxnSync::IsWritingByOthers(RowMutation* row_mu, RowReader* reader) {
     return false;
 }
 
-bool CrossRowTxnSync::IsLockedByOthers(RowMutation* row_mu, RowReader* reader) {
+bool MultiRowTxnSync::IsLockedByOthers(RowMutation* row_mu, RowReader* reader) {
     return false;
 }
 
-ErrorCode CrossRowTxnSync::Prewrite(RowMutation* w, RowMutation* primary) {
+ErrorCode MultiRowTxnSync::Prewrite(RowMutation* w, RowMutation* primary) {
     ErrorCode status;
     return status;
 }
 
-bool CrossRowTxnSync::LockExists(tera::Transaction* single_row_txn, RowMutation* row_mu) {
+bool MultiRowTxnSync::LockExists(tera::Transaction* single_row_txn, RowMutation* row_mu) {
     return false;
 }
 
-ErrorCode CrossRowTxnSync::Commit() {
+ErrorCode MultiRowTxnSync::Commit() {
     assert(writes_.size() > 0);
 
     ErrorCode status;
     return status;
 }
 
-void CrossRowTxnSync::ApplyMutation(RowMutation* row_mu) {
+void MultiRowTxnSync::ApplyMutation(RowMutation* row_mu) {
     assert(row_mu != NULL);
     writes_.push_back(row_mu);
 }
 
-void CrossRowTxnSync::Get(RowReader* row_reader) {
+void MultiRowTxnSync::Get(RowReader* row_reader) {
     assert(row_reader != NULL);
 }
 

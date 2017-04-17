@@ -14,7 +14,7 @@ namespace tera {
 
 /// cross-row, cross-table transaction
 /// 跨行，跨表事务
-class CrossRowTxn : public Transaction {
+class MultiRowTxn : public Transaction {
 public:
     /// 提交一个修改操作
     virtual void ApplyMutation(RowMutation* row_mu) = 0;
@@ -41,18 +41,18 @@ public:
     /// 异步模式下，通过GetError()获取提交结果
     virtual ErrorCode Commit() = 0;
 
-    CrossRowTxn() {}
-    virtual ~CrossRowTxn() {}
+    MultiRowTxn() {}
+    virtual ~MultiRowTxn() {}
 
 private:
-    CrossRowTxn(const CrossRowTxn&);
-    void operator=(const CrossRowTxn&);
+    MultiRowTxn(const MultiRowTxn&);
+    void operator=(const MultiRowTxn&);
 };
 
-class CrossRowTxnSync: public CrossRowTxn {
+class MultiRowTxnSync: public MultiRowTxn {
 public:
-    static Transaction* NewCrossRowTxnSync();
-    virtual ~CrossRowTxnSync();
+    static Transaction* NewMultiRowTxnSync();
+    virtual ~MultiRowTxnSync();
 
     virtual void Get(RowReader* row_reader);
     virtual void ApplyMutation(RowMutation* row_mu);
@@ -67,9 +67,9 @@ public:
     virtual const ErrorCode& GetError() { return status_; }
 
 private:
-    CrossRowTxnSync(int64_t start_ts);
-    CrossRowTxnSync(const CrossRowTxn&);
-    void operator=(const CrossRowTxnSync&);
+    MultiRowTxnSync(int64_t start_ts);
+    MultiRowTxnSync(const MultiRowTxn&);
+    void operator=(const MultiRowTxnSync&);
 
     bool IsWritingByOthers(RowMutation* row_mu, RowReader* reader);
     bool IsLockedByOthers(RowMutation* row_mu, RowReader* reader);
