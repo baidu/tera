@@ -40,6 +40,10 @@ struct ::dirent* Readdir(nfs::NFSDIR* dir);
 
 int Closedir(nfs::NFSDIR* dir);
 
+int SetDirOwner(const char* path);
+
+int ClearDirOwner(const char* path);
+
 int Create(const char* path);
 
 int Unlink(const char* path);

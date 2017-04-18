@@ -387,6 +387,34 @@ struct ::dirent* Readdir(NFSDIR* dir);
 int Closedir(NFSDIR* dir);
 
 /**
+ * @brief   Set Dir Owner. only dir owner has create delete permission.
+ * @param   dir
+ * @return
+ *    0     - on success
+ *   -1     - on error
+ * @errno   When error, the nfs errno will be set appropriately:
+ *   NFSE_BANNED  - dir is lock
+ *   EINVAL  - invalid argument
+ *   ETIMEDOUT - access nfs service timeout
+ *   EIO    - other error
+ */
+int SetDirOwner(const char* path);
+
+/**
+ * @brief   clear dir Owner.
+ * @param   dir
+ * @return
+ *    0     - on success
+ *   -1     - on error
+ * @errno   When error, the nfs errno will be set appropriately:
+ *   NFSE_BANNED  - dir is lock
+ *   EINVAL  - invalid argument
+ *   ETIMEDOUT - access nfs service timeout
+ *   EIO    - other error
+ */
+int ClearDirOwner(const char* path);
+
+/**
  * @brief   Create a file. The default mode is 0666.
  * @param   path
  * @return
