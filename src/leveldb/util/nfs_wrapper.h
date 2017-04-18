@@ -52,6 +52,8 @@ nfs::NFSFILE* Open(const char* path, const char* mode);
 
 int Close(nfs::NFSFILE* stream);
 
+int ForceRelease(const char* path);
+
 ssize_t Read(nfs::NFSFILE* stream, void* ptr, size_t size);
 
 ssize_t PRead(nfs::NFSFILE* stream, void* ptr, size_t size, uint64_t offset);

@@ -499,6 +499,20 @@ NFSFILE* Open(const char* path, const char* mode);
 int Close(NFSFILE* stream);
 
 /**
+ * @brief   Force Close a file.
+ * @param   path
+ * @return
+ *    0     - on success
+ *   -1     - on error
+ *          Usually used to force close the file "write opened" by other client
+ *          If file is opened by self, will close and clear open info from NFSCLient, but not NFSFILE, will memory leak
+ *          If file is opened by other client, force release will close it, if other is writing, will reopen and ..
+ *          Must be used very caseful
+ * @errno   the same to Close
+ */
+int ForceRelease(const char* path);
+
+/**
  * @brief   Read size bytes to the buf pointed by ptr from the file stream.
  *          Libnfs will assume that the offset is the finished offset you read last time.
  *          Actually, it is atomically, will not cause EAGAIN or EWOULDBLOCK.
