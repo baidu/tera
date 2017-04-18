@@ -354,63 +354,23 @@ int32_t Nfs::LockDirectory(const std::string& path) {
     return -1;
   }
 
-  std::vector<std::string> lg_and_log;
-  ret = ListDirectory(path, &lg_and_log);
+  std::vector<std::string> files;
+  ret = ListDirectory(path, &files);
   if (ret != 0) {
     fprintf(stderr, "[LockDirectory] list dir %s fail, errno: %d",
         path.c_str(), errno);
     return -1;
   }
 
-  for (size_t i = 0; i < lg_and_log.size(); i++) {
-    if (lg_and_log[i].find(".log") != std::string::npos) {
-      std::string log_file = path + "/" + lg_and_log[i];
-      ret = (*nfsForceRelease)(log_file.c_str());
+  for (size_t i = 0; i < files.size(); i++) {
+    if (files[i].find(".log") != std::string::npos ||
+        files[i].find("MANIFEST") != std::string::npos) {
+      std::string file_name = path + "/" + files[i];
+      ret = (*nfsForceRelease)(file_name.c_str());
       if (ret != 0) {
         fprintf(stderr, "[LockDirectory] force release file %s fail, errno: %d",
-            log_file.c_str(), errno);
+            file_name.c_str(), errno);
         return -1;
-      }
-    } else {
-      std::string lg_path = path + "/" + lg_and_log[i];
-      std::vector<std::string> lg_files;
-
-      struct stat fileinfo;
-      ret = (*nfsStat)(lg_path.c_str(), &fileinfo);
-      if (ret != 0) {
-        fprintf(stderr, "[LockDirectory] stat file %s fail, errno: %d",
-            lg_path.c_str(), errno);
-        return -1;
-      }
-
-      if (!S_ISDIR(fileinfo.st_mode)) {
-        continue;
-      }
-
-      ret = (*nfsSetDirOwner)(lg_path.c_str());
-      if (ret != 0) {
-        fprintf(stderr, "[LockDirectory] lock dir %s fail, errno: %d",
-            lg_path.c_str(), errno);
-        return -1;
-      }
-
-      ret = ListDirectory(lg_path, &lg_files);
-      if (ret != 0) {
-        fprintf(stderr, "[LockDirectory] list directory %s fail, errno: %d",
-            lg_path.c_str(), errno);
-        return -1;
-      }
-
-      for (size_t j = 0; j < lg_files.size(); j++) {
-        if (lg_files[j].find("MANIFEST") != std::string::npos) {
-          std::string manifest_file = lg_path + "/" + lg_files[j];
-          ret = (*nfsForceRelease)(manifest_file.c_str());
-          if (ret != 0) {
-            fprintf(stderr, "[LockDirectory] force release file %s fail, errno: %d",
-                manifest_file.c_str(), errno);
-            return -1;
-          }
-        }
       }
     }
   }

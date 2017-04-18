@@ -92,7 +92,6 @@ Status DestroyLG(const std::string& lgname, const Options& options) {
     }
     env->DeleteDir(lgname + "/lost");
     env->UnlockFile(lock);  // Ignore error since state is already gone
-    env->DeleteFile(lockname);
     env->DeleteDir(lgname);  // Ignore error in case dir contains other files
 
     return result;
@@ -166,7 +165,6 @@ Status DestroyDB(const std::string& dbname, const Options& opt) {
     }
     env->DeleteDir(dbname + "/lost");
     env->UnlockFile(lock);  // Ignore error since state is already gone
-    env->DeleteFile(lockname);
     env->DeleteDir(dbname);  // Ignore error in case dir contains other files
 
     return result;
