@@ -12,23 +12,23 @@
 namespace tera {
 
 Transaction* NewTransaction() {
-    return MultiRowTxnSync::NewMultiRowTxnSync();
+    return MultiRowTxn::NewMultiRowTxn();
 }
 
-Transaction* MultiRowTxnSync::NewMultiRowTxnSync() {
+Transaction* MultiRowTxn::NewMultiRowTxn() {
     // int64_t start_ts = TimeOracle::GetTimestamp();
     int64_t start_ts = 42;
     if (start_ts > 0) {
-        return new MultiRowTxnSync(start_ts);
+        return new MultiRowTxn(start_ts);
     } else {
         return NULL;
     }
 }
 
-MultiRowTxnSync::MultiRowTxnSync(int64_t start_ts)
+MultiRowTxn::MultiRowTxn(int64_t start_ts)
    : start_ts_(start_ts) {}
 
-MultiRowTxnSync::~MultiRowTxnSync() {}
+MultiRowTxn::~MultiRowTxn() {}
 
 std::string LockColumnName(const std::string& c) {
     return c + "__l__"; // lock
@@ -38,36 +38,36 @@ std::string WriteColumnName(const std::string& c) {
     return c + "__w__"; // write
 }
 
-bool MultiRowTxnSync::IsWritingByOthers(RowMutation* row_mu, RowReader* reader) {
+bool MultiRowTxn::IsWritingByOthers(RowMutation* row_mu, RowReader* reader) {
     return false;
 }
 
-bool MultiRowTxnSync::IsLockedByOthers(RowMutation* row_mu, RowReader* reader) {
+bool MultiRowTxn::IsLockedByOthers(RowMutation* row_mu, RowReader* reader) {
     return false;
 }
 
-ErrorCode MultiRowTxnSync::Prewrite(RowMutation* w, RowMutation* primary) {
+ErrorCode MultiRowTxn::Prewrite(RowMutation* w, RowMutation* primary) {
     ErrorCode status;
     return status;
 }
 
-bool MultiRowTxnSync::LockExists(tera::Transaction* single_row_txn, RowMutation* row_mu) {
+bool MultiRowTxn::LockExists(tera::Transaction* single_row_txn, RowMutation* row_mu) {
     return false;
 }
 
-ErrorCode MultiRowTxnSync::Commit() {
+ErrorCode MultiRowTxn::Commit() {
     assert(writes_.size() > 0);
 
     ErrorCode status;
     return status;
 }
 
-void MultiRowTxnSync::ApplyMutation(RowMutation* row_mu) {
+void MultiRowTxn::ApplyMutation(RowMutation* row_mu) {
     assert(row_mu != NULL);
     writes_.push_back(row_mu);
 }
 
-ErrorCode MultiRowTxnSync::Get(RowReader* row_reader) {
+ErrorCode MultiRowTxn::Get(RowReader* row_reader) {
     assert(row_reader != NULL);
 
     ErrorCode status;

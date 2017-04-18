@@ -81,8 +81,10 @@ ErrorCode SingleRowTxn::Get(RowReader* row_reader) {
         if (is_async) {
             ThreadPool::Task task = std::bind(&RowReaderImpl::RunCallback, reader_impl);
             thread_pool_->AddTask(task);
+            return ErrorCode();
+        } else {
+            return reader_impl->GetError();
         }
-        return reader_impl->GetError();
     }
 
     // save user's callback & context
@@ -94,10 +96,12 @@ ErrorCode SingleRowTxn::Get(RowReader* row_reader) {
     reader_impl->SetContext(this);
 
     table_->Get(reader_impl);
-    if (!is_async) {
+    if (is_async) {
+        return ErrorCode();
+    } else {
         reader_impl->Wait();
+        return reader_impl->GetError();
     }
-    return reader_impl->GetError();
 }
 
 /// 设置提交回调, 提交操作会异步返回
@@ -170,13 +174,18 @@ ErrorCode SingleRowTxn::Commit() {
         }
         mutation_buffer_.SetTransaction(this);
         table_->ApplyMutation(&mutation_buffer_);
+        if (mutation_buffer_.IsAsync()) {
+            return ErrorCode();
+        } else {
+            return mutation_buffer_.GetError();
+        }
     } else {
         if (user_commit_callback_ != NULL) {
             ThreadPool::Task task = std::bind(user_commit_callback_, this);
             thread_pool_->AddTask(task);
         }
+        return ErrorCode();
     }
-    return GetError();
 }
 
 /// 内部提交回调
