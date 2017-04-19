@@ -40,7 +40,7 @@ public:
     }
 
     bool SetCpuMask(int32_t cpu_id) {
-        if (cpu_id < 0 || cpu_id > cpu_num_) {
+        if (cpu_id < 0 || cpu_id >= cpu_num_) {
             return false;
         }
 
