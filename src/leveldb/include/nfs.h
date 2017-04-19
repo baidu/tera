@@ -387,6 +387,34 @@ struct ::dirent* Readdir(NFSDIR* dir);
 int Closedir(NFSDIR* dir);
 
 /**
+ * @brief   Set Dir Owner. only dir owner has create delete permission.
+ * @param   dir
+ * @return
+ *    0     - on success
+ *   -1     - on error
+ * @errno   When error, the nfs errno will be set appropriately:
+ *   NFSE_BANNED  - dir is lock
+ *   EINVAL  - invalid argument
+ *   ETIMEDOUT - access nfs service timeout
+ *   EIO    - other error
+ */
+int SetDirOwner(const char* path);
+
+/**
+ * @brief   clear dir Owner.
+ * @param   dir
+ * @return
+ *    0     - on success
+ *   -1     - on error
+ * @errno   When error, the nfs errno will be set appropriately:
+ *   NFSE_BANNED  - dir is lock
+ *   EINVAL  - invalid argument
+ *   ETIMEDOUT - access nfs service timeout
+ *   EIO    - other error
+ */
+int ClearDirOwner(const char* path);
+
+/**
  * @brief   Create a file. The default mode is 0666.
  * @param   path
  * @return
@@ -469,6 +497,20 @@ NFSFILE* Open(const char* path, const char* mode);
  *   EIO    - other error (only in RBS system)
  */
 int Close(NFSFILE* stream);
+
+/**
+ * @brief   Force Close a file.
+ * @param   path
+ * @return
+ *    0     - on success
+ *   -1     - on error
+ *          Usually used to force close the file "write opened" by other client
+ *          If file is opened by self, will close and clear open info from NFSCLient, but not NFSFILE, will memory leak
+ *          If file is opened by other client, force release will close it, if other is writing, will reopen and ..
+ *          Must be used very caseful
+ * @errno   the same to Close
+ */
+int ForceRelease(const char* path);
 
 /**
  * @brief   Read size bytes to the buf pointed by ptr from the file stream.

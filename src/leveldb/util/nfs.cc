@@ -27,6 +27,8 @@ static int (*nfsRmdir)(const char* path);
 static nfs::NFSDIR* (*nfsOpendir)(const char* path);
 static struct ::dirent* (*nfsReaddir)(nfs::NFSDIR* dir);
 static int (*nfsClosedir)(nfs::NFSDIR* dir);
+static int (*nfsSetDirOwner)(const char* path);
+static int (*nfsClearDirOwner)(const char* path);
 
 static int (*nfsStat)(const char* path, struct ::stat* stat);
 static int (*nfsUnlink)(const char* path);
@@ -35,6 +37,7 @@ static int (*nfsRename)(const char* oldpath, const char* newpath);
 
 static nfs::NFSFILE* (*nfsOpen)(const char* path, const char* mode);
 static int (*nfsClose)(nfs::NFSFILE* stream);
+static int (*nfsForceRelease)(const char* path);
 
 static ssize_t (*nfsRead)(nfs::NFSFILE* stream, void* ptr, size_t size);
 static ssize_t (*nfsPRead)(nfs::NFSFILE* stream, void* ptr, size_t size,
@@ -84,12 +87,15 @@ void Nfs::LoadSymbol() {
   *(void**)(&nfsOpendir) = ResolveSymbol(dl, "Opendir");
   *(void**)(&nfsReaddir) = ResolveSymbol(dl, "Readdir");
   *(void**)(&nfsClosedir) = ResolveSymbol(dl, "Closedir");
+  *(void**)(&nfsSetDirOwner) = ResolveSymbol(dl, "SetDirOwner");
+  *(void**)(&nfsClearDirOwner) = ResolveSymbol(dl, "ClearDirOwner");
   *(void**)(&nfsStat) = ResolveSymbol(dl, "Stat");
   *(void**)(&nfsUnlink) = ResolveSymbol(dl, "Unlink");
   *(void**)(&nfsAccess) = ResolveSymbol(dl, "Access");
   *(void**)(&nfsRename) = ResolveSymbol(dl, "Rename");
   *(void**)(&nfsOpen) = ResolveSymbol(dl, "Open");
   *(void**)(&nfsClose) = ResolveSymbol(dl, "Close");
+  *(void**)(&nfsForceRelease) = ResolveSymbol(dl, "ForceRelease");
   *(void**)(&nfsRead) = ResolveSymbol(dl, "Read");
   *(void**)(&nfsPRead) = ResolveSymbol(dl, "PRead");
   *(void**)(&nfsWrite) = ResolveSymbol(dl, "Write");
@@ -338,6 +344,41 @@ int32_t Nfs::ListDirectory(const std::string& path,
   }
   (*nfsClosedir)(dir);
   return 0;
+}
+
+int32_t Nfs::LockDirectory(const std::string& path) {
+  int ret = (*nfsSetDirOwner)(path.c_str());
+  if (ret != 0) {
+    fprintf(stderr, "[LockDirectory] lock dir %s fail, errno: %d",
+        path.c_str(), errno);
+    return -1;
+  }
+
+  std::vector<std::string> files;
+  ret = ListDirectory(path, &files);
+  if (ret != 0) {
+    fprintf(stderr, "[LockDirectory] list dir %s fail, errno: %d",
+        path.c_str(), errno);
+    return -1;
+  }
+
+  for (size_t i = 0; i < files.size(); i++) {
+    if (files[i].find(".log") != std::string::npos ||
+        files[i].find("MANIFEST") != std::string::npos) {
+      std::string file_name = path + "/" + files[i];
+      ret = (*nfsForceRelease)(file_name.c_str());
+      if (ret != 0) {
+        fprintf(stderr, "[LockDirectory] force release file %s fail, errno: %d",
+            file_name.c_str(), errno);
+        return -1;
+      }
+    }
+  }
+  return 0;
+}
+
+int32_t Nfs::UnlockDirectory(const std::string& path) {
+  return (*nfsClearDirOwner)(path.c_str());
 }
 
 }

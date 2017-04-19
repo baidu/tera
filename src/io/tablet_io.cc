@@ -56,6 +56,7 @@ DECLARE_int32(tera_tabletnode_retry_period);
 DECLARE_string(tera_leveldb_compact_strategy);
 DECLARE_bool(tera_leveldb_verify_checksums);
 DECLARE_bool(tera_leveldb_ignore_corruption_in_compaction);
+DECLARE_bool(tera_leveldb_use_file_lock);
 
 DECLARE_int32(tera_tabletnode_scan_pack_max_size);
 DECLARE_bool(tera_tabletnode_cache_enabled);
@@ -274,6 +275,7 @@ bool TabletIO::Load(const TableSchema& schema,
     }
     ldb_options_.verify_checksums_in_compaction = FLAGS_tera_leveldb_verify_checksums;
     ldb_options_.ignore_corruption_in_compaction = FLAGS_tera_leveldb_ignore_corruption_in_compaction;
+    ldb_options_.use_file_lock = FLAGS_tera_leveldb_use_file_lock;
     ldb_options_.disable_wal = table_schema_.disable_wal();
     SetupOptionsForLG();
 

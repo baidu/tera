@@ -162,13 +162,12 @@ class DBImpl : public DB {
   bool owns_info_log_;
   bool owns_block_cache_;
   const std::string dbname_;
+  // Lock over the persistent DB state.  Non-NULL iff successfully acquired.
+  FileLock* db_lock_;
 
   // table_cache_ provides its own synchronization
   TableCache* table_cache_;
   bool owns_table_cache_;
-
-  // Lock over the persistent DB state.  Non-NULL iff successfully acquired.
-  FileLock* db_lock_;
 
   // State below is protected by mutex_
   port::Mutex mutex_;

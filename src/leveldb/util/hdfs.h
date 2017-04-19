@@ -46,6 +46,8 @@ public:
   int32_t Rename(const std::string& from, const std::string& to);
   int32_t Copy(const std::string& from, const std::string& to);
   int32_t ListDirectory(const std::string& path, std::vector<std::string>* result);
+  int32_t LockDirectory(const std::string& path);
+  int32_t UnlockDirectory(const std::string& path);
   DfsFile* OpenFile(const std::string& filename, int32_t flags);
 
 private:
@@ -88,6 +90,8 @@ public:
   int32_t Rename(const std::string& from, const std::string& to);
   int32_t Copy(const std::string& from, const std::string& to);
   int32_t ListDirectory(const std::string& path, std::vector<std::string>* result);
+  int32_t LockDirectory(const std::string& path);
+  int32_t UnlockDirectory(const std::string& path);
   DfsFile* OpenFile(const std::string& filename, int32_t flags);
 
 private:

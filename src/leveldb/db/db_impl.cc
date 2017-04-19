@@ -151,9 +151,9 @@ DBImpl::DBImpl(const Options& options, const std::string& dbname)
       owns_info_log_(options_.info_log != options.info_log),
       owns_block_cache_(options_.block_cache != options.block_cache),
       dbname_(dbname),
+      db_lock_(NULL),
       table_cache_(options_.table_cache),
       owns_table_cache_(options_.table_cache == NULL),
-      db_lock_(NULL),
       shutting_down_(NULL),
       bg_cv_(&mutex_),
       writting_mem_cv_(&mutex_),
@@ -249,9 +249,6 @@ DBImpl::~DBImpl() {
         Shutdown2();
     }
   }
-  if (db_lock_ != NULL) {
-    env_->UnlockFile(db_lock_);
-  }
 
   delete versions_;
   if (mem_ != NULL) mem_->Unref();
@@ -267,6 +264,9 @@ DBImpl::~DBImpl() {
   }
   if (owns_block_cache_) {
     delete options_.block_cache;
+  }
+  if (db_lock_) {
+    env_->UnlockFile(db_lock_);
   }
 }
 
@@ -573,14 +573,15 @@ Status DBImpl::Recover(VersionEdit* edit) {
       }
   }
 
-  assert(db_lock_ == NULL);
-  Status s = env_->LockFile(LockFileName(dbname_), &db_lock_);
-  if (!s.ok()) {
-    return s;
+  if (options_.use_file_lock) {
+    Status s = env_->LockFile(LockFileName(dbname_), &db_lock_);
+    if (!s.ok()) {
+      return s;
+    }
   }
 
   bool db_exists;
-  s = DbExists(&db_exists);
+  Status s = DbExists(&db_exists);
   if (!s.ok()) {
     return s;
   }

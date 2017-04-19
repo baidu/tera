@@ -292,6 +292,9 @@ struct Options {
   // Default: false
   bool ignore_corruption_in_compaction;
 
+  // If true, env::FileLock will be called during leveldb's load
+  bool use_file_lock;
+
   // disable write-ahead-log
   bool disable_wal;
 
