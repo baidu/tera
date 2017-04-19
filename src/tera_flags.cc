@@ -67,7 +67,7 @@ DEFINE_bool(tera_use_flash_for_memenv, true, "Use flashenv for memery lg");
 DEFINE_string(tera_leveldb_compact_strategy, "default", "the default strategy to drive consum compaction, should be [default|LG|dummy]");
 DEFINE_bool(tera_leveldb_verify_checksums, true, "enable verify data read from storage against checksums");
 DEFINE_bool(tera_leveldb_ignore_corruption_in_compaction, false, "skip corruption blocks of sst file in compaction");
-DEFINE_bool(tera_leveldb_use_file_lock, true, "hold file lock during loading leveldb");
+DEFINE_bool(tera_leveldb_use_file_lock, false, "hold file lock during loading leveldb");
 
 DEFINE_int32(tera_rpc_client_max_inflow, -1, "the max input flow (in MB/s) for rpc-client, -1 means no limit");
 DEFINE_int32(tera_rpc_client_max_outflow, -1, "the max input flow (in MB/s) for rpc-client, -1 means no limit");
