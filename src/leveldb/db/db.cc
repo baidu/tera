@@ -133,9 +133,11 @@ Status DestroyDB(const std::string& dbname, const Options& opt) {
                 }
                 lg_opt.compression = lg_info->compression;
                 delete lg_info;
+                info_it->second = NULL;
             }
         } else if (options.lg_info_list) {
             delete options.lg_info_list;
+            options.lg_info_list = NULL;
         }
         Status lg_ret = DestroyLG(lgname, lg_opt);
         if (!lg_ret.ok()) {

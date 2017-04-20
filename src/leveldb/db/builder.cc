@@ -8,6 +8,8 @@
 
 #include "db/builder.h"
 
+#include <algorithm>
+
 #include "db/filename.h"
 #include "db/dbformat.h"
 #include "db/table_cache.h"
@@ -28,6 +30,9 @@ Status BuildTable(const std::string& dbname,
                   uint64_t* saved_size,
                   uint64_t smallest_snapshot) {
   Status s;
+  int64_t del_num = 0;         // statistic: delete tag's percentage in sst
+  std::vector<int64_t> ttls; // use for calculate timeout percentage
+  int64_t entries = 0;
   meta->file_size = 0;
   iter->SeekToFirst();
 
@@ -46,48 +51,57 @@ Status BuildTable(const std::string& dbname,
       compact_strategy->SetSnapshot(snapshot);
     }
 
+    ParsedInternalKey ikey;
     TableBuilder* builder = new TableBuilder(options, file);
     meta->smallest.DecodeFrom(iter->key());
     for (;iter->Valid();) {
       Slice key = iter->key();  // no-length-prefix-key
+      assert(ParseInternalKey(key, &ikey));
 
-      const char* entry = key.data();
-      Slice raw_key(entry, key.size() - 8);
-
-      const uint64_t tag = DecodeFixed64(entry + key.size() - 8);
-      const uint64_t sequence_id = tag >> 8;
       bool has_atom_merged = false;
-
-      if (static_cast<ValueType>(tag & 0xff) == kTypeValue && compact_strategy && sequence_id <= snapshot) {
-        bool drop = compact_strategy->Drop(raw_key, sequence_id);
+      if (ikey.type == kTypeValue && compact_strategy && ikey.sequence <= snapshot) {
+        bool drop = compact_strategy->Drop(ikey.user_key, ikey.sequence);
         if (drop) {
-            iter->Next();
-//             Log(options.info_log, "[Memtable Drop] sequence_id: %llu, raw_key: %s",
-//                     sequence_id, entry);
-            continue;   // drop it before build
-        }
-        else {
-            std::string merged_value;
-            std::string merged_key;
-            has_atom_merged = compact_strategy->MergeAtomicOPs(iter, &merged_value,
-                    &merged_key);
-            if (has_atom_merged) {
-                meta->largest.DecodeFrom(Slice(merged_key));
-                builder->Add(Slice(merged_key), Slice(merged_value));
-            }
+          iter->Next();
+          // Log(options.info_log, "[Memtable Drop] sequence_id: %llu, raw_key: %s",
+          //     ikey.sequence, ikey.user_key);
+          continue;   // drop it before build
+        } else {
+          std::string merged_value;
+          std::string merged_key;
+          has_atom_merged = compact_strategy->MergeAtomicOPs(iter, &merged_value,
+                                                             &merged_key);
+          if (has_atom_merged) {
+            meta->largest.DecodeFrom(Slice(merged_key));
+            builder->Add(Slice(merged_key), Slice(merged_value));
+          }
         }
       }
 
       if (!has_atom_merged) {
-          meta->largest.DecodeFrom(key);
-          builder->Add(key, iter->value());
-          iter->Next();
+        bool del_tag = false;
+        int64_t ttl = -1;
+        compact_strategy && compact_strategy->CheckTag(ikey.user_key, &del_tag, &ttl);
+        if (ikey.type == kTypeDeletion || del_tag) {
+          //Log(options_.info_log, "[%s] add del_tag %d, key_type %d\n",
+          //    dbname_.c_str(), del_tag, ikey.type);
+          del_num++;
+        } else if (ttl > 0) { // del tag has not ttl
+          //Log(options_.info_log, "[%s] add ttl_tag %ld\n",
+          //    dbname_.c_str(), ttl);
+          ttls.push_back(ttl);
+        }
+
+        meta->largest.DecodeFrom(key);
+        builder->Add(key, iter->value());
+        iter->Next();
       }
-      //Log(options.info_log, "[Memtable Not Drop] sequence_id: %llu, raw_key: %s", sequence_id, entry);
+      // Log(options.info_log, "[Memtable Not Drop] sequence_id: %llu, raw_key: %s",
+      //     ikey.sequence, ikey.user_key);
     }
 
     if (compact_strategy) {
-        delete compact_strategy;
+      delete compact_strategy;
     }
 
     // Finish and check for builder errors
@@ -98,6 +112,24 @@ Status BuildTable(const std::string& dbname,
         meta->file_size = builder->FileSize();
         assert(meta->file_size > 0);
         *saved_size = builder->SavedSize();
+
+        // update ttl/del information
+        entries = builder->NumEntries();
+        std::sort(ttls.begin(), ttls.end());
+        uint32_t idx = ttls.size() * options.ttl_percentage / 100 ;
+        meta->del_percentage = del_num * 100 / entries; /* delete tag percentage */
+        meta->check_ttl_ts = ((ttls.size() > 0) && (idx < ttls.size())) ? ttls[idx] : 0; /* sst's check ttl's time */
+        meta->ttl_percentage = ((ttls.size() > 0) && (idx < ttls.size())) ? idx * 100 / ttls.size() : 0; /* ttl tag percentage */
+        Log(options.info_log, "[%s] (mem dump) AddFile, number #%lu, entries %ld, del_nr %lu"
+                             ", ttl_nr %lu, del_p %lu, ttl_check_ts %lu, ttl_p %lu\n",
+          dbname.c_str(),
+          meta->number,
+          entries,
+          del_num,
+          ttls.size(),
+          meta->del_percentage,
+          meta->check_ttl_ts,
+          meta->ttl_percentage);
       }
     } else {
       builder->Abandon();
