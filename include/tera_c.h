@@ -69,7 +69,7 @@ tera_row_mutation_t* tera_row_mutation(tera_table_t* table, const char* row_key,
 void tera_table_apply_mutation(tera_table_t* table, tera_row_mutation_t* mutation);
 void tera_table_apply_mutation_batch(tera_table_t* table, tera_row_mutation_t** mutation_batch, int64_t num);
 void tera_row_mutation_put_kv(tera_row_mutation_t* mu,
-		                          const char* val, uint64_t vallen, int32_t ttl);
+                              const char* val, uint64_t vallen, int32_t ttl);
 void tera_row_mutation_put(tera_row_mutation_t* mu, const char* cf,
                            const char* qu, uint64_t qulen,
                            const char* val, uint64_t vallen);
