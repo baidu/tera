@@ -78,6 +78,8 @@ def main():
     # async get
     async_get(table)
 
+    put_get_with_timestamp(table)
+
     table.Close()
     client.Close()
     print("main() done\n")
@@ -168,6 +170,35 @@ def async_get(table):
         table.ApplyReader(reader)
     while not table.IsGetFinished():
         time.sleep(0.01)
+
+
+def put_get_with_timestamp(table):
+    print("\nput_get_with_timestamp")
+    key = "nput_get_with_timestamp"
+    mu = table.NewRowMutation(key)
+    mu.PutWithTimestamp("cf0", "qu0", 42, "value")
+    table.ApplyMutation(mu)
+    while not table.IsPutFinished():
+        time.sleep(0.01)
+
+    reader = table.NewRowReader(key)
+    reader.AddColumn("cf0", "qu0")
+    table.ApplyReader(reader)
+    while not table.IsGetFinished():
+        time.sleep(0.01)
+
+    status = reader.GetStatus()
+    if status.GetReasonNumber() != Status.OK:
+        print(status.GetReasonString())
+        return
+    while not reader.Done():
+        row = reader.RowKey()
+        column = reader.Family() + ":" + reader.Qualifier()
+        timestamp = str(reader.Timestamp())
+        assert reader.Timestamp() == 42
+        val = reader.Value()
+        print row + ":" + column + ":" + timestamp + ":" + val
+        reader.Next()
 
 
 def put_get_int64(table, rowkey, cf, qu, value):
