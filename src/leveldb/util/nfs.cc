@@ -60,6 +60,19 @@ void* ResolveSymbol(void* dl, const char* sym) {
       fprintf(stderr, "libnfs.so does not support federation\n");
       return NULL;
   }
+  if (strcmp(sym,"SetDirOwner") == 0 && error != NULL) {
+      fprintf(stderr, "libnfs.so does not support SetDirOwner\n");
+      return NULL;
+  }
+  if (strcmp(sym,"ClearDirOwner") == 0 && error != NULL) {
+      fprintf(stderr, "libnfs.so does not support ClearDirOwner\n");
+      return NULL;
+  }
+
+  if (strcmp(sym,"ForceRelease") == 0 && error != NULL) {
+      fprintf(stderr, "libnfs.so does not support ForceRelease\n");
+      return NULL;
+  }
   if (error != NULL) {
     fprintf(stderr, "resolve symbol %s from libnfs.so error: %s\n",
             sym, error);
