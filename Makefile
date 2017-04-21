@@ -42,6 +42,9 @@ SERVER_SRC := src/tera_main.cc src/tera_entry.cc
 CLIENT_SRC := src/teracli_main.cc
 TEST_CLIENT_SRC := src/tera_test_main.cc
 TERA_C_SRC := src/tera_c.cc
+TSO_SERVER_SRC := src/tso/tso_server_entry.cc src/tso/tso_server_impl.cc
+TSO_CLIENT_SRC := src/tso/tso.cc src/tso/tso_client_impl.cc src/tso/tso_rpc_client.cc
+TSOC_SRC := src/tso/tsoc_main.cc
 MONITOR_SRC := src/monitor/teramo_main.cc
 MARK_SRC := src/benchmark/mark.cc src/benchmark/mark_main.cc
 TEST_SRC := src/utils/test/prop_tree_test.cc src/utils/test/tprinter_test.cc \
@@ -64,6 +67,9 @@ SERVER_OBJ := $(SERVER_SRC:.cc=.o)
 CLIENT_OBJ := $(CLIENT_SRC:.cc=.o)
 TEST_CLIENT_OBJ := $(TEST_CLIENT_SRC:.cc=.o)
 TERA_C_OBJ := $(TERA_C_SRC:.cc=.o)
+TSO_SERVER_OBJ := $(TSO_SERVER_SRC:.cc=.o)
+TSO_CLIENT_OBJ := $(TSO_CLIENT_SRC:.cc=.o)
+TSOC_OBJ := $(TSOC_SRC:.cc=.o)
 MONITOR_OBJ := $(MONITOR_SRC:.cc=.o)
 MARK_OBJ := $(MARK_SRC:.cc=.o)
 HTTP_OBJ := $(HTTP_SRC:.cc=.o)
@@ -71,11 +77,11 @@ TEST_OBJ := $(TEST_SRC:.cc=.o)
 ALL_OBJ := $(MASTER_OBJ) $(TABLETNODE_OBJ) $(IO_OBJ) $(SDK_OBJ) $(PROTO_OBJ) \
            $(JNI_TERA_OBJ) $(OTHER_OBJ) $(COMMON_OBJ) $(SERVER_OBJ) $(CLIENT_OBJ) \
            $(TEST_CLIENT_OBJ) $(TERA_C_OBJ) $(MONITOR_OBJ) $(MARK_OBJ) $(TEST_OBJ) \
-           $(SERVER_WRAPPER_OBJ)
+           $(SERVER_WRAPPER_OBJ) $(TSO_SERVER_OBJ) $(TSO_CLIENT_OBJ)
 LEVELDB_LIB := src/leveldb/libleveldb.a
 LEVELDB_UTIL := src/leveldb/util/histogram.o src/leveldb/port/port_posix.o
 
-PROGRAM = tera_main tera_master tabletserver teracli teramo tera_test
+PROGRAM = tera_main tera_master tabletserver teracli teramo tera_test tera_tso tsoc
 LIBRARY = libtera.a
 SOLIBRARY = libtera.so
 TERA_C_SO = libtera_c.so
@@ -128,10 +134,10 @@ tabletserver: $(SERVER_OBJ) $(TABLETNODE_OBJ) $(IO_OBJ) $(SDK_OBJ) \
               $(PROTO_OBJ) $(OTHER_OBJ) $(COMMON_OBJ) $(LEVELDB_LIB)
 	$(CXX) -o $@ $^ $(LDFLAGS)
 
-libtera.a: $(SDK_OBJ) $(PROTO_OBJ) $(OTHER_OBJ) $(COMMON_OBJ) $(LEVELDB_UTIL)
+libtera.a: $(SDK_OBJ) $(PROTO_OBJ) $(OTHER_OBJ) $(COMMON_OBJ) $(TSO_CLIENT_OBJ) $(LEVELDB_UTIL)
 	$(AR) -rs $@ $^
 
-libtera.so: $(SDK_OBJ) $(PROTO_OBJ) $(OTHER_OBJ) $(COMMON_OBJ) $(LEVELDB_UTIL)
+libtera.so: $(SDK_OBJ) $(PROTO_OBJ) $(OTHER_OBJ) $(COMMON_OBJ) $(TSO_CLIENT_OBJ) $(LEVELDB_UTIL)
 	$(CXX) -o $@ $^ $(SO_LDFLAGS)
 
 libtera_c.so: $(TERA_C_OBJ) $(LIBRARY)
@@ -159,6 +165,12 @@ src/leveldb/libleveldb.a: FORCE
 	CC=$(CC) CXX=$(CXX) $(MAKE) -C src/leveldb
 
 tera_bench:
+
+tera_tso: $(TSO_SERVER_OBJ) $(SERVER_OBJ) $(PROTO_OBJ) $(OTHER_OBJ) $(COMMON_OBJ)
+	$(CXX) -o $@ $^ $(LDFLAGS)
+
+tsoc: $(TSOC_OBJ) $(TSO_CLIENT_OBJ) $(PROTO_OBJ) $(OTHER_OBJ) $(COMMON_OBJ)
+	$(CXX) -o $@ $^ $(LDFLAGS)
 
 # unit test
 prop_tree_test: src/utils/test/prop_tree_test.o $(LIBRARY)
