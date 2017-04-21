@@ -21,6 +21,7 @@ bool LoadFlagFile(const std::string& file) {
     argv[1] = const_cast<char*>(flag.c_str());
     argv[2] = NULL;
     ::google::ParseCommandLineFlags(&argc, &argv, false);
+    argv[1] = NULL;
     delete[] argv;
     return true;
 }

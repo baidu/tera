@@ -692,14 +692,6 @@ Status DBImpl::WriteLevel0Table(MemTable* mem, VersionEdit* edit,
                    &saved_size, smallest_snapshot);
     mutex_.Lock();
   }
-
-  VersionSet::LevelSummaryStorage tmp;
-  Log(options_.info_log, "[%s] Level-0 table #%u: %lld (+ %lld ) bytes %s, %s",
-      dbname_.c_str(), (unsigned int) meta.number,
-      (unsigned long long) meta.file_size,
-      (unsigned long long) saved_size,
-      s.ToString().c_str(),
-      versions_->LevelSummary(&tmp));
   delete iter;
   pending_outputs_.erase(meta.number);
 
@@ -712,8 +704,16 @@ Status DBImpl::WriteLevel0Table(MemTable* mem, VersionEdit* edit,
     if (base != NULL) {
       level = base->PickLevelForMemTableOutput(min_user_key, max_user_key);
     }
-    edit->AddFile(level, meta.number, meta.file_size, meta.smallest, meta.largest);
+    edit->AddFile(level, meta);
   }
+  VersionSet::LevelSummaryStorage tmp;
+  Log(options_.info_log, "[%s] Level-0 table #%u: dump-level %d, %lld (+ %lld ) bytes %s, %s",
+      dbname_.c_str(), (unsigned int) meta.number,
+      level,
+      (unsigned long long) meta.file_size,
+      (unsigned long long) saved_size,
+      s.ToString().c_str(),
+      versions_->LevelSummary(&tmp));
 
   CompactionStats stats;
   stats.micros = env_->NowMicros() - start_micros;
@@ -1060,7 +1060,7 @@ Status DBImpl::BackgroundCompaction() {
     c->edit()->AddFile(c->output_level(), *f);
     status = versions_->LogAndApply(c->edit(), &mutex_);
     VersionSet::LevelSummaryStorage tmp;
-    Log(options_.info_log, "[%s] Moved #%08u, %08u to level-%d %lld bytes %s: %s\n",
+    Log(options_.info_log, "[%s] Moved #%08u, #%u to level-%d %lld bytes %s: %s\n",
         dbname_.c_str(),
         static_cast<uint32_t>(f->number >> 32 & 0x7fffffff),  //tablet number
         static_cast<uint32_t>(f->number & 0xffffffff),        //sst number
