@@ -692,14 +692,6 @@ Status DBImpl::WriteLevel0Table(MemTable* mem, VersionEdit* edit,
                    &saved_size, smallest_snapshot);
     mutex_.Lock();
   }
-
-  VersionSet::LevelSummaryStorage tmp;
-  Log(options_.info_log, "[%s] Level-0 table #%u: %lld (+ %lld ) bytes %s, %s",
-      dbname_.c_str(), (unsigned int) meta.number,
-      (unsigned long long) meta.file_size,
-      (unsigned long long) saved_size,
-      s.ToString().c_str(),
-      versions_->LevelSummary(&tmp));
   delete iter;
   pending_outputs_.erase(meta.number);
 
@@ -714,6 +706,14 @@ Status DBImpl::WriteLevel0Table(MemTable* mem, VersionEdit* edit,
     }
     edit->AddFile(level, meta);
   }
+  VersionSet::LevelSummaryStorage tmp;
+  Log(options_.info_log, "[%s] Level-0 table #%u: dump-level %d, %lld (+ %lld ) bytes %s, %s",
+      dbname_.c_str(), (unsigned int) meta.number,
+      level,
+      (unsigned long long) meta.file_size,
+      (unsigned long long) saved_size,
+      s.ToString().c_str(),
+      versions_->LevelSummary(&tmp));
 
   CompactionStats stats;
   stats.micros = env_->NowMicros() - start_micros;

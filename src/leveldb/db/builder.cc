@@ -120,10 +120,10 @@ Status BuildTable(const std::string& dbname,
         meta->del_percentage = del_num * 100 / entries; /* delete tag percentage */
         meta->check_ttl_ts = ((ttls.size() > 0) && (idx < ttls.size())) ? ttls[idx] : 0; /* sst's check ttl's time */
         meta->ttl_percentage = ((ttls.size() > 0) && (idx < ttls.size())) ? idx * 100 / ttls.size() : 0; /* ttl tag percentage */
-        Log(options.info_log, "[%s] (mem dump) AddFile, number #%lu, entries %ld, del_nr %lu"
+        Log(options.info_log, "[%s] (mem dump) AddFile, number #%u, entries %ld, del_nr %lu"
                              ", ttl_nr %lu, del_p %lu, ttl_check_ts %lu, ttl_p %lu\n",
           dbname.c_str(),
-          meta->number,
+          (unsigned int) meta->number,
           entries,
           del_num,
           ttls.size(),
