@@ -1060,7 +1060,7 @@ Status DBImpl::BackgroundCompaction() {
     c->edit()->AddFile(c->output_level(), *f);
     status = versions_->LogAndApply(c->edit(), &mutex_);
     VersionSet::LevelSummaryStorage tmp;
-    Log(options_.info_log, "[%s] Moved #%08u, %08u to level-%d %lld bytes %s: %s\n",
+    Log(options_.info_log, "[%s] Moved #%08u, #%u to level-%d %lld bytes %s: %s\n",
         dbname_.c_str(),
         static_cast<uint32_t>(f->number >> 32 & 0x7fffffff),  //tablet number
         static_cast<uint32_t>(f->number & 0xffffffff),        //sst number
