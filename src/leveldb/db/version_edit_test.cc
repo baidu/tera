@@ -36,7 +36,9 @@ enum EditTestTag {
 
 class VersionEditTest: public VersionEdit {
   public:
-    VersionEditTest() : has_error_tag_(false) {}
+    VersionEditTest() : has_error_tag_(false) {
+      Clear();
+    }
     void AddErrorTag(const std::string& str) {
       has_error_tag_ = true;
       error_code_ = str;

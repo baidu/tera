@@ -54,7 +54,7 @@ struct DBImpl::Writer {
   WriteBatch* batch;
   port::CondVar cv;
 
-  explicit Writer(port::Mutex* mu) : cv(mu) { }
+  explicit Writer(port::Mutex* mu) : batch(NULL), cv(mu) { }
 };
 
 struct DBImpl::CompactionState {
@@ -75,7 +75,9 @@ struct DBImpl::CompactionState {
     int64_t entries;
     InternalKey smallest, largest;
 
-    Output(): del_num(0),
+    Output(): number(0),
+      file_size(0),
+      del_num(0),
       entries(0) {}
   };
   std::vector<Output> outputs;

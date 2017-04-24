@@ -26,6 +26,7 @@ RowReaderImpl::RowReaderImpl(TableImpl* table, const std::string& row_key)
       commit_times_(0),
       on_finish_callback_(NULL),
       txn_(NULL) {
+    start_ts_ = get_micros();
 }
 
 RowReaderImpl::~RowReaderImpl() {

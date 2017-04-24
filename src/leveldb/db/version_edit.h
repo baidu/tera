@@ -40,6 +40,7 @@ struct FileMetaData {
       check_ttl_ts(0),
       ttl_percentage(0),
       del_percentage(0),
+      number(0),
       file_size(0),
       data_size(0),
       smallest_fake(false),
