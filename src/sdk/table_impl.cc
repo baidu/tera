@@ -346,7 +346,8 @@ ResultStream* TableImpl::Scan(const ScanDescriptor& desc, ErrorCode* err) {
     ScanDescImpl * impl = desc.GetImpl();
     impl->SetTableSchema(table_schema_);
     ResultStream * results = NULL;
-    if (desc.IsAsync() && (table_schema_.raw_key() != GeneralKv)) {
+    if (desc.IsAsync() &&
+        (table_schema_.raw_key() == Binary || table_schema_.raw_key() == Readable)) {
         VLOG(6) << "activate async-scan";
         results = new ResultStreamBatchImpl(this, impl);
     } else {

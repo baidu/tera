@@ -21,9 +21,9 @@ RowMutationImpl::RowMutationImpl(Table* table, const std::string& row_key)
       finish_cond_(&finish_mutex_),
       commit_times_(0),
       on_finish_callback_(NULL),
+      start_ts_(get_micros()),
       txn_(NULL) {
     SetErrorIfInvalid(row_key, kRowkey);
-    start_ts_ = get_micros();
 }
 
 RowMutationImpl::~RowMutationImpl() {
