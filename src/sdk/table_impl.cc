@@ -180,6 +180,7 @@ bool TableImpl::Put(const std::string& row_key, const std::string& family,
     row_mu->Put(family, qualifier, value);
     ApplyMutation(row_mu);
     *err = row_mu->GetError();
+    delete row_mu;
     return (err->GetType() == ErrorCode::kOK ? true : false);
 }
 
@@ -190,6 +191,7 @@ bool TableImpl::Put(const std::string& row_key, const std::string& family,
     row_mu->Put(family, qualifier, timestamp, value);
     ApplyMutation(row_mu);
     *err = row_mu->GetError();
+    delete row_mu;
     return (err->GetType() == ErrorCode::kOK ? true : false);
 }
 
@@ -200,6 +202,7 @@ bool TableImpl::Put(const std::string& row_key, const std::string& family,
     row_mu->Put(family, qualifier, value, ttl);
     ApplyMutation(row_mu);
     *err = row_mu->GetError();
+    delete row_mu;
     return (err->GetType() == ErrorCode::kOK ? true : false);
 }
 
@@ -210,6 +213,7 @@ bool TableImpl::Put(const std::string& row_key, const std::string& family,
     row_mu->Put(family, qualifier, timestamp, value, ttl);
     ApplyMutation(row_mu);
     *err = row_mu->GetError();
+    delete row_mu;
     return (err->GetType() == ErrorCode::kOK ? true : false);
 }
 
@@ -219,6 +223,7 @@ bool TableImpl::Add(const std::string& row_key, const std::string& family,
     row_mu->Add(family, qualifier, delta);
     ApplyMutation(row_mu);
     *err = row_mu->GetError();
+    delete row_mu;
     return (err->GetType() == ErrorCode::kOK ? true : false);
 }
 
@@ -228,6 +233,7 @@ bool TableImpl::AddInt64(const std::string& row_key, const std::string& family,
     row_mu->AddInt64(family, qualifier, delta);
     ApplyMutation(row_mu);
     *err = row_mu->GetError();
+    delete row_mu;
     return (err->GetType() == ErrorCode::kOK ? true : false);
 }
 
@@ -238,6 +244,7 @@ bool TableImpl::PutIfAbsent(const std::string& row_key, const std::string& famil
     row_mu->PutIfAbsent(family, qualifier, value);
     ApplyMutation(row_mu);
     *err = row_mu->GetError();
+    delete row_mu;
     return (err->GetType() == ErrorCode::kOK ? true : false);
 }
 
@@ -248,6 +255,7 @@ bool TableImpl::Append(const std::string& row_key, const std::string& family,
     row_mu->Append(family, qualifier, value);
     ApplyMutation(row_mu);
     *err = row_mu->GetError();
+    delete row_mu;
     return (err->GetType() == ErrorCode::kOK ? true : false);
 }
 
@@ -337,8 +345,10 @@ bool TableImpl::Get(const std::string& row_key, const std::string& family,
     *err = row_reader->GetError();
     if (err->GetType() == ErrorCode::kOK) {
         *value = row_reader->Value();
+        delete row_reader;
         return true;
     }
+    delete row_reader;
     return false;
 }
 
