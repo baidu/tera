@@ -59,20 +59,14 @@ void SplitStringEnd(const std::string& full, std::string* begin_part,
 void SplitStringStart(const std::string& full, std::string* begin_part,
                       std::string* end_part, std::string delim) {
     std::string::size_type pos = full.find_first_of(delim);
-    if (pos != std::string::npos && pos != 0) {
+    if (pos == std::string::npos || (pos < full.size() - 1)) {
         if (end_part) {
             *end_part = full.substr(pos + 1);
         }
+    }
+    if (pos != std::string::npos && pos >= 1) {
         if (begin_part) {
             *begin_part = full.substr(0, pos);
-        }
-    } else if (pos == 0) {
-        if (end_part) {
-            *end_part = full;
-        }
-    } else if (pos != std::string::npos) {
-        if (begin_part) {
-            *begin_part = full;
         }
     }
 }

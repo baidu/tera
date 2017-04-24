@@ -39,6 +39,10 @@ const std::string working_dir = "testdata/";
 class TabletScannerTest : public ::testing::Test {
 public:
     TabletScannerTest() {
+        session_id_ = 0;
+        last_key_= 0;
+        done_cnt_ = 0;
+
         std::string cmd = std::string("mkdir -p ") + working_dir;
         FLAGS_tera_tabletnode_path_prefix = "./";
         system(cmd.c_str());

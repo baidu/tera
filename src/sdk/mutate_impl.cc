@@ -23,6 +23,7 @@ RowMutationImpl::RowMutationImpl(Table* table, const std::string& row_key)
       on_finish_callback_(NULL),
       txn_(NULL) {
     SetErrorIfInvalid(row_key, kRowkey);
+    start_ts_ = get_micros();
 }
 
 RowMutationImpl::~RowMutationImpl() {

@@ -295,9 +295,9 @@ static long long ProcessCpuTick() {
 
 // return number of cpu(cores)
 static int GetCpuCount() {
-#ifdef _SC_NPROCESSORS_ONLN
+#if defined(_SC_NPROCESSORS_ONLN)
     return sysconf(_SC_NPROCESSORS_ONLN);
-#endif
+#else
     FILE *fp = fopen("/proc/stat", "r");
     if (fp == NULL) {
         return 1;
@@ -323,6 +323,7 @@ static int GetCpuCount() {
     fclose(fp);
     free(aline);
     return i-1 > 0 ? i-1 : 1;
+#endif
 }
 
 // irix_on == 1 --> irix mode on
