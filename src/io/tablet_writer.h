@@ -52,11 +52,13 @@ private:
     void DoWork();
     bool SwapActiveBuffer(bool force);
     /// 把一个request打到一个leveldbbatch里去, request是原子的, batch也是, so ..
-    void BatchRequest(const std::vector<const RowMutationSequence*>& row_mutation_vec,
+    void BatchRequest(std::vector<WriteTask*> *tasks_list,
                       leveldb::WriteBatch* batch);
     bool CheckConflict(const RowMutationSequence& row_mu,
                        std::set<std::string>* commit_row_key_set,
                        StatusCode* status = NULL);
+    bool CheckTableSchema(const Mutation& mu, StatusCode* status,
+                          const std::set<std::string>& cf_set);
     /// 任务完成, 执行回调
     void FinishTask(const WriteTask& task, StatusCode status);
     /// 将buffer刷到磁盘(leveldb), 并sync
