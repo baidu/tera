@@ -47,12 +47,12 @@ Tera集群搭建
   * 在master节点上，执行以下命令
   ```
   cd ${tera_prefix}/bin
-  nohup ./tera_main --flagfile=../conf/tera.flag --tera_role=master &> ../log/master.stderr &
+  nohup ./tera_master --flagfile=../conf/tera.flag &> ../log/master.stderr &
   ```
   * 在TabletServer节点上，执行以下命令
   ```
   cd ${tera_prefix}/bin
-  nohup ./tera_main --flagfile=../conf/tera.flag --tera_role=tabletnode &> ../log/tabletserver.stderr &
+  nohup ./tabletserver --flagfile=../conf/tera.flag &> ../log/tabletserver.stderr &
   ```
 5. 停止tera
-  * 用kill命令杀掉tera_main对应的进程即可
+  * 用kill命令杀掉tera_master和tabletserver对应的进程即可

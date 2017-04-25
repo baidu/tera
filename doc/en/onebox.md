@@ -9,7 +9,7 @@ Your can run Tera in pseudo-distributed mode which means that Tera runs on a sin
 1. git clone https://github.com/baidu/tera.git
 1. cd tera
 1. ./build.sh
-1. cp {tera_main,teracli} example/onebox/bin
+1. cp {tera_master,tabletserver,teracli} example/onebox/bin
 1. cd example/onebox/bin
 
 
