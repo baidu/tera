@@ -206,7 +206,6 @@ void TabletWriter::BatchRequest(std::vector<WriteTask*> *tasks_list,
     int64_t timestamp_old = 0;
     std::set<std::string> cf_set;
     TableSchema schema = tablet_->GetSchema();
-    cf_set.insert("");
     for (int32_t cf_idx = 0; cf_idx < schema.column_families_size(); ++cf_idx) {
         cf_set.insert(schema.column_families(cf_idx).name());
     }
