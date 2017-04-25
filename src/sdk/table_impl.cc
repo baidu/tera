@@ -792,7 +792,7 @@ void TableImpl::MutateCallBack(std::vector<int64_t>* mu_id_list,
             err = response->row_status_list(i);
         }
 
-        if (err == kTabletNodeOk || err == kTxnFail) {
+        if (err == kTabletNodeOk || err == kTxnFail || err == kTableInvalidArg) {
             perf_counter_.mutate_ok_cnt.Inc();
             SdkTask* task = task_pool_.PopTask(mu_id);
             if (task == NULL) {
@@ -804,8 +804,10 @@ void TableImpl::MutateCallBack(std::vector<int64_t>* mu_id_list,
             RowMutationImpl* row_mutation = (RowMutationImpl*)task;
             if (err == kTabletNodeOk) {
                 row_mutation->SetError(ErrorCode::kOK);
-            } else {
+            } else if (err == kTxnFail) {
                 row_mutation->SetError(ErrorCode::kTxnFail, "transaction commit fail");
+            } else {
+                row_mutation->SetError(ErrorCode::kBadParam, "illegal arg error");
             }
 
             // only for flow control

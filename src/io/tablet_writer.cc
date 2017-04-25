@@ -201,7 +201,7 @@ bool TabletWriter::CheckTableSchema(const Mutation& mu, StatusCode* status,
     }
     return true;
 }
-void TabletWriter::BatchRequest(std::vector<WriteTask*> *tasks_list,
+void TabletWriter::BatchRequest(WriteTaskBuffer* task_buffer,
                                 leveldb::WriteBatch* batch) {
     int64_t timestamp_old = 0;
     std::set<std::string> cf_set;
@@ -209,10 +209,10 @@ void TabletWriter::BatchRequest(std::vector<WriteTask*> *tasks_list,
     for (int32_t cf_idx = 0; cf_idx < schema.column_families_size(); ++cf_idx) {
         cf_set.insert(schema.column_families(cf_idx).name());
     }
-    for (uint32_t task_idx = 0; task_idx < tasks_list->size(); ++task_idx) {
-        WriteTask* task = (*tasks_list)[task_idx];
-        const std::vector<const RowMutationSequence*>& row_mutation_vec = *(task->row_mutation_vec);
-        std::vector<StatusCode>* status_vec = task->status_vec;
+    for (uint32_t task_idx = 0; task_idx < task_buffer->size(); ++task_idx) {
+        WriteTask& task = (*task_buffer)[task_idx];
+        const std::vector<const RowMutationSequence*>& row_mutation_vec = *(task.row_mutation_vec);
+        std::vector<StatusCode>* status_vec = task.status_vec;
 
         for (uint32_t i = 0; i < row_mutation_vec.size(); ++i) {
             StatusCode* status = &((*status_vec)[i]);
@@ -220,6 +220,11 @@ void TabletWriter::BatchRequest(std::vector<WriteTask*> *tasks_list,
             const RowMutationSequence& row_mu = *row_mutation_vec[i];
             const std::string& row_key = row_mu.row_key();
             int32_t mu_num = row_mu.mutation_sequence().size();
+            if (*status != kTabletNodeOk) {
+                VLOG(11) << "batch write fail, row " << DebugString(row_key)
+                    << ", status " << StatusCodeToString(*status);
+                continue;
+            }
             if (mu_num == 0) {
                 continue;
             }
@@ -247,6 +252,11 @@ void TabletWriter::BatchRequest(std::vector<WriteTask*> *tasks_list,
                 for (int32_t t = 0; t < mu_num; ++t) {
                     const Mutation& mu = row_mu.mutation_sequence().Get(t);
                     if (!CheckTableSchema(mu, status, cf_set)) { // drop invalid cf
+                        VLOG(11) << "batch write check, illegal cf, row " << DebugString(row_key)
+                            << ", cf " << mu.family() << ", qu " << mu.qualifier()
+                            << ", ts " << mu.timestamp() << ", type " << mu.type()
+                            << ", cf_set.size " << cf_set.size()
+                            << ", status " << StatusCodeToString(*status);
                         continue;
                     }
 
@@ -367,7 +377,6 @@ StatusCode TabletWriter::FlushToDiskBatch(WriteTaskBuffer* task_buffer) {
     leveldb::WriteBatch batch;
 
     std::set<std::string> commit_row_key_set;
-    std::vector<WriteTask*> commit_tasks_list;
     for (size_t i = 0; i < task_num; ++i) {
         WriteTask& task = (*task_buffer)[i];
         std::vector<const RowMutationSequence*>& row_mutation_vec = *task.row_mutation_vec;
@@ -377,11 +386,10 @@ StatusCode TabletWriter::FlushToDiskBatch(WriteTaskBuffer* task_buffer) {
             const RowMutationSequence* row_mu = row_mutation_vec[j];
             if (CheckConflict(*row_mu, &commit_row_key_set, &status_vec[j])) {
                 status_vec[j] = kTabletNodeOk;
-                commit_tasks_list.push_back(&((*task_buffer)[i]));
             }
         }
     }
-    BatchRequest(&commit_tasks_list, &batch);
+    BatchRequest(task_buffer, &batch);
 
     StatusCode status = kTabletNodeOk;
     const bool disable_wal = false;

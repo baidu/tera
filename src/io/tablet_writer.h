@@ -52,7 +52,7 @@ private:
     void DoWork();
     bool SwapActiveBuffer(bool force);
     /// 把一个request打到一个leveldbbatch里去, request是原子的, batch也是, so ..
-    void BatchRequest(std::vector<WriteTask*> *tasks_list,
+    void BatchRequest(WriteTaskBuffer* task_buffer,
                       leveldb::WriteBatch* batch);
     bool CheckConflict(const RowMutationSequence& row_mu,
                        std::set<std::string>* commit_row_key_set,
