@@ -137,7 +137,11 @@ void OpStatCallback(Table* table, SdkTask* task) {
 void TableImpl::ApplyMutation(RowMutation* row_mu) {
     perf_counter_.user_mu_cnt.Add(1);
     ((RowMutationImpl*)row_mu)->Prepare(OpStatCallback);
-    if (row_mu->GetError().GetType() != ErrorCode::kOK) {
+    if (row_mu->GetError().GetType() != ErrorCode::kOK) { // local check fail
+        if (!((RowMutationImpl*)row_mu)->IsAsync()) {
+            ((RowMutationImpl*)row_mu)->RunCallback();
+            return;
+        }
         ThreadPool::Task task =
             std::bind(&RowMutationImpl::RunCallback,
                       static_cast<RowMutationImpl*>(row_mu));
@@ -154,7 +158,11 @@ void TableImpl::ApplyMutation(const std::vector<RowMutation*>& row_mutations) {
     for (uint32_t i = 0; i < row_mutations.size(); i++) {
         perf_counter_.user_mu_cnt.Add(1);
         ((RowMutationImpl*)row_mutations[i])->Prepare(OpStatCallback);
-        if (row_mutations[i]->GetError().GetType() != ErrorCode::kOK) {
+        if (row_mutations[i]->GetError().GetType() != ErrorCode::kOK) { // local check fail
+            if (!((RowMutationImpl*)row_mutations[i])->IsAsync()) {
+                ((RowMutationImpl*)row_mutations[i])->RunCallback();
+                continue;
+            }
             ThreadPool::Task task =
                 std::bind(&RowMutationImpl::RunCallback,
                           static_cast<RowMutationImpl*>(row_mutations[i]));
