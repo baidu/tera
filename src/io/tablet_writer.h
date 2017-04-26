@@ -54,13 +54,15 @@ private:
     /// 把一个request打到一个leveldbbatch里去, request是原子的, batch也是, so ..
     void BatchRequest(WriteTaskBuffer* task_buffer,
                       leveldb::WriteBatch* batch);
-    bool CheckConflict(const RowMutationSequence& row_mu,
-                       std::set<std::string>* commit_row_key_set,
-                       StatusCode* status = NULL);
-    bool CheckTableSchema(const Mutation& mu, StatusCode* status,
-                          const std::set<std::string>& cf_set);
+    bool CheckSingleRowTxnConflict(const RowMutationSequence& row_mu,
+                                   std::set<std::string>* commit_row_key_set,
+                                   StatusCode* status);
+    bool CheckIllegalRowArg(const RowMutationSequence& row_mu,
+                            const std::set<std::string>& cf_set,
+                            StatusCode* status);
+    void CheckRows(WriteTaskBuffer* task_buffer);
     /// 任务完成, 执行回调
-    void FinishTask(const WriteTask& task, StatusCode status);
+    void FinishTask(WriteTaskBuffer* task_buffer, StatusCode status);
     /// 将buffer刷到磁盘(leveldb), 并sync
     StatusCode FlushToDiskBatch(WriteTaskBuffer* task_buffer);
 
