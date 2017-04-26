@@ -361,22 +361,27 @@ bool TabletWriter::CheckIllegalRowArg(const RowMutationSequence& row_mu,
         SetStatusCode(kTableInvalidArg, status);
         return true;
     }
-    for (int32_t i = 0; !tablet_->KvOnly() && i < row_mu.mutation_sequence().size(); ++i) {
+    for (int32_t i = 0; i < row_mu.mutation_sequence().size(); ++i) {
         const Mutation& mu = row_mu.mutation_sequence(i);
-        if ((mu.qualifier().size() >= 64 * 1024) ||     // 64KB
-            (mu.value().size() >= 32 * 1024 * 1024)) {  // 32MB
+        if (mu.value().size() >= 32 * 1024 * 1024) {
             SetStatusCode(kTableInvalidArg, status);
             return true;
         }
-        if (mu.type() != kDeleteRow &&
-           (cf_set.find(mu.family()) == cf_set.end())) {
-            SetStatusCode(kTableInvalidArg, status);
-            VLOG(11) << "batch write check, illegal cf, row " << DebugString(row_mu.row_key())
-                << ", cf " << mu.family() << ", qu " << mu.qualifier()
-                << ", ts " << mu.timestamp() << ", type " << mu.type()
-                << ", cf_set.size " << cf_set.size()
-                << ", status " << StatusCodeToString(*status);
-            return true;
+        if (!tablet_->KvOnly()) {
+            if (mu.qualifier().size() >= 64 * 1024) {     // 64KB
+                SetStatusCode(kTableInvalidArg, status);
+                return true;
+            }
+            if (mu.type() != kDeleteRow &&
+               (cf_set.find(mu.family()) == cf_set.end())) {
+                SetStatusCode(kTableInvalidArg, status);
+                VLOG(11) << "batch write check, illegal cf, row " << DebugString(row_mu.row_key())
+                    << ", cf " << mu.family() << ", qu " << mu.qualifier()
+                    << ", ts " << mu.timestamp() << ", type " << mu.type()
+                    << ", cf_set.size " << cf_set.size()
+                    << ", status " << StatusCodeToString(*status);
+                return true;
+            }
         }
     }
     return false;
