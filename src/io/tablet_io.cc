@@ -888,12 +888,6 @@ inline bool TabletIO::LowLevelScan(const std::string& start_tera_key,
             break;
         }
 
-        if (now_time > time_out) {
-            VLOG(9) << "ll-scan timeout. Mark next start key: " << DebugString(tera_key.ToString());
-            MakeKvPair(key, col, qual, ts, "", &next_start_kv_pair);
-            break;
-        }
-
         const std::set<std::string>& cf_set = scan_options.iter_cf_set;
         if (cf_set.size() > 0 &&
             cf_set.find(col.ToString()) == cf_set.end() &&
@@ -932,6 +926,12 @@ inline bool TabletIO::LowLevelScan(const std::string& start_tera_key,
             *read_row_count += 1;
             ProcessRowBuffer(row_buf, scan_options, value_list, &buffer_size, &number_limit);
             row_buf.clear();
+
+            if (now_time > time_out) {
+                VLOG(9) << "ll-scan timeout. Mark next start key: " << DebugString(tera_key.ToString());
+                MakeKvPair(key, col, qual, ts, "", &next_start_kv_pair);
+                break;
+            }
         }
 
         // max version filter

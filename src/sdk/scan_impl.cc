@@ -22,6 +22,7 @@ DECLARE_bool(tera_sdk_batch_scan_enabled);
 DECLARE_int64(tera_sdk_scan_number_limit);
 DECLARE_int64(tera_sdk_scan_buffer_size);
 DECLARE_int32(tera_sdk_max_batch_scan_req);
+DECLARE_int64(tera_sdk_scan_timeout);
 
 namespace tera {
 
@@ -86,7 +87,7 @@ void ResultStreamBatchImpl::GetRpcHandle(ScanTabletRequest** request_ptr,
     MutexLock mutex(&mu_);
     (*request_ptr)->set_part_of_session(part_of_session_);
     (*request_ptr)->set_session_id((int64_t)session_id_);
-    VLOG(28) << "Get rpc handle, part_of_session_ " << part_of_session_
+    VLOG(28) << "get rpc handle, part_of_session_ " << part_of_session_
         << ", session_id_ " << session_id_ << ", response " << (uint64_t)(*response_ptr);
 }
 
@@ -98,7 +99,8 @@ void ResultStreamBatchImpl::ReleaseRpcHandle(ScanTabletRequest* request,
 
     MutexLock mutex(&mu_);
     ref_count_--;
-    VLOG(28) << "release rpc handle and wakeup, ref_count_ " << ref_count_;
+    VLOG(28) << "release rpc handle and wakeup, ref_count_ " << ref_count_
+        << ", response " << (uint64_t)(response);
     cv_.Signal();
 }
 
@@ -487,7 +489,7 @@ ScanDescImpl::ScanDescImpl(const string& rowkey)
       number_limit_(FLAGS_tera_sdk_scan_number_limit),
       is_async_(FLAGS_tera_sdk_batch_scan_enabled),
       max_version_(1),
-      pack_interval_(5000),
+      pack_interval_(FLAGS_tera_sdk_scan_timeout),
       snapshot_(0),
       value_converter_(&DefaultValueConverter) {
     SetStart(rowkey);
