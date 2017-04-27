@@ -32,6 +32,7 @@ def runcmd(cmd, ignore_status=False):
     print "stderr: "
     print err
     print "returncode: %d" % p.returncode
+    p.wait()
     ret = p.returncode
     if not ignore_status:
         assert( ret == 0 )
