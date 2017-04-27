@@ -861,6 +861,7 @@ inline bool TabletIO::LowLevelScan(const std::string& start_tera_key,
         << ", start_tera_key " << start_tera_key
         << ", end_row_key " << end_row_key;
 
+    *is_complete = false;
     for (; it->Valid();) {
         bool has_merged = false;
         std::string merged_value;
