@@ -6,7 +6,6 @@
 
 #include <functional>
 
-#include "common/base/closure.h"
 #include "gflags/gflags.h"
 #include "glog/logging.h"
 

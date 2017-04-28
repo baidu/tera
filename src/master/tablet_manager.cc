@@ -1811,9 +1811,9 @@ void TabletManager::TryMajorCompact(Tablet* tablet) {
     request->mutable_key_range()->CopyFrom(tablet->meta_.key_range());
 
     tabletnode::TabletNodeClient node_client(tablet->meta_.server_addr());
-    Closure<void, CompactTabletRequest*, CompactTabletResponse*, bool, int>* done =
-        NewClosure(this, &TabletManager::MajorCompactCallback, tablet,
-                   FLAGS_tera_master_impl_retry_times);
+    std::function<void (CompactTabletRequest*, CompactTabletResponse*, bool, int)> done =
+        std::bind(&TabletManager::MajorCompactCallback, this, tablet,
+                   FLAGS_tera_master_impl_retry_times, _1, _2, _3, _4);
     node_client.CompactTablet(request, response, done);
 }
 
@@ -1845,8 +1845,8 @@ void TabletManager::MajorCompactCallback(Tablet* tb, int32_t retry,
                 * (FLAGS_tera_master_impl_retry_times - retry);
             ThisThread::Sleep(wait_time);
             tabletnode::TabletNodeClient node_client(tb->meta_.server_addr());
-            Closure<void, CompactTabletRequest*, CompactTabletResponse*, bool, int>* done =
-                NewClosure(this, &TabletManager::MajorCompactCallback, tb, retry - 1);
+            std::function<void (CompactTabletRequest*, CompactTabletResponse*, bool, int)> done =
+                std::bind(&TabletManager::MajorCompactCallback, this, tb, retry - 1, _1, _2, _3, _4);
             node_client.CompactTablet(request, response, done);
         }
         return;

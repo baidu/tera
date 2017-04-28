@@ -7,7 +7,6 @@
 #include <functional>
 
 #include "common/this_thread.h"
-#include "common/base/closure.h"
 #include "common/base/string_ext.h"
 
 #include "proto/proto_helper.h"

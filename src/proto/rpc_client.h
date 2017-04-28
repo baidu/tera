@@ -26,12 +26,12 @@ struct RpcCallbackParam {
     sofa::pbrpc::RpcController* rpc_controller;
     const Request* request;
     Response* response;
-    Callback* closure;
+    Callback closure;
     std::string tips;
     ThreadPool* thread_pool;
 
     RpcCallbackParam(sofa::pbrpc::RpcController* ctrler, const Request* req,
-                     Response* resp, Callback* cb, const std::string& str,
+                     Response* resp, Callback cb, const std::string& str,
                      ThreadPool* tpool)
         : rpc_controller(ctrler), request(req), response(resp),
           closure(cb), tips(str), thread_pool(tpool) {}
@@ -140,7 +140,7 @@ protected:
                               google::protobuf::RpcController*, const Request*,
                               Response*, google::protobuf::Closure*),
                               const Request* request, Response* response,
-                              Callback* closure, const std::string& tips,
+                              Callback closure, const std::string& tips,
                               int32_t rpc_timeout, ThreadPool* thread_pool = 0) {
         if (NULL == server_client_.get()) {
             // sync call
@@ -183,7 +183,7 @@ protected:
         sofa::pbrpc::RpcController* rpc_controller = param->rpc_controller;
         const Request* request = param->request;
         Response* response = param->response;
-        Callback* closure = param->closure;
+        Callback closure = param->closure;
         ThreadPool* thread_pool = param->thread_pool;
 
         bool failed = rpc_controller->Failed();
@@ -211,8 +211,8 @@ protected:
 
     template <class Request, class Response, class Callback>
     static void UserCallback(const Request* request, Response* response,
-                             Callback* closure, bool failed, int error) {
-        closure->Run((Request*)request, response, failed, error);
+                             Callback closure, bool failed, int error) {
+        closure((Request*)request, response, failed, error);
     }
 
     virtual bool PollAndResetServerAddr() {
