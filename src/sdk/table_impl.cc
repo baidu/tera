@@ -137,7 +137,11 @@ void OpStatCallback(Table* table, SdkTask* task) {
 void TableImpl::ApplyMutation(RowMutation* row_mu) {
     perf_counter_.user_mu_cnt.Add(1);
     ((RowMutationImpl*)row_mu)->Prepare(OpStatCallback);
-    if (row_mu->GetError().GetType() != ErrorCode::kOK) {
+    if (row_mu->GetError().GetType() != ErrorCode::kOK) { // local check fail
+        if (!((RowMutationImpl*)row_mu)->IsAsync()) {
+            ((RowMutationImpl*)row_mu)->RunCallback();
+            return;
+        }
         ThreadPool::Task task =
             std::bind(&RowMutationImpl::RunCallback,
                       static_cast<RowMutationImpl*>(row_mu));
@@ -154,7 +158,11 @@ void TableImpl::ApplyMutation(const std::vector<RowMutation*>& row_mutations) {
     for (uint32_t i = 0; i < row_mutations.size(); i++) {
         perf_counter_.user_mu_cnt.Add(1);
         ((RowMutationImpl*)row_mutations[i])->Prepare(OpStatCallback);
-        if (row_mutations[i]->GetError().GetType() != ErrorCode::kOK) {
+        if (row_mutations[i]->GetError().GetType() != ErrorCode::kOK) { // local check fail
+            if (!((RowMutationImpl*)row_mutations[i])->IsAsync()) {
+                ((RowMutationImpl*)row_mutations[i])->RunCallback();
+                continue;
+            }
             ThreadPool::Task task =
                 std::bind(&RowMutationImpl::RunCallback,
                           static_cast<RowMutationImpl*>(row_mutations[i]));
@@ -180,6 +188,7 @@ bool TableImpl::Put(const std::string& row_key, const std::string& family,
     row_mu->Put(family, qualifier, value);
     ApplyMutation(row_mu);
     *err = row_mu->GetError();
+    delete row_mu;
     return (err->GetType() == ErrorCode::kOK ? true : false);
 }
 
@@ -190,6 +199,7 @@ bool TableImpl::Put(const std::string& row_key, const std::string& family,
     row_mu->Put(family, qualifier, timestamp, value);
     ApplyMutation(row_mu);
     *err = row_mu->GetError();
+    delete row_mu;
     return (err->GetType() == ErrorCode::kOK ? true : false);
 }
 
@@ -200,6 +210,7 @@ bool TableImpl::Put(const std::string& row_key, const std::string& family,
     row_mu->Put(family, qualifier, value, ttl);
     ApplyMutation(row_mu);
     *err = row_mu->GetError();
+    delete row_mu;
     return (err->GetType() == ErrorCode::kOK ? true : false);
 }
 
@@ -210,6 +221,7 @@ bool TableImpl::Put(const std::string& row_key, const std::string& family,
     row_mu->Put(family, qualifier, timestamp, value, ttl);
     ApplyMutation(row_mu);
     *err = row_mu->GetError();
+    delete row_mu;
     return (err->GetType() == ErrorCode::kOK ? true : false);
 }
 
@@ -219,6 +231,7 @@ bool TableImpl::Add(const std::string& row_key, const std::string& family,
     row_mu->Add(family, qualifier, delta);
     ApplyMutation(row_mu);
     *err = row_mu->GetError();
+    delete row_mu;
     return (err->GetType() == ErrorCode::kOK ? true : false);
 }
 
@@ -228,6 +241,7 @@ bool TableImpl::AddInt64(const std::string& row_key, const std::string& family,
     row_mu->AddInt64(family, qualifier, delta);
     ApplyMutation(row_mu);
     *err = row_mu->GetError();
+    delete row_mu;
     return (err->GetType() == ErrorCode::kOK ? true : false);
 }
 
@@ -238,6 +252,7 @@ bool TableImpl::PutIfAbsent(const std::string& row_key, const std::string& famil
     row_mu->PutIfAbsent(family, qualifier, value);
     ApplyMutation(row_mu);
     *err = row_mu->GetError();
+    delete row_mu;
     return (err->GetType() == ErrorCode::kOK ? true : false);
 }
 
@@ -248,6 +263,7 @@ bool TableImpl::Append(const std::string& row_key, const std::string& family,
     row_mu->Append(family, qualifier, value);
     ApplyMutation(row_mu);
     *err = row_mu->GetError();
+    delete row_mu;
     return (err->GetType() == ErrorCode::kOK ? true : false);
 }
 
@@ -337,8 +353,10 @@ bool TableImpl::Get(const std::string& row_key, const std::string& family,
     *err = row_reader->GetError();
     if (err->GetType() == ErrorCode::kOK) {
         *value = row_reader->Value();
+        delete row_reader;
         return true;
     }
+    delete row_reader;
     return false;
 }
 
@@ -346,7 +364,8 @@ ResultStream* TableImpl::Scan(const ScanDescriptor& desc, ErrorCode* err) {
     ScanDescImpl * impl = desc.GetImpl();
     impl->SetTableSchema(table_schema_);
     ResultStream * results = NULL;
-    if (desc.IsAsync() && (table_schema_.raw_key() != GeneralKv)) {
+    if (desc.IsAsync() &&
+        (table_schema_.raw_key() == Binary || table_schema_.raw_key() == Readable)) {
         VLOG(6) << "activate async-scan";
         results = new ResultStreamBatchImpl(this, impl);
     } else {
