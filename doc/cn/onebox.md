@@ -8,7 +8,7 @@
 
 ## 准备工作
 1. 完成Tera的编译，请参考：https://github.com/baidu/tera/wiki/Build-Manual
-2. 将编译生成的tera_main, teracli两个二进制文件放入example/onebox/bin
+2. 将编译生成的tera_master, tabletserver, teracli三个二进制文件放入example/onebox/bin
 3. 如有需要，通过修改example/onebox/bin/config中的选项配置tabletnode个数
 4. 进入example/onebox/bin/目录
 

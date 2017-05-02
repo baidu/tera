@@ -85,7 +85,7 @@ extern tera::Counter ssd_write_size_counter;
 }
 
 tera::Counter rand_read_delay;
-tera::Counter row_read_delay;
+extern tera::Counter row_read_delay;
 tera::Counter range_error_counter;
 tera::Counter read_pending_counter;
 tera::Counter write_pending_counter;

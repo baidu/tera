@@ -8,34 +8,20 @@
 #include <glog/logging.h>
 
 #include "common/base/scoped_ptr.h"
-#include "master/master_entry.h"
-#include "tabletnode/tabletnode_entry.h"
 #include "tera_entry.h"
 #include "utils/utils_cmd.h"
 #include "version.h"
 
-DECLARE_string(tera_role);
 DECLARE_string(tera_log_prefix);
 DECLARE_string(tera_local_addr);
+
+extern std::string GetTeraEntryName();
+extern tera::TeraEntry* GetTeraEntry();
 
 volatile sig_atomic_t g_quit = 0;
 
 static void SignalIntHandler(int sig) {
     g_quit = 1;
-}
-
-tera::TeraEntry* SwitchTeraEntry() {
-    const std::string& server_name = FLAGS_tera_role;
-
-    if (server_name == "master") {
-        return new tera::master::MasterEntry();
-    } else if (server_name == "tabletnode") {
-        return new tera::tabletnode::TabletNodeEntry();
-    }
-    LOG(ERROR) << "FLAGS_tera_role should be one of ("
-        << "master | tabletnode"
-        << "), not : " << FLAGS_tera_role;
-    return NULL;
 }
 
 int main(int argc, char** argv) {
@@ -44,7 +30,7 @@ int main(int argc, char** argv) {
     if (!FLAGS_tera_log_prefix.empty()) {
         tera::utils::SetupLog(FLAGS_tera_log_prefix);
     } else {
-        tera::utils::SetupLog(FLAGS_tera_role);
+        tera::utils::SetupLog(GetTeraEntryName());
     }
 
     if (argc > 1) {
@@ -58,7 +44,7 @@ int main(int argc, char** argv) {
     signal(SIGINT, SignalIntHandler);
     signal(SIGTERM, SignalIntHandler);
 
-    scoped_ptr<tera::TeraEntry> entry(SwitchTeraEntry());
+    scoped_ptr<tera::TeraEntry> entry(GetTeraEntry());
     if (entry.get() == NULL) {
         return -1;
     }
@@ -72,10 +58,6 @@ int main(int argc, char** argv) {
             LOG(ERROR) << "Server run error ,and then exit now ";
             break;
         }
-        // jvm会抢注这个, 时刻准备着抢回来
-        signal(SIGINT, SignalIntHandler);
-        signal(SIGTERM, SignalIntHandler);
-        // signal(SIGSEGV, SIG_DFL); // 如果这个被改回SIG_DFL, jvm会core, 不知道为啥...
     }
     if (g_quit) {
         LOG(INFO) << "received interrupt signal from user, will stop";

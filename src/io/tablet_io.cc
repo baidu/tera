@@ -69,7 +69,7 @@ DECLARE_bool(tera_tablet_use_memtable_on_leveldb);
 DECLARE_int64(tera_tablet_memtable_ldb_write_buffer_size);
 DECLARE_int64(tera_tablet_memtable_ldb_block_size);
 
-extern tera::Counter row_read_delay;
+tera::Counter row_read_delay;
 
 namespace tera {
 namespace io {

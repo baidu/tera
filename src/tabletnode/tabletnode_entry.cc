@@ -34,6 +34,14 @@ DECLARE_int32(tera_tabletnode_hang_detect_threshold);
 DECLARE_int32(tera_tabletnode_rpc_server_max_inflow);
 DECLARE_int32(tera_tabletnode_rpc_server_max_outflow);
 
+std::string GetTeraEntryName() {
+    return "tabletnode";
+}
+
+tera::TeraEntry* GetTeraEntry() {
+    return new tera::tabletnode::TabletNodeEntry();
+}
+
 namespace tera {
 namespace tabletnode {
 
