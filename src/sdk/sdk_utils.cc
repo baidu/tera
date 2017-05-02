@@ -564,6 +564,15 @@ bool CheckTableDescrptor(const TableDescriptor& desc, ErrorCode* err) {
         }
         return false;
     }
+    if ((desc.RawKey() == kReadable || desc.RawKey() == kBinary)) {
+        if (desc.ColumnFamilyNum() == 0) {
+            ss << "kBinary/kReadable MUST have cf";
+            if (err != NULL) {
+                err->SetFailed(ErrorCode::kBadParam, ss.str());
+            }
+            return false;
+        }
+    }
     return true;
 }
 
