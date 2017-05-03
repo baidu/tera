@@ -261,10 +261,11 @@ DEFINE_int32(tera_sdk_cookie_update_interval, 600, "the interval of cookie updat
 DEFINE_bool(tera_sdk_perf_counter_enabled, true, "enable performance counter log");
 DEFINE_int64(tera_sdk_perf_counter_log_interval, 60, "the interval period (in sec) of performance counter log dumping");
 
-DEFINE_bool(tera_sdk_batch_scan_enabled, false, "enable batch scan");
+DEFINE_bool(tera_sdk_batch_scan_enabled, true, "enable batch scan");
 DEFINE_int64(tera_sdk_scan_buffer_size, 65536, "default buffer limit for scan");
 DEFINE_int64(tera_sdk_scan_number_limit, 1000000000, "default number limit for scan");
-DEFINE_int32(tera_sdk_max_batch_scan_req, 10, "the max number of concurrent scan req");
+DEFINE_int32(tera_sdk_max_batch_scan_req, 30, "the max number of concurrent scan req");
+DEFINE_int32(tera_sdk_batch_scan_max_retry, 60, "the max retry times for session scan");
 DEFINE_int64(tera_sdk_scan_timeout, 30000, "scan timeout");
 
 DEFINE_string(tera_ins_addr_list, "", "the ins cluster addr. e.g. abc.com:1234,abb.com:1234");

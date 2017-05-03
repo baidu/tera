@@ -446,6 +446,10 @@ void TableImpl::CommitScan(ScanTask* scan_task,
         column_family->CopyFrom(*(impl->GetColumnFamily(i)));
     }
 
+    VLOG(20) << "table " << request->table_name()
+        << ", start_key " << request->start()
+        << ", end_key " << request->end()
+        << ", scan to " << server_addr;
     request->set_timestamp(common::timer::get_micros());
     Closure<void, ScanTabletRequest*, ScanTabletResponse*, bool, int>* done =
         NewClosure(this, &TableImpl::ScanCallBack, scan_task);
@@ -485,9 +489,10 @@ void TableImpl::ScanCallBack(ScanTask* scan_task,
     }
 
     scan_task->SetInternalError(err);
-    if (err == kTabletNodeOk
-        || err == kSnapshotNotExist
-        || scan_task->RetryTimes() >= static_cast<uint32_t>(FLAGS_tera_sdk_retry_times)) {
+    if (err == kTabletNodeOk ||
+        err == kSnapshotNotExist ||
+        stream->GetScanDesc()->IsAsync() || // batch scan retry internal
+        scan_task->RetryTimes() >= static_cast<uint32_t>(FLAGS_tera_sdk_retry_times)) {
         if (err == kKeyNotInRange || err == kConnectError) {
             ScheduleUpdateMeta(stream->GetScanDesc()->GetStartRowKey(),
                                scan_task->GetMetaTimeStamp());

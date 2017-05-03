@@ -91,12 +91,14 @@ public:
                   ScanTabletResponse* response); // scan callback
 private:
     void ClearAndScanNextSlot(bool scan_next);
+    void ComputeStartKey(const KeyValuePair& kv, KeyValuePair* start_key);
     void ScanSessionReset();
 
 private:
     mutable Mutex mu_;
     CondVar cv_;
 
+    int32_t session_retry_;
     int32_t ref_count_; // use for scan_imple destory
 
     // session control
@@ -106,6 +108,7 @@ private:
     uint32_t session_data_idx_; // current result id wait
     bool part_of_session_; // TODO, should be deleted
     std::string session_end_key_;
+    KeyValuePair slot_last_key_;
     uint32_t session_last_idx_; // if session done, point to the last data_idx
 
     // sliding window control
