@@ -285,7 +285,8 @@ bool TabletIO::Load(const TableSchema& schema,
     }
 
     tablet_path_ = path_prefix + path;
-    LOG(INFO) << "[Load] Start Open " << tablet_path_;
+    LOG(INFO) << "[Load] Start Open " << tablet_path_
+        << ", kv_only " << kv_only_ << ", raw_key_operator " << key_operator_->Name();
     // recover snapshot
     for (std::map<uint64_t, uint64_t>::iterator it = snapshots.begin(); it != snapshots.end(); ++it) {
         id_to_snapshot_num_[it->first] = it->second;

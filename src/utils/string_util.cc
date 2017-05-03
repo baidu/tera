@@ -151,7 +151,7 @@ bool IsValidName(const std::string& str) {
     for (size_t i = 0; i < str.size(); ++i) {
         char c = str[i];
         if (!(isdigit(c) || isupper(c) || islower(c)
-              || (c == '_') || (c == '.') || (c == '-'))) {
+              || (c == '_') || (c == '.') || (c == '-') || (c == '#'))) {
             return false;
         }
     }
