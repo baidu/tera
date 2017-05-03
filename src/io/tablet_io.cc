@@ -858,8 +858,8 @@ inline bool TabletIO::LowLevelScan(const std::string& start_tera_key,
     int64_t time_out = now_time + scan_options.timeout;
     KeyValuePair next_start_kv_pair;
     VLOG(9) << "ll-scan timeout set to be " << scan_options.timeout
-        << ", start_tera_key " << start_tera_key
-        << ", end_row_key " << end_row_key;
+        << ", start_tera_key " << DebugString(start_tera_key)
+        << ", end_row_key " << DebugString(end_row_key);
 
     *is_complete = false;
     for (; it->Valid();) {
