@@ -22,7 +22,9 @@ DECLARE_bool(tera_sdk_batch_scan_enabled);
 DECLARE_int64(tera_sdk_scan_number_limit);
 DECLARE_int64(tera_sdk_scan_buffer_size);
 DECLARE_int32(tera_sdk_max_batch_scan_req);
+DECLARE_int32(tera_sdk_batch_scan_max_retry);
 DECLARE_int64(tera_sdk_scan_timeout);
+DECLARE_int64(batch_scan_delay_retry_in_us);
 
 namespace tera {
 
@@ -70,10 +72,13 @@ std::string ResultStreamImpl::GetNextStartPoint(const std::string& str) {
 ///////////////////////////////////////
 ResultStreamBatchImpl::ResultStreamBatchImpl(TableImpl* table, ScanDescImpl* scan_desc)
     : ResultStreamImpl(table, scan_desc),
-    cv_(&mu_), ref_count_(1) {
+    cv_(&mu_), session_retry_(0), ref_count_(1) {
     // do something startup
     sliding_window_.resize(FLAGS_tera_sdk_max_batch_scan_req);
     session_end_key_ = scan_desc_impl_->GetStartRowKey();
+    slot_last_key_.set_key(session_end_key_);
+    slot_last_key_.set_timestamp(INT64_MAX);
+
     mu_.Lock();
     ScanSessionReset();
     mu_.Unlock();
@@ -149,7 +154,7 @@ void ResultStreamBatchImpl::OnFinish(ScanTabletRequest* request,
         ScanSlot* slot = &(sliding_window_[slot_idx]);
         if (slot->state_ == SCANSLOT_INVALID) {
             slot->state_ = SCANSLOT_VALID;
-            slot->cell_ = response->results();
+            slot->cell_.CopyFrom(response->results());
             VLOG(28) << "cache scan result, session_id " << session_id_ << ", slot_idx " << slot_idx
                 << ", kv.size() " << slot->cell_.key_values_size()
                 << ", resp.kv.size() " << response->results().key_values_size();
@@ -174,6 +179,26 @@ ResultStreamBatchImpl::~ResultStreamBatchImpl() {
     while (ref_count_ != 0) { cv_.Wait();}
 }
 
+void ResultStreamBatchImpl::ComputeStartKey(const KeyValuePair& kv, KeyValuePair* start_key) {
+    if (scan_desc_impl_->IsKvOnlyTable()) { // kv, set next key
+        start_key->set_key(GetNextStartPoint(kv.key()));
+        start_key->set_column_family(kv.column_family());
+        start_key->set_qualifier(kv.qualifier());
+        start_key->set_timestamp(kv.timestamp());
+    } else if (kv.timestamp() == 0) { // table timestamp == 0
+        start_key->set_key(kv.key());
+        start_key->set_column_family(kv.column_family());
+        start_key->set_qualifier(GetNextStartPoint(kv.qualifier()));
+        start_key->set_timestamp(INT64_MAX);
+    } else { // table has timestamp > 0
+        start_key->set_key(kv.key());
+        start_key->set_column_family(kv.column_family());
+        start_key->set_qualifier(kv.qualifier());
+        start_key->set_timestamp(kv.timestamp() - 1);
+    }
+    return;
+}
+
 void ResultStreamBatchImpl::ScanSessionReset() {
     mu_.AssertHeld();
     // reset session parameter
@@ -195,8 +220,11 @@ void ResultStreamBatchImpl::ScanSessionReset() {
     }
 
     ref_count_ += FLAGS_tera_sdk_max_batch_scan_req;
-    scan_desc_impl_->SetStart(session_end_key_);
-    VLOG(28) << "scan session reset, start key " << session_end_key_
+    KeyValuePair start_key;
+    ComputeStartKey(slot_last_key_, &start_key);
+    scan_desc_impl_->SetStart(start_key.key(), start_key.column_family(),
+                              start_key.qualifier(), start_key.timestamp());
+    VLOG(28) << "scan session reset, start key " << start_key.key()
         << ", ref_count " << ref_count_;
     mu_.Unlock();
     // do io, release lock
@@ -210,6 +238,10 @@ void ResultStreamBatchImpl::ScanSessionReset() {
 void ResultStreamBatchImpl::ClearAndScanNextSlot(bool scan_next) {
     mu_.AssertHeld();
     ScanSlot* slot = &(sliding_window_[sliding_window_idx_]);
+    assert(next_idx_ == slot->cell_.key_values_size());
+    if (next_idx_ > 0) { // update last slot kv_pair
+        slot_last_key_.CopyFrom(slot->cell_.key_values(next_idx_ - 1));
+    }
     slot->cell_.Clear();
     slot->state_ = SCANSLOT_INVALID;
     next_idx_ = 0;
@@ -237,23 +269,42 @@ bool ResultStreamBatchImpl::Done(ErrorCode* error) {
         //  2. ts not available, or
         //  3. rpc not available, or
         ScanSlot* slot = &(sliding_window_[sliding_window_idx_]);
-        while(slot->state_ == SCANSLOT_INVALID) {
+        while (slot->state_ == SCANSLOT_INVALID) {
             // stale results_id, re-enable another scan req
             if (session_error_ != kTabletNodeOk) {
                 // TODO: kKeyNotInRange, do reset session
-                LOG(WARNING) << "scan done: session error " << StatusCodeToString(session_error_);
+                LOG(WARNING) << "[RETRY " << ++session_retry_ << "] scan session error: "
+                    << StatusCodeToString(session_error_)
+                    << ", data_idx " << session_data_idx_ << ", slice_idx " << sliding_window_idx_;
+                assert(session_done_);
+                if (session_retry_ <= FLAGS_tera_sdk_batch_scan_max_retry) {
+                    break;
+                }
+
+                // give up scan, report session error
                 if (error) {
                     error->SetFailed(ErrorCode::kSystem, StatusCodeToString(session_error_));
                 }
                 return true;
             }
             if (ref_count_ == 1) {
-                // ts refuse scan...
-                LOG(WARNING) << "ts refuse scan, scan later...\n";
+                // check wether ts refuse scan
+                if (error) {
+                    error->SetFailed(ErrorCode::kSystem, StatusCodeToString(session_error_));
+                }
+                LOG(WARNING) << "[CHECK]: ts refuse scan, scan later.\n";
                 return true;
             }
             cv_.Wait();
         }
+        if (slot->state_ == SCANSLOT_INVALID) { // TODO: error break,  maybe delay retry
+            while (ref_count_ > 1) { cv_.Wait();}
+            cv_.TimeWaitInUs(FLAGS_batch_scan_delay_retry_in_us, "BatchScanRetryTimeWait");
+            ScanSessionReset();
+            continue;
+        }
+
+        // slot valid
         if (next_idx_ < slot->cell_.key_values_size()) { break; }
 
         VLOG(28) << "session_done_ " << session_done_ << ", session_data_idx_ "
@@ -278,6 +329,8 @@ bool ResultStreamBatchImpl::Done(ErrorCode* error) {
         }
 
         // scan next tablet
+        slot_last_key_.set_key(session_end_key_);
+        slot_last_key_.set_timestamp(INT64_MAX);
         ScanSessionReset();
     }
     return false;
@@ -368,7 +421,7 @@ bool ResultStreamSyncImpl::Done(ErrorCode* err) {
                                               kv.qualifier(), kv.timestamp());
                 } else if (kv.timestamp() == 0) {
                     scan_desc_impl_->SetStart(kv.key(), kv.column_family(),
-                                              GetNextStartPoint(kv.qualifier()), kv.timestamp());
+                                              GetNextStartPoint(kv.qualifier()), INT64_MAX);
                 } else {
                     scan_desc_impl_->SetStart(kv.key(), kv.column_family(),
                                               kv.qualifier(), kv.timestamp() - 1);
