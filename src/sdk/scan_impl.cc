@@ -24,6 +24,7 @@ DECLARE_int64(tera_sdk_scan_buffer_size);
 DECLARE_int32(tera_sdk_max_batch_scan_req);
 DECLARE_int32(tera_sdk_batch_scan_max_retry);
 DECLARE_int64(tera_sdk_scan_timeout);
+DECLARE_int64(batch_scan_delay_retry_in_us);
 
 namespace tera {
 
@@ -297,6 +298,8 @@ bool ResultStreamBatchImpl::Done(ErrorCode* error) {
             cv_.Wait();
         }
         if (slot->state_ == SCANSLOT_INVALID) { // TODO: error break,  maybe delay retry
+            while (ref_count_ > 1) { cv_.Wait();}
+            cv_.TimeWaitInUs(FLAGS_batch_scan_delay_retry_in_us, "BatchScanRetryTimeWait");
             ScanSessionReset();
             continue;
         }
