@@ -189,7 +189,7 @@ void ResultStreamBatchImpl::ComputeStartKey(const KeyValuePair& kv, KeyValuePair
         start_key->set_key(kv.key());
         start_key->set_column_family(kv.column_family());
         start_key->set_qualifier(GetNextStartPoint(kv.qualifier()));
-        start_key->set_timestamp(kv.timestamp());
+        start_key->set_timestamp(INT64_MAX);
     } else { // table has timestamp > 0
         start_key->set_key(kv.key());
         start_key->set_column_family(kv.column_family());
@@ -421,7 +421,7 @@ bool ResultStreamSyncImpl::Done(ErrorCode* err) {
                                               kv.qualifier(), kv.timestamp());
                 } else if (kv.timestamp() == 0) {
                     scan_desc_impl_->SetStart(kv.key(), kv.column_family(),
-                                              GetNextStartPoint(kv.qualifier()), kv.timestamp());
+                                              GetNextStartPoint(kv.qualifier()), INT64_MAX);
                 } else {
                     scan_desc_impl_->SetStart(kv.key(), kv.column_family(),
                                               kv.qualifier(), kv.timestamp() - 1);
