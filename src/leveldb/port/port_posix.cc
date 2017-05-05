@@ -50,32 +50,39 @@ void Mutex::Unlock() { PthreadCall("unlock", pthread_mutex_unlock(&mu_)); }
 
 CondVar::CondVar(Mutex* mu)
     : mu_(mu) {
-    PthreadCall("init cv", pthread_cond_init(&cv_, NULL));
+    // use monotonic clock
+    PthreadCall("condattr init ", pthread_condattr_init(&attr_));
+    PthreadCall("condattr setclock ", pthread_condattr_setclock(&attr_, CLOCK_MONOTONIC));
+    PthreadCall("condvar init with attr", pthread_cond_init(&cond_, &attr_));
 }
 
-CondVar::~CondVar() { PthreadCall("destroy cv", pthread_cond_destroy(&cv_)); }
+CondVar::~CondVar() {
+    PthreadCall("condvar destroy", pthread_cond_destroy(&cond_));
+    PthreadCall("condattr destroy", pthread_condattr_destroy(&attr_));
+}
 
 void CondVar::Wait() {
-  PthreadCall("wait", pthread_cond_wait(&cv_, &mu_->mu_));
+  PthreadCall("condvar wait", pthread_cond_wait(&cond_, &mu_->mu_));
 }
 
+// wait in ms
 bool CondVar::Wait(int64_t wait_millisec) {
   assert(wait_millisec >= 0);
+  // ref: http://www.qnx.com/developers/docs/6.5.0SP1.update/com.qnx.doc.neutrino_lib_ref/p/pthread_cond_timedwait.html
   struct timespec ts;
-  struct timeval tp;
-  gettimeofday(&tp, NULL);
-  uint64_t usec = tp.tv_usec + wait_millisec * 1000;
-  ts.tv_sec = tp.tv_sec + usec / 1000000;
-  ts.tv_nsec = (usec % 1000000) * 1000;
-  return (0 == pthread_cond_timedwait(&cv_, &mu_->mu_, &ts));
+  clock_gettime(CLOCK_MONOTONIC, &ts);
+  int64_t nsec = ((int64_t)wait_millisec) * 1000000 + ts.tv_nsec;
+  ts.tv_sec += nsec / 1000000000;
+  ts.tv_nsec = nsec % 1000000000;
+  return (0 == pthread_cond_timedwait(&cond_, &mu_->mu_, &ts));
 }
 
 void CondVar::Signal() {
-  PthreadCall("signal", pthread_cond_signal(&cv_));
+  PthreadCall("signal", pthread_cond_signal(&cond_));
 }
 
 void CondVar::SignalAll() {
-  PthreadCall("broadcast", pthread_cond_broadcast(&cv_));
+  PthreadCall("broadcast", pthread_cond_broadcast(&cond_));
 }
 
 void InitOnce(OnceType* once, void (*initializer)()) {

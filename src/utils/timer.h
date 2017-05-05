@@ -27,23 +27,19 @@ static inline std::string get_curtime_str_plain() {
 }
 
 static inline int64_t get_micros() {
-    struct timeval tv;
-    gettimeofday(&tv, NULL);
-    return static_cast<int64_t>(tv.tv_sec) * 1000000 + tv.tv_usec;
+    struct timespec ts;
+    clock_gettime(CLOCK_MONOTONIC, &ts);
+    return static_cast<int64_t>(ts.tv_sec) * 1000000 + static_cast<int64_t>(ts.tv_nsec) / 1000;
 }
 
 static inline int64_t get_millis() {
-    struct timeval tv;
-    gettimeofday(&tv, NULL);
-    return static_cast<int64_t>(tv.tv_sec) * 1000 + tv.tv_usec / 1000;
+    return get_micros() / 1000;
 }
 
 static inline int64_t get_unique_micros(int64_t ref) {
-    struct timeval tv;
     int64_t now;
     do {
-        gettimeofday(&tv, NULL);
-        now = static_cast<int64_t>(tv.tv_sec) * 1000000 + tv.tv_usec;
+        now = get_micros();
     } while (now == ref);
     return now;
 }

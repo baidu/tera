@@ -222,8 +222,8 @@ class Benchmark {
       snprintf(msg, sizeof(msg), "(%d ops)", num_entries);
       message_ = msg;
     }
-    char ts[10];
-    snprintf(ts, sizeof(ts), "%d", FLAGS_value_seed);
+    char ts[20];
+    snprintf(ts, sizeof(ts), "%lld", ((long long int)FLAGS_value_seed) * 1000000);
 
     // Write to database
     int i = FLAGS_start_key;

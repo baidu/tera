@@ -113,7 +113,8 @@ class CondVar {
   void Signal();
   void SignalAll();
  private:
-  pthread_cond_t cv_;
+  pthread_cond_t cond_;
+  pthread_condattr_t attr_;
   Mutex* mu_;
 };
 
