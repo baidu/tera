@@ -33,6 +33,7 @@ DECLARE_string(tera_master_meta_table_path);
 DECLARE_string(tera_master_meta_table_name);
 DECLARE_bool(tera_zk_enabled);
 
+DECLARE_string(tera_master_gc_strategy);
 DECLARE_int32(tera_master_impl_retry_times);
 DECLARE_int32(tera_tabletnode_connect_retry_period);
 
@@ -42,6 +43,11 @@ DECLARE_string(tera_tabletnode_path_prefix);
 
 namespace tera {
 namespace master {
+
+std::ostream& operator << (std::ostream& o, const TabletFile& file) {
+    o << file.tablet_id << "-" << file.lg_id << "-" << file.file_id;
+    return o;
+}
 
 std::ostream& operator << (std::ostream& o, const Tablet& tablet) {
     MutexLock lock(&tablet.mutex_);
@@ -61,14 +67,16 @@ Tablet::Tablet(const TabletMeta& meta)
     : meta_(meta),
       update_time_(common::timer::get_micros()),
       ready_time_(std::numeric_limits<int64_t>::max()),
-      merge_param_(NULL) {}
+      merge_param_(NULL),
+      gc_reported_(false) {}
 
 Tablet::Tablet(const TabletMeta& meta, TablePtr table)
     : meta_(meta),
       table_(table),
       update_time_(common::timer::get_micros()),
       ready_time_(std::numeric_limits<int64_t>::max()),
-      merge_param_(NULL) {}
+      merge_param_(NULL),
+      gc_reported_(false) {}
 
 Tablet::~Tablet() {
     table_.reset();
@@ -994,6 +1002,271 @@ void Table::RefreshCounter() {
     for (size_t l = 0; l < lg_num; ++l) {
         counter_.add_lg_size(lg_size[l]);
     }
+}
+
+void Table::MergeTablets(TabletPtr first_tablet, TabletPtr second_tablet,
+                         const TabletMeta& merged_meta, TabletPtr* merged_tablet) {
+    CHECK_EQ(first_tablet->GetKeyStart(), merged_meta.key_range().key_start());
+    CHECK_EQ(second_tablet->GetKeyEnd(), merged_meta.key_range().key_end());
+    CHECK_EQ(first_tablet->GetKeyEnd(), second_tablet->GetKeyStart());
+
+    MutexLock lock(&mutex_);
+    merged_tablet->reset(new Tablet(merged_meta, first_tablet->GetTable()));
+    uint64_t tablet_num = leveldb::GetTabletNumFromPath(merged_meta.path());
+    if (max_tablet_no_ < tablet_num) {
+        max_tablet_no_ = tablet_num;
+    }
+
+    if (FLAGS_tera_master_gc_strategy == "trackable") {
+        uint64_t tablet_num1 = leveldb::GetTabletNumFromPath(first_tablet->GetPath());
+        std::multiset<TabletFile>::iterator it = first_tablet->inh_files_.begin();
+        for (; it != first_tablet->inh_files_.end(); ++it) {
+            const TabletFile& file = *it;
+            InheritedFileInfo& file_info = useful_inh_files_[file.tablet_id][file];
+            CHECK_GT(file_info.ref, 0);
+            VLOG(10) << "[gc] [" << name_ << "] file " << file << " inherited by " << tablet_num1
+                << " pass to " << tablet_num << " ref is " << file_info.ref;
+            (*merged_tablet)->inh_files_.insert(file);
+        }
+        uint64_t tablet_num2 = leveldb::GetTabletNumFromPath(second_tablet->GetPath());
+        it = second_tablet->inh_files_.begin();
+        for (; it != second_tablet->inh_files_.end(); ++it) {
+            const TabletFile& file = *it;
+            InheritedFileInfo& file_info = useful_inh_files_[file.tablet_id][file];
+            CHECK_GT(file_info.ref, 0);
+            VLOG(10) << "[gc] [" << name_ << "] file " << file << " inherited by " << tablet_num2
+                << " pass to " << tablet_num << " ref is " << file_info.ref;
+            (*merged_tablet)->inh_files_.insert(file);
+        }
+
+        if (first_tablet->gc_reported_) {
+            --reported_live_tablets_num_;
+        }
+        if (second_tablet->gc_reported_) {
+            --reported_live_tablets_num_;
+        }
+    }
+
+    tablets_list_.erase(first_tablet->GetKeyStart());
+    tablets_list_.erase(second_tablet->GetKeyStart());
+    tablets_list_[merged_meta.key_range().key_start()] = *merged_tablet;
+}
+
+void Table::SplitTablet(TabletPtr splited_tablet,
+                        const TabletMeta& first_half, const TabletMeta& second_half,
+                        TabletPtr* first_tablet, TabletPtr* second_tablet) {
+    CHECK_EQ(splited_tablet->GetKeyStart(), first_half.key_range().key_start());
+    CHECK_EQ(splited_tablet->GetKeyEnd(), second_half.key_range().key_end());
+    CHECK_EQ(first_half.key_range().key_end(), second_half.key_range().key_start());
+
+    MutexLock lock(&mutex_);
+    first_tablet->reset(new Tablet(first_half, splited_tablet->GetTable()));
+    uint64_t tablet_num1 = leveldb::GetTabletNumFromPath(first_half.path());
+    if (max_tablet_no_ < tablet_num1) {
+        max_tablet_no_ = tablet_num1;
+    }
+    second_tablet->reset(new Tablet(second_half, splited_tablet->GetTable()));
+    uint64_t tablet_num2 = leveldb::GetTabletNumFromPath(second_half.path());
+    if (max_tablet_no_ < tablet_num2) {
+        max_tablet_no_ = tablet_num2;
+    }
+
+    if (FLAGS_tera_master_gc_strategy == "trackable") {
+        uint64_t tablet_num = leveldb::GetTabletNumFromPath(splited_tablet->GetPath());
+        (*first_tablet)->inh_files_ = splited_tablet->inh_files_;
+        (*second_tablet)->inh_files_ = splited_tablet->inh_files_;
+        std::multiset<TabletFile>::iterator it = splited_tablet->inh_files_.begin();
+        for (; it != splited_tablet->inh_files_.end(); ++it) {
+            const TabletFile& file = *it;
+            InheritedFileInfo& file_info = useful_inh_files_[file.tablet_id][file];
+            CHECK_GT(file_info.ref, 0);
+            file_info.ref++;
+            VLOG(10) << "[gc] [" << name_ << "] file " << file << " inherited by " << tablet_num
+                << " pass to " << tablet_num1 << " and " << tablet_num2
+                << " ref increment to " << file_info.ref;
+        }
+
+        if (splited_tablet->gc_reported_) {
+            --reported_live_tablets_num_;
+        }
+    }
+
+    tablets_list_.erase(first_half.key_range().key_start());
+    tablets_list_[first_half.key_range().key_start()] = *first_tablet;
+    tablets_list_[second_half.key_range().key_start()] = *second_tablet;
+}
+
+void Table::GarbageCollect(const TabletInheritedFileInfo& tablet_inh_info) {
+    // sort reported files
+    std::multiset<TabletFile> report_inh_files;
+    for (int32_t i = 0; i < tablet_inh_info.lg_inh_files_size(); i++) {
+        const LgInheritedLiveFiles& lg_inh_files = tablet_inh_info.lg_inh_files(i);
+        struct TabletFile inh_file;
+        inh_file.lg_id = lg_inh_files.lg_no();
+        for (int32_t j = 0; j < lg_inh_files.file_number_size(); j++) {
+            leveldb::ParseFullFileNumber(lg_inh_files.file_number(j),
+                                         &inh_file.tablet_id,
+                                         &inh_file.file_id);
+            report_inh_files.insert(inh_file);
+        }
+    }
+
+    MutexLock l(&mutex_);
+    Table::TabletList::iterator tablet_it = tablets_list_.find(tablet_inh_info.key_start());
+    if (tablet_it == tablets_list_.end()) {
+        return;
+    }
+    TabletPtr tablet = tablet_it->second;
+    if (tablet->GetKeyEnd() != tablet_inh_info.key_end()) {
+        return;
+    }
+
+    // insert a MAX element to simplify two sets' comparason
+    struct TabletFile max = {UINT64_MAX, INT32_MAX, UINT64_MAX};
+    report_inh_files.insert(max);
+    tablet->inh_files_.insert(max);
+    std::multiset<TabletFile>::iterator old_it = tablet->inh_files_.begin();
+    std::multiset<TabletFile>::iterator new_it = report_inh_files.begin();
+    while (old_it != tablet->inh_files_.end() && new_it != report_inh_files.end()) {
+        if (*old_it == *new_it) {
+            ++old_it;
+            ++new_it;
+        } else if (*old_it < *new_it) {
+            VLOG(10) << "[gc] " << tablet->GetPath() << " release file " << *old_it;
+            ReleaseInheritedFile(*old_it);
+            old_it = tablet->inh_files_.erase(old_it);
+        } else if (!tablet->gc_reported_) {
+            VLOG(10) << "[gc] " << tablet->GetPath() << " report file " << *new_it;
+            AddInheritedFile(*new_it);
+            tablet->inh_files_.insert(*new_it);
+            ++new_it;
+        } else {
+            LOG(WARNING) << "[gc] ignore " << tablet->GetPath() << " report new file " << *new_it;
+            ++new_it;
+        }
+    }
+    tablet->inh_files_.erase(max);
+
+    if (!tablet->gc_reported_) {
+        tablet->gc_reported_ = true;
+        if (++reported_live_tablets_num_ == tablets_list_.size()) {
+            std::set<uint64_t>::iterator it = gc_disabled_dead_tablets_.begin();
+            for (; it != gc_disabled_dead_tablets_.end(); ++it) {
+                EnableDeadTabletGarbageCollect(*it);
+            }
+            gc_disabled_dead_tablets_.clear();
+        }
+    }
+}
+
+void Table::EnableDeadTabletGarbageCollect(uint64_t tablet_id) {
+    mutex_.AssertHeld();
+    LOG(INFO) << "[gc] [" << name_ << "] enable gc dir " << tablet_id;
+    std::map<TabletFile, InheritedFileInfo>& dead_tablet_files = useful_inh_files_[tablet_id];
+    std::map<TabletFile, InheritedFileInfo>::iterator it = dead_tablet_files.begin();
+    while (it != dead_tablet_files.end()) {
+        const TabletFile& file = it->first;
+        InheritedFileInfo& file_info = it->second;
+        CHECK_GT(file_info.ref, 0);
+        VLOG(10) << "[gc] [" << name_ << "] file " << file << " ref decrement to " << file_info.ref - 1;
+        if (--file_info.ref == 0) {
+            // delete file
+            obsolete_inh_files_.push(file);
+            it = dead_tablet_files.erase(it);
+        } else {
+            ++it;
+        }
+    }
+    if (dead_tablet_files.size() == 0) {
+        // delete tablet dir
+        VLOG(10) << "[gc] [" << name_ << "] dir " << tablet_id << " has no useful file";
+        TabletFile tablet_dir = {tablet_id, 0, 0};
+        obsolete_inh_files_.push(tablet_dir);
+        useful_inh_files_.erase(tablet_id);
+    }
+}
+
+void Table::ReleaseInheritedFile(const TabletFile& file) {
+    mutex_.AssertHeld();
+
+    InheritedFiles::iterator it = useful_inh_files_.find(file.tablet_id);
+    CHECK(it != useful_inh_files_.end());
+    std::map<TabletFile, InheritedFileInfo>& dead_tablet_files = it->second;
+
+    std::map<TabletFile, InheritedFileInfo>::iterator it2 = dead_tablet_files.find(file);
+    CHECK(it2 != dead_tablet_files.end());
+    InheritedFileInfo& inh_file = it2->second;
+
+    CHECK_GT(inh_file.ref, 0);
+    VLOG(10) << "[gc] [" << name_ << "] file " << file << " ref decrement to " << inh_file.ref - 1;
+    if (--inh_file.ref == 0) {
+        // delete file
+        obsolete_inh_files_.push(file);
+        dead_tablet_files.erase(it2);
+        if (dead_tablet_files.size() == 0) {
+            // delete tablet dir
+            VLOG(10) << "[gc] [" << name_ << "] dir " << file.tablet_id << " has no useful file";
+            TabletFile tablet_dir = {file.tablet_id, 0, 0};
+            obsolete_inh_files_.push(tablet_dir);
+            useful_inh_files_.erase(it);
+        }
+    }
+}
+
+void Table::AddInheritedFile(const TabletFile& file) {
+    mutex_.AssertHeld();
+
+    bool is_gc_disabled = false;
+    if (useful_inh_files_.find(file.tablet_id) == useful_inh_files_.end()) {
+        LOG(INFO) << "[gc] [" << name_ << "] new report dir " << file.tablet_id << ", gc disabled";
+        gc_disabled_dead_tablets_.insert(file.tablet_id);
+    }
+    if (gc_disabled_dead_tablets_.find(file.tablet_id) != gc_disabled_dead_tablets_.end()) {
+        is_gc_disabled = true;
+    }
+
+    InheritedFileInfo& file_info = useful_inh_files_[file.tablet_id][file];
+    if (is_gc_disabled && file_info.ref == 0) {
+        VLOG(10) << "[gc] [" << name_ << "] new report file " << file;
+        file_info.ref = 1;
+    }
+    ++file_info.ref;
+    VLOG(10) << "[gc] [" << name_ << "] file " << file << " ref increment to " << file_info.ref;
+}
+
+uint64_t Table::CleanObsoleteFile() {
+    leveldb::Env* env = io::LeveldbBaseEnv();
+    std::string table_path = FLAGS_tera_tabletnode_path_prefix + name_;
+    uint64_t delete_file_num = 0;
+    int64_t start_ts = get_micros();
+
+    MutexLock l(&mutex_);
+    while (!obsolete_inh_files_.empty()) {
+        TabletFile file = obsolete_inh_files_.front();
+        mutex_.Unlock();
+        std::string path;
+        leveldb::Status s;
+        if (file.lg_id == 0 && file.file_id == 0) {
+            std::string path = leveldb::BuildTabletPath(table_path, file.tablet_id);
+            LOG(INFO) << "[gc] [" << name_ << "] delete dir " << path;
+            s = env->DeleteFile(path);
+        } else {
+            std::string path = leveldb::BuildTableFilePath(table_path, file.tablet_id,
+                                                           file.lg_id, file.file_id);
+            LOG(INFO) << "[gc] [" << name_ << "] delete file " << file << " path " << path;
+            s = env->DeleteFile(path);
+        }
+        mutex_.Lock();
+        if (!s.ok()) {
+            LOG(WARNING) << "[gc] fail to delete: " << path << " status: " << s.ToString();
+            break;
+        }
+        delete_file_num++;
+        obsolete_inh_files_.pop();
+    }
+    LOG(INFO) << "[gc] [" << name_ << "] clean obsolete file/dir, total: " << delete_file_num
+        << ", cost: " << (get_micros() - start_ts) / 1000 << " ms";
+    return delete_file_num;
 }
 
 TabletManager::TabletManager(Counter* sequence_id,

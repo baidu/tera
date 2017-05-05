@@ -92,11 +92,22 @@ const char* FileTypeToString(FileType type);
 extern uint64_t BuildFullFileNumber(const std::string& dbname,
                                     uint64_t number);
 
+// Build tablet path from tablet_num
+// E.g. construct "/table1/tablet000003"
+//      from (/table1, 3)
+std::string BuildTabletPath(const std::string& prefix, uint64_t tablet);
+
+// Build file path from tablet_num & lg_num & file number
+// E.g. construct "/table1/tablet000003/0/00000001.sst"
+//      from (/table1, 3, 0, 1)
+std::string BuildTableFilePath(const std::string& prefix, uint64_t tablet,
+                               uint64_t lg, uint64_t number);
+
 // Build file path from lg_num & full file number
 // E.g. construct "/table1/tablet000003/0/00000001.sst"
 //      from (/table1, 0, 0x8000000300000001)
 std::string BuildTableFilePath(const std::string& prefix,
-                               uint64_t lg, uint64_t number);
+                               uint64_t lg, uint64_t full_number);
 
 // Parse a db_impl name to prefix, tablet number, lg number...
 // db_impl name format maybe:

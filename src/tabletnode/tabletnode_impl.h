@@ -173,6 +173,7 @@ private:
     void EnableReleaseMallocCacheTimer(int32_t expand_factor = 1);
     void DisableReleaseMallocCacheTimer();
 
+    void GetInheritedLiveFiles(std::vector<TabletInheritedFileInfo>* inherited);
     void GetInheritedLiveFiles(std::vector<InheritedLiveFiles>& inherited);
 
     void GarbageCollectInPath(const std::string& path, leveldb::Env* env,

@@ -57,3 +57,10 @@ message InheritedLiveFiles {
     required string table_name = 1;
     repeated LgInheritedLiveFiles lg_live_files = 2;
 }
+
+message TabletInheritedFileInfo {
+    optional string table_name = 1;
+    optional bytes key_start = 2;
+    optional bytes key_end = 3;
+    repeated LgInheritedLiveFiles lg_inh_files = 4;
+}

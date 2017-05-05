@@ -58,6 +58,7 @@ message QueryResponse {
     optional TabletNodeInfo tabletnode_info = 3;
     optional TabletMetaList tabletmeta_list = 4;
     repeated InheritedLiveFiles inh_live_files = 5;
+    repeated TabletInheritedFileInfo tablet_inh_file_infos = 6;
 }
 
 enum UpdateType {
