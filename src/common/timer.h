@@ -28,7 +28,7 @@ static inline std::string get_curtime_str() {
 
 static inline int64_t get_micros() {
     struct timespec ts;
-    clock_gettime(CLOCK_MONOTONIC, &ts);
+    clock_gettime(CLOCK_REALTIME, &ts);
     return static_cast<int64_t>(ts.tv_sec) * 1000000 + static_cast<int64_t>(ts.tv_nsec) / 1000;
 }
 
