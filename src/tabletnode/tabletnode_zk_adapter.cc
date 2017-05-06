@@ -365,6 +365,7 @@ void InsTabletNodeZkAdapter::Init() {
 
     // create node
     std::string lock_key = root_path + kTsListPath + "/" + server_addr_;
+    ins_sdk_->UnLock(lock_key, &err);
     CHECK(ins_sdk_->Lock(lock_key, &err)) << "register fail";
 
     // get session id
@@ -402,6 +403,7 @@ void InsTabletNodeZkAdapter::OnMetaChange(std::string meta_addr, bool deleted) {
 
 void InsTabletNodeZkAdapter::OnKickMarkCreated() {
     LOG(ERROR) << "I am kicked by master";
+    tabletnode_impl_->Exit();
     _Exit(EXIT_FAILURE);
 }
 
