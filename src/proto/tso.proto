@@ -1,0 +1,22 @@
+import "sofa/pbrpc/rpc_option.proto";
+import "status_code.proto";
+
+package tera;
+
+message GetTimestampRequest {
+    optional uint64 sequence_id = 1;
+    optional uint32 number = 2;
+}
+
+message GetTimestampResponse {
+    optional uint64 sequence_id = 1;
+    optional StatusCode status = 2;
+    optional int64 start_timestamp = 3;
+    optional uint32 number = 4;
+}
+
+service TimestampOracleServer {
+    rpc GetTimestamp(GetTimestampRequest) returns(GetTimestampResponse);
+}
+
+option cc_generic_services = true;
