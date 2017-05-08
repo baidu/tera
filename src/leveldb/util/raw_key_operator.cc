@@ -102,6 +102,10 @@ public:
     virtual int Compare(const Slice& key1, const Slice& key2) const {
         return key1.compare(key2);
     }
+
+    const char* Name() const {
+        return "tera.RawKeyOperator.readable";
+    }
 };
 
 /**
@@ -228,6 +232,10 @@ public:
         Slice ts_type2(data2 + size2 - 12, 8);
         return ts_type1.compare(ts_type2);
     }
+
+    const char* Name() const {
+        return "tera.RawKeyOperator.binary";
+    }
 };
 
 // support KV-pair with TTL, Key's format :
@@ -266,6 +274,10 @@ public:
         leveldb::Slice key1_rowkey(key1.data(), key1.size() - sizeof(int64_t));
         leveldb::Slice key2_rowkey(key2.data(), key2.size() - sizeof(int64_t));
         return key1_rowkey.compare(key2_rowkey);
+    }
+
+    const char* Name() const {
+        return "tera.RawKeyOperator.kv";
     }
 };
 

@@ -29,6 +29,7 @@ public:
                                 TeraKeyType* type) const = 0;
     virtual int Compare(const Slice& key1,
                         const Slice& key2) const = 0;
+    virtual const char* Name() const = 0;
 };
 
 const RawKeyOperator* ReadableRawKeyOperator();

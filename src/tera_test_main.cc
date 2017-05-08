@@ -67,7 +67,7 @@ public:
         // gen row keys
         while (keys_.size() < key_num) {
             std::stringstream ss;
-            ss << (uint64_t)(rand() * rand()) << "abcdefghijklmnopqrstuvwxyz";
+            ss << ((uint64_t)rand()) * ((uint64_t)rand()) << "abcdefghijklmnopqrstuvwxyz";
             std::string key = ss.str();
             keys_[key] = 0;
             keys_stat_[key] = false;

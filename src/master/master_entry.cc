@@ -16,6 +16,14 @@ DECLARE_string(tera_master_port);
 DECLARE_int32(tera_master_rpc_server_max_inflow);
 DECLARE_int32(tera_master_rpc_server_max_outflow);
 
+std::string GetTeraEntryName() {
+    return "master";
+}
+
+tera::TeraEntry* GetTeraEntry() {
+    return new tera::master::MasterEntry();
+}
+
 namespace tera {
 namespace master {
 

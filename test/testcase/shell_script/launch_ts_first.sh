@@ -25,9 +25,8 @@ MASTER_LOG_FILE=${CURRENT_DIR}/../log/master.stderr
 if [ -f ${MASTER_LOG_FILE} ];then
     mv ${MASTER_LOG_FILE} ${MASTER_LOG_FILE}.${TIME}
 fi
-${CURRENT_DIR}/tera_main \
+${CURRENT_DIR}/tera_master \
     --flagfile=${CURRENT_DIR}/../conf/tera.flag \
-    --tera_role=master \
     --tera_master_port=${PORT} \
     --tera_fake_zk_path_prefix=${FAKE_ZK_PATH_PREFIX} \
     --tera_log_prefix=master &> ${MASTER_LOG_FILE} </dev/null &
@@ -47,9 +46,8 @@ for ((i=1; i<=$TABLETNODE_NUM; i++)); do
     if [ ! -x $CACHE_PATH ];then
         mkdir -p $CACHE_PATH
     fi
-    ${CURRENT_DIR}/tera_main \
+    ${CURRENT_DIR}/tabletserver \
         --flagfile=${CURRENT_DIR}/../conf/tera.flag \
-        --tera_role=tabletnode \
         --tera_tabletnode_port=$((PORT+i)) \
         --tera_leveldb_log_path=${LEVELDB_LOG_FILE} \
         --tera_tabletnode_cache_paths=${CACHE_PATH} \

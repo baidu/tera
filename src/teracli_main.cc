@@ -53,7 +53,6 @@ DECLARE_int64(tera_sdk_status_timeout);
 DEFINE_int32(tera_client_batch_put_num, 1000, "num of each batch in batch put mode");
 DEFINE_int32(tera_client_scan_package_size, 1024, "the package size (in KB) of each scan request");
 
-DEFINE_int64(scan_pack_interval, 5000, "scan timeout");
 DEFINE_int64(snapshot, 0, "read | scan snapshot");
 DEFINE_string(rollback_switch, "close", "Pandora's box, do not open");
 DEFINE_string(rollback_name, "", "rollback operation's name");
@@ -1055,7 +1054,6 @@ int32_t DeleteOp(Client* client, int32_t argc, std::string* argv, ErrorCode* err
 int32_t ScanRange(TablePtr& table, ScanDescriptor& desc, ErrorCode* err) {
     desc.SetBufferSize(FLAGS_tera_client_scan_package_size << 10);
     desc.SetAsync(FLAGS_tera_sdk_batch_scan_enabled);
-    desc.SetPackInterval(FLAGS_scan_pack_interval);
     desc.SetSnapshot(FLAGS_snapshot);
 
     ResultStream* result_stream;

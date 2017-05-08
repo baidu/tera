@@ -49,7 +49,7 @@ ubuntu安装tera(单机和集群)
 
 3. 等待编译结束 & 单机体验
 
-  将编译生成的tera_main和teracli文件copy到example/onebox/bin目录下，进入目录执行：sh launch_tera.sh。然后执行./teracli进终端交互。Have fun！
+  将编译生成的tera_master，tabletserver和teracli文件copy到example/onebox/bin目录下，进入目录执行：sh launch_tera.sh。然后执行./teracli进终端交互。Have fun！
   详见：https://github.com/baidu/tera/blob/master/doc/onebox-cn.md
 
 
@@ -262,10 +262,10 @@ ubuntu安装tera(单机和集群)
   > 在zookeeper目录中执行：./bin/zkServer.sh status，找到leader那台机器，即master
   > 进入tera_root的bin目录，
     在master上执行：
-    nohup ./tera_main --flagfile=../conf/tera.flag --tera_role=master &> ../log/master.stderr &
+    nohup ./tera_master --flagfile=../conf/tera.flag &> ../log/master.stderr &
     
     在其他两台slave机器上执行：
-    nohup ./tera_main --flagfile=../conf/tera.flag --tera_role=tabletnode &> ../log/tabletserver.stderr &
+    nohup ./tabletserver --flagfile=../conf/tera.flag &> ../log/tabletserver.stderr &
 
   > 在任意一台机器上的tera_root/bin目录中执行：./teracli
     Have Fun！

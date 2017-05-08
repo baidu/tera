@@ -69,7 +69,7 @@ DECLARE_bool(tera_tablet_use_memtable_on_leveldb);
 DECLARE_int64(tera_tablet_memtable_ldb_write_buffer_size);
 DECLARE_int64(tera_tablet_memtable_ldb_block_size);
 
-extern tera::Counter row_read_delay;
+tera::Counter row_read_delay;
 
 namespace tera {
 namespace io {
@@ -285,7 +285,8 @@ bool TabletIO::Load(const TableSchema& schema,
     }
 
     tablet_path_ = path_prefix + path;
-    LOG(INFO) << "[Load] Start Open " << tablet_path_;
+    LOG(INFO) << "[Load] Start Open " << tablet_path_
+        << ", kv_only " << kv_only_ << ", raw_key_operator " << key_operator_->Name();
     // recover snapshot
     for (std::map<uint64_t, uint64_t>::iterator it = snapshots.begin(); it != snapshots.end(); ++it) {
         id_to_snapshot_num_[it->first] = it->second;
@@ -857,8 +858,11 @@ inline bool TabletIO::LowLevelScan(const std::string& start_tera_key,
     int64_t now_time = GetTimeStampInMs();
     int64_t time_out = now_time + scan_options.timeout;
     KeyValuePair next_start_kv_pair;
-    VLOG(9) << "ll-scan timeout set to be " << scan_options.timeout;
+    VLOG(9) << "ll-scan timeout set to be " << scan_options.timeout
+        << ", start_tera_key " << DebugString(start_tera_key)
+        << ", end_row_key " << DebugString(end_row_key);
 
+    *is_complete = false;
     for (; it->Valid();) {
         bool has_merged = false;
         std::string merged_value;
@@ -885,12 +889,7 @@ inline bool TabletIO::LowLevelScan(const std::string& start_tera_key,
 
         if (end_row_key.size() && key.compare(end_row_key) >= 0) {
             // scan finished
-            break;
-        }
-
-        if (now_time > time_out) {
-            VLOG(9) << "ll-scan timeout. Mark next start key: " << DebugString(tera_key.ToString());
-            MakeKvPair(key, col, qual, ts, "", &next_start_kv_pair);
+            *is_complete = true;
             break;
         }
 
@@ -932,6 +931,12 @@ inline bool TabletIO::LowLevelScan(const std::string& start_tera_key,
             *read_row_count += 1;
             ProcessRowBuffer(row_buf, scan_options, value_list, &buffer_size, &number_limit);
             row_buf.clear();
+
+            if (now_time > time_out && (next_start_point != NULL)) {
+                VLOG(9) << "ll-scan timeout. Mark next start key: " << DebugString(tera_key.ToString());
+                MakeKvPair(key, col, qual, ts, "", next_start_point);
+                break;
+            }
         }
 
         // max version filter
@@ -948,8 +953,7 @@ inline bool TabletIO::LowLevelScan(const std::string& start_tera_key,
             last_qual.assign(qual.data(), qual.size());
             version_num = 1;
             int64_t merged_num = 0;
-            has_merged =
-                compact_strategy->ScanMergedValue(it, &merged_value, &merged_num);
+            has_merged = compact_strategy->ScanMergedValue(it, &merged_value, &merged_num);
             if (has_merged) {
                 counter_.low_read_cell.Add(merged_num - 1);
                 value = merged_value;
@@ -983,6 +987,7 @@ inline bool TabletIO::LowLevelScan(const std::string& start_tera_key,
             it->Next();
         }
     }
+    *is_complete = !it->Valid() ? true : *is_complete;
 
     if (ScanWithFilter(scan_options)
         && it->Valid()
@@ -994,30 +999,13 @@ inline bool TabletIO::LowLevelScan(const std::string& start_tera_key,
         ProcessRowBuffer(row_buf, scan_options, value_list, &buffer_size, &number_limit);
     }
 
-    leveldb::Status it_status;
-    if (!it->Valid()) {
-        it_status = it->status();
-    }
-
-    if (!it_status.ok()) {
-        SetStatusCode(it_status, status);
-        VLOG(10) << "ll-seek fail: " << "tablet=[" << tablet_path_ <<
-            "] status=[" << StatusCodeToString(*status);
+    if (!it->Valid() && !(it->status().ok())) {
+        SetStatusCode(it->status(), status);
+        VLOG(10) << "ll-scan fail: " << "tablet=[" << tablet_path_ << "], "
+            << "status=[" << StatusCodeToString(*status) << "]";
         return false;
     }
-
-    // check if scan finished
     SetStatusCode(kTabletNodeOk, status);
-    if ((buffer_size < scan_options.max_size) &&
-        (number_limit < scan_options.number_limit) &&
-        (now_time <= time_out)) {
-        *is_complete = true;
-    } else {
-        if (now_time > time_out && next_start_point) {
-            next_start_point->CopyFrom(next_start_kv_pair);
-        }
-        *is_complete = false;
-    }
     return true;
 }
 

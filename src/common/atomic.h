@@ -5,6 +5,8 @@
 #ifndef  TERA_COUNTER_ATOMIC_H_
 #define  TERA_COUNTER_ATOMIC_H_
 
+#include <stdint.h>
+
 namespace common {
 
 static inline int atomic_add(volatile int *mem, int add)

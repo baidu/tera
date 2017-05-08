@@ -386,6 +386,7 @@ TEST_F(TabletIOTest, SstLostButIgnore) {
                             empty_snaphsots_, empty_rollback_, ldb_logger, NULL, NULL, &status));
 
     env->ResetMock();
+    close(fd);
 }
 //#endif
 
