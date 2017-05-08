@@ -8,6 +8,8 @@
 #include <string>
 #include <thread>
 
+#include <gflags/gflags.h>
+
 #include "common/counter.h"
 #include "tso/tso.h"
 #include "version.h"
