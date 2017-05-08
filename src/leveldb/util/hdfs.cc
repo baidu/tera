@@ -223,5 +223,16 @@ int32_t Hdfs::ListDirectory(const std::string& path,
   return 0;
 }
 
+int32_t Hdfs::LockDirectory(const std::string& path) {
+  // no implementation
+  return -1;
 }
+
+int32_t Hdfs::UnlockDirectory(const std::string& path) {
+  // no implementation
+  return -1;
+}
+
+}
+
 /* vim: set expandtab ts=2 sw=2 sts=2 tw=100: */

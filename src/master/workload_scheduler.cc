@@ -4,6 +4,8 @@
 
 #include "master/workload_scheduler.h"
 
+#include <algorithm>
+
 #include "glog/logging.h"
 #include "master/tablet_manager.h"
 

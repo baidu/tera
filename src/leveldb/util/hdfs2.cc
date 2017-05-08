@@ -247,6 +247,17 @@ void* Hdfs2::GetFSHandle(const std::string& path) {
   return fs_list_[index];
 }
 
+int32_t Hdfs2::LockDirectory(const std::string& path) {
+  // no implementation
+  return -1;
+}
+
+int32_t Hdfs2::UnlockDirectory(const std::string& path) {
+  // no implementation
+  return -1;
+}
+
+
 } // namespace leveldb
 
 /* vim: set expandtab ts=2 sw=2 sts=2 tw=100: */

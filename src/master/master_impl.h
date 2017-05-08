@@ -165,8 +165,8 @@ private:
     typedef Closure<void, SplitTabletRequest*, SplitTabletResponse*, bool, int> SplitClosure;
     typedef Closure<void, WriteTabletRequest*, WriteTabletResponse*, bool, int> WriteClosure;
     typedef Closure<void, ScanTabletRequest*, ScanTabletResponse*, bool, int> ScanClosure;
-    typedef boost::function<void (std::string*, std::string*)> ToMetaFunc;
-    typedef boost::shared_ptr<Mutex> MutexPtr;
+    typedef std::function<void (std::string*, std::string*)> ToMetaFunc;
+    typedef std::shared_ptr<Mutex> MutexPtr;
 
     enum MetaTaskType {
         kWrite = 0,
@@ -244,8 +244,6 @@ private:
                           const std::string& key_start,
                           const std::string& key_end,
                           const std::string& server_addr, StatusCode* status);
-    void UnloadTabletAsync(std::string table_name, std::string key_start,
-                           std::string server_addr, int32_t retry);
 
     void RetryLoadTablet(TabletPtr tablet, int32_t retry_times);
     void RetryUnloadTablet(TabletPtr tablet, int32_t retry_times);
@@ -272,7 +270,7 @@ private:
                             int error_code);
 
     bool RemoveTablet(const TabletMeta& meta, StatusCode* status);
-    void UnloadTabletAsync(TabletPtr tablet, UnloadClosure* done);
+    virtual void UnloadTabletAsync(TabletPtr tablet, UnloadClosure* done);
     void UnloadTabletCallback(TabletPtr tablet, int32_t retry,
                               UnloadTabletRequest* request,
                               UnloadTabletResponse* response, bool failed,
@@ -357,13 +355,9 @@ private:
                                    QueryRequest* request,
                                    QueryResponse* response, bool failed,
                                    int error_code);
-    void TabletNodeRecoveryCallback(std::string addr, QueryRequest* request,
-                                    QueryResponse* response, bool failed,
-                                    int error_code);
     void RetryCollectTabletInfo(std::string addr,
                                 std::vector<TabletMeta>* tablet_list,
                                 sem_t* finish_counter, Mutex* mutex);
-    void RetryQueryNewTabletNode(std::string addr);
 
     void SplitTabletAsync(TabletPtr tablet);
     void SplitTabletCallback(TabletPtr tablet, SplitTabletRequest* request,
@@ -576,9 +570,9 @@ private:
 
     mutable Mutex tabletnode_mutex_;
     bool restored_;
-    boost::shared_ptr<TabletManager> tablet_manager_;
-    boost::shared_ptr<TabletNodeManager> tabletnode_manager_;
-    boost::shared_ptr<UserManager> user_manager_;
+    std::shared_ptr<TabletManager> tablet_manager_;
+    std::shared_ptr<TabletNodeManager> tabletnode_manager_;
+    std::shared_ptr<UserManager> user_manager_;
     scoped_ptr<MasterZkAdapterBase> zk_adapter_;
     scoped_ptr<Scheduler> size_scheduler_;
     scoped_ptr<Scheduler> load_scheduler_;
@@ -619,11 +613,11 @@ private:
     bool gc_enabled_;
     int64_t gc_timer_id_;
     bool gc_query_enable_;
-    boost::shared_ptr<GcStrategy> gc_strategy_;
+    std::shared_ptr<GcStrategy> gc_strategy_;
     std::map<std::string, std::string> alias_;
     mutable Mutex alias_mutex_;
 
-    boost::shared_ptr<TabletAvailability> tablet_availability_;
+    std::shared_ptr<TabletAvailability> tablet_availability_;
 };
 
 } // namespace master

@@ -8,12 +8,11 @@
 #include <limits>
 #include <list>
 #include <map>
+#include <memory>
 #include <set>
 #include <stdint.h>
 #include <string>
 #include <vector>
-
-#include <boost/shared_ptr.hpp>
 
 #include "common/base/closure.h"
 #include "common/mutex.h"
@@ -52,7 +51,7 @@ namespace master {
 
 class MasterImpl;
 class Table;
-typedef boost::shared_ptr<Table> TablePtr;
+typedef std::shared_ptr<Table> TablePtr;
 
 class Tablet {
     friend class TabletManager;
@@ -127,8 +126,7 @@ public:
 
     int64_t UpdateTime();
     int64_t SetUpdateTime(int64_t timestamp);
-    int64_t LoadTime();
-    int64_t SetLoadTime(int64_t timestamp);
+    int64_t ReadyTime();
 
     void* GetMergeParam();
     void SetMergeParam(void* merge_param);
@@ -144,7 +142,7 @@ private:
     TabletMeta meta_;
     TablePtr table_;
     int64_t update_time_;
-    int64_t load_time_;
+    int64_t ready_time_;
     std::string server_id_;
     std::string expect_server_addr_;
     std::list<TabletCounter> counter_list_;
@@ -168,7 +166,7 @@ private:
     void* merge_param_;
 };
 
-typedef class boost::shared_ptr<Tablet> TabletPtr;
+typedef class std::shared_ptr<Tablet> TabletPtr;
 std::ostream& operator << (std::ostream& o, const TabletPtr& tablet);
 std::ostream& operator << (std::ostream& o, const TablePtr& table);
 
@@ -202,7 +200,8 @@ public:
     void ToMeta(TableMeta* meta);
     uint64_t GetNextTabletNo();
     bool GetTabletsForGc(std::set<uint64_t>* live_tablets,
-                         std::set<uint64_t>* dead_tablets);
+                         std::set<uint64_t>* dead_tablets,
+                         bool ignore_not_ready);
     void RefreshCounter();
     int64_t GetTabletsCount();
     bool GetSchemaIsSyncing();
@@ -286,6 +285,12 @@ public:
     void FindTablet(const std::string& server_addr,
                     std::vector<TabletPtr>* tablet_meta_list,
                     bool need_disabled_tables);
+
+    bool FindOverlappedTablets(const std::string& table_name,
+                               const std::string& key_start,
+                               const std::string& key_end,
+                               std::vector<TabletPtr>* tablets,
+                               StatusCode* ret_status = NULL);
 
     bool FindTable(const std::string& table_name,
                    std::vector<TabletPtr>* tablet_meta_list,

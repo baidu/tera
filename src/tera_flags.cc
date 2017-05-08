@@ -67,6 +67,7 @@ DEFINE_bool(tera_use_flash_for_memenv, true, "Use flashenv for memery lg");
 DEFINE_string(tera_leveldb_compact_strategy, "default", "the default strategy to drive consum compaction, should be [default|LG|dummy]");
 DEFINE_bool(tera_leveldb_verify_checksums, true, "enable verify data read from storage against checksums");
 DEFINE_bool(tera_leveldb_ignore_corruption_in_compaction, false, "skip corruption blocks of sst file in compaction");
+DEFINE_bool(tera_leveldb_use_file_lock, false, "hold file lock during loading leveldb");
 
 DEFINE_int32(tera_rpc_client_max_inflow, -1, "the max input flow (in MB/s) for rpc-client, -1 means no limit");
 DEFINE_int32(tera_rpc_client_max_outflow, -1, "the max input flow (in MB/s) for rpc-client, -1 means no limit");
@@ -178,6 +179,8 @@ DEFINE_int32(tera_tabletnode_scan_pack_max_size, 10240, "the max size(KB) of the
 DEFINE_int32(tera_asyncwriter_pending_limit, 10000, "the max pending data size (KB) in async writer");
 DEFINE_bool(tera_enable_level0_limit, true, "enable level0 limit");
 DEFINE_int32(tera_tablet_level0_file_limit, 20000, "the max level0 file num before write busy");
+DEFINE_int32(tera_tablet_ttl_percentage, 99, "percentage of ttl tag in sst file begin to trigger compaction");
+DEFINE_int32(tera_tablet_del_percentage, 20, "percentage of del tag in sst file begin to trigger compaction");
 DEFINE_int32(tera_asyncwriter_sync_interval, 100, "the interval (in ms) to sync write buffer to disk");
 DEFINE_int32(tera_asyncwriter_sync_size_threshold, 1024, "force sync per X KB");
 DEFINE_int32(tera_asyncwriter_batch_size, 1024, "write batch to leveldb per X KB");
@@ -258,10 +261,13 @@ DEFINE_int32(tera_sdk_cookie_update_interval, 600, "the interval of cookie updat
 DEFINE_bool(tera_sdk_perf_counter_enabled, true, "enable performance counter log");
 DEFINE_int64(tera_sdk_perf_counter_log_interval, 60, "the interval period (in sec) of performance counter log dumping");
 
-DEFINE_bool(tera_sdk_batch_scan_enabled, false, "enable batch scan");
+DEFINE_bool(tera_sdk_batch_scan_enabled, true, "enable batch scan");
 DEFINE_int64(tera_sdk_scan_buffer_size, 65536, "default buffer limit for scan");
 DEFINE_int64(tera_sdk_scan_number_limit, 1000000000, "default number limit for scan");
-DEFINE_int32(tera_sdk_max_batch_scan_req, 10, "the max number of concurrent scan req");
+DEFINE_int32(tera_sdk_max_batch_scan_req, 30, "the max number of concurrent scan req");
+DEFINE_int32(tera_sdk_batch_scan_max_retry, 60, "the max retry times for session scan");
+DEFINE_int64(tera_sdk_scan_timeout, 30000, "scan timeout");
+DEFINE_int64(batch_scan_delay_retry_in_us, 1000000, "timewait in us before retry batch scan");
 
 DEFINE_string(tera_ins_addr_list, "", "the ins cluster addr. e.g. abc.com:1234,abb.com:1234");
 DEFINE_string(tera_ins_root_path, "", "root path on ins. e.g /ps/sandbox");

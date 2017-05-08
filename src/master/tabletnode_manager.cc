@@ -22,6 +22,8 @@ TabletNode::TabletNode() : state_(kOffLine),
     update_time_(0), query_fail_count_(0), onload_count_(0),
     onsplit_count_(0), plan_move_in_count_(0) {
     info_.set_addr("");
+    info_.set_status_m(NodeStateToString(state_));
+    info_.set_timestamp(get_micros());
 }
 
 TabletNode::TabletNode(const std::string& addr, const std::string& uuid)
@@ -30,6 +32,8 @@ TabletNode::TabletNode(const std::string& addr, const std::string& uuid)
       update_time_(0), query_fail_count_(0), onload_count_(0),
       onsplit_count_(0), plan_move_in_count_(0) {
     info_.set_addr(addr);
+    info_.set_status_m(NodeStateToString(state_));
+    info_.set_timestamp(get_micros());
 }
 
 TabletNode::TabletNode(const TabletNode& t) {
@@ -319,19 +323,20 @@ TabletNodeManager::~TabletNodeManager() {
     MutexLock lock(&mutex_);
 }
 
-void TabletNodeManager::AddTabletNode(const std::string& addr,
-                                      const std::string& uuid) {
+TabletNodePtr TabletNodeManager::AddTabletNode(const std::string& addr,
+                                               const std::string& uuid) {
     MutexLock lock(&mutex_);
     TabletNodePtr null_ptr;
     std::pair<TabletNodeList::iterator, bool> ret = tabletnode_list_.insert(
         std::pair<std::string, TabletNodePtr>(addr, null_ptr));
     if (!ret.second) {
         LOG(ERROR) << "tabletnode [" << addr << "] exists";
-        return;
+        return ret.first->second;
     }
     TabletNodePtr& state = ret.first->second;
     state.reset(new TabletNode(addr, uuid));
     LOG(INFO) << "add tabletnode : " << addr << ", id : " << uuid;
+    return state;
 }
 
 void TabletNodeManager::DelTabletNode(const std::string& addr) {
@@ -384,7 +389,7 @@ void TabletNodeManager::UpdateTabletNode(const std::string& addr,
         CounterWeightedSum(state.info_.scan_pending(),
                            node->average_counter_.scan_pending_);
     node->average_counter_.row_read_delay_ =
-        CounterWeightedSum(state.info_.extra_info(1).value(),
+        CounterWeightedSum(state.info_.extra_info_size() > 1 ? state.info_.extra_info(1).value() : 0,
                            node->average_counter_.row_read_delay_);
     VLOG(15) << "update tabletnode : " << addr;
 }

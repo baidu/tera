@@ -10,12 +10,14 @@
 #define STORAGE_LEVELDB_UTIL_HISTOGRAM_H_
 
 #include <string>
+#include "port/port_posix.h"
+#include "util/mutexlock.h"
 
 namespace leveldb {
 
 class Histogram {
  public:
-  Histogram() { }
+  Histogram() { Clear(); }
   ~Histogram() { }
 
   void Clear();
@@ -25,6 +27,7 @@ class Histogram {
   std::string ToString() const;
 
  private:
+  mutable port::Mutex mutex_;
   double min_;
   double max_;
   double num_;

@@ -5,14 +5,12 @@
 #ifndef TERA_IO_TABLET_IO_H_
 #define TERA_IO_TABLET_IO_H_
 
+#include <functional>
 #include <list>
 #include <map>
 #include <set>
 #include <string>
 #include <vector>
-
-#include <boost/bind.hpp>
-#include <boost/function.hpp>
 
 #include "common/base/scoped_ptr.h"
 #include "common/mutex.h"
@@ -40,6 +38,11 @@ class ScanContextManager;
 
 class TabletIO {
 public:
+    enum CompactionType {
+        kManualCompaction = 1,
+        kMinorCompaction = 2,
+    };
+
     enum TabletStatus {
         kNotInit = kTabletNotInit,
         kReady = kTabletReady,
@@ -63,11 +66,14 @@ public:
         tera::Counter write_size;
     };
 
-    typedef boost::function<void (std::vector<const RowMutationSequence*>*,
-                                  std::vector<StatusCode>*)> WriteCallback;
+    typedef std::function<void (std::vector<const RowMutationSequence*>*,
+                                std::vector<StatusCode>*)> WriteCallback;
+
+    friend std::ostream& operator << (std::ostream& o, const TabletIO& tablet_io);
 
 public:
-    TabletIO(const std::string& key_start, const std::string& key_end);
+    TabletIO(const std::string& key_start, const std::string& key_end,
+             const std::string& path);
     virtual ~TabletIO();
 
     // for testing
@@ -96,8 +102,7 @@ public:
                       StatusCode* status = NULL);
     virtual bool Unload(StatusCode* status = NULL);
     virtual bool Split(std::string* split_key, StatusCode* status = NULL);
-    virtual bool Compact(int lg_no = -1, StatusCode* status = NULL);
-    bool CompactMinor(StatusCode* status = NULL);
+    virtual bool Compact(int lg_no = -1, StatusCode* status = NULL, CompactionType type = kManualCompaction);
     bool Destroy(StatusCode* status = NULL);
     virtual bool GetDataSize(uint64_t* size, std::vector<uint64_t>* lgsize = NULL,
                              StatusCode* status = NULL);
@@ -181,6 +186,8 @@ private:
 
     void SetupIteratorOptions(const ScanOptions& scan_options,
                               leveldb::ReadOptions* leveldb_opts);
+    void SetupSingleRowIteratorOptions(const std::string& row_key,
+                                       leveldb::ReadOptions* opts);
     void TearDownIteratorOptions(leveldb::ReadOptions* opts);
 
     void ProcessRowBuffer(std::list<KeyValuePair>& row_buf,
@@ -189,9 +196,10 @@ private:
                           uint32_t* buffer_size,
                           int64_t* number_limit);
 
-    StatusCode InitedScanInterator(const std::string& start_tera_key,
-                                   const ScanOptions& scan_options,
-                                   leveldb::Iterator** scan_it);
+    StatusCode InitedScanIterator(const std::string& start_tera_key,
+                                  const std::string& end_row_key,
+                                  const ScanOptions& scan_options,
+                                  leveldb::Iterator** scan_it);
 
     bool ScanRowsRestricted(const ScanTabletRequest* request,
                             ScanTabletResponse* response,
@@ -249,6 +257,7 @@ private:
     std::string tablet_path_;
     const std::string start_key_;
     const std::string end_key_;
+    const std::string short_path_;
     std::string raw_start_key_;
     std::string raw_end_key_;
     CompactStatus compact_status_;

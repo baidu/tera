@@ -29,6 +29,17 @@ void KvCompactStrategy::SetSnapshot(uint64_t snapshot) {
     snapshot_ = snapshot;
 }
 
+bool KvCompactStrategy::CheckTag(const Slice& tera_key, bool* del_tag, int64_t* ttl_tag) {
+    *del_tag = false;
+    leveldb::Slice row_key;
+    int64_t expire_timestamp;
+    raw_key_operator_->ExtractTeraKey(tera_key, &row_key, NULL, NULL,
+                                      &expire_timestamp, NULL);
+    *ttl_tag = (expire_timestamp > 0 && expire_timestamp != kLatestTs) ? (expire_timestamp * 1000000LL): -1;
+    VLOG(11) << "CheckTag, expire " << expire_timestamp << ", ttl_tag " << *ttl_tag;
+    return true;
+}
+
 bool KvCompactStrategy::Drop(const leveldb::Slice& tera_key, uint64_t n,
                              const std::string& lower_bound) {
     leveldb::Slice row_key;

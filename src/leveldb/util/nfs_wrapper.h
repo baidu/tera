@@ -40,6 +40,10 @@ struct ::dirent* Readdir(nfs::NFSDIR* dir);
 
 int Closedir(nfs::NFSDIR* dir);
 
+int SetDirOwner(const char* path);
+
+int ClearDirOwner(const char* path);
+
 int Create(const char* path);
 
 int Unlink(const char* path);
@@ -47,6 +51,8 @@ int Unlink(const char* path);
 nfs::NFSFILE* Open(const char* path, const char* mode);
 
 int Close(nfs::NFSFILE* stream);
+
+int ForceRelease(const char* path);
 
 ssize_t Read(nfs::NFSFILE* stream, void* ptr, size_t size);
 

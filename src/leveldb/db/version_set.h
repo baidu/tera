@@ -137,6 +137,13 @@ class Version {
   FileMetaData* file_to_compact_;
   int file_to_compact_level_;
 
+  // ttl strategy: ttl trigger compaction
+  FileMetaData* ttl_trigger_compact_;
+  int ttl_trigger_compact_level_;
+  // del strategy: delete trigger compaction
+  FileMetaData* del_trigger_compact_;
+  int del_trigger_compact_level_;
+
   // Level that should be compacted next and its compaction score.
   // Score < 1 means compaction is not strictly needed.  These fields
   // are initialized by Finalize().
@@ -147,6 +154,10 @@ class Version {
       : vset_(vset), next_(this), prev_(this), refs_(0),
         file_to_compact_(NULL),
         file_to_compact_level_(-1),
+        ttl_trigger_compact_(NULL),
+        ttl_trigger_compact_level_(-1),
+        del_trigger_compact_(NULL),
+        del_trigger_compact_level_(-1),
         compaction_score_(-1),
         compaction_level_(-1) {
   }
@@ -220,6 +231,7 @@ class VersionSet {
   // being compacted, or zero if there is no such log file.
   uint64_t PrevLogNumber() const { return prev_log_number_; }
 
+  double CompactionScore(uint64_t* timeout) const;
   // Pick level and inputs for a new compaction.
   // Returns NULL if there is no compaction to be done.
   // Otherwise returns a pointer to a heap-allocated object that
@@ -242,22 +254,6 @@ class VersionSet {
   // Create an iterator that reads over the compaction inputs for "*c".
   // The caller should delete the iterator when no longer needed.
   Iterator* MakeInputIterator(Compaction* c);
-
-  // Returns true iff some level needs a compaction.
-  bool NeedsCompaction() const {
-    Version* v = current_;
-    return (v->compaction_score_ >= 1) || (v->file_to_compact_ != NULL);
-  }
-
-  double CompactionScore() const {
-    Version* v = current_;
-    if (v->compaction_score_ >= 1) {
-        return v->compaction_score_;
-    } else if (v->file_to_compact_ != NULL) {
-        return 0.1f;
-    }
-    return -1.0;
-  }
 
   // Add all files listed in any live version to *live.
   // May also mutate some internal state.
@@ -343,6 +339,8 @@ class Compaction {
   // Return the level that is being compacted.  Inputs from "level"
   // and "level+1" will be merged to produce a set of "level+1" files.
   int level() const { return level_; }
+  void set_output_level(int output_level) {output_level_ = output_level;}
+  int output_level() const { return output_level_; }
 
   // Return the object that holds the edits to the descriptor done
   // by this compaction.
@@ -357,6 +355,7 @@ class Compaction {
   // Maximum size of files to build during this compaction.
   uint64_t MaxOutputFileSize() const { return max_output_file_size_; }
 
+  void SetNonTrivial(bool non_trivial);
   // Is this a trivial compaction that can be implemented by just
   // moving a single input file to the next level (no merging or splitting)
   bool IsTrivialMove() const;
@@ -389,6 +388,7 @@ class Compaction {
   explicit Compaction(int level);
 
   int level_;
+  int output_level_; // compact ouputfile should step into output_level_, use for self level compaction
   uint64_t max_output_file_size_;
   Version* input_version_;
   VersionEdit edit_;
@@ -397,7 +397,7 @@ class Compaction {
   std::vector<FileMetaData*> inputs_[2];      // The two sets of inputs
 
   // State used to check for number of of overlapping grandparent files
-  // (parent == level_ + 1, grandparent == level_ + 2)
+  // (parent == output_level_ + 1, grandparent == output_level_ + 2)
   std::vector<FileMetaData*> grandparents_;
   size_t grandparent_index_;  // Index in grandparent_starts_
   bool seen_key_;             // Some output key has been seen
@@ -417,6 +417,9 @@ class Compaction {
   // If delete mark is not less than this lower_bound, do not drop it.
   // If compaction is not on base level, this is an empty string.
   std::string drop_lower_bound_;
+
+  // support self compaction
+  bool force_non_trivial_;
 };
 
 }  // namespace leveldb

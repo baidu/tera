@@ -133,6 +133,14 @@ class DBImpl : public DB {
   Status InstallCompactionResults(CompactionState* compact)
       EXCLUSIVE_LOCKS_REQUIRED(mutex_);
 
+  // Returns:
+  //   Status OK: iff *exists == true  -> exists
+  //       iff *exists == false -> not exists
+  //   Status not OK:
+  //       1). Status::Corruption -> CURRENT lost,
+  //       2). Status::IOError    -> Maybe request timeout, don't use *exists
+  Status ParentCurrentStatus(uint64_t parent_no, bool* exists);
+
   State state_;
 
   // tera-specific
@@ -154,13 +162,12 @@ class DBImpl : public DB {
   bool owns_info_log_;
   bool owns_block_cache_;
   const std::string dbname_;
+  // Lock over the persistent DB state.  Non-NULL iff successfully acquired.
+  FileLock* db_lock_;
 
   // table_cache_ provides its own synchronization
   TableCache* table_cache_;
   bool owns_table_cache_;
-
-  // Lock over the persistent DB state.  Non-NULL iff successfully acquired.
-  FileLock* db_lock_;
 
   // State below is protected by mutex_
   port::Mutex mutex_;
@@ -191,6 +198,7 @@ class DBImpl : public DB {
   // Has a background compaction been scheduled or is running?
   bool bg_compaction_scheduled_;
   double bg_compaction_score_;
+  uint64_t bg_compaction_timeout_;
   int64_t bg_schedule_id_;
 
   // Information for a manual compaction

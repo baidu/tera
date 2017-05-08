@@ -24,6 +24,7 @@ namespace leveldb {
 
 class DBImpl;
 class MemTable;
+class FileLock;
 
 class DBTable : public DB {
 public:
@@ -179,6 +180,8 @@ private:
     const Options options_;
     const std::string dbname_;
     Env* const env_;
+    // Lock over the persistent DB state.  Non-NULL iff successfully acquired.
+    FileLock* db_lock_;
     bool created_own_lg_list_;
     bool created_own_info_log_;
     bool created_own_compact_strategy_;

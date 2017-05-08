@@ -23,6 +23,9 @@ class VersionSetBuilder;
 struct FileMetaData {
   int refs;
   int allowed_seeks;          // Seeks allowed until compaction
+  uint64_t check_ttl_ts;       // statistic: Descripe this sst file when to timeout check
+  uint64_t ttl_percentage;     // statistic: By default, if 50% entry timeout, will trigger compaction
+  uint64_t del_percentage;     // statistic: delete tag's percentage in sst
   uint64_t number;
   uint64_t file_size;         // File size in bytes
   uint64_t data_size;         // data_size <= file_size
@@ -34,6 +37,10 @@ struct FileMetaData {
   FileMetaData() :
       refs(0),
       allowed_seeks(1 << 30),
+      check_ttl_ts(0),
+      ttl_percentage(0),
+      del_percentage(0),
+      number(0),
       file_size(0),
       data_size(0),
       smallest_fake(false),
@@ -143,12 +150,18 @@ class VersionEdit {
   void AddFile(int level, uint64_t file,
                uint64_t file_size,
                const InternalKey& smallest,
-               const InternalKey& largest) {
+               const InternalKey& largest,
+               uint64_t del_percentage = 0,
+               uint64_t check_ttl_ts = 0,
+               uint64_t ttl_percentage = 0) {
     FileMetaData f;
     f.number = file;
     f.file_size = file_size;
     f.smallest = smallest;
     f.largest = largest;
+    f.del_percentage = del_percentage;
+    f.ttl_percentage = ttl_percentage;
+    f.check_ttl_ts = check_ttl_ts;
     new_files_.push_back(std::make_pair(level, f));
   }
 

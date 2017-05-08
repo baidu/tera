@@ -359,7 +359,7 @@ bool tera_table_is_get_finished(tera_table_t* table) {
     return table->rep->IsGetFinished();
 }
 
-void tera_row_mutation_put_kv(tera_row_mutation_t* mu, 
+void tera_row_mutation_put_kv(tera_row_mutation_t* mu,
                               const char* val, uint64_t vallen, int32_t ttl) {
     mu->rep->Put(std::string(val, vallen), ttl);
 }
@@ -374,6 +374,13 @@ void tera_row_mutation_put(tera_row_mutation_t* mu, const char* cf,
                            const char* qu, uint64_t qulen,
                            const char* val, uint64_t vallen) {
     mu->rep->Put(cf, std::string(qu, qulen), std::string(val, vallen));
+}
+
+void tera_row_mutation_put_with_timestamp(tera_row_mutation_t* mu, const char* cf,
+                                          const char* qu, uint64_t qulen,
+                                          int64_t timestamp,
+                                          const char* val, uint64_t vallen) {
+    mu->rep->Put(cf, std::string(qu, qulen), std::string(val, vallen), (int64_t)timestamp);
 }
 
 void tera_row_mutation_delete_column(tera_row_mutation_t* mu, const char* cf,

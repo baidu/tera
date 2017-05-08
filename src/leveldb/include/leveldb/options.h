@@ -292,6 +292,9 @@ struct Options {
   // Default: false
   bool ignore_corruption_in_compaction;
 
+  // If true, env::FileLock will be called during leveldb's load
+  bool use_file_lock;
+
   // disable write-ahead-log
   bool disable_wal;
 
@@ -305,6 +308,14 @@ struct Options {
   //       try to use lastest valid manifest
   //   3). ignore sst lost
   bool ignore_corruption_in_open;
+
+  // Statistic: By default, if 10% entry timeout, will trigger compaction
+  // Default: 10 %
+  uint64_t ttl_percentage;
+
+  // Statistic: delete tag's percentage in sst
+  // Default: 10 %
+  uint64_t del_percentage;
 
   // Create an Options object with default values for all fields.
   Options();
@@ -337,6 +348,11 @@ struct ReadOptions {
   // Default: NULL
   std::set<uint32_t>* target_lgs;
 
+  // if read a single row, optimization may be applied to this read
+  bool read_single_row;
+  std::string row_start_key;  // start key of this row
+  std::string row_end_key;    // start key of next row
+
   // db option
   const Options* db_opt;
 
@@ -345,6 +361,7 @@ struct ReadOptions {
         fill_cache(true),
         snapshot(kMaxSequenceNumber),
         target_lgs(NULL),
+        read_single_row(false),
         db_opt(db_option) {
   }
   ReadOptions() {

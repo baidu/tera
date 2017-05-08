@@ -173,14 +173,27 @@ class Version::LevelFileNumIterator : public Iterator {
  public:
   LevelFileNumIterator(const InternalKeyComparator& icmp,
                        const std::vector<FileMetaData*>* flist,
-                       const std::string& dbname)
+                       const std::string& dbname,
+                       const ReadOptions& opts)
       : icmp_(icmp),
         flist_(flist),
         dbname_(dbname),
-        index_(flist->size()) {        // Marks as invalid
+        index_(flist->size()),   // Marks as invalid
+        read_single_row_(opts.read_single_row),
+        row_start_key_(opts.row_start_key, kMaxSequenceNumber, kValueTypeForSeek),
+        row_end_key_(opts.row_end_key, kMaxSequenceNumber, kValueTypeForSeek) {
   }
   virtual bool Valid() const {
-    return index_ < flist_->size();
+    if (index_ >= flist_->size()) {
+      return false;
+    }
+    FileMetaData* f = (*flist_)[index_];
+    if (read_single_row_ &&
+        (icmp_.InternalKeyComparator::Compare(f->largest.Encode(), row_start_key_.Encode()) < 0 ||
+         icmp_.InternalKeyComparator::Compare(f->smallest.Encode(), row_end_key_.Encode()) >= 0)) {
+      return false;
+    }
+    return true;
   }
   virtual void Seek(const Slice& target) {
     index_ = FindFile(icmp_, *flist_, target);
@@ -227,6 +240,9 @@ class Version::LevelFileNumIterator : public Iterator {
   const std::vector<FileMetaData*>* const flist_;
   const std::string dbname_;
   uint32_t index_;
+  bool read_single_row_;
+  InternalKey row_start_key_;
+  InternalKey row_end_key_;
 
   // Backing store for value().  Holds the file number and size.
   mutable std::string value_buf_;
@@ -257,7 +273,7 @@ Iterator* Version::NewConcatenatingIterator(const ReadOptions& options,
   ReadOptions opts = options;
   opts.db_opt = vset_->options_;
   return NewTwoLevelIterator(
-      new LevelFileNumIterator(vset_->icmp_, &files_[level], vset_->dbname_),
+      new LevelFileNumIterator(vset_->icmp_, &files_[level], vset_->dbname_, opts),
       &GetFileIterator, vset_->table_cache_, opts);
 }
 
@@ -1021,24 +1037,27 @@ Status VersionSet::LogAndApply(VersionEdit* edit, port::Mutex* mu) {
       last_switch_manifest_ + switch_interval < env_->NowMicros()) {
     force_switch_manifest_ = true;
   }
-  // timeout cause switch or failure cause switch
-  if (force_switch_manifest_) {
-    manifest_file_number_ = NewFileNumber();
-    last_switch_manifest_ = env_->NowMicros();
-  }
 
-  std::string new_manifest_file;
+  int retry_count = 0;
   Status s;
   // Unlock during expensive MANIFEST log write
-  {
+  do {
+    s = Status::OK();
+    std::string new_manifest_file;
+    // timeout cause switch or failure cause switch
+    if (force_switch_manifest_) {
+      manifest_file_number_ = NewFileNumber();
+      last_switch_manifest_ = env_->NowMicros();
+    }
     mu->Unlock();
+
     if (force_switch_manifest_) {
       delete descriptor_log_;
       delete descriptor_file_;
       descriptor_log_ = NULL;
       descriptor_file_ = NULL;
       Log(options_->info_log, "[%s] force switch MANIFEST to %lu",
-          dbname_.c_str(), manifest_file_number_);
+        dbname_.c_str(), manifest_file_number_);
       force_switch_manifest_ = false;
     }
 
@@ -1052,9 +1071,13 @@ Status VersionSet::LogAndApply(VersionEdit* edit, port::Mutex* mu) {
       if (s.ok()) {
         descriptor_log_ = new log::Writer(descriptor_file_);
         s = WriteSnapshot(descriptor_log_);
+        if (!s.ok()) {
+          Log(options_->info_log, "[%s][dfs error] writesnapshot MANIFEST[%s] error, status[%s].\n",
+            dbname_.c_str(), new_manifest_file.c_str(), s.ToString().c_str());
+        }
       } else {
         Log(options_->info_log, "[%s][dfs error] open MANIFEST[%s] error, status[%s].\n",
-            dbname_.c_str(), new_manifest_file.c_str(), s.ToString().c_str());
+          dbname_.c_str(), new_manifest_file.c_str(), s.ToString().c_str());
       }
     }
 
@@ -1065,48 +1088,48 @@ Status VersionSet::LogAndApply(VersionEdit* edit, port::Mutex* mu) {
       s = descriptor_log_->AddRecord(record);
       if (s.ok()) {
         s = descriptor_file_->Sync();
-      }
-      if (!s.ok()) {
-        Log(options_->info_log, "[%s][dfs error] MANIFEST sync error: %s\n",
+        if (!s.ok()) {
+          Log(options_->info_log, "[%s][dfs error] MANIFEST sync error: %s\n",
             dbname_.c_str(), s.ToString().c_str());
-        if (ManifestContains(record)) {
-          Log(options_->info_log,
-              "[%s] MANIFEST contains log record despite error; advancing to new "
-              "version to prevent mismatch between in-memory and logged state",
-              dbname_.c_str());
-          s = Status::OK();
         }
+      } else {
+        Log(options_->info_log, "[%s][dfs error] AddRecord MANIFEST error: %s\n",
+          dbname_.c_str(), s.ToString().c_str());
       }
     }
 
-    // If we just created a new descriptor file, install it by writing a
-    // new CURRENT file that points to it.
     if (s.ok() && !new_manifest_file.empty()) {
       s = SetCurrentFile(env_, dbname_, manifest_file_number_);
       if (s.ok()) {
         Log(options_->info_log, "[%s] set CURRENT to %llu\n",
-            dbname_.c_str(), static_cast<unsigned long long>(manifest_file_number_));
+          dbname_.c_str(), static_cast<unsigned long long>(manifest_file_number_));
       } else {
         Log(options_->info_log, "[%s][dfs error] set CURRENT error: %s\n",
-            dbname_.c_str(), s.ToString().c_str());
+          dbname_.c_str(), s.ToString().c_str());
       }
-      // No need to double-check MANIFEST in case of error since it
-      // will be discarded below.
     }
 
-    // write manifest error, cause switch
     if (!s.ok()) {
+      force_switch_manifest_ = true;
       if (!new_manifest_file.empty()) {
-        delete descriptor_log_;
-        delete descriptor_file_;
-        descriptor_log_ = NULL;
-        descriptor_file_ = NULL;
         env_->DeleteFile(new_manifest_file);
       }
     }
 
+    // retry until success
+    if (force_switch_manifest_) {
+      retry_count++;
+      int sec = 1;
+      for (int i = 1; i < retry_count && i < 4; i++) {
+        sec *= 2;
+      }
+      Log(options_->info_log, "[%s] Waiting after %d, LogAndApply sync error: %s, retry: %d",
+        dbname_.c_str(), sec, s.ToString().c_str(), retry_count);
+      env_->SleepForMicroseconds(sec * 1000000);
+    }
+
     mu->Lock();
-  }
+  } while (force_switch_manifest_);
 
   // Install the new version
   if (s.ok()) {
@@ -1221,15 +1244,15 @@ Status VersionSet::ReadCurrentFile(uint64_t tablet, std::string* dscname) {
     }
   }
   if (manifest_set.size() < 1) {
-    Log(options_->info_log, "[%s] none available manifest file.",
+    Log(options_->info_log, "[%s] none available manifest file",
         dbname_.c_str());
     ArchiveFile(env_, CurrentFileName(pdbname));
-    return Status::Corruption("DB has none available manifest file.");
+    return Status::Corruption("DB has none available manifest file");
   }
   // select the largest manifest number
   std::set<std::string>::reverse_iterator it = manifest_set.rbegin();
   *dscname = pdbname + "/" + *it;
-  Log(options_->info_log, "[%s] use backup manifest: %s.",
+  Log(options_->info_log, "[%s] use backup manifest: %s",
       dbname_.c_str(), dscname->c_str());
   return Status::OK();
 }
@@ -1257,12 +1280,12 @@ Status VersionSet::Recover() {
       return s;
     }
   } else if (parent_size == 1) {
-    Log(options_->info_log, "[%s] generated by splitting, parent tablet: %llu",
+    Log(options_->info_log, "[%s] generated by splitting/merging, parent tablet: %llu",
         dbname_.c_str(), static_cast<unsigned long long>(options_->parent_tablets[0]));
     dscname.resize(1);
     s = ReadCurrentFile(options_->parent_tablets[0], &dscname[0]);
     if (!s.ok()) {
-      Log(options_->info_log, "[%s] fail to read current (split): %ld.",
+      Log(options_->info_log, "[%s] fail to read current (split/merge): %ld.",
           dbname_.c_str(), options_->parent_tablets[0]);
       return s;
     }
@@ -1427,9 +1450,12 @@ Status VersionSet::Recover() {
       FileMetaData* f = files[i];
       ModifyFileSize(f);
       // Debug
-      Log(options_->info_log, "[%s] recover: %s, level: %d, s: %d %s, l: %d %s\n",
+      Log(options_->info_log, "[%s] recover: %s, level: %d, del_p: %lu, check_ttl_ts %lu, ttl_p %lu, s: %d %s, l: %d %s\n",
           dbname_.c_str(),
           FileNumberDebugString(f->number).c_str(), level,
+          f->del_percentage,
+          f->check_ttl_ts,
+          f->ttl_percentage,
           f->smallest_fake, f->smallest.user_key().ToString().data(),
           f->largest_fake, f->largest.user_key().ToString().data());
     }
@@ -1487,8 +1513,13 @@ void VersionSet::Finalize(Version* v) {
   // Precomputed best level for next compaction
   int best_level = -1;
   double best_score = -1;
+  int best_del_level = -1;
+  int best_del_idx = -1;
+  int best_ttl_level = -1;
+  int best_ttl_idx = -1;
 
-  for (int level = 0; level < config::kNumLevels-1; level++) {
+  int base_level =  -1;
+  for (int level = config::kNumLevels - 1; level >= 0; level--) {
     double score;
     if (level == 0) {
       // We treat level-0 specially by bounding the number of files
@@ -1514,14 +1545,63 @@ void VersionSet::Finalize(Version* v) {
           / MaxBytesForLevel(level, options_->sst_size);
     }
 
-    if (score > best_score) {
+    // locate base level
+    if (v->files_[level].size() > 0 && base_level < 0) {
+      base_level = level;
+    }
+
+    // size compaction does not allow trigger by base level
+    if ((score > best_score) && (level < config::kNumLevels - 1)) {
       best_level = level;
       best_score = score;
+    }
+
+    for (size_t i = 0; i < v->files_[level].size(); i++) {
+      FileMetaData* f = v->files_[level][i];
+      // del compaction does not allow trigger by base level
+      if ((level > 0) && (level < base_level) &&
+          (f->del_percentage > options_->del_percentage) &&
+          (best_del_level < 0 ||
+           v->files_[best_del_level][best_del_idx]->del_percentage < f->del_percentage)) {
+        best_del_level = level;
+        best_del_idx = i;
+      }
+
+      // ttl compaction can trigger in base level
+      if ((f->check_ttl_ts > 0) &&
+          (best_ttl_level < 0 ||
+           v->files_[best_ttl_level][best_ttl_idx]->check_ttl_ts > f->check_ttl_ts)) {
+        best_ttl_level = level;
+        best_ttl_idx = i;
+      }
     }
   }
 
   v->compaction_level_ = best_level;
   v->compaction_score_ = best_score;
+  if (best_del_level >= 0) {
+    v->del_trigger_compact_ = v->files_[best_del_level][best_del_idx];
+    v->del_trigger_compact_level_ = best_del_level;
+    Log(options_->info_log,
+        "[%s] del_strategy(current), level %d, num #%lu, file_size %lu, del_p %lu\n",
+        dbname_.c_str(),
+        v->del_trigger_compact_level_,
+        (v->del_trigger_compact_->number) & 0xffffffff,
+        v->del_trigger_compact_->file_size,
+        v->del_trigger_compact_->del_percentage);
+  }
+  if (best_ttl_level >= 0) {
+    v->ttl_trigger_compact_ = v->files_[best_ttl_level][best_ttl_idx];
+    v->ttl_trigger_compact_level_ = best_ttl_level;
+    Log(options_->info_log,
+        "[%s] ttl_strategy(current), level %d, num #%lu, file_size %lu, ttl_p %lu, check_ts %lu\n",
+        dbname_.c_str(),
+        v->ttl_trigger_compact_level_,
+        (v->ttl_trigger_compact_->number) & 0xffffffff,
+        v->ttl_trigger_compact_->file_size,
+        v->ttl_trigger_compact_->ttl_percentage,
+        v->ttl_trigger_compact_->check_ttl_ts);
+  }
 }
 
 Status VersionSet::WriteSnapshot(log::Writer* log) {
@@ -1751,7 +1831,7 @@ Iterator* VersionSet::MakeInputIterator(Compaction* c) {
       } else {
         // Create concatenating iterator for the files from this level
         list[num++] = NewTwoLevelIterator(
-            new Version::LevelFileNumIterator(icmp_, &c->inputs_[which], dbname_),
+            new Version::LevelFileNumIterator(icmp_, &c->inputs_[which], dbname_, options),
             &GetFileIterator, table_cache_, options);
       }
     }
@@ -1762,6 +1842,34 @@ Iterator* VersionSet::MakeInputIterator(Compaction* c) {
   return result;
 }
 
+// timeout for micro_second
+double VersionSet::CompactionScore(uint64_t* timeout) const {
+  *timeout = 0;
+  uint64_t ts = env_->NowMicros();
+  Version* v = current_;
+  if (v->compaction_score_ >= 1) {
+    return v->compaction_score_;
+  } else if (v->del_trigger_compact_ != NULL &&
+            v->del_trigger_compact_->del_percentage > options_->del_percentage) {
+    return (double)(v->del_trigger_compact_->del_percentage / 100.0);
+  } else if (v->ttl_trigger_compact_ != NULL &&
+            ts >= v->ttl_trigger_compact_->check_ttl_ts) {
+    return (double)((v->ttl_trigger_compact_->ttl_percentage + 1) / 100.0);
+  } else if (v->file_to_compact_ != NULL) {
+    return 0.1f;
+  }
+
+  // delay task
+  if (v->ttl_trigger_compact_ != NULL &&
+     ts < v->ttl_trigger_compact_->check_ttl_ts) {
+    *timeout = (v->ttl_trigger_compact_->check_ttl_ts - ts + 1000000) / 1000;
+    return (double)((v->ttl_trigger_compact_->ttl_percentage + 1) / 100.0);
+  }
+
+  // nothing to do
+  return -1.0;
+}
+
 Compaction* VersionSet::PickCompaction() {
   Compaction* c;
   int level;
@@ -1770,6 +1878,8 @@ Compaction* VersionSet::PickCompaction() {
   // the compactions triggered by seeks.
   const bool size_compaction = (current_->compaction_score_ >= 1);
   const bool seek_compaction = (current_->file_to_compact_ != NULL);
+  const bool del_compaction = (current_->del_trigger_compact_ != NULL);
+  const bool ttl_compaction = (current_->ttl_trigger_compact_ != NULL);
   if (size_compaction) {
     level = current_->compaction_level_;
     assert(level >= 0);
@@ -1790,9 +1900,46 @@ Compaction* VersionSet::PickCompaction() {
       c->inputs_[0].push_back(current_->files_[level][0]);
     }
   } else if (seek_compaction) {
+    // compaction trigger by seek percentage
+    // TODO: multithread should lock it
     level = current_->file_to_compact_level_;
     c = new Compaction(level);
     c->inputs_[0].push_back(current_->file_to_compact_);
+  } else if (del_compaction) {
+    // compaction trigger by delete tags percentage;
+    // TODO: multithread should lock it
+    level = current_->del_trigger_compact_level_;
+    assert(level >= 0);
+    assert(level+1 < config::kNumLevels);
+    c = new Compaction(level);
+    c->SetNonTrivial(true);
+    c->inputs_[0].push_back(current_->del_trigger_compact_);
+    Log(options_->info_log,
+        "[%s] compact trigger by del stragety, level %d, num #%lu, file_size %lu, del_p %lu\n",
+        dbname_.c_str(),
+        current_->del_trigger_compact_level_,
+        (current_->del_trigger_compact_->number) & 0xffffffff,
+        current_->del_trigger_compact_->file_size,
+        current_->del_trigger_compact_->del_percentage);
+  } else if (ttl_compaction) {
+    // compaction trigger by ttl tags percentage
+    // TODO: multithread should lock it
+    level = current_->ttl_trigger_compact_level_;
+    assert(level >= 0);
+    c = new Compaction(level);
+    c->SetNonTrivial(true);
+    c->inputs_[0].push_back(current_->ttl_trigger_compact_);
+    if (level == config::kNumLevels - 1) {// level in last level
+      c->set_output_level(level);
+    }
+    Log(options_->info_log,
+        "[%s] compact trigger by ttl stragety, level %d, num #%lu, file_size %lu, ttl_p %lu, check_ts %lu\n",
+        dbname_.c_str(),
+        current_->ttl_trigger_compact_level_,
+        (current_->ttl_trigger_compact_->number) & 0xffffffff,
+        current_->ttl_trigger_compact_->file_size,
+        current_->ttl_trigger_compact_->ttl_percentage,
+        current_->ttl_trigger_compact_->check_ttl_ts);
   } else {
     return NULL;
   }
@@ -1800,7 +1947,7 @@ Compaction* VersionSet::PickCompaction() {
   c->input_version_ = current_;
   c->input_version_->Ref();
   c->max_output_file_size_ =
-      MaxFileSizeForLevel(level + 1, current_->vset_->options_->sst_size);
+      MaxFileSizeForLevel(c->output_level(), current_->vset_->options_->sst_size);
 
   // Files in level 0 may overlap each other, so pick up all overlapping ones
   if (level == 0) {
@@ -1812,18 +1959,22 @@ Compaction* VersionSet::PickCompaction() {
     current_->GetOverlappingInputs(0, &smallest, &largest, &c->inputs_[0]);
     assert(!c->inputs_[0].empty());
   }
-
   SetupOtherInputs(c);
-
+  // tera-specific: calculate the smallest rowkey which overlap with file not
+  // in this compaction.
+  SetupCompactionBoundary(c);
   return c;
 }
 
 void VersionSet::SetupOtherInputs(Compaction* c) {
+  if (c->level() == c->output_level()) { // self level compaction, should select next level
+    return;
+  }
   const int level = c->level();
   InternalKey smallest, largest;
   GetRange(c->inputs_[0], &smallest, &largest);
 
-  current_->GetOverlappingInputs(level+1, &smallest, &largest, &c->inputs_[1]);
+  current_->GetOverlappingInputs(c->output_level(), &smallest, &largest, &c->inputs_[1]);
 
   // Get entire range covered by compaction
   InternalKey all_start, all_limit;
@@ -1843,7 +1994,7 @@ void VersionSet::SetupOtherInputs(Compaction* c) {
       InternalKey new_start, new_limit;
       GetRange(expanded0, &new_start, &new_limit);
       std::vector<FileMetaData*> expanded1;
-      current_->GetOverlappingInputs(level+1, &new_start, &new_limit,
+      current_->GetOverlappingInputs(c->output_level(), &new_start, &new_limit,
                                      &expanded1);
       if (expanded1.size() == c->inputs_[1].size()) {
         Log(options_->info_log,
@@ -1867,8 +2018,8 @@ void VersionSet::SetupOtherInputs(Compaction* c) {
 
   // Compute the set of grandparent files that overlap this compaction
   // (parent == level+1; grandparent == level+2)
-  if (level + 2 < config::kNumLevels) {
-    current_->GetOverlappingInputs(level + 2, &all_start, &all_limit,
+  if (c->output_level() + 1 < config::kNumLevels) {
+    current_->GetOverlappingInputs(c->output_level() + 1, &all_start, &all_limit,
                                    &c->grandparents_);
   }
 
@@ -1886,10 +2037,7 @@ void VersionSet::SetupOtherInputs(Compaction* c) {
   // key range next time.
   compact_pointer_[level] = largest.Encode().ToString();
   c->edit_.SetCompactPointer(level, largest);
-
-  // tera-specific: calculate the smallest rowkey which overlap with file not
-  // in this compaction.
-  SetupCompactionBoundary(c);
+  return;
 }
 
 void VersionSet::SetupCompactionBoundary(Compaction* c) {
@@ -1905,15 +2053,20 @@ void VersionSet::SetupCompactionBoundary(Compaction* c) {
     }
     base_level--;
   }
-  if (base_level > c->level_ + 1) {
+  if (base_level > c->output_level()) {
     // not base level
     return;
   }
 
-  // do not need calculate input[1].
+  // consider case:
+  // level:             sst: 100---------200  sst:200--------300
+  // level + 1:         sst: 100------------------------250
+  // if use 250 as lower_bound, then 200's del tag may miss
+  // could not calculate input[1].large key.
   int input0_size = c->inputs_[0].size();
   FileMetaData* last_file = c->inputs_[0][input0_size - 1];
   c->set_drop_lower_bound(last_file->largest.user_key().ToString());
+  return;
 }
 
 Compaction* VersionSet::CompactRange(
@@ -1948,19 +2101,24 @@ Compaction* VersionSet::CompactRange(
   c->input_version_ = current_;
   c->input_version_->Ref();
   c->max_output_file_size_ =
-    MaxFileSizeForLevel(level + 1, current_->vset_->options_->sst_size);
+    MaxFileSizeForLevel(c->output_level(), current_->vset_->options_->sst_size);
   c->inputs_[0] = inputs;
   SetupOtherInputs(c);
+  // tera-specific: calculate the smallest rowkey which overlap with file not
+  // in this compaction.
+  SetupCompactionBoundary(c);
   return c;
 }
 
 Compaction::Compaction(int level)
     : level_(level),
+      output_level_(level + 1),
       max_output_file_size_(0),
       input_version_(NULL),
       grandparent_index_(0),
       seen_key_(false),
-      overlapped_bytes_(0) {
+      overlapped_bytes_(0),
+      force_non_trivial_(false) {
   for (int i = 0; i < config::kNumLevels; i++) {
     level_ptrs_[i] = 0;
   }
@@ -1972,7 +2130,13 @@ Compaction::~Compaction() {
   }
 }
 
+void Compaction::SetNonTrivial(bool non_trivial) {
+  force_non_trivial_ = non_trivial;
+}
 bool Compaction::IsTrivialMove() const {
+  if (force_non_trivial_) {
+    return false;
+  }
   // Avoid a move if there is lots of overlapping grandparent data.
   // Otherwise, the move could create a parent file that will require
   // a very expensive merge later on.
@@ -1993,7 +2157,7 @@ void Compaction::AddInputDeletions(VersionEdit* edit) {
 bool Compaction::IsBaseLevelForKey(const Slice& user_key) {
   // Maybe use binary search to find right entry instead of linear search?
   const Comparator* user_cmp = input_version_->vset_->icmp_.user_comparator();
-  for (int lvl = level_ + 2; lvl < config::kNumLevels; lvl++) {
+  for (int lvl = output_level_ + 1; lvl < config::kNumLevels; lvl++) {
     const std::vector<FileMetaData*>& files = input_version_->files_[lvl];
     for (; level_ptrs_[lvl] < files.size(); ) {
       FileMetaData* f = files[level_ptrs_[lvl]];

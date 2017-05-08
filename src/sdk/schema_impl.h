@@ -191,6 +191,9 @@ public:
     void SetAlias(const std::string& alias);
     std::string Alias() const;
 
+    static const std::string DEFAULT_LG_NAME;
+    static const std::string DEFAULT_CF_NAME;
+
 private:
     typedef std::map<std::string, LGDescImpl*> LGMap;
     typedef std::map<std::string, CFDescImpl*> CFMap;
@@ -202,8 +205,6 @@ private:
     int32_t         next_lg_id_;
     int32_t         next_cf_id_;
     std::vector<uint64_t> snapshots_;
-    static const std::string DEFAULT_LG_NAME;
-    static const std::string DEFAULT_CF_NAME;
     RawKeyType      raw_key_type_;
     int64_t         split_size_;
     int64_t         merge_size_;

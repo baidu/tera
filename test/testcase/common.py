@@ -32,6 +32,7 @@ def runcmd(cmd, ignore_status=False):
     print "stderr: "
     print err
     print "returncode: %d" % p.returncode
+    p.wait()
     ret = p.returncode
     if not ignore_status:
         assert( ret == 0 )
@@ -83,7 +84,7 @@ def cleanup():
     for f in files:
         if f.endswith('.out'):
             os.remove(f)
-            
+
 def print_debug_msg(sid=0, msg=""):
     """
     provide general print interface
@@ -180,10 +181,11 @@ def createbyfile(schema, deli=''):
 
 def rowread_table(table_name, file_path):
     allv = 'scan'
-    
+    flags = '--printable=false'
+
     tmpfile = 'tmp.file'
-    scan_cmd = '{teracli} {op} {table_name} "" "" > {out}'.format(
-        teracli=const.teracli_binary, op=allv, table_name=table_name, out=tmpfile)
+    scan_cmd = '{teracli} {flags} {op} {table_name} "" "" > {out}'.format(
+        teracli=const.teracli_binary, flags=flags, op=allv, table_name=table_name, out=tmpfile)
     print scan_cmd
     ret = subprocess.Popen(scan_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, shell=True)
     ret.communicate()
@@ -196,9 +198,9 @@ def rowread_table(table_name, file_path):
     print awk_cmd
     ret = subprocess.Popen(awk_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, shell=True)
     ret.communicate()
-    
-    rowread_cmd = 'while read line; do {teracli} get {table_name} $line; done < {out1} > {output}'.format(
-            teracli=const.teracli_binary, table_name=table_name, out1=tmpfile2, output=file_path)
+
+    rowread_cmd = 'while read line; do {teracli} {flags} get {table_name} $line; done < {out1} > {output}'.format(
+            teracli=const.teracli_binary, flags=flags, table_name=table_name, out1=tmpfile2, output=file_path)
     ret = subprocess.Popen(rowread_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, shell=True)
     ret.communicate()
 
@@ -287,16 +289,16 @@ def scan_table(table_name, file_path, allversion, snapshot=0, is_async=False):
         allv += 'scanallv'
     else:
         allv += 'scan'
-    
+
     if is_async is True:
-        async_flag = '--tera_sdk_batch_scan_enabled=true --v=30 '
+        async_flag = '--tera_sdk_batch_scan_enabled=true --v=30 --printable=false'
     else:
-        async_flag = '--tera_sdk_batch_scan_enabled=false'
-        
+        async_flag = '--tera_sdk_batch_scan_enabled=false --printable=false'
+
     snapshot_args = ''
     if snapshot != 0:
         snapshot_args += '--snapshot={snapshot}'.format(snapshot=snapshot)
-    
+
     scan_cmd = '{teracli} {flags} {op} {table_name} "" "" {snapshot} > {out}'.format(
         teracli=const.teracli_binary, flags=async_flag, op=allv, table_name=table_name, snapshot=snapshot_args, out=file_path)
     runcmd(scan_cmd)

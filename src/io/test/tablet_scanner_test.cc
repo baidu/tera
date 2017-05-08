@@ -4,9 +4,9 @@
 
 #include "io/tablet_io.h"
 
+#include <functional>
 #include <stdlib.h>
 
-#include <boost/bind.hpp>
 #include "gflags/gflags.h"
 #include "glog/logging.h"
 #include "gtest/gtest.h"
@@ -39,6 +39,10 @@ const std::string working_dir = "testdata/";
 class TabletScannerTest : public ::testing::Test {
 public:
     TabletScannerTest() {
+        session_id_ = 0;
+        last_key_= 0;
+        done_cnt_ = 0;
+
         std::string cmd = std::string("mkdir -p ") + working_dir;
         FLAGS_tera_tabletnode_path_prefix = "./";
         system(cmd.c_str());
@@ -219,7 +223,7 @@ TEST_F(TabletScannerTest, General) {
     std::string key_end = "";
     StatusCode status;
 
-    TabletIO tablet(key_start, key_end);
+    TabletIO tablet(key_start, key_end, tablet_path);
     EXPECT_TRUE(tablet.Load(GetTableSchema(), tablet_path, std::vector<uint64_t>(),
                             empty_snaphsots_, empty_rollback_, NULL, NULL, NULL, &status));
 
@@ -240,7 +244,7 @@ TEST_F(TabletScannerTest, CacheEvict) {
     std::string key_end = "";
     StatusCode status;
 
-    TabletIO tablet(key_start, key_end);
+    TabletIO tablet(key_start, key_end, tablet_path);
     EXPECT_TRUE(tablet.Load(GetTableSchema(), tablet_path, std::vector<uint64_t>(),
                             empty_snaphsots_, empty_rollback_, NULL, NULL, NULL, &status));
 
@@ -251,7 +255,7 @@ TEST_F(TabletScannerTest, CacheEvict) {
     ThreadPool pool(nr_thread);
     for (uint32_t i = 0; i < nr_thread; i++) {
         ThreadPool::Task task =
-            boost::bind(&TabletScannerTest::MultiScan, this, &tablet);
+            std::bind(&TabletScannerTest::MultiScan, this, &tablet);
         pool.AddTask(task);
     }
     pool.Stop(true);
