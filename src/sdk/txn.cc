@@ -15,11 +15,21 @@
 #include "types.h"
 #include "utils/timer.h"
 
+#include "tso/tso.h"
+
 DEFINE_bool(crash0, false, "for test");
 DEFINE_bool(crash1, false, "for test");
 DEFINE_bool(crash2, false, "for test");
+DEFINE_bool(use_real_tso, true, "for test");
 
 namespace tera {
+
+static pthread_once_t timestamporacle_once_control = PTHREAD_ONCE_INIT;
+static tera::tso::TimestampOracle* g_tso = NULL;
+void InitTimestmpOracle() {
+    // TODO we need check error!
+    g_tso = new tera::tso::TimestampOracle;
+}
 
 //----- for test
 class TimeOracle {
@@ -27,7 +37,12 @@ public:
     TimeOracle() {}
     static int64_t GetTimestamp() {
         MutexLock l(&mutex_);
-        return t_++;
+        if (FLAGS_use_real_tso) {
+            pthread_once(&timestamporacle_once_control, InitTimestmpOracle);
+            return g_tso->GetTimestamp();
+        } else {
+            return t_++;
+        }
     }
     static int64_t t_;
 private:
