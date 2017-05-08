@@ -89,6 +89,7 @@ static void InitializeCommandTable() {
 }
 
 int main(int argc, char** argv) {
+    google::ParseCommandLineFlags(&argc, &argv, true);
     if (argc == 1) {
         PrintHelp(argv[0]);
         return 0;
