@@ -216,7 +216,7 @@ bool TabletNode::LoadNextWaitTablet(TabletPtr* tablet) {
     return true;
 }
 
-bool TabletNode::TrySplit(TabletPtr tablet) {
+bool TabletNode::TrySplit(TabletPtr tablet, const std::string& split_key) {
     MutexLock lock(&mutex_);
     data_size_ -= tablet->GetDataSize();
 //    VLOG(5) << "split on: " << addr_ << ", size: " << tablet->GetDataSize()
@@ -226,29 +226,36 @@ bool TabletNode::TrySplit(TabletPtr tablet) {
         ++onsplit_count_;
         return true;
     }
-    if (std::find(wait_split_list_.begin(), wait_split_list_.end(), tablet) ==
-        wait_split_list_.end()) {
-        wait_split_list_.push_back(tablet);
+    std::list<std::pair<TabletPtr, std::string> >::iterator it;
+    for (it = wait_split_list_.begin(); it != wait_split_list_.end(); ++it) {
+        if (it->first == tablet) {
+            return false;
+        }
     }
+    if (it == wait_split_list_.end()) {
+        wait_split_list_.push_back(std::make_pair(tablet, split_key));
+    }
+
     return false;
 }
 
-bool TabletNode::FinishSplit(TabletPtr tablet) {
+bool TabletNode::FinishSplit() {
     MutexLock lock(&mutex_);
     --onsplit_count_;
     return true;
 }
 
-bool TabletNode::SplitNextWaitTablet(TabletPtr* tablet) {
+bool TabletNode::SplitNextWaitTablet(TabletPtr* tablet, std::string* split_key) {
     MutexLock lock(&mutex_);
     if (onsplit_count_ >= static_cast<uint32_t>(FLAGS_tera_master_max_split_concurrency)) {
         return false;
     }
-    std::list<TabletPtr>::iterator it = wait_split_list_.begin();
+    std::list<std::pair<TabletPtr, std::string> >::iterator it = wait_split_list_.begin();
     if (it == wait_split_list_.end()) {
         return false;
     }
-    *tablet = *it;
+    *tablet = it->first;
+    *split_key = it->second;
     wait_split_list_.pop_front();
     ++onsplit_count_;
     return true;

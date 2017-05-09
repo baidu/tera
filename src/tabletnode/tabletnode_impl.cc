@@ -803,7 +803,8 @@ void TabletNodeImpl::SplitTablet(const SplitTabletRequest* request,
                                  google::protobuf::Closure* done) {
     response->set_sequence_id(request->sequence_id());
 
-    std::string split_key, path;
+    std::string split_key = request->split_key();
+    std::string path;
     StatusCode status = kTabletNodeOk;
     io::TabletIO* tablet_io = tablet_manager_->GetTablet(request->tablet_name(),
                                                 request->key_range().key_start(),
@@ -823,7 +824,7 @@ void TabletNodeImpl::SplitTablet(const SplitTabletRequest* request,
         LOG(ERROR) << "fail to split tablet: " << tablet_io->GetTablePath()
             << " [" << DebugString(tablet_io->GetStartKey())
             << ", " << DebugString(tablet_io->GetEndKey())
-            << "], status: " << StatusCodeToString(status);
+            << "], split_key: " << DebugString(split_key) << ". status: " << StatusCodeToString(status);
         if (status == kTableNotSupport) {
             response->set_status(kTableNotSupport);
         } else {

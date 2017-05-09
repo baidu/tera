@@ -460,29 +460,30 @@ bool TabletIO::Split(std::string* split_key, StatusCode* status) {
         db_ref_count_++;
     }
 
-    std::string raw_split_key;
-    split_key->clear();
-    if (db_->FindSplitKey(0.5, &raw_split_key)) {
-        ParseRowKey(raw_split_key, split_key);
-    }
-
-    if (split_key->empty() || *split_key == end_key_) {
-        // could not find split_key, try calc average key
-        std::string smallest_key, largest_key;
-        CHECK(db_->FindKeyRange(&smallest_key, &largest_key));
-
-        std::string srow_key, lrow_key;
-        if (!smallest_key.empty()) {
-            ParseRowKey(smallest_key, &srow_key);
-        } else {
-            srow_key = start_key_;
+    if (split_key->empty()) {
+        std::string raw_split_key;
+        if (db_->FindSplitKey(0.5, &raw_split_key)) {
+            ParseRowKey(raw_split_key, split_key);
         }
-        if (!largest_key.empty()) {
-            ParseRowKey(largest_key, &lrow_key);
-        } else {
-            lrow_key = end_key_;
+
+        if (split_key->empty() || *split_key == end_key_) {
+            // could not find split_key, try calc average key
+            std::string smallest_key, largest_key;
+            CHECK(db_->FindKeyRange(&smallest_key, &largest_key));
+
+            std::string srow_key, lrow_key;
+            if (!smallest_key.empty()) {
+                ParseRowKey(smallest_key, &srow_key);
+            } else {
+                srow_key = start_key_;
+            }
+            if (!largest_key.empty()) {
+                ParseRowKey(largest_key, &lrow_key);
+            } else {
+                lrow_key = end_key_;
+            }
+            FindAverageKey(srow_key, lrow_key, split_key);
         }
-        FindAverageKey(srow_key, lrow_key, split_key);
     }
 
     VLOG(5) << "start: [" << DebugString(start_key_)
@@ -492,8 +493,8 @@ bool TabletIO::Split(std::string* split_key, StatusCode* status) {
     MutexLock lock(&mutex_);
     db_ref_count_--;
     if (*split_key != ""
-        && *split_key != start_key_
-        && *split_key != end_key_) {
+        && *split_key > start_key_
+        && (end_key_ == "" || *split_key < end_key_)) {
         status_ = kSplited;
         return true;
     } else {

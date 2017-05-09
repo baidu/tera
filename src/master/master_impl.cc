@@ -1495,9 +1495,9 @@ void MasterImpl::TabletCmdCtrl(const CmdCtrlRequest* request,
         std::string split_key;
         if (request->arg_list_size() == 3) {
             split_key = request->arg_list(2);
-            LOG(INFO) << "ignore user specified split key: not support";
+            LOG(INFO) << "User specified split key: " << split_key;
         }
-        TrySplitTablet(tablet);
+        TrySplitTablet(tablet, split_key);
         response->set_status(kMasterOk);
     } else if (request->arg_list(0) == "merge") {
         if (request->arg_list_size() > 3) {
@@ -2704,15 +2704,16 @@ void MasterImpl::UnloadTabletCallback(TabletPtr tablet, int32_t retry,
             TabletNodePtr node;
             if (tabletnode_manager_->FindTabletNode(server_addr, &node)
                 && node->uuid_ == tablet->GetServerId()) {
-                node->FinishSplit(tablet);
+                node->FinishSplit();
                 TabletPtr next_tablet;
-                while (node->SplitNextWaitTablet(&next_tablet)) {
+                std::string split_key;
+                while (node->SplitNextWaitTablet(&next_tablet, &split_key)) {
                     if (next_tablet->SetStatusIf(kTableOnSplit, kTableReady)) {
                         next_tablet->SetServerId(node->uuid_);
-                        SplitTabletAsync(next_tablet);
+                        SplitTabletAsync(next_tablet, split_key);
                         break;
                     }
-                    node->FinishSplit(next_tablet);
+                    node->FinishSplit();
                 }
             }
         }
@@ -3647,7 +3648,7 @@ void MasterImpl::RetryCollectTabletInfo(std::string addr,
     QueryTabletNodeAsync(addr, FLAGS_tera_master_collect_info_timeout, false, done);
 }
 
-void MasterImpl::SplitTabletAsync(TabletPtr tablet) {
+void MasterImpl::SplitTabletAsync(TabletPtr tablet, const std::string& split_key) {
     const std::string& table_name = tablet->GetTableName();
     const std::string& server_addr = tablet->GetServerAddr();
     const std::string& key_start = tablet->GetKeyStart();
@@ -3664,6 +3665,7 @@ void MasterImpl::SplitTabletAsync(TabletPtr tablet) {
     request->mutable_key_range()->set_key_end(key_end);
     request->add_child_tablets(tablet->GetTable()->GetNextTabletNo());
     request->add_child_tablets(tablet->GetTable()->GetNextTabletNo());
+    request->set_split_key(split_key);
 
     tablet->ToMeta(request->mutable_tablet_meta());
     std::vector<uint64_t> snapshots;
@@ -3724,17 +3726,18 @@ void MasterImpl::SplitTabletCallback(TabletPtr tablet,
     TabletNodePtr node;
     if (tabletnode_manager_->FindTabletNode(server_addr, &node)
         && node->uuid_ == tablet->GetServerId()) {
-        node->FinishSplit(tablet);
+        node->FinishSplit();
 
         // schedule next split task
         TabletPtr next_tablet;
-        while (node->SplitNextWaitTablet(&next_tablet)) {
+        std::string split_key;
+        while (node->SplitNextWaitTablet(&next_tablet, &split_key)) {
             if (next_tablet->SetStatusIf(kTableOnSplit, kTableReady)) {
                 next_tablet->SetServerId(node->uuid_);
-                SplitTabletAsync(next_tablet);
+                SplitTabletAsync(next_tablet, split_key);
                 break;
             }
-            node->FinishSplit(next_tablet);
+            node->FinishSplit();
         }
     } else { // server down or restart
         if (tablet->SetStatusIf(kTableOffLine, kTableReady)) {
@@ -3940,7 +3943,7 @@ void MasterImpl::RetryUnloadTablet(TabletPtr tablet, int32_t retry_times) {
     UnloadTabletAsync(tablet, done);
 }
 
-bool MasterImpl::TrySplitTablet(TabletPtr tablet) {
+bool MasterImpl::TrySplitTablet(TabletPtr tablet, const std::string& split_key) {
     const std::string& server_addr = tablet->GetServerAddr();
 
     // abort if server down
@@ -3951,7 +3954,7 @@ bool MasterImpl::TrySplitTablet(TabletPtr tablet) {
     }
 
     // delay split
-    if (!node->TrySplit(tablet)) {
+    if (!node->TrySplit(tablet, split_key)) {
         LOG(INFO) << "delay split table " << tablet->GetPath()
             << ", too many tablets are splitting on server: " << server_addr;
         return false;
@@ -3965,7 +3968,7 @@ bool MasterImpl::TrySplitTablet(TabletPtr tablet) {
     // if server down here, let split callback take care of status switch
     LOG(INFO) << "begin split table " << tablet->GetPath();
     tablet->SetServerId(node->uuid_);
-    SplitTabletAsync(tablet);
+    SplitTabletAsync(tablet, split_key);
     return true;
 }
 
