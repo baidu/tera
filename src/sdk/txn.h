@@ -46,12 +46,12 @@ private:
                                      const std::string& primary_info);
     ErrorCode Prewrite(RowMutation* w, RowMutation* primary);
 
-    bool LockExists(tera::Transaction* single_row_txn, RowMutation* mu);
+    bool LockExistsOrUnknown(tera::Transaction* single_row_txn, RowMutation* mu);
     void BuildRowReaderForCommit(RowMutation* user_mu, RowReader* reader);
     void BuildRowMutationForCommit(RowMutation* user_mu, RowMutation* txn_mu, int64_t commit_ts);
 
     void CheckPrimaryLockAndTimestamp(RowReader* reader, const std::string& cf, const std::string& qu,
-                                            bool* lock_exists, int64_t* lock_timestamp);
+                                      bool* lock_exists, int64_t* lock_timestamp);
     bool MaybePrimaryLockTimeout(int64_t ts);
     bool CleanupLockAndData(Transaction* single_row_txn,
                             RowReader* reader,
@@ -59,9 +59,9 @@ private:
                             const std::string& cf,
                             const std::string& qu,
                             int64_t start_ts);
-    void RollForwardThisCell(tera::Transaction* target_row_txn, RowReader* reader,
-                             const std::string& cf, const std::string qu,
-                             int64_t start_ts, int64_t commit_ts);
+    void RollForwardCell(tera::Transaction* target_row_txn, RowReader* reader,
+                         const std::string& cf, const std::string qu,
+                         int64_t start_ts, int64_t commit_ts);
     void BackoffAndMaybeCleanupLock(tera::Transaction* target_row_txn, RowReader* user_reader, const std::string& primary_info,
                                     const std::string& cf, const std::string& qu, int64_t last_txn_start_ts);
     bool IsLockedBeforeMe(RowReader* user_reader, RowReader* txn_reader, std::string* primary,

@@ -4,18 +4,19 @@
 
 #include <boost/bind.hpp>
 
-#include "common/thread_pool.h"
 #include "common/base/string_format.h"
+#include "common/thread_pool.h"
 
 #include "io/coding.h"
 #include "sdk/read_impl.h"
-#include "sdk/txn.h"
 #include "sdk/single_row_txn.h"
 #include "sdk/table_impl.h"
+#include "sdk/txn.h"
+#include "tso/tso.h"
 #include "types.h"
 #include "utils/timer.h"
 
-#include "tso/tso.h"
+DEFINE_int64(tera_txn_primary_lock_timeout_in_us, 10000000, "");
 
 DEFINE_bool(crash0, false, "for test");
 DEFINE_bool(crash1, false, "for test");
@@ -31,7 +32,6 @@ void InitTimestmpOracle() {
     g_tso = new tera::tso::TimestampOracle;
 }
 
-//----- for test
 class TimeOracle {
 public:
     TimeOracle() {}
@@ -44,13 +44,13 @@ public:
             return t_++;
         }
     }
+    //----- for test
     static int64_t t_;
 private:
     static Mutex mutex_;
 };
 int64_t TimeOracle::t_ = 42;
 Mutex TimeOracle::mutex_;
-//----- for test
 
 Transaction* NewTransaction(int64_t ts) {
     // XXX for test
@@ -84,7 +84,7 @@ static std::string WriteColumnName(const std::string& c) {
     return c + "__w__"; // write
 }
 
-std::string Int64EncodedString(int64_t n) {
+std::string Int64ToEncodedString(int64_t n) {
     char buf[sizeof(int64_t)];
     io::EncodeBigEndian(buf, n);
     std::string s;
@@ -93,21 +93,19 @@ std::string Int64EncodedString(int64_t n) {
 }
 
 int64_t EncodedStringToInt64(const std::string& s) {
+    // TODO invalid input?
     return io::DecodeBigEndain(s.c_str());
 }
 
 void MultiRowTxn::BuildReaderForPrewrite(RowMutation* w, RowReader* reader) {
-    // reader->SetTimeRange(0, kLatestTimestamp);
     for (size_t i = 0; i < w->MutationNum(); i++) {
-        const RowMutation::Mutation& mu = w->GetMutation(i); // 1 colomn
+        const RowMutation::Mutation& mu = w->GetMutation(i); // one cell
         if (mu.type == RowMutation::kPut) {
             reader->AddColumn(mu.family, mu.qualifier);
             reader->AddColumn(mu.family, WriteColumnName(mu.qualifier));
             reader->AddColumn(mu.family, LockColumnName(mu.qualifier));
         } else if (mu.type == RowMutation::kDeleteColumn) {
-
         } else {
-
         }
     }
 }
@@ -129,25 +127,22 @@ void MultiRowTxn::BuildRowMutationForPrewrite(RowMutation* user_mu,
                                               RowMutation* txn_mu,
                                               const std::string& primary_info) {
     for (size_t i = 0; i < user_mu->MutationNum(); i++) {
-        const RowMutation::Mutation& mu = user_mu->GetMutation(i); // 1 colomn
+        const RowMutation::Mutation& mu = user_mu->GetMutation(i); // one cell
         if (mu.type == RowMutation::kPut) {
             txn_mu->Put(mu.family, LockColumnName(mu.qualifier), primary_info, (int64_t)start_ts_);
             txn_mu->Put(mu.family, mu.qualifier, mu.value, (int64_t)start_ts_);
-            //LOG(ERROR) << "prewrite family:" << mu.family << ", qualifier:" << mu.qualifier
+            //VLOG(12) << "prewrite family:" << mu.family << ", qualifier:" << mu.qualifier
             //    << ", value:" << mu.value;
         } else if (mu.type == RowMutation::kDeleteColumn) {
-
         } else {
-
         }
     }
 }
 
-// TODO merge IsWritingByOthers() & IsLockedByOthers()
 // return true: this row is been writing by others
 bool MultiRowTxn::IsWritingByOthers(RowMutation* row_mu, RowReader* reader) {
     if (reader->GetError().GetType() == tera::ErrorCode::kNotFound) {
-        LOG(ERROR) << "IsWritingByOthers not found";
+        VLOG(12) << "reader not found";
         return false;
     }
     assert(reader->GetError().GetType() == tera::ErrorCode::kOK);
@@ -156,19 +151,19 @@ bool MultiRowTxn::IsWritingByOthers(RowMutation* row_mu, RowReader* reader) {
 
     // check every cell
     for (size_t i = 0; i < row_mu->MutationNum(); i++) {
-        const RowMutation::Mutation& mu = row_mu->GetMutation(i); // 1 cell
+        const RowMutation::Mutation& mu = row_mu->GetMutation(i); // one cell
         if (row.find(mu.family) == row.end()) {
-            LOG(ERROR) << "not found columnfamily";
+            VLOG(12) << "columnfamily not found";
             return false;
         }
         if (row[mu.family].find(WriteColumnName(mu.qualifier)) == row[mu.family].end()) {
-            LOG(ERROR) << "not found qualifier";
+            VLOG(12) << "qualifier not found";
             return false;
         }
         for (RowReader::TColumn::reverse_iterator k = row[mu.family][WriteColumnName(mu.qualifier)].rbegin();
              k != row[mu.family][WriteColumnName(mu.qualifier)].rend();
              ++k) {
-            LOG(ERROR) << "write pointer:" <<  k->first << ":" << EncodedStringToInt64(k->second);
+            VLOG(12) << "write-pointer: " <<  k->first << ":" << EncodedStringToInt64(k->second);
             if (k->first >= start_ts_) {
                 return true;
             }
@@ -180,7 +175,7 @@ bool MultiRowTxn::IsWritingByOthers(RowMutation* row_mu, RowReader* reader) {
 // return true: this row is locked by others
 bool MultiRowTxn::IsLockedByOthers(RowMutation* row_mu, RowReader* reader) {
     if (reader->GetError().GetType() == tera::ErrorCode::kNotFound) {
-        LOG(ERROR) << "IsLockedByOthers not found";
+        VLOG(12) << "reader not found";
         return false;
     }
     assert(reader->GetError().GetType() == tera::ErrorCode::kOK);
@@ -191,17 +186,17 @@ bool MultiRowTxn::IsLockedByOthers(RowMutation* row_mu, RowReader* reader) {
     for (size_t i = 0; i < row_mu->MutationNum(); i++) {
         const RowMutation::Mutation& mu = row_mu->GetMutation(i); // 1 cell
         if (row.find(mu.family) == row.end()) {
-            LOG(ERROR) << "not found cfamily";
+            VLOG(12) << "columnfamily not found";
             return false;
         }
         if (row[mu.family].find(LockColumnName(mu.qualifier)) == row[mu.family].end()) {
-            LOG(ERROR) << "not found qualifier";
+            VLOG(12) << "qualifier not found";
             return false;
         }
         for (RowReader::TColumn::reverse_iterator k = row[mu.family][LockColumnName(mu.qualifier)].rbegin();
              k != row[mu.family][LockColumnName(mu.qualifier)].rend();
              ++k) {
-            LOG(ERROR) << k->first << ":" << k->second;
+            VLOG(12) << "lock: " << k->first << ":" << k->second;
             return true;
         }
     }
@@ -216,9 +211,8 @@ ErrorCode MultiRowTxn::Prewrite(RowMutation* w, RowMutation* primary) {
     RowReader* reader = table->NewRowReader(w->RowKey());
     BuildReaderForPrewrite(w, reader);
     single_row_txn->Get(reader);
-    // TODO check error
     if (reader->GetError().GetType() == tera::ErrorCode::kNotFound) {
-        LOG(ERROR) << "prewrite read notfound:" << reader->GetError().GetReason();
+        VLOG(12) << "prewrite-read notfound:" << reader->GetError().GetReason();
     } else if (reader->GetError().GetType() != tera::ErrorCode::kOK) {
         status.SetFailed(ErrorCode::kSystem, "fail to read in prewrite");
         return status;
@@ -249,52 +243,50 @@ ErrorCode MultiRowTxn::Prewrite(RowMutation* w, RowMutation* primary) {
 
 void MultiRowTxn::BuildRowMutationForCommit(RowMutation* user_mu, RowMutation* txn_mu, int64_t commit_ts) {
     for (size_t i = 0; i < user_mu->MutationNum(); i++) {
-        const RowMutation::Mutation& mu = user_mu->GetMutation(i); // 1 cell
+        const RowMutation::Mutation& mu = user_mu->GetMutation(i); // one cell
         if (mu.type == RowMutation::kPut) {
             txn_mu->Put(mu.family,
                         WriteColumnName(mu.qualifier),
-                        Int64EncodedString(start_ts_),  // value
-                        commit_ts);   // cell timestamp
+                        Int64ToEncodedString(start_ts_),  // value
+                        commit_ts);                       // cell timestamp
             txn_mu->DeleteColumn(mu.family,
                                  LockColumnName(mu.qualifier),
                                  commit_ts);
         } else if (mu.type == RowMutation::kDeleteColumn) {
-
         } else {
-
         }
     }
 }
 
 void MultiRowTxn::BuildRowReaderForCommit(RowMutation* user_mu, RowReader* reader) {
     assert(user_mu->MutationNum() > 0);
-    const RowMutation::Mutation& mu = user_mu->GetMutation(0); // 1 cell
+    const RowMutation::Mutation& mu = user_mu->GetMutation(0); // one cell
     reader->AddColumn(mu.family, LockColumnName(mu.qualifier));
 }
 
 // return true: there is a txn-lock
-bool MultiRowTxn::LockExists(tera::Transaction* single_row_txn, RowMutation* row_mu) {
+bool MultiRowTxn::LockExistsOrUnknown(tera::Transaction* single_row_txn, RowMutation* row_mu) {
     RowReader* reader = row_mu->GetTable()->NewRowReader(row_mu->RowKey());
     BuildRowReaderForCommit(row_mu, reader);
     single_row_txn->Get(reader);
 
     if (reader->GetError().GetType() == tera::ErrorCode::kNotFound) {
-        LOG(ERROR) << "not found";
+        VLOG(12) << "reader not found";
         return false;
     }
     assert(reader->GetError().GetType() == tera::ErrorCode::kOK);
     RowReader::TRow row;
     reader->ToMap(&row);
 
-    const RowMutation::Mutation& mu = row_mu->GetMutation(0); // 1 cell
+    const RowMutation::Mutation& mu = row_mu->GetMutation(0); // one cell
     if (row.find(mu.family) == row.end()) {
-        LOG(ERROR) << "not found cfamily";
+        VLOG(12) << "columnfamily not found";
         return false;
     }
     for (RowReader::TColumn::reverse_iterator k = row[mu.family][LockColumnName(mu.qualifier)].rbegin();
          k != row[mu.family][LockColumnName(mu.qualifier)].rend();
          ++k) {
-        LOG(ERROR) << "LockExists " << k->first << ":" << k->second;
+        VLOG(12) << "LockExistsOrUnknown " << k->first << ":" << k->second;
         if (k->first != start_ts_) {
             return false;
         } else {
@@ -314,10 +306,10 @@ ErrorCode MultiRowTxn::Commit() {
     std::vector<RowMutation*> secondaries(writes_.begin() + 1, writes_.end());
     status = Prewrite(primary, primary);
     if (status.GetType() != tera::ErrorCode::kOK) {
-        LOG(ERROR) << status.GetReason();
+        VLOG(12) << status.GetReason();
         return status;
     }
-    LOG(ERROR) << "prewrite primary done";
+    VLOG(12) << "prewrite primary done";
     if (FLAGS_crash0) {
         exit(66);
     }
@@ -325,7 +317,8 @@ ErrorCode MultiRowTxn::Commit() {
     for (size_t i = 0; i < secondaries.size(); i++) {
         status = Prewrite(secondaries[i], primary);
         if (status.GetType() != tera::ErrorCode::kOK) {
-            LOG(ERROR) << status.GetReason() << " | key: " <<  secondaries[i]->RowKey();
+            VLOG(12) << status.GetReason() << " | key: " <<  secondaries[i]->RowKey();
+            // TODO try to clean legacy env
             return status;
         }
     }
@@ -333,14 +326,14 @@ ErrorCode MultiRowTxn::Commit() {
         exit(66);
     }
 
-    LOG(ERROR) << "prewrite done";
+    VLOG(12) << "prewrite done";
     int64_t commit_ts = TimeOracle::GetTimestamp();
 
 
     // commit primary first
     Table* table = primary->GetTable();
     tera::Transaction* single_row_txn = table->StartRowTransaction(primary->RowKey());
-    if (!LockExists(single_row_txn, primary)) {
+    if (!LockExistsOrUnknown(single_row_txn, primary)) {
         status.SetFailed(ErrorCode::kSystem, "maybe lock already erased by others");
         return status;
     }
@@ -353,10 +346,10 @@ ErrorCode MultiRowTxn::Commit() {
     delete txn_primary;
     delete single_row_txn;
     if (status.GetType() != tera::ErrorCode::kOK) {
-        LOG(ERROR) << "commit primary fail";
+        VLOG(12) << "commit primary fail";
         return status;
     }
-    LOG(ERROR) << "commit primary ok";
+    VLOG(12) << "commit primary done";
     if (FLAGS_crash2) {
         exit(66);
     }
@@ -380,7 +373,7 @@ void MultiRowTxn::ApplyMutation(RowMutation* row_mu) {
 // return true: primary lock already timeout
 bool MultiRowTxn::MaybePrimaryLockTimeout(int64_t ts) {
     int64_t now = get_micros();
-    return (now - ts) > 10000000; // timeout in us
+    return (now - ts) > FLAGS_tera_txn_primary_lock_timeout_in_us;
 }
 
 // return true: clean lock & data ok
@@ -399,7 +392,7 @@ bool MultiRowTxn::CleanupLockAndData(Transaction* single_row_txn,
     table->CommitRowTransaction(single_row_txn);
     ErrorCode status = single_row_txn->GetError();
     if (status.GetType() != tera::ErrorCode::kOK) {
-        LOG(ERROR) << "cleanup primary lock failed:"
+        VLOG(12) << "cleanup primary lock failed:"
             << row << ":" << cf << ":" << qu << " for:" << status.GetReason();
         delete mu;
         return false;
@@ -408,32 +401,32 @@ bool MultiRowTxn::CleanupLockAndData(Transaction* single_row_txn,
     return true;
 }
 
-void MultiRowTxn::RollForwardThisCell(tera::Transaction* target_row_txn, RowReader* reader,
-                                      const std::string& cf, const std::string qu,
-                                      int64_t start_ts, int64_t commit_ts) {
+void MultiRowTxn::RollForwardCell(tera::Transaction* target_row_txn, RowReader* reader,
+                                  const std::string& cf, const std::string qu,
+                                  int64_t start_ts, int64_t commit_ts) {
     RowMutation* mu = reader->GetTable()->NewRowMutation(reader->RowKey());
-    mu->Put(cf, WriteColumnName(qu), Int64EncodedString(start_ts), commit_ts);
+    mu->Put(cf, WriteColumnName(qu), Int64ToEncodedString(start_ts), commit_ts);
     mu->DeleteColumn(cf, LockColumnName(qu), commit_ts);
     target_row_txn->ApplyMutation(mu);
     reader->GetTable()->CommitRowTransaction(target_row_txn);
     if (target_row_txn->GetError().GetType() != tera::ErrorCode::kOK) {
-        LOG(ERROR) << "RollForwardThisCell failed";
+        VLOG(12) << "RollForwardCell failed";
     }
     delete mu;
 }
 
 void MultiRowTxn::CheckPrimaryLockAndTimestamp(RowReader* reader, const std::string& cf, const std::string& qu,
-                                                     bool* lock_exists, int64_t* lock_timestamp) {
+                                               bool* lock_exists, int64_t* lock_timestamp) {
     RowReader::TRow row;
     reader->ToMap(&row);
     if (row.find(cf) == row.end()) {
-        LOG(ERROR) << "lock not found";
+        VLOG(12) << "lock not found";
         *lock_exists = false;
     } else if (row[cf].find(LockColumnName(qu)) == row[cf].end()) {
-        LOG(ERROR) << "lock not found";
+        VLOG(12) << "lock not found";
         *lock_exists = false;
     } else {
-        LOG(ERROR) << "lock exists";
+        VLOG(12) << "lock exists";
         *lock_exists = true;
     }
     if (row.find(cf) != row.end()) {
@@ -441,13 +434,13 @@ void MultiRowTxn::CheckPrimaryLockAndTimestamp(RowReader* reader, const std::str
             for (RowReader::TColumn::reverse_iterator k = row[cf][LockColumnName(qu)].rbegin();
                  k != row[cf][LockColumnName(qu)].rend(); ++k) {
                 *lock_timestamp = k->first;
-                LOG(ERROR) << "lock_timestamp:" <<  k->first;
+                VLOG(12) << "lock_timestamp:" <<  k->first;
             }
         } else {
-            LOG(ERROR) << "lock-qu not found";
+            VLOG(12) << "lock-qu not found";
         }
     } else {
-        LOG(ERROR) << "lock-cf not found";
+        VLOG(12) << "lock-cf not found";
     }
 }
 
@@ -498,7 +491,7 @@ bool IfPrimaryCommittedThenGetCommitTimestamp(RowReader* primary_reader, const s
          k != row[family][WriteColumnName(qualifier)].rend(); ++k) {
         int64_t tmp_commit_ts = k->first;
         int64_t tmp_start_ts = EncodedStringToInt64(k->second);
-        LOG(ERROR) << "someone txn commit_ts:" << tmp_commit_ts << ", start_ts:" << tmp_start_ts;
+        VLOG(12) << "someone txn commit_ts:" << tmp_commit_ts << ", start_ts:" << tmp_start_ts;
         if (tmp_start_ts == last_txn_start_ts) {
             *commit_ts = tmp_commit_ts;
             *is_commited = true;
@@ -516,7 +509,7 @@ void MultiRowTxn::BackoffAndMaybeCleanupLock(tera::Transaction* target_row_txn, 
 
     MultiRowTxnPrimaryLockInfo primary;
     primary.ParseFromString(primary_info);
-    LOG(ERROR) << "primary: " << primary.row() << ":" << primary.family() << ":"
+    VLOG(12) << "primary: " << primary.row() << ":" << primary.family() << ":"
         << primary.qualifier();
     Table* table = user_reader->GetTable(); // TODO cross-table
     tera::Transaction* primary_row_txn = table->StartRowTransaction(primary.row());
@@ -528,12 +521,12 @@ void MultiRowTxn::BackoffAndMaybeCleanupLock(tera::Transaction* target_row_txn, 
     ErrorCode status = primary_reader->GetError();
     if ((status.GetType() != tera::ErrorCode::kOK)
         && (status.GetType() != tera::ErrorCode::kNotFound)) {
-        LOG(ERROR) << "IO ERROR: fail to read primary lock info";
+        VLOG(12) << "IO ERROR: fail to read primary lock info";
         delete primary_row_txn;
         return;
     }
     while (!primary_reader->Done()) {
-        LOG(ERROR) << "primary reader:" << primary_reader->RowKey() << ":" << primary_reader->Family()
+        VLOG(12) << "primary reader:" << primary_reader->RowKey() << ":" << primary_reader->Family()
             << ":" << primary_reader->Qualifier() << ":" << primary_reader->Timestamp() << ":" << primary_reader->Value();
         primary_reader->Next();
     }
@@ -542,19 +535,19 @@ void MultiRowTxn::BackoffAndMaybeCleanupLock(tera::Transaction* target_row_txn, 
     CheckPrimaryLockAndTimestamp(primary_reader, primary.family(), primary.qualifier(), &lock_exists, &lock_timestamp);
     if (lock_exists && (lock_timestamp == last_txn_start_ts)) {
         if (MaybePrimaryLockTimeout(primary.timestamp())) {
-            LOG(ERROR) << "clean legacy lock & data";
+            VLOG(12) << "clean legacy lock & data";
             if (CleanupLockAndData(primary_row_txn, primary_reader,
                                    primary.row(), primary.family(), primary.qualifier(), lock_timestamp)) {
                 if (!IsSameCell(primary.row(), primary.family(), primary.qualifier(),
                                 user_reader->RowKey(), cf, qu)) {
-                    LOG(ERROR) << "clean primary done, then clean this cell";
+                    VLOG(12) << "clean primary done, then clean this cell";
                     CleanupLockAndData(target_row_txn, user_reader,
                                        user_reader->RowKey(), cf, qu, lock_timestamp);
                 }
             }
         } else {
             // primary txn is live, wait
-            LOG(ERROR) << "wait primary lock";
+            VLOG(12) << "wait primary lock";
             sleep(2);
         }
     } else {
@@ -562,16 +555,16 @@ void MultiRowTxn::BackoffAndMaybeCleanupLock(tera::Transaction* target_row_txn, 
         bool is_primary_commited = false;
         if (!IfPrimaryCommittedThenGetCommitTimestamp(primary_reader, primary.family(), primary.qualifier(),
                                                       last_txn_start_ts, &is_primary_commited, &commit_ts)) {
-            LOG(ERROR) << "IO ERROR, retry later";
+            VLOG(12) << "IO ERROR, retry later";
         } else {
             if (is_primary_commited) {
                 // primary committed, so roll forward this cell
-                LOG(ERROR) << "primary has commited, so rollforward this cell, star_ts:"
+                VLOG(12) << "primary has commited, so rollforward this cell, star_ts:"
                     << last_txn_start_ts << ", commit_ts:"<< commit_ts;
-                RollForwardThisCell(target_row_txn, user_reader, cf, qu, last_txn_start_ts, commit_ts);
+                RollForwardCell(target_row_txn, user_reader, cf, qu, last_txn_start_ts, commit_ts);
             } else {
                 // primary lock has beed cleaned, so clean this cell
-                LOG(ERROR) << "primary has been cleaned, so clean this cell";
+                VLOG(12) << "primary has been cleaned, so clean this cell";
                 CleanupLockAndData(target_row_txn, user_reader, user_reader->RowKey(),
                                    cf, qu, last_txn_start_ts);
             }
@@ -593,21 +586,21 @@ bool MultiRowTxn::IsLockedBeforeMe(RowReader* user_reader, RowReader* txn_reader
         std::string cf_name = cf_it->first;
         for (qu_it = cf_it->second.begin(); qu_it != cf_it->second.end(); ++qu_it) {
             std::string qu_name = *qu_it;
-            LOG(ERROR) << "IsLockedBeforeMe: found:" << cf_name << ":" << qu_name;
+            VLOG(12) << "IsLockedBeforeMe: found:" << cf_name << ":" << qu_name;
 
             // check every cell
             if (row.find(cf_name) == row.end()) {
-                LOG(ERROR) << "IsLockedBeforeMe cf not found:" << cf_name;
+                VLOG(12) << "IsLockedBeforeMe cf not found:" << cf_name;
                 continue;
             }
             if (row[cf_name].find(LockColumnName(qu_name)) == row[cf_name].end()) {
-                LOG(ERROR) << "IsLockedBeforeMe  qu not found:" << LockColumnName(qu_name);
+                VLOG(12) << "IsLockedBeforeMe  qu not found:" << LockColumnName(qu_name);
                 continue;
             }
             for (RowReader::TColumn::reverse_iterator k = row[cf_name][LockColumnName(qu_name)].rbegin();
                  k != row[cf_name][LockColumnName(qu_name)].rend();
                  ++k) {
-                LOG(ERROR) << "IsLockedBeforeMe found:" <<  k->first << ":" << k->second;
+                VLOG(12) << "IsLockedBeforeMe found:" <<  k->first << ":" << k->second;
                 if (k->first <= start_ts_) {
                     *primary = row[cf_name][LockColumnName(qu_name)][k->first];
                     *cf = cf_name;
@@ -615,7 +608,7 @@ bool MultiRowTxn::IsLockedBeforeMe(RowReader* user_reader, RowReader* txn_reader
                     *last_txn_start_ts = k->first;
                     MultiRowTxnPrimaryLockInfo info;
                     info.ParseFromString(*primary);
-                    LOG(ERROR) << "LockedBeforeMe, oops, lock:" << info.DebugString();
+                    VLOG(12) << "LockedBeforeMe, oops, lock:" << info.DebugString();
                     return true;
                 }
             }
@@ -655,26 +648,26 @@ void MultiRowTxn::FillReadResult(RowReader* txn_reader, RowReader* user_reader) 
         for (qu_it = cf_it->second.begin(); qu_it != cf_it->second.end(); ++qu_it) {
             std::string qu_name = *qu_it;
             // user want to read cf_name:qu_name cell
-            LOG(ERROR) << "user want read " << cf_name << ":" << qu_name;
+            VLOG(12) << "user want read " << cf_name << ":" << qu_name;
 
             if (row.find(cf_name) == row.end()) {
-                LOG(ERROR) << "cf not found:" << cf_name;
+                VLOG(12) << "cf not found:" << cf_name;
                 continue;
             }
             if (row[cf_name].find(qu_name) == row[cf_name].end()) {
-                LOG(ERROR) << "qu not found:" << qu_name;
+                VLOG(12) << "qu not found:" << qu_name;
                 continue;
             }
             if (row[cf_name].find(WriteColumnName(qu_name)) == row[cf_name].end()) {
-                LOG(ERROR) << "write-pointer not found:" << WriteColumnName(qu_name);
+                VLOG(12) << "write-pointer not found:" << WriteColumnName(qu_name);
                 continue;
             }
             for (RowReader::TColumn::reverse_iterator k = row[cf_name][WriteColumnName(qu_name)].rbegin();
                  k != row[cf_name][WriteColumnName(qu_name)].rend(); ++k) {
                 int64_t start_ts = EncodedStringToInt64(k->second); // value is a pointer
-                LOG(ERROR) << "FillReadResult: " << cf_name << ":" << qu_name << ":" << k->first << ":" << start_ts;
+                VLOG(12) << "FillReadResult: " << cf_name << ":" << qu_name << ":" << k->first << ":" << start_ts;
                 if (start_ts_ <= k->first) {
-                    LOG(ERROR) << "FillReadResult: there is new data, use newer txn try again";
+                    VLOG(12) << "FillReadResult: there is new data, use newer txn try again";
                     return;
                 }
                 if (row[cf_name][qu_name].find(start_ts) != row[cf_name][qu_name].end()) {
@@ -686,7 +679,7 @@ void MultiRowTxn::FillReadResult(RowReader* txn_reader, RowReader* user_reader) 
                     cell->set_value(row[cf_name][qu_name][start_ts]);
                     break; // next cell
                 } else {
-                    LOG(ERROR) << "found write-pointer but data not found";
+                    VLOG(12) << "found write-pointer but data not found";
                     return; // error
                 }
             }
@@ -714,12 +707,12 @@ void MultiRowTxn::Get(RowReader* user_reader) {
         target_row_txn->Get(txn_reader);
         if ((txn_reader->GetError().GetType() != tera::ErrorCode::kOK)
             && (txn_reader->GetError().GetType() != tera::ErrorCode::kNotFound)) {
-            LOG(ERROR) << "fail to read:" << txn_reader->GetError().GetReason();
+            VLOG(12) << "fail to read:" << txn_reader->GetError().GetReason();
             delete txn_reader;
             return;
         }
         while (!txn_reader->Done()) {
-            LOG(ERROR) << "txn reader:" << txn_reader->RowKey() << ":" << txn_reader->Family()
+            VLOG(12) << "txn reader:" << txn_reader->RowKey() << ":" << txn_reader->Family()
                 << ":" << txn_reader->Qualifier() << ":" << txn_reader->Timestamp() << ":" << txn_reader->Value();
             txn_reader->Next();
         }
@@ -728,10 +721,9 @@ void MultiRowTxn::Get(RowReader* user_reader) {
         std::string qu;
         int64_t last_txn_start_ts;
         if (IsLockedBeforeMe(user_reader, txn_reader, &primary, &cf, &qu, &last_txn_start_ts)) {
-            //LOG(ERROR) << "read a locked cell";
+            //VLOG(12) << "read a locked cell";
             BackoffAndMaybeCleanupLock(target_row_txn, user_reader, primary, cf, qu, last_txn_start_ts);
             delete txn_reader;
-
         } else {
             break;
         }
