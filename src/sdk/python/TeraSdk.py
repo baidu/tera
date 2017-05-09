@@ -14,6 +14,7 @@ from ctypes import c_uint32, c_int32, c_int64, c_ubyte, c_uint64
 
 
 class Status(object):
+    """ status code """
     # C++ tera.h ErrorCode
     OK = 0
     NotFound = 1
@@ -32,6 +33,7 @@ class Status(object):
                     "not implemented"]
 
     def __init__(self, c):
+        """ init """
         self.c_ = c
         if c < 0 or c > len(Status.reason_list_) - 1:
             self.reason_ = "bad status code"
@@ -39,9 +41,17 @@ class Status(object):
             self.reason_ = Status.reason_list_[c]
 
     def GetReasonString(self):
+        """
+        Returns:
+            (string) status string
+        """
         return Status.reason_list_[self.c_]
 
     def GetReasonNumber(self):
+        """
+        Returns:
+            (long) status code
+        """
         return self.c_
 
 
@@ -174,6 +184,7 @@ class ResultStream(object):
     """
 
     def __init__(self, stream):
+        """ init """
         self.stream = stream
 
     def Destroy(self):
@@ -315,6 +326,7 @@ class RowMutation(object):
     """
 
     def __init__(self, mutation):
+        """ init """
         self.mutation = mutation
 
     def PutKV(self, value, ttl):
@@ -341,6 +353,16 @@ class RowMutation(object):
                                   value, c_uint64(len(value)))
 
     def PutWithTimestamp(self, cf, qu, timestamp, value):
+        """ 写入（修改）这一行上
+            ColumnFamily为<cf>, Qualifier为<qu>的cell值为<value>
+            指定版本（时间戳）为timestamp
+
+        Args:
+            cf(string): ColumnFamily名
+            qu(string): Qualifier名
+            timestamp(long): 版本号/时间戳
+            value(string): cell的值
+        """
         lib.tera_row_mutation_put_with_timestamp(self.mutation, cf,
                                                  qu, c_uint64(len(qu)),
                                                  timestamp,
@@ -454,6 +476,7 @@ class Table(object):
         通过Client.OpenTable()获取一个Table对象
     """
     def __init__(self, table):
+        """ init """
         self.table = table
 
     def Close(self):
@@ -687,6 +710,7 @@ class RowReader(object):
     """ 提供随机读取一行的功能
     """
     def __init__(self, reader):
+        """ init """
         self.reader = reader
 
     def AddColumnFamily(self, cf):
@@ -721,18 +745,23 @@ class RowReader(object):
         lib.tera_row_reader_set_callback(self.reader, callback)
 
     def SetTimestamp(self, ts):
+        """ set timestamp """
         lib.tera_row_reader_set_timestamp(self.reader, ts)
 
     def SetTimeRange(self, start, end):
+        """ set time range """
         lib.tera_row_reader_set_time_range(self.reader, start, end)
 
     def SetSnapshot(self, snapshot):
+        """ set snapshot """
         lib.tera_row_reader_set_snapshot(self.reader, snapshot)
 
     def SetMaxVersions(self, versions):
+        """ set max versions """
         lib.tera_row_reader_set_max_versions(self.reader, versions)
 
     def SetTimeout(self, timeout):
+        """ set timeout """
         lib.tera_row_reader_set_timeout(self.reader, timeout)
 
     def Done(self):
@@ -820,10 +849,13 @@ class RowReader(object):
 
 
 class TeraSdkException(Exception):
+    """ exception """
     def __init__(self, reason):
+        """ init """
         self.reason = reason
 
     def __str__(self):
+        """ str """
         return self.reason
 
 
@@ -1122,6 +1154,7 @@ def init_function_prototype_for_row_reader():
 
 
 def init_function_prototype():
+    """ init function prototype """
     init_function_prototype_for_client()
     init_function_prototype_for_table()
     init_function_prototype_for_row_reader()
@@ -1133,6 +1166,7 @@ def init_function_prototype():
 
 
 def copy_string_to_user(value, size):
+    """ copy string """
     result = string_at(value, size)
     libc.free(value)
     return result
