@@ -11,19 +11,19 @@ import time
 
 
 def mutation_callback(raw_mu):
+    """ mutation callback """
     mu = RowMutation(raw_mu)
     status = mu.GetStatus()
     if status.GetReasonNumber() != Status.OK:
         print(status.GetReasonString())
     print "callback of rowkey:", mu.RowKey()
     mu.Destroy()
-'''
-用户需要确保回调执行时，write_callback仍然有效（例如没有因为过作用域被gc掉）
-'''
+""" 用户需要确保回调执行时，write_callback仍然有效（例如没有因为过作用域被gc掉）"""
 write_callback = MUTATION_CALLBACK(mutation_callback)
 
 
 def reader_callback(raw_reader):
+    """ reader callback """
     reader = RowReader(raw_reader)
     status = reader.GetStatus()
     if status.GetReasonNumber() != Status.OK:
@@ -36,15 +36,15 @@ def reader_callback(raw_reader):
         print row + ":" + column + ":" + timestamp + ":" + val
         reader.Next()
     reader.Destroy()
-'''
-用户需要确保回调执行时，read_callback仍然有效（例如没有因为过作用域被gc掉）
-'''
+
+""" 用户需要确保回调执行时，read_callback仍然有效（例如没有因为过作用域被gc掉）"""
 read_callback = READER_CALLBACK(reader_callback)
 
 
 def main():
-    """
-    REQUIRES: tera.flag in current work directory; table `oops' was created
+    """ REQUIRES:
+        tera.flag in current work directory;
+        table `oops' was created
     """
     try:
         client = Client("./tera.flag", "pysdk")
@@ -86,6 +86,7 @@ def main():
 
 
 def sync_put(table):
+    """ sync put """
     print("\nsync put")
     try:
         table.Put("sync", "cf0", "qu0", "value")
@@ -94,6 +95,7 @@ def sync_put(table):
 
 
 def sync_get(table):
+    """ sync get """
     print("\nsync get")
     try:
         print(table.Get("sync", "cf0", "qu0", 0))
@@ -106,6 +108,7 @@ def sync_get(table):
 
 
 def sync_put_batch(table):
+    """ sync_put_batch """
     print("\nsync put batch")
     mutation_list = list()
     for i in range(1, 1001):
@@ -127,6 +130,7 @@ def sync_put_batch(table):
 
 
 def sync_get_batch(table):
+    """ sync_get_batch """
     print("\nsync get batch")
     s1 = long(time.time() * 1000)
     reader_list = list()
@@ -150,6 +154,7 @@ def sync_get_batch(table):
 
 
 def async_put(table):
+    """ async put """
     print("\nasync put")
     rowkey_list = ["async"]
     for key in rowkey_list:
@@ -162,6 +167,7 @@ def async_put(table):
 
 
 def async_get(table):
+    """ async get """
     print("\nasync get")
     rowkey_list = ["async", "async_not_found"]
     for key in rowkey_list:
@@ -173,6 +179,7 @@ def async_get(table):
 
 
 def put_get_with_timestamp(table):
+    """ put get with timestamp """
     print("\nput_get_with_timestamp")
     key = "nput_get_with_timestamp"
     mu = table.NewRowMutation(key)
@@ -202,6 +209,7 @@ def put_get_with_timestamp(table):
 
 
 def put_get_int64(table, rowkey, cf, qu, value):
+    """ put/get int64 """
     try:
         table.PutInt64(rowkey, cf, qu, value)
         print("i got:" + str(table.GetInt64(rowkey, cf, qu, 0)))
@@ -210,6 +218,7 @@ def put_get_int64(table, rowkey, cf, qu, value):
 
 
 def scan_with_filter(table):
+    """ scan with filter """
     from TeraSdk import ScanDescriptor
     scan_desc = ScanDescriptor("")
     scan_desc.SetBufferSize(1024 * 1024)  # 1MB
@@ -232,6 +241,7 @@ def scan_with_filter(table):
 
 
 def scan(table):
+    """ scan """
     print("\nscan")
     from TeraSdk import ScanDescriptor
     scan_desc = ScanDescriptor("")
