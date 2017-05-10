@@ -45,6 +45,8 @@ public:
     /// 提交事务
     virtual ErrorCode Commit() = 0;
 
+    virtual int64_t GetStartTimestamp() = 0;
+
     Transaction() {}
     virtual ~Transaction() {}
 

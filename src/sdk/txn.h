@@ -33,6 +33,7 @@ public:
         abort();
         return status_;
     }
+    virtual int64_t GetStartTimestamp() { return start_ts_; }
 private:
     MultiRowTxn(int64_t start_ts);
     MultiRowTxn(const MultiRowTxn&);

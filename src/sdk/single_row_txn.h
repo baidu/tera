@@ -42,6 +42,8 @@ public:
     /// 获得结果错误码
     virtual const ErrorCode& GetError();
 
+    virtual int64_t GetStartTimestamp() { return 0; }
+
     /// 提交事务
     virtual ErrorCode Commit();
 public:
