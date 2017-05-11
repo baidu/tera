@@ -16,7 +16,6 @@
 #include <vector>
 
 #include "mutex.h"
-#include "timer.h"
 
 namespace common {
 
@@ -84,19 +83,19 @@ public:
     // Add a task to the thread pool.
     void AddTask(const Task& task) {
         MutexLock lock(&mutex_, "AddTask");
-        queue_.push_back(BGItem(0, timer::get_micros(), task));
+        queue_.push_back(BGItem(0, get_micros(), task));
         ++pending_num_;
         work_cv_.Signal();
     }
     void AddPriorityTask(const Task& task) {
         MutexLock lock(&mutex_);
-        queue_.push_front(BGItem(0, timer::get_micros(), task));
+        queue_.push_front(BGItem(0, get_micros(), task));
         ++pending_num_;
         work_cv_.Signal();
     }
     int64_t DelayTask(int64_t delay, const Task& task) {
         MutexLock lock(&mutex_);
-        int64_t now_time = timer::get_micros();
+        int64_t now_time = get_micros();
         int64_t exe_time = now_time + delay * 1000;
         BGItem bg_item(++last_task_id_, exe_time, task);
         time_queue_.push(bg_item);
@@ -172,6 +171,12 @@ private:
     ThreadPool(const ThreadPool&);
     void operator=(const ThreadPool&);
 
+    int64_t get_micros() { // get us before machine reboot
+        struct timespec ts;
+        clock_gettime(CLOCK_MONOTONIC, &ts);
+        return static_cast<int64_t>(ts.tv_sec) * 1000000 + static_cast<int64_t>(ts.tv_nsec) / 1000;
+    }
+
     static void* ThreadWrapper(void* arg) {
         reinterpret_cast<ThreadPool*>(arg)->ThreadProc();
         return NULL;
@@ -188,7 +193,7 @@ private:
             }
             // Timer task
             if (!time_queue_.empty()) {
-                int64_t now_time = timer::get_micros();
+                int64_t now_time = get_micros();
                 BGItem bg_item = time_queue_.top();
                 int64_t wait_time = bg_item.exe_time - now_time; // in us
                 if (wait_time <= 0) {
@@ -203,7 +208,7 @@ private:
                         mutex_.Unlock();
                         task(bg_item.id);
                         mutex_.Lock("ThreadProcRelock");
-                        task_cost_sum_ += timer::get_micros() - now_time;
+                        task_cost_sum_ += get_micros() - now_time;
                         task_count_++;
                         running_task_ids_.erase(bg_item.id);
                     }
@@ -219,13 +224,13 @@ private:
                 int64_t exe_time = queue_.front().exe_time;
                 queue_.pop_front();
                 --pending_num_;
-                int64_t start_time = timer::get_micros();
+                int64_t start_time = get_micros();
                 schedule_cost_sum_ += start_time - exe_time;
                 schedule_count_++;
                 mutex_.Unlock();
                 task(0);
                 mutex_.Lock("ThreadProcRelock2");
-                task_cost_sum_ += timer::get_micros() - start_time;
+                task_cost_sum_ += get_micros() - start_time;
                 task_count_++;
             }
         }
