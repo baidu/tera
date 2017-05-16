@@ -58,9 +58,6 @@ std::string ClusterFinder::ClusterId() {
     std::string name = Name();
     std::string authority = Authority();
     std::string path = Path();
-    if (name.empty() || authority.empty() || path.empty()) {
-        LOG(FATAL) << "cluster name/authority/path must be non-empty";
-    }
     std::string cluster_id = name + "://" + authority;
     if (path[0] != '/') {
         cluster_id += "/";
