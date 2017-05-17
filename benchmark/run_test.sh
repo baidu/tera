@@ -1,7 +1,7 @@
 #!/bin/bash
 
-if [[ $# != 8 || $6 -lt 0 || $6 -gt 100 ]]; then
-    echo "$0 DIST[zipfian, uniform, latest] ROW_NUM OP_NUM VALUE_SIZE COLUMN_NUM UPDATE_PROPORTION[0~100] TABLE_NAME LOG"
+if [[ $# != 7 || $6 -lt 0 || $6 -gt 100 ]]; then
+    echo "$0 DIST[zipfian, uniform, latest] ROW_NUM OP_NUM VALUE_SIZE COLUMN_NUM UPDATE_PROPORTION[0~100] TABLE_NAME"
     exit 0
 fi
 
@@ -12,7 +12,6 @@ VALUE_SIZE=$4
 COLUMN_NUM=$5
 UPDATE_PROPORTION=$6
 TABLE_NAME=$7
-LOG=$8
 
 UPDATE_PROPORTION=`printf "%02d" $6`
 READ_PROPORTION=`expr 100 - $UPDATE_PROPORTION`
