@@ -73,17 +73,17 @@ Tera将数据表横向划分为若干个有序的区间，每一个区间就是�
 #### 3.1.2 Master的具体实现
 Master实现的代码在master\_impl模块中，master\_impl通过tablet\_manager、tabletnode\_manager和workload\_scheduler进行表格管理、tablet节点管理和负载均衡管理等工作。
 
-**_tablet\_manager_**实现表格信息的管理，拥有一个all\_table\_list成员，是一个table name到Table指针的hash表；每一个Table拥有一个m\_tablets\_list数据成员，是一个start\_key到Tablet类指针的hash表，而一个Tablet类包含了Tablet的meta信息，包括tablet的起始key，结束key，TS地址，tablet的状态、大小、是否压缩等详细信息。
+**tablet\_manager** 实现表格信息的管理，拥有一个all\_table\_list成员，是一个table name到Table指针的hash表；每一个Table拥有一个m\_tablets\_list数据成员，是一个start\_key到Tablet类指针的hash表，而一个Tablet类包含了Tablet的meta信息，包括tablet的起始key，结束key，TS地址，tablet的状态、大小、是否压缩等详细信息。
 
 通过这样的层次结构，tablet\_manager就拥有了从table名称到该table的所有tablet信息的映射关系。简单的说all\_table\_list就是meta表在tablet\_manager内存中的数据结构，所有对内存中all\_table\_list的操作都会同步更新到meta表中。
 
 tablet\_manager模块实现了如下功能：装载meta table信息，dump meta table到本地，添加、删除、查找table和tablet，合并tablet，分裂tablet等。
 
-**_tabletnode\_manager_**实现tablet节点的管理，拥有一个m\_tabletnode\_list的数据成员，m\_tabletnode\_list是一个server address到tabletnode的hash表，TabletNode类管理tabletnode的信息和相应的操作，TabletNode包含一个tabletnode的状态，数据大小，地址，uuid等。
+**tabletnode\_manager**实现tablet节点的管理，拥有一个m\_tabletnode\_list的数据成员，m\_tabletnode\_list是一个server address到tabletnode的hash表，TabletNode类管理tabletnode的信息和相应的操作，TabletNode包含一个tabletnode的状态，数据大小，地址，uuid等。
 
 tabletnode\_manager类实现了如下功能：添加、删除、更新tabletnode，获得所有tabletnode的信息等。
 
-**_master\_impl_**通过LoadBalanceTimer定期（10s）对tablet信息进行监控，对满足条件（tablet的data\_size大于512M）的tablet进行split;
+**master\_impl**通过LoadBalanceTimer定期（10s）对tablet信息进行监控，对满足条件（tablet的data\_size大于512M）的tablet进行split;
 tablet\_manager通过MergeTabletTimer定期（180s）对teblet信息进行扫描，对满足条件的tablets进行合并。
 
 ### 3.2 Tablet Server
