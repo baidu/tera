@@ -33,7 +33,7 @@ if [ $MIRROR == "china" ]; then
     INS_URL=https://github.com/baidu/ins/archive/${INS_VERSION}.tar.gz
     NOSE_URL=http://mirrors.163.com/gentoo/distfiles/nose-${NOSE_VERSION}.tar.gz
 elif [ $MIRROR == "origin" ]; then
-    BOOST_URL=http://mirrors.tuna.tsinghua.edu.cn/macports/distfiles/boost/boost_${BOOST_VERSION}.tar.bz2
+	BOOST_URL=http://downloads.sourceforge.net/project/boost/boost/1.58.0/boost_${BOOST_VERSION}.tar.bz2
     PROTOBUF_URL=https://github.com/google/protobuf/releases/download/v${PROTOBUF_VERSION}/protobuf-${PROTOBUF_VERSION}.tar.bz2
     SNAPPY_URL=https://github.com/google/snappy/releases/download/${SNAPPY_VERSION}/snappy-${SNAPPY_VERSION}.tar.gz
     SOFA_PBRPC_URL=https://github.com/baidu/sofa-pbrpc/archive/v${SOFA_PBRPC_VERSION}.tar.gz
