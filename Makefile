@@ -93,7 +93,7 @@ all: $(PROGRAM) $(LIBRARY) $(SOLIBRARY) $(TERA_C_SO) $(JNILIBRARY) $(BENCHMARK)
 	cp $(PROGRAM) build/bin
 	cp $(LIBRARY) $(SOLIBRARY) $(TERA_C_SO) $(JNILIBRARY) build/lib
 	cp src/leveldb/tera_bench .
-	cp -r benchmark/*.sh $(BENCHMARK) build/benchmark
+	cp -r benchmark/*.sh benchmark/ycsb4tera/ $(BENCHMARK) build/benchmark
 	cp -r include build/
 	cp -r conf build
 	echo 'Done'
