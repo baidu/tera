@@ -53,6 +53,11 @@ public:
     void Serialize(RowMutationSequence* mu_seq);
 
 private:
+    // prevent users from reading more than once in one single-row-txn
+    bool MarkHasRead();
+
+    void MarkNoRead();
+private:
     Table* table_;
     const std::string row_key_;
     common::ThreadPool* thread_pool_;
@@ -71,6 +76,8 @@ private:
     RowMutationImpl mutation_buffer_;
     Callback user_commit_callback_;
     void* user_commit_context_;
+
+    mutable Mutex mu_;
 };
 
 } // namespace tera

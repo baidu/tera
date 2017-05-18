@@ -153,8 +153,8 @@ message SingleRowTxnReadInfo {
     optional bool has_read = 1 [default = false];
     repeated ColumnFamily read_column_list = 2;
     optional RowResult read_result = 3;
-    optional int64 max_versions = 4;     // max versions of one column(columnfamily:qualifier)
-    optional int64 start_timestamp = 5;  // [start_timestamp, end_timestamp] of one column
+    optional int64 max_versions = 4 [default = 1];     // max versions of one column(columnfamily:qualifier)
+    optional int64 start_timestamp = 5;                // [start_timestamp, end_timestamp] of one column
     optional int64 end_timestamp = 6;
 }
 

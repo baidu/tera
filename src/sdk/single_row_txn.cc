@@ -35,6 +35,22 @@ SingleRowTxn::SingleRowTxn(Table* table, const std::string& row_key,
 SingleRowTxn::~SingleRowTxn() {
 }
 
+bool SingleRowTxn::MarkHasRead() {
+    MutexLock l(&mu_);
+    if (has_read_) {
+        return false;
+    } else {
+        has_read_ = true;
+        return true;
+    }
+}
+
+void SingleRowTxn::MarkNoRead() {
+    MutexLock l(&mu_);
+    assert(has_read_ == true);
+    has_read_ = false;
+}
+
 /// 提交一个修改操作
 void SingleRowTxn::ApplyMutation(RowMutation* row_mu) {
     RowMutationImpl* row_mu_impl = static_cast<RowMutationImpl*>(row_mu);
@@ -65,16 +81,11 @@ void SingleRowTxn::Get(RowReader* row_reader) {
     reader_impl->SetTransaction(this);
     bool is_async = reader_impl->IsAsync();
 
-    int64_t ts_start = 0, ts_end = 0;
-    reader_impl->GetTimeRange(&ts_start, &ts_end);
-    reader_start_timestamp_ = ts_start;
-    reader_end_timestamp_ = ts_end;
-    reader_max_versions_ = reader_impl->GetMaxVersions();
 
     // safe check
     if (reader_impl->RowName() != row_key_) {
         reader_impl->SetError(ErrorCode::kBadParam, "not same row");
-    } else if (has_read_) {
+    } else if (MarkHasRead()) {
         reader_impl->SetError(ErrorCode::kBadParam, "not support read more than once in txn");
     } else if (reader_impl->GetSnapshot() != 0) {
         reader_impl->SetError(ErrorCode::kBadParam, "not support read a snapshot in txn");
@@ -86,6 +97,12 @@ void SingleRowTxn::Get(RowReader* row_reader) {
         }
         return;
     }
+
+    int64_t ts_start = 0, ts_end = 0;
+    reader_impl->GetTimeRange(&ts_start, &ts_end);
+    reader_start_timestamp_ = ts_start;
+    reader_end_timestamp_ = ts_end;
+    reader_max_versions_ = reader_impl->GetMaxVersions();
 
     // save user's callback & context
     user_reader_callback_ = reader_impl->GetCallBack();
@@ -135,8 +152,6 @@ void SingleRowTxn::ReadCallback(RowReaderImpl* reader_impl) {
     // save results for commit check
     ErrorCode::ErrorCodeType code = reader_impl->GetError().GetType();
     if (code == ErrorCode::kOK || code == ErrorCode::kNotFound) {
-        has_read_ = true;
-
         // copy read_column_list
         read_column_list_ = reader_impl->GetReadColumnList();
 
@@ -149,6 +164,8 @@ void SingleRowTxn::ReadCallback(RowReaderImpl* reader_impl) {
             reader_impl->Next();
         }
         reader_impl->ResetResultPos();
+    } else {
+        MarkNoRead();
     }
 
     // run user's callback
