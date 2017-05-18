@@ -15,6 +15,7 @@
 #include "io/tablet_io.h"
 #include "leveldb/lg_coding.h"
 #include "proto/proto_helper.h"
+#include "tera/table_descriptor.h"
 #include "utils/counter.h"
 #include "utils/string_util.h"
 #include "utils/timer.h"
@@ -268,10 +269,15 @@ void TabletWriter::BatchRequest(WriteTaskBuffer* task_buffer,
                     }
                     int64_t timestamp = get_unique_micros(timestamp_old);
                     timestamp_old = timestamp;
-                    if (!tablet_->GetSchema().enable_txn() &&
-                            leveldb::TeraKey::IsTypeAllowUserSetTimestamp(type) &&
+                    if (tablet_->GetSchema().enable_txn()) {
+                        if (mu.has_timestamp() && (mu.timestamp() != kLatestTimestamp)) {
+                            timestamp = mu.timestamp();
+                        }
+                    } else {
+                        if (leveldb::TeraKey::IsTypeAllowUserSetTimestamp(type) &&
                             mu.has_timestamp() && mu.timestamp() < timestamp) {
-                        timestamp = mu.timestamp();
+                            timestamp = mu.timestamp();
+                        }
                     }
                     tablet_->GetRawKeyOperator()->EncodeTeraKey(row_key, mu.family(), mu.qualifier(),
                             timestamp, type, &tera_key);

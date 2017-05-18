@@ -175,11 +175,11 @@ tprinter_test: src/utils/test/tprinter_test.o $(LIBRARY)
 string_util_test: src/utils/test/string_util_test.o $(LIBRARY)
 	$(CXX) -o $@ $^ $(LDFLAGS)
 
-tablet_io_test: src/io/test/tablet_io_test.o src/tabletnode/tabletnode_sysinfo.o \
+tablet_io_test: src/sdk/tera.o src/io/test/tablet_io_test.o src/tabletnode/tabletnode_sysinfo.o \
                 $(IO_OBJ) $(PROTO_OBJ) $(OTHER_OBJ) $(COMMON_OBJ) $(LEVELDB_LIB)
 	$(CXX) -o $@ $^ $(LDFLAGS)
 
-load_test: src/io/test/load_test.o src/tabletnode/tabletnode_sysinfo.o \
+load_test: src/sdk/tera.o src/io/test/load_test.o src/tabletnode/tabletnode_sysinfo.o \
                 $(IO_OBJ) $(PROTO_OBJ) $(OTHER_OBJ) $(COMMON_OBJ) $(LEVELDB_LIB)
 	$(CXX) -o $@ $^ $(LDFLAGS)
 
@@ -189,7 +189,7 @@ fragment_test: src/utils/test/fragment_test.o src/utils/fragment.o
 progress_bar_test: src/common/console/progress_bar_test.o src/common/console/progress_bar.o
 	$(CXX) -o $@ $^ $(LDFLAGS)
 
-tablet_scanner_test: src/io/test/tablet_scanner_test.o src/tabletnode/tabletnode_sysinfo.o \
+tablet_scanner_test: src/sdk/tera.o src/io/test/tablet_scanner_test.o src/tabletnode/tabletnode_sysinfo.o \
                      $(IO_OBJ) $(PROTO_OBJ) $(OTHER_OBJ) $(COMMON_OBJ) $(LEVELDB_LIB)
 	$(CXX) -o $@ $^ $(LDFLAGS)
 
