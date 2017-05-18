@@ -17,6 +17,7 @@ DECLARE_int32(tera_zk_timeout);
 DECLARE_int64(tera_zk_retry_period);
 DECLARE_string(tera_ins_addr_list);
 DECLARE_string(tera_ins_root_path);
+DECLARE_bool(tera_tabletnode_quit_on_kick_or_lost_lock);
 
 namespace tera {
 namespace tabletnode {
@@ -228,14 +229,18 @@ void TabletNodeZkAdapter::OnSafeModeMarkDeleted() {
 
 void TabletNodeZkAdapter::OnKickMarkCreated() {
     LOG(ERROR) << "kick mark node is created";
-    _Exit(EXIT_FAILURE);
+    if (FLAGS_tera_tabletnode_quit_on_kick_or_lost_lock) {
+        _Exit(EXIT_FAILURE);
+    }
 //    Finalize();
 //    tabletnode_impl_->ExitService();
 }
 
 void TabletNodeZkAdapter::OnSelfNodeDeleted() {
     LOG(ERROR) << "self node is deleted";
-    _Exit(EXIT_FAILURE);
+    if (FLAGS_tera_tabletnode_quit_on_kick_or_lost_lock) {
+        _Exit(EXIT_FAILURE);
+    }
 //    tabletnode_impl_->ExitService();
 }
 
@@ -281,12 +286,16 @@ void TabletNodeZkAdapter::OnNodeDeleted(const std::string& path) {
 void TabletNodeZkAdapter::OnWatchFailed(const std::string& path,
                                         int watch_type, int err) {
     LOG(ERROR) << "watch " << path << " fail!";
-    _Exit(EXIT_FAILURE);
+    if (FLAGS_tera_tabletnode_quit_on_kick_or_lost_lock) {
+        _Exit(EXIT_FAILURE);
+    }
 }
 
 void TabletNodeZkAdapter::OnSessionTimeout() {
     LOG(ERROR) << "zk session timeout!";
-    _Exit(EXIT_FAILURE);
+    if (FLAGS_tera_tabletnode_quit_on_kick_or_lost_lock) {
+        _Exit(EXIT_FAILURE);
+    }
 }
 
 FakeTabletNodeZkAdapter::FakeTabletNodeZkAdapter(TabletNodeImpl* tabletnode_impl,
@@ -401,14 +410,18 @@ void InsTabletNodeZkAdapter::OnMetaChange(std::string meta_addr, bool deleted) {
 }
 
 void InsTabletNodeZkAdapter::OnKickMarkCreated() {
-    LOG(ERROR) << "I am kicked by master";
-    _Exit(EXIT_FAILURE);
+    if (FLAGS_tera_tabletnode_quit_on_kick_or_lost_lock) {
+        LOG(ERROR) << "I am kicked by master";
+        _Exit(EXIT_FAILURE);
+    }
 }
 
 void InsTabletNodeZkAdapter::OnLockChange(std::string session_id, bool deleted) {
     if (deleted || session_id != ins_sdk_->GetSessionID()) {
-        LOG(ERROR) << "I lost my lock , so quit";
-        _Exit(EXIT_FAILURE);
+        if (FLAGS_tera_tabletnode_quit_on_kick_or_lost_lock) {
+            LOG(ERROR) << "I lost my lock , so quit";
+            _Exit(EXIT_FAILURE);
+        }
     }
 }
 
