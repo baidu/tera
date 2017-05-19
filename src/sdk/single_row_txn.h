@@ -53,6 +53,11 @@ public:
     void Serialize(RowMutationSequence* mu_seq);
 
 private:
+    // prevent users from reading more than once in one single-row-txn
+    bool MarkHasRead();
+
+    void MarkNoRead();
+private:
     Table* table_;
     const std::string row_key_;
     common::ThreadPool* thread_pool_;
@@ -61,12 +66,18 @@ private:
     RowReader::Callback user_reader_callback_;
     void* user_reader_context_;
     RowReader::ReadColumnList read_column_list_;
-    typedef std::map<std::string, std::map<std::string, int64_t> > ReadResult;
+    //               columnfamily          qualifier             timestamp  value
+    typedef std::map<std::string, std::map<std::string, std::map<int64_t, std::string>> > ReadResult;
     ReadResult read_result_;
+    uint32_t reader_max_versions_;
+    int64_t reader_start_timestamp_;
+    int64_t reader_end_timestamp_;
 
     RowMutationImpl mutation_buffer_;
     Callback user_commit_callback_;
     void* user_commit_context_;
+
+    mutable Mutex mu_;
 };
 
 } // namespace tera

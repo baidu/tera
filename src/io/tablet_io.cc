@@ -2047,7 +2047,13 @@ bool TabletIO::SingleRowTxnCheck(const std::string& row_key,
         }
         scan_options.iter_cf_set.insert(column_info.family_name());
     }
-    scan_options.max_versions = 1;
+    scan_options.max_versions = txn_read_info.max_versions();
+    if (txn_read_info.has_start_timestamp()) {
+        scan_options.ts_start = txn_read_info.start_timestamp();
+    }
+    if (txn_read_info.has_end_timestamp()) {
+        scan_options.ts_end = txn_read_info.end_timestamp();
+    }
 
     // read the row
     std::string start_tera_key;
@@ -2074,7 +2080,8 @@ bool TabletIO::SingleRowTxnCheck(const std::string& row_key,
         const KeyValuePair& old_kv = txn_read_info.read_result().key_values(i);
         if (new_kv.column_family() != old_kv.column_family()
             || new_kv.qualifier() != old_kv.qualifier()
-            || new_kv.timestamp() != old_kv.timestamp()) {
+            || new_kv.timestamp() != old_kv.timestamp()
+            || new_kv.value() != old_kv.value()) {
             SetStatusCode(kTxnFail, status);
             return false;
         }

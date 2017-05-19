@@ -24,12 +24,31 @@ SingleRowTxn::SingleRowTxn(Table* table, const std::string& row_key,
       has_read_(false),
       user_reader_callback_(NULL),
       user_reader_context_(NULL),
+      reader_max_versions_(1),
+      reader_start_timestamp_(kOldestTs),
+      reader_end_timestamp_(kLatestTs),
       mutation_buffer_(table, row_key),
       user_commit_callback_(NULL),
       user_commit_context_(NULL) {
 }
 
 SingleRowTxn::~SingleRowTxn() {
+}
+
+bool SingleRowTxn::MarkHasRead() {
+    MutexLock l(&mu_);
+    if (has_read_) {
+        return false;
+    } else {
+        has_read_ = true;
+        return true;
+    }
+}
+
+void SingleRowTxn::MarkNoRead() {
+    MutexLock l(&mu_);
+    assert(has_read_ == true);
+    has_read_ = false;
 }
 
 /// 提交一个修改操作
@@ -62,20 +81,14 @@ void SingleRowTxn::Get(RowReader* row_reader) {
     reader_impl->SetTransaction(this);
     bool is_async = reader_impl->IsAsync();
 
-    int64_t ts_start = 0, ts_end = 0;
-    reader_impl->GetTimeRange(&ts_start, &ts_end);
 
     // safe check
     if (reader_impl->RowName() != row_key_) {
         reader_impl->SetError(ErrorCode::kBadParam, "not same row");
-    } else if (has_read_) {
+    } else if (MarkHasRead()) {
         reader_impl->SetError(ErrorCode::kBadParam, "not support read more than once in txn");
-    } else if (ts_start > kOldestTs || ts_end < kLatestTs) {
-        reader_impl->SetError(ErrorCode::kBadParam, "not support read a time range in txn");
     } else if (reader_impl->GetSnapshot() != 0) {
         reader_impl->SetError(ErrorCode::kBadParam, "not support read a snapshot in txn");
-    } else if (reader_impl->GetMaxVersions() != 1) {
-        reader_impl->SetError(ErrorCode::kBadParam, "not support read old versions in txn");
     }
     if (reader_impl->GetError().GetType() != ErrorCode::kOK) {
         if (is_async) {
@@ -84,6 +97,12 @@ void SingleRowTxn::Get(RowReader* row_reader) {
         }
         return;
     }
+
+    int64_t ts_start = 0, ts_end = 0;
+    reader_impl->GetTimeRange(&ts_start, &ts_end);
+    reader_start_timestamp_ = ts_start;
+    reader_end_timestamp_ = ts_end;
+    reader_max_versions_ = reader_impl->GetMaxVersions();
 
     // save user's callback & context
     user_reader_callback_ = reader_impl->GetCallBack();
@@ -133,8 +152,6 @@ void SingleRowTxn::ReadCallback(RowReaderImpl* reader_impl) {
     // save results for commit check
     ErrorCode::ErrorCodeType code = reader_impl->GetError().GetType();
     if (code == ErrorCode::kOK || code == ErrorCode::kNotFound) {
-        has_read_ = true;
-
         // copy read_column_list
         read_column_list_ = reader_impl->GetReadColumnList();
 
@@ -143,10 +160,12 @@ void SingleRowTxn::ReadCallback(RowReaderImpl* reader_impl) {
             const std::string& family = reader_impl->Family();
             const std::string& qualifier = reader_impl->Qualifier();
             int64_t timestamp = reader_impl->Timestamp();
-            read_result_[family][qualifier] = timestamp;
+            read_result_[family][qualifier][timestamp] = reader_impl->Value();
             reader_impl->Next();
         }
         reader_impl->ResetResultPos();
+    } else {
+        MarkNoRead();
     }
 
     // run user's callback
@@ -189,6 +208,14 @@ void SingleRowTxn::CommitCallback(RowMutationImpl* mu_impl) {
 void SingleRowTxn::Serialize(RowMutationSequence* mu_seq) {
     SingleRowTxnReadInfo* pb_read_info = mu_seq->mutable_txn_read_info();
     pb_read_info->set_has_read(has_read_);
+    assert(reader_max_versions_ >= 1);
+    pb_read_info->set_max_versions(reader_max_versions_);
+    if (reader_start_timestamp_ != kOldestTs) {
+        pb_read_info->set_start_timestamp(reader_start_timestamp_);
+    }
+    if (reader_end_timestamp_ != kLatestTs) {
+        pb_read_info->set_end_timestamp(reader_end_timestamp_);
+    }
 
     // serialize read_clumn_list
     RowReader::ReadColumnList::iterator column_it = read_column_list_.begin();
@@ -205,24 +232,27 @@ void SingleRowTxn::Serialize(RowMutationSequence* mu_seq) {
         }
     }
 
-    // serialize read_result (only family & qualifier & timestamp)
+    // serialize read_result (family & qualifier & timestamp & value)
     ReadResult::iterator cf_it = read_result_.begin();
     for (; cf_it != read_result_.end(); ++cf_it) {
         const std::string& family = cf_it->first;
-        std::map<std::string, int64_t>& qualifier_map = cf_it->second;
+        auto& qualifier_map = cf_it->second;
 
-        std::map<std::string, int64_t>::iterator cq_it = qualifier_map.begin();
+        auto cq_it = qualifier_map.begin();
         for (; cq_it != qualifier_map.end(); ++cq_it) {
             const std::string& qualifier = cq_it->first;
-            int64_t timestamp = cq_it->second;
+            auto& cell_map = cq_it->second;
 
-            KeyValuePair* kv = pb_read_info->mutable_read_result()->add_key_values();
-            kv->set_column_family(family);
-            kv->set_qualifier(qualifier);
-            kv->set_timestamp(timestamp);
+            auto it = cell_map.rbegin();
+            for (; it != cell_map.rend(); ++it) {
+                KeyValuePair* kv = pb_read_info->mutable_read_result()->add_key_values();
+                kv->set_column_family(family);
+                kv->set_qualifier(qualifier);
+                kv->set_timestamp(it->first);
+                kv->set_value(it->second);
+            }
         }
     }
-
 }
 
 } // namespace tera
