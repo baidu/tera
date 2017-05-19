@@ -1011,9 +1011,9 @@ void TabletNodeImpl::UpdateMetaTableAsync(const SplitTabletRequest* rpc_request,
     VLOG(5) << "write meta: key [" << DebugString(meta_key)
         << "], value_size: " << meta_value.size();
 
-    Closure<void, WriteTabletRequest*, WriteTabletResponse*, bool, int>* done =
-        NewClosure(this, &TabletNodeImpl::UpdateMetaTableCallback, rpc_request,
-                   rpc_response, rpc_done);
+    std::function<void (WriteTabletRequest*, WriteTabletResponse*, bool, int)> done =
+        std::bind(&TabletNodeImpl::UpdateMetaTableCallback, this, rpc_request,
+                   rpc_response, rpc_done, _1, _2, _3, _4);
     meta_tablet_client.WriteTablet(request, response, done);
 }
 

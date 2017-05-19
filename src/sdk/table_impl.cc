@@ -451,8 +451,8 @@ void TableImpl::CommitScan(ScanTask* scan_task,
         << ", end_key " << request->end()
         << ", scan to " << server_addr;
     request->set_timestamp(common::timer::get_micros());
-    Closure<void, ScanTabletRequest*, ScanTabletResponse*, bool, int>* done =
-        NewClosure(this, &TableImpl::ScanCallBack, scan_task);
+    std::function<void (ScanTabletRequest*, ScanTabletResponse*, bool, int)> done =
+        std::bind(&TableImpl::ScanCallBack, this, scan_task, _1, _2, _3, _4);
     tabletnode_client.ScanTablet(request, response, done);
 }
 
@@ -505,7 +505,7 @@ void TableImpl::ScanCallBack(ScanTask* scan_task,
     } else {
         scan_task->IncRetryTimes();
         ThreadPool::Task retry_task =
-            std::bind(static_cast<void (TableImpl::*)(ScanTask*, bool)>(&TableImpl::ScanTabletAsync),
+            std::bind((void (TableImpl::*)(ScanTask*, bool))&TableImpl::ScanTabletAsync,
                       this, scan_task, false);
         CHECK(scan_task->RetryTimes() > 0);
         int64_t retry_interval =
@@ -777,8 +777,8 @@ void TableImpl::CommitMutations(const std::string& server_addr,
 
     VLOG(20) << "commit " << mu_list.size() << " mutations to " << server_addr;
     request->set_timestamp(common::timer::get_micros());
-    Closure<void, WriteTabletRequest*, WriteTabletResponse*, bool, int>* done =
-        NewClosure(this, &TableImpl::MutateCallBack, mu_id_list);
+    std::function<void (WriteTabletRequest*, WriteTabletResponse*, bool, int)> done =
+        std::bind(&TableImpl::MutateCallBack, this, mu_id_list, _1, _2, _3, _4);
     tabletnode_client_async.WriteTablet(request, response, done);
 }
 
@@ -1123,8 +1123,8 @@ void TableImpl::CommitReaders(const std::string server_addr,
     }
     VLOG(20) << "commit " << reader_list.size() << " reads to " << server_addr;
     request->set_timestamp(common::timer::get_micros());
-    Closure<void, ReadTabletRequest*, ReadTabletResponse*, bool, int>* done =
-        NewClosure(this, &TableImpl::ReaderCallBack, reader_id_list);
+    std::function<void (ReadTabletRequest*, ReadTabletResponse*, bool, int)> done =
+        std::bind(&TableImpl::ReaderCallBack, this, reader_id_list, _1, _2, _3, _4);
     tabletnode_client_async.ReadTablet(request, response, done);
 }
 
@@ -1484,8 +1484,9 @@ void TableImpl::ScanMetaTableAsync(const std::string& key_start, const std::stri
     request->set_buffer_limit(FLAGS_tera_sdk_update_meta_buffer_limit);
     request->set_round_down(true);
 
-    Closure<void, ScanTabletRequest*, ScanTabletResponse*, bool, int>* done =
-        NewClosure(this, &TableImpl::ScanMetaTableCallBack, key_start, key_end, expand_key_end, ::common::timer::get_micros());
+    std::function<void (ScanTabletRequest*, ScanTabletResponse*, bool, int)> done =
+        std::bind(&TableImpl::ScanMetaTableCallBack, this, key_start, key_end,
+                  expand_key_end, ::common::timer::get_micros(), _1, _2, _3, _4);
     tabletnode_client_async.ScanTablet(request, response, done);
 }
 
@@ -1828,8 +1829,8 @@ void TableImpl::ReadTableMetaAsync(ErrorCode* ret_err, int32_t retry_times,
     RowReaderInfo* row_info = request->add_row_info_list();
     MakeMetaTableKey(name_, row_info->mutable_key());
 
-    Closure<void, ReadTabletRequest*, ReadTabletResponse*, bool, int>* done =
-        NewClosure(this, &TableImpl::ReadTableMetaCallBack, ret_err, retry_times);
+    std::function<void (ReadTabletRequest*, ReadTabletResponse*, bool, int)> done =
+        std::bind(&TableImpl::ReadTableMetaCallBack, this, ret_err, retry_times, _1, _2, _3, _4);
     tabletnode_client_async.ReadTablet(request, response, done);
 }
 
