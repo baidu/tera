@@ -96,6 +96,9 @@ enum StatusCode {
 
     kTableStatusEnable = 1000;
     kTableStatusDisable = 1001;
+
+    // Timeoracle
+    kTimeoracleBusy = 2000;
 }
 
 enum TabletStatus {

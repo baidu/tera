@@ -281,3 +281,9 @@ DEFINE_int64(tera_sdk_status_timeout, 600, "(s) check tablet/tabletnode status t
 DEFINE_string(tera_http_port, "8657", "the http proxy port of tera");
 DEFINE_int32(tera_http_request_thread_num, 30, "the http proxy thread num for handle client request");
 DEFINE_int32(tera_http_ctrl_thread_num, 10, "the http proxy thread num for it self");
+
+
+/////////  http /////////
+DEFINE_string(tera_timeoracle_port, "30000", "the timeoracle port of tera");
+DEFINE_int32(tera_timeoracle_max_lease_second, 30, "timeoracle work this seconds for a lease");
+DEFINE_int32(tera_timeoracle_refresh_lease_second, 10, "timeoracle refresh lease before this seconds");

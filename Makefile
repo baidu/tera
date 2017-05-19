@@ -47,7 +47,10 @@ MARK_SRC := src/benchmark/mark.cc src/benchmark/mark_main.cc
 TEST_SRC := src/utils/test/prop_tree_test.cc src/utils/test/tprinter_test.cc \
             src/io/test/tablet_io_test.cc src/io/test/tablet_scanner_test.cc \
             src/master/test/master_impl_test.cc src/io/test/load_test.cc \
-	     src/common/test/thread_pool_test.cc
+            src/common/test/thread_pool_test.cc
+
+TIMEORACLE_SRC := $(wildcard src/timeoracle/*.cc) src/tera_entry.cc
+TIMEORACLE_BENCH_SRC := src/timeoracle/bench/timeoracle_bench.cc
 
 TEST_OUTPUT := test_output
 UNITTEST_OUTPUT := $(TEST_OUTPUT)/unittest
@@ -69,14 +72,17 @@ MONITOR_OBJ := $(MONITOR_SRC:.cc=.o)
 MARK_OBJ := $(MARK_SRC:.cc=.o)
 HTTP_OBJ := $(HTTP_SRC:.cc=.o)
 TEST_OBJ := $(TEST_SRC:.cc=.o)
+TIMEORACLE_OBJ := $(TIMEORACLE_SRC:.cc=.o)
+TIMEORACLE_BENCH_OBJ := $(TIMEORACLE_BENCH_SRC:.cc=.o)
+
 ALL_OBJ := $(MASTER_OBJ) $(TABLETNODE_OBJ) $(IO_OBJ) $(SDK_OBJ) $(PROTO_OBJ) \
            $(JNI_TERA_OBJ) $(OTHER_OBJ) $(COMMON_OBJ) $(SERVER_OBJ) $(CLIENT_OBJ) \
            $(TEST_CLIENT_OBJ) $(TERA_C_OBJ) $(MONITOR_OBJ) $(MARK_OBJ) $(TEST_OBJ) \
-           $(SERVER_WRAPPER_OBJ)
+           $(SERVER_WRAPPER_OBJ) $(TIMEORACLE_OBJ)
 LEVELDB_LIB := src/leveldb/libleveldb.a
 LEVELDB_UTIL := src/leveldb/util/histogram.o src/leveldb/port/port_posix.o
 
-PROGRAM = tera_main tera_master tabletserver teracli teramo tera_test
+PROGRAM = tera_main tera_master tabletserver teracli teramo tera_test timeoracle timeoracle_bench
 LIBRARY = libtera.a
 SOLIBRARY = libtera.so
 TERA_C_SO = libtera_c.so
@@ -151,6 +157,12 @@ tera_mark: $(MARK_OBJ) $(LIBRARY) $(LEVELDB_LIB)
 tera_test: $(TEST_CLIENT_OBJ) $(LIBRARY)
 	$(CXX) -o $@ $(TEST_CLIENT_OBJ) $(LIBRARY) $(LDFLAGS)
 
+timeoracle: $(TIMEORACLE_OBJ) $(PROTO_OBJ) $(COMMON_OBJ) $(OTHER_OBJ)
+	$(CXX) -o $@ $^ $(LDFLAGS)
+
+timeoracle_bench : $(TIMEORACLE_BENCH_OBJ) $(LIBRARY)
+	$(CXX) -o $@ $^ $(LDFLAGS)
+
 terahttp: $(HTTP_OBJ) $(PROTO_OBJ) $(LIBRARY)
 	$(CXX) -o $@ $^ $(LDFLAGS)
 
@@ -163,6 +175,7 @@ src/leveldb/libleveldb.a: FORCE
 tera_bench:
 
 # unit test
+timeoracle_bench_test: src/timeoracle/test/timeoracle_bench_test.o $(LIBRARY)
 thread_pool_test: src/common/test/thread_pool_test.o $(LIBRARY)
 	$(CXX) -o $@ $^ $(LDFLAGS)
 
