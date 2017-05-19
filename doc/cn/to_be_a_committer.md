@@ -16,7 +16,7 @@
 
 	1、每个pr惯例是需要得到两个LGTM，然后由最后一个LGTM的人执行merge；
 	2、merge pr时，提pr的人，不能merge自己的pr；
-	3、code view时，避免两个都是新的commiter，完成LGTM就自行merge代码；
+	3、code review时，避免两个都是新的commiter，完成LGTM就自行merge代码；
 	4、push代码时，禁止rebase，否则难以看出代码diff;
 	5、merge代码时，需要将commit log进行合并，每个pr保证只有一个commint log。
 
