@@ -85,7 +85,7 @@ void SingleRowTxn::Get(RowReader* row_reader) {
     // safe check
     if (reader_impl->RowName() != row_key_) {
         reader_impl->SetError(ErrorCode::kBadParam, "not same row");
-    } else if (MarkHasRead()) {
+    } else if (!MarkHasRead()) {
         reader_impl->SetError(ErrorCode::kBadParam, "not support read more than once in txn");
     } else if (reader_impl->GetSnapshot() != 0) {
         reader_impl->SetError(ErrorCode::kBadParam, "not support read a snapshot in txn");
