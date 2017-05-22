@@ -41,10 +41,11 @@ def doSingleRowTxnBaseTest(value):
 
 
 def setUp():
-    # clear env
+    '''
+    setup
+    '''
     common.drop_table("single_row_txn_test")
 
-    # set env
     cmd = "./teracli create 'single_row_txn_test<txn=on>{lg0{cf0}}'"
     common.exe_and_check_res(cmd)
 
