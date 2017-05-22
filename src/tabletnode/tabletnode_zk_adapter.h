@@ -109,8 +109,8 @@ public:
     virtual ~InsTabletNodeZkAdapter() {}
     virtual void Init();
     virtual bool GetRootTableAddr(std::string* root_table_addr);
-    void OnKickMarkCreated();
-    void OnLockChange(std::string session_id, bool deleted);
+    virtual void OnKickMarkCreated();
+    virtual void OnLockChange(std::string session_id, bool deleted);
     void OnMetaChange(std::string meta_addr, bool deleted);
 private:
     virtual void OnChildrenChanged(const std::string& path,
@@ -130,6 +130,16 @@ private:
     std::string serve_node_path_;
     std::string kick_node_path_;
     galaxy::ins::sdk::InsSDK* ins_sdk_;
+};
+
+class MockInsTabletNodeZkAdapter : public InsTabletNodeZkAdapter {
+public:
+    MockInsTabletNodeZkAdapter(TabletNodeImpl* tabletnode_impl,
+                               const std::string& server_addr) :
+        InsTabletNodeZkAdapter(tabletnode_impl, server_addr) {}
+    virtual ~MockInsTabletNodeZkAdapter() {}
+    virtual void OnKickMarkCreated() {}
+    virtual void OnLockChange(std::string /*session_id*/, bool /*deleted*/) {}
 };
 
 } // namespace tabletnode

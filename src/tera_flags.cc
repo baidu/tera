@@ -272,6 +272,7 @@ DEFINE_int64(batch_scan_delay_retry_in_us, 1000000, "timewait in us before retry
 DEFINE_string(tera_ins_addr_list, "", "the ins cluster addr. e.g. abc.com:1234,abb.com:1234");
 DEFINE_string(tera_ins_root_path, "", "root path on ins. e.g /ps/sandbox");
 DEFINE_bool(tera_ins_enabled, false, "option to open ins naming");
+DEFINE_bool(tera_mock_ins_enabled, false, "option to open mock ins naming");
 
 DEFINE_int64(tera_sdk_status_timeout, 600, "(s) check tablet/tabletnode status timeout");
 

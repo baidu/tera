@@ -167,6 +167,13 @@ private:
     galaxy::ins::sdk::InsSDK* ins_sdk_;
 };
 
+class MockInsMasterZkAdapter : public InsMasterZkAdapter {
+public:
+    MockInsMasterZkAdapter(MasterImpl* master_impl, const std::string& server_addr) :
+        InsMasterZkAdapter(master_impl, server_addr) {}
+    virtual ~MockInsMasterZkAdapter() {}
+};
+
 } // namespace master
 } // namespace tera
 

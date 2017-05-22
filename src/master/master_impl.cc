@@ -91,6 +91,7 @@ DECLARE_string(tera_zk_root_path);
 DECLARE_string(tera_zk_addr_list);
 DECLARE_string(tera_local_addr);
 DECLARE_bool(tera_ins_enabled);
+DECLARE_bool(tera_mock_ins_enabled);
 
 DECLARE_int64(tera_sdk_perf_counter_log_interval);
 
@@ -169,6 +170,9 @@ bool MasterImpl::Init() {
     } else if (FLAGS_tera_ins_enabled) {
         LOG(INFO) << "ins mode" ;
         zk_adapter_.reset(new InsMasterZkAdapter(this, local_addr_));
+    } else if (FLAGS_tera_mock_ins_enabled) {
+        LOG(INFO) << "mock ins mode" ;
+        zk_adapter_.reset(new MockInsMasterZkAdapter(this, local_addr_));
     } else {
         LOG(INFO) << "fake zk mode!";
         zk_adapter_.reset(new FakeMasterZkAdapter(this, local_addr_));

@@ -20,6 +20,7 @@ DECLARE_string(tera_zk_root_path);
 DECLARE_bool(tera_ins_enabled);
 DECLARE_string(tera_ins_root_path);
 DECLARE_string(tera_ins_addr_list);
+DECLARE_bool(tera_mock_ins_enabled);
 
 namespace tera {
 namespace sdk {
@@ -123,6 +124,8 @@ bool FakeZkClusterFinder::ReadNode(const std::string& name, std::string* value) 
 ClusterFinder* NewClusterFinder() {
     if (FLAGS_tera_ins_enabled) {
         return new sdk::InsClusterFinder(FLAGS_tera_ins_root_path, FLAGS_tera_ins_addr_list);
+    } else if (FLAGS_tera_mock_ins_enabled) {
+        return new sdk::MockInsClusterFinder(FLAGS_tera_ins_root_path, FLAGS_tera_ins_addr_list);
     } else if (!FLAGS_tera_zk_enabled) {
         return new sdk::FakeZkClusterFinder(FLAGS_tera_fake_zk_path_prefix);
     } else {
