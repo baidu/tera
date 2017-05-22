@@ -8,6 +8,7 @@
 
 #include <sys/time.h>
 #include <unistd.h>
+#include <sys/stat.h>
 
 #include <cstdlib>
 #include <iomanip>
@@ -24,6 +25,8 @@
 DEFINE_int32(tera_tabletnode_sysinfo_mem_collect_interval, 10, "interval of mem checking(s)");
 DEFINE_int32(tera_tabletnode_sysinfo_net_collect_interval, 5, "interval of net checking(s)");
 DEFINE_int32(tera_tabletnode_sysinfo_cpu_collect_interval, 5, "interval of cpu checking(s)");
+DECLARE_bool(tera_tabletnode_dump_running_info);
+DECLARE_string(tera_tabletnode_running_info_dump_file);
 
 namespace leveldb {
 extern tera::Counter rawkey_compare_counter;
@@ -94,6 +97,39 @@ tera::Counter compact_pending_counter;
 
 namespace tera {
 namespace tabletnode {
+
+class TabletNodeSysInfoDumper {
+public:
+    TabletNodeSysInfoDumper(const std::string& filename) :
+        filename_(filename), fp_(NULL) {
+
+    }
+    ~TabletNodeSysInfoDumper() {
+        if (fp_) {
+            fclose(fp_);
+            fp_ = NULL;
+        }
+    }
+    template<typename T>
+    bool DumpData(const std::string& item_name, T data) {
+        if (!fp_) {
+            std::string dirname = filename_.substr(0, filename_.rfind('/'));
+            mkdir(dirname.c_str(), 0755);
+            fp_ = fopen(filename_.c_str(), "w");
+            if (!fp_) {
+                LOG(ERROR) << "fail to open dump file " << filename_;
+                return false;
+            }
+        }
+        std::stringstream ss;
+        ss << item_name << " : " << data;
+        fprintf(fp_, "%s\r\n", ss.str().c_str());
+        return true;
+    }
+private:
+    std::string filename_;
+    FILE* fp_;
+};
 
 TabletNodeSysInfo::TabletNodeSysInfo()
     : mem_check_ts_(0),
@@ -463,8 +499,23 @@ void TabletNodeSysInfo::SetStatus(StatusCode status) {
 void TabletNodeSysInfo::DumpLog() {
     MutexLock lock(&mutex_);
 
+    TabletNodeSysInfoDumper dumper(FLAGS_tera_tabletnode_running_info_dump_file);
+
     double snappy_ratio = (double)leveldb::snappy_before_size_counter.Clear()
                           / leveldb::snappy_after_size_counter.Clear();
+
+    if (FLAGS_tera_tabletnode_dump_running_info) {
+        dumper.DumpData("low_level", info_.low_read_cell());
+        dumper.DumpData("read", info_.read_rows());
+        dumper.DumpData("rspeed", info_.read_size());
+        dumper.DumpData("write", info_.write_rows());
+        dumper.DumpData("wspeed", info_.write_size());
+        dumper.DumpData("scan", info_.scan_rows());
+        dumper.DumpData("sspeed", info_.scan_size());
+        dumper.DumpData("snappy", snappy_ratio);
+        dumper.DumpData("rowcomp", leveldb::rawkey_compare_counter.Get());
+    }
+
     LOG(INFO) << "[SysInfo]"
         << " low_level " << info_.low_read_cell()
         << " read " << info_.read_rows()
@@ -477,6 +528,13 @@ void TabletNodeSysInfo::DumpLog() {
         << " rawcomp " << leveldb::rawkey_compare_counter.Clear();
 
     // hardware info
+    if (FLAGS_tera_tabletnode_dump_running_info) {
+        dumper.DumpData("mem_used", info_.mem_used());
+        dumper.DumpData("net_tx", info_.net_tx());
+        dumper.DumpData("net_rx", info_.net_rx());
+        dumper.DumpData("cpu_usage", info_.cpu_usage());
+    }
+
     LOG(INFO) << "[HardWare Info] "
         << " mem_used " << info_.mem_used() << " "
         << utils::ConvertByteToString(info_.mem_used())
@@ -487,6 +545,17 @@ void TabletNodeSysInfo::DumpLog() {
         << " cpu_usage " << info_.cpu_usage() << "%";
 
     // net and io info
+    if (FLAGS_tera_tabletnode_dump_running_info) {
+        dumper.DumpData("dfs_r", info_.dfs_io_r());
+        dumper.DumpData("dfs_w", info_.dfs_io_w());
+        dumper.DumpData("local_r", info_.local_io_r());
+        dumper.DumpData("local_w", info_.local_io_w());
+        dumper.DumpData("ssd_r_counter", leveldb::ssd_read_counter.Get());
+        dumper.DumpData("ssd_r_size", leveldb::ssd_read_size_counter.Get());
+        dumper.DumpData("ssd_w_counter", leveldb::ssd_write_counter.Get());
+        dumper.DumpData("ssd_w_size", leveldb::ssd_write_size_counter.Get());
+    }
+
     LOG(INFO) << "[IO]"
         << " dfs_r " << info_.dfs_io_r() << " "
         << utils::ConvertByteToString(info_.dfs_io_r())
@@ -507,6 +576,7 @@ void TabletNodeSysInfo::DumpLog() {
     ss << "[Pending]";
     for (int i = 0; i < cols; ++i) {
         ss << info_.extra_info(i).name() << " " << info_.extra_info(i).value() << " ";
+        dumper.DumpData(info_.extra_info(i).name(), info_.extra_info(i).value());
     }
     LOG(INFO) << ss.str();
 
@@ -520,6 +590,36 @@ void TabletNodeSysInfo::DumpLog() {
     double sdelay = leveldb::dfs_sync_counter.Get() ?
         leveldb::dfs_sync_delay_counter.Clear()/1000/leveldb::dfs_sync_counter.Get()
         : 0;
+
+    if (FLAGS_tera_tabletnode_dump_running_info) {
+        dumper.DumpData("dfs_read", leveldb::dfs_read_counter.Get());
+        dumper.DumpData("dfs_read_hang", leveldb::dfs_read_hang_counter.Get());
+        dumper.DumpData("dfs_rdealy", rdelay);
+        dumper.DumpData("dfs_write", leveldb::dfs_write_counter.Get());
+        dumper.DumpData("dfs_write_hang", leveldb::dfs_write_hang_counter.Get());
+        dumper.DumpData("dfs_wdelay", wdelay);
+        dumper.DumpData("dfs_sync", leveldb::dfs_sync_counter.Get());
+        dumper.DumpData("dfs_sync_hang", leveldb::dfs_sync_hang_counter.Get());
+        dumper.DumpData("dfs_sdelay", sdelay);
+        dumper.DumpData("dfs_flush", leveldb::dfs_flush_counter.Get());
+        dumper.DumpData("dfs_flush_hang", leveldb::dfs_flush_hang_counter.Get());
+        dumper.DumpData("dfs_list", leveldb::dfs_list_counter.Get());
+        dumper.DumpData("dfs_list_hang", leveldb::dfs_list_hang_counter.Get());
+        dumper.DumpData("dfs_info", leveldb::dfs_info_counter.Get());
+        dumper.DumpData("dfs_info_hang", leveldb::dfs_info_hang_counter.Get());
+        dumper.DumpData("dfs_exists", leveldb::dfs_exists_counter.Get());
+        dumper.DumpData("dfs_exists_hang", leveldb::dfs_exists_hang_counter.Get());
+        dumper.DumpData("dfs_open", leveldb::dfs_open_counter.Get());
+        dumper.DumpData("dfs_open_hang", leveldb::dfs_open_hang_counter.Get());
+        dumper.DumpData("dfs_close", leveldb::dfs_close_counter.Get());
+        dumper.DumpData("dfs_close_hang", leveldb::dfs_close_hang_counter.Get());
+        dumper.DumpData("dfs_delete", leveldb::dfs_delete_counter.Get());
+        dumper.DumpData("dfs_delete_hang", leveldb::dfs_delete_hang_counter.Get());
+        dumper.DumpData("dfs_tell", leveldb::dfs_tell_counter.Get());
+        dumper.DumpData("dfs_tell_hang", leveldb::dfs_tell_hang_counter.Get());
+        dumper.DumpData("dfs_other", leveldb::dfs_other_counter.Get());
+        dumper.DumpData("dfs_other_hang", leveldb::dfs_other_hang_counter.Get());
+    }
 
     LOG(INFO) << "[Dfs] read " << leveldb::dfs_read_counter.Clear() << " "
         << leveldb::dfs_read_hang_counter.Get() << " "
@@ -548,6 +648,22 @@ void TabletNodeSysInfo::DumpLog() {
         << leveldb::dfs_tell_hang_counter.Get() << " "
         << "other " << leveldb::dfs_other_counter.Clear() << " "
         << leveldb::dfs_other_hang_counter.Get();
+
+    // local info
+    if (FLAGS_tera_tabletnode_dump_running_info) {
+        dumper.DumpData("local_read", leveldb::posix_read_counter.Get());
+        dumper.DumpData("local_write", leveldb::posix_write_counter.Get());
+        dumper.DumpData("local_sync", leveldb::posix_sync_counter.Get());
+        dumper.DumpData("local_list", leveldb::posix_list_counter.Get());
+        dumper.DumpData("local_info", leveldb::posix_info_counter.Get());
+        dumper.DumpData("local_exists", leveldb::posix_exists_counter.Get());
+        dumper.DumpData("local_open", leveldb::posix_open_counter.Get());
+        dumper.DumpData("local_close", leveldb::posix_close_counter.Get());
+        dumper.DumpData("local_delete", leveldb::posix_delete_counter.Get());
+        dumper.DumpData("local_tell", leveldb::posix_tell_counter.Get());
+        dumper.DumpData("local_seek", leveldb::posix_seek_counter.Get());
+        dumper.DumpData("local_other", leveldb::posix_other_counter.Get());
+    }
 
     LOG(INFO) << "[Local] read " << leveldb::posix_read_counter.Clear() << " "
         << "write " << leveldb::posix_write_counter.Clear() << " "

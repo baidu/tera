@@ -215,6 +215,8 @@ DEFINE_int32(tera_tabletnode_gc_log_level, 15, "the vlog level [0 - 16] for cach
 DEFINE_bool(tera_tabletnode_tcm_cache_release_enabled, true, "enable the timer to release tcmalloc cache");
 DEFINE_int32(tera_tabletnode_tcm_cache_release_period, 180, "the period (in sec) to try release tcmalloc cache");
 DEFINE_int64(tera_tabletnode_tcm_cache_size, 838860800, "TCMALLOC_MAX_TOTAL_THREAD_CACHE_BYTES");
+DEFINE_bool(tera_tabletnode_dump_running_info, true, "dump tabletnode running info");
+DEFINE_string(tera_tabletnode_running_info_dump_file, "../monitor/ts.info.data", "file path for dump running info");
 
 ///////// SDK  /////////
 DEFINE_string(tera_sdk_impl_type, "tera", "the activated type of SDK impl");
