@@ -573,10 +573,12 @@ void TabletNodeSysInfo::DumpLog() {
     // extra info
     std::ostringstream ss;
     int cols = info_.extra_info_size();
-    ss << "[Pending]";
+    ss << "[Pending] ";
     for (int i = 0; i < cols; ++i) {
         ss << info_.extra_info(i).name() << " " << info_.extra_info(i).value() << " ";
-        dumper.DumpData(info_.extra_info(i).name(), info_.extra_info(i).value());
+        if (FLAGS_tera_tabletnode_dump_running_info) {
+            dumper.DumpData(info_.extra_info(i).name(), info_.extra_info(i).value());
+        }
     }
     LOG(INFO) << ss.str();
 
