@@ -103,7 +103,7 @@ public:
     // This unload function will not send unload request
     // Tablet will stay in kTableUnLoading status forever
     // It can be used to simulate a slow unload
-    virtual void UnloadTabletAsync(TabletPtr tablet, UnloadClosure* done) {
+    virtual void UnloadTabletAsync(TabletPtr tablet, UnloadClosure done) {
         LOG(ERROR) << "dummy UnloadTabletAsync...";
     }
 
