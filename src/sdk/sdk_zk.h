@@ -46,6 +46,14 @@ private:
     std::string zk_addr_list_;
 };
 
+class MockZkClusterFinder : public ZkClusterFinder {
+public:
+    MockZkClusterFinder(const std::string& zk_root_path, const std::string& zk_addr_list) :
+        ZkClusterFinder(zk_root_path, zk_addr_list) {}
+protected:
+    virtual std::string Name() { return "mock zk"; }
+};
+
 class InsClusterFinder : public ClusterFinder {
 public:
     InsClusterFinder(const std::string& ins_root_path, const std::string& ins_addr_list);

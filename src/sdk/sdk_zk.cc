@@ -15,6 +15,7 @@
 DECLARE_string(tera_zk_lib_log_path);
 DECLARE_string(tera_fake_zk_path_prefix);
 DECLARE_bool(tera_zk_enabled);
+DECLARE_bool(tera_mock_zk_enabled);
 DECLARE_string(tera_zk_addr_list);
 DECLARE_string(tera_zk_root_path);
 DECLARE_bool(tera_ins_enabled);
@@ -126,6 +127,8 @@ ClusterFinder* NewClusterFinder() {
         return new sdk::InsClusterFinder(FLAGS_tera_ins_root_path, FLAGS_tera_ins_addr_list);
     } else if (FLAGS_tera_mock_ins_enabled) {
         return new sdk::MockInsClusterFinder(FLAGS_tera_ins_root_path, FLAGS_tera_ins_addr_list);
+    } else if (FLAGS_tera_mock_zk_enabled) {
+        return new sdk::MockZkClusterFinder(FLAGS_tera_zk_root_path, FLAGS_tera_zk_addr_list);
     } else if (!FLAGS_tera_zk_enabled) {
         return new sdk::FakeZkClusterFinder(FLAGS_tera_fake_zk_path_prefix);
     } else {

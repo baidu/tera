@@ -49,6 +49,7 @@ DECLARE_int32(tera_tabletnode_impl_thread_min_num);
 DECLARE_int32(tera_tabletnode_impl_thread_max_num);
 
 DECLARE_bool(tera_zk_enabled);
+DECLARE_bool(tera_mock_zk_enabled);
 
 DECLARE_string(tera_master_meta_table_name);
 DECLARE_int32(tera_tabletnode_retry_period);
@@ -158,6 +159,8 @@ TabletNodeImpl::~TabletNodeImpl() {
 bool TabletNodeImpl::Init() {
     if (FLAGS_tera_zk_enabled) {
         zk_adapter_.reset(new TabletNodeZkAdapter(this, local_addr_));
+    } else if (FLAGS_tera_mock_zk_enabled) {
+        zk_adapter_.reset(new MockTabletNodeZkAdapter(this, local_addr_));
     } else if(FLAGS_tera_ins_enabled) {
         LOG(INFO) << "ins mode!";
         zk_adapter_.reset(new InsTabletNodeZkAdapter(this, local_addr_));
