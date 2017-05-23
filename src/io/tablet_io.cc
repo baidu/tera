@@ -2075,13 +2075,15 @@ bool TabletIO::SingleRowTxnCheck(const std::string& row_key,
         SetStatusCode(kTxnFail, status);
         return false;
     }
+    // older sdk's write request has no start_timestamp/end_timestamp/value
+    bool has_timestamp = txn_read_info.has_start_timestamp() || txn_read_info.has_end_timestamp();
     for (int32_t i = 0; i < row_result.key_values_size(); ++i) {
         const KeyValuePair& new_kv = row_result.key_values(i);
         const KeyValuePair& old_kv = txn_read_info.read_result().key_values(i);
         if (new_kv.column_family() != old_kv.column_family()
             || new_kv.qualifier() != old_kv.qualifier()
             || new_kv.timestamp() != old_kv.timestamp()
-            || new_kv.value() != old_kv.value()) {
+            || (has_timestamp && new_kv.value() != old_kv.value())) {
             SetStatusCode(kTxnFail, status);
             return false;
         }
