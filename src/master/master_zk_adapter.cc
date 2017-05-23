@@ -663,7 +663,6 @@ bool InsMasterZkAdapter::Init(std::string* root_tablet_addr,
     std::string master_lock = root_path + kMasterLockPath;
     std::string master_path = root_path + kMasterNodePath;
     std::string ts_list_path = root_path + kTsListPath;
-    std::string kick_path = root_path + kKickPath;
     galaxy::ins::sdk::SDKError err;
     CHECK(ins_sdk_->Lock(master_lock, &err)) << "lock master_lock fail";
     CHECK(ins_sdk_->Put(master_path, server_addr_, &err)) << "writer master fail";
@@ -689,8 +688,6 @@ bool InsMasterZkAdapter::Init(std::string* root_tablet_addr,
 
 void InsMasterZkAdapter::RefreshTabletNodeList() {
     std::string root_path = FLAGS_tera_ins_root_path;
-    std::string master_lock = root_path + kMasterLockPath;
-    std::string master_path = root_path + kMasterNodePath;
     std::string ts_list_path = root_path + kTsListPath;
     galaxy::ins::sdk::SDKError err;
     CHECK(ins_sdk_->Watch(ts_list_path, &InsOnTsChange,
