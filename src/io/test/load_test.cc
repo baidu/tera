@@ -146,7 +146,8 @@ TEST_F(TabletIOTest, CurrentLost) {
     leveldb::Status s = leveldb::Env::Default()->NewLogger("./log/leveldblog", &ldb_logger);
     assert(s.ok());
 
-    ASSERT_FALSE(tablet.Load(TableSchema(), tablet_path, std::vector<uint64_t>(),
+    // if just lost the CURRENT, it will fix this issue
+    ASSERT_TRUE(tablet.Load(TableSchema(), tablet_path, std::vector<uint64_t>(),
                             empty_snaphsots_, empty_rollback_, ldb_logger, NULL, NULL, &status));
 
     env->ResetMock();
