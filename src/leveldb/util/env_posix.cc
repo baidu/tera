@@ -753,7 +753,6 @@ class PosixEnv : public Env {
     }
     locks_.Remove(my_lock->name_);
     close(my_lock->fd_);
-    remove(my_lock->name_.c_str());
     delete my_lock;
     return result;
   }
