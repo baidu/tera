@@ -82,12 +82,12 @@ launching master...
   -  total       -             52.14K  -        3       0   
 ```
 
-写入一条数据(列族是cf0，列是column1): `./teracli put hello first_row_key cf0:column1 value`
+写入一条数据(列族是cf0，列是column1): `./teracli put hello row1 cf0:column1 value1`
 
-随机读出刚写入的数据： `./teracli get hello first_row_key`
+随机读出刚写入的数据： `./teracli get hello row1`
 ```
-[tera@localhost bin]$ ./teracli get hello first_row_key                    
-first_row_key:cf0:column1:1477367889042685:value
+[tera@localhost bin]$ ./teracli get hello row1                    
+row1:cf0:column1:1477367889042685:value1
 ```
 
 多写一些数据：
@@ -101,7 +101,7 @@ first_row_key:cf0:column1:1477367889042685:value
 ```
 [tera@localhost bin]$ ./teracli scan hello "" ""
 row0:cf1:column1:1477368174895134:value0
-row1:cf0:column1:1477368150979077:value1
+row1:cf0:column1:1477367889042685:value1
 row2:cf1:column0:1477368164358077:value2
 row2:cf1:column1:1477368169176632:value3
 ```

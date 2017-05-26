@@ -25,7 +25,7 @@ public:
     /// 提交一个修改操作
     virtual void ApplyMutation(RowMutation* row_mu) = 0;
     /// 读取操作
-    virtual void Get(RowReader* row_reader) = 0;
+    virtual ErrorCode Get(RowReader* row_reader) = 0;
 
     /// 回调函数原型
     typedef void (*Callback)(Transaction* transaction);
@@ -42,6 +42,11 @@ public:
     /// 获得结果错误码
     virtual const ErrorCode& GetError() = 0;
 
+    /// 提交事务
+    /// 同步模式下，Commit()的返回值代表了提交操作的结果(成功 或者 失败及其原因)
+    /// 异步模式下，通过GetError()获取提交结果
+    virtual ErrorCode Commit() = 0;
+
     Transaction() {}
     virtual ~Transaction() {}
 
@@ -49,6 +54,10 @@ private:
     Transaction(const Transaction&);
     void operator=(const Transaction&);
 };
+
+/// cross-row, cross-table transaction
+/// 跨行，跨表事务
+Transaction* NewTransaction();
 
 } // namespace tera
 #pragma GCC visibility pop

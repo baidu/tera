@@ -76,7 +76,7 @@ void ReadCallbackWrapper(RowReader* row_reader) {
 }
 
 /// 读取操作
-void SingleRowTxn::Get(RowReader* row_reader) {
+ErrorCode SingleRowTxn::Get(RowReader* row_reader) {
     RowReaderImpl* reader_impl = static_cast<RowReaderImpl*>(row_reader);
     reader_impl->SetTransaction(this);
     bool is_async = reader_impl->IsAsync();
@@ -94,8 +94,10 @@ void SingleRowTxn::Get(RowReader* row_reader) {
         if (is_async) {
             ThreadPool::Task task = std::bind(&RowReaderImpl::RunCallback, reader_impl);
             thread_pool_->AddTask(task);
+            return ErrorCode();
+        } else {
+            return reader_impl->GetError();
         }
-        return;
     }
 
     int64_t ts_start = 0, ts_end = 0;
@@ -113,8 +115,11 @@ void SingleRowTxn::Get(RowReader* row_reader) {
     reader_impl->SetContext(this);
 
     table_->Get(reader_impl);
-    if (!is_async) {
+    if (is_async) {
+        return ErrorCode();
+    } else {
         reader_impl->Wait();
+        return reader_impl->GetError();
     }
 }
 
@@ -179,7 +184,7 @@ void CommitCallbackWrapper(RowMutation* row_mu) {
 }
 
 /// 提交事务
-void SingleRowTxn::Commit() {
+ErrorCode SingleRowTxn::Commit() {
     if (mutation_buffer_.MutationNum() > 0) {
         if (user_commit_callback_ != NULL) {
             // use our callback wrapper
@@ -188,11 +193,17 @@ void SingleRowTxn::Commit() {
         }
         mutation_buffer_.SetTransaction(this);
         table_->ApplyMutation(&mutation_buffer_);
+        if (mutation_buffer_.IsAsync()) {
+            return ErrorCode();
+        } else {
+            return mutation_buffer_.GetError();
+        }
     } else {
         if (user_commit_callback_ != NULL) {
             ThreadPool::Task task = std::bind(user_commit_callback_, this);
             thread_pool_->AddTask(task);
         }
+        return ErrorCode();
     }
 }
 

@@ -118,6 +118,8 @@ public:
     /// 设置所属事务
     void SetTransaction(Transaction* txn) { txn_ = txn; }
 
+    Table* GetTable() { return (Table*)table_; }
+
 private:
     TableImpl* table_;
     std::string row_key_;
