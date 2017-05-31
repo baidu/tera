@@ -47,6 +47,9 @@ public:
     /// 异步模式下，通过GetError()获取提交结果
     virtual ErrorCode Commit() = 0;
 
+    /// 获取事务开始时间戳，仅在多行事务场景下有效
+    virtual int64_t GetStartTimestamp() = 0;
+
     Transaction() {}
     virtual ~Transaction() {}
 

@@ -33,6 +33,7 @@ public:
     virtual void SetContext(void* context) {}
     virtual void* GetContext() { return NULL; }
     virtual const ErrorCode& GetError() { return status_; }
+    virtual int64_t GetStartTimestamp() { return 0; }
 
 private:
     MultiRowTxn(int64_t start_ts);

@@ -44,6 +44,10 @@ public:
 
     /// 提交事务
     virtual ErrorCode Commit();
+
+    /// 请忽略此接口
+    virtual int64_t GetStartTimestamp() { abort(); }
+
 public:
     /// 内部读操作回调
     void ReadCallback(RowReaderImpl* reader_impl);
