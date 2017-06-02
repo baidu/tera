@@ -12,6 +12,7 @@
 #include <sys/stat.h>
 #include <sys/types.h>
 #include <unistd.h>
+#include <libgen.h>
 
 #include <gflags/gflags.h>
 
@@ -104,6 +105,23 @@ bool CreateDirWithRetry(const std::string& dir_path) {
         }
     }
     return is_success;
+}
+std::string GetCWD(){
+    char buf[1024];
+    if(getcwd(buf, 1024) == NULL){
+        return "";
+    }
+	return buf;
+}
+
+std::string GetProcessDir(){
+    char buf[1024];
+    ssize_t count = readlink("/proc/self/exe", buf, 1024);
+    if(count == 0) {
+        return "";
+    } else{
+    return dirname(buf);
+    }
 }
 
 std::string UidToName(uid_t uid) {

@@ -21,6 +21,9 @@ std::string GetPathPrefix(const std::string& full_path,
 
 bool CreateDirWithRetry(const std::string& dir_path);
 
+std::string GetCWD();
+std::string GetProcessDir();
+
 std::string GidToName(gid_t gid);
 
 std::string UidToName(uid_t uid);

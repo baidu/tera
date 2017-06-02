@@ -1207,16 +1207,16 @@ static int InitFlags(const std::string& confpath, const std::string& log_prefix)
     } else if (!FLAGS_tera_sdk_conf_file.empty() && !IsExist(confpath)) {
         LOG(ERROR) << "specified config file(FLAGS_tera_sdk_conf_file) not found";
         return -1;
-    } else if (IsExist("./tera.flag")) {
+    } else if (IsExist(GetProcessDir()+"./tera.flag")) {
         flagfile = "./tera.flag";
-    } else if (IsExist("../conf/tera.flag")) {
+    } else if (IsExist(GetProcessDir()+"/../conf/tera.flag")) {
         flagfile = "../conf/tera.flag";
     } else if (IsExist(utils::GetValueFromEnv("TERA_CONF"))) {
         flagfile = utils::GetValueFromEnv("TERA_CONF");
     } else {
         LOG(ERROR) << "hasn't specify the flagfile, but default config file not found";
         return -1;
-    }
+        }
 
     utils::LoadFlagFile(flagfile);
 
