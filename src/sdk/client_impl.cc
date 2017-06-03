@@ -1195,7 +1195,7 @@ static int InitFlags(const std::string& confpath, const std::string& log_prefix)
         LOG(ERROR) << "should specify no more than one config file";
         return -1;
     }
-
+    std::string exedir = GetProcessDir();
     if (!confpath.empty() && IsExist(confpath)){
         flagfile = confpath;
     } else if(!confpath.empty() && !IsExist(confpath)){
@@ -1207,10 +1207,14 @@ static int InitFlags(const std::string& confpath, const std::string& log_prefix)
     } else if (!FLAGS_tera_sdk_conf_file.empty() && !IsExist(confpath)) {
         LOG(ERROR) << "specified config file(FLAGS_tera_sdk_conf_file) not found";
         return -1;
-    } else if (IsExist(GetProcessDir()+"./tera.flag")) {
+    } else if (IsExist("./tera.flag")) {
         flagfile = "./tera.flag";
-    } else if (IsExist(GetProcessDir()+"/../conf/tera.flag")) {
+    } else if (IsExist("../conf/tera.flag")) {
         flagfile = "../conf/tera.flag";
+    } else if (IsExist(exedir + "/./tera.flag")) {
+        flagfile = exedir + "/./tera.flag";
+    } else if (IsExist(exedir + "/../conf/tera.flag")) {
+        flagfile = exedir + "/../conf/tera.flag";
     } else if (IsExist(utils::GetValueFromEnv("TERA_CONF"))) {
         flagfile = utils::GetValueFromEnv("TERA_CONF");
     } else {
