@@ -13,8 +13,9 @@
 >     * 读
 >     * 写
 >     * 扫描
->  3. [Java SDK](https://github.com/baidu/tera/blob/master/doc/sdk_dev_guide_for_java.md)
->  4. [Python SDK](https://github.com/baidu/tera/blob/master/doc/sdk_dev_guide_for_python.md)
+>  3. [Java SDK](https://github.com/baidu/tera/blob/master/doc/cn/sdk_guide_java.md)
+>  4. [Python SDK](https://github.com/baidu/tera/blob/master/doc/cn/sdk_guide_python.md)
+>  5. [Http SDK](https://github.com/baidu/tera/blob/master/doc/cn/sdk_guide_http.md)
 
 <a name="main-data-structure"></a>
 

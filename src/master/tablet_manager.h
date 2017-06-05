@@ -14,7 +14,6 @@
 #include <string>
 #include <vector>
 
-#include "common/base/closure.h"
 #include "common/mutex.h"
 #include "common/thread_pool.h"
 
@@ -23,6 +22,8 @@
 #include "proto/tabletnode_rpc.pb.h"
 #include "utils/counter.h"
 #include "utils/fragment.h"
+
+using namespace std::placeholders;
 
 namespace tera {
 class UpdateTableResponse;
@@ -245,7 +246,7 @@ private:
 
 class TabletManager {
 public:
-    typedef Closure<bool, const std::string&, StatusCode*> FindCondCallback;
+    typedef std::function<bool (const std::string&, StatusCode*)> FindCondCallback;
 
     TabletManager(Counter* sequence_id, MasterImpl* master_impl, ThreadPool* thread_pool);
     ~TabletManager();

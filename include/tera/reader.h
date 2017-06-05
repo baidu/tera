@@ -64,6 +64,7 @@ public:
     virtual void SetContext(void* context) = 0;
     virtual void* GetContext() = 0;
     virtual void SetTimeOut(int64_t timeout_ms) = 0;
+    virtual Table* GetTable() = 0;
 
     // Get column filters map.
     typedef std::map<std::string, std::set<std::string> >ReadColumnList;

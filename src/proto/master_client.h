@@ -7,8 +7,6 @@
 
 #include <string>
 
-#include "common/base/closure.h"
-
 #include "proto/master_rpc.pb.h"
 #include "proto/rpc_client.h"
 

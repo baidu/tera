@@ -27,7 +27,7 @@ public:
     /// 提交一个修改操作
     virtual void ApplyMutation(RowMutation* row_mu);
     /// 读取操作
-    virtual void Get(RowReader* row_reader);
+    virtual ErrorCode Get(RowReader* row_reader);
 
     /// 设置提交回调, 提交操作会异步返回
     virtual void SetCommitCallback(Callback callback);
@@ -42,16 +42,25 @@ public:
     /// 获得结果错误码
     virtual const ErrorCode& GetError();
 
+    /// 提交事务
+    virtual ErrorCode Commit();
+
+    /// 请忽略此接口
+    virtual int64_t GetStartTimestamp() { abort(); }
+
 public:
     /// 内部读操作回调
     void ReadCallback(RowReaderImpl* reader_impl);
-    /// 提交事务
-    virtual void Commit();
     /// 内部提交回调
     void CommitCallback(RowMutationImpl* mu_impl);
     /// 序列化
     void Serialize(RowMutationSequence* mu_seq);
 
+private:
+    // prevent users from reading more than once in one single-row-txn
+    bool MarkHasRead();
+
+    void MarkNoRead();
 private:
     Table* table_;
     const std::string row_key_;
@@ -61,12 +70,18 @@ private:
     RowReader::Callback user_reader_callback_;
     void* user_reader_context_;
     RowReader::ReadColumnList read_column_list_;
-    typedef std::map<std::string, std::map<std::string, int64_t> > ReadResult;
+    //               columnfamily          qualifier             timestamp  value
+    typedef std::map<std::string, std::map<std::string, std::map<int64_t, std::string>> > ReadResult;
     ReadResult read_result_;
+    uint32_t reader_max_versions_;
+    int64_t reader_start_timestamp_;
+    int64_t reader_end_timestamp_;
 
     RowMutationImpl mutation_buffer_;
     Callback user_commit_callback_;
     void* user_commit_context_;
+
+    mutable Mutex mu_;
 };
 
 } // namespace tera

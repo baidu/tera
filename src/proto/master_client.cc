@@ -27,7 +27,7 @@ bool MasterClient::GetSnapshot(const GetSnapshotRequest* request,
                                GetSnapshotResponse* response) {
     return SendMessageWithRetry(&MasterServer::Stub::GetSnapshot,
                                 request, response,
-                                (Closure<void, GetSnapshotRequest*, GetSnapshotResponse*, bool, int>*)NULL,
+                                (std::function<void (GetSnapshotRequest*, GetSnapshotResponse*, bool, int)>)NULL,
                                 "GetSnapshot", rpc_timeout_);
 }
 
@@ -35,7 +35,7 @@ bool MasterClient::DelSnapshot(const DelSnapshotRequest* request,
                                DelSnapshotResponse* response) {
     return SendMessageWithRetry(&MasterServer::Stub::DelSnapshot,
                                 request, response,
-                                (Closure<void, DelSnapshotRequest*, DelSnapshotResponse*, bool, int>*)NULL,
+                                (std::function<void (DelSnapshotRequest*, DelSnapshotResponse*, bool, int)>)NULL,
                                 "DelSnapshot", rpc_timeout_);
 }
 
@@ -43,7 +43,7 @@ bool MasterClient::GetRollback(const RollbackRequest* request,
                                RollbackResponse* response) {
     return SendMessageWithRetry(&MasterServer::Stub::GetRollback,
                                 request, response,
-                                (Closure<void, RollbackRequest*, RollbackResponse*, bool, int>*)NULL,
+                                (std::function<void (RollbackRequest*, RollbackResponse*, bool, int)>)NULL,
                                 "GetRollback", rpc_timeout_);
 }
 
@@ -51,7 +51,7 @@ bool MasterClient::CreateTable(const CreateTableRequest* request,
                                CreateTableResponse* response) {
     return SendMessageWithRetry(&MasterServer::Stub::CreateTable,
                                 request, response,
-                                (Closure<void, CreateTableRequest*, CreateTableResponse*, bool, int>*)NULL,
+                                (std::function<void (CreateTableRequest*, CreateTableResponse*, bool, int)>)NULL,
                                 "CreateTable", rpc_timeout_);
 }
 
@@ -59,7 +59,7 @@ bool MasterClient::DeleteTable(const DeleteTableRequest* request,
                                DeleteTableResponse* response) {
     return SendMessageWithRetry(&MasterServer::Stub::DeleteTable,
                                 request, response,
-                                (Closure<void, DeleteTableRequest*, DeleteTableResponse*, bool, int>*)NULL,
+                                (std::function<void (DeleteTableRequest*, DeleteTableResponse*, bool, int)>)NULL,
                                 "DeleteTable", rpc_timeout_);
 }
 
@@ -67,7 +67,7 @@ bool MasterClient::DisableTable(const DisableTableRequest* request,
                                 DisableTableResponse* response) {
     return SendMessageWithRetry(&MasterServer::Stub::DisableTable,
                                 request, response,
-                                (Closure<void, DisableTableRequest*, DisableTableResponse*, bool, int>*)NULL,
+                                (std::function<void (DisableTableRequest*, DisableTableResponse*, bool, int)>)NULL,
                                 "DisableTable", rpc_timeout_);
 }
 
@@ -75,7 +75,7 @@ bool MasterClient::EnableTable(const EnableTableRequest* request,
                                EnableTableResponse* response) {
     return SendMessageWithRetry(&MasterServer::Stub::EnableTable,
                                 request, response,
-                                (Closure<void, EnableTableRequest*, EnableTableResponse*, bool, int>*)NULL,
+                                (std::function<void (EnableTableRequest*, EnableTableResponse*, bool, int)>)NULL,
                                 "EnableTable", rpc_timeout_);
 }
 
@@ -83,7 +83,7 @@ bool MasterClient::UpdateTable(const UpdateTableRequest* request,
                                UpdateTableResponse* response) {
     return SendMessageWithRetry(&MasterServer::Stub::UpdateTable,
                                 request, response,
-                                (Closure<void, UpdateTableRequest*, UpdateTableResponse*, bool, int>*)NULL,
+                                (std::function<void (UpdateTableRequest*, UpdateTableResponse*, bool, int)>)NULL,
                                 "UpdateTable", rpc_timeout_);
 }
 
@@ -91,7 +91,7 @@ bool MasterClient::UpdateCheck(const UpdateCheckRequest* request,
                                UpdateCheckResponse* response) {
     return SendMessageWithRetry(&MasterServer::Stub::UpdateCheck,
                                 request, response,
-                                (Closure<void, UpdateCheckRequest*, UpdateCheckResponse*, bool, int>*)NULL,
+                                (std::function<void (UpdateCheckRequest*, UpdateCheckResponse*, bool, int)>)NULL,
                                 "UpdateCheck", rpc_timeout_);
 }
 
@@ -99,7 +99,7 @@ bool MasterClient::SearchTable(const SearchTableRequest* request,
                                SearchTableResponse* response) {
     return SendMessageWithRetry(&MasterServer::Stub::SearchTable,
                                 request, response,
-                                (Closure<void, SearchTableRequest*, SearchTableResponse*, bool, int>*)NULL,
+                                (std::function<void (SearchTableRequest*, SearchTableResponse*, bool, int)>)NULL,
                                 "SearchTable", rpc_timeout_);
 }
 
@@ -107,7 +107,7 @@ bool MasterClient::CompactTable(const CompactTableRequest* request,
                                 CompactTableResponse* response) {
     return SendMessageWithRetry(&MasterServer::Stub::CompactTable,
                                 request, response,
-                                (Closure<void, CompactTableRequest*, CompactTableResponse*, bool, int>*)NULL,
+                                (std::function<void (CompactTableRequest*, CompactTableResponse*, bool, int)>)NULL,
                                 "CompactTable", rpc_timeout_);
 }
 
@@ -115,7 +115,7 @@ bool MasterClient::ShowTables(const ShowTablesRequest* request,
                               ShowTablesResponse* response) {
     return SendMessageWithRetry(&MasterServer::Stub::ShowTables,
                                 request, response,
-                                (Closure<void, ShowTablesRequest*, ShowTablesResponse*, bool, int>*)NULL,
+                                (std::function<void (ShowTablesRequest*, ShowTablesResponse*, bool, int)>)NULL,
                                 "ShowTables", rpc_timeout_);
 }
 
@@ -123,7 +123,7 @@ bool MasterClient::ShowTabletNodes(const ShowTabletNodesRequest* request,
                                    ShowTabletNodesResponse* response) {
     return SendMessageWithRetry(&MasterServer::Stub::ShowTabletNodes,
                                 request, response,
-                                (Closure<void, ShowTabletNodesRequest*, ShowTabletNodesResponse*, bool, int>*)NULL,
+                                (std::function<void (ShowTabletNodesRequest*, ShowTabletNodesResponse*, bool, int)>)NULL,
                                 "ShowTabletNodes", rpc_timeout_);
 }
 
@@ -131,7 +131,7 @@ bool MasterClient::Register(const RegisterRequest* request,
                             RegisterResponse* response) {
     return SendMessageWithRetry(&MasterServer::Stub::Register,
                                 request, response,
-                                (Closure<void, RegisterRequest*, RegisterResponse*, bool, int>*)NULL,
+                                (std::function<void (RegisterRequest*, RegisterResponse*, bool, int)>)NULL,
                                 "Register", rpc_timeout_);
 }
 
@@ -139,7 +139,7 @@ bool MasterClient::Report(const ReportRequest* request,
                           ReportResponse* response) {
     return SendMessageWithRetry(&MasterServer::Stub::Report,
                                 request, response,
-                                (Closure<void, ReportRequest*, ReportResponse*, bool, int>*)NULL,
+                                (std::function<void (ReportRequest*, ReportResponse*, bool, int)>)NULL,
                                 "Report", rpc_timeout_);
 }
 
@@ -147,7 +147,7 @@ bool MasterClient::CmdCtrl(const CmdCtrlRequest* request,
                            CmdCtrlResponse* response) {
     return SendMessageWithRetry(&MasterServer::Stub::CmdCtrl,
                                 request, response,
-                                (Closure<void, CmdCtrlRequest*, CmdCtrlResponse*, bool, int>*)NULL,
+                                (std::function<void (CmdCtrlRequest*, CmdCtrlResponse*, bool, int)>)NULL,
                                 "CmdCtrl", rpc_timeout_);
 }
 
@@ -155,7 +155,7 @@ bool MasterClient::OperateUser(const OperateUserRequest* request,
                                OperateUserResponse* response) {
     return SendMessageWithRetry(&MasterServer::Stub::OperateUser,
                                 request, response,
-                                (Closure<void, OperateUserRequest*, OperateUserResponse*, bool, int>*)NULL,
+                                (std::function<void (OperateUserRequest*, OperateUserResponse*, bool, int)>)NULL,
                                 "OperateUser", rpc_timeout_);
 }
 
@@ -163,8 +163,7 @@ bool MasterClient::RenameTable(const RenameTableRequest* request,
                                RenameTableResponse* response) {
     return SendMessageWithRetry(&MasterServer::Stub::RenameTable,
                                 request, response,
-                                (Closure<void, RenameTableRequest*,
-                                         RenameTableResponse*, bool, int>*)NULL,
+                                (std::function<void (RenameTableRequest*, RenameTableResponse*, bool, int)>)NULL,
                                 "RenameTable", rpc_timeout_);
 }
 
