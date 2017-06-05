@@ -19,7 +19,8 @@ class MemTableOnLevelDB : public MemTable{
 
 public:
 
-    MemTableOnLevelDB (const InternalKeyComparator& comparator,
+    MemTableOnLevelDB (const std::string& dbname,
+                       const InternalKeyComparator& comparator,
                        CompactStrategyFactory* compact_strategy_factory,
                        size_t write_buffer_size,
                        size_t block_size,
