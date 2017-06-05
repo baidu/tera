@@ -16,7 +16,7 @@ namespace observer {
 class TestWorker : public Observer {
 public:
     TestWorker(const std::string& observer_name, ColumnList& observed_columns): 
-        Observer(observer_name, observed_columns), notified_(false) {}
+        Observer(observer_name, observed_columns), counter_(0), notified_(false) {}
     virtual ~TestWorker() {}
     virtual bool OnNotify(tera::Transaction* t, 
             tera::Table* table, 
@@ -29,13 +29,21 @@ public:
         value_ = value;
         timestamp_ = timestamp;
         notified_ = true;
+        
+        ++counter_;
+        
+        observer::ColumnList ack_columns;
+        observer::Column c = {"observer_test_table", "Data", "Page"};
+        ack_columns.push_back(c);
+        Ack(ack_columns, row, -1);
+
         return true;
     }
     std::string row_;
     Column column_;
     std::string value_;
     int64_t timestamp_;
-
+    std::atomic<int> counter_;
     std::atomic<bool> notified_;
 };
 
@@ -75,7 +83,7 @@ public:
         Executor* executor = Executor::NewExecutor();
         executor->RegisterObserver(&worker);
         run_thread_.Start(std::bind(&ObserverImplTest::DoRun, this, executor));
-        while (!worker->notified_) {
+        while (!worker.notified_) {
             sleep(1);
         }
         executor->Quit();
