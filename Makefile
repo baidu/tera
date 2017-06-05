@@ -12,9 +12,9 @@ INCPATH += -I./src -I./include -I./src/leveldb/include -I./src/leveldb \
 CFLAGS += $(OPT) $(INCPATH) -fPIC -fvisibility=hidden # hide internal symbol of tera
 CXXFLAGS += $(CFLAGS)
 LDFLAGS += -rdynamic $(DEPS_LDPATH) $(DEPS_LDFLAGS) -lpthread -lrt -lz -ldl \
-           -lreadline -lncurses
+           -lreadline -lncurses -fPIC
 SO_LDFLAGS += -rdynamic $(DEPS_LDPATH) $(SO_DEPS_LDFLAGS) -lpthread -lrt -lz -ldl \
-              -shared -Wl,--version-script,so-version-script # hide symbol of thirdparty libs
+              -shared -fPIC -Wl,--version-script,so-version-script # hide symbol of thirdparty libs
 
 PROTO_FILES := $(wildcard src/proto/*.proto)
 PROTO_OUT_CC := $(PROTO_FILES:.proto=.pb.cc)

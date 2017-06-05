@@ -8,6 +8,7 @@
 #include <stdint.h>
 #include <string>
 #include "leveldb/iterator.h"
+#include "leveldb/comparator.h"
 
 namespace leveldb {
 
@@ -21,6 +22,8 @@ class InternalKeyComparator;
 class CompactStrategy {
 public:
     virtual ~CompactStrategy() {}
+
+    virtual const Comparator* RowKeyComparator() = 0;
 
     virtual bool Drop(const Slice& k, uint64_t n,
                       const std::string& lower_bound = "") = 0;
@@ -46,6 +49,8 @@ public:
 class DummyCompactStrategy : public CompactStrategy {
 public:
     virtual ~DummyCompactStrategy() {}
+
+    virtual const Comparator* RowKeyComparator() { return NULL;}
 
     virtual bool Drop(const Slice& k, uint64_t n, const std::string& lower_bound) {
         return false;

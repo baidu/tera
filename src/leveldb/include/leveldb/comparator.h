@@ -10,6 +10,7 @@
 #define STORAGE_LEVELDB_INCLUDE_COMPARATOR_H_
 
 #include <string>
+#include "leveldb/raw_key_operator.h"
 
 namespace leveldb {
 
@@ -65,6 +66,8 @@ extern const Comparator* BytewiseComparator();
 // Return a comparator that compare tera raw keys using key-family-qualifier
 // ordering.
 extern const Comparator* TeraBinaryComparator();
+
+extern Comparator* NewRowKeyComparator(const RawKeyOperator* key_operator);
 
 // Return a comparator that compare TTL-Key with row_key only.
 const Comparator* TeraTTLKvComparator();

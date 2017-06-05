@@ -7,6 +7,7 @@
 
 #include "common/mutex.h"
 #include "leveldb/compact_strategy.h"
+#include "leveldb/comparator.h"
 #include "leveldb/raw_key_operator.h"
 #include "proto/table_schema.pb.h"
 
@@ -18,6 +19,7 @@ public:
     KvCompactStrategy(const TableSchema& schema);
     virtual ~KvCompactStrategy();
 
+    virtual const leveldb::Comparator* RowKeyComparator();
     virtual bool Drop(const leveldb::Slice& k, uint64_t n,
                       const std::string& lower_bound);
 
@@ -38,6 +40,7 @@ public:
 private:
     TableSchema schema_;
     const leveldb::RawKeyOperator* raw_key_operator_;
+    leveldb::Comparator* cmp_;
     uint64_t snapshot_;
 };
 
