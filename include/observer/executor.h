@@ -20,7 +20,10 @@ public:
     
     // 启动接口
     virtual bool Run() = 0;
-
+    
+    // 退出接口
+    virtual void Quit() = 0;
+    
     Executor() {}
     virtual ~Executor() {}
 

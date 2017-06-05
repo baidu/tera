@@ -23,9 +23,6 @@ public:
             const observer::Column& column, 
             const std::string& value, 
             int64_t timestamp);
-    virtual bool Init() { return true; }
-    virtual bool Close() { return true; }
-private:
 };
 
 bool Parser::OnNotify(tera::Transaction* t, 
@@ -34,9 +31,11 @@ bool Parser::OnNotify(tera::Transaction* t,
             const observer::Column& column, 
             const std::string& value, 
             int64_t timestamp) {
-    LOG(ERROR) << "[Notify Parser] table:family:qualifer=" << column.table_name << ":" << 
-        column.family << ":" << column.qualifier << " row=" << row << 
+    LOG(INFO) << "[Notify Parser] table:family:qualifer=" << 
+        column.table_name << ":" << column.family << ":" << 
+        column.qualifier << " row=" << row << 
         " value=" << value << " timestamp=" << timestamp;
+
     // todo: read other columns ...
     // write ForwordIndex column
     tera::RowMutation* mutation = table->NewRowMutation(row);
@@ -54,6 +53,7 @@ bool Parser::OnNotify(tera::Transaction* t,
     // GetStartTimestamp接口暂不支持
     // Notify(notify_columns, row, t->GetStartTimestamp());
     Notify(notify_columns, row, -1);
+    
     // clear notification, equal to t->Ack()
     observer::ColumnList ack_columns;
     observer::Column c2 = {"observer_test_table", "Data", "Page"};
@@ -61,7 +61,6 @@ bool Parser::OnNotify(tera::Transaction* t,
     // ...
     ack_columns.push_back(c2);
     ack_columns.push_back(c3);
-    // GetStartTimestamp接口暂不支持
     // Ack(ack_columns, row, t->GetStartTimestamp());
     Ack(ack_columns, row, -1);
 
@@ -81,9 +80,6 @@ public:
             const observer::Column& column, 
             const std::string& value, 
             int64_t timestamp);
-    virtual bool Init() { return true; }
-    virtual bool Close() { return true; }
-private:
 };
 
 bool Builder::OnNotify(tera::Transaction* t, 
@@ -92,7 +88,7 @@ bool Builder::OnNotify(tera::Transaction* t,
             const observer::Column& column, 
             const std::string& value, 
             int64_t timestamp) {
-    LOG(ERROR) << "[Notify Builder] table:family:qualifer=" << column.table_name << ":" << 
+    LOG(INFO) << "[Notify Builder] table:family:qualifer=" << column.table_name << ":" << 
         column.family << ":" << column.qualifier << " row=" << row << 
         " value=" << value << " timestamp=" << timestamp;
     
@@ -106,7 +102,6 @@ bool Builder::OnNotify(tera::Transaction* t,
     observer::ColumnList ack_columns;
     observer::Column c1 = {"observer_test_table", "Data", "ForwordIndex"};
     ack_columns.push_back(c1);
-    // GetStartTimestamp接口暂不支持
     // Ack(ack_columns, row, t->GetStartTimestamp());
     Ack(ack_columns, row, -1);
 

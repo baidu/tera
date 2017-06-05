@@ -42,6 +42,9 @@ bool Scanner::Init() {
 }
 
 bool Scanner::Close() {
+    for (size_t idx = 0; idx < scan_thread_list_.size(); ++idx) {
+        scan_thread_list_[idx].Join();
+    }
     return true;
 }
 
@@ -108,7 +111,8 @@ bool Scanner::ScanTable(tera::Table* table,
     }
     while (!result_stream->Done(&err)) {
         if (executor_impl_->GetQuit()) {
-            return true;
+            ret = true;
+            break;
         }
         if (tera::ErrorCode::kOK != err.GetType()) {
             LOG(ERROR) << "table scanning failed";

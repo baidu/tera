@@ -15,7 +15,7 @@ DECLARE_string(observer_notify_column_name);
 namespace observer {
 
 static tera::Client* g_tera_client = NULL;
-static Mutex g_table_mutex;
+// static Mutex g_table_mutex;
 static TableMap g_table_map;
 
 Executor* Executor::NewExecutor() {
@@ -49,7 +49,7 @@ bool ExecutorImpl::RegisterObserver(Observer* observer) {
     ColumnMap& column_map = observer->GetColumnMap();
     ColumnMap::iterator it = column_map.begin();
     for (; it != column_map.end(); ++it) {
-        MutexLock locker(&g_table_mutex);
+        // MutexLock locker(&g_table_mutex);
         if (g_table_map.end() == g_table_map.find(it->first)) {
             // init table
             tera::Table* new_table = g_tera_client->OpenTable(it->first, &err);
@@ -79,7 +79,12 @@ bool ExecutorImpl::Run() {
         LOG(ERROR) << "no observer, please register observers first";
         return false;
     }
-
+    
+    // init observers (user definition)
+    for (ObserverSet::iterator it = observer_set_.begin(); it != observer_set_.end(); ++it) {
+        (*it)->Init();
+    }
+    
     // init scanner
     scanner_ = new Scanner(this);
     if (!scanner_->Init()) {
@@ -87,19 +92,9 @@ bool ExecutorImpl::Run() {
         Quit();
         return false;
     }
-   
-    // init observers (user definition)
-    for (ObserverSet::iterator it = observer_set_.begin(); it != observer_set_.end(); ++it) {
-        (*it)->Init();
-    }
 
     while (!quit_) {
         ThisThread::Sleep(1);
-    }
-    
-    // close observers (user definition)
-    for (ObserverSet::iterator it = observer_set_.begin(); it != observer_set_.end(); ++it) {
-        (*it)->Close();
     }
     
     // close scanner
@@ -107,19 +102,12 @@ bool ExecutorImpl::Run() {
         scanner_->Close();
         delete scanner_;
     }
+
+    // close observers (user definition)
+    for (ObserverSet::iterator it = observer_set_.begin(); it != observer_set_.end(); ++it) {
+        (*it)->Close();
+    }
     
-    // close table
-    for (TableMap::iterator it = g_table_map.begin(); it != g_table_map.end(); ++it) {
-        if (it->second != NULL) {
-            delete it->second;
-        }
-    }
-
-    // close tera client
-    if (g_tera_client != NULL) {
-        delete g_tera_client; 
-    }
-
     return true;
 }
 
@@ -161,7 +149,7 @@ bool ExecutorImpl::SetOrClearNotification(ColumnList& columns,
     // reduce columns
     ColumnReduceMap reduce_map;
     for (size_t idx = 0; idx < columns.size(); ++idx) {
-        MutexLock locker(&g_table_mutex);
+        // MutexLock locker(&g_table_mutex);
         TableMap::iterator it = g_table_map.find(columns[idx].table_name);
         if (g_table_map.end() == it) {
             tera::Table* new_table = g_tera_client->OpenTable(columns[idx].table_name, &err);

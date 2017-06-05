@@ -47,7 +47,8 @@ MARK_SRC := src/benchmark/mark.cc src/benchmark/mark_main.cc
 TEST_SRC := src/utils/test/prop_tree_test.cc src/utils/test/tprinter_test.cc \
             src/io/test/tablet_io_test.cc src/io/test/tablet_scanner_test.cc \
             src/master/test/master_impl_test.cc src/io/test/load_test.cc \
-	     src/common/test/thread_pool_test.cc
+	     src/common/test/thread_pool_test.cc \
+		 src/observer/test/observer_impl_test.cc
 OBSERVER_SRC := $(wildcard src/observer/executor/*.cc)
 OBSERVER_DEMO_SRC := $(wildcard src/observer/observer_demo.cc)
 
@@ -89,7 +90,7 @@ JNILIBRARY = libjni_tera.so
 BENCHMARK = tera_bench tera_mark
 TESTS = prop_tree_test tprinter_test string_util_test tablet_io_test \
         tablet_scanner_test fragment_test progress_bar_test master_impl_test load_test \
-	 thread_pool_test
+	 thread_pool_test observer_impl_test
 OBSERVER_LIBRARY = libobserver.a
 
 .PHONY: all clean cleanall test
@@ -175,6 +176,9 @@ observer_demo : $(OBSERVER_DEMO_OBJ) $(OBSERVER_LIBRARY) $(LIBRARY)
 	$(CXX) -o $@ $^ $(LDFLAGS)
 
 # unit test
+observer_impl_test: src/observer/test/observer_impl_test.o $(OBSERVER_LIBRARY) $(LIBRARY)
+	$(CXX) -o $@ $^ $(LDFLAGS)
+
 thread_pool_test: src/common/test/thread_pool_test.o $(LIBRARY)
 	$(CXX) -o $@ $^ $(LDFLAGS)
 

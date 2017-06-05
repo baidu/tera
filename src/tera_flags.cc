@@ -286,7 +286,7 @@ DEFINE_int32(tera_http_ctrl_thread_num, 10, "the http proxy thread num for it se
 DEFINE_string(observer_tera_flag_file, "./tera.flag", "tera flag file");
 DEFINE_int32(observer_proc_thread_num, 100, "the max number of user process thread");
 DEFINE_int64(observer_proc_pending_num_max, 10000, "the max number of pending process task");
-DEFINE_int32(observer_scan_thread_num, 3, "the max number of table scan thread");
+DEFINE_int32(observer_scan_thread_num, 1, "the max number of table scan thread");
 DEFINE_bool(observer_scan_async_switch, false, "enable to async scan table");
 DEFINE_int32(observer_read_thread_num, 200, "the max number of table read thread");
 DEFINE_string(observer_notify_column_name, "Notify", "the column family name of notification");

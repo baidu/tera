@@ -42,15 +42,15 @@ public:
     
     // 启动接口
     virtual bool Run();
-
+    
+    // 退出接口
+    virtual void Quit() {
+        quit_ = true;
+    }
+    
     bool Process(TuplePtr tuple);
     
     bool ProcTaskPendingFull();
-
-    // 进程退出
-    void Quit() {
-        quit_ = true;
-    }
 
     bool GetQuit() const {
         return quit_;
