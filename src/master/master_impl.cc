@@ -153,6 +153,8 @@ MasterImpl::MasterImpl()
     } else if (FLAGS_tera_master_gc_strategy == "incremental") {
         LOG(INFO) << "[gc] gc strategy is IncrementalGcStrategy";
         gc_strategy_ = std::shared_ptr<GcStrategy>(new IncrementalGcStrategy(tablet_manager_));
+    } else if (FLAGS_tera_master_gc_strategy == "trackable") {
+        LOG(INFO) << "[gc] gc strategy is Trackable";
     } else {
         LOG(ERROR) << "Unknown gc strategy";
     }
@@ -3533,9 +3535,20 @@ void MasterImpl::QueryTabletNodeCallback(std::string addr, QueryRequest* request
         VLOG(20) << "query tabletnode [" << addr << "], status_: "
             << StatusCodeToString(state.report_status_);
     }
+
     // if this is a gc query, process it
     if (request->is_gc_query()) {
-        gc_strategy_->ProcessQueryCallbackForGc(response);
+        if (FLAGS_tera_master_gc_strategy == "trackable") {
+            for (int32_t i = 0; i < response->tablet_inh_file_infos_size(); i++) {
+                const TabletInheritedFileInfo& tablet_inh_info = response->tablet_inh_file_infos(i);
+                TablePtr table_ptr;
+                if (tablet_manager_->FindTable(tablet_inh_info.table_name(), &table_ptr)) {
+                    table_ptr->GarbageCollect(tablet_inh_info);
+                }
+            }
+        } else {
+            gc_strategy_->ProcessQueryCallbackForGc(response);
+        }
     }
 
     if (0 == query_pending_count_.Dec()) {
@@ -4217,15 +4230,11 @@ void MasterImpl::MergeTabletWriteMetaCallback(TabletPtr tablet_c,
 
     TabletMeta new_meta;
     tablet_c->ToMeta(&new_meta);
-    if (tablet_p1->GetKeyStart() == tablet_c->GetKeyStart()) {
-        DeleteTablet(tablet_p1);
-        tablet_manager_->AddTablet(new_meta, TableSchema(), &tablet_c);
-        DeleteTablet(tablet_p2);
-    } else {
-        DeleteTablet(tablet_p2);
-        tablet_manager_->AddTablet(new_meta, TableSchema(), &tablet_c);
-        DeleteTablet(tablet_p1);
-    }
+    TablePtr table = tablet_c->GetTable();
+    table->MergeTablets(tablet_p1, tablet_p2, new_meta, &tablet_c);
+
+    tablet_availability_->EraseNotReadyTablet(tablet_p1->GetPath());
+    tablet_availability_->EraseNotReadyTablet(tablet_p2->GetPath());
     tablet_availability_->AddNotReadyTablet(tablet_c->GetPath());
     ProcessOffLineTablet(tablet_c);
     TryLoadTablet(tablet_c);
@@ -4731,7 +4740,9 @@ void MasterImpl::DeleteTableCallback(TablePtr table,
         TabletPtr tablet = tablets[i];
         DeleteTablet(tablet);
     }
-    gc_strategy_->Clear(table->GetTableName());
+    if (gc_strategy_ != NULL) {
+        gc_strategy_->Clear(table->GetTableName());
+    }
     LOG(INFO) << "delete meta table record success, " << table;
     rpc_response->set_status(kMasterOk);
     rpc_done->Run();
@@ -4857,18 +4868,14 @@ void MasterImpl::ScanMetaCallbackForSplit(TabletPtr tablet,
         RepairMetaTableAsync(tablet, response, closure);
         return;
     }
-    TabletPtr first_tablet, second_tablet;
-    // update second child tablet meta
-    second_meta.set_status(kTableOffLine);
-    tablet_manager_->AddTablet(second_meta, TableSchema(), &second_tablet);
 
-    // delete old tablet
-    DeleteTablet(tablet);
-
-    // update first child tablet meta
     first_meta.set_status(kTableOffLine);
-    tablet_manager_->AddTablet(first_meta, TableSchema(), &first_tablet);
+    second_meta.set_status(kTableOffLine);
+    TabletPtr first_tablet, second_tablet;
+    TablePtr table = tablet->GetTable();
+    table->SplitTablet(tablet, first_meta, second_meta, &first_tablet, &second_tablet);
 
+    tablet_availability_->EraseNotReadyTablet(tablet->GetPath());
     tablet_availability_->AddNotReadyTablet(first_tablet->GetPath());
     tablet_availability_->AddNotReadyTablet(second_tablet->GetPath());
     LOG(INFO) << "split finish, " << tablet << ", try load child tablets, "
@@ -5248,7 +5255,10 @@ void MasterImpl::DoTabletNodeGc() {
         }
     }
 
-    bool need_gc = gc_strategy_->PreQuery();
+    bool need_gc = true;
+    if (gc_strategy_ != NULL) {
+        need_gc = gc_strategy_->PreQuery();
+    }
 
     MutexLock lock(&mutex_);
     if (!need_gc) {
@@ -5263,7 +5273,15 @@ void MasterImpl::DoTabletNodeGc() {
 }
 
 void MasterImpl::DoTabletNodeGcPhase2() {
-    gc_strategy_->PostQuery();
+    if (FLAGS_tera_master_gc_strategy == "trackable") {
+        std::vector<TablePtr> table_list;
+        tablet_manager_->ShowTable(&table_list, NULL);
+        for (uint32_t i = 0; i < table_list.size(); ++i) {
+            table_list[i]->CleanObsoleteFile();
+        }
+    } else {
+        gc_strategy_->PostQuery();
+    }
 
     LOG(INFO) << "[gc] try clean trash dir.";
     int64_t start = common::timer::get_micros();

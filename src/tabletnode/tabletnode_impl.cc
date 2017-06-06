@@ -746,6 +746,14 @@ void TabletNodeImpl::Query(const QueryRequest* request,
     sysinfo_.GetTabletMetaList(meta_list);
 
     if (request->has_is_gc_query() && request->is_gc_query()) {
+        std::vector<TabletInheritedFileInfo> inh_infos;
+        GetInheritedLiveFiles(&inh_infos);
+        for (size_t i = 0; i < inh_infos.size(); i++) {
+            TabletInheritedFileInfo* inh_info = response->add_tablet_inh_file_infos();
+            inh_info->CopyFrom(inh_infos[i]);
+        }
+
+        // only for compatible with old master
         std::vector<InheritedLiveFiles> inherited;
         GetInheritedLiveFiles(inherited);
         for (size_t i = 0; i < inherited.size(); ++i) {
@@ -1236,6 +1244,34 @@ void TabletNodeImpl::DisableReleaseMallocCacheTimer() {
     if (release_cache_timer_id_ != kInvalidTimerId) {
         thread_pool_->CancelTask(release_cache_timer_id_);
         release_cache_timer_id_ = kInvalidTimerId;
+    }
+}
+
+void TabletNodeImpl::GetInheritedLiveFiles(std::vector<TabletInheritedFileInfo>* inherited) {
+    std::vector<io::TabletIO*> tablet_ios;
+    tablet_manager_->GetAllTablets(&tablet_ios);
+    for (size_t tablet_id = 0; tablet_id < tablet_ios.size(); tablet_id++) {
+        io::TabletIO* tablet_io = tablet_ios[tablet_id];
+        std::vector<std::set<uint64_t> > tablet_files;
+        if (tablet_io->AddInheritedLiveFiles(&tablet_files)) {
+            TabletInheritedFileInfo inh_file_info;
+            inh_file_info.set_table_name(tablet_io->GetTableName());
+            inh_file_info.set_key_start(tablet_io->GetStartKey());
+            inh_file_info.set_key_end(tablet_io->GetEndKey());
+            for (size_t lg_id = 0; lg_id < tablet_files.size(); lg_id++) {
+                VLOG(10) << "[gc] " << tablet_io->GetTablePath()
+                    << " add inherited file, lg " << lg_id << ", "
+                    << tablet_files[lg_id].size() << " files total";
+                LgInheritedLiveFiles* lg_files = inh_file_info.add_lg_inh_files();
+                lg_files->set_lg_no(lg_id);
+                std::set<uint64_t>::iterator file_it = tablet_files[lg_id].begin();
+                for (; file_it != tablet_files[lg_id].end(); ++file_it) {
+                    lg_files->add_file_number(*file_it);
+                }
+            }
+            inherited->push_back(inh_file_info);
+        }
+        tablet_io->DecRef();
     }
 }
 

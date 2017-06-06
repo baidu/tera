@@ -235,16 +235,27 @@ bool ParseFullFileNumber(uint64_t full_number, uint64_t* tablet, uint64_t* file)
   return true;
 }
 
-std::string BuildTableFilePath(const std::string& prefix,
-                               uint64_t lg, uint64_t number) {
-  uint64_t tablet = (number >> 32 & 0x7FFFFFFF);
+std::string BuildTabletPath(const std::string& prefix, uint64_t tablet) {
+  char buf[100];
+  snprintf(buf, sizeof(buf), "/tablet%08llu", static_cast<unsigned long long>(tablet));
+  std::string dbname = prefix + buf;
+  return dbname;
+}
 
+std::string BuildTableFilePath(const std::string& prefix, uint64_t tablet,
+                               uint64_t lg, uint64_t number) {
   char buf[100];
   snprintf(buf, sizeof(buf), "/tablet%08llu/%llu",
            static_cast<unsigned long long>(tablet),
            static_cast<unsigned long long>(lg));
   std::string dbname = prefix + buf;
   return MakeFileName(dbname, number & 0xffffffff, "sst");
+}
+
+std::string BuildTableFilePath(const std::string& prefix, uint64_t lg, uint64_t full_number) {
+  uint64_t tablet, number;
+  ParseFullFileNumber(full_number, &tablet, &number);
+  return BuildTableFilePath(prefix, tablet, lg, number);
 }
 
 std::string RealDbName(const std::string& dbname, uint64_t tablet) {

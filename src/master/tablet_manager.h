@@ -50,6 +50,29 @@ namespace master {
 // kTableSplitFail = 61;
 // kTableUnLoadFail = 62;
 
+struct TabletFile {
+    uint64_t tablet_id;
+    uint32_t lg_id;
+    uint64_t file_id;
+
+    bool operator <(const TabletFile& f) const {
+        return tablet_id < f.tablet_id ||
+            (tablet_id == f.tablet_id &&
+            (lg_id < f.lg_id || (lg_id == f.lg_id && file_id < f.file_id)));
+    }
+
+    bool operator ==(const TabletFile& f) const {
+        return tablet_id == f.tablet_id &&
+            lg_id == f.lg_id &&
+            file_id == f.file_id;
+    }
+};
+
+struct InheritedFileInfo {
+    uint32_t ref;
+    InheritedFileInfo() : ref(0) {}
+};
+
 class MasterImpl;
 class Table;
 typedef std::shared_ptr<Table> TablePtr;
@@ -165,6 +188,10 @@ private:
         }
     } accumu_counter_;
     void* merge_param_;
+
+    // protected by Table::mutex_
+    bool gc_reported_;
+    std::multiset<TabletFile> inh_files_;
 };
 
 typedef class std::shared_ptr<Tablet> TabletPtr;
@@ -222,6 +249,17 @@ public:
     void AbortUpdate();
     void CommitUpdate();
 
+    void MergeTablets(TabletPtr first_tablet, TabletPtr second_tablet,
+                      const TabletMeta& merged_meta, TabletPtr* merged_tablet);
+    void SplitTablet(TabletPtr splited_tablet,
+                     const TabletMeta& first_half, const TabletMeta& second_half,
+                     TabletPtr* first_tablet, TabletPtr* second_tablet);
+    void GarbageCollect(const TabletInheritedFileInfo& tablet_inh_info);
+    void EnableDeadTabletGarbageCollect(uint64_t tablet_id);
+    void ReleaseInheritedFile(const TabletFile& file);
+    void AddInheritedFile(const TabletFile& file);
+    uint64_t CleanObsoleteFile();
+
 private:
     Table(const Table&) {}
     Table& operator=(const Table&) {return *this;}
@@ -242,6 +280,15 @@ private:
     UpdateTableResponse* update_rpc_response_;
     google::protobuf::Closure* update_rpc_done_;
     TableSchema* old_schema_;
+
+    // map from dead tablet's ID to its inherited files set
+    typedef std::map<uint64_t, std::map<TabletFile, InheritedFileInfo> > InheritedFiles;
+    InheritedFiles useful_inh_files_;
+    std::queue<TabletFile> obsolete_inh_files_;
+    // If there is any live tablet hasn't reported since a tablet died,
+    // this dead tablet cannot GC.
+    std::set<uint64_t> gc_disabled_dead_tablets_;
+    uint32_t reported_live_tablets_num_;
 };
 
 class TabletManager {
