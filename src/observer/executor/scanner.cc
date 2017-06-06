@@ -128,6 +128,8 @@ bool Scanner::ScanTable(tera::Table* table,
             ThisThread::Sleep(1);
         }
 
+        // todo: try lock row
+
         std::string ob_family;
         std::string ob_qualifier;
         std::string rowkey = result_stream->RowName();
@@ -183,7 +185,7 @@ bool Scanner::DoReadValue(TuplePtr tuple) {
 }
 
 bool Scanner::RandomStartKey(tera::Table* table, std::string* Key) {
-    /// todo
+    // todo
     *Key = "";
     return true;
 }

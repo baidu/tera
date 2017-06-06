@@ -118,7 +118,10 @@ bool ExecutorImpl::Process(TuplePtr tuple) {
         LOG(ERROR) << "no match observers, table=" << tuple->observed_column.table_name << 
             " cf=" << tuple->observed_column.family << " qu=" << tuple->observed_column.qualifier;
         return false;
-    } 
+    }
+
+    // todo: analysis observers collision on Ack column
+
     // notify observers
     for (size_t idx = 0; idx < it->second.size(); ++idx) {
         proc_thread_pool_->AddTask(std::bind(&ExecutorImpl::DoNotify, this, tuple, it->second[idx]));
