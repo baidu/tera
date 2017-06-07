@@ -13,11 +13,18 @@ using namespace leveldb;
 
 KvCompactStrategy::KvCompactStrategy(const TableSchema& schema)
     : schema_(schema),
-      raw_key_operator_(GetRawKeyOperatorFromSchema(schema_)) {
+      raw_key_operator_(GetRawKeyOperatorFromSchema(schema_)),
+      cmp_(NewRowKeyComparator(raw_key_operator_)),
+      snapshot_(leveldb::kMaxSequenceNumber) {
     VLOG(11) << "KvCompactStrategy construct";
 }
 
 KvCompactStrategy::~KvCompactStrategy() {
+    delete cmp_;
+}
+
+const leveldb::Comparator* KvCompactStrategy::RowKeyComparator() {
+    return cmp_;
 }
 
 const char* KvCompactStrategy::Name() const {

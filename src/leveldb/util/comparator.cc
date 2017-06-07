@@ -19,6 +19,46 @@ namespace leveldb {
 Comparator::~Comparator() { }
 
 namespace {
+class RowKeyComparator : public Comparator {
+ public:
+  RowKeyComparator(const RawKeyOperator* key_operator)
+    : key_operator_(key_operator) {}
+
+  virtual const char* Name() const {
+    return "leveldb.RowKeyComparator";
+  }
+
+  virtual int Compare(const Slice& a, const Slice& b) const {
+    Slice a_key, a_col, a_qual;
+    Slice b_key, b_col, b_qual;
+    int64_t a_ts = -1;
+    int64_t b_ts = -1;
+    leveldb::TeraKeyType a_type;
+    leveldb::TeraKeyType b_type;
+
+    if (!key_operator_->ExtractTeraKey(a, &a_key, &a_col, &a_qual, &a_ts, &a_type)) {
+        return key_operator_->Compare(a, b);
+    }
+    if (!key_operator_->ExtractTeraKey(b, &b_key, &b_col, &b_qual, &b_ts, &b_type)) {
+        return key_operator_->Compare(a, b);
+    }
+    return a_key.compare(b_key);
+  }
+
+  virtual void FindShortestSeparator(
+      std::string* start,
+      const Slice& limit) const {
+    return;
+  }
+
+  virtual void FindShortSuccessor(std::string* key) const {
+    return;
+  }
+
+ private:
+  const RawKeyOperator* key_operator_;
+};
+
 class BytewiseComparatorImpl : public Comparator {
  public:
   BytewiseComparatorImpl() { }
@@ -156,4 +196,8 @@ const Comparator* TeraTTLKvComparator() {
     return terakv;
 }
 
+Comparator* NewRowKeyComparator(const RawKeyOperator* key_operator) {
+    Comparator* cmp = new RowKeyComparator(key_operator);
+    return cmp;
+}
 }  // namespace leveldb
