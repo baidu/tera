@@ -703,7 +703,7 @@ Status DBImpl::WriteLevel0Table(MemTable* mem, VersionEdit* edit,
   if (s.ok() && meta.file_size > 0) {
     const Slice min_user_key = meta.smallest.user_key();
     const Slice max_user_key = meta.largest.user_key();
-    if (base != NULL) {
+    if (base != NULL && options_.drop_base_level_del_in_compaction) {
       level = base->PickLevelForMemTableOutput(min_user_key, max_user_key);
     }
     edit->AddFile(level, meta);
@@ -1906,7 +1906,7 @@ MemTable* DBImpl::NewMemTable() const {
     } else {
         Logger* info_log = NULL;
         // Logger* info_log = options_.info_log;
-        MemTableOnLevelDB* new_mem = new MemTableOnLevelDB(internal_comparator_,
+        MemTableOnLevelDB* new_mem = new MemTableOnLevelDB(dbname_, internal_comparator_,
                                      options_.compact_strategy_factory,
                                      options_.memtable_ldb_write_buffer_size,
                                      options_.memtable_ldb_block_size,
