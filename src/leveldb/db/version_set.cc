@@ -516,7 +516,15 @@ void Version::GetOverlappingInputs(
   if (end != NULL) {
     user_end = end->user_key();
   }
-  const Comparator* user_cmp = vset_->icmp_.user_comparator();
+  const Comparator* user_cmp = NULL;
+  CompactStrategy* strategy = NULL;
+  if (!vset_->options_->drop_base_level_del_in_compaction) { // use row key comparator
+    strategy = vset_->options_->compact_strategy_factory->NewInstance();
+    user_cmp = strategy->RowKeyComparator();
+  }
+  if (user_cmp == NULL) {
+    user_cmp = vset_->icmp_.user_comparator();
+  }
   for (size_t i = 0; i < files_[level].size(); ) {
     FileMetaData* f = files_[level][i++];
     const Slice file_start = f->smallest.user_key();
@@ -542,6 +550,10 @@ void Version::GetOverlappingInputs(
       }
     }
   }
+  if (strategy != NULL) {
+    delete strategy;
+  }
+  return;
 }
 
 void Version::GetApproximateSizes(uint64_t* size, uint64_t* size_under_level1) {
