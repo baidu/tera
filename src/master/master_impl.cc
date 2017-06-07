@@ -4231,7 +4231,11 @@ void MasterImpl::MergeTabletWriteMetaCallback(TabletPtr tablet_c,
     TabletMeta new_meta;
     tablet_c->ToMeta(&new_meta);
     TablePtr table = tablet_c->GetTable();
-    table->MergeTablets(tablet_p1, tablet_p2, new_meta, &tablet_c);
+    if (tablet_p1->GetKeyStart() == tablet_c->GetKeyStart()) {
+        table->MergeTablets(tablet_p1, tablet_p2, new_meta, &tablet_c);
+    } else {
+        table->MergeTablets(tablet_p2, tablet_p1, new_meta, &tablet_c);
+    }
 
     tablet_availability_->EraseNotReadyTablet(tablet_p1->GetPath());
     tablet_availability_->EraseNotReadyTablet(tablet_p2->GetPath());
