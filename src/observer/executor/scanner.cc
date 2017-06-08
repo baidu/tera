@@ -164,6 +164,8 @@ bool Scanner::ScanTable(tera::Table* table,
 }
 
 bool Scanner::DoReadValue(TuplePtr tuple) { 
+    // todo: if observers conflict on Ack column, return
+
     bool ret = true;
     tera::RowReader* row_reader = tuple->table->NewRowReader(tuple->row);
     row_reader->AddColumn(tuple->observed_column.family, tuple->observed_column.qualifier);

@@ -120,8 +120,6 @@ bool ExecutorImpl::Process(TuplePtr tuple) {
         return false;
     }
 
-    // todo: analysis observers collision on Ack column
-
     // notify observers
     for (size_t idx = 0; idx < it->second.size(); ++idx) {
         proc_thread_pool_->AddTask(std::bind(&ExecutorImpl::DoNotify, this, tuple, it->second[idx]));
