@@ -20,6 +20,7 @@ DEFINE_int32(tera_heartbeat_retry_times, 5, "the max retry times when fail to se
 DEFINE_string(tera_working_dir, "./", "the base dir for system data");
 
 DEFINE_bool(tera_zk_enabled, true, "enable zk adapter to collaborate with other master instances");
+DEFINE_bool(tera_mock_zk_enabled, false, "enable mock zk adapter to collaborate with other master instances");
 DEFINE_string(tera_zk_addr_list, "localhost:2180", "zookeeper server list");
 DEFINE_string(tera_zk_root_path, "/tera", "zookeeper root path");
 DEFINE_string(tera_fake_zk_path_prefix, "../fakezk", "fake zk path prefix in onebox tera");
@@ -274,6 +275,7 @@ DEFINE_int64(batch_scan_delay_retry_in_us, 1000000, "timewait in us before retry
 DEFINE_string(tera_ins_addr_list, "", "the ins cluster addr. e.g. abc.com:1234,abb.com:1234");
 DEFINE_string(tera_ins_root_path, "", "root path on ins. e.g /ps/sandbox");
 DEFINE_bool(tera_ins_enabled, false, "option to open ins naming");
+DEFINE_bool(tera_mock_ins_enabled, false, "option to open mock ins naming");
 
 DEFINE_int64(tera_sdk_status_timeout, 600, "(s) check tablet/tabletnode status timeout");
 

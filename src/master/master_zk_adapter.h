@@ -52,28 +52,28 @@ public:
     virtual bool UpdateRootTabletNode(const std::string& root_tablet_addr);
 
 protected:
-    bool Setup();
-    void Reset();
+    virtual bool Setup();
+    virtual void Reset();
 
-    bool LockMasterLock();
-    bool UnlockMasterLock();
-    bool CreateMasterNode();
-    bool DeleteMasterNode();
+    virtual bool LockMasterLock();
+    virtual bool UnlockMasterLock();
+    virtual bool CreateMasterNode();
+    virtual bool DeleteMasterNode();
 
-    bool WatchRootTabletNode(bool* is_exist, std::string* root_tablet_addr);
-    bool WatchSafeModeMark(bool* is_safemode);
-    bool WatchTabletNodeList(std::map<std::string, std::string>* tabletnode_list);
+    virtual bool WatchRootTabletNode(bool* is_exist, std::string* root_tablet_addr);
+    virtual bool WatchSafeModeMark(bool* is_safemode);
+    virtual bool WatchTabletNodeList(std::map<std::string, std::string>* tabletnode_list);
 
-    void OnSafeModeMarkCreated();
-    void OnSafeModeMarkDeleted();
-    void OnMasterLockLost();
-    void OnTabletNodeListDeleted();
-    void OnRootTabletNodeDeleted();
-    void OnMasterNodeDeleted();
-    void OnTabletServerKickMarkCreated();
-    void OnTabletServerKickMarkDeleted();
-    void OnTabletServerStart(const std::string& ts_host);
-    void OnTabletServerExist(const std::string& ts_host);
+    virtual void OnSafeModeMarkCreated();
+    virtual void OnSafeModeMarkDeleted();
+    virtual void OnMasterLockLost();
+    virtual void OnTabletNodeListDeleted();
+    virtual void OnRootTabletNodeDeleted();
+    virtual void OnMasterNodeDeleted();
+    virtual void OnTabletServerKickMarkCreated();
+    virtual void OnTabletServerKickMarkDeleted();
+    virtual void OnTabletServerStart(const std::string& ts_host);
+    virtual void OnTabletServerExist(const std::string& ts_host);
 
     virtual void OnChildrenChanged(const std::string& path,
                                    const std::vector<std::string>& name_list,
@@ -90,6 +90,13 @@ private:
     mutable Mutex mutex_;
     MasterImpl * master_impl_;
     std::string server_addr_;
+};
+
+class MockMasterZkAdapter : public MasterZkAdapter {
+public:
+    MockMasterZkAdapter(MasterImpl* master_impl, const std::string & server_addr) :
+        MasterZkAdapter(master_impl, server_addr) {}
+    virtual ~MockMasterZkAdapter() {}
 };
 
 /*
@@ -165,6 +172,13 @@ private:
     MasterImpl * master_impl_;
     std::string server_addr_;
     galaxy::ins::sdk::InsSDK* ins_sdk_;
+};
+
+class MockInsMasterZkAdapter : public InsMasterZkAdapter {
+public:
+    MockInsMasterZkAdapter(MasterImpl* master_impl, const std::string& server_addr) :
+        InsMasterZkAdapter(master_impl, server_addr) {}
+    virtual ~MockInsMasterZkAdapter() {}
 };
 
 } // namespace master
