@@ -1023,7 +1023,7 @@ void Table::MergeTablets(TabletPtr first_tablet, TabletPtr second_tablet,
         for (; it != first_tablet->inh_files_.end(); ++it) {
             const TabletFile& file = *it;
             InheritedFileInfo& file_info = useful_inh_files_[file.tablet_id][file];
-            CHECK_GT(file_info.ref, 0);
+            CHECK_GT(file_info.ref, 0u);
             VLOG(10) << "[gc] [" << name_ << "] file " << file << " inherited by " << tablet_num1
                 << " pass to " << tablet_num << " ref is " << file_info.ref;
             (*merged_tablet)->inh_files_.insert(file);
@@ -1033,7 +1033,7 @@ void Table::MergeTablets(TabletPtr first_tablet, TabletPtr second_tablet,
         for (; it != second_tablet->inh_files_.end(); ++it) {
             const TabletFile& file = *it;
             InheritedFileInfo& file_info = useful_inh_files_[file.tablet_id][file];
-            CHECK_GT(file_info.ref, 0);
+            CHECK_GT(file_info.ref, 0u);
             VLOG(10) << "[gc] [" << name_ << "] file " << file << " inherited by " << tablet_num2
                 << " pass to " << tablet_num << " ref is " << file_info.ref;
             (*merged_tablet)->inh_files_.insert(file);
@@ -1079,7 +1079,7 @@ void Table::SplitTablet(TabletPtr splited_tablet,
         for (; it != splited_tablet->inh_files_.end(); ++it) {
             const TabletFile& file = *it;
             InheritedFileInfo& file_info = useful_inh_files_[file.tablet_id][file];
-            CHECK_GT(file_info.ref, 0);
+            CHECK_GT(file_info.ref, 0u);
             file_info.ref++;
             VLOG(10) << "[gc] [" << name_ << "] file " << file << " inherited by " << tablet_num
                 << " pass to " << tablet_num1 << " and " << tablet_num2
@@ -1167,7 +1167,7 @@ void Table::EnableDeadTabletGarbageCollect(uint64_t tablet_id) {
     while (it != dead_tablet_files.end()) {
         const TabletFile& file = it->first;
         InheritedFileInfo& file_info = it->second;
-        CHECK_GT(file_info.ref, 0);
+        CHECK_GT(file_info.ref, 0u);
         VLOG(10) << "[gc] [" << name_ << "] file " << file << " ref decrement to " << file_info.ref - 1;
         if (--file_info.ref == 0) {
             // delete file
@@ -1197,7 +1197,7 @@ void Table::ReleaseInheritedFile(const TabletFile& file) {
     CHECK(it2 != dead_tablet_files.end());
     InheritedFileInfo& inh_file = it2->second;
 
-    CHECK_GT(inh_file.ref, 0);
+    CHECK_GT(inh_file.ref, 0u);
     VLOG(10) << "[gc] [" << name_ << "] file " << file << " ref decrement to " << inh_file.ref - 1;
     if (--inh_file.ref == 0) {
         // delete file
