@@ -168,11 +168,12 @@ MasterImpl::~MasterImpl() {
 bool MasterImpl::Init() {
     if (FLAGS_tera_zk_enabled) {
         zk_adapter_.reset(new MasterZkAdapter(this, local_addr_));
-    } else if (FLAGS_tera_mock_zk_enabled) {
-        zk_adapter_.reset(new MockMasterZkAdapter(this, local_addr_));
     } else if (FLAGS_tera_ins_enabled) {
         LOG(INFO) << "ins mode" ;
         zk_adapter_.reset(new InsMasterZkAdapter(this, local_addr_));
+    } else if (FLAGS_tera_mock_zk_enabled) {
+        LOG(INFO) << "mock zk mode" ;
+        zk_adapter_.reset(new MockMasterZkAdapter(this, local_addr_));
     } else if (FLAGS_tera_mock_ins_enabled) {
         LOG(INFO) << "mock ins mode" ;
         zk_adapter_.reset(new MockInsMasterZkAdapter(this, local_addr_));

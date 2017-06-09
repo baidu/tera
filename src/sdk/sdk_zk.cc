@@ -123,14 +123,14 @@ bool FakeZkClusterFinder::ReadNode(const std::string& name, std::string* value) 
 }
 
 ClusterFinder* NewClusterFinder() {
-    if (FLAGS_tera_ins_enabled) {
+    if (FLAGS_tera_zk_enabled) {
+        return new sdk::FakeZkClusterFinder(FLAGS_tera_fake_zk_path_prefix);
+    } else if (FLAGS_tera_ins_enabled) {
         return new sdk::InsClusterFinder(FLAGS_tera_ins_root_path, FLAGS_tera_ins_addr_list);
-    } else if (FLAGS_tera_mock_ins_enabled) {
-        return new sdk::MockInsClusterFinder(FLAGS_tera_ins_root_path, FLAGS_tera_ins_addr_list);
     } else if (FLAGS_tera_mock_zk_enabled) {
         return new sdk::MockZkClusterFinder(FLAGS_tera_zk_root_path, FLAGS_tera_zk_addr_list);
-    } else if (!FLAGS_tera_zk_enabled) {
-        return new sdk::FakeZkClusterFinder(FLAGS_tera_fake_zk_path_prefix);
+    } else if (FLAGS_tera_mock_ins_enabled) {
+        return new sdk::MockInsClusterFinder(FLAGS_tera_ins_root_path, FLAGS_tera_ins_addr_list);
     } else {
         return new sdk::ZkClusterFinder(FLAGS_tera_zk_root_path, FLAGS_tera_zk_addr_list);
     }
