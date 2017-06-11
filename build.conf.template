@@ -61,7 +61,6 @@ elif [ $MIRROR == "baidu" ]; then
     GPERFTOOLS_URL=http://gitlab.baidu.com/baidups/third/raw/master/gperftools-${GPERFTOOLS_VERSION}.tar.gz
     INS_URL=http://gitlab.baidu.com/baidups/third/raw/master/ins-${INS_VERSION}.tar.gz
     NOSE_URL=http://gitlab.baidu.com/baidups/third/raw/master/nose-${NOSE_VERSION}.tar.gz
-    READLINE_URL=http://git.savannah.gnu.org/cgit/readline.git/snapshot/readline-${READLINE_VERSION}.tar.gz
 else
     return 1
 fi
