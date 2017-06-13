@@ -1905,7 +1905,7 @@ MemTable* DBImpl::NewMemTable() const {
                   options_.enable_strategy_when_get ? options_.compact_strategy_factory : NULL);
     } else {
         Logger* info_log = NULL;
-        // Logger* info_log = options_.info_log;
+        //Logger* info_log = options_.info_log;
         MemTableOnLevelDB* new_mem = new MemTableOnLevelDB(dbname_, internal_comparator_,
                                      options_.compact_strategy_factory,
                                      options_.memtable_ldb_write_buffer_size,

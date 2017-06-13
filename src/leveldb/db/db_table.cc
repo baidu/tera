@@ -503,8 +503,8 @@ Status DBTable::Write(const WriteOptions& options, WriteBatch* my_batch) {
     lg_updates.resize(lg_list_.size());
     std::fill(lg_updates.begin(), lg_updates.end(), (WriteBatch*)0);
     bool created_new_wb = false;
-    // kv version may not create snapshot
-    for (uint32_t i = 0; i < lg_list_.size(); ++i) {
+    // kv version should not create snapshot
+    for (uint32_t i = 0; lg_list_.size() > 1 && i < lg_list_.size(); ++i) {
       lg_list_[i]->GetSnapshot(last_sequence_);
     }
     commit_snapshot_ = last_sequence_;
@@ -536,7 +536,7 @@ Status DBTable::Write(const WriteOptions& options, WriteBatch* my_batch) {
     }
     // Commit updates
     if (s.ok()) {
-      for (uint32_t i = 0; i < lg_list_.size(); ++i) {
+      for (uint32_t i = 0; lg_list_.size() > 1 && i < lg_list_.size(); ++i) {
         lg_list_[i]->ReleaseSnapshot(commit_snapshot_);
       }
       commit_snapshot_ = last_sequence_ + WriteBatchInternal::Count(updates);
