@@ -6,6 +6,7 @@
 #define TERA_IO_DEFAULT_COMPACT_STRATEGY_H_
 
 #include "leveldb/compact_strategy.h"
+#include "leveldb/comparator.h"
 
 #include "common/mutex.h"
 #include "io/io_utils.h"
@@ -20,6 +21,8 @@ class DefaultCompactStrategy : public leveldb::CompactStrategy {
 public:
     DefaultCompactStrategy(const TableSchema& schema);
     virtual ~DefaultCompactStrategy();
+
+    virtual const leveldb::Comparator* RowKeyComparator();
 
     virtual bool Drop(const Slice& k, uint64_t n,
                       const std::string& lower_bound);
@@ -56,6 +59,7 @@ private:
     std::map<std::string, int32_t> cf_indexs_;
     TableSchema schema_;
     const leveldb::RawKeyOperator* raw_key_operator_;
+    leveldb::Comparator* cmp_;
 
     std::string last_key_;
     std::string last_col_;

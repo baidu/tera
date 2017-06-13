@@ -15,14 +15,15 @@
 
 namespace leveldb {
 
-MemTableOnLevelDB::MemTableOnLevelDB(const InternalKeyComparator& comparator,
+MemTableOnLevelDB::MemTableOnLevelDB(const std::string& dbname,
+                                     const InternalKeyComparator& comparator,
                                      CompactStrategyFactory* compact_strategy_factory,
                                      size_t write_buffer_size,
                                      size_t block_size,
                                      Logger* info_log)
                                      : MemTable(comparator, compact_strategy_factory) {
     char memdb_name[1024] = { '\0' };
-    snprintf(memdb_name, sizeof(memdb_name), "/%d/%llu", getpid(),
+    snprintf(memdb_name, sizeof(memdb_name), "/%d/%s/%llu", getpid(), dbname.c_str(),
              (unsigned long long)this);
     leveldb::Options opts;
     opts.env = memenv_ = leveldb::NewMemEnv(GetBaseEnv());

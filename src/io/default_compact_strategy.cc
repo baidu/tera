@@ -13,6 +13,7 @@ namespace io {
 DefaultCompactStrategy::DefaultCompactStrategy(const TableSchema& schema)
     : schema_(schema),
       raw_key_operator_(GetRawKeyOperatorFromSchema(schema_)),
+      cmp_(NewRowKeyComparator(raw_key_operator_)),
       last_ts_(-1), del_row_ts_(-1), del_col_ts_(-1), del_qual_ts_(-1), cur_ts_(-1),
       del_row_seq_(0), del_col_seq_(0), del_qual_seq_(0), version_num_(0),
       snapshot_(leveldb::kMaxSequenceNumber) {
@@ -25,7 +26,13 @@ DefaultCompactStrategy::DefaultCompactStrategy(const TableSchema& schema)
     VLOG(11) << "DefaultCompactStrategy construct";
 }
 
-DefaultCompactStrategy::~DefaultCompactStrategy() {}
+DefaultCompactStrategy::~DefaultCompactStrategy() {
+    delete cmp_;
+}
+
+const leveldb::Comparator* DefaultCompactStrategy::RowKeyComparator() {
+    return cmp_;
+}
 
 const char* DefaultCompactStrategy::Name() const {
     return "tera.DefaultCompactStrategy";
