@@ -227,9 +227,6 @@ public:
                              std::string* packed_value = NULL);
     void ToMeta(TableMeta* meta);
     uint64_t GetNextTabletNo();
-    bool GetTabletsForGc(std::set<uint64_t>* live_tablets,
-                         std::set<uint64_t>* dead_tablets,
-                         bool ignore_not_ready);
     void RefreshCounter();
     int64_t GetTabletsCount();
     bool GetSchemaIsSyncing();
@@ -249,6 +246,13 @@ public:
     void AbortUpdate();
     void CommitUpdate();
 
+    bool TryCollectInheritedFile();
+    bool GetTabletsForGc(std::set<uint64_t>* live_tablets,
+                         std::set<uint64_t>* dead_tablets,
+                         bool ignore_not_ready);
+    bool CollectInheritedFileFromFilesystem(const std::string& tablename,
+                                            uint64_t tablet_num,
+                                            std::vector<TabletFile>* tablet_files);
     void MergeTablets(TabletPtr first_tablet, TabletPtr second_tablet,
                       const TabletMeta& merged_meta, TabletPtr* merged_tablet);
     void SplitTablet(TabletPtr splited_tablet,
@@ -257,7 +261,7 @@ public:
     void GarbageCollect(const TabletInheritedFileInfo& tablet_inh_info);
     void EnableDeadTabletGarbageCollect(uint64_t tablet_id);
     void ReleaseInheritedFile(const TabletFile& file);
-    void AddInheritedFile(const TabletFile& file);
+    void AddInheritedFile(const TabletFile& file, bool need_ref);
     uint64_t CleanObsoleteFile();
 
 private:
@@ -288,7 +292,7 @@ private:
     // If there is any live tablet hasn't reported since a tablet died,
     // this dead tablet cannot GC.
     std::set<uint64_t> gc_disabled_dead_tablets_;
-    uint32_t reported_live_tablets_num_;
+    uint32_t reported_live_tablets_num_; // realtime live tablets num, which already reported
 };
 
 class TabletManager {

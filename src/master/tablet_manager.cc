@@ -586,7 +586,8 @@ Table::Table(const std::string& table_name)
       rangefragment_(NULL),
       update_rpc_response_(NULL),
       update_rpc_done_(NULL),
-      old_schema_(NULL) {
+      old_schema_(NULL),
+      reported_live_tablets_num_(0) {
 }
 
 bool Table::FindTablet(const std::string& key_start, TabletPtr* tablet) {
@@ -792,56 +793,6 @@ uint64_t Table::GetNextTabletNo() {
     return max_tablet_no_;
 }
 
-bool Table::GetTabletsForGc(std::set<uint64_t>* live_tablets,
-                            std::set<uint64_t>* dead_tablets,
-                            bool ignore_not_ready) {
-    MutexLock lock(&mutex_);
-
-    std::vector<std::string> children;
-    leveldb::Env* env = io::LeveldbBaseEnv();
-    std::string table_path = FLAGS_tera_tabletnode_path_prefix + name_;
-    mutex_.Unlock();
-    leveldb::Status s = env->GetChildren(table_path, &children);
-    mutex_.Lock();
-    if (!s.ok()) {
-        LOG(ERROR) << "[gc] fail to list directory: " << table_path;
-        return false;
-    }
-
-    std::vector<TabletPtr> tablet_list;
-    Table::TabletList::iterator it = tablets_list_.begin();
-    for (; it != tablets_list_.end(); ++it) {
-        TabletPtr tablet = it->second;
-        if (tablet->GetStatus() != kTableReady) {
-            if (!ignore_not_ready) {
-                // any tablet not ready, stop gc
-                return false;
-            }
-        }
-        const std::string& path = tablet->GetPath();
-        live_tablets->insert(leveldb::GetTabletNumFromPath(path));
-        VLOG(20) << "[gc] add live tablet: " << path;
-    }
-
-    for (size_t i = 0; i < children.size(); ++i) {
-        if (children[i].size() < 5) {
-            // skip directory . and ..
-            continue;
-        }
-        std::string path = table_path + "/" + children[i];
-        uint64_t tabletnum = leveldb::GetTabletNumFromPath(path);
-        if (live_tablets->find(tabletnum) == live_tablets->end()) {
-            VLOG(10) << "[gc] add dead tablet: " << path;
-            dead_tablets->insert(tabletnum);
-        }
-    }
-    if (dead_tablets->size() == 0) {
-        VLOG(10) << "[gc] there is none dead tablets: " << name_;
-        return false;
-    }
-    return true;
-}
-
 bool Table::GetSchemaIsSyncing() {
     MutexLock lock(&mutex_);
     return schema_is_syncing_;
@@ -1030,6 +981,7 @@ void Table::MergeTablets(TabletPtr first_tablet, TabletPtr second_tablet,
         }
         uint64_t tablet_num2 = leveldb::GetTabletNumFromPath(second_tablet->GetPath());
         it = second_tablet->inh_files_.begin();
+        // ref: +1 for add child tablets, -1 for del parent tablets
         for (; it != second_tablet->inh_files_.end(); ++it) {
             const TabletFile& file = *it;
             InheritedFileInfo& file_info = useful_inh_files_[file.tablet_id][file];
@@ -1080,7 +1032,7 @@ void Table::SplitTablet(TabletPtr splited_tablet,
             const TabletFile& file = *it;
             InheritedFileInfo& file_info = useful_inh_files_[file.tablet_id][file];
             CHECK_GT(file_info.ref, 0u);
-            file_info.ref++;
+            file_info.ref++; // ref: +2 for add child tablets, -1 for del parent tablets
             VLOG(10) << "[gc] [" << name_ << "] file " << file << " inherited by " << tablet_num
                 << " pass to " << tablet_num1 << " and " << tablet_num2
                 << " ref increment to " << file_info.ref;
@@ -1134,14 +1086,14 @@ void Table::GarbageCollect(const TabletInheritedFileInfo& tablet_inh_info) {
         } else if (*old_it < *new_it) {
             VLOG(10) << "[gc] " << tablet->GetPath() << " release file " << *old_it;
             ReleaseInheritedFile(*old_it);
-            old_it = tablet->inh_files_.erase(old_it);
+            old_it = tablet->inh_files_.erase(old_it); // desc ref for tablet->inh_files_
         } else if (!tablet->gc_reported_) {
             VLOG(10) << "[gc] " << tablet->GetPath() << " report file " << *new_it;
-            AddInheritedFile(*new_it);
+            AddInheritedFile(*new_it, true); // inc ref for tablet->inh_files_
             tablet->inh_files_.insert(*new_it);
             ++new_it;
         } else {
-            LOG(WARNING) << "[gc] ignore " << tablet->GetPath() << " report new file " << *new_it;
+            LOG(WARNING) << "[gc] ignore(query error) " << tablet->GetPath() << " report new file " << *new_it;
             ++new_it;
         }
     }
@@ -1150,6 +1102,7 @@ void Table::GarbageCollect(const TabletInheritedFileInfo& tablet_inh_info) {
     if (!tablet->gc_reported_) {
         tablet->gc_reported_ = true;
         if (++reported_live_tablets_num_ == tablets_list_.size()) {
+            // now all live tablets report finish
             std::set<uint64_t>::iterator it = gc_disabled_dead_tablets_.begin();
             for (; it != gc_disabled_dead_tablets_.end(); ++it) {
                 EnableDeadTabletGarbageCollect(*it);
@@ -1169,7 +1122,7 @@ void Table::EnableDeadTabletGarbageCollect(uint64_t tablet_id) {
         InheritedFileInfo& file_info = it->second;
         CHECK_GT(file_info.ref, 0u);
         VLOG(10) << "[gc] [" << name_ << "] file " << file << " ref decrement to " << file_info.ref - 1;
-        if (--file_info.ref == 0) {
+        if (--file_info.ref == 0) { // desc refs for gc_disabled_dead_tablets_
             // delete file
             obsolete_inh_files_.push(file);
             it = dead_tablet_files.erase(it);
@@ -1213,7 +1166,118 @@ void Table::ReleaseInheritedFile(const TabletFile& file) {
     }
 }
 
-void Table::AddInheritedFile(const TabletFile& file) {
+bool Table::TryCollectInheritedFile() {
+    std::set<uint64_t> live_tablets, dead_tablets;
+    GetTabletsForGc(&live_tablets, &dead_tablets, true);
+
+    std::set<uint64_t>::iterator it = dead_tablets.begin();
+    for (; it != dead_tablets.end(); ++it) {
+        std::vector<TabletFile> tablet_files;
+        CollectInheritedFileFromFilesystem(name_, *it, &tablet_files);
+
+        for (uint32_t i = 0; i < tablet_files.size(); i++) {
+            MutexLock l(&mutex_);
+            AddInheritedFile(tablet_files[i], false);
+        }
+    }
+    return dead_tablets.size() > 0;
+}
+
+bool Table::CollectInheritedFileFromFilesystem(const std::string& tablename,
+                                               uint64_t tablet_num,
+                                               std::vector<TabletFile>* tablet_files) {
+    std::string tablepath = FLAGS_tera_tabletnode_path_prefix + tablename;
+    std::string tablet_path = leveldb::GetTabletPathFromNum(tablepath, tablet_num);
+    leveldb::Env* env = io::LeveldbBaseEnv();
+
+    // list lg dir
+    std::vector<std::string> children;
+    env->GetChildren(tablet_path, &children);
+    for (size_t lg = 0; lg < children.size(); ++lg) {
+        std::string lg_path = tablet_path + "/" + children[lg];
+        leveldb::FileType type = leveldb::kUnknown;
+        uint64_t number = 0;
+        if (ParseFileName(children[lg], &number, &type)) {
+            LOG(INFO) << "[gc] parent tablet has log_file: " << lg_path;
+            continue;
+        }
+
+        leveldb::Slice rest(children[lg]);
+        uint64_t lg_num = 0;
+        if (!leveldb::ConsumeDecimalNumber(&rest, &lg_num)) {
+            LOG(ERROR) << "[gc] skip unknown dir(not log_num nor lg_num): " << lg_path;
+            continue;
+        }
+
+        // collector sst file
+        std::vector<std::string> files;
+        env->GetChildren(lg_path, &files);
+        for (size_t f = 0; f < files.size(); ++f) {
+            std::string file_path = lg_path + "/" + files[f];
+            type = leveldb::kUnknown;
+            number = 0;
+            if (ParseFileName(files[f], &number, &type) &&
+                type == leveldb::kTableFile) {
+                struct TabletFile tablet_file = {tablet_num, (uint32_t)lg_num, number};
+                tablet_files->push_back(tablet_file);
+            }
+        }
+    }
+    return true;
+}
+
+bool Table::GetTabletsForGc(std::set<uint64_t>* live_tablets,
+                            std::set<uint64_t>* dead_tablets,
+                            bool ignore_not_ready) {
+    MutexLock lock(&mutex_);
+
+    std::vector<std::string> children;
+    leveldb::Env* env = io::LeveldbBaseEnv();
+    std::string table_path = FLAGS_tera_tabletnode_path_prefix + name_;
+    mutex_.Unlock();
+
+    leveldb::Status s = env->GetChildren(table_path, &children);
+    mutex_.Lock();
+    if (!s.ok()) {
+        LOG(ERROR) << "[gc] fail to list directory: " << table_path;
+        return false;
+    }
+
+    std::vector<TabletPtr> tablet_list;
+    Table::TabletList::iterator it = tablets_list_.begin();
+    for (; it != tablets_list_.end(); ++it) {
+        TabletPtr tablet = it->second;
+        if (tablet->GetStatus() != kTableReady) {
+            if (!ignore_not_ready) {
+                // any tablet not ready, stop gc
+                return false;
+            }
+        }
+        const std::string& path = tablet->GetPath();
+        live_tablets->insert(leveldb::GetTabletNumFromPath(path));
+        VLOG(20) << "[gc] add live tablet: " << path;
+    }
+
+    for (size_t i = 0; i < children.size(); ++i) {
+        if (children[i].size() < 5) {
+            // skip directory . and ..
+            continue;
+        }
+        std::string path = table_path + "/" + children[i];
+        uint64_t tabletnum = leveldb::GetTabletNumFromPath(path);
+        if (live_tablets->find(tabletnum) == live_tablets->end()) {
+            VLOG(10) << "[gc] add dead tablet: " << path;
+            dead_tablets->insert(tabletnum);
+        }
+    }
+    if (dead_tablets->size() == 0) {
+        VLOG(10) << "[gc] there is none dead tablets: " << name_;
+        return false;
+    }
+    return true;
+}
+
+void Table::AddInheritedFile(const TabletFile& file, bool need_ref) {
     mutex_.AssertHeld();
 
     bool is_gc_disabled = false;
@@ -1228,9 +1292,11 @@ void Table::AddInheritedFile(const TabletFile& file) {
     InheritedFileInfo& file_info = useful_inh_files_[file.tablet_id][file];
     if (is_gc_disabled && file_info.ref == 0) {
         VLOG(10) << "[gc] [" << name_ << "] new report file " << file;
-        file_info.ref = 1;
+        file_info.ref = 1; // gc_disabled_dead_tablets_ ref it
     }
-    ++file_info.ref;
+    if (need_ref) {
+        ++file_info.ref;
+    }
     VLOG(10) << "[gc] [" << name_ << "] file " << file << " ref increment to " << file_info.ref;
 }
 
@@ -1249,7 +1315,7 @@ uint64_t Table::CleanObsoleteFile() {
         if (file.lg_id == 0 && file.file_id == 0) {
             std::string path = leveldb::BuildTabletPath(table_path, file.tablet_id);
             LOG(INFO) << "[gc] [" << name_ << "] delete dir " << path;
-            s = env->DeleteFile(path);
+            s = env->DeleteFile(path); //safely delete dir and all file in it
         } else {
             std::string path = leveldb::BuildTableFilePath(table_path, file.tablet_id,
                                                            file.lg_id, file.file_id);
