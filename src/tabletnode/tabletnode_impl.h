@@ -50,8 +50,7 @@ public:
             : row_done_counter(c), request(req), response(resp), done(d), timer(t) {}
     };
 
-    TabletNodeImpl(const TabletNodeInfo& tabletnode_info,
-                   TabletManager* tablet_manager = NULL);
+    TabletNodeImpl();
     ~TabletNodeImpl();
 
     bool Init();
@@ -174,6 +173,7 @@ private:
     void EnableReleaseMallocCacheTimer(int32_t expand_factor = 1);
     void DisableReleaseMallocCacheTimer();
 
+    void GetInheritedLiveFiles(std::vector<TabletInheritedFileInfo>* inherited);
     void GetInheritedLiveFiles(std::vector<InheritedLiveFiles>& inherited);
 
     void GarbageCollectInPath(const std::string& path, leveldb::Env* env,
@@ -181,6 +181,9 @@ private:
                               const std::set<std::string> active_tablets);
 
     bool ApplySchema(const UpdateRequest* request);
+
+    void UnloadTabletProc(io::TabletIO* tablet_io, Counter* worker_count);
+
 private:
     mutable Mutex status_mutex_;
     TabletNodeStatus status_;
@@ -201,6 +204,7 @@ private:
 
     leveldb::Logger* ldb_logger_;
     leveldb::Cache* ldb_block_cache_;
+    leveldb::Cache* m_memory_cache;
     leveldb::TableCache* ldb_table_cache_;
 };
 

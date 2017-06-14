@@ -8,8 +8,6 @@
 #include <gflags/gflags.h>
 #include <sofa/pbrpc/pbrpc.h>
 
-#include "common/base/closure.h"
-
 #include "proto/tabletnode_rpc.pb.h"
 #include "proto/rpc_client.h"
 
@@ -35,53 +33,53 @@ public:
 
     bool LoadTablet(const LoadTabletRequest* request,
                     LoadTabletResponse* response,
-                    Closure<void, LoadTabletRequest*, LoadTabletResponse*, bool, int>* done = NULL);
+                    std::function<void (LoadTabletRequest*, LoadTabletResponse*, bool, int)> done = NULL);
 
     bool UnloadTablet(const UnloadTabletRequest* request,
                       UnloadTabletResponse* response,
-                      Closure<void, UnloadTabletRequest*, UnloadTabletResponse*, bool, int>* done = NULL);
+                      std::function<void (UnloadTabletRequest*, UnloadTabletResponse*, bool, int)> done = NULL);
 
     bool ReadTablet(const ReadTabletRequest* request,
                     ReadTabletResponse* response,
-                    Closure<void, ReadTabletRequest*, ReadTabletResponse*, bool, int>* done = NULL);
+                    std::function<void (ReadTabletRequest*, ReadTabletResponse*, bool, int)> done = NULL);
 
     bool WriteTablet(const WriteTabletRequest* request,
                      WriteTabletResponse* response,
-                     Closure<void, WriteTabletRequest*, WriteTabletResponse*, bool, int>* done = NULL);
+                     std::function<void (WriteTabletRequest*, WriteTabletResponse*, bool, int)> done = NULL);
 
     bool ScanTablet(const ScanTabletRequest* request,
                     ScanTabletResponse* response,
-                    Closure<void, ScanTabletRequest*, ScanTabletResponse*, bool, int>* done = NULL);
+                    std::function<void (ScanTabletRequest*, ScanTabletResponse*, bool, int)> done = NULL);
 
     bool GetSnapshot(const SnapshotRequest* request,
                      SnapshotResponse* response,
-                     Closure<void, SnapshotRequest*, SnapshotResponse*, bool, int>* done = NULL);
+                     std::function<void (SnapshotRequest*, SnapshotResponse*, bool, int)> done = NULL);
     bool ReleaseSnapshot(const ReleaseSnapshotRequest* request,
                          ReleaseSnapshotResponse* response,
-                         Closure<void, ReleaseSnapshotRequest*, ReleaseSnapshotResponse*, bool, int>* done = NULL);
+                         std::function<void (ReleaseSnapshotRequest*, ReleaseSnapshotResponse*, bool, int)> done = NULL);
     bool Rollback(const SnapshotRollbackRequest* request,
                   SnapshotRollbackResponse* response,
-                  Closure<void, SnapshotRollbackRequest*, SnapshotRollbackResponse*, bool, int>* done = NULL);
+                  std::function<void (SnapshotRollbackRequest*, SnapshotRollbackResponse*, bool, int)> done = NULL);
 
 
     bool Query(ThreadPool* thread_pool, const QueryRequest* request,
                QueryResponse* response,
-               Closure<void, QueryRequest*, QueryResponse*, bool, int>* done = NULL);
+               std::function<void (QueryRequest*, QueryResponse*, bool, int)> done = NULL);
 
     bool SplitTablet(const SplitTabletRequest* request,
                      SplitTabletResponse* response,
-                     Closure<void, SplitTabletRequest*, SplitTabletResponse*, bool, int>* done = NULL);
+                     std::function<void (SplitTabletRequest*, SplitTabletResponse*, bool, int)> done = NULL);
 
     bool CompactTablet(const CompactTabletRequest* request,
                        CompactTabletResponse* response,
-                       Closure<void, CompactTabletRequest*, CompactTabletResponse*, bool, int>* done = NULL);
+                       std::function<void (CompactTabletRequest*, CompactTabletResponse*, bool, int)> done = NULL);
     bool CmdCtrl(const TsCmdCtrlRequest* request,
                  TsCmdCtrlResponse* response,
-                 Closure<void, TsCmdCtrlRequest*, TsCmdCtrlResponse*, bool, int>* done = NULL);
+                 std::function<void (TsCmdCtrlRequest*, TsCmdCtrlResponse*, bool, int)> done = NULL);
 
     bool Update(const UpdateRequest* request,
                       UpdateResponse* response,
-                      Closure<void, UpdateRequest*, UpdateResponse*, bool, int>* done = NULL);
+                      std::function<void (UpdateRequest*, UpdateResponse*, bool, int)> done = NULL);
 
 private:
     int32_t rpc_timeout_;

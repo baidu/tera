@@ -21,7 +21,7 @@ class TableImpl;
 
 class RowReaderImpl : public RowReader, public SdkTask {
 public:
-    RowReaderImpl(Table* table, const std::string& row_key);
+    RowReaderImpl(TableImpl* table, const std::string& row_key);
     ~RowReaderImpl();
     /// 设置读取特定版本
     void SetTimestamp(int64_t ts);
@@ -88,6 +88,9 @@ public:
 
     void SetResult(const RowResult& result);
 
+    void Prepare(StatCallback cb);
+    int64_t GetStartTime() { return start_ts_;}
+
     void IncRetryTimes();
 
     uint32_t RetryTimes();
@@ -115,7 +118,10 @@ public:
     /// 设置所属事务
     void SetTransaction(Transaction* txn) { txn_ = txn; }
 
+    Table* GetTable() { return (Table*)table_; }
+
 private:
+    TableImpl* table_;
     std::string row_key_;
     RowReader::Callback callback_;
     void* user_context_;
@@ -140,6 +146,9 @@ private:
 
     /// 记录此reader被提交到ts的次数
     int64_t commit_times_;
+
+    StatCallback on_finish_callback_;
+    int64_t start_ts_;
 
     /// 所属事务
     Transaction* txn_;

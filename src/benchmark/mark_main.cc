@@ -423,6 +423,8 @@ void print_summary(Statistic* marker, double duration) {
                          &success_count, &success_size);
 
     print_opt(marker);
+    std::streamsize precision = std::cout.precision();
+    std::ios::fmtflags flag(std::cout.flags());
     std::cout.precision(3);
     std::cout << " Summary: " << std::fixed << duration << " s\n"
         << "    total: " << finish_size << " bytes "
@@ -432,6 +434,8 @@ void print_summary(Statistic* marker, double duration) {
                          << success_count << " records "
                          << (double)success_size / 1048576 / duration << " MB/s"
         << std::endl;
+    std::cout.precision(precision);
+    std::cout.flags(flag);
 }
 
 void print_summary_proc(Adapter* adapter, double duration) {

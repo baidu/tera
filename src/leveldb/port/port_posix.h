@@ -109,11 +109,12 @@ class CondVar {
   explicit CondVar(Mutex* mu);
   ~CondVar();
   void Wait();
-  bool Wait(int32_t wait_millisec);
+  bool Wait(int64_t wait_millisec);
   void Signal();
   void SignalAll();
  private:
-  pthread_cond_t cv_;
+  pthread_cond_t cond_;
+  pthread_condattr_t attr_;
   Mutex* mu_;
 };
 

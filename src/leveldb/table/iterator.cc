@@ -13,6 +13,8 @@ namespace leveldb {
 Iterator::Iterator() {
   cleanup_.function = NULL;
   cleanup_.next = NULL;
+  cleanup_.arg1 = NULL;
+  cleanup_.arg2 = NULL;
 }
 
 Iterator::~Iterator() {

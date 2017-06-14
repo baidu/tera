@@ -3,16 +3,15 @@
 // found in the LICENSE file.
 //
 
+#include <fstream>
+#include <functional>
+#include <iostream>
+#include <limits>
+#include <sstream>
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
 
-#include <fstream>
-#include <iostream>
-#include <limits>
-#include <sstream>
-
-#include <boost/bind.hpp>
 #include <gflags/gflags.h>
 #include <glog/logging.h>
 
@@ -61,13 +60,14 @@ void PrintStat() {
 
 class KeySet {
 public:
+    KeySet() : key_num_(0) {}
     void Init(const uint32_t key_num) {
         key_num_ = key_num;
 
         // gen row keys
         while (keys_.size() < key_num) {
             std::stringstream ss;
-            ss << (uint64_t)(rand() * rand()) << "abcdefghijklmnopqrstuvwxyz";
+            ss << ((uint64_t)rand()) * ((uint64_t)rand()) << "abcdefghijklmnopqrstuvwxyz";
             std::string key = ss.str();
             keys_[key] = 0;
             keys_stat_[key] = false;
@@ -294,7 +294,7 @@ int32_t SharedTableImplTest(int32_t argc, char** argv, ErrorCode* err) {
     ThreadPool thread_pool(100);
     for (int i = 0; i < 1000000; ++i) {
         ThreadPool::Task task =
-                boost::bind(&SharedTableImplTask, client, err);
+                std::bind(&SharedTableImplTask, client, err);
         thread_pool.AddTask(task);
     }
     while (thread_pool.PendingNum() > 0) {

@@ -1,7 +1,6 @@
 package tera;
 
 enum StatusCode {
-    option allow_alias = true;
     // master
     kMasterNotInited = 12;
     kMasterIsBusy = 13;
@@ -25,7 +24,6 @@ enum StatusCode {
     kTabletNodeWaitKick = 33;
 
     // table status
-    kTableOk = 40;
     kTabletNotInit = 41;
     kTabletReady = 42;
     kTabletOnLoad = 43;

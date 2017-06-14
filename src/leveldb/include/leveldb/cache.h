@@ -35,7 +35,7 @@ extern Cache* NewLRUCache(size_t capacity);
 
 class Cache {
  public:
-  Cache() { }
+  Cache() : rep_(NULL) { }
 
   // Destroys all existing entries by calling the "deleter"
   // function that was passed to the constructor.

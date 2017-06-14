@@ -24,7 +24,7 @@ public:
     virtual Status NewWritableFile(const std::string& fname,
             WritableFile** result);
 
-    virtual bool FileExists(const std::string& fname);
+    virtual Status FileExists(const std::string& fname);
 
     virtual Status GetChildren(const std::string& path,
             std::vector<std::string>* result);

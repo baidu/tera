@@ -38,22 +38,22 @@ public:
     virtual bool GetRootTableAddr(std::string* root_table_addr);
 
 private:
-    bool Register(const std::string& session_id, int* zk_code);
-    bool Unregister(int* zk_code);
+    virtual bool Register(const std::string& session_id, int* zk_code);
+    virtual bool Unregister(int* zk_code);
 
-    bool WatchMaster(std::string* master, int* zk_code);
-    bool WatchSafeModeMark(bool* is_exist, int* zk_code);
-    bool WatchKickMark(bool* is_exist, int* zk_code);
-    bool WatchSelfNode(bool* is_exist, int* zk_code);
-    bool WatchRootNode(bool* is_exist, std::string* root_tablet_addr, int* zk_errno);
+    virtual bool WatchMaster(std::string* master, int* zk_code);
+    virtual bool WatchSafeModeMark(bool* is_exist, int* zk_code);
+    virtual bool WatchKickMark(bool* is_exist, int* zk_code);
+    virtual bool WatchSelfNode(bool* is_exist, int* zk_code);
+    virtual bool WatchRootNode(bool* is_exist, std::string* root_tablet_addr, int* zk_errno);
 
-    void OnSafeModeMarkCreated();
-    void OnSafeModeMarkDeleted();
-    void OnKickMarkCreated();
-    void OnSelfNodeDeleted();
-    void OnRootNodeCreated();
-    void OnRootNodeDeleted();
-    void OnRootNodeChanged(const std::string& root_tablet_addr);
+    virtual void OnSafeModeMarkCreated();
+    virtual void OnSafeModeMarkDeleted();
+    virtual void OnKickMarkCreated();
+    virtual void OnSelfNodeDeleted();
+    virtual void OnRootNodeCreated();
+    virtual void OnRootNodeDeleted();
+    virtual void OnRootNodeChanged(const std::string& root_tablet_addr);
 
     virtual void OnChildrenChanged(const std::string& path,
                                    const std::vector<std::string>& name_list,
@@ -70,6 +70,19 @@ private:
     std::string server_addr_;
     std::string serve_node_path_;
     std::string kick_node_path_;
+};
+
+class MockTabletNodeZkAdapter : public TabletNodeZkAdapter {
+public:
+    MockTabletNodeZkAdapter(TabletNodeImpl* tabletnode_impl,
+                        const std::string & server_addr) :
+        TabletNodeZkAdapter(tabletnode_impl, server_addr) {}
+    virtual ~MockTabletNodeZkAdapter() {}
+private:
+    virtual void OnKickMarkCreated() {}
+    virtual void OnSelfNodeDeleted() {}
+    virtual void OnWatchFailed(const std::string& /*path*/, int /*watch_type*/, int /*err*/) {}
+    virtual void OnSessionTimeout() {}
 };
 
 class FakeTabletNodeZkAdapter : public TabletNodeZkAdapterBase {
@@ -109,8 +122,8 @@ public:
     virtual ~InsTabletNodeZkAdapter() {}
     virtual void Init();
     virtual bool GetRootTableAddr(std::string* root_table_addr);
-    void OnKickMarkCreated();
-    void OnLockChange(std::string session_id, bool deleted);
+    virtual void OnKickMarkCreated();
+    virtual void OnLockChange(std::string session_id, bool deleted);
     void OnMetaChange(std::string meta_addr, bool deleted);
 private:
     virtual void OnChildrenChanged(const std::string& path,
@@ -130,6 +143,16 @@ private:
     std::string serve_node_path_;
     std::string kick_node_path_;
     galaxy::ins::sdk::InsSDK* ins_sdk_;
+};
+
+class MockInsTabletNodeZkAdapter : public InsTabletNodeZkAdapter {
+public:
+    MockInsTabletNodeZkAdapter(TabletNodeImpl* tabletnode_impl,
+                               const std::string& server_addr) :
+        InsTabletNodeZkAdapter(tabletnode_impl, server_addr) {}
+    virtual ~MockInsTabletNodeZkAdapter() {}
+    virtual void OnKickMarkCreated() {}
+    virtual void OnLockChange(std::string /*session_id*/, bool /*deleted*/) {}
 };
 
 } // namespace tabletnode

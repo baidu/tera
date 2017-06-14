@@ -28,7 +28,7 @@ public:
         int  sort_dir;
         int  sort_col;   // select column num for sorting
 
-        PrintOpt() : print_head(true), sort_dir(0) {}
+        PrintOpt() : print_head(true), sort_dir(0), sort_col(0) {}
     };
 
     TPrinter();

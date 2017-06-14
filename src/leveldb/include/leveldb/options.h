@@ -76,6 +76,9 @@ struct LG_info {
 
   int32_t write_buffer_size;
 
+  Cache* block_cache;
+
+  int64_t seek_latency;
   // Other LG properties
   // ...
 
@@ -88,7 +91,9 @@ struct LG_info {
         memtable_ldb_write_buffer_size(1 << 20),
         memtable_ldb_block_size(kDefaultBlockSize),
         sst_size(kDefaultSstSize),
-        write_buffer_size(32 << 20) {}
+        write_buffer_size(32 << 20),
+        block_cache(NULL),
+        seek_latency(0) {}
 };
 
 // Options to control the behavior of a database (passed to DB::Open)
@@ -287,8 +292,30 @@ struct Options {
   // Default: false
   bool ignore_corruption_in_compaction;
 
+  // If true, env::FileLock will be called during leveldb's load
+  bool use_file_lock;
+
   // disable write-ahead-log
   bool disable_wal;
+
+  // Ignore data corruption in DB::Open
+  // Default: false
+  //   1). TODO(taocipian)
+  //       CURRENT corruption
+  //       try to use lastest valid manifest rebuild CURRENT
+  //   2). TODO(taocipian)
+  //       the manifest which CURRENT pointed to was lost
+  //       try to use lastest valid manifest
+  //   3). ignore sst lost
+  bool ignore_corruption_in_open;
+
+  // Statistic: By default, if 10% entry timeout, will trigger compaction
+  // Default: 10 %
+  uint64_t ttl_percentage;
+
+  // Statistic: delete tag's percentage in sst
+  // Default: 10 %
+  uint64_t del_percentage;
 
   // Create an Options object with default values for all fields.
   Options();
@@ -321,6 +348,11 @@ struct ReadOptions {
   // Default: NULL
   std::set<uint32_t>* target_lgs;
 
+  // if read a single row, optimization may be applied to this read
+  bool read_single_row;
+  std::string row_start_key;  // start key of this row
+  std::string row_end_key;    // start key of next row
+
   // db option
   const Options* db_opt;
 
@@ -329,6 +361,7 @@ struct ReadOptions {
         fill_cache(true),
         snapshot(kMaxSequenceNumber),
         target_lgs(NULL),
+        read_single_row(false),
         db_opt(db_option) {
   }
   ReadOptions() {

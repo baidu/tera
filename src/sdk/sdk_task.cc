@@ -8,6 +8,8 @@
 
 #include "utils/timer.h"
 
+DECLARE_int32(tera_sdk_timeout_precision);
+
 namespace tera {
 
 int64_t SdkTask::GetRef() {
@@ -36,22 +38,21 @@ void SdkTask::ExcludeOtherRef() {
     CHECK_EQ(ref_, 1);
 }
 
-int64_t GetSdkTaskId(SdkTask* task) {
-    return task->GetId();
-}
-
-uint64_t GetSdkTaskDueTime(SdkTask* task) {
-    return task->DueTime();
-}
-
 SdkTimeoutManager::SdkTimeoutManager(ThreadPool* thread_pool)
     : thread_pool_(thread_pool),
+      timeout_precision_(FLAGS_tera_sdk_timeout_precision),
       stop_(false),
       bg_exit_(false),
       bg_cond_(&bg_mutex_),
       bg_func_id_(0),
-      bg_func_(boost::bind(&SdkTimeoutManager::CheckTimeout, this)) {
-    thread_pool_->AddTask(bg_func_);
+      bg_func_(std::bind(&SdkTimeoutManager::CheckTimeout, this)) {
+    if (timeout_precision_ <= 0) {
+        timeout_precision_ = 1;
+    }
+    if (timeout_precision_ > 1000) {
+        timeout_precision_ = 1000;
+    }
+    bg_func_id_ = thread_pool_->DelayTask(timeout_precision_, bg_func_);
 }
 
 SdkTimeoutManager::~SdkTimeoutManager() {
@@ -85,10 +86,11 @@ bool SdkTimeoutManager::PutTask(SdkTask* task, int64_t timeout,
     Mutex& mutex = mutex_shard_[shard_id];
 
     MutexLock l(&mutex);
-    std::pair<TaskMap::iterator, bool> insert_ret;
-    insert_ret = map.insert(task);
+    std::pair<IdHashMap::iterator, bool> insert_ret;
+    insert_ret = map.id_hash_map.insert(std::pair<int64_t, SdkTask*>(task_id, task));
     bool insert_success = insert_ret.second;
     if (insert_success) {
+        map.due_time_map.insert(task);
         task->IncRef();
     }
     return insert_success;
@@ -100,10 +102,9 @@ SdkTask* SdkTimeoutManager::GetTask(int64_t task_id) {
     Mutex& mutex = mutex_shard_[shard_id];
 
     MutexLock l(&mutex);
-    TaskIdIndex& id_index = map.get<INDEX_BY_ID>();
-    TaskIdIndex::iterator it = id_index.find(task_id);
-    if (it != id_index.end()) {
-        SdkTask* task = *it;
+    IdHashMap::iterator it = map.id_hash_map.find(task_id);
+    if (it != map.id_hash_map.end()) {
+        SdkTask* task = it->second;
         CHECK_EQ(task->GetId(), task_id);
         task->IncRef();
         return task;
@@ -118,12 +119,12 @@ SdkTask* SdkTimeoutManager::PopTask(int64_t task_id) {
     Mutex& mutex = mutex_shard_[shard_id];
 
     MutexLock l(&mutex);
-    TaskIdIndex& id_index = map.get<INDEX_BY_ID>();
-    TaskIdIndex::iterator it = id_index.find(task_id);
-    if (it != id_index.end()) {
-        SdkTask* task = *it;
+    IdHashMap::iterator it = map.id_hash_map.find(task_id);
+    if (it != map.id_hash_map.end()) {
+        SdkTask* task = it->second;
         CHECK_EQ(task->GetId(), task_id);
-        id_index.erase(it);
+        map.id_hash_map.erase(it);
+        map.due_time_map.erase(task);
         return task;
     } else {
         return NULL;
@@ -137,16 +138,16 @@ void SdkTimeoutManager::CheckTimeout() {
         Mutex& mutex = mutex_shard_[shard_id];
 
         MutexLock l(&mutex);
-        while (!map.empty()) {
-            TaskDueTimeIndex& due_time_index = map.get<INDEX_BY_DUE_TIME>();
-            TaskDueTimeIndex::iterator it = due_time_index.begin();
+        while (!map.due_time_map.empty()) {
+            DueTimeMap::iterator it = map.due_time_map.begin();
             SdkTask* task = *it;
             if (task->DueTime() > (uint64_t)now_ms) {
                 break;
             }
-            due_time_index.erase(it);
+            map.due_time_map.erase(it);
+            map.id_hash_map.erase(task->GetId());
             mutex.Unlock();
-            thread_pool_->AddTask(boost::bind(&SdkTimeoutManager::RunTimeoutFunc, this, task));
+            thread_pool_->AddTask(std::bind(&SdkTimeoutManager::RunTimeoutFunc, this, task));
             mutex.Lock();
         }
     }
@@ -158,12 +159,7 @@ void SdkTimeoutManager::CheckTimeout() {
         return;
     }
 
-    if (get_millis() == now_ms) {
-        bg_func_id_ = thread_pool_->DelayTask(1, bg_func_);
-    } else {
-        thread_pool_->AddTask(bg_func_);
-        bg_func_id_ = 0;
-    }
+    bg_func_id_ = thread_pool_->DelayTask(timeout_precision_, bg_func_);
 }
 
 void SdkTimeoutManager::RunTimeoutFunc(SdkTask* sdk_task) {

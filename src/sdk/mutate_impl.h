@@ -29,7 +29,7 @@ public:
         kValue
     };
 
-    RowMutationImpl(TableImpl* table, const std::string& row_key);
+    RowMutationImpl(Table* table, const std::string& row_key);
     ~RowMutationImpl();
 
     /// 重置
@@ -138,8 +138,13 @@ public:
     /// 返回所属事务
     Transaction* GetTransaction() { return txn_; }
 
+    Table* GetTable() { return (Table*)table_; }
+
 public:
     /// 以下接口仅内部使用，不开放给用户
+
+    void Prepare(StatCallback cb);
+    int64_t GetStartTime() { return start_ts_;}
 
     /// 重试计数加一
     void IncRetryTimes();
@@ -176,7 +181,7 @@ protected:
     RowMutation::Mutation& AddMutation();
 
 private:
-    TableImpl* table_;
+    Table* table_;
     std::string row_key_;
     std::vector<RowMutation::Mutation> mu_seq_;
 
@@ -192,6 +197,9 @@ private:
 
     /// 记录此mutation被提交到ts的次数
     int64_t commit_times_;
+
+    StatCallback on_finish_callback_;
+    int64_t start_ts_;
 
     /// 所属事务
     Transaction* txn_;

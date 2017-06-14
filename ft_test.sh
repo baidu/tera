@@ -51,7 +51,8 @@ if ! $run_without_fetch; then
     cp example/onebox/conf/tera.flag $test_dir/conf
 
     cp build/bin/teracli $test_dir/bin
-    cp build/bin/tera_main $test_dir/bin
+    cp build/bin/tera_master $test_dir/bin
+    cp build/bin/tabletserver $test_dir/bin
     cp build/bin/tera_test $test_dir/bin
     cp build/benchmark/tera_bench $test_dir/bin
     cp build/benchmark/tera_mark $test_dir/bin

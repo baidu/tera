@@ -109,7 +109,7 @@ bool ClientImpl::CheckReturnValue(StatusCode status, std::string& reason, ErrorC
             reason = "table not found.";
             err->SetFailed(ErrorCode::kBadParam, reason);
             break;
-        case kTableDisable:
+        case kTableStatusDisable:
             reason = "table status: disable.";
             err->SetFailed(ErrorCode::kBadParam, reason);
             break;
@@ -450,10 +450,14 @@ bool ClientImpl::GetInternalTableName(const std::string& table_name, ErrorCode* 
     if (!meta_client.ScanTablet(&request, &response)
           || response.status() != kTabletNodeOk) {
         LOG(ERROR) << "fail to scan meta: " << StatusCodeToString(response.status());
-        err->SetFailed(ErrorCode::kSystem, "system error");
+        if (err != NULL) {
+            err->SetFailed(ErrorCode::kSystem, "system error");
+        }
         return false;
     }
-    err->SetFailed(ErrorCode::kOK);
+    if (err != NULL) {
+        err->SetFailed(ErrorCode::kOK);
+    }
     int32_t table_size = response.results().key_values_size();
     for (int32_t i = 0; i < table_size; i++) {
         const KeyValuePair& record = response.results().key_values(i);
@@ -515,7 +519,7 @@ Table* ClientImpl::OpenTable(const std::string& table_name,
 }
 
 TableImpl* ClientImpl::OpenTableInternal(const std::string& table_name,
-                                     ErrorCode* err) {
+                                         ErrorCode* err) {
     std::string internal_table_name;
     if (!GetInternalTableName(table_name, err, &internal_table_name)) {
         std::string reason = "fail to scan meta schema";
@@ -525,7 +529,6 @@ TableImpl* ClientImpl::OpenTableInternal(const std::string& table_name,
         LOG(ERROR) << reason;
         return NULL;
     }
-    err->SetFailed(ErrorCode::kOK);
     TableImpl* table = new TableImpl(internal_table_name, &thread_pool_, cluster_);
     if (table == NULL) {
         std::string reason = "fail to new TableImpl";
@@ -726,6 +729,7 @@ bool ClientImpl::DoShowTablesInfo(TableMetaList* table_list,
     bool table_meta_copied = false;
     std::string err_msg;
     while(has_more && !has_error) {
+        VLOG(7) << "round more " << has_more << ", " << DebugString(start_tablet_key);
         ShowTablesRequest request;
         ShowTablesResponse response;
         if (!table_name.empty()) {
@@ -740,7 +744,7 @@ bool ClientImpl::DoShowTablesInfo(TableMetaList* table_list,
 
         if (master_client.ShowTables(&request, &response) &&
             response.status() == kMasterOk) {
-            if (tablet_list == NULL && response.all_brief()) {
+            if (response.all_brief()) {
                 // show all table brief
                 table_list->CopyFrom(response.table_meta_list());
                 return true;
@@ -777,7 +781,9 @@ bool ClientImpl::DoShowTablesInfo(TableMetaList* table_list,
                     std::string last_key = response.tablet_meta_list().meta(i).key_range().key_start();
                     if (prev_table_name > start_table_name
                         || (prev_table_name == start_table_name && last_key <= start_tablet_key)) {
-                        LOG(WARNING) << "the master has older version";
+                        LOG(WARNING) << "the master has older version, pre_table " << prev_table_name
+                          << ", start_table " << start_table_name << ", last_key " << DebugString(last_key)
+                          << ", start_key " << DebugString(start_tablet_key);
                         has_more = false;
                         break;
                     }

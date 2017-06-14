@@ -1,14 +1,6 @@
-package tera;
+import "status_code.proto";
 
-enum TabletNodeStatus {
-    kTabletNodeInit = 1;
-    kTabletNodeRegistered = 2;
-    kTabletNodeRunning = 3;
-    kTabletNodeTimeout = 4;
-    kTabletNodeFrozen = 5;
-    kTabletNodeRestore = 6;
-    kTabletNodeOffline = 7;
-}
+package tera;
 
 message ExtraTsInfo {
     optional string name = 1;
@@ -17,7 +9,7 @@ message ExtraTsInfo {
 
 message TabletNodeInfo {
     required string addr = 1;
-    optional TabletNodeStatus status_t = 2;
+    optional StatusCode status_t = 2;
     optional uint64 load = 3;
     optional uint64 timestamp = 4;
     optional uint32 tablet_total = 5;
@@ -53,6 +45,7 @@ message TabletNodeInfo {
     optional uint32 scan_pending = 43;
 
     optional float cpu_usage = 44;
+    optional int64 process_start_time = 45;  // Unix time in us
 }
 
 message LgInheritedLiveFiles {
@@ -63,4 +56,11 @@ message LgInheritedLiveFiles {
 message InheritedLiveFiles {
     required string table_name = 1;
     repeated LgInheritedLiveFiles lg_live_files = 2;
+}
+
+message TabletInheritedFileInfo {
+    optional string table_name = 1;
+    optional bytes key_start = 2;
+    optional bytes key_end = 3;
+    repeated LgInheritedLiveFiles lg_inh_files = 4;
 }

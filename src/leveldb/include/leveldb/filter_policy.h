@@ -22,6 +22,8 @@
 
 #include <string>
 
+#include "leveldb/raw_key_operator.h"
+
 namespace leveldb {
 
 class Slice;
@@ -70,6 +72,9 @@ class FilterPolicy {
 extern const FilterPolicy* NewBloomFilterPolicy(int bits_per_key);
 // bloomfilter for ttl-kv mode.
 extern const FilterPolicy* NewTTLKvBloomFilterPolicy(int bits_per_key);
+// for bigtable mode
+extern const FilterPolicy* NewRowKeyBloomFilterPolicy(int bits_per_key,
+                                                      const RawKeyOperator* raw_key_operator);
 
 }
 

@@ -4,16 +4,17 @@
 
 #include "tabletnode/tabletnode_impl.h"
 
+#include <functional>
 #include <set>
 #include <vector>
 
-#include <boost/bind.hpp>
 #include <gflags/gflags.h>
 #include <glog/logging.h>
 #include <gperftools/malloc_extension.h>
 
 #include "db/filename.h"
 #include "db/table_cache.h"
+#include "common/thread.h"
 #include "io/io_utils.h"
 #include "io/utils_leveldb.h"
 #include "leveldb/cache.h"
@@ -48,6 +49,7 @@ DECLARE_int32(tera_tabletnode_impl_thread_min_num);
 DECLARE_int32(tera_tabletnode_impl_thread_max_num);
 
 DECLARE_bool(tera_zk_enabled);
+DECLARE_bool(tera_mock_zk_enabled);
 
 DECLARE_string(tera_master_meta_table_name);
 DECLARE_int32(tera_tabletnode_retry_period);
@@ -65,6 +67,7 @@ DECLARE_int32(tera_tabletnode_compact_thread_num);
 DECLARE_string(tera_tabletnode_path_prefix);
 
 // cache-related
+DECLARE_int32(tera_memenv_block_cache_size);
 DECLARE_bool(tera_tabletnode_cache_enabled);
 DECLARE_string(tera_tabletnode_cache_paths);
 DECLARE_int32(tera_tabletnode_cache_block_size);
@@ -80,11 +83,14 @@ DECLARE_int32(tera_tabletnode_gc_log_level);
 DECLARE_string(tera_leveldb_env_type);
 DECLARE_string(tera_local_addr);
 DECLARE_bool(tera_ins_enabled);
+DECLARE_bool(tera_mock_ins_enabled);
 
 DECLARE_bool(tera_io_cache_path_vanish_allowed);
 DECLARE_int64(tera_tabletnode_tcm_cache_size);
 
 DECLARE_string(flagfile);
+
+using namespace std::placeholders;
 
 extern tera::Counter range_error_counter;
 extern tera::Counter rand_read_delay;
@@ -94,19 +100,18 @@ static const int GC_LOG_LEVEL = FLAGS_tera_tabletnode_gc_log_level;
 namespace tera {
 namespace tabletnode {
 
-TabletNodeImpl::TabletNodeImpl(const TabletNodeInfo& tabletnode_info,
-                               TabletManager* tablet_manager)
+TabletNodeImpl::TabletNodeImpl()
     : status_(kNotInited),
-      tablet_manager_(tablet_manager),
+      tablet_manager_(new TabletManager()),
       zk_adapter_(NULL),
       release_cache_timer_id_(kInvalidTimerId),
-      sysinfo_(tabletnode_info),
       thread_pool_(new ThreadPool(FLAGS_tera_tabletnode_impl_thread_max_num)) {
     if (FLAGS_tera_local_addr == "") {
         local_addr_ = utils::GetLocalHostName()+ ":" + FLAGS_tera_tabletnode_port;
     } else {
         local_addr_ = FLAGS_tera_local_addr + ":" + FLAGS_tera_tabletnode_port;
     }
+    sysinfo_.SetServerAddr(local_addr_);
     TabletNodeClient::SetThreadPool(thread_pool_.get());
 
     leveldb::Env::Default()->SetBackgroundThreads(FLAGS_tera_tabletnode_compact_thread_num);
@@ -118,6 +123,8 @@ TabletNodeImpl::TabletNodeImpl(const TabletNodeInfo& tabletnode_info,
 
     ldb_block_cache_ =
         leveldb::NewLRUCache(FLAGS_tera_tabletnode_block_cache_size * 1024UL * 1024);
+    m_memory_cache =
+        leveldb::NewLRUCache(FLAGS_tera_memenv_block_cache_size * 1024UL * 1024);
     ldb_table_cache_ =
         new leveldb::TableCache(FLAGS_tera_tabletnode_table_cache_size * 1024UL * 1024);
     if (!s.ok()) {
@@ -130,10 +137,6 @@ TabletNodeImpl::TabletNodeImpl(const TabletNodeInfo& tabletnode_info,
 
     InitCacheSystem();
 
-    if (tablet_manager_.get() == NULL) {
-        tablet_manager_.reset(new TabletManager());
-    }
-
     if (FLAGS_tera_tabletnode_tcm_cache_release_enabled) {
         LOG(INFO) << "enable tcmalloc cache release timer";
         EnableReleaseMallocCacheTimer();
@@ -144,6 +147,7 @@ TabletNodeImpl::TabletNodeImpl(const TabletNodeInfo& tabletnode_info,
     size_t tcm_t;
     CHECK(MallocExtension::instance()->GetNumericProperty(tcm_property, &tcm_t));
     LOG(INFO) << tcm_property << "=" << tcm_t;
+    sysinfo_.SetProcessStartTime(get_micros());
 }
 
 TabletNodeImpl::~TabletNodeImpl() {
@@ -158,13 +162,19 @@ bool TabletNodeImpl::Init() {
     } else if(FLAGS_tera_ins_enabled) {
         LOG(INFO) << "ins mode!";
         zk_adapter_.reset(new InsTabletNodeZkAdapter(this, local_addr_));
+    } else if (FLAGS_tera_mock_zk_enabled) {
+        LOG(INFO) << "mock zk mode!";
+        zk_adapter_.reset(new MockTabletNodeZkAdapter(this, local_addr_));
+    } else if (FLAGS_tera_mock_ins_enabled) {
+        LOG(INFO) << "mock ins mode!";
+        zk_adapter_.reset(new MockInsTabletNodeZkAdapter(this, local_addr_));
     } else {
         LOG(INFO) << "fake zk mode!";
         zk_adapter_.reset(new FakeTabletNodeZkAdapter(this, local_addr_));
     }
 
     SetTabletNodeStatus(kIsIniting);
-    thread_pool_->AddTask(boost::bind(&TabletNodeZkAdapterBase::Init, zk_adapter_.get()));
+    thread_pool_->AddTask(std::bind(&TabletNodeZkAdapterBase::Init, zk_adapter_.get()));
     return true;
 }
 
@@ -198,21 +208,47 @@ void TabletNodeImpl::InitCacheSystem() {
 }
 
 bool TabletNodeImpl::Exit() {
-    thread_pool_.reset();
+    std::vector<io::TabletIO*> tablet_ios;
+    tablet_manager_->GetAllTablets(&tablet_ios);
 
-    std::vector<TabletMeta*> tablet_meta_list;
-    tablet_manager_->GetAllTabletMeta(&tablet_meta_list);
-    std::vector<TabletMeta*>::iterator it = tablet_meta_list.begin();
-    for (; it != tablet_meta_list.end(); ++it) {
-        TabletMeta*& tablet_meta = *it;
-        StatusCode status = kTableOk;
-        bool ret = UnloadTablet(tablet_meta->table_name(),
-            tablet_meta->key_range().key_start(),
-            tablet_meta->key_range().key_end(), &status);
-        LOG(INFO) << "unload tablet [" << tablet_meta->path() << "] return " << ret;
-        delete tablet_meta;
+    std::vector<common::Thread> unload_threads;
+    unload_threads.resize(tablet_ios.size());
+
+    Counter worker_count;
+    worker_count.Set(tablet_ios.size());
+
+    for (uint32_t i = 0; i < tablet_ios.size(); ++i) {
+        io::TabletIO* tablet_io = tablet_ios[i];
+        common::Thread& thread = unload_threads[i];
+        thread.Start(std::bind(&TabletNodeImpl::UnloadTabletProc,
+                               this, tablet_io, &worker_count));
+    }
+    int64_t print_ms_ = get_millis();
+    int64_t left = 0;
+    while ((left = worker_count.Get()) > 0) {
+        if (get_millis() - print_ms_ > 1000) {
+            LOG(INFO) << "[Exit] " << left << " tablets are still unloading ...";
+            print_ms_ = get_millis();
+        }
+        ThisThread::Sleep(100);
+    }
+    for (uint32_t i = 0; i < tablet_ios.size(); ++i) {
+        unload_threads[i].Join();
     }
     return true;
+}
+
+void TabletNodeImpl::UnloadTabletProc(io::TabletIO* tablet_io, Counter* worker_count) {
+    LOG(INFO) << "begin to unload tablet: " << *tablet_io;
+    StatusCode status;
+    if (!tablet_io->Unload(&status)) {
+        LOG(ERROR) << "fail to unload tablet: " << *tablet_io
+            << ", status: " << StatusCodeToString(status);
+    } else {
+        LOG(INFO) << "unload tablet success: " << *tablet_io;
+    }
+    tablet_io->DecRef();
+    worker_count->Dec();
 }
 
 void TabletNodeImpl::LoadTablet(const LoadTabletRequest* request,
@@ -282,25 +318,29 @@ void TabletNodeImpl::LoadTablet(const LoadTabletRequest* request,
             << StatusCodeToString(status);
         response->set_status((StatusCode)tablet_io->GetStatus());
         tablet_io->DecRef();
-    } else if (!tablet_io->Load(schema, request->path(), parent_tablets,
-                                snapshots, rollbacks, ldb_logger_,
-                                ldb_block_cache_, ldb_table_cache_, &status)) {
-        tablet_io->DecRef();
-        LOG(ERROR) << "fail to load tablet: " << request->path()
-            << " [" << DebugString(key_start) << ", "
-            << DebugString(key_end) << "], status: "
-            << StatusCodeToString(status);
-        if (!tablet_manager_->RemoveTablet(request->tablet_name(), key_start,
-                                            key_end, &status)) {
-            LOG(ERROR) << "fail to remove tablet: " << request->path()
+    } else {
+        ///TODO: User per user memery_cache according to user quota.
+        tablet_io->SetMemoryCache(m_memory_cache);
+        if (!tablet_io->Load(schema, request->path(), parent_tablets,
+                             snapshots, rollbacks, ldb_logger_,
+                             ldb_block_cache_, ldb_table_cache_, &status)) {
+            tablet_io->DecRef();
+            LOG(ERROR) << "fail to load tablet: " << request->path()
                 << " [" << DebugString(key_start) << ", "
                 << DebugString(key_end) << "], status: "
                 << StatusCodeToString(status);
+            if (!tablet_manager_->RemoveTablet(request->tablet_name(), key_start,
+                                               key_end, &status)) {
+                LOG(ERROR) << "fail to remove tablet: " << request->path()
+                    << " [" << DebugString(key_start) << ", "
+                    << DebugString(key_end) << "], status: "
+                    << StatusCodeToString(status);
+            }
+            response->set_status(kIOError);
+        } else {
+            tablet_io->DecRef();
+            response->set_status(kTabletNodeOk);
         }
-        response->set_status(kIOError);
-    } else {
-        tablet_io->DecRef();
-        response->set_status(kTabletNodeOk);
     }
 
     LOG(INFO) << "load tablet: " << request->path() << " ["
@@ -485,34 +525,6 @@ void TabletNodeImpl::WriteTablet(const WriteTabletRequest* request,
         return;
     }
 
-    // check arguments
-    for (int32_t i = 0; i < row_num; i++) {
-        const RowMutationSequence& mu_seq = request->row_list(i);
-        if (mu_seq.row_key().size() >= 64 * 1024) { // 64KB
-            response->set_status(kTableNotSupport);
-            done->Run();
-            if (NULL != timer) {
-                RpcTimerList::Instance()->Erase(timer);
-                delete timer;
-            }
-            return;
-        }
-        int32_t mu_num = mu_seq.mutation_sequence_size();
-        for (int32_t k = 0; k < mu_num; k++) {
-            const Mutation& mu = mu_seq.mutation_sequence(k);
-            if ((mu.qualifier().size() >= 64 * 1024)          // 64KB
-                || (mu.value().size() >= 32 * 1024 * 1024)) { // 32MB
-                response->set_status(kTableNotSupport);
-                done->Run();
-                if (NULL != timer) {
-                    RpcTimerList::Instance()->Erase(timer);
-                    delete timer;
-                }
-                return;
-            }
-        }
-    }
-
     Counter* row_done_counter = new Counter;
     for (int32_t i = 0; i < row_num; i++) {
         io::TabletIO* tablet_io = tablet_manager_->GetTablet(
@@ -552,8 +564,8 @@ void TabletNodeImpl::WriteTablet(const WriteTabletRequest* request,
         } else if (!tablet_io->Write(&tablet_task->row_mutation_vec,
                                      &tablet_task->row_status_vec,
                                      request->is_instant(),
-                                     boost::bind(&TabletNodeImpl::WriteTabletCallback, this,
-                                                 tablet_task, _1, _2),
+                                     std::bind(&TabletNodeImpl::WriteTabletCallback, this,
+                                               tablet_task, _1, _2),
                                      &status)) {
             tablet_io->DecRef();
             WriteTabletFail(tablet_task, status);
@@ -742,6 +754,14 @@ void TabletNodeImpl::Query(const QueryRequest* request,
     sysinfo_.GetTabletMetaList(meta_list);
 
     if (request->has_is_gc_query() && request->is_gc_query()) {
+        std::vector<TabletInheritedFileInfo> inh_infos;
+        GetInheritedLiveFiles(&inh_infos);
+        for (size_t i = 0; i < inh_infos.size(); i++) {
+            TabletInheritedFileInfo* inh_info = response->add_tablet_inh_file_infos();
+            inh_info->CopyFrom(inh_infos[i]);
+        }
+
+        // only for compatible with old master
         std::vector<InheritedLiveFiles> inherited;
         GetInheritedLiveFiles(inherited);
         for (size_t i = 0; i < inherited.size(); ++i) {
@@ -799,7 +819,8 @@ void TabletNodeImpl::SplitTablet(const SplitTabletRequest* request,
                                  google::protobuf::Closure* done) {
     response->set_sequence_id(request->sequence_id());
 
-    std::string split_key, path;
+    std::string split_key = request->split_key();
+    std::string path;
     StatusCode status = kTabletNodeOk;
     io::TabletIO* tablet_io = tablet_manager_->GetTablet(request->tablet_name(),
                                                 request->key_range().key_start(),
@@ -819,7 +840,7 @@ void TabletNodeImpl::SplitTablet(const SplitTabletRequest* request,
         LOG(ERROR) << "fail to split tablet: " << tablet_io->GetTablePath()
             << " [" << DebugString(tablet_io->GetStartKey())
             << ", " << DebugString(tablet_io->GetEndKey())
-            << "], status: " << StatusCodeToString(status);
+            << "], split_key: " << DebugString(split_key) << ". status: " << StatusCodeToString(status);
         if (status == kTableNotSupport) {
             response->set_status(kTableNotSupport);
         } else {
@@ -1006,9 +1027,9 @@ void TabletNodeImpl::UpdateMetaTableAsync(const SplitTabletRequest* rpc_request,
     VLOG(5) << "write meta: key [" << DebugString(meta_key)
         << "], value_size: " << meta_value.size();
 
-    Closure<void, WriteTabletRequest*, WriteTabletResponse*, bool, int>* done =
-        NewClosure(this, &TabletNodeImpl::UpdateMetaTableCallback, rpc_request,
-                   rpc_response, rpc_done);
+    std::function<void (WriteTabletRequest*, WriteTabletResponse*, bool, int)> done =
+        std::bind(&TabletNodeImpl::UpdateMetaTableCallback, this, rpc_request,
+                   rpc_response, rpc_done, _1, _2, _3, _4);
     meta_tablet_client.WriteTablet(request, response, done);
 }
 
@@ -1221,8 +1242,8 @@ void TabletNodeImpl::ReleaseMallocCache() {
 void TabletNodeImpl::EnableReleaseMallocCacheTimer(int32_t expand_factor) {
     assert(release_cache_timer_id_ == kInvalidTimerId);
     ThreadPool::Task task =
-        boost::bind(&TabletNodeImpl::ReleaseMallocCache, this);
-    int64_t timeout_period = expand_factor * 1000 *
+        std::bind(&TabletNodeImpl::ReleaseMallocCache, this);
+    int64_t timeout_period = expand_factor * 1000LL *
         FLAGS_tera_tabletnode_tcm_cache_release_period;
     release_cache_timer_id_ = thread_pool_->DelayTask(timeout_period, task);
 }
@@ -1231,6 +1252,34 @@ void TabletNodeImpl::DisableReleaseMallocCacheTimer() {
     if (release_cache_timer_id_ != kInvalidTimerId) {
         thread_pool_->CancelTask(release_cache_timer_id_);
         release_cache_timer_id_ = kInvalidTimerId;
+    }
+}
+
+void TabletNodeImpl::GetInheritedLiveFiles(std::vector<TabletInheritedFileInfo>* inherited) {
+    std::vector<io::TabletIO*> tablet_ios;
+    tablet_manager_->GetAllTablets(&tablet_ios);
+    for (size_t tablet_id = 0; tablet_id < tablet_ios.size(); tablet_id++) {
+        io::TabletIO* tablet_io = tablet_ios[tablet_id];
+        std::vector<std::set<uint64_t> > tablet_files;
+        if (tablet_io->AddInheritedLiveFiles(&tablet_files)) {
+            TabletInheritedFileInfo inh_file_info;
+            inh_file_info.set_table_name(tablet_io->GetTableName());
+            inh_file_info.set_key_start(tablet_io->GetStartKey());
+            inh_file_info.set_key_end(tablet_io->GetEndKey());
+            for (size_t lg_id = 0; lg_id < tablet_files.size(); lg_id++) {
+                VLOG(10) << "[gc] " << tablet_io->GetTablePath()
+                    << " add inherited file, lg " << lg_id << ", "
+                    << tablet_files[lg_id].size() << " files total";
+                LgInheritedLiveFiles* lg_files = inh_file_info.add_lg_inh_files();
+                lg_files->set_lg_no(lg_id);
+                std::set<uint64_t>::iterator file_it = tablet_files[lg_id].begin();
+                for (; file_it != tablet_files[lg_id].end(); ++file_it) {
+                    lg_files->add_file_number(*file_it);
+                }
+            }
+            inherited->push_back(inh_file_info);
+        }
+        tablet_io->DecRef();
     }
 }
 

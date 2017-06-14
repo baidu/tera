@@ -19,9 +19,9 @@ void print_bytes(const char* str, int len) {
 }
 
 int64_t get_micros() {
-    struct timeval tv;
-    gettimeofday(&tv, NULL);
-    return static_cast<int64_t>(tv.tv_sec) * 1000000 + tv.tv_usec;
+    struct timespec ts;
+    clock_gettime(CLOCK_REALTIME, &ts);
+    return static_cast<int64_t>(ts.tv_sec) * 1000000 + static_cast<int64_t>(ts.tv_nsec) / 1000;
 }
 
 class RawKeyOperatorTest {};

@@ -13,7 +13,11 @@
 namespace tera {
 
 bool IsVisible(char c) {
-    return (c >= 0x20 && c <= 0x7E);
+    return (c >= 0x21 && c <= 0x7E); // exclude space (0x20)
+}
+
+char IsHex(uint8_t i) {
+    return ((i >= '0' && i <= '9') || (i >= 'a' && i <= 'f') || (i >= 'A' && i <= 'F'));
 }
 
 char ToHex(uint8_t i) {
@@ -22,6 +26,18 @@ char ToHex(uint8_t i) {
         j = i + '0';
     } else {
         j = i - 10 + 'a';
+    }
+    return j;
+}
+
+char ToBinary(uint8_t i) {
+    char j = 0;
+    if (i >= '0' && i <= '9') {
+        j = i - '0';
+    } else if (i >= 'a' && i <= 'f') {
+        j = i - 'a' + 10;
+    } else {
+        j = i - 'A' + 10;
     }
     return j;
 }
@@ -45,6 +61,69 @@ std::string DebugString(const std::string& src) {
     }
 
     return dst.substr(0, j);
+}
+
+bool ParseDebugString(const std::string& src, std::string* dst) {
+    size_t src_len = src.size();
+    std::string tmp;
+    tmp.resize(src_len);
+
+    int state = 0; // 0: normal, 1: \, 2: \x, 3: \x[0-9a-fAZ-F]
+    char bin_char = 0;
+    size_t j = 0;
+    for (size_t i = 0; i < src_len; i++) {
+        uint8_t c = src[i];
+        if (!IsVisible(c) && !isspace(c)) {
+            return false;
+        }
+        switch (state) {
+        case 0:
+            if (c == '\\') {
+                state = 1;
+            } else {
+                tmp[j++] = c;
+            }
+            break;
+        case 1:
+            if (c == 'x') {
+                state = 2;
+            } else if (c == '\\') {
+                tmp[j++] = '\\';
+                state = 0;
+            } else {
+                return false;
+            }
+            break;
+        case 2:
+            if (!IsHex(c)) {
+                return false;
+            } else {
+                bin_char |= (ToBinary(c) << 4);
+                state = 3;
+            }
+            break;
+        case 3:
+            if (!IsHex(c)) {
+                return false;
+            } else {
+                bin_char |= ToBinary(c) & 0xF;
+                tmp[j++] = bin_char;
+                bin_char = 0;
+                state = 0;
+            }
+            break;
+        default:
+            abort();
+            break;
+        }
+    }
+
+    if (state != 0) {
+        return false;
+    }
+
+    dst->assign(tmp.substr(0, j));
+    return true;
 }
 
 bool IsValidTableName(const std::string& str) {
@@ -72,7 +151,7 @@ bool IsValidName(const std::string& str) {
     for (size_t i = 0; i < str.size(); ++i) {
         char c = str[i];
         if (!(isdigit(c) || isupper(c) || islower(c)
-              || (c == '_') || (c == '.') || (c == '-'))) {
+              || (c == '_') || (c == '.') || (c == '-') || (c == '#'))) {
             return false;
         }
     }

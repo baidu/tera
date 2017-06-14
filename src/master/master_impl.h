@@ -155,18 +155,18 @@ public:
 
 private:
     friend class MasterImplTest;
-    typedef Closure<void, SnapshotRequest*, SnapshotResponse*, bool, int> SnapshotClosure;
-    typedef Closure<void, SnapshotRollbackRequest*, SnapshotRollbackResponse*, bool, int> RollbackClosure;
-    typedef Closure<void, ReleaseSnapshotRequest*, ReleaseSnapshotResponse*, bool, int> DelSnapshotClosure;
-    typedef Closure<void, QueryRequest*, QueryResponse*, bool, int> QueryClosure;
-    typedef Closure<void, UpdateRequest*, UpdateResponse*, bool, int> UpdateClosure;
-    typedef Closure<void, LoadTabletRequest*, LoadTabletResponse*, bool, int> LoadClosure;
-    typedef Closure<void, UnloadTabletRequest*, UnloadTabletResponse*, bool, int> UnloadClosure;
-    typedef Closure<void, SplitTabletRequest*, SplitTabletResponse*, bool, int> SplitClosure;
-    typedef Closure<void, WriteTabletRequest*, WriteTabletResponse*, bool, int> WriteClosure;
-    typedef Closure<void, ScanTabletRequest*, ScanTabletResponse*, bool, int> ScanClosure;
-    typedef boost::function<void (std::string*, std::string*)> ToMetaFunc;
-    typedef boost::shared_ptr<Mutex> MutexPtr;
+    typedef std::function<void (SnapshotRequest*, SnapshotResponse*, bool, int)> SnapshotClosure;
+    typedef std::function<void (SnapshotRollbackRequest*, SnapshotRollbackResponse*, bool, int)> RollbackClosure;
+    typedef std::function<void (ReleaseSnapshotRequest*, ReleaseSnapshotResponse*, bool, int)> DelSnapshotClosure;
+    typedef std::function<void (QueryRequest*, QueryResponse*, bool, int)> QueryClosure;
+    typedef std::function<void (UpdateRequest*, UpdateResponse*, bool, int)> UpdateClosure;
+    typedef std::function<void (LoadTabletRequest*, LoadTabletResponse*, bool, int)> LoadClosure;
+    typedef std::function<void (UnloadTabletRequest*, UnloadTabletResponse*, bool, int)> UnloadClosure;
+    typedef std::function<void (SplitTabletRequest*, SplitTabletResponse*, bool, int)> SplitClosure;
+    typedef std::function<void (WriteTabletRequest*, WriteTabletResponse*, bool, int)> WriteClosure;
+    typedef std::function<void (ScanTabletRequest*, ScanTabletResponse*, bool, int)> ScanClosure;
+    typedef std::function<void (std::string*, std::string*)> ToMetaFunc;
+    typedef std::shared_ptr<Mutex> MutexPtr;
 
     enum MetaTaskType {
         kWrite = 0,
@@ -178,20 +178,20 @@ private:
     };
     struct WriteTask {
         MetaTaskType type_;
-        WriteClosure* done_;
+        WriteClosure done_;
         std::vector<ToMetaFunc> meta_entries_;
         bool is_delete_;
     };
     struct ScanTask {
         MetaTaskType type_;
-        ScanClosure* done_;
+        ScanClosure done_;
         std::string table_name_;
         std::string tablet_key_start_;
         std::string tablet_key_end_;
     };
     struct RepairTask {
         MetaTaskType type_;
-        WriteClosure* done_;
+        WriteClosure done_;
         TabletPtr tablet_;
         ScanTabletResponse* scan_resp_;
     };
@@ -230,6 +230,8 @@ private:
     void SafeModeCmdCtrl(const CmdCtrlRequest* request,
                          CmdCtrlResponse* response);
     void ReloadConfig(CmdCtrlResponse* response);
+    void KickTabletNodeCmdCtrl(const CmdCtrlRequest* request,
+                               CmdCtrlResponse* response);
     void TabletCmdCtrl(const CmdCtrlRequest* request,
                        CmdCtrlResponse* response);
     void MetaCmdCtrl(const CmdCtrlRequest* request,
@@ -242,14 +244,12 @@ private:
                           const std::string& key_start,
                           const std::string& key_end,
                           const std::string& server_addr, StatusCode* status);
-    void UnloadTabletAsync(std::string table_name, std::string key_start,
-                           std::string server_addr, int32_t retry);
 
     void RetryLoadTablet(TabletPtr tablet, int32_t retry_times);
     void RetryUnloadTablet(TabletPtr tablet, int32_t retry_times);
-    bool TrySplitTablet(TabletPtr tablet);
+    bool TrySplitTablet(TabletPtr tablet, const std::string& split_key = "");
     bool TryMergeTablet(TabletPtr tablet);
-    void TryMoveTablet(TabletPtr tablet, const std::string& server_addr = "");
+    void TryMoveTablet(TabletPtr tablet, const std::string& server_addr = "", bool in_place = false);
 
     void TryReleaseCache(bool enbaled_debug = false);
     void ReleaseCacheWrapper();
@@ -262,7 +262,7 @@ private:
 
     bool CreateAndLoadTable(const std::string& table_name,
                             bool compress, StoreMedium store, StatusCode* status);
-    void LoadTabletAsync(TabletPtr tablet, LoadClosure* done,
+    void LoadTabletAsync(TabletPtr tablet, LoadClosure done,
                          uint64_t timer_id = 0);
     void LoadTabletCallback(TabletPtr tablet, int32_t retry,
                             LoadTabletRequest* request,
@@ -270,7 +270,7 @@ private:
                             int error_code);
 
     bool RemoveTablet(const TabletMeta& meta, StatusCode* status);
-    void UnloadTabletAsync(TabletPtr tablet, UnloadClosure* done);
+    virtual void UnloadTabletAsync(TabletPtr tablet, UnloadClosure done);
     void UnloadTabletCallback(TabletPtr tablet, int32_t retry,
                               UnloadTabletRequest* request,
                               UnloadTabletResponse* response, bool failed,
@@ -296,7 +296,7 @@ private:
                                const std::string& table_name = "");
 
     void GetSnapshotAsync(TabletPtr tablet, int64_t snapshot_id, int32_t timeout,
-                          SnapshotClosure* done);
+                          SnapshotClosure done);
     void GetSnapshotCallback(int32_t tablet_id, SnapshotTask* task,
                              SnapshotRequest* master_request,
                              SnapshotResponse* master_response,
@@ -320,7 +320,7 @@ private:
                              WriteTabletResponse* response,
                              bool failed, int error_code);
     void RollbackAsync(TabletPtr tablet, uint64_t snapshot_id, int32_t timeout,
-                          RollbackClosure* done);
+                          RollbackClosure done);
     void RollbackCallback(int32_t tablet_id, RollbackTask* task,
                           SnapshotRollbackRequest* master_request,
                           SnapshotRollbackResponse* master_response,
@@ -338,7 +338,7 @@ private:
     void ScheduleQueryTabletNode();
     void QueryTabletNode();
     void QueryTabletNodeAsync(std::string addr, int32_t timeout,
-                              bool is_gc, QueryClosure* done);
+                              bool is_gc, QueryClosure done);
 
     void ReleaseSnpashot(TabletPtr tablet, uint64_t snapshot);
     void ReleaseSnapshotCallback(ReleaseSnapshotRequest* request,
@@ -355,15 +355,11 @@ private:
                                    QueryRequest* request,
                                    QueryResponse* response, bool failed,
                                    int error_code);
-    void TabletNodeRecoveryCallback(std::string addr, QueryRequest* request,
-                                    QueryResponse* response, bool failed,
-                                    int error_code);
     void RetryCollectTabletInfo(std::string addr,
                                 std::vector<TabletMeta>* tablet_list,
                                 sem_t* finish_counter, Mutex* mutex);
-    void RetryQueryNewTabletNode(std::string addr);
 
-    void SplitTabletAsync(TabletPtr tablet);
+    void SplitTabletAsync(TabletPtr tablet, const std::string& split_key = "");
     void SplitTabletCallback(TabletPtr tablet, SplitTabletRequest* request,
                              SplitTabletResponse* response, bool failed,
                              int error_code);
@@ -371,19 +367,19 @@ private:
     void MergeTabletAsync(TabletPtr tablet_p1, TabletPtr tablet_p2);
     virtual void MergeTabletAsyncPhase2(TabletPtr tablet_p1, TabletPtr tablet_p2);
     void MergeTabletUnloadCallback(TabletPtr tablet);
-    void MergeTabletWriteMetaCallback(TabletMeta new_meta, TabletPtr tablet_p1,
+    void MergeTabletWriteMetaCallback(TabletPtr tablet_c, TabletPtr tablet_p1,
                                       TabletPtr tablet_p2, int32_t retry_times,
                                       WriteTabletRequest* request,
                                       WriteTabletResponse* response,
                                       bool failed, int error_code);
     void MergeTabletFailed(TabletPtr tablet_p1, TabletPtr tablet_p2);
 
-    void BatchWriteMetaTableAsync(ToMetaFunc meta_entry, bool is_delete, WriteClosure* done);
+    void BatchWriteMetaTableAsync(ToMetaFunc meta_entry, bool is_delete, WriteClosure done);
     void BatchWriteMetaTableAsync(std::vector<ToMetaFunc> meta_entries,
-                                  bool is_delete, WriteClosure* done);
+                                  bool is_delete, WriteClosure done);
     void BatchWriteMetaTableAsync(TablePtr table,
                                   const std::vector<TabletPtr>& tablets,
-                                  bool is_delete, WriteClosure* done);
+                                  bool is_delete, WriteClosure done);
     void AddMetaCallback(TablePtr table, std::vector<TabletPtr> tablets,
                          int32_t retry_times,
                          const CreateTableRequest* rpc_request,
@@ -448,7 +444,7 @@ private:
     void ScanMetaTableAsync(const std::string& table_name,
                             const std::string& tablet_key_start,
                             const std::string& tablet_key_end,
-                            ScanClosure* done);
+                            ScanClosure done);
     void ScanMetaCallbackForSplit(TabletPtr tablet,
                                   ScanTabletRequest* request,
                                   ScanTabletResponse* response,
@@ -456,7 +452,7 @@ private:
 
     void RepairMetaTableAsync(TabletPtr tablet,
                               ScanTabletResponse* response,
-                              WriteClosure* done);
+                              WriteClosure done);
     void RepairMetaAfterSplitCallback(TabletPtr tablet,
                                       ScanTabletResponse* scan_resp,
                                       int32_t retry_times,
@@ -473,7 +469,7 @@ private:
                               UpdateResponse* response,
                               bool rpc_failed, int status_code);
     void NoticeTabletNodeSchemaUpdatedAsync(TabletPtr tablet,
-                                            UpdateClosure* done);
+                                            UpdateClosure done);
     void NoticeTabletNodeSchemaUpdated(TablePtr table);
     void NoticeTabletNodeSchemaUpdated(TabletPtr tablet);
 
@@ -514,18 +510,18 @@ private:
     void LoadAllOffLineTablet();
 
     void SuspendMetaOperation(TablePtr table, const std::vector<TabletPtr>& tablets,
-                              bool is_delete, WriteClosure* done);
+                              bool is_delete, WriteClosure done);
     void SuspendMetaOperation(ToMetaFunc meta_entry,
-                              bool is_delete, WriteClosure* done);
+                              bool is_delete, WriteClosure done);
     void SuspendMetaOperation(std::vector<ToMetaFunc> meta_entries,
-                              bool is_delete, WriteClosure* done);
+                              bool is_delete, WriteClosure done);
 
     void SuspendMetaOperation(const std::string& table_name,
                               const std::string& tablet_key_start,
                               const std::string& tablet_key_end,
-                              ScanClosure* done);
+                              ScanClosure done);
     void SuspendMetaOperation(TabletPtr tablet, ScanTabletResponse* scan_resp,
-                              WriteClosure* done);
+                              WriteClosure done);
     void PushToMetaPendingQueue(MetaTask* task);
     void ResumeMetaOperation();
     void ProcessOffLineTablet(TabletPtr tablet);
@@ -574,9 +570,9 @@ private:
 
     mutable Mutex tabletnode_mutex_;
     bool restored_;
-    boost::shared_ptr<TabletManager> tablet_manager_;
-    boost::shared_ptr<TabletNodeManager> tabletnode_manager_;
-    boost::shared_ptr<UserManager> user_manager_;
+    std::shared_ptr<TabletManager> tablet_manager_;
+    std::shared_ptr<TabletNodeManager> tabletnode_manager_;
+    std::shared_ptr<UserManager> user_manager_;
     scoped_ptr<MasterZkAdapterBase> zk_adapter_;
     scoped_ptr<Scheduler> size_scheduler_;
     scoped_ptr<Scheduler> load_scheduler_;
@@ -593,7 +589,6 @@ private:
 
     bool load_balance_scheduled_;
     bool load_balance_enabled_;
-    int64_t load_balance_timer_id_;
 
     scoped_ptr<ThreadPool> thread_pool_;
     AutoResetEvent query_event_;
@@ -618,11 +613,11 @@ private:
     bool gc_enabled_;
     int64_t gc_timer_id_;
     bool gc_query_enable_;
-    boost::shared_ptr<GcStrategy> gc_strategy_;
+    std::shared_ptr<GcStrategy> gc_strategy_;
     std::map<std::string, std::string> alias_;
     mutable Mutex alias_mutex_;
 
-    boost::shared_ptr<TabletAvailability> tablet_availability_;
+    std::shared_ptr<TabletAvailability> tablet_availability_;
 };
 
 } // namespace master

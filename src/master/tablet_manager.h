@@ -8,14 +8,12 @@
 #include <limits>
 #include <list>
 #include <map>
+#include <memory>
 #include <set>
 #include <stdint.h>
 #include <string>
 #include <vector>
 
-#include <boost/shared_ptr.hpp>
-
-#include "common/base/closure.h"
 #include "common/mutex.h"
 #include "common/thread_pool.h"
 
@@ -25,12 +23,14 @@
 #include "utils/counter.h"
 #include "utils/fragment.h"
 
+using namespace std::placeholders;
+
 namespace tera {
 class UpdateTableResponse;
 namespace master {
 
 
-// kTableOk = 40;
+// kTabletNodeOk = 40;
 // kTableNotInit = 41;
 // kTableReady = 42;
 // kTableOnLoad = 43;
@@ -50,9 +50,32 @@ namespace master {
 // kTableSplitFail = 61;
 // kTableUnLoadFail = 62;
 
+struct TabletFile {
+    uint64_t tablet_id;
+    uint32_t lg_id;
+    uint64_t file_id;
+
+    bool operator <(const TabletFile& f) const {
+        return tablet_id < f.tablet_id ||
+            (tablet_id == f.tablet_id &&
+            (lg_id < f.lg_id || (lg_id == f.lg_id && file_id < f.file_id)));
+    }
+
+    bool operator ==(const TabletFile& f) const {
+        return tablet_id == f.tablet_id &&
+            lg_id == f.lg_id &&
+            file_id == f.file_id;
+    }
+};
+
+struct InheritedFileInfo {
+    uint32_t ref;
+    InheritedFileInfo() : ref(0) {}
+};
+
 class MasterImpl;
 class Table;
-typedef boost::shared_ptr<Table> TablePtr;
+typedef std::shared_ptr<Table> TablePtr;
 
 class Tablet {
     friend class TabletManager;
@@ -127,8 +150,7 @@ public:
 
     int64_t UpdateTime();
     int64_t SetUpdateTime(int64_t timestamp);
-    int64_t LoadTime();
-    int64_t SetLoadTime(int64_t timestamp);
+    int64_t ReadyTime();
 
     void* GetMergeParam();
     void SetMergeParam(void* merge_param);
@@ -144,7 +166,7 @@ private:
     TabletMeta meta_;
     TablePtr table_;
     int64_t update_time_;
-    int64_t load_time_;
+    int64_t ready_time_;
     std::string server_id_;
     std::string expect_server_addr_;
     std::list<TabletCounter> counter_list_;
@@ -166,9 +188,13 @@ private:
         }
     } accumu_counter_;
     void* merge_param_;
+
+    // protected by Table::mutex_
+    bool gc_reported_;
+    std::multiset<TabletFile> inh_files_;
 };
 
-typedef class boost::shared_ptr<Tablet> TabletPtr;
+typedef class std::shared_ptr<Tablet> TabletPtr;
 std::ostream& operator << (std::ostream& o, const TabletPtr& tablet);
 std::ostream& operator << (std::ostream& o, const TablePtr& table);
 
@@ -202,7 +228,8 @@ public:
     void ToMeta(TableMeta* meta);
     uint64_t GetNextTabletNo();
     bool GetTabletsForGc(std::set<uint64_t>* live_tablets,
-                         std::set<uint64_t>* dead_tablets);
+                         std::set<uint64_t>* dead_tablets,
+                         bool ignore_not_ready);
     void RefreshCounter();
     int64_t GetTabletsCount();
     bool GetSchemaIsSyncing();
@@ -221,6 +248,17 @@ public:
     bool PrepareUpdate(const TableSchema& schema);
     void AbortUpdate();
     void CommitUpdate();
+
+    void MergeTablets(TabletPtr first_tablet, TabletPtr second_tablet,
+                      const TabletMeta& merged_meta, TabletPtr* merged_tablet);
+    void SplitTablet(TabletPtr splited_tablet,
+                     const TabletMeta& first_half, const TabletMeta& second_half,
+                     TabletPtr* first_tablet, TabletPtr* second_tablet);
+    void GarbageCollect(const TabletInheritedFileInfo& tablet_inh_info);
+    void EnableDeadTabletGarbageCollect(uint64_t tablet_id);
+    void ReleaseInheritedFile(const TabletFile& file);
+    void AddInheritedFile(const TabletFile& file);
+    uint64_t CleanObsoleteFile();
 
 private:
     Table(const Table&) {}
@@ -242,11 +280,20 @@ private:
     UpdateTableResponse* update_rpc_response_;
     google::protobuf::Closure* update_rpc_done_;
     TableSchema* old_schema_;
+
+    // map from dead tablet's ID to its inherited files set
+    typedef std::map<uint64_t, std::map<TabletFile, InheritedFileInfo> > InheritedFiles;
+    InheritedFiles useful_inh_files_;
+    std::queue<TabletFile> obsolete_inh_files_;
+    // If there is any live tablet hasn't reported since a tablet died,
+    // this dead tablet cannot GC.
+    std::set<uint64_t> gc_disabled_dead_tablets_;
+    uint32_t reported_live_tablets_num_;
 };
 
 class TabletManager {
 public:
-    typedef Closure<bool, const std::string&, StatusCode*> FindCondCallback;
+    typedef std::function<bool (const std::string&, StatusCode*)> FindCondCallback;
 
     TabletManager(Counter* sequence_id, MasterImpl* master_impl, ThreadPool* thread_pool);
     ~TabletManager();
@@ -286,6 +333,12 @@ public:
     void FindTablet(const std::string& server_addr,
                     std::vector<TabletPtr>* tablet_meta_list,
                     bool need_disabled_tables);
+
+    bool FindOverlappedTablets(const std::string& table_name,
+                               const std::string& key_start,
+                               const std::string& key_end,
+                               std::vector<TabletPtr>* tablets,
+                               StatusCode* ret_status = NULL);
 
     bool FindTable(const std::string& table_name,
                    std::vector<TabletPtr>* tablet_meta_list,

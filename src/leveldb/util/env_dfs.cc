@@ -308,6 +308,12 @@ public:
     }
 };
 
+class DfsFileLock : public FileLock {
+public:
+    DfsFileLock(const std::string& path) : dir_path_(path) {}
+    std::string dir_path_;
+};
+
 DfsEnv::DfsEnv(Dfs* dfs)
   : EnvWrapper(Env::Default()), dfs_(dfs) {
 }
@@ -357,12 +363,26 @@ Status DfsEnv::NewWritableFile(const std::string& fname,
     return Status::OK();
 }
 
-// FileExists
-bool DfsEnv::FileExists(const std::string& fname)
+// returns:
+//   ok: exists
+//   nofound: not found
+//   timeout: timeout, unknown, should retry
+//   ioerror: io error
+Status DfsEnv::FileExists(const std::string& fname)
 {
     tera::AutoCounter ac(&dfs_exists_hang_counter, "Exists", fname.c_str());
     dfs_exists_counter.Inc();
-    return (0 == dfs_->Exists(fname));
+    int32_t retval = dfs_->Exists(fname);
+    if (retval == 0) {
+        return Status::OK();
+    } else if (errno == ENOENT) {
+        return Status::NotFound("filestatus", fname);
+    } else if (errno == ETIMEDOUT)  {
+        Log("[env_dfs] exists timeout: %s\n", fname.c_str());
+        return Status::TimeOut("filestatus", fname);
+    } else {
+        return Status::IOError(fname);
+    }
 }
 
 Status DfsEnv::CopyFile(const std::string& from, const std::string& to) {
@@ -380,11 +400,16 @@ Status DfsEnv::GetChildren(const std::string& path, std::vector<std::string>* re
 {
     tera::AutoCounter ac(&dfs_list_hang_counter, "ListDirectory", path.c_str());
     dfs_list_counter.Inc();
-    if (0 != dfs_->ListDirectory(path, result)) {
-        Log("GetChildren call with path not exists: %s\n", path.data());
+    if (0 == dfs_->ListDirectory(path, result)) {
+        return Status::OK();
+    }
+    if (errno == ETIMEDOUT)  {
+        Log("[env_dfs] GetChildren timeout: %s\n", path.c_str());
+        return Status::TimeOut("ListDirectory", path);
+    } else {
+        Log("[env_dfs] GetChildren call with path not exists: %s\n", path.data());
         return Status::IOError("Path not exist", path);
     }
-    return Status::OK();
 }
 
 bool DfsEnv::CheckDelete(const std::string& fname, std::vector<std::string>* flags)
@@ -476,13 +501,29 @@ Status DfsEnv::RenameFile(const std::string& src, const std::string& target)
 
 Status DfsEnv::LockFile(const std::string& fname, FileLock** lock)
 {
-    *lock = NULL;
+    std::size_t found = fname.find_last_of("/");
+    if (found == std::string::npos) {
+        return Status::IOError("lock path error: " + fname);
+    }
+    std::string dir_path(fname.c_str(), found);
+    if (dfs_->LockDirectory(dir_path) != 0) {
+        return Status::IOError("lock " + dir_path);
+    }
+    *lock = new DfsFileLock(dir_path);
     return Status::OK();
 }
 
 Status DfsEnv::UnlockFile(FileLock* lock)
 {
-    return Status::OK();
+    if (DfsFileLock* dfs_lock = dynamic_cast<DfsFileLock*>(lock)) {
+        const std::string& dir_path = dfs_lock->dir_path_;
+        dfs_->UnlockDirectory(dir_path.c_str());
+        delete lock;
+        return Status::OK();
+    } else {
+        Log("[env_dfs]: wrong file lock at %p\n", lock);
+        abort();
+    }
 }
 
 static bool inited = false;

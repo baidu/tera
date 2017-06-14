@@ -7,10 +7,9 @@
 
 #include <list>
 #include <map>
+#include <memory>
 #include <string>
 #include <vector>
-
-#include <boost/shared_ptr.hpp>
 
 #include "common/mutex.h"
 #include "common/thread_pool.h"
@@ -37,7 +36,7 @@ struct TabletNode {
     NodeState state_;
 
     // updated by query
-    TabletNodeStatus report_status_;
+    StatusCode report_status_;
     TabletNodeInfo info_;
     uint64_t data_size_;
     uint64_t qps_;
@@ -65,7 +64,7 @@ struct TabletNode {
     uint32_t onsplit_count_;
     uint32_t plan_move_in_count_;
     std::list<TabletPtr> wait_load_list_;
-    std::list<TabletPtr> wait_split_list_;
+    std::list<std::pair<TabletPtr, std::string> > wait_split_list_; // (tablet, split_key)
 
     // The start time of recent load operation.
     // Used to tell if node load too many tablets within short time.
@@ -101,9 +100,9 @@ struct TabletNode {
     bool FinishLoad(TabletPtr tablet);
     bool LoadNextWaitTablet(TabletPtr* tablet);
 
-    bool TrySplit(TabletPtr tablet);
-    bool FinishSplit(TabletPtr tablet);
-    bool SplitNextWaitTablet(TabletPtr* tablet);
+    bool TrySplit(TabletPtr tablet, const std::string& split_key = "");
+    bool FinishSplit();
+    bool SplitNextWaitTablet(TabletPtr* tablet, std::string* split_key);
 
     NodeState GetState();
     bool SetState(NodeState new_state, NodeState* old_state);
@@ -117,7 +116,7 @@ private:
     TabletNode& operator=(const TabletNode& t);
 };
 
-typedef boost::shared_ptr<TabletNode> TabletNodePtr;
+typedef std::shared_ptr<TabletNode> TabletNodePtr;
 
 class WorkloadGetter;
 class Scheduler;
@@ -128,7 +127,7 @@ public:
     explicit TabletNodeManager(MasterImpl* master_impl);
     ~TabletNodeManager();
 
-    void AddTabletNode(const std::string& addr, const std::string& uuid);
+    TabletNodePtr AddTabletNode(const std::string& addr, const std::string& uuid);
     void DelTabletNode(const std::string& addr);
     void UpdateTabletNode(const std::string& addr, const TabletNode& info);
     bool FindTabletNode(const std::string& addr, TabletNodePtr* info);

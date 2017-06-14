@@ -6,8 +6,8 @@
 #include "tabletnode/tablet_manager.h"
 
 #include <algorithm>
-#include <boost/bind.hpp>
 #include <fstream>
+#include <functional>
 
 #include <gflags/gflags.h>
 #include <glog/logging.h>
@@ -49,6 +49,7 @@ DECLARE_string(tera_master_meta_table_path);
 DECLARE_int32(tera_master_meta_retry_times);
 
 DECLARE_bool(tera_zk_enabled);
+DECLARE_bool(tera_mock_zk_enabled);
 
 DECLARE_double(tera_master_workload_split_threshold);
 DECLARE_int64(tera_master_split_tablet_size);
@@ -91,6 +92,7 @@ DECLARE_string(tera_zk_root_path);
 DECLARE_string(tera_zk_addr_list);
 DECLARE_string(tera_local_addr);
 DECLARE_bool(tera_ins_enabled);
+DECLARE_bool(tera_mock_ins_enabled);
 
 DECLARE_int64(tera_sdk_perf_counter_log_interval);
 
@@ -105,6 +107,8 @@ DECLARE_int32(tera_master_schema_update_retry_times);
 
 DECLARE_int64(tera_master_availability_check_period);
 DECLARE_bool(tera_master_availability_check_enabled);
+
+using namespace std::placeholders;
 
 namespace tera {
 namespace master {
@@ -147,10 +151,12 @@ MasterImpl::MasterImpl()
 
     if (FLAGS_tera_master_gc_strategy == "default") {
         LOG(INFO) << "[gc] gc strategy is BatchGcStrategy";
-        gc_strategy_ = boost::shared_ptr<GcStrategy>(new BatchGcStrategy(tablet_manager_));
+        gc_strategy_ = std::shared_ptr<GcStrategy>(new BatchGcStrategy(tablet_manager_));
     } else if (FLAGS_tera_master_gc_strategy == "incremental") {
         LOG(INFO) << "[gc] gc strategy is IncrementalGcStrategy";
-        gc_strategy_ = boost::shared_ptr<GcStrategy>(new IncrementalGcStrategy(tablet_manager_));
+        gc_strategy_ = std::shared_ptr<GcStrategy>(new IncrementalGcStrategy(tablet_manager_));
+    } else if (FLAGS_tera_master_gc_strategy == "trackable") {
+        LOG(INFO) << "[gc] gc strategy is Trackable";
     } else {
         LOG(ERROR) << "Unknown gc strategy";
     }
@@ -167,6 +173,12 @@ bool MasterImpl::Init() {
     } else if (FLAGS_tera_ins_enabled) {
         LOG(INFO) << "ins mode" ;
         zk_adapter_.reset(new InsMasterZkAdapter(this, local_addr_));
+    } else if (FLAGS_tera_mock_zk_enabled) {
+        LOG(INFO) << "mock zk mode" ;
+        zk_adapter_.reset(new MockMasterZkAdapter(this, local_addr_));
+    } else if (FLAGS_tera_mock_ins_enabled) {
+        LOG(INFO) << "mock ins mode" ;
+        zk_adapter_.reset(new MockInsMasterZkAdapter(this, local_addr_));
     } else {
         LOG(INFO) << "fake zk mode!";
         zk_adapter_.reset(new FakeMasterZkAdapter(this, local_addr_));
@@ -174,7 +186,7 @@ bool MasterImpl::Init() {
 
     LOG(INFO) << "[acl] " << (FLAGS_tera_acl_enabled ? "enabled" : "disabled");
     SetMasterStatus(kIsSecondary);
-    thread_pool_->AddTask(boost::bind(&MasterImpl::InitAsync, this));
+    thread_pool_->AddTask(std::bind(&MasterImpl::InitAsync, this));
     return true;
 }
 
@@ -246,9 +258,9 @@ void MasterImpl::CollectAllTabletInfo(const std::map<std::string, std::string>& 
         const std::string& uuid = it->second;
         tabletnode_manager_->AddTabletNode(addr, uuid);
 
-        QueryClosure* done =
-            NewClosure(this, &MasterImpl::CollectTabletInfoCallback, addr,
-                       tablet_list, &finish_counter, &mutex);
+        QueryClosure done =
+            std::bind(&MasterImpl::CollectTabletInfoCallback, this, addr,
+                       tablet_list, &finish_counter, &mutex, _1, _2, _3, _4);
         QueryTabletNodeAsync(addr, FLAGS_tera_master_collect_info_timeout, false, done);
     }
 
@@ -367,9 +379,9 @@ void MasterImpl::RestoreUserTablet(const std::vector<TabletMeta>& report_meta_li
             TabletMeta unknown_meta = meta;
             unknown_meta.set_status(kTableUnLoading);
             TabletPtr unknown_tablet(new Tablet(unknown_meta));
-            UnloadClosure* done =
-                NewClosure(this, &MasterImpl::UnloadTabletCallback,
-                           unknown_tablet, FLAGS_tera_master_impl_retry_times);
+            UnloadClosure done =
+                std::bind(&MasterImpl::UnloadTabletCallback, this, unknown_tablet,
+                          FLAGS_tera_master_impl_retry_times, _1, _2, _3, _4);
             UnloadTabletAsync(unknown_tablet, done);
         } else {
             tablet->SetStatus(kTableReady);
@@ -539,7 +551,8 @@ bool MasterImpl::LoadMetaTable(const std::string& meta_tablet_addr,
             lg->set_store_type(MemoryStore);
             tablet_manager_->AddTablet(FLAGS_tera_master_meta_table_name, "", "",
                       FLAGS_tera_master_meta_table_path, meta_tablet_addr,
-                      schema, kTableReady, 0, &meta_tablet);
+                      schema, kTableNotInit, 0, &meta_tablet);
+            meta_tablet->SetStatus(kTableReady);
             return true;
         }
         uint32_t record_size = response.results().key_values_size();
@@ -669,7 +682,7 @@ void MasterImpl::CreateTable(const CreateTableRequest* request,
     MasterStatus master_status = GetMasterStatus();
     if (master_status != kIsRunning) {
         LOG(ERROR) << "master is not ready, status_ = "
-            << StatusCodeToString(master_status);
+            << StatusCodeToString(static_cast<StatusCode>(master_status));
         response->set_status(static_cast<StatusCode>(master_status));
         done->Run();
         return;
@@ -790,9 +803,9 @@ void MasterImpl::CreateTable(const CreateTableRequest* request,
         MutexLock locker(&alias_mutex_);
         alias_[table_alias] = table_name;
     }
-    WriteClosure* closure =
-        NewClosure(this, &MasterImpl::AddMetaCallback, table, tablets,
-                   FLAGS_tera_master_meta_retry_times, request, response, done);
+    WriteClosure closure =
+        std::bind(&MasterImpl::AddMetaCallback, this, table, tablets,
+                   FLAGS_tera_master_meta_retry_times, request, response, done, _1, _2, _3, _4);
     BatchWriteMetaTableAsync(table, tablets, false, closure);
     return;
 }
@@ -804,7 +817,7 @@ void MasterImpl::DeleteTable(const DeleteTableRequest* request,
     MasterStatus master_status = GetMasterStatus();
     if (master_status != kIsRunning) {
         LOG(ERROR) << "master is not ready, status_ = "
-            << StatusCodeToString(master_status);
+            << StatusCodeToString(static_cast<StatusCode>(master_status));
         response->set_status(static_cast<StatusCode>(master_status));
         done->Run();
         return;
@@ -848,9 +861,9 @@ void MasterImpl::DeleteTable(const DeleteTableRequest* request,
         }
     }
 
-    WriteClosure* closure =
-        NewClosure(this, &MasterImpl::DeleteTableCallback, table, tablets,
-                   FLAGS_tera_master_impl_retry_times, response, done);
+    WriteClosure closure =
+        std::bind(&MasterImpl::DeleteTableCallback, this, table, tablets,
+                   FLAGS_tera_master_impl_retry_times, response, done, _1, _2, _3, _4);
     BatchWriteMetaTableAsync(table, tablets, true, closure);
 }
 
@@ -861,7 +874,7 @@ void MasterImpl::DisableTable(const DisableTableRequest* request,
     MasterStatus master_status = GetMasterStatus();
     if (master_status != kIsRunning) {
         LOG(ERROR) << "master is not ready, status_ = "
-            << StatusCodeToString(master_status);
+            << StatusCodeToString(static_cast<StatusCode>(master_status));
         response->set_status(static_cast<StatusCode>(master_status));
         done->Run();
         return;
@@ -888,10 +901,10 @@ void MasterImpl::DisableTable(const DisableTableRequest* request,
         return;
     }
 
-    WriteClosure* closure =
-        NewClosure(this, &MasterImpl::UpdateTableRecordForDisableCallback, table,
-                   FLAGS_tera_master_meta_retry_times, response, done);
-    BatchWriteMetaTableAsync(boost::bind(&Table::ToMetaTableKeyValue, table, _1, _2),
+    WriteClosure closure =
+        std::bind(&MasterImpl::UpdateTableRecordForDisableCallback, this, table,
+                   FLAGS_tera_master_meta_retry_times, response, done, _1, _2, _3, _4);
+    BatchWriteMetaTableAsync(std::bind(&Table::ToMetaTableKeyValue, table, _1, _2),
                              false, closure);
 }
 
@@ -902,7 +915,7 @@ void MasterImpl::EnableTable(const EnableTableRequest* request,
     MasterStatus master_status = GetMasterStatus();
     if (master_status != kIsRunning) {
         LOG(ERROR) << "master is not ready, status_ = "
-            << StatusCodeToString(master_status);
+            << StatusCodeToString(static_cast<StatusCode>(master_status));
         response->set_status(static_cast<StatusCode>(master_status));
         done->Run();
         return;
@@ -930,10 +943,10 @@ void MasterImpl::EnableTable(const EnableTableRequest* request,
     }
 
     // write meta tablet
-    WriteClosure* closure =
-        NewClosure(this, &MasterImpl::UpdateTableRecordForEnableCallback, table,
-                   FLAGS_tera_master_meta_retry_times, response, done);
-    BatchWriteMetaTableAsync(boost::bind(&Table::ToMetaTableKeyValue, table, _1, _2),
+    WriteClosure closure =
+        std::bind(&MasterImpl::UpdateTableRecordForEnableCallback, this, table,
+                   FLAGS_tera_master_meta_retry_times, response, done, _1, _2, _3, _4);
+    BatchWriteMetaTableAsync(std::bind(&Table::ToMetaTableKeyValue, table, _1, _2),
                              false, closure);
 }
 
@@ -972,7 +985,7 @@ void MasterImpl::UpdateTable(const UpdateTableRequest* request,
     MasterStatus master_status = GetMasterStatus();
     if (master_status != kIsRunning) {
         LOG(ERROR) << "master is not ready, status_ = "
-            << StatusCodeToString(master_status);
+            << StatusCodeToString(static_cast<StatusCode>(master_status));
         response->set_status(static_cast<StatusCode>(master_status));
         done->Run();
         return;
@@ -1005,10 +1018,10 @@ void MasterImpl::UpdateTable(const UpdateTableRequest* request,
     }
 
     // write meta tablet
-    WriteClosure* closure =
-        NewClosure(this, &MasterImpl::UpdateTableRecordForUpdateCallback, table,
-                   FLAGS_tera_master_meta_retry_times, response, done);
-    BatchWriteMetaTableAsync(boost::bind(&Table::ToMetaTableKeyValue, table, _1, _2),
+    WriteClosure closure =
+        std::bind(&MasterImpl::UpdateTableRecordForUpdateCallback, this, table,
+                   FLAGS_tera_master_meta_retry_times, response, done, _1, _2, _3, _4);
+    BatchWriteMetaTableAsync(std::bind(&Table::ToMetaTableKeyValue, table, _1, _2),
                              false, closure);
     return;
 }
@@ -1025,7 +1038,7 @@ void MasterImpl::SearchTable(const SearchTableRequest* request,
     MasterStatus master_status = GetMasterStatus();
     if (master_status != kIsRunning) {
         LOG(ERROR) << "master is not ready, status_ = "
-            << StatusCodeToString(master_status);
+            << StatusCodeToString(static_cast<StatusCode>(master_status));
         response->set_status(static_cast<StatusCode>(master_status));
         done->Run();
         return;
@@ -1083,7 +1096,7 @@ void MasterImpl::ShowTables(const ShowTablesRequest* request,
     MasterStatus master_status = GetMasterStatus();
     if (master_status != kIsRunning && master_status != kIsReadonly) {
         LOG(ERROR) << "master is not ready, status_ = "
-            << StatusCodeToString(master_status);
+            << StatusCodeToString(static_cast<StatusCode>(master_status));
         response->set_status(static_cast<StatusCode>(master_status));
         done->Run();
         return;
@@ -1147,7 +1160,7 @@ void MasterImpl::ShowTablesBrief(const ShowTablesRequest* request,
     MasterStatus master_status = GetMasterStatus();
     if (master_status != kIsRunning && master_status != kIsReadonly) {
         LOG(ERROR) << "master is not ready, status_ = "
-            << StatusCodeToString(master_status);
+            << StatusCodeToString(static_cast<StatusCode>(master_status));
         response->set_status(static_cast<StatusCode>(master_status));
         done->Run();
         return;
@@ -1175,7 +1188,7 @@ void MasterImpl::ShowTabletNodes(const ShowTabletNodesRequest* request,
     MasterStatus master_status = GetMasterStatus();
     if (master_status != kIsRunning && master_status != kIsReadonly) {
         LOG(ERROR) << "master is not ready, status_ = "
-            << StatusCodeToString(master_status);
+            << StatusCodeToString(static_cast<StatusCode>(master_status));
         response->set_status(static_cast<StatusCode>(master_status));
         done->Run();
         return;
@@ -1216,6 +1229,18 @@ void MasterImpl::ShowTabletNodes(const ShowTabletNodesRequest* request,
     }
 }
 
+void MasterImpl::KickTabletNodeCmdCtrl(const CmdCtrlRequest* request,
+                                       CmdCtrlResponse* response) {
+    if (request->arg_list_size() == 1) {
+        TryKickTabletNode(request->arg_list(0));
+        response->set_status(kMasterOk);
+        return;
+    } else {
+        response->set_status(kInvalidArgument);
+        return;
+    }
+}
+
 void MasterImpl::CmdCtrl(const CmdCtrlRequest* request,
                          CmdCtrlResponse* response) {
     std::string cmd_line;
@@ -1236,6 +1261,8 @@ void MasterImpl::CmdCtrl(const CmdCtrlRequest* request,
         MetaCmdCtrl(request, response);
     } else if (request->command() == "reload config") {
         ReloadConfig(response);
+    } else if (request->command() == "kick") {
+        KickTabletNodeCmdCtrl(request, response);
     } else {
         response->set_status(kInvalidArgument);
     }
@@ -1265,10 +1292,10 @@ void MasterImpl::AddUserInfoToMetaCallback(UserPtr user_ptr,
             rpc_response->set_status(kMetaTabletError);
             rpc_done->Run();
         } else {
-            WriteClosure* done =
-                NewClosure(this, &MasterImpl::AddUserInfoToMetaCallback, user_ptr,
-                           retry_times - 1, rpc_request, rpc_response, rpc_done);
-            SuspendMetaOperation(boost::bind(&User::ToMetaTableKeyValue, user_ptr, _1, _2),
+            WriteClosure done =
+                std::bind(&MasterImpl::AddUserInfoToMetaCallback, this, user_ptr,
+                           retry_times - 1, rpc_request, rpc_response, rpc_done, _1, _2, _3, _4);
+            SuspendMetaOperation(std::bind(&User::ToMetaTableKeyValue, user_ptr, _1, _2),
                                  rpc_request->op_type() == kDeleteUser, done);
         }
         return;
@@ -1302,7 +1329,7 @@ void MasterImpl::OperateUser(const OperateUserRequest* request,
     MasterStatus master_status = GetMasterStatus();
     if (master_status != kIsRunning) {
         LOG(ERROR) << "master is not ready, status_ = "
-            << StatusCodeToString(master_status);
+            << StatusCodeToString(static_cast<StatusCode>(master_status));
         response->set_status(static_cast<StatusCode>(master_status));
         done->Run();
         return;
@@ -1383,10 +1410,10 @@ void MasterImpl::OperateUser(const OperateUserRequest* request,
         return;
     }
     UserPtr user_ptr(new User(user_name, operated_user));
-    WriteClosure* closure =
-        NewClosure(this, &MasterImpl::AddUserInfoToMetaCallback, user_ptr,
-                   FLAGS_tera_master_meta_retry_times, request, response, done);
-    BatchWriteMetaTableAsync(boost::bind(&User::ToMetaTableKeyValue, user_ptr, _1, _2),
+    WriteClosure closure =
+        std::bind(&MasterImpl::AddUserInfoToMetaCallback, this, user_ptr,
+                   FLAGS_tera_master_meta_retry_times, request, response, done, _1, _2, _3, _4);
+    BatchWriteMetaTableAsync(std::bind(&User::ToMetaTableKeyValue, user_ptr, _1, _2),
                              is_delete, closure);
 }
 
@@ -1453,7 +1480,13 @@ void MasterImpl::TabletCmdCtrl(const CmdCtrlRequest* request,
         return;
     }
 
-    if (request->arg_list(0) == "move") {
+    if (request->arg_list(0) == "reload") {
+        std::string current_server_addr = tablet->GetServerAddr();
+        TryMoveTablet(tablet,
+                      current_server_addr,
+                      true);  // force to unload and load tablet even it on the same ts
+
+    } else if (request->arg_list(0) == "move") {
         if (request->arg_list_size() > 3) {
             response->set_status(kInvalidArgument);
             return;
@@ -1472,9 +1505,9 @@ void MasterImpl::TabletCmdCtrl(const CmdCtrlRequest* request,
         std::string split_key;
         if (request->arg_list_size() == 3) {
             split_key = request->arg_list(2);
-            LOG(INFO) << "ignore user specified split key: not support";
+            LOG(INFO) << "User specified split key: " << split_key;
         }
-        TrySplitTablet(tablet);
+        TrySplitTablet(tablet, split_key);
         response->set_status(kMasterOk);
     } else if (request->arg_list(0) == "merge") {
         if (request->arg_list_size() > 3) {
@@ -1517,8 +1550,9 @@ bool MasterImpl::SetMasterStatus(const MasterStatus& new_status,
         *old_status = status_;
     }
     if (CheckStatusSwitch(status_, new_status)) {
-        LOG(INFO) << "master status switch " << StatusCodeToString(status_)
-            << " to " << StatusCodeToString(new_status);
+        LOG(INFO) << "master status switch "
+            << StatusCodeToString(static_cast<StatusCode>(status_))
+            << " to " << StatusCodeToString(static_cast<StatusCode>(new_status));
         status_ = new_status;
         return true;
     }
@@ -1569,8 +1603,8 @@ bool MasterImpl::CheckStatusSwitch(MasterStatus old_status,
     }
 
     LOG(ERROR) << "not support master status switch "
-        << StatusCodeToString(old_status) << " to "
-        << StatusCodeToString(new_status);
+        << StatusCodeToString(static_cast<StatusCode>(old_status)) << " to "
+        << StatusCodeToString(static_cast<StatusCode>(new_status));
     return false;
 }
 
@@ -1629,8 +1663,9 @@ void MasterImpl::QueryTabletNode() {
             continue;
         }
         query_pending_count_.Inc();
-        QueryClosure* done =
-            NewClosure(this, &MasterImpl::QueryTabletNodeCallback, tabletnode->addr_);
+        QueryClosure done =
+            std::bind(&MasterImpl::QueryTabletNodeCallback, this, tabletnode->addr_,
+                      _1, _2, _3, _4);
         QueryTabletNodeAsync(tabletnode->addr_,
                              FLAGS_tera_master_query_tabletnode_period,
                              gc_query_enable, done);
@@ -1657,7 +1692,7 @@ void MasterImpl::ScheduleQueryTabletNode() {
 
     LOG(INFO) << "schedule query tabletnodes after " << schedule_delay << "ms.";
 
-    ThreadPool::Task task = boost::bind(&MasterImpl::QueryTabletNode, this);
+    ThreadPool::Task task = std::bind(&MasterImpl::QueryTabletNode, this);
     query_tabletnode_timer_id_ = thread_pool_->DelayTask(schedule_delay, task);
 }
 
@@ -1693,7 +1728,7 @@ void MasterImpl::ScheduleLoadBalance() {
     }
 
     ThreadPool::Task task =
-        boost::bind(&MasterImpl::LoadBalance, this);
+        std::bind(static_cast<void(MasterImpl::*)()>(&MasterImpl::LoadBalance), this);
     thread_pool_->AddTask(task);
 }
 
@@ -1939,7 +1974,7 @@ void MasterImpl::ReleaseCacheWrapper() {
 void MasterImpl::EnableReleaseCacheTimer() {
     assert(release_cache_timer_id_ == kInvalidTimerId);
     ThreadPool::Task task =
-        boost::bind(&MasterImpl::ReleaseCacheWrapper, this);
+        std::bind(&MasterImpl::ReleaseCacheWrapper, this);
     int64_t timeout_period = 1000LL *
         FLAGS_tera_master_cache_release_period;
     release_cache_timer_id_ = thread_pool_->DelayTask(
@@ -2031,96 +2066,38 @@ void MasterImpl::AddTabletNode(const std::string& tabletnode_addr,
         }
     }
 
-    tabletnode_manager_->AddTabletNode(tabletnode_addr, tabletnode_uuid);
-    QueryClosure* done =
-        NewClosure(this, &MasterImpl::TabletNodeRecoveryCallback, tabletnode_addr);
-    QueryTabletNodeAsync(tabletnode_addr,
-                         FLAGS_tera_master_collect_info_timeout, false, done);
-}
-
-void MasterImpl::TabletNodeRecoveryCallback(std::string addr,
-                                            QueryRequest* request,
-                                            QueryResponse* response,
-                                            bool failed, int error_code) {
-    TabletNodePtr node;
-    if (!tabletnode_manager_->FindTabletNode(addr, &node)) {
-        LOG(WARNING) << "fail to query: server down, id: "
-            << request->sequence_id() << ", server: " << addr;
-        delete request;
-        delete response;
-        return;
-    }
-
-    if (failed || response->status() != kTabletNodeOk) {
-        if (failed) {
-            LOG(WARNING) << "fail to query: "
-                << sofa::pbrpc::RpcErrorCodeToString(error_code)
-                << ", id: " << request->sequence_id() << ", server: " << addr;
-        } else {
-            LOG(WARNING) << "fail to query: "
-                << StatusCodeToString(response->status())
-                << ", id: " << request->sequence_id() << ", server: " << addr;
-        }
-        int32_t fail_count = node->IncQueryFailCount();
-        if (fail_count >= FLAGS_tera_master_collect_info_retry_times) {
-            LOG(ERROR) << kSms << "fail to query " << addr
-                << " for " << fail_count << " times";
-            TryKickTabletNode(addr);
-        } else {
-            ThreadPool::Task task =
-                boost::bind(&MasterImpl::RetryQueryNewTabletNode, this, addr);
-            thread_pool_->DelayTask(FLAGS_tera_master_collect_info_retry_period, task);
-        }
-        delete request;
-        delete response;
-        return;
-    }
-    node->ResetQueryFailCount();
-
-    // New tabletnode should not have any tablet.
-    uint32_t meta_num = response->tabletmeta_list().meta_size();
-    if (meta_num > 0) {
-        LOG(WARNING) << "new tabletnode " << addr << " has " << meta_num << " tablets";
-        TryKickTabletNode(node->GetAddr());
-        delete request;
-        delete response;
-        return;
-    }
+    TabletNodePtr node = tabletnode_manager_->AddTabletNode(tabletnode_addr, tabletnode_uuid);
 
     // update tabletnode info
     timeval update_time;
     gettimeofday(&update_time, NULL);
     TabletNode state;
-    state.addr_ = addr;
-    state.report_status_ = response->tabletnode_info().status_t();
-    state.info_ = response->tabletnode_info();
-    state.info_.set_addr(addr);
-    state.load_ = response->tabletnode_info().load();
+    state.addr_ = tabletnode_addr;
+    state.report_status_ = kTabletNodeReady;
+    state.info_.set_addr(tabletnode_addr);
     state.data_size_ = 0;
     state.qps_ = 0;
     state.update_time_ = update_time.tv_sec * 1000 + update_time.tv_usec / 1000;
 
-    tabletnode_manager_->UpdateTabletNode(addr, state);
+    tabletnode_manager_->UpdateTabletNode(tabletnode_addr, state);
     NodeState old_state;
     node->SetState(kReady, &old_state);
 
-    delete request;
-    delete response;
 
     // If all tabletnodes restart in one zk callback,
     // master will not enter restore/wait state;
     // meta table must be scheduled to load from here.
     TabletPtr meta_tablet;
     if (tablet_manager_->FindTablet(FLAGS_tera_master_meta_table_name, "",
-                                     &meta_tablet)
+                                    &meta_tablet)
         && meta_tablet->GetStatus() == kTableOffLine) {
-        LOG(INFO) << "try load meta tablet on new ts: " << addr;
+        LOG(INFO) << "try load meta tablet on new ts: " << tabletnode_addr;
         TryLoadTablet(meta_tablet);
     }
 
     // load offline tablets
     std::vector<TabletPtr> tablet_list;
-    tablet_manager_->FindTablet(addr,
+    tablet_manager_->FindTablet(tabletnode_addr,
                                 &tablet_list,
                                 true);  // need disabled table/tablets
     std::vector<TabletPtr>::iterator it = tablet_list.begin();
@@ -2131,17 +2108,11 @@ void MasterImpl::TabletNodeRecoveryCallback(std::string addr,
         }
         if (tablet->GetStatus() == kTableOffLine) {
             LOG(INFO) << "try load, " << tablet;
-            TryLoadTablet(tablet, addr);
+            TryLoadTablet(tablet, tabletnode_addr);
         }
     }
 
     TryLeaveSafeMode();
-}
-
-void MasterImpl::RetryQueryNewTabletNode(std::string addr) {
-    QueryClosure* done =
-        NewClosure(this, &MasterImpl::TabletNodeRecoveryCallback, addr);
-    QueryTabletNodeAsync(addr, FLAGS_tera_master_collect_info_timeout, false, done);
 }
 
 void MasterImpl::DeleteTabletNode(const std::string& tabletnode_addr) {
@@ -2178,8 +2149,8 @@ void MasterImpl::DeleteTabletNode(const std::string& tabletnode_addr) {
         }
 
         if (tablet->SetStatusIf(kTableOnSplit, kTableSplitFail)) {
-            ScanClosure* done =
-                NewClosure(this, &MasterImpl::ScanMetaCallbackForSplit, tablet);
+            ScanClosure done =
+                std::bind(&MasterImpl::ScanMetaCallbackForSplit, this, tablet, _1, _2, _3, _4);
             ScanMetaTableAsync(tablet->GetTableName(), tablet->GetKeyStart(),
                                tablet->GetKeyEnd(), done);
         }
@@ -2198,7 +2169,7 @@ void MasterImpl::DeleteTabletNode(const std::string& tabletnode_addr) {
             << "(ms) later";
         MutexLock lock(&tabletnode_timer_mutex_);
         ThreadPool::Task task =
-            boost::bind(&MasterImpl::TryMovePendingTablets, this, tabletnode_addr);
+            std::bind(&MasterImpl::TryMovePendingTablets, this, tabletnode_addr);
         int64_t timer_id = thread_pool_->DelayTask(
             FLAGS_tera_master_tabletnode_timeout, task);
         tabletnode_timer_id_map_[tabletnode_addr] = timer_id;
@@ -2362,8 +2333,8 @@ void MasterImpl::TryKickTabletNode(const std::string& tabletnode_addr) {
         return;
     }
     LOG(INFO) << "try kick tabletnode " << tabletnode_addr << " ...";
-//    Closure<void>* callback =
-//        NewClosure(this, &MasterImpl::KickTabletNodeAsync, tabletnode_addr);
+//    std::function<void>* callback =
+//        std::bind(&MasterImpl::KickTabletNodeAsync, tabletnode_addr);
 //    thread_pool_->AddTask(callback);
 
     TabletNodePtr tabletnode;
@@ -2375,7 +2346,7 @@ void MasterImpl::TryKickTabletNode(const std::string& tabletnode_addr) {
     NodeState old_state;
     if (!tabletnode->SetState(kWaitKick, &old_state)) {
         LOG(WARNING) << "cancel kick tabletnode " << tabletnode_addr
-            << " state: " << StatusCodeToString(old_state);
+            << " state: " << StatusCodeToString(static_cast<StatusCode>(old_state));
         return;
     }
     KickTabletNode(tabletnode);
@@ -2389,7 +2360,7 @@ void MasterImpl::KickTabletNode(TabletNodePtr node) {
         MasterStatus status = GetMasterStatus();
         if (status == kIsReadonly) {
             LOG(WARNING) << "cancel kick tabletnode " << node->addr_
-                << ", master state: " << StatusCodeToString(status);
+                << ", master state: " << StatusCodeToString(static_cast<StatusCode>(status));
             return;
         }
         TryEnterSafeMode();
@@ -2398,7 +2369,7 @@ void MasterImpl::KickTabletNode(TabletNodePtr node) {
     NodeState old_state;
     if (!node->SetState(kOnKick, &old_state)) {
         LOG(WARNING) << "cancel kick, tabletnode " << node->addr_
-            << " state: " << StatusCodeToString(old_state);
+            << " state: " << StatusCodeToString(static_cast<StatusCode>(old_state));
         return;
     }
     if (!zk_adapter_->KickTabletServer(node->addr_, node->uuid_)) {
@@ -2468,7 +2439,7 @@ bool MasterImpl::LoadTabletSync(const TabletMeta& meta,
     return false;
 }
 
-void MasterImpl::LoadTabletAsync(TabletPtr tablet, LoadClosure* done, uint64_t) {
+void MasterImpl::LoadTabletAsync(TabletPtr tablet, LoadClosure done, uint64_t) {
     tabletnode::TabletNodeClient node_client(tablet->GetServerAddr(),
                                             FLAGS_tera_master_load_rpc_timeout);
     LoadTabletRequest* request = new LoadTabletRequest;
@@ -2545,7 +2516,6 @@ void MasterImpl::LoadTabletCallback(TabletPtr tablet, int32_t retry,
     // success
     if (!failed && (status == kTabletNodeOk || status == kTabletReady)) {
         LOG(INFO) << "load tablet success, " << tablet;
-        tablet->SetLoadTime(get_micros());
         tablet->SetStatusIf(kTableReady, kTableOnLoad);
         tablet_availability_->EraseNotReadyTablet(tablet->GetPath());
         if (tablet->GetTableName() == FLAGS_tera_master_meta_table_name) {
@@ -2562,10 +2532,10 @@ void MasterImpl::LoadTabletCallback(TabletPtr tablet, int32_t retry,
         while (node->LoadNextWaitTablet(&next_tablet)) {
             if (next_tablet->SetAddrAndStatusIf(server_addr, kTableOnLoad, kTableOffLine)) {
                 next_tablet->SetServerId(node->uuid_);
-                WriteClosure* done =
-                    NewClosure(this, &MasterImpl::UpdateMetaForLoadCallback,
-                               next_tablet, FLAGS_tera_master_meta_retry_times);
-                BatchWriteMetaTableAsync(boost::bind(&Tablet::ToMetaTableKeyValue, next_tablet, _1, _2),
+                WriteClosure done =
+                    std::bind(&MasterImpl::UpdateMetaForLoadCallback, this, next_tablet,
+                              FLAGS_tera_master_meta_retry_times, _1, _2, _3, _4);
+                BatchWriteMetaTableAsync(std::bind(&Tablet::ToMetaTableKeyValue, next_tablet, _1, _2),
                                          false, done);
                 break;
             }
@@ -2588,9 +2558,9 @@ void MasterImpl::LoadTabletCallback(TabletPtr tablet, int32_t retry,
         // extend max retry times when tablet need repair
         if (retry > FLAGS_tera_master_load_slow_retry_times) {
             LOG(ERROR) << kSms << "abort LoadTablet: try unload, " << tablet;
-            UnloadClosure* done =
-                NewClosure(this, &MasterImpl::UnloadTabletCallback, tablet,
-                           FLAGS_tera_master_impl_retry_times);
+            UnloadClosure done =
+                std::bind(&MasterImpl::UnloadTabletCallback, this, tablet,
+                           FLAGS_tera_master_impl_retry_times, _1, _2, _3, _4);
             UnloadTabletAsync(tablet, done);
             return;
         }
@@ -2599,16 +2569,16 @@ void MasterImpl::LoadTabletCallback(TabletPtr tablet, int32_t retry,
         }
     } else if (retry > FLAGS_tera_master_impl_retry_times) {
         LOG(ERROR) << kSms << "abort LoadTablet: try unload, " << tablet;
-        UnloadClosure* done =
-            NewClosure(this, &MasterImpl::UnloadTabletCallback, tablet,
-                       FLAGS_tera_master_impl_retry_times);
+        UnloadClosure done =
+            std::bind(&MasterImpl::UnloadTabletCallback, this, tablet,
+                       FLAGS_tera_master_impl_retry_times, _1, _2, _3, _4);
         UnloadTabletAsync(tablet, done);
         return;
     }
 
     // retry
     ThreadPool::Task task =
-        boost::bind(&MasterImpl::RetryLoadTablet, this, tablet, retry + 1);
+        std::bind(&MasterImpl::RetryLoadTablet, this, tablet, retry + 1);
     thread_pool_->DelayTask(
         FLAGS_tera_master_control_tabletnode_retry_period, task);
 }
@@ -2642,7 +2612,7 @@ bool MasterImpl::UnloadTabletSync(const std::string& table_name,
     return true;
 }
 
-void MasterImpl::UnloadTabletAsync(TabletPtr tablet, UnloadClosure* done) {
+void MasterImpl::UnloadTabletAsync(TabletPtr tablet, UnloadClosure done) {
     tabletnode::TabletNodeClient node_client(tablet->GetServerAddr(),
             FLAGS_tera_master_unload_rpc_timeout);
     UnloadTabletRequest* request = new UnloadTabletRequest;
@@ -2686,8 +2656,8 @@ void MasterImpl::UnloadTabletCallback(TabletPtr tablet, int32_t retry,
             TryLoadTablet(tablet);
         } else {
             CHECK(tablet->GetStatus() == kTableOnSplit);
-            ScanClosure* done =
-                NewClosure(this, &MasterImpl::ScanMetaCallbackForSplit, tablet);
+            ScanClosure done =
+                std::bind(&MasterImpl::ScanMetaCallbackForSplit, this, tablet, _1, _2, _3, _4);
             ScanMetaTableAsync(tablet->GetTableName(), tablet->GetKeyStart(),
                                tablet->GetKeyEnd(), done);
         }
@@ -2706,7 +2676,6 @@ void MasterImpl::UnloadTabletCallback(TabletPtr tablet, int32_t retry,
     // success
     if (!failed && (status == kTabletNodeOk || status == kKeyNotInRange)) {
         LOG(INFO) << "unload tablet success, " << tablet;
-        tablet_availability_->AddNotReadyTablet(tablet->GetPath());
         if (tablet->GetMergeParam() != NULL) {
             CHECK(tablet->GetStatus() == kTableUnLoading);
             MergeTabletUnloadCallback(tablet);
@@ -2725,10 +2694,10 @@ void MasterImpl::UnloadTabletCallback(TabletPtr tablet, int32_t retry,
             while (node->LoadNextWaitTablet(&next_tablet)) {
                 if (next_tablet->SetAddrAndStatusIf(server_addr, kTableOnLoad, kTableOffLine)) {
                     next_tablet->SetServerId(node->uuid_);
-                    WriteClosure* done =
-                        NewClosure(this, &MasterImpl::UpdateMetaForLoadCallback,
-                                   next_tablet, FLAGS_tera_master_meta_retry_times);
-                    BatchWriteMetaTableAsync(boost::bind(&Tablet::ToMetaTableKeyValue, next_tablet, _1, _2),
+                    WriteClosure done =
+                        std::bind(&MasterImpl::UpdateMetaForLoadCallback, this,
+                                   next_tablet, FLAGS_tera_master_meta_retry_times, _1, _2, _3, _4);
+                    BatchWriteMetaTableAsync(std::bind(&Tablet::ToMetaTableKeyValue, next_tablet, _1, _2),
                                              false, done);
                     break;
                 }
@@ -2737,8 +2706,8 @@ void MasterImpl::UnloadTabletCallback(TabletPtr tablet, int32_t retry,
         } else {
             CHECK(tablet->GetStatus() == kTableOnSplit);
             // don't know split result, scan meta to determine the result
-            ScanClosure* done =
-                NewClosure(this, &MasterImpl::ScanMetaCallbackForSplit, tablet);
+            ScanClosure done =
+                std::bind(&MasterImpl::ScanMetaCallbackForSplit, this, tablet, _1, _2, _3, _4);
             ScanMetaTableAsync(tablet->GetTableName(), tablet->GetKeyStart(),
                                tablet->GetKeyEnd(), done);
 
@@ -2746,15 +2715,16 @@ void MasterImpl::UnloadTabletCallback(TabletPtr tablet, int32_t retry,
             TabletNodePtr node;
             if (tabletnode_manager_->FindTabletNode(server_addr, &node)
                 && node->uuid_ == tablet->GetServerId()) {
-                node->FinishSplit(tablet);
+                node->FinishSplit();
                 TabletPtr next_tablet;
-                while (node->SplitNextWaitTablet(&next_tablet)) {
+                std::string split_key;
+                while (node->SplitNextWaitTablet(&next_tablet, &split_key)) {
                     if (next_tablet->SetStatusIf(kTableOnSplit, kTableReady)) {
                         next_tablet->SetServerId(node->uuid_);
-                        SplitTabletAsync(next_tablet);
+                        SplitTabletAsync(next_tablet, split_key);
                         break;
                     }
-                    node->FinishSplit(next_tablet);
+                    node->FinishSplit();
                 }
             }
         }
@@ -2782,7 +2752,7 @@ void MasterImpl::UnloadTabletCallback(TabletPtr tablet, int32_t retry,
 
     // retry
     ThreadPool::Task task =
-        boost::bind(&MasterImpl::RetryUnloadTablet, this, tablet, retry - 1);
+        std::bind(&MasterImpl::RetryUnloadTablet, this, tablet, retry - 1);
     thread_pool_->DelayTask(
         FLAGS_tera_master_control_tabletnode_retry_period, task);
 }
@@ -2794,7 +2764,7 @@ void MasterImpl::DelSnapshot(const DelSnapshotRequest* request,
     MasterStatus master_status = GetMasterStatus();
     if (master_status != kIsRunning) {
         LOG(WARNING) << "master is not ready, status_ = "
-            << StatusCodeToString(master_status);
+            << StatusCodeToString(static_cast<StatusCode>(master_status));
         response->set_status(static_cast<StatusCode>(master_status));
         done->Run();
         return;
@@ -2838,11 +2808,11 @@ void MasterImpl::DelSnapshot(const DelSnapshotRequest* request,
     for (uint32_t i = 0; i < tablets.size(); i++) {
         tablets[i]->DelSnapshot(id);
     }
-    WriteClosure* closure =
-        NewClosure(this, &MasterImpl::DelSnapshotCallback,
+    WriteClosure closure =
+        std::bind(&MasterImpl::DelSnapshotCallback, this,
                 table, tablets,
                 FLAGS_tera_master_meta_retry_times,
-                request, response, done);
+                request, response, done, _1, _2, _3, _4);
     BatchWriteMetaTableAsync(table, tablets, false, closure);
 }
 
@@ -2878,10 +2848,10 @@ void MasterImpl::DelSnapshotCallback(TablePtr table,
             rpc_response->set_status(kMetaTabletError);
             rpc_done->Run();
         } else {
-            WriteClosure* done =
-                NewClosure(this, &MasterImpl::DelSnapshotCallback, table,
+            WriteClosure done =
+                std::bind(&MasterImpl::DelSnapshotCallback, this, table,
                            tablets, retry_times - 1, rpc_request, rpc_response,
-                           rpc_done);
+                           rpc_done, _1, _2, _3, _4);
             SuspendMetaOperation(table, tablets, false, done);
         }
         return;
@@ -2905,7 +2875,7 @@ void MasterImpl::GetSnapshot(const GetSnapshotRequest* request,
     MasterStatus master_status = GetMasterStatus();
     if (master_status != kIsRunning) {
         LOG(WARNING) << "master is not ready, status_ = "
-            << StatusCodeToString(master_status);
+            << StatusCodeToString(static_cast<StatusCode>(master_status));
         response->set_status(static_cast<StatusCode>(master_status));
         done->Run();
         return;
@@ -2945,8 +2915,9 @@ void MasterImpl::GetSnapshot(const GetSnapshotRequest* request,
         }
         LOG(INFO) << "Set tablet kTabletOnSnapshot " << tablet->GetPath();
         ++task->task_num;
-        SnapshotClosure* closure =
-            NewClosure(this, &MasterImpl::GetSnapshotCallback, static_cast<int32_t>(i), task);
+        SnapshotClosure closure =
+            std::bind(&MasterImpl::GetSnapshotCallback, this, static_cast<int32_t>(i), task,
+                      _1, _2, _3, _4);
         GetSnapshotAsync(tablet, snapshot_id, 3000, closure);
     }
     if (task->task_num == 0) {
@@ -2962,7 +2933,7 @@ void MasterImpl::GetSnapshot(const GetSnapshotRequest* request,
 }
 
 void MasterImpl::GetSnapshotAsync(TabletPtr tablet, int64_t snapshot_id, int32_t timeout,
-                                  SnapshotClosure* done) {
+                                  SnapshotClosure done) {
 
     std::string addr = tablet->GetServerAddr();
     tabletnode::TabletNodeClient node_client(addr, timeout);
@@ -3017,11 +2988,11 @@ void MasterImpl::GetSnapshotCallback(int32_t tablet_id,
             assert(sid == tsid);
         }
         task->response->set_snapshot_id(master_request->snapshot_id());
-        WriteClosure* closure =
-            NewClosure(this, &MasterImpl::AddSnapshotCallback,
+        WriteClosure closure =
+            std::bind(&MasterImpl::AddSnapshotCallback, this,
                     task->table, task->tablets,
                     FLAGS_tera_master_meta_retry_times,
-                    task->request, task->response, task->done);
+                    task->request, task->response, task->done, _1, _2, _3, _4);
         BatchWriteMetaTableAsync(task->table, task->tablets, false, closure);
     }
     task->mutex.Unlock();
@@ -3061,10 +3032,10 @@ void MasterImpl::AddSnapshotCallback(TablePtr table,
             rpc_response->set_status(kMetaTabletError);
             rpc_done->Run();
         } else {
-            WriteClosure* done =
-                NewClosure(this, &MasterImpl::AddSnapshotCallback, table,
+            WriteClosure done =
+                std::bind(&MasterImpl::AddSnapshotCallback, this, table,
                            tablets, retry_times - 1, rpc_request, rpc_response,
-                           rpc_done);
+                           rpc_done, _1, _2, _3, _4);
             SuspendMetaOperation(table, tablets, false, done);
         }
         return;
@@ -3087,8 +3058,8 @@ void MasterImpl::ReleaseSnpashot(TabletPtr tablet, uint64_t snapshot) {
     request->mutable_key_range()->set_key_start(tablet->GetKeyStart());
     request->mutable_key_range()->set_key_end(tablet->GetKeyEnd());
 
-    DelSnapshotClosure* done =
-        NewClosure(this, &MasterImpl::ReleaseSnapshotCallback);
+    DelSnapshotClosure done =
+        std::bind(&MasterImpl::ReleaseSnapshotCallback, this, _1, _2, _3, _4);
     LOG(INFO) << "ClearSnapshot id: " << request->sequence_id()
         << ", server: " << addr;
     node_client.ReleaseSnapshot(request, response, done);
@@ -3109,7 +3080,7 @@ void MasterImpl::GetRollback(const RollbackRequest* request,
     MasterStatus master_status = GetMasterStatus();
     if (master_status != kIsRunning) {
         LOG(WARNING) << "master is not ready, status_ = "
-            << StatusCodeToString(master_status);
+            << StatusCodeToString(static_cast<StatusCode>(master_status));
         response->set_status(static_cast<StatusCode>(master_status));
         done->Run();
         return;
@@ -3141,8 +3112,9 @@ void MasterImpl::GetRollback(const RollbackRequest* request,
     for (uint32_t i = 0; i < task->tablets.size(); ++i) {
         TabletPtr tablet = task->tablets[i];
         ++task->task_num;
-        RollbackClosure* closure =
-            NewClosure(this, &MasterImpl::RollbackCallback, static_cast<int32_t>(i), task);
+        RollbackClosure closure =
+            std::bind(&MasterImpl::RollbackCallback, this, static_cast<int32_t>(i), task,
+                      _1, _2, _3, _4);
         RollbackAsync(tablet, request->snapshot_id(), 3000, closure);
     }
     if (task->task_num == 0) {
@@ -3158,7 +3130,7 @@ void MasterImpl::GetRollback(const RollbackRequest* request,
 }
 
 void MasterImpl::RollbackAsync(TabletPtr tablet, uint64_t snapshot_id,
-                                int32_t timeout, RollbackClosure* done) {
+                                int32_t timeout, RollbackClosure done) {
     std::string addr = tablet->GetServerAddr();
     tabletnode::TabletNodeClient node_client(addr, timeout);
 
@@ -3207,11 +3179,11 @@ void MasterImpl::RollbackCallback(int32_t tablet_id, RollbackTask* task,
                                                      task->rollback_points[i]);
             assert(sid == tsid);
         }
-        WriteClosure* closure =
-            NewClosure(this, &MasterImpl::AddRollbackCallback,
+        WriteClosure closure =
+            std::bind(&MasterImpl::AddRollbackCallback, this,
                        task->table, task->tablets,
                        FLAGS_tera_master_meta_retry_times,
-                       task->request, task->response, task->done);
+                       task->request, task->response, task->done, _1, _2, _3, _4);
         BatchWriteMetaTableAsync(task->table, task->tablets, false, closure);
     }
     task->mutex.Unlock();
@@ -3248,10 +3220,10 @@ void MasterImpl::AddRollbackCallback(TablePtr table,
             rpc_response->set_status(kMetaTabletError);
             rpc_done->Run();
         } else {
-            WriteClosure* done =
-                NewClosure(this, &MasterImpl::AddRollbackCallback, table,
+            WriteClosure done =
+                std::bind(&MasterImpl::AddRollbackCallback, this, table,
                            tablets, retry_times - 1, rpc_request, rpc_response,
-                           rpc_done);
+                           rpc_done, _1, _2, _3, _4);
             SuspendMetaOperation(table, tablets, false, done);
         }
         return;
@@ -3325,11 +3297,12 @@ void MasterImpl::UpdateSchemaCallback(std::string table_name,
                 << tablet->GetServerAddr();
             TryKickTabletNode(tablet->GetServerAddr());
         } else {
-            UpdateClosure* done =
-                NewClosure(this, &MasterImpl::UpdateSchemaCallback, tablet->GetTableName(),
-                           tablet->GetPath(), tablet->GetKeyStart(), tablet->GetKeyEnd(), retry_times + 1);
+            UpdateClosure done =
+                std::bind(&MasterImpl::UpdateSchemaCallback, this, tablet->GetTableName(),
+                           tablet->GetPath(), tablet->GetKeyStart(), tablet->GetKeyEnd(),
+                           retry_times + 1, _1, _2, _3, _4);
             ThreadPool::Task task =
-                boost::bind(&MasterImpl::NoticeTabletNodeSchemaUpdatedAsync, this, tablet, done);
+                std::bind(&MasterImpl::NoticeTabletNodeSchemaUpdatedAsync, this, tablet, done);
             thread_pool_->DelayTask(FLAGS_tera_master_schema_update_retry_period * 1000, task);
         }
         return;
@@ -3348,7 +3321,7 @@ void MasterImpl::UpdateSchemaCallback(std::string table_name,
 }
 
 void MasterImpl::NoticeTabletNodeSchemaUpdatedAsync(TabletPtr tablet,
-                                                    UpdateClosure* done) {
+                                                    UpdateClosure done) {
     tabletnode::TabletNodeClient node_client(tablet->GetServerAddr(),
                                              FLAGS_tera_master_collect_info_timeout);
     UpdateRequest* request = new UpdateRequest;
@@ -3367,9 +3340,10 @@ void MasterImpl::NoticeTabletNodeSchemaUpdatedAsync(TabletPtr tablet,
 
 void MasterImpl::NoticeTabletNodeSchemaUpdated(TabletPtr tablet) {
     int32_t retry_times = 0;
-    UpdateClosure* done =
-        NewClosure(this, &MasterImpl::UpdateSchemaCallback, tablet->GetTableName(),
-                   tablet->GetPath(), tablet->GetKeyStart(), tablet->GetKeyEnd(), retry_times);
+    UpdateClosure done =
+        std::bind(&MasterImpl::UpdateSchemaCallback, this, tablet->GetTableName(),
+                   tablet->GetPath(), tablet->GetKeyStart(), tablet->GetKeyEnd(), retry_times,
+                   _1, _2, _3, _4);
     NoticeTabletNodeSchemaUpdatedAsync(tablet, done);
 }
 
@@ -3386,7 +3360,7 @@ void MasterImpl::NoticeTabletNodeSchemaUpdated(TablePtr table) {
 }
 
 void MasterImpl::QueryTabletNodeAsync(std::string addr, int32_t timeout,
-                                      bool is_gc, QueryClosure* done) {
+                                      bool is_gc, QueryClosure done) {
     tabletnode::TabletNodeClient node_client(addr, timeout);
 
     QueryRequest* request = new QueryRequest;
@@ -3405,7 +3379,7 @@ void MasterImpl::QueryTabletNodeAsync(std::string addr, int32_t timeout,
 void MasterImpl::QueryTabletNodeCallback(std::string addr, QueryRequest* request,
                                          QueryResponse* response, bool failed,
                                          int error_code) {
-    int64_t start_query = get_micros();
+    int64_t query_callback_start = get_micros();
     TabletNodePtr node;
     if (!tabletnode_manager_->FindTabletNode(addr, &node)) {
         LOG(WARNING) << "fail to query: server down, id: "
@@ -3437,70 +3411,84 @@ void MasterImpl::QueryTabletNodeCallback(std::string addr, QueryRequest* request
             const std::string& key_start = meta.key_range().key_start();
             const std::string& key_end = meta.key_range().key_end();
 
-            tabletnode::TabletRange range(table_name, key_start, key_end);
-            std::map<tabletnode::TabletRange, int>::iterator it = tablet_map.find(range);
-            if (it != tablet_map.end()) {
-                LOG(WARNING) << "query found ts has more than one table_name+startkey item: "
-                    << table_name << ", " << DebugString(key_start) << ", " << DebugString(key_end);
-            } else {
-                tablet_map[range] = 1;
+            std::vector<TabletPtr> tablets;
+            if (!tablet_manager_->FindOverlappedTablets(table_name, key_start, key_end, &tablets)) {
+                LOG(WARNING) << "[query] table not exist, tablet: " << meta.path()
+                    << " [" << DebugString(key_start)
+                    << ", " << DebugString(key_end)
+                    << "] @ " << meta.server_addr()
+                    << " status: " << meta.status();
+                continue;
             }
 
-            TabletPtr tablet;
-            if (meta.status() != kTableReady) {
-                VLOG(30) << "non-ready tablet: " << meta.table_name()
-                    << ", path: " << meta.path()
-                    << ", range: [" << DebugString(key_start)
-                    << ", " << DebugString(key_end)
-                    << "], size: " << meta.size()
-                    << ", addr: " << meta.server_addr()
-                    << ", status: " << meta.status();
-            } else if (tablet_manager_->FindTablet(table_name, key_start, &tablet)) {
-                int64_t pre_time = tablet->SetUpdateTime(start_query);
-                int64_t load_time = tablet->LoadTime();
-                if (load_time < start_query_time_ && pre_time > start_query_time_) {
-                    LOG(ERROR) << "caution: one tablet multi-loaded, path "
-                        << tablet->GetPath() << ", addr " << meta.server_addr()
-                        << " vs " << tablet->GetServerAddr()
-                        << ", start_query " << start_query_time_
-                        << ", pre_update " << pre_time
-                        << ", cur_time " << start_query;
-                }
-                if (tablet->Verify(table_name, key_start, key_end, meta.path(),
-                                   meta.server_addr())) {
-                    if (tablet->GetTable()->GetStatus() == kTableDisable) {
-                        if (tablet->SetStatusIf(kTableUnLoading, kTableReady)) {
-                            UnloadClosure* done =
-                                NewClosure(this, &MasterImpl::UnloadTabletCallback, tablet,
-                                           FLAGS_tera_master_impl_retry_times);
-                            UnloadTabletAsync(tablet, done);
-                            LOG(INFO) << "Unload disable tablet: " << tablet->GetPath();
-                        } else {
-                            LOG(INFO) << "Discard disable tablet: " << tablet->GetPath()
-                                << ", status: " << tablet->GetStatus();
-                        }
-                    } else {
-                        tablet->UpdateSize(meta);
-                        tablet->SetCounter(counter);
-                        tablet->SetCompactStatus(meta.compact_status());
-                        ClearUnusedSnapshots(tablet, meta);
+            if (tablets.size() > 1) {
+                bool any_tablet_load_before_query = false;
+                for (uint32_t j = 0; j < tablets.size(); ++j) {
+                    if (tablets[j]->ReadyTime() < start_query_time_) {
+                        any_tablet_load_before_query = true;
+                        break;
                     }
-                } else {
-                    VLOG(10) << "fail to verify tablet: " << meta.table_name()
-                        << ", path: " << meta.path()
-                        << ", range: [" << DebugString(key_start)
-                        << ", " << DebugString(key_end)
-                        << "], size: " << meta.size()
-                        << ", addr: " << meta.server_addr();
                 }
-                VLOG(30) << "[query] " << tablet;
-            } else {
-                LOG(WARNING) << "fail to find tablet: " << meta.table_name()
-                    << ", path: " << meta.path()
-                    << ", range: [" << DebugString(key_start)
+                if (any_tablet_load_before_query) {
+                    LOG(ERROR) << "[query] range error tablet: " << meta.path()
+                        << " [" << DebugString(key_start)
+                        << ", " << DebugString(key_end)
+                        << "] @ " << meta.server_addr()
+                        << " status: " << meta.status();
+                } else {
+                    VLOG(20) << "[query] ignore mutable tablet: " << meta.path()
+                        << " [" << DebugString(key_start)
+                        << ", " << DebugString(key_end)
+                        << "] @ " << meta.server_addr()
+                        << " status: " << meta.status();
+                }
+                continue;
+            }
+
+            CHECK_EQ(tablets.size(), 1u);
+            TabletPtr tablet = tablets[0];
+            if (tablet->ReadyTime() >= start_query_time_) {
+                VLOG(20) << "[query] ignore mutable tablet: " << meta.path()
+                    << " [" << DebugString(key_start)
                     << ", " << DebugString(key_end)
-                    << "], size: " << meta.size()
-                    << ", addr: " << meta.server_addr();
+                    << "] @ " << meta.server_addr()
+                    << " status: " << meta.status();
+            } else if (tablet->GetKeyStart() != key_start || tablet->GetKeyEnd() != key_end) {
+                LOG(ERROR) << "[query] range error tablet: " << meta.path()
+                    << " [" << DebugString(key_start)
+                    << ", " << DebugString(key_end)
+                    << "] @ " << meta.server_addr();
+            } else if (tablet->GetPath() != meta.path()) {
+                LOG(ERROR) << "[query] path error tablet: " << meta.path()
+                    << "] @ " << meta.server_addr()
+                    << " should be " << tablet->GetPath();
+            } else if (kTableReady != meta.status()) {
+                LOG(ERROR) << "[query] status error tablet: " << meta.path()
+                    << "] @ " << meta.server_addr()
+                    << " should be kTabletReady";
+            } else if (tablet->GetServerAddr() != meta.server_addr()) {
+                LOG(ERROR) << "[query] addr error tablet: " << meta.path()
+                    << " @ " << meta.server_addr()
+                    << " should @ " << tablet->GetServerAddr();
+            } else if (tablet->GetTable()->GetStatus() == kTableDisable) {
+                if (tablet->SetStatusIf(kTableUnLoading, kTableReady)) {
+                    UnloadClosure done =
+                        std::bind(&MasterImpl::UnloadTabletCallback, this, tablet,
+                                   FLAGS_tera_master_impl_retry_times, _1, _2, _3, _4);
+                    UnloadTabletAsync(tablet, done);
+                    LOG(INFO) << "Unload disable tablet: " << tablet->GetPath();
+                } else {
+                    LOG(INFO) << "Discard disable tablet: " << tablet->GetPath()
+                        << ", status: " << tablet->GetStatus();
+                }
+            } else {
+                VLOG(20) << "[query] OK tablet: " << meta.path()
+                    << "] @ " << meta.server_addr();
+                tablet->SetUpdateTime(query_callback_start);
+                tablet->UpdateSize(meta);
+                tablet->SetCounter(counter);
+                tablet->SetCompactStatus(meta.compact_status());
+                ClearUnusedSnapshots(tablet, meta);
             }
         }
 
@@ -3525,12 +3513,12 @@ void MasterImpl::QueryTabletNodeCallback(std::string addr, QueryRequest* request
         std::vector<TabletPtr>::iterator it;
         for (it = tablet_list.begin(); it != tablet_list.end(); ++it) {
             TabletPtr tablet = *it;
-            tabletnode::TabletRange range(tablet->GetTableName(), tablet->GetKeyStart(),
-                                          tablet->GetKeyEnd());
-            if (tablet_map.find(range) == tablet_map.end()) {
-                LOG(INFO) << "master load tablet, but ts not: addr " << addr
-                           << ", " << tablet;
-                continue;
+            if (tablet->UpdateTime() != query_callback_start) {
+                if (tablet->ReadyTime() < start_query_time_) {
+                    LOG(ERROR) << "[query] missed tablet: " << tablet;
+                } else {
+                    VLOG(20) << "[query] ignore mutable missed tablet: " << tablet;
+                }
             }
 
             TabletStatus tablet_status = tablet->GetStatus();
@@ -3555,9 +3543,20 @@ void MasterImpl::QueryTabletNodeCallback(std::string addr, QueryRequest* request
         VLOG(20) << "query tabletnode [" << addr << "], status_: "
             << StatusCodeToString(state.report_status_);
     }
+
     // if this is a gc query, process it
     if (request->is_gc_query()) {
-        gc_strategy_->ProcessQueryCallbackForGc(response);
+        if (FLAGS_tera_master_gc_strategy == "trackable") {
+            for (int32_t i = 0; i < response->tablet_inh_file_infos_size(); i++) {
+                const TabletInheritedFileInfo& tablet_inh_info = response->tablet_inh_file_infos(i);
+                TablePtr table_ptr;
+                if (tablet_manager_->FindTable(tablet_inh_info.table_name(), &table_ptr)) {
+                    table_ptr->GarbageCollect(tablet_inh_info);
+                }
+            }
+        } else {
+            gc_strategy_->ProcessQueryCallbackForGc(response);
+        }
     }
 
     if (0 == query_pending_count_.Dec()) {
@@ -3585,7 +3584,7 @@ void MasterImpl::QueryTabletNodeCallback(std::string addr, QueryRequest* request
     delete response;
     VLOG(20) << "query tabletnode finish " << addr
         << ", id " << query_tabletnode_timer_id_
-        << ", callback cost " << (get_micros() - start_query) / 1000 << "ms.";
+        << ", callback cost " << (get_micros() - query_callback_start) / 1000 << "ms.";
 }
 
 void MasterImpl::CollectTabletInfoCallback(std::string addr,
@@ -3652,8 +3651,8 @@ void MasterImpl::CollectTabletInfoCallback(std::string addr,
             TryKickTabletNode(addr);
         } else {
             ThreadPool::Task task =
-                boost::bind(&MasterImpl::RetryCollectTabletInfo, this, addr,
-                            tablet_list, finish_counter, mutex);
+                std::bind(&MasterImpl::RetryCollectTabletInfo, this, addr,
+                          tablet_list, finish_counter, mutex);
             thread_pool_->DelayTask(FLAGS_tera_master_collect_info_retry_period,
                                      task);
             delete request;
@@ -3669,13 +3668,13 @@ void MasterImpl::CollectTabletInfoCallback(std::string addr,
 void MasterImpl::RetryCollectTabletInfo(std::string addr,
                                         std::vector<TabletMeta>* tablet_list,
                                         sem_t* finish_counter, Mutex* mutex) {
-    QueryClosure* done =
-        NewClosure(this, &MasterImpl::CollectTabletInfoCallback, addr,
-                   tablet_list, finish_counter, mutex);
+    QueryClosure done =
+        std::bind(&MasterImpl::CollectTabletInfoCallback, this, addr,
+                   tablet_list, finish_counter, mutex, _1, _2, _3, _4);
     QueryTabletNodeAsync(addr, FLAGS_tera_master_collect_info_timeout, false, done);
 }
 
-void MasterImpl::SplitTabletAsync(TabletPtr tablet) {
+void MasterImpl::SplitTabletAsync(TabletPtr tablet, const std::string& split_key) {
     const std::string& table_name = tablet->GetTableName();
     const std::string& server_addr = tablet->GetServerAddr();
     const std::string& key_start = tablet->GetKeyStart();
@@ -3692,16 +3691,18 @@ void MasterImpl::SplitTabletAsync(TabletPtr tablet) {
     request->mutable_key_range()->set_key_end(key_end);
     request->add_child_tablets(tablet->GetTable()->GetNextTabletNo());
     request->add_child_tablets(tablet->GetTable()->GetNextTabletNo());
+    request->set_split_key(split_key);
 
     tablet->ToMeta(request->mutable_tablet_meta());
     std::vector<uint64_t> snapshots;
     tablet->GetTable()->ListSnapshot(&snapshots);
     LOG(INFO) << "SplitTabletAsync snapshot num " << snapshots.size();
-    Closure<void, SplitTabletRequest*, SplitTabletResponse*, bool, int>* done =
-        NewClosure(this, &MasterImpl::SplitTabletCallback, tablet);
+    SplitClosure done =
+        std::bind(&MasterImpl::SplitTabletCallback, this, tablet, _1, _2, _3, _4);
 
     LOG(INFO) << "SplitTabletAsync id: " << request->sequence_id() << ", "
         << tablet;
+    tablet_availability_->AddNotReadyTablet(tablet->GetPath());
     node_client.SplitTablet(request, response, done);
 }
 
@@ -3726,9 +3727,9 @@ void MasterImpl::SplitTabletCallback(TabletPtr tablet,
             LOG(WARNING) << "fail to split: "
                 << StatusCodeToString(status) << ", " << tablet;
         }
-        UnloadClosure* done =
-            NewClosure(this, &MasterImpl::UnloadTabletCallback, tablet,
-                       FLAGS_tera_master_impl_retry_times);
+        UnloadClosure done =
+            std::bind(&MasterImpl::UnloadTabletCallback, this, tablet,
+                       FLAGS_tera_master_impl_retry_times, _1, _2, _3, _4);
         UnloadTabletAsync(tablet, done);
         return;
     }
@@ -3751,17 +3752,18 @@ void MasterImpl::SplitTabletCallback(TabletPtr tablet,
     TabletNodePtr node;
     if (tabletnode_manager_->FindTabletNode(server_addr, &node)
         && node->uuid_ == tablet->GetServerId()) {
-        node->FinishSplit(tablet);
+        node->FinishSplit();
 
         // schedule next split task
         TabletPtr next_tablet;
-        while (node->SplitNextWaitTablet(&next_tablet)) {
+        std::string split_key;
+        while (node->SplitNextWaitTablet(&next_tablet, &split_key)) {
             if (next_tablet->SetStatusIf(kTableOnSplit, kTableReady)) {
                 next_tablet->SetServerId(node->uuid_);
-                SplitTabletAsync(next_tablet);
+                SplitTabletAsync(next_tablet, split_key);
                 break;
             }
-            node->FinishSplit(next_tablet);
+            node->FinishSplit();
         }
     } else { // server down or restart
         if (tablet->SetStatusIf(kTableOffLine, kTableReady)) {
@@ -3774,13 +3776,14 @@ void MasterImpl::SplitTabletCallback(TabletPtr tablet,
         LOG(ERROR) << "ts refused to split tablet: "
             << StatusCodeToString(status) << ", " << tablet
             << ", tablet status " << StatusCodeToString(tablet->GetStatus());
+        tablet_availability_->EraseNotReadyTablet(tablet->GetPath());
         return;
     }
 
     // scan meta tablet
     if (tablet->GetStatus() == kTableOnSplit) {
-        ScanClosure* done =
-            NewClosure(this, &MasterImpl::ScanMetaCallbackForSplit, tablet);
+        ScanClosure done =
+            std::bind(&MasterImpl::ScanMetaCallbackForSplit, this, tablet, _1, _2, _3, _4);
         ScanMetaTableAsync(tablet->GetTableName(), tablet->GetKeyStart(),
                            tablet->GetKeyEnd(), done);
     }
@@ -3819,7 +3822,7 @@ void MasterImpl::TryLoadTablet(TabletPtr tablet, std::string server_addr) {
             LOG(INFO) << "load tablet " << tablet << " on " << server_addr
                 << " " << FLAGS_tera_master_tabletnode_timeout << "(ms) later";
             ThreadPool::Task task =
-                boost::bind(&MasterImpl::TryMovePendingTablet, this, tablet);
+                std::bind(&MasterImpl::TryMovePendingTablet, this, tablet);
             thread_pool_->DelayTask(FLAGS_tera_master_tabletnode_timeout, task);
             return;
         } else if (GetMasterStatus() == kIsRunning) {
@@ -3860,8 +3863,8 @@ void MasterImpl::TryLoadTablet(TabletPtr tablet, std::string server_addr) {
         }
         if (tablet->SetAddrAndStatusIf(server_addr, kTableOnLoad, kTableOffLine)) {
             tablet->SetServerId(node->uuid_);
-            LoadClosure* done = NewClosure(this, &MasterImpl::LoadTabletCallback ,
-                                           tablet, 0);
+            LoadClosure done = std::bind(&MasterImpl::LoadTabletCallback, this,
+                                           tablet, 0, _1, _2, _3, _4);
             LoadTabletAsync(tablet, done);
         }
         return;
@@ -3892,10 +3895,10 @@ void MasterImpl::TryLoadTablet(TabletPtr tablet, std::string server_addr) {
                     next_tablet->SetExpectServerAddr("");
                 }
                 next_tablet->SetServerId(node->uuid_);
-                WriteClosure* done =
-                    NewClosure(this, &MasterImpl::UpdateMetaForLoadCallback,
-                               next_tablet, FLAGS_tera_master_meta_retry_times);
-                BatchWriteMetaTableAsync(boost::bind(&Tablet::ToMetaTableKeyValue, next_tablet, _1, _2),
+                WriteClosure done =
+                    std::bind(&MasterImpl::UpdateMetaForLoadCallback, this,
+                               next_tablet, FLAGS_tera_master_meta_retry_times, _1, _2, _3, _4);
+                BatchWriteMetaTableAsync(std::bind(&Tablet::ToMetaTableKeyValue, next_tablet, _1, _2),
                                          false, done);
                 break;
             }
@@ -3906,10 +3909,10 @@ void MasterImpl::TryLoadTablet(TabletPtr tablet, std::string server_addr) {
 
     // if server down here, let split callback take care of status switch
     tablet->SetServerId(node->uuid_);
-    WriteClosure* done =
-        NewClosure(this, &MasterImpl::UpdateMetaForLoadCallback, tablet,
-                   FLAGS_tera_master_meta_retry_times);
-    BatchWriteMetaTableAsync(boost::bind(&Tablet::ToMetaTableKeyValue, tablet, _1, _2),
+    WriteClosure done =
+        std::bind(&MasterImpl::UpdateMetaForLoadCallback, this, tablet,
+                   FLAGS_tera_master_meta_retry_times, _1, _2, _3, _4);
+    BatchWriteMetaTableAsync(std::bind(&Tablet::ToMetaTableKeyValue, tablet, _1, _2),
                              false, done);
     return;
 }
@@ -3935,8 +3938,8 @@ void MasterImpl::RetryLoadTablet(TabletPtr tablet, int32_t retry_times) {
         return;
     }
 
-    LoadClosure* done = NewClosure(this, &MasterImpl::LoadTabletCallback, tablet,
-                                   retry_times);
+    LoadClosure done = std::bind(&MasterImpl::LoadTabletCallback, this, tablet,
+                                   retry_times, _1, _2, _3, _4);
     LoadTabletAsync(tablet, done);
     return;
 }
@@ -3953,20 +3956,20 @@ void MasterImpl::RetryUnloadTablet(TabletPtr tablet, int32_t retry_times) {
             TryLoadTablet(tablet);
         } else {
             CHECK(tablet->GetStatus() == kTableOnSplit);
-            ScanClosure* done =
-                NewClosure(this, &MasterImpl::ScanMetaCallbackForSplit, tablet);
+            ScanClosure done =
+                std::bind(&MasterImpl::ScanMetaCallbackForSplit, this, tablet, _1, _2, _3, _4);
             ScanMetaTableAsync(tablet->GetTableName(), tablet->GetKeyStart(),
                                tablet->GetKeyEnd(), done);
         }
         return;
     }
 
-    UnloadClosure* done =
-        NewClosure(this, &MasterImpl::UnloadTabletCallback, tablet, retry_times);
+    UnloadClosure done =
+        std::bind(&MasterImpl::UnloadTabletCallback, this, tablet, retry_times, _1, _2, _3, _4);
     UnloadTabletAsync(tablet, done);
 }
 
-bool MasterImpl::TrySplitTablet(TabletPtr tablet) {
+bool MasterImpl::TrySplitTablet(TabletPtr tablet, const std::string& split_key) {
     const std::string& server_addr = tablet->GetServerAddr();
 
     // abort if server down
@@ -3977,7 +3980,7 @@ bool MasterImpl::TrySplitTablet(TabletPtr tablet) {
     }
 
     // delay split
-    if (!node->TrySplit(tablet)) {
+    if (!node->TrySplit(tablet, split_key)) {
         LOG(INFO) << "delay split table " << tablet->GetPath()
             << ", too many tablets are splitting on server: " << server_addr;
         return false;
@@ -3991,7 +3994,7 @@ bool MasterImpl::TrySplitTablet(TabletPtr tablet) {
     // if server down here, let split callback take care of status switch
     LOG(INFO) << "begin split table " << tablet->GetPath();
     tablet->SetServerId(node->uuid_);
-    SplitTabletAsync(tablet);
+    SplitTabletAsync(tablet, split_key);
     return true;
 }
 
@@ -4012,11 +4015,18 @@ bool MasterImpl::TryMergeTablet(TabletPtr tablet) {
     }
 
     TabletPtr tablet2;
-    if (!tablet_manager_->PickMergeTablet(tablet, &tablet2) ||
-        tablet2->GetStatus() != kTableReady ||
+    if (!tablet_manager_->PickMergeTablet(tablet, &tablet2)) {
+        VLOG(20) << "[merge] merge failed, no proper tablet for " << tablet;
+        return false;
+    }
+
+    if (tablet2->GetStatus() != kTableReady ||
         tablet2->IsBusy() ||
         tablet2->GetCounter().write_workload() >= 1) {
-        VLOG(20) << "[merge] merge failed, none proper tablet";
+        VLOG(20) << "[merge] merge failed, none proper tablet."
+            << " status:" << tablet2->GetStatus()
+            << " isbusy:" << tablet2->IsBusy()
+            << " write workload:" << tablet2->GetCounter().write_workload();
         return false;
     }
 
@@ -4027,26 +4037,41 @@ bool MasterImpl::TryMergeTablet(TabletPtr tablet) {
 }
 
 void MasterImpl::MergeTabletAsync(TabletPtr tablet_p1, TabletPtr tablet_p2) {
-    if (tablet_p1->SetStatusIf(kTableUnLoading, kTableReady) &&
-        tablet_p2->SetStatusIf(kTableUnLoading, kTableReady)) {
-        MutexPtr mu(new Mutex());
-        MergeParam* param1 = new MergeParam(mu, tablet_p2);
-        MergeParam* param2 = new MergeParam(mu, tablet_p1);
-        tablet_p1->SetMergeParam(param1);
-        tablet_p2->SetMergeParam(param2);
-        UnloadClosure* done1 =
-            NewClosure(this, &MasterImpl::UnloadTabletCallback, tablet_p1,
-                       FLAGS_tera_master_impl_retry_times);
-        UnloadClosure* done2 =
-            NewClosure(this, &MasterImpl::UnloadTabletCallback, tablet_p2,
-                       FLAGS_tera_master_impl_retry_times);
-        UnloadTabletAsync(tablet_p1, done1);
-        UnloadTabletAsync(tablet_p2, done2);
-    } else {
-        LOG(WARNING) << "[merge] tablet not ready, merge failed and rollback.";
-        tablet_p1->SetStatusIf(kTableReady, kTableUnLoading);
-        tablet_p2->SetStatusIf(kTableReady, kTableUnLoading);
+    bool switch_ok = false;
+
+    // prepare
+    switch_ok = tablet_p1->SetStatusIf(kTableUnLoading, kTableReady);
+    if (!switch_ok) {
+        // why this tablet is not Ready? maybe someone changes it's state
+        LOG(WARNING) << "[merge] tablet not ready, merge failed:" << tablet_p1;
+        return;
     }
+    switch_ok = tablet_p2->SetStatusIf(kTableUnLoading, kTableReady);
+    if (!switch_ok) {
+        // why this tablet is not Ready? maybe someone changes it's state
+        LOG(WARNING) << "[merge] tablet not ready, merge failed:" << tablet_p2;
+        // rollback
+        CHECK(tablet_p1->SetStatusIf(kTableReady, kTableUnLoading));
+        return;
+    }
+
+    // commit
+    MutexPtr mu(new Mutex());
+    MergeParam* param1 = new MergeParam(mu, tablet_p2);
+    MergeParam* param2 = new MergeParam(mu, tablet_p1);
+    tablet_p1->SetMergeParam(param1);
+    tablet_p2->SetMergeParam(param2);
+    UnloadClosure done1 =
+        std::bind(&MasterImpl::UnloadTabletCallback, this, tablet_p1,
+                   FLAGS_tera_master_impl_retry_times, _1, _2, _3, _4);
+    UnloadClosure done2 =
+        std::bind(&MasterImpl::UnloadTabletCallback, this, tablet_p2,
+                   FLAGS_tera_master_impl_retry_times, _1, _2, _3, _4);
+
+    tablet_availability_->AddNotReadyTablet(tablet_p1->GetPath());
+    tablet_availability_->AddNotReadyTablet(tablet_p2->GetPath());
+    UnloadTabletAsync(tablet_p1, done1);
+    UnloadTabletAsync(tablet_p2, done2);
 }
 
 void MasterImpl::MergeTabletAsyncPhase2(TabletPtr tablet_p1, TabletPtr tablet_p2) {
@@ -4126,17 +4151,17 @@ void MasterImpl::MergeTabletAsyncPhase2(TabletPtr tablet_p1, TabletPtr tablet_p2
     new_meta.set_path(new_path);
     new_meta.set_size(tablet_p1->GetDataSize() + tablet_p2->GetDataSize());
 
-    Tablet tablet_c(new_meta, tablet_p1->GetTable());
-    tablet_c.ToMetaTableKeyValue(&packed_key, &packed_value);
+    TabletPtr tablet_c(new Tablet(new_meta, tablet_p1->GetTable()));
+    tablet_c->ToMetaTableKeyValue(&packed_key, &packed_value);
     mu_seq = request->add_row_list();
     mu_seq->set_row_key(packed_key);
     mutation = mu_seq->add_mutation_sequence();
     mutation->set_type(kPut);
     mutation->set_value(packed_value);
 
-    WriteClosure* done =
-        NewClosure(this, &MasterImpl::MergeTabletWriteMetaCallback, new_meta,
-                   tablet_p1, tablet_p2, FLAGS_tera_master_meta_retry_times);
+    WriteClosure done =
+        std::bind(&MasterImpl::MergeTabletWriteMetaCallback, this, tablet_c,
+                   tablet_p1, tablet_p2, FLAGS_tera_master_meta_retry_times, _1, _2, _3, _4);
     tabletnode::TabletNodeClient meta_node_client(meta_addr);
     meta_node_client.WriteTablet(request, response, done);
 }
@@ -4166,7 +4191,7 @@ void MasterImpl::MergeTabletUnloadCallback(TabletPtr tablet) {
     }
 }
 
-void MasterImpl::MergeTabletWriteMetaCallback(TabletMeta new_meta,
+void MasterImpl::MergeTabletWriteMetaCallback(TabletPtr tablet_c,
                                               TabletPtr tablet_p1,
                                               TabletPtr tablet_p2,
                                               int32_t retry_times,
@@ -4183,11 +4208,11 @@ void MasterImpl::MergeTabletWriteMetaCallback(TabletMeta new_meta,
         if (failed) {
             LOG(ERROR) << "[merge] fail to add to meta tablet: "
                 << sofa::pbrpc::RpcErrorCodeToString(error_code) << ", "
-                << new_meta.ShortDebugString();
+                << tablet_c;
         } else {
             LOG(ERROR) << "[merge] fail to add to meta tablet: "
                 << StatusCodeToString(status) << ", "
-                << new_meta.ShortDebugString();
+                << tablet_c;
         }
         if (retry_times <= 0) {
             LOG(ERROR) << "[merge] fail to update meta";
@@ -4195,9 +4220,9 @@ void MasterImpl::MergeTabletWriteMetaCallback(TabletMeta new_meta,
         } else {
             std::string meta_addr;
             if (tablet_manager_->GetMetaTabletAddr(&meta_addr)) {
-                WriteClosure* done =
-                    NewClosure(this, &MasterImpl::MergeTabletWriteMetaCallback, new_meta,
-                               tablet_p1, tablet_p2, retry_times - 1);
+                WriteClosure done =
+                    std::bind(&MasterImpl::MergeTabletWriteMetaCallback, this, tablet_c,
+                               tablet_p1, tablet_p2, retry_times - 1, _1, _2, _3, _4);
                 tabletnode::TabletNodeClient meta_node_client(meta_addr);
                 meta_node_client.WriteTablet(request, response, done);
                 return;
@@ -4211,16 +4236,18 @@ void MasterImpl::MergeTabletWriteMetaCallback(TabletMeta new_meta,
         return;
     }
 
-    TabletPtr tablet_c;
-    if (tablet_p1->GetKeyStart() == new_meta.key_range().key_start()) {
-        DeleteTablet(tablet_p1);
-        tablet_manager_->AddTablet(new_meta, TableSchema(), &tablet_c);
-        DeleteTablet(tablet_p2);
+    TabletMeta new_meta;
+    tablet_c->ToMeta(&new_meta);
+    TablePtr table = tablet_c->GetTable();
+    if (tablet_p1->GetKeyStart() == tablet_c->GetKeyStart()) {
+        table->MergeTablets(tablet_p1, tablet_p2, new_meta, &tablet_c);
     } else {
-        DeleteTablet(tablet_p2);
-        tablet_manager_->AddTablet(new_meta, TableSchema(), &tablet_c);
-        DeleteTablet(tablet_p1);
+        table->MergeTablets(tablet_p2, tablet_p1, new_meta, &tablet_c);
     }
+
+    tablet_availability_->EraseNotReadyTablet(tablet_p1->GetPath());
+    tablet_availability_->EraseNotReadyTablet(tablet_p2->GetPath());
+    tablet_availability_->AddNotReadyTablet(tablet_c->GetPath());
     ProcessOffLineTablet(tablet_c);
     TryLoadTablet(tablet_c);
     delete request;
@@ -4243,7 +4270,7 @@ void MasterImpl::MergeTabletFailed(TabletPtr tablet_p1, TabletPtr tablet_p2) {
 }
 
 void MasterImpl::BatchWriteMetaTableAsync(ToMetaFunc meta_entry,
-                                          bool is_delete, WriteClosure* done) {
+                                          bool is_delete, WriteClosure done) {
     std::vector<ToMetaFunc> meta_entries;
     meta_entries.push_back(meta_entry);
     BatchWriteMetaTableAsync(meta_entries, is_delete, done);
@@ -4251,22 +4278,22 @@ void MasterImpl::BatchWriteMetaTableAsync(ToMetaFunc meta_entry,
 
 void MasterImpl::BatchWriteMetaTableAsync(TablePtr table,
                                           const std::vector<TabletPtr>& tablets,
-                                          bool is_delete, WriteClosure* done) {
+                                          bool is_delete, WriteClosure done) {
     std::vector<ToMetaFunc> meta_entries;
     TablePtr null_ptr;
     if (table != null_ptr) {
-        meta_entries.push_back(boost::bind(&Table::ToMetaTableKeyValue, table, _1, _2));
+        meta_entries.push_back(std::bind(&Table::ToMetaTableKeyValue, table, _1, _2));
     }
     if (tablets.size() != 0) {
         for (size_t i = 0; i < tablets.size(); ++i) {
-            meta_entries.push_back(boost::bind(&Tablet::ToMetaTableKeyValue, tablets[i], _1, _2));
+            meta_entries.push_back(std::bind(&Tablet::ToMetaTableKeyValue, tablets[i], _1, _2));
         }
     }
     BatchWriteMetaTableAsync(meta_entries, is_delete, done);
 }
 
 void MasterImpl::BatchWriteMetaTableAsync(std::vector<ToMetaFunc> meta_entries,
-                                          bool is_delete, WriteClosure* done) {
+                                          bool is_delete, WriteClosure done) {
     VLOG(5) << "WriteMetaTableAsync()";
     std::string meta_addr;
     if (!tablet_manager_->GetMetaTabletAddr(&meta_addr)) {
@@ -4338,10 +4365,10 @@ void MasterImpl::AddMetaCallback(TablePtr table,
             rpc_response->set_status(kMetaTabletError);
             rpc_done->Run();
         } else {
-            WriteClosure* done =
-                NewClosure(this, &MasterImpl::AddMetaCallback, table,
+            WriteClosure done =
+                std::bind(&MasterImpl::AddMetaCallback, this, table,
                            tablets, retry_times - 1, rpc_request, rpc_response,
-                           rpc_done);
+                           rpc_done, _1, _2, _3, _4);
             SuspendMetaOperation(table, tablets, false, done);
         }
         return;
@@ -4386,10 +4413,10 @@ void MasterImpl::UpdateTableRecordForDisableCallback(TablePtr table, int32_t ret
             rpc_response->set_status(kMetaTabletError);
             rpc_done->Run();
         } else {
-            WriteClosure* done =
-                NewClosure(this, &MasterImpl::UpdateTableRecordForDisableCallback,
-                           table, retry_times - 1, rpc_response, rpc_done);
-            SuspendMetaOperation(boost::bind(&Table::ToMetaTableKeyValue, table, _1, _2),
+            WriteClosure done =
+                std::bind(&MasterImpl::UpdateTableRecordForDisableCallback, this,
+                           table, retry_times - 1, rpc_response, rpc_done, _1, _2, _3, _4);
+            SuspendMetaOperation(std::bind(&Table::ToMetaTableKeyValue, table, _1, _2),
                                  false, done);
         }
         return;
@@ -4404,9 +4431,9 @@ void MasterImpl::UpdateTableRecordForDisableCallback(TablePtr table, int32_t ret
     for (uint32_t i = 0; i < tablet_meta_list.size(); ++i) {
         TabletPtr tablet = tablet_meta_list[i];
         if (tablet->SetStatusIf(kTableUnLoading, kTableReady, kTableDisable)) {
-            UnloadClosure* done =
-                NewClosure(this, &MasterImpl::UnloadTabletCallback, tablet,
-                           FLAGS_tera_master_impl_retry_times);
+            UnloadClosure done =
+                std::bind(&MasterImpl::UnloadTabletCallback, this, tablet,
+                           FLAGS_tera_master_impl_retry_times, _1, _2, _3, _4);
             UnloadTabletAsync(tablet, done);
         } else {
             tablet->SetStatusIf(kTabletDisable, kTableOffLine, kTableDisable);
@@ -4442,10 +4469,10 @@ void MasterImpl::UpdateTableRecordForEnableCallback(TablePtr table, int32_t retr
             rpc_response->set_status(kMetaTabletError);
             rpc_done->Run();
         } else {
-            WriteClosure* done =
-                NewClosure(this, &MasterImpl::UpdateTableRecordForEnableCallback,
-                           table, retry_times - 1, rpc_response, rpc_done);
-            SuspendMetaOperation(boost::bind(&Table::ToMetaTableKeyValue, table, _1, _2),
+            WriteClosure done =
+                std::bind(&MasterImpl::UpdateTableRecordForEnableCallback, this,
+                           table, retry_times - 1, rpc_response, rpc_done, _1, _2, _3, _4);
+            SuspendMetaOperation(std::bind(&Table::ToMetaTableKeyValue, table, _1, _2),
                                  false, done);
         }
         return;
@@ -4497,10 +4524,10 @@ void MasterImpl::UpdateTableRecordForUpdateCallback(TablePtr table, int32_t retr
             rpc_done->Run();
             table->SetSchemaIsSyncing(false);
         } else {
-            WriteClosure* done =
-                NewClosure(this, &MasterImpl::UpdateTableRecordForUpdateCallback,
-                           table, retry_times - 1, rpc_response, rpc_done);
-            SuspendMetaOperation(boost::bind(&Table::ToMetaTableKeyValue, table, _1, _2),
+            WriteClosure done =
+                std::bind(&MasterImpl::UpdateTableRecordForUpdateCallback, this,
+                           table, retry_times - 1, rpc_response, rpc_done, _1, _2, _3, _4);
+            SuspendMetaOperation(std::bind(&Table::ToMetaTableKeyValue, table, _1, _2),
                                  false, done);
         }
         return;
@@ -4560,11 +4587,11 @@ void MasterImpl::UpdateTableRecordForRenameCallback(TablePtr table, int32_t retr
             rpc_response->set_status(kMetaTabletError);
             rpc_done->Run();
         } else {
-            WriteClosure* done =
-                NewClosure(this, &MasterImpl::UpdateTableRecordForRenameCallback,
+            WriteClosure done =
+                std::bind(&MasterImpl::UpdateTableRecordForRenameCallback, this,
                            table, retry_times - 1, rpc_response, rpc_done,
-                           old_alias, new_alias);
-            SuspendMetaOperation(boost::bind(&Table::ToMetaTableKeyValue, table, _1, _2),
+                           old_alias, new_alias, _1, _2, _3, _4);
+            SuspendMetaOperation(std::bind(&Table::ToMetaTableKeyValue, table, _1, _2),
                                  false, done);
         }
         return;
@@ -4603,10 +4630,10 @@ void MasterImpl::UpdateTabletRecordCallback(TabletPtr tablet, int32_t retry_time
         if (retry_times <= 0) {
             LOG(ERROR) << kSms << "abort update meta tablet, " << tablet;
         } else {
-            WriteClosure* done =
-                NewClosure(this, &MasterImpl::UpdateTabletRecordCallback,
-                           tablet, retry_times - 1);
-            SuspendMetaOperation(boost::bind(&Tablet::ToMetaTableKeyValue, tablet, _1, _2),
+            WriteClosure done =
+                std::bind(&MasterImpl::UpdateTabletRecordCallback, this,
+                           tablet, retry_times - 1, _1, _2, _3, _4);
+            SuspendMetaOperation(std::bind(&Tablet::ToMetaTableKeyValue, tablet, _1, _2),
                                  false, done);
         }
         return;
@@ -4652,10 +4679,10 @@ void MasterImpl::UpdateMetaForLoadCallback(TabletPtr tablet, int32_t retry_times
                 while (node->LoadNextWaitTablet(&next_tablet)) {
                     if (next_tablet->SetAddrAndStatusIf(server_addr, kTableOnLoad, kTableOffLine)) {
                         next_tablet->SetServerId(node->uuid_);
-                        WriteClosure* done =
-                            NewClosure(this, &MasterImpl::UpdateMetaForLoadCallback,
-                                       next_tablet, FLAGS_tera_master_meta_retry_times);
-                        BatchWriteMetaTableAsync(boost::bind(&Tablet::ToMetaTableKeyValue, next_tablet, _1, _2),
+                        WriteClosure done =
+                            std::bind(&MasterImpl::UpdateMetaForLoadCallback, this,
+                                       next_tablet, FLAGS_tera_master_meta_retry_times, _1, _2, _3, _4);
+                        BatchWriteMetaTableAsync(std::bind(&Tablet::ToMetaTableKeyValue, next_tablet, _1, _2),
                                                  false, done);
                         break;
                     }
@@ -4663,10 +4690,10 @@ void MasterImpl::UpdateMetaForLoadCallback(TabletPtr tablet, int32_t retry_times
                 }
             }
         } else {
-            WriteClosure* done =
-                NewClosure(this, &MasterImpl::UpdateMetaForLoadCallback,
-                           tablet, retry_times - 1);
-            SuspendMetaOperation(boost::bind(&Tablet::ToMetaTableKeyValue, tablet, _1, _2),
+            WriteClosure done =
+                std::bind(&MasterImpl::UpdateMetaForLoadCallback, this,
+                           tablet, retry_times - 1, _1, _2, _3, _4);
+            SuspendMetaOperation(std::bind(&Tablet::ToMetaTableKeyValue, tablet, _1, _2),
                                  false, done);
         }
         return;
@@ -4674,8 +4701,8 @@ void MasterImpl::UpdateMetaForLoadCallback(TabletPtr tablet, int32_t retry_times
     LOG(INFO) << "update meta tablet success, " << tablet;
 
     // if server down here, let split callback take care of status switch
-    LoadClosure* done = NewClosure(this, &MasterImpl::LoadTabletCallback ,
-                                   tablet, 0);
+    LoadClosure done = std::bind(&MasterImpl::LoadTabletCallback, this,
+                                   tablet, 0, _1, _2, _3, _4);
     LoadTabletAsync(tablet, done);
 }
 
@@ -4708,9 +4735,9 @@ void MasterImpl::DeleteTableCallback(TablePtr table,
             rpc_response->set_status(kMetaTabletError);
             rpc_done->Run();
         } else {
-            WriteClosure* done =
-                NewClosure(this, &MasterImpl::DeleteTableCallback, table, tablets,
-                           retry_times - 1, rpc_response, rpc_done);
+            WriteClosure done =
+                std::bind(&MasterImpl::DeleteTableCallback, this, table, tablets,
+                           retry_times - 1, rpc_response, rpc_done, _1, _2, _3, _4);
             SuspendMetaOperation(table, tablets, true, done);
         }
         return;
@@ -4725,7 +4752,9 @@ void MasterImpl::DeleteTableCallback(TablePtr table,
         TabletPtr tablet = tablets[i];
         DeleteTablet(tablet);
     }
-    gc_strategy_->Clear(table->GetTableName());
+    if (gc_strategy_ != NULL) {
+        gc_strategy_->Clear(table->GetTableName());
+    }
     LOG(INFO) << "delete meta table record success, " << table;
     rpc_response->set_status(kMasterOk);
     rpc_done->Run();
@@ -4739,7 +4768,7 @@ void MasterImpl::DeleteTablet(TabletPtr tablet) {
 void MasterImpl::ScanMetaTableAsync(const std::string& table_name,
                                     const std::string& tablet_key_start,
                                     const std::string& tablet_key_end,
-                                    ScanClosure* done) {
+                                    ScanClosure done) {
     std::string meta_addr;
     if (!tablet_manager_->GetMetaTabletAddr(&meta_addr)) {
         SuspendMetaOperation(table_name, tablet_key_start, tablet_key_end, done);
@@ -4778,8 +4807,8 @@ void MasterImpl::ScanMetaCallbackForSplit(TabletPtr tablet,
             LOG(ERROR) << "fail to scan meta table: "
                 << StatusCodeToString(response->status()) << ", " << tablet;
         }
-        ScanClosure* done =
-            NewClosure(this, &MasterImpl::ScanMetaCallbackForSplit, tablet);
+        ScanClosure done =
+            std::bind(&MasterImpl::ScanMetaCallbackForSplit, this, tablet, _1, _2, _3, _4);
         SuspendMetaOperation(tablet->GetTableName(), tablet->GetKeyStart(),
                              tablet->GetKeyEnd(), done);
         delete response;
@@ -4792,9 +4821,10 @@ void MasterImpl::ScanMetaCallbackForSplit(TabletPtr tablet,
         LOG(ERROR) << kSms << "split into " << record_size << " pieces, "
             << tablet;
         // TryKickTabletNode(tablet->GetServerAddr());
-        WriteClosure* closure =
-                NewClosure(this, &MasterImpl::RepairMetaAfterSplitCallback,
-                           tablet, response, FLAGS_tera_master_meta_retry_times);
+        WriteClosure closure =
+                std::bind(&MasterImpl::RepairMetaAfterSplitCallback, this,
+                           tablet, response, FLAGS_tera_master_meta_retry_times,
+                           _1, _2, _3, _4);
         RepairMetaTableAsync(tablet, response, closure);
         return;
     }
@@ -4821,9 +4851,10 @@ void MasterImpl::ScanMetaCallbackForSplit(TabletPtr tablet,
         } else {
             LOG(ERROR) << kSms << "split into " << record_size << " pieces, "
                 << tablet;
-            WriteClosure* closure =
-                    NewClosure(this, &MasterImpl::RepairMetaAfterSplitCallback,
-                               tablet, response, FLAGS_tera_master_meta_retry_times);
+            WriteClosure closure =
+                    std::bind(&MasterImpl::RepairMetaAfterSplitCallback, this,
+                               tablet, response, FLAGS_tera_master_meta_retry_times,
+                               _1, _2, _3, _4);
             RepairMetaTableAsync(tablet, response, closure);
         }
         return;
@@ -4842,25 +4873,25 @@ void MasterImpl::ScanMetaCallbackForSplit(TabletPtr tablet,
         || (key_end.empty() && second_key_start.empty())) {
         LOG(ERROR) << kSms << "two splits are not successive, " << tablet;
         // TryKickTabletNode(tablet->GetServerAddr());
-        WriteClosure* closure =
-                NewClosure(this, &MasterImpl::RepairMetaAfterSplitCallback,
-                           tablet, response, FLAGS_tera_master_meta_retry_times);
+        WriteClosure closure =
+                std::bind(&MasterImpl::RepairMetaAfterSplitCallback, this,
+                           tablet, response, FLAGS_tera_master_meta_retry_times,
+                           _1, _2, _3, _4);
         RepairMetaTableAsync(tablet, response, closure);
         return;
     }
-    TabletPtr first_tablet, second_tablet;
-    // update second child tablet meta
-    second_meta.set_status(kTableOffLine);
-    tablet_manager_->AddTablet(second_meta, TableSchema(), &second_tablet);
 
-    // delete old tablet
-    DeleteTablet(tablet);
-
-    // update first child tablet meta
     first_meta.set_status(kTableOffLine);
-    tablet_manager_->AddTablet(first_meta, TableSchema(), &first_tablet);
+    second_meta.set_status(kTableOffLine);
+    TabletPtr first_tablet, second_tablet;
+    TablePtr table = tablet->GetTable();
+    table->SplitTablet(tablet, first_meta, second_meta, &first_tablet, &second_tablet);
 
-    LOG(INFO) << "try load child tablets, \nfirst: " << first_meta.ShortDebugString()
+    tablet_availability_->EraseNotReadyTablet(tablet->GetPath());
+    tablet_availability_->AddNotReadyTablet(first_tablet->GetPath());
+    tablet_availability_->AddNotReadyTablet(second_tablet->GetPath());
+    LOG(INFO) << "split finish, " << tablet << ", try load child tablets, "
+        << "\nfirst: " << first_meta.ShortDebugString()
         << "\nsecond: " << second_meta.ShortDebugString();
     ProcessOffLineTablet(first_tablet);
     TryLoadTablet(first_tablet, server_addr);
@@ -4871,7 +4902,7 @@ void MasterImpl::ScanMetaCallbackForSplit(TabletPtr tablet,
 
 void MasterImpl::RepairMetaTableAsync(TabletPtr tablet,
                                       ScanTabletResponse* scan_resp,
-                                      WriteClosure* done) {
+                                      WriteClosure done) {
     std::string meta_addr;
     if (!tablet_manager_->GetMetaTabletAddr(&meta_addr)) {
         SuspendMetaOperation(tablet, scan_resp, done);
@@ -4941,9 +4972,9 @@ void MasterImpl::RepairMetaAfterSplitCallback(TabletPtr tablet,
             ProcessOffLineTablet(tablet);
             TryLoadTablet(tablet);
         } else {
-            WriteClosure* done =
-                NewClosure(this, &MasterImpl::RepairMetaAfterSplitCallback,
-                           tablet, scan_resp, retry_times - 1);
+            WriteClosure done =
+                std::bind(&MasterImpl::RepairMetaAfterSplitCallback, this,
+                           tablet, scan_resp, retry_times - 1, _1, _2, _3, _4);
             SuspendMetaOperation(tablet, scan_resp, done);
         }
         return;
@@ -4957,27 +4988,27 @@ void MasterImpl::RepairMetaAfterSplitCallback(TabletPtr tablet,
 }
 
 void MasterImpl::SuspendMetaOperation(TablePtr table, const std::vector<TabletPtr>& tablets,
-                                      bool is_delete, WriteClosure* done) {
+                                      bool is_delete, WriteClosure done) {
     std::vector<ToMetaFunc> meta_entries;
     TablePtr null_ptr;
     if (table != null_ptr) {
-        meta_entries.push_back(boost::bind(&Table::ToMetaTableKeyValue, table, _1, _2));
+        meta_entries.push_back(std::bind(&Table::ToMetaTableKeyValue, table, _1, _2));
     }
     for (size_t i = 0; i < tablets.size(); ++i) {
-        meta_entries.push_back(boost::bind(&Tablet::ToMetaTableKeyValue, tablets[i], _1, _2));
+        meta_entries.push_back(std::bind(&Tablet::ToMetaTableKeyValue, tablets[i], _1, _2));
     }
     SuspendMetaOperation(meta_entries, is_delete, done);
 }
 
 void MasterImpl::SuspendMetaOperation(ToMetaFunc meta_entry,
-                                      bool is_delete, WriteClosure* done) {
+                                      bool is_delete, WriteClosure done) {
     std::vector<ToMetaFunc> meta_entries;
     meta_entries.push_back(meta_entry);
     SuspendMetaOperation(meta_entries, is_delete, done);
 }
 
 void MasterImpl::SuspendMetaOperation(std::vector<ToMetaFunc> meta_entries,
-                                      bool is_delete, WriteClosure* done) {
+                                      bool is_delete, WriteClosure done) {
     WriteTask* task = new WriteTask;
     task->type_ = kWrite;
     task->done_ = done;
@@ -4989,7 +5020,7 @@ void MasterImpl::SuspendMetaOperation(std::vector<ToMetaFunc> meta_entries,
 void MasterImpl::SuspendMetaOperation(const std::string& table_name,
                                       const std::string& tablet_key_start,
                                       const std::string& tablet_key_end,
-                                      ScanClosure* done) {
+                                      ScanClosure done) {
     ScanTask* task = new ScanTask;
     task->type_ = kScan;
     task->done_ = done;
@@ -5001,7 +5032,7 @@ void MasterImpl::SuspendMetaOperation(const std::string& table_name,
 
 void MasterImpl::SuspendMetaOperation(TabletPtr tablet,
                                       ScanTabletResponse* scan_resp,
-                                      WriteClosure* done) {
+                                      WriteClosure done) {
     RepairTask* task = new RepairTask;
     task->type_ = kRepair;
     task->tablet_ = tablet;
@@ -5052,8 +5083,8 @@ void MasterImpl::ResumeMetaOperation() {
     meta_task_mutex_.Unlock();
 }
 
-void MasterImpl::TryMoveTablet(TabletPtr tablet, const std::string& server_addr) {
-    if (tablet->GetServerAddr() == server_addr) {
+void MasterImpl::TryMoveTablet(TabletPtr tablet, const std::string& server_addr, bool in_place) {
+    if (!in_place && (tablet->GetServerAddr() == server_addr)) {
         return;
     }
     LOG(INFO) << "Move " << tablet << " from " << tablet->GetServerAddr()
@@ -5065,9 +5096,10 @@ void MasterImpl::TryMoveTablet(TabletPtr tablet, const std::string& server_addr)
             tabletnode_manager_->FindTabletNode(server_addr, &node)) {
             node->PlanToMoveIn();
         }
-        UnloadClosure* done =
-            NewClosure(this, &MasterImpl::UnloadTabletCallback, tablet,
-                       FLAGS_tera_master_impl_retry_times);
+        tablet_availability_->AddNotReadyTablet(tablet->GetPath());
+        UnloadClosure done =
+            std::bind(&MasterImpl::UnloadTabletCallback, this, tablet,
+                       FLAGS_tera_master_impl_retry_times, _1, _2, _3, _4);
         UnloadTabletAsync(tablet, done);
     }
 }
@@ -5081,9 +5113,9 @@ void MasterImpl::ProcessOffLineTablet(TabletPtr tablet) {
 
 void MasterImpl::ProcessReadyTablet(TabletPtr tablet) {
     if (tablet->SetStatusIf(kTableUnLoading, kTableReady, kTableDisable)) {
-        UnloadClosure* done =
-            NewClosure(this, &MasterImpl::UnloadTabletCallback, tablet,
-                       FLAGS_tera_master_impl_retry_times);
+        UnloadClosure done =
+            std::bind(&MasterImpl::UnloadTabletCallback, this, tablet,
+                       FLAGS_tera_master_impl_retry_times, _1, _2, _3, _4);
         UnloadTabletAsync(tablet, done);
         return;
     }
@@ -5181,7 +5213,7 @@ void MasterImpl::ScheduleTabletNodeGc() {
     mutex_.AssertHeld();
     LOG(INFO) << "[gc] ScheduleTabletNodeGcTimer";
     ThreadPool::Task task =
-        boost::bind(&MasterImpl::DoTabletNodeGc, this);
+        std::bind(&MasterImpl::DoTabletNodeGc, this);
     gc_timer_id_ = thread_pool_->DelayTask(
         FLAGS_tera_master_gc_period, task);
 }
@@ -5205,7 +5237,7 @@ void MasterImpl::DoAvailableCheck() {
 void MasterImpl::ScheduleAvailableCheck() {
     mutex_.AssertHeld();
     ThreadPool::Task task =
-        boost::bind(&MasterImpl::DoAvailableCheck, this);
+        std::bind(&MasterImpl::DoAvailableCheck, this);
     thread_pool_->DelayTask(
         FLAGS_tera_master_availability_check_period * 1000, task);
 }
@@ -5235,7 +5267,10 @@ void MasterImpl::DoTabletNodeGc() {
         }
     }
 
-    bool need_gc = gc_strategy_->PreQuery();
+    bool need_gc = true;
+    if (gc_strategy_ != NULL) {
+        need_gc = gc_strategy_->PreQuery();
+    }
 
     MutexLock lock(&mutex_);
     if (!need_gc) {
@@ -5250,7 +5285,15 @@ void MasterImpl::DoTabletNodeGc() {
 }
 
 void MasterImpl::DoTabletNodeGcPhase2() {
-    gc_strategy_->PostQuery();
+    if (FLAGS_tera_master_gc_strategy == "trackable") {
+        std::vector<TablePtr> table_list;
+        tablet_manager_->ShowTable(&table_list, NULL);
+        for (uint32_t i = 0; i < table_list.size(); ++i) {
+            table_list[i]->CleanObsoleteFile();
+        }
+    } else {
+        gc_strategy_->PostQuery();
+    }
 
     LOG(INFO) << "[gc] try clean trash dir.";
     int64_t start = common::timer::get_micros();
@@ -5273,7 +5316,7 @@ void MasterImpl::RenameTable(const RenameTableRequest* request,
     MasterStatus master_status = GetMasterStatus();
     if (master_status != kIsRunning) {
         LOG(ERROR) << "master is not ready, status_ = "
-            << StatusCodeToString(master_status);
+            << StatusCodeToString(static_cast<StatusCode>(master_status));
         response->set_status(static_cast<StatusCode>(master_status));
         done->Run();
         return;
@@ -5331,11 +5374,11 @@ void MasterImpl::RenameTable(const RenameTableRequest* request,
     schema.set_alias(new_alias);
     table->SetSchema(schema);
     // write meta tablet
-    WriteClosure* closure =
-        NewClosure(this, &MasterImpl::UpdateTableRecordForRenameCallback, table,
+    WriteClosure closure =
+        std::bind(&MasterImpl::UpdateTableRecordForRenameCallback, this, table,
                    FLAGS_tera_master_meta_retry_times, response, done,
-                   old_alias, new_alias);
-    BatchWriteMetaTableAsync(boost::bind(&Table::ToMetaTableKeyValue, table, _1, _2),
+                   old_alias, new_alias, _1, _2, _3, _4);
+    BatchWriteMetaTableAsync(std::bind(&Table::ToMetaTableKeyValue, table, _1, _2),
                              false, closure);
 }
 
@@ -5349,7 +5392,7 @@ void MasterImpl::RefreshTableCounter() {
 
     // Set refresh interval as  query-interval / 2, because each table counter
     // changed after query callback reached.
-    ThreadPool::Task task = boost::bind(&MasterImpl::RefreshTableCounter, this);
+    ThreadPool::Task task = std::bind(&MasterImpl::RefreshTableCounter, this);
     thread_pool_->DelayTask(FLAGS_tera_master_query_tabletnode_period / 2, task);
     LOG(INFO) << "RefreshTableCounter, cost: "
         << ((get_micros() - start) / 1000) << "ms.";
@@ -5359,5 +5402,6 @@ std::string MasterImpl::ProfilingLog() {
     return "[main : " + thread_pool_->ProfilingLog() + "] [query : "
         + query_thread_pool_->ProfilingLog() + "]";
 }
+
 } // namespace master
 } // namespace tera

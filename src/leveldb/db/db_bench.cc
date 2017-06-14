@@ -307,7 +307,7 @@ struct SharedState {
   int num_done;
   bool start;
 
-  SharedState() : cv(&mu) { }
+  SharedState() : cv(&mu), total(0), num_initialized(0), num_done(0), start(false) { }
 };
 
 // Per-thread state for concurrent executions of the same benchmark.
@@ -319,7 +319,8 @@ struct ThreadState {
 
   ThreadState(int index)
       : tid(index),
-        rand(1000 + index) {
+        rand(1000 + index),
+        shared(NULL) {
   }
 };
 
@@ -466,7 +467,7 @@ class Benchmark {
       write_options_.disable_wal = FLAGS_disable_wal;
 
       void (Benchmark::*method)(ThreadState*) = NULL;
-      bool fresh_db = false;
+      //bool fresh_db = false;
       int num_threads = FLAGS_threads;
 
       if (name == Slice("fillseq")) {
@@ -546,18 +547,18 @@ class Benchmark {
         }
       }
 
-      if (fresh_db) {
-        if (FLAGS_use_existing_db) {
-          fprintf(stdout, "%-12s : skipped (--use_existing_db is true)\n",
-                  name.ToString().c_str());
-          method = NULL;
-        } else {
-          delete db_;
-          db_ = NULL;
-          DestroyDB(FLAGS_db, Options());
-          Open();
-        }
-      }
+      //if (fresh_db) {
+      //  if (FLAGS_use_existing_db) {
+      //    fprintf(stdout, "%-12s : skipped (--use_existing_db is true)\n",
+      //            name.ToString().c_str());
+      //    method = NULL;
+      //  } else {
+      //    delete db_;
+      //    db_ = NULL;
+      //    DestroyDB(FLAGS_db, Options());
+      //    Open();
+      //  }
+      //}
 
       if (method != NULL) {
         RunBenchmark(num_threads, name, method);

@@ -227,7 +227,7 @@ Status InMemoryEnv::NewWritableFile(const std::string& fname,
 }
 
 // FileExists
-bool InMemoryEnv::FileExists(const std::string& fname)
+Status InMemoryEnv::FileExists(const std::string& fname)
 {
     return dfs_env_->FileExists(fname);
 }

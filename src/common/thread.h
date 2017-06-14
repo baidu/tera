@@ -7,15 +7,15 @@
 #ifndef  TERA_COMMON_THREAD_H_
 #define  TERA_COMMON_THREAD_H_
 
+#include <functional>
 #include <pthread.h>
-
-#include <boost/function.hpp>
 
 namespace common {
 
 class Thread {
 public:
-    bool Start(boost::function<void()> thread_proc) {
+    Thread() : tid_(0) {}
+    bool Start(std::function<void()> thread_proc) {
         user_proc_ = thread_proc;
         int ret = pthread_create(&tid_, NULL, ProcWrapper, this);
         return (ret == 0);
@@ -32,7 +32,7 @@ private:
     }
 
 private:
-    boost::function<void()> user_proc_;
+    std::function<void()> user_proc_;
     pthread_t tid_;
 };
 

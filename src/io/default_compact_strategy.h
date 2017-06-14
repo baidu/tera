@@ -6,6 +6,8 @@
 #define TERA_IO_DEFAULT_COMPACT_STRATEGY_H_
 
 #include "leveldb/compact_strategy.h"
+#include "leveldb/comparator.h"
+#include "leveldb/slice.h"
 
 #include "common/mutex.h"
 #include "io/io_utils.h"
@@ -24,6 +26,8 @@ public:
     virtual bool Drop(const Slice& k, uint64_t n,
                       const std::string& lower_bound);
 
+    virtual const leveldb::Comparator* RowKeyComparator();
+
     // tera-specific, based on all-level iterators.
     // used in LowLevelScan
     virtual bool ScanDrop(const Slice& k, uint64_t n);
@@ -31,6 +35,7 @@ public:
     virtual const char* Name() const;
 
     virtual void SetSnapshot(uint64_t snapshot);
+    virtual bool CheckTag(const leveldb::Slice& tera_key, bool* del_tag, int64_t* ttl_tag);
 
     virtual bool ScanMergedValue(leveldb::Iterator* it,
                                  std::string* merged_value,
@@ -56,6 +61,7 @@ private:
     std::map<std::string, int32_t> cf_indexs_;
     TableSchema schema_;
     const leveldb::RawKeyOperator* raw_key_operator_;
+    leveldb::Comparator* cmp_;
 
     std::string last_key_;
     std::string last_col_;

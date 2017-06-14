@@ -16,6 +16,7 @@
 #include "glog/logging.h"
 #include "utils/string_util.h"
 
+#include "sdk/schema_impl.h"
 #include "sdk/filter_utils.h"
 
 DECLARE_int64(tera_tablet_write_block_size);
@@ -563,6 +564,15 @@ bool CheckTableDescrptor(const TableDescriptor& desc, ErrorCode* err) {
         }
         return false;
     }
+    if ((desc.RawKey() == kReadable || desc.RawKey() == kBinary)) {
+        if (desc.ColumnFamilyNum() == 0) {
+            ss << "kBinary/kReadable MUST have cf";
+            if (err != NULL) {
+                err->SetFailed(ErrorCode::kBadParam, ss.str());
+            }
+            return false;
+        }
+    }
     return true;
 }
 
@@ -664,8 +674,17 @@ bool UpdateKvTableProperties(const PropTree::Node* table_node, TableDescriptor* 
     LocalityGroupDescriptor* lg_desc =
         const_cast<LocalityGroupDescriptor*>(table_desc->LocalityGroup("kv"));
     if (lg_desc == NULL) {
-        LOG(ERROR) << "[update] fail to get locality group: kv";
-        return false;
+        LOG(ERROR) << "[update][WARNING] can not get locality group: kv(kv table)";
+
+        // maybe this is a old kv table, it's LocalityGroup name is TableDescImpl::DEFAULT_LG_NAME
+        lg_desc =
+            const_cast<LocalityGroupDescriptor*>(table_desc->LocalityGroup(TableDescImpl::DEFAULT_LG_NAME));
+        if (lg_desc == NULL) {
+            LOG(ERROR) << "[update] fail to get locality group: " << TableDescImpl::DEFAULT_LG_NAME;
+            return false;
+        } else {
+            LOG(ERROR) << "[update][WARNING] it seems this is a old-style kv table";
+        }
     }
     for (std::map<string, string>::const_iterator i = table_node->properties_.begin();
          i != table_node->properties_.end(); ++i) {
@@ -755,9 +774,9 @@ bool FillTableDescriptor(PropTree& schema_tree, TableDescriptor* table_desc) {
         // simple table mode, have 1 default lg
         // e.g. table1{cf1, cf2, cf3}
         LocalityGroupDescriptor* lg_desc;
-        lg_desc = table_desc->AddLocalityGroup("lg0");
+        lg_desc = table_desc->AddLocalityGroup(TableDescImpl::DEFAULT_LG_NAME);
         if (lg_desc == NULL) {
-            LOG(ERROR) << "fail to add locality group: lg0";
+            LOG(ERROR) << "fail to add locality group: " << TableDescImpl::DEFAULT_LG_NAME;
             return false;
         }
         // add all column families and properties
@@ -931,9 +950,15 @@ bool ParseDelimiterFile(const string& filename, std::vector<string>* delims) {
     bool is_delim_error = false;
     for (size_t i = 1; i < delimiters.size(); i++) {
         if (delimiters[i] <= delimiters[i-1]) {
-            LOG(ERROR) << "delimiter error: line: " << i + 1
-                << ", [" << delimiters[i] << "]";
+            LOG(ERROR) << "line[" << i << "]" << " SHOULD less than line[" << i + 1
+                << "] (bitwise comparison, maybe LC_ALL=C if you use command sort(1))";
+            LOG(ERROR) << "line[" << i << "]: (" << delimiters[i-1] << ")";
+            LOG(ERROR) << "line[" << i + 1 << "]: (" << delimiters[i] << ")";
             is_delim_error = true;
+            // just print the 1st invalid input case,
+            // if print all invalid input,
+            //   it will print too many log to read/understand
+            break;
         }
     }
     if (is_delim_error) {

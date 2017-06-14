@@ -7,7 +7,7 @@
 
 #include <string>
 
-#include <boost/bind.hpp>
+#include <functional>
 #include <glog/logging.h>
 #include <sofa/pbrpc/pbrpc.h>
 
@@ -26,12 +26,12 @@ struct RpcCallbackParam {
     sofa::pbrpc::RpcController* rpc_controller;
     const Request* request;
     Response* response;
-    Callback* closure;
+    Callback closure;
     std::string tips;
     ThreadPool* thread_pool;
 
     RpcCallbackParam(sofa::pbrpc::RpcController* ctrler, const Request* req,
-                     Response* resp, Callback* cb, const std::string& str,
+                     Response* resp, Callback cb, const std::string& str,
                      ThreadPool* tpool)
         : rpc_controller(ctrler), request(req), response(resp),
           closure(cb), tips(str), thread_pool(tpool) {}
@@ -41,6 +41,7 @@ class RpcClientBase {
 public:
     static void SetOption(int32_t max_inflow, int32_t max_outflow,
                           int32_t pending_buffer_size, int32_t thread_num) {
+        channel_options_.create_with_init = false;
         if (-1 != max_inflow) {
             rpc_client_options_.max_throughput_in = max_inflow;
         }
@@ -75,9 +76,15 @@ protected:
         if (it != rpc_channel_list_.end()) {
             rpc_channel_ = it->second;
         } else {
-            rpc_channel_ = rpc_channel_list_[server_addr]
-                = new sofa::pbrpc::RpcChannel(&rpc_client_, server_addr,
-                                              channel_options_);
+            sofa::pbrpc::RpcChannel* c = new sofa::pbrpc::RpcChannel(&rpc_client_,
+                                                                     server_addr,
+                                                                     channel_options_);
+            if (c->Init()) {
+                rpc_channel_ = rpc_channel_list_[server_addr] = c;
+            } else {
+                delete c;
+                rpc_channel_ = NULL;
+            }
         }
         mutex_.Unlock();
     }
@@ -95,7 +102,8 @@ protected:
 template<class ServerType>
 class RpcClient : public RpcClientBase {
 public:
-    RpcClient(const std::string& addr) {
+    RpcClient(const std::string& addr)
+        : sync_call_failed(false) {
         ResetClient(addr);
     }
     virtual ~RpcClient() {}
@@ -118,7 +126,11 @@ protected:
         }
         */
         RpcClientBase::ResetClient(server_addr);
-        server_client_.reset(new ServerType(rpc_channel_));
+        if (rpc_channel_ == NULL) {
+            server_client_.reset(NULL);
+        } else {
+            server_client_.reset(new ServerType(rpc_channel_));
+        }
         server_addr_ = server_addr;
         // VLOG(5) << "reset connected address to: " << server_addr;
     }
@@ -128,7 +140,7 @@ protected:
                               google::protobuf::RpcController*, const Request*,
                               Response*, google::protobuf::Closure*),
                               const Request* request, Response* response,
-                              Callback* closure, const std::string& tips,
+                              Callback closure, const std::string& tips,
                               int32_t rpc_timeout, ThreadPool* thread_pool = 0) {
         if (NULL == server_client_.get()) {
             // sync call
@@ -138,7 +150,7 @@ protected:
 
             // async call
             ThreadPool::Task callback =
-                boost::bind(&RpcClient::template UserCallback<Request, Response, Callback>,
+                std::bind(&RpcClient::template UserCallback<Request, Response, Callback>,
                 request, response, closure, true,
                 (int)sofa::pbrpc::RPC_ERROR_RESOLVE_ADDRESS);
             thread_pool->AddTask(callback);
@@ -171,7 +183,7 @@ protected:
         sofa::pbrpc::RpcController* rpc_controller = param->rpc_controller;
         const Request* request = param->request;
         Response* response = param->response;
-        Callback* closure = param->closure;
+        Callback closure = param->closure;
         ThreadPool* thread_pool = param->thread_pool;
 
         bool failed = rpc_controller->Failed();
@@ -192,15 +204,15 @@ protected:
 
         // async call
         ThreadPool::Task done =
-            boost::bind(&RpcClient::template UserCallback<Request, Response, Callback>,
+            std::bind(&RpcClient::template UserCallback<Request, Response, Callback>,
             request, response, closure, failed, error);
         thread_pool->AddTask(done);
     }
 
     template <class Request, class Response, class Callback>
     static void UserCallback(const Request* request, Response* response,
-                             Callback* closure, bool failed, int error) {
-        closure->Run((Request*)request, response, failed, error);
+                             Callback closure, bool failed, int error) {
+        closure((Request*)request, response, failed, error);
     }
 
     virtual bool PollAndResetServerAddr() {

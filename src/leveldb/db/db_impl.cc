@@ -46,15 +46,15 @@ namespace leveldb {
 
 const int kNumNonTableCacheFiles = 10;
 
+// if this file exists, ignore error in db-opening
+const static std::string mark_file_name = "/__oops";
+
 // Information kept for every waiting writer
 struct DBImpl::Writer {
-  Status status;
   WriteBatch* batch;
-  bool sync;
-  bool done;
   port::CondVar cv;
 
-  explicit Writer(port::Mutex* mu) : cv(mu) { }
+  explicit Writer(port::Mutex* mu) : batch(NULL), cv(mu) { }
 };
 
 struct DBImpl::CompactionState {
@@ -70,7 +70,15 @@ struct DBImpl::CompactionState {
   struct Output {
     uint64_t number;
     uint64_t file_size;
+    int64_t del_num;         // statistic: delete tag's percentage in sst
+    std::vector<int64_t> ttls; // use for calculate timeout percentage
+    int64_t entries;
     InternalKey smallest, largest;
+
+    Output(): number(0),
+      file_size(0),
+      del_num(0),
+      entries(0) {}
   };
   std::vector<Output> outputs;
 
@@ -84,6 +92,7 @@ struct DBImpl::CompactionState {
 
   explicit CompactionState(Compaction* c)
       : compaction(c),
+        smallest_snapshot(kMaxSequenceNumber),
         outfile(NULL),
         builder(NULL),
         total_bytes(0) {
@@ -119,6 +128,18 @@ Options SanitizeOptions(const std::string& dbname,
   if (result.block_cache == NULL) {
     result.block_cache = NewLRUCache(8 << 20);
   }
+
+  {
+    // Maybe mark error flag in option
+    std::string oops = dbname + mark_file_name;
+    Status s = src.env->FileExists(oops);
+    if (s.ok()) {
+      Log(result.info_log, "[%s] caution: open with ignore_corruption_in_open", dbname.c_str());
+      result.ignore_corruption_in_open = true;
+    }
+    // Ignore error from FileExists since there is no harm
+  }
+
   return result;
 }
 
@@ -132,9 +153,9 @@ DBImpl::DBImpl(const Options& options, const std::string& dbname)
       owns_info_log_(options_.info_log != options.info_log),
       owns_block_cache_(options_.block_cache != options.block_cache),
       dbname_(dbname),
+      db_lock_(NULL),
       table_cache_(options_.table_cache),
       owns_table_cache_(options_.table_cache == NULL),
-      db_lock_(NULL),
       shutting_down_(NULL),
       bg_cv_(&mutex_),
       writting_mem_cv_(&mutex_),
@@ -145,9 +166,9 @@ DBImpl::DBImpl(const Options& options, const std::string& dbname)
       logfile_number_(0),
       log_(NULL),
       bound_log_size_(0),
-      tmp_batch_(new WriteBatch),
       bg_compaction_scheduled_(false),
       bg_compaction_score_(0),
+      bg_compaction_timeout_(0),
       bg_schedule_id_(0),
       manual_compaction_(NULL),
       consecutive_compaction_errors_(0),
@@ -176,7 +197,7 @@ Status DBImpl::Shutdown1() {
 
   Log(options_.info_log, "[%s] wait bg compact finish", dbname_.c_str());
   if (bg_compaction_scheduled_) {
-    env_->ReSchedule(bg_schedule_id_, kDumpMemTableUrgentScore);
+    env_->ReSchedule(bg_schedule_id_, kDumpMemTableUrgentScore, 0);
   }
   while (bg_compaction_scheduled_) {
     bg_cv_.Wait();
@@ -230,15 +251,11 @@ DBImpl::~DBImpl() {
         Shutdown2();
     }
   }
-  if (db_lock_ != NULL) {
-    env_->UnlockFile(db_lock_);
-  }
 
   delete versions_;
   if (mem_ != NULL) mem_->Unref();
   if (imm_ != NULL) imm_->Unref();
   if (recover_mem_ != NULL) recover_mem_->Unref();
-  delete tmp_batch_;
   delete log_;
   delete logfile_;
   if (owns_table_cache_) {
@@ -249,6 +266,9 @@ DBImpl::~DBImpl() {
   }
   if (owns_block_cache_) {
     delete options_.block_cache;
+  }
+  if (db_lock_) {
+    env_->UnlockFile(db_lock_);
   }
 }
 
@@ -372,97 +392,202 @@ void DBImpl::DeleteObsoleteFiles() {
   }
 }
 
-bool DBImpl::IsDbExist() {
-  if (env_->FileExists(CurrentFileName(dbname_))) {
-    // db exist, ready to load, discard parent_tablets
-    options_.parent_tablets.resize(0);
-    return true;
-  }
+// Returns:
+//   Status OK: iff *exists == true  -> exists
+//       iff *exists == false -> not exists
+//   Status not OK:
+//       1). Status::Corruption -> CURRENT lost,
+//       2). Status::IOError    -> Maybe request timeout, don't use *exists
+Status DBImpl::ParentCurrentStatus(uint64_t parent_no, bool* exists) {
+    assert(exists != NULL);
+    std::string current =
+        CurrentFileName(RealDbName(dbname_, parent_no));
+    Status s = env_->FileExists(current);
+    if (s.ok()) {
+      *exists = true;
+      return s;
+    } else if (s.IsNotFound()) {
+      *exists = false;
+      if (options_.ignore_corruption_in_open) {
+        // Drop all data in parent tablet
+        Log(options_.info_log, "[%s] parent tablet(%ld) CURRENT error(drop all data): %s",
+            dbname_.c_str(),
+            static_cast<long>(parent_no),
+            s.ToString().c_str());
+        return Status::OK(); // Data lost, reopen it as a new db
+      } else {
+        Log(options_.info_log, "[%s] parent tablet(%ld) CURRENT error: %s",
+            dbname_.c_str(),
+            static_cast<long>(parent_no),
+            s.ToString().c_str());
+        return Status::Corruption("parent CURRENT lost");
+      }
+    } else {
+      // Maybe request timeout, should retry open
+      Log(options_.info_log, "[%s] parent tablet(%ld) CURRENT timeout",
+          dbname_.c_str(),
+          static_cast<long>(parent_no));
+      return Status::IOError("parent CURRENT timeout");
+    }
+}
 
-  // check MANIFEST. If exist, CURRENT file lost
-  bool is_manifest_exist = false;
+// Returns:
+//   OK: iff *exists == true  -> exists
+//       iff *exists == false -> not exists
+//   not OK:
+//       error occured, don't use *exists
+Status DBImpl::DbExists(bool* exists) {
+  assert(exists != NULL);
+  *exists = true;
+
+  bool current_exists = false;
+  bool manifest_exists = false;
   std::vector<std::string> files;
-  env_->GetChildren(dbname_, &files);
+  Status s = env_->GetChildren(dbname_, &files);
+  if (!s.ok()) {
+    return s;
+  }
   for (size_t i = 0; i < files.size(); ++i) {
     uint64_t number;
     FileType type;
-    if (ParseFileName(files[i], &number, &type) && type == kDescriptorFile) {
-      std::string dscname = dbname_ + "/" + files[i];
-      uint64_t fsize = 0;
-      env_->GetFileSize(dscname, &fsize);
-      if (fsize == 0) {
-        // if CURRENT file not exist, empty MANIFEST is dangerous, delete it
-        Log(options_.info_log, "[%s] delete empty manifest: %s.",
-            dbname_.c_str(), dscname.c_str());
-        ArchiveFile(env_, dscname);
-      } else {
-        is_manifest_exist = true;
-      }
+    bool valid = ParseFileName(files[i], &number, &type);
+    if (!valid) {
+      Log(options_.info_log, "[%s] invalid filename %s",
+          dbname_.c_str(), files[i].c_str());
+      continue;
+    }
+    if (type == kCurrentFile) {
+      current_exists = true;
+    } else if (type == kDescriptorFile) {
+      manifest_exists = true;
     }
   }
-  if (is_manifest_exist) {
-    // CURRENT file lost, but MANIFEST exist, still open it
+
+  if (current_exists) {
+    // db exist, ready to load, discard parent_tablets
+    // don't care MANIFEST-lost in here
     options_.parent_tablets.resize(0);
-    return true;
+    *exists = true;
+    return Status::OK();
+  } else {
+    // CURRENT is not found
+    if (manifest_exists) {
+      // CURRENT file lost, but MANIFEST exist, maybe still open it
+      if (options_.ignore_corruption_in_open) {
+        Log(options_.info_log, "[%s] CURRENT file lost, but MANIFEST exists",
+            dbname_.c_str());
+        options_.parent_tablets.resize(0);
+        *exists = true;
+        return Status::OK();
+      } else {
+        return Status::Corruption("CURRENT file lost");
+      }
+    } else {
+      // maybe
+      // 1.this is a new db:
+      //   normal case, don't panic
+      // 2.current & manifest are all lost:
+      //   we can do nothing in here, and there is no way to recover
+      //   TODO(taocipian) detect this error
+    }
   }
 
   // CURRENT & MANIFEST not exist
   if (options_.parent_tablets.size() == 0) {
     // This is a new db
-    return false;
+    *exists = false;
+    return Status::OK();
   } else if (options_.parent_tablets.size() == 1) {
     // This is a new db generated by splitting
-    std::string current =
-        CurrentFileName(RealDbName(dbname_, options_.parent_tablets[0]));
-    if (env_->FileExists(current)) {
-      return true;
-    } else {
-      Log(options_.info_log, "[%s] all data(%ld) deleted, open a new db.",
-          dbname_.c_str(),
-          static_cast<long>(options_.parent_tablets[0]));
-      return false;
-    }
+    // We expect parent tablet exists
+    return ParentCurrentStatus(options_.parent_tablets[0], exists);
   } else if (options_.parent_tablets.size() == 2) {
     // This is a new db generated by merging
-    std::string current0 =
-        CurrentFileName(RealDbName(dbname_, options_.parent_tablets[0]));
-    std::string current1 =
-        CurrentFileName(RealDbName(dbname_, options_.parent_tablets[1]));
-    if (env_->FileExists(current0) && env_->FileExists(current1)) {
-      return true;
-    } else {
-      Log(options_.info_log, "[%s] all data(%ld, %ld) deleted, open a new db.",
-          dbname_.c_str(),
-          static_cast<long>(options_.parent_tablets[0]),
-          static_cast<long>(options_.parent_tablets[1]));
-      return false;
+    // We expect parent tablets exist
+    bool parent0_exists = true;
+    uint64_t parent0 = options_.parent_tablets[0];
+    s = ParentCurrentStatus(options_.parent_tablets[0], &parent0_exists);
+    if (!s.ok()) {
+      return s;
     }
+
+    bool parent1_exists = true;
+    uint64_t parent1 = options_.parent_tablets[1];
+    s = ParentCurrentStatus(options_.parent_tablets[1], &parent1_exists);
+    if (!s.ok()) {
+      return s;
+    }
+
+    assert((parent0_exists && parent1_exists) || options_.ignore_corruption_in_open);
+
+    if (parent0_exists && parent1_exists) {
+      *exists = true;
+    } else if (parent0_exists) {
+      *exists = true;
+      options_.parent_tablets.resize(0);
+      options_.parent_tablets.push_back(parent0);
+      Log(options_.info_log, "[%s] ignore parent(%ld) lost",
+          dbname_.c_str(), parent1);
+    } else if (parent1_exists) {
+      *exists = true;
+      options_.parent_tablets.resize(0);
+      options_.parent_tablets.push_back(parent1);
+      Log(options_.info_log, "[%s] ignore parent(%ld) lost",
+          dbname_.c_str(), parent0);
+    } else {
+      // Parents data lost, open this db as an empty db
+      *exists = false;
+      Log(options_.info_log, "[%s] ignore all parents(%ld, %ld) lost",
+          dbname_.c_str(), parent0, parent1);
+    }
+    return s;
   } else {
     assert(false);
   }
-
 }
 
 Status DBImpl::Recover(VersionEdit* edit) {
   mutex_.AssertHeld();
+  if (options_.ignore_corruption_in_open) {
+      Status s = env_->DeleteFile(dbname_ + mark_file_name);
+      if (!s.ok()) {
+        // legacy mark-file is dangerous
+        Log(options_.info_log, "[%s] delete mark-file failed for %s",
+            dbname_.c_str(), s.ToString().c_str());
+        return Status::IOError("delete mark-file failed");
+      }
+  }
 
-  if (!env_->FileExists(dbname_)) {
-    Status s = env_->CreateDir(dbname_);
+  {
+      Status s = env_->FileExists(dbname_);
+      if (s.IsNotFound()) {
+        s = env_->CreateDir(dbname_);
+        if (!s.ok()) {
+          Log(options_.info_log, "[%s] fail to create db: %s",
+              dbname_.c_str(), s.ToString().c_str());
+          return s;
+        }
+      } else if (s.ok()) {
+        // Directory exists, do nothing
+      } else {
+        // Unknown status
+        return s;
+      }
+  }
+
+  if (options_.use_file_lock) {
+    Status s = env_->LockFile(LockFileName(dbname_), &db_lock_);
     if (!s.ok()) {
-      Log(options_.info_log, "[%s] fail to create db: %s",
-          dbname_.c_str(), s.ToString().c_str());
       return s;
     }
   }
-  assert(db_lock_ == NULL);
-  Status s = env_->LockFile(LockFileName(dbname_), &db_lock_);
+
+  bool db_exists;
+  Status s = DbExists(&db_exists);
   if (!s.ok()) {
     return s;
   }
-
-  // if (!env_->FileExists(CurrentFileName(dbname_))) {
-  //    if (options_.parent_tablets.size() == 0) {
-  if (!IsDbExist()) {
+  if (!db_exists) {
     s = NewDB();
     if (!s.ok()) {
       return s;
@@ -494,10 +619,27 @@ Status DBImpl::Recover(VersionEdit* edit) {
       std::string path = RealDbName(dbname_, *it_tablet);
       Log(options_.info_log, "[%s] GetChildren(%s)", dbname_.c_str(), path.c_str());
       std::vector<std::string> filenames;
-      if (!env_->GetChildren(path, &filenames).ok()) {
-        Log(options_.info_log, "[%s] GetChildren(%s) fail: %s",
+      s = env_->GetChildren(path, &filenames);
+      if (s.ok()) {
+        // Do nothing
+      } else if (s.IsTimeOut()) {
+        // Should retry open
+        Log(options_.info_log, "[%s] GetChildren(%s) timeout: %s",
             dbname_.c_str(), path.c_str(), s.ToString().c_str());
-        continue;
+        return Status::TimeOut("GetChildren timeout");
+      } else {
+        // Cannot read the directory
+        if (options_.ignore_corruption_in_open) {
+          Log(options_.info_log, "[%s] GetChildren(%s) fail: %s, still open!",
+              dbname_.c_str(), path.c_str(), s.ToString().c_str());
+          // Reset the status
+          s = Status::OK();
+          continue;
+        } else {
+          Log(options_.info_log, "[%s] GetChildren(%s) fail: %s",
+              dbname_.c_str(), path.c_str(), s.ToString().c_str());
+          return Status::IOError("GetChildren fail");
+        }
       }
       uint64_t number;
       FileType type;
@@ -510,11 +652,15 @@ Status DBImpl::Recover(VersionEdit* edit) {
     if (!expected.empty()) {
       std::map<uint64_t, int>::iterator it = expected.begin();
       for (; it != expected.end(); ++it) {
-        if (!env_->FileExists(TableFileName(dbname_, it->first))) {
-          Log(options_.info_log, "[%s] file system lost files: %d.sst, delete it from versionset.",
-              dbname_.c_str(), static_cast<int>(it->first));
+        Log(options_.info_log, "[%s] file system lost file: %d.sst",
+            dbname_.c_str(), static_cast<int>(it->first));
+        if (options_.ignore_corruption_in_open) {
           edit->DeleteFile(it->second, it->first);
         }
+      }
+
+      if (!options_.ignore_corruption_in_open) {
+        return Status::Corruption("sst lost");
       }
     }
   }
@@ -548,17 +694,8 @@ Status DBImpl::WriteLevel0Table(MemTable* mem, VersionEdit* edit,
                    &saved_size, smallest_snapshot);
     mutex_.Lock();
   }
-
-  VersionSet::LevelSummaryStorage tmp;
-  Log(options_.info_log, "[%s] Level-0 table #%u: %lld (+ %lld ) bytes %s, %s",
-      dbname_.c_str(), (unsigned int) meta.number,
-      (unsigned long long) meta.file_size,
-      (unsigned long long) saved_size,
-      s.ToString().c_str(),
-      versions_->LevelSummary(&tmp));
   delete iter;
   pending_outputs_.erase(meta.number);
-
 
   // Note that if file_size is zero, the file has been deleted and
   // should not be added to the manifest.
@@ -566,11 +703,19 @@ Status DBImpl::WriteLevel0Table(MemTable* mem, VersionEdit* edit,
   if (s.ok() && meta.file_size > 0) {
     const Slice min_user_key = meta.smallest.user_key();
     const Slice max_user_key = meta.largest.user_key();
-    if (base != NULL) {
+    if (base != NULL && options_.drop_base_level_del_in_compaction) {
       level = base->PickLevelForMemTableOutput(min_user_key, max_user_key);
     }
-    edit->AddFile(level, meta.number, meta.file_size, meta.smallest, meta.largest);
+    edit->AddFile(level, meta);
   }
+  VersionSet::LevelSummaryStorage tmp;
+  Log(options_.info_log, "[%s] Level-0 table #%u: dump-level %d, %lld (+ %lld ) bytes %s, %s",
+      dbname_.c_str(), (unsigned int) meta.number,
+      level,
+      (unsigned long long) meta.file_size,
+      (unsigned long long) saved_size,
+      s.ToString().c_str(),
+      versions_->LevelSummary(&tmp));
 
   CompactionStats stats;
   stats.micros = env_->NowMicros() - start_micros;
@@ -790,28 +935,43 @@ void DBImpl::MaybeScheduleCompaction() {
   if (shutting_down_.Acquire_Load()) {
     // DB is being deleted; no more background compactions
   } else {
-    double score = versions_->CompactionScore();
+    uint64_t timeout = 0;
+    double score = versions_->CompactionScore(&timeout);
     if (manual_compaction_ != NULL) {
-        score = kManualCompactScore;
+      score = kManualCompactScore;
+      timeout = 0;
     }
     if (imm_ != NULL) {
-        score = kDumpMemTableScore;
+      score = kDumpMemTableScore;
+      timeout = 0;
     }
     if (score > 0) {
-        if (bg_compaction_scheduled_ && score <= bg_compaction_score_) {
-            // Already scheduled
-        } else if (bg_compaction_scheduled_) {
-            env_->ReSchedule(bg_schedule_id_, score);
-            Log(options_.info_log, "[%s] ReSchedule Compact[%ld] score= %.2f",
-                dbname_.c_str(), bg_schedule_id_, score);
-            bg_compaction_score_ = score;
-        } else {
-            bg_schedule_id_ = env_->Schedule(&DBImpl::BGWork, this, score);
-            Log(options_.info_log, "[%s] Schedule Compact[%ld] score= %.2f",
-                dbname_.c_str(), bg_schedule_id_, score);
-            bg_compaction_score_ = score;
-            bg_compaction_scheduled_ = true;
+      if (!bg_compaction_scheduled_) {
+        bg_schedule_id_ = env_->Schedule(&DBImpl::BGWork, this, score, timeout);
+        Log(options_.info_log, "[%s] Schedule Compact[%ld] score= %.2f, timeout=%lu",
+            dbname_.c_str(), bg_schedule_id_, score, timeout);
+        bg_compaction_score_ = score;
+        bg_compaction_timeout_ = timeout;
+        bg_compaction_scheduled_ = true;
+        assert(score <= 1 || timeout == 0); // if score > 1, then timeout MUST be 0
+      } else {
+        // use the same way to compute priority score, like util/thread_pool.h
+        bool need_resched = false;
+        if (timeout != bg_compaction_timeout_) {
+          need_resched = timeout < bg_compaction_timeout_;
+        } else if (score != bg_compaction_score_) {
+          need_resched = score > bg_compaction_score_;
         }
+
+        if (need_resched) {
+          env_->ReSchedule(bg_schedule_id_, score, timeout);
+          Log(options_.info_log, "[%s] ReSchedule Compact[%ld] score= %.2f, timeout=%lu",
+              dbname_.c_str(), bg_schedule_id_, score, timeout);
+          bg_compaction_score_ = score;
+          bg_compaction_timeout_ = timeout;
+          assert(score <= 1 || timeout == 0); // if score > 1, then timeout MUST be 0
+        }
+      }
     } else {
       // No work to be done
     }
@@ -899,14 +1059,14 @@ Status DBImpl::BackgroundCompaction() {
     assert(c->num_input_files(0) == 1);
     FileMetaData* f = c->input(0, 0);
     c->edit()->DeleteFile(c->level(), *f);
-    c->edit()->AddFile(c->level() + 1, *f);
+    c->edit()->AddFile(c->output_level(), *f);
     status = versions_->LogAndApply(c->edit(), &mutex_);
     VersionSet::LevelSummaryStorage tmp;
-    Log(options_.info_log, "[%s] Moved #%08u, %08u to level-%d %lld bytes %s: %s\n",
+    Log(options_.info_log, "[%s] Moved #%08u, #%u to level-%d %lld bytes %s: %s\n",
         dbname_.c_str(),
         static_cast<uint32_t>(f->number >> 32 & 0x7fffffff),  //tablet number
         static_cast<uint32_t>(f->number & 0xffffffff),        //sst number
-        c->level() + 1,
+        c->output_level(),
         static_cast<unsigned long long>(f->file_size),
         status.ToString().c_str(),
         versions_->LevelSummary(&tmp));
@@ -1005,6 +1165,7 @@ Status DBImpl::FinishCompactionOutputFile(CompactionState* compact,
       s = input->status();
   }
   const uint64_t current_entries = compact->builder->NumEntries();
+  compact->current_output()->entries = current_entries;
   if (s.ok()) {
     s = compact->builder->Finish();
   } else {
@@ -1051,7 +1212,6 @@ Status DBImpl::FinishCompactionOutputFile(CompactionState* compact,
   return s;
 }
 
-
 Status DBImpl::InstallCompactionResults(CompactionState* compact) {
   mutex_.AssertHeld();
   Log(options_.info_log,  "[%s] Compacted %d@%d + %d@%d files => %lld bytes",
@@ -1059,17 +1219,36 @@ Status DBImpl::InstallCompactionResults(CompactionState* compact) {
       compact->compaction->num_input_files(0),
       compact->compaction->level(),
       compact->compaction->num_input_files(1),
-      compact->compaction->level() + 1,
+      compact->compaction->output_level(),
       static_cast<long long>(compact->total_bytes));
 
-  // Add compaction outputs
+  // Add compaction outputs, skip file without entries
   compact->compaction->AddInputDeletions(compact->compaction->edit());
-  const int level = compact->compaction->level();
   for (size_t i = 0; i < compact->outputs.size(); i++) {
-    const CompactionState::Output& out = compact->outputs[i];
+    CompactionState::Output& out = compact->outputs[i];
+    if (out.entries <= 0) {
+        continue;
+    }
+
+    std::sort(out.ttls.begin(), out.ttls.end());
+    uint32_t idx = out.ttls.size() * options_.ttl_percentage / 100 ;
     compact->compaction->edit()->AddFile(
-        level + 1, BuildFullFileNumber(dbname_, out.number),
-        out.file_size, out.smallest, out.largest);
+      compact->compaction->output_level(), BuildFullFileNumber(dbname_, out.number),
+      out.file_size, out.smallest, out.largest,
+      out.del_num * 100 / out.entries /* delete tag percentage */,
+      ((out.ttls.size() > 0) && (idx < out.ttls.size())) ? out.ttls[idx] : 0 /* sst's check ttl's time */,
+      ((out.ttls.size() > 0) && (idx < out.ttls.size())) ? idx * 100 / out.ttls.size() : 0 /* delete tag percentage */);
+      Log(options_.info_log, "[%s] AddFile, level %d, number #%lu, entries %ld, del_nr %lu"
+                             ", ttl_nr %lu, del_p %lu, ttl_check_ts %lu, ttl_p %lu\n",
+          dbname_.c_str(),
+          compact->compaction->output_level(),
+          out.number,
+          out.entries,
+          out.del_num,
+          out.ttls.size(),
+          out.del_num * 100 / out.entries,
+          ((out.ttls.size() > 0) && (idx < out.ttls.size())) ? out.ttls[idx] : 0,
+          ((out.ttls.size() > 0) && (idx < out.ttls.size())) ? idx * 100 / out.ttls.size() : 0);
   }
   return versions_->LogAndApply(compact->compaction->edit(), &mutex_);
 }
@@ -1083,7 +1262,7 @@ Status DBImpl::DoCompactionWork(CompactionState* compact) {
       compact->compaction->num_input_files(0),
       compact->compaction->level(),
       compact->compaction->num_input_files(1),
-      compact->compaction->level() + 1);
+      compact->compaction->output_level());
 
   assert(versions_->NumLevelFiles(compact->compaction->level()) > 0);
   assert(compact->builder == NULL);
@@ -1102,14 +1281,13 @@ Status DBImpl::DoCompactionWork(CompactionState* compact) {
     } else {
       compact_strategy->SetSnapshot(*(snapshots_.begin()));
     }
+    Log(options_.info_log,  "[%s] Compact strategy: %s",
+      dbname_.c_str(),
+      compact_strategy->Name());
   }
 
   // Release mutex while we're actually doing the compaction work
   mutex_.Unlock();
-
-  Log(options_.info_log,  "[%s] Compact strategy: %s",
-    dbname_.c_str(),
-    compact_strategy->Name());
 
   Iterator* input = versions_->MakeInputIterator(compact->compaction);
   input->SeekToFirst();
@@ -1134,7 +1312,7 @@ Status DBImpl::DoCompactionWork(CompactionState* compact) {
 
     Slice key = input->key();
     if (compact->compaction->ShouldStopBefore(key) &&
-        compact->builder != NULL) {
+        compact->builder != NULL) { // should not overlap level() + 2 too much
       status = FinishCompactionOutputFile(compact, input);
       if (!status.ok()) {
         break;
@@ -1179,7 +1357,7 @@ Status DBImpl::DoCompactionWork(CompactionState* compact) {
       } else if (compact_strategy && ikey.sequence <= compact->smallest_snapshot) {
         std::string lower_bound;
         if (options_.drop_base_level_del_in_compaction) {
-            lower_bound = compact->compaction->drop_lower_bound();
+          lower_bound = compact->compaction->drop_lower_bound();
         }
         drop = compact_strategy->Drop(ikey.user_key, ikey.sequence, lower_bound);
       }
@@ -1205,6 +1383,7 @@ Status DBImpl::DoCompactionWork(CompactionState* compact) {
           break;
         }
       }
+      assert(compact->builder);
       if (compact->builder->NumEntries() == 0) {
         compact->current_output()->smallest.DecodeFrom(key);
       }
@@ -1222,7 +1401,20 @@ Status DBImpl::DoCompactionWork(CompactionState* compact) {
       }
 
       if (!has_atom_merged) {
-          compact->builder->Add(key, input->value());
+        // check del tag and ttl tag
+        bool del_tag = false;
+        int64_t ttl = -1;
+        compact_strategy && compact_strategy->CheckTag(ikey.user_key, &del_tag, &ttl);
+        if (ikey.type == kTypeDeletion || del_tag) {
+          //Log(options_.info_log, "[%s] add del_tag %d, key_type %d\n",
+          //    dbname_.c_str(), del_tag, ikey.type);
+          compact->current_output()->del_num++;
+        } else if (ttl > 0) { // del tag has not ttl
+          //Log(options_.info_log, "[%s] add ttl_tag %ld\n",
+          //    dbname_.c_str(), ttl);
+          compact->current_output()->ttls.push_back(ttl);
+        }
+        compact->builder->Add(key, input->value());
       }
       // Close output file if it is big enough
       if (compact->builder->FileSize() >=
@@ -1272,7 +1464,7 @@ Status DBImpl::DoCompactionWork(CompactionState* compact) {
   }
 
   mutex_.Lock();
-  stats_[compact->compaction->level() + 1].Add(stats);
+  stats_[compact->compaction->output_level()].Add(stats);
 
   if (status.ok()) {
     status = InstallCompactionResults(compact);
@@ -1460,7 +1652,8 @@ bool DBImpl::BusyWrite() {
 
 void DBImpl::Workload(double* write_workload) {
   MutexLock l(&mutex_);
-  double wwl = versions_->CompactionScore();
+  uint64_t timeout = 0;
+  double wwl = versions_->CompactionScore(&timeout);
   if (wwl >= 0) {
     *write_workload = wwl;
   } else {
@@ -1471,28 +1664,19 @@ void DBImpl::Workload(double* write_workload) {
 Status DBImpl::Write(const WriteOptions& options, WriteBatch* my_batch) {
   Writer w(&mutex_);
   w.batch = my_batch;
-  w.sync = options.sync;
-  w.done = false;
 
   MutexLock l(&mutex_);
   writers_.push_back(&w);
-  while (!w.done && &w != writers_.front()) {
+  while (&w != writers_.front()) {
     w.cv.Wait();
   }
-  if (w.done) {
-    return w.status;
-  }
-
 
   // May temporarily unlock and wait.
   Status status = MakeRoomForWrite(my_batch == NULL);
 
-  Writer* last_writer = &w;
   if (status.ok() && my_batch != NULL) {  // NULL batch is for compactions
     uint64_t batch_sequence = WriteBatchInternal::Sequence(my_batch);
-    WriteBatch* updates = BuildBatchGroup(&last_writer);
-    WriteBatchInternal::SetSequence(updates, batch_sequence);
-    assert(writers_.size() == 1);
+    WriteBatch* updates = my_batch;
 
     // Apply to memtable.  We can release the lock
     // during this phase since &w is currently responsible for logging
@@ -1504,7 +1688,6 @@ Status DBImpl::Write(const WriteOptions& options, WriteBatch* my_batch) {
     status = WriteBatchInternal::InsertInto(updates, mem_);
     mutex_.Lock();
 
-    if (updates == tmp_batch_) tmp_batch_->Clear();
     if (WriteBatchInternal::Count(updates) > 0) {
       mem_->SetNonEmpty();
     }
@@ -1513,16 +1696,8 @@ Status DBImpl::Write(const WriteOptions& options, WriteBatch* my_batch) {
     }
   }
 
-  while (true) {
-    Writer* ready = writers_.front();
-    writers_.pop_front();
-    if (ready != &w) {
-      ready->status = status;
-      ready->done = true;
-      ready->cv.Signal();
-    }
-    if (ready == last_writer) break;
-  }
+  assert(writers_.front() == &w);
+  writers_.pop_front();
 
   // Notify new head of write queue
   if (!writers_.empty()) {
@@ -1532,57 +1707,6 @@ Status DBImpl::Write(const WriteOptions& options, WriteBatch* my_batch) {
   is_writting_mem_ = false;
   writting_mem_cv_.Signal();
   return status;
-}
-
-// REQUIRES: Writer list must be non-empty
-// REQUIRES: First writer must have a non-NULL batch
-WriteBatch* DBImpl::BuildBatchGroup(Writer** last_writer) {
-  assert(!writers_.empty());
-  Writer* first = writers_.front();
-  WriteBatch* result = first->batch;
-  assert(result != NULL);
-
-  size_t size = WriteBatchInternal::ByteSize(first->batch);
-
-  // Allow the group to grow up to a maximum size, but if the
-  // original write is small, limit the growth so we do not slow
-  // down the small write too much.
-  size_t max_size = 1 << 20;
-  if (size <= (128<<10)) {
-    max_size = size + (128<<10);
-  }
-
-  *last_writer = first;
-  std::deque<Writer*>::iterator iter = writers_.begin();
-  ++iter;  // Advance past "first"
-  for (; iter != writers_.end(); ++iter) {
-    Writer* w = *iter;
-    if (w->sync && !first->sync) {
-      // Do not include a sync write into a batch handled by a non-sync write.
-      break;
-    }
-
-    if (w->batch != NULL) {
-      size += WriteBatchInternal::ByteSize(w->batch);
-      if (size > max_size) {
-        // Do not make batch too big
-        break;
-      }
-
-      // Append to *reuslt
-      if (result == first->batch) {
-        // Switch to temporary batch instead of disturbing caller's batch
-        result = tmp_batch_;
-        assert(WriteBatchInternal::Count(result) == 0);
-        WriteBatchInternal::Append(result, first->batch);
-      }
-      WriteBatchInternal::Append(result, w->batch);
-    } else {
-      break;
-    }
-    *last_writer = w;
-  }
-  return result;
 }
 
 // REQUIRES: mutex_ is held
@@ -1782,7 +1906,7 @@ MemTable* DBImpl::NewMemTable() const {
     } else {
         Logger* info_log = NULL;
         // Logger* info_log = options_.info_log;
-        MemTableOnLevelDB* new_mem = new MemTableOnLevelDB(internal_comparator_,
+        MemTableOnLevelDB* new_mem = new MemTableOnLevelDB(dbname_, internal_comparator_,
                                      options_.compact_strategy_factory,
                                      options_.memtable_ldb_write_buffer_size,
                                      options_.memtable_ldb_block_size,

@@ -24,34 +24,28 @@ std::string StatusCodeToString(CompactStatus status) {
     return CompactStatus_Name(status);
 }
 
-std::string StatusCodeToString(TabletNodeStatus status) {
-    return TabletNodeStatus_Name(status);
+void SetStatusCode(const StatusCode& code, StatusCode* tera_status) {
+    if (tera_status) {
+        *tera_status = code;
+    }
 }
 
-std::string StatusCodeToString(int32_t status) {
-    switch (status) {
-    // master
-    case kMasterNotInited:
-        return "kMasterNotInited";
-    case kMasterIsBusy:
-        return "kMasterIsBusy";
-    case kMasterIsSecondary:
-        return "kMasterIsSecondary";
-    case kMasterIsReadonly:
-        return "kMasterIsReadonly";
-    case kMasterOnRestore:
-        return "kMasterOnRestore";
-    case kMasterIsRunning:
-        return "kMasterIsRunning";
-    case kMasterOnWait:
-        return "kMasterOnWait";
-    default:
-        ;
+void SetStatusCode(const TabletStatus& tablet_status, StatusCode* tera_status) {
+    if (tera_status) {
+        *tera_status = static_cast<StatusCode>(tablet_status);
     }
-    char num[16];
-    snprintf(num, 16, "%d", status);
-    num[15] = '\0';
-    return num;
+}
+
+void SetStatusCode(const TableStatus& table_status, StatusCode* tera_status) {
+    if (tera_status) {
+        *tera_status = static_cast<StatusCode>(table_status);
+    }
+}
+
+void SetStatusCode(const CompactStatus& compact_status, StatusCode* tera_status) {
+    if (tera_status) {
+        *tera_status = static_cast<StatusCode>(compact_status);
+    }
 }
 
 } // namespace tera

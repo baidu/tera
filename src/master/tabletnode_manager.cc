@@ -18,18 +18,22 @@ namespace tera {
 namespace master {
 
 TabletNode::TabletNode() : state_(kOffLine),
-    report_status_(kTabletNodeInit), data_size_(0), qps_(0), load_(0),
+    report_status_(kTabletNodeIsRunning), data_size_(0), qps_(0), load_(0),
     update_time_(0), query_fail_count_(0), onload_count_(0),
     onsplit_count_(0), plan_move_in_count_(0) {
     info_.set_addr("");
+    info_.set_status_m(NodeStateToString(state_));
+    info_.set_timestamp(get_micros());
 }
 
 TabletNode::TabletNode(const std::string& addr, const std::string& uuid)
     : addr_(addr), uuid_(uuid), state_(kOffLine),
-      report_status_(kTabletNodeInit), data_size_(0), qps_(0), load_(0),
+      report_status_(kTabletNodeIsRunning), data_size_(0), qps_(0), load_(0),
       update_time_(0), query_fail_count_(0), onload_count_(0),
       onsplit_count_(0), plan_move_in_count_(0) {
     info_.set_addr(addr);
+    info_.set_status_m(NodeStateToString(state_));
+    info_.set_timestamp(get_micros());
 }
 
 TabletNode::TabletNode(const TabletNode& t) {
@@ -212,7 +216,7 @@ bool TabletNode::LoadNextWaitTablet(TabletPtr* tablet) {
     return true;
 }
 
-bool TabletNode::TrySplit(TabletPtr tablet) {
+bool TabletNode::TrySplit(TabletPtr tablet, const std::string& split_key) {
     MutexLock lock(&mutex_);
     data_size_ -= tablet->GetDataSize();
 //    VLOG(5) << "split on: " << addr_ << ", size: " << tablet->GetDataSize()
@@ -222,29 +226,36 @@ bool TabletNode::TrySplit(TabletPtr tablet) {
         ++onsplit_count_;
         return true;
     }
-    if (std::find(wait_split_list_.begin(), wait_split_list_.end(), tablet) ==
-        wait_split_list_.end()) {
-        wait_split_list_.push_back(tablet);
+    std::list<std::pair<TabletPtr, std::string> >::iterator it;
+    for (it = wait_split_list_.begin(); it != wait_split_list_.end(); ++it) {
+        if (it->first == tablet) {
+            return false;
+        }
     }
+    if (it == wait_split_list_.end()) {
+        wait_split_list_.push_back(std::make_pair(tablet, split_key));
+    }
+
     return false;
 }
 
-bool TabletNode::FinishSplit(TabletPtr tablet) {
+bool TabletNode::FinishSplit() {
     MutexLock lock(&mutex_);
     --onsplit_count_;
     return true;
 }
 
-bool TabletNode::SplitNextWaitTablet(TabletPtr* tablet) {
+bool TabletNode::SplitNextWaitTablet(TabletPtr* tablet, std::string* split_key) {
     MutexLock lock(&mutex_);
     if (onsplit_count_ >= static_cast<uint32_t>(FLAGS_tera_master_max_split_concurrency)) {
         return false;
     }
-    std::list<TabletPtr>::iterator it = wait_split_list_.begin();
+    std::list<std::pair<TabletPtr, std::string> >::iterator it = wait_split_list_.begin();
     if (it == wait_split_list_.end()) {
         return false;
     }
-    *tablet = *it;
+    *tablet = it->first;
+    *split_key = it->second;
     wait_split_list_.pop_front();
     ++onsplit_count_;
     return true;
@@ -262,14 +273,14 @@ bool TabletNode::SetState(NodeState new_state, NodeState* old_state) {
     }
     if (CheckStateSwitch(state_, new_state)) {
         LOG(INFO) << addr_ << " state switch "
-            << StatusCodeToString(state_) << " to "
-            << StatusCodeToString(new_state);
+            << StatusCodeToString(static_cast<StatusCode>(state_)) << " to "
+            << StatusCodeToString(static_cast<StatusCode>(new_state));
         state_ = new_state;
         return true;
     }
     VLOG(5) << addr_ << " not support state switch "
-        << StatusCodeToString(state_) << " to "
-        << StatusCodeToString(new_state);
+        << StatusCodeToString(static_cast<StatusCode>(state_)) << " to "
+        << StatusCodeToString(static_cast<StatusCode>(new_state));
     return false;
 }
 
@@ -319,19 +330,20 @@ TabletNodeManager::~TabletNodeManager() {
     MutexLock lock(&mutex_);
 }
 
-void TabletNodeManager::AddTabletNode(const std::string& addr,
-                                      const std::string& uuid) {
+TabletNodePtr TabletNodeManager::AddTabletNode(const std::string& addr,
+                                               const std::string& uuid) {
     MutexLock lock(&mutex_);
     TabletNodePtr null_ptr;
     std::pair<TabletNodeList::iterator, bool> ret = tabletnode_list_.insert(
         std::pair<std::string, TabletNodePtr>(addr, null_ptr));
     if (!ret.second) {
         LOG(ERROR) << "tabletnode [" << addr << "] exists";
-        return;
+        return ret.first->second;
     }
     TabletNodePtr& state = ret.first->second;
     state.reset(new TabletNode(addr, uuid));
     LOG(INFO) << "add tabletnode : " << addr << ", id : " << uuid;
+    return state;
 }
 
 void TabletNodeManager::DelTabletNode(const std::string& addr) {
@@ -384,7 +396,7 @@ void TabletNodeManager::UpdateTabletNode(const std::string& addr,
         CounterWeightedSum(state.info_.scan_pending(),
                            node->average_counter_.scan_pending_);
     node->average_counter_.row_read_delay_ =
-        CounterWeightedSum(state.info_.extra_info(1).value(),
+        CounterWeightedSum(state.info_.extra_info_size() > 1 ? state.info_.extra_info(1).value() : 0,
                            node->average_counter_.row_read_delay_);
     VLOG(15) << "update tabletnode : " << addr;
 }

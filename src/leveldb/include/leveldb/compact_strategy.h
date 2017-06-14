@@ -8,6 +8,7 @@
 #include <stdint.h>
 #include <string>
 #include "leveldb/iterator.h"
+#include "leveldb/comparator.h"
 
 namespace leveldb {
 
@@ -21,6 +22,8 @@ class InternalKeyComparator;
 class CompactStrategy {
 public:
     virtual ~CompactStrategy() {}
+
+    virtual const Comparator* RowKeyComparator() = 0;
 
     virtual bool Drop(const Slice& k, uint64_t n,
                       const std::string& lower_bound = "") = 0;
@@ -39,6 +42,8 @@ public:
     // are protected by snpashot
     virtual void SetSnapshot(uint64_t snapshot) = 0;
 
+    virtual bool CheckTag(const Slice& tera_key, bool* del_tag, int64_t* ttl_tag) = 0;
+
     virtual const char* Name() const = 0;
 };
 
@@ -46,6 +51,8 @@ public:
 class DummyCompactStrategy : public CompactStrategy {
 public:
     virtual ~DummyCompactStrategy() {}
+
+    virtual const Comparator* RowKeyComparator() { return NULL;}
 
     virtual bool Drop(const Slice& k, uint64_t n, const std::string& lower_bound) {
         return false;
@@ -71,6 +78,12 @@ public:
     virtual bool ScanMergedValue(Iterator* it, std::string* merged_value,
                                  int64_t* merged_num) {
         return false;
+    }
+
+    virtual bool CheckTag(const Slice& tera_key, bool* del_tag, int64_t* ttl_tag) {
+        *del_tag = false;
+        *ttl_tag = -1;
+        return true;
     }
 };
 

@@ -87,6 +87,9 @@ Options InitOptionsLG(const Options& options, uint32_t lg_id) {
   if (lg_info->env) {
     opt.env = lg_info->env;
   }
+  if (lg_info->block_cache) {
+    opt.block_cache = lg_info->block_cache;
+  }
   opt.compression = lg_info->compression;
   opt.block_size = lg_info->block_size;
   opt.use_memtable_on_leveldb = lg_info->use_memtable_on_leveldb;
@@ -94,6 +97,7 @@ Options InitOptionsLG(const Options& options, uint32_t lg_id) {
   opt.memtable_ldb_block_size = lg_info->memtable_ldb_block_size;
   opt.sst_size = lg_info->sst_size;
   opt.write_buffer_size = lg_info->write_buffer_size;
+  opt.seek_latency = lg_info->seek_latency;
   return opt;
 }
 
@@ -101,7 +105,7 @@ DBTable::DBTable(const Options& options, const std::string& dbname)
   : state_(kNotOpen), shutting_down_(NULL), bg_cv_(&mutex_),
     bg_cv_timer_(&mutex_), bg_cv_sleeper_(&mutex_),
     options_(InitDefaultOptions(options, dbname)),
-    dbname_(dbname), env_(options.env),
+    dbname_(dbname), env_(options.env), db_lock_(NULL),
     created_own_lg_list_(options_.exist_lg_list != options.exist_lg_list),
     created_own_info_log_(options_.info_log != options.info_log),
     created_own_compact_strategy_(options_.compact_strategy_factory != options.compact_strategy_factory),
@@ -212,12 +216,22 @@ DBTable::~DBTable() {
     delete options_.info_log;
   }
   delete tmp_batch_;
+  if (db_lock_) {
+    env_->UnlockFile(db_lock_);
+  }
 }
 
 Status DBTable::Init() {
   std::vector<VersionEdit*> lg_edits;
-  Status s;
   Log(options_.info_log, "[%s] start Init()", dbname_.c_str());
+  Status s;
+  if (options_.use_file_lock) {
+      s = env_->LockFile(LockFileName(dbname_), &db_lock_);
+      if (!s.ok()) {
+          Log(options_.info_log, "[%s] Get db lock fail", dbname_.c_str());
+          return s;
+      }
+  }
   MutexLock lock(&mutex_);
 
   uint64_t min_log_sequence = kMaxSequenceNumber;

@@ -7,8 +7,8 @@
 #include "zk/zk_adapter.h"
 
 #include <errno.h>
+#include <functional>
 
-#include <boost/bind.hpp>
 #include <glog/logging.h>
 
 #include "common/this_thread.h"
@@ -61,7 +61,12 @@ bool ZooKeeperAdapter::Init(const std::string& server_list,
 
     server_list_ = server_list;
     root_path_ = root_path;
-    if (*root_path_.end() == '/') {
+    if (root_path_.size() < 1) {
+        LOG(ERROR) << "zookeeper_init fail : invalid <root_path>";
+        SetZkAdapterCode(ZE_ARG, zk_errno);
+        return false;
+    }
+    if (root_path_[root_path_.size() - 1] == '/') {
         root_path_.resize(root_path_.size() - 1);
     }
     id_ = id;
@@ -811,7 +816,7 @@ void ZooKeeperAdapter::SessionEventCallBack(int state) {
             LOG(INFO) << "disconnect from zk server, enable timer: "
                 << session_timeout_ << " ms";
             ThreadPool::Task task =
-                boost::bind(&ZooKeeperAdapter::SessionTimeoutWrapper, this);
+                std::bind(&ZooKeeperAdapter::SessionTimeoutWrapper, this);
             session_timer_id_ = thread_pool_.DelayTask(session_timeout_, task);
         }
         session_id_ = -1;

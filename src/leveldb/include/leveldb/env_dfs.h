@@ -33,7 +33,12 @@ public:
 
     virtual Status NewWritableFile(const std::string& fname, WritableFile** result);
 
-    virtual bool FileExists(const std::string& fname);
+    // Returns:
+    //   OK:       exists
+    //   NotFound: not found
+    //   TimeOut:  timeout
+    //   IOError:  other errors
+    virtual Status FileExists(const std::string& fname);
 
     bool CheckDelete(const std::string& fname, std::vector<std::string>* flags);
 

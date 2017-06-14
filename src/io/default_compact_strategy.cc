@@ -13,7 +13,9 @@ namespace io {
 DefaultCompactStrategy::DefaultCompactStrategy(const TableSchema& schema)
     : schema_(schema),
       raw_key_operator_(GetRawKeyOperatorFromSchema(schema_)),
-      last_ts_(-1), del_row_ts_(-1), del_col_ts_(-1), del_qual_ts_(-1), cur_ts_(-1),
+      cmp_(NewRowKeyComparator(raw_key_operator_)),
+      last_ts_(-1), last_type_(leveldb::TKT_FORSEEK), cur_type_(leveldb::TKT_FORSEEK),
+      del_row_ts_(-1), del_col_ts_(-1), del_qual_ts_(-1), cur_ts_(-1),
       del_row_seq_(0), del_col_seq_(0), del_qual_seq_(0), version_num_(0),
       snapshot_(leveldb::kMaxSequenceNumber) {
     // build index
@@ -25,7 +27,13 @@ DefaultCompactStrategy::DefaultCompactStrategy(const TableSchema& schema)
     VLOG(11) << "DefaultCompactStrategy construct";
 }
 
-DefaultCompactStrategy::~DefaultCompactStrategy() {}
+DefaultCompactStrategy::~DefaultCompactStrategy() {
+    delete cmp_;
+}
+
+const leveldb::Comparator* DefaultCompactStrategy::RowKeyComparator() {
+    return cmp_;
+}
 
 const char* DefaultCompactStrategy::Name() const {
     return "tera.DefaultCompactStrategy";
@@ -400,6 +408,37 @@ bool DefaultCompactStrategy::DropByLifeTime(int32_t cf_idx, int64_t timestamp) c
     } else {
         return true;
     }
+}
+
+bool DefaultCompactStrategy::CheckTag(const Slice& tera_key, bool* del_tag, int64_t* ttl_tag) {
+    *del_tag = false;
+    *ttl_tag = -1;
+    Slice key, col, qual;
+    int64_t ts = -1;
+    leveldb::TeraKeyType type;
+
+    if (!raw_key_operator_->ExtractTeraKey(tera_key, &key, &col, &qual, &ts, &type)) {
+        LOG(WARNING) << "invalid tera key: " << tera_key.ToString();
+        return false;
+    }
+
+    if (type == leveldb::TKT_DEL ||
+        type == leveldb::TKT_DEL_COLUMN ||
+        type == leveldb::TKT_DEL_QUALIFIERS ||
+        type == leveldb::TKT_DEL_QUALIFIER) {
+        *del_tag = true;
+    }
+    int32_t cf = -1;
+    int64_t ttl = -1;
+    if (!DropIllegalColumnFamily(col.ToString(), &cf) &&
+        schema_.column_families(cf).time_to_live() > 0) {
+        ttl = schema_.column_families(cf).time_to_live();
+        *ttl_tag = ts + ttl * 1000000LL;
+    }
+    VLOG(11) << "default strategy, del " << *del_tag << ", key_ts " << ts
+             << ", ttl " << ttl
+             << ", ttl_tag " << *ttl_tag;
+    return true;
 }
 
 bool DefaultCompactStrategy::CheckCompactLowerBound(const Slice& cur_key,

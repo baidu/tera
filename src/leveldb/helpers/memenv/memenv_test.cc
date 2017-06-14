@@ -37,7 +37,7 @@ TEST(MemEnvTest, Basics) {
   ASSERT_OK(env_->CreateDir("/dir"));
 
   // Check that the directory is empty.
-  ASSERT_TRUE(!env_->FileExists("/dir/non_existent"));
+  ASSERT_TRUE(env_->FileExists("/dir/non_existent").IsNotFound());
   ASSERT_TRUE(!env_->GetFileSize("/dir/non_existent", &file_size).ok());
   ASSERT_OK(env_->GetChildren("/dir", &children));
   ASSERT_EQ(0u, children.size());
@@ -47,7 +47,7 @@ TEST(MemEnvTest, Basics) {
   delete writable_file;
 
   // Check that the file exists.
-  ASSERT_TRUE(env_->FileExists("/dir/f"));
+  ASSERT_TRUE(env_->FileExists("/dir/f").ok());
   ASSERT_OK(env_->GetFileSize("/dir/f", &file_size));
   ASSERT_EQ(0u, file_size);
   ASSERT_OK(env_->GetChildren("/dir", &children));
@@ -66,8 +66,8 @@ TEST(MemEnvTest, Basics) {
   // Check that renaming works.
   ASSERT_TRUE(!env_->RenameFile("/dir/non_existent", "/dir/g").ok());
   ASSERT_OK(env_->RenameFile("/dir/f", "/dir/g"));
-  ASSERT_TRUE(!env_->FileExists("/dir/f"));
-  ASSERT_TRUE(env_->FileExists("/dir/g"));
+  ASSERT_TRUE(env_->FileExists("/dir/f").IsNotFound());
+  ASSERT_TRUE(env_->FileExists("/dir/g").ok());
   ASSERT_OK(env_->GetFileSize("/dir/g", &file_size));
   ASSERT_EQ(3u, file_size);
 
@@ -82,7 +82,7 @@ TEST(MemEnvTest, Basics) {
   // Check that deleting works.
   ASSERT_TRUE(!env_->DeleteFile("/dir/non_existent").ok());
   ASSERT_OK(env_->DeleteFile("/dir/g"));
-  ASSERT_TRUE(!env_->FileExists("/dir/g"));
+  ASSERT_TRUE(env_->FileExists("/dir/g").IsNotFound());
   ASSERT_OK(env_->GetChildren("/dir", &children));
   ASSERT_EQ(0u, children.size());
   ASSERT_OK(env_->DeleteDir("/dir"));

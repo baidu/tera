@@ -21,12 +21,13 @@ public:
     std::string RootTableAddr(bool update = false);
     std::string ClusterId(); // cluster URI: <scheme>://<authority>/<path>
 
-private:
+protected:
     virtual bool ReadNode(const std::string& path, std::string* value) = 0;
     virtual std::string Name() = 0;
     virtual std::string Authority() = 0;
     virtual std::string Path() = 0;
 
+private:
     mutable Mutex mutex_;
     std::string master_addr_;
     std::string root_table_addr_;
@@ -35,35 +36,54 @@ private:
 class ZkClusterFinder : public ClusterFinder {
 public:
     ZkClusterFinder(const std::string& zk_root_path, const std::string& zk_addr_list);
-private:
+protected:
     virtual bool ReadNode(const std::string& path, std::string* value);
     virtual std::string Name() { return "zk"; };
     virtual std::string Authority() { return zk_addr_list_; }
     virtual std::string Path() { return zk_root_path_; }
+private:
     std::string zk_root_path_;
     std::string zk_addr_list_;
+};
+
+class MockZkClusterFinder : public ZkClusterFinder {
+public:
+    MockZkClusterFinder(const std::string& zk_root_path, const std::string& zk_addr_list) :
+        ZkClusterFinder(zk_root_path, zk_addr_list) {}
+protected:
+    virtual std::string Name() { return "mock zk"; }
 };
 
 class InsClusterFinder : public ClusterFinder {
 public:
     InsClusterFinder(const std::string& ins_root_path, const std::string& ins_addr_list);
-private:
+protected:
     virtual bool ReadNode(const std::string& path, std::string* value);
-    virtual std::string Name() { return "ins"; };
+    virtual std::string Name() { return "ins"; }
     virtual std::string Authority() { return ins_addr_list_; }
     virtual std::string Path() { return ins_root_path_; }
+private:
     std::string ins_root_path_;
     std::string ins_addr_list_;
+};
+
+class MockInsClusterFinder : public InsClusterFinder {
+public:
+    MockInsClusterFinder(const std::string& ins_root_path, const std::string& ins_addr_list) :
+        InsClusterFinder(ins_root_path, ins_addr_list) {}
+protected:
+    virtual std::string Name() { return "mock ins"; }
 };
 
 class FakeZkClusterFinder : public ClusterFinder {
 public:
     FakeZkClusterFinder(const std::string& fake_zk_path_prefix);
-private:
+protected:
     virtual bool ReadNode(const std::string& path, std::string* value);
     virtual std::string Name() { return "fakezk"; };
     virtual std::string Authority() { return "localhost"; }
     virtual std::string Path() { return fake_zk_path_prefix_; }
+private:
     std::string fake_zk_path_prefix_;
 };
 

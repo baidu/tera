@@ -34,6 +34,14 @@ DECLARE_int32(tera_tabletnode_hang_detect_threshold);
 DECLARE_int32(tera_tabletnode_rpc_server_max_inflow);
 DECLARE_int32(tera_tabletnode_rpc_server_max_outflow);
 
+std::string GetTeraEntryName() {
+    return "tabletnode";
+}
+
+tera::TeraEntry* GetTeraEntry() {
+    return new tera::tabletnode::TabletNodeEntry();
+}
+
 namespace tera {
 namespace tabletnode {
 
@@ -55,10 +63,7 @@ bool TabletNodeEntry::StartServer() {
     IpAddress tabletnode_addr("0.0.0.0", FLAGS_tera_tabletnode_port);
     LOG(INFO) << "Start RPC server at: " << tabletnode_addr.ToString();
 
-    TabletNodeInfo tabletnode_info;
-    tabletnode_info.set_addr(tabletnode_addr.ToString());
-
-    tabletnode_impl_.reset(new TabletNodeImpl(tabletnode_info));
+    tabletnode_impl_.reset(new TabletNodeImpl());
     remote_tabletnode_ = new RemoteTabletNode(tabletnode_impl_.get());
 
     // 注册给rpcserver, rpcserver会负责delete
@@ -77,11 +82,9 @@ bool TabletNodeEntry::StartServer() {
 }
 
 void TabletNodeEntry::ShutdownServer() {
-    LOG(INFO) << "shut down server";
-    // StopServer要保证调用后, 不会再调用serveice的任何方法.
-    rpc_server_->Stop();
     tabletnode_impl_->Exit();
-    tabletnode_impl_.reset();
+    LOG(INFO) << "shut down server";
+    rpc_server_->Stop();
     LOG(INFO) << "TabletNodeEntry stop done!";
 }
 
@@ -134,8 +137,11 @@ void TabletNodeEntry::SetProcessorAffinity() {
     SplitString(FLAGS_tera_tabletnode_cpu_affinity_set, ",", &cpu_set);
     for (uint32_t i = 0; i < cpu_set.size(); ++i) {
         int32_t cpu_id;
-        StringToNumber(cpu_set[i], &cpu_id);
-        thread_attr.SetCpuMask(cpu_id);
+        if (StringToNumber(cpu_set[i], &cpu_id)) {
+            thread_attr.SetCpuMask(cpu_id);
+        } else {
+            LOG(ERROR) << "invalid cpu affinity id: " << cpu_set[i];
+        }
     }
 
     if (!thread_attr.SetCpuAffinity()) {

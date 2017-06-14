@@ -14,6 +14,7 @@ from ctypes import c_uint32, c_int32, c_int64, c_ubyte, c_uint64
 
 
 class Status(object):
+    """ status code """
     # C++ tera.h ErrorCode
     OK = 0
     NotFound = 1
@@ -32,16 +33,25 @@ class Status(object):
                     "not implemented"]
 
     def __init__(self, c):
+        """ init """
         self.c_ = c
-        if c < 0 or c > len(Status.reason_list_)-1:
+        if c < 0 or c > len(Status.reason_list_) - 1:
             self.reason_ = "bad status code"
         else:
             self.reason_ = Status.reason_list_[c]
 
     def GetReasonString(self):
+        """
+        Returns:
+            (string) status string
+        """
         return Status.reason_list_[self.c_]
 
     def GetReasonNumber(self):
+        """
+        Returns:
+            (long) status code
+        """
         return self.c_
 
 
@@ -174,6 +184,7 @@ class ResultStream(object):
     """
 
     def __init__(self, stream):
+        """ init """
         self.stream = stream
 
     def Destroy(self):
@@ -315,7 +326,18 @@ class RowMutation(object):
     """
 
     def __init__(self, mutation):
+        """ init """
         self.mutation = mutation
+
+    def PutKV(self, value, ttl):
+        """ 写入（修改）值为<value>
+
+        Args:
+            value(string): cell的值
+            ttl: value 过期时间
+        """
+        lib.tera_row_mutation_put_kv(self.mutation, value,
+                                     c_uint64(len(value)), c_int32(ttl))
 
     def Put(self, cf, qu, value):
         """ 写入（修改）这一行上
@@ -330,28 +352,49 @@ class RowMutation(object):
                                   qu, c_uint64(len(qu)),
                                   value, c_uint64(len(value)))
 
-    def PutInt64(self, cf, qu, value):
+    def PutWithTimestamp(self, cf, qu, timestamp, value):
         """ 写入（修改）这一行上
             ColumnFamily为<cf>, Qualifier为<qu>的cell值为<value>
+            指定版本（时间戳）为timestamp
 
         Args:
             cf(string): ColumnFamily名
             qu(string): Qualifier名
-            value(long): cell的值
+            timestamp(long): 版本号/时间戳
+            value(string): cell的值
         """
-        lib.tera_row_mutation_put_int64(self.mutation, cf,
-                                        qu, c_uint64(len(qu)), value)
+        lib.tera_row_mutation_put_with_timestamp(self.mutation, cf,
+                                                 qu, c_uint64(len(qu)),
+                                                 timestamp,
+                                                 value, c_uint64(len(value)))
 
-    def DeleteColumn(self, cf, qu):
+    def DeleteColumnAllVersions(self, cf, qu):
         """ 删除这一行上
-            ColumnFamily为<cf>, Qualifier为<qu>的cell
+            ColumnFamily为<cf>, Qualifier为<qu>的cell的所有版本
+
+            如果没有用到多版本机制或本列只存储了一个版本（默认情况），
+            那么使用`DeleteColumnAllVersions`而不是`DeleteColumnWithVersion`来删除本列会更方便，
+            因为不用指定timestamp作为版本号。
 
         Args:
             cf(string): ColumnFamily名
             qu(string): Qualifier名
         """
-        lib.tera_row_mutation_delete_column(self.mutation, cf,
-                                            qu, c_uint64(len(qu)))
+        lib.tera_row_mutation_delete_column_all_versions(self.mutation, cf,
+                                                         qu, c_uint64(len(qu)))
+
+    def DeleteColumnWithVersion(self, cf, qu, ts):
+        """ 删除这一行上
+            ColumnFamily为<cf>, Qualifier为<qu>的cell中Timestamp为<ts>的那个版本
+
+        Args:
+            cf(string): ColumnFamily名
+            qu(string): Qualifier名
+            ts(long): Timestamp（版本号）
+        """
+        lib.tera_row_mutation_delete_column_with_version(self.mutation, cf,
+                                                         qu, c_uint64(len(qu)),
+                                                         ts)
 
     def DeleteFamily(self, cf):
         """ 删除ColumnFamily下所有列的所有版本
@@ -402,12 +445,38 @@ class RowMutation(object):
         """
         lib.tera_row_mutation_destroy(self.mutation)
 
+    # Deprecated
+    def DeleteColumn(self, cf, qu):
+        """ 删除这一行上
+            ColumnFamily为<cf>, Qualifier为<qu>的cell
+
+        Args:
+            cf(string): ColumnFamily名
+            qu(string): Qualifier名
+        """
+        lib.tera_row_mutation_delete_column(self.mutation, cf,
+                                            qu, c_uint64(len(qu)))
+
+    # Deprecated
+    def PutInt64(self, cf, qu, value):
+        """ 写入（修改）这一行上
+            ColumnFamily为<cf>, Qualifier为<qu>的cell值为<value>
+
+        Args:
+            cf(string): ColumnFamily名
+            qu(string): Qualifier名
+            value(long): cell的值
+        """
+        lib.tera_row_mutation_put_int64(self.mutation, cf,
+                                        qu, c_uint64(len(qu)), value)
+
 
 class Table(object):
     """ 对表格的所有增删查改操作由此发起
         通过Client.OpenTable()获取一个Table对象
     """
     def __init__(self, table):
+        """ init """
         self.table = table
 
     def Close(self):
@@ -474,7 +543,28 @@ class Table(object):
         """
         return lib.tera_table_is_get_finished(self.table)
 
-    def Get(self, rowkey, cf, qu, snapshot):
+    def BatchGet(self, row_reader_list):
+        """ 批量get
+            用法类似 ApplyReader
+
+        Args:
+            row_reader_list(RowReader): 预先构造好的RowReader列表
+
+            每一行的读取结果存储在row_reader_list里对应的每个RowReader内，
+            如果该行读取成功（即返回的状态码是OK），
+                那么可以调用诸如RowReader.Value()访问读取结果
+            否则读取出错，通过状态码确定原因。
+
+            用法详见sample.py
+        """
+        num = len(row_reader_list)
+        r = list()
+        for i in row_reader_list:
+            r.append(i.reader)
+        reader_array = (c_void_p * num)(*r)
+        lib.tera_table_apply_reader_batch(self.table, reader_array, num)
+
+    def Get(self, rowkey, cf, qu, snapshot=0):
         """ 同步get一个cell的值
 
         Args:
@@ -543,6 +633,25 @@ class Table(object):
         if not result:
             raise TeraSdkException("put record failed:" + err.value)
 
+    def BatchPut(self, row_mutation_list):
+        """ 批量put
+            用法类似 ApplyMutation
+
+        Args:
+            row_mutation_list(RowMutation): 预先构造好的RowMutation列表
+
+            每一行的写入操作返回状态存储在row_mutation_list里对应的每个RowMutation内，
+            如果写入失败，通过状态码确定原因。
+
+            用法详见sample.py
+        """
+        num = len(row_mutation_list)
+        r = list()
+        for i in row_mutation_list:
+            r.append(i.mutation)
+        mutation_array = (c_void_p * num)(*r)
+        lib.tera_table_apply_mutation_batch(self.table, mutation_array, num)
+
     def PutInt64(self, rowkey, cf, qu, value):
         """ 类同Put()方法，区别是这里的参数value可以是一个数字（能够用int64表示）计数器
 
@@ -601,6 +710,7 @@ class RowReader(object):
     """ 提供随机读取一行的功能
     """
     def __init__(self, reader):
+        """ init """
         self.reader = reader
 
     def AddColumnFamily(self, cf):
@@ -635,18 +745,23 @@ class RowReader(object):
         lib.tera_row_reader_set_callback(self.reader, callback)
 
     def SetTimestamp(self, ts):
+        """ set timestamp """
         lib.tera_row_reader_set_timestamp(self.reader, ts)
 
     def SetTimeRange(self, start, end):
+        """ set time range """
         lib.tera_row_reader_set_time_range(self.reader, start, end)
 
     def SetSnapshot(self, snapshot):
+        """ set snapshot """
         lib.tera_row_reader_set_snapshot(self.reader, snapshot)
 
     def SetMaxVersions(self, versions):
+        """ set max versions """
         lib.tera_row_reader_set_max_versions(self.reader, versions)
 
     def SetTimeout(self, timeout):
+        """ set timeout """
         lib.tera_row_reader_set_timeout(self.reader, timeout)
 
     def Done(self):
@@ -734,10 +849,13 @@ class RowReader(object):
 
 
 class TeraSdkException(Exception):
+    """ exception """
     def __init__(self, reason):
+        """ init """
         self.reason = reason
 
     def __str__(self):
+        """ str """
         return self.reason
 
 
@@ -871,6 +989,11 @@ def init_function_prototype_for_table():
                                    POINTER(c_char_p)]
     lib.tera_table_put.restype = c_bool
 
+    lib.tera_table_put_kv.argtypes = [c_void_p, c_char_p, c_uint64,
+                                      c_char_p, c_uint64, c_int32,
+                                      POINTER(c_char_p)]
+    lib.tera_table_put_kv.restype = c_bool
+
     lib.tera_table_putint64.argtypes = [c_void_p, c_char_p, c_uint64, c_char_p,
                                         c_char_p, c_uint64, c_int64,
                                         POINTER(c_char_p)]
@@ -881,16 +1004,24 @@ def init_function_prototype_for_table():
 
     lib.tera_table_delete.argtypes = [c_void_p, c_char_p, c_uint64,
                                       c_char_p, c_char_p, c_uint64]
-    lib.tera_table_delete.restype = None
+    lib.tera_table_delete.restype = c_bool
 
     lib.tera_table_apply_mutation.argtypes = [c_void_p, c_void_p]
     lib.tera_table_apply_mutation.restype = None
+
+    lib.tera_table_apply_mutation_batch.argtypes = [c_void_p,
+                                                    c_void_p,
+                                                    c_int64]
+    lib.tera_table_apply_mutation_batch.restype = None
 
     lib.tera_table_is_put_finished.argtypes = [c_void_p]
     lib.tera_table_is_put_finished.restype = c_bool
 
     lib.tera_table_apply_reader.argtypes = [c_void_p, c_void_p]
     lib.tera_table_apply_reader.restype = None
+
+    lib.tera_table_apply_reader_batch.argtypes = [c_void_p, c_void_p, c_int64]
+    lib.tera_table_apply_reader_batch.restype = None
 
     lib.tera_table_is_get_finished.argtypes = [c_void_p]
     lib.tera_table_is_get_finished.restype = c_bool
@@ -907,10 +1038,20 @@ def init_function_prototype_for_table():
 
 def init_function_prototype_for_row_mutation():
     """ row_mutation"""
+    lib.tera_row_mutation_put_kv.argtypes = [c_void_p, c_char_p,
+                                             c_uint64, c_int32]
+    lib.tera_row_mutation_put_kv.restype = None
+
     lib.tera_row_mutation_put.argtypes = [c_void_p, c_char_p,
                                           c_char_p, c_uint64,
                                           c_char_p, c_uint64]
     lib.tera_row_mutation_put.restype = None
+
+    lib.tera_row_mutation_put_with_timestamp.argtypes = [c_void_p, c_char_p,
+                                                         c_char_p, c_uint64,
+                                                         c_int64,
+                                                         c_void_p, c_uint64]
+    lib.tera_row_mutation_put_with_timestamp.restype = None
 
     lib.tera_row_mutation_put_int64.argtypes = [c_void_p, c_char_p,
                                                 c_char_p, c_uint64, c_int64]
@@ -933,6 +1074,14 @@ def init_function_prototype_for_row_mutation():
                                              POINTER(POINTER(c_ubyte)),
                                              POINTER(c_uint64)]
     lib.tera_row_mutation_rowkey.restype = None
+
+    lib.tera_row_mutation_delete_column_all_versions.argtypes =\
+        [c_void_p, c_char_p, c_char_p, c_uint64]
+    lib.tera_row_mutation_delete_column_all_versions.restype = None
+
+    lib.tera_row_mutation_delete_column_with_version.argtypes =\
+        [c_void_p, c_char_p, c_char_p, c_uint64, c_int64]
+    lib.tera_row_mutation_delete_column_with_version.restype = None
 
 
 def init_function_prototype_for_row_reader():
@@ -1005,6 +1154,7 @@ def init_function_prototype_for_row_reader():
 
 
 def init_function_prototype():
+    """ init function prototype """
     init_function_prototype_for_client()
     init_function_prototype_for_table()
     init_function_prototype_for_row_reader()
@@ -1016,6 +1166,7 @@ def init_function_prototype():
 
 
 def copy_string_to_user(value, size):
+    """ copy string """
     result = string_at(value, size)
     libc.free(value)
     return result

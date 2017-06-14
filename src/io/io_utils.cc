@@ -8,7 +8,7 @@ namespace tera {
 
 StatusCode LeveldbCodeToTeraCode(const leveldb::Status& status) {
     if (status.ok()) {
-        return kTableOk;
+        return kTabletNodeOk;
     } else if (status.IsNotFound()) {
         return kKeyNotExist;
     } else if (status.IsCorruption()) {
@@ -26,30 +26,6 @@ void SetStatusCode(const leveldb::Status& db_status, StatusCode* tera_status) {
 void SetStatusCode(const io::TabletIO::TabletStatus& tablet_status, StatusCode* tera_status) {
     if (tera_status) {
         *tera_status = static_cast<StatusCode>(tablet_status);
-    }
-}
-
-void SetStatusCode(const StatusCode& code, StatusCode* tera_status) {
-    if (tera_status) {
-        *tera_status = code;
-    }
-}
-
-void SetStatusCode(const CompactStatus& compact_status, StatusCode* tera_status) {
-    if (tera_status) {
-        *tera_status = static_cast<StatusCode>(compact_status);
-    }
-}
-
-void SetStatusCode(const TabletStatus& tablet_status, StatusCode* tera_status) {
-    if (tera_status) {
-        *tera_status = static_cast<StatusCode>(tablet_status);
-    }
-}
-
-void SetStatusCode(const TableStatus& table_status, StatusCode* tera_status) {
-    if (tera_status) {
-        *tera_status = static_cast<StatusCode>(table_status);
     }
 }
 

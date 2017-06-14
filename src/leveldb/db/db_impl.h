@@ -101,7 +101,7 @@ class DBImpl : public DB {
                                 SequenceNumber* latest_snapshot);
 
   Status NewDB();
-  bool IsDbExist();
+  Status DbExists(bool* exists);
 
   void MaybeIgnoreError(Status* s) const;
 
@@ -118,7 +118,6 @@ class DBImpl : public DB {
 
   Status MakeRoomForWrite(bool force /* compact even if there is room? */)
       EXCLUSIVE_LOCKS_REQUIRED(mutex_);
-  WriteBatch* BuildBatchGroup(Writer** last_writer);
 
   void MaybeScheduleCompaction() EXCLUSIVE_LOCKS_REQUIRED(mutex_);
   static void BGWork(void* db);
@@ -133,6 +132,14 @@ class DBImpl : public DB {
   Status FinishCompactionOutputFile(CompactionState* compact, Iterator* input);
   Status InstallCompactionResults(CompactionState* compact)
       EXCLUSIVE_LOCKS_REQUIRED(mutex_);
+
+  // Returns:
+  //   Status OK: iff *exists == true  -> exists
+  //       iff *exists == false -> not exists
+  //   Status not OK:
+  //       1). Status::Corruption -> CURRENT lost,
+  //       2). Status::IOError    -> Maybe request timeout, don't use *exists
+  Status ParentCurrentStatus(uint64_t parent_no, bool* exists);
 
   State state_;
 
@@ -155,13 +162,12 @@ class DBImpl : public DB {
   bool owns_info_log_;
   bool owns_block_cache_;
   const std::string dbname_;
+  // Lock over the persistent DB state.  Non-NULL iff successfully acquired.
+  FileLock* db_lock_;
 
   // table_cache_ provides its own synchronization
   TableCache* table_cache_;
   bool owns_table_cache_;
-
-  // Lock over the persistent DB state.  Non-NULL iff successfully acquired.
-  FileLock* db_lock_;
 
   // State below is protected by mutex_
   port::Mutex mutex_;
@@ -184,7 +190,6 @@ class DBImpl : public DB {
 
   // Queue of writers.
   std::deque<Writer*> writers_;
-  WriteBatch* tmp_batch_;
 
   // Set of table files to protect from deletion because they are
   // part of ongoing compactions.
@@ -193,6 +198,7 @@ class DBImpl : public DB {
   // Has a background compaction been scheduled or is running?
   bool bg_compaction_scheduled_;
   double bg_compaction_score_;
+  uint64_t bg_compaction_timeout_;
   int64_t bg_schedule_id_;
 
   // Information for a manual compaction
