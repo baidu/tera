@@ -5272,7 +5272,7 @@ void MasterImpl::DoTabletNodeGc() {
         std::vector<TablePtr> table_list;
         tablet_manager_->ShowTable(&table_list, NULL);
         for (uint32_t i = 0; i < table_list.size(); ++i) {
-            need_gc = need_gc ? true: table_list[i]->TryCollectInheritedFile();
+            table_list[i]->TryCollectInheritedFile();
         }
     } else {
         need_gc = gc_strategy_->PreQuery();
