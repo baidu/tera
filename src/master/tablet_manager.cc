@@ -1173,7 +1173,7 @@ bool Table::TryCollectInheritedFile() {
     std::set<uint64_t>::iterator it = dead_tablets.begin();
     for (; it != dead_tablets.end(); ++it) {
         std::vector<TabletFile> tablet_files;
-        CollectInheritedFileFromFilesystem(name_, *it, &tablet_files);
+        CollectInheritedFileFromFilesystem(GetTableName(), *it, &tablet_files);
 
         for (uint32_t i = 0; i < tablet_files.size(); i++) {
             MutexLock l(&mutex_);
