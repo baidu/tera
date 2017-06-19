@@ -505,17 +505,14 @@ Status DBTable::Write(const WriteOptions& options, WriteBatch* my_batch) {
     bool created_new_wb = false;
     // kv version should not create snapshot
     if (lg_list_.size() > 1) {
-        for (uint32_t i = 0; i < lg_list_.size(); ++i) {
-            lg_list_[i]->GetSnapshot(last_sequence_);
-        }
-        commit_snapshot_ = last_sequence_;
-    } else { // single lg should not set commit_snapshot_
-        commit_snapshot_ = kMaxSequenceNumber;
-    }
-    if (lg_list_.size() > 1) {
+      for (uint32_t i = 0; i < lg_list_.size(); ++i) {
+        lg_list_[i]->GetSnapshot(last_sequence_);
+      }
+      commit_snapshot_ = last_sequence_;
       updates->SeperateLocalityGroup(&lg_updates);
       created_new_wb = true;
     } else {
+      commit_snapshot_ = kMaxSequenceNumber;
       lg_updates[0] = updates;
     }
     mutex_.Unlock();
