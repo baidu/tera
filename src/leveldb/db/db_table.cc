@@ -504,10 +504,14 @@ Status DBTable::Write(const WriteOptions& options, WriteBatch* my_batch) {
     std::fill(lg_updates.begin(), lg_updates.end(), (WriteBatch*)0);
     bool created_new_wb = false;
     // kv version should not create snapshot
-    for (uint32_t i = 0; lg_list_.size() > 1 && i < lg_list_.size(); ++i) {
-      lg_list_[i]->GetSnapshot(last_sequence_);
+    if (lg_list_.size() > 1) {
+        for (uint32_t i = 0; i < lg_list_.size(); ++i) {
+            lg_list_[i]->GetSnapshot(last_sequence_);
+        }
+        commit_snapshot_ = last_sequence_;
+    } else { // single lg should not set commit_snapshot_
+        commit_snapshot_ = kMaxSequenceNumber;
     }
-    commit_snapshot_ = last_sequence_;
     if (lg_list_.size() > 1) {
       updates->SeperateLocalityGroup(&lg_updates);
       created_new_wb = true;
@@ -535,8 +539,8 @@ Status DBTable::Write(const WriteOptions& options, WriteBatch* my_batch) {
       }
     }
     // Commit updates
-    if (s.ok()) {
-      for (uint32_t i = 0; lg_list_.size() > 1 && i < lg_list_.size(); ++i) {
+    if (s.ok() && lg_list_.size() > 1) {
+      for (uint32_t i = 0; i < lg_list_.size(); ++i) {
         lg_list_[i]->ReleaseSnapshot(commit_snapshot_);
       }
       commit_snapshot_ = last_sequence_ + WriteBatchInternal::Count(updates);

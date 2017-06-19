@@ -1390,14 +1390,14 @@ Status DBImpl::DoCompactionWork(CompactionState* compact) {
       compact->current_output()->largest.DecodeFrom(key);
 
       if (compact_strategy && ikey.sequence <= compact->smallest_snapshot) {
-          std::string merged_value;
-          std::string merged_key;
-          has_atom_merged = compact_strategy->MergeAtomicOPs(
-              input, &merged_value, &merged_key);
-          if (has_atom_merged) {
-              Slice newValue(merged_value);
-              compact->builder->Add(Slice(merged_key), newValue);
-          }
+        std::string merged_value;
+        std::string merged_key;
+        has_atom_merged = compact_strategy->MergeAtomicOPs(
+            input, &merged_value, &merged_key);
+        if (has_atom_merged) {
+            Slice newValue(merged_value);
+            compact->builder->Add(Slice(merged_key), newValue);
+        }
       }
 
       if (!has_atom_merged) {
@@ -1427,7 +1427,7 @@ Status DBImpl::DoCompactionWork(CompactionState* compact) {
     }
 
     if (!has_atom_merged) {
-        input->Next();
+      input->Next();
     }
   }
 
@@ -1442,12 +1442,12 @@ Status DBImpl::DoCompactionWork(CompactionState* compact) {
     status = FinishCompactionOutputFile(compact, input);
   }
   if (status.ok() && !input->status().ok()) {
-      if (options_.ignore_corruption_in_compaction) {
-          Log(options_.info_log, "[%s] ignore compaction error: %s",
-              dbname_.c_str(), input->status().ToString().c_str());
-      } else {
-          status = input->status();
-      }
+    if (options_.ignore_corruption_in_compaction) {
+      Log(options_.info_log, "[%s] ignore compaction error: %s",
+          dbname_.c_str(), input->status().ToString().c_str());
+    } else {
+      status = input->status();
+    }
   }
   delete input;
   input = NULL;
@@ -1883,7 +1883,7 @@ void DBImpl::GetApproximateSizes(uint64_t* size, std::vector<uint64_t>* lgsize) 
 
 uint64_t DBImpl::GetLastSequence(bool is_locked) {
   if (is_locked) {
-      mutex_.Lock();
+    mutex_.Lock();
   }
   uint64_t retval;
   if (mem_->GetLastSequence() > 0) {
@@ -1894,29 +1894,29 @@ uint64_t DBImpl::GetLastSequence(bool is_locked) {
     retval = versions_->LastSequence();
   }
   if (is_locked) {
-      mutex_.Unlock();
+    mutex_.Unlock();
   }
   return retval;
 }
 
 MemTable* DBImpl::NewMemTable() const {
-    if (!options_.use_memtable_on_leveldb) {
-        return new MemTable(internal_comparator_,
-                  options_.enable_strategy_when_get ? options_.compact_strategy_factory : NULL);
-    } else {
-        Logger* info_log = NULL;
-        //Logger* info_log = options_.info_log;
-        MemTableOnLevelDB* new_mem = new MemTableOnLevelDB(dbname_, internal_comparator_,
-                                     options_.compact_strategy_factory,
-                                     options_.memtable_ldb_write_buffer_size,
-                                     options_.memtable_ldb_block_size,
-                                     info_log);
-        std::multiset<uint64_t>::iterator i = snapshots_.begin();
-        for (; i != snapshots_.end(); ++i) {
-          new_mem->GetSnapshot(*i);
-        }
-        return new_mem;
+  if (!options_.use_memtable_on_leveldb) {
+    return new MemTable(internal_comparator_,
+              options_.enable_strategy_when_get ? options_.compact_strategy_factory : NULL);
+  } else {
+    Logger* info_log = NULL;
+    //Logger* info_log = options_.info_log;
+    MemTableOnLevelDB* new_mem = new MemTableOnLevelDB(dbname_, internal_comparator_,
+                                 options_.compact_strategy_factory,
+                                 options_.memtable_ldb_write_buffer_size,
+                                 options_.memtable_ldb_block_size,
+                                 info_log);
+    std::multiset<uint64_t>::iterator i = snapshots_.begin();
+    for (; i != snapshots_.end(); ++i) {
+      new_mem->GetSnapshot(*i);
     }
+    return new_mem;
+  }
 }
 
 uint64_t DBImpl::GetLastVerSequence() {
@@ -1925,8 +1925,8 @@ uint64_t DBImpl::GetLastVerSequence() {
 }
 
 Iterator* DBImpl::NewInternalIterator() {
-    SequenceNumber ignored;
-    return NewInternalIterator(ReadOptions(), &ignored);
+  SequenceNumber ignored;
+  return NewInternalIterator(ReadOptions(), &ignored);
 }
 
 }  // namespace leveldb
