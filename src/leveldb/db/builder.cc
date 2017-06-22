@@ -63,8 +63,8 @@ Status BuildTable(const std::string& dbname,
         bool drop = compact_strategy->Drop(ikey.user_key, ikey.sequence);
         if (drop) {
           iter->Next();
-          // Log(options.info_log, "[Memtable Drop] sequence_id: %llu, raw_key: %s",
-          //     ikey.sequence, ikey.user_key);
+          //Log(options.info_log, "[%s] [Memtable Drop] sequence_id: %lu, seq: %lu, raw_key: %s",
+          //  dbname.c_str(), ikey.sequence, snapshot, ikey.user_key.data());
           continue;   // drop it before build
         } else {
           std::string merged_value;
@@ -96,8 +96,8 @@ Status BuildTable(const std::string& dbname,
         builder->Add(key, iter->value());
         iter->Next();
       }
-      // Log(options.info_log, "[Memtable Not Drop] sequence_id: %llu, raw_key: %s",
-      //     ikey.sequence, ikey.user_key);
+      //Log(options.info_log, "[%s] [Memtable Not Drop] sequence_id: %lu, seq: %lu, raw_key: %s",
+      //  dbname.c_str(), ikey.sequence, snapshot, ikey.user_key.data());
     }
 
     if (compact_strategy) {
