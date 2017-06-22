@@ -1173,6 +1173,13 @@ bool TabletIO::LowLevelSeek(const std::string& row_key,
                 if (has_merged) {
                     counter_.low_read_cell.Add(merged_num - 1);
                     kv->set_value(merged_value);
+                    VLOG(10) << "ll-seek merge: " << "key=[" << DebugString(row_key)
+                        << "] column=[" << DebugString(cf_name)
+                        << ":" << DebugString(qu_name)
+                        << "] ts=[" << timestamp << "] "
+                        << " value_v=[" << io::DecodeBigEndain(merged_value.data()) << "] "
+                        << " value=[" << DebugString(merged_value)
+                        << "] merged=" << merged_num;
                 } else {
                     leveldb::Slice value = it_data->value();
                     kv->set_value(value.data(), value.size());

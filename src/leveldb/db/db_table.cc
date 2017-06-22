@@ -479,20 +479,23 @@ Status DBTable::Write(const WriteOptions& options, WriteBatch* my_batch) {
         }
         mutex_.Lock();
     }
+
     if (s.ok()) {
         std::vector<WriteBatch*> lg_updates;
         lg_updates.resize(lg_list_.size());
         std::fill(lg_updates.begin(), lg_updates.end(), (WriteBatch*)0);
         bool created_new_wb = false;
-        // kv version may not create snapshot
-        for (uint32_t i = 0; i < lg_list_.size(); ++i) {
-            lg_list_[i]->GetSnapshot(last_sequence_);
-        }
-        commit_snapshot_ = last_sequence_;
+
+        // kv version should not create snapshot
         if (lg_list_.size() > 1) {
+            for (uint32_t i = 0; i < lg_list_.size(); ++i) {
+                lg_list_[i]->GetSnapshot(last_sequence_);
+            }
+            commit_snapshot_ = last_sequence_;
             updates->SeperateLocalityGroup(&lg_updates);
             created_new_wb = true;
         } else {
+            commit_snapshot_ = kMaxSequenceNumber;
             lg_updates[0] = updates;
         }
         mutex_.Unlock();
@@ -516,7 +519,7 @@ Status DBTable::Write(const WriteOptions& options, WriteBatch* my_batch) {
             }
         }
         // Commit updates
-        if (s.ok()) {
+        if (s.ok() && lg_list_.size() > 1) {
             for (uint32_t i = 0; i < lg_list_.size(); ++i) {
                 lg_list_[i]->ReleaseSnapshot(commit_snapshot_);
             }
