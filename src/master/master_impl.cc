@@ -5268,7 +5268,13 @@ void MasterImpl::DoTabletNodeGc() {
     }
 
     bool need_gc = true;
-    if (gc_strategy_ != NULL) {
+    if (FLAGS_tera_master_gc_strategy == "trackable") {
+        std::vector<TablePtr> table_list;
+        tablet_manager_->ShowTable(&table_list, NULL);
+        for (uint32_t i = 0; i < table_list.size(); ++i) {
+            table_list[i]->TryCollectInheritedFile();
+        }
+    } else {
         need_gc = gc_strategy_->PreQuery();
     }
 
