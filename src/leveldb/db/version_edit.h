@@ -33,6 +33,7 @@ struct FileMetaData {
   InternalKey largest;        // Largest internal key served by table
   bool smallest_fake;         // smallest is not real, have out-of-range keys
   bool largest_fake;          // largest is not real, have out-of-range keys
+  bool being_compacted;       // Is this file undergoing compaction?
 
   FileMetaData() :
       refs(0),
@@ -44,7 +45,8 @@ struct FileMetaData {
       file_size(0),
       data_size(0),
       smallest_fake(false),
-      largest_fake(false) { }
+      largest_fake(false),
+      being_compacted(false) { }
 };
 
 class VersionEdit {

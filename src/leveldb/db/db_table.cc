@@ -311,22 +311,6 @@ Status DBTable::Init() {
     uint32_t i = *it;
     DBImpl* impl = lg_list_[i];
     s = impl->RecoverLastDumpToLevel0(lg_edits[i]);
-
-    // LogAndApply to lg's manifest
-    if (s.ok()) {
-      MutexLock lock(&impl->mutex_);
-      s = impl->versions_->LogAndApply(lg_edits[i], &impl->mutex_);
-      if (s.ok()) {
-        impl->DeleteObsoleteFiles();
-        impl->MaybeScheduleCompaction();
-      } else {
-        Log(options_.info_log, "[%s] Fail to modify manifest of lg %d",
-            dbname_.c_str(),
-            i);
-      }
-    } else {
-      Log(options_.info_log, "[%s] Fail to dump log to level 0", dbname_.c_str());
-    }
     delete lg_edits[i];
   }
 
@@ -936,7 +920,6 @@ Status DBTable::RecoverLogFile(uint64_t log_number, uint64_t recover_limit,
     }
   }
   delete file;
-
   return status;
 }
 
