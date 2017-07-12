@@ -5,6 +5,7 @@
 #include "sdk/scan_impl.h"
 
 #include <functional>
+#include <limits>
 
 #include "common/this_thread.h"
 #include "common/base/string_ext.h"
