@@ -362,7 +362,7 @@ int32_t Nfs::ListDirectory(const std::string& path,
 int32_t Nfs::LockDirectory(const std::string& path) {
   int ret = (*nfsSetDirOwner)(path.c_str());
   if (ret != 0) {
-    fprintf(stderr, "[LockDirectory] lock dir %s fail, errno: %d",
+    fprintf(stderr, "[LockDirectory] lock dir %s fail, errno: %d\n",
         path.c_str(), errno);
     return -1;
   }
@@ -370,7 +370,7 @@ int32_t Nfs::LockDirectory(const std::string& path) {
   std::vector<std::string> files;
   ret = ListDirectory(path, &files);
   if (ret != 0) {
-    fprintf(stderr, "[LockDirectory] list dir %s fail, errno: %d",
+    fprintf(stderr, "[LockDirectory] list dir %s fail, errno: %d\n",
         path.c_str(), errno);
     return -1;
   }
