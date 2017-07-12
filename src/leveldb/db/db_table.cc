@@ -227,9 +227,6 @@ Status DBTable::Init() {
   Status s;
   if (options_.use_file_lock) {
       s = env_->LockFile(LockFileName(dbname_), &db_lock_);
-      Log(options_.info_log, "[%s] Get table lock: %s,  env %lu", dbname_.c_str(),
-          LockFileName(dbname_).c_str(),
-          (uint64_t)env_);
       if (!s.ok()) {
           Log(options_.info_log, "[%s] Get db lock fail", dbname_.c_str());
           return s;

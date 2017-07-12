@@ -576,8 +576,6 @@ Status DBImpl::Recover(VersionEdit* edit) {
   }
 
   if (options_.use_file_lock) {
-    Log(options_.info_log, "[%s] lock lg(begin): %s, env %lu",
-      dbname_.c_str(), LockFileName(dbname_).c_str(), (uint64_t)env_);
     Status s = env_->LockFile(LockFileName(dbname_), &db_lock_);
     if (!s.ok()) {
       return s;
