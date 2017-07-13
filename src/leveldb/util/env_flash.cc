@@ -473,13 +473,12 @@ Status FlashEnv::RenameFile(const std::string& src, const std::string& target)
 
 Status FlashEnv::LockFile(const std::string& fname, FileLock** lock)
 {
-    *lock = NULL;
-    return Status::OK();
+    return dfs_env_->LockFile(fname, lock);
 }
 
 Status FlashEnv::UnlockFile(FileLock* lock)
 {
-    return Status::OK();
+    return dfs_env_->UnlockFile(lock);
 }
 
 void FlashEnv::SetFlashPath(const std::string& path, bool vanish_allowed) {

@@ -270,13 +270,12 @@ Status InMemoryEnv::RenameFile(const std::string& src, const std::string& target
 
 Status InMemoryEnv::LockFile(const std::string& fname, FileLock** lock)
 {
-    *lock = NULL;
-    return Status::OK();
+    return dfs_env_->LockFile(fname, lock);
 }
 
 Status InMemoryEnv::UnlockFile(FileLock* lock)
 {
-    return Status::OK();
+    return dfs_env_->UnlockFile(lock);
 }
 
 Env* NewInMemoryEnv(Env* base_env)
