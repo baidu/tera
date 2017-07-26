@@ -1173,7 +1173,7 @@ bool Table::TryCollectInheritedFile() {
     std::set<uint64_t>::iterator it = dead_tablets.begin();
     for (; it != dead_tablets.end(); ++it) {
         std::vector<TabletFile> tablet_files;
-        CollectInheritedFileFromFilesystem(GetTableName(), *it, &tablet_files);
+        CollectInheritedFileFromFilesystem(name_, *it, &tablet_files);
 
         for (uint32_t i = 0; i < tablet_files.size(); i++) {
             MutexLock l(&mutex_);
@@ -1315,7 +1315,7 @@ uint64_t Table::CleanObsoleteFile() {
         if (file.lg_id == 0 && file.file_id == 0) {
             std::string path = leveldb::BuildTabletPath(table_path, file.tablet_id);
             LOG(INFO) << "[gc] [" << name_ << "] delete dir " << path;
-            s = env->DeleteFile(path); //safely delete dir and all file in it
+            s = io::DeleteEnvDir(path); //safely delete dir and all file in it
         } else {
             std::string path = leveldb::BuildTableFilePath(table_path, file.tablet_id,
                                                            file.lg_id, file.file_id);

@@ -28,7 +28,9 @@ bool GetFixed32LGId(Slice* input, uint32_t* lg_id) {
     } else if (!GetVarint32(&lg_str, lg_id)) {
         return false;
     }
-    GetLengthPrefixedSlice(&lg_str, input);
+    if (!GetLengthPrefixedSlice(&lg_str, input)) {
+        return false;
+    }
     return true;
 }
 

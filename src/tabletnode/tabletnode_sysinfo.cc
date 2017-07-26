@@ -114,7 +114,11 @@ public:
     bool DumpData(const std::string& item_name, T data) {
         if (!fp_) {
             std::string dirname = filename_.substr(0, filename_.rfind('/'));
-            mkdir(dirname.c_str(), 0755);
+            int ret = mkdir(dirname.c_str(), 0755);
+            if (ret != 0 && errno != EEXIST) {
+                LOG(ERROR) << "fail to make dump dir " << dirname;
+                return false;
+            }
             fp_ = fopen(filename_.c_str(), "w");
             if (!fp_) {
                 LOG(ERROR) << "fail to open dump file " << filename_;

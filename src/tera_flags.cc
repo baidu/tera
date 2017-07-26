@@ -147,6 +147,7 @@ DEFINE_int64(tera_master_stat_table_interval, 60, "interval of system status dum
 DEFINE_int64(tera_master_stat_table_splitsize, 100, "default split size of stat table");
 
 DEFINE_int32(tera_master_gc_period, 60000, "the period (in ms) for master gc");
+DEFINE_int64(tera_master_ins_session_timeout, 10000000, "ins session timeout(us), default 10sec");
 
 DEFINE_bool(tera_master_availability_check_enabled, true, "whether execute availability check");    // reload config safety
 DEFINE_bool(tera_master_availability_show_details_enabled, false, "whether show details of not-ready tablets"); // reload config safety
@@ -243,7 +244,7 @@ DEFINE_int32(tera_sdk_rpc_work_thread_num, 8, "thread num of sdk rpc client");
 DEFINE_int32(tera_sdk_update_meta_internal, 10000, "the sdk update meta table internal time(ms)");
 DEFINE_int32(tera_sdk_check_timer_internal, 100, "the sdk check the resend quest queue internal time");
 DEFINE_int32(tera_sdk_timeout, 60000, "timeout of sdk read/write request (in ms)");
-DEFINE_int32(tera_sdk_timeout_precision, 10, "precision of sdk read/write timeout detector (in ms)");
+DEFINE_int32(tera_sdk_timeout_precision, 100, "precision of sdk read/write timeout detector (in ms)");
 DEFINE_int32(tera_sdk_delay_send_internal, 2, "the sdk resend the request internal time(s)");
 DEFINE_int32(tera_sdk_scan_buffer_limit, 2048000, "the pack size limit for scan operation");
 DEFINE_bool(tera_sdk_write_sync, false, "sync flag for write");
@@ -276,6 +277,7 @@ DEFINE_string(tera_ins_addr_list, "", "the ins cluster addr. e.g. abc.com:1234,a
 DEFINE_string(tera_ins_root_path, "", "root path on ins. e.g /ps/sandbox");
 DEFINE_bool(tera_ins_enabled, false, "option to open ins naming");
 DEFINE_bool(tera_mock_ins_enabled, false, "option to open mock ins naming");
+DEFINE_int64(tera_ins_session_timeout, 600000000, "ins session timeout(us), default 10min");
 
 DEFINE_int64(tera_sdk_status_timeout, 600, "(s) check tablet/tabletnode status timeout");
 

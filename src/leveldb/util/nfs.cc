@@ -381,7 +381,7 @@ int32_t Nfs::LockDirectory(const std::string& path) {
       std::string file_name = path + "/" + files[i];
       ret = (*nfsForceRelease)(file_name.c_str());
       if (ret != 0) {
-        fprintf(stderr, "[LockDirectory] force release file %s fail, errno: %d",
+        fprintf(stderr, "[LockDirectory] force release file %s fail, errno: %d\n",
             file_name.c_str(), errno);
         return -1;
       }

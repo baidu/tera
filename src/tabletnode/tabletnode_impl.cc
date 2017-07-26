@@ -235,6 +235,8 @@ bool TabletNodeImpl::Exit() {
     for (uint32_t i = 0; i < tablet_ios.size(); ++i) {
         unload_threads[i].Join();
     }
+
+    zk_adapter_->Exit();
     return true;
 }
 

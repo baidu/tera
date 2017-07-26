@@ -17,6 +17,7 @@ DECLARE_int64(tera_zk_retry_period);
 DECLARE_int32(tera_zk_retry_max_times);
 DECLARE_string(tera_ins_addr_list);
 DECLARE_string(tera_ins_root_path);
+DECLARE_int64(tera_master_ins_session_timeout);
 
 namespace tera {
 namespace master {
@@ -634,6 +635,12 @@ InsMasterZkAdapter::InsMasterZkAdapter(MasterImpl * master_impl,
 }
 
 InsMasterZkAdapter::~InsMasterZkAdapter() {
+    if (ins_sdk_) {
+        std::string root_path = FLAGS_tera_ins_root_path;
+        std::string master_lock = root_path + kMasterLockPath;
+        galaxy::ins::sdk::SDKError err;
+        ins_sdk_->UnLock(master_lock, &err);
+    }
 }
 
 static void InsOnTsChange(const galaxy::ins::sdk::WatchParam& param,
@@ -659,6 +666,7 @@ bool InsMasterZkAdapter::Init(std::string* root_tablet_addr,
                                bool* safe_mode) {
     MutexLock lock(&mutex_);
     ins_sdk_ = new galaxy::ins::sdk::InsSDK(FLAGS_tera_ins_addr_list);
+    ins_sdk_->SetTimeoutTime(FLAGS_tera_master_ins_session_timeout);
     std::string root_path = FLAGS_tera_ins_root_path;
     std::string master_lock = root_path + kMasterLockPath;
     std::string master_path = root_path + kMasterNodePath;

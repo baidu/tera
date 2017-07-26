@@ -17,6 +17,7 @@ DECLARE_int32(tera_zk_timeout);
 DECLARE_int64(tera_zk_retry_period);
 DECLARE_string(tera_ins_addr_list);
 DECLARE_string(tera_ins_root_path);
+DECLARE_int64(tera_ins_session_timeout);
 
 namespace tera {
 namespace tabletnode {
@@ -119,7 +120,7 @@ bool TabletNodeZkAdapter::Register(const std::string& session_id, int* zk_errno)
     }
     serve_node_path_ = ret_node_path;
     kick_node_path_ = kKickPath + "/" + zk::ZooKeeperUtil::GetNodeName(serve_node_path_.c_str());
-    LOG(INFO) << "create serve node success, node_path " << node_path << ", " << ret_node_path
+    LOG(INFO) << "create serve node success, node_path " << node_path
         << ", " << serve_node_path_ << ", " << kick_node_path_;
     SetZkAdapterCode(zk::ZE_OK, zk_errno);
     return true;
@@ -362,9 +363,11 @@ void InsTabletNodeZkAdapter::Init() {
     galaxy::ins::sdk::SDKError err;
     // create session
     ins_sdk_ = new galaxy::ins::sdk::InsSDK(FLAGS_tera_ins_addr_list);
+    ins_sdk_->SetTimeoutTime(FLAGS_tera_ins_session_timeout);
 
     // create node
     std::string lock_key = root_path + kTsListPath + "/" + server_addr_;
+    ins_sdk_->Delete(lock_key, &err);
     CHECK(ins_sdk_->Lock(lock_key, &err)) << "register fail";
 
     // get session id
@@ -382,6 +385,18 @@ void InsTabletNodeZkAdapter::Init() {
     std::string meta_table = root_path + kRootTabletNodePath;
     CHECK(ins_sdk_->Watch(meta_table, &InsOnMetaChange, this, &err))
           << "watch meta table fail";
+}
+
+InsTabletNodeZkAdapter::~InsTabletNodeZkAdapter() {
+}
+
+void InsTabletNodeZkAdapter::Exit() {
+    std::string root_path = FLAGS_tera_ins_root_path;
+    galaxy::ins::sdk::SDKError err;
+    std::string lock_key = root_path + kTsListPath + "/" + server_addr_;
+    LOG(INFO) << "tabletserver exit, unlock " << lock_key;
+    ins_sdk_->UnLock(lock_key, &err);
+    return;
 }
 
 void InsTabletNodeZkAdapter::OnMetaChange(std::string meta_addr, bool deleted) {
@@ -402,6 +417,7 @@ void InsTabletNodeZkAdapter::OnMetaChange(std::string meta_addr, bool deleted) {
 
 void InsTabletNodeZkAdapter::OnKickMarkCreated() {
     LOG(ERROR) << "I am kicked by master";
+    this->Exit();
     _Exit(EXIT_FAILURE);
 }
 

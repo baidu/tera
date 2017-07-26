@@ -158,13 +158,16 @@ MasterImpl::MasterImpl()
     } else if (FLAGS_tera_master_gc_strategy == "trackable") {
         LOG(INFO) << "[gc] gc strategy is Trackable";
     } else {
-        LOG(ERROR) << "Unknown gc strategy";
+        LOG(WARNING) << "Unknown gc strategy: " << FLAGS_tera_master_gc_strategy
+            << ", default gc strategy: BatchGcStrategy will take effect";
+        gc_strategy_ = std::shared_ptr<GcStrategy>(new BatchGcStrategy(tablet_manager_));
     }
 }
 
 MasterImpl::~MasterImpl() {
     LOG(INFO) << "dest impl";
     delete stat_table_;
+    zk_adapter_.reset(NULL);
 }
 
 bool MasterImpl::Init() {
@@ -3945,25 +3948,6 @@ void MasterImpl::RetryLoadTablet(TabletPtr tablet, int32_t retry_times) {
 }
 
 void MasterImpl::RetryUnloadTablet(TabletPtr tablet, int32_t retry_times) {
-    // server down
-    if (!tabletnode_manager_->FindTabletNode(tablet->GetServerAddr(), NULL)) {
-        LOG(ERROR) << "abort UnloadTablet: server down, " << tablet;
-        if (tablet->SetAddrAndStatusIf("", kTableOffLine, kTableUnLoading)) {
-            ProcessOffLineTablet(tablet);
-            TryLoadTablet(tablet);
-        } else if (tablet->SetAddrAndStatusIf("", kTableOffLine, kTableOnLoad)) {
-            ProcessOffLineTablet(tablet);
-            TryLoadTablet(tablet);
-        } else {
-            CHECK(tablet->GetStatus() == kTableOnSplit);
-            ScanClosure done =
-                std::bind(&MasterImpl::ScanMetaCallbackForSplit, this, tablet, _1, _2, _3, _4);
-            ScanMetaTableAsync(tablet->GetTableName(), tablet->GetKeyStart(),
-                               tablet->GetKeyEnd(), done);
-        }
-        return;
-    }
-
     UnloadClosure done =
         std::bind(&MasterImpl::UnloadTabletCallback, this, tablet, retry_times, _1, _2, _3, _4);
     UnloadTabletAsync(tablet, done);

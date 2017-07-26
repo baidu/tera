@@ -5,7 +5,6 @@
 #include "sdk/scan_impl.h"
 
 #include <functional>
-#include <limits>
 
 #include "common/this_thread.h"
 #include "common/base/string_ext.h"
@@ -100,12 +99,13 @@ void ResultStreamBatchImpl::GetRpcHandle(ScanTabletRequest** request_ptr,
 void ResultStreamBatchImpl::ReleaseRpcHandle(ScanTabletRequest* request,
                                              ScanTabletResponse* response) {
     delete request;
+    uint64_t response_ptr = (uint64_t)(response);
     delete response;
 
     MutexLock mutex(&mu_);
     ref_count_--;
     VLOG(28) << "release rpc handle and wakeup, ref_count_ " << ref_count_
-        << ", response " << (uint64_t)(response);
+        << ", response " << response_ptr;
     cv_.Signal();
 }
 

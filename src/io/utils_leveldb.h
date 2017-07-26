@@ -34,7 +34,7 @@ bool MoveEnvDirToTrash(const std::string& subdir);
 
 void CleanTrashDir();
 
-bool DeleteEnvDir(const std::string& subdir);
+leveldb::Status DeleteEnvDir(const std::string& subdir);
 
 } // namespace io
 } // namespace tera
