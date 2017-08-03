@@ -138,9 +138,6 @@ Status BuildTable(const std::string& dbname,
 
     // Finish and check for file errors
     if (s.ok()) {
-      s = file->Sync();
-    }
-    if (s.ok()) {
       s = file->Close();
     }
     delete file;

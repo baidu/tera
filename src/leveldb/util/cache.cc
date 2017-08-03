@@ -25,31 +25,6 @@ namespace {
 
 // LRU cache implementation
 
-// An entry is a variable length heap-allocated structure.  Entries
-// are kept in a circular doubly linked list ordered by access time.
-struct LRUHandle {
-  void* value;
-  void (*deleter)(const Slice&, void* value);
-  LRUHandle* next_hash;
-  LRUHandle* next;
-  LRUHandle* prev;
-  size_t charge;      // TODO(opt): Only allow uint32_t?
-  size_t key_length;
-  uint32_t refs;
-  uint32_t hash;      // Hash of key(); used for fast sharding and comparisons
-  char key_data[1];   // Beginning of key
-
-  Slice key() const {
-    // For cheaper lookups, we allow a temporary Handle object
-    // to store a pointer to a key in "value".
-    if (next == this) {
-      return *(reinterpret_cast<Slice*>(value));
-    } else {
-      return Slice(key_data, key_length);
-    }
-  }
-};
-
 // We provide our own simple hash table since it removes a whole bunch
 // of porting hacks and is also faster than some of the built-in hash
 // table implementations in some of the compiler/runtime combinations
@@ -286,6 +261,170 @@ size_t LRUCache::TotalCharge() {
   return usage_;
 }
 
+class LRU2QCache: public Cache {
+ public:
+  explicit LRU2QCache(size_t capacity)
+    : capacity_(capacity),
+      usage_(0) {
+     // Make empty circular linked list
+    lru_.next = &lru_;
+    lru_.prev = &lru_;
+  }
+
+  ~LRU2QCache() {}
+
+  // Like Cache methods, but with an extra "hash" parameter.
+  Cache::Handle* Insert(const Slice& key, void* value, size_t charge,
+                         void (*deleter)(const Slice& key, void* value)) {
+    const uint32_t hash = HashSlice(key);
+    MutexLock l(&mutex_);
+    LRUHandle* e = NULL;
+    e = table_.Lookup(key, hash);
+    if (e != NULL) {
+      return reinterpret_cast<Cache::Handle*>(NULL);
+    }
+
+    if (usage_ < capacity_) { // cache full
+      e = reinterpret_cast<LRUHandle*>(
+          malloc(sizeof(LRUHandle)-1 + key.size()));
+      e->value = value;
+      e->deleter = deleter;
+      e->charge = 1;
+      e->key_length = key.size();
+      e->hash = hash;
+      e->refs = 2;  // One from LRUCache, one for the returned handle
+      e->cache_id = usage_;
+      memcpy(e->key_data, key.data(), key.size());
+
+      assert(table_.Insert(e) == NULL);
+      LRU_Append(e);
+      usage_++;
+      return reinterpret_cast<Cache::Handle*>(e);
+    }
+
+    // cache full, reuse item
+    LRUHandle* old = lru_.next;
+    while (old != &lru_) {
+      if (old->refs > 1) {
+        old = old->next;
+        continue;
+      }
+      e = reinterpret_cast<LRUHandle*>(
+          malloc(sizeof(LRUHandle)-1 + key.size()));
+      e->value = value;
+      e->deleter = deleter;
+      e->charge = 1;
+      e->key_length = key.size();
+      e->hash = hash;
+      e->refs = 2;  // One from LRUCache, one for the returned handle
+      e->cache_id = old->cache_id;
+      memcpy(e->key_data, key.data(), key.size());
+
+      LRU_Remove(old);
+      table_.Remove(old->key(), old->hash);
+      Unref(old);
+
+      assert(table_.Insert(e) == NULL);
+      LRU_Append(e);
+      return reinterpret_cast<Cache::Handle*>(e);
+    }
+    // TODO: try wait finish
+    return reinterpret_cast<Cache::Handle*>(NULL);
+  }
+
+  Cache::Handle* Lookup(const Slice& key) {
+    const uint32_t hash = HashSlice(key);
+    MutexLock l(&mutex_);
+    LRUHandle* e = table_.Lookup(key, hash);
+    if (e != NULL) {
+        e->refs++;
+        LRU_Remove(e);
+        LRU_Append(e);
+    }
+    return reinterpret_cast<Cache::Handle*>(e);
+  }
+
+  void Erase(const Slice& key) {
+    const uint32_t hash = HashSlice(key);
+    MutexLock l(&mutex_);
+    LRUHandle* e = table_.Remove(key, hash);
+    if (e != NULL) {
+      LRU_Remove(e);
+      Unref(e);
+    }
+  }
+
+  void Release(Cache::Handle* handle) {
+    MutexLock l(&mutex_);
+    Unref(reinterpret_cast<LRUHandle*>(handle));
+  }
+
+  void* Value(Cache::Handle* handle) {
+    return reinterpret_cast<LRUHandle*>(handle)->value;
+  }
+
+  uint64_t NewId() {
+    return 0;
+  }
+
+  double HitRate(bool force_clear = false) {
+    return 99.9999;
+  }
+
+  size_t Entries() {
+    MutexLock l(&mutex_);
+    return usage_;
+  }
+
+  size_t TotalCharge() {
+    MutexLock l(&mutex_);
+    return usage_;
+  }
+
+ private:
+  void LRU_Remove(LRUHandle* e) {
+    e->next->prev = e->prev;
+    e->prev->next = e->next;
+  }
+
+  void LRU_Append(LRUHandle* e) {
+    // Make "e" newest entry by inserting just before lru_
+    e->next = &lru_;
+    e->prev = lru_.prev;
+    e->prev->next = e;
+    e->next->prev = e;
+  }
+
+  void Unref(LRUHandle* e) {
+    assert(e->refs > 0);
+    e->refs--;
+    if (e->refs <= 0) {
+      usage_ -= e->charge;
+      (*e->deleter)(e->key(), e->value);
+      free(e);
+    }
+  }
+
+  inline uint32_t HashSlice(const Slice& s) {
+    return Hash(s.data(), s.size(), 0);
+  }
+
+  // Initialized before use.
+  size_t capacity_;
+
+  // mutex_ protects the following state.
+  port::Mutex mutex_;
+  size_t usage_;
+
+  // Dummy head of LRU list.
+  // lru.prev is newest entry, lru.next is oldest entry.
+  //LRUHandle hot_lru_;
+  //LRUHandle cold_lru_;
+  LRUHandle lru_;
+
+  HandleTable table_;
+};
+
 static const int kNumShardBits = 4;
 static const int kNumShards = 1 << kNumShardBits;
 
@@ -380,6 +519,10 @@ class ShardedLRUCache : public Cache {
 
 Cache* NewLRUCache(size_t capacity) {
   return new ShardedLRUCache(capacity);
+}
+
+Cache* New2QCache(size_t capacity) {
+  return new LRU2QCache(capacity);
 }
 
 }  // namespace leveldb
