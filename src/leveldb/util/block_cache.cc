@@ -147,7 +147,7 @@ struct CacheBlock {
         std::stringstream ss;
         ss << "CacheBlock(" << (uint64_t)this << "): fid: " << fid << ", block_idx: " << block_idx
            << ", sid: " << sid << ", cache_block_idx: " << cache_block_idx
-           << ", state " << state;
+           << ", state " << state << ", status " << s.ToString();
         return ss.str();
     }
 };
@@ -615,6 +615,7 @@ private:
 
     Status FillCache(std::string* block_data, uint64_t block_idx) {
         cache_->mu_.AssertHeld();
+        Status s;
         uint64_t fid = fid_;
         CacheBlock* block = cache_->GetAndAllocBlock(fid, block_idx);
         block->state = 0;
@@ -622,14 +623,18 @@ private:
         cache_->mu_.Unlock();
 
         // Do io without lock
-        cache_->LogRecord(block);
-        cache_->FillCache(block);
+        block->s = cache_->LogRecord(block);
+        if (block->s.ok()) {
+            block->s = cache_->FillCache(block);
+        }
 
         cache_->mu_.Lock();
-        block->state = kCacheBlockValid;
-        cache_->ReleaseBlock(block, true);
+        if (block->s.ok()) {
+            block->state = kCacheBlockValid;
+        }
+        s = cache_->ReleaseBlock(block, true);
         write_buffer_.ReleaseBlock(block_data);
-        return Status::OK();
+        return s;
     }
 
 private:
@@ -738,7 +743,10 @@ public:
             MutexLock lockgard(&cache_->mu_);
             CacheBlock* block = c_valid[i];
             block->WaitOnClear(kCacheBlockCacheRead);
-            block->Set(kCacheBlockValid);
+            assert(block->Test(kCacheBlockValid));
+            if (!block->s.ok() && s.ok()) {
+                s = block->s; // degrade read
+            }
             block->Clear(kCacheBlockLocked);
             block->cv.SignalAll();
             Log("[%s] cache read done, %s\n",
@@ -752,6 +760,9 @@ public:
             CacheBlock* block = c_miss[i];
             block->WaitOnClear(kCacheBlockDfsRead);
             block->Set(kCacheBlockCacheFill);
+            if (!block->s.ok() && s.ok()) {
+                s = block->s; // degrade read
+            }
             Log("[%s] dfs read done, %s\n",
                 cache_->WorkPath().c_str(),
                 block->ToString().c_str());
@@ -772,7 +783,11 @@ public:
             MutexLock lockgard(&cache_->mu_);
             CacheBlock* block = c_miss[i];
             block->WaitOnClear(kCacheBlockCacheFill);
-            block->Set(kCacheBlockValid);
+            if (block->s.ok()) {
+                block->Set(kCacheBlockValid);
+            } else if (s.ok()) {
+                s = block->s; // degrade read
+            }
             block->Clear(kCacheBlockLocked);
             block->cv.SignalAll();
             Log("[%s] cache fill done, %s\n",
@@ -785,7 +800,6 @@ public:
             MutexLock lockgard(&cache_->mu_);
             CacheBlock* block = c_locked[i];
             block->WaitOnClear(kCacheBlockLocked);
-            assert((block->state & kCacheBlockValid) == kCacheBlockValid);
             Log("[%s] wait locked done, %s\n",
                 cache_->WorkPath().c_str(),
                 block->ToString().c_str());
@@ -804,8 +818,10 @@ public:
             }
             memcpy(scratch + msize, data_block.data(), data_block.size());
             msize += data_block.size();
-            Log("[%s] Fill user data, %s, prefix %lu, suffix %lu, msize %lu, offset %lu\n",
+            Log("[%s] Fill user data, %s, fill_offset %lu, fill_size %lu, prefix %lu, suffix %lu, msize %lu, offset %lu\n",
                 cache_->WorkPath().c_str(), fname_.c_str(),
+                block_idx * cache_->options_.block_size + (block_idx == begin ? offset % cache_->options_.block_size: 0),
+                data_block.size(),
                 block_idx == begin ? offset % cache_->options_.block_size: 0,
                 block_idx == end ? cache_->options_.block_size - (n + offset) % cache_->options_.block_size
                                  : cache_->options_.block_size,
@@ -829,6 +845,13 @@ public:
             CacheBlock* block = c_locked[i];
             //Log("[%s] wakeup for lock, %s\n", cache_->WorkPath().c_str(), block->ToString().c_str());
             cache_->ReleaseBlock(block, false);
+        }
+
+        if (!s.ok()) {
+            s = dfs_file_->Read(offset, n, result, scratch);
+            Log("[%s] Pread degrade %s, offset %lu, size %lu, status %s\n",
+                cache_->WorkPath().c_str(), fname_.c_str(),
+                offset, n, s.ToString().c_str());
         }
 
         Log("[%s] End Pread %s, size %lu, offset %lu, fid %lu, res %lu, status %s, start_block %lu, end_block %lu"
@@ -857,12 +880,12 @@ private:
         Slice result;
         uint64_t offset = block->block_idx * cache_->options_.block_size;
         size_t n = cache_->options_.block_size;
-        s = dfs_file_->Read(offset, n, &result, scratch);
+        block->s = dfs_file_->Read(offset, n, &result, scratch);
         Log("[%s] dfs read, %s"
             ", offset %lu, size %lu, status %s, res %lu\n",
             cache_->WorkPath().c_str(), block->ToString().c_str(),
             offset, n,
-            s.ToString().c_str(), result.size());
+            block->s.ToString().c_str(), result.size());
 
         MutexLock lockgard(&cache_->mu_);
         block->Clear(kCacheBlockDfsRead);
@@ -882,7 +905,7 @@ private:
     }
     void HandleCacheRead(AsyncCacheReader* reader) {
         CacheBlock* block = reader->block;
-        cache_->ReadCache(block);
+        block->s = cache_->ReadCache(block);
 
         MutexLock lockgard(&cache_->mu_);
         block->Clear(kCacheBlockCacheRead);
@@ -907,8 +930,10 @@ private:
         //Log("[%s] cache fill, %s\n",
         //    cache_->WorkPath().c_str(),
         //    block->ToString().c_str());
-        cache_->LogRecord(block);
-        cache_->FillCache(block);
+        block->s = cache_->LogRecord(block);
+        if (block->s.ok()) {
+            block->s = cache_->FillCache(block);
+        }
 
         MutexLock lockgard(&cache_->mu_);
         block->Clear(kCacheBlockCacheFill);
@@ -1318,6 +1343,7 @@ Status BlockCacheImpl::ReleaseBlock(CacheBlock* block, bool need_sync) {
 
     mu_.Unlock();
     if (need_sync) {
+        // TODO: dump meta into memtable
         s = LogRecord(block);
     }
 
@@ -1325,11 +1351,10 @@ Status BlockCacheImpl::ReleaseBlock(CacheBlock* block, bool need_sync) {
     LRUHandle* h = block->handle;
     DataSet* ds = GetDataSet(block->sid); // get and alloc ds
     block->ReleaseDataBlock();
+    Log("[%s] release block: %s\n", this->WorkPath().c_str(), block->ToString().c_str());
+    block->s = Status::OK(); // clear io status
     block->cv.SignalAll();
     ds->cache->Release((Cache::Handle*)h);
-
-    // TODO: dump meta into memtable
-    Log("[%s] release block: %s\n", this->WorkPath().c_str(), block->ToString().c_str());
     return s;
 }
 
