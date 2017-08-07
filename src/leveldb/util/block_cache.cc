@@ -49,13 +49,17 @@ class BlockCacheImpl;
 
 // Each SSD will New a BlockCache
 // block state
-uint64_t kCacheBlockValid = 1;
+uint64_t kCacheBlockValid = 0x1;
+uint64_t kCacheBlockLocked = 0x2;
+uint64_t kCacheBlockDfsRead = 0x4;
+uint64_t kCacheBlockCacheRead = 0x8;
+uint64_t kCacheBlockCacheFill = 0x10;
 struct CacheBlock {
     uint64_t fid;
     uint64_t block_idx;
     uint64_t sid;
     uint64_t cache_block_idx;
-    uint64_t state;
+    volatile uint64_t state;
     port::CondVar cv;
     Slice data_block;
     bool data_block_alloc;
@@ -68,11 +72,29 @@ struct CacheBlock {
       block_idx(0),
       sid(0xffffffffffffffff),
       cache_block_idx(0xffffffffffffffff),
-      state(!kCacheBlockValid),
+      state(0),
       cv(mu),
       data_block_alloc(false),
       data_block_refs(0),
       handle(NULL) {
+    }
+
+    bool Test(uint64_t c_state) {
+        return (state & c_state) == c_state;
+    }
+
+    void Clear(uint64_t c_state) {
+        state &= ~c_state;
+    }
+
+    void Set(uint64_t c_state) {
+        state |= c_state;
+    }
+
+    void WaitOnClear(uint64_t c_state) { // access in lock
+        while (Test(c_state)) {
+            cv.Wait();
+        }
     }
 
     // access in cache lock
@@ -122,7 +144,7 @@ struct CacheBlock {
 
     const std::string ToString() {
         std::stringstream ss;
-        ss << "CacheBlock: fid: " << fid << ", block_idx: " << block_idx
+        ss << "CacheBlock(" << (uint64_t)this << "): fid: " << fid << ", block_idx: " << block_idx
            << ", sid: " << sid << ", cache_block_idx: " << cache_block_idx
            << ", state " << state;
         return ss.str();
@@ -339,10 +361,13 @@ public:
 
     uint32_t NumFullBlock() { // use for BGFlush
         MutexLock l(&mu_);
-        if (block_list_.size() > 1) {
+        if (block_list_.size() == 0) {
+            return 0;
+        } else if ((block_list_.back())->size() < block_size_) {
             return block_list_.size() - 1;
+        } else {
+            return block_list_.size();
         }
-        return 0;
     }
 
     Status Append(const Slice& data) {
@@ -389,8 +414,12 @@ public:
 
     std::string* PopFrontBlock(uint64_t* block_idx) {
         MutexLock l(&mu_);
-        std::string* block = block_list_.front();
         if (block_list_.size() == 0) {
+            return NULL;
+        }
+        std::string* block = block_list_.front();
+        assert(block->size() <= block_size_);
+        if (block->size() != block_size_) {
             return NULL;
         }
         block_list_.pop_front();
@@ -431,6 +460,7 @@ public:
         : cache_(c),
           bg_cv_(&c->mu_),
           bg_block_flush_(0),
+          pending_block_num_(0),
           write_buffer_(cache_->WorkPath(), fname, cache_->options_.block_size),
           fname_(fname) { // file open
         *s = cache_->dfs_env_->NewWritableFile(fname_, &dfs_file_);
@@ -454,11 +484,9 @@ public:
         MutexLock lockgard(&cache_->mu_);
         uint64_t block_idx;
         std::string* block_data = write_buffer_.PopBackBlock(&block_idx);
-        if (block_data == NULL) {
-            Log("[%s] end release(nothing) %s\n", cache_->WorkPath().c_str(), fname_.c_str());
-            return;
+        if (block_data != NULL) {
+            FillCache(block_data, block_idx);
         }
-        FillCache(block_data, block_idx);
 
         while (bg_block_flush_ > 0) {
             bg_cv_.Wait();
@@ -492,11 +520,9 @@ public:
         MutexLock lockgard(&cache_->mu_);
         uint64_t block_idx;
         std::string* block_data = write_buffer_.PopBackBlock(&block_idx);
-        if (block_data == NULL) {
-            Log("[%s] end close state error: %s\n", cache_->WorkPath().c_str(), fname_.c_str());
-            return s;
+        if (block_data != NULL) {
+            FillCache(block_data, block_idx);
         }
-        FillCache(block_data, block_idx);
 
         while (bg_block_flush_ > 0) {
             bg_cv_.Wait();
@@ -524,7 +550,7 @@ private:
             fname_.c_str(),
             bg_block_flush_,
             write_buffer_.NumFullBlock());
-        while (bg_block_flush_ < write_buffer_.NumFullBlock()) {
+        while (bg_block_flush_ < (write_buffer_.NumFullBlock() + pending_block_num_)) {
             bg_block_flush_++;
             cache_->bg_flush_.Schedule(&BlockCacheWritableFile::BGFlushFunc, this, 10);
         }
@@ -536,14 +562,13 @@ private:
     void BGFlush() {
         Log("[%s] begin BGFlush: %s\n", cache_->WorkPath().c_str(), fname_.c_str());
         MutexLock lockgard(&cache_->mu_);
-        if (write_buffer_.NumFullBlock() == 0) {
-            return;
-        }
-
         uint64_t block_idx;
         std::string* block_data = write_buffer_.PopFrontBlock(&block_idx);
-        assert(block_data != NULL);
-        FillCache(block_data, block_idx);
+        if (block_data != NULL) {
+            pending_block_num_++;
+            FillCache(block_data, block_idx);
+            pending_block_num_--;
+        }
 
         bg_block_flush_--;
         MaybeScheduleBGFlush();
@@ -555,7 +580,7 @@ private:
         cache_->mu_.AssertHeld();
         uint64_t fid = cache_->FileId(fname_);
         CacheBlock* block = cache_->GetAndAllocBlock(fid, block_idx);
-        assert(block->state != kCacheBlockValid);
+        block->state = 0;
         block->GetDataBlock(cache_->options_.block_size, Slice(*block_data));
         cache_->mu_.Unlock();
 
@@ -577,6 +602,7 @@ private:
     WritableFile* dfs_file_;
     // protected by cache_.mu_
     uint32_t bg_block_flush_;
+    uint32_t pending_block_num_;
     BlockCacheWriteBuffer write_buffer_;
     std::string fname_;
 };
@@ -622,13 +648,17 @@ public:
             block->GetDataBlock(cache_->options_.block_size, Slice());
             block_queue.push_back(block); // sort by block_idx
 
-            if (block->state != kCacheBlockValid && block->handle->refs == 2) { // first one access this block
-                c_miss.push_back(block);
-            } else if (block->state == kCacheBlockValid && block->handle->refs == 2) { // frist one access this block
+            if (!block->Test(kCacheBlockLocked) &&
+                block->Test(kCacheBlockValid)) {
+                block->Set(kCacheBlockLocked | kCacheBlockCacheRead);
                 c_valid.push_back(block);
+            } else if (!block->Test(kCacheBlockLocked)) {
+                block->Set(kCacheBlockLocked | kCacheBlockDfsRead);
+                c_miss.push_back(block);
             } else {
                 c_locked.push_back(block);
             }
+
             Log("[%s] queue block: %s, refs %u, data_block_refs %lu, alloc %u\n",
                 cache_->WorkPath().c_str(), block->ToString().c_str(),
                 block->handle->refs, block->data_block_refs,
@@ -660,11 +690,25 @@ public:
             cache_->bg_read_.Schedule(&BlockCacheRandomAccessFile::AsyncCacheRead, reader, 10);
         }
 
+        // wait async cache read done
+        for (uint32_t i = 0; i < c_valid.size(); ++i) {
+            MutexLock lockgard(&cache_->mu_);
+            CacheBlock* block = c_valid[i];
+            block->WaitOnClear(kCacheBlockCacheRead);
+            block->Set(kCacheBlockValid);
+            block->Clear(kCacheBlockLocked);
+            block->cv.SignalAll();
+            Log("[%s] pread in valid list(done), %s\n",
+                cache_->WorkPath().c_str(),
+                block->ToString().c_str());
+        }
+
         // wait dfs read done and async cache file
         for (uint32_t i = 0; i < c_miss.size(); ++i) {
             MutexLock lockgard(&cache_->mu_);
             CacheBlock* block = c_miss[i];
-            block->cv.Wait();
+            block->WaitOnClear(kCacheBlockDfsRead);
+            block->Set(kCacheBlockCacheFill);
             Log("[%s] pread in miss list(dfs done), %s\n",
                 cache_->WorkPath().c_str(),
                 block->ToString().c_str());
@@ -684,18 +728,11 @@ public:
         for (uint32_t i = 0; i < c_miss.size(); ++i) { // wait cache fill finish
             MutexLock lockgard(&cache_->mu_);
             CacheBlock* block = c_miss[i];
-            block->cv.Wait();
+            block->WaitOnClear(kCacheBlockCacheFill);
+            block->Set(kCacheBlockValid);
+            block->Clear(kCacheBlockLocked);
+            block->cv.SignalAll();
             Log("[%s] pread in miss list(fill cache done), %s\n",
-                cache_->WorkPath().c_str(),
-                block->ToString().c_str());
-        }
-
-        // wait cache read done
-        for (uint32_t i = 0; i < c_valid.size(); ++i) {
-            MutexLock lockgard(&cache_->mu_);
-            CacheBlock* block = c_valid[i];
-            block->cv.Wait();
-            Log("[%s] pread in valid list(done), %s\n",
                 cache_->WorkPath().c_str(),
                 block->ToString().c_str());
         }
@@ -704,9 +741,8 @@ public:
         for (uint32_t i = 0; i < c_locked.size(); ++i) {
             MutexLock lockgard(&cache_->mu_);
             CacheBlock* block = c_locked[i];
-            while (block->state != kCacheBlockValid) {
-                block->cv.Wait();
-            }
+            block->WaitOnClear(kCacheBlockLocked);
+            assert((block->state & kCacheBlockValid) == kCacheBlockValid);
         }
 
         // fill user mem
@@ -735,19 +771,16 @@ public:
         cache_->mu_.Lock();
         for (uint32_t i = 0; i < c_miss.size(); ++i) {
             CacheBlock* block = c_miss[i];
-            block->state = kCacheBlockValid;
             Log("[%s] wakeup for miss, %s\n", cache_->WorkPath().c_str(), block->ToString().c_str());
             cache_->ReleaseBlock(block);
         }
         for (uint32_t i = 0; i < c_valid.size(); ++i) {
             CacheBlock* block = c_valid[i];
-            block->state = kCacheBlockValid;
             Log("[%s] wakeup for valid, %s\n", cache_->WorkPath().c_str(), block->ToString().c_str());
             cache_->ReleaseBlock(block);
         }
         for (uint32_t i = 0; i < c_locked.size(); ++i) {
             CacheBlock* block = c_locked[i];
-            block->state = kCacheBlockValid;
             Log("[%s] wakeup for lock, %s\n", cache_->WorkPath().c_str(), block->ToString().c_str());
             cache_->ReleaseBlock(block);
         }
@@ -785,6 +818,7 @@ private:
             s.ToString().c_str(), result.size());
 
         MutexLock lockgard(&cache_->mu_);
+        block->Clear(kCacheBlockDfsRead);
         block->cv.SignalAll();
         return;
     }
@@ -804,7 +838,10 @@ private:
         cache_->ReadCache(block);
 
         MutexLock lockgard(&cache_->mu_);
+        block->Clear(kCacheBlockCacheRead);
         block->cv.SignalAll();
+        //Log("[%s] async.cacheread signal, %s\n", cache_->WorkPath().c_str(),
+        //    block->ToString().c_str());
         return;
     }
 
@@ -827,6 +864,7 @@ private:
         cache_->FillCache(block);
 
         MutexLock lockgard(&cache_->mu_);
+        block->Clear(kCacheBlockCacheFill);
         block->cv.SignalAll();
         return;
     }
@@ -987,6 +1025,7 @@ Status BlockCacheImpl::LockAndPut(LockContent& lc) {
                 LRUHandle* handle = (LRUHandle*)(lc.data_set->cache->Insert(hkey, block, 1, &BlockCacheImpl::BlockDeleter));
                 assert(handle != NULL);
                 handle->cache_id = block->cache_block_idx;
+                block->handle = handle;
                 lc.data_set->cache->Release((Cache::Handle*)handle);
             }
             delete db_it;
@@ -1204,14 +1243,13 @@ CacheBlock* BlockCacheImpl::GetAndAllocBlock(uint64_t fid, uint64_t block_idx) {
        block->block_idx = block_idx;
        block->sid = sid;
        block->cache_block_idx = h->cache_id;
+       block->handle = h;
        Log("[%s] new blockcache: %s\n", this->WorkPath().c_str(), block->ToString().c_str());
-       assert(block->state != kCacheBlockValid);
     } else {
         block = reinterpret_cast<CacheBlock*>(cache->Value((Cache::Handle*)h));
         Log("[%s] get block from memcache, %s\n",
             this->WorkPath().c_str(), block->ToString().c_str());
     }
-    block->handle = h;
     return block;
 }
 
@@ -1236,7 +1274,6 @@ Status BlockCacheImpl::ReleaseBlock(CacheBlock* block) {
     LRUHandle* h = block->handle;
     DataSet* ds = GetDataSet(block->sid); // get and alloc ds
     block->ReleaseDataBlock();
-    block->handle = NULL;
     block->cv.SignalAll();
     ds->cache->Release((Cache::Handle*)h);
     mu_.Unlock();
