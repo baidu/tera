@@ -617,7 +617,14 @@ private:
         cache_->mu_.AssertHeld();
         Status s;
         uint64_t fid = fid_;
-        CacheBlock* block = cache_->GetAndAllocBlock(fid, block_idx);
+        CacheBlock* block = NULL;
+        while ((block = cache_->GetAndAllocBlock(fid, block_idx)) == NULL) {
+            Log("[%s] fill cache for write %s, fid %lu, block_idx %lu, wait 10ms after retry\n",
+                cache_->WorkPath().c_str(), fname_.c_str(),
+                fid, block_idx);
+            port::CondVar cv(&cache_->mu_);
+            cv.Wait(10); // timewait 10ms retry
+        }
         block->state = 0;
         block->GetDataBlock(cache_->options_.block_size, Slice(*block_data));
         cache_->mu_.Unlock();
@@ -691,7 +698,14 @@ public:
 
         MutexLock lockgard(&cache_->mu_);
         for (uint64_t block_idx = begin; block_idx <= end; ++block_idx) {
-            CacheBlock* block = cache_->GetAndAllocBlock(fid, block_idx);
+            CacheBlock* block = NULL;
+            while ((block = cache_->GetAndAllocBlock(fid, block_idx)) == NULL) {
+                Log("[%s] fill cache for read %s, fid %lu, block_idx %lu, wait 10ms after retry\n",
+                    cache_->WorkPath().c_str(), fname_.c_str(),
+                    fid, block_idx);
+                port::CondVar cv(&cache_->mu_);
+                cv.Wait(10); // timewait 10ms retry
+            }
             assert(block->fid == fid && block->block_idx == block_idx);
             block->GetDataBlock(cache_->options_.block_size, Slice());
             block_queue.push_back(block); // sort by block_idx
@@ -1310,7 +1324,10 @@ CacheBlock* BlockCacheImpl::GetAndAllocBlock(uint64_t fid, uint64_t block_idx) {
     if (h == NULL) {
         block = new CacheBlock(&mu_);
         h = (LRUHandle*)cache->Insert(key, block, 1, &BlockCacheImpl::BlockDeleter);
-        assert(h != NULL);
+        if (h == NULL) {
+            delete block;
+            return NULL;
+        }
         block->fid = fid;
         block->block_idx = block_idx;
         block->sid = sid;
