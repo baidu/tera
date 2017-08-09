@@ -211,8 +211,14 @@ elif [ ! -f "${FLAG_DIR}/ins_${INS_VERSION}" ] \
     tar zxf ins-${INS_VERSION}.tar.gz --recursive-unlink
     cd ins-${INS_VERSION}
     sed -i "s|^PREFIX=.*|PREFIX=${DEPS_PREFIX}|" Makefile
-    sed -i "s|^PROTOC=.*|PROTOC=${DEPS_PREFIX}/bin/protoc|" Makefile
-    BOOST_PATH=${DEPS_PREFIX}/boost_${BOOST_VERSION} make install_sdk
+    sed -i "s|^PROTOC ?=.*|PROTOC ?=${DEPS_PREFIX}/bin/protoc|" Makefile
+    sed -i "s|^SNAPPY_PATH ?=.*|SNAPPY_PATH ?=${DEPS_PREFIX}|" Makefile
+    sed -i "s|^BOOST_PATH ?=.*|BOOST_PATH ?=${DEPS_PREFIX}/boost_${BOOST_VERSION}|" Makefile
+    sed -i "s|^GFLAGS_PATH ?=.*|GFLAGS_PATH ?=${DEPS_PREFIX}|" Makefile
+    sed -i "s|^PROTOBUF_PATH ?=.*|PROTOBUF_PATH ?=${DEPS_PREFIX}|" Makefile
+    sed -i "s|^PBRPC_PATH ?=.*|PBRPC_PATH ?=${DEPS_PREFIX}|" Makefile
+    sed -i "s|^GTEST_PATH ?=.*|GTEST_PATH ?=${DEPS_PREFIX}|" Makefile
+    #BOOST_PATH=${DEPS_PREFIX}/boost_${BOOST_VERSION} make install_sdk
     make -j4 install_sdk
     cd -
     touch "${FLAG_DIR}/ins_${INS_VERSION}"

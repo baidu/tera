@@ -156,22 +156,25 @@ void CleanTrashDir() {
     return;
 }
 
-bool DeleteEnvDir(const std::string& dir) {
+leveldb::Status DeleteEnvDir(const std::string& dir) {
+    leveldb::Status s;
     static bool is_support_rmdir = true;
 
     leveldb::Env* env = LeveldbBaseEnv();
-    leveldb::Status s;
-    if (env->DeleteFile(dir).ok()) {
+    s = env->DeleteFile(dir);
+    if (s.ok()) {
         LOG(INFO) << "[gc] delete: " << dir;
-        return true;
+        return s;
     }
     if (is_support_rmdir) {
-        if (env->DeleteDir(dir).ok()) {
+        s = env->DeleteDir(dir);
+        if (s.ok()) {
             LOG(INFO) << "[gc] delete: " << dir;
-            return true;
+            return s;
         } else {
             is_support_rmdir = false;
-            LOG(INFO) << "[gc] file system not supoort rmdir.";
+            LOG(INFO) << "[gc] file system not support rmdir"
+                << ", status: " << s.ToString();
         }
     }
 
@@ -181,17 +184,18 @@ bool DeleteEnvDir(const std::string& dir) {
     if (!s.ok()) {
         LOG(ERROR) << "[gc] fail to get children, dir: " << dir
             << ", status: " << s.ToString();
-        return false;
+        return s;
     }
     for (size_t i = 0; i < children.size(); ++i) {
         std::string c_dir = dir + '/' + children[i];
         DeleteEnvDir(c_dir);
     }
-    if (env->DeleteDir(dir).ok()) {
+    s = env->DeleteDir(dir);
+    if (s.ok()) {
         LOG(INFO) << "[gc] delete: " << dir;
-        return true;
+        return s;
     }
-    return true;
+    return s;
 }
 } // namespace io
 } // namespace leveldb

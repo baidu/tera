@@ -472,7 +472,7 @@ void IncrementalGcStrategy::DeleteTableFiles(const std::string& table_name) {
                     std::string lg_str = std::to_string(lg_it->first);
                     std::string lg_path = tablet_path + "/" + lg_str;
                     LOG(INFO) << "[gc] delete empty lg dir: " << lg_path;
-                    if (io::DeleteEnvDir(lg_path)) {
+                    if (io::DeleteEnvDir(lg_path).ok()) {
                         lg_files.erase(lg_it++);
                     } else {
                         ++lg_it;

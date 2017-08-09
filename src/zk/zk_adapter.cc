@@ -70,7 +70,6 @@ bool ZooKeeperAdapter::Init(const std::string& server_list,
         root_path_.resize(root_path_.size() - 1);
     }
     id_ = id;
-
     handle_ = zookeeper_init((server_list_ + root_path_).c_str(),
                               EventCallBack, session_timeout, NULL, this, 0);
     if (NULL == handle_) {
@@ -134,7 +133,10 @@ void ZooKeeperAdapter::Finalize() {
         locks_.clear();
         watchers_.clear();
         state_ = ZS_DISCONN;
-        thread_pool_.CancelTask(session_timer_id_);
+        if (!thread_pool_.CancelTask(session_timer_id_)) {
+            LOG(WARNING) << "session timeout timer is triggered";
+            return;
+        }
         session_timer_id_ = 0;
         LOG(INFO) << "zookeeper_session_timeout_timer has gone, safe to finalize.";
     }
@@ -194,9 +196,9 @@ bool ZooKeeperAdapter::Create(const std::string& path, const std::string& value,
     if (ZOK == ret) {
         if (NULL != ret_path) {
             size_t ret_path_len = strlen(ret_path_buf);
-            if (((flag & ZOO_SEQUENCE) == 1 &&
+            if (((flag & ZOO_SEQUENCE) == ZOO_SEQUENCE &&
                 ret_path_len == root_path_len + path_len + 10) ||
-                ((flag & ZOO_SEQUENCE) == 0 &&
+                ((flag & ZOO_SEQUENCE) != ZOO_SEQUENCE &&
                 ret_path_len == root_path_len + path_len)) {
                 // compatible to zk 3.3.x
                 *ret_path = ret_path_buf + root_path_len;
@@ -470,7 +472,6 @@ bool ZooKeeperAdapter::CheckAndWatchExist(const std::string& path, bool* is_exis
         pthread_mutex_unlock(&watch->mutex);
         LOG(INFO) << "is_watch has been set before";
     }
-
     int ret = ExistsWrapper(path, is_watch, is_exist);
     if (ZE_OK == ret) {
         if (is_watch) {
@@ -1163,12 +1164,12 @@ int ZooKeeperAdapter::ExistsWrapper(const std::string& path, bool is_watch,
     int ret = zoo_exists(handle_, path.c_str(), is_watch, &stat);
     if (ZOK == ret) {
         *is_exist = true;
-        LOG(INFO)<< "zoo_exists success";
+        LOG(INFO) << "zoo_exists node [" << path << "] success";
     } else if (ZNONODE == ret) {
         *is_exist = false;
-        LOG(INFO) << "zoo_exists success";
+        LOG(INFO) << "zoo_exists node [" << path << "] not exist";
     } else {
-        LOG(WARNING) << "zoo_exists fail : " << zerror(ret);
+        LOG(WARNING) << "zoo_exists node [" << path << "] fail : " << zerror(ret);
     }
 
     switch (ret) {
@@ -1195,12 +1196,12 @@ int ZooKeeperAdapter::ExistsWrapperForLock(const std::string& path,
     int ret = zoo_wexists(handle_, path.c_str(), LockEventCallBack, this, &stat);
     if (ZOK == ret) {
         *is_exist = true;
-        LOG(INFO)<< "zoo_exists success";
+        LOG(INFO) << "zoo_exists node [" << path << "] success";
     } else if (ZNONODE == ret) {
         *is_exist = false;
-        LOG(INFO) << "zoo_exists success";
+        LOG(INFO) << "zoo_exists node [" << path << "] not exist";
     } else {
-        LOG(WARNING) << "zoo_exists fail : " << zerror(ret);
+        LOG(WARNING) << "zoo_exists node [" << path << "] fail : " << zerror(ret);
     }
 
     switch (ret) {

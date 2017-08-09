@@ -27,6 +27,7 @@ public:
     virtual ~TabletNodeZkAdapterBase() {};
     virtual void Init() = 0;
     virtual bool GetRootTableAddr(std::string* root_table_addr) = 0;
+    virtual void Exit() {};
 };
 
 class TabletNodeZkAdapter : public TabletNodeZkAdapterBase {
@@ -119,9 +120,10 @@ class InsTabletNodeZkAdapter : public TabletNodeZkAdapterBase {
 public:
     InsTabletNodeZkAdapter(TabletNodeImpl* tabletnode_impl,
                             const std::string& server_addr);
-    virtual ~InsTabletNodeZkAdapter() {}
+    virtual ~InsTabletNodeZkAdapter();
     virtual void Init();
     virtual bool GetRootTableAddr(std::string* root_table_addr);
+    virtual void Exit();
     virtual void OnKickMarkCreated();
     virtual void OnLockChange(std::string session_id, bool deleted);
     void OnMetaChange(std::string meta_addr, bool deleted);
