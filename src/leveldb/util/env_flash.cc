@@ -62,9 +62,13 @@ Status CopyToLocal(const std::string& local_fname, Env* env,
         return s;
     }
 
-    for (size_t i = 1; i < local_fname.size(); i++) {
-        if (local_fname.at(i) == '/') {
-            Env::Default()->CreateDir(local_fname.substr(0,i));
+    size_t dir_pos = local_fname.rfind("/");
+    if (dir_pos != std::string::npos) {
+        s = Env::Default()->CreateDir(local_fname.substr(0, dir_pos));
+        if (!s.ok()) {
+            Log("[env_flash] create dir: %s failed: %s, exit",
+                local_fname.substr(0, dir_pos).c_str(), s.ToString().c_str());
+            exit(-1);
         }
     }
 
@@ -73,8 +77,8 @@ Status CopyToLocal(const std::string& local_fname, Env* env,
     s = Env::Default()->NewWritableFile(local_fname, &local_file);
     if (!s.ok()) {
         if (!vanish_allowed) {
-            Log("[env_flash] local env error, exit: %s\n",
-                local_fname.c_str());
+            Log("[env_flash] create file: %s failed: %s, exit",
+                local_fname.c_str(), s.ToString().c_str());
             exit(-1);
         }
         delete dfs_file;
