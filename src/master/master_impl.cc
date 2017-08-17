@@ -2236,7 +2236,6 @@ bool MasterImpl::EnterSafeMode(StatusCode* status) {
     }
 
     tablet_manager_->Stop();
-    DisableQueryTabletNodeTimer();
     DisableTabletNodeGcTimer();
     DisableLoadBalance();
     return true;
