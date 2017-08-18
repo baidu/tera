@@ -1123,6 +1123,13 @@ int32_t ScanOp(Client* client, int32_t argc, std::string* argv, ErrorCode* err) 
 
     std::string start_rowkey = argv[3];
     std::string end_rowkey = argv[4];
+    if (start_rowkey == "\"\"") {
+        start_rowkey = "";
+    }
+    if (end_rowkey == "\"\"") {
+        end_rowkey = "";
+    }
+    LOG(INFO) << "start_key=" << start_rowkey << " end_key=" << end_rowkey;
     ScanDescriptor desc(start_rowkey);
     desc.SetEnd(end_rowkey);
     if (op == "scanallv") {
