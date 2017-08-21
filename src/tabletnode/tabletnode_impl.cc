@@ -199,7 +199,7 @@ void TabletNodeImpl::InitCacheSystem() {
     // compitable with legacy FlashEnv
     leveldb::FlashEnv* flash_env = (leveldb::FlashEnv*)io::LeveldbFlashEnv();
     flash_env->SetFlashPath(FLAGS_tera_tabletnode_cache_paths,
-            FLAGS_tera_io_cache_path_vanish_allowed);
+                            FLAGS_tera_io_cache_path_vanish_allowed);
     flash_env->SetUpdateFlashThreadNumber(FLAGS_tera_tabletnode_cache_update_thread_num);
     flash_env->SetIfForceReadFromCache(FLAGS_tera_tabletnode_cache_force_read_from_cache);
     return;

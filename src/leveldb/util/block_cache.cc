@@ -174,6 +174,7 @@ public:
 
     Status NewRandomAccessFile(const std::string& fname,
                                RandomAccessFile** result); // cache Pread
+
     static void BlockDeleter(const Slice& key, void* v);
 
     static void BGControlThreadFunc(void* arg);
@@ -424,7 +425,6 @@ public:
         MutexLock l(&mu_);
         if (tmp_storage_ == NULL) {
             tmp_storage_ = new std::string();
-            tmp_storage_->resize(0);
             block_list_.push_back(tmp_storage_);
         }
         uint32_t begin = offset_ / block_size_;
@@ -438,7 +438,6 @@ public:
             Slice buf(data.data() + tmp_size, data.size() - tmp_size);
             for (uint32_t i = begin + 1; i <= end; ++i) {
                 tmp_storage_ = new std::string();
-                tmp_storage_->resize(0);
                 block_list_.push_back(tmp_storage_);
                 if (i < end) { // last block
                     tmp_storage_->append(buf.data(), block_size_);
