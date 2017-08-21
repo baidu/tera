@@ -7,7 +7,7 @@
 # to switch between compilation modes.
 
 # OPT ?= -O2 -DNDEBUG       # (A) Production use (optimized mode)
-OPT ?= -std=gnu++11 -g2 -Wall -Werror    # (B) Debug mode, w/ full line-level debugging symbols
+OPT ?= -g2 -Wall -Werror    # (B) Debug mode, w/ full line-level debugging symbols
 # OPT ?= -O2 -g2 -DNDEBUG # (C) Profiling mode: opt, but w/debugging symbols
 #-----------------------------------------------
 
@@ -19,7 +19,7 @@ include ../../depends.mk
 include build_config.mk
 
 CFLAGS += -I. -I./include $(PLATFORM_CCFLAGS) $(OPT)
-CXXFLAGS += -I. -I./include $(PLATFORM_CXXFLAGS) $(OPT)
+CXXFLAGS += -I. -I./include $(PLATFORM_CXXFLAGS) $(OPT) -std=gnu++11
 
 LDFLAGS += $(PLATFORM_LDFLAGS) -L$(SNAPPY_LIBDIR) -lrt -ldl -lsnappy
 LIBS += $(PLATFORM_LIBS)

@@ -641,7 +641,7 @@ private:
             port::CondVar cv(&cache_->mu_);
             cv.Wait(10); // timewait 10ms retry
         }
-        block->state = 0;
+        assert(block->state == 0);
         block->GetDataBlock(cache_->options_.block_size, Slice(*block_data));
         cache_->mu_.Unlock();
 
@@ -1119,7 +1119,7 @@ Status BlockCacheImpl::LockAndPut(LockContent& lc) {
 
     Waiter* w = NULL;
     LockKeyMap::iterator it = lock_key_.find(key);
-    if (it != lock_key_.end()){
+    if (it != lock_key_.end()) {
         w = it->second;
         w->wait_num ++;
         while (!w->done) {
