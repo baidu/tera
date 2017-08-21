@@ -4,6 +4,7 @@
 
 #include "leveldb/block_cache.h"
 
+#include <aio.h>
 #include <errno.h>
 #include <fcntl.h>
 #include <stdio.h>
@@ -20,6 +21,7 @@
 #include "leveldb/env.h"
 #include "leveldb/iterator.h"
 #include "leveldb/options.h"
+#include "leveldb/statistics.h"
 #include "leveldb/status.h"
 #include "leveldb/table_utils.h"
 #include "leveldb/write_batch.h"
@@ -174,6 +176,10 @@ public:
                                RandomAccessFile** result); // cache Pread
     static void BlockDeleter(const Slice& key, void* v);
 
+    static void BGControlThreadFunc(void* arg);
+
+    Status DeleteFile(const std::string& fname);
+
 private:
     friend struct DataSet;
     struct LockContent;
@@ -182,7 +188,7 @@ private:
 
     Status FillCache(CacheBlock* block);
 
-    Status ReadCache(CacheBlock* block);
+    Status ReadCache(CacheBlock* block, struct aiocb* aio_context);
 
     uint64_t AllocFileId(); // no more than fid_batch_num
 
@@ -195,6 +201,8 @@ private:
     Status LogRecord(CacheBlock* block);
 
     Status ReleaseBlock(CacheBlock* block, bool need_sync);
+
+    void BGControlThread();
 
 private:
     friend class BlockCacheWritableFile;
@@ -223,6 +231,7 @@ private:
     enum LockKeyType {
         kDBKey = 0,
         kDataSetKey = 1,
+        kDeleteDBKey = 2,
     };
     struct LockContent {
         int type;
@@ -237,7 +246,7 @@ private:
         DataSet* data_set;
 
         const std::string Encode() {
-            if (type == kDBKey) {
+            if (type == kDBKey || type == kDeleteDBKey) {
                 return db_lock_key.ToString();
             } else if (type == kDataSetKey) {
                 std::string key = "DS#";
@@ -248,7 +257,7 @@ private:
         }
 
         const std::string KeyToString() {
-            if (type == kDBKey) {
+            if (type == kDBKey || type == kDeleteDBKey) {
                 return db_lock_key.ToString();
             } else if (type == kDataSetKey) {
                 std::stringstream ss;
@@ -272,12 +281,14 @@ private:
     typedef std::map<uint64_t, DataSet*> DataSetMap;
     DataSetMap data_set_map_;
 
+    Statistics* stat_;
     //WritableFile* logfile_;
     //log::Writer* log_;
     DB* db_; // store meta
     ThreadPool bg_fill_;
     ThreadPool bg_read_;
     ThreadPool bg_flush_;
+    ThreadPool bg_control_;
 };
 
 // Must insure not init more than twice
@@ -302,6 +313,11 @@ Status BlockCacheEnv::GetChildren(const std::string& path,
 }
 
 Status BlockCacheEnv::DeleteFile(const std::string& fname) {
+    if (fname.rfind(".sst") == fname.size() - 4) {
+        uint32_t hash = (Hash(fname.c_str(), fname.size(), 13)) % cache_vec_.size();
+        BlockCacheImpl* cache = cache_vec_[hash];
+        cache->DeleteFile(fname);
+    }
     return dfs_env_->DeleteFile(fname);
 }
 
@@ -371,8 +387,8 @@ Status BlockCacheEnv::NewRandomAccessFile(const std::string& fname,
     uint32_t hash = (Hash(fname.c_str(), fname.size(), 13)) % cache_vec_.size();
     BlockCacheImpl* cache = cache_vec_[hash];
     Status s = cache->NewRandomAccessFile(fname, result);
-    Log("[block_cache %s] open file read: %s, hash: %u, status: %s\n",
-        cache->WorkPath().c_str(), fname.c_str(), hash, s.ToString().c_str());
+    //Log("[block_cache %s] open file read: %s, hash: %u, status: %s\n",
+    //    cache->WorkPath().c_str(), fname.c_str(), hash, s.ToString().c_str());
     return s;
 }
 
@@ -663,14 +679,15 @@ public:
     : cache_(c),
       fname_(fname) {
         *s = cache_->dfs_env_->NewRandomAccessFile(fname_, &dfs_file_);
-        Log("[%s] dfs open for read: %s, block_size: %lu, status: %s\n",
-            cache_->WorkPath().c_str(),
-            fname.c_str(),
-            cache_->options_.block_size,
-            s->ToString().c_str());
+        //Log("[%s] dfs open for read: %s, block_size: %lu, status: %s\n",
+        //    cache_->WorkPath().c_str(),
+        //    fname.c_str(),
+        //    cache_->options_.block_size,
+        //    s->ToString().c_str());
 
         MutexLock lockgard(&cache_->mu_);
         fid_ = cache_->FileId(fname_);
+        aio_enabled_ = true;
         return;
     }
 
@@ -691,11 +708,12 @@ public:
         std::vector<CacheBlock*> c_valid;
         std::vector<CacheBlock*> block_queue;
 
-        Log("[%s] Begin Pread %s, size %lu, offset %lu, fid %lu, start_block %lu, end_block %lu"
-            ", block_size %lu\n",
-            cache_->WorkPath().c_str(), fname_.c_str(), n, offset, fid,
-            begin, end, cache_->options_.block_size);
+        //Log("[%s] Begin Pread %s, size %lu, offset %lu, fid %lu, start_block %lu, end_block %lu"
+        //    ", block_size %lu\n",
+        //    cache_->WorkPath().c_str(), fname_.c_str(), n, offset, fid,
+        //    begin, end, cache_->options_.block_size);
 
+        uint64_t start_ts = cache_->options_.cache_env->NowMicros();
         MutexLock lockgard(&cache_->mu_);
         for (uint64_t block_idx = begin; block_idx <= end; ++block_idx) {
             CacheBlock* block = NULL;
@@ -721,12 +739,14 @@ public:
                 c_locked.push_back(block);
             }
 
-            Log("[%s] Queue block: %s, refs %u, data_block_refs %lu, alloc %u\n",
-                cache_->WorkPath().c_str(), block->ToString().c_str(),
-                block->handle->refs, block->data_block_refs,
-                block->data_block_alloc);
+            //Log("[%s] Queue block: %s, refs %u, data_block_refs %lu, alloc %u\n",
+            //    cache_->WorkPath().c_str(), block->ToString().c_str(),
+            //    block->handle->refs, block->data_block_refs,
+            //    block->data_block_alloc);
         }
         cache_->mu_.Unlock();
+        uint64_t queue_ts = cache_->options_.cache_env->NowMicros();
+        cache_->stat_->MeasureTime(TERA_BLOCK_CACHE_PREAD_QUEUE, queue_ts - start_ts);
 
         // async read miss data
         for (uint32_t i = 0; i < c_miss.size(); ++i) {
@@ -739,6 +759,7 @@ public:
             //    block->ToString().c_str());
             cache_->bg_read_.Schedule(&BlockCacheRandomAccessFile::AsyncDfsRead, reader, 10);
         }
+        //uint64_t miss_read_sched_ts = cache_->options_.cache_env->NowMicros();
 
         // async read valid data
         for (uint32_t i = 0; i < c_valid.size(); ++i) {
@@ -749,8 +770,13 @@ public:
             //Log("[%s] pread in valid list, %s\n",
             //    cache_->WorkPath().c_str(),
             //    block->ToString().c_str());
-            cache_->bg_read_.Schedule(&BlockCacheRandomAccessFile::AsyncCacheRead, reader, 10);
+            if (aio_enabled_) {
+                AioCacheRead(reader);
+            } else {
+                cache_->bg_read_.Schedule(&BlockCacheRandomAccessFile::AsyncCacheRead, reader, 10);
+            }
         }
+        //uint64_t ssd_read_sched_ts = cache_->options_.cache_env->NowMicros();
 
         // wait async cache read done
         for (uint32_t i = 0; i < c_valid.size(); ++i) {
@@ -763,10 +789,12 @@ public:
             }
             block->Clear(kCacheBlockLocked);
             block->cv.SignalAll();
-            Log("[%s] cache read done, %s\n",
-                cache_->WorkPath().c_str(),
-                block->ToString().c_str());
+            //Log("[%s] cache read done, %s\n",
+            //    cache_->WorkPath().c_str(),
+            //    block->ToString().c_str());
         }
+        uint64_t ssd_read_ts = cache_->options_.cache_env->NowMicros();
+        cache_->stat_->MeasureTime(TERA_BLOCK_CACHE_PREAD_SSD_READ, ssd_read_ts - queue_ts);
 
         // wait dfs read done and async cache file
         for (uint32_t i = 0; i < c_miss.size(); ++i) {
@@ -781,6 +809,7 @@ public:
                 cache_->WorkPath().c_str(),
                 block->ToString().c_str());
         }
+        //uint64_t dfs_read_ts = cache_->options_.cache_env->NowMicros();
 
         for (uint32_t i = 0; i < c_miss.size(); ++i) {
             CacheBlock* block = c_miss[i];
@@ -792,6 +821,7 @@ public:
             //    block->ToString().c_str());
             cache_->bg_fill_.Schedule(&BlockCacheRandomAccessFile::AsyncCacheWrite, writer, 10);
         }
+        //uint64_t ssd_write_sched_ts = cache_->options_.cache_env->NowMicros();
 
         for (uint32_t i = 0; i < c_miss.size(); ++i) { // wait cache fill finish
             MutexLock lockgard(&cache_->mu_);
@@ -804,20 +834,22 @@ public:
             }
             block->Clear(kCacheBlockLocked);
             block->cv.SignalAll();
-            Log("[%s] cache fill done, %s\n",
-                cache_->WorkPath().c_str(),
-                block->ToString().c_str());
+            //Log("[%s] cache fill done, %s\n",
+            //    cache_->WorkPath().c_str(),
+            //    block->ToString().c_str());
         }
+        //uint64_t ssd_write_ts = cache_->options_.cache_env->NowMicros();
 
         // wait other async read finish
         for (uint32_t i = 0; i < c_locked.size(); ++i) {
             MutexLock lockgard(&cache_->mu_);
             CacheBlock* block = c_locked[i];
             block->WaitOnClear(kCacheBlockLocked);
-            Log("[%s] wait locked done, %s\n",
-                cache_->WorkPath().c_str(),
-                block->ToString().c_str());
+            //Log("[%s] wait locked done, %s\n",
+            //    cache_->WorkPath().c_str(),
+            //    block->ToString().c_str());
         }
+        uint64_t wait_unlock_ts = cache_->options_.cache_env->NowMicros();
 
         // fill user mem
         size_t msize = 0;
@@ -832,17 +864,19 @@ public:
             }
             memcpy(scratch + msize, data_block.data(), data_block.size());
             msize += data_block.size();
-            Log("[%s] Fill user data, %s, fill_offset %lu, fill_size %lu, prefix %lu, suffix %lu, msize %lu, offset %lu\n",
-                cache_->WorkPath().c_str(), fname_.c_str(),
-                block_idx * cache_->options_.block_size + (block_idx == begin ? offset % cache_->options_.block_size: 0),
-                data_block.size(),
-                block_idx == begin ? offset % cache_->options_.block_size: 0,
-                block_idx == end ? cache_->options_.block_size - (n + offset) % cache_->options_.block_size
-                                 : cache_->options_.block_size,
-                msize, offset);
+            //Log("[%s] Fill user data, %s, fill_offset %lu, fill_size %lu, prefix %lu, suffix %lu, msize %lu, offset %lu\n",
+            //    cache_->WorkPath().c_str(), fname_.c_str(),
+            //    block_idx * cache_->options_.block_size + (block_idx == begin ? offset % cache_->options_.block_size: 0),
+            //    data_block.size(),
+            //    block_idx == begin ? offset % cache_->options_.block_size: 0,
+            //    block_idx == end ? cache_->options_.block_size - (n + offset) % cache_->options_.block_size
+            //                     : cache_->options_.block_size,
+            //    msize, offset);
         }
         assert(msize == n);
         *result = Slice(scratch, n);
+        uint64_t fill_user_data_ts = cache_->options_.cache_env->NowMicros();
+        cache_->stat_->MeasureTime(TERA_BLOCK_CACHE_PREAD_FILL_USER_DATA, fill_user_data_ts - wait_unlock_ts);
 
         cache_->mu_.Lock();
         for (uint32_t i = 0; i < c_miss.size(); ++i) {
@@ -860,6 +894,8 @@ public:
             //Log("[%s] wakeup for lock, %s\n", cache_->WorkPath().c_str(), block->ToString().c_str());
             cache_->ReleaseBlock(block, false);
         }
+        uint64_t release_cache_block_ts = cache_->options_.cache_env->NowMicros();
+        cache_->stat_->MeasureTime(TERA_BLOCK_CACHE_PREAD_RELEASE_BLOCK, release_cache_block_ts - fill_user_data_ts);
 
         if (!s.ok()) {
             s = dfs_file_->Read(offset, n, result, scratch);
@@ -868,11 +904,11 @@ public:
                 offset, n, s.ToString().c_str());
         }
 
-        Log("[%s] End Pread %s, size %lu, offset %lu, fid %lu, res %lu, status %s, start_block %lu, end_block %lu"
-            ", block_size %lu\n",
-            cache_->WorkPath().c_str(), fname_.c_str(), n, offset, fid,
-            result->size(), s.ToString().c_str(),
-            begin, end, cache_->options_.block_size);
+        //Log("[%s] Done Pread %s, size %lu, offset %lu, fid %lu, res %lu, status %s, start_block %lu, end_block %lu"
+        //    ", block_size %lu\n",
+        //    cache_->WorkPath().c_str(), fname_.c_str(), n, offset, fid,
+        //    result->size(), s.ToString().c_str(),
+        //    begin, end, cache_->options_.block_size);
         return s;
     }
 
@@ -895,11 +931,13 @@ private:
         uint64_t offset = block->block_idx * cache_->options_.block_size;
         size_t n = cache_->options_.block_size;
         block->s = dfs_file_->Read(offset, n, &result, scratch);
-        Log("[%s] dfs read, %s"
-            ", offset %lu, size %lu, status %s, res %lu\n",
-            cache_->WorkPath().c_str(), block->ToString().c_str(),
-            offset, n,
-            block->s.ToString().c_str(), result.size());
+        if (!block->s.ok()) {
+            Log("[%s] dfs read, %s"
+                ", offset %lu, size %lu, status %s, res %lu\n",
+                cache_->WorkPath().c_str(), block->ToString().c_str(),
+                offset, n,
+                block->s.ToString().c_str(), result.size());
+        }
 
         MutexLock lockgard(&cache_->mu_);
         block->Clear(kCacheBlockDfsRead);
@@ -910,23 +948,58 @@ private:
     struct AsyncCacheReader {
         BlockCacheRandomAccessFile* file;
         CacheBlock* block;
+
+        // aio spec
+        struct aiocb aio_context;
     };
+
+    // use use thread module to enhance sync io
     static void AsyncCacheRead(void* arg) {
         AsyncCacheReader* reader = (AsyncCacheReader*)arg;
         reader->file->HandleCacheRead(reader);
         delete reader;
-        return;
     }
     void HandleCacheRead(AsyncCacheReader* reader) {
         CacheBlock* block = reader->block;
-        block->s = cache_->ReadCache(block);
+        block->s = cache_->ReadCache(block, NULL);
 
         MutexLock lockgard(&cache_->mu_);
         block->Clear(kCacheBlockCacheRead);
         block->cv.SignalAll();
         //Log("[%s] async.cacheread signal, %s\n", cache_->WorkPath().c_str(),
         //    block->ToString().c_str());
-        return;
+    }
+
+    // support aio engine
+    static void AioCacheReadCallback(sigval_t sigval) { // kernel create thread
+        AsyncCacheReader* reader = (AsyncCacheReader*)sigval.sival_ptr;
+        reader->file->HandleAioCacheReadCallback(reader);
+        delete reader;
+    }
+    void HandleAioCacheReadCallback(AsyncCacheReader* reader) {
+        CacheBlock* block = reader->block;
+        assert(aio_error(&reader->aio_context) == 0);
+        //while (aio_error(reader->aio_context) == EINPROGRESS);
+        ssize_t res = aio_return(&reader->aio_context);
+        block->s = res < 0? Status::Corruption("AioReadCache error") : Status::OK();
+
+        MutexLock lockgard(&cache_->mu_);
+        block->Clear(kCacheBlockCacheRead);
+        block->cv.SignalAll();
+        if (!block->s.ok()) {
+            Log("[%s] aio.cacheread signal, %s\n", cache_->WorkPath().c_str(),
+                block->ToString().c_str());
+        }
+    }
+    void AioCacheRead(AsyncCacheReader* reader) const {
+        // setup sigevent
+        memset((char*)(&reader->aio_context), 0, sizeof(struct aiocb));
+        reader->aio_context.aio_sigevent.sigev_notify = SIGEV_THREAD;
+        reader->aio_context.aio_sigevent.sigev_notify_function = &BlockCacheRandomAccessFile::AioCacheReadCallback;
+        reader->aio_context.aio_sigevent.sigev_notify_attributes = NULL;
+        reader->aio_context.aio_sigevent.sigev_value.sival_ptr = reader;
+
+        cache_->ReadCache(reader->block, &reader->aio_context);
     }
 
     struct AsyncCacheWriter {
@@ -960,6 +1033,7 @@ private:
     RandomAccessFile* dfs_file_;
     std::string fname_;
     uint64_t fid_;
+    bool aio_enabled_;
 };
 
 // Tcache impl
@@ -972,9 +1046,35 @@ BlockCacheImpl::BlockCacheImpl(const BlockCacheOptions& options)
     bg_fill_.SetBackgroundThreads(30);
     bg_read_.SetBackgroundThreads(30);
     bg_flush_.SetBackgroundThreads(30);
+    bg_control_.SetBackgroundThreads(2);
+    stat_ = CreateDBStatistics();
 }
 
-BlockCacheImpl::~BlockCacheImpl() {}
+BlockCacheImpl::~BlockCacheImpl() {
+    delete stat_;
+}
+
+void BlockCacheImpl::BGControlThreadFunc(void* arg) {
+    reinterpret_cast<BlockCacheImpl*>(arg)->BGControlThread();
+}
+
+void BlockCacheImpl::BGControlThread() {
+    Log("[%s] statistics: %s", this->WorkPath().c_str(),
+        stat_->GetBriefHistogramString(TERA_BLOCK_CACHE_PREAD_QUEUE).c_str());
+    Log("[%s] statistics: %s", this->WorkPath().c_str(),
+        stat_->GetBriefHistogramString(TERA_BLOCK_CACHE_PREAD_SSD_READ).c_str());
+    Log("[%s] statistics: %s", this->WorkPath().c_str(),
+        stat_->GetBriefHistogramString(TERA_BLOCK_CACHE_PREAD_FILL_USER_DATA).c_str());
+    Log("[%s] statistics: %s", this->WorkPath().c_str(),
+        stat_->GetBriefHistogramString(TERA_BLOCK_CACHE_PREAD_RELEASE_BLOCK).c_str());
+
+    // resched after 1s
+    stat_->ClearHistogram(TERA_BLOCK_CACHE_PREAD_QUEUE);
+    stat_->ClearHistogram(TERA_BLOCK_CACHE_PREAD_SSD_READ);
+    stat_->ClearHistogram(TERA_BLOCK_CACHE_PREAD_FILL_USER_DATA);
+    stat_->ClearHistogram(TERA_BLOCK_CACHE_PREAD_RELEASE_BLOCK);
+    bg_control_.Schedule(&BlockCacheImpl::BGControlThreadFunc, this, 10, 10000);
+}
 
 Status BlockCacheImpl::NewWritableFile(const std::string& fname,
                                        WritableFile** result) {
@@ -1072,9 +1172,15 @@ Status BlockCacheImpl::LockAndPut(LockContent& lc) {
                 lc.KeyToString().c_str(),
                 lc.ValToString().c_str(),
                 s.ToString().c_str());
+        } else if (lc.type == kDeleteDBKey) {
+            WriteOptions w_opts;
+            s = db_->Delete(w_opts, key);
+            Log("[%s] Delete db key : %s, val %s, status %s\n",
+                this->WorkPath().c_str(),
+                lc.KeyToString().c_str(),
+                lc.ValToString().c_str(),
+                s.ToString().c_str());
         } else if (lc.type == kDataSetKey) {
-            std::string end_ds = "DS#";
-            PutFixed64(&end_ds, lc.sid + 1);
             lc.data_set = new DataSet;
             lc.data_set->cache = New2QCache((options_.dataset_size / options_.block_size) + 1);// number of blocks in DS
             std::string file = options_.cache_dir + "/" + Uint64ToString(lc.sid);
@@ -1090,26 +1196,32 @@ Status BlockCacheImpl::LockAndPut(LockContent& lc) {
             ReadOptions s_opts;
             leveldb::Iterator* db_it = db_->NewIterator(s_opts);
             for (db_it->Seek(key);
-                 db_it->Valid() && db_it->key().ToString() < end_ds;
+                 db_it->Valid() && db_it->key().starts_with("DS#");
                  db_it->Next()) {
                 Slice lkey = db_it->key();
-                lkey.remove_prefix(3 + sizeof(uint64_t));// remove DS#sid
+                uint64_t sid, cbi;
+                lkey.remove_prefix(3);// lkey = DS#, sid, cbi
+                sid = DecodeFixed64(lkey.data());
+                lkey.remove_prefix(sizeof(uint64_t));
+                cbi = DecodeFixed64(lkey.data());
                 //Slice lval = db_it->value();
+                if (sid != lc.sid) {
+                    break;
+                }
 
                 CacheBlock* block = new CacheBlock(&mu_);
                 block->DecodeFrom(db_it->value()); // get fid and block_idx
                 std::string hkey;
                 PutFixed64(&hkey, block->fid);
                 PutFixed64(&hkey, block->block_idx);
-                block->sid = lc.sid;
-                block->cache_block_idx = DecodeFixed64(lkey.data());
+                block->sid = sid;
+                block->cache_block_idx = cbi;
                 block->state = (block->Test(kCacheBlockValid)) ? kCacheBlockValid : 0;
                 Log("[%s] Recovery %s, insert cacheblock into 2QLru, %s\n",
                     this->WorkPath().c_str(),
                     lc.KeyToString().c_str(),
                     block->ToString().c_str());
                 LRUHandle* handle = (LRUHandle*)(lc.data_set->cache->Insert(hkey, block, 1, &BlockCacheImpl::BlockDeleter));
-                assert(handle != NULL);
                 handle->cache_id = block->cache_block_idx;
                 block->handle = handle;
                 lc.data_set->cache->Release((Cache::Handle*)handle);
@@ -1173,6 +1285,8 @@ Status BlockCacheImpl::LoadCache() {
     new_fid_ = prev_fid_ + options_.fid_batch_num;
     Log("[block_cache %s]: reuse block cache: prev_fid: %lu, new_fid: %lu\n",
         dbname.c_str(), prev_fid_, new_fid_);
+
+    bg_control_.Schedule(&BlockCacheImpl::BGControlThreadFunc, this, 10, 10000);
     s = Status::OK();
     return s;
 }
@@ -1200,7 +1314,7 @@ Status BlockCacheImpl::FillCache(CacheBlock* block) {
     return Status::OK();
 }
 
-Status BlockCacheImpl::ReadCache(CacheBlock* block) {
+Status BlockCacheImpl::ReadCache(CacheBlock* block, struct aiocb* aio_context) {
     MutexLock l(&mu_);
     uint64_t sid = block->sid;
     uint64_t cache_block_idx = block->cache_block_idx;
@@ -1208,13 +1322,25 @@ Status BlockCacheImpl::ReadCache(CacheBlock* block) {
     mu_.Unlock();
 
     // do io without lock
-    ssize_t res = pread(fd, (char*)block->data_block.data(), block->data_block.size(),
-                         cache_block_idx * options_.block_size);
-    Log("[%s] cache read: sid %lu, dataset.fd %d, datablock size %lu, cb_idx %lu, %s, res %ld\n",
-        this->WorkPath().c_str(), sid, fd, block->data_block.size(),
-        cache_block_idx,
-        block->ToString().c_str(),
-        res);
+    ssize_t res = 0;
+    if (aio_context != NULL) { // support aio engine
+        aio_context->aio_fildes = fd;
+        aio_context->aio_buf = (char*)block->data_block.data();
+        aio_context->aio_nbytes = block->data_block.size();
+        aio_context->aio_offset = cache_block_idx * options_.block_size;
+        res = aio_read(aio_context);
+    } else {
+        res = pread(fd, (char*)block->data_block.data(), block->data_block.size(),
+                    cache_block_idx * options_.block_size);
+    }
+
+    if (res < 0) {
+        Log("[%s] cache read: sid %lu, dataset.fd %d, datablock size %lu, cb_idx %lu, %s, res %ld\n",
+            this->WorkPath().c_str(), sid, fd, block->data_block.size(),
+            cache_block_idx,
+            block->ToString().c_str(),
+            res);
+    }
 
     mu_.Lock();
     if (res < 0) {
@@ -1279,12 +1405,29 @@ uint64_t BlockCacheImpl::FileId(const std::string& fname) {
     } else { // fid in cache
         fid = DecodeFixed64(val.c_str());
     }
-    Log("[%s] Fid: %lu, fname: %s\n",
-        this->WorkPath().c_str(),
-        fid, fname.c_str());
+    //Log("[%s] Fid: %lu, fname: %s\n",
+    //    this->WorkPath().c_str(),
+    //    fid, fname.c_str());
 
     mu_.Lock();
     return fid;
+}
+
+Status BlockCacheImpl::DeleteFile(const std::string& fname) {
+    Status s;
+    std::string key = "FNAME#" + fname;
+    ReadOptions r_opts;
+    std::string val;
+    //s = db_->Get(r_opts, key, &val);
+    //if (!s.ok()) { // not exist
+    {
+        MutexLock l(&mu_);
+        LockContent lc;
+        lc.type = kDeleteDBKey;
+        lc.db_lock_key = key;
+        s = LockAndPut(lc);
+    }
+    return s;
 }
 
 DataSet* BlockCacheImpl::GetDataSet(uint64_t sid) {
@@ -1368,7 +1511,7 @@ Status BlockCacheImpl::ReleaseBlock(CacheBlock* block, bool need_sync) {
     LRUHandle* h = block->handle;
     DataSet* ds = GetDataSet(block->sid); // get and alloc ds
     block->ReleaseDataBlock();
-    Log("[%s] release block: %s\n", this->WorkPath().c_str(), block->ToString().c_str());
+    //Log("[%s] release block: %s\n", this->WorkPath().c_str(), block->ToString().c_str());
     block->s = Status::OK(); // clear io status
     block->cv.SignalAll();
     ds->cache->Release((Cache::Handle*)h);

@@ -274,17 +274,15 @@ class LRU2QCache: public Cache {
   ~LRU2QCache() {}
 
   // Like Cache methods, but with an extra "hash" parameter.
-  Cache::Handle* Insert(const Slice& key, void* value, size_t charge,
-                         void (*deleter)(const Slice& key, void* value)) {
+  Cache::Handle* Insert(const Slice& key, void* value, size_t cache_id,
+                        void (*deleter)(const Slice& key, void* value)) {
     const uint32_t hash = HashSlice(key);
     MutexLock l(&mutex_);
     LRUHandle* e = NULL;
     e = table_.Lookup(key, hash);
-    if (e != NULL) {
-      return reinterpret_cast<Cache::Handle*>(NULL);
-    }
+    assert(e == NULL);
 
-    if (usage_ < capacity_) { // cache full
+    if (usage_ < capacity_) { // cache not full
       e = reinterpret_cast<LRUHandle*>(
           malloc(sizeof(LRUHandle)-1 + key.size()));
       e->value = value;
@@ -296,8 +294,8 @@ class LRU2QCache: public Cache {
       e->cache_id = usage_;
       memcpy(e->key_data, key.data(), key.size());
 
-      assert(table_.Insert(e) == NULL);
       LRU_Append(e);
+      assert(table_.Insert(e) == NULL);
       usage_++;
       return reinterpret_cast<Cache::Handle*>(e);
     }
@@ -324,12 +322,11 @@ class LRU2QCache: public Cache {
       table_.Remove(old->key(), old->hash);
       Unref(old);
 
-      assert(table_.Insert(e) == NULL);
       LRU_Append(e);
+      assert(table_.Insert(e) == NULL);
       return reinterpret_cast<Cache::Handle*>(e);
     }
-    // TODO: try wait finish
-    return reinterpret_cast<Cache::Handle*>(NULL);
+    return NULL;
   }
 
   Cache::Handle* Lookup(const Slice& key) {

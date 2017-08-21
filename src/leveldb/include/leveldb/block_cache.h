@@ -2,8 +2,8 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#ifndef  STOREAGE_LEVELDB_UTIL_BLOCK_CACHE_H
-#define  STOREAGE_LEVELDB_UTIL_BLOCK_CACHE_H
+#ifndef  STOREAGE_LEVELDB_UTIL_BLOCK_CACHE_H_
+#define  STOREAGE_LEVELDB_UTIL_BLOCK_CACHE_H_
 
 #include "leveldb/env.h"
 #include "leveldb/options.h"
