@@ -47,7 +47,10 @@ MARK_SRC := src/benchmark/mark.cc src/benchmark/mark_main.cc
 TEST_SRC := src/utils/test/prop_tree_test.cc src/utils/test/tprinter_test.cc \
             src/io/test/tablet_io_test.cc src/io/test/tablet_scanner_test.cc \
             src/master/test/master_impl_test.cc src/io/test/load_test.cc \
-	     src/common/test/thread_pool_test.cc
+	     src/common/test/thread_pool_test.cc \
+		 src/observer/test/observer_impl_test.cc
+OBSERVER_SRC := $(wildcard src/observer/executor/*.cc)
+OBSERVER_DEMO_SRC := $(wildcard src/observer/observer_demo.cc)
 
 TEST_OUTPUT := test_output
 UNITTEST_OUTPUT := $(TEST_OUTPUT)/unittest
@@ -69,14 +72,17 @@ MONITOR_OBJ := $(MONITOR_SRC:.cc=.o)
 MARK_OBJ := $(MARK_SRC:.cc=.o)
 HTTP_OBJ := $(HTTP_SRC:.cc=.o)
 TEST_OBJ := $(TEST_SRC:.cc=.o)
+OBSERVER_OBJ := $(OBSERVER_SRC:.cc=.o)
+OBSERVER_DEMO_OBJ := $(OBSERVER_DEMO_SRC:.cc=.o)
 ALL_OBJ := $(MASTER_OBJ) $(TABLETNODE_OBJ) $(IO_OBJ) $(SDK_OBJ) $(PROTO_OBJ) \
            $(JNI_TERA_OBJ) $(OTHER_OBJ) $(COMMON_OBJ) $(SERVER_OBJ) $(CLIENT_OBJ) \
            $(TEST_CLIENT_OBJ) $(TERA_C_OBJ) $(MONITOR_OBJ) $(MARK_OBJ) $(TEST_OBJ) \
-           $(SERVER_WRAPPER_OBJ)
+           $(SERVER_WRAPPER_OBJ) \
+		   $(OBSERVER_OBJ) $(OBSERVER_DEMO_OBJ)
 LEVELDB_LIB := src/leveldb/libleveldb.a
 LEVELDB_UTIL := src/leveldb/util/histogram.o src/leveldb/port/port_posix.o
 
-PROGRAM = tera_main tera_master tabletserver teracli teramo tera_test
+PROGRAM = tera_main tera_master tabletserver teracli teramo tera_test observer_demo
 LIBRARY = libtera.a
 SOLIBRARY = libtera.so
 TERA_C_SO = libtera_c.so
@@ -84,14 +90,15 @@ JNILIBRARY = libjni_tera.so
 BENCHMARK = tera_bench tera_mark
 TESTS = prop_tree_test tprinter_test string_util_test tablet_io_test \
         tablet_scanner_test fragment_test progress_bar_test master_impl_test load_test \
-	 thread_pool_test
+	 thread_pool_test observer_impl_test
+OBSERVER_LIBRARY = libobserver.a
 
 .PHONY: all clean cleanall test
 
-all: $(PROGRAM) $(LIBRARY) $(SOLIBRARY) $(TERA_C_SO) $(JNILIBRARY) $(BENCHMARK)
+all: $(PROGRAM) $(LIBRARY) $(SOLIBRARY) $(TERA_C_SO) $(JNILIBRARY) $(BENCHMARK) $(OBSERVER_LIBRARY)
 	mkdir -p build/include build/lib build/bin build/log build/benchmark
 	cp $(PROGRAM) build/bin
-	cp $(LIBRARY) $(SOLIBRARY) $(TERA_C_SO) $(JNILIBRARY) build/lib
+	cp $(LIBRARY) $(SOLIBRARY) $(TERA_C_SO) $(JNILIBRARY) $(OBSERVER_LIBRARY) build/lib
 	cp src/leveldb/tera_bench .
 	cp -r benchmark/*.sh benchmark/ycsb4tera/ $(BENCHMARK) build/benchmark
 	cp -r include build/
@@ -113,7 +120,7 @@ check: test
 clean:
 	rm -rf $(ALL_OBJ) $(PROTO_OUT_CC) $(PROTO_OUT_H) $(TEST_OUTPUT)
 	$(MAKE) clean -C src/leveldb
-	rm -rf $(PROGRAM) $(LIBRARY) $(SOLIBRARY) $(TERA_C_SO) $(JNILIBRARY) $(BENCHMARK) $(TESTS) terahttp
+	rm -rf $(PROGRAM) $(LIBRARY) $(SOLIBRARY) $(TERA_C_SO) $(JNILIBRARY) $(BENCHMARK) $(TESTS) terahttp $(OBSERVER_LIBRARY)
 
 cleanall:
 	$(MAKE) clean
@@ -162,7 +169,16 @@ src/leveldb/libleveldb.a: FORCE
 
 tera_bench:
 
+libobserver.a: $(OBSERVER_OBJ)
+	$(AR) -rs $@ $^
+
+observer_demo : $(OBSERVER_DEMO_OBJ) $(OBSERVER_LIBRARY) $(LIBRARY)
+	$(CXX) -o $@ $^ $(LDFLAGS)
+
 # unit test
+observer_impl_test: src/observer/test/observer_impl_test.o $(OBSERVER_LIBRARY) $(LIBRARY)
+	$(CXX) -o $@ $^ $(LDFLAGS)
+
 thread_pool_test: src/common/test/thread_pool_test.o $(LIBRARY)
 	$(CXX) -o $@ $^ $(LDFLAGS)
 
@@ -216,8 +232,8 @@ proto: $(PROTO_OUT_CC) $(PROTO_OUT_H)
 
 # install output into system directories
 .PHONY: install
-install: $(PROGRAM) $(LIBRARY) $(SOLIBRARY) $(TERA_C_SO) $(JNILIBRARY)
+install: $(PROGRAM) $(LIBRARY) $(SOLIBRARY) $(TERA_C_SO) $(JNILIBRARY) $(OBSERVER_LIBRARY)
 	mkdir -p $(INSTALL_PREFIX)/bin $(INSTALL_PREFIX)/include $(INSTALL_PREFIX)/lib
 	cp -rf $(PROGRAM) $(INSTALL_PREFIX)/bin
 	cp -rf include/* $(INSTALL_PREFIX)/include
-	cp -rf $(LIBRARY) $(SOLIBRARY) $(TERA_C_SO) $(JNILIBRARY) $(INSTALL_PREFIX)/lib
+	cp -rf $(LIBRARY) $(SOLIBRARY) $(TERA_C_SO) $(JNILIBRARY) $(OBSERVER_LIBRARY) $(INSTALL_PREFIX)/lib
