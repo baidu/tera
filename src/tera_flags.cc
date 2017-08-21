@@ -121,7 +121,7 @@ DEFINE_double(tera_master_load_balance_size_ratio_trigger, 1.2, "ratio of heavie
 DEFINE_int32(tera_master_load_balance_ts_load_threshold, 5000, "threshold of one tabletnode in QPS load-balance decision");
 DEFINE_int32(tera_master_load_balance_scan_weight, 300, "scan weight in load-balance decision");
 
-DEFINE_double(tera_safemode_tablet_locality_ratio, 0.9, "the tablet locality ratio threshold of safemode");
+DEFINE_double(tera_safemode_tablet_locality_ratio, 0.3, "the tablet locality ratio threshold of safemode");
 DEFINE_bool(tera_master_kick_tabletnode_enabled, true, "enable master to kick tabletnode");
 DEFINE_int32(tera_master_kick_tabletnode_query_fail_times, 10, "the number of query fail to kick tabletnode");
 DEFINE_int32(tera_master_control_tabletnode_retry_period, 60000, "the retry period (in ms) for master control tabletnode");
