@@ -178,7 +178,7 @@ bool TabletNodeImpl::Init() {
 
 void TabletNodeImpl::InitCacheSystem() {
     if (FLAGS_tera_tabletnode_block_cache_enabled) {
-        LOG(INFO) << "Tcache: set flash path: " << FLAGS_tera_tabletnode_cache_paths;
+        LOG(INFO) << "t-cache: set flash path: " << FLAGS_tera_tabletnode_cache_paths;
         std::vector<std::string> path_list;
         SplitString(FLAGS_tera_tabletnode_cache_paths, ";", &path_list);
 
@@ -187,7 +187,7 @@ void TabletNodeImpl::InitCacheSystem() {
             posix_env->CreateDir(path_list[i]);
         }
 
-        LOG(INFO) << "activate Tcache system";
+        LOG(INFO) << "activate t-cache system";
         leveldb::Env* block_cache_env = io::DefaultBlockCacheEnv();
         for (uint32_t i = 0; i < path_list.size(); ++i) {
             leveldb::BlockCacheOptions opts;
