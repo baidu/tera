@@ -53,11 +53,10 @@ public:
     GetHistogramData(type, &hData);
     snprintf(buffer,
             200,
-            "%s statistics Percentiles :=> 50 : %f 95 : %f 99 : %f\n",
+            "%s :=> %f(%f)",
             HistogramsNameMap[type].second.c_str(),
-            hData.median,
-            hData.percentile95,
-            hData.percentile99);
+            hData.average,
+            hData.percentile99 - hData.median);
     res.append(buffer);
     res.shrink_to_fit();
     return res;
