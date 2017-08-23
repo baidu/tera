@@ -1,4 +1,4 @@
-// Copyright (c) 2015, Baidu.com, Inc. All Rights Reserved
+// Copyright (c) 2017, Baidu.com, Inc. All Rights Reserved
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -38,7 +38,7 @@ namespace leveldb {
 // Tcache
 /////////////////////////////////////////////
 uint64_t kBlockSize = 4096UL;
-uint64_t kDataSetSize = 134217728UL;
+uint64_t kDataSetSize = 128UL << 20;
 uint64_t kFidBatchNum = 100000UL;
 uint64_t kCacheSize = 350000000000UL;
 uint64_t kMetaBlockSize = 2000UL;
@@ -63,6 +63,7 @@ struct CacheBlock {
     uint64_t sid;
     uint64_t cache_block_idx;
     volatile uint64_t state;
+    port::Mutex mu;
     port::CondVar cv;
     Slice data_block;
     bool data_block_alloc;
@@ -70,31 +71,35 @@ struct CacheBlock {
     LRUHandle* handle;
     Status s;
 
-    CacheBlock(port::Mutex* mu)
+    CacheBlock()
     : fid(0),
       block_idx(0),
       sid(0xffffffffffffffff),
       cache_block_idx(0xffffffffffffffff),
       state(0),
-      cv(mu),
+      cv(&mu),
       data_block_alloc(false),
       data_block_refs(0),
       handle(NULL) {
     }
 
     bool Test(uint64_t c_state) {
+        mu.AssertHeld();
         return (state & c_state) == c_state;
     }
 
     void Clear(uint64_t c_state) {
+        mu.AssertHeld();
         state &= ~c_state;
     }
 
     void Set(uint64_t c_state) {
+        mu.AssertHeld();
         state |= c_state;
     }
 
     void WaitOnClear(uint64_t c_state) { // access in lock
+        mu.AssertHeld();
         while (Test(c_state)) {
             cv.Wait();
         }
@@ -507,7 +512,7 @@ class BlockCacheWritableFile : public WritableFile {
 public:
     BlockCacheWritableFile(BlockCacheImpl* c, const std::string& fname, Status* s)
         : cache_(c),
-          bg_cv_(&c->mu_),
+          bg_cv_(&mu_),
           bg_block_flush_(0),
           pending_block_num_(0),
           write_buffer_(cache_->WorkPath(), fname, cache_->options_.block_size),
@@ -519,7 +524,6 @@ public:
             cache_->options_.block_size,
             s->ToString().c_str());
 
-        MutexLock lockgard(&cache_->mu_);
         fid_ = cache_->FileId(fname_);
         return;
     }
@@ -537,7 +541,7 @@ public:
         }
         write_buffer_.Append(data);
 
-        MutexLock lockgard(&cache_->mu_);
+        MutexLock lockgard(&mu_);
         MaybeScheduleBGFlush();
         return Status::OK();
     }
@@ -550,13 +554,13 @@ public:
             dfs_file_ = NULL;
         }
 
-        MutexLock lockgard(&cache_->mu_);
         uint64_t block_idx;
         std::string* block_data = write_buffer_.PopBackBlock(&block_idx);
         if (block_data != NULL) {
             FillCache(block_data, block_idx);
         }
 
+        MutexLock lockgard(&mu_);
         while (bg_block_flush_ > 0) {
             bg_cv_.Wait();
         }
@@ -577,7 +581,7 @@ public:
 
 private:
     void MaybeScheduleBGFlush() {
-        cache_->mu_.AssertHeld();
+        mu_.AssertHeld();
         //Log("[%s] Maybe schedule BGFlush: %s, bg_block_flush: %u, block_nr: %u\n",
         //    cache_->WorkPath().c_str(),
         //    fname_.c_str(),
@@ -594,12 +598,15 @@ private:
     }
     void BGFlush() {
         Log("[%s] Begin BGFlush: %s\n", cache_->WorkPath().c_str(), fname_.c_str());
-        MutexLock lockgard(&cache_->mu_);
+        MutexLock lockgard(&mu_);
         uint64_t block_idx;
         std::string* block_data = write_buffer_.PopFrontBlock(&block_idx);
         if (block_data != NULL) {
             pending_block_num_++;
+            mu_.Unlock();
+
             FillCache(block_data, block_idx);
+            mu_.Lock();
             pending_block_num_--;
         }
 
@@ -610,7 +617,6 @@ private:
     }
 
     Status FillCache(std::string* block_data, uint64_t block_idx) {
-        cache_->mu_.AssertHeld();
         Status s;
         uint64_t fid = fid_;
         CacheBlock* block = NULL;
@@ -618,22 +624,22 @@ private:
             Log("[%s] fill cache for write %s, fid %lu, block_idx %lu, wait 10ms after retry\n",
                 cache_->WorkPath().c_str(), fname_.c_str(),
                 fid, block_idx);
-            port::CondVar cv(&cache_->mu_);
-            cv.Wait(10); // timewait 10ms retry
+            cache_->options_.cache_env->SleepForMicroseconds(10000);
         }
+
+        block->mu.Lock();
         block->state = 0;
         block->GetDataBlock(cache_->options_.block_size, Slice(*block_data));
-        cache_->mu_.Unlock();
+        block->mu.Unlock();
 
         // Do io without lock
         block->s = cache_->LogRecord(block);
         if (block->s.ok()) {
             block->s = cache_->FillCache(block);
-        }
-
-        cache_->mu_.Lock();
-        if (block->s.ok()) {
-            block->state = kCacheBlockValid;
+            if (block->s.ok()) {
+                MutexLock l(&block->mu);
+                block->state = kCacheBlockValid;
+            }
         }
         s = cache_->ReleaseBlock(block, true);
         write_buffer_.ReleaseBlock(block_data);
@@ -643,6 +649,7 @@ private:
 private:
     BlockCacheImpl* cache_;
     //port::AtomicPointer shutting_down_;
+    port::Mutex mu_;
     port::CondVar bg_cv_;          // Signalled when background work finishes
     WritableFile* dfs_file_;
     // protected by cache_.mu_
@@ -665,7 +672,6 @@ public:
         //    cache_->options_.block_size,
         //    s->ToString().c_str());
 
-        MutexLock lockgard(&cache_->mu_);
         fid_ = cache_->FileId(fname_);
         aio_enabled_ = false;
         return;
@@ -673,7 +679,6 @@ public:
 
     ~BlockCacheRandomAccessFile() {
         delete dfs_file_;
-        return;
     }
 
     Status Read(uint64_t offset, size_t n, Slice* result,
@@ -694,7 +699,6 @@ public:
         //    begin, end, cache_->options_.block_size);
 
         uint64_t start_ts = cache_->options_.cache_env->NowMicros();
-        MutexLock lockgard(&cache_->mu_);
         for (uint64_t block_idx = begin; block_idx <= end; ++block_idx) {
             uint64_t get_block_ts = cache_->options_.cache_env->NowMicros();
             CacheBlock* block = NULL;
@@ -702,13 +706,13 @@ public:
                 Log("[%s] fill cache for read %s, fid %lu, block_idx %lu, wait 10ms after retry\n",
                     cache_->WorkPath().c_str(), fname_.c_str(),
                     fid, block_idx);
-                port::CondVar cv(&cache_->mu_);
-                cv.Wait(10); // timewait 10ms retry
+                cache_->options_.cache_env->SleepForMicroseconds(10000);
             }
+
+            block->mu.Lock();
             assert(block->fid == fid && block->block_idx == block_idx);
             block->GetDataBlock(cache_->options_.block_size, Slice());
             block_queue.push_back(block); // sort by block_idx
-
             if (!block->Test(kCacheBlockLocked) &&
                 block->Test(kCacheBlockValid)) {
                 block->Set(kCacheBlockLocked | kCacheBlockCacheRead);
@@ -719,6 +723,7 @@ public:
             } else {
                 c_locked.push_back(block);
             }
+            block->mu.Unlock();
 
             //Log("[%s] Queue block: %s, refs %u, data_block_refs %lu, alloc %u\n",
             //    cache_->WorkPath().c_str(), block->ToString().c_str(),
@@ -727,7 +732,6 @@ public:
             cache_->stat_->MeasureTime(TERA_BLOCK_CACHE_PREAD_GET_BLOCK,
                                        cache_->options_.cache_env->NowMicros() - get_block_ts);
         }
-        cache_->mu_.Unlock();
         uint64_t queue_ts = cache_->options_.cache_env->NowMicros();
         cache_->stat_->MeasureTime(TERA_BLOCK_CACHE_PREAD_QUEUE, queue_ts - start_ts);
         cache_->stat_->MeasureTime(TERA_BLOCK_CACHE_PREAD_BLOCK_NR, end - begin + 1);
@@ -764,8 +768,8 @@ public:
 
         // wait async cache read done
         for (uint32_t i = 0; i < c_valid.size(); ++i) {
-            MutexLock lockgard(&cache_->mu_);
             CacheBlock* block = c_valid[i];
+            block->mu.Lock();
             block->WaitOnClear(kCacheBlockCacheRead);
             assert(block->Test(kCacheBlockValid));
             if (!block->s.ok() && s.ok()) {
@@ -773,6 +777,7 @@ public:
             }
             block->Clear(kCacheBlockLocked);
             block->cv.SignalAll();
+            block->mu.Unlock();
             //Log("[%s] cache read done, %s\n",
             //    cache_->WorkPath().c_str(),
             //    block->ToString().c_str());
@@ -782,13 +787,14 @@ public:
 
         // wait dfs read done and async cache file
         for (uint32_t i = 0; i < c_miss.size(); ++i) {
-            MutexLock lockgard(&cache_->mu_);
             CacheBlock* block = c_miss[i];
+            block->mu.Lock();
             block->WaitOnClear(kCacheBlockDfsRead);
             block->Set(kCacheBlockCacheFill);
             if (!block->s.ok() && s.ok()) {
                 s = block->s; // degrade read
             }
+            block->mu.Unlock();
             Log("[%s] dfs read done, %s\n",
                 cache_->WorkPath().c_str(),
                 block->ToString().c_str());
@@ -808,8 +814,8 @@ public:
         //uint64_t ssd_write_sched_ts = cache_->options_.cache_env->NowMicros();
 
         for (uint32_t i = 0; i < c_miss.size(); ++i) { // wait cache fill finish
-            MutexLock lockgard(&cache_->mu_);
             CacheBlock* block = c_miss[i];
+            block->mu.Lock();
             block->WaitOnClear(kCacheBlockCacheFill);
             if (block->s.ok()) {
                 block->Set(kCacheBlockValid);
@@ -818,22 +824,25 @@ public:
             }
             block->Clear(kCacheBlockLocked);
             block->cv.SignalAll();
+            block->mu.Unlock();
             //Log("[%s] cache fill done, %s\n",
             //    cache_->WorkPath().c_str(),
             //    block->ToString().c_str());
         }
-        //uint64_t ssd_write_ts = cache_->options_.cache_env->NowMicros();
+        uint64_t ssd_write_ts = cache_->options_.cache_env->NowMicros();
 
         // wait other async read finish
         for (uint32_t i = 0; i < c_locked.size(); ++i) {
-            MutexLock lockgard(&cache_->mu_);
             CacheBlock* block = c_locked[i];
+            block->mu.Lock();
             block->WaitOnClear(kCacheBlockLocked);
+            block->mu.Unlock();
             //Log("[%s] wait locked done, %s\n",
             //    cache_->WorkPath().c_str(),
             //    block->ToString().c_str());
         }
         uint64_t wait_unlock_ts = cache_->options_.cache_env->NowMicros();
+        cache_->stat_->MeasureTime(TERA_BLOCK_CACHE_PREAD_WAIT_UNLOCK, wait_unlock_ts - ssd_write_ts);
 
         // fill user mem
         size_t msize = 0;
@@ -862,7 +871,6 @@ public:
         uint64_t fill_user_data_ts = cache_->options_.cache_env->NowMicros();
         cache_->stat_->MeasureTime(TERA_BLOCK_CACHE_PREAD_FILL_USER_DATA, fill_user_data_ts - wait_unlock_ts);
 
-        cache_->mu_.Lock();
         for (uint32_t i = 0; i < c_miss.size(); ++i) {
             CacheBlock* block = c_miss[i];
             //Log("[%s] wakeup for miss, %s\n", cache_->WorkPath().c_str(), block->ToString().c_str());
@@ -923,9 +931,10 @@ private:
                 block->s.ToString().c_str(), result.size());
         }
 
-        MutexLock lockgard(&cache_->mu_);
+        block->mu.Lock();
         block->Clear(kCacheBlockDfsRead);
         block->cv.SignalAll();
+        block->mu.Unlock();
         return;
     }
 
@@ -947,9 +956,10 @@ private:
         CacheBlock* block = reader->block;
         block->s = cache_->ReadCache(block, NULL);
 
-        MutexLock lockgard(&cache_->mu_);
+        block->mu.Lock();
         block->Clear(kCacheBlockCacheRead);
         block->cv.SignalAll();
+        block->mu.Unlock();
         //Log("[%s] async.cacheread signal, %s\n", cache_->WorkPath().c_str(),
         //    block->ToString().c_str());
     }
@@ -966,14 +976,15 @@ private:
         //while (aio_error(reader->aio_context) == EINPROGRESS);
         ssize_t res = aio_return(&reader->aio_context);
         block->s = res < 0? Status::Corruption("AioReadCache error") : Status::OK();
-
-        MutexLock lockgard(&cache_->mu_);
-        block->Clear(kCacheBlockCacheRead);
-        block->cv.SignalAll();
         if (!block->s.ok()) {
             Log("[%s] aio.cacheread signal, %s\n", cache_->WorkPath().c_str(),
                 block->ToString().c_str());
         }
+
+        block->mu.Lock();
+        block->Clear(kCacheBlockCacheRead);
+        block->cv.SignalAll();
+        block->mu.Unlock();
     }
     void AioCacheRead(AsyncCacheReader* reader) const {
         // setup sigevent
@@ -1006,9 +1017,10 @@ private:
             block->s = cache_->FillCache(block);
         }
 
-        MutexLock lockgard(&cache_->mu_);
+        block->mu.Lock();
         block->Clear(kCacheBlockCacheFill);
         block->cv.SignalAll();
+        block->mu.Unlock();
         return;
     }
 
@@ -1043,16 +1055,27 @@ void BlockCacheImpl::BGControlThreadFunc(void* arg) {
 }
 
 void BlockCacheImpl::BGControlThread() {
-    Log("[%s] statistics: %s, %s, %s, %s, %s, %s, %s\n", this->WorkPath().c_str(),
+    Log("[%s] statistics: "
+        "%s, %s, %s, %s, %s, "
+        "%s, %s, %s, %s, %s, "
+        "%s, %s\n",
+        this->WorkPath().c_str(),
         stat_->GetBriefHistogramString(TERA_BLOCK_CACHE_PREAD_QUEUE).c_str(),
         stat_->GetBriefHistogramString(TERA_BLOCK_CACHE_PREAD_SSD_READ).c_str(),
         stat_->GetBriefHistogramString(TERA_BLOCK_CACHE_PREAD_FILL_USER_DATA).c_str(),
         stat_->GetBriefHistogramString(TERA_BLOCK_CACHE_PREAD_RELEASE_BLOCK).c_str(),
         stat_->GetBriefHistogramString(TERA_BLOCK_CACHE_LOCKMAP_DS_RELOAD_NR).c_str(),
-        stat_->GetBriefHistogramString(TERA_BLOCK_CACHE_PREAD_GET_BLOCK).c_str(),
-        stat_->GetBriefHistogramString(TERA_BLOCK_CACHE_PREAD_BLOCK_NR).c_str());
 
-    // resched after 1s
+        stat_->GetBriefHistogramString(TERA_BLOCK_CACHE_PREAD_GET_BLOCK).c_str(),
+        stat_->GetBriefHistogramString(TERA_BLOCK_CACHE_PREAD_BLOCK_NR).c_str(),
+        stat_->GetBriefHistogramString(TERA_BLOCK_CACHE_GET_DS).c_str(),
+        stat_->GetBriefHistogramString(TERA_BLOCK_CACHE_DS_LRU_LOOKUP).c_str(),
+        stat_->GetBriefHistogramString(TERA_BLOCK_CACHE_PREAD_WAIT_UNLOCK).c_str(),
+
+        stat_->GetBriefHistogramString(TERA_BLOCK_CACHE_ALLOC_FID).c_str(),
+        stat_->GetBriefHistogramString(TERA_BLOCK_CACHE_GET_FID).c_str());
+
+    // resched after 6s
     stat_->ClearHistogram(TERA_BLOCK_CACHE_PREAD_QUEUE);
     stat_->ClearHistogram(TERA_BLOCK_CACHE_PREAD_SSD_READ);
     stat_->ClearHistogram(TERA_BLOCK_CACHE_PREAD_FILL_USER_DATA);
@@ -1060,6 +1083,11 @@ void BlockCacheImpl::BGControlThread() {
     stat_->ClearHistogram(TERA_BLOCK_CACHE_LOCKMAP_DS_RELOAD_NR);
     stat_->ClearHistogram(TERA_BLOCK_CACHE_PREAD_GET_BLOCK);
     stat_->ClearHistogram(TERA_BLOCK_CACHE_PREAD_BLOCK_NR);
+    stat_->ClearHistogram(TERA_BLOCK_CACHE_GET_DS);
+    stat_->ClearHistogram(TERA_BLOCK_CACHE_DS_LRU_LOOKUP);
+    stat_->ClearHistogram(TERA_BLOCK_CACHE_PREAD_WAIT_UNLOCK);
+    stat_->ClearHistogram(TERA_BLOCK_CACHE_ALLOC_FID);
+    stat_->ClearHistogram(TERA_BLOCK_CACHE_GET_FID);
     bg_control_.Schedule(&BlockCacheImpl::BGControlThreadFunc, this, 10, 6000);
 }
 
@@ -1198,7 +1226,7 @@ Status BlockCacheImpl::LockAndPut(LockContent& lc) {
                 }
                 total_items++;
 
-                CacheBlock* block = new CacheBlock(&mu_);
+                CacheBlock* block = new CacheBlock;
                 block->DecodeFrom(db_it->value()); // get fid and block_idx
                 std::string hkey;
                 PutFixed64(&hkey, block->fid);
@@ -1282,7 +1310,7 @@ Status BlockCacheImpl::LoadCache() {
 }
 
 Status BlockCacheImpl::FillCache(CacheBlock* block) {
-    MutexLock l(&mu_);
+    mu_.Lock();
     uint64_t sid = block->sid;
     uint64_t cache_block_idx = block->cache_block_idx;
     int fd = (data_set_map_[sid])->fd;
@@ -1297,7 +1325,6 @@ Status BlockCacheImpl::FillCache(CacheBlock* block) {
         block->ToString().c_str(),
         res);
 
-    mu_.Lock();
     if (res < 0) {
         return Status::Corruption("FillCache error");
     }
@@ -1305,7 +1332,7 @@ Status BlockCacheImpl::FillCache(CacheBlock* block) {
 }
 
 Status BlockCacheImpl::ReadCache(CacheBlock* block, struct aiocb* aio_context) {
-    MutexLock l(&mu_);
+    mu_.Lock();
     uint64_t sid = block->sid;
     uint64_t cache_block_idx = block->cache_block_idx;
     int fd = (data_set_map_[sid])->fd;
@@ -1330,10 +1357,6 @@ Status BlockCacheImpl::ReadCache(CacheBlock* block, struct aiocb* aio_context) {
             cache_block_idx,
             block->ToString().c_str(),
             res);
-    }
-
-    mu_.Lock();
-    if (res < 0) {
         return Status::Corruption("ReadCache error");
     }
     return Status::OK();
@@ -1341,6 +1364,7 @@ Status BlockCacheImpl::ReadCache(CacheBlock* block, struct aiocb* aio_context) {
 
 uint64_t BlockCacheImpl::AllocFileId() { // no more than fid_batch_num
     mu_.AssertHeld();
+    uint64_t start_ts = options_.cache_env->NowMicros();
     uint64_t fid = ++new_fid_;
     while (new_fid_ - prev_fid_ >= options_.fid_batch_num) {
         std::string key = "FID#";
@@ -1363,17 +1387,18 @@ uint64_t BlockCacheImpl::AllocFileId() { // no more than fid_batch_num
             new_fid_,
             prev_fid_);
     }
+    stat_->MeasureTime(TERA_BLOCK_CACHE_ALLOC_FID,
+                       options_.cache_env->NowMicros() - start_ts);
     return fid;
 }
 
 uint64_t BlockCacheImpl::FileId(const std::string& fname) {
-    mu_.AssertHeld();
     uint64_t fid = 0;
     std::string key = "FNAME#" + fname;
-    mu_.Unlock();
-
+    uint64_t start_ts = options_.cache_env->NowMicros();
     ReadOptions r_opts;
     std::string val;
+
     Status s = db_->Get(r_opts, key, &val);
     if (!s.ok()) { // not exist
         MutexLock l(&mu_);
@@ -1395,11 +1420,12 @@ uint64_t BlockCacheImpl::FileId(const std::string& fname) {
     } else { // fid in cache
         fid = DecodeFixed64(val.c_str());
     }
+
     //Log("[%s] Fid: %lu, fname: %s\n",
     //    this->WorkPath().c_str(),
     //    fid, fname.c_str());
-
-    mu_.Lock();
+    stat_->MeasureTime(TERA_BLOCK_CACHE_GET_FID,
+                       options_.cache_env->NowMicros() - start_ts);
     return fid;
 }
 
@@ -1421,9 +1447,10 @@ Status BlockCacheImpl::DeleteFile(const std::string& fname) {
 }
 
 DataSet* BlockCacheImpl::GetDataSet(uint64_t sid) {
-    mu_.AssertHeld();
     DataSet* set = NULL;
+    uint64_t start_ts = options_.cache_env->NowMicros();
 
+    MutexLock l(&mu_);
     DataSetMap::iterator it = data_set_map_.find(sid);
     if (it == data_set_map_.end()) {
         LockContent lc;
@@ -1437,11 +1464,12 @@ DataSet* BlockCacheImpl::GetDataSet(uint64_t sid) {
         //    this->WorkPath().c_str(), sid);
         set = it->second;
     }
+    stat_->MeasureTime(TERA_BLOCK_CACHE_GET_DS,
+                       options_.cache_env->NowMicros() - start_ts);
     return set;
 }
 
 CacheBlock* BlockCacheImpl::GetAndAllocBlock(uint64_t fid, uint64_t block_idx) {
-    mu_.AssertHeld();
     std::string key;
     PutFixed64(&key, fid);
     PutFixed64(&key, block_idx);
@@ -1453,14 +1481,14 @@ CacheBlock* BlockCacheImpl::GetAndAllocBlock(uint64_t fid, uint64_t block_idx) {
     CacheBlock* block = NULL;
     DataSet* ds = GetDataSet(sid); // get and alloc ds
     Cache* cache = ds->cache;
-    mu_.Unlock();
 
+    uint64_t start_ts = options_.cache_env->NowMicros();
     LRUHandle* h = (LRUHandle*)cache->Lookup(key);
     if (h == NULL) {
-        mu_.Lock();
+        MutexLock l(&mu_);
         h = (LRUHandle*)cache->Lookup(key);
         if (h == NULL) {
-            block = new CacheBlock(&mu_);
+            block = new CacheBlock;
             h = (LRUHandle*)cache->Insert(key, block, 1, &BlockCacheImpl::BlockDeleter);
             if (h == NULL) {
                 delete block;
@@ -1479,11 +1507,12 @@ CacheBlock* BlockCacheImpl::GetAndAllocBlock(uint64_t fid, uint64_t block_idx) {
             block = reinterpret_cast<CacheBlock*>(cache->Value((Cache::Handle*)h));
         }
     } else {
-        mu_.Lock();
         block = reinterpret_cast<CacheBlock*>(cache->Value((Cache::Handle*)h));
         //Log("[%s] get block from memcache, %s\n",
         //        this->WorkPath().c_str(), block->ToString().c_str());
     }
+    stat_->MeasureTime(TERA_BLOCK_CACHE_DS_LRU_LOOKUP,
+                       options_.cache_env->NowMicros() - start_ts);
     return block;
 }
 
@@ -1497,22 +1526,20 @@ Status BlockCacheImpl::LogRecord(CacheBlock* block) {
 }
 
 Status BlockCacheImpl::ReleaseBlock(CacheBlock* block, bool need_sync) {
-    mu_.AssertHeld();
     Status s;
-
-    mu_.Unlock();
-    if (need_sync) {
-        // TODO: dump meta into memtable
+    if (need_sync) { // TODO: dump meta into memtable
         s = LogRecord(block);
     }
 
-    mu_.Lock();
-    LRUHandle* h = block->handle;
-    DataSet* ds = GetDataSet(block->sid); // get and alloc ds
+    block->mu.Lock();
     block->ReleaseDataBlock();
-    //Log("[%s] release block: %s\n", this->WorkPath().c_str(), block->ToString().c_str());
     block->s = Status::OK(); // clear io status
     block->cv.SignalAll();
+    block->mu.Unlock();
+
+    //Log("[%s] release block: %s\n", this->WorkPath().c_str(), block->ToString().c_str());
+    LRUHandle* h = block->handle;
+    DataSet* ds = GetDataSet(block->sid); // get and alloc ds
     ds->cache->Release((Cache::Handle*)h);
     return s;
 }

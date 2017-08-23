@@ -1,4 +1,4 @@
-// Copyright (c) 2015, Baidu.com, Inc. All Rights Reserved
+// Copyright (c) 2017, Baidu.com, Inc. All Rights Reserved
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -43,6 +43,11 @@ enum Histograms : uint32_t {
   TERA_BLOCK_CACHE_LOCKMAP_DS_RELOAD_NR,
   TERA_BLOCK_CACHE_PREAD_GET_BLOCK,
   TERA_BLOCK_CACHE_PREAD_BLOCK_NR,
+  TERA_BLOCK_CACHE_GET_DS,
+  TERA_BLOCK_CACHE_DS_LRU_LOOKUP,
+  TERA_BLOCK_CACHE_PREAD_WAIT_UNLOCK,
+  TERA_BLOCK_CACHE_ALLOC_FID,
+  TERA_BLOCK_CACHE_GET_FID,
   HISTOGRAM_ENUM_MAX,  // TODO(ldemailly): enforce HistogramsNameMap match
 };
 
@@ -54,6 +59,11 @@ const std::vector<std::pair<Histograms, std::string> > HistogramsNameMap = {
     {TERA_BLOCK_CACHE_LOCKMAP_DS_RELOAD_NR, "tera.block_cache.lockmap_ds_reload_nr"},
     {TERA_BLOCK_CACHE_PREAD_GET_BLOCK, "tera.block_cache.pread_get_block"},
     {TERA_BLOCK_CACHE_PREAD_BLOCK_NR, "tera.block_cache.pread_block_nr"},
+    {TERA_BLOCK_CACHE_GET_DS, "tera.block_cache.get_ds"},
+    {TERA_BLOCK_CACHE_DS_LRU_LOOKUP, "tera.block_cache.ds_lru_lookup"},
+    {TERA_BLOCK_CACHE_PREAD_WAIT_UNLOCK, "tera.block_cache.pread_wait_unlock"},
+    {TERA_BLOCK_CACHE_ALLOC_FID, "tera.block_cache.alloc_fid"},
+    {TERA_BLOCK_CACHE_GET_FID, "tera.block_cache.get_fid"},
 };
 
 struct HistogramData {
