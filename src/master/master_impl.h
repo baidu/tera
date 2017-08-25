@@ -154,7 +154,6 @@ public:
     std::string ProfilingLog();
 
 private:
-    friend class MasterImplTest;
     typedef std::function<void (SnapshotRequest*, SnapshotResponse*, bool, int)> SnapshotClosure;
     typedef std::function<void (SnapshotRollbackRequest*, SnapshotRollbackResponse*, bool, int)> RollbackClosure;
     typedef std::function<void (ReleaseSnapshotRequest*, ReleaseSnapshotResponse*, bool, int)> DelSnapshotClosure;
