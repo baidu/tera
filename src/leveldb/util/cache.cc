@@ -274,13 +274,16 @@ class LRU2QCache: public Cache {
   ~LRU2QCache() {}
 
   // Like Cache methods, but with an extra "hash" parameter.
+  // Notice: insert if absent,if exist, return the old one.
   Cache::Handle* Insert(const Slice& key, void* value, size_t cache_id,
                         void (*deleter)(const Slice& key, void* value)) {
     const uint32_t hash = HashSlice(key);
     MutexLock l(&mutex_);
     LRUHandle* e = NULL;
-    e = table_.Lookup(key, hash);
-    assert(e == NULL);
+    e = (LRUHandle*)DoLookup(key, hash);
+    if (e != NULL) {
+        return reinterpret_cast<Cache::Handle*>(e);
+    }
 
     if (usage_ < capacity_) { // cache not full
       e = reinterpret_cast<LRUHandle*>(
@@ -332,13 +335,7 @@ class LRU2QCache: public Cache {
   Cache::Handle* Lookup(const Slice& key) {
     const uint32_t hash = HashSlice(key);
     MutexLock l(&mutex_);
-    LRUHandle* e = table_.Lookup(key, hash);
-    if (e != NULL) {
-        e->refs++;
-        LRU_Remove(e);
-        LRU_Append(e);
-    }
-    return reinterpret_cast<Cache::Handle*>(e);
+    return DoLookup(key, hash);
   }
 
   void Erase(const Slice& key) {
@@ -379,6 +376,16 @@ class LRU2QCache: public Cache {
   }
 
  private:
+  Cache::Handle* DoLookup(const Slice& key, uint32_t hash) {
+    LRUHandle* e = table_.Lookup(key, hash);
+    if (e != NULL) {
+        e->refs++;
+        LRU_Remove(e);
+        LRU_Append(e);
+    }
+    return reinterpret_cast<Cache::Handle*>(e);
+  }
+
   void LRU_Remove(LRUHandle* e) {
     e->next->prev = e->prev;
     e->prev->next = e->next;

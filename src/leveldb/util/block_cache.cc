@@ -35,7 +35,7 @@
 namespace leveldb {
 
 /////////////////////////////////////////////
-// Tcache
+// t-cache impl
 /////////////////////////////////////////////
 uint64_t kBlockSize = 4096UL;
 uint64_t kDataSetSize = 128UL << 20;
@@ -1239,6 +1239,7 @@ Status BlockCacheImpl::LockAndPut(LockContent& lc) {
                 //    lc.KeyToString().c_str(),
                 //    block->ToString().c_str());
                 LRUHandle* handle = (LRUHandle*)(lc.data_set->cache->Insert(hkey, block, 1, &BlockCacheImpl::BlockDeleter));
+                assert((uint64_t)(lc.data_set->cache->Value((Cache::Handle*)handle)) == (uint64_t)block);
                 handle->cache_id = block->cache_block_idx;
                 block->handle = handle;
                 lc.data_set->cache->Release((Cache::Handle*)handle);
@@ -1381,11 +1382,11 @@ uint64_t BlockCacheImpl::AllocFileId() { // no more than fid_batch_num
         if (s.ok()) {
             prev_fid_ = DecodeFixed64(val.c_str());
         }
-        Log("[%s] alloc fid: key %s, new_fid: %lu, prev_fid: %lu\n",
-            this->WorkPath().c_str(),
-            key.c_str(),
-            new_fid_,
-            prev_fid_);
+        //Log("[%s] alloc fid: key %s, new_fid: %lu, prev_fid: %lu\n",
+        //    this->WorkPath().c_str(),
+        //    key.c_str(),
+        //    new_fid_,
+        //    prev_fid_);
     }
     stat_->MeasureTime(TERA_BLOCK_CACHE_ALLOC_FID,
                        options_.cache_env->NowMicros() - start_ts);
@@ -1483,33 +1484,21 @@ CacheBlock* BlockCacheImpl::GetAndAllocBlock(uint64_t fid, uint64_t block_idx) {
     Cache* cache = ds->cache;
 
     uint64_t start_ts = options_.cache_env->NowMicros();
-    LRUHandle* h = (LRUHandle*)cache->Lookup(key);
-    if (h == NULL) {
-        MutexLock l(&mu_);
-        h = (LRUHandle*)cache->Lookup(key);
-        if (h == NULL) {
-            block = new CacheBlock;
-            h = (LRUHandle*)cache->Insert(key, block, 1, &BlockCacheImpl::BlockDeleter);
-            if (h == NULL) {
-                delete block;
-                return NULL;
-            }
-            block->fid = fid;
-            block->block_idx = block_idx;
-            block->sid = sid;
-            block->cache_block_idx = h->cache_id;
-            block->handle = h;
-            Log("[%s] Alloc Block: %s, sid %lu, fid %lu, block_idx %lu, hash %u, dataset_nr %lu\n",
-                    this->WorkPath().c_str(),
-                    block->ToString().c_str(),
-                    sid, fid, block_idx, hash, options_.dataset_num);
-        } else {
-            block = reinterpret_cast<CacheBlock*>(cache->Value((Cache::Handle*)h));
-        }
+    block = new CacheBlock;
+    LRUHandle* h = (LRUHandle*)cache->Insert(key, block, 1, &BlockCacheImpl::BlockDeleter);
+    if (h != NULL && ((uint64_t)(cache->Value((Cache::Handle*)h)) == (uint64_t)block)) {
+        block->fid = fid;
+        block->block_idx = block_idx;
+        block->sid = sid;
+        block->cache_block_idx = h->cache_id;
+        block->handle = h;
+        //Log("[%s] Alloc Block: %s, sid %lu, fid %lu, block_idx %lu, hash %u, dataset_nr %lu\n",
+        //    this->WorkPath().c_str(),
+        //    block->ToString().c_str(),
+        //    sid, fid, block_idx, hash, options_.dataset_num);
     } else {
-        block = reinterpret_cast<CacheBlock*>(cache->Value((Cache::Handle*)h));
-        //Log("[%s] get block from memcache, %s\n",
-        //        this->WorkPath().c_str(), block->ToString().c_str());
+        delete block;
+        block = (h == NULL) ? NULL: reinterpret_cast<CacheBlock*>(cache->Value((Cache::Handle*)h));
     }
     stat_->MeasureTime(TERA_BLOCK_CACHE_DS_LRU_LOOKUP,
                        options_.cache_env->NowMicros() - start_ts);
