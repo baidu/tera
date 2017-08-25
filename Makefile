@@ -19,6 +19,7 @@ LDFLAGS += -rdynamic $(DEPS_LDPATH) $(DEPS_LDFLAGS) -lpthread -lrt -lz -ldl \
            -lreadline -lncurses -fPIC
 SO_LDFLAGS += -rdynamic $(DEPS_LDPATH) $(SO_DEPS_LDFLAGS) -lpthread -lrt -lz -ldl \
               -shared -fPIC -Wl,--version-script,so-version-script # hide symbol of thirdparty libs
+UTFLAGS += -Dprivate=public
 
 PROTO_FILES := $(wildcard src/proto/*.proto)
 PROTO_OUT_CC := $(PROTO_FILES:.proto=.pb.cc)
@@ -46,8 +47,9 @@ MONITOR_SRC := src/monitor/teramo_main.cc
 MARK_SRC := src/benchmark/mark.cc src/benchmark/mark_main.cc
 TEST_SRC := src/utils/test/prop_tree_test.cc src/utils/test/tprinter_test.cc \
             src/io/test/tablet_io_test.cc src/io/test/tablet_scanner_test.cc \
-            src/master/test/master_impl_test.cc src/io/test/load_test.cc \
-	     src/common/test/thread_pool_test.cc
+            src/io/test/load_test.cc src/master/test/master_test.cc \
+            src/master/test/master_impl_test.cc src/master/test/trackable_gc_test.cc \
+            src/common/test/thread_pool_test.cc
 
 TEST_OUTPUT := test_output
 UNITTEST_OUTPUT := $(TEST_OUTPUT)/unittest
@@ -71,7 +73,7 @@ HTTP_OBJ := $(HTTP_SRC:.cc=.o)
 TEST_OBJ := $(TEST_SRC:.cc=.o)
 ALL_OBJ := $(MASTER_OBJ) $(TABLETNODE_OBJ) $(IO_OBJ) $(SDK_OBJ) $(PROTO_OBJ) \
            $(JNI_TERA_OBJ) $(OTHER_OBJ) $(COMMON_OBJ) $(SERVER_OBJ) $(CLIENT_OBJ) \
-           $(TEST_CLIENT_OBJ) $(TERA_C_OBJ) $(MONITOR_OBJ) $(MARK_OBJ) $(TEST_OBJ) \
+           $(TEST_CLIENT_OBJ) $(TERA_C_OBJ) $(MONITOR_OBJ) $(MARK_OBJ) \
            $(SERVER_WRAPPER_OBJ)
 LEVELDB_LIB := src/leveldb/libleveldb.a
 LEVELDB_UTIL := src/leveldb/util/histogram.o src/leveldb/port/port_posix.o
@@ -83,8 +85,8 @@ TERA_C_SO = libtera_c.so
 JNILIBRARY = libjni_tera.so
 BENCHMARK = tera_bench tera_mark
 TESTS = prop_tree_test tprinter_test string_util_test tablet_io_test \
-        tablet_scanner_test fragment_test progress_bar_test master_impl_test load_test \
-	 thread_pool_test
+        tablet_scanner_test fragment_test progress_bar_test master_test load_test \
+        thread_pool_test
 
 .PHONY: all clean cleanall test
 
@@ -100,7 +102,7 @@ all: $(PROGRAM) $(LIBRARY) $(SOLIBRARY) $(TERA_C_SO) $(JNILIBRARY) $(BENCHMARK)
 
 test: $(TESTS)
 	mkdir -p $(UNITTEST_OUTPUT)
-	cp $(TESTS) $(UNITTEST_OUTPUT)
+	mv $(TESTS) $(UNITTEST_OUTPUT)
 	$(MAKE) test -C src/leveldb
 	cp src/leveldb/*_test $(UNITTEST_OUTPUT)
 
@@ -111,7 +113,7 @@ check: test
 	sh ./src/sdk/python/checker.sh
 
 clean:
-	rm -rf $(ALL_OBJ) $(PROTO_OUT_CC) $(PROTO_OUT_H) $(TEST_OUTPUT)
+	rm -rf $(ALL_OBJ) $(TEST_OBJ) $(PROTO_OUT_CC) $(PROTO_OUT_H) $(TEST_OUTPUT)
 	$(MAKE) clean -C src/leveldb
 	rm -rf $(PROGRAM) $(LIBRARY) $(SOLIBRARY) $(TERA_C_SO) $(JNILIBRARY) $(BENCHMARK) $(TESTS) terahttp
 
@@ -193,12 +195,16 @@ tablet_scanner_test: src/sdk/tera.o src/io/test/tablet_scanner_test.o src/tablet
                      $(IO_OBJ) $(PROTO_OBJ) $(OTHER_OBJ) $(COMMON_OBJ) $(LEVELDB_LIB)
 	$(CXX) -o $@ $^ $(LDFLAGS)
 
-master_impl_test: src/master/test/master_impl_test.o src/tera_entry.cc $(MASTER_OBJ) $(IO_OBJ) $(SDK_OBJ) \
-                  $(PROTO_OBJ) $(OTHER_OBJ) $(COMMON_OBJ) $(LEVELDB_LIB)
+master_test: src/master/test/master_test.o  src/master/test/master_impl_test.o \
+             src/master/test/trackable_gc_test.o src/tera_entry.cc $(MASTER_OBJ) $(IO_OBJ) $(SDK_OBJ) \
+             $(PROTO_OBJ) $(OTHER_OBJ) $(COMMON_OBJ) $(LEVELDB_LIB)
 	$(CXX) -o $@ $^ $(LDFLAGS)
 
 $(ALL_OBJ): %.o: %.cc $(PROTO_OUT_H)
 	$(CXX) $(CXXFLAGS) -c $< -o $@
+
+$(TEST_OBJ): %.o: %.cc $(PROTO_OUT_H)
+	$(CXX) $(CXXFLAGS) $(UTFLAGS) -c $< -o $@
 
 $(VERSION_SRC): FORCE
 	sh build_version.sh

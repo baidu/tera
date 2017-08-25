@@ -4,9 +4,9 @@
 
 #include <signal.h>
 
-#include <gflags/gflags.h>
-#include <glog/logging.h>
-#include <gtest/gtest.h>
+#include "gflags/gflags.h"
+#include "glog/logging.h"
+#include "gtest/gtest.h"
 
 #include "common/base/scoped_ptr.h"
 #include "master/master_impl.h"
@@ -25,7 +25,10 @@ namespace master {
 
 class MasterImplTest : public ::testing::Test, public MasterImpl {
 public:
-    MasterImplTest() : merge_enter_phase2(false) {}
+    MasterImplTest() : merge_enter_phase2(false) {
+        FLAGS_tera_zk_enabled = false;
+        FLAGS_tera_leveldb_env_type = "local";
+    }
 
     void SplitTabletTest() {
         SplitTabletRequest* request = NULL;
@@ -107,7 +110,7 @@ public:
         LOG(ERROR) << "dummy UnloadTabletAsync...";
     }
 
-    void MergeTabletBorkenTest() {
+    void MergeTabletBrokenTest() {
         TablePtr table(new Table("mergetest"));
         TabletPtr t1 = MakeTabletPtr("", "a", table);
         t1->SetStatus(kTableReady);
@@ -150,21 +153,10 @@ TEST_F(MasterImplTest, MergeTest) {
     MergeTabletTest();
 }
 
-TEST_F(MasterImplTest, MergeTabletBorkenTest) {
-    MergeTabletBorkenTest();
+TEST_F(MasterImplTest, MergeTabletBrokenTest) {
+    MergeTabletBrokenTest();
 }
 
 } // master
 } // tera
-
-int main(int argc, char** argv) {
-    ::google::ParseCommandLineFlags(&argc, &argv, true);
-    ::google::InitGoogleLogging(argv[0]);
-    FLAGS_tera_zk_enabled = false;
-    FLAGS_tera_leveldb_env_type = "local";
-
-    tera::utils::SetupLog("master_test");
-    ::testing::InitGoogleTest(&argc, argv);
-    return RUN_ALL_TESTS();
-}
 
