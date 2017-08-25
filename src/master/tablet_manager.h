@@ -262,6 +262,7 @@ public:
     void EnableDeadTabletGarbageCollect(uint64_t tablet_id);
     void ReleaseInheritedFile(const TabletFile& file);
     void AddInheritedFile(const TabletFile& file, bool need_ref);
+    void AddEmptyDeadTablet(uint64_t tablet_id);
     uint64_t CleanObsoleteFile();
 
 private:

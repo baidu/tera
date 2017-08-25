@@ -1175,9 +1175,14 @@ bool Table::TryCollectInheritedFile() {
         std::vector<TabletFile> tablet_files;
         CollectInheritedFileFromFilesystem(name_, *it, &tablet_files);
 
-        for (uint32_t i = 0; i < tablet_files.size(); i++) {
+        if (tablet_files.empty()) {
             MutexLock l(&mutex_);
-            AddInheritedFile(tablet_files[i], false);
+            AddEmptyDeadTablet(*it);
+        } else {
+            for (uint32_t i = 0; i < tablet_files.size(); i++) {
+                MutexLock l(&mutex_);
+                AddInheritedFile(tablet_files[i], false);
+            }
         }
     }
     return dead_tablets.size() > 0;
@@ -1298,6 +1303,17 @@ void Table::AddInheritedFile(const TabletFile& file, bool need_ref) {
         ++file_info.ref;
     }
     VLOG(10) << "[gc] [" << name_ << "] file " << file << " ref increment to " << file_info.ref;
+}
+
+void Table::AddEmptyDeadTablet(uint64_t tablet_id) {
+    mutex_.AssertHeld();
+
+    if (useful_inh_files_.find(tablet_id) == useful_inh_files_.end()) {
+        LOG(INFO) << "[gc] [" << name_ << "] new empty dead tablet "
+            << tablet_id << ", gc disabled";
+        gc_disabled_dead_tablets_.insert(tablet_id);
+        useful_inh_files_[tablet_id];
+    }
 }
 
 uint64_t Table::CleanObsoleteFile() {
