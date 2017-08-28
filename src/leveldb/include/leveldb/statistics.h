@@ -48,6 +48,7 @@ enum Histograms : uint32_t {
   TERA_BLOCK_CACHE_PREAD_WAIT_UNLOCK,
   TERA_BLOCK_CACHE_ALLOC_FID,
   TERA_BLOCK_CACHE_GET_FID,
+  TERA_BLOCK_CACHE_EVICT_NR,
   HISTOGRAM_ENUM_MAX,  // TODO(ldemailly): enforce HistogramsNameMap match
 };
 
@@ -64,6 +65,7 @@ const std::vector<std::pair<Histograms, std::string> > HistogramsNameMap = {
     {TERA_BLOCK_CACHE_PREAD_WAIT_UNLOCK, "tera.block_cache.pread_wait_unlock"},
     {TERA_BLOCK_CACHE_ALLOC_FID, "tera.block_cache.alloc_fid"},
     {TERA_BLOCK_CACHE_GET_FID, "tera.block_cache.get_fid"},
+    {TERA_BLOCK_CACHE_EVICT_NR, "tera.block_cache.evict_nr"},
 };
 
 struct HistogramData {

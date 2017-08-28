@@ -265,7 +265,8 @@ class LRU2QCache: public Cache {
  public:
   explicit LRU2QCache(size_t capacity)
     : capacity_(capacity),
-      usage_(0) {
+      usage_(0),
+      max_cache_id_(0) {
      // Make empty circular linked list
     lru_.next = &lru_;
     lru_.prev = &lru_;
@@ -294,14 +295,16 @@ class LRU2QCache: public Cache {
       e->key_length = key.size();
       e->hash = hash;
       e->refs = 2;  // One from LRUCache, one for the returned handle
-      e->cache_id = usage_;
+      e->cache_id = cache_id == 0xffffffffffffffff ? usage_: cache_id;
       memcpy(e->key_data, key.data(), key.size());
+      max_cache_id_ = max_cache_id_ < e->cache_id ? e->cache_id : max_cache_id_;
 
       LRU_Append(e);
       assert(table_.Insert(e) == NULL);
       usage_++;
       return reinterpret_cast<Cache::Handle*>(e);
     }
+    assert(max_cache_id_ + 1 == usage_);
 
     // cache full, reuse item
     LRUHandle* old = lru_.next;
@@ -419,6 +422,7 @@ class LRU2QCache: public Cache {
   // mutex_ protects the following state.
   port::Mutex mutex_;
   size_t usage_;
+  uint64_t max_cache_id_;
 
   // Dummy head of LRU list.
   // lru.prev is newest entry, lru.next is oldest entry.

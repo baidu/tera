@@ -84,6 +84,9 @@ public:
     // cache relatively
     virtual Status NewRandomAccessFile(const std::string& fname,
                                        RandomAccessFile** result); // cache Pread
+    virtual Status NewRandomAccessFile(const std::string& fname,
+                                       uint64_t fsize,
+                                       RandomAccessFile** result); // cache Pread
 
     virtual Status NewWritableFile(const std::string& fname,
                                    WritableFile** result); // cache Append

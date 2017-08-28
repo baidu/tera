@@ -15,6 +15,8 @@
 #include <list>
 #include <sstream>
 
+#include "../utils/counter.h"
+
 #include "db/table_cache.h"
 #include "leveldb/db.h"
 #include "leveldb/cache.h"
@@ -33,6 +35,8 @@
 #include "util/thread_pool.h"
 
 namespace leveldb {
+
+::tera::Counter tera_block_cache_evict_counter;
 
 /////////////////////////////////////////////
 // t-cache impl
@@ -160,6 +164,7 @@ struct CacheBlock {
 };
 
 struct DataSet {
+    port::Mutex mu;
     Cache* cache;
     int fd;
 };
@@ -178,6 +183,7 @@ public:
                            WritableFile** result);
 
     Status NewRandomAccessFile(const std::string& fname,
+                               uint64_t fsize,
                                RandomAccessFile** result); // cache Pread
 
     static void BlockDeleter(const Slice& key, void* v);
@@ -363,7 +369,6 @@ Status BlockCacheEnv::LoadCache(const BlockCacheOptions& opts, const std::string
     options.cache_env = this->target();
     BlockCacheImpl* cache = new BlockCacheImpl(options);
     Status s = cache->LoadCache();
-    assert(s.ok());
     cache_vec_.push_back(cache); // no need lock
     return s;
 }
@@ -383,18 +388,37 @@ Status BlockCacheEnv::NewWritableFile(const std::string& fname,
     uint32_t hash = (Hash(fname.c_str(), fname.size(), 13)) % cache_vec_.size();
     BlockCacheImpl* cache = cache_vec_[hash];
     Status s = cache->NewWritableFile(fname, result);
-    Log("[block_cache %s] open file write: %s, hash: %u, status: %s\n",
-        cache->WorkPath().c_str(), fname.c_str(), hash, s.ToString().c_str());
+    if (!s.ok()) {
+        Log("[block_cache %s] open file write fail: %s, hash: %u, status: %s\n",
+             cache->WorkPath().c_str(), fname.c_str(), hash, s.ToString().c_str());
+    }
     return s;
 }
 
 Status BlockCacheEnv::NewRandomAccessFile(const std::string& fname,
                                           RandomAccessFile** result) {
+    //uint32_t hash = (Hash(fname.c_str(), fname.size(), 13)) % cache_vec_.size();
+    //BlockCacheImpl* cache = cache_vec_[hash];
+    //Status s = cache->NewRandomAccessFile(fname, result);
+    //if (!s.ok()) {
+    //    Log("[block_cache %s] open file read fail: %s, hash: %u, status: %s\n",
+    //         cache->WorkPath().c_str(), fname.c_str(), hash, s.ToString().c_str());
+    //}
+    //return s;
+    abort();
+    return Status::OK();
+}
+
+Status BlockCacheEnv::NewRandomAccessFile(const std::string& fname,
+                                          uint64_t fsize,
+                                          RandomAccessFile** result) {
     uint32_t hash = (Hash(fname.c_str(), fname.size(), 13)) % cache_vec_.size();
     BlockCacheImpl* cache = cache_vec_[hash];
-    Status s = cache->NewRandomAccessFile(fname, result);
-    //Log("[block_cache %s] open file read: %s, hash: %u, status: %s\n",
-    //    cache->WorkPath().c_str(), fname.c_str(), hash, s.ToString().c_str());
+    Status s = cache->NewRandomAccessFile(fname, fsize, result);
+    if (!s.ok()) {
+        Log("[block_cache %s] open file read fail: %s, hash: %u, status: %s, fsize %lu\n",
+             cache->WorkPath().c_str(), fname.c_str(), hash, s.ToString().c_str(), fsize);
+    }
     return s;
 }
 
@@ -450,19 +474,19 @@ public:
                 } else { // last block
                     tmp_storage_->append(buf.data(), buf.size());
                 }
-                Log("[%s] add tmp_storage %s: offset: %lu, buf_size: %lu\n",
-                    path_.c_str(),
-                    file_.c_str(),
-                    offset_,
-                    buf.size());
+                //Log("[%s] add tmp_storage %s: offset: %lu, buf_size: %lu\n",
+                //    path_.c_str(),
+                //    file_.c_str(),
+                //    offset_,
+                //    buf.size());
             }
         }
         offset_ += data.size();
-        Log("[%s] add record: %s, begin: %u, end: %u, offset: %lu, data_size: %lu, block_size: %u\n",
-            path_.c_str(),
-            file_.c_str(),
-            begin, end,
-            offset_ - data.size() , data.size(), block_size_);
+        //Log("[%s] add record: %s, begin: %u, end: %u, offset: %lu, data_size: %lu, block_size: %u\n",
+        //    path_.c_str(),
+        //    file_.c_str(),
+        //    begin, end,
+        //    offset_ - data.size() , data.size(), block_size_);
         return Status::OK();
     }
 
@@ -518,12 +542,14 @@ public:
           write_buffer_(cache_->WorkPath(), fname, cache_->options_.block_size),
           fname_(fname) { // file open
         *s = cache_->dfs_env_->NewWritableFile(fname_, &dfs_file_);
-        Log("[%s] dfs open: %s, block_size: %lu, status: %s\n",
-            cache_->WorkPath().c_str(),
-            fname.c_str(),
-            cache_->options_.block_size,
-            s->ToString().c_str());
-
+        if (!s->ok()) {
+            Log("[%s] dfs open: %s, block_size: %lu, status: %s\n",
+                 cache_->WorkPath().c_str(),
+                 fname.c_str(),
+                 cache_->options_.block_size,
+                 s->ToString().c_str());
+        }
+        bg_status_ = *s;
         fid_ = cache_->FileId(fname_);
         return;
     }
@@ -543,11 +569,11 @@ public:
 
         MutexLock lockgard(&mu_);
         MaybeScheduleBGFlush();
-        return Status::OK();
+        return s;
     }
 
     Status Close() {
-        Status s;
+        Status s, s1;
         if (dfs_file_ != NULL) {
             s = dfs_file_->Close();
             delete dfs_file_;
@@ -557,25 +583,28 @@ public:
         uint64_t block_idx;
         std::string* block_data = write_buffer_.PopBackBlock(&block_idx);
         if (block_data != NULL) {
-            FillCache(block_data, block_idx);
+            s1 = FillCache(block_data, block_idx);
         }
 
         MutexLock lockgard(&mu_);
         while (bg_block_flush_ > 0) {
             bg_cv_.Wait();
         }
+        if (bg_status_.ok()) {
+            bg_status_ = s.ok() ? s1: s;
+        }
         //Log("[%s] end close %s, status %s\n", cache_->WorkPath().c_str(), fname_.c_str(),
         //    s.ToString().c_str());
-        return s;
+        return bg_status_;
     }
 
     Status Flush() {
-        Log("[%s] dfs flush: %s\n", cache_->WorkPath().c_str(), fname_.c_str());
+        //Log("[%s] dfs flush: %s\n", cache_->WorkPath().c_str(), fname_.c_str());
         return dfs_file_->Flush();
     }
 
     Status Sync() {
-        Log("[%s] dfs sync: %s\n", cache_->WorkPath().c_str(), fname_.c_str());
+        //Log("[%s] dfs sync: %s\n", cache_->WorkPath().c_str(), fname_.c_str());
         return dfs_file_->Sync();
     }
 
@@ -597,7 +626,8 @@ private:
         reinterpret_cast<BlockCacheWritableFile*>(arg)->BGFlush();
     }
     void BGFlush() {
-        Log("[%s] Begin BGFlush: %s\n", cache_->WorkPath().c_str(), fname_.c_str());
+        //Log("[%s] Begin BGFlush: %s\n", cache_->WorkPath().c_str(), fname_.c_str());
+        Status s;
         MutexLock lockgard(&mu_);
         uint64_t block_idx;
         std::string* block_data = write_buffer_.PopFrontBlock(&block_idx);
@@ -605,11 +635,12 @@ private:
             pending_block_num_++;
             mu_.Unlock();
 
-            FillCache(block_data, block_idx);
+            s = FillCache(block_data, block_idx);
             mu_.Lock();
             pending_block_num_--;
         }
 
+        bg_status_ = bg_status_.ok() ? s: bg_status_;
         bg_block_flush_--;
         MaybeScheduleBGFlush();
         bg_cv_.Signal();
@@ -651,6 +682,7 @@ private:
     //port::AtomicPointer shutting_down_;
     port::Mutex mu_;
     port::CondVar bg_cv_;          // Signalled when background work finishes
+    Status bg_status_;
     WritableFile* dfs_file_;
     // protected by cache_.mu_
     uint32_t bg_block_flush_;
@@ -662,9 +694,11 @@ private:
 
 class BlockCacheRandomAccessFile : public RandomAccessFile {
 public:
-    BlockCacheRandomAccessFile(BlockCacheImpl* c, const std::string& fname, Status* s)
+    BlockCacheRandomAccessFile(BlockCacheImpl* c, const std::string& fname,
+                               uint64_t fsize, Status* s)
     : cache_(c),
-      fname_(fname) {
+      fname_(fname),
+      fsize_(fsize) {
         *s = cache_->dfs_env_->NewRandomAccessFile(fname_, &dfs_file_);
         //Log("[%s] dfs open for read: %s, block_size: %lu, status: %s\n",
         //    cache_->WorkPath().c_str(),
@@ -795,9 +829,9 @@ public:
                 s = block->s; // degrade read
             }
             block->mu.Unlock();
-            Log("[%s] dfs read done, %s\n",
-                cache_->WorkPath().c_str(),
-                block->ToString().c_str());
+            //Log("[%s] dfs read done, %s\n",
+            //    cache_->WorkPath().c_str(),
+            //    block->ToString().c_str());
         }
         //uint64_t dfs_read_ts = cache_->options_.cache_env->NowMicros();
 
@@ -1029,6 +1063,7 @@ private:
     RandomAccessFile* dfs_file_;
     std::string fname_;
     uint64_t fid_;
+    uint64_t fsize_;
     bool aio_enabled_;
 };
 
@@ -1055,10 +1090,13 @@ void BlockCacheImpl::BGControlThreadFunc(void* arg) {
 }
 
 void BlockCacheImpl::BGControlThread() {
+    stat_->MeasureTime(TERA_BLOCK_CACHE_EVICT_NR,
+                       tera_block_cache_evict_counter.Clear());
+
     Log("[%s] statistics: "
         "%s, %s, %s, %s, %s, "
         "%s, %s, %s, %s, %s, "
-        "%s, %s\n",
+        "%s, %s, %s\n",
         this->WorkPath().c_str(),
         stat_->GetBriefHistogramString(TERA_BLOCK_CACHE_PREAD_QUEUE).c_str(),
         stat_->GetBriefHistogramString(TERA_BLOCK_CACHE_PREAD_SSD_READ).c_str(),
@@ -1073,7 +1111,8 @@ void BlockCacheImpl::BGControlThread() {
         stat_->GetBriefHistogramString(TERA_BLOCK_CACHE_PREAD_WAIT_UNLOCK).c_str(),
 
         stat_->GetBriefHistogramString(TERA_BLOCK_CACHE_ALLOC_FID).c_str(),
-        stat_->GetBriefHistogramString(TERA_BLOCK_CACHE_GET_FID).c_str());
+        stat_->GetBriefHistogramString(TERA_BLOCK_CACHE_GET_FID).c_str(),
+        stat_->GetBriefHistogramString(TERA_BLOCK_CACHE_EVICT_NR).c_str());
 
     // resched after 6s
     stat_->ClearHistogram(TERA_BLOCK_CACHE_PREAD_QUEUE);
@@ -1088,6 +1127,7 @@ void BlockCacheImpl::BGControlThread() {
     stat_->ClearHistogram(TERA_BLOCK_CACHE_PREAD_WAIT_UNLOCK);
     stat_->ClearHistogram(TERA_BLOCK_CACHE_ALLOC_FID);
     stat_->ClearHistogram(TERA_BLOCK_CACHE_GET_FID);
+    stat_->ClearHistogram(TERA_BLOCK_CACHE_EVICT_NR);
     bg_control_.Schedule(&BlockCacheImpl::BGControlThreadFunc, this, 10, 6000);
 }
 
@@ -1103,9 +1143,10 @@ Status BlockCacheImpl::NewWritableFile(const std::string& fname,
 }
 
 Status BlockCacheImpl::NewRandomAccessFile(const std::string& fname,
+                                           uint64_t fsize,
                                            RandomAccessFile** result) {
     Status s;
-    BlockCacheRandomAccessFile* file = new BlockCacheRandomAccessFile(this, fname, &s);
+    BlockCacheRandomAccessFile* file = new BlockCacheRandomAccessFile(this, fname, fsize, &s);
     *result = NULL;
     if (s.ok()) {
         *result = (RandomAccessFile*)file;
@@ -1115,8 +1156,9 @@ Status BlockCacheImpl::NewRandomAccessFile(const std::string& fname,
 
 void BlockCacheImpl::BlockDeleter(const Slice& key, void* v) {
     CacheBlock* block = (CacheBlock*)v;
-    Log("Evict blockcache: %s\n", block->ToString().c_str());
+    //Log("Evict blockcache: %s\n", block->ToString().c_str());
     delete block;
+    tera_block_cache_evict_counter.Inc();
     return;
 }
 
@@ -1238,9 +1280,9 @@ Status BlockCacheImpl::LockAndPut(LockContent& lc) {
                 //    this->WorkPath().c_str(),
                 //    lc.KeyToString().c_str(),
                 //    block->ToString().c_str());
-                LRUHandle* handle = (LRUHandle*)(lc.data_set->cache->Insert(hkey, block, 1, &BlockCacheImpl::BlockDeleter));
+                LRUHandle* handle = (LRUHandle*)(lc.data_set->cache->Insert(hkey, block, cbi, &BlockCacheImpl::BlockDeleter));
                 assert((uint64_t)(lc.data_set->cache->Value((Cache::Handle*)handle)) == (uint64_t)block);
-                handle->cache_id = block->cache_block_idx;
+                assert(handle->cache_id == block->cache_block_idx);
                 block->handle = handle;
                 lc.data_set->cache->Release((Cache::Handle*)handle);
             }
@@ -1320,11 +1362,11 @@ Status BlockCacheImpl::FillCache(CacheBlock* block) {
     // do io without lock
     ssize_t res = pwrite(fd, block->data_block.data(), block->data_block.size(),
                          cache_block_idx * options_.block_size);
-    Log("[%s] cache fill: sid %lu, dataset.fd %d, datablock size %lu, cb_idx %lu, %s, res %ld\n",
-        this->WorkPath().c_str(), sid, fd, block->data_block.size(),
-        cache_block_idx,
-        block->ToString().c_str(),
-        res);
+    //Log("[%s] cache fill: sid %lu, dataset.fd %d, datablock size %lu, cb_idx %lu, %s, res %ld\n",
+    //    this->WorkPath().c_str(), sid, fd, block->data_block.size(),
+    //    cache_block_idx,
+    //    block->ToString().c_str(),
+    //    res);
 
     if (res < 0) {
         return Status::Corruption("FillCache error");
@@ -1484,22 +1526,31 @@ CacheBlock* BlockCacheImpl::GetAndAllocBlock(uint64_t fid, uint64_t block_idx) {
     Cache* cache = ds->cache;
 
     uint64_t start_ts = options_.cache_env->NowMicros();
-    block = new CacheBlock;
-    LRUHandle* h = (LRUHandle*)cache->Insert(key, block, 1, &BlockCacheImpl::BlockDeleter);
-    if (h != NULL && ((uint64_t)(cache->Value((Cache::Handle*)h)) == (uint64_t)block)) {
+    ds->mu.Lock();
+    LRUHandle* h = (LRUHandle*)cache->Lookup(key);
+    if (h == NULL) {
+        block = new CacheBlock;
         block->fid = fid;
         block->block_idx = block_idx;
         block->sid = sid;
-        block->cache_block_idx = h->cache_id;
-        block->handle = h;
-        //Log("[%s] Alloc Block: %s, sid %lu, fid %lu, block_idx %lu, hash %u, dataset_nr %lu\n",
-        //    this->WorkPath().c_str(),
-        //    block->ToString().c_str(),
-        //    sid, fid, block_idx, hash, options_.dataset_num);
+        h = (LRUHandle*)cache->Insert(key, block, 0xffffffffffffffff, &BlockCacheImpl::BlockDeleter);
+        if (h != NULL) {
+            assert((uint64_t)(cache->Value((Cache::Handle*)h)) == (uint64_t)block);
+            block->cache_block_idx = h->cache_id;
+            block->handle = h;
+            //Log("[%s] Alloc Block: %s, sid %lu, fid %lu, block_idx %lu, hash %u, dataset_nr %lu\n",
+            //    this->WorkPath().c_str(),
+            //    block->ToString().c_str(),
+            //    sid, fid, block_idx, hash, options_.dataset_num);
+        } else {
+            delete block;
+            block = NULL;
+            assert(0);
+        }
     } else {
-        delete block;
-        block = (h == NULL) ? NULL: reinterpret_cast<CacheBlock*>(cache->Value((Cache::Handle*)h));
+        block = reinterpret_cast<CacheBlock*>(cache->Value((Cache::Handle*)h));
     }
+    ds->mu.Unlock();
     stat_->MeasureTime(TERA_BLOCK_CACHE_DS_LRU_LOOKUP,
                        options_.cache_env->NowMicros() - start_ts);
     return block;
