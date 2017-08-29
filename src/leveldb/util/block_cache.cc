@@ -14,6 +14,7 @@
 
 #include <list>
 #include <sstream>
+#include <unordered_map>
 
 #include "../utils/counter.h"
 
@@ -229,10 +230,12 @@ private:
     port::Mutex mu_;
     // key lock list
     struct Waiter {
+        int wait_num; // protected by BlockCacheImpl.mu_
+
+        port::Mutex mu;
         port::CondVar cv;
-        int wait_num;
         bool done;
-        Waiter(port::Mutex* mu):cv(mu), wait_num(0), done(false) {}
+        Waiter(): wait_num(0), cv(&mu), done(false) {}
     };
     typedef std::map<std::string, Waiter*> LockKeyMap;
     LockKeyMap lock_key_;
@@ -290,7 +293,7 @@ private:
             return "";
         }
     };
-    typedef std::map<uint64_t, DataSet*> DataSetMap;
+    typedef std::unordered_map<uint64_t, DataSet*> DataSetMap;
     DataSetMap data_set_map_;
 
     Statistics* stat_;
@@ -1114,6 +1117,17 @@ void BlockCacheImpl::BGControlThread() {
         stat_->GetBriefHistogramString(TERA_BLOCK_CACHE_GET_FID).c_str(),
         stat_->GetBriefHistogramString(TERA_BLOCK_CACHE_EVICT_NR).c_str());
 
+    Log("[%s] statistics(meta): "
+        "table_cache: %lf/%lu/%lu, "
+        "block_cache: %lf/%lu/%lu\n",
+        this->WorkPath().c_str(),
+        options_.opts.table_cache->HitRate(true),
+        options_.opts.table_cache->TableEntries(),
+        options_.opts.table_cache->ByteSize(),
+        options_.opts.block_cache->HitRate(true),
+        options_.opts.block_cache->Entries(),
+        options_.opts.block_cache->TotalCharge());
+
     // resched after 6s
     stat_->ClearHistogram(TERA_BLOCK_CACHE_PREAD_QUEUE);
     stat_->ClearHistogram(TERA_BLOCK_CACHE_PREAD_SSD_READ);
@@ -1179,10 +1193,13 @@ Status BlockCacheImpl::LockAndPut(LockContent& lc) {
     if (it != lock_key_.end()) {
         w = it->second;
         w->wait_num ++;
+        mu_.Unlock();
+
+        w->mu.Lock();
         while (!w->done) {
             w->cv.Wait();
         }
-        mu_.Unlock();
+        w->mu.Unlock();
 
         if (lc.type == kDBKey) {
             ReadOptions r_opts;
@@ -1193,7 +1210,9 @@ Status BlockCacheImpl::LockAndPut(LockContent& lc) {
             //    lc.db_val->c_str(),
             //    s.ToString().c_str());
         } else if (lc.type == kDataSetKey) {
+            mu_.Lock();
             lc.data_set = data_set_map_[lc.sid];
+            mu_.Unlock();
             //Log("[%s] get dataset sid: %lu\n",
             //    this->WorkPath().c_str(),
             //    lc.sid);
@@ -1213,7 +1232,7 @@ Status BlockCacheImpl::LockAndPut(LockContent& lc) {
             //    key.c_str());
         }
     } else {
-        w = new Waiter(&mu_);
+        w = new Waiter;
         w->wait_num = 1;
         lock_key_[key] = w;
         mu_.Unlock();
@@ -1302,11 +1321,16 @@ Status BlockCacheImpl::LockAndPut(LockContent& lc) {
             //    key.c_str());
             delete w;
         } else {
+            mu_.Unlock();
             //Log("[%s] put done %s, signal all wait thread\n",
             //    this->WorkPath().c_str(),
             //    key.c_str());
+            w->mu.Lock();
             w->done = true;
             w->cv.SignalAll();
+            w->mu.Unlock();
+
+            mu_.Lock();
         }
     }
     return s;
