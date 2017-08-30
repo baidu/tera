@@ -204,6 +204,12 @@ private:
 
     Status LockAndPut(LockContent& lc);
 
+    Status GetContentAfterWait(LockContent& lc);
+
+    Status PutContentAfterLock(LockContent& lc);
+
+    Status ReloadDataSet(LockContent& lc);
+
     Status FillCache(CacheBlock* block);
 
     Status ReadCache(CacheBlock* block, struct aiocb* aio_context);
@@ -241,6 +247,17 @@ private:
         port::CondVar cv;
         bool done;
         Waiter(): wait_num(0), cv(&mu), done(false) {}
+
+        void Wait() {
+            MutexLock l(&mu);
+            while (!done) { cv.Wait(); }
+        }
+
+        void SignalAll() {
+            MutexLock l(&mu);
+            done = true;
+            cv.SignalAll();
+        }
     };
     typedef std::map<std::string, Waiter*> LockKeyMap;
     LockKeyMap lock_key_;
@@ -936,7 +953,6 @@ public:
                 cache_->WorkPath().c_str(), fname_.c_str(),
                 offset, n, s.ToString().c_str());
         }
-
         //Log("[%s] Done Pread %s, size %lu, offset %lu, fid %lu, res %lu, status %s, start_block %lu, end_block %lu"
         //    ", block_size %lu\n",
         //    cache_->WorkPath().c_str(), fname_.c_str(), n, offset, fid,
@@ -1005,7 +1021,7 @@ private:
         //    block->ToString().c_str());
     }
 
-    // support aio engine
+    // support posix aio engine
     static void AioCacheReadCallback(sigval_t sigval) { // kernel create thread
         AsyncCacheReader* reader = (AsyncCacheReader*)sigval.sival_ptr;
         reader->file->HandleAioCacheReadCallback(reader);
@@ -1074,7 +1090,7 @@ private:
     bool aio_enabled_;
 };
 
-// Tcache impl
+// t-cache implementation
 BlockCacheImpl::BlockCacheImpl(const BlockCacheOptions& options)
     : options_(options),
       dfs_env_(options.env),
@@ -1198,29 +1214,9 @@ Status BlockCacheImpl::LockAndPut(LockContent& lc) {
         w = it->second;
         w->wait_num ++;
         mu_.Unlock();
+        w->Wait();
 
-        w->mu.Lock();
-        while (!w->done) {
-            w->cv.Wait();
-        }
-        w->mu.Unlock();
-
-        if (lc.type == kDBKey) {
-            ReadOptions r_opts;
-            s = db_->Get(r_opts, key, lc.db_val);
-            //Log("[%s] get lock key: %s, val: %s, status: %s\n",
-            //    this->WorkPath().c_str(),
-            //    key.c_str(),
-            //    lc.db_val->c_str(),
-            //    s.ToString().c_str());
-        } else if (lc.type == kDataSetKey) {
-            lc.data_set = GetDataSet(lc.sid);
-            assert(lc.data_set != NULL);
-            //Log("[%s] get dataset sid: %lu\n",
-            //    this->WorkPath().c_str(),
-            //    lc.sid);
-        }
-
+        s = GetContentAfterWait(lc);
         mu_.Lock();
         if (--w->wait_num == 0) {
             // last thread wait for open
@@ -1240,84 +1236,7 @@ Status BlockCacheImpl::LockAndPut(LockContent& lc) {
         lock_key_[key] = w;
         mu_.Unlock();
 
-        if (lc.type == kDBKey) {
-            WriteOptions w_opts;
-            s = db_->Put(w_opts, key, lc.db_lock_val);
-            if (s.ok()) {
-                lc.db_val->append(lc.db_lock_val.data(), lc.db_lock_val.size());
-            }
-            Log("[%s] Insert db key : %s, val %s, status %s\n",
-                this->WorkPath().c_str(),
-                lc.KeyToString().c_str(),
-                lc.ValToString().c_str(),
-                s.ToString().c_str());
-        } else if (lc.type == kDeleteDBKey) {
-            WriteOptions w_opts;
-            s = db_->Delete(w_opts, key);
-            Log("[%s] Delete db key : %s, val %s, status %s\n",
-                this->WorkPath().c_str(),
-                lc.KeyToString().c_str(),
-                lc.ValToString().c_str(),
-                s.ToString().c_str());
-        } else if (lc.type == kDataSetKey) {
-            lc.data_set = new DataSet;
-            lc.data_set->cache = New2QCache((options_.dataset_size / options_.block_size) + 1);// number of blocks in DS
-            std::string file = options_.cache_dir + "/" + Uint64ToString(lc.sid);
-            lc.data_set->fd = open(file.c_str(), O_RDWR | O_CREAT, 0644);
-            assert(lc.data_set->fd > 0);
-            Log("[%s] New DataSet %s, file: %s, nr_block: %lu, fd: %d\n",
-                this->WorkPath().c_str(),
-                lc.KeyToString().c_str(),
-                file.c_str(), (options_.dataset_size / options_.block_size) + 1,
-                lc.data_set->fd);
-
-            // reload hash lru
-            uint64_t total_items = 0;
-            ReadOptions s_opts;
-            leveldb::Iterator* db_it = db_->NewIterator(s_opts);
-            for (db_it->Seek(key);
-                 db_it->Valid() && db_it->key().starts_with("DS#");
-                 db_it->Next()) {
-                Slice lkey = db_it->key();
-                uint64_t sid, cbi;
-                lkey.remove_prefix(3);// lkey = DS#, sid, cbi
-                sid = DecodeFixed64(lkey.data());
-                lkey.remove_prefix(sizeof(uint64_t));
-                cbi = DecodeFixed64(lkey.data());
-                //Slice lval = db_it->value();
-                if (sid != lc.sid) {
-                    break;
-                }
-                total_items++;
-
-                CacheBlock* block = new CacheBlock;
-                block->DecodeFrom(db_it->value()); // get fid and block_idx
-                std::string hkey;
-                PutFixed64(&hkey, block->fid);
-                PutFixed64(&hkey, block->block_idx);
-                block->sid = sid;
-                block->cache_block_idx = cbi;
-                block->state = (block->Test(kCacheBlockValid)) ? kCacheBlockValid : 0;
-                //Log("[%s] Recovery %s, insert cacheblock into 2QLru, %s\n",
-                //    this->WorkPath().c_str(),
-                //    lc.KeyToString().c_str(),
-                //    block->ToString().c_str());
-                LRUHandle* handle = (LRUHandle*)(lc.data_set->cache->Insert(hkey, block, cbi, &BlockCacheImpl::BlockDeleter));
-                assert((uint64_t)(lc.data_set->cache->Value((Cache::Handle*)handle)) == (uint64_t)block);
-                assert(handle->cache_id == block->cache_block_idx);
-                block->handle = handle;
-                lc.data_set->cache->Release((Cache::Handle*)handle);
-            }
-            delete db_it;
-            stat_->MeasureTime(TERA_BLOCK_CACHE_LOCKMAP_DS_RELOAD_NR, total_items);
-
-            std::string ds_key;
-            PutFixed64(&ds_key, lc.sid);
-            LRUHandle* ds_handle = (LRUHandle*)data_set_cache_->Insert(ds_key, lc.data_set, 1, NULL);
-            assert(ds_handle != NULL);
-            lc.data_set->h = ds_handle;
-        }
-
+        s = PutContentAfterLock(lc);
         mu_.Lock();
         if (--w->wait_num == 0) {
             lock_key_.erase(key);
@@ -1330,14 +1249,136 @@ Status BlockCacheImpl::LockAndPut(LockContent& lc) {
             //Log("[%s] put done %s, signal all wait thread\n",
             //    this->WorkPath().c_str(),
             //    key.c_str());
-            w->mu.Lock();
-            w->done = true;
-            w->cv.SignalAll();
-            w->mu.Unlock();
+            w->SignalAll();
 
             mu_.Lock();
         }
     }
+    return s;
+}
+
+Status BlockCacheImpl::GetContentAfterWait(LockContent& lc) {
+    Status s;
+    std::string key = lc.Encode();
+
+    if (lc.type == kDBKey) {
+        ReadOptions r_opts;
+        s = db_->Get(r_opts, key, lc.db_val);
+        //Log("[%s] get lock key: %s, val: %s, status: %s\n",
+        //    this->WorkPath().c_str(),
+        //    key.c_str(),
+        //    lc.db_val->c_str(),
+        //    s.ToString().c_str());
+    } else if (lc.type == kDataSetKey) {
+        std::string ds_key;
+        PutFixed64(&ds_key, lc.sid);
+        LRUHandle* ds_handle = (LRUHandle*)data_set_cache_->Lookup(ds_key);
+        lc.data_set = reinterpret_cast<DataSet*>(data_set_cache_->Value((Cache::Handle*)ds_handle));
+        assert(ds_handle == lc.data_set->h);
+        //Log("[%s] get dataset sid: %lu\n",
+        //    this->WorkPath().c_str(),
+        //    lc.sid);
+    }
+    return s;
+}
+
+Status BlockCacheImpl::PutContentAfterLock(LockContent& lc) {
+    Status s;
+    std::string key = lc.Encode();
+
+    if (lc.type == kDBKey) {
+        WriteOptions w_opts;
+        s = db_->Put(w_opts, key, lc.db_lock_val);
+        if (s.ok()) {
+            lc.db_val->append(lc.db_lock_val.data(), lc.db_lock_val.size());
+        }
+        Log("[%s] Insert db key : %s, val %s, status %s\n",
+            this->WorkPath().c_str(),
+            lc.KeyToString().c_str(),
+            lc.ValToString().c_str(),
+            s.ToString().c_str());
+    } else if (lc.type == kDeleteDBKey) {
+        WriteOptions w_opts;
+        s = db_->Delete(w_opts, key);
+        Log("[%s] Delete db key : %s, val %s, status %s\n",
+            this->WorkPath().c_str(),
+            lc.KeyToString().c_str(),
+            lc.ValToString().c_str(),
+            s.ToString().c_str());
+    } else if (lc.type == kDataSetKey) { // cannot double insert
+        std::string ds_key;
+        PutFixed64(&ds_key, lc.sid);
+        LRUHandle* ds_handle = (LRUHandle*)data_set_cache_->Lookup(ds_key);
+        if (ds_handle != NULL) {
+            lc.data_set = reinterpret_cast<DataSet*>(data_set_cache_->Value((Cache::Handle*)ds_handle));
+            assert(ds_handle == lc.data_set->h);
+        } else {
+            s = ReloadDataSet(lc);
+        }
+    }
+    return s;
+}
+
+Status BlockCacheImpl::ReloadDataSet(LockContent& lc) {
+    Status s;
+    std::string key = lc.Encode();
+
+    lc.data_set = new DataSet;
+    lc.data_set->cache = New2QCache((options_.dataset_size / options_.block_size) + 1);// number of blocks in DS
+    std::string file = options_.cache_dir + "/" + Uint64ToString(lc.sid);
+    lc.data_set->fd = open(file.c_str(), O_RDWR | O_CREAT, 0644);
+    assert(lc.data_set->fd > 0);
+    Log("[%s] New DataSet %s, file: %s, nr_block: %lu, fd: %d\n",
+            this->WorkPath().c_str(),
+            lc.KeyToString().c_str(),
+            file.c_str(), (options_.dataset_size / options_.block_size) + 1,
+            lc.data_set->fd);
+
+    // reload hash lru
+    uint64_t total_items = 0;
+    ReadOptions s_opts;
+    leveldb::Iterator* db_it = db_->NewIterator(s_opts);
+    for (db_it->Seek(key);
+            db_it->Valid() && db_it->key().starts_with("DS#");
+            db_it->Next()) {
+        Slice lkey = db_it->key();
+        uint64_t sid, cbi;
+        lkey.remove_prefix(3);// lkey = DS#, sid, cbi
+        sid = DecodeFixed64(lkey.data());
+        lkey.remove_prefix(sizeof(uint64_t));
+        cbi = DecodeFixed64(lkey.data());
+        //Slice lval = db_it->value();
+        if (sid != lc.sid) {
+            break;
+        }
+        total_items++;
+
+        CacheBlock* block = new CacheBlock;
+        block->DecodeFrom(db_it->value()); // get fid and block_idx
+        std::string hkey;
+        PutFixed64(&hkey, block->fid);
+        PutFixed64(&hkey, block->block_idx);
+        block->sid = sid;
+        block->cache_block_idx = cbi;
+        block->state = (block->Test(kCacheBlockValid)) ? kCacheBlockValid : 0;
+        //Log("[%s] Recovery %s, insert cacheblock into 2QLru, %s\n",
+        //    this->WorkPath().c_str(),
+        //    lc.KeyToString().c_str(),
+        //    block->ToString().c_str());
+        LRUHandle* handle = (LRUHandle*)(lc.data_set->cache->Insert(hkey, block, cbi, &BlockCacheImpl::BlockDeleter));
+        assert((uint64_t)(lc.data_set->cache->Value((Cache::Handle*)handle)) == (uint64_t)block);
+        assert(handle->cache_id == block->cache_block_idx);
+        block->handle = handle;
+        lc.data_set->cache->Release((Cache::Handle*)handle);
+    }
+    delete db_it;
+    stat_->MeasureTime(TERA_BLOCK_CACHE_LOCKMAP_DS_RELOAD_NR, total_items);
+
+    std::string ds_key;
+    PutFixed64(&ds_key, lc.sid);
+    LRUHandle* ds_handle = (LRUHandle*)data_set_cache_->Insert(ds_key, lc.data_set, 1, NULL);
+    assert(ds_handle != NULL);
+    lc.data_set->h = ds_handle;
     return s;
 }
 
