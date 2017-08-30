@@ -74,6 +74,7 @@ struct CacheBlock {
     bool data_block_alloc;
     uint64_t data_block_refs;
     LRUHandle* handle;
+    LRUHandle* data_set_handle;
     Status s;
 
     CacheBlock()
@@ -85,7 +86,8 @@ struct CacheBlock {
       cv(&mu),
       data_block_alloc(false),
       data_block_refs(0),
-      handle(NULL) {
+      handle(NULL),
+      data_set_handle(NULL) {
     }
 
     bool Test(uint64_t c_state) {
@@ -165,9 +167,12 @@ struct CacheBlock {
 };
 
 struct DataSet {
+    LRUHandle* h;
     port::Mutex mu;
     Cache* cache;
     int fd;
+
+    DataSet(): h(NULL), cache(NULL), fd(-1) {}
 };
 
 class BlockCacheImpl {
@@ -293,8 +298,7 @@ private:
             return "";
         }
     };
-    typedef std::unordered_map<uint64_t, DataSet*> DataSetMap;
-    DataSetMap data_set_map_;
+    Cache* data_set_cache_;
 
     Statistics* stat_;
     //WritableFile* logfile_;
@@ -1210,9 +1214,8 @@ Status BlockCacheImpl::LockAndPut(LockContent& lc) {
             //    lc.db_val->c_str(),
             //    s.ToString().c_str());
         } else if (lc.type == kDataSetKey) {
-            mu_.Lock();
-            lc.data_set = data_set_map_[lc.sid];
-            mu_.Unlock();
+            lc.data_set = GetDataSet(lc.sid);
+            assert(lc.data_set != NULL);
             //Log("[%s] get dataset sid: %lu\n",
             //    this->WorkPath().c_str(),
             //    lc.sid);
@@ -1308,9 +1311,11 @@ Status BlockCacheImpl::LockAndPut(LockContent& lc) {
             delete db_it;
             stat_->MeasureTime(TERA_BLOCK_CACHE_LOCKMAP_DS_RELOAD_NR, total_items);
 
-            mu_.Lock();
-            data_set_map_[lc.sid] = lc.data_set;
-            mu_.Unlock();
+            std::string ds_key;
+            PutFixed64(&ds_key, lc.sid);
+            LRUHandle* ds_handle = (LRUHandle*)data_set_cache_->Insert(ds_key, lc.data_set, 1, NULL);
+            assert(ds_handle != NULL);
+            lc.data_set->h = ds_handle;
         }
 
         mu_.Lock();
@@ -1356,6 +1361,7 @@ Status BlockCacheImpl::LoadCache() {
         options_.meta_table_cache_size);
     Status s = DB::Open(options_.opts, dbname, &db_);
     assert(s.ok());
+    data_set_cache_ = leveldb::NewLRUCache(128 * options_.dataset_num + 1);
 
     // recover fid
     std::string key = "FID#";
@@ -1377,20 +1383,20 @@ Status BlockCacheImpl::LoadCache() {
 }
 
 Status BlockCacheImpl::FillCache(CacheBlock* block) {
-    mu_.Lock();
-    uint64_t sid = block->sid;
     uint64_t cache_block_idx = block->cache_block_idx;
-    int fd = (data_set_map_[sid])->fd;
-    mu_.Unlock();
+    DataSet* ds = reinterpret_cast<DataSet*>(data_set_cache_->Value((Cache::Handle*)block->data_set_handle));
+    int fd = ds->fd;
 
     // do io without lock
     ssize_t res = pwrite(fd, block->data_block.data(), block->data_block.size(),
                          cache_block_idx * options_.block_size);
-    //Log("[%s] cache fill: sid %lu, dataset.fd %d, datablock size %lu, cb_idx %lu, %s, res %ld\n",
-    //    this->WorkPath().c_str(), sid, fd, block->data_block.size(),
-    //    cache_block_idx,
-    //    block->ToString().c_str(),
-    //    res);
+    if (res < 0) {
+        Log("[%s] cache fill: sid %lu, dataset.fd %d, datablock size %lu, cb_idx %lu, %s, res %ld\n",
+            this->WorkPath().c_str(), block->sid, fd, block->data_block.size(),
+            cache_block_idx,
+            block->ToString().c_str(),
+            res);
+    }
 
     if (res < 0) {
         return Status::Corruption("FillCache error");
@@ -1399,11 +1405,9 @@ Status BlockCacheImpl::FillCache(CacheBlock* block) {
 }
 
 Status BlockCacheImpl::ReadCache(CacheBlock* block, struct aiocb* aio_context) {
-    mu_.Lock();
-    uint64_t sid = block->sid;
     uint64_t cache_block_idx = block->cache_block_idx;
-    int fd = (data_set_map_[sid])->fd;
-    mu_.Unlock();
+    DataSet* ds = reinterpret_cast<DataSet*>(data_set_cache_->Value((Cache::Handle*)block->data_set_handle));
+    int fd = ds->fd;
 
     // do io without lock
     ssize_t res = 0;
@@ -1420,7 +1424,7 @@ Status BlockCacheImpl::ReadCache(CacheBlock* block, struct aiocb* aio_context) {
 
     if (res < 0) {
         Log("[%s] cache read: sid %lu, dataset.fd %d, datablock size %lu, cb_idx %lu, %s, res %ld\n",
-            this->WorkPath().c_str(), sid, fd, block->data_block.size(),
+            this->WorkPath().c_str(), block->sid, fd, block->data_block.size(),
             cache_block_idx,
             block->ToString().c_str(),
             res);
@@ -1514,12 +1518,14 @@ Status BlockCacheImpl::DeleteFile(const std::string& fname) {
 }
 
 DataSet* BlockCacheImpl::GetDataSet(uint64_t sid) {
+    std::string key;
+    PutFixed64(&key, sid);
     DataSet* set = NULL;
     uint64_t start_ts = options_.cache_env->NowMicros();
 
-    MutexLock l(&mu_);
-    DataSetMap::iterator it = data_set_map_.find(sid);
-    if (it == data_set_map_.end()) {
+    LRUHandle* h = (LRUHandle*)data_set_cache_->Lookup(key);
+    if (h == NULL) {
+        MutexLock l(&mu_);
         LockContent lc;
         lc.type = kDataSetKey;
         lc.sid = sid;
@@ -1529,7 +1535,8 @@ DataSet* BlockCacheImpl::GetDataSet(uint64_t sid) {
     } else {
         //Log("[%s] get dataset from memcache, sid %lu\n",
         //    this->WorkPath().c_str(), sid);
-        set = it->second;
+        set = reinterpret_cast<DataSet*>(data_set_cache_->Value((Cache::Handle*)h));
+        assert(set->h == h);
     }
     stat_->MeasureTime(TERA_BLOCK_CACHE_GET_DS,
                        options_.cache_env->NowMicros() - start_ts);
@@ -1562,6 +1569,7 @@ CacheBlock* BlockCacheImpl::GetAndAllocBlock(uint64_t fid, uint64_t block_idx) {
             assert((uint64_t)(cache->Value((Cache::Handle*)h)) == (uint64_t)block);
             block->cache_block_idx = h->cache_id;
             block->handle = h;
+            block->data_set_handle = ds->h;
             //Log("[%s] Alloc Block: %s, sid %lu, fid %lu, block_idx %lu, hash %u, dataset_nr %lu\n",
             //    this->WorkPath().c_str(),
             //    block->ToString().c_str(),
@@ -1573,8 +1581,11 @@ CacheBlock* BlockCacheImpl::GetAndAllocBlock(uint64_t fid, uint64_t block_idx) {
         }
     } else {
         block = reinterpret_cast<CacheBlock*>(cache->Value((Cache::Handle*)h));
+        block->data_set_handle = block->data_set_handle == NULL? ds->h: block->data_set_handle;
     }
     ds->mu.Unlock();
+
+    data_set_cache_->Release((Cache::Handle*)ds->h);
     stat_->MeasureTime(TERA_BLOCK_CACHE_DS_LRU_LOOKUP,
                        options_.cache_env->NowMicros() - start_ts);
     return block;
@@ -1603,7 +1614,7 @@ Status BlockCacheImpl::ReleaseBlock(CacheBlock* block, bool need_sync) {
 
     //Log("[%s] release block: %s\n", this->WorkPath().c_str(), block->ToString().c_str());
     LRUHandle* h = block->handle;
-    DataSet* ds = GetDataSet(block->sid); // get and alloc ds
+    DataSet* ds = reinterpret_cast<DataSet*>(data_set_cache_->Value((Cache::Handle*)block->data_set_handle));
     ds->cache->Release((Cache::Handle*)h);
     return s;
 }
