@@ -1189,13 +1189,13 @@ static int SpecifiedFlagfileCount(const std::string& confpath) {
 
 static int InitFlags(const std::string& confpath, const std::string& log_prefix) {
     // search conf file, priority:
-    //   user-specified > ./tera.flag > ../conf/tera.flag
+    //   user-specified > ./tera.flag > ../conf/tera.flag > exeDir/tera.flag > exeDir/../tera.flag
     std::string flagfile;
     if (SpecifiedFlagfileCount(confpath) > 1) {
         LOG(ERROR) << "should specify no more than one config file";
         return -1;
     }
-
+    std::string exedir = GetProcessDir();
     if (!confpath.empty() && IsExist(confpath)){
         flagfile = confpath;
     } else if(!confpath.empty() && !IsExist(confpath)){
@@ -1211,6 +1211,10 @@ static int InitFlags(const std::string& confpath, const std::string& log_prefix)
         flagfile = "./tera.flag";
     } else if (IsExist("../conf/tera.flag")) {
         flagfile = "../conf/tera.flag";
+    } else if (IsExist(exedir + "/./tera.flag")) {
+        flagfile = exedir + "/./tera.flag";
+    } else if (IsExist(exedir + "/../conf/tera.flag")) {
+        flagfile = exedir + "/../conf/tera.flag";
     } else if (IsExist(utils::GetValueFromEnv("TERA_CONF"))) {
         flagfile = utils::GetValueFromEnv("TERA_CONF");
     } else {
@@ -1219,6 +1223,11 @@ static int InitFlags(const std::string& confpath, const std::string& log_prefix)
     }
 
     utils::LoadFlagFile(flagfile);
+
+    if(!IsDir(FLAGS_log_dir)) {
+        LOG(ERROR) << "wrong log directory: "<<FLAGS_log_dir;
+        return -1;
+    }
 
     if (!g_is_glog_init) {
         ::google::InitGoogleLogging(log_prefix.c_str());

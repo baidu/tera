@@ -1,5 +1,6 @@
 #!/bin/bash
-source ./config
+CURRENT_DIR=`dirname $0`
+source ${CURRENT_DIR}/config
 
 PID=`ps x | grep tera_master | grep $PORT | awk '{print $1}'`;
 if [ ${PID}"x" != "x" ]; then

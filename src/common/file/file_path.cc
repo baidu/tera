@@ -2,21 +2,26 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include "common/file/file_path.h"
+
 #include <dirent.h>
 #include <grp.h>
+#include <libgen.h>
+#include <linux/limits.h>
 #include <pwd.h>
-#include <stdint.h>
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
 #include <sys/stat.h>
 #include <sys/types.h>
 #include <unistd.h>
 
+#include <stdint.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+
 #include <gflags/gflags.h>
 
 #include "common/base/string_ext.h"
-#include "common/file/file_path.h"
+
 
 DECLARE_int32(file_op_retry_times);
 
@@ -104,6 +109,23 @@ bool CreateDirWithRetry(const std::string& dir_path) {
         }
     }
     return is_success;
+}
+std::string GetCWD() {
+    char buf[PATH_MAX];
+    if(getcwd(buf, PATH_MAX) == NULL){
+        return "";
+    }
+	return buf;
+}
+
+std::string GetProcessDir() {
+    char buf[PATH_MAX];
+    ssize_t count = readlink("/proc/self/exe", buf, PATH_MAX);
+    if(count == 0) {
+        return "";
+    } else{
+    return dirname(buf);
+    }
 }
 
 std::string UidToName(uid_t uid) {

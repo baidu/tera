@@ -229,7 +229,7 @@ if [ ${NOSE_VERSION} == "DISABLE" ]; then
     echo "Disable nose."
 elif [ ! -f "${FLAG_DIR}/nose_${NOSE_VERSION}" ] \
     || [ ! -f "${DEPS_PREFIX}/bin/nosetests" ] \
-    || [ ! -d "${DEPS_PREFIX}/lib/nose" ]; then
+    || [ ! -d "${DEPS_PREFIX}/lib/"nose* ]; then
     wget --no-check-certificate -O nose-${NOSE_VERSION}.tar.gz ${NOSE_URL}
     tar zxf nose-${NOSE_VERSION}.tar.gz --recursive-unlink
     cd nose-${NOSE_VERSION}
@@ -237,6 +237,21 @@ elif [ ! -f "${FLAG_DIR}/nose_${NOSE_VERSION}" ] \
     python setup.py install --prefix=. --install-scripts=${DEPS_PREFIX}/bin --install-lib=${DEPS_PREFIX}/lib
     cd -
     touch "${FLAG_DIR}/nose_${NOSE_VERSION}"
+fi
+
+# readline (teracli_main.cc use this and lead to compile failed)
+if [ ${READLINE_VERSION} == "DISABLE" ]; then
+    echo "Disable readline."
+elif [ ! -f "${FLAG_DIR}/readline_${READLINE_VERSION}" ] \
+    || [ ! -f "${DEPS_PREFIX}/lib/libreadline.a" ] \
+    || [ ! -d "${DEPS_PREFIX}/include/readline" ]; then
+    wget --no-check-certificate -O readline-${READLINE_VERSION}.tar.gz ${READLINE_URL}
+    tar zxf readline-${READLINE_VERSION}.tar.gz --recursive-unlink
+    cd readline-${READLINE_VERSION}
+    ./configure ${DEPS_CONFIG} CPPFLAGS=-I${DEPS_PREFIX}/include LDFLAGS=-L${DEPS_PREFIX}/lib
+    make install
+    cd -
+    touch "${FLAG_DIR}/readline_${READLINE_VERSION}"
 fi
 
 cd ${WORK_DIR}
