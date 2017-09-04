@@ -310,12 +310,20 @@ struct Options {
   bool ignore_corruption_in_open;
 
   // Statistic: By default, if 10% entry timeout, will trigger compaction
-  // Default: 10 %
+  // Default: 99 %
   uint64_t ttl_percentage;
 
   // Statistic: delete tag's percentage in sst
-  // Default: 10 %
+  // Default: 20 %
   uint64_t del_percentage;
+
+  // Max thread alloc for lg's compaction
+  // Default: 5
+  uint32_t max_background_compactions;
+
+  // if level0's file num >= limit, use sqrt slow down level score
+  // Default: 30
+  int slow_down_level0_score_limit;
 
   // Create an Options object with default values for all fields.
   Options();

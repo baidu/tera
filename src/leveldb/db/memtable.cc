@@ -26,6 +26,7 @@ MemTable::MemTable(const InternalKeyComparator& cmp, CompactStrategyFactory* com
     : last_seq_(0),
       comparator_(cmp),
       refs_(0),
+      being_flushed_(false),
       table_(comparator_, &arena_),
       empty_(true),
       compact_strategy_factory_(compact_strategy_factory) {

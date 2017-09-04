@@ -96,6 +96,12 @@ class DBImpl : public DB {
   friend class DBTable;
   struct CompactionState;
   struct Writer;
+  struct CompactionTask {
+    int64_t id; // compaction thread id
+    double score; // compaction score
+    uint64_t timeout; // compaction task delay time
+    DBImpl* db;
+  };
 
   Iterator* NewInternalIterator(const ReadOptions&,
                                 SequenceNumber* latest_snapshot);
@@ -110,10 +116,10 @@ class DBImpl : public DB {
 
   // Compact the in-memory write buffer to disk.  Switches to a new
   // log-file/memtable and writes a new descriptor iff successful.
-  Status CompactMemTable()
+  Status CompactMemTable(bool* sched_idle = NULL)
       EXCLUSIVE_LOCKS_REQUIRED(mutex_);
 
-  Status WriteLevel0Table(MemTable* mem, VersionEdit* edit, Version* base)
+  Status WriteLevel0Table(MemTable* mem, VersionEdit* edit, Version* base, uint64_t* number = NULL)
       EXCLUSIVE_LOCKS_REQUIRED(mutex_);
 
   Status MakeRoomForWrite(bool force /* compact even if there is room? */)
@@ -121,8 +127,8 @@ class DBImpl : public DB {
 
   void MaybeScheduleCompaction() EXCLUSIVE_LOCKS_REQUIRED(mutex_);
   static void BGWork(void* db);
-  void BackgroundCall();
-  Status BackgroundCompaction() EXCLUSIVE_LOCKS_REQUIRED(mutex_);
+  void BackgroundCall(CompactionTask* task);
+  Status BackgroundCompaction(bool* sched_idle) EXCLUSIVE_LOCKS_REQUIRED(mutex_);
   void CleanupCompaction(CompactionState* compact)
       EXCLUSIVE_LOCKS_REQUIRED(mutex_);
   Status DoCompactionWork(CompactionState* compact)
@@ -196,18 +202,24 @@ class DBImpl : public DB {
   std::set<uint64_t> pending_outputs_;
 
   // Has a background compaction been scheduled or is running?
-  bool bg_compaction_scheduled_;
-  double bg_compaction_score_;
-  uint64_t bg_compaction_timeout_;
-  int64_t bg_schedule_id_;
+  std::vector<CompactionTask*> bg_compaction_tasks_;
+  std::vector<double> bg_compaction_score_;
+  std::vector<int64_t> bg_schedule_id_;
 
   // Information for a manual compaction
+  enum ManualCompactState {
+    kManualCompactIdle,         // manual compact inited
+    kManualCompactConflict,     // manual compact run simultaneously
+    kManualCompactWakeup,       // restart delay compact task
+  };
   struct ManualCompaction {
     int level;
     bool done;
+    bool being_sched;
     const InternalKey* begin;   // NULL means beginning of key range
     const InternalKey* end;     // NULL means end of key range
     InternalKey tmp_storage;    // Used to keep track of compaction progress
+    ManualCompactState compaction_conflict; // 0 == idle, 1 == conflict, 2 == wake
   };
   ManualCompaction* manual_compaction_;
 

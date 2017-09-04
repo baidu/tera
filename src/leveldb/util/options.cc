@@ -53,7 +53,9 @@ Options::Options()
       disable_wal(false),
       ignore_corruption_in_open(false),
       ttl_percentage(99),
-      del_percentage(20) {
+      del_percentage(20),
+      max_background_compactions(5),
+      slow_down_level0_score_limit(30) {
 }
 
 }  // namespace leveldb
