@@ -281,10 +281,11 @@ class LRU2QCache: public Cache {
     const uint32_t hash = HashSlice(key);
     MutexLock l(&mutex_);
     LRUHandle* e = NULL;
-    e = (LRUHandle*)DoLookup(key, hash);
-    if (e != NULL) {
-        return reinterpret_cast<Cache::Handle*>(e);
-    }
+    //e = (LRUHandle*)DoLookup(key, hash);
+    //if (e != NULL) {
+    //    assert(0);
+    //    return reinterpret_cast<Cache::Handle*>(e);
+    //}
 
     if (usage_ < capacity_) { // cache not full
       e = reinterpret_cast<LRUHandle*>(
@@ -305,6 +306,8 @@ class LRU2QCache: public Cache {
       return reinterpret_cast<Cache::Handle*>(e);
     }
     assert(max_cache_id_ + 1 == usage_);
+    assert(usage_ == capacity_);
+    //fprintf(stderr, "%lu, usage %lu, capacity %lu\n", (uint64_t)this, usage_, capacity_);
 
     // cache full, reuse item
     LRUHandle* old = lru_.next;
@@ -330,6 +333,7 @@ class LRU2QCache: public Cache {
 
       LRU_Append(e);
       assert(table_.Insert(e) == NULL);
+      usage_++;
       return reinterpret_cast<Cache::Handle*>(e);
     }
     return NULL;

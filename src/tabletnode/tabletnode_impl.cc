@@ -192,7 +192,7 @@ void TabletNodeImpl::InitCacheSystem() {
         for (uint32_t i = 0; i < path_list.size(); ++i) {
             leveldb::BlockCacheOptions opts;
             LOG(INFO) << "load cache: " << path_list[i];
-            reinterpret_cast<leveldb::BlockCacheEnv*>(block_cache_env)->LoadCache(opts, path_list[i] + "/block_cache/");
+            reinterpret_cast<leveldb::BlockCacheEnv*>(block_cache_env)->LoadCache(opts, path_list[i] + "/block_cache");
         }
         return;
     }

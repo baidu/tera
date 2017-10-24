@@ -97,7 +97,10 @@ Status ReadBlock(RandomAccessFile* file,
     const uint32_t actual = crc32c::Value(data, n + 1);
     if (actual != crc) {
       delete[] buf;
-      s = Status::Corruption("block checksum mismatch");
+      char err[128] = {'\0'};
+      sprintf(err, "block checksum mismatch: crc %u, actual %u, offset %lu, size %lu",
+              crc, actual, handle.offset(), n + kBlockTrailerSize);
+      s = Status::Corruption(Slice(err, strlen(err)));
       return s;
     }
   }

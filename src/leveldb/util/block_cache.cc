@@ -323,6 +323,7 @@ private:
     DB* db_; // store meta
     ThreadPool bg_fill_;
     ThreadPool bg_read_;
+    ThreadPool bg_dfs_read_;
     ThreadPool bg_flush_;
     ThreadPool bg_control_;
 };
@@ -492,17 +493,18 @@ public:
             for (uint32_t i = begin + 1; i <= end; ++i) {
                 tmp_storage_ = new std::string();
                 block_list_.push_back(tmp_storage_);
-                if (i < end) { // last block
+                if (i < end) {
                     tmp_storage_->append(buf.data(), block_size_);
                     buf.remove_prefix(block_size_);
                 } else { // last block
                     tmp_storage_->append(buf.data(), buf.size());
+                    buf.remove_prefix(buf.size());
                 }
-                //Log("[%s] add tmp_storage %s: offset: %lu, buf_size: %lu\n",
+                //Log("[%s] add tmp_storage %s: offset: %lu, buf_size: %lu, idx %u\n",
                 //    path_.c_str(),
                 //    file_.c_str(),
                 //    offset_,
-                //    buf.size());
+                //    buf.size(), i);
             }
         }
         offset_ += data.size();
@@ -803,7 +805,7 @@ public:
             //Log("[%s] pread in miss list, %s\n",
             //    cache_->WorkPath().c_str(),
             //    block->ToString().c_str());
-            cache_->bg_read_.Schedule(&BlockCacheRandomAccessFile::AsyncDfsRead, reader, 10);
+            cache_->bg_dfs_read_.Schedule(&BlockCacheRandomAccessFile::AsyncDfsRead, reader, 10);
         }
         //uint64_t miss_read_sched_ts = cache_->options_.cache_env->NowMicros();
 
@@ -857,7 +859,8 @@ public:
             //    cache_->WorkPath().c_str(),
             //    block->ToString().c_str());
         }
-        //uint64_t dfs_read_ts = cache_->options_.cache_env->NowMicros();
+        uint64_t dfs_read_ts = cache_->options_.cache_env->NowMicros();
+        cache_->stat_->MeasureTime(TERA_BLOCK_CACHE_PREAD_DFS_READ, dfs_read_ts - ssd_read_ts);
 
         for (uint32_t i = 0; i < c_miss.size(); ++i) {
             CacheBlock* block = c_miss[i];
@@ -869,7 +872,8 @@ public:
             //    block->ToString().c_str());
             cache_->bg_fill_.Schedule(&BlockCacheRandomAccessFile::AsyncCacheWrite, writer, 10);
         }
-        //uint64_t ssd_write_sched_ts = cache_->options_.cache_env->NowMicros();
+        uint64_t ssd_write_sched_ts = cache_->options_.cache_env->NowMicros();
+        //cache_->stat_->MeasureTime(TERA_BLOCK_CACHE_PREAD_SSD_WRITE_SCHED, ssd_write_sched_ts - dfs_read_ts);
 
         for (uint32_t i = 0; i < c_miss.size(); ++i) { // wait cache fill finish
             CacheBlock* block = c_miss[i];
@@ -888,6 +892,7 @@ public:
             //    block->ToString().c_str());
         }
         uint64_t ssd_write_ts = cache_->options_.cache_env->NowMicros();
+        cache_->stat_->MeasureTime(TERA_BLOCK_CACHE_PREAD_SSD_WRITE, ssd_write_ts - ssd_write_sched_ts);
 
         // wait other async read finish
         for (uint32_t i = 0; i < c_locked.size(); ++i) {
@@ -1099,6 +1104,7 @@ BlockCacheImpl::BlockCacheImpl(const BlockCacheOptions& options)
       db_(NULL) {
     bg_fill_.SetBackgroundThreads(30);
     bg_read_.SetBackgroundThreads(30);
+    bg_dfs_read_.SetBackgroundThreads(30);
     bg_flush_.SetBackgroundThreads(30);
     bg_control_.SetBackgroundThreads(2);
     stat_ = CreateDBStatistics();
@@ -1119,20 +1125,22 @@ void BlockCacheImpl::BGControlThread() {
     Log("[%s] statistics: "
         "%s, %s, %s, %s, %s, "
         "%s, %s, %s, %s, %s, "
-        "%s, %s, %s\n",
+        "%s, %s, %s, %s, %s\n",
         this->WorkPath().c_str(),
         stat_->GetBriefHistogramString(TERA_BLOCK_CACHE_PREAD_QUEUE).c_str(),
         stat_->GetBriefHistogramString(TERA_BLOCK_CACHE_PREAD_SSD_READ).c_str(),
+        stat_->GetBriefHistogramString(TERA_BLOCK_CACHE_PREAD_DFS_READ).c_str(),
+        stat_->GetBriefHistogramString(TERA_BLOCK_CACHE_PREAD_SSD_WRITE).c_str(),
         stat_->GetBriefHistogramString(TERA_BLOCK_CACHE_PREAD_FILL_USER_DATA).c_str(),
+
         stat_->GetBriefHistogramString(TERA_BLOCK_CACHE_PREAD_RELEASE_BLOCK).c_str(),
         stat_->GetBriefHistogramString(TERA_BLOCK_CACHE_LOCKMAP_DS_RELOAD_NR).c_str(),
-
         stat_->GetBriefHistogramString(TERA_BLOCK_CACHE_PREAD_GET_BLOCK).c_str(),
         stat_->GetBriefHistogramString(TERA_BLOCK_CACHE_PREAD_BLOCK_NR).c_str(),
-        stat_->GetBriefHistogramString(TERA_BLOCK_CACHE_GET_DS).c_str(),
+        stat_->GetBriefHistogramString(TERA_BLOCK_CACHE_GET_DATA_SET).c_str(),
+
         stat_->GetBriefHistogramString(TERA_BLOCK_CACHE_DS_LRU_LOOKUP).c_str(),
         stat_->GetBriefHistogramString(TERA_BLOCK_CACHE_PREAD_WAIT_UNLOCK).c_str(),
-
         stat_->GetBriefHistogramString(TERA_BLOCK_CACHE_ALLOC_FID).c_str(),
         stat_->GetBriefHistogramString(TERA_BLOCK_CACHE_GET_FID).c_str(),
         stat_->GetBriefHistogramString(TERA_BLOCK_CACHE_EVICT_NR).c_str());
@@ -1151,12 +1159,14 @@ void BlockCacheImpl::BGControlThread() {
     // resched after 6s
     stat_->ClearHistogram(TERA_BLOCK_CACHE_PREAD_QUEUE);
     stat_->ClearHistogram(TERA_BLOCK_CACHE_PREAD_SSD_READ);
+    stat_->ClearHistogram(TERA_BLOCK_CACHE_PREAD_DFS_READ);
+    stat_->ClearHistogram(TERA_BLOCK_CACHE_PREAD_SSD_WRITE);
     stat_->ClearHistogram(TERA_BLOCK_CACHE_PREAD_FILL_USER_DATA);
     stat_->ClearHistogram(TERA_BLOCK_CACHE_PREAD_RELEASE_BLOCK);
     stat_->ClearHistogram(TERA_BLOCK_CACHE_LOCKMAP_DS_RELOAD_NR);
     stat_->ClearHistogram(TERA_BLOCK_CACHE_PREAD_GET_BLOCK);
     stat_->ClearHistogram(TERA_BLOCK_CACHE_PREAD_BLOCK_NR);
-    stat_->ClearHistogram(TERA_BLOCK_CACHE_GET_DS);
+    stat_->ClearHistogram(TERA_BLOCK_CACHE_GET_DATA_SET);
     stat_->ClearHistogram(TERA_BLOCK_CACHE_DS_LRU_LOOKUP);
     stat_->ClearHistogram(TERA_BLOCK_CACHE_PREAD_WAIT_UNLOCK);
     stat_->ClearHistogram(TERA_BLOCK_CACHE_ALLOC_FID);
@@ -1292,19 +1302,19 @@ Status BlockCacheImpl::PutContentAfterLock(LockContent& lc) {
         if (s.ok()) {
             lc.db_val->append(lc.db_lock_val.data(), lc.db_lock_val.size());
         }
-        Log("[%s] Insert db key : %s, val %s, status %s\n",
-            this->WorkPath().c_str(),
-            lc.KeyToString().c_str(),
-            lc.ValToString().c_str(),
-            s.ToString().c_str());
+        //Log("[%s] Insert db key : %s, val %s, status %s\n",
+        //    this->WorkPath().c_str(),
+        //    lc.KeyToString().c_str(),
+        //    lc.ValToString().c_str(),
+        //    s.ToString().c_str());
     } else if (lc.type == kDeleteDBKey) {
         WriteOptions w_opts;
         s = db_->Delete(w_opts, key);
-        Log("[%s] Delete db key : %s, val %s, status %s\n",
-            this->WorkPath().c_str(),
-            lc.KeyToString().c_str(),
-            lc.ValToString().c_str(),
-            s.ToString().c_str());
+        //Log("[%s] Delete db key : %s, val %s, status %s\n",
+        //    this->WorkPath().c_str(),
+        //    lc.KeyToString().c_str(),
+        //    lc.ValToString().c_str(),
+        //    s.ToString().c_str());
     } else if (lc.type == kDataSetKey) { // cannot double insert
         std::string ds_key;
         PutFixed64(&ds_key, lc.sid);
@@ -1329,18 +1339,18 @@ Status BlockCacheImpl::ReloadDataSet(LockContent& lc) {
     lc.data_set->fd = open(file.c_str(), O_RDWR | O_CREAT, 0644);
     assert(lc.data_set->fd > 0);
     Log("[%s] New DataSet %s, file: %s, nr_block: %lu, fd: %d\n",
-            this->WorkPath().c_str(),
-            lc.KeyToString().c_str(),
-            file.c_str(), (options_.dataset_size / options_.block_size) + 1,
-            lc.data_set->fd);
+        this->WorkPath().c_str(),
+        lc.KeyToString().c_str(),
+        file.c_str(), (options_.dataset_size / options_.block_size) + 1,
+        lc.data_set->fd);
 
     // reload hash lru
     uint64_t total_items = 0;
     ReadOptions s_opts;
     leveldb::Iterator* db_it = db_->NewIterator(s_opts);
     for (db_it->Seek(key);
-            db_it->Valid() && db_it->key().starts_with("DS#");
-            db_it->Next()) {
+         db_it->Valid() && db_it->key().starts_with("DS#");
+         db_it->Next()) {
         Slice lkey = db_it->key();
         uint64_t sid, cbi;
         lkey.remove_prefix(3);// lkey = DS#, sid, cbi
@@ -1389,7 +1399,7 @@ const std::string& BlockCacheImpl::WorkPath() {
 Status BlockCacheImpl::LoadCache() {
     // open meta file
     work_path_ = options_.cache_dir;
-    std::string dbname = options_.cache_dir + "/meta/";
+    std::string dbname = options_.cache_dir + "/meta";
     options_.opts.env = options_.cache_env; // local write
     options_.opts.filter_policy = NewBloomFilterPolicy(10);
     options_.opts.block_cache = leveldb::NewLRUCache(options_.meta_block_cache_size * 1024UL * 1024);
@@ -1431,15 +1441,13 @@ Status BlockCacheImpl::FillCache(CacheBlock* block) {
     // do io without lock
     ssize_t res = pwrite(fd, block->data_block.data(), block->data_block.size(),
                          cache_block_idx * options_.block_size);
+
     if (res < 0) {
         Log("[%s] cache fill: sid %lu, dataset.fd %d, datablock size %lu, cb_idx %lu, %s, res %ld\n",
             this->WorkPath().c_str(), block->sid, fd, block->data_block.size(),
             cache_block_idx,
             block->ToString().c_str(),
             res);
-    }
-
-    if (res < 0) {
         return Status::Corruption("FillCache error");
     }
     return Status::OK();
@@ -1579,7 +1587,7 @@ DataSet* BlockCacheImpl::GetDataSet(uint64_t sid) {
         set = reinterpret_cast<DataSet*>(data_set_cache_->Value((Cache::Handle*)h));
         assert(set->h == h);
     }
-    stat_->MeasureTime(TERA_BLOCK_CACHE_GET_DS,
+    stat_->MeasureTime(TERA_BLOCK_CACHE_GET_DATA_SET,
                        options_.cache_env->NowMicros() - start_ts);
     return set;
 }
@@ -1611,10 +1619,12 @@ CacheBlock* BlockCacheImpl::GetAndAllocBlock(uint64_t fid, uint64_t block_idx) {
             block->cache_block_idx = h->cache_id;
             block->handle = h;
             block->data_set_handle = ds->h;
-            //Log("[%s] Alloc Block: %s, sid %lu, fid %lu, block_idx %lu, hash %u, dataset_nr %lu\n",
+            //Log("[%s] Alloc Block: %s, sid %lu, fid %lu, block_idx %lu, hash %u, usage: %lu/%lu\n",
             //    this->WorkPath().c_str(),
             //    block->ToString().c_str(),
-            //    sid, fid, block_idx, hash, options_.dataset_num);
+            //    sid, fid, block_idx, hash,
+            //    cache->TotalCharge(),
+            //    options_.dataset_size / options_.block_size + 1);
         } else {
             delete block;
             block = NULL;
