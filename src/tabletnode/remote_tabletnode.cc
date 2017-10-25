@@ -322,7 +322,7 @@ void RemoteTabletNode::DoReadTablet(google::protobuf::RpcController* controller,
         int64_t read_timeout = request->client_timeout_ms() * 1000; // ms -> us
         int64_t detal = get_micros() - start_micros;
         if (detal > read_timeout) {
-            VLOG(5) << "timeout, drop read request for:" << request->tablet_name()
+            VLOG(8) << "timeout, drop read request for:" << request->tablet_name()
                 << ", detal(in us):" << detal
                 << ", read_timeout(in us):" << read_timeout;
             is_read_timeout = true;

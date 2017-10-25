@@ -14,9 +14,11 @@
 
 #include "db/filename.h"
 #include "db/table_cache.h"
+#include "common/base/string_ext.h"
 #include "common/thread.h"
 #include "io/io_utils.h"
 #include "io/utils_leveldb.h"
+#include "leveldb/block_cache.h"
 #include "leveldb/cache.h"
 #include "leveldb/env_cache.h"
 #include "leveldb/env_dfs.h"
@@ -68,7 +70,7 @@ DECLARE_string(tera_tabletnode_path_prefix);
 
 // cache-related
 DECLARE_int32(tera_memenv_block_cache_size);
-DECLARE_bool(tera_tabletnode_cache_enabled);
+DECLARE_bool(tera_tabletnode_block_cache_enabled);
 DECLARE_string(tera_tabletnode_cache_paths);
 DECLARE_int32(tera_tabletnode_cache_block_size);
 DECLARE_string(tera_tabletnode_cache_name);
@@ -150,11 +152,7 @@ TabletNodeImpl::TabletNodeImpl()
     sysinfo_.SetProcessStartTime(get_micros());
 }
 
-TabletNodeImpl::~TabletNodeImpl() {
-    if (FLAGS_tera_tabletnode_cache_enabled) {
-        leveldb::ThreeLevelCacheEnv::RemoveCachePaths();
-    }
-}
+TabletNodeImpl::~TabletNodeImpl() {}
 
 bool TabletNodeImpl::Init() {
     if (FLAGS_tera_zk_enabled) {
@@ -179,32 +177,32 @@ bool TabletNodeImpl::Init() {
 }
 
 void TabletNodeImpl::InitCacheSystem() {
-    if (!FLAGS_tera_tabletnode_cache_enabled) {
-        // compitable with legacy FlashEnv
-        leveldb::FlashEnv* flash_env = (leveldb::FlashEnv*)io::LeveldbFlashEnv();
-        flash_env->SetFlashPath(FLAGS_tera_tabletnode_cache_paths,
-                                FLAGS_tera_io_cache_path_vanish_allowed);
-        flash_env->SetUpdateFlashThreadNumber(FLAGS_tera_tabletnode_cache_update_thread_num);
-        flash_env->SetIfForceReadFromCache(FLAGS_tera_tabletnode_cache_force_read_from_cache);
+    if (FLAGS_tera_tabletnode_block_cache_enabled) {
+        LOG(INFO) << "t-cache: set flash path: " << FLAGS_tera_tabletnode_cache_paths;
+        std::vector<std::string> path_list;
+        SplitString(FLAGS_tera_tabletnode_cache_paths, ";", &path_list);
+
+        leveldb::Env* posix_env = leveldb::Env::Default();
+        for (uint32_t i = 0; i < path_list.size(); ++i) {
+            posix_env->CreateDir(path_list[i]);
+        }
+
+        LOG(INFO) << "activate t-cache system";
+        leveldb::Env* block_cache_env = io::DefaultBlockCacheEnv();
+        for (uint32_t i = 0; i < path_list.size(); ++i) {
+            leveldb::BlockCacheOptions opts;
+            LOG(INFO) << "load cache: " << path_list[i];
+            reinterpret_cast<leveldb::BlockCacheEnv*>(block_cache_env)->LoadCache(opts, path_list[i] + "/block_cache");
+        }
         return;
     }
-
-    LOG(INFO) << "activate new cache system";
-    // new cache mechanism
-    leveldb::ThreeLevelCacheEnv::SetCachePaths(FLAGS_tera_tabletnode_cache_paths);
-    leveldb::ThreeLevelCacheEnv::s_mem_cache_size_in_KB_ = FLAGS_tera_tabletnode_cache_mem_size;
-    leveldb::ThreeLevelCacheEnv::s_disk_cache_size_in_MB_ = FLAGS_tera_tabletnode_cache_disk_size;
-    leveldb::ThreeLevelCacheEnv::s_block_size_ = FLAGS_tera_tabletnode_cache_block_size;
-    leveldb::ThreeLevelCacheEnv::s_disk_cache_file_num_ = FLAGS_tera_tabletnode_cache_disk_filenum;
-    leveldb::ThreeLevelCacheEnv::s_disk_cache_file_name_ = FLAGS_tera_tabletnode_cache_name;
-
-    if (FLAGS_tera_tabletnode_cache_log_level < 3) {
-        LEVELDB_SET_LOG_LEVEL(WARNING);
-    } else if (FLAGS_tera_tabletnode_cache_log_level < 4) {
-        LEVELDB_SET_LOG_LEVEL(INFO);
-    } else {
-        LEVELDB_SET_LOG_LEVEL(DEBUG);
-    }
+    // compitable with legacy FlashEnv
+    leveldb::FlashEnv* flash_env = (leveldb::FlashEnv*)io::LeveldbFlashEnv();
+    flash_env->SetFlashPath(FLAGS_tera_tabletnode_cache_paths,
+                            FLAGS_tera_io_cache_path_vanish_allowed);
+    flash_env->SetUpdateFlashThreadNumber(FLAGS_tera_tabletnode_cache_update_thread_num);
+    flash_env->SetIfForceReadFromCache(FLAGS_tera_tabletnode_cache_force_read_from_cache);
+    return;
 }
 
 bool TabletNodeImpl::Exit() {
@@ -1072,7 +1070,7 @@ void TabletNodeImpl::UpdateMetaTableCallback(const SplitTabletRequest* rpc_reque
  * ------------------------------------------
  */
 void TabletNodeImpl::GarbageCollect() {
-    if (FLAGS_tera_tabletnode_cache_enabled) {
+    if (FLAGS_tera_tabletnode_block_cache_enabled) {
         return;
     }
     int64_t start_ms = get_micros();

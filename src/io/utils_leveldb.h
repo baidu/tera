@@ -18,6 +18,8 @@ void InitDfsEnv();
 // return the base env leveldb used (dfs/local), singleton
 leveldb::Env* LeveldbBaseEnv();
 
+leveldb::Env* DefaultBlockCacheEnv(); // ssd + base
+
 // return the mem env leveldb used, singleton
 leveldb::Env* LeveldbMemEnv();
 

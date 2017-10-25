@@ -15,6 +15,7 @@
 #include "common/file/file_path.h"
 #include "common/mutex.h"
 #include "io/timekey_comparator.h"
+#include "leveldb/block_cache.h"
 #include "leveldb/comparator.h"
 #include "leveldb/env_dfs.h"
 #include "leveldb/env_flash.h"
@@ -31,6 +32,7 @@ DECLARE_string(tera_leveldb_env_hdfs2_nameservice_list);
 DECLARE_string(tera_tabletnode_path_prefix);
 DECLARE_string(tera_dfs_so_path);
 DECLARE_string(tera_dfs_conf);
+DECLARE_int32(tera_leveldb_block_cache_env_thread_num);
 
 namespace tera {
 namespace io {
@@ -66,6 +68,21 @@ leveldb::Env* LeveldbBaseEnv() {
     }
 }
 
+// Tcache: default env
+static pthread_once_t block_cache_once = PTHREAD_ONCE_INIT;
+static leveldb::Env* default_block_cache_env;
+static void InitDefaultBlockCacheEnv() {
+    default_block_cache_env = new leveldb::BlockCacheEnv(LeveldbBaseEnv());
+    default_block_cache_env->SetBackgroundThreads(FLAGS_tera_leveldb_block_cache_env_thread_num);
+    LOG(INFO) << "init block cache, thread num " << FLAGS_tera_leveldb_block_cache_env_thread_num;
+}
+
+leveldb::Env* DefaultBlockCacheEnv() {
+    pthread_once(&block_cache_once, InitDefaultBlockCacheEnv);
+    return default_block_cache_env;
+}
+
+// mem env
 leveldb::Env* LeveldbMemEnv() {
     static Mutex mutex;
     static leveldb::Env* mem_env = NULL;
@@ -78,6 +95,7 @@ leveldb::Env* LeveldbMemEnv() {
     return mem_env;
 }
 
+// flash env
 leveldb::Env* LeveldbFlashEnv() {
     static Mutex mutex;
     static leveldb::Env* flash_env = NULL;

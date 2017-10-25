@@ -1180,9 +1180,6 @@ Status DBImpl::FinishCompactionOutputFile(CompactionState* compact,
 
   // Finish and check for file errors
   if (s.ok()) {
-    s = compact->outfile->Sync();
-  }
-  if (s.ok()) {
     s = compact->outfile->Close();
   }
   delete compact->outfile;

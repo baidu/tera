@@ -93,7 +93,7 @@ Status TableCache::FindTable(const std::string& dbname, const Options* options,
 
       if (!s.ok()) {
         assert(table == NULL);
-        fprintf(stderr, "open sstable file failed: [%s]\n", fname.c_str());
+        fprintf(stderr, "open sstable file failed: [%s] %s\n", fname.c_str(), s.ToString().c_str());
         delete file;
         // We do not cache error results so that if the error is transient,
         // or somebody repairs the file, we recover automatically.

@@ -59,11 +59,11 @@ DECLARE_bool(tera_leveldb_ignore_corruption_in_compaction);
 DECLARE_bool(tera_leveldb_use_file_lock);
 
 DECLARE_int32(tera_tabletnode_scan_pack_max_size);
-DECLARE_bool(tera_tabletnode_cache_enabled);
 DECLARE_int32(tera_leveldb_env_local_seek_latency);
 DECLARE_int32(tera_leveldb_env_dfs_seek_latency);
 DECLARE_int32(tera_memenv_table_cache_size);
 DECLARE_bool(tera_use_flash_for_memenv);
+DECLARE_bool(tera_tabletnode_block_cache_enabled);
 
 DECLARE_bool(tera_tablet_use_memtable_on_leveldb);
 DECLARE_int64(tera_tablet_memtable_ldb_write_buffer_size);
@@ -1676,18 +1676,25 @@ void TabletIO::SetupOptionsForLG() {
             lg_info->env = LeveldbMockEnv();
         } else if (store == MemoryStore) {
             if (FLAGS_tera_use_flash_for_memenv) {
-                lg_info->env = LeveldbFlashEnv();
+                if (FLAGS_tera_tabletnode_block_cache_enabled) {
+                    LOG(INFO) << "MemLG[" << lg_i << "] activate TCache";
+                    lg_info->env = io::DefaultBlockCacheEnv();
+                } else {
+                    lg_info->env = LeveldbFlashEnv();
+                }
             } else {
                 lg_info->env = LeveldbMemEnv();
             }
             lg_info->seek_latency = 0;
             lg_info->block_cache = m_memory_cache;
         } else if (store == FlashStore) {
-            if (!FLAGS_tera_tabletnode_cache_enabled) {
-                lg_info->env = LeveldbFlashEnv();
+            if (FLAGS_tera_tabletnode_block_cache_enabled) {
+                //LOG(INFO) << "activate block-level Cache store";
+                //lg_info->env = leveldb::EnvThreeLevelCache();
+                LOG(INFO) << "FlashLG[" << lg_i << "] activate TCache";
+                lg_info->env = io::DefaultBlockCacheEnv();
             } else {
-                LOG(INFO) << "activate block-level Cache store";
-                lg_info->env = leveldb::EnvThreeLevelCache();
+                lg_info->env = LeveldbFlashEnv();
             }
             lg_info->seek_latency = FLAGS_tera_leveldb_env_local_seek_latency;
         } else {

@@ -219,6 +219,17 @@ TEST(Coding, PutLG_ugly) {
     ASSERT_EQ(a_slice.ToString(), b_slice.ToString());
 }
 
+TEST(Coding, PutFixed64Cmp) {
+    std::string sa, sb;
+    PutFixed64(&sa, 100);
+    PutFixed64(&sb, 50);
+    ASSERT_TRUE(sa > sb);
+    uint64_t a = DecodeFixed64(sa.c_str());
+    uint64_t b = DecodeFixed64(sb.c_str());
+    ASSERT_TRUE(a == 100);
+    ASSERT_TRUE(b == 50);
+}
+
 }  // namespace leveldb
 
 int main(int argc, char** argv) {
