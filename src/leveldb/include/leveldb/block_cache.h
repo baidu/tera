@@ -1,6 +1,8 @@
 // Copyright (c) 2017, Baidu.com, Inc. All Rights Reserved
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
+//
+// Author: caijieming@baidu.com
 
 #ifndef  STOREAGE_LEVELDB_UTIL_BLOCK_CACHE_H_
 #define  STOREAGE_LEVELDB_UTIL_BLOCK_CACHE_H_
