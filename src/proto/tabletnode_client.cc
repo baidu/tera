@@ -105,6 +105,14 @@ bool TabletNodeClient::SplitTablet(const SplitTabletRequest* request,
                                 request, response, done, "SplitTablet",
                                 rpc_timeout_, thread_pool_);
 }
+bool TabletNodeClient::ComputeSplitKey(const SplitTabletRequest* request,
+                                   SplitTabletResponse* response,
+                                   std::function<void (SplitTabletRequest*, SplitTabletResponse*, bool, int)> done) {
+    return SendMessageWithRetry(&TabletNodeServer::Stub::ComputeSplitKey,
+                                request, response, done, "ComputeSplitKey",
+                                rpc_timeout_, thread_pool_);
+}
+
 
 bool TabletNodeClient::CompactTablet(const CompactTabletRequest* request,
                                      CompactTabletResponse* response,

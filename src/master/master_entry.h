@@ -8,6 +8,7 @@
 #include <sofa/pbrpc/pbrpc.h>
 
 #include "common/base/scoped_ptr.h"
+#include "common/metric/metric_http_server.h"
 #include "tera_entry.h"
 
 namespace tera {
@@ -33,6 +34,7 @@ private:
     // scoped_ptr<RemoteMaster> remote_master_;
     RemoteMaster* remote_master_;
     scoped_ptr<sofa::pbrpc::RpcServer> rpc_server_;
+    scoped_ptr<tera::MetricHttpServer> metric_http_server_;
 };
 
 } // namespace master

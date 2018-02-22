@@ -13,7 +13,7 @@
 
 #include "proto/http.pb.h"
 #include "tera.h"
-#include "utils/counter.h"
+#include "common/counter.h"
 
 DECLARE_int32(tera_http_ctrl_thread_num);
 DECLARE_int32(tera_http_request_thread_num);

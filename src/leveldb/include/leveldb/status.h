@@ -55,6 +55,10 @@ class Status {
     return Status(kTimeOut, msg, msg2);
   }
 
+  static Status IOPermissionDenied(const Slice& msg, const Slice msg2 = Slice()) {
+    return Status(kIOPermissionDenied, msg, msg2);
+  }
+
   // Returns true iff the status indicates success.
   bool ok() const { return (state_ == NULL); }
 
@@ -69,6 +73,8 @@ class Status {
 
   // Returns true iff the status indicates an TimeOut.
   bool IsTimeOut() const { return code() == kTimeOut; }
+
+  bool IsIOPermissionDenied() const { return code() == kIOPermissionDenied; }
   // Return a string representation of this status suitable for printing.
   // Returns the string "OK" for success.
   std::string ToString() const;
@@ -88,7 +94,8 @@ class Status {
     kNotSupported = 3,
     kInvalidArgument = 4,
     kIOError = 5,
-    kTimeOut = 6
+    kTimeOut = 6,
+    kIOPermissionDenied = 13
   };
 
   Code code() const {

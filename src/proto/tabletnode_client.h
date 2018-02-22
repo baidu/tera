@@ -69,6 +69,9 @@ public:
     bool SplitTablet(const SplitTabletRequest* request,
                      SplitTabletResponse* response,
                      std::function<void (SplitTabletRequest*, SplitTabletResponse*, bool, int)> done = NULL);
+    bool ComputeSplitKey(const SplitTabletRequest* request, SplitTabletResponse* response, 
+                     std::function<void (SplitTabletRequest*, SplitTabletResponse*, bool, int)> done = NULL);
+
 
     bool CompactTablet(const CompactTabletRequest* request,
                        CompactTabletResponse* response,

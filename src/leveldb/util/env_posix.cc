@@ -36,7 +36,7 @@
 #include "util/posix_logger.h"
 #include "util/string_ext.h"
 #include "util/thread_pool.h"
-#include "../utils/counter.h"
+#include "../common/counter.h"
 
 namespace leveldb {
 
@@ -59,6 +59,9 @@ tera::Counter posix_other_counter;
 namespace {
 
 static Status IOError(const std::string& context, int err_number) {
+  if (err_number == EACCES) {
+    return Status::IOPermissionDenied(context, strerror(err_number));
+  }
   return Status::IOError(context, strerror(err_number));
 }
 
@@ -132,9 +135,13 @@ class PosixRandomAccessFile: public RandomAccessFile {
 // problems for very large databases.
 class MmapLimiter {
  public:
-  // Up to 1000 mmaps for 64-bit binaries; none for smaller pointer sizes.
   MmapLimiter() {
-    SetAllowed(sizeof(void*) >= 8 ? 1000 : 0);
+    //Disable mmap in tera for reducing memory use.
+    SetAllowed(0);
+
+    // Up to 1000 mmaps for 64-bit binaries; none for smaller pointer sizes.
+    //SetAllowed(sizeof(void*) >= 8 ? 1000 : 0);
+    //If you want to enable mmap, uncomment the line above.
   }
 
   // If another mmap slot is available, acquire it and return true.

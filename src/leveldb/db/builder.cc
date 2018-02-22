@@ -110,6 +110,7 @@ Status BuildTable(const std::string& dbname,
       *saved_size = 0;
       if (s.ok() && builder->NumEntries()) {
         meta->file_size = builder->FileSize();
+        meta->data_size = meta->file_size;
         assert(meta->file_size > 0);
         *saved_size = builder->SavedSize();
 
@@ -164,7 +165,7 @@ Status BuildTable(const std::string& dbname,
 
   if (s.ok() && meta->file_size > 0) {
     // Keep it
-  } else {
+  } else if (!s.IsIOPermissionDenied()) {
     env->DeleteFile(fname);
   }
   return s;

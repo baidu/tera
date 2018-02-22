@@ -223,6 +223,8 @@ struct Options {
   std::set<uint32_t>* exist_lg_list;
   std::map<uint32_t, LG_info*>* lg_info_list;
 
+  std::set<uint32_t> ignore_corruption_in_open_lg_list;
+
   // compaction strategy to determine how to
   // drop the obsoleted kv records
   bool enable_strategy_when_get;
@@ -310,12 +312,23 @@ struct Options {
   bool ignore_corruption_in_open;
 
   // Statistic: By default, if 10% entry timeout, will trigger compaction
-  // Default: 10 %
+  // Default: 99 %
   uint64_t ttl_percentage;
 
   // Statistic: delete tag's percentage in sst
-  // Default: 10 %
+  // Default: 20 %
   uint64_t del_percentage;
+
+  // Max thread alloc for lg's compaction
+  // Default: 5
+  uint32_t max_background_compactions;
+
+  // if level0's file num >= limit, use sqrt slow down level score
+  // Default: 30
+  int slow_down_level0_score_limit;
+
+  // parallel compaction
+  int max_sub_parallel_compaction;
 
   // Create an Options object with default values for all fields.
   Options();

@@ -22,7 +22,6 @@
 #
 #       -DLEVELDB_CSTDATOMIC_PRESENT if <cstdatomic> is present
 #       -DLEVELDB_PLATFORM_POSIX     for Posix-based platforms
-#       -DSNAPPY                     if the Snappy library is present
 #
 
 OUTPUT=$1
@@ -175,15 +174,6 @@ EOF
     else
         COMMON_FLAGS="$COMMON_FLAGS -DLEVELDB_PLATFORM_POSIX"
     fi
-
-    # Test whether Snappy library is installed
-    # http://code.google.com/p/snappy/
-    $CXX $CXXFLAGS -x c++ - -o $CXXOUTPUT 2>/dev/null  <<EOF
-      #include <snappy.h>
-      int main() {}
-EOF
-    COMMON_FLAGS="$COMMON_FLAGS -DSNAPPY"
-    PLATFORM_LIBS="$PLATFORM_LIBS"
 
     # Test whether tcmalloc is available
     $CXX $CXXFLAGS -x c++ - -o $CXXOUTPUT -ltcmalloc_minimal 2>/dev/null  <<EOF

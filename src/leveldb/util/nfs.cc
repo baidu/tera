@@ -13,7 +13,7 @@
 #include "util/mutexlock.h"
 #include "util/string_ext.h"
 #include "../common/timer.h"
-#include "../utils/counter.h"
+#include "../common/counter.h"
 
 namespace leveldb {
 
@@ -29,6 +29,7 @@ static struct ::dirent* (*nfsReaddir)(nfs::NFSDIR* dir);
 static int (*nfsClosedir)(nfs::NFSDIR* dir);
 static int (*nfsSetDirOwner)(const char* path);
 static int (*nfsClearDirOwner)(const char* path);
+static int (*nfsForceClearDirOwner)(const char* path);
 
 static int (*nfsStat)(const char* path, struct ::stat* stat);
 static int (*nfsUnlink)(const char* path);
@@ -90,7 +91,7 @@ void Nfs::LoadSymbol() {
   }
 
   *(void**)(&printVersion) = ResolveSymbol(dl, "PrintNfsVersion");
-  fprintf(stderr, "libnfs.so version: \n%s\n\n", (*printVersion)());
+  //fprintf(stderr, "libnfs.so version: \n%s\n\n", (*printVersion)());
 
   *(void**)(&nfsInit) = ResolveSymbol(dl, "Init");
   *(void**)(&nfsSetComlogLevel) = ResolveSymbol(dl, "SetComlogLevel");
@@ -102,6 +103,7 @@ void Nfs::LoadSymbol() {
   *(void**)(&nfsClosedir) = ResolveSymbol(dl, "Closedir");
   *(void**)(&nfsSetDirOwner) = ResolveSymbol(dl, "SetDirOwner");
   *(void**)(&nfsClearDirOwner) = ResolveSymbol(dl, "ClearDirOwner");
+  *(void**)(&nfsForceClearDirOwner) = ResolveSymbol(dl, "ForceClearDirOwner");
   *(void**)(&nfsStat) = ResolveSymbol(dl, "Stat");
   *(void**)(&nfsUnlink) = ResolveSymbol(dl, "Unlink");
   *(void**)(&nfsAccess) = ResolveSymbol(dl, "Access");
@@ -256,7 +258,7 @@ int32_t Nfs::CreateDirectory(const std::string& name) {
     if (0 != (*nfsAccess)(path.c_str(), F_OK) && (*nfsGetErrno)() == ENOENT) {
       if (0 != (*nfsMkdir)(path.c_str()) && (*nfsGetErrno)() != EEXIST) {
         errno = (*nfsGetErrno)();
-        fprintf(stderr, "[%s] Createdir %s fail: %d\n", common::timer::get_curtime_str().c_str(), name.c_str(), errno);
+        fprintf(stderr, "[%s] Createdir %s fail: %d\n", tera::get_curtime_str().c_str(), name.c_str(), errno);
         return -1;
       }
     }
@@ -268,7 +270,7 @@ int32_t Nfs::DeleteDirectory(const std::string& name) {
   int32_t retval = (*nfsRmdir)(name.c_str());
   if (retval != 0) {
     errno = (*nfsGetErrno)();
-    fprintf(stderr, "[%s] DeleteDirectory %s fail: %d\n", common::timer::get_curtime_str().c_str(), name.c_str(), errno);
+    fprintf(stderr, "[%s] DeleteDirectory %s fail: %d\n", tera::get_curtime_str().c_str(), name.c_str(), errno);
   }
   return retval;
 }
@@ -277,7 +279,7 @@ int32_t Nfs::Exists(const std::string& filename) {
   if (retval != 0) {
     errno = (*nfsGetErrno)();
     int errno_saved = errno;
-    fprintf(stderr, "[%s] Exists %s fail: %d\n", common::timer::get_curtime_str().c_str(), filename.c_str(), errno);
+    fprintf(stderr, "[%s] Exists %s fail: %d\n", tera::get_curtime_str().c_str(), filename.c_str(), errno);
     errno = errno_saved;
   }
   return retval;
@@ -286,7 +288,7 @@ int32_t Nfs::Delete(const std::string& filename) {
   int32_t retval = (*nfsUnlink)(filename.c_str());
   if (retval != 0) {
     errno = (*nfsGetErrno)();
-    fprintf(stderr, "[%s] Delete %s fail: %d\n", common::timer::get_curtime_str().c_str(), filename.c_str(), errno);
+    fprintf(stderr, "[%s] Delete %s fail: %d\n", tera::get_curtime_str().c_str(), filename.c_str(), errno);
   }
   return retval;
 }
@@ -297,7 +299,7 @@ int32_t Nfs::GetFileSize(const std::string& filename, uint64_t* size) {
     *size = fileinfo.st_size;
   } else {
     errno = (*nfsGetErrno)();
-    fprintf(stderr, "[%s] Getfilesize %s fail: %d\n", common::timer::get_curtime_str().c_str(), filename.c_str(), errno);
+    fprintf(stderr, "[%s] Getfilesize %s fail: %d\n", tera::get_curtime_str().c_str(), filename.c_str(), errno);
   }
   return retval;
 }
@@ -305,7 +307,7 @@ int32_t Nfs::Rename(const std::string& from, const std::string& to) {
   int32_t retval = (*nfsRename)(from.c_str(), to.c_str());
   if (retval != 0) {
     errno = (*nfsGetErrno)();
-    fprintf(stderr, "[%s] Rename %s to %s fail: %d\n", common::timer::get_curtime_str().c_str(), from.c_str(), to.c_str(), errno);
+    fprintf(stderr, "[%s] Rename %s to %s fail: %d\n", tera::get_curtime_str().c_str(), from.c_str(), to.c_str(), errno);
   }
   return retval;
 }
@@ -322,8 +324,17 @@ DfsFile* Nfs::OpenFile(const std::string& filename, int32_t flags) {
     return new NFile(file, filename);
   }
   errno = (*nfsGetErrno)();
-  fprintf(stderr, "[%s] Openfile %s fail: %d\n", common::timer::get_curtime_str().c_str(), filename.c_str(), errno);
+  fprintf(stderr, "[%s] Openfile %s fail: %d\n", tera::get_curtime_str().c_str(), filename.c_str(), errno);
   return NULL;
+}
+
+int32_t Nfs::Stat(const std::string& filename, struct stat* fstat) {
+  int32_t retval = (*nfsStat)(filename.c_str(), fstat);
+  if (retval != 0) {
+    errno = (*nfsGetErrno)();
+    //fprintf(stderr, "[%s] Stat %s fail: %d\n", tera::get_curtime_str().c_str(), filename.c_str(), errno);
+  }
+  return retval;
 }
 
 int32_t Nfs::Copy(const std::string& from, const std::string& to) {
@@ -336,7 +347,7 @@ int32_t Nfs::ListDirectory(const std::string& path,
   if (NULL == dir) {
     errno = (*nfsGetErrno)();
     int errno_saved = errno;
-    fprintf(stderr, "[%s] Opendir %s fail: %d\n", common::timer::get_curtime_str().c_str(), path.c_str(), errno);
+    fprintf(stderr, "[%s] Opendir %s fail: %d\n", tera::get_curtime_str().c_str(), path.c_str(), errno);
     errno = errno_saved;
     return -1;
   }
@@ -350,7 +361,7 @@ int32_t Nfs::ListDirectory(const std::string& path,
   errno = (*nfsGetErrno)();
   int errno_saved = errno;
   if (0 != errno) {
-    fprintf(stderr, "[%s] List %s error: %d\n", common::timer::get_curtime_str().c_str(), path.c_str(), errno);
+    fprintf(stderr, "[%s] List %s error: %d\n", tera::get_curtime_str().c_str(), path.c_str(), errno);
     (*nfsClosedir)(dir);
     errno = errno_saved;
     return -1;
@@ -392,6 +403,10 @@ int32_t Nfs::LockDirectory(const std::string& path) {
 
 int32_t Nfs::UnlockDirectory(const std::string& path) {
   return (*nfsClearDirOwner)(path.c_str());
+}
+
+int32_t Nfs::ClearDirOwner(const std::string& path) {
+  return (*nfsForceClearDirOwner)(path.c_str());
 }
 
 }

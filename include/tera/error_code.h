@@ -26,7 +26,22 @@ public:
         kNoAuth    = 7,
         kUnknown   = 8,
         kNotImpl   = 9,
-        kTxnFail   = 10
+        kTxnFail   = 10,
+
+        // only for global transaction error
+        kGTxnDataTooLarge      = 101,
+        kGTxnNotSupport        = 102,
+        kGTxnSchemaError       = 103,
+        kGTxnOpAfterCommit     = 104,
+        kGTxnPrimaryLost       = 105,
+        kGTxnWriteConflict     = 106,
+        kGTxnLockConflict      = 107,
+        kGTxnOKButAckFailed    = 108,
+        kGTxnOKButNotifyFailed = 109,
+        kGTxnPrewriteTimeout   = 110,
+        kGTxnPrimaryCommitTimeout  = 111,
+        kGTxnTimestampLost     = 112
+        // end of global transaction error
     };
 
 public:

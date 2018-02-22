@@ -174,6 +174,8 @@ class DB {
   // Add all sst files inherited from other tablets
   virtual void AddInheritedLiveFiles(std::vector<std::set<uint64_t> >* live) = 0;
 
+  virtual bool ShouldForceUnloadOnError() { return false; }
+
  private:
   // No copying allowed
   DB(const DB&);

@@ -1,0 +1,11 @@
+import "sofa/pbrpc/rpc_option.proto";
+import "master_rpc.proto";
+
+package tera;
+
+service LoadBalancerService {
+    rpc CmdCtrl(CmdCtrlRequest) returns(CmdCtrlResponse);
+}
+
+option cc_generic_services = true;
+

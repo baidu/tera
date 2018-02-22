@@ -49,21 +49,6 @@ private:
     TableSchema table_schema_;
 };
 
-TEST_F(ScanDescImplTest, GetCfType) {
-    string cf_name, type;
-
-    cf_name = "cf0";
-    EXPECT_TRUE(GetCfType(cf_name, &type));
-    EXPECT_EQ(type, "int32");
-
-    cf_name = "cf2";
-    EXPECT_TRUE(GetCfType(cf_name, &type));
-    EXPECT_EQ(type, "binary");
-
-    cf_name = "cf100";
-    EXPECT_FALSE(GetCfType(cf_name, &type));
-}
-
 TEST_F(ScanDescImplTest, ParseValueCompareFilter) {
     string filter_str;
     Filter filter;
@@ -76,21 +61,19 @@ TEST_F(ScanDescImplTest, ParseValueCompareFilter) {
     filter_str = "qualifier10";
     EXPECT_FALSE(ParseValueCompareFilter(filter_str, &filter));
 
-    filter_str = "cf0==-10";
+    filter_str = "int64cf0==-10";
     EXPECT_TRUE(ParseValueCompareFilter(filter_str, &filter));
     EXPECT_EQ(filter.type(), BinComp);
     EXPECT_EQ(filter.bin_comp_op(), EQ);
     EXPECT_EQ(filter.field(), ValueFilter);
     EXPECT_EQ(filter.content(), "cf0");
 
-    filter_str = "cf1>1";
+    filter_str = "int64cf1>1";
     EXPECT_TRUE(ParseValueCompareFilter(filter_str, &filter));
     EXPECT_EQ(filter.bin_comp_op(), GT);
 
     filter_str = "cf2==hello";
-    EXPECT_TRUE(ParseValueCompareFilter(filter_str, &filter));
-    EXPECT_EQ(filter.bin_comp_op(), EQ);
-    EXPECT_EQ(filter.ref_value(), "hello");
+    EXPECT_FALSE(ParseValueCompareFilter(filter_str, &filter));
 }
 
 TEST_F(ScanDescImplTest, ParseSubFilterString) {
@@ -104,33 +87,15 @@ TEST_F(ScanDescImplTest, ParseSubFilterString) {
     filter_str = "qual@ifier10";
     EXPECT_FALSE(ParseSubFilterString(filter_str, &filter));
 
-    filter_str = "cf0 == -10";
+    filter_str = "int64cf0 == -10";
     EXPECT_TRUE(ParseSubFilterString(filter_str, &filter));
     EXPECT_EQ(filter.type(), BinComp);
     EXPECT_EQ(filter.bin_comp_op(), EQ);
     EXPECT_EQ(filter.field(), ValueFilter);
     EXPECT_EQ(filter.content(), "cf0");
 
-    filter_str = "cf1 > 1";
+    filter_str = "int64cf1 > 1";
     EXPECT_TRUE(ParseSubFilterString(filter_str, &filter));
     EXPECT_EQ(filter.bin_comp_op(), GT);
 }
-
-TEST_F(ScanDescImplTest, ParseFilterString) {
-    string filter_str;
-
-    filter_str = "cf0 < 10 AND cf1 >100 AND cf2 == world";
-    SetFilterString(filter_str);
-    EXPECT_TRUE(ParseFilterString());
-    EXPECT_EQ(filter_list_.filter_size(), 3);
-
-    filter_str = "cf < 10 AND cf1 >100 AND cf2 == world";
-    SetFilterString(filter_str);
-    EXPECT_FALSE(ParseFilterString());
-
-    filter_str = "cf0 < 10 OR cf1 >100 AND cf2 == world";
-    SetFilterString(filter_str);
-    EXPECT_FALSE(ParseFilterString());
-}
-
 } // namespace tera

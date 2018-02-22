@@ -5,14 +5,18 @@
 #include "tabletnode/remote_tabletnode.h"
 
 #include <functional>
+#include <memory>
 
 #include "gflags/gflags.h"
 #include "glog/logging.h"
 
+#include "common/metric/metric_counter.h"
+#include "common/metric/ratio_subscriber.h"
+#include "common/metric/prometheus_subscriber.h"
 #include "tabletnode/tabletnode_impl.h"
-#include "utils/counter.h"
+#include "tabletnode/tabletnode_metric_name.h"
 #include "utils/network_utils.h"
-#include "utils/timer.h"
+#include "common/timer.h"
 
 DECLARE_int32(tera_tabletnode_ctrl_thread_num);
 DECLARE_int32(tera_tabletnode_write_thread_num);
@@ -22,13 +26,92 @@ DECLARE_int32(tera_tabletnode_manual_compact_thread_num);
 DECLARE_int32(tera_request_pending_limit);
 DECLARE_int32(tera_scan_request_pending_limit);
 
-extern tera::Counter read_pending_counter;
-extern tera::Counter write_pending_counter;
-extern tera::Counter scan_pending_counter;
-extern tera::Counter compact_pending_counter;
-
 namespace tera {
 namespace tabletnode {
+
+//Add SubscriberType::SUM for caculating SLA
+tera::MetricCounter read_request_counter(kRequestCountMetric, kApiLabelRead, 
+                                         {SubscriberType::QPS, SubscriberType::SUM});
+tera::MetricCounter write_request_counter(kRequestCountMetric, kApiLabelWrite, 
+                                          {SubscriberType::QPS, SubscriberType::SUM});
+tera::MetricCounter scan_request_counter(kRequestCountMetric, kApiLabelScan, {SubscriberType::QPS});
+
+tera::MetricCounter read_pending_counter(kPendingCountMetric, kApiLabelRead, {SubscriberType::LATEST}, false);
+tera::MetricCounter write_pending_counter(kPendingCountMetric, kApiLabelWrite, {SubscriberType::LATEST}, false);
+tera::MetricCounter scan_pending_counter(kPendingCountMetric, kApiLabelScan, {SubscriberType::LATEST}, false);
+tera::MetricCounter compact_pending_counter(kPendingCountMetric, kApiLabelCompact, {SubscriberType::LATEST}, false);
+
+//Add SubscriberType::SUM for caculating SLA
+tera::MetricCounter read_reject_counter(kRejectCountMetric, kApiLabelRead, 
+                                        {SubscriberType::QPS, SubscriberType::SUM});
+tera::MetricCounter write_reject_counter(kRejectCountMetric, kApiLabelWrite, 
+                                         {SubscriberType::QPS, SubscriberType::SUM});
+tera::MetricCounter scan_reject_counter(kRejectCountMetric, kApiLabelScan, {SubscriberType::QPS});
+
+tera::MetricCounter finished_read_request_counter(kFinishedRequestCountMetric, kApiLabelRead, {SubscriberType::QPS});
+tera::MetricCounter finished_write_request_counter(kFinishedRequestCountMetric, kApiLabelWrite, {SubscriberType::QPS});
+tera::MetricCounter finished_scan_request_counter(kFinishedRequestCountMetric, kApiLabelScan, {SubscriberType::QPS});
+
+//These three metrics are not auto registered with a subscriber, they are used for ratio subscriber.
+tera::MetricCounter read_delay(kRequestDelayMetric, kApiLabelRead, {});
+tera::MetricCounter write_delay(kRequestDelayMetric, kApiLabelWrite, {});
+tera::MetricCounter scan_delay(kRequestDelayMetric, kApiLabelScan, {});
+
+tera::AutoSubscriberRegister rand_read_delay_per_request(std::unique_ptr<Subscriber>(new tera::RatioSubscriber(
+    MetricId("tera_ts_read_delay_us_per_request"),
+    std::unique_ptr<Subscriber>(new tera::PrometheusSubscriber(MetricId(kRequestDelayMetric, kApiLabelRead), SubscriberType::SUM)),
+    std::unique_ptr<Subscriber>(new tera::PrometheusSubscriber(MetricId(kFinishedRequestCountMetric, kApiLabelRead), SubscriberType::SUM)))));
+
+tera::AutoSubscriberRegister write_delay_per_request(std::unique_ptr<Subscriber>(new tera::RatioSubscriber(
+    MetricId("tera_ts_write_delay_us_per_request"),
+    std::unique_ptr<Subscriber>(new tera::PrometheusSubscriber(MetricId(kRequestDelayMetric, kApiLabelWrite), SubscriberType::SUM)),
+    std::unique_ptr<Subscriber>(new tera::PrometheusSubscriber(MetricId(kFinishedRequestCountMetric, kApiLabelWrite), SubscriberType::SUM)))));
+
+tera::AutoSubscriberRegister scan_delay_per_request(std::unique_ptr<Subscriber>(new tera::RatioSubscriber(
+    MetricId("tera_ts_scan_delay_us_per_request"),
+    std::unique_ptr<Subscriber>(new tera::PrometheusSubscriber(MetricId(kRequestDelayMetric, kApiLabelScan), SubscriberType::SUM)),
+    std::unique_ptr<Subscriber>(new tera::PrometheusSubscriber(MetricId(kFinishedRequestCountMetric, kApiLabelScan), SubscriberType::SUM)))));
+
+void ReadDoneWrapper::Run() {
+    if (response_->has_detail()) {
+        int64_t now_us = get_micros();
+        int64_t used_us =  now_us - start_micros_;
+        if (used_us <= 0) {
+            LOG(ERROR) << "now us: "<< now_us << " start_us: "<< start_micros_;
+        }
+        finished_read_request_counter.Add(response_->detail().status_size());
+        read_delay.Add(used_us);
+    }
+    delete this;
+}
+
+void WriteDoneWrapper::Run() {
+    if (response_->row_status_list_size() != 0) {
+        int64_t now_us = get_micros();
+        int64_t used_us =  now_us - start_micros_;
+        if (used_us <= 0) {
+            LOG(ERROR) << "now us: "<< now_us << " start_us: "<< start_micros_;
+        }
+
+        finished_write_request_counter.Add(response_->row_status_list_size());
+        write_delay.Add(used_us);
+    }
+    delete this;
+}
+
+void ScanDoneWrapper::Run() {
+    if (response_->has_results()) {
+        int64_t now_us = get_micros();
+        int64_t used_us =  now_us - start_micros_;
+        if (used_us <= 0) {
+            LOG(ERROR) << "now us: "<< now_us << " start_us: "<< start_micros_;
+        }
+
+        finished_scan_request_counter.Add(response_->results().key_values_size());
+        scan_delay.Add(used_us);
+    }
+    delete this;
+}
 
 enum RpcType {
     RPC_READ = 1,
@@ -105,11 +188,16 @@ void RemoteTabletNode::ReadTablet(google::protobuf::RpcController* controller,
                                   const ReadTabletRequest* request,
                                   ReadTabletResponse* response,
                                   google::protobuf::Closure* done) {
+    int64_t start_micros = get_micros();
+    done = ReadDoneWrapper::NewInstance(start_micros, response, done);
     VLOG(8) << "accept RPC (ReadTablet): [" << request->tablet_name() << "] " << tera::utils::GetRemoteAddress(controller);
     static uint32_t last_print = time(NULL);
+    int32_t row_num = request->row_info_list_size();
+    read_request_counter.Add(row_num);
     if (read_pending_counter.Get() > FLAGS_tera_request_pending_limit) {
         response->set_sequence_id(request->sequence_id());
         response->set_status(kTabletNodeIsBusy);
+        read_reject_counter.Add(row_num);
         done->Run();
         uint32_t now_time = time(NULL);
         if (now_time > last_print) {
@@ -118,9 +206,7 @@ void RemoteTabletNode::ReadTablet(google::protobuf::RpcController* controller,
         }
         VLOG(8) << "finish RPC (ReadTablet)";
     } else {
-        int32_t row_num = request->row_info_list_size();
         read_pending_counter.Add(row_num);
-        int64_t start_micros = get_micros();
         ReadRpcTimer* timer = new ReadRpcTimer(request, response, done, start_micros);
         RpcTimerList::Instance()->Push(timer);
 
@@ -136,11 +222,16 @@ void RemoteTabletNode::WriteTablet(google::protobuf::RpcController* controller,
                                    const WriteTabletRequest* request,
                                    WriteTabletResponse* response,
                                    google::protobuf::Closure* done) {
+    int64_t start_micros = get_micros();
+    done = WriteDoneWrapper::NewInstance(start_micros, response, done);
     VLOG(8) << "accept RPC (WriteTablet): [" << request->tablet_name() << "] " << tera::utils::GetRemoteAddress(controller);
     static uint32_t last_print = time(NULL);
+    int32_t row_num = request->row_list_size();
+    write_request_counter.Add(row_num);
     if (write_pending_counter.Get() > FLAGS_tera_request_pending_limit) {
         response->set_sequence_id(request->sequence_id());
         response->set_status(kTabletNodeIsBusy);
+        write_reject_counter.Add(row_num);
         done->Run();
         uint32_t now_time = time(NULL);
         if (now_time > last_print) {
@@ -149,9 +240,7 @@ void RemoteTabletNode::WriteTablet(google::protobuf::RpcController* controller,
         }
         VLOG(8) << "finish RPC (WriteTablet)";
     } else {
-        int32_t row_num = request->row_list_size();
         write_pending_counter.Add(row_num);
-        int64_t start_micros = get_micros();
         WriteRpcTimer* timer = new WriteRpcTimer(request, response, done, start_micros);
         RpcTimerList::Instance()->Push(timer);
         ThreadPool::Task callback =
@@ -165,10 +254,13 @@ void RemoteTabletNode::ScanTablet(google::protobuf::RpcController* controller,
                                   const ScanTabletRequest* request,
                                   ScanTabletResponse* response,
                                   google::protobuf::Closure* done) {
+    done = ScanDoneWrapper::NewInstance(get_micros(), response, done);
     VLOG(8) << "accept RPC (ScanTablet): [" << request->table_name() << "] " << tera::utils::GetRemoteAddress(controller);
+    scan_request_counter.Inc();
     if (scan_pending_counter.Get() > FLAGS_tera_scan_request_pending_limit) {
         response->set_sequence_id(request->sequence_id());
         response->set_status(kTabletNodeIsBusy);
+        scan_reject_counter.Inc();
         done->Run();
         VLOG(8) << "finish RPC (ScanTablet)";
     } else {
@@ -254,6 +346,18 @@ void RemoteTabletNode::SplitTablet(google::protobuf::RpcController* controller,
     ctrl_thread_pool_->AddTask(callback);
 }
 
+void RemoteTabletNode::ComputeSplitKey(google::protobuf::RpcController* controller,
+                                   const SplitTabletRequest* request,
+                                   SplitTabletResponse* response,
+                                   google::protobuf::Closure* done) {
+    uint64_t id = request->sequence_id();
+    LOG(INFO) << "accept RPC (ComputeSplitKey) id: " << id << ", src: " << tera::utils::GetRemoteAddress(controller);
+    ThreadPool::Task callback =
+        std::bind(&RemoteTabletNode::DoComputeSplitKey, this, controller,
+                  request, response, done);
+    ctrl_thread_pool_->AddTask(callback);
+}
+
 void RemoteTabletNode::CompactTablet(google::protobuf::RpcController* controller,
                                    const CompactTabletRequest* request,
                                    CompactTabletResponse* response,
@@ -322,7 +426,7 @@ void RemoteTabletNode::DoReadTablet(google::protobuf::RpcController* controller,
         int64_t read_timeout = request->client_timeout_ms() * 1000; // ms -> us
         int64_t detal = get_micros() - start_micros;
         if (detal > read_timeout) {
-            VLOG(5) << "timeout, drop read request for:" << request->tablet_name()
+            LOG(WARNING) << "timeout, drop read request for:" << request->tablet_name()
                 << ", detal(in us):" << detal
                 << ", read_timeout(in us):" << read_timeout;
             is_read_timeout = true;
@@ -335,6 +439,7 @@ void RemoteTabletNode::DoReadTablet(google::protobuf::RpcController* controller,
         response->set_sequence_id(request->sequence_id());
         response->set_success_num(0);
         response->set_status(kTableIsBusy);
+        read_reject_counter.Inc();
         done->Run();
     }
 
@@ -429,6 +534,16 @@ void RemoteTabletNode::DoSplitTablet(google::protobuf::RpcController* controller
     LOG(INFO) << "run RPC (SplitTablet) id: " << id;
     tabletnode_impl_->SplitTablet(request, response, done);
     LOG(INFO) << "finish RPC (SplitTablet) id: " << id;
+}
+
+void RemoteTabletNode::DoComputeSplitKey(google::protobuf::RpcController* controller,
+                                     const SplitTabletRequest* request,
+                                     SplitTabletResponse* response,
+                                     google::protobuf::Closure* done) {
+    uint64_t id = request->sequence_id();
+    LOG(INFO) << "run RPC (ComputeSplitKey) id: " << id;
+    tabletnode_impl_->ComputeSplitKey(request, response, done);
+    LOG(INFO) << "finish RPC (ComputeSplitKey) id: " << id;
 }
 
 void RemoteTabletNode::DoCompactTablet(google::protobuf::RpcController* controller,

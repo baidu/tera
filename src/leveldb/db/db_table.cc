@@ -98,6 +98,10 @@ Options InitOptionsLG(const Options& options, uint32_t lg_id) {
   opt.sst_size = lg_info->sst_size;
   opt.write_buffer_size = lg_info->write_buffer_size;
   opt.seek_latency = lg_info->seek_latency;
+  if (options.ignore_corruption_in_open_lg_list.find(lg_id) 
+          != options.ignore_corruption_in_open_lg_list.end()) {
+    opt.ignore_corruption_in_open = true;
+  }
   return opt;
 }
 
@@ -311,22 +315,6 @@ Status DBTable::Init() {
     uint32_t i = *it;
     DBImpl* impl = lg_list_[i];
     s = impl->RecoverLastDumpToLevel0(lg_edits[i]);
-
-    // LogAndApply to lg's manifest
-    if (s.ok()) {
-      MutexLock lock(&impl->mutex_);
-      s = impl->versions_->LogAndApply(lg_edits[i], &impl->mutex_);
-      if (s.ok()) {
-        impl->DeleteObsoleteFiles();
-        impl->MaybeScheduleCompaction();
-      } else {
-        Log(options_.info_log, "[%s] Fail to modify manifest of lg %d",
-            dbname_.c_str(),
-            i);
-      }
-    } else {
-      Log(options_.info_log, "[%s] Fail to dump log to level 0", dbname_.c_str());
-    }
     delete lg_edits[i];
   }
 
@@ -497,6 +485,9 @@ Status DBTable::Write(const WriteOptions& options, WriteBatch* my_batch) {
       break;
     }
     mutex_.Lock();
+    if (s.IsIOPermissionDenied()) {
+        fatal_error_ = s;
+    }
   }
   if (s.ok()) {
     std::vector<WriteBatch*> lg_updates;
@@ -525,7 +516,6 @@ Status DBTable::Write(const WriteOptions& options, WriteBatch* my_batch) {
         Log(options_.info_log, "[%s] [Fatal] Write to lg%u fail",
             dbname_.c_str(), i);
         s = lg_s;
-        fatal_error_ = lg_s;
         break;
       }
     }
@@ -534,7 +524,10 @@ Status DBTable::Write(const WriteOptions& options, WriteBatch* my_batch) {
       for (uint32_t i = 0; i < lg_list_.size(); ++i) {
         lg_list_[i]->AddBoundLogSize(updates->DataSize());
       }
+    } else {
+        fatal_error_ = s;
     }
+
     // Commit updates
     if (s.ok() && lg_list_.size() > 1) {
       for (uint32_t i = 0; i < lg_list_.size(); ++i) {
@@ -696,6 +689,19 @@ void DBTable::ReleaseSnapshot(uint64_t sequence_number) {
   }
 }
 
+bool DBTable::ShouldForceUnloadOnError() {
+    MutexLock l(&mutex_);
+    bool permission_error = fatal_error_.IsIOPermissionDenied();
+    if (permission_error) {     //return early
+        return permission_error;
+    }
+    std::set<uint32_t>::iterator it = options_.exist_lg_list->begin();
+    for (; it != options_.exist_lg_list->end(); ++it) {
+        permission_error |= lg_list_[*it]->ShouldForceUnloadOnError();
+    }
+    return permission_error;
+}
+
 const uint64_t DBTable::Rollback(uint64_t snapshot_seq, uint64_t rollback_point) {
   std::set<uint32_t>::iterator it = options_.exist_lg_list->begin();
   uint64_t rollback_seq = rollback_point == kMaxSequenceNumber ? last_sequence_ : rollback_point;;
@@ -708,21 +714,28 @@ const uint64_t DBTable::Rollback(uint64_t snapshot_seq, uint64_t rollback_point)
 bool DBTable::GetProperty(const Slice& property, std::string* value) {
   bool ret = true;
   std::string ret_string;
+
   std::set<uint32_t>::iterator it = options_.exist_lg_list->begin();
   for (; it != options_.exist_lg_list->end(); ++it) {
     std::string lg_value;
     bool lg_ret = lg_list_[*it]->GetProperty(property, &lg_value);
     if (lg_ret) {
       if (options_.exist_lg_list->size() > 1) {
-        ret_string.append(Uint64ToString(*it) + ": {\n");
+        ret_string.append("LG:" + Uint64ToString(*it) + ":");
       }
       ret_string.append(lg_value);
       if (options_.exist_lg_list->size() > 1) {
-        ret_string.append("\n}\n");
+        ret_string.append(" ");
       }
+    } else {
+      ret = false;
+      break;
     }
   }
-  *value = ret_string;
+
+  if (ret) {
+    *value = ret_string;
+  }
   return ret;
 }
 
@@ -936,7 +949,6 @@ Status DBTable::RecoverLogFile(uint64_t log_number, uint64_t recover_limit,
     }
   }
   delete file;
-
   return status;
 }
 
@@ -1131,6 +1143,14 @@ int64_t DBTable::TEST_MaxNextLevelOverlappingBytes() {
 }
 
 int DBTable::SwitchLog(bool blocked_switch) {
+  {
+    MutexLock l(&mutex_);
+    if (fatal_error_.IsIOPermissionDenied()) {
+      Log(options_.info_log, "[%s] can not switch log becasue %s",
+          dbname_.c_str(), fatal_error_.ToString().c_str());
+     return 2;
+    }
+  }
   if (!blocked_switch ||
       log::AsyncWriter::BlockLogNum() < options_.max_block_log_number) {
     if (current_log_size_ == 0) {
@@ -1156,6 +1176,10 @@ int DBTable::SwitchLog(bool blocked_switch) {
         Log(options_.info_log, "[%s] SwitchLog", dbname_.c_str());
       }
       return 0;   // success
+    } else if (s.IsIOPermissionDenied()) {
+        MutexLock l(&mutex_);
+        fatal_error_ = s;
+        return 2;  // posix error EACCES = 13
     } else {
       Log(options_.info_log, "[%s] fail to open logfile %s. SwitchLog failed",
           dbname_.c_str(), log_file_name.c_str());

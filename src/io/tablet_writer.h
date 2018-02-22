@@ -6,6 +6,8 @@
 #define TERA_TABLETNODE_TABLET_WRITER_H_
 
 #include <functional>
+#include <unordered_set>
+#include <set>
 
 #include "common/event.h"
 #include "common/mutex.h"
@@ -27,11 +29,16 @@ class TabletWriter {
 public:
     typedef std::function<void (std::vector<const RowMutationSequence*>*, \
                                 std::vector<StatusCode>*)> WriteCallback;
+    
+    typedef std::vector<bool> IgnoreCellFlags;
 
     struct WriteTask {
+        WriteTask():start_time(get_micros()) {}
         std::vector<const RowMutationSequence*>* row_mutation_vec;
         std::vector<StatusCode>* status_vec;
+        std::vector<IgnoreCellFlags> ignore_row_vec;
         WriteCallback callback;
+        int64_t start_time;
     };
 
     typedef std::vector<WriteTask> WriteTaskBuffer;
@@ -47,6 +54,7 @@ public:
                                      bool kv_only);
     void Start();
     void Stop();
+    bool IsBusy();
 
 private:
     void DoWork();
@@ -57,6 +65,11 @@ private:
     bool CheckSingleRowTxnConflict(const RowMutationSequence& row_mu,
                                    std::set<std::string>* commit_row_key_set,
                                    StatusCode* status);
+    // mark conflict of PutIfAbsent
+    void MarkPutIfAbsentConflict(const RowMutationSequence& row_mu,
+                                 IgnoreCellFlags* ignore_cell_flags,
+                                 std::unordered_set<std::string>* not_exist_cell_set);
+
     bool CheckIllegalRowArg(const RowMutationSequence& row_mu,
                             const std::set<std::string>& cf_set,
                             StatusCode* status);

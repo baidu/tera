@@ -12,6 +12,7 @@
 #include "error_code.h"
 #include "table.h"
 #include "table_descriptor.h"
+#include "transaction.h"
 
 #pragma GCC visibility push(default)
 namespace tera {
@@ -101,6 +102,10 @@ public:
     // Rename a table.
     virtual bool Rename(const std::string& old_table_name, const std::string& new_table_name,
                         ErrorCode* err) = 0 ;
+
+    /// New a global transaction
+    virtual Transaction* NewGlobalTransaction() = 0;
+
     Client() {}
     virtual ~Client() {}
 

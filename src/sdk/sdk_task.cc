@@ -6,7 +6,7 @@
 
 #include <glog/logging.h>
 
-#include "utils/timer.h"
+#include "common/timer.h"
 
 DECLARE_int32(tera_sdk_timeout_precision);
 
@@ -124,7 +124,8 @@ SdkTask* SdkTimeoutManager::PopTask(int64_t task_id) {
         SdkTask* task = it->second;
         CHECK_EQ(task->GetId(), task_id);
         map.id_hash_map.erase(it);
-        map.due_time_map.erase(task);
+        // make sure that we only erased the right one element
+        assert(map.due_time_map.erase(task) == 1);
         return task;
     } else {
         return NULL;

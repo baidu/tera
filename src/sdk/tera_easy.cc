@@ -13,8 +13,8 @@
 
 #include "common/thread_pool.h"
 #include "tera.h"
-#include "utils/atomic.h"
-#include "utils/counter.h"
+#include "common/atomic.h"
+#include "common/counter.h"
 
 DEFINE_int32(tera_easy_ttl, 90 * 24 * 3600, "ttl(s) of key-value writed by tera_easy");
 DEFINE_int32(tera_sdk_rpc_max_pending_num, 1024 * 1024, "max num of pending kv");

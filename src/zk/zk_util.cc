@@ -9,7 +9,7 @@
 
 #include <gflags/gflags.h>
 #include <glog/logging.h>
-#include <zookeeper/zookeeper.h>
+#include <zookeeper.h>
 
 #include "common/file/file_path.h"
 #include "common/file/file_stream.h"

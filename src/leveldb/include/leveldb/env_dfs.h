@@ -17,7 +17,7 @@
 #include "leveldb/dfs.h"
 #include "leveldb/env.h"
 #include "leveldb/status.h"
-#include "../../../utils/counter.h"
+#include "../../../common/counter.h"
 
 namespace leveldb {
 
@@ -59,6 +59,8 @@ public:
     virtual Status LockFile(const std::string& fname, FileLock** lock);
 
     virtual Status UnlockFile(FileLock* lock);
+
+    int32_t ClearDirOwner(const std::string& dir) {return dfs_->ClearDirOwner(dir);}
 
     virtual Env* CacheEnv() { return this; }
 

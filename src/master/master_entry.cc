@@ -7,6 +7,7 @@
 #include <gflags/gflags.h>
 #include <glog/logging.h>
 
+#include "common/metric/collector_report.h"
 #include "common/net/ip_address.h"
 #include "master/master_impl.h"
 #include "master/remote_master.h"
@@ -15,6 +16,8 @@
 DECLARE_string(tera_master_port);
 DECLARE_int32(tera_master_rpc_server_max_inflow);
 DECLARE_int32(tera_master_rpc_server_max_outflow);
+DECLARE_bool(tera_metric_http_server_enable);
+DECLARE_int32(tera_metric_http_server_listen_port);
 
 std::string GetTeraEntryName() {
     return "master";
@@ -30,7 +33,8 @@ namespace master {
 MasterEntry::MasterEntry()
     : master_impl_(NULL),
       remote_master_(NULL),
-      rpc_server_(NULL) {
+      rpc_server_(NULL),
+      metric_http_server_(new tera::MetricHttpServer()) {
     sofa::pbrpc::RpcServerOptions rpc_options;
     rpc_options.max_throughput_in = FLAGS_tera_master_rpc_server_max_inflow;
     rpc_options.max_throughput_out = FLAGS_tera_master_rpc_server_max_outflow;
@@ -57,10 +61,20 @@ bool MasterEntry::StartServer() {
     }
 
     LOG(INFO) << "finish starting master server";
+
+    // start metric http server
+	if (FLAGS_tera_metric_http_server_enable) {
+	    if(!metric_http_server_->Start(FLAGS_tera_metric_http_server_listen_port)) {
+		    LOG(WARNING) << "Start metric http server failed. Ignore";
+		}
+	} else {
+	    LOG(INFO) << "Metric http server is disabled.";
+	}
     return true;
 }
 
 bool MasterEntry::Run() {
+    CollectorReportPublisher::GetInstance().Refresh();
     static int64_t timer_ticks = 0;
     ++timer_ticks;
 
@@ -73,6 +87,7 @@ bool MasterEntry::Run() {
 }
 
 void MasterEntry::ShutdownServer() {
+    metric_http_server_->Stop();
     rpc_server_->Stop();
     master_impl_.reset();
 }

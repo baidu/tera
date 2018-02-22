@@ -18,7 +18,7 @@
 
 #include "common/mutex.h"
 #include "tera.h"
-#include "utils/counter.h"
+#include "common/counter.h"
 
 DECLARE_int64(pend_size);
 DECLARE_int64(pend_count);
@@ -46,7 +46,8 @@ enum OP {
     PUT = 1,
     GET = 2,
     SCN = 3,
-    DEL = 4
+    DEL = 4,
+    PIF = 5
 };
 
 int64_t Now();
@@ -201,8 +202,11 @@ public:
           last_finish_size_(0),
           last_success_count_(0),
           last_success_size_(0),
+          last_conflict_count_(0),
+          last_conflict_size_(0),
           finish_marker_(1000000),
-          success_marker_(1000000) {}
+          success_marker_(1000000),
+          conflict_marker_(1000000) {}
 
     int GetOpt() {
         return opt_;
@@ -210,24 +214,30 @@ public:
 
     void GetStatistic(int64_t* total_count, int64_t* total_size,
                       int64_t* finish_count, int64_t* finish_size,
-                      int64_t* success_count, int64_t* success_size) {
+                      int64_t* success_count, int64_t* success_size,
+                      int64_t* conflict_count, int64_t* conflict_size) {
         *total_count = last_total_count_ = total_count_.Get();
         *total_size = last_total_size_ = total_size_.Get();
         *finish_count = last_finish_count_ = finish_count_.Get();
         *finish_size = last_finish_size_ = finish_size_.Get();
         *success_count = last_success_count_ = success_count_.Get();
         *success_size = last_success_size_ = success_size_.Get();
+        *conflict_count = last_conflict_count_ = conflict_count_.Get();
+        *conflict_size = last_conflict_size_ = conflict_size_.Get();
     }
 
     void GetLastStatistic(int64_t* total_count, int64_t* total_size,
                           int64_t* finish_count, int64_t* finish_size,
-                          int64_t* success_count, int64_t* success_size) {
+                          int64_t* success_count, int64_t* success_size,
+                          int64_t* conflict_count, int64_t* conflict_size) {
         *total_count = last_total_count_;
         *total_size = last_total_size_;
         *finish_count = last_finish_count_;
         *finish_size = last_finish_size_;
         *success_count = last_success_count_;
         *success_size = last_success_size_;
+        *conflict_count = last_conflict_count_;
+        *conflict_size = last_conflict_size_;
     }
 
     Marker* GetFinishMarker() {
@@ -236,6 +246,10 @@ public:
 
     Marker* GetSuccessMarker() {
         return &success_marker_;
+    }
+
+    Marker* GetConflictMarker() {
+        return &conflict_marker_;
     }
 
     void OnReceive(size_t size) {
@@ -255,6 +269,12 @@ public:
         success_count_.Inc();
         success_size_.Add(size);
         success_marker_.AddLatency(latency);
+    }
+
+    void OnConflict(size_t size, uint32_t latency) {
+        conflict_count_.Inc();
+        conflict_size_.Add(size);
+        conflict_marker_.AddLatency(latency);
     }
 
     void CheckPending() {
@@ -297,6 +317,8 @@ private:
     tera::Counter finish_size_;
     tera::Counter success_count_;
     tera::Counter success_size_;
+    tera::Counter conflict_count_;
+    tera::Counter conflict_size_;
 
     size_t last_send_size_;
     int64_t last_send_time_;
@@ -307,9 +329,12 @@ private:
     int64_t last_finish_size_;
     int64_t last_success_count_;
     int64_t last_success_size_;
+    int64_t last_conflict_count_;
+    int64_t last_conflict_size_;
 
     Marker finish_marker_;
     Marker success_marker_;
+    Marker conflict_marker_;
 };
 
 class Adapter {
@@ -317,7 +342,7 @@ public:
     Adapter(tera::Table* table);
     ~Adapter();
 
-    void Write(const std::string& row,
+    void Write(int opt, const std::string& row,
                std::map<std::string, std::set<std::string> >& column,
                uint64_t timestamp,
                std::string& value);

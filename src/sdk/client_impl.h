@@ -8,9 +8,11 @@
 #include "common/thread_pool.h"
 #include "proto/master_rpc.pb.h"
 #include "proto/tabletnode_client.h"
+#include "sdk/sdk_perf.h"
 #include "sdk/sdk_zk.h"
+#include "sdk/timeoracle_client_impl.h"
 #include "tera.h"
-#include "utils/timer.h"
+#include "common/timer.h"
 
 using std::string;
 
@@ -97,6 +99,8 @@ public:
                          string* str_result,
                          ErrorCode* err);
 
+    virtual Transaction* NewGlobalTransaction();
+
     bool ShowTableSchema(const string& name, TableSchema* meta, ErrorCode* err);
 
     bool ShowTablesInfo(const string& name, TableMeta* meta,
@@ -116,6 +120,10 @@ public:
 
     void CloseTable(const string& table_name);
     TableImpl* OpenTableInternal(const string& table_name, ErrorCode* err);
+
+    bool IsClientAlive(const string& path);
+
+    string ClientSession();
 
 private:
     bool ListInternal(std::vector<TableInfo>* table_list,
@@ -147,10 +155,13 @@ private:
                           bool is_brief,
                           ErrorCode* err);
 
+    bool RegisterSelf();
+
 private:
     ClientImpl(const ClientImpl&);
     void operator=(const ClientImpl&);
     ThreadPool thread_pool_;
+    ThreadPool* gtxn_thread_pool_;
 
     std::string user_identity_;
     std::string user_passcode_;
@@ -160,7 +171,11 @@ private:
     ///    we have to access zookeeper whenever we need master_addr or root_table_addr.
     /// if there is cluster_,
     ///    we save master_addr & root_table_addr in cluster_, access zookeeper only once.
+    sdk::ClientZkAdapterBase* client_zk_adapter_;
     sdk::ClusterFinder* cluster_;
+    sdk::ClusterFinder* tso_cluster_;
+    sdk::PerfCollecter* collecter_;
+    std::string session_str_;
 
     Mutex open_table_mutex_;
     struct TableHandle {

@@ -14,6 +14,7 @@ message TabletNodeInfo {
     optional uint64 timestamp = 4;
     optional uint32 tablet_total = 5;
     optional uint32 tablet_onbusy = 6;
+    optional uint32 tablet_corruption = 7;
 
     optional uint32 low_read_cell = 11;
     optional uint32 scan_rows = 12;

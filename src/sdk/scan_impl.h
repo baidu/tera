@@ -16,7 +16,7 @@
 #include "sdk/sdk_task.h"
 #include "tera.h"
 #include "types.h"
-#include "utils/timer.h"
+#include "common/timer.h"
 
 
 namespace tera {
@@ -162,19 +162,8 @@ private:
     int32_t result_pos_;
     mutable Mutex finish_mutex_;
     common::CondVar finish_cond_;
+    int32_t retry_times_;
     bool finish_;
-};
-
-struct ScanTask : public SdkTask {
-    ResultStreamImpl* stream;
-    tera::ScanTabletRequest* request;
-    tera::ScanTabletResponse* response;
-
-    uint32_t retry_times;
-    void IncRetryTimes() { retry_times++; }
-    uint32_t RetryTimes() { return retry_times; }
-    ScanTask() : SdkTask(SdkTask::SCAN), stream(NULL), request(NULL),
-        response(NULL), retry_times(0) {}
 };
 
 typedef ScanDescriptor::ValueConverter ValueConverter;
@@ -194,6 +183,8 @@ public:
     void AddColumn(const std::string& cf, const std::string& qualifier);
 
     void SetMaxVersions(int32_t versions);
+
+    void SetMaxQualifiers(int64_t max_qualifiers);
 
     void SetPackInterval(int64_t timeout);
 
@@ -238,6 +229,8 @@ public:
 
     int32_t GetMaxVersion() const;
 
+    int64_t GetMaxQualifiers() const;
+
     int64_t GetPackInterval() const;
 
     uint64_t GetSnapshot() const;
@@ -272,12 +265,33 @@ private:
     int64_t number_limit_;
     bool is_async_;
     int32_t max_version_;
+    int64_t max_qualifiers_;
     int64_t pack_interval_;
     uint64_t snapshot_;
     std::string filter_string_;
     FilterList filter_list_;
     ValueConverter value_converter_;
     TableSchema table_schema_;
+};
+
+struct ScanTask : public SdkTask {
+    ResultStreamImpl* stream;
+    tera::ScanTabletRequest* request;
+    tera::ScanTabletResponse* response;
+
+    uint32_t retry_times;
+    void IncRetryTimes() { retry_times++; }
+    uint32_t RetryTimes() { return retry_times; }
+    ScanTask() : SdkTask(SdkTask::SCAN), stream(NULL), request(NULL),
+        response(NULL), retry_times(0) {}
+
+    virtual bool IsAsync() { return false; }
+    virtual uint32_t Size() { return 0; }
+    virtual int64_t TimeOut() { return 0; }
+    virtual void Wait() {}
+    virtual void SetError(ErrorCode::ErrorCodeType err,
+                          const std::string& reason) {}
+    virtual const std::string& RowKey() { return stream->GetScanDesc()->GetStartRowKey(); }
 };
 
 } // namespace tera

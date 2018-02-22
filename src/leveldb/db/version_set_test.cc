@@ -6,10 +6,15 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file. See the AUTHORS file for names of contributors.
 
+#define private public
 #include "db/version_set.h"
+#undef private
+
+#include "db/dbformat.h"
 #include "util/logging.h"
 #include "util/testharness.h"
 #include "util/testutil.h"
+#include "leveldb/compact_strategy.h"
 
 namespace leveldb {
 
@@ -46,7 +51,7 @@ class FindFileTest {
     InternalKeyComparator cmp(BytewiseComparator());
     Slice s(smallest != NULL ? smallest : "");
     Slice l(largest != NULL ? largest : "");
-    return SomeFileOverlapsRange(cmp, disjoint_sorted_files_, files_,
+    return SomeFileOverlapsRange(cmp, cmp.user_comparator(), disjoint_sorted_files_, files_,
                                  (smallest != NULL ? &s : NULL),
                                  (largest != NULL ? &l : NULL));
   }
@@ -89,7 +94,6 @@ TEST(FindFileTest, Single) {
   ASSERT_TRUE(Overlaps("q", NULL));
   ASSERT_TRUE(Overlaps(NULL, NULL));
 }
-
 
 TEST(FindFileTest, Multiple) {
   Add("150", "200");
@@ -174,6 +178,57 @@ TEST(FindFileTest, OverlappingFiles) {
   ASSERT_TRUE(Overlaps("450", "500"));
   ASSERT_TRUE(Overlaps("450", "700"));
   ASSERT_TRUE(Overlaps("600", "700"));
+}
+
+class VersionSetTest {
+public:
+    VersionSetTest ()
+      : icmp(opt.comparator),
+        t_log_number(10),
+        t_next_file(20),
+        t_last_seq(100) {
+      opt.compact_strategy_factory = new DummyCompactStrategyFactory();
+      opt.env->DeleteDirRecursive("/tmp/db/test");
+      opt.env->CreateDir("/tmp/db/test");
+      t_vset = new VersionSet(std::string("/tmp/db/test"), &opt, NULL, &icmp);
+      t_vset->manifest_file_number_ = 100;
+    }
+
+public:
+    Options opt;
+    const InternalKeyComparator icmp;
+    VersionSet* t_vset;
+    uint64_t t_log_number;
+    uint64_t t_next_file;
+    uint64_t t_last_seq;
+    port::Mutex t_mu;
+};
+
+TEST(VersionSetTest, PickCompactionTest) {
+  VersionEdit edit;
+
+  edit.AddFile(0, t_vset->NewFileNumber(), 200,
+               InternalKey("a0001", 1, kTypeValue),
+               InternalKey("a0002", 1, kTypeDeletion));
+  edit.AddFile(0, t_vset->NewFileNumber(), 200,
+               InternalKey("a0003", 1, kTypeValue),
+               InternalKey("a0004", 1, kTypeValue));
+  edit.SetComparatorName(leveldb::BytewiseComparator()->Name());
+  t_mu.Lock();
+  t_vset->LogAndApply(&edit, &t_mu);
+  t_mu.Unlock();
+  Compaction* c = t_vset->PickCompaction();
+  ASSERT_TRUE((uint64_t)t_vset->level0_compactions_in_progress_[0] == (uint64_t)c);
+
+  VersionEdit edit1;
+  edit1.AddFile(0, t_vset->NewFileNumber(), 200,
+               InternalKey("a0005", 1, kTypeValue),
+               InternalKey("a0006", 1, kTypeValue));
+  edit1.SetComparatorName(leveldb::BytewiseComparator()->Name());
+  t_mu.Lock();
+  t_vset->LogAndApply(&edit1, &t_mu);
+  t_mu.Unlock();
+  ASSERT_TRUE(t_vset->PickCompaction() == NULL);
 }
 
 }  // namespace leveldb

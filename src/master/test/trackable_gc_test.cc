@@ -11,7 +11,7 @@
 #include "master/tablet_manager.h"
 #include "utils/utils_cmd.h"
 
-DECLARE_bool(tera_zk_enabled);
+DECLARE_string(tera_coord_type);
 DECLARE_string(tera_leveldb_env_type);
 DECLARE_string(tera_master_gc_strategy);
 DECLARE_string(tera_tabletnode_path_prefix);
@@ -500,7 +500,7 @@ protected:
 
     static void SetUpTestCase() {
         std::cout << "SetUpTestCase" << std::endl;
-        FLAGS_tera_zk_enabled = false;
+        FLAGS_tera_coord_type = "fake_zk";
         FLAGS_tera_leveldb_env_type = "local";
         FLAGS_tera_master_gc_strategy = "trackable";
         FLAGS_tera_tabletnode_path_prefix = "./";

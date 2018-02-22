@@ -21,7 +21,7 @@
 #include "util/hash.h"
 #include "util/mutexlock.h"
 #include "helpers/memenv/memenv.h"
-#include "../utils/counter.h"
+#include "../common/counter.h"
 
 #include "leveldb/env_flash.h"
 
@@ -38,6 +38,9 @@ const int64_t kUpdateFlashRetryIntervalMillis = 60 * 1000;
 
 // Log error message
 static Status IOError(const std::string& context, int err_number) {
+    if (err_number == EACCES) {
+        return Status::IOPermissionDenied(context, strerror(err_number));
+    }
     return Status::IOError(context, strerror(err_number));
 }
 
@@ -68,7 +71,7 @@ Status CopyToLocal(const std::string& local_fname, Env* env,
         if (!s.ok()) {
             Log("[env_flash] create dir: %s failed: %s, exit",
                 local_fname.substr(0, dir_pos).c_str(), s.ToString().c_str());
-            exit(-1);
+            _exit(-1);
         }
     }
 
@@ -79,7 +82,7 @@ Status CopyToLocal(const std::string& local_fname, Env* env,
         if (!vanish_allowed) {
             Log("[env_flash] create file: %s failed: %s, exit",
                 local_fname.c_str(), s.ToString().c_str());
-            exit(-1);
+            _exit(-1);
         }
         delete dfs_file;
         return s;
@@ -501,7 +504,7 @@ void FlashEnv::SetFlashPath(const std::string& path, bool vanish_allowed) {
                 && !Env::Default()->CreateDir(flash_paths_.back()).ok()) {
                 Log("[env_flash] cannot access cache dir: %s\n",
                     flash_paths_.back().c_str());
-                exit(-1);
+                _exit(-1);
             }
         }
     }

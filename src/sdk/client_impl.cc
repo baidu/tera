@@ -10,6 +10,7 @@
 #include "gflags/gflags.h"
 
 #include "common/file/file_path.h"
+#include "common/log/log_cleaner.h"
 #include "common/mutex.h"
 #include "proto/kv_helper.h"
 #include "proto/master_client.h"
@@ -17,6 +18,8 @@
 #include "proto/table_meta.pb.h"
 #include "proto/tabletnode_client.h"
 #include "sdk/table_impl.h"
+#include "sdk/global_txn.h"
+#include "sdk/sdk_perf.h"
 #include "sdk/sdk_utils.h"
 #include "sdk/sdk_zk.h"
 #include "utils/config_utils.h"
@@ -43,6 +46,12 @@ DECLARE_int32(tera_sdk_rpc_max_pending_buffer_size);
 DECLARE_int32(tera_sdk_rpc_work_thread_num);
 DECLARE_int32(tera_sdk_show_max_num);
 DECLARE_bool(tera_online_schema_update_enabled);
+DECLARE_string(tera_log_prefix);
+DECLARE_bool(tera_info_log_clean_enable);
+DECLARE_bool(tera_sdk_perf_collect_enabled);
+DECLARE_int32(tera_gtxn_thread_max_num);
+DECLARE_bool(tera_sdk_client_for_gtxn);
+DECLARE_bool(tera_sdk_tso_client_enabled);
 
 namespace tera {
 
@@ -55,14 +64,40 @@ void LogSdkVersionInfo() {
 ClientImpl::ClientImpl(const std::string& user_identity,
                        const std::string& user_passcode)
     : thread_pool_(FLAGS_tera_sdk_thread_max_num),
+      gtxn_thread_pool_(NULL),
       user_identity_(user_identity),
-      user_passcode_(user_passcode) {
+      user_passcode_(user_passcode),
+      client_zk_adapter_(NULL),
+      tso_cluster_(NULL),
+      collecter_(NULL),
+      session_str_("") {
     tabletnode::TabletNodeClient::SetThreadPool(&thread_pool_);
     tabletnode::TabletNodeClient::SetRpcOption(
         FLAGS_tera_sdk_rpc_limit_enabled ? FLAGS_tera_sdk_rpc_limit_max_inflow : -1,
         FLAGS_tera_sdk_rpc_limit_enabled ? FLAGS_tera_sdk_rpc_limit_max_outflow : -1,
         FLAGS_tera_sdk_rpc_max_pending_buffer_size, FLAGS_tera_sdk_rpc_work_thread_num);
-    cluster_ = sdk::NewClusterFinder();
+
+    if (FLAGS_tera_sdk_client_for_gtxn) {
+        client_zk_adapter_ = sdk::NewClientZkAdapter();
+        client_zk_adapter_->Init();
+        cluster_ = sdk::NewClusterFinder(client_zk_adapter_);
+        if (FLAGS_tera_sdk_tso_client_enabled) {
+            tso_cluster_ = sdk::NewTimeoracleClusterFinder();
+        }
+        gtxn_thread_pool_ = new ThreadPool(FLAGS_tera_gtxn_thread_max_num);
+        RegisterSelf();
+    } else {
+        cluster_ = sdk::NewClusterFinder();
+    }
+
+    if (FLAGS_tera_sdk_perf_collect_enabled) {
+        collecter_ = new sdk::PerfCollecter();
+        collecter_->Run();
+        LOG(INFO) << "start perf collect";
+    } else {
+        LOG(INFO) << "perf collect disable";
+    }
+
     pthread_once(&sdk_client_once_control, LogSdkVersionInfo);
 }
 
@@ -77,6 +112,17 @@ ClientImpl::~ClientImpl() {
         }
     }
     delete cluster_;
+    if (FLAGS_tera_sdk_perf_collect_enabled) {
+        collecter_->Stop();
+        delete collecter_;
+    }
+    if (FLAGS_tera_sdk_client_for_gtxn) {
+        delete gtxn_thread_pool_;
+        if (FLAGS_tera_sdk_tso_client_enabled) {
+            delete tso_cluster_;
+        }
+        delete client_zk_adapter_;
+    }
 }
 
 bool ClientImpl::CreateTable(const TableDescriptor& desc, ErrorCode* err) {
@@ -1173,6 +1219,29 @@ bool ClientImpl::ParseTabletEntry(const TabletMeta& meta, std::vector<TabletInfo
     return true;
 }
 
+Transaction* ClientImpl::NewGlobalTransaction() {
+    return GlobalTxn::NewGlobalTxn(this, gtxn_thread_pool_, tso_cluster_);
+}
+
+bool ClientImpl::IsClientAlive(const std::string& path) {
+    if (client_zk_adapter_ != NULL) {
+        return client_zk_adapter_->IsClientAlive(path);
+    }
+    return true;
+}
+
+std::string ClientImpl::ClientSession() {
+    return session_str_;
+}
+
+bool ClientImpl::RegisterSelf() {
+    if (client_zk_adapter_ != NULL) {
+        return client_zk_adapter_->RegisterClient(&session_str_);
+    } else {
+        return false;   
+    }
+}
+
 static Mutex g_mutex;
 static bool g_is_glog_init = false;
 
@@ -1223,6 +1292,14 @@ static int InitFlags(const std::string& confpath, const std::string& log_prefix)
     if (!g_is_glog_init) {
         ::google::InitGoogleLogging(log_prefix.c_str());
         utils::SetupLog(log_prefix);
+        FLAGS_tera_log_prefix = log_prefix;
+    	// start log cleaner
+    	if (FLAGS_tera_info_log_clean_enable) {
+    	    common::LogCleaner::StartCleaner();
+    		LOG(INFO) << "start log cleaner";
+    	} else {
+    		LOG(INFO) << "log cleaner is disable";
+    	}
         g_is_glog_init = true;
     }
 

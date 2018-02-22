@@ -5,6 +5,7 @@
 #include "sdk/scan_impl.h"
 
 #include <functional>
+#include <algorithm>
 
 #include "common/this_thread.h"
 #include "common/base/string_ext.h"
@@ -14,16 +15,18 @@
 #include "sdk/filter_utils.h"
 #include "sdk/sdk_utils.h"
 #include "sdk/table_impl.h"
-#include "utils/atomic.h"
-#include "utils/timer.h"
+#include "common/atomic.h"
+#include "common/timer.h"
 
 DECLARE_bool(tera_sdk_batch_scan_enabled);
 DECLARE_int64(tera_sdk_scan_number_limit);
 DECLARE_int64(tera_sdk_scan_buffer_size);
 DECLARE_int32(tera_sdk_max_batch_scan_req);
 DECLARE_int32(tera_sdk_batch_scan_max_retry);
+DECLARE_int32(tera_sdk_sync_scan_max_retry);
 DECLARE_int64(tera_sdk_scan_timeout);
 DECLARE_int64(batch_scan_delay_retry_in_us);
+DECLARE_int64(sync_scan_delay_retry_in_ms);
 
 namespace tera {
 
@@ -374,6 +377,7 @@ ResultStreamSyncImpl::ResultStreamSyncImpl(TableImpl* table,
       response_(new tera::ScanTabletResponse),
       result_pos_(0),
       finish_cond_(&finish_mutex_),
+      retry_times_(0),
       finish_(false) {
     table_ptr_->ScanTabletSync(this);
 }
@@ -392,13 +396,37 @@ bool ResultStreamSyncImpl::Done(ErrorCode* err) {
     while (1) {
         const string& scan_end_key = scan_desc_impl_->GetEndRowKey();
         /// scan failed
-        if (response_->status() != kTabletNodeOk) {
+        while (response_->status() != kTabletNodeOk &&
+               retry_times_ <= FLAGS_tera_sdk_sync_scan_max_retry) {
+            LOG(WARNING) << "[RETRY " << ++retry_times_ << "] scan error: "
+                         << StatusCodeToString(response_->status());
+
+            int64_t wait_time;
+            if(response_->status() == kKeyNotInRange) {
+                wait_time = FLAGS_sync_scan_delay_retry_in_ms;
+            } else {
+                /// Wait less than 60 seconds
+                wait_time = std::min(static_cast<int64_t>(FLAGS_sync_scan_delay_retry_in_ms * (1 << (retry_times_ - 1))),
+                                     static_cast<int64_t>(60000));
+            }
+
+            delete response_;
+            response_ = new tera::ScanTabletResponse;
+            result_pos_ = 0;
+            Reset();
+
+            ThisThread::Sleep(wait_time);
+            table_ptr_->ScanTabletSync(this);
+        }
+
+        if(response_->status() != kTabletNodeOk) {
             if (err) {
                 err->SetFailed(ErrorCode::kSystem,
-                               StatusCodeToString(response_->status()));
+                                StatusCodeToString(response_->status()));
             }
             return true;
         }
+
         if (result_pos_ < response_->results().key_values_size()) {
             break;
         }
@@ -542,6 +570,7 @@ ScanDescImpl::ScanDescImpl(const string& rowkey)
       number_limit_(FLAGS_tera_sdk_scan_number_limit),
       is_async_(FLAGS_tera_sdk_batch_scan_enabled),
       max_version_(1),
+      max_qualifiers_(std::numeric_limits<uint64_t>::max()),
       pack_interval_(FLAGS_tera_sdk_scan_timeout),
       snapshot_(0),
       value_converter_(&DefaultValueConverter) {
@@ -558,6 +587,7 @@ ScanDescImpl::ScanDescImpl(const ScanDescImpl& impl)
       number_limit_(impl.number_limit_),
       is_async_(impl.is_async_),
       max_version_(impl.max_version_),
+      max_qualifiers_(impl.max_qualifiers_),
       pack_interval_(impl.pack_interval_),
       snapshot_(impl.snapshot_),
       table_schema_(impl.table_schema_) {
@@ -620,6 +650,10 @@ void ScanDescImpl::AddColumn(const string& cf, const string& qualifier) {
 
 void ScanDescImpl::SetMaxVersions(int32_t versions) {
     max_version_ = versions;
+}
+
+void ScanDescImpl::SetMaxQualifiers(int64_t max_qualifiers) {
+    max_qualifiers_ = max_qualifiers;
 }
 
 void ScanDescImpl::SetPackInterval(int64_t interval) {
@@ -691,6 +725,10 @@ const tera::ColumnFamily* ScanDescImpl::GetColumnFamily(int32_t num) const {
 
 int32_t ScanDescImpl::GetMaxVersion() const {
     return max_version_;
+}
+
+int64_t ScanDescImpl::GetMaxQualifiers() const {
+    return max_qualifiers_;
 }
 
 int64_t ScanDescImpl::GetPackInterval() const {

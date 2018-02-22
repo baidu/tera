@@ -40,27 +40,21 @@ TEST(FilterUtils, DefaultValueConverter) {
     EXPECT_FALSE(DefaultValueConverter("", "", NULL));
 
     in = "8";
-    out_p = string("\x80\x0\x0\x0\x0\x0\x0\x7", 8);
+    out_p = string("\x08\x0\x0\x0\x0\x0\x0\x0", 8);
     type = "int64";
+
     EXPECT_TRUE(DefaultValueConverter(in, type, &out));
     EXPECT_EQ(out, out_p);
 
     in = "-8";
-    out_p = string("\x7F\xFF\xFF\xFF\xFF\xFF\xFF\xF7", 8);
+    out_p = string("\xF8\xFF\xFF\xFF\xFF\xFF\xFF\xFF", 8);
     type = "int64";
-    EXPECT_TRUE(DefaultValueConverter(in, type, &out));
-    EXPECT_EQ(out, out_p);
-
-    in = "8";
-    out_p = string("\x0\x0\x0\x0\x0\x0\x0\x8", 8);
-    type = "uint64";
     EXPECT_TRUE(DefaultValueConverter(in, type, &out));
     EXPECT_EQ(out, out_p);
 
     in = "-8";
     type = "string";
-    EXPECT_TRUE(DefaultValueConverter(in, type, &out));
-    EXPECT_TRUE(out == "-8");
+    EXPECT_FALSE(DefaultValueConverter(in, type, &out));
 
     type = "illegal";
     EXPECT_FALSE(DefaultValueConverter(in, type, &out));

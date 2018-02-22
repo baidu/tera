@@ -6,8 +6,10 @@
 #define TERA_TABLETNODE_TABLETNODE_IMPL_H_
 
 #include <string>
+#include <memory>
 
 #include "common/base/scoped_ptr.h"
+#include "common/metric/collector_report_publisher.h"
 #include "common/thread_pool.h"
 
 #include "io/tablet_io.h"
@@ -38,7 +40,7 @@ public:
         std::vector<const RowMutationSequence*> row_mutation_vec;
         std::vector<StatusCode> row_status_vec;
         std::vector<int32_t> row_index_vec;
-        Counter* row_done_counter;
+        std::shared_ptr<Counter> row_done_counter;
 
         const WriteTabletRequest* request;
         WriteTabletResponse* response;
@@ -46,7 +48,7 @@ public:
         WriteRpcTimer* timer;
 
         WriteTabletTask(const WriteTabletRequest* req, WriteTabletResponse* resp,
-                   google::protobuf::Closure* d, WriteRpcTimer* t, Counter* c)
+                   google::protobuf::Closure* d, WriteRpcTimer* t, std::shared_ptr<Counter> c)
             : row_done_counter(c), request(req), response(resp), done(d), timer(t) {}
     };
 
@@ -112,6 +114,9 @@ public:
     void SplitTablet(const SplitTabletRequest* request,
                      SplitTabletResponse* response,
                      google::protobuf::Closure* done);
+    void ComputeSplitKey(const SplitTabletRequest* request,
+                     SplitTabletResponse* response,
+                     google::protobuf::Closure* done);
 
     void EnterSafeMode();
     void LeaveSafeMode();
@@ -124,10 +129,6 @@ public:
 
     void SetSessionId(const std::string& session_id);
     std::string GetSessionId();
-
-    std::string BlockCacheProfileInfo();
-
-    std::string TableCacheProfileInfo();
 
     TabletNodeSysInfo& GetSysInfo();
 
@@ -157,15 +158,6 @@ private:
                          const std::string& key_start,
                          const std::string& key_end);
 
-    void UpdateMetaTableAsync(const SplitTabletRequest* request,
-             SplitTabletResponse* response, google::protobuf::Closure* done,
-             const std::string& path, const std::string& key_split,
-             const TableSchema& schema, int64_t first_size, int64_t second_size,
-             const TabletMeta& meta);
-    void UpdateMetaTableCallback(const SplitTabletRequest* rpc_request,
-             SplitTabletResponse* rpc_response, google::protobuf::Closure* rpc_done,
-             WriteTabletRequest* request, WriteTabletResponse* response,
-             bool failed, int error_code);
 
     void InitCacheSystem();
 
@@ -206,6 +198,22 @@ private:
     leveldb::Cache* ldb_block_cache_;
     leveldb::Cache* m_memory_cache;
     leveldb::TableCache* ldb_table_cache_;
+    
+    // metric for caches
+    struct CacheMetrics {
+        tera::AutoCollectorRegister block_cache_hitrate_;
+        tera::AutoCollectorRegister block_cache_entries_;
+        tera::AutoCollectorRegister block_cache_charge_;
+        
+        tera::AutoCollectorRegister table_cache_hitrate_;
+        tera::AutoCollectorRegister table_cache_entries_;
+        tera::AutoCollectorRegister table_cache_charge_;
+        
+        CacheMetrics(leveldb::Cache* block_cache, leveldb::TableCache* table_cache);
+    };
+    
+    scoped_ptr<CacheMetrics> cache_metrics_;
+    scoped_ptr<tera::AutoCollectorRegister> snappy_ratio_metric_;
 };
 
 } // namespace tabletnode

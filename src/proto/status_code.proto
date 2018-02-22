@@ -96,6 +96,18 @@ enum StatusCode {
 
     kTableStatusEnable = 1000;
     kTableStatusDisable = 1001;
+
+    // Timeoracle
+    kTimeoracleOk   = 2000;
+    kTimeoracleBusy = 2001;
+
+    // rowlock service
+    kLockSucc = 2100;
+    kLockFail = 2101;
+
+    // LoadBalancer
+    kLoadBalancerOk = 2200;
+    kLoadBalancerError = 2201;
 }
 
 enum TabletStatus {
@@ -118,6 +130,9 @@ enum TabletStatus {
     kTabletPending = 65;
     kTabletOnSnapshot = 66;
     kTabletDelSnapshot = 67;
+
+    // runtime status
+    kTabletCorruption = 90;
 }
 
 enum TableStatus {
