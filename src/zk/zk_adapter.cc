@@ -51,7 +51,8 @@ bool ZooKeeperAdapter::Init(const std::string& server_list,
                             const std::string& root_path,
                             uint32_t session_timeout,
                             const std::string& id,
-                            int* zk_errno) {
+                            int* zk_errno,
+                            int wait_timeout) {
     MutexLock mutex(&state_mutex_);
 
     if (NULL != handle_) {
@@ -79,7 +80,12 @@ bool ZooKeeperAdapter::Init(const std::string& server_list,
     }
 
     while (state_ == ZS_DISCONN || state_ == ZS_CONNECTING) {
-        state_cond_.Wait();
+        if (wait_timeout > 0) {
+            state_cond_.TimeWait(wait_timeout);
+            break;
+        } else {
+            state_cond_.Wait();
+        }
     }
 
     int code = ZE_OK;
@@ -427,7 +433,7 @@ bool ZooKeeperAdapter::ListAndWatchChildren(const std::string& path,
     }
 }
 
-bool ZooKeeperAdapter::CheckExist(const std::string&path, bool* is_exist,
+bool ZooKeeperAdapter::CheckExist(const std::string& path, bool* is_exist,
                                   int* zk_errno) {
     MutexLock mutex(&state_mutex_);
     if (!ZooKeeperUtil::IsValidPath(path)) {

@@ -9,6 +9,7 @@
 
 #include "common/base/string_ext.h"
 #include "common/base/string_number.h"
+#include "common/metric/collector_report.h"
 #include "common/net/ip_address.h"
 #include "common/this_thread.h"
 #include "common/thread_attributes.h"
@@ -19,20 +20,21 @@
 #include "proto/tabletnode.pb.h"
 #include "tabletnode/remote_tabletnode.h"
 #include "tabletnode/tabletnode_impl.h"
-#include "utils/counter.h"
+#include "common/counter.h"
 #include "utils/rpc_timer_list.h"
-#include "utils/timer.h"
+#include "common/timer.h"
 #include "utils/utils_cmd.h"
 
 DECLARE_string(tera_tabletnode_port);
 DECLARE_int32(tera_garbage_collect_period);
-DECLARE_bool(tera_zk_enabled);
 DECLARE_bool(tera_tabletnode_cpu_affinity_enabled);
 DECLARE_string(tera_tabletnode_cpu_affinity_set);
 DECLARE_bool(tera_tabletnode_hang_detect_enabled);
 DECLARE_int32(tera_tabletnode_hang_detect_threshold);
 DECLARE_int32(tera_tabletnode_rpc_server_max_inflow);
 DECLARE_int32(tera_tabletnode_rpc_server_max_outflow);
+DECLARE_bool(tera_metric_http_server_enable);
+DECLARE_int32(tera_metric_http_server_listen_port);
 
 std::string GetTeraEntryName() {
     return "tabletnode";
@@ -47,7 +49,8 @@ namespace tabletnode {
 
 TabletNodeEntry::TabletNodeEntry()
     : tabletnode_impl_(NULL),
-      remote_tabletnode_(NULL) {
+      remote_tabletnode_(NULL),
+      metric_http_server_(new tera::MetricHttpServer()) {
     sofa::pbrpc::RpcServerOptions rpc_options;
     rpc_options.max_throughput_in = FLAGS_tera_tabletnode_rpc_server_max_inflow;
     rpc_options.max_throughput_out = FLAGS_tera_tabletnode_rpc_server_max_outflow;
@@ -78,14 +81,23 @@ bool TabletNodeEntry::StartServer() {
         return false;
     }
     LOG(INFO) << "finish starting RPC server";
+
+    // start metric http server
+	if (FLAGS_tera_metric_http_server_enable) {
+	    if(!metric_http_server_->Start(FLAGS_tera_metric_http_server_listen_port)) {
+		    LOG(WARNING) << "Start metric http server failed. Ignore";
+		}
+	} else {
+	    LOG(INFO) << "Metric http server is disabled.";
+	}
     return true;
 }
 
 void TabletNodeEntry::ShutdownServer() {
+    metric_http_server_->Stop();
     tabletnode_impl_->Exit();
-    LOG(INFO) << "shut down server";
-    rpc_server_->Stop();
     LOG(INFO) << "TabletNodeEntry stop done!";
+    _exit(0);
 }
 
 bool TabletNodeEntry::Run() {
@@ -99,20 +111,17 @@ bool TabletNodeEntry::Run() {
         tabletnode_impl_->GarbageCollect();
     }
 
+    CollectorReportPublisher::GetInstance().Refresh();
     tabletnode_impl_->RefreshSysInfo();
     tabletnode_impl_->GetSysInfo().DumpLog();
     LOG(INFO) << "[ThreadPool schd/task/cnt] "
         << remote_tabletnode_->ProfilingLog();
 
-    LOG(INFO) << "[Cache HitRate/Cnt/Size] table_cache "
-        << tabletnode_impl_->TableCacheProfileInfo()
-        << ", block_cache " << tabletnode_impl_->BlockCacheProfileInfo();
-
     int64_t now_time = get_micros();
     int64_t earliest_rpc_time = now_time;
     RpcTimerList::Instance()->TopTime(&earliest_rpc_time);
     double max_delay = (now_time - earliest_rpc_time) / 1000.0;
-    VLOG(5) << "pending rpc max delay: "
+    LOG(INFO) << "pending rpc max delay: "
             << std::fixed<< std::setprecision(2) << max_delay;
     if (FLAGS_tera_tabletnode_hang_detect_enabled &&
         max_delay > FLAGS_tera_tabletnode_hang_detect_threshold) {

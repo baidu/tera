@@ -9,13 +9,14 @@
 
 #include <map>
 #include <string>
-#include <zookeeper/zookeeper.h>
+#include <zookeeper.h>
 
 #include "common/mutex.h"
 #include "common/thread_pool.h"
 
 #include "zk/zk_lock.h"
 #include "zk/zk_util.h"
+
 
 namespace tera {
 namespace zk {
@@ -39,7 +40,8 @@ public:
     virtual ~ZooKeeperAdapter();
 
     bool Init(const std::string& server_list, const std::string& root_path,
-              uint32_t session_timeout, const std::string& id, int* zk_errno);
+              uint32_t session_timeout, const std::string& id, int* zk_errno,
+              int wait_timeout = -1); // default wait until zk server ready
     void Finalize();
     bool GetSessionId(int64_t* session_id, int* zk_errno);
 

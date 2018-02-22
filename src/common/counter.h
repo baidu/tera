@@ -7,10 +7,10 @@
 
 #include <stdio.h>
 
-#include "atomic.h"
-#include "timer.h"
+#include "common/atomic.h"
+#include "common/timer.h"
 
-namespace common {
+namespace tera {
 
 class Counter {
 public:
@@ -47,19 +47,19 @@ public:
         : counter_(counter),
           msg1_(msg1),
           msg2_(msg2) {
-        start_ = timer::get_micros();
+        start_ = get_micros();
         counter_->Inc();
     }
     ~AutoCounter() {
-        int64_t end = timer::get_micros();
+        int64_t end = get_micros();
         if (end - start_ > 5000000) {
             int64_t t = (end - start_) / 1000000;
             if (!msg2_) {
                 fprintf(stderr, "%s [AutoCounter] %s hang for %ld s\n",
-                    timer::get_curtime_str().data(), msg1_, t);
+                    get_curtime_str().data(), msg1_, t);
             } else {
                 fprintf(stderr, "%s [AutoCounter] %s %s hang for %ld s\n",
-                    timer::get_curtime_str().data(), msg1_, msg2_, t);
+                    get_curtime_str().data(), msg1_, msg2_, t);
             }
         }
         counter_->Dec();

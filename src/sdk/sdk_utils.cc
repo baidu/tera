@@ -18,6 +18,7 @@
 
 #include "sdk/schema_impl.h"
 #include "sdk/filter_utils.h"
+#include "types.h"
 
 DECLARE_int64(tera_tablet_write_block_size);
 DECLARE_int64(tera_tablet_ldb_sst_size);
@@ -184,6 +185,12 @@ void ShowTableSchema(const TableSchema& s, bool is_x) {
                     cf_ss << "type=bytes" << ",";
                 }
             }
+            if (is_x || (cf_schema.gtxn() != false)) {
+                cf_ss << "gtxn=" << Switch2Str(cf_schema.gtxn()) << ","; 
+            }
+            if (is_x || (cf_schema.notify() != false)) {
+                cf_ss << "notify=" << Switch2Str(cf_schema.notify()) << ","; 
+            }
             cf_ss << "\b>";
             if (cf_ss.str().size() > 5) {
                 ss << cf_ss.str();
@@ -281,6 +288,8 @@ void TableDescToSchema(const TableDescriptor& desc, TableSchema* schema) {
         cf->set_max_versions(cf_desc->MaxVersions());
         cf->set_min_versions(cf_desc->MinVersions());
         cf->set_type(cf_desc->Type());
+        cf->set_gtxn(cf_desc->GlobalTransaction());
+        cf->set_notify(cf_desc->IsNotifyEnabled());
     }
 }
 
@@ -365,6 +374,16 @@ void TableSchemaToDesc(const TableSchema& schema, TableDescriptor* desc) {
         cfd->SetMinVersions(cf.min_versions());
         cfd->SetTimeToLive(cf.time_to_live());
         cfd->SetType(cf.type());
+        if (cf.gtxn()) {
+            cfd->EnableGlobalTransaction();
+        } else {
+            cfd->DisableGlobalTransaction();
+        }
+        if (cf.notify()) {
+            cfd->EnableNotify();
+        } else {
+            cfd->DisableNotify();
+        }
     }
 }
 
@@ -402,6 +421,22 @@ bool SetCfProperties(const string& name, const string& value,
             return false;
         }
         desc->SetType(value);
+    } else if (name == "gtxn") {
+        if (value == "on") {
+            desc->EnableGlobalTransaction();
+        } else if (value == "off") {
+            desc->DisableGlobalTransaction();
+        } else {
+            return false;
+        }
+    } else if (name == "notify") {
+        if (value == "on") {
+            desc->EnableNotify();
+        } else if (value == "off") {
+            desc->DisableNotify();
+        } else {
+            return false;
+        }
     }else {
         return false;
     }
@@ -551,6 +586,13 @@ bool CheckTableDescrptor(const TableDescriptor& desc, ErrorCode* err) {
     for (int32_t i = 0; i < desc.ColumnFamilyNum(); ++i) {
         if (!IsValidColumnFamilyName(desc.ColumnFamily(i)->Name())) {
             ss << " invalid columnfamily name:" << desc.ColumnFamily(i)->Name();
+            if (err != NULL) {
+                err->SetFailed(ErrorCode::kBadParam, ss.str());
+            }
+            return false;
+        }
+        if (!desc.IsTxnEnabled() && desc.ColumnFamily(i)->GlobalTransaction() == true) {
+            ss << " columnfamily property: gtxn is valid only when table set 'txn=on') ";
             if (err != NULL) {
                 err->SetFailed(ErrorCode::kBadParam, ss.str());
             }
@@ -806,6 +848,8 @@ bool FillTableDescriptor(PropTree& schema_tree, TableDescriptor* table_desc) {
                 return false;
             }
         }
+        // extend notify locality group and _N_ columnfamily
+        return ExtendNotifyLgToDescriptor(table_desc); 
     } else if (schema_tree.MaxDepth() == 3) {
         // full mode, all elements are user-defined
         // e.g. table1<mergesize=100>{
@@ -860,6 +904,8 @@ bool FillTableDescriptor(PropTree& schema_tree, TableDescriptor* table_desc) {
                 return false;
             }
         }
+        // extend notify locality group and _N_ columnfamily
+        return ExtendNotifyLgToDescriptor(table_desc); 
     } else {
         LOG(FATAL) << "never here.";
     }
@@ -973,6 +1019,58 @@ bool IsKvTable(const TableSchema& schema) {
     return (schema.kv_only() ||
             schema.raw_key() == GeneralKv ||
             schema.raw_key() == TTLKv);
+}
+
+bool IsTransactionTable(const TableSchema& schema) {
+    return schema.enable_txn();
+}
+
+void FindGlobalTransactionCfs(const TableSchema& schema, 
+                              std::set<string>* column_families) {
+    size_t cf_num = schema.column_families_size();
+    for (size_t cf_no = 0; cf_no < cf_num; ++cf_no) {
+        const ColumnFamilySchema& cf_schema = schema.column_families(cf_no);
+        if (cf_schema.gtxn()) {
+            column_families->insert(cf_schema.name());
+        }
+    }
+}
+
+bool ExtendNotifyLgToDescriptor(TableDescriptor* desc) {
+    bool do_extend = false;
+    bool have_n_cf = false;
+    for (int32_t i = 0; i < desc->ColumnFamilyNum(); ++i) {
+        if (desc->ColumnFamily(i)->Name() == kNotifyColumnFamily) {
+            have_n_cf = true;
+        }
+        if (desc->ColumnFamily(i)->IsNotifyEnabled()) {
+            do_extend = true;
+        }
+    }
+    if (!do_extend) {
+        return true;
+    } else if (do_extend && have_n_cf) {
+        return false;
+    }
+    if (desc->LocalityGroup(TableDescImpl::NOTIFY_LG_NAME) != NULL) {
+        LOG(ERROR) << "already exists locality group: " 
+                   << TableDescImpl::NOTIFY_LG_NAME;
+        return false;
+    }
+    LocalityGroupDescriptor* lg_desc 
+        = desc->AddLocalityGroup(TableDescImpl::NOTIFY_LG_NAME);
+    if (lg_desc == NULL) {
+        LOG(ERROR) << "fail to add locality group: " 
+                   << TableDescImpl::NOTIFY_LG_NAME;
+        return false;
+    }
+    ColumnFamilyDescriptor* cf_desc 
+        = desc->AddColumnFamily(kNotifyColumnFamily, TableDescImpl::NOTIFY_LG_NAME);
+    if (cf_desc == NULL) {
+        LOG(ERROR) << "fail to add column family: " << kNotifyColumnFamily;
+        return false;
+    }
+    return true;
 }
 
 } // namespace tera

@@ -90,6 +90,7 @@ message LoadTabletRequest {
     repeated uint64 snapshots_sequence = 10;
     repeated uint64 parent_tablets = 11;
     repeated Rollback rollbacks = 12;
+    repeated string ignore_err_lgs = 13; 
 }
 
 message LoadTabletResponse {
@@ -263,6 +264,7 @@ message ScanTabletRequest {
     optional int64 timestamp = 18 [default = 0];
     optional int64 timeout = 19;
     optional int64 number_limit = 21;
+    optional uint64 max_qualifiers = 22;
 }
 
 message ScanTabletResponse {
@@ -282,6 +284,7 @@ message RowReaderInfo {
     optional TimeRange time_range = 3;
     optional FilterList filter_list = 4;
     optional uint32 max_version = 5;
+    optional uint64 max_qualifiers = 6;
 }
 
 message ReadTabletRequest {
@@ -309,11 +312,13 @@ message SplitTabletRequest {
     optional TabletMeta tablet_meta = 4;
     repeated uint64 child_tablets = 5;
     optional bytes split_key = 6;
+    optional bool master_update_meta = 7;
 }
 
 message SplitTabletResponse {
     required StatusCode status = 1 [default = kTableMergeError];
     required uint64 sequence_id = 2;
+    repeated string split_keys = 3;
 }
 
 message MergeTabletRequest {
@@ -367,6 +372,7 @@ service TabletNodeServer {
     rpc Rollback(SnapshotRollbackRequest) returns(SnapshotRollbackResponse);
 
     rpc SplitTablet(SplitTabletRequest) returns(SplitTabletResponse);
+    rpc ComputeSplitKey(SplitTabletRequest) returns (SplitTabletResponse);
 
     rpc CmdCtrl(TsCmdCtrlRequest) returns(TsCmdCtrlResponse);
     rpc Update(UpdateRequest) returns(UpdateResponse);

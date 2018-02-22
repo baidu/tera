@@ -6,7 +6,7 @@
 
 #include "master/master_impl.h"
 #include "master/workload_scheduler.h"
-#include "utils/timer.h"
+#include "common/timer.h"
 
 DECLARE_string(tera_master_meta_table_name);
 DECLARE_int32(tera_master_max_load_concurrency);

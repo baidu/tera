@@ -7,6 +7,7 @@
 
 #include "common/base/scoped_ptr.h"
 #include "common/thread_pool.h"
+#include "common/request_done_wrapper.h"
 
 #include "proto/tabletnode_rpc.pb.h"
 #include "tabletnode/rpc_schedule.h"
@@ -16,6 +17,82 @@ namespace tera {
 namespace tabletnode {
 
 class TabletNodeImpl;
+
+
+class ReadDoneWrapper final : public RequestDoneWrapper {
+public:
+    static google::protobuf::Closure* NewInstance(int64_t start_micros,
+                                                  ReadTabletResponse* response,
+                                                  google::protobuf::Closure* done) {
+        return new ReadDoneWrapper(start_micros, response, done);
+    }
+
+    virtual void Run() override;
+
+    virtual ~ReadDoneWrapper() {}
+
+protected:
+    //Just Can Create on Heap;
+    ReadDoneWrapper(int64_t start_micros,
+                    ReadTabletResponse* response,
+                    google::protobuf::Closure* done):
+        RequestDoneWrapper(done),
+        start_micros_(start_micros),
+        response_(response) { }
+
+    int64_t start_micros_;
+    ReadTabletResponse* response_;
+};
+
+class WriteDoneWrapper final : public RequestDoneWrapper {
+public:
+    static google::protobuf::Closure* NewInstance(int64_t start_micros,
+                                                  WriteTabletResponse* response,
+                                                  google::protobuf::Closure* done) {
+        return new WriteDoneWrapper(start_micros, response, done);
+    }
+
+    virtual void Run() override;
+
+    virtual ~WriteDoneWrapper() {}
+
+protected:
+    //Just Can Create on Heap;
+    WriteDoneWrapper(int64_t start_micros,
+                     WriteTabletResponse* response,
+                     google::protobuf::Closure* done):
+        RequestDoneWrapper(done),
+        start_micros_(start_micros),
+        response_(response) { }
+
+    int64_t start_micros_;
+    WriteTabletResponse* response_;
+};
+
+class ScanDoneWrapper final : public RequestDoneWrapper {
+public:
+    static google::protobuf::Closure* NewInstance(int64_t start_micros,
+                                                  ScanTabletResponse* response,
+                                                  google::protobuf::Closure* done) {
+        return new ScanDoneWrapper(start_micros, response, done);
+    }
+
+    virtual void Run() override;
+
+    virtual ~ScanDoneWrapper() {}
+
+protected:
+    //Just Can Create on Heap;
+    ScanDoneWrapper(int64_t start_micros,
+                    ScanTabletResponse* response,
+                    google::protobuf::Closure* done):
+        RequestDoneWrapper(done),
+        start_micros_(start_micros),
+        response_(response) { }
+
+    int64_t start_micros_;
+    ScanTabletResponse* response_;
+};
 
 class RemoteTabletNode : public TabletNodeServer {
 public:
@@ -68,6 +145,11 @@ public:
                google::protobuf::Closure* done);
 
     void SplitTablet(google::protobuf::RpcController* controller,
+                     const SplitTabletRequest* request,
+                     SplitTabletResponse* response,
+                     google::protobuf::Closure* done);
+
+    void ComputeSplitKey(google::protobuf::RpcController* controller,
                      const SplitTabletRequest* request,
                      SplitTabletResponse* response,
                      google::protobuf::Closure* done);
@@ -136,6 +218,10 @@ private:
                       google::protobuf::Closure* done);
 
     void DoSplitTablet(google::protobuf::RpcController* controller,
+                       const SplitTabletRequest* request,
+                       SplitTabletResponse* response,
+                       google::protobuf::Closure* done);
+    void DoComputeSplitKey(google::protobuf::RpcController* controller,
                        const SplitTabletRequest* request,
                        SplitTabletResponse* response,
                        google::protobuf::Closure* done);

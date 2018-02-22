@@ -1,4 +1,5 @@
 #include <iostream>
+#include <assert.h>
 #include "tera.h"
 
 int main() {

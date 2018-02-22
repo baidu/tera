@@ -64,6 +64,7 @@ message TabletCounter {
     optional double write_workload = 11 [default = 0.0];
 
     optional bool is_on_busy = 15 [default = false];
+    optional TabletStatus db_status = 16;
 }
 
 message TableCounter {
@@ -107,6 +108,7 @@ message TabletMeta {
     repeated uint64 parent_tablets = 12;
     repeated int64 lg_size = 13;
     repeated Rollback rollbacks = 14;
+    optional int64 last_move_time_us = 15;
 }
 
 message TableMetaList {
@@ -129,4 +131,13 @@ message SdkTabletCookie {
 message SdkCookie {
     required string table_name = 1;
     repeated SdkTabletCookie tablets = 2;
+}
+
+message PrimaryInfo {
+    optional string table_name = 1;
+    optional bytes row_key = 2;
+    optional bytes column_family = 3;
+    optional bytes qualifier = 4;
+    optional int64 gtxn_start_ts = 5;
+    optional string client_session = 6;
 }

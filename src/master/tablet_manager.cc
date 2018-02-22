@@ -31,15 +31,17 @@
 DECLARE_string(tera_working_dir);
 DECLARE_string(tera_master_meta_table_path);
 DECLARE_string(tera_master_meta_table_name);
-DECLARE_bool(tera_zk_enabled);
 
 DECLARE_string(tera_master_gc_strategy);
+DECLARE_bool(tera_master_gc_trash_enabled);
 DECLARE_int32(tera_master_impl_retry_times);
 DECLARE_int32(tera_tabletnode_connect_retry_period);
 
 DECLARE_bool(tera_delete_obsolete_tabledir_enabled);
 
 DECLARE_string(tera_tabletnode_path_prefix);
+DECLARE_int64(tera_master_split_history_time_interval);
+DECLARE_string(tera_leveldb_env_type);
 
 namespace tera {
 namespace master {
@@ -63,20 +65,22 @@ std::ostream& operator << (std::ostream& o, const TabletPtr& tablet) {
     return o;
 }
 
-Tablet::Tablet(const TabletMeta& meta)
-    : meta_(meta),
-      update_time_(common::timer::get_micros()),
-      ready_time_(std::numeric_limits<int64_t>::max()),
-      merge_param_(NULL),
-      gc_reported_(false) {}
+Tablet::Tablet(const TabletMeta& meta):
+    meta_(meta),
+    update_time_(get_micros()),
+    ready_time_(std::numeric_limits<int64_t>::max()),
+    last_move_time_us_(0),
+    merge_param_(NULL),
+    gc_reported_(false) { }
 
-Tablet::Tablet(const TabletMeta& meta, TablePtr table)
-    : meta_(meta),
-      table_(table),
-      update_time_(common::timer::get_micros()),
-      ready_time_(std::numeric_limits<int64_t>::max()),
-      merge_param_(NULL),
-      gc_reported_(false) {}
+Tablet::Tablet(const TabletMeta& meta, TablePtr table):
+    meta_(meta),
+    table_(table),
+    update_time_(get_micros()),
+    ready_time_(std::numeric_limits<int64_t>::max()),
+    last_move_time_us_(0),
+    merge_param_(NULL),
+    gc_reported_(false) { }
 
 Tablet::~Tablet() {
     table_.reset();
@@ -129,6 +133,21 @@ int64_t Tablet::GetQps() {
     MutexLock lock(&mutex_);
     return average_counter_.read_rows() + average_counter_.write_rows()
         + average_counter_.scan_rows();
+}
+
+int64_t Tablet::GetReadQps() {
+    MutexLock lock(&mutex_);
+    return average_counter_.read_rows();
+}
+
+int64_t Tablet::GetWriteQps() {
+    MutexLock lock(&mutex_);
+    return average_counter_.write_rows();
+}
+
+int64_t Tablet::GetScanQps() {
+    MutexLock lock(&mutex_);
+    return average_counter_.scan_rows();
 }
 
 const std::string& Tablet::GetKeyStart() {
@@ -188,8 +207,47 @@ bool Tablet::IsBusy() {
     if (counter_list_.size() > 0) {
         return counter_list_.back().is_on_busy();
     } else {
-        return false;
+        return average_counter_.is_on_busy();
     }
+}
+
+bool Tablet::TestAndSetSplitTimeStamp(int64_t ts) { // timestamp in us
+    ts /= 1000; // transalte into ms
+    //MutexLock lock(&mutex_);
+    if (split_history_.last_split_ts < (ts - FLAGS_tera_master_split_history_time_interval)) {
+        split_history_.last_split_ts = ts;
+        return true;
+    }
+    return false;
+}
+
+void Tablet::GetErrorIgnoredLGs(std::vector<std::string>* lgs) {
+    MutexLock lock(&mutex_);
+    *lgs = ignore_err_lgs_;
+}
+
+bool Tablet::SetErrorIgnoredLGs(const std::string& lg_list_str) {
+    if (lg_list_str.empty()) {
+        MutexLock lock(&mutex_);
+        ignore_err_lgs_.clear();
+        return true;
+    }
+    std::vector<std::string> lgs;
+    SplitString(lg_list_str, ":", &lgs);
+    const TableSchema& schema = GetSchema();
+    std::set<std::string> lg_schema_set;
+    for (int i = 0; i < schema.locality_groups_size(); ++i) {
+        lg_schema_set.insert(schema.locality_groups(i).name());
+    }
+    for (const auto& lg : lgs) {
+        if (lg_schema_set.find(lg) == lg_schema_set.end()) {
+            LOG(WARNING) << "set error ignored locality group ["<< lg << "] failed.";
+            return false;
+        }
+    }
+    MutexLock lock(&mutex_);
+    ignore_err_lgs_ = lgs;
+    return true;
 }
 
 std::string Tablet::DebugString() {
@@ -220,8 +278,8 @@ void Tablet::SetCounter(const TabletCounter& counter) {
     average_counter_.set_write_size(
         CounterWeightedSum(counter.write_size(), average_counter_.write_size()));
     average_counter_.set_write_workload(counter.write_workload());
-    average_counter_.set_is_on_busy(
-        CounterWeightedSum(counter.is_on_busy(), average_counter_.is_on_busy()));
+    average_counter_.set_is_on_busy(counter.is_on_busy());
+    average_counter_.set_db_status(counter.db_status());
 }
 
 void Tablet::UpdateSize(const TabletMeta& meta) {
@@ -273,6 +331,22 @@ bool Tablet::SetStatusIf(TabletStatus new_status, TabletStatus if_status,
     }
     if (meta_.status() == if_status
         && CheckStatusSwitch(meta_.status(), new_status)) {
+        meta_.set_status(new_status);
+        if (new_status == kTableReady) {
+            ready_time_ = get_micros();
+        }
+        return true;
+    }
+    return false;
+}
+
+bool Tablet::SetStatusIf(TabletStatus new_status,
+                         TabletStatus if_status,
+                         const std::string& if_addr) {
+    MutexLock lock(&mutex_);
+    if (meta_.status() == if_status &&
+        meta_.server_addr() == if_addr &&
+        CheckStatusSwitch(meta_.status(), new_status)) {
         meta_.set_status(new_status);
         if (new_status == kTableReady) {
             ready_time_ = get_micros();
@@ -368,10 +442,20 @@ int64_t Tablet::SetUpdateTime(int64_t timestamp) {
 int64_t Tablet::ReadyTime() {
     MutexLock lock(&mutex_);
     if (meta_.status() != kTableReady) {
-        return std::numeric_limits<int>::max();
+        return std::numeric_limits<int64_t>::max();
     } else {
         return ready_time_;
     }
+}
+
+int64_t Tablet::LastMoveTime() const {
+    MutexLock lock(&mutex_);
+    return last_move_time_us_;
+}
+
+void Tablet::SetLastMoveTime(int64_t time) {
+    MutexLock lock(&mutex_);
+    last_move_time_us_ = time;
 }
 
 int32_t Tablet::AddSnapshot(uint64_t snapshot) {
@@ -582,6 +666,7 @@ Table::Table(const std::string& table_name)
       deleted_tablet_num_(0),
       max_tablet_no_(0),
       create_time_((int64_t)time(NULL)),
+      metric_(table_name),
       schema_is_syncing_(false),
       rangefragment_(NULL),
       update_rpc_response_(NULL),
@@ -936,6 +1021,10 @@ void Table::RefreshCounter() {
         sspeed += counter.scan_size();
     }
 
+    metric_.SetTableSize(size);
+    metric_.SetTabletNum(tablet_num);
+    metric_.SetNotReady(notready);
+
     counter_.set_size(size);
     counter_.set_tablet_num(tablet_num);
     counter_.set_notready_num(notready);
@@ -1175,9 +1264,14 @@ bool Table::TryCollectInheritedFile() {
         std::vector<TabletFile> tablet_files;
         CollectInheritedFileFromFilesystem(name_, *it, &tablet_files);
 
-        for (uint32_t i = 0; i < tablet_files.size(); i++) {
+        if (tablet_files.empty()) {
             MutexLock l(&mutex_);
-            AddInheritedFile(tablet_files[i], false);
+            AddEmptyDeadTablet(*it);
+        } else {
+            for (uint32_t i = 0; i < tablet_files.size(); i++) {
+                MutexLock l(&mutex_);
+                AddInheritedFile(tablet_files[i], false);
+            }
         }
     }
     return dead_tablets.size() > 0;
@@ -1269,6 +1363,10 @@ bool Table::GetTabletsForGc(std::set<uint64_t>* live_tablets,
             VLOG(10) << "[gc] add dead tablet: " << path;
             dead_tablets->insert(tabletnum);
         }
+
+        if (0 == tabletnum) {
+            LOG(WARNING) << "[gc] invalid tablet path found: <" << path << ">";
+        }
     }
     if (dead_tablets->size() == 0) {
         VLOG(10) << "[gc] there is none dead tablets: " << name_;
@@ -1300,6 +1398,17 @@ void Table::AddInheritedFile(const TabletFile& file, bool need_ref) {
     VLOG(10) << "[gc] [" << name_ << "] file " << file << " ref increment to " << file_info.ref;
 }
 
+void Table::AddEmptyDeadTablet(uint64_t tablet_id) {
+    mutex_.AssertHeld();
+
+    if (useful_inh_files_.find(tablet_id) == useful_inh_files_.end()) {
+        LOG(INFO) << "[gc] [" << name_ << "] new empty dead tablet "
+            << tablet_id << ", gc disabled";
+        gc_disabled_dead_tablets_.insert(tablet_id);
+        useful_inh_files_[tablet_id];
+    }
+}
+
 uint64_t Table::CleanObsoleteFile() {
     leveldb::Env* env = io::LeveldbBaseEnv();
     std::string table_path = FLAGS_tera_tabletnode_path_prefix + name_;
@@ -1314,13 +1423,38 @@ uint64_t Table::CleanObsoleteFile() {
         leveldb::Status s;
         if (file.lg_id == 0 && file.file_id == 0) {
             std::string path = leveldb::BuildTabletPath(table_path, file.tablet_id);
+            leveldb::FileLock* file_lock = nullptr;
+            // NEVER remove the trailing character '/', otherwise you will lock the parent directory
+            s = env->LockFile(path + "/", &file_lock);
+            if (!s.ok()) {
+                LOG(WARNING) << "lock path failed, path: " << path << ", status: " << s.ToString();
+            }
+            delete file_lock;
+
             LOG(INFO) << "[gc] [" << name_ << "] delete dir " << path;
             s = io::DeleteEnvDir(path); //safely delete dir and all file in it
         } else {
+            std::string lg_path = leveldb::BuildTabletLgPath(table_path, file.tablet_id, file.lg_id);
+            leveldb::FileLock* file_lock = nullptr;
+            // NEVER remove the trailing character '/', otherwise you will lock the parent directory
+            s = env->LockFile(lg_path + "/", &file_lock);
+            if (!s.ok()) {
+                LOG(WARNING) << "lock path failed, path: " << lg_path << ", status: " << s.ToString();
+            }
+
+            delete file_lock;
+
             std::string path = leveldb::BuildTableFilePath(table_path, file.tablet_id,
                                                            file.lg_id, file.file_id);
-            LOG(INFO) << "[gc] [" << name_ << "] delete file " << file << " path " << path;
-            s = env->DeleteFile(path);
+            if (FLAGS_tera_master_gc_trash_enabled) {
+                LOG(INFO) << "[gc] [" << name_ << "] move file to trash, file: "
+                    << file << ", path: " << path;
+                // move sst to trackable gc trash instead of deleting it directly
+                s = io::MoveSstToTrackableGcTrash(name_, file.tablet_id, file.lg_id, file.file_id);
+            } else {
+                LOG(INFO) << "[gc] [" << name_ << "] delete file " << file << " path " << path;
+                s = env->DeleteFile(path);
+            }
         }
         mutex_.Lock();
         if (!s.ok()) {
@@ -1551,6 +1685,40 @@ bool TabletManager::FindOverlappedTablets(const std::string& table_name,
     }
     table.mutex_.Unlock();
     CHECK_GT(tablets->size(), 0u);
+    return true;
+}
+
+bool TabletManager::SearchTablet(const std::string& table_name,
+                                 const std::string& key,
+                                 TabletPtr* tablet,
+                                 StatusCode* ret_status) {
+    // lock table list
+    mutex_.Lock();
+
+    // search table
+    TableList::iterator it = all_tables_.find(table_name);
+    if (it == all_tables_.end()) {
+        mutex_.Unlock();
+        VLOG(5) << "table: " << table_name << " not exist";
+        SetStatusCode(kTableNotFound, ret_status);
+        return false;
+    }
+    Table& table = *it->second;
+
+    // lock table
+    table.mutex_.Lock();
+    mutex_.Unlock();
+
+    // search tablet
+    Table::TabletList::reverse_iterator rit2 = table.tablets_list_.rbegin();
+    for (; rit2 != table.tablets_list_.rend(); ++rit2) {
+        if (rit2->first <= key) {
+            *tablet = rit2->second;
+            break;
+        }
+    }
+
+    table.mutex_.Unlock();
     return true;
 }
 

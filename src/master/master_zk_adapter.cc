@@ -387,14 +387,6 @@ void MasterZkAdapter::OnSafeModeMarkDeleted() {
     LOG(ERROR) << "safemode mark node is deleted";
 }
 
-void MasterZkAdapter::OnMasterLockLost() {
-    LOG(ERROR) << "master lock lost";
-    master_impl_->SetMasterStatus(MasterImpl::kIsSecondary);
-    master_impl_->DisableQueryTabletNodeTimer();
-    DeleteMasterNode();
-    Reset();
-}
-
 void MasterZkAdapter::OnTabletNodeListDeleted() {
     LOG(ERROR) << "ts dir node is deleted";
     if (!MarkSafeMode()) {

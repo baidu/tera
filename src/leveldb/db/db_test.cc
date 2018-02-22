@@ -98,6 +98,23 @@ class SpecialEnv : public EnvWrapper {
   }
 
   Status NewWritableFile(const std::string& f, WritableFile** r) {
+    class InitLoadLockFile : public WritableFile {
+     private:
+      SpecialEnv* env_;
+      WritableFile* base_;
+
+     public:
+      InitLoadLockFile(SpecialEnv* env, WritableFile* base)
+          : env_(env),
+            base_(base) {
+      }
+      ~InitLoadLockFile() { delete base_; }
+      Status Append(const Slice& data) { return base_->Append(data); }
+      Status Close() { return base_->Close(); }
+      Status Flush() { return base_->Flush(); }
+      Status Sync() { return base_->Sync(); }
+    };
+
     class SSTableFile : public WritableFile {
      private:
       SpecialEnv* env_;
@@ -165,6 +182,8 @@ class SpecialEnv : public EnvWrapper {
         *r = new SSTableFile(this, *r);
       } else if (strstr(f.c_str(), "MANIFEST") != NULL) {
         *r = new ManifestFile(this, *r);
+      } else if (strstr(f.c_str(), "__init_load_filelock") != NULL) {
+        *r = new InitLoadLockFile(this, *r);
       }
     }
     return s;
@@ -869,6 +888,40 @@ TEST(DBTest, Recover) {
     ASSERT_EQ("v4", Get("foo"));
     ASSERT_EQ("v2", Get("bar"));
     ASSERT_EQ("v5", Get("baz"));
+  } while (ChangeOptions());
+}
+
+TEST(DBTest, RecoverWithLostCurrent) {
+  // before write anything delete current file 
+  ASSERT_OK(env_->DeleteFile(CurrentFileName(dbname_ + "/0")));
+  leveldb::WritableFile* lock_file;
+  ASSERT_OK(env_->NewWritableFile(dbname_ + "/0/__init_load_filelock", &lock_file));
+  ASSERT_OK(lock_file->Append("\n"));
+  ASSERT_OK(lock_file->Sync());
+  ASSERT_OK(lock_file->Close());
+  delete lock_file;
+  do {
+    Reopen();
+    ASSERT_OK(Put("foo", "v3"));
+    Reopen();
+    ASSERT_EQ("v3", Get("foo"));
+  } while (ChangeOptions());
+}
+
+TEST(DBTest, RecoverWithLostManifest) {
+  // before write anything delete current file 
+  ASSERT_OK(env_->DeleteFile(DescriptorFileName(dbname_ + "/0", 1)));
+  leveldb::WritableFile* lock_file;
+  ASSERT_OK(env_->NewWritableFile(dbname_ + "/0/__init_load_filelock", &lock_file));
+  ASSERT_OK(lock_file->Append("\n"));
+  ASSERT_OK(lock_file->Sync());
+  ASSERT_OK(lock_file->Close());
+  delete lock_file;
+  do {
+    Reopen();
+    ASSERT_OK(Put("foo", "v3"));
+    Reopen();
+    ASSERT_EQ("v3", Get("foo"));
   } while (ChangeOptions());
 }
 

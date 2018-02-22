@@ -129,7 +129,7 @@ bool ParseFileName(const std::string& fname,
   if (rest == "CURRENT") {
     *number = 0;
     *type = kCurrentFile;
-  } else if (rest == "LOCK") {
+  } else if (rest == "LOCK" || rest == "__init_load_filelock") {
     *number = 0;
     *type = kDBLockFile;
   } else if (rest == "LOG" || rest == "LOG.old") {
@@ -242,6 +242,15 @@ std::string BuildTabletPath(const std::string& prefix, uint64_t tablet) {
   return dbname;
 }
 
+std::string BuildTabletLgPath(const std::string& prefix, uint64_t tablet, uint64_t lg) {
+  char buf[100];
+  snprintf(buf, sizeof(buf), "/tablet%08llu/%llu",
+           static_cast<unsigned long long>(tablet),
+           static_cast<unsigned long long>(lg));
+  std::string lg_path = prefix + buf;
+  return lg_path;
+}
+
 std::string BuildTableFilePath(const std::string& prefix, uint64_t tablet,
                                uint64_t lg, uint64_t number) {
   char buf[100];
@@ -250,6 +259,35 @@ std::string BuildTableFilePath(const std::string& prefix, uint64_t tablet,
            static_cast<unsigned long long>(lg));
   std::string dbname = prefix + buf;
   return MakeFileName(dbname, number & 0xffffffff, "sst");
+}
+
+std::string BuildTrashTableFilePath(const std::string& prefix, uint64_t tablet,
+                                    uint32_t lg_id, uint64_t number,
+                                    const std::string& time) {
+    char buf[100];
+    snprintf(buf, sizeof(buf), "/tablet%08llu/%lu/%08llu.sst.%s",
+            static_cast<unsigned long long>(tablet),
+            static_cast<unsigned long>(lg_id),
+            static_cast<unsigned long long>(number),
+            time.c_str());
+
+    return prefix + buf;
+}
+
+std::string GetTimeStrFromTrashFile(const std::string& path) {
+    size_t dir_pos = path.rfind("/");
+    if (dir_pos == std::string::npos || dir_pos == path.length() - 1) {
+        return "";
+    }
+    std::string file = path.substr(dir_pos + 1, path.length() - dir_pos - 1);
+
+    size_t time_pos = file.rfind(".");
+    if (time_pos == std::string::npos) {
+        return "";
+    }
+    std::string time_str = file.substr(time_pos + 1, file.length() - time_pos - 1);
+
+    return time_str;
 }
 
 std::string BuildTableFilePath(const std::string& prefix, uint64_t lg, uint64_t full_number) {

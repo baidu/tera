@@ -33,6 +33,9 @@ const char* paths[] = {"./cache_dir_1/", "./cache_dir_2/"};
 std::vector<std::string> ThreeLevelCacheEnv::cache_paths_(paths, paths + 2);
 
 static Status IOError(const std::string& context, int err_number) {
+    if (err_number == EACCES) {
+        return Status::IOPermissionDenied(context, strerror(err_number));
+    }
     return Status::IOError(context, strerror(err_number));
 }
 

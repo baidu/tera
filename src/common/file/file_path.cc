@@ -146,6 +146,33 @@ bool ListCurrentDir(const std::string& dir_path,
     return true;
 }
 
+bool ListCurrentDirWithStat(const std::string& dir_path,
+		                    std::vector<FileStateInfo>* file_list) {
+    DIR *dir = NULL;
+    struct dirent *ptr = NULL;
+    dir = opendir(dir_path.c_str());
+    if (dir == NULL) {
+        return false;
+    }
+    bool stat_all_succ = true;
+    while ((ptr = readdir(dir)) != NULL) {
+        if (strcmp(ptr->d_name, ".") != 0 && strcmp(ptr->d_name, "..") != 0) {
+            struct stat st;
+            std::string file_name(ptr->d_name);
+            file_name = dir_path + "/" + file_name;
+            if (lstat(file_name.c_str(), &st) == 0) {
+                file_list->push_back(std::make_pair(file_name, st));
+            } else {
+                // break if stat fail and return false later
+            	stat_all_succ = false;
+                break;
+            }
+        }
+    }
+    closedir(dir);
+    return stat_all_succ;
+}
+
 bool IsExist(const std::string& path) {
     return access(path.c_str(), R_OK) == 0;
 }

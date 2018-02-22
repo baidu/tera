@@ -256,6 +256,7 @@ bool DefaultCompactStrategy::InternalMergeProcess(leveldb::Iterator* it,
 }
 
 bool DefaultCompactStrategy::ScanDrop(const Slice& tera_key, uint64_t n) {
+    bool key_col_qual_same = false;
     Slice key, col, qual;
     int64_t ts = -1;
     leveldb::TeraKeyType type;
@@ -345,6 +346,7 @@ bool DefaultCompactStrategy::ScanDrop(const Slice& tera_key, uint64_t n) {
         }
         return true;
     } else {
+        key_col_qual_same = true;
         last_type_ = type;
     }
 
@@ -362,8 +364,7 @@ bool DefaultCompactStrategy::ScanDrop(const Slice& tera_key, uint64_t n) {
 
     CHECK(cf_id >= 0) << "illegel column family";
     if (type == leveldb::TKT_VALUE) {
-        if (cur_ts_ == last_ts_ && last_qual_ == qual.ToString() &&
-            last_col_ == col.ToString() && last_key_ == key.ToString()) {
+        if (cur_ts_ == last_ts_ && key_col_qual_same) {
             // this is the same key, do not chang version num
         } else {
             version_num_++;

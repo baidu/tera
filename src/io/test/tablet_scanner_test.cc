@@ -20,7 +20,7 @@
 #include "leveldb/table_utils.h"
 #include "proto/proto_helper.h"
 #include "proto/status_code.pb.h"
-#include "utils/timer.h"
+#include "common/timer.h"
 #include "utils/utils_cmd.h"
 
 DECLARE_string(tera_tabletnode_path_prefix);
@@ -225,7 +225,8 @@ TEST_F(TabletScannerTest, General) {
 
     TabletIO tablet(key_start, key_end, tablet_path);
     EXPECT_TRUE(tablet.Load(GetTableSchema(), tablet_path, std::vector<uint64_t>(),
-                            empty_snaphsots_, empty_rollback_, NULL, NULL, NULL, &status));
+                            std::set<std::string>(), empty_snaphsots_,
+                            empty_rollback_, NULL, NULL, NULL, &status));
 
     PrepareData(&tablet, 1000000);
     uint64_t nr = 400;
@@ -246,7 +247,8 @@ TEST_F(TabletScannerTest, CacheEvict) {
 
     TabletIO tablet(key_start, key_end, tablet_path);
     EXPECT_TRUE(tablet.Load(GetTableSchema(), tablet_path, std::vector<uint64_t>(),
-                            empty_snaphsots_, empty_rollback_, NULL, NULL, NULL, &status));
+                            std::set<std::string>(), empty_snaphsots_,
+                            empty_rollback_, NULL, NULL, NULL, &status));
 
     PrepareData(&tablet, 1000000);
 

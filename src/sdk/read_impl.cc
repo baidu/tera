@@ -19,6 +19,7 @@ RowReaderImpl::RowReaderImpl(TableImpl* table, const std::string& row_key)
       ts_start_(kOldestTs),
       ts_end_(kLatestTs),
       max_version_(1),
+      max_qualifiers_(std::numeric_limits<uint64_t>::max()),
       snapshot_id_(0),
       timeout_ms_(0),
       retry_times_(0),
@@ -78,6 +79,12 @@ uint32_t RowReaderImpl::GetMaxVersions() {
     return max_version_;
 }
 
+void RowReaderImpl::SetMaxQualifiers(uint64_t max_qualifiers) {
+    max_qualifiers_ = max_qualifiers;
+}
+uint64_t RowReaderImpl::GetMaxQualifiers() {
+    return max_qualifiers_;
+}
 
 /// 设置超时时间(只影响当前操作,不影响Table::SetReadTimeout设置的默认读超时)
 void RowReaderImpl::SetTimeOut(int64_t timeout_ms) {
@@ -303,6 +310,7 @@ const RowReader::ReadColumnList& RowReaderImpl::GetReadColumnList() {
 void RowReaderImpl::ToProtoBuf(RowReaderInfo* info) {
     info->set_key(row_key_);
     info->set_max_version(max_version_);
+    info->set_max_qualifiers(max_qualifiers_);
     info->mutable_time_range()->set_ts_start(ts_start_);
     info->mutable_time_range()->set_ts_end(ts_end_);
 

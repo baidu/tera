@@ -3,16 +3,18 @@
 // found in the LICENSE file.
 
 #include <functional>
+#include <memory>
 
 #include "common/thread_pool.h"
 #include "common/base/string_format.h"
 
 #include "io/coding.h"
+#include "sdk/global_txn_internal.h"
 #include "sdk/read_impl.h"
 #include "sdk/single_row_txn.h"
 #include "sdk/table_impl.h"
 #include "types.h"
-#include "utils/timer.h"
+#include "common/timer.h"
 
 namespace tera {
 
@@ -27,9 +29,12 @@ SingleRowTxn::SingleRowTxn(Table* table, const std::string& row_key,
       reader_max_versions_(1),
       reader_start_timestamp_(kOldestTs),
       reader_end_timestamp_(kLatestTs),
+      start_timestamp_(0),
+      commit_timestamp_(0),
       mutation_buffer_(table, row_key),
       user_commit_callback_(NULL),
       user_commit_context_(NULL) {
+    start_timestamp_ = get_micros();
 }
 
 SingleRowTxn::~SingleRowTxn() {
@@ -185,6 +190,8 @@ void CommitCallbackWrapper(RowMutation* row_mu) {
 
 /// 提交事务
 ErrorCode SingleRowTxn::Commit() {
+    commit_timestamp_ = get_micros();
+    InternalNotify();
     if (mutation_buffer_.MutationNum() > 0) {
         if (user_commit_callback_ != NULL) {
             // use our callback wrapper
@@ -263,6 +270,34 @@ void SingleRowTxn::Serialize(RowMutationSequence* mu_seq) {
                 kv->set_value(it->second);
             }
         }
+    }
+}
+
+void SingleRowTxn::Ack(Table* t, 
+                     const std::string& row_key, 
+                     const std::string& column_family, 
+                     const std::string& qualifier) {
+    std::unique_ptr<tera::RowMutation> mutation(t->NewRowMutation(row_key));
+    std::string notify_qulifier = PackNotifyName(column_family, qualifier);
+    mutation->DeleteColumns(kNotifyColumnFamily, notify_qulifier, start_timestamp_);
+    this->ApplyMutation(mutation.get());
+}
+
+void SingleRowTxn::Notify(Table* t,
+                        const std::string& row_key, 
+                        const std::string& column_family, 
+                        const std::string& qualifier) {
+    Cell cell(t, row_key, column_family, qualifier);
+    notify_cells_.push_back(cell);
+}
+
+void SingleRowTxn::InternalNotify() {
+    for (auto cell : notify_cells_) {
+        std::unique_ptr<tera::RowMutation> mutation(cell.Table()->NewRowMutation(cell.RowKey()));
+        std::string notify_qulifier = PackNotifyName(cell.ColFamily(), cell.Qualifier());
+        mutation->Put(kNotifyColumnFamily, notify_qulifier, commit_timestamp_);
+        // single row transaction may notify different rows
+        cell.Table()->ApplyMutation(mutation.get());
     }
 }
 

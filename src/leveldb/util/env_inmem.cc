@@ -20,7 +20,7 @@
 #include "leveldb/table_utils.h"
 #include "util/mutexlock.h"
 #include "helpers/memenv/memenv.h"
-#include "../utils/counter.h"
+#include "../common/counter.h"
 
 #include "leveldb/env_inmem.h"
 

@@ -13,6 +13,7 @@
 #include <vector>
 
 #include "common/base/scoped_ptr.h"
+#include "common/metric/metric_counter.h"
 #include "common/mutex.h"
 #include "io/tablet_scanner.h"
 #include "leveldb/db.h"
@@ -26,15 +27,31 @@
 #include "proto/table_schema.pb.h"
 #include "proto/tabletnode_rpc.pb.h"
 #include "types.h"
-#include "utils/counter.h"
+#include "common/counter.h"
 
 namespace tera {
+
+// metric name constants
+const char* const kLowReadCellMetricName = "tera_ts_tablet_low_read_cell_count";
+const char* const kScanRowsMetricName = "tera_ts_tablet_scan_row_count";
+const char* const kScanKvsMetricName = "tera_ts_tablet_scan_kv_count";
+const char* const kScanThroughPutMetricName = "tera_ts_tablet_scan_through_put";
+const char* const kReadRowsMetricName = "tera_ts_tablet_read_row_count";
+const char* const kReadKvsMetricName = "tera_ts_tablet_read_kv_count";
+const char* const kReadThroughPutMetricName = "tera_ts_tablet_read_through_put";
+const char* const kWriteRowsMetricName = "tera_ts_tablet_write_row_count";
+const char* const kWriteKvsMetricName = "tera_ts_tablet_write_kv_count";
+const char* const kWriteThroughPutMetricName = "tera_ts_tablet_write_through_put";
+const char* const kWriteRejectRowsMetricName = "tera_ts_tablet_write_reject_row_count";
+
 namespace io {
 
 class TabletWriter;
 struct ScanOptions;
 struct ScanContext;
 class ScanContextManager;
+
+std::string MetricLabelToString(const std::string& tablet_path);
 
 class TabletIO {
 public:
@@ -54,16 +71,32 @@ public:
     };
 
     struct StatCounter {
-        tera::Counter low_read_cell;
-        tera::Counter scan_rows;
-        tera::Counter scan_kvs;
-        tera::Counter scan_size;
-        tera::Counter read_rows;
-        tera::Counter read_kvs;
-        tera::Counter read_size;
-        tera::Counter write_rows;
-        tera::Counter write_kvs;
-        tera::Counter write_size;
+        const std::string label;
+        tera::MetricCounter low_read_cell;
+        tera::MetricCounter scan_rows;
+        tera::MetricCounter scan_kvs;
+        tera::MetricCounter scan_size;
+        tera::MetricCounter read_rows;
+        tera::MetricCounter read_kvs;
+        tera::MetricCounter read_size;
+        tera::MetricCounter write_rows;
+        tera::MetricCounter write_kvs;
+        tera::MetricCounter write_size;
+        tera::MetricCounter write_reject_rows;
+
+        StatCounter(const std::string& tablet_path)
+            : label(MetricLabelToString(tablet_path)),
+              low_read_cell(tera::kLowReadCellMetricName, label, {SubscriberType::QPS}),
+              scan_rows(tera::kScanRowsMetricName, label, {SubscriberType::QPS}),
+              scan_kvs(tera::kScanKvsMetricName, label, {SubscriberType::QPS}),
+              scan_size(tera::kScanThroughPutMetricName, label, {SubscriberType::THROUGHPUT}),
+              read_rows(tera::kReadRowsMetricName, label, {SubscriberType::QPS}),
+              read_kvs(tera::kReadKvsMetricName, label, {SubscriberType::QPS}),
+              read_size(tera::kReadThroughPutMetricName, label, {SubscriberType::THROUGHPUT}),
+              write_rows(tera::kWriteRowsMetricName, label, {SubscriberType::QPS}),
+              write_kvs(tera::kWriteKvsMetricName, label, {SubscriberType::QPS}),
+              write_size(tera::kWriteThroughPutMetricName, label, {SubscriberType::THROUGHPUT}),
+              write_reject_rows(tera::kWriteRejectRowsMetricName, label, {SubscriberType::QPS}) {}
     };
 
     typedef std::function<void (std::vector<const RowMutationSequence*>*,
@@ -83,6 +116,7 @@ public:
     std::string GetTablePath() const;
     std::string GetStartKey() const;
     std::string GetEndKey() const;
+    const std::string& GetMetricLabel() const;
     virtual CompactStatus GetCompactStatus() const;
     virtual TableSchema GetSchema() const;
     RawKey RawKeyType() const;
@@ -94,6 +128,7 @@ public:
     virtual bool Load(const TableSchema& schema,
                       const std::string& path,
                       const std::vector<uint64_t>& parent_tablets,
+                      const std::set<std::string>& ignore_err_lgs,
                       std::map<uint64_t, uint64_t> snapshots,
                       std::map<uint64_t, uint64_t> rollbacks,
                       leveldb::Logger* logger = NULL,
@@ -118,7 +153,8 @@ public:
 
     // read a row
     virtual bool ReadCells(const RowReaderInfo& row_reader, RowResult* value_list,
-                           uint64_t snapshot_id = 0, StatusCode* status = NULL);
+                           uint64_t snapshot_id = 0, StatusCode* status = NULL,
+                           int64_t timeout_ms = std::numeric_limits<int64_t>::max());
     /// scan from leveldb return ture means complete flase means not complete
     bool LowLevelScan(const std::string& start_tera_key,
                       const std::string& end_row_key,
@@ -162,8 +198,6 @@ public:
     void SetStatus(TabletStatus status);
     TabletStatus GetStatus();
 
-    void GetAndClearCounter(TabletCounter* counter);
-
     int32_t AddRef();
     int32_t DecRef();
     int32_t GetRef() const;
@@ -173,6 +207,10 @@ public:
     void ProcessScan(ScanContext* context);
     void ApplySchema(const TableSchema& schema);
 
+    bool ShouldForceUnloadOnError();
+
+    bool GetDBStatus(tera::TabletStatus* tablet_status, bool slow_check);
+
 private:
     friend class TabletWriter;
     friend class ScanConextManager;
@@ -180,7 +218,7 @@ private:
                           bool sync = false, StatusCode* status = NULL);
 //     int64_t GetDataSizeWithoutLock(StatusCode* status = NULL);
 
-    void SetupOptionsForLG();
+    void SetupOptionsForLG(const std::set<std::string>& ignore_err_lgs);
     void TearDownOptionsForLG();
     void IndexingCfToLG();
 
@@ -245,6 +283,8 @@ private:
                      KeyValuePair* next);
     void SetSchema(const TableSchema& schema);
 
+    bool PutIfAbsentCheck(const std::string& row_key, const Mutation& mutation);
+
     bool SingleRowTxnCheck(const std::string& row_key,
                            const SingleRowTxnReadInfo& txn_read_info,
                            StatusCode* status);
@@ -263,6 +303,7 @@ private:
     CompactStatus compact_status_;
 
     TabletStatus status_;
+    tera::TabletStatus tablet_status_; // check wether db corruption
     volatile int32_t ref_count_;
     volatile int32_t db_ref_count_;
     leveldb::Options ldb_options_;

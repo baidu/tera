@@ -14,6 +14,7 @@ DECLARE_int64(tera_master_merge_tablet_size);
 namespace tera {
 
 const std::string TableDescImpl::DEFAULT_LG_NAME = "lg0";
+const std::string TableDescImpl::NOTIFY_LG_NAME = "notify";
 const std::string TableDescImpl::DEFAULT_CF_NAME = "";
 
 /// 列族名字仅允许使用字母、数字和下划线构造, 长度不超过256
@@ -29,7 +30,9 @@ CFDescImpl::CFDescImpl(const std::string& cf_name,
       acl_(0),
       owner_(0),
       disk_quota_(-1),
-      type_("") {
+      type_(""),
+      is_global_transaction_(false),
+      is_notify_enabled_(false) {
 }
 
 int32_t CFDescImpl::Id() const {
@@ -86,6 +89,30 @@ void CFDescImpl::SetAcl(ACL acl) {
 
 ACL CFDescImpl::Acl() const {
     return ACL();
+}
+
+void CFDescImpl::EnableGlobalTransaction() {
+    is_global_transaction_ = true;
+}
+
+void CFDescImpl::DisableGlobalTransaction() {
+    is_global_transaction_ = false;
+}
+
+bool CFDescImpl::GlobalTransaction() const {
+    return is_global_transaction_; 
+}
+
+void CFDescImpl::EnableNotify() {
+    is_notify_enabled_ = true;
+}
+
+void CFDescImpl::DisableNotify() {
+    is_notify_enabled_ = false;
+}
+
+bool CFDescImpl::IsNotifyEnabled() const {
+    return is_notify_enabled_;
 }
 
 void CFDescImpl::SetType(const std::string& type) {

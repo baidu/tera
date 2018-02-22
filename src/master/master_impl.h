@@ -52,7 +52,6 @@ class MetaTable;
 class Scheduler;
 class TabletManager;
 class TabletNodeManager;
-class MasterImplTest;
 
 class MasterImpl {
 public:
@@ -233,6 +232,8 @@ private:
                                CmdCtrlResponse* response);
     void TabletCmdCtrl(const CmdCtrlRequest* request,
                        CmdCtrlResponse* response);
+    void TableCmdCtrl(const CmdCtrlRequest* request,
+                      CmdCtrlResponse* response);
     void MetaCmdCtrl(const CmdCtrlRequest* request,
                      CmdCtrlResponse* response);
 
@@ -363,6 +364,15 @@ private:
                              SplitTabletResponse* response, bool failed,
                              int error_code);
 
+    virtual void SplitTabletWriteMetaAsync(TabletPtr tablet, const std::string& split_key);
+
+    void SplitTabletWriteMetaCallback(TabletPtr parent_tablet,
+                                    std::vector<TabletPtr> child_tablets,
+                                    int32_t retry_times,
+                                    WriteTabletRequest* request,
+                                    WriteTabletResponse* response,
+                                    bool failed, int err_code);
+
     void MergeTabletAsync(TabletPtr tablet_p1, TabletPtr tablet_p2);
     virtual void MergeTabletAsyncPhase2(TabletPtr tablet_p1, TabletPtr tablet_p2);
     void MergeTabletUnloadCallback(TabletPtr tablet);
@@ -440,7 +450,7 @@ private:
                              WriteTabletResponse* response,
                              bool failed, int error_code);
 
-    void ScanMetaTableAsync(const std::string& table_name,
+    virtual void ScanMetaTableAsync(const std::string& table_name,
                             const std::string& tablet_key_start,
                             const std::string& tablet_key_end,
                             ScanClosure done);
@@ -535,6 +545,10 @@ private:
     void DumpStatToTable(const TabletNode& stat);
 
     // garbage clean
+    void EnableGcTrashCleanTimer();
+    void DisableGcTrashCleanTimer();
+    void ScheduleGcTrashClean();
+    void DoGcTrashClean();
     void EnableTabletNodeGcTimer();
     void DisableTabletNodeGcTimer();
     void ScheduleTabletNodeGc();
@@ -609,6 +623,8 @@ private:
     TableImpl* stat_table_;
 
     // tabletnode garbage clean
+    bool gc_trash_clean_enabled_;
+    int64_t gc_trash_clean_timer_id_;
     bool gc_enabled_;
     int64_t gc_timer_id_;
     bool gc_query_enable_;

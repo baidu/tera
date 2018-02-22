@@ -54,6 +54,12 @@ public:
     virtual int64_t DiskQuota() const = 0;
     virtual void SetAcl(ACL acl) = 0;
     virtual ACL Acl() const = 0;
+    virtual void EnableGlobalTransaction() = 0;
+    virtual void DisableGlobalTransaction() = 0;
+    virtual bool GlobalTransaction() const = 0;
+    virtual void EnableNotify() = 0;
+    virtual void DisableNotify() = 0;
+    virtual bool IsNotifyEnabled() const = 0;
 
     ColumnFamilyDescriptor() {}
     virtual ~ColumnFamilyDescriptor() {}

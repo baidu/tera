@@ -66,7 +66,6 @@ protected:
 
     virtual void OnSafeModeMarkCreated();
     virtual void OnSafeModeMarkDeleted();
-    virtual void OnMasterLockLost();
     virtual void OnTabletNodeListDeleted();
     virtual void OnRootTabletNodeDeleted();
     virtual void OnMasterNodeDeleted();

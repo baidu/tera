@@ -16,7 +16,7 @@
 #include "sdk/sdk_task.h"
 #include "sdk/sdk_zk.h"
 #include "tera.h"
-#include "utils/counter.h"
+#include "common/counter.h"
 
 namespace tera {
 
@@ -261,10 +261,16 @@ public:
         Counter user_read_fail;
         ::leveldb::Histogram hist_read_cost;
 
+        ::leveldb::Histogram hist_async_cost;
+        Counter meta_sched_cnt;
+        Counter meta_update_cnt;
+        Counter total_task_cnt;
+        Counter total_commit_cnt;
+
         void DoDumpPerfCounterLog(const std::string& log_prefix);
 
         PerfCounter() {
-            start_time = common::timer::get_micros();
+            start_time = get_micros();
         }
     };
 private:
@@ -274,22 +280,13 @@ private:
                         std::vector<KeyValuePair>* kv_list,
                         ErrorCode* err);
 
-    // 将一批mutation根据rowkey分配给各个TS
-    void DistributeMutations(const std::vector<RowMutationImpl*>& mu_list,
-                            bool called_by_user);
+    void DistributeTasks(const std::vector<SdkTask*>& task_list,
+                         bool called_by_user,
+                         SdkTask::TYPE task_type);
 
     void DistributeMutationsById(std::vector<int64_t>* retry_mu_id_list);
 
-    // 分配完成后将mutation打包
-    void PackMutations(const std::string& server_addr,
-                       std::vector<RowMutationImpl*>& mu_list);
-
-    // mutation打包不满但到达最大等待时间
-    void MutationBatchTimeout(std::string server_addr, uint64_t batch_seq);
-
     // 通过异步RPC将mutation提交至TS
-    void CommitMutationsById(const std::string& server_addr,
-                             std::vector<int64_t>& mu_id_list);
     void CommitMutations(const std::string& server_addr,
                          std::vector<RowMutationImpl*>& mu_list);
 
@@ -306,20 +303,11 @@ private:
     void DistributeReaders(const std::vector<RowReaderImpl*>& row_reader_list,
                            bool called_by_user);
 
-    void DistributeReadersById(std::vector<int64_t>* reader_id_list);
-
-    // 分配完成后将reader打包
-    void PackReaders(const std::string& server_addr,
-                     std::vector<RowReaderImpl*>& reader_list);
-
-    // reader打包不满但到达最大等待时间
-    void ReaderBatchTimeout(std::string server_addr, uint64_t batch_seq);
-
     // 通过异步RPC将reader提交至TS
-    void CommitReadersById(const std::string server_addr,
-                           std::vector<int64_t>& reader_id_list);
     void CommitReaders(const std::string server_addr,
                        std::vector<RowReaderImpl*>& reader_list);
+
+    void DistributeReadersById(std::vector<int64_t>* reader_id_list);
 
     // reader RPC回调
     void ReaderCallBack(std::vector<int64_t>* reader_id_list,
@@ -329,6 +317,14 @@ private:
 
     // reader到达用户设置的超时时间但尚未处理完
     void ReaderTimeout(SdkTask* sdk_task);
+
+    void PackSdkTasks(const std::string& server_addr,
+                      std::vector<SdkTask*>& task_list,
+                      SdkTask::TYPE task_type);
+    void TaskBatchTimeout(SdkTask* task);
+    void CommitTasksById(const std::string& server_addr,
+                         std::vector<int64_t>& task_id_list,
+                         SdkTask::TYPE task_type);
 
     void ScanTabletAsync(ScanTask* scan_task, bool called_by_user);
 
@@ -415,11 +411,22 @@ private:
     TableImpl(const TableImpl&);
     void operator=(const TableImpl&);
 
-    struct TaskBatch {
-        uint64_t sequence_num;
-        uint64_t timer_id;
+    struct TaskBatch : public SdkTask {
         uint64_t byte_size;
+        std::string server_addr;
+        SdkTask::TYPE type;
+        Mutex* mutex;
+        std::map<std::string, TaskBatch*>* task_batch_map;
         std::vector<int64_t>* row_id_list;
+
+        TaskBatch() : SdkTask(SdkTask::TASKBATCH) {}
+        virtual bool IsAsync() { return false; }
+        virtual uint32_t Size() { return 0; }
+        virtual int64_t TimeOut() { return 0; }
+        virtual void Wait() {}
+        virtual void SetError(ErrorCode::ErrorCodeType err,
+                              const std::string& reason) {}
+        virtual const std::string& RowKey() { return server_addr; }
     };
 
     std::string name_;
@@ -432,10 +439,8 @@ private:
     uint32_t commit_size_;
     uint64_t write_commit_timeout_;
     uint64_t read_commit_timeout_;
-    std::map<std::string, TaskBatch> mutation_batch_map_;
-    std::map<std::string, TaskBatch> reader_batch_map_;
-    uint64_t mutation_batch_seq_;
-    uint64_t reader_batch_seq_;
+    std::map<std::string, TaskBatch*> mutation_batch_map_;
+    std::map<std::string, TaskBatch*> reader_batch_map_;
     Counter cur_commit_pending_counter_;
     Counter cur_reader_pending_counter_;
     int64_t max_commit_pending_num_;

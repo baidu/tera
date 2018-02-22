@@ -1,11 +1,10 @@
+#pragma once
 // Copyright (c) 2015, Baidu.com, Inc. All Rights Reserved
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
+#include<cstdint>
 
-#ifndef  TERA_COUNTER_ATOMIC_H_
-#define  TERA_COUNTER_ATOMIC_H_
-
-namespace common {
+namespace tera {
 
 static inline int atomic_add(volatile int *mem, int add)
 {
@@ -106,5 +105,4 @@ static inline int64_t atomic_comp_swap64(volatile void *mem, int64_t xchg, int64
     return cmp;
 }
 
-} // namespace common
-#endif  // TERA_COMMON_ATOMIC_H_
+} 

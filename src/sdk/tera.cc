@@ -41,6 +41,42 @@ static const char* strerr(ErrorCode::ErrorCodeType type) {
     case ErrorCode::kTxnFail:
         ret = "TransactionFail";
         break;
+    case ErrorCode::kGTxnDataTooLarge:
+        ret = "GlobalTransactionDataTooLarge";
+        break;
+    case ErrorCode::kGTxnNotSupport:
+        ret = "GlobalTransactionNotSupport";
+        break;
+    case ErrorCode::kGTxnSchemaError:
+        ret = "GlobalTransactionSchemaError";
+        break;
+    case ErrorCode::kGTxnOpAfterCommit:
+        ret = "GlobalTransactionOpAfterCommit";
+        break;
+    case ErrorCode::kGTxnPrimaryLost:
+        ret = "GlobalTransactionPrimaryLost";
+        break;
+    case ErrorCode::kGTxnWriteConflict:
+        ret = "GlobalTransactionWriteConflict";
+        break;
+    case ErrorCode::kGTxnLockConflict:
+        ret = "GlobalTransactionLockConflict";
+        break;
+    case ErrorCode::kGTxnOKButAckFailed:
+        ret = "GlobalTransactionOkButAckFailed";
+        break;
+    case ErrorCode::kGTxnOKButNotifyFailed:
+        ret = "GlobalTransactionOKButNotifyFailed";
+        break;
+    case ErrorCode::kGTxnPrewriteTimeout:
+        ret = "GlobalTransactionPrewriteTimeout";
+        break;
+    case ErrorCode::kGTxnPrimaryCommitTimeout:
+        ret = "GlobalTransactionPrimaryCommitTimeout";
+        break;
+    case ErrorCode::kGTxnTimestampLost:
+        ret = "GlobalTransactionTimestampLost";
+        break;
     default:
         ret = "UnkownError";
     }

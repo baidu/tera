@@ -1,0 +1,5 @@
+t_warehouse <txn=on> {
+    lg0 {
+        cf0 <maxversions=10000000,gtxn=on>
+    }
+}

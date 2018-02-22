@@ -39,6 +39,8 @@ message ColumnFamilySchema {
     optional int32 time_to_live = 8 [default = 0]; // 单位:秒(0:不过期, <0:提前过期, >0:延后过期)
     optional int64 disk_quota = 9;
     optional string type = 10;
+    optional bool gtxn = 11 [default = false]; // 'gtxn=on' for global transaction feature availability 
+    optional bool notify = 12 [default = false]; // 'notify=on' for notify feature availability
 }
 
 message TableSchema {

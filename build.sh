@@ -218,7 +218,7 @@ elif [ ! -f "${FLAG_DIR}/ins_${INS_VERSION}" ] \
     sed -i "s|^PROTOBUF_PATH ?=.*|PROTOBUF_PATH ?=${DEPS_PREFIX}|" Makefile
     sed -i "s|^PBRPC_PATH ?=.*|PBRPC_PATH ?=${DEPS_PREFIX}|" Makefile
     sed -i "s|^GTEST_PATH ?=.*|GTEST_PATH ?=${DEPS_PREFIX}|" Makefile
-    #BOOST_PATH=${DEPS_PREFIX}/boost_${BOOST_VERSION} make install_sdk
+    # BOOST_PATH=${DEPS_PREFIX}/boost_${BOOST_VERSION} make install_sdk
     make -j4 install_sdk
     cd -
     touch "${FLAG_DIR}/ins_${INS_VERSION}"
@@ -237,6 +237,23 @@ elif [ ! -f "${FLAG_DIR}/nose_${NOSE_VERSION}" ] \
     python setup.py install --prefix=. --install-scripts=${DEPS_PREFIX}/bin --install-lib=${DEPS_PREFIX}/lib
     cd -
     touch "${FLAG_DIR}/nose_${NOSE_VERSION}"
+fi
+
+# mongoose
+if [ ${MONGOOSE_VERSION} == "DISABLE" ]; then
+    echo "Disable mongoose."
+elif [ ! -f "${FLAG_DIR}/mongoose_${MONGOOSE_VERSION}" ] \
+    || [ ! -f "${DEPS_PREFIX}/include/mongoose.h" ] \
+    || [ ! -f "${DEPS_PREFIX}/lib/libmongoose.a" ]; then
+    wget --no-check-certificate -O mongoose-${MONGOOSE_VERSION}.tar.gz ${MONGOOSE_URL}
+    tar zxf mongoose-${MONGOOSE_VERSION}.tar.gz --recursive-unlink
+	cd mongoose-${MONGOOSE_VERSION}
+	cp -af mongoose.h ${DEPS_PREFIX}/include
+	gcc -c mongoose.c -o mongoose.o -g2 -pipe -Wall -Werror -fPIC
+	ar -rv libmongoose.a mongoose.o
+	cp -af libmongoose.a ${DEPS_PREFIX}/lib
+	cd -
+    touch "${FLAG_DIR}/mongoose_${MONGOOSE_VERSION}"
 fi
 
 cd ${WORK_DIR}

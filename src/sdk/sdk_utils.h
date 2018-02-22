@@ -50,5 +50,11 @@ bool ParseDelimiterFile(const string& filename, std::vector<string>* delims);
 
 bool IsKvTable(const TableSchema& schema);
 
+bool ExtendNotifyLgToDescriptor(TableDescriptor* desc);
+
+bool IsTransactionTable(const TableSchema& schema);
+
+void FindGlobalTransactionCfs(const TableSchema& schema, std::set<string>* column_families);
+
 } // namespace tera
 #endif // TERA_SDK_SDK_UTILS_H_

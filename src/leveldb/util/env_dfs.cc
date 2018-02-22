@@ -22,7 +22,7 @@
 #include "leveldb/table_utils.h"
 #include "nfs.h"
 #include "util/mutexlock.h"
-#include "../utils/counter.h"
+#include "../common/counter.h"
 
 namespace leveldb {
 
@@ -95,6 +95,9 @@ char* get_time_str(char* p, size_t len)
 // Log error message
 static Status IOError(const std::string& context, int err_number)
 {
+    if (err_number == EACCES) {
+        return Status::IOPermissionDenied(context, strerror(err_number));
+    }
     return Status::IOError(context, strerror(err_number));
 }
 

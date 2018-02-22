@@ -7,10 +7,10 @@
 --tera_leveldb_env_type=local
 
 ## 是否使用zk
-# 指定使用非zk模式, 但只能本机访问tera
---tera_zk_enabled=false
+# 指定使用fake_zk模式, 只能本机访问tera
+--tera_coord_type=fake_zk
 # 指定使用zk, 可以跨服务使用, 配置相应地址和路径即可
-#--tera_zk_enabled=true
+--tera_zk_enabled=false
 #--tera_zk_addr_list=localhost:2181
 #--tera_zk_root_path=/tera
 --tera_master_query_tabletnode_period=1000
@@ -18,3 +18,18 @@
 
 # sdk
 --tera_sdk_timeout=20000
+
+# balancer
+#--tera_info_log_clean_enable=false
+#--logbugsecs=0
+#--v=5
+#--tera_master_load_balance_ts_load_threshold=1000000000
+#--tera_master_load_balance_ts_size_threshold=10000000000000
+#--tera_master_meta_isolate_enabled=true
+#--tera_lb_load_balance_period_s=60
+#--tera_lb_tablet_max_move_num=10
+#--tera_lb_min_cost_need_balance=0.05
+#--tera_lb_move_cost_weight=10
+#--tera_lb_size_cost_weight=90
+#--tera_lb_debug_mode_enabled=false
+--online_schema_update_enabled=true

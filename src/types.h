@@ -27,6 +27,10 @@ const std::string kTsListPath = "/ts";
 const std::string kKickPath = "/kick";
 const std::string kRootTabletNodePath = "/root_table";
 const std::string kSafeModeNodePath = "/safemode";
+const std::string kTimeoracleNodePath = "/timeoracle";
+const std::string kTimeoracleLockPath = "/timeoracle-lock";
+const std::string kTimeoracleTimestampPath = "/timeoracle-timestamp";
+const std::string kClientsNodePath = "/clients";
 const std::string kSms = "[SMS] ";
 const std::string kMail = "[MAIL] ";
 const int64_t kLatestTs = INT64_MAX;
@@ -35,6 +39,16 @@ const uint64_t kMaxRpcSize = (16 << 20);       // 16MB
 const uint64_t kRowkeySize = (64 << 10);       // 64KB
 const uint64_t kQualifierSize = (64 << 10);    // 64KB
 const uint64_t kValueSize = (32 << 20);        // 32MB
+
+// observer
+const std::string kRowlockNodeIdListPath = "/id_lock";
+const std::string kRowlockNodeHostListPath = "/host_lock";
+const std::string kRowlockNodeNumPath = "/node_num";
+const std::string kRowlockProxyPath = "/proxy";
+const uint64_t kObserverWaitTime = 1000000;
+
+// global transaction
+const char* const kNotifyColumnFamily = "_N_";
 
 } // namespace tera
 

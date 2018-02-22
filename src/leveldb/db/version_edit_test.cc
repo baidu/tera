@@ -26,6 +26,7 @@ enum Tag {
   kNewFile              = 10,
   kDeletedFile          = 11,
   kNewFileInfo          = 12,
+  kSstFileDataSize      = 13,
 
   // no more than 1<<20
   kMaxTag               = 1 << 20,
@@ -53,7 +54,7 @@ class VersionEditTest: public VersionEdit {
         dst->append(str.data(), str.size());
       }
     }
-    void EncodeToOld(std::string* dst) {
+    void EncodeToOld(std::string* dst, bool with_sst, bool with_data_size) {
       DumpToOldFormat();
       if (has_comparator_) {
         PutVarint32(dst, kComparator);
@@ -71,7 +72,43 @@ class VersionEditTest: public VersionEdit {
         PutVarint32(dst, kLastSequence);
         PutVarint64(dst, last_sequence_);
       }
+      if (!with_sst) {
+          return;
+      }
+      for (uint32_t i = 0; i < 5; i++) {
+        FileMetaData f;
+        f.number = 100 + i;
+        f.file_size = 200 + i;
+        f.data_size = f.file_size;
+        f.smallest = InternalKey("apple", 300 + i, kTypeValue);
+        f.largest = InternalKey("zookeeper", 400 + i, kTypeDeletion);
+        EncodeSstFile(i, f, dst, with_data_size);
+      }
     }
+
+    void EncodeSstFile(uint32_t level, const FileMetaData& f, std::string* dst, bool with_data_size) {
+        std::string str;
+        PutVarint32(&str,level);  // level
+        PutVarint64(&str, f.number);
+        PutVarint64(&str, f.file_size);
+        PutLengthPrefixedSlice(&str, f.smallest.Encode());
+        PutLengthPrefixedSlice(&str, f.largest.Encode());
+        PutVarint32(&str, 0);      // put f.smallest_fake
+        PutVarint32(&str, 0);     // put f.largest_fake
+
+        PutVarint32(dst, str.size() + kMaxTag);
+        PutVarint32(dst, kNewFile);
+        dst->append(str.data(), str.size());
+        // record sst FileData
+        if (with_data_size) {
+          str.clear();
+          PutVarint64(&str, f.data_size);
+          PutVarint32(dst, str.size() + kMaxTag);
+          PutVarint32(dst, kSstFileDataSize);
+          dst->append(str.data(), str.size());
+        }
+    }
+
     void DumpToOldFormat() {
       has_comparator_ = HasComparator();
       comparator_ = GetComparatorName();
@@ -126,22 +163,28 @@ static void CreateEditContent(VersionEditTest* edit) {
   edit->SetLastSequence(900);
   TestEncodeDecode(*edit);
 }
-static void CreateEditContentV2(VersionEditTest* edit) {
+static void CreateOldEncodedContent(VersionEditTest* edit, std::string* dst,
+        bool with_sst, bool with_data_size) {
   edit->SetComparatorName("test_nil_cmp");
   edit->SetLogNumber(700);
   edit->SetNextFile(800);
   edit->SetLastSequence(900);
   TestEncodeDecode(*edit);
+  edit->EncodeToOld(dst, with_sst, with_data_size);
 }
-static void CreateEditWithTtlInfo(VersionEditTest* edit) {
+static void CreateEditWithSstDetail(VersionEditTest* edit) {
   for (int i = 0; i < 5; i++) {
     TestEncodeDecode(*edit);
-    edit->AddFile(i, 100 + i, 200 + i,
-                  InternalKey("apple", 300 + i, kTypeValue),
-                  InternalKey("zookeeper", 400 + i, kTypeDeletion),
-                  20 + i/* del percentage */,
-                  1000000000 + i/* timeout */,
-                  50 + i/* del percentage */);
+    FileMetaData f;
+    f.number = 100 + i;
+    f.file_size = 200 + i;
+    f.data_size = f.file_size;
+    f.smallest = InternalKey("apple", 300 + i, kTypeValue);
+    f.largest = InternalKey("zookeeper", 400 + i, kTypeDeletion);
+    f.del_percentage = 20 + i;
+    f.ttl_percentage = 50 + i;
+    f.check_ttl_ts = 1000000000 + i;
+    edit->AddFile(i, f);
     edit->DeleteFile(i, 500 + i);
     edit->SetCompactPointer(i, InternalKey("x00", 600 + i, kTypeValue));
   }
@@ -154,14 +197,13 @@ static void CreateEditWithTtlInfo(VersionEditTest* edit) {
 }
 TEST(VersionEditTest, EncodeFileInfoTag) {
   VersionEditTest edit;
-  CreateEditWithTtlInfo(&edit);
+  CreateEditWithSstDetail(&edit);
   fprintf(stderr, "%s\n", edit.DebugString().c_str());
 }
 TEST(VersionEditTest, OldFormatRead) {
   VersionEditTest edit;
-  CreateEditContentV2(&edit);
   std::string c1, c3;
-  edit.EncodeToOld(&c1); // dump into old format
+  CreateOldEncodedContent(&edit, &c1, false, false);
   edit.EncodeTo(&c3); // dump into new format
 
   VersionEditTest parsed;
@@ -172,6 +214,23 @@ TEST(VersionEditTest, OldFormatRead) {
 
   ASSERT_EQ(c2, c3);
   fprintf(stderr, "%s\n", parsed.DebugString().c_str());
+}
+
+TEST(VersionEditTest, DecodeFormatWithoutSstFileDataSize) {
+  VersionEditTest edit;
+  std::string c1, c3;
+  CreateOldEncodedContent(&edit, &c1, true, false);
+  edit.EncodeTo(&c3); // dump into new format
+
+  VersionEditTest parsed;
+  Status s = parsed.DecodeFrom(c1); // use new Decode to parse old format
+  ASSERT_TRUE(s.ok()) << s.ToString();
+  std::string c2;
+  parsed.EncodeTo(&c2);
+
+  ASSERT_NE(c2, c3);
+  fprintf(stderr, "%s\n", parsed.DebugString().c_str());
+
 }
 
 TEST(VersionEditTest, EncodeUnknowTag) {
