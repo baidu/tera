@@ -869,6 +869,59 @@ TEST(TableTest, ApproximateOffsetOfCompressed) {
   ASSERT_TRUE(Between(c.ApproximateOffsetOf("xyz"),    4000,   6000));
 }
 
+class FormatTest {};
+
+static void CheckAlign(RandomAccessFile* file, size_t alignment, uint64_t offset, size_t len) {
+    DirectIOArgs args;
+    char* buf = DirectIOAlign(file, offset, len, &args);
+    if (buf != NULL) {
+        free(buf);
+    }
+    ASSERT_TRUE(args.aligned_offset % alignment == 0);
+    ASSERT_TRUE(args.aligned_len % alignment == 0);
+    ASSERT_TRUE(args.aligned_offset >= 0 && args.aligned_offset <= offset);
+    ASSERT_TRUE(args.aligned_len >= 0 && args.aligned_len >= len);
+    ASSERT_TRUE(args.aligned_offset + args.aligned_len >= offset + len);
+}
+
+TEST(FormatTest, DirectIOAlign) {
+    WritableFile* write_file;
+    RandomAccessFile* file;
+    std::string filename = "/tmp/direct_io_align";
+    ASSERT_OK(Env::Default()->NewWritableFile(filename, &write_file, EnvOptions()));
+    ASSERT_OK(write_file->Append("test"));
+    ASSERT_OK(write_file->Close());
+    ASSERT_OK(Env::Default()->NewRandomAccessFile(filename, &file, EnvOptions()));
+    size_t alignment = file->GetRequiredBufferAlignment();
+
+    uint64_t offset = 0;
+    size_t len = 0;
+    uint64_t offset_before = 1;
+    size_t len_before = 1;
+    for (int i = 0; i < 10; ++i) {
+        for (int j = 0; j < 10; ++j) {
+            offset = alignment * j;
+            len = alignment * i;
+            // same to align
+            CheckAlign(file, alignment, offset, len);
+            // offset = align * j + 1
+            // len = align * i + 1
+            CheckAlign(file, alignment, offset + offset_before, len + len_before);
+            // offset = align * j - 1 && offset >= 0
+            // len = align * i - 1 && len >= 0
+            uint64_t tmp_offset = offset == 0 ? 0 : offset - offset_before;
+            size_t tmp_len = len == 0 ? 0 : len - len_before;
+            CheckAlign(file, alignment, tmp_offset, tmp_len);
+            // offset = align * j + 1
+            // len = align * i - 1 && len >= 0
+            CheckAlign(file, alignment, offset + offset_before, tmp_len); 
+            // offset = align * j - 1 && offset >= 0
+            // len = align * i + 1
+            CheckAlign(file, alignment, tmp_offset, len + len_before);
+        }
+    }
+}
+
 }  // namespace leveldb
 
 int main(int argc, char** argv) {

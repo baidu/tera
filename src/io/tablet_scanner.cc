@@ -134,6 +134,9 @@ bool ScanContextManager::ScheduleScanContext(ScanContext* context) {
             // complete or io error, return all the rest request to client
             if (context->complete || (context->ret_code != kTabletNodeOk)) {
                 DeleteScanContext(context); // never use context
+                if (context->ret_code != kTabletNodeOk) {
+                    return false;
+                }
                 return true;
             }
             if (context->jobs.size() == 0) {
@@ -148,6 +151,7 @@ bool ScanContextManager::ScheduleScanContext(ScanContext* context) {
         MutexLock l(&lock_);
         if (context->ret_code != kTabletNodeOk) {
             DeleteScanContext(context); // never use context
+            return false;
         }
     }
     return true;

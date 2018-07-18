@@ -12,7 +12,8 @@
 #include <stdlib.h>
 #include <string.h>
 #include <sys/time.h>
-#include "timer.h"
+#include <cassert>
+#include "common/timer.h"
 
 namespace common {
 
@@ -45,7 +46,7 @@ public:
         #ifdef MUTEX_DEBUG
         int64_t s = 0;
         if (msg) {
-            s = timer::get_micros();
+            s = get_micros();
         }
         #endif
         PthreadCall("mutex lock", pthread_mutex_lock(&mu_));
@@ -74,16 +75,16 @@ private:
         msg_ = msg;
         msg_threshold_ = msg_threshold;
         if (msg_) {
-            lock_time_ = timer::get_micros();
+            lock_time_ = get_micros();
         }
         #endif
         owner_ = pthread_self();
     }
     void BeforeUnlock() {
         #ifdef MUTEX_DEBUG
-        if (msg_ && timer::get_micros() - lock_time_ > msg_threshold_) {
+        if (msg_ && get_micros() - lock_time_ > msg_threshold_) {
             printf("%s locked %.3f ms\n",
-                    msg_, (timer::get_micros() - lock_time_) / 1000.0);
+                    msg_, (get_micros() - lock_time_) / 1000.0);
         }
         msg_ = NULL;
         #endif
@@ -137,11 +138,14 @@ public:
     }
     // Time wait in us
     // timeout < 0 would cause ETIMEOUT and return false immediately
-    bool TimeWaitInUs(int timeout, const char* msg = NULL) {
+    bool TimeWaitInUs(int64_t timeout, const char* msg = NULL) {
         // ref: http://www.qnx.com/developers/docs/6.5.0SP1.update/com.qnx.doc.neutrino_lib_ref/p/pthread_cond_timedwait.html
         struct timespec ts;
         clock_gettime(CLOCK_MONOTONIC, &ts);
-        int64_t nsec = ((int64_t)timeout) * 1000 + ts.tv_nsec;
+        int64_t nsec = timeout * 1000 + ts.tv_nsec;
+
+        assert(nsec > 0);
+
         ts.tv_sec += nsec / 1000000000;
         ts.tv_nsec = nsec % 1000000000;
 

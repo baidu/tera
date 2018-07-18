@@ -17,7 +17,7 @@
 #include "leveldb/dfs.h"
 #include "leveldb/env.h"
 #include "leveldb/status.h"
-#include "../../../utils/counter.h"
+#include "../../../common/counter.h"
 
 namespace leveldb {
 
@@ -29,9 +29,10 @@ public:
 
     virtual Status NewSequentialFile(const std::string& fname, SequentialFile** result);
 
-    virtual Status NewRandomAccessFile(const std::string& fname, RandomAccessFile** result);
+    virtual Status NewRandomAccessFile(const std::string& fname, RandomAccessFile** result,
+                                       const EnvOptions& options);
 
-    virtual Status NewWritableFile(const std::string& fname, WritableFile** result);
+    virtual Status NewWritableFile(const std::string& fname, WritableFile** result, const EnvOptions& options);
 
     // Returns:
     //   OK:       exists
@@ -59,6 +60,8 @@ public:
     virtual Status LockFile(const std::string& fname, FileLock** lock);
 
     virtual Status UnlockFile(FileLock* lock);
+
+    int32_t ClearDirOwner(const std::string& dir) {return dfs_->ClearDirOwner(dir);}
 
     virtual Env* CacheEnv() { return this; }
 

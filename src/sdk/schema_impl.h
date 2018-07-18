@@ -48,6 +48,18 @@ public:
 
     ACL Acl() const;
 
+    void EnableGlobalTransaction();
+
+    void DisableGlobalTransaction();
+    
+    bool GlobalTransaction() const;
+
+    void EnableNotify();
+
+    void DisableNotify();
+
+    bool IsNotifyEnabled() const;
+
     void SetType(const std::string& type);
 
     const std::string& Type() const;
@@ -63,6 +75,8 @@ private:
     int32_t owner_;
     int32_t disk_quota_;
     std::string type_;
+    bool is_global_transaction_;
+    bool is_notify_enabled_;
 };
 
 /// 局部性群组描述
@@ -188,10 +202,8 @@ public:
     void SetAdmin(const std::string& name);
     std::string Admin() const;
 
-    void SetAlias(const std::string& alias);
-    std::string Alias() const;
-
     static const std::string DEFAULT_LG_NAME;
+    static const std::string NOTIFY_LG_NAME;
     static const std::string DEFAULT_CF_NAME;
 
 private:
@@ -212,7 +224,6 @@ private:
     bool            enable_txn_;
     std::string     admin_group_;
     std::string     admin_;
-    std::string     alias_;
 };
 
 } // namespace tera

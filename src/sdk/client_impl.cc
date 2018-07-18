@@ -10,6 +10,7 @@
 #include "gflags/gflags.h"
 
 #include "common/file/file_path.h"
+#include "common/log/log_cleaner.h"
 #include "common/mutex.h"
 #include "proto/kv_helper.h"
 #include "proto/master_client.h"
@@ -17,6 +18,8 @@
 #include "proto/table_meta.pb.h"
 #include "proto/tabletnode_client.h"
 #include "sdk/table_impl.h"
+#include "sdk/global_txn.h"
+#include "sdk/sdk_perf.h"
 #include "sdk/sdk_utils.h"
 #include "sdk/sdk_zk.h"
 #include "utils/config_utils.h"
@@ -43,40 +46,98 @@ DECLARE_int32(tera_sdk_rpc_max_pending_buffer_size);
 DECLARE_int32(tera_sdk_rpc_work_thread_num);
 DECLARE_int32(tera_sdk_show_max_num);
 DECLARE_bool(tera_online_schema_update_enabled);
+DECLARE_string(tera_log_prefix);
+DECLARE_bool(tera_info_log_clean_enable);
+DECLARE_bool(tera_sdk_perf_collect_enabled);
+DECLARE_int32(tera_gtxn_thread_max_num);
+DECLARE_bool(tera_sdk_client_for_gtxn);
+DECLARE_bool(tera_sdk_tso_client_enabled);
+DECLARE_bool(tera_sdk_mock_enable);
 
 namespace tera {
 
-static pthread_once_t sdk_client_once_control = PTHREAD_ONCE_INIT;
+namespace {
+    struct ClientResource {
+        std::weak_ptr<ClientImpl> wp_client_impl;
+        ThreadPool* client_thread_pool;
+        ThreadPool* client_gtxn_thread_pool;
+        ClientResource() : client_thread_pool(NULL),
+                           client_gtxn_thread_pool(NULL) {}
+    };
+    typedef std::map<std::string, std::unique_ptr<ClientResource>> ClusterClientMap;
+    std::unique_ptr<ClusterClientMap> cluster_client_map;
 
-void LogSdkVersionInfo() {
-    LOG(INFO) << "\n" << SystemVersionInfo();
+    Mutex g_mutex;
+    bool g_is_glog_init = false;
+
+    std::once_flag sdk_client_once_control;
+    std::once_flag init_cluster_client_map_once;
+
+    void InitClusterClientMap() {
+        cluster_client_map.reset(new ClusterClientMap());
+    }
+    void LogSdkVersionInfo() {
+        LOG(INFO) << "\n" << SystemVersionInfo();
+    }
 }
 
-ClientImpl::ClientImpl(const std::string& user_identity,
-                       const std::string& user_passcode)
-    : thread_pool_(FLAGS_tera_sdk_thread_max_num),
-      user_identity_(user_identity),
-      user_passcode_(user_passcode) {
-    tabletnode::TabletNodeClient::SetThreadPool(&thread_pool_);
+ClientImpl::ClientImpl(const ClientOptions& client_options,
+                       ThreadPool* client_thread_pool,
+                       ThreadPool* client_gtxn_thread_pool)
+    : thread_pool_(client_thread_pool),
+      gtxn_thread_pool_(client_gtxn_thread_pool),
+      client_options_(client_options),
+      client_zk_adapter_(NULL),
+      tso_cluster_(NULL),
+      collecter_(NULL),
+      session_str_("") {
     tabletnode::TabletNodeClient::SetRpcOption(
         FLAGS_tera_sdk_rpc_limit_enabled ? FLAGS_tera_sdk_rpc_limit_max_inflow : -1,
         FLAGS_tera_sdk_rpc_limit_enabled ? FLAGS_tera_sdk_rpc_limit_max_outflow : -1,
         FLAGS_tera_sdk_rpc_max_pending_buffer_size, FLAGS_tera_sdk_rpc_work_thread_num);
-    cluster_ = sdk::NewClusterFinder();
-    pthread_once(&sdk_client_once_control, LogSdkVersionInfo);
+
+    if (FLAGS_tera_sdk_client_for_gtxn) {
+        client_zk_adapter_ = sdk::NewClientZkAdapter();
+        client_zk_adapter_->Init();
+        cluster_ = sdk::NewClusterFinder(client_zk_adapter_);
+        if (FLAGS_tera_sdk_tso_client_enabled) {
+            tso_cluster_ = sdk::NewTimeoracleClusterFinder();
+        }
+        RegisterSelf();
+    } else {
+        cluster_ = sdk::NewClusterFinder();
+    }
+
+    if (FLAGS_tera_sdk_perf_collect_enabled) {
+        collecter_ = new sdk::PerfCollecter();
+        collecter_->Run();
+        LOG(INFO) << "start perf collect";
+    } else {
+        LOG(INFO) << "perf collect disable";
+    }
+
+    std::call_once(sdk_client_once_control, LogSdkVersionInfo);
 }
 
 ClientImpl::~ClientImpl() {
     {
         MutexLock l(&open_table_mutex_);
-        if (!open_table_map_.empty()) {
-            std::map<std::string, TableHandle>::iterator it = open_table_map_.begin() ;
-            for (; it != open_table_map_.end(); ++it) {
-                LOG(ERROR) << "table should be delete first: " << it->first;
-            }
+        auto it = open_table_map_.begin();
+        for (; it != open_table_map_.end(); ) {
+            open_table_map_.erase(it++);
         }
     }
     delete cluster_;
+    if (FLAGS_tera_sdk_perf_collect_enabled) {
+        collecter_->Stop();
+        delete collecter_;
+    }
+    if (FLAGS_tera_sdk_client_for_gtxn) {
+        if (FLAGS_tera_sdk_tso_client_enabled) {
+            delete tso_cluster_;
+        }
+        delete client_zk_adapter_;
+    }
 }
 
 bool ClientImpl::CreateTable(const TableDescriptor& desc, ErrorCode* err) {
@@ -149,20 +210,15 @@ bool ClientImpl::CreateTable(const TableDescriptor& desc,
     CreateTableResponse response;
     request.set_sequence_id(0);
     std::string timestamp = tera::get_curtime_str_plain();
-    std::string internal_table_name;
-    if (FLAGS_tera_sdk_table_rename_enabled) {
-        internal_table_name = desc.TableName() + "@" + timestamp;
-    } else {
-        internal_table_name = desc.TableName();
-    }
-    request.set_table_name(internal_table_name);
-    request.set_user_token(GetUserToken(user_identity_, user_passcode_));
+    request.set_table_name(desc.TableName());
+    request.set_user_token(GetUserToken(client_options_.user_identity,
+        client_options_.user_passcode));
 
     TableSchema* schema = request.mutable_schema();
 
     TableDescToSchema(desc, schema);
     schema->set_alias(desc.TableName());
-    schema->set_name(internal_table_name);
+    schema->set_name(desc.TableName());
     // add delimiter
     size_t delim_num = tablet_delim.size();
     for (size_t i = 0; i < delim_num; ++i) {
@@ -199,7 +255,8 @@ bool ClientImpl::UpdateTable(const TableDescriptor& desc, ErrorCode* err) {
     UpdateTableResponse response;
     request.set_sequence_id(0);
     request.set_table_name(desc.TableName());
-    request.set_user_token(GetUserToken(user_identity_, user_passcode_));
+    request.set_user_token(GetUserToken(client_options_.user_identity,
+        client_options_.user_passcode));
 
     TableSchema* schema = request.mutable_schema();
     TableDescToSchema(desc, schema);
@@ -245,7 +302,8 @@ bool ClientImpl::UpdateCheck(const std::string& table_name, bool* done, ErrorCod
     UpdateCheckResponse response;
     request.set_sequence_id(0);
     request.set_table_name(table_name);
-    request.set_user_token(GetUserToken(user_identity_, user_passcode_));
+    request.set_user_token(GetUserToken(client_options_.user_identity,
+        client_options_.user_passcode));
 
     string reason;
     if (master_client.UpdateCheck(&request, &response)) {
@@ -266,18 +324,14 @@ bool ClientImpl::DropTable(const std::string& name, ErrorCode* err) {
 }
 
 bool ClientImpl::DeleteTable(const std::string& name, ErrorCode* err) {
-    std::string internal_table_name;
-    if (!GetInternalTableName(name, err, &internal_table_name)) {
-        LOG(ERROR) << "faild to scan meta schema";
-        return false;
-    }
     master::MasterClient master_client(cluster_->MasterAddr());
 
     DeleteTableRequest request;
     DeleteTableResponse response;
     request.set_sequence_id(0);
-    request.set_table_name(internal_table_name);
-    request.set_user_token(GetUserToken(user_identity_, user_passcode_));
+    request.set_table_name(name);
+    request.set_user_token(GetUserToken(client_options_.user_identity,
+        client_options_.user_passcode));
 
     string reason;
     if (master_client.DeleteTable(&request, &response)) {
@@ -293,18 +347,14 @@ bool ClientImpl::DeleteTable(const std::string& name, ErrorCode* err) {
 }
 
 bool ClientImpl::DisableTable(const std::string& name, ErrorCode* err) {
-    std::string internal_table_name;
-    if (!GetInternalTableName(name, err, &internal_table_name)) {
-        LOG(ERROR) << "faild to scan meta schema";
-        return false;
-    }
     master::MasterClient master_client(cluster_->MasterAddr());
 
     DisableTableRequest request;
     DisableTableResponse response;
     request.set_sequence_id(0);
-    request.set_table_name(internal_table_name);
-    request.set_user_token(GetUserToken(user_identity_, user_passcode_));
+    request.set_table_name(name);
+    request.set_user_token(GetUserToken(client_options_.user_identity,
+        client_options_.user_passcode));
 
     string reason;
     if (master_client.DisableTable(&request, &response)) {
@@ -322,16 +372,12 @@ bool ClientImpl::DisableTable(const std::string& name, ErrorCode* err) {
 
 bool ClientImpl::EnableTable(const std::string& name, ErrorCode* err) {
     master::MasterClient master_client(cluster_->MasterAddr());
-    std::string internal_table_name;
-    if (!GetInternalTableName(name, err, &internal_table_name)) {
-        LOG(ERROR) << "faild to scan meta schema";
-        return false;
-    }
     EnableTableRequest request;
     EnableTableResponse response;
     request.set_sequence_id(0);
-    request.set_table_name(internal_table_name);
-    request.set_user_token(GetUserToken(user_identity_, user_passcode_));
+    request.set_table_name(name);
+    request.set_user_token(GetUserToken(client_options_.user_identity,
+        client_options_.user_passcode));
 
     std::string reason;
     if (master_client.EnableTable(&request, &response)) {
@@ -365,7 +411,8 @@ bool ClientImpl::OperateUser(UserInfo& operated_user, UserOperateType type,
     OperateUserRequest request;
     OperateUserResponse response;
     request.set_sequence_id(0);
-    request.set_user_token(GetUserToken(user_identity_, user_passcode_));
+    request.set_user_token(GetUserToken(client_options_.user_identity,
+        client_options_.user_passcode));
     request.set_op_type(type);
     UserInfo* user_info = request.mutable_user_info();
     user_info->CopyFrom(operated_user);
@@ -415,7 +462,8 @@ bool ClientImpl::ShowUser(const std::string& user, std::vector<std::string>& use
                           ErrorCode* err) {
     UserInfo user_info;
     user_info.set_user_name(user);
-    user_info.set_token(GetUserToken(user_identity_, user_passcode_));
+    user_info.set_token(GetUserToken(client_options_.user_identity,
+        client_options_.user_passcode));
     return OperateUser(user_info, kShowUser, user_groups, err);
 }
 
@@ -437,127 +485,59 @@ bool ClientImpl::DeleteUserFromGroup(const std::string& user_name,
     return OperateUser(user, kDeleteFromGroup, null, err);
 }
 
-bool ClientImpl::GetInternalTableName(const std::string& table_name, ErrorCode* err,
-                                      std::string* internal_table_name) {
-    *internal_table_name = table_name;
-    tabletnode::TabletNodeClient meta_client(cluster_->RootTableAddr(true));
-    ScanTabletRequest request;
-    ScanTabletResponse response;
-    request.set_sequence_id(0);
-    request.set_table_name(FLAGS_tera_master_meta_table_name);
-    request.set_start("");
-    request.set_end("@~");
-    if (!meta_client.ScanTablet(&request, &response)
-          || response.status() != kTabletNodeOk) {
-        LOG(ERROR) << "fail to scan meta: " << StatusCodeToString(response.status());
-        if (err != NULL) {
-            err->SetFailed(ErrorCode::kSystem, "system error");
-        }
-        return false;
-    }
-    if (err != NULL) {
-        err->SetFailed(ErrorCode::kOK);
-    }
-    int32_t table_size = response.results().key_values_size();
-    for (int32_t i = 0; i < table_size; i++) {
-        const KeyValuePair& record = response.results().key_values(i);
-        const string& key = record.key();
-        const string& value = record.value();
-        if (key[0] == '@') {
-            TableMeta meta;
-            ParseMetaTableKeyValue(key, value, &meta);
-            if (meta.schema().alias() == table_name) {
-                *internal_table_name =  meta.table_name();
-                break;
-            }
-        } else if (key[0] > '@') {
-            break;
-        } else {
-            continue;
-        }
-    }
-    return true;
-}
-
 Table* ClientImpl::OpenTable(const std::string& table_name,
                              ErrorCode* err) {
     open_table_mutex_.Lock();
     TableHandle& th = open_table_map_[table_name];
-    th.ref++;
+    std::shared_ptr<TableImpl> table_impl;
 
-    if (th.mu == NULL) {
-        // open a new table
-        CHECK(th.handle == NULL);
-        th.mu = new Mutex();
-        th.mu->Lock();
+    bool is_existed = false;
+    {
+        MutexLock l(&th.mu);
         open_table_mutex_.Unlock();
-        VLOG(10) << "open a new table: " << table_name;
-        th.handle = OpenTableInternal(table_name, &th.err);
-        th.mu->Unlock();
-    } else {
-        open_table_mutex_.Unlock();
+        table_impl = th.handle.lock();
+        if (table_impl) {
+            is_existed = true;
+        }
+
+        if (!is_existed) {
+            // open a new table
+            VLOG(10) << "open a new table: " << table_name;
+            table_impl = OpenTableInternal(table_name, &th.err);
+            th.handle = table_impl;
+        }
     }
 
-    th.mu->Lock();
     if (err) {
         *err = th.err;
     }
-    if (th.handle == NULL) {
+    if (!table_impl) {
         VLOG(10) << "open null table: " << table_name;
-        th.mu->Unlock();
         MutexLock l(&open_table_mutex_);
-        if (--th.ref == 0) {
-            delete th.mu;
-            open_table_map_.erase(table_name);
-        }
+        open_table_map_.erase(table_name);
         return NULL;
     }
 
-    Table* table_impl = th.handle;
-    th.mu->Unlock();
-    return new TableWrapper(table_impl, this);
+    return new TableWrapper(table_impl);
 }
 
-TableImpl* ClientImpl::OpenTableInternal(const std::string& table_name,
+std::shared_ptr<TableImpl> ClientImpl::OpenTableInternal(const std::string& table_name,
                                          ErrorCode* err) {
-    std::string internal_table_name;
-    if (!GetInternalTableName(table_name, err, &internal_table_name)) {
-        std::string reason = "fail to scan meta schema";
-        if (err != NULL) {
-            err->SetFailed(ErrorCode::kBadParam, reason);
-        }
-        LOG(ERROR) << reason;
-        return NULL;
-    }
-    TableImpl* table = new TableImpl(internal_table_name, &thread_pool_, cluster_);
-    if (table == NULL) {
+    std::shared_ptr<TableImpl> table(new TableImpl(table_name, thread_pool_, shared_from_this()));
+    if (!table) {
         std::string reason = "fail to new TableImpl";
         if (err != NULL) {
             err->SetFailed(ErrorCode::kBadParam, reason);
         }
         LOG(ERROR) << reason;
-        return NULL;
+        return std::shared_ptr<TableImpl>();
+    } else if (FLAGS_tera_sdk_mock_enable) {
+        return table;
     }
     if (!table->OpenInternal(err)) {
-        delete table;
-        return NULL;
+        return std::shared_ptr<TableImpl>();
     }
     return table;
-}
-
-void ClientImpl::CloseTable(const std::string& table_name) {
-    MutexLock l(&open_table_mutex_);
-    std::map<std::string, TableHandle>::iterator it;
-    it = open_table_map_.find(table_name);
-    assert(it != open_table_map_.end());
-    TableHandle& h = it->second;
-    h.ref--;
-    if (h.ref == 0) {
-        VLOG(10) << "close table: " << table_name;
-        delete h.handle;
-        delete h.mu;
-        open_table_map_.erase(it);
-    }
 }
 
 bool ClientImpl::GetTabletLocation(const string& table_name,
@@ -579,62 +559,14 @@ bool ClientImpl::GetTabletLocation(const string& table_name,
 
 TableDescriptor* ClientImpl::GetTableDescriptor(const string& table_name,
                                                 ErrorCode* err) {
-    std::string internal_table_name;
-    if (!GetInternalTableName(table_name, err, &internal_table_name)) {
-        LOG(ERROR) << "faild to scan meta schema";
-        return NULL;
-    }
     std::vector<TableInfo> table_list;
-    ListInternal(&table_list, NULL, internal_table_name, "", 1, 0, err);
+    ListInternal(&table_list, NULL, table_name, "", 1, 0, err);
     if (table_list.size() > 0
-        && table_list[0].table_desc->TableName() == internal_table_name) {
+        && table_list[0].table_desc->TableName() == table_name) {
         return table_list[0].table_desc;
     }
     return NULL;
 }
-
-//bool ClientImpl::List(std::vector<TableInfo>* table_list,
-//                      std::vector<TabletInfo>* tablet_list,
-//                      ErrorCode* err) {
-//      tabletnode::TabletNodeClient meta_client;
-//      meta_client.ResetTabletNodeClient(cluster_->RootTableAddr());
-//
-//      ScanTabletRequest request;
-//      ScanTabletResponse response;
-//      request.set_sequence_id(0);
-//      request.set_table_name(FLAGS_tera_master_meta_table_name);
-//      //MetaTableListScanRange(request.mutable_start(), request.mutable_end());
-//      request.mutable_key_range()->set_key_start("");
-//      request.mutable_key_range()->set_key_end("");
-//
-//      if (!meta_client.ScanTablet(&request, &response)
-//          || response.status() != kTabletNodeOk) {
-//          err->SetFailed(ErrorCode::kSystem, "system error");
-//          return false;
-//      }
-//
-//      err->SetFailed(ErrorCode::kOK);
-//
-//      int32_t table_size = response.kv_list_size();
-//      for (int32_t i = 0; i < table_size; i++) {
-//          const KeyValuePair& record = response.kv_list(i);
-//          const string& key = record.key();
-//          const string& value = record.value();
-//
-//          if (key[0] == '@') {
-//              TableMeta meta;
-//              ParseMetaTableKeyValue(key, value, &meta);
-//              ParseTableEntry(meta, table_list);
-//          } else if (key[0] > '@') {
-//              TabletMeta meta;
-//              ParseMetaTableKeyValue(key, value, &meta);
-//              ParseTabletEntry(meta, tablet_list);
-//          } else {
-//              continue;
-//          }
-//      }
-//      return true;
-//}
 
 bool ClientImpl::List(std::vector<TableInfo>* table_list, ErrorCode* err) {
     std::vector<TabletInfo> tablet_list;
@@ -645,7 +577,7 @@ bool ClientImpl::List(std::vector<TableInfo>* table_list, ErrorCode* err) {
 
 bool ClientImpl::ShowTableSchema(const string& name, TableSchema* schema,
                                  ErrorCode* err) {
-    tabletnode::TabletNodeClient meta_client(cluster_->RootTableAddr(true));
+    tabletnode::TabletNodeClient meta_client(thread_pool_, cluster_->RootTableAddr(true));
     ScanTabletRequest request;
     ScanTabletResponse response;
     request.set_sequence_id(0);
@@ -686,15 +618,10 @@ bool ClientImpl::ShowTablesInfo(const string& name,
                                 TabletMetaList* tablet_list,
                                 ErrorCode* err) {
     TableMetaList table_list;
-    std::string internal_table_name;
-    if (!GetInternalTableName(name, err, &internal_table_name)) {
-        LOG(ERROR) << "faild to scan meta schema";
-        return false;
-    }
-    bool result = DoShowTablesInfo(&table_list, tablet_list, internal_table_name,
+    bool result = DoShowTablesInfo(&table_list, tablet_list, name,
                                    false, err);
     if ((table_list.meta_size() == 0)
-        || (table_list.meta(0).table_name() != internal_table_name)) {
+        || (table_list.meta(0).table_name() != name)) {
         return false;
     }
     if (result) {
@@ -739,7 +666,8 @@ bool ClientImpl::DoShowTablesInfo(TableMetaList* table_list,
         request.set_start_tablet_key(start_tablet_key);
         request.set_max_tablet_num(FLAGS_tera_sdk_show_max_num); //tablets be fetched at most in one RPC
         request.set_sequence_id(0);
-        request.set_user_token(GetUserToken(user_identity_, user_passcode_));
+        request.set_user_token(GetUserToken(client_options_.user_identity,
+        client_options_.user_passcode));
         request.set_all_brief(is_brief);
 
         if (master_client.ShowTables(&request, &response) &&
@@ -831,7 +759,8 @@ bool ClientImpl::ShowTabletNodesInfo(const string& addr,
     request.set_sequence_id(0);
     request.set_addr(addr);
     request.set_is_showall(false);
-    request.set_user_token(GetUserToken(user_identity_, user_passcode_));
+    request.set_user_token(GetUserToken(client_options_.user_identity,
+        client_options_.user_passcode));
 
     if (master_client.ShowTabletNodes(&request, &response) &&
         response.status() == kMasterOk) {
@@ -879,15 +808,10 @@ bool ClientImpl::ShowTabletNodesInfo(std::vector<TabletNodeInfo>* infos,
 bool ClientImpl::List(const string& table_name, TableInfo* table_info,
                       std::vector<TabletInfo>* tablet_list, ErrorCode* err) {
     std::vector<TableInfo> table_list;
-    std::string internal_table_name;
-    if (!GetInternalTableName(table_name, err, &internal_table_name)) {
-        LOG(ERROR) << "faild to scan meta schema";
-        return false;
-    }
-    bool ret = ListInternal(&table_list, tablet_list, internal_table_name, "", 1,
+    bool ret = ListInternal(&table_list, tablet_list, table_name, "", 1,
                             FLAGS_tera_sdk_show_max_num, err);
     if (table_list.size() > 0
-        && table_list[0].table_desc->TableName() == internal_table_name) {
+        && table_list[0].table_desc->TableName() == table_name) {
         *table_info = table_list[0];
     }
     return ret;
@@ -895,14 +819,9 @@ bool ClientImpl::List(const string& table_name, TableInfo* table_info,
 
 bool ClientImpl::IsTableExist(const string& table_name, ErrorCode* err) {
     std::vector<TableInfo> table_list;
-    std::string internal_table_name;
-    if (!GetInternalTableName(table_name, err, &internal_table_name)) {
-        LOG(ERROR) << "faild to scan meta schema";
-        return false;
-    }
-    ListInternal(&table_list, NULL, internal_table_name, "", 1, 0, err);
+    ListInternal(&table_list, NULL, table_name, "", 1, 0, err);
     if (table_list.size() > 0
-        && table_list[0].table_desc->TableName() == internal_table_name) {
+        && table_list[0].table_desc->TableName() == table_name) {
         return true;
     }
     return false;
@@ -910,14 +829,9 @@ bool ClientImpl::IsTableExist(const string& table_name, ErrorCode* err) {
 
 bool ClientImpl::IsTableEnabled(const string& table_name, ErrorCode* err) {
     std::vector<TableInfo> table_list;
-    std::string internal_table_name;
-    if (!GetInternalTableName(table_name, err, &internal_table_name)) {
-        LOG(ERROR) << "faild to scan meta schema";
-        return false;
-    }
-    ListInternal(&table_list, NULL, internal_table_name, "", 1, 0, err);
+    ListInternal(&table_list, NULL, table_name, "", 1, 0, err);
     if (table_list.size() > 0
-        && table_list[0].table_desc->TableName() == internal_table_name) {
+        && table_list[0].table_desc->TableName() == table_name) {
         if (table_list[0].status == "kTableEnable") {
             return true;
         } else {
@@ -932,15 +846,10 @@ bool ClientImpl::IsTableEnabled(const string& table_name, ErrorCode* err) {
 bool ClientImpl::IsTableEmpty(const string& table_name, ErrorCode* err) {
     std::vector<TableInfo> table_list;
     std::vector<TabletInfo> tablet_list;
-    std::string internal_table_name;
-    if (!GetInternalTableName(table_name, err, &internal_table_name)) {
-        LOG(ERROR) << "faild to scan meta schema";
-        return false;
-    }
-    ListInternal(&table_list, &tablet_list, internal_table_name, "", 1,
+    ListInternal(&table_list, &tablet_list, table_name, "", 1,
                  FLAGS_tera_sdk_show_max_num, err);
     if (table_list.size() > 0
-        && table_list[0].table_desc->TableName() == internal_table_name) {
+        && table_list[0].table_desc->TableName() == table_name) {
         if (tablet_list.size() == 0
             || (tablet_list.size() == 1 && tablet_list[0].data_size <= 0)) {
             return true;
@@ -949,84 +858,6 @@ bool ClientImpl::IsTableEmpty(const string& table_name, ErrorCode* err) {
     }
     LOG(ERROR) << "table not exist: " << table_name;
     return true;
-}
-
-bool ClientImpl::GetSnapshot(const string& name, uint64_t* snapshot, ErrorCode* err) {
-    master::MasterClient master_client(cluster_->MasterAddr());
-
-    std::string internal_table_name;
-    if (!GetInternalTableName(name, err, &internal_table_name)) {
-        LOG(ERROR) << "faild to scan meta schema";
-        return false;
-    }
-    GetSnapshotRequest request;
-    GetSnapshotResponse response;
-    request.set_sequence_id(0);
-    request.set_table_name(internal_table_name);
-
-    if (master_client.GetSnapshot(&request, &response)) {
-        if (response.status() == kMasterOk) {
-            std::cout << name << " get snapshot successfully" << std::endl;
-            *snapshot = response.snapshot_id();
-            return true;
-        }
-    }
-    err->SetFailed(ErrorCode::kSystem, StatusCodeToString(response.status()));
-    std::cout << name << " get snapshot failed";
-    return false;
-}
-
-bool ClientImpl::DelSnapshot(const string& name, uint64_t snapshot, ErrorCode* err) {
-    master::MasterClient master_client(cluster_->MasterAddr());
-
-    std::string internal_table_name;
-    if (!GetInternalTableName(name, err, &internal_table_name)) {
-        LOG(ERROR) << "faild to scan meta schema";
-        return false;
-    }
-    DelSnapshotRequest request;
-    DelSnapshotResponse response;
-    request.set_sequence_id(0);
-    request.set_table_name(internal_table_name);
-    request.set_snapshot_id(snapshot);
-
-    if (master_client.DelSnapshot(&request, &response)) {
-        if (response.status() == kMasterOk) {
-            std::cout << name << " del snapshot successfully" << std::endl;
-            return true;
-        }
-    }
-    err->SetFailed(ErrorCode::kSystem, StatusCodeToString(response.status()));
-    std::cout << name << " del snapshot failed";
-    return false;
-}
-
-bool ClientImpl::Rollback(const string& name, uint64_t snapshot,
-                          const std::string& rollback_name, ErrorCode* err) {
-    master::MasterClient master_client(cluster_->MasterAddr());
-
-    std::string internal_table_name;
-    if (!GetInternalTableName(name, err, &internal_table_name)) {
-        LOG(ERROR) << "faild to scan meta schema";
-        return false;
-    }
-    RollbackRequest request;
-    RollbackResponse response;
-    request.set_sequence_id(0);
-    request.set_table_name(internal_table_name);
-    request.set_snapshot_id(snapshot);
-    request.set_rollback_name(rollback_name);
-    std::cout << name << " " << rollback_name << std::endl;
-
-    if (master_client.GetRollback(&request, &response)) {
-        if (response.status() == kMasterOk) {
-            std::cout << name << " rollback to snapshot sucessfully" << std::endl;
-            return true;
-        }
-    }
-    err->SetFailed(ErrorCode::kSystem, StatusCodeToString(response.status()));
-    std::cout << name << " rollback to snapshot failed";
-    return false;
 }
 
 bool ClientImpl::CmdCtrl(const string& command,
@@ -1060,26 +891,6 @@ bool ClientImpl::CmdCtrl(const string& command,
     return true;
 }
 
-bool ClientImpl::Rename(const std::string& old_table_name,
-                        const std::string& new_table_name,
-                        ErrorCode* err) {
-    master::MasterClient master_client(cluster_->MasterAddr());
-    RenameTableRequest request;
-    RenameTableResponse response;
-    uint64_t sequence_id = 0;
-    request.set_sequence_id(sequence_id);
-    request.set_old_table_name(old_table_name);
-    request.set_new_table_name(new_table_name);
-    bool ok = master_client.RenameTable(&request, &response);
-    if (!ok || response.status() != kMasterOk) {
-        err->SetFailed(ErrorCode::kSystem, "failed to rename table");
-        return false;
-    }
-    LOG(INFO) << "rename table OK. " << old_table_name
-              << " -> " << new_table_name;
-    return true;
-}
-
 bool ClientImpl::ListInternal(std::vector<TableInfo>* table_list,
                               std::vector<TabletInfo>* tablet_list,
                               const string& start_table_name,
@@ -1097,7 +908,8 @@ bool ClientImpl::ListInternal(std::vector<TableInfo>* table_list,
     request.set_max_tablet_num(max_tablet_found);
     request.set_start_table_name(start_table_name);
     request.set_start_tablet_key(start_tablet_key);
-    request.set_user_token(GetUserToken(user_identity_, user_passcode_));
+    request.set_user_token(GetUserToken(client_options_.user_identity,
+        client_options_.user_passcode));
 
     bool is_more = true;
     while (is_more) {
@@ -1148,9 +960,6 @@ bool ClientImpl::ParseTableEntry(const TableMeta meta, std::vector<TableInfo>* t
 
     TableSchemaToDesc(schema, table_info.table_desc);
 
-    for (int i = 0; i < meta.snapshot_list_size(); ++i) {
-        table_info.table_desc->AddSnapshot(meta.snapshot_list(i));
-    }
     table_info.status = StatusCodeToString(meta.status());
     table_list->push_back(table_info);
     return true;
@@ -1173,8 +982,32 @@ bool ClientImpl::ParseTabletEntry(const TabletMeta& meta, std::vector<TabletInfo
     return true;
 }
 
-static Mutex g_mutex;
-static bool g_is_glog_init = false;
+Transaction* ClientImpl::NewGlobalTransaction() {
+    return GlobalTxn::NewGlobalTxn(shared_from_this(), gtxn_thread_pool_, tso_cluster_);
+}
+
+bool ClientImpl::IsClientAlive(const std::string& path) {
+    if (client_zk_adapter_ != NULL) {
+        return client_zk_adapter_->IsClientAlive(path);
+    }
+    return true;
+}
+
+std::string ClientImpl::ClientSession() {
+    return session_str_;
+}
+
+sdk::ClusterFinder* ClientImpl::GetClusterFinder() {
+    return cluster_;
+}
+
+bool ClientImpl::RegisterSelf() {
+    if (client_zk_adapter_ != NULL) {
+        return client_zk_adapter_->RegisterClient(&session_str_);
+    } else {
+        return false;   
+    }
+}
 
 static int SpecifiedFlagfileCount(const std::string& confpath) {
     int count = 0;
@@ -1187,7 +1020,8 @@ static int SpecifiedFlagfileCount(const std::string& confpath) {
     return count;
 }
 
-static int InitFlags(const std::string& confpath, const std::string& log_prefix) {
+static int InitFlags(ClientOptions* client_options,
+        const std::string& confpath, const std::string& log_prefix) {
     // search conf file, priority:
     //   user-specified > ./tera.flag > ../conf/tera.flag
     std::string flagfile;
@@ -1219,10 +1053,19 @@ static int InitFlags(const std::string& confpath, const std::string& log_prefix)
     }
 
     utils::LoadFlagFile(flagfile);
+    client_options->flagfile = flagfile;
 
     if (!g_is_glog_init) {
         ::google::InitGoogleLogging(log_prefix.c_str());
         utils::SetupLog(log_prefix);
+        FLAGS_tera_log_prefix = log_prefix;
+    	// start log cleaner
+    	if (FLAGS_tera_info_log_clean_enable) {
+    	    common::LogCleaner::StartCleaner();
+    		LOG(INFO) << "start log cleaner";
+    	} else {
+    		LOG(INFO) << "log cleaner is disable";
+    	}
         g_is_glog_init = true;
     }
 
@@ -1231,19 +1074,69 @@ static int InitFlags(const std::string& confpath, const std::string& log_prefix)
     return 0;
 }
 
-Client* Client::NewClient(const string& confpath, const string& log_prefix, ErrorCode* err) {
+Client* Client::NewClient(const string& confpath,
+                          const string& log_prefix,
+                          ErrorCode* err) {
     // Protect the section from [load flagfile] to [new a client instance],
     // because the client constructor will use flagfile options to initial its private options
+
+    std::call_once(init_cluster_client_map_once, InitClusterClientMap);
+
+    bool client_existed = false;
+    ClusterClientMap::iterator it;
+
     MutexLock locker(&g_mutex);
-    if (InitFlags(confpath, log_prefix) != 0) {
+    it = cluster_client_map->find(confpath);
+    if (it != cluster_client_map->end()) {
+        client_existed = true;
+        if (auto tmp_client = (it->second->wp_client_impl).lock()) {
+            return new ClientWrapper(tmp_client);
+        }
+    }
+
+    ClientOptions client_options;
+    client_options.confpath = confpath;
+    if (!FLAGS_tera_sdk_mock_enable &&
+        InitFlags(&client_options, confpath, log_prefix) != 0) {
         if (err != NULL) {
             std::string reason = "init tera flag failed";
             err->SetFailed(ErrorCode::kBadParam, reason);
         }
         return NULL;
     }
-    return new ClientImpl(FLAGS_tera_user_identity,
-                          FLAGS_tera_user_passcode);
+    client_options.user_identity = FLAGS_tera_user_identity;
+    client_options.user_passcode = FLAGS_tera_user_passcode;
+
+    std::unique_ptr<ClientResource> client_resource;
+    // brand new client
+    if (!client_existed) {
+        client_resource.reset(new ClientResource);
+        client_resource->client_thread_pool = new ThreadPool(FLAGS_tera_sdk_thread_max_num);
+        if (FLAGS_tera_sdk_client_for_gtxn) {
+            client_resource->client_gtxn_thread_pool = new ThreadPool(FLAGS_tera_gtxn_thread_max_num);
+        }
+    } else {
+        client_resource = std::move(it->second);
+    }
+
+    std::shared_ptr<ClientImpl> client(new ClientImpl(client_options,
+            client_resource->client_thread_pool, client_resource->client_gtxn_thread_pool));
+    if (client) {
+        client_resource->wp_client_impl = client;
+        if (!client_existed) {
+            cluster_client_map->insert(std::pair<std::string, std::unique_ptr<ClientResource>>(
+                                       confpath, std::move(client_resource)));
+        } else {
+            it->second = std::move(client_resource);
+        }
+    } else {
+        if (err != NULL) {
+            std::string reason = "new ClientImpl faield";
+            err->SetFailed(ErrorCode::kSystem, reason);
+        }
+        return NULL;
+    }
+    return new ClientWrapper(client);
 }
 
 Client* Client::NewClient(const string& confpath, ErrorCode* err) {

@@ -23,11 +23,23 @@
 #include "proto/master_client.h"
 #include "proto/proto_helper.h"
 #include "proto/tabletnode_client.h"
+#include "sdk/stat_table.h"
 #include "utils/config_utils.h"
 #include "utils/schema_utils.h"
 #include "utils/string_util.h"
-#include "utils/timer.h"
+#include "common/timer.h"
 #include "utils/utils_cmd.h"
+#include "master_env.h"
+#include "master/create_table_procedure.h"
+#include "master/delete_table_procedure.h"
+#include "master/disable_table_procedure.h"
+#include "master/enable_table_procedure.h"
+#include "master/load_tablet_procedure.h"
+#include "master/move_tablet_procedure.h"
+#include "master/merge_tablet_procedure.h"
+#include "master/split_tablet_procedure.h"
+#include "master/unload_tablet_procedure.h"
+#include "master/update_table_procedure.h"
 
 DECLARE_string(tera_master_port);
 DECLARE_bool(tera_master_meta_recovery_enabled);
@@ -35,24 +47,26 @@ DECLARE_string(tera_master_meta_recovery_file);
 
 DECLARE_bool(tera_master_cache_check_enabled);
 DECLARE_int32(tera_master_cache_release_period);
-DECLARE_int32(tera_master_cache_keep_min);
 
 DECLARE_int32(tera_master_impl_thread_max_num);
 DECLARE_int32(tera_master_impl_query_thread_num);
 DECLARE_int32(tera_master_impl_retry_times);
 
-DECLARE_int32(tera_master_common_retry_period);
 DECLARE_int32(tera_master_query_tabletnode_period);
 
 DECLARE_string(tera_master_meta_table_name);
 DECLARE_string(tera_master_meta_table_path);
 DECLARE_int32(tera_master_meta_retry_times);
 
+DECLARE_string(tera_coord_type);
 DECLARE_bool(tera_zk_enabled);
 DECLARE_bool(tera_mock_zk_enabled);
 
 DECLARE_double(tera_master_workload_split_threshold);
+DECLARE_double(tera_master_workload_merge_threshold);
 DECLARE_int64(tera_master_split_tablet_size);
+DECLARE_int64(tera_master_min_split_size);
+DECLARE_double(tera_master_min_split_ratio);
 DECLARE_int64(tera_master_merge_tablet_size);
 DECLARE_bool(tera_master_kick_tabletnode_enabled);
 DECLARE_int32(tera_master_kick_tabletnode_query_fail_times);
@@ -66,24 +80,16 @@ DECLARE_int32(tera_master_load_balance_period);
 DECLARE_bool(tera_master_load_balance_table_grained);
 DECLARE_int32(tera_master_load_rpc_timeout);
 DECLARE_int32(tera_master_unload_rpc_timeout);
-DECLARE_int32(tera_master_split_rpc_timeout);
 DECLARE_int32(tera_master_tabletnode_timeout);
 DECLARE_bool(tera_master_move_tablet_enabled);
-DECLARE_int32(tera_master_load_slow_retry_times);
 DECLARE_int32(tera_master_max_move_concurrency);
 
 DECLARE_int32(tera_max_pre_assign_tablet_num);
 DECLARE_int64(tera_tablet_write_block_size);
 
-DECLARE_bool(tera_delete_obsolete_tabledir_enabled);
-
-DECLARE_string(tera_master_stat_table_name);
-DECLARE_int64(tera_master_stat_table_ttl);
-DECLARE_int64(tera_master_stat_table_interval);
-DECLARE_bool(tera_master_stat_table_enabled);
-DECLARE_int64(tera_master_stat_table_splitsize);
-
 DECLARE_int32(tera_master_gc_period);
+DECLARE_bool(tera_master_gc_trash_enabled);
+DECLARE_int64(tera_master_gc_trash_clean_period_s);
 
 DECLARE_string(tera_tabletnode_path_prefix);
 DECLARE_string(tera_leveldb_env_type);
@@ -108,13 +114,17 @@ DECLARE_int32(tera_master_schema_update_retry_times);
 DECLARE_int64(tera_master_availability_check_period);
 DECLARE_bool(tera_master_availability_check_enabled);
 
+DECLARE_bool(tera_stat_table_enabled);
+
 using namespace std::placeholders;
 
 namespace tera {
 namespace master {
 
 MasterImpl::MasterImpl()
-    : status_(kNotInited), restored_(false),
+    : status_(kNotInited),
+      thread_pool_(new ThreadPool(FLAGS_tera_master_impl_thread_max_num)),
+      restored_(false),
       tablet_manager_(new TabletManager(&this_sequence_id_, this, thread_pool_.get())),
       tabletnode_manager_(new TabletNodeManager(this)),
       user_manager_(new UserManager),
@@ -128,12 +138,12 @@ MasterImpl::MasterImpl()
       query_tabletnode_timer_id_(kInvalidTimerId),
       load_balance_scheduled_(false),
       load_balance_enabled_(false),
-      thread_pool_(new ThreadPool(FLAGS_tera_master_impl_thread_max_num)),
-      is_stat_table_(false),
-      stat_table_(NULL),
+      gc_trash_clean_enabled_(false),
+      gc_trash_clean_timer_id_(kInvalidTimerId),
       gc_enabled_(false),
       gc_timer_id_(kInvalidTimerId),
       gc_query_enable_(false),
+      executor_(new ProcedureExecutor),
       tablet_availability_(new TabletAvailability(tablet_manager_)) {
     if (FLAGS_tera_master_cache_check_enabled) {
         EnableReleaseCacheTimer();
@@ -143,49 +153,74 @@ MasterImpl::MasterImpl()
     } else {
         local_addr_ = FLAGS_tera_local_addr + ":" + FLAGS_tera_master_port;
     }
-    tabletnode::TabletNodeClient::SetThreadPool(thread_pool_.get());
-
-    if (FLAGS_tera_leveldb_env_type != "local") {
-        io::InitDfsEnv();
-    }
 
     if (FLAGS_tera_master_gc_strategy == "default") {
         LOG(INFO) << "[gc] gc strategy is BatchGcStrategy";
         gc_strategy_ = std::shared_ptr<GcStrategy>(new BatchGcStrategy(tablet_manager_));
-    } else if (FLAGS_tera_master_gc_strategy == "incremental") {
-        LOG(INFO) << "[gc] gc strategy is IncrementalGcStrategy";
-        gc_strategy_ = std::shared_ptr<GcStrategy>(new IncrementalGcStrategy(tablet_manager_));
     } else if (FLAGS_tera_master_gc_strategy == "trackable") {
         LOG(INFO) << "[gc] gc strategy is Trackable";
     } else {
-        LOG(WARNING) << "Unknown gc strategy: " << FLAGS_tera_master_gc_strategy
-            << ", default gc strategy: BatchGcStrategy will take effect";
-        gc_strategy_ = std::shared_ptr<GcStrategy>(new BatchGcStrategy(tablet_manager_));
+        LOG(ERROR) << "Unknown gc strategy: " << FLAGS_tera_master_gc_strategy
+            << ", exit";
+        exit(EXIT_FAILURE);
+    }
+    executor_->Start();
+    if (FLAGS_tera_stat_table_enabled) {
+        stat_table_.reset(new sdk::StatTable(thread_pool_.get(),
+                                             sdk::StatTableCustomer::kMaster,
+                                             local_addr_));
     }
 }
 
 MasterImpl::~MasterImpl() {
-    LOG(INFO) << "dest impl";
-    delete stat_table_;
-    zk_adapter_.reset(NULL);
+    LOG(INFO) << "begin destory impl";
+    executor_->Stop();
+    executor_.reset();
+    stat_table_.reset();
+    zk_adapter_.reset();
+    LOG(INFO) << "end destory impl";
 }
 
 bool MasterImpl::Init() {
-    if (FLAGS_tera_zk_enabled) {
+    if (FLAGS_tera_leveldb_env_type != "local") {
+        io::InitDfsEnv();
+    }
+    if (FLAGS_tera_coord_type.empty()) {
+        LOG(ERROR) << "Note: We don't recommend that use '"
+                   << "--tera_[zk|ins|mock_zk|mock_ins]_enabled' flag for your cluster coord"
+                   << " replace by '--tera_coord_type=[zk|ins|mock_zk|mock_ins|fake_zk]'"
+                   << " flag is usually recommended.";
+    }
+    if (FLAGS_tera_coord_type == "zk"
+            || (FLAGS_tera_coord_type.empty() && FLAGS_tera_zk_enabled)) {
         zk_adapter_.reset(new MasterZkAdapter(this, local_addr_));
-    } else if (FLAGS_tera_ins_enabled) {
+    } else if (FLAGS_tera_coord_type == "ins"
+            || (FLAGS_tera_coord_type.empty() && FLAGS_tera_ins_enabled)) {
         LOG(INFO) << "ins mode" ;
         zk_adapter_.reset(new InsMasterZkAdapter(this, local_addr_));
-    } else if (FLAGS_tera_mock_zk_enabled) {
+    } else if (FLAGS_tera_coord_type == "mock_zk"
+            || (FLAGS_tera_coord_type.empty() && FLAGS_tera_mock_zk_enabled)) {
         LOG(INFO) << "mock zk mode" ;
         zk_adapter_.reset(new MockMasterZkAdapter(this, local_addr_));
-    } else if (FLAGS_tera_mock_ins_enabled) {
+    } else if (FLAGS_tera_coord_type == "mock_ins"
+            || (FLAGS_tera_coord_type.empty() && FLAGS_tera_mock_ins_enabled)) {
         LOG(INFO) << "mock ins mode" ;
         zk_adapter_.reset(new MockInsMasterZkAdapter(this, local_addr_));
-    } else {
+    } else if (FLAGS_tera_coord_type == "fake_zk"
+            || FLAGS_tera_coord_type.empty()) {
         LOG(INFO) << "fake zk mode!";
         zk_adapter_.reset(new FakeMasterZkAdapter(this, local_addr_));
     }
+
+    MasterEnv().Init(this,
+            tabletnode_manager_,
+            tablet_manager_,
+            size_scheduler_,
+            load_scheduler_,
+            thread_pool_,
+            executor_,
+            tablet_availability_,
+            stat_table_);
 
     LOG(INFO) << "[acl] " << (FLAGS_tera_acl_enabled ? "enabled" : "disabled");
     SetMasterStatus(kIsSecondary);
@@ -225,8 +260,7 @@ bool MasterImpl::Restore(const std::map<std::string, std::string>& tabletnode_li
     std::vector<TabletMeta> tablet_list;
     CollectAllTabletInfo(tabletnode_list, &tablet_list);
 
-    std::string meta_tablet_addr;
-    if (!RestoreMetaTablet(tablet_list, &meta_tablet_addr)) {
+    if (!RestoreMetaTablet(tablet_list)) {
         SetMasterStatus(kOnWait);
         return false;
     }
@@ -234,8 +268,6 @@ bool MasterImpl::Restore(const std::map<std::string, std::string>& tabletnode_li
     SetMasterStatus(kIsReadonly);
 
     user_manager_->SetupRootUser();
-    tablet_manager_->FindTablet(FLAGS_tera_master_meta_table_name, "", &meta_tablet_);
-    zk_adapter_->UpdateRootTabletNode(meta_tablet_addr);
 
     RestoreUserTablet(tablet_list);
 
@@ -274,8 +306,8 @@ void MasterImpl::CollectAllTabletInfo(const std::map<std::string, std::string>& 
     sem_destroy(&finish_counter);
 }
 
-bool MasterImpl::RestoreMetaTablet(const std::vector<TabletMeta>& tablet_list,
-                                   std::string* meta_tablet_addr) {
+bool MasterImpl::RestoreMetaTablet(const std::vector<TabletMeta>& tablet_list) {
+                                   //std::string* meta_tablet_addr) {
     // find the unique loaded complete meta tablet
     // if meta_tablet is loaded by more than one tabletnode, unload them all
     // if meta_tablet is incomplete (not from "" to ""), unload it
@@ -320,13 +352,12 @@ bool MasterImpl::RestoreMetaTablet(const std::vector<TabletMeta>& tablet_list,
             }
         }
     }
-
+    std::string meta_tablet_addr;
     if (loaded && !loaded_twice) {
-        meta_tablet_addr->assign(meta_tablet_meta.server_addr());
-    } else if (!LoadMetaTablet(meta_tablet_addr)) {
+        meta_tablet_addr.assign(meta_tablet_meta.server_addr());
+    } else if (!LoadMetaTablet(&meta_tablet_addr)) {
         return false;
     }
-
     // meta table has been loaded up by now
     if (FLAGS_tera_master_meta_recovery_enabled) {
         const std::string& filename = FLAGS_tera_master_meta_recovery_file;
@@ -334,26 +365,24 @@ bool MasterImpl::RestoreMetaTablet(const std::vector<TabletMeta>& tablet_list,
             LOG(ERROR) << kSms << "fail to recovery meta table from backup";
             ThisThread::Sleep(60 * 1000);
         }
-        TabletPtr meta_tablet;
-        tablet_manager_->FindTablet(FLAGS_tera_master_meta_table_name, "",
-                                     &meta_tablet);
-        meta_tablet->SetAddrAndStatus(*meta_tablet_addr, kTableReady);
-
-        while (!tablet_manager_->ClearMetaTable(*meta_tablet_addr)
-               || !tablet_manager_->DumpMetaTable(*meta_tablet_addr)) {
-            TryKickTabletNode(*meta_tablet_addr);
-            if (!LoadMetaTablet(meta_tablet_addr)) {
+        // load MetaTablet, clear all data in MetaTablet and dump current memory snapshot to MetaTable
+        while (!tablet_manager_->ClearMetaTable(meta_tablet_addr)
+               || !tablet_manager_->DumpMetaTable(meta_tablet_addr)) {
+            TryKickTabletNode(meta_tablet_addr);
+            if (!LoadMetaTablet(&meta_tablet_addr)) {
                 return false;
             }
-            meta_tablet->SetAddr(*meta_tablet_addr);
         }
+        TabletNodePtr meta_node = tabletnode_manager_->FindTabletNode(meta_tablet_addr, NULL);
+        meta_tablet_ = tablet_manager_->AddMetaTablet(meta_node, zk_adapter_);
+        LOG(INFO) << "recovery meta table from backup file success";
         return true;
     }
 
     StatusCode status = kTabletNodeOk;
-    while (!LoadMetaTable(*meta_tablet_addr, &status)) {
-        TryKickTabletNode(*meta_tablet_addr);
-        if (!LoadMetaTablet(meta_tablet_addr)) {
+    while (!LoadMetaTable(meta_tablet_addr, &status)) {
+        TryKickTabletNode(meta_tablet_addr);
+        if (!LoadMetaTablet(&meta_tablet_addr)) {
             return false;
         }
     }
@@ -362,6 +391,7 @@ bool MasterImpl::RestoreMetaTablet(const std::vector<TabletMeta>& tablet_list,
 
 void MasterImpl::RestoreUserTablet(const std::vector<TabletMeta>& report_meta_list) {
     std::vector<TabletMeta>::const_iterator meta_it = report_meta_list.begin();
+    std::set<TablePtr> disabled_tables;
     for (; meta_it != report_meta_list.end(); ++meta_it) {
         const TabletMeta& meta = *meta_it;
         const std::string& table_name = meta.table_name();
@@ -372,7 +402,9 @@ void MasterImpl::RestoreUserTablet(const std::vector<TabletMeta>& report_meta_li
         const std::string& key_end = meta.key_range().key_end();
         const std::string& path = meta.path();
         const std::string& server_addr = meta.server_addr();
+        TabletNodePtr node = tabletnode_manager_->FindTabletNode(meta.server_addr(), NULL);
         CompactStatus compact_status = meta.compact_status();
+        TabletMeta::TabletStatus status = meta.status();
 
         TabletPtr tablet;
         if (!tablet_manager_->FindTablet(table_name, key_start, &tablet)
@@ -380,16 +412,26 @@ void MasterImpl::RestoreUserTablet(const std::vector<TabletMeta>& report_meta_li
             LOG(INFO) << "unload unexpected table: " << path << ", server: "
                 << server_addr;
             TabletMeta unknown_meta = meta;
-            unknown_meta.set_status(kTableUnLoading);
+            unknown_meta.set_status(TabletMeta::kTabletUnloading);
             TabletPtr unknown_tablet(new Tablet(unknown_meta));
-            UnloadClosure done =
-                std::bind(&MasterImpl::UnloadTabletCallback, this, unknown_tablet,
-                          FLAGS_tera_master_impl_retry_times, _1, _2, _3, _4);
-            UnloadTabletAsync(unknown_tablet, done);
+            unknown_tablet->AssignTabletNode(node);
+            TryUnloadTablet(unknown_tablet);
         } else {
-            tablet->SetStatus(kTableReady);
+            tablet->AssignTabletNode(node);
+            tablet->SetStatus(TabletMeta::kTabletReady);
+            // tablets of a table may be partially disabled before master deaded, so we need try disable
+            // the table once more on master restarted
+            if (tablet->GetTable()->GetStatus() == kTableDisable) {
+                disabled_tables.insert(tablet->GetTable());
+                continue;
+            }
             tablet->UpdateSize(meta);
             tablet->SetCompactStatus(compact_status);
+            // if the actual status of a tablet reported by ts is unloading, try move it to make sure it be loaded finally
+            if (status == TabletMeta::kTabletUnloading || status == TabletMeta::kTabletUnloading2) {
+                TryMoveTablet(tablet);
+                continue;
+            }
         }
     }
 
@@ -401,46 +443,79 @@ void MasterImpl::RestoreUserTablet(const std::vector<TabletMeta>& report_meta_li
         if (tablet->GetTableName() == FLAGS_tera_master_meta_table_name) {
             continue;
         }
+        // there may exists in transition tablets here as we may have a MoveTabletProcedure for it
+        // if its reported status is unloading
+        if (tablet->InTransition()) {
+            LOG(WARNING) << "give up restore in transition tablet, tablet: " << tablet;
+            continue;
+        }
         const std::string& server_addr = tablet->GetServerAddr();
-        if (tablet->GetStatus() == kTableReady) {
+        if (tablet->GetStatus() == TabletMeta::kTabletReady) {
             VLOG(8) << "READY Tablet, " << tablet;
             continue;
         }
-        tablet_availability_->AddNotReadyTablet(tablet->GetPath());
-        CHECK(tablet->GetStatus() == kTableNotInit);
+        if (tablet->GetStatus() != TabletMeta::kTabletOffline) {
+            LOG(ERROR) << kSms << "tablet " << tablet
+                << ", unexpected status: " << StatusCodeToString(tablet->GetStatus());
+            continue;
+        }
+        if (tablet->GetTable()->GetStatus() == kTableDisable) {
+            disabled_tables.insert(tablet->GetTable());
+            continue;
+        }
 
         TabletNodePtr node;
         if (server_addr.empty()) {
-            tablet->SetStatus(kTableOffLine);
             VLOG(8) << "OFFLINE Tablet with empty addr, " << tablet;
         } else if (!tabletnode_manager_->FindTabletNode(server_addr, &node)) {
-            tablet->SetStatus(kTableOffLine);
             VLOG(8) << "OFFLINE Tablet of Dead TS, " << tablet;
         } else if (node->state_ == kReady) {
-            tablet->SetStatus(kTableOffLine);
             VLOG(8) << "OFFLINE Tablet of Alive TS, " << tablet;
-            TryLoadTablet(tablet, server_addr);
+            TryLoadTablet(tablet, node);
         } else {
             // Ts not response, we count its tablets as Ready and wait for it to be kicked.
-            tablet->SetStatus(kTableReady);
+            tablet->SetStatus(TabletMeta::kTabletReady);
             VLOG(8) << "UNKNOWN Tablet of No-Response TS, " << tablet;
+        }
+    }
+    for (auto& table : disabled_tables) {
+        if (table->LockTransition()) {
+            DisableAllTablets(table);
         }
     }
 }
 
-void MasterImpl::LoadAllOffLineTablet() {
-    VLOG(5) << "LoadAllOffLineTablet()";
-    std::vector<TabletPtr> all_tablet_list;
-    tablet_manager_->ShowTable(NULL, &all_tablet_list);
-    std::vector<TabletPtr>::iterator it = all_tablet_list.begin();
-    for (; it != all_tablet_list.end(); ++it) {
-        TabletPtr tablet = *it;
-        const std::string& path = tablet->GetPath();
-        if (tablet->GetStatus() == kTableOffLine) {
-            LOG(INFO) << "load offline tablet: " << path;
-            TryLoadTablet(tablet);
+void MasterImpl::DisableAllTablets(TablePtr table) {
+    std::vector<TabletPtr> tablet_meta_list;
+    table->GetTablet(&tablet_meta_list);
+    int in_transition_tablet_cnt = 0;
+    for (uint32_t i = 0; i < tablet_meta_list.size(); ++i) {
+        TabletPtr tablet = tablet_meta_list[i];
+        if (tablet->GetStatus() == TabletMeta::kTabletDisable) {
+            continue;
+        }
+        if (tablet->LockTransition()) {
+            if (tablet->GetStatus() == TabletMeta::kTabletOffline) {
+                tablet->DoStateTransition(TabletEvent::kTableDisable);
+                tablet->UnlockTransition();
+                continue;
+            }
+            tablet->UnlockTransition();
+            if (TryUnloadTablet(tablet)) {
+                in_transition_tablet_cnt++;
+            }
+        }
+        else {
+            in_transition_tablet_cnt++;
         }
     }
+    VLOG(23) << "table: " << table->GetTableName() << ", in transition num: " << in_transition_tablet_cnt;
+    if (in_transition_tablet_cnt == 0) {
+        table->UnlockTransition();
+        return;
+    }
+    ThreadPool::Task task = std::bind(&MasterImpl::DisableAllTablets, this, table);
+    thread_pool_->DelayTask(500, task); // magic number 500ms
 }
 
 bool MasterImpl::LoadMetaTablet(std::string* server_addr) {
@@ -456,8 +531,10 @@ bool MasterImpl::LoadMetaTablet(std::string* server_addr) {
     lg_schema->set_compress_type(false);
     lg_schema->set_store_type(MemoryStore);
 
+    TabletNodePtr node;
     while (tabletnode_manager_->ScheduleTabletNode(size_scheduler_.get(), "",
-                                                    false, server_addr)) {
+                                                    false, &node)) {
+        *server_addr = node->GetAddr();
         meta.set_server_addr(*server_addr);
         StatusCode status = kTabletNodeOk;
         if (LoadTabletSync(meta, schema, &status)) {
@@ -467,7 +544,6 @@ bool MasterImpl::LoadMetaTablet(std::string* server_addr) {
         LOG(ERROR) << "fail to load meta tablet on node: " << *server_addr
             << ", status: " << StatusCodeToString(status);
         TryKickTabletNode(*server_addr);
-        // ThisThread::Sleep(FLAGS_tera_master_common_retry_period);
     }
     LOG(ERROR) << "no live node to load meta tablet";
     return false;
@@ -494,36 +570,6 @@ bool MasterImpl::CheckUserPermissionOnTable(const std::string& token, TablePtr t
            || (table->GetSchema().admin() == user_manager_->TokenToUserName(token)));
 }
 
-template <typename Request>
-bool MasterImpl::HasPermissionOnTable(const Request* request, TablePtr table) {
-    if (!FLAGS_tera_acl_enabled
-        || IsRootUser(request->user_token())
-        || ((table->GetSchema().admin_group() == "") && (table->GetSchema().admin() == ""))
-        || (request->has_user_token()
-            && CheckUserPermissionOnTable(request->user_token(), table))) {
-        return true;
-
-    }
-    return false;
-}
-
-template <typename Request, typename Response, typename Callback>
-bool MasterImpl::HasPermissionOrReturn(const Request* request, Response* response,
-                                       Callback* done, TablePtr table, const char* operate) {
-    // check permission
-    if (HasPermissionOnTable(request, table)) {
-        return true;
-    } else {
-        std::string token = request->has_user_token() ? request->user_token() : "";
-        LOG(INFO) << "[acl] " << user_manager_->TokenToUserName(token)
-                  << ":" << token << " fail to " << operate;
-        response->set_sequence_id(request->sequence_id());
-        response->set_status(kNotPermission);
-        done->Run();
-        return false;
-    }
-}
-
 bool MasterImpl::LoadMetaTable(const std::string& meta_tablet_addr,
                                StatusCode* ret_status) {
     tablet_manager_->ClearTableList();
@@ -533,7 +579,7 @@ bool MasterImpl::LoadMetaTable(const std::string& meta_tablet_addr,
     request.set_table_name(FLAGS_tera_master_meta_table_name);
     request.set_start("");
     request.set_end("");
-    tabletnode::TabletNodeClient meta_node_client(meta_tablet_addr);
+    tabletnode::TabletNodeClient meta_node_client(thread_pool_.get(), meta_tablet_addr);
     while (meta_node_client.ScanTablet(&request, &response)) {
         if (response.status() != kTabletNodeOk) {
             SetStatusCode(response.status(), ret_status);
@@ -544,18 +590,8 @@ bool MasterImpl::LoadMetaTable(const std::string& meta_tablet_addr,
         }
         if (response.results().key_values_size() <= 0) {
             LOG(INFO) << "load meta table success";
-            TabletPtr meta_tablet;
-            TableSchema schema;
-            schema.set_kv_only(true);
-            LocalityGroupSchema* lg = schema.add_locality_groups();
-            schema.set_name(FLAGS_tera_master_meta_table_name);
-            lg->set_name("lg_meta");
-            lg->set_compress_type(false);
-            lg->set_store_type(MemoryStore);
-            tablet_manager_->AddTablet(FLAGS_tera_master_meta_table_name, "", "",
-                      FLAGS_tera_master_meta_table_path, meta_tablet_addr,
-                      schema, kTableNotInit, 0, &meta_tablet);
-            meta_tablet->SetStatus(kTableReady);
+            TabletNodePtr meta_node = tabletnode_manager_->FindTabletNode(meta_tablet_addr, NULL);
+            meta_tablet_ = tablet_manager_->AddMetaTablet(meta_node, zk_adapter_);
             return true;
         }
         uint32_t record_size = response.results().key_values_size();
@@ -570,7 +606,6 @@ bool MasterImpl::LoadMetaTable(const std::string& meta_tablet_addr,
                 user_manager_->LoadUserMeta(record.key(), record.value());
             } else if (first_key_char == '@') {
                 tablet_manager_->LoadTableMeta(record.key(), record.value());
-                FillAlias(record.key(), record.value());
             } else if (first_key_char > '@') {
                 tablet_manager_->LoadTabletMeta(record.key(), record.value());
             } else {
@@ -589,17 +624,6 @@ bool MasterImpl::LoadMetaTable(const std::string& meta_tablet_addr,
     return false;
 }
 
-void MasterImpl::FillAlias(const std::string& key, const std::string& value) {
-    TableMeta meta;
-    ParseMetaTableKeyValue(key, value, &meta);
-    if (!meta.schema().alias().empty()) {
-        MutexLock locker(&alias_mutex_);
-        alias_[meta.schema().alias()] = meta.schema().name();
-        LOG(INFO) << "table alias:" << meta.schema().alias()
-                  << " -> " << meta.schema().name();
-    }
-}
-
 bool MasterImpl::LoadMetaTableFromFile(const std::string& filename,
                                           StatusCode* ret_status) {
     tablet_manager_->ClearTableList();
@@ -614,17 +638,6 @@ bool MasterImpl::LoadMetaTableFromFile(const std::string& filename,
     std::string key, value;
     while (ReadFromStream(ifs, &key, &value)) {
         if (key.empty()) {
-            LOG(INFO) << "load meta table success, " << count << " records";
-            TabletPtr meta_tablet;
-            TableSchema schema;
-            LocalityGroupSchema* lg = schema.add_locality_groups();
-            schema.set_name(FLAGS_tera_master_meta_table_name);
-            lg->set_name("lg_meta");
-            lg->set_compress_type(false);
-            lg->set_store_type(MemoryStore);
-            tablet_manager_->AddTablet(FLAGS_tera_master_meta_table_name, "", "",
-                      FLAGS_tera_master_meta_table_path, "",
-                      schema, kTableNotInit, 0, &meta_tablet);
             return true;
         }
 
@@ -633,7 +646,6 @@ bool MasterImpl::LoadMetaTableFromFile(const std::string& filename,
             user_manager_->LoadUserMeta(key, value);
         } else if (first_key_char == '@') {
             tablet_manager_->LoadTableMeta(key, value);
-            FillAlias(key, value);
         } else if (first_key_char > '@') {
             tablet_manager_->LoadTabletMeta(key, value);
         } else {
@@ -643,7 +655,6 @@ bool MasterImpl::LoadMetaTableFromFile(const std::string& filename,
         count++;
     }
     tablet_manager_->ClearTableList();
-
     SetStatusCode(kIOError, ret_status);
     LOG(ERROR) << "fail to load meta table: " << StatusCodeToString(kIOError);
     return false;
@@ -691,126 +702,8 @@ void MasterImpl::CreateTable(const CreateTableRequest* request,
         return;
     }
 
-    {
-        TablePtr table;
-        if (tablet_manager_->FindTable(request->table_name(), &table)) {
-            LOG(ERROR) << "Fail to create table: " << request->table_name()
-                << ", table already exist";
-            response->set_status(kTableExist);
-            done->Run();
-            return;
-        }
-        if (tablet_manager_->FindTable(request->schema().alias(), &table)) {
-            LOG(ERROR) << "Fail to create table: " << request->schema().alias()
-                << ", table already exist";
-            response->set_status(kTableExist);
-            done->Run();
-            return;
-        }
-        if (FLAGS_tera_acl_enabled
-            && !IsRootUser(request->user_token())
-            && FLAGS_tera_only_root_create_table) {
-                response->set_sequence_id(request->sequence_id());
-                response->set_status(kNotPermission);
-                done->Run();
-                return;
-        }
-        if (!request->schema().alias().empty()) {
-            bool alias_exist = false;
-            {
-                MutexLock locker(&alias_mutex_);
-                if (alias_.find(request->schema().alias()) != alias_.end()) {
-                    alias_exist =  true;
-                }
-            }
-            if (alias_exist) {
-                LOG(ERROR) << "Fail to create table: " << request->table_name()
-                << ", table already exist, alias:" << request->schema().alias() ;
-                response->set_status(kTableExist);
-                done->Run();
-                return;
-            }
-        }
-    }
-
-    // try clean env, if there is a dir same as table_name, delete it first
-    if (!io::MoveEnvDirToTrash(request->table_name())) {
-        LOG(ERROR) << "Fail to create table: " << request->table_name()
-            << ", cannot move old table dir to trash";
-        response->set_status(kTableExist);
-        done->Run();
-        return;
-    }
-
-    int32_t tablet_num = request->delimiters_size() + 1;
-    bool delivalid = true;
-    for (int32_t i = 1; i < tablet_num - 1; i++) {
-        // TODO: Use user defined comparator
-        if (request->delimiters(i) <= request->delimiters(i-1)) {
-            delivalid = false;
-            break;
-        }
-    }
-    if (tablet_num > FLAGS_tera_max_pre_assign_tablet_num || !delivalid
-        || request->schema().locality_groups_size() < 1) {
-        if (tablet_num > FLAGS_tera_max_pre_assign_tablet_num) {
-            LOG(WARNING) << "Too many pre-create tablets " << tablet_num;
-        } else if (!delivalid) {
-            LOG(WARNING) << "Invalid delimiters for " << request->table_name();
-        } else {
-            LOG(WARNING) << "No LocalityGroupSchema for " << request->table_name();
-        }
-        response->set_status(kInvalidArgument);
-        done->Run();
-        return;
-    }
-
-    std::vector<TabletPtr> tablets;
-    const std::string& table_name = request->table_name();
-    StatusCode status = kMasterOk;
-    int32_t add_num = 0;
-    tablets.resize(tablet_num);
-
-    for (int32_t i = 1; i <= tablet_num; i++) {
-        std::string path = leveldb::GetTabletPathFromNum(request->table_name(), i);
-        const std::string& start_key = (i == 1) ? "" : request->delimiters(i-2);
-        const std::string& end_key = (i == tablet_num) ? "" : request->delimiters(i-1);
-
-        if (!tablet_manager_->AddTablet(table_name, start_key, end_key, path,
-                                         "", request->schema(), kTableNotInit,
-                                         FLAGS_tera_tablet_write_block_size * 1024,
-                                         &tablets[i-1], &status)) {
-            LOG(ERROR) << "Add table fail: " << table_name;
-            break;
-        }
-        add_num++;
-    }
-
-    if (add_num != tablet_num) {
-        tablet_manager_->DeleteTable(table_name, NULL);
-        response->set_status(status);
-        done->Run();
-        return;
-    }
-    const LocalityGroupSchema& lg0 = request->schema().locality_groups(0);
-    LOG(INFO) << "New table is created: " << request->table_name()
-        << ", store_medium: " << lg0.store_type()
-        << ", compress: " << lg0.compress_type()
-        << ", raw_key: " << request->schema().raw_key()
-        << ", has " << tablet_num << " tablets, schema: "
-        << request->schema().ShortDebugString();
-    // write meta tablet
-    TablePtr table = tablets[0]->GetTable();
-    std::string table_alias = table->GetSchema().alias();
-    if (!table_alias.empty()) {
-        MutexLock locker(&alias_mutex_);
-        alias_[table_alias] = table_name;
-    }
-    WriteClosure closure =
-        std::bind(&MasterImpl::AddMetaCallback, this, table, tablets,
-                   FLAGS_tera_master_meta_retry_times, request, response, done, _1, _2, _3, _4);
-    BatchWriteMetaTableAsync(table, tablets, false, closure);
-    return;
+    std::shared_ptr<Procedure> proc(new CreateTableProcedure(request, response, done, thread_pool_.get()));
+    MasterEnv().GetExecutor()->AddProcedure(proc);
 }
 
 void MasterImpl::DeleteTable(const DeleteTableRequest* request,
@@ -827,47 +720,18 @@ void MasterImpl::DeleteTable(const DeleteTableRequest* request,
     }
 
     TablePtr table;
-    if (!tablet_manager_->FindTable(request->table_name(), &table)) {
-        LOG(ERROR) << "fail to delete table: " << request->table_name()
+    if (!tablet_manager_->FindTable(request->table_name(), &table) || !table->LockTransition()) {
+        LOG_IF(ERROR, !table) << "fail to delete table: " << request->table_name()
             << ", table not exist";
-        response->set_status(kTableNotFound);
+        LOG_IF(ERROR, table) << "fail to delete table: " << request->table_name()
+            << ", current in another state transition";
+        StatusCode code = !table ? kTableNotFound : kTableNotSupport;
+        response->set_status(code);
         done->Run();
         return;
     }
-    if (!HasPermissionOrReturn(request, response, done, table, "delete table")) {
-        return;
-    }
-
-    TableStatus old_status;
-    if (!table->SetStatus(kTableDeleting, &old_status)) {
-        LOG(ERROR) << "fail to delete table: " << request->table_name()
-            << ", table status: " << StatusCodeToString(old_status);
-        response->set_status(static_cast<StatusCode>(old_status));
-        done->Run();
-        return;
-    }
-
-    std::vector<TabletPtr> tablets;
-    table->GetTablet(&tablets);
-
-    // check if all tablet disable
-    for (uint32_t i = 0; i < tablets.size(); ++i) {
-        TabletPtr tablet = tablets[i];
-        if (tablet->GetStatus() != kTabletDisable
-            && tablet->GetStatus() != kTableOffLine) {
-            CHECK(table->SetStatus(old_status));
-            LOG(ERROR) << "fail to delete table: " << request->table_name()
-                << ", tablet status: " << StatusCodeToString(tablet->GetStatus());
-            response->set_status(kTabletReady);
-            done->Run();
-            return;
-        }
-    }
-
-    WriteClosure closure =
-        std::bind(&MasterImpl::DeleteTableCallback, this, table, tablets,
-                   FLAGS_tera_master_impl_retry_times, response, done, _1, _2, _3, _4);
-    BatchWriteMetaTableAsync(table, tablets, true, closure);
+    std::shared_ptr<Procedure> proc(new DeleteTableProcedure(table, request, response, done, thread_pool_.get()));
+    MasterEnv().GetExecutor()->AddProcedure(proc);
 }
 
 void MasterImpl::DisableTable(const DisableTableRequest* request,
@@ -882,33 +746,20 @@ void MasterImpl::DisableTable(const DisableTableRequest* request,
         done->Run();
         return;
     }
-
     TablePtr table;
-    if (!tablet_manager_->FindTable(request->table_name(), &table)) {
-        LOG(ERROR) << "fail to disable table: " << request->table_name()
+    if (!tablet_manager_->FindTable(request->table_name(), &table) || !table->LockTransition()) {
+        LOG_IF(ERROR, !table) << "fail to disable table: " << request->table_name()
             << ", table not exist";
-        response->set_status(kTableNotFound);
-        done->Run();
-        return;
-    }
-    if (!HasPermissionOrReturn(request, response, done, table, "disable table")) {
-        return;
-    }
-
-    TableStatus old_status;
-    if (!table->SetStatus(kTableDisable, &old_status)) {
-        LOG(ERROR) << "fail to disable table: " << request->table_name()
-            << ", table status: " << StatusCodeToString(old_status);
-        response->set_status(static_cast<StatusCode>(old_status));
+        LOG_IF(ERROR, table) << "fail to disable table: " << request->table_name()
+            << ", current in another state transition";
+        StatusCode code = !table ? kTableNotFound : kTableNotSupport;
+        response->set_status(code);
         done->Run();
         return;
     }
 
-    WriteClosure closure =
-        std::bind(&MasterImpl::UpdateTableRecordForDisableCallback, this, table,
-                   FLAGS_tera_master_meta_retry_times, response, done, _1, _2, _3, _4);
-    BatchWriteMetaTableAsync(std::bind(&Table::ToMetaTableKeyValue, table, _1, _2),
-                             false, closure);
+    std::shared_ptr<Procedure> proc(new DisableTableProcedure(table, request, response, done, thread_pool_.get()));
+    MasterEnv().GetExecutor()->AddProcedure(proc);
 }
 
 void MasterImpl::EnableTable(const EnableTableRequest* request,
@@ -925,32 +776,18 @@ void MasterImpl::EnableTable(const EnableTableRequest* request,
     }
 
     TablePtr table;
-    if (!tablet_manager_->FindTable(request->table_name(), &table)) {
-        LOG(ERROR) << "fail to enable table: " << request->table_name()
+    if (!tablet_manager_->FindTable(request->table_name(), &table) || !table->LockTransition()) {
+        LOG_IF(ERROR, !table) << "fail to enable table: " << request->table_name()
             << ", table not exist";
-        response->set_status(kTableNotFound);
+        LOG_IF(ERROR, table) << "fail to enable table: " << request->table_name()
+            << ", current in another state transition";
+        StatusCode code = !table ? kTableNotFound : kTableNotSupport;
+        response->set_status(code);
         done->Run();
         return;
     }
-    if (!HasPermissionOrReturn(request, response, done, table, "enable table")) {
-        return;
-    }
-
-    TableStatus old_status;
-    if (!table->SetStatus(kTableEnable, &old_status)) {
-        LOG(ERROR) << "fail to enable table: " << request->table_name()
-            << ", table status: " << StatusCodeToString(old_status);
-        response->set_status(static_cast<StatusCode>(old_status));
-        done->Run();
-        return;
-    }
-
-    // write meta tablet
-    WriteClosure closure =
-        std::bind(&MasterImpl::UpdateTableRecordForEnableCallback, this, table,
-                   FLAGS_tera_master_meta_retry_times, response, done, _1, _2, _3, _4);
-    BatchWriteMetaTableAsync(std::bind(&Table::ToMetaTableKeyValue, table, _1, _2),
-                             false, closure);
+    std::shared_ptr<Procedure> proc(new EnableTableProcedure(table, request, response, done, thread_pool_.get()));
+    MasterEnv().GetExecutor()->AddProcedure(proc);
 }
 
 void MasterImpl::UpdateCheck(const UpdateCheckRequest* request,
@@ -965,7 +802,9 @@ void MasterImpl::UpdateCheck(const UpdateCheckRequest* request,
         done->Run();
         return;
     }
-    if (!HasPermissionOrReturn(request, response, done, table, "update-check table")) {
+    if (!HasPermission(request, table, "update-check table")) {
+        response->set_status(kNotPermission);
+        done->Run();
         return;
     }
     if (!FLAGS_tera_online_schema_update_enabled) {
@@ -995,43 +834,19 @@ void MasterImpl::UpdateTable(const UpdateTableRequest* request,
     }
 
     TablePtr table;
-    if (!tablet_manager_->FindTable(request->table_name(), &table)) {
-        LOG(ERROR) << "Fail to update table: " << request->table_name()
+    if (!tablet_manager_->FindTable(request->table_name(), &table) || !table->LockTransition()) {
+        LOG_IF(ERROR, !table) << "fail to update table: " << request->table_name()
             << ", table not exist";
-        response->set_status(kTableNotExist);
-        done->Run();
-        return;
-    }
-    if (!HasPermissionOrReturn(request, response, done, table, "update table")) {
-        return;
-    }
-
-    if (request->schema().locality_groups_size() < 1) {
-        LOG(WARNING) << "No LocalityGroupSchema for " << request->table_name();
-        response->set_status(kInvalidArgument);
-        done->Run();
-        return;
-    }
-    if (!table->PrepareUpdate(request->schema())) {
-        // another schema-update is doing...
-        LOG(INFO) << "[update] no concurrent schema-update, table:" << table;
-        response->set_status(kInvalidArgument);
+        LOG_IF(ERROR, table) << "fail to update table: " << request->table_name()
+            << ", current in another state transition";
+        StatusCode code = !table ? kTableNotFound : kTableNotSupport;
+        response->set_status(code);
         done->Run();
         return;
     }
 
-    // write meta tablet
-    WriteClosure closure =
-        std::bind(&MasterImpl::UpdateTableRecordForUpdateCallback, this, table,
-                   FLAGS_tera_master_meta_retry_times, response, done, _1, _2, _3, _4);
-    BatchWriteMetaTableAsync(std::bind(&Table::ToMetaTableKeyValue, table, _1, _2),
-                             false, closure);
-    return;
-}
-
-void MasterImpl::CompactTable(const CompactTableRequest* request,
-                              CompactTableResponse* response,
-                              google::protobuf::Closure* done) {
+    std::shared_ptr<Procedure> proc(new UpdateTableProcedure(table, request, response, done, thread_pool_.get()));
+    MasterEnv().GetExecutor()->AddProcedure(proc);
 }
 
 void MasterImpl::SearchTable(const SearchTableRequest* request,
@@ -1142,6 +957,7 @@ void MasterImpl::ShowTables(const ShowTablesRequest* request,
             TabletPtr tablet = tablet_list[i];
             TabletMeta meta;
             tablet->ToMeta(&meta);
+            meta.set_last_move_time_us(tablet->LastMoveTime());
             tablet_meta_list->add_meta()->CopyFrom(meta);
             tablet_meta_list->add_counter()->CopyFrom(tablet->GetCounter());
             tablet_meta_list->add_timestamp(tablet->UpdateTime());
@@ -1266,47 +1082,27 @@ void MasterImpl::CmdCtrl(const CmdCtrlRequest* request,
         ReloadConfig(response);
     } else if (request->command() == "kick") {
         KickTabletNodeCmdCtrl(request, response);
+    } else if (request->command() == "table") {
+        TableCmdCtrl(request, response);
     } else {
         response->set_status(kInvalidArgument);
     }
 }
 
 void MasterImpl::AddUserInfoToMetaCallback(UserPtr user_ptr,
-                                           int32_t retry_times,
                                            const OperateUserRequest* rpc_request,
                                            OperateUserResponse* rpc_response,
                                            google::protobuf::Closure* rpc_done,
-                                           WriteTabletRequest* request,
-                                           WriteTabletResponse* response,
-                                           bool rpc_failed, int error_code) {
-    StatusCode status = response->status();
-    delete request;
-    delete response;
-    if (rpc_failed || status != kTabletNodeOk) {
-        if (rpc_failed) {
-            LOG(ERROR) << "[user-manager] fail to add to meta tablet: "
-                << sofa::pbrpc::RpcErrorCodeToString(error_code) << ", "
-                << user_ptr->GetUserInfo().user_name() << "...";
-        } else {
-            LOG(ERROR) << "[user-manager] fail to add to meta tablet: "
-                << StatusCodeToString(status) << ", " << user_ptr->GetUserInfo().user_name() << "...";
-        }
-        if (retry_times <= 0) {
-            rpc_response->set_status(kMetaTabletError);
-            rpc_done->Run();
-        } else {
-            WriteClosure done =
-                std::bind(&MasterImpl::AddUserInfoToMetaCallback, this, user_ptr,
-                           retry_times - 1, rpc_request, rpc_response, rpc_done, _1, _2, _3, _4);
-            SuspendMetaOperation(std::bind(&User::ToMetaTableKeyValue, user_ptr, _1, _2),
-                                 rpc_request->op_type() == kDeleteUser, done);
-        }
+                                           bool succ) {
+    if (!succ) {
+        rpc_response->set_status(kMetaTabletError);
+        rpc_done->Run();
         return;
     }
     rpc_response->set_status(kMasterOk);
     rpc_done->Run();
     LOG(INFO) << "[user-manager] write user info to meta table done: "
-        << StatusCodeToString(status) << ", " << user_ptr->GetUserInfo().user_name();
+            << user_ptr->GetUserInfo().user_name();
     std::string user_name = user_ptr->GetUserInfo().user_name();
     UserOperateType op_type = rpc_request->op_type();
     if (op_type == kDeleteUser) {
@@ -1413,11 +1209,13 @@ void MasterImpl::OperateUser(const OperateUserRequest* request,
         return;
     }
     UserPtr user_ptr(new User(user_name, operated_user));
-    WriteClosure closure =
-        std::bind(&MasterImpl::AddUserInfoToMetaCallback, this, user_ptr,
-                   FLAGS_tera_master_meta_retry_times, request, response, done, _1, _2, _3, _4);
-    BatchWriteMetaTableAsync(std::bind(&User::ToMetaTableKeyValue, user_ptr, _1, _2),
-                             is_delete, closure);
+
+    std::string key, value;
+    user_ptr->ToMetaTableKeyValue(&key, &value);
+    MetaWriteRecord record {key, value, is_delete};
+    UpdateMetaClosure closure = std::bind(
+            &MasterImpl::AddUserInfoToMetaCallback, this, user_ptr, request, response, done, _1);
+    MasterEnv().BatchWriteMetaTableAsync(record, closure, FLAGS_tera_master_meta_retry_times);
 }
 
 void MasterImpl::SafeModeCmdCtrl(const CmdCtrlRequest* request,
@@ -1458,13 +1256,42 @@ void MasterImpl::ReloadConfig(CmdCtrlResponse* response) {
     }
 }
 
-void MasterImpl::TabletCmdCtrl(const CmdCtrlRequest* request,
-                               CmdCtrlResponse* response) {
+void MasterImpl::TableCmdCtrl(const CmdCtrlRequest* request,
+                              CmdCtrlResponse* response) {
     if (request->arg_list_size() < 2) {
         response->set_status(kInvalidArgument);
         return;
     }
 
+    if (request->arg_list(0) == "split") {
+        TabletPtr tablet;
+        StatusCode status;
+        for (int32_t i = 2; i < request->arg_list_size(); i++) {
+            if (!tablet_manager_->SearchTablet(request->arg_list(1),
+                                               request->arg_list(i),
+                                               &tablet, &status)) {
+                response->set_status(kInvalidArgument);
+                return;
+            }
+            VLOG(10) << "table split: key " << request->arg_list(i)
+                << ", " << tablet;
+            //TrySplitTablet(tablet, request->arg_list(i));
+        }
+        response->set_status(kMasterOk);
+    } else {
+        response->set_status(kInvalidArgument);
+    }
+    return;
+}
+
+void MasterImpl::TabletCmdCtrl(const CmdCtrlRequest* request,
+                               CmdCtrlResponse* response) {
+    int32_t request_argc = request->arg_list_size();
+    if (request_argc < 2) {
+        response->set_status(kInvalidArgument);
+        return;
+    }
+    const std::string& op = request->arg_list(0);
     const std::string& tablet_id = request->arg_list(1);
     TabletPtr tablet;
     bool found = false;
@@ -1483,40 +1310,45 @@ void MasterImpl::TabletCmdCtrl(const CmdCtrlRequest* request,
         return;
     }
 
-    if (request->arg_list(0) == "reload") {
-        std::string current_server_addr = tablet->GetServerAddr();
-        TryMoveTablet(tablet,
-                      current_server_addr,
-                      true);  // force to unload and load tablet even it on the same ts
-
-    } else if (request->arg_list(0) == "move") {
-        if (request->arg_list_size() > 3) {
-            response->set_status(kInvalidArgument);
-            return;
-        }
-        std::string expect_server_addr;
-        if (request->arg_list_size() == 3) {
-            expect_server_addr = request->arg_list(2);
-        }
-        TryMoveTablet(tablet, expect_server_addr);
+    if (op == "reload" && request_argc == 2) {
+        TabletNodePtr current_tablet_node = tablet->GetTabletNode();
+        TryMoveTablet(tablet, current_tablet_node);
         response->set_status(kMasterOk);
-    } else if (request->arg_list(0) == "split") {
-        if (request->arg_list_size() > 3) {
+    } else if (op == "reloadx" && request_argc == 3
+               && tablet->SetErrorIgnoredLGs(request->arg_list(2))) {
+        TabletNodePtr current_tablet_node = tablet->GetTabletNode();
+        TryMoveTablet(tablet, current_tablet_node);
+        response->set_status(kMasterOk);
+    } else if (op == "move" && request_argc == 3) {
+        std::string expect_server_addr = request->arg_list(2);
+        TabletNodePtr dest_node;
+        if (!expect_server_addr.empty() &&
+                !tabletnode_manager_->FindTabletNode(expect_server_addr, &dest_node)) {
             response->set_status(kInvalidArgument);
             return;
         }
+        TryMoveTablet(tablet, dest_node);
+        response->set_status(kMasterOk);
+    } else if (op == "movex" && request_argc == 4
+            && tablet->SetErrorIgnoredLGs(request->arg_list(3))) {
+        std::string expect_server_addr = request->arg_list(2);
+        TabletNodePtr dest_node;
+        if (!expect_server_addr.empty() &&
+                !tabletnode_manager_->FindTabletNode(expect_server_addr, &dest_node)) {
+            response->set_status(kInvalidArgument);
+            return;
+        }
+        TryMoveTablet(tablet, dest_node);
+        response->set_status(kMasterOk);
+    } else if (op == "split" && (request_argc == 2 || request_argc == 3)) {
         std::string split_key;
-        if (request->arg_list_size() == 3) {
+        if (request_argc == 3) {
             split_key = request->arg_list(2);
             LOG(INFO) << "User specified split key: " << split_key;
         }
         TrySplitTablet(tablet, split_key);
         response->set_status(kMasterOk);
-    } else if (request->arg_list(0) == "merge") {
-        if (request->arg_list_size() > 3) {
-            response->set_status(kInvalidArgument);
-            return;
-        }
+    } else if (op == "merge" && request_argc == 2) {
         TryMergeTablet(tablet);
         response->set_status(kMasterOk);
     } else {
@@ -1612,11 +1444,7 @@ bool MasterImpl::CheckStatusSwitch(MasterStatus old_status,
 }
 
 bool MasterImpl::GetMetaTabletAddr(std::string* addr) {
-    if (restored_ && meta_tablet_->GetStatus() == kTableReady) {
-        *addr = meta_tablet_->GetServerAddr();
-        return true;
-    }
-    return false;
+    return (restored_ && tablet_manager_->GetMetaTabletAddr(addr));
 }
 
 /////////// load balance //////////
@@ -1641,19 +1469,8 @@ void MasterImpl::QueryTabletNode() {
     LOG(INFO) << "query tabletnodes: " << tabletnode_array.size()
         << ", id " << query_tabletnode_timer_id_;
 
-    if (FLAGS_tera_master_stat_table_enabled && !is_stat_table_) {
-        CreateStatTable();
-        ErrorCode err;
-        const std::string& tablename = FLAGS_tera_master_stat_table_name;
-        stat_table_ = new TableImpl(tablename, thread_pool_.get(), NULL);
-        FLAGS_tera_sdk_perf_counter_log_interval = 60;
-        if (stat_table_->OpenInternal(&err)) {
-            is_stat_table_ = true;
-        } else {
-            LOG(ERROR) << "fail to open stat_table.";
-            delete stat_table_;
-            stat_table_ = NULL;
-        }
+    if (FLAGS_tera_stat_table_enabled) {
+        stat_table_->OpenStatTable();
     }
 
     CHECK_EQ(query_pending_count_.Get(), 0);
@@ -1882,7 +1699,7 @@ bool MasterImpl::TabletNodeLoadBalance(TabletNodePtr tabletnode, Scheduler* sche
     std::vector<TabletPtr>::const_iterator it;
     for (it = tablet_list.begin(); it != tablet_list.end(); ++it) {
         TabletPtr tablet = *it;
-        if (tablet->GetStatus() != kTableReady
+        if (tablet->GetStatus() != TabletMeta::kTabletReady
             || tablet->GetTableName() == FLAGS_tera_master_meta_table_name) {
             continue;
         }
@@ -1892,9 +1709,12 @@ bool MasterImpl::TabletNodeLoadBalance(TabletNodePtr tabletnode, Scheduler* sche
             split_size = tablet->GetSchema().split_size();
         }
         if (write_workload > FLAGS_tera_master_workload_split_threshold) {
-            split_size /= 2;
-            VLOG(6) << tablet->GetPath() << " write_workload too large, split it by size: "
-                << split_size;
+            if (split_size > FLAGS_tera_master_min_split_size) {
+                split_size = std::max(FLAGS_tera_master_min_split_size,
+                                      static_cast<int64_t>(split_size * FLAGS_tera_master_min_split_ratio));
+            }
+            VLOG(6) << tablet->GetPath() << ", trigger workload split, write_workload: " << write_workload
+                << ", split it by size(M): " << split_size;
         }
         int64_t merge_size = FLAGS_tera_master_merge_tablet_size;
         if (tablet->GetSchema().has_merge_size() && tablet->GetSchema().merge_size() > 0) {
@@ -1903,12 +1723,14 @@ bool MasterImpl::TabletNodeLoadBalance(TabletNodePtr tabletnode, Scheduler* sche
         if (tablet->GetDataSize() < 0) {
             // tablet size is error, skip it
             continue;
-        } else if (tablet->GetDataSize() > (split_size << 20)) {
+        } else if (tablet->GetDataSize() > (split_size << 20) &&
+                   tablet->TestAndSetSplitTimeStamp(get_micros())) {
             TrySplitTablet(tablet);
             any_tablet_split = true;
             continue;
         } else if (tablet->GetDataSize() < (merge_size << 20)) {
-            if (write_workload < 1) {
+            if (!tablet->IsBusy() &&
+                write_workload < FLAGS_tera_master_workload_merge_threshold) {
                 TryMergeTablet(tablet);
             } else {
                 VLOG(6) << "[merge] skip high workload tablet: "
@@ -1916,7 +1738,7 @@ bool MasterImpl::TabletNodeLoadBalance(TabletNodePtr tabletnode, Scheduler* sche
             }
             continue;
         }
-        if (tablet->GetStatus() == kTableReady) {
+        if (tablet->GetStatus() == TabletMeta::kTabletReady) {
             tablet_candidates.push_back(tablet);
         }
     }
@@ -1926,14 +1748,15 @@ bool MasterImpl::TabletNodeLoadBalance(TabletNodePtr tabletnode, Scheduler* sche
         return false;
     }
 
-    TabletNodePtr dst_tabletnode;
+    TabletNodePtr dest_tabletnode;
     size_t tablet_index = 0;
     if (scheduler->MayMoveOut(tabletnode, table_name)
-            && tabletnode_manager_->ScheduleTabletNode(scheduler, table_name, true, &dst_tabletnode)
+            && tabletnode_manager_->ScheduleTabletNode(scheduler, table_name, true, &dest_tabletnode)
             && tabletnode_manager_->ShouldMoveData(scheduler, table_name, tabletnode,
-                                                    dst_tabletnode, tablet_candidates,
-                                                    &tablet_index)) {
-        TryMoveTablet(tablet_candidates[tablet_index], dst_tabletnode->GetAddr());
+                                                    dest_tabletnode, tablet_candidates,
+                                                    &tablet_index)
+            && dest_tabletnode->GetState() == kReady) {
+        TryMoveTablet(tablet_candidates[tablet_index], dest_tabletnode);
         return true;
     }
     return false;
@@ -2040,7 +1863,7 @@ void MasterImpl::RefreshTabletNodeList(const std::map<std::string, std::string>&
     std::map<std::string, std::string>::iterator it;
     for (it = del_ts_list.begin(); it != del_ts_list.end(); ++it) {
         const std::string& old_addr = it->first;
-        DeleteTabletNode(old_addr);
+        DeleteTabletNode(old_addr, it->second);
     }
 
     if (add_ts_list.size() > 0 && !restored_) {
@@ -2058,19 +1881,11 @@ void MasterImpl::RefreshTabletNodeList(const std::map<std::string, std::string>&
 
 void MasterImpl::AddTabletNode(const std::string& tabletnode_addr,
                                const std::string& tabletnode_uuid) {
-    if (FLAGS_tera_master_tabletnode_timeout > 0) {
-        MutexLock lock(&tabletnode_timer_mutex_);
-        std::map<std::string, int64_t>::iterator it =
-            tabletnode_timer_id_map_.find(tabletnode_addr);
-        if (it != tabletnode_timer_id_map_.end()) {
-            uint64_t timer_id = it->second;
-            thread_pool_->CancelTask(timer_id);
-            tabletnode_timer_id_map_.erase(it);
-        }
-    }
-
     TabletNodePtr node = tabletnode_manager_->AddTabletNode(tabletnode_addr, tabletnode_uuid);
-
+    if (!node) {
+        return;
+    }
+    CHECK(node->GetState() == kReady);
     // update tabletnode info
     timeval update_time;
     gettimeofday(&update_time, NULL);
@@ -2083,131 +1898,73 @@ void MasterImpl::AddTabletNode(const std::string& tabletnode_addr,
     state.update_time_ = update_time.tv_sec * 1000 + update_time.tv_usec / 1000;
 
     tabletnode_manager_->UpdateTabletNode(tabletnode_addr, state);
-    NodeState old_state;
-    node->SetState(kReady, &old_state);
-
 
     // If all tabletnodes restart in one zk callback,
     // master will not enter restore/wait state;
     // meta table must be scheduled to load from here.
-    TabletPtr meta_tablet;
-    if (tablet_manager_->FindTablet(FLAGS_tera_master_meta_table_name, "",
-                                    &meta_tablet)
-        && meta_tablet->GetStatus() == kTableOffLine) {
-        LOG(INFO) << "try load meta tablet on new ts: " << tabletnode_addr;
-        TryLoadTablet(meta_tablet);
+    if (meta_tablet_->GetStatus() == TabletMeta::kTabletOffline) {
+        TryLoadTablet(meta_tablet_);
     }
-
     // load offline tablets
+    // update tabletnode
     std::vector<TabletPtr> tablet_list;
     tablet_manager_->FindTablet(tabletnode_addr,
                                 &tablet_list,
-                                true);  // need disabled table/tablets
+                                false);  // need disabled table/tablets
     std::vector<TabletPtr>::iterator it = tablet_list.begin();
     for (; it != tablet_list.end(); ++it) {
         TabletPtr tablet = *it;
-        if (tablet->SetStatusIf(kTableOffLine, kTabletPending)) {
-            ProcessOffLineTablet(tablet);
-        }
-        if (tablet->GetStatus() == kTableOffLine) {
-            LOG(INFO) << "try load, " << tablet;
-            TryLoadTablet(tablet, tabletnode_addr);
+        if (tablet->LockTransition()) {
+            if (tablet->GetStatus() != TabletMeta::kTabletOffline) {
+                tablet->UnlockTransition();
+                LOG(WARNING) << "tablet cannot deal TsOffline event, tablet:  " << tablet;
+                continue;
+            }
+            std::shared_ptr<Procedure> load(new LoadTabletProcedure(tablet, node, thread_pool_.get()));
+            if (MasterEnv().GetExecutor()->AddProcedure(load) == 0) {
+                LOG(WARNING) << "add to procedure_executor fail, may duplicated procid: " << load->ProcId();
+                tablet->UnlockTransition();
+            }
         }
     }
-
     TryLeaveSafeMode();
 }
 
-void MasterImpl::DeleteTabletNode(const std::string& tabletnode_addr) {
-    tabletnode_manager_->DelTabletNode(tabletnode_addr);
+void MasterImpl::DeleteTabletNode(const std::string& tabletnode_addr, const std::string& uuid) {
+    TabletNodePtr node = tabletnode_manager_->DelTabletNode(tabletnode_addr);
+    if (!node) {
+        return;
+    }
     // possible status: running, readonly, wait.
     if (GetMasterStatus() == kOnWait) {
         return;
     }
-
-    // move all tablets on the deleted tabletnode
-    std::vector<TabletPtr> tablet_list;
-    tablet_manager_->FindTablet(tabletnode_addr,
-                                &tablet_list,
-                                true);  // need disabled tables/tablets
-    std::vector<TabletPtr>::iterator it;
-    for (it = tablet_list.begin(); it != tablet_list.end(); ++it) {
-        TabletPtr tablet = *it;
-        tablet_availability_->AddNotReadyTablet(tablet->GetPath());
-
-        if (FLAGS_tera_master_tabletnode_timeout > 0
-            && tablet->GetTableName() != FLAGS_tera_master_meta_table_name) {
-            tablet->SetStatusIf(kTabletPending, kTableReady);
-        } else if (tablet->SetStatusIf(kTableOffLine, kTableReady)) {
-            ProcessOffLineTablet(tablet);
-        }
-
-        if (tablet->GetStatus() == kTableUnLoadFail && tablet->GetMergeParam() != NULL) {
-            MergeTabletUnloadCallback(tablet);
-        }
-
-        if (tablet->SetStatusIf(kTableOffLine, kTableLoadFail)
-            || tablet->SetStatusIf(kTableOffLine, kTableUnLoadFail)) {
-            ProcessOffLineTablet(tablet);
-        }
-
-        if (tablet->SetStatusIf(kTableOnSplit, kTableSplitFail)) {
-            ScanClosure done =
-                std::bind(&MasterImpl::ScanMetaCallbackForSplit, this, tablet, _1, _2, _3, _4);
-            ScanMetaTableAsync(tablet->GetTableName(), tablet->GetKeyStart(),
-                               tablet->GetKeyEnd(), done);
-        }
-
-        if (tablet->GetTableName() == FLAGS_tera_master_meta_table_name
-            && tablet->GetStatus() == kTableOffLine) {
-            LOG(INFO) << "try move meta tablet";
-            TryLoadTablet(tablet);
-        }
-    }
-
     TryEnterSafeMode();
 
-    if (FLAGS_tera_master_tabletnode_timeout > 0) {
-        LOG(INFO) << "try move tablet " << FLAGS_tera_master_tabletnode_timeout
-            << "(ms) later";
-        MutexLock lock(&tabletnode_timer_mutex_);
-        ThreadPool::Task task =
-            std::bind(&MasterImpl::TryMovePendingTablets, this, tabletnode_addr);
-        int64_t timer_id = thread_pool_->DelayTask(
-            FLAGS_tera_master_tabletnode_timeout, task);
-        tabletnode_timer_id_map_[tabletnode_addr] = timer_id;
-    } else if (GetMasterStatus() == kIsRunning) {
-        VLOG(5) << "MoveOffLineTablets: " << tabletnode_addr;
-        MoveOffLineTablets(tablet_list);
-    }
-}
-
-void MasterImpl::TryMovePendingTablets(std::string tabletnode_addr) {
     std::vector<TabletPtr> tablet_list;
-    tablet_manager_->FindTablet(tabletnode_addr,
-                                &tablet_list,
-                                true);  // need disabled tables/tablets
-    std::vector<TabletPtr>::const_iterator it;
-    for (it = tablet_list.begin(); it != tablet_list.end(); ++it) {
+    tablet_manager_->FindTablet(tabletnode_addr, &tablet_list, false);
+    for (auto it = tablet_list.begin(); it != tablet_list.end(); ++it) {
         TabletPtr tablet = *it;
-        if (tablet->SetStatusIf(kTableOffLine, kTabletPending)) {
-            ProcessOffLineTablet(tablet);
+        if (tablet->LockTransition()) {
+            // tablet maybe already been updated by another async TabletXxxProcedure (for example a 
+            // manual triggered MoveTabletProcedure), leading tablet info got through FindTablet 
+            // is stale. skip these kinds of tablets
+            if (tablet->GetTabletNode() && tablet->GetTabletNode()->GetId() != uuid) {
+                LOG(WARNING) << "stale tablet info, tablet: " << tablet << " has already been resumed @ [" 
+                    << tablet->GetTabletNode()->GetAddr() << ", " << tablet->GetTabletNode()->GetId();
+                tablet->UnlockTransition();
+                continue;
+            }
+            if (tablet->GetStatus() == TabletMeta::kTabletLoadFail) {
+                LOG(INFO) << "try reload tablet in status kTabletLoadFail as ts down, tablet:" << tablet;
+                tablet->DoStateTransition(TabletEvent::kTsOffline);
+            }
+            std::shared_ptr<Procedure> move(new MoveTabletProcedure(tablet, node, thread_pool_.get()));
+            if (MasterEnv().GetExecutor()->AddProcedure(move) == 0) {
+                LOG(WARNING) << "add to procedure_executor fail, may duplicated procid: " << move->ProcId();
+                tablet->UnlockTransition();
+            }
         }
-    }
-    if (GetMasterStatus() == kIsRunning) {
-        VLOG(5) << "MoveOffLineTablets: " << tabletnode_addr;
-        MoveOffLineTablets(tablet_list);
-    }
-}
-
-void MasterImpl::TryMovePendingTablet(TabletPtr tablet) {
-    if (tablet->SetStatusIf(kTableOffLine, kTabletPending)) {
-        ProcessOffLineTablet(tablet);
-    }
-    if (GetMasterStatus() == kIsRunning
-        && tablet->GetStatus() == kTableOffLine) {
-        LOG(INFO) << "try move pending tablet, " << tablet;
-        TryLoadTablet(tablet);
     }
 }
 
@@ -2238,6 +1995,7 @@ bool MasterImpl::EnterSafeMode(StatusCode* status) {
     tablet_manager_->Stop();
     DisableTabletNodeGcTimer();
     DisableLoadBalance();
+    DisableGcTrashCleanTimer();
     return true;
 }
 
@@ -2271,6 +2029,7 @@ bool MasterImpl::LeaveSafeMode(StatusCode* status) {
     EnableQueryTabletNodeTimer();
     EnableTabletNodeGcTimer();
     EnableLoadBalance();
+    EnableGcTrashCleanTimer();
 
     std::vector<TabletNodePtr> node_array;
     tabletnode_manager_->GetAllTabletNodeInfo(&node_array);
@@ -2284,20 +2043,6 @@ bool MasterImpl::LeaveSafeMode(StatusCode* status) {
     return true;
 }
 
-void MasterImpl::LoadAllOffLineTablets() {
-    std::vector<TabletPtr> all_tablet_list;
-    tablet_manager_->ShowTable(NULL, &all_tablet_list);
-
-    std::vector<TabletPtr>::iterator it;
-    for (it = all_tablet_list.begin(); it != all_tablet_list.end(); ++it) {
-        TabletPtr tablet = *it;
-        if (tablet->GetStatus() == kTableOffLine) {
-            LOG(INFO) << "try load offline tablet, " << tablet;
-            TryLoadTablet(tablet);
-        }
-    }
-}
-
 void MasterImpl::LoadAllDeadNodeTablets() {
     std::vector<TabletPtr> all_tablet_list;
     tablet_manager_->ShowTable(NULL, &all_tablet_list);
@@ -2305,7 +2050,7 @@ void MasterImpl::LoadAllDeadNodeTablets() {
     std::vector<TabletPtr>::iterator it;
     for (it = all_tablet_list.begin(); it != all_tablet_list.end(); ++it) {
         TabletPtr tablet = *it;
-        if (tablet->GetStatus() != kTableOffLine) {
+        if (tablet->GetStatus() != TabletMeta::kTabletOffline) {
             continue;
         }
         TabletNodePtr node;
@@ -2317,27 +2062,12 @@ void MasterImpl::LoadAllDeadNodeTablets() {
         TryLoadTablet(tablet);
     }
 }
-
-void MasterImpl::MoveOffLineTablets(const std::vector<TabletPtr>& tablet_list) {
-    std::vector<TabletPtr>::const_iterator it;
-    for (it = tablet_list.begin(); it != tablet_list.end(); ++it) {
-        TabletPtr tablet = *it;
-        if (tablet->GetStatus() == kTableOffLine) {
-            LOG(INFO) << "try move offline tablet, " << tablet;
-            TryLoadTablet(tablet);
-        }
-    }
-}
-
 void MasterImpl::TryKickTabletNode(const std::string& tabletnode_addr) {
     if (!FLAGS_tera_master_kick_tabletnode_enabled) {
         LOG(INFO) << "will not kick tabletnode " << tabletnode_addr;
         return;
     }
     LOG(INFO) << "try kick tabletnode " << tabletnode_addr << " ...";
-//    std::function<void>* callback =
-//        std::bind(&MasterImpl::KickTabletNodeAsync, tabletnode_addr);
-//    thread_pool_->AddTask(callback);
 
     TabletNodePtr tabletnode;
     if (!tabletnode_manager_->FindTabletNode(tabletnode_addr, &tabletnode)) {
@@ -2421,7 +2151,7 @@ bool MasterImpl::LoadTabletSync(const TabletMeta& meta,
         return false;
     }
 
-    tabletnode::TabletNodeClient node_client(meta.server_addr(),
+    tabletnode::TabletNodeClient node_client(thread_pool_.get(), meta.server_addr(),
                                              FLAGS_tera_master_load_rpc_timeout);
 
     LoadTabletRequest request;
@@ -2441,150 +2171,6 @@ bool MasterImpl::LoadTabletSync(const TabletMeta& meta,
     return false;
 }
 
-void MasterImpl::LoadTabletAsync(TabletPtr tablet, LoadClosure done, uint64_t) {
-    tabletnode::TabletNodeClient node_client(tablet->GetServerAddr(),
-                                            FLAGS_tera_master_load_rpc_timeout);
-    LoadTabletRequest* request = new LoadTabletRequest;
-    LoadTabletResponse* response = new LoadTabletResponse;
-    request->set_tablet_name(tablet->GetTableName());
-    request->set_sequence_id(this_sequence_id_.Inc());
-    request->mutable_key_range()->set_key_start(tablet->GetKeyStart());
-    request->mutable_key_range()->set_key_end(tablet->GetKeyEnd());
-    request->set_path(tablet->GetPath());
-    request->mutable_schema()->CopyFrom(tablet->GetSchema());
-    request->set_session_id(tablet->GetServerId());
-
-    TablePtr table = tablet->GetTable();
-    std::vector<uint64_t> snapshot_id;
-    std::vector<uint64_t> snapshot_seq;
-    table->ListSnapshot(&snapshot_id);
-    tablet->ListSnapshot(&snapshot_seq);
-    assert(snapshot_id.size() == snapshot_seq.size());
-    for (uint32_t i = 0; i < snapshot_id.size(); ++i) {
-        request->add_snapshots_id(snapshot_id[i]);
-        request->add_snapshots_sequence(snapshot_seq[i]);
-    }
-    std::vector<std::string> rollback_names;
-    std::vector<Rollback> rollbacks;
-    table->ListRollback(&rollback_names);
-    tablet->ListRollback(&rollbacks);
-    assert(rollback_names.size() == rollbacks.size());
-    for (uint32_t i = 0; i < rollbacks.size(); ++i) {
-        request->add_rollbacks()->CopyFrom(rollbacks[i]);
-    }
-
-    TabletMeta meta;
-    tablet->ToMeta(&meta);
-    CHECK(meta.parent_tablets_size() <= 2)
-        << "too many parents tablets: " << meta.parent_tablets_size();
-    for (int32_t i = 0; i < meta.parent_tablets_size(); ++i) {
-        request->add_parent_tablets(meta.parent_tablets(i));
-    }
-
-    LOG(INFO) << "LoadTabletAsync id: " << request->sequence_id() << ", "
-        << tablet;
-    node_client.LoadTablet(request, response, done);
-}
-
-void MasterImpl::LoadTabletCallback(TabletPtr tablet, int32_t retry,
-                                    LoadTabletRequest* request,
-                                    LoadTabletResponse* response, bool failed,
-                                    int error_code) {
-    CHECK(tablet->GetStatus() == kTableOnLoad);
-    StatusCode status = response->status();
-    delete request;
-    delete response;
-    const std::string& server_addr = tablet->GetServerAddr();
-
-    // server down
-    TabletNodePtr node;
-    if (!tabletnode_manager_->FindTabletNode(server_addr, &node)) {
-        LOG(ERROR) << "fail to load tablet: server down, " << tablet;
-        tablet->SetStatusIf(kTableOffLine, kTableOnLoad);
-        ProcessOffLineTablet(tablet);
-        TryLoadTablet(tablet, server_addr);
-        return;
-    }
-
-    // server restart
-    if (node->uuid_ != tablet->GetServerId()) {
-        LOG(ERROR) << "fail to load tablet: server restart, " << tablet;
-        tablet->SetStatusIf(kTableOffLine, kTableOnLoad);
-        ProcessOffLineTablet(tablet);
-        TryLoadTablet(tablet, server_addr);
-        return;
-    }
-
-    // success
-    if (!failed && (status == kTabletNodeOk || status == kTabletReady)) {
-        LOG(INFO) << "load tablet success, " << tablet;
-        tablet->SetStatusIf(kTableReady, kTableOnLoad);
-        tablet_availability_->EraseNotReadyTablet(tablet->GetPath());
-        if (tablet->GetTableName() == FLAGS_tera_master_meta_table_name) {
-            CHECK(tablet->GetPath() == FLAGS_tera_master_meta_table_path);
-            zk_adapter_->UpdateRootTabletNode(server_addr);
-            ResumeMetaOperation();
-            return;
-        }
-        ProcessReadyTablet(tablet);
-
-        // load next
-        node->FinishLoad(tablet);
-        TabletPtr next_tablet;
-        while (node->LoadNextWaitTablet(&next_tablet)) {
-            if (next_tablet->SetAddrAndStatusIf(server_addr, kTableOnLoad, kTableOffLine)) {
-                next_tablet->SetServerId(node->uuid_);
-                WriteClosure done =
-                    std::bind(&MasterImpl::UpdateMetaForLoadCallback, this, next_tablet,
-                              FLAGS_tera_master_meta_retry_times, _1, _2, _3, _4);
-                BatchWriteMetaTableAsync(std::bind(&Tablet::ToMetaTableKeyValue, next_tablet, _1, _2),
-                                         false, done);
-                break;
-            }
-            node->FinishLoad(next_tablet);
-        }
-        return;
-    }
-
-    // fail
-    if (failed) {
-        LOG(WARNING) << "fail to load tablet: "
-            << sofa::pbrpc::RpcErrorCodeToString(error_code) << ", " << tablet;
-    } else {
-        LOG(WARNING) << "fail to load tablet: " << StatusCodeToString(status)
-            << ", " << tablet;
-    }
-
-    // abort
-    if (!failed && status == kTabletOnLoad) {
-        // extend max retry times when tablet need repair
-        if (retry > FLAGS_tera_master_load_slow_retry_times) {
-            LOG(ERROR) << kSms << "abort LoadTablet: try unload, " << tablet;
-            UnloadClosure done =
-                std::bind(&MasterImpl::UnloadTabletCallback, this, tablet,
-                           FLAGS_tera_master_impl_retry_times, _1, _2, _3, _4);
-            UnloadTabletAsync(tablet, done);
-            return;
-        }
-        if (retry > FLAGS_tera_master_impl_retry_times && retry % 10 == 0) {
-            LOG(ERROR) << kSms << "slow load, retry: " << retry << ", " << tablet;
-        }
-    } else if (retry > FLAGS_tera_master_impl_retry_times) {
-        LOG(ERROR) << kSms << "abort LoadTablet: try unload, " << tablet;
-        UnloadClosure done =
-            std::bind(&MasterImpl::UnloadTabletCallback, this, tablet,
-                       FLAGS_tera_master_impl_retry_times, _1, _2, _3, _4);
-        UnloadTabletAsync(tablet, done);
-        return;
-    }
-
-    // retry
-    ThreadPool::Task task =
-        std::bind(&MasterImpl::RetryLoadTablet, this, tablet, retry + 1);
-    thread_pool_->DelayTask(
-        FLAGS_tera_master_control_tabletnode_retry_period, task);
-}
-
 bool MasterImpl::UnloadTabletSync(const std::string& table_name,
                                   const std::string& key_start,
                                   const std::string& key_end,
@@ -2592,7 +2178,7 @@ bool MasterImpl::UnloadTabletSync(const std::string& table_name,
                                   StatusCode* status) {
     VLOG(5) << "UnloadTabletSync() for " << table_name << " ["
         << DebugString(key_start) << ", " << DebugString(key_end) << "]";
-    tabletnode::TabletNodeClient node_client(server_addr,
+    tabletnode::TabletNodeClient node_client(thread_pool_.get(), server_addr,
                                                   FLAGS_tera_master_unload_rpc_timeout);
 
     UnloadTabletRequest request;
@@ -2614,756 +2200,10 @@ bool MasterImpl::UnloadTabletSync(const std::string& table_name,
     return true;
 }
 
-void MasterImpl::UnloadTabletAsync(TabletPtr tablet, UnloadClosure done) {
-    tabletnode::TabletNodeClient node_client(tablet->GetServerAddr(),
-            FLAGS_tera_master_unload_rpc_timeout);
-    UnloadTabletRequest* request = new UnloadTabletRequest;
-    UnloadTabletResponse* response = new UnloadTabletResponse;
-    request->set_sequence_id(this_sequence_id_.Inc());
-    request->set_tablet_name(tablet->GetTableName());
-    request->mutable_key_range()->set_key_start(tablet->GetKeyStart());
-    request->mutable_key_range()->set_key_end(tablet->GetKeyEnd());
-    LOG(INFO) << "UnloadTabletAsync id: " << request->sequence_id() << ", "
-        << tablet;
-    node_client.UnloadTablet(request, response, done);
-}
-
-void MasterImpl::UnloadTabletCallback(TabletPtr tablet, int32_t retry,
-                                      UnloadTabletRequest* request,
-                                      UnloadTabletResponse* response,
-                                      bool failed, int error_code) {
-    StatusCode status = response->status();
-    delete request;
-    delete response;
-
-    CHECK(tablet->GetStatus() == kTableUnLoading
-          || tablet->GetStatus() == kTableOnLoad
-          || tablet->GetStatus() == kTableOnSplit);
-
-    // tablet server addr may change later, so copy one
-    std::string server_addr = tablet->GetServerAddr();
-
-    // server down
-    TabletNodePtr node;
-    if (!tabletnode_manager_->FindTabletNode(server_addr, &node)) {
-        LOG(ERROR) << "abort UnloadTablet: server down, " << tablet;
-        if (tablet->GetMergeParam() != NULL) {
-            CHECK(tablet->GetStatus() == kTableUnLoading);
-            MergeTabletUnloadCallback(tablet);
-        } else if (tablet->SetAddrAndStatusIf("", kTableOffLine, kTableUnLoading)) {
-            ProcessOffLineTablet(tablet);
-            TryLoadTablet(tablet);
-        } else if (tablet->SetAddrAndStatusIf("", kTableOffLine, kTableOnLoad)) {
-            ProcessOffLineTablet(tablet);
-            TryLoadTablet(tablet);
-        } else {
-            CHECK(tablet->GetStatus() == kTableOnSplit);
-            ScanClosure done =
-                std::bind(&MasterImpl::ScanMetaCallbackForSplit, this, tablet, _1, _2, _3, _4);
-            ScanMetaTableAsync(tablet->GetTableName(), tablet->GetKeyStart(),
-                               tablet->GetKeyEnd(), done);
-        }
-        return;
-    }
-
-    // server restart (only OnLoad tablet care this)
-    if (tablet->GetStatus() == kTableOnLoad && node->uuid_ != tablet->GetServerId()) {
-        LOG(ERROR) << "abort UnloadTablet: server restart, " << tablet;
-        tablet->SetStatusIf(kTableOffLine, kTableOnLoad);
-        ProcessOffLineTablet(tablet);
-        TryLoadTablet(tablet, server_addr);
-        return;
-    }
-
-    // success
-    if (!failed && (status == kTabletNodeOk || status == kKeyNotInRange)) {
-        LOG(INFO) << "unload tablet success, " << tablet;
-        if (tablet->GetMergeParam() != NULL) {
-            CHECK(tablet->GetStatus() == kTableUnLoading);
-            MergeTabletUnloadCallback(tablet);
-        } else if (tablet->SetStatusIf(kTableOffLine, kTableUnLoading)) {
-            ProcessOffLineTablet(tablet);
-            // unload success, try load
-            TryLoadTablet(tablet);
-        } else if (tablet->SetStatusIf(kTableOffLine, kTableOnLoad)) {
-            ProcessOffLineTablet(tablet);
-            // load fail but unload success, try reload
-            TryLoadTablet(tablet);
-
-            // load next tablet
-            node->FinishLoad(tablet);
-            TabletPtr next_tablet;
-            while (node->LoadNextWaitTablet(&next_tablet)) {
-                if (next_tablet->SetAddrAndStatusIf(server_addr, kTableOnLoad, kTableOffLine)) {
-                    next_tablet->SetServerId(node->uuid_);
-                    WriteClosure done =
-                        std::bind(&MasterImpl::UpdateMetaForLoadCallback, this,
-                                   next_tablet, FLAGS_tera_master_meta_retry_times, _1, _2, _3, _4);
-                    BatchWriteMetaTableAsync(std::bind(&Tablet::ToMetaTableKeyValue, next_tablet, _1, _2),
-                                             false, done);
-                    break;
-                }
-                node->FinishLoad(next_tablet);
-            }
-        } else {
-            CHECK(tablet->GetStatus() == kTableOnSplit);
-            // don't know split result, scan meta to determine the result
-            ScanClosure done =
-                std::bind(&MasterImpl::ScanMetaCallbackForSplit, this, tablet, _1, _2, _3, _4);
-            ScanMetaTableAsync(tablet->GetTableName(), tablet->GetKeyStart(),
-                               tablet->GetKeyEnd(), done);
-
-            // split next tablet
-            TabletNodePtr node;
-            if (tabletnode_manager_->FindTabletNode(server_addr, &node)
-                && node->uuid_ == tablet->GetServerId()) {
-                node->FinishSplit();
-                TabletPtr next_tablet;
-                std::string split_key;
-                while (node->SplitNextWaitTablet(&next_tablet, &split_key)) {
-                    if (next_tablet->SetStatusIf(kTableOnSplit, kTableReady)) {
-                        next_tablet->SetServerId(node->uuid_);
-                        SplitTabletAsync(next_tablet, split_key);
-                        break;
-                    }
-                    node->FinishSplit();
-                }
-            }
-        }
-        return;
-    }
-
-    // fail
-    if (failed) {
-        LOG(WARNING) << "fail to unload tablet: "
-            << sofa::pbrpc::RpcErrorCodeToString(error_code) << ", " << tablet;
-    } else {
-        LOG(WARNING) << "fail to unload tablet: " << StatusCodeToString(status)
-            << ", " << tablet;
-    }
-
-    // abort
-    if (retry <= 0) {
-        LOG(ERROR) << "abort UnloadTablet: kick tabletnode, " << tablet;
-        tablet->SetStatusIf(kTableUnLoadFail, kTableUnLoading)
-            || tablet->SetStatusIf(kTableLoadFail, kTableOnLoad)
-            || tablet->SetStatusIf(kTableSplitFail, kTableOnSplit);
-        TryKickTabletNode(tablet->GetServerAddr());
-        return;
-    }
-
-    // retry
-    ThreadPool::Task task =
-        std::bind(&MasterImpl::RetryUnloadTablet, this, tablet, retry - 1);
-    thread_pool_->DelayTask(
-        FLAGS_tera_master_control_tabletnode_retry_period, task);
-}
-
-void MasterImpl::DelSnapshot(const DelSnapshotRequest* request,
-                             DelSnapshotResponse* response,
-                             google::protobuf::Closure* done) {
-    response->set_sequence_id(request->sequence_id());
-    MasterStatus master_status = GetMasterStatus();
-    if (master_status != kIsRunning) {
-        LOG(WARNING) << "master is not ready, status_ = "
-            << StatusCodeToString(static_cast<StatusCode>(master_status));
-        response->set_status(static_cast<StatusCode>(master_status));
-        done->Run();
-        return;
-    }
-    TablePtr table;
-    if (!tablet_manager_->FindTable(request->table_name(), &table)) {
-        LOG(WARNING) << "fail to delete snapshot: " << request->table_name()
-            << ", table not exist";
-        response->set_status(kTableNotFound);
-        done->Run();
-        return;
-    }
-
-    std::vector<TabletPtr> tablets;
-    table->GetTablet(&tablets);
-    assert(tablets.size());
-
-    for (uint32_t i = 0; i < tablets.size(); ++i) {
-        if (!tablets[i]->SetStatusIf(kTabletDelSnapshot, kTableReady)) {
-            for (uint32_t j = 0; j < i; ++j) {
-                tablets[j]->SetStatusIf(kTableReady, kTabletDelSnapshot);
-            }
-            response->set_status(kTabletNodeOffLine);
-            done->Run();
-            return;
-        }
-    }
-    uint64_t snapshot = request->snapshot_id();
-    int id = table->DelSnapshot(snapshot);
-    if (id < 0) {
-        LOG(WARNING) << "fail to delete snapshot: " << request->table_name()
-            << ", unknown snapshot " << snapshot;
-        response->set_status(kTableNotFound);
-        for (uint32_t j = 0; j < tablets.size(); ++j) {
-            tablets[j]->SetStatusIf(kTableReady, kTabletDelSnapshot);
-        }
-        done->Run();
-        return;
-    }
-
-    for (uint32_t i = 0; i < tablets.size(); i++) {
-        tablets[i]->DelSnapshot(id);
-    }
-    WriteClosure closure =
-        std::bind(&MasterImpl::DelSnapshotCallback, this,
-                table, tablets,
-                FLAGS_tera_master_meta_retry_times,
-                request, response, done, _1, _2, _3, _4);
-    BatchWriteMetaTableAsync(table, tablets, false, closure);
-}
-
-void MasterImpl::DelSnapshotCallback(TablePtr table,
-                                     std::vector<TabletPtr> tablets,
-                                     int32_t retry_times,
-                                     const DelSnapshotRequest* rpc_request,
-                                     DelSnapshotResponse* rpc_response,
-                                     google::protobuf::Closure* rpc_done,
-                                     WriteTabletRequest* request,
-                                     WriteTabletResponse* response,
-                                     bool failed, int error_code) {
-    StatusCode status = response->status();
-    if (!failed && status == kTabletNodeOk) {
-        // all the row status should be the same
-        CHECK_GT(response->row_status_list_size(), 0);
-        status = response->row_status_list(0);
-    }
-    delete request;
-    delete response;
-    if (failed || status != kTabletNodeOk) {
-        if (failed) {
-            LOG(ERROR) << "fail to del snapshot from meta: "
-                << sofa::pbrpc::RpcErrorCodeToString(error_code) << ", "
-                << tablets[0] << "...";
-        } else {
-            LOG(ERROR) << "fail to del snapshot from meta: "
-                << StatusCodeToString(status) << ", " << tablets[0] << "...";
-        }
-        if (retry_times <= 0) {
-            /// 写meta失败会导致内存与meta不一致, 没处理
-            abort();
-            rpc_response->set_status(kMetaTabletError);
-            rpc_done->Run();
-        } else {
-            WriteClosure done =
-                std::bind(&MasterImpl::DelSnapshotCallback, this, table,
-                           tablets, retry_times - 1, rpc_request, rpc_response,
-                           rpc_done, _1, _2, _3, _4);
-            SuspendMetaOperation(table, tablets, false, done);
-        }
-        return;
-    } else {
-        LOG(INFO) << "DelSnapshot " << rpc_request->table_name()
-            << ", write meta " << rpc_request->snapshot_id() << " done";
-        rpc_response->set_status(kMasterOk);
-        rpc_done->Run();
-    }
-    for (uint32_t j = 0; j < tablets.size(); ++j) {
-        tablets[j]->SetStatusIf(kTableReady, kTabletDelSnapshot);
-    }
-}
-
-void MasterImpl::GetSnapshot(const GetSnapshotRequest* request,
-                             GetSnapshotResponse* response,
-                             google::protobuf::Closure* done) {
-    LOG(INFO) << "MasterImpl GetSnapshot";
-    response->set_sequence_id(request->sequence_id());
-
-    MasterStatus master_status = GetMasterStatus();
-    if (master_status != kIsRunning) {
-        LOG(WARNING) << "master is not ready, status_ = "
-            << StatusCodeToString(static_cast<StatusCode>(master_status));
-        response->set_status(static_cast<StatusCode>(master_status));
-        done->Run();
-        return;
-    }
-
-    TablePtr table;
-    if (!tablet_manager_->FindTable(request->table_name(), &table)) {
-        LOG(WARNING) << "fail to create snapshot: " << request->table_name()
-            << ", table not exist";
-        response->set_status(kTableNotFound);
-        done->Run();
-        return;
-    }
-
-    SnapshotTask* task = new SnapshotTask;
-    table->GetTablet(&task->tablets);
-
-    assert(task->tablets.size());
-
-    task->snapshot_id.resize(task->tablets.size());
-    task->request = request;
-    task->response = response;
-    task->done = done;
-    task->table = table;
-    task->task_num = 0;
-    task->finish_num = 0;
-    task->aborted = false;
-    task->mutex.Lock();
-    int64_t snapshot_id = get_micros();
-    for (uint32_t i = 0; i < task->tablets.size(); ++i) {
-        TabletPtr tablet = task->tablets[i];
-        if (!tablet->SetStatusIf(kTabletOnSnapshot, kTableReady)) {
-            LOG(INFO) << "will not get snapshot, " << tablet->GetServerAddr()
-                << " is not ready";
-            task->aborted = true;
-            break;
-        }
-        LOG(INFO) << "Set tablet kTabletOnSnapshot " << tablet->GetPath();
-        ++task->task_num;
-        SnapshotClosure closure =
-            std::bind(&MasterImpl::GetSnapshotCallback, this, static_cast<int32_t>(i), task,
-                      _1, _2, _3, _4);
-        GetSnapshotAsync(tablet, snapshot_id, 3000, closure);
-    }
-    if (task->task_num == 0) {
-        task->mutex.Unlock();
-        delete task;
-        LOG(WARNING) << "fail to create snapshot: " << request->table_name()
-            << ", all tables kTabletNodeOffLine";
-        response->set_status(kTabletNodeOffLine);
-        done->Run();
-        return;
-    }
-    task->mutex.Unlock();
-}
-
-void MasterImpl::GetSnapshotAsync(TabletPtr tablet, int64_t snapshot_id, int32_t timeout,
-                                  SnapshotClosure done) {
-
-    std::string addr = tablet->GetServerAddr();
-    tabletnode::TabletNodeClient node_client(addr, timeout);
-
-    SnapshotRequest* request = new SnapshotRequest;
-    SnapshotResponse* response = new SnapshotResponse;
-    request->set_sequence_id(this_sequence_id_.Inc());
-    request->set_table_name(tablet->GetTableName());
-    request->set_snapshot_id(snapshot_id);
-    request->mutable_key_range()->set_key_start(tablet->GetKeyStart());
-    request->mutable_key_range()->set_key_end(tablet->GetKeyEnd());
-
-    LOG(INFO) << "GetSnapshotAsync id: " << request->sequence_id() << ", "
-        << "server: " << addr;
-    node_client.GetSnapshot(request, response, done);
-}
-
-void MasterImpl::GetSnapshotCallback(int32_t tablet_id,
-                                     SnapshotTask* task,
-                                     SnapshotRequest* master_request,
-                                     SnapshotResponse* master_response, bool failed,
-                                     int error_code) {
-    task->mutex.Lock();
-    ++task->finish_num;
-    VLOG(6) << "MasterImpl GetSnapshot id= " << tablet_id
-        << " finish_num= " << task->finish_num
-        << ". Return " << master_response->snapshot_seq();
-    if (task->finish_num != task->task_num) {
-        if (!failed && master_response->status() == kTabletNodeOk) {
-            task->snapshot_id[tablet_id] = master_response->snapshot_seq();
-        } else {
-            task->aborted = true;
-        }
-        task->mutex.Unlock();
-        return;
-    }
-
-    if (failed || task->aborted) {
-        LOG(WARNING) << "MasterImpl GetSnapshot fail done";
-        for (uint32_t i = 0; i < task->tablets.size(); ++i) {
-            VLOG(6) << "Set tablet kTabletOnSnapshot " << task->tablets[i]->GetPath();
-            task->tablets[i]->SetStatusIf(kTableReady, kTabletOnSnapshot);
-        }
-        task->response->set_status(kTabletNodeOffLine);
-        task->done->Run();
-    } else {
-        task->snapshot_id[tablet_id] = master_response->snapshot_seq();
-        LOG(INFO) << "MasterImpl GetSnapshot all tablet done";
-        int sid = task->table->AddSnapshot(master_request->snapshot_id());
-        for (uint32_t i = 0; i < task->tablets.size(); ++i) {
-            int tsid = task->tablets[i]->AddSnapshot(task->snapshot_id[i]);
-            assert(sid == tsid);
-        }
-        task->response->set_snapshot_id(master_request->snapshot_id());
-        WriteClosure closure =
-            std::bind(&MasterImpl::AddSnapshotCallback, this,
-                    task->table, task->tablets,
-                    FLAGS_tera_master_meta_retry_times,
-                    task->request, task->response, task->done, _1, _2, _3, _4);
-        BatchWriteMetaTableAsync(task->table, task->tablets, false, closure);
-    }
-    task->mutex.Unlock();
-    delete task;
-}
-
-void MasterImpl::AddSnapshotCallback(TablePtr table,
-                                     std::vector<TabletPtr> tablets,
-                                     int32_t retry_times,
-                                     const GetSnapshotRequest* rpc_request,
-                                     GetSnapshotResponse* rpc_response,
-                                     google::protobuf::Closure* rpc_done,
-                                     WriteTabletRequest* request,
-                                     WriteTabletResponse* response,
-                                     bool failed, int error_code) {
-    StatusCode status = response->status();
-    if (!failed && status == kTabletNodeOk) {
-        // all the row status should be the same
-        CHECK_GT(response->row_status_list_size(), 0);
-        status = response->row_status_list(0);
-    }
-    delete request;
-    delete response;
-    for (uint32_t i = 0; i < tablets.size(); ++i) {
-        tablets[i]->SetStatusIf(kTableReady, kTabletOnSnapshot);
-    }
-    if (failed || status != kTabletNodeOk) {
-        if (failed) {
-            LOG(WARNING) << "fail to write snapshot to meta: "
-                << sofa::pbrpc::RpcErrorCodeToString(error_code) << ", "
-                << tablets[0] << "...";
-        } else {
-            LOG(WARNING) << "fail to write snapshot to meta: "
-                << StatusCodeToString(status) << ", " << tablets[0] << "...";
-        }
-        if (retry_times <= 0) {
-            rpc_response->set_status(kMetaTabletError);
-            rpc_done->Run();
-        } else {
-            WriteClosure done =
-                std::bind(&MasterImpl::AddSnapshotCallback, this, table,
-                           tablets, retry_times - 1, rpc_request, rpc_response,
-                           rpc_done, _1, _2, _3, _4);
-            SuspendMetaOperation(table, tablets, false, done);
-        }
-        return;
-    }
-    LOG(INFO) << "Snapshot " << rpc_request->table_name()
-        << ", write meta " << rpc_response->snapshot_id() << " done";
-    rpc_response->set_status(kMasterOk);
-    rpc_done->Run();
-}
-
-void MasterImpl::ReleaseSnpashot(TabletPtr tablet, uint64_t snapshot) {
-    std::string addr = tablet->GetServerAddr();
-    tabletnode::TabletNodeClient node_client(addr, 3000);
-
-    ReleaseSnapshotRequest* request = new ReleaseSnapshotRequest;
-    ReleaseSnapshotResponse* response = new ReleaseSnapshotResponse;
-    request->set_sequence_id(this_sequence_id_.Inc());
-    request->set_table_name(tablet->GetTableName());
-    request->set_snapshot_id(snapshot);
-    request->mutable_key_range()->set_key_start(tablet->GetKeyStart());
-    request->mutable_key_range()->set_key_end(tablet->GetKeyEnd());
-
-    DelSnapshotClosure done =
-        std::bind(&MasterImpl::ReleaseSnapshotCallback, this, _1, _2, _3, _4);
-    LOG(INFO) << "ClearSnapshot id: " << request->sequence_id()
-        << ", server: " << addr;
-    node_client.ReleaseSnapshot(request, response, done);
-}
-
-void MasterImpl::ReleaseSnapshotCallback(ReleaseSnapshotRequest* request,
-                                         ReleaseSnapshotResponse* response,
-                                         bool failed, int error_code) {
-    /// 删掉删不掉无所谓, 不计较~
-}
-
-void MasterImpl::GetRollback(const RollbackRequest* request,
-                             RollbackResponse* response,
-                             google::protobuf::Closure* done) {
-    LOG(INFO) << "MasterImpl Rollback";
-    response->set_sequence_id(request->sequence_id());
-
-    MasterStatus master_status = GetMasterStatus();
-    if (master_status != kIsRunning) {
-        LOG(WARNING) << "master is not ready, status_ = "
-            << StatusCodeToString(static_cast<StatusCode>(master_status));
-        response->set_status(static_cast<StatusCode>(master_status));
-        done->Run();
-        return;
-    }
-
-    TablePtr table;
-    if (!tablet_manager_->FindTable(request->table_name(), &table)) {
-        LOG(WARNING) << "fail to rollback to snapshot: " << request->table_name()
-            << ", table not exist";
-        response->set_status(kTableNotFound);
-        done->Run();
-        return;
-    }
-
-    RollbackTask* task = new RollbackTask;
-    table->GetTablet(&task->tablets);
-
-    assert(task->tablets.size());
-
-    task->rollback_points.resize(task->tablets.size());
-    task->request = request;
-    task->response = response;
-    task->done = done;
-    task->table = table;
-    task->task_num = 0;
-    task->finish_num = 0;
-    task->aborted = false;
-    task->mutex.Lock();
-    for (uint32_t i = 0; i < task->tablets.size(); ++i) {
-        TabletPtr tablet = task->tablets[i];
-        ++task->task_num;
-        RollbackClosure closure =
-            std::bind(&MasterImpl::RollbackCallback, this, static_cast<int32_t>(i), task,
-                      _1, _2, _3, _4);
-        RollbackAsync(tablet, request->snapshot_id(), 3000, closure);
-    }
-    if (task->task_num == 0) {
-        task->mutex.Unlock();
-        delete task;
-        LOG(WARNING) << "fail to rollback to snapshot: " << request->table_name()
-            << ", all tables kTabletNodeOffLine";
-        response->set_status(kTabletNodeOffLine);
-        done->Run();
-        return;
-    }
-    task->mutex.Unlock();
-}
-
-void MasterImpl::RollbackAsync(TabletPtr tablet, uint64_t snapshot_id,
-                                int32_t timeout, RollbackClosure done) {
-    std::string addr = tablet->GetServerAddr();
-    tabletnode::TabletNodeClient node_client(addr, timeout);
-
-    SnapshotRollbackRequest* request = new SnapshotRollbackRequest;
-    SnapshotRollbackResponse* response = new SnapshotRollbackResponse;
-    request->set_sequence_id(this_sequence_id_.Inc());
-    request->set_table_name(tablet->GetTableName());
-    request->set_snapshot_id(snapshot_id);
-    request->mutable_key_range()->set_key_start(tablet->GetKeyStart());
-    request->mutable_key_range()->set_key_end(tablet->GetKeyEnd());
-
-    LOG(INFO) << "RollbackAsync id: " << request->sequence_id() << ", "
-        << "server: " << addr;
-    node_client.Rollback(request, response, done);
-}
-
-void MasterImpl::RollbackCallback(int32_t tablet_id, RollbackTask* task,
-                                  SnapshotRollbackRequest* master_request,
-                                  SnapshotRollbackResponse* master_response,
-                                  bool failed, int error_code) {
-    MutexLock lock(&task->mutex);
-    ++task->finish_num;
-    VLOG(6) << "MasterImpl Rollback id= " << tablet_id
-        << " finish_num= " << task->finish_num
-        << ". Return " << master_response->rollback_point();
-    if (task->finish_num != task->task_num) {
-        if (!failed && master_response->status() == kTabletNodeOk) {
-            task->rollback_points[tablet_id] = master_response->rollback_point();
-        } else {
-            task->aborted = true;
-        }
-        return;
-    }
-
-    if (failed || task->aborted) {
-        LOG(WARNING) << "MasterImpl Rollback fail done";
-        task->response->set_status(kTabletNodeOffLine);
-        task->done->Run();
-    } else {
-        task->rollback_points[tablet_id] = master_response->rollback_point();
-        LOG(INFO) << "MasterImpl rollback all tablet done";
-        int sid = task->table->AddRollback(task->request->rollback_name());
-        for (uint32_t i = 0; i < task->tablets.size(); ++i) {
-            int tsid = task->tablets[i]->AddRollback(task->request->rollback_name(),
-                                                     master_request->snapshot_id(),
-                                                     task->rollback_points[i]);
-            assert(sid == tsid);
-        }
-        WriteClosure closure =
-            std::bind(&MasterImpl::AddRollbackCallback, this,
-                       task->table, task->tablets,
-                       FLAGS_tera_master_meta_retry_times,
-                       task->request, task->response, task->done, _1, _2, _3, _4);
-        BatchWriteMetaTableAsync(task->table, task->tablets, false, closure);
-    }
-    task->mutex.Unlock();
-    delete task;
-}
-
-void MasterImpl::AddRollbackCallback(TablePtr table,
-                                     std::vector<TabletPtr> tablets,
-                                     int32_t retry_times,
-                                     const RollbackRequest* rpc_request,
-                                     RollbackResponse* rpc_response,
-                                     google::protobuf::Closure* rpc_done,
-                                     WriteTabletRequest* request,
-                                     WriteTabletResponse* response,
-                                     bool failed, int error_code) {
-    StatusCode status = response->status();
-    if (!failed && status == kTabletNodeOk) {
-        // all the row status should be the same
-        CHECK_GT(response->row_status_list_size(), 0);
-        status = response->row_status_list(0);
-    }
-    delete request;
-    delete response;
-    if (failed || status != kTabletNodeOk) {
-        if (failed) {
-            LOG(WARNING) << "fail to write rollback to meta: "
-                << sofa::pbrpc::RpcErrorCodeToString(error_code) << ", "
-                << tablets[0] << "...";
-        } else {
-            LOG(WARNING) << "fail to write rollback to meta: "
-                << StatusCodeToString(status) << ", " << tablets[0] << "...";
-        }
-        if (retry_times <= 0) {
-            rpc_response->set_status(kMetaTabletError);
-            rpc_done->Run();
-        } else {
-            WriteClosure done =
-                std::bind(&MasterImpl::AddRollbackCallback, this, table,
-                           tablets, retry_times - 1, rpc_request, rpc_response,
-                           rpc_done, _1, _2, _3, _4);
-            SuspendMetaOperation(table, tablets, false, done);
-        }
-        return;
-    }
-    LOG(INFO) << "Rollback " << rpc_request->rollback_name() << " to " << rpc_request->table_name()
-        << ", write meta " << rpc_request->snapshot_id() << " done";
-    rpc_response->set_status(kMasterOk);
-    rpc_done->Run();
-}
-
-void MasterImpl::ClearUnusedSnapshots(TabletPtr tablet, const TabletMeta& meta) {
-    std::vector<uint64_t> snapshots;
-    TablePtr table = tablet->GetTable();
-    table->ListSnapshot(&snapshots);
-#if 0
-    std::map<uint64_t, int> snapshot_map;
-    for (uint32_t i = 0; i < snapshots.size(); ++i) {
-        snapshot_map[snapshots[i]]++;
-    }
-    for (int32_t i = 0; i < meta.snapshot_list_size(); i++) {
-        uint64_t seq = meta.snapshot_list(i);
-        if (--snapshot_map[seq] < 1) {
-            ClearSnpashot(tablet, seq);
-        }
-    }
-#endif
-    std::sort(snapshots.begin(), snapshots.end());
-    size_t i = 0;
-    for (int j = 0; j < meta.snapshot_list_size(); ++j) {
-        uint64_t seq = meta.snapshot_list(j);
-        if (i >= snapshots.size() || snapshots[i] != seq) {
-            ReleaseSnpashot(tablet, seq);
-            continue;
-        }
-        ++i;
-    }
-}
-
-void MasterImpl::UpdateSchemaCallback(std::string table_name,
-                                      std::string tablet_path,
-                                      std::string start_key,
-                                      std::string end_key,
-                                      int32_t retry_times,
-                                      UpdateRequest* request,
-                                      UpdateResponse* response,
-                                      bool rpc_failed, int status_code) {
-    StatusCode status = response->status();
-    delete request;
-    delete response;
-    TabletPtr tablet;
-    if (!tablet_manager_->FindTablet(table_name, start_key, &tablet)
-        || (tablet->GetKeyEnd() != end_key)) {
-        LOG(INFO) << "[update] tablet not found, ignore it:" << tablet_path
-            << ", start_key:" << DebugString(start_key)
-            << ", end_key:" << DebugString(end_key);
-        return;
-    }
-
-    // fail
-    if (rpc_failed || (status != kTabletNodeOk)) {
-        if (rpc_failed) {
-            LOG(WARNING) << "[update] fail to update schema: "
-                << sofa::pbrpc::RpcErrorCodeToString(status_code)
-                << ": " << tablet;
-        } else {
-            LOG(WARNING) << "[update] fail to update schema: " << StatusCodeToString(status)
-                << ": " << tablet;
-        }
-        if (retry_times > FLAGS_tera_master_schema_update_retry_times) {
-            LOG(ERROR) << "[update] retry " << retry_times << " times, kick "
-                << tablet->GetServerAddr();
-            TryKickTabletNode(tablet->GetServerAddr());
-        } else {
-            UpdateClosure done =
-                std::bind(&MasterImpl::UpdateSchemaCallback, this, tablet->GetTableName(),
-                           tablet->GetPath(), tablet->GetKeyStart(), tablet->GetKeyEnd(),
-                           retry_times + 1, _1, _2, _3, _4);
-            ThreadPool::Task task =
-                std::bind(&MasterImpl::NoticeTabletNodeSchemaUpdatedAsync, this, tablet, done);
-            thread_pool_->DelayTask(FLAGS_tera_master_schema_update_retry_period * 1000, task);
-        }
-        return;
-    }
-    LOG(INFO) << "[update] tablet schema update done. " << tablet;
-    TablePtr table = tablet->GetTable();
-    if (!table->AddToRange(tablet->GetKeyStart(), tablet->GetKeyEnd())) {
-        LOG(ERROR) << "[update] invalid argument:" << tablet;
-    }
-    if (table->IsCompleteRange()) {
-        table->UpdateRpcDone();
-        LOG(INFO) << "[update] DONE :" << table;
-        // new schema synced to all tablets/ts
-        table->SetSchemaIsSyncing(false);
-    }
-}
-
-void MasterImpl::NoticeTabletNodeSchemaUpdatedAsync(TabletPtr tablet,
-                                                    UpdateClosure done) {
-    tabletnode::TabletNodeClient node_client(tablet->GetServerAddr(),
-                                             FLAGS_tera_master_collect_info_timeout);
-    UpdateRequest* request = new UpdateRequest;
-    UpdateResponse* response = new UpdateResponse;
-
-    request->set_sequence_id(this_sequence_id_.Inc());
-    request->mutable_schema()->CopyFrom(tablet->GetSchema());
-    request->set_tablet_name(tablet->GetTableName());
-    request->mutable_key_range()->set_key_start(tablet->GetKeyStart());
-    request->mutable_key_range()->set_key_end(tablet->GetKeyEnd());
-
-    VLOG(20) << "NoticeTabletNodeSchemaUpdatedAsync id: " << request->sequence_id()
-             << ", tablet:" << tablet;
-    node_client.Update(request, response, done);
-}
-
-void MasterImpl::NoticeTabletNodeSchemaUpdated(TabletPtr tablet) {
-    int32_t retry_times = 0;
-    UpdateClosure done =
-        std::bind(&MasterImpl::UpdateSchemaCallback, this, tablet->GetTableName(),
-                   tablet->GetPath(), tablet->GetKeyStart(), tablet->GetKeyEnd(), retry_times,
-                   _1, _2, _3, _4);
-    NoticeTabletNodeSchemaUpdatedAsync(tablet, done);
-}
-
-void MasterImpl::NoticeTabletNodeSchemaUpdated(TablePtr table) {
-    std::vector<TabletPtr> tablet_list;
-    table->GetTablet(&tablet_list);
-    std::vector<TabletPtr>::iterator it;
-    for (it = tablet_list.begin(); it != tablet_list.end(); ++it) {
-        if ((*it)->GetStatus() != kTableReady) {
-            continue;
-        }
-        NoticeTabletNodeSchemaUpdated(*it);
-    }
-}
 
 void MasterImpl::QueryTabletNodeAsync(std::string addr, int32_t timeout,
                                       bool is_gc, QueryClosure done) {
-    tabletnode::TabletNodeClient node_client(addr, timeout);
+    tabletnode::TabletNodeClient node_client(thread_pool_.get(), addr, timeout);
 
     QueryRequest* request = new QueryRequest;
     QueryResponse* response = new QueryResponse;
@@ -3464,7 +2304,7 @@ void MasterImpl::QueryTabletNodeCallback(std::string addr, QueryRequest* request
                 LOG(ERROR) << "[query] path error tablet: " << meta.path()
                     << "] @ " << meta.server_addr()
                     << " should be " << tablet->GetPath();
-            } else if (kTableReady != meta.status()) {
+            } else if (TabletMeta::kTabletReady != meta.status()) {
                 LOG(ERROR) << "[query] status error tablet: " << meta.path()
                     << "] @ " << meta.server_addr()
                     << " should be kTabletReady";
@@ -3473,16 +2313,7 @@ void MasterImpl::QueryTabletNodeCallback(std::string addr, QueryRequest* request
                     << " @ " << meta.server_addr()
                     << " should @ " << tablet->GetServerAddr();
             } else if (tablet->GetTable()->GetStatus() == kTableDisable) {
-                if (tablet->SetStatusIf(kTableUnLoading, kTableReady)) {
-                    UnloadClosure done =
-                        std::bind(&MasterImpl::UnloadTabletCallback, this, tablet,
-                                   FLAGS_tera_master_impl_retry_times, _1, _2, _3, _4);
-                    UnloadTabletAsync(tablet, done);
-                    LOG(INFO) << "Unload disable tablet: " << tablet->GetPath();
-                } else {
-                    LOG(INFO) << "Discard disable tablet: " << tablet->GetPath()
-                        << ", status: " << tablet->GetStatus();
-                }
+                LOG(INFO) << "table disabled: " << tablet->GetPath();
             } else {
                 VLOG(20) << "[query] OK tablet: " << meta.path()
                     << "] @ " << meta.server_addr();
@@ -3490,7 +2321,6 @@ void MasterImpl::QueryTabletNodeCallback(std::string addr, QueryRequest* request
                 tablet->UpdateSize(meta);
                 tablet->SetCounter(counter);
                 tablet->SetCompactStatus(meta.compact_status());
-                ClearUnusedSnapshots(tablet, meta);
             }
         }
 
@@ -3523,9 +2353,9 @@ void MasterImpl::QueryTabletNodeCallback(std::string addr, QueryRequest* request
                 }
             }
 
-            TabletStatus tablet_status = tablet->GetStatus();
-            if (tablet_status == kTableReady || tablet_status == kTableOnLoad
-                || tablet_status == kTableOffLine) {
+            TabletMeta::TabletStatus tablet_status = tablet->GetStatus();
+            if (tablet_status == TabletMeta::kTabletReady || tablet_status == TabletMeta::kTabletLoading
+                || tablet_status == TabletMeta::kTabletOffline) {
                 state.data_size_ += tablet->GetDataSize();
                 state.qps_ += tablet->GetQps();
                 if (state.table_size_.find(tablet->GetTableName()) != state.table_size_.end()) {
@@ -3539,8 +2369,14 @@ void MasterImpl::QueryTabletNodeCallback(std::string addr, QueryRequest* request
         }
         tabletnode_manager_->UpdateTabletNode(addr, state);
         node->ResetQueryFailCount();
-        if (FLAGS_tera_master_stat_table_enabled && stat_table_) {
-            DumpStatToTable(state);
+
+        for (int32_t i = 0; i < response->tablet_background_errors_size(); i++) {
+            const TabletBackgroundErrorInfo& background_error =
+                response->tablet_background_errors(i);
+            if (FLAGS_tera_stat_table_enabled) {
+                stat_table_->RecordTabletCorrupt(background_error.tablet_name(),
+                                                 background_error.detail_info());
+            }
         }
         VLOG(20) << "query tabletnode [" << addr << "], status_: "
             << StatusCodeToString(state.report_status_);
@@ -3581,7 +2417,6 @@ void MasterImpl::QueryTabletNodeCallback(std::string addr, QueryRequest* request
         }
     }
 
-
     delete request;
     delete response;
     VLOG(20) << "query tabletnode finish " << addr
@@ -3595,6 +2430,8 @@ void MasterImpl::CollectTabletInfoCallback(std::string addr,
                                            QueryRequest* request,
                                            QueryResponse* response,
                                            bool failed, int error_code) {
+    std::unique_ptr<QueryRequest> request_holder(request);
+    std::unique_ptr<QueryResponse> response_holder(response);
     TabletNodePtr node;
     if (!tabletnode_manager_->FindTabletNode(addr, &node)) {
         LOG(WARNING) << "fail to query: server down, id: "
@@ -3630,10 +2467,9 @@ void MasterImpl::CollectTabletInfoCallback(std::string addr,
                 state.table_size_[meta.table_name()] = meta.size();
             }
         }
+        //NodeState old_state;
         tabletnode_manager_->UpdateTabletNode(addr, state);
         node->ResetQueryFailCount();
-        NodeState old_state;
-        node->SetState(kReady, &old_state);
         LOG(INFO) << "query tabletnode [" << addr << "], status_: "
             << StatusCodeToString(response->tabletnode_info().status_t());
     } else {
@@ -3657,14 +2493,10 @@ void MasterImpl::CollectTabletInfoCallback(std::string addr,
                           tablet_list, finish_counter, mutex);
             thread_pool_->DelayTask(FLAGS_tera_master_collect_info_retry_period,
                                      task);
-            delete request;
-            delete response;
             return;
         }
     }
     sem_post(finish_counter);
-    delete request;
-    delete response;
 }
 
 void MasterImpl::RetryCollectTabletInfo(std::string addr,
@@ -3676,1520 +2508,24 @@ void MasterImpl::RetryCollectTabletInfo(std::string addr,
     QueryTabletNodeAsync(addr, FLAGS_tera_master_collect_info_timeout, false, done);
 }
 
-void MasterImpl::SplitTabletAsync(TabletPtr tablet, const std::string& split_key) {
-    const std::string& table_name = tablet->GetTableName();
-    const std::string& server_addr = tablet->GetServerAddr();
-    const std::string& key_start = tablet->GetKeyStart();
-    const std::string& key_end = tablet->GetKeyEnd();
 
-    tabletnode::TabletNodeClient node_client(server_addr,
-            FLAGS_tera_master_split_rpc_timeout);
-
-    SplitTabletRequest* request = new SplitTabletRequest;
-    SplitTabletResponse* response = new SplitTabletResponse;
-    request->set_sequence_id(this_sequence_id_.Inc());
-    request->set_tablet_name(table_name);
-    request->mutable_key_range()->set_key_start(key_start);
-    request->mutable_key_range()->set_key_end(key_end);
-    request->add_child_tablets(tablet->GetTable()->GetNextTabletNo());
-    request->add_child_tablets(tablet->GetTable()->GetNextTabletNo());
-    request->set_split_key(split_key);
-
-    tablet->ToMeta(request->mutable_tablet_meta());
-    std::vector<uint64_t> snapshots;
-    tablet->GetTable()->ListSnapshot(&snapshots);
-    LOG(INFO) << "SplitTabletAsync snapshot num " << snapshots.size();
-    SplitClosure done =
-        std::bind(&MasterImpl::SplitTabletCallback, this, tablet, _1, _2, _3, _4);
-
-    LOG(INFO) << "SplitTabletAsync id: " << request->sequence_id() << ", "
-        << tablet;
-    tablet_availability_->AddNotReadyTablet(tablet->GetPath());
-    node_client.SplitTablet(request, response, done);
-}
-
-void MasterImpl::SplitTabletCallback(TabletPtr tablet,
-                                     SplitTabletRequest* request,
-                                     SplitTabletResponse* response,
-                                     bool failed, int error_code) {
-    CHECK(tablet->GetStatus() == kTableOnSplit);
-    StatusCode status = response->status();
-    delete request;
-    delete response;
-    const std::string& server_addr = tablet->GetServerAddr();
-
-    // fail
-    if (failed || (status != kTabletNodeOk && status != kTableNotSupport
-                   && status != kMetaTabletError)) {
-        if (failed) {
-            LOG(WARNING) << "fail to split: "
-                << sofa::pbrpc::RpcErrorCodeToString(error_code)
-                << ", " << tablet;
-        } else {
-            LOG(WARNING) << "fail to split: "
-                << StatusCodeToString(status) << ", " << tablet;
-        }
-        UnloadClosure done =
-            std::bind(&MasterImpl::UnloadTabletCallback, this, tablet,
-                       FLAGS_tera_master_impl_retry_times, _1, _2, _3, _4);
-        UnloadTabletAsync(tablet, done);
-        return;
-    }
-
-    // success
-    if (status == kTabletNodeOk) {
-        // tabletnode unloaded the tablet
-        LOG(INFO) << "RPC SplitTablet success";
-    } else if (status == kTableNotSupport) {
-        // tabletnode refused to split and didn't unload the tablet
-        tablet->SetStatusIf(kTableReady, kTableOnSplit);
-        ProcessReadyTablet(tablet);
-    } else {
-        CHECK(status == kMetaTabletError);
-        // meta table is not ok
-        LOG(ERROR) << "fail to split: " << StatusCodeToString(status) << ", "
-            << tablet;
-    }
-
-    TabletNodePtr node;
-    if (tabletnode_manager_->FindTabletNode(server_addr, &node)
-        && node->uuid_ == tablet->GetServerId()) {
-        node->FinishSplit();
-
-        // schedule next split task
-        TabletPtr next_tablet;
-        std::string split_key;
-        while (node->SplitNextWaitTablet(&next_tablet, &split_key)) {
-            if (next_tablet->SetStatusIf(kTableOnSplit, kTableReady)) {
-                next_tablet->SetServerId(node->uuid_);
-                SplitTabletAsync(next_tablet, split_key);
-                break;
-            }
-            node->FinishSplit();
-        }
-    } else { // server down or restart
-        if (tablet->SetStatusIf(kTableOffLine, kTableReady)) {
-            ProcessOffLineTablet(tablet);
-            TryLoadTablet(tablet, tablet->GetServerAddr());
-        }
-    }
-
-    if (status == kTableNotSupport) {
-        LOG(ERROR) << "ts refused to split tablet: "
-            << StatusCodeToString(status) << ", " << tablet
-            << ", tablet status " << StatusCodeToString(tablet->GetStatus());
-        tablet_availability_->EraseNotReadyTablet(tablet->GetPath());
-        return;
-    }
-
-    // scan meta tablet
-    if (tablet->GetStatus() == kTableOnSplit) {
-        ScanClosure done =
-            std::bind(&MasterImpl::ScanMetaCallbackForSplit, this, tablet, _1, _2, _3, _4);
-        ScanMetaTableAsync(tablet->GetTableName(), tablet->GetKeyStart(),
-                           tablet->GetKeyEnd(), done);
-    }
-}
-
-void MasterImpl::TryLoadTablet(TabletPtr tablet, std::string server_addr) {
-    if (!tablet->IsBound()) {
-        return;
-    }
-
-    const std::string& table_name = tablet->GetTableName();
-
-    if (table_name == FLAGS_tera_master_meta_table_name) {
-        CHECK(tablet->GetPath() == FLAGS_tera_master_meta_table_path);
-        zk_adapter_->UpdateRootTabletNode("");
-    }
-
-    if (tablet->GetTable()->GetStatus() == kTableDisable) {
-        VLOG(20) << "LoadTablet skip disable tablet: " << tablet->GetPath();
-        return;
-    }
-
-    if (!tablet->GetExpectServerAddr().empty()) {
-        server_addr = tablet->GetExpectServerAddr();
-    }
-
-    TabletNodePtr node;
-    if (!server_addr.empty()
-        && !tabletnode_manager_->FindTabletNode(server_addr, &node)) {
-        tablet->SetExpectServerAddr("");
-
-        if (tablet->GetTableName() == FLAGS_tera_master_meta_table_name) {
-            server_addr.clear();
-        } else if (FLAGS_tera_master_tabletnode_timeout > 0) {
-            tablet->SetAddrAndStatusIf(server_addr, kTabletPending, kTableOffLine);
-            LOG(INFO) << "load tablet " << tablet << " on " << server_addr
-                << " " << FLAGS_tera_master_tabletnode_timeout << "(ms) later";
-            ThreadPool::Task task =
-                std::bind(&MasterImpl::TryMovePendingTablet, this, tablet);
-            thread_pool_->DelayTask(FLAGS_tera_master_tabletnode_timeout, task);
-            return;
-        } else if (GetMasterStatus() == kIsRunning) {
-            LOG(WARNING) << "give up load " << tablet << " on " << server_addr
-                << ": server down, try to pick another server";
-            server_addr.clear();
-        } else {
-            tablet->SetAddrIf(server_addr, kTableOffLine);
-            LOG(WARNING) << "give up load " << tablet << " on " << server_addr
-                << ": server down, master is in safemode, abort load";
-            return;
-        }
-    }
-
-    while (server_addr.empty()) {
-        std::string sche_table_name;
-        if (FLAGS_tera_master_load_balance_table_grained
-            && table_name != FLAGS_tera_master_meta_table_name) {
-            sche_table_name = table_name;
-        }
-
-        if (!tabletnode_manager_->ScheduleTabletNode(size_scheduler_.get(), sche_table_name,
-                                                      false, &server_addr)) {
-            // tablet->SetAddrIf("", kTableOffLine);
-            LOG(ERROR) << "no available tabletnode, abort load " << tablet;
-            return;
-        }
-        if (!tabletnode_manager_->FindTabletNode(server_addr, &node)) {
-            server_addr.clear();
-        }
-    }
-
-    // meta table always load immediately
-    if (table_name == FLAGS_tera_master_meta_table_name) {
-        if (!tablet->GetExpectServerAddr().empty()) {
-            node->DoneMoveIn();
-            tablet->SetExpectServerAddr("");
-        }
-        if (tablet->SetAddrAndStatusIf(server_addr, kTableOnLoad, kTableOffLine)) {
-            tablet->SetServerId(node->uuid_);
-            LoadClosure done = std::bind(&MasterImpl::LoadTabletCallback, this,
-                                           tablet, 0, _1, _2, _3, _4);
-            LoadTabletAsync(tablet, done);
-        }
-        return;
-    }
-
-    // other tables may wait in a queue
-    if (!node->TryLoad(tablet)) {
-        tablet->SetAddrIf(server_addr, kTableOffLine);
-        LOG(INFO) << "delay load table " << tablet->GetPath()
-            << ", too many tablets are loading on server: "
-            << server_addr;
-        return;
-    }
-    if (!tablet->GetExpectServerAddr().empty()) {
-        node->DoneMoveIn();
-        tablet->SetExpectServerAddr("");
-    }
-
-    // abort if status switch to offline (server down / disable)
-    if (!tablet->SetAddrAndStatusIf(server_addr, kTableOnLoad, kTableOffLine)) {
-        LOG(ERROR) << "error state, abort load tablet, " << tablet;
-        node->FinishLoad(tablet);
-        TabletPtr next_tablet;
-        while (node->LoadNextWaitTablet(&next_tablet)) {
-            if (next_tablet->SetAddrAndStatusIf(server_addr, kTableOnLoad, kTableOffLine)) {
-                if (!next_tablet->GetExpectServerAddr().empty()) {
-                    node->DoneMoveIn();
-                    next_tablet->SetExpectServerAddr("");
-                }
-                next_tablet->SetServerId(node->uuid_);
-                WriteClosure done =
-                    std::bind(&MasterImpl::UpdateMetaForLoadCallback, this,
-                               next_tablet, FLAGS_tera_master_meta_retry_times, _1, _2, _3, _4);
-                BatchWriteMetaTableAsync(std::bind(&Tablet::ToMetaTableKeyValue, next_tablet, _1, _2),
-                                         false, done);
-                break;
-            }
-            node->FinishLoad(next_tablet);
-        }
-        return;
-    }
-
-    // if server down here, let split callback take care of status switch
-    tablet->SetServerId(node->uuid_);
-    WriteClosure done =
-        std::bind(&MasterImpl::UpdateMetaForLoadCallback, this, tablet,
-                   FLAGS_tera_master_meta_retry_times, _1, _2, _3, _4);
-    BatchWriteMetaTableAsync(std::bind(&Tablet::ToMetaTableKeyValue, tablet, _1, _2),
-                             false, done);
-    return;
-}
-
-void MasterImpl::RetryLoadTablet(TabletPtr tablet, int32_t retry_times) {
-    CHECK(tablet->GetStatus() == kTableOnLoad);
-    TabletNodePtr node;
-    if (!tabletnode_manager_->FindTabletNode(tablet->GetServerAddr(), &node)) {
-        LOG(WARNING) << kSms << "abort load on " << tablet->GetServerAddr()
-            << ": server down, " << tablet;
-        tablet->SetStatus(kTableOffLine);
-        ProcessOffLineTablet(tablet);
-        TryLoadTablet(tablet, tablet->GetServerAddr());
-        return;
-    }
-
-    // server restart
-    if (node->uuid_ != tablet->GetServerId()) {
-        LOG(ERROR) << "retry LoadTablet: server restart, " << tablet;
-        tablet->SetStatusIf(kTableOffLine, kTableOnLoad);
-        ProcessOffLineTablet(tablet);
-        TryLoadTablet(tablet, tablet->GetServerAddr());
-        return;
-    }
-
-    LoadClosure done = std::bind(&MasterImpl::LoadTabletCallback, this, tablet,
-                                   retry_times, _1, _2, _3, _4);
-    LoadTabletAsync(tablet, done);
-    return;
-}
-
-void MasterImpl::RetryUnloadTablet(TabletPtr tablet, int32_t retry_times) {
-    UnloadClosure done =
-        std::bind(&MasterImpl::UnloadTabletCallback, this, tablet, retry_times, _1, _2, _3, _4);
-    UnloadTabletAsync(tablet, done);
-}
-
-bool MasterImpl::TrySplitTablet(TabletPtr tablet, const std::string& split_key) {
-    const std::string& server_addr = tablet->GetServerAddr();
-
-    // abort if server down
-    TabletNodePtr node;
-    if (!tabletnode_manager_->FindTabletNode(server_addr, &node)) {
-        LOG(WARNING) << "abort split on " << server_addr << ": server down";
-        return false;
-    }
-
-    // delay split
-    if (!node->TrySplit(tablet, split_key)) {
-        LOG(INFO) << "delay split table " << tablet->GetPath()
-            << ", too many tablets are splitting on server: " << server_addr;
-        return false;
-    }
-    // abort if status switch to offline (server down / disable)
-    if (!tablet->SetStatusIf(kTableOnSplit, kTableReady)) {
-        LOG(ERROR) << "error state, abort split table " << tablet->GetPath();
-        return false;
-    }
-
-    // if server down here, let split callback take care of status switch
-    LOG(INFO) << "begin split table " << tablet->GetPath();
-    tablet->SetServerId(node->uuid_);
-    SplitTabletAsync(tablet, split_key);
-    return true;
-}
-
-bool MasterImpl::TryMergeTablet(TabletPtr tablet) {
-    MutexLock lock(&tablet_mutex_);
-    const std::string& server_addr = tablet->GetServerAddr();
-
-    // abort if server down
-    TabletNodePtr node;
-    if (!tabletnode_manager_->FindTabletNode(server_addr, &node)) {
-        LOG(WARNING) << "[merge] abort merge on " << server_addr << ": server down";
-        return false;
-    }
-
-    if (tablet->IsBusy()) {
-        LOG(INFO) << "[merge] skip merge, tablet is busy: " << tablet->GetPath();
-        return false;
-    }
-
-    TabletPtr tablet2;
-    if (!tablet_manager_->PickMergeTablet(tablet, &tablet2)) {
-        VLOG(20) << "[merge] merge failed, no proper tablet for " << tablet;
-        return false;
-    }
-
-    if (tablet2->GetStatus() != kTableReady ||
-        tablet2->IsBusy() ||
-        tablet2->GetCounter().write_workload() >= 1) {
-        VLOG(20) << "[merge] merge failed, none proper tablet."
-            << " status:" << tablet2->GetStatus()
-            << " isbusy:" << tablet2->IsBusy()
-            << " write workload:" << tablet2->GetCounter().write_workload();
-        return false;
-    }
-
-    LOG(INFO) << "[merge] begin merge tablet " << tablet->GetPath()
-        << " and " << tablet2->GetPath();
-    MergeTabletAsync(tablet, tablet2);
-    return true;
-}
-
-void MasterImpl::MergeTabletAsync(TabletPtr tablet_p1, TabletPtr tablet_p2) {
-    bool switch_ok = false;
-
-    // prepare
-    switch_ok = tablet_p1->SetStatusIf(kTableUnLoading, kTableReady);
-    if (!switch_ok) {
-        // why this tablet is not Ready? maybe someone changes it's state
-        LOG(WARNING) << "[merge] tablet not ready, merge failed:" << tablet_p1;
-        return;
-    }
-    switch_ok = tablet_p2->SetStatusIf(kTableUnLoading, kTableReady);
-    if (!switch_ok) {
-        // why this tablet is not Ready? maybe someone changes it's state
-        LOG(WARNING) << "[merge] tablet not ready, merge failed:" << tablet_p2;
-        // rollback
-        CHECK(tablet_p1->SetStatusIf(kTableReady, kTableUnLoading));
-        return;
-    }
-
-    // commit
-    MutexPtr mu(new Mutex());
-    MergeParam* param1 = new MergeParam(mu, tablet_p2);
-    MergeParam* param2 = new MergeParam(mu, tablet_p1);
-    tablet_p1->SetMergeParam(param1);
-    tablet_p2->SetMergeParam(param2);
-    UnloadClosure done1 =
-        std::bind(&MasterImpl::UnloadTabletCallback, this, tablet_p1,
-                   FLAGS_tera_master_impl_retry_times, _1, _2, _3, _4);
-    UnloadClosure done2 =
-        std::bind(&MasterImpl::UnloadTabletCallback, this, tablet_p2,
-                   FLAGS_tera_master_impl_retry_times, _1, _2, _3, _4);
-
-    tablet_availability_->AddNotReadyTablet(tablet_p1->GetPath());
-    tablet_availability_->AddNotReadyTablet(tablet_p2->GetPath());
-    UnloadTabletAsync(tablet_p1, done1);
-    UnloadTabletAsync(tablet_p2, done2);
-}
-
-void MasterImpl::MergeTabletAsyncPhase2(TabletPtr tablet_p1, TabletPtr tablet_p2) {
-    leveldb::Env* env = io::LeveldbBaseEnv();
-    std::vector<std::string> children;
-    std::string tablet_path = FLAGS_tera_tabletnode_path_prefix + tablet_p1->GetPath();
-    env->GetChildren(tablet_path, &children);
-    tablet_path = FLAGS_tera_tabletnode_path_prefix + tablet_p2->GetPath();
-    env->GetChildren(tablet_path, &children);
-    for (size_t i = 0; i < children.size(); ++i) {
-        leveldb::FileType type = leveldb::kUnknown;
-        uint64_t number = 0;
-        if (ParseFileName(children[i], &number, &type) &&
-            type == leveldb::kLogFile) {
-            LOG(ERROR) << "[merge] tablet log not clear, merge failed: " << tablet_path;
-            MergeTabletFailed(tablet_p1, tablet_p2);
-            return;
-        }
-    }
-
-    std::string meta_addr;
-    if (!tablet_manager_->GetMetaTabletAddr(&meta_addr)) {
-        LOG(ERROR) << "[merge] meta table not ready.";
-        MergeTabletFailed(tablet_p1, tablet_p2);
-        return;
-    }
-
-    WriteTabletRequest* request = new WriteTabletRequest;
-    WriteTabletResponse* response = new WriteTabletResponse;
-    request->set_sequence_id(this_sequence_id_.Inc());
-    request->set_tablet_name(FLAGS_tera_master_meta_table_name);
-    request->set_is_sync(true);
-    request->set_is_instant(true);
-
-    // delete the first tablet
-    std::string packed_key, packed_value;
-    tablet_p1->ToMetaTableKeyValue(&packed_key, &packed_value);
-    RowMutationSequence* mu_seq = request->add_row_list();
-    mu_seq->set_row_key(packed_key);
-    Mutation* mutation = mu_seq->add_mutation_sequence();
-    mutation->set_type(kDeleteRow);
-
-    // delete the second tablet
-    tablet_p2->ToMetaTableKeyValue(&packed_key, &packed_value);
-    mu_seq = request->add_row_list();
-    mu_seq->set_row_key(packed_key);
-    mutation = mu_seq->add_mutation_sequence();
-    mutation->set_type(kDeleteRow);
-
-    // put the new tablet
-    TabletMeta new_meta;
-    if (tablet_p1->GetKeyStart() == tablet_p2->GetKeyEnd() &&
-        tablet_p1->GetKeyStart() != "") {
-        tablet_p2->ToMeta(&new_meta);
-        new_meta.mutable_key_range()->set_key_end(tablet_p1->GetKeyEnd());
-        new_meta.clear_parent_tablets();
-        new_meta.add_parent_tablets(leveldb::GetTabletNumFromPath(tablet_p2->GetPath()));
-        new_meta.add_parent_tablets(leveldb::GetTabletNumFromPath(tablet_p1->GetPath()));
-    } else if (tablet_p1->GetKeyEnd() == tablet_p2->GetKeyStart()) {
-        tablet_p1->ToMeta(&new_meta);
-        new_meta.mutable_key_range()->set_key_end(tablet_p2->GetKeyEnd());
-        new_meta.clear_parent_tablets();
-        new_meta.add_parent_tablets(leveldb::GetTabletNumFromPath(tablet_p1->GetPath()));
-        new_meta.add_parent_tablets(leveldb::GetTabletNumFromPath(tablet_p2->GetPath()));
-    } else {
-        LOG(FATAL) << "tablet range error, cannot be merged: "
-            << tablet_p1 << ", " << tablet_p2;
-    }
-    new_meta.set_status(kTableOffLine);
-    // load new tablet on server which has larger parent tablet
-    new_meta.set_server_addr(
-        (tablet_p1->GetDataSize() > tablet_p2->GetDataSize()) ?
-        tablet_p1->GetServerAddr() : tablet_p2->GetServerAddr());
-    std::string new_path =
-        leveldb::GetChildTabletPath(tablet_p1->GetPath(),
-                                    tablet_p1->GetTable()->GetNextTabletNo());
-    new_meta.set_path(new_path);
-    new_meta.set_size(tablet_p1->GetDataSize() + tablet_p2->GetDataSize());
-
-    TabletPtr tablet_c(new Tablet(new_meta, tablet_p1->GetTable()));
-    tablet_c->ToMetaTableKeyValue(&packed_key, &packed_value);
-    mu_seq = request->add_row_list();
-    mu_seq->set_row_key(packed_key);
-    mutation = mu_seq->add_mutation_sequence();
-    mutation->set_type(kPut);
-    mutation->set_value(packed_value);
-
-    WriteClosure done =
-        std::bind(&MasterImpl::MergeTabletWriteMetaCallback, this, tablet_c,
-                   tablet_p1, tablet_p2, FLAGS_tera_master_meta_retry_times, _1, _2, _3, _4);
-    tabletnode::TabletNodeClient meta_node_client(meta_addr);
-    meta_node_client.WriteTablet(request, response, done);
-}
-
-void MasterImpl::MergeTabletUnloadCallback(TabletPtr tablet) {
-    MergeParam* merge_param = (MergeParam*)tablet->GetMergeParam();
-    CHECK_NOTNULL(merge_param);
-    MutexPtr mutex = merge_param->mutex;
-    TabletPtr tablet2 = merge_param->counter_part;
-    delete merge_param;
-    tablet->SetMergeParam(NULL);
-
-    MutexLock l(mutex.get());
-    CHECK(tablet->GetStatus() == kTableUnLoading
-          || tablet->GetStatus() == kTableUnLoadFail);
-
-    LOG(INFO) << "[merge] unload tablet finish, " << tablet;
-    tablet->SetStatus(kTableOnMerge);
-
-    if (tablet2->GetStatus() == kTableOnMerge) {
-        LOG(INFO) << "[merge] tablet2 unload finish, continue merge: " << tablet2;
-        MergeTabletAsyncPhase2(tablet, tablet2);
-    } else {
-        CHECK(tablet2->GetStatus() == kTableUnLoading
-              || tablet2->GetStatus() == kTableUnLoadFail);
-        LOG(INFO) << "[merge] tablet2 still unloading: " << tablet2;
-    }
-}
-
-void MasterImpl::MergeTabletWriteMetaCallback(TabletPtr tablet_c,
-                                              TabletPtr tablet_p1,
-                                              TabletPtr tablet_p2,
-                                              int32_t retry_times,
-                                              WriteTabletRequest* request,
-                                              WriteTabletResponse* response,
-                                              bool failed, int error_code) {
-    StatusCode status = response->status();
-    if (!failed && status == kTabletNodeOk) {
-        // all the row status should be the same
-        CHECK_GT(response->row_status_list_size(), 0);
-        status = response->row_status_list(0);
-    }
-    if (failed || status != kTabletNodeOk) {
-        if (failed) {
-            LOG(ERROR) << "[merge] fail to add to meta tablet: "
-                << sofa::pbrpc::RpcErrorCodeToString(error_code) << ", "
-                << tablet_c;
-        } else {
-            LOG(ERROR) << "[merge] fail to add to meta tablet: "
-                << StatusCodeToString(status) << ", "
-                << tablet_c;
-        }
-        if (retry_times <= 0) {
-            LOG(ERROR) << "[merge] fail to update meta";
-            MergeTabletFailed(tablet_p1, tablet_p2);
-        } else {
-            std::string meta_addr;
-            if (tablet_manager_->GetMetaTabletAddr(&meta_addr)) {
-                WriteClosure done =
-                    std::bind(&MasterImpl::MergeTabletWriteMetaCallback, this, tablet_c,
-                               tablet_p1, tablet_p2, retry_times - 1, _1, _2, _3, _4);
-                tabletnode::TabletNodeClient meta_node_client(meta_addr);
-                meta_node_client.WriteTablet(request, response, done);
-                return;
-            } else {
-                LOG(WARNING) << "[merge] meta table not ready.";
-                MergeTabletFailed(tablet_p1, tablet_p2);
-            }
-        }
-        delete request;
-        delete response;
-        return;
-    }
-
-    TabletMeta new_meta;
-    tablet_c->ToMeta(&new_meta);
-    TablePtr table = tablet_c->GetTable();
-    if (tablet_p1->GetKeyStart() == tablet_c->GetKeyStart()) {
-        table->MergeTablets(tablet_p1, tablet_p2, new_meta, &tablet_c);
-    } else {
-        table->MergeTablets(tablet_p2, tablet_p1, new_meta, &tablet_c);
-    }
-
-    tablet_availability_->EraseNotReadyTablet(tablet_p1->GetPath());
-    tablet_availability_->EraseNotReadyTablet(tablet_p2->GetPath());
-    tablet_availability_->AddNotReadyTablet(tablet_c->GetPath());
-    ProcessOffLineTablet(tablet_c);
-    TryLoadTablet(tablet_c);
-    delete request;
-    delete response;
-    LOG(INFO) << "[merge] merge tablet finished, from [" << tablet_p1
-        << "] and [" << tablet_p2 << "] to [" << tablet_c << "]";
-}
-
-void MasterImpl::MergeTabletFailed(TabletPtr tablet_p1, TabletPtr tablet_p2) {
-    CHECK(tablet_p1->GetStatus() == kTableOnMerge);
-    CHECK(tablet_p2->GetStatus() == kTableOnMerge);
-    LOG(INFO) << "[merge] merge failed, tablets unload succ, reload them: "
-        << tablet_p1 << ", " << tablet_p2;
-    tablet_p1->SetStatusIf(kTableOffLine, kTableOnMerge);
-    ProcessOffLineTablet(tablet_p1);
-    TryLoadTablet(tablet_p1);
-    tablet_p2->SetStatusIf(kTableOffLine, kTableOnMerge);
-    ProcessOffLineTablet(tablet_p2);
-    TryLoadTablet(tablet_p2);
-}
-
-void MasterImpl::BatchWriteMetaTableAsync(ToMetaFunc meta_entry,
-                                          bool is_delete, WriteClosure done) {
-    std::vector<ToMetaFunc> meta_entries;
-    meta_entries.push_back(meta_entry);
-    BatchWriteMetaTableAsync(meta_entries, is_delete, done);
-}
-
-void MasterImpl::BatchWriteMetaTableAsync(TablePtr table,
-                                          const std::vector<TabletPtr>& tablets,
-                                          bool is_delete, WriteClosure done) {
-    std::vector<ToMetaFunc> meta_entries;
-    TablePtr null_ptr;
-    if (table != null_ptr) {
-        meta_entries.push_back(std::bind(&Table::ToMetaTableKeyValue, table, _1, _2));
-    }
-    if (tablets.size() != 0) {
-        for (size_t i = 0; i < tablets.size(); ++i) {
-            meta_entries.push_back(std::bind(&Tablet::ToMetaTableKeyValue, tablets[i], _1, _2));
-        }
-    }
-    BatchWriteMetaTableAsync(meta_entries, is_delete, done);
-}
-
-void MasterImpl::BatchWriteMetaTableAsync(std::vector<ToMetaFunc> meta_entries,
-                                          bool is_delete, WriteClosure done) {
-    VLOG(5) << "WriteMetaTableAsync()";
-    std::string meta_addr;
-    if (!tablet_manager_->GetMetaTabletAddr(&meta_addr)) {
-        SuspendMetaOperation(meta_entries, is_delete, done);
-        return;
-    }
-    WriteTabletRequest* request = new WriteTabletRequest;
-    WriteTabletResponse* response = new WriteTabletResponse;
-    request->set_sequence_id(this_sequence_id_.Inc());
-    request->set_tablet_name(FLAGS_tera_master_meta_table_name);
-    request->set_is_sync(true);
-    request->set_is_instant(true);
-    for (size_t i = 0; i < meta_entries.size(); ++i) {
-        std::string packed_key;
-        std::string packed_value;
-        meta_entries[i](&packed_key, &packed_value);
-        RowMutationSequence* mu_seq = request->add_row_list();
-        mu_seq->set_row_key(packed_key);
-        Mutation* mutation = mu_seq->add_mutation_sequence();
-        if (!is_delete) {
-            mutation->set_type(kPut);
-            mutation->set_value(packed_value);
-        } else {
-            mutation->set_type(kDeleteRow);
-        }
-    }
-    if (request->row_list_size() == 0) {
-        delete request;
-        delete response;
-        return;
-    } else {
-        LOG(INFO) << "WriteMetaTableAsync id: " << request->sequence_id();
-    }
-
-    tabletnode::TabletNodeClient meta_node_client(meta_addr);
-    meta_node_client.WriteTablet(request, response, done);
-}
-
-void MasterImpl::AddMetaCallback(TablePtr table,
-                                 std::vector<TabletPtr> tablets,
-                                 int32_t retry_times,
-                                 const CreateTableRequest* rpc_request,
+void MasterImpl::AddMetaCallback(std::vector<TabletPtr> tablets,
                                  CreateTableResponse* rpc_response,
                                  google::protobuf::Closure* rpc_done,
-                                 WriteTabletRequest* request,
-                                 WriteTabletResponse* response,
-                                 bool failed, int error_code) {
-    StatusCode status = response->status();
-    if (!failed && status == kTabletNodeOk) {
-        // all the row status should be the same
-        CHECK_GT(response->row_status_list_size(), 0);
-        status = response->row_status_list(0);
-    }
-    delete request;
-    delete response;
-    if (failed || status != kTabletNodeOk) {
-        if (failed) {
-            LOG(ERROR) << "fail to add to meta tablet: "
-                << sofa::pbrpc::RpcErrorCodeToString(error_code) << ", "
-                << tablets[0] << "...";
-        } else {
-            LOG(ERROR) << "fail to add to meta tablet: "
-                << StatusCodeToString(status) << ", " << tablets[0] << "...";
-        }
-        if (retry_times <= 0) {
-            for(size_t i = 0; i < tablets.size(); i++) {
-                DeleteTablet(tablets[i]);
-            }
-            rpc_response->set_status(kMetaTabletError);
-            rpc_done->Run();
-        } else {
-            WriteClosure done =
-                std::bind(&MasterImpl::AddMetaCallback, this, table,
-                           tablets, retry_times - 1, rpc_request, rpc_response,
-                           rpc_done, _1, _2, _3, _4);
-            SuspendMetaOperation(table, tablets, false, done);
-        }
+                                 bool succ) {
+    if (!succ) {
+        LOG(INFO) << "create table " << tablets[0]->GetTableName() << " failed";
+        rpc_response->set_status(kMetaTabletError);
+        rpc_done->Run();
         return;
     }
 
     rpc_response->set_status(kMasterOk);
     rpc_done->Run();
     LOG(INFO) << "create table " << tablets[0]->GetTableName() << " success";
-
     for (size_t i = 0; i < tablets.size(); i++) {
-        if (tablets[i]->SetStatusIf(kTableOffLine, kTableNotInit)) {
-            ProcessOffLineTablet(tablets[i]);
-            TryLoadTablet(tablets[i]);
-        }
+        TryLoadTablet(tablets[i]);
     }
-}
-
-void MasterImpl::UpdateTableRecordForDisableCallback(TablePtr table, int32_t retry_times,
-                                                     DisableTableResponse* rpc_response,
-                                                     google::protobuf::Closure* rpc_done,
-                                                     WriteTabletRequest* request,
-                                                     WriteTabletResponse* response,
-                                                     bool failed, int error_code) {
-    StatusCode status = response->status();
-    if (!failed && status == kTabletNodeOk) {
-        // all the row status should be the same
-        CHECK_GT(response->row_status_list_size(), 0);
-        status = response->row_status_list(0);
-    }
-    delete request;
-    delete response;
-    if (failed || status != kTabletNodeOk) {
-        if (failed) {
-            LOG(ERROR) << "fail to update meta table: "
-                << sofa::pbrpc::RpcErrorCodeToString(error_code) << ", " << table;
-        } else {
-            LOG(ERROR) << "fail to update meta table: "
-                << StatusCodeToString(status) << ", " << table;
-        }
-        if (retry_times <= 0) {
-            LOG(ERROR) << kSms << "abort update meta table, " << table;
-            rpc_response->set_status(kMetaTabletError);
-            rpc_done->Run();
-        } else {
-            WriteClosure done =
-                std::bind(&MasterImpl::UpdateTableRecordForDisableCallback, this,
-                           table, retry_times - 1, rpc_response, rpc_done, _1, _2, _3, _4);
-            SuspendMetaOperation(std::bind(&Table::ToMetaTableKeyValue, table, _1, _2),
-                                 false, done);
-        }
-        return;
-    }
-    LOG(INFO) << "update meta table success, " << table;
-    rpc_response->set_status(kMasterOk);
-    rpc_done->Run();
-
-    // unload all tablet of this table
-    std::vector<TabletPtr> tablet_meta_list;
-    table->GetTablet(&tablet_meta_list);
-    for (uint32_t i = 0; i < tablet_meta_list.size(); ++i) {
-        TabletPtr tablet = tablet_meta_list[i];
-        if (tablet->SetStatusIf(kTableUnLoading, kTableReady, kTableDisable)) {
-            UnloadClosure done =
-                std::bind(&MasterImpl::UnloadTabletCallback, this, tablet,
-                           FLAGS_tera_master_impl_retry_times, _1, _2, _3, _4);
-            UnloadTabletAsync(tablet, done);
-        } else {
-            tablet->SetStatusIf(kTabletDisable, kTableOffLine, kTableDisable);
-        }
-    }
-}
-
-
-void MasterImpl::UpdateTableRecordForEnableCallback(TablePtr table, int32_t retry_times,
-                                                    EnableTableResponse* rpc_response,
-                                                    google::protobuf::Closure* rpc_done,
-                                                    WriteTabletRequest* request,
-                                                    WriteTabletResponse* response,
-                                                    bool failed, int error_code) {
-    StatusCode status = response->status();
-    if (!failed && status == kTabletNodeOk) {
-        // all the row status should be the same
-        CHECK_GT(response->row_status_list_size(), 0);
-        status = response->row_status_list(0);
-    }
-    delete request;
-    delete response;
-    if (failed || status != kTabletNodeOk) {
-        if (failed) {
-            LOG(ERROR) << "fail to update meta table: "
-                << sofa::pbrpc::RpcErrorCodeToString(error_code) << ", " << table;
-        } else {
-            LOG(ERROR) << "fail to update meta table: "
-                << StatusCodeToString(status) << ", " << table;
-        }
-        if (retry_times <= 0) {
-            LOG(ERROR) << kSms << "abort update meta table, " << table;
-            rpc_response->set_status(kMetaTabletError);
-            rpc_done->Run();
-        } else {
-            WriteClosure done =
-                std::bind(&MasterImpl::UpdateTableRecordForEnableCallback, this,
-                           table, retry_times - 1, rpc_response, rpc_done, _1, _2, _3, _4);
-            SuspendMetaOperation(std::bind(&Table::ToMetaTableKeyValue, table, _1, _2),
-                                 false, done);
-        }
-        return;
-    }
-    LOG(INFO) << "update meta table success, " << table;
-    rpc_response->set_status(kMasterOk);
-    rpc_done->Run();
-
-    // load all tablet of this table
-    std::vector<TabletPtr> tablet_meta_list;
-    table->GetTablet(&tablet_meta_list);
-    for (uint32_t i = 0; i < tablet_meta_list.size(); ++i) {
-        TabletPtr tablet = tablet_meta_list[i];
-        if (tablet->SetStatusIf(kTableOffLine, kTabletDisable, kTableEnable)) {
-            TryLoadTablet(tablet, tablet->GetServerAddr());
-        } else {
-            LOG(ERROR) << "fail to load tablet: " << tablet->GetPath()
-                << ", tablet status: " << StatusCodeToString(tablet->GetStatus());
-        }
-    }
-}
-
-void MasterImpl::UpdateTableRecordForUpdateCallback(TablePtr table, int32_t retry_times,
-                                                    UpdateTableResponse* rpc_response,
-                                                    google::protobuf::Closure* rpc_done,
-                                                    WriteTabletRequest* request,
-                                                    WriteTabletResponse* response,
-                                                    bool failed, int error_code) {
-    StatusCode status = response->status();
-    if (!failed && status == kTabletNodeOk) {
-        // all the row status should be the same
-        CHECK_GT(response->row_status_list_size(), 0);
-        status = response->row_status_list(0);
-    }
-    delete request;
-    delete response;
-    if (failed || status != kTabletNodeOk) {
-        if (failed) {
-            LOG(ERROR) << "fail to update meta table: "
-                << sofa::pbrpc::RpcErrorCodeToString(error_code) << ", " << table;
-        } else {
-            LOG(ERROR) << "fail to update meta table: "
-                << StatusCodeToString(status) << ", " << table;
-        }
-        if (retry_times <= 0) {
-            LOG(ERROR) << kSms << "abort update meta table, " << table;
-            table->AbortUpdate();
-            rpc_response->set_status(kMetaTabletError);
-            rpc_done->Run();
-            table->SetSchemaIsSyncing(false);
-        } else {
-            WriteClosure done =
-                std::bind(&MasterImpl::UpdateTableRecordForUpdateCallback, this,
-                           table, retry_times - 1, rpc_response, rpc_done, _1, _2, _3, _4);
-            SuspendMetaOperation(std::bind(&Table::ToMetaTableKeyValue, table, _1, _2),
-                                 false, done);
-        }
-        return;
-    }
-    bool is_update_cf = IsUpdateCf(table);
-    table->CommitUpdate();
-    if ((table->GetStatus() == kTableDisable) // no need to sync
-        || !FLAGS_tera_online_schema_update_enabled
-        || !is_update_cf) {
-        LOG(INFO) << "[update] new table schema is updated: " << table->GetSchema().ShortDebugString();
-        table->SetSchemaIsSyncing(false); // releases the schema-sync lock
-        rpc_response->set_status(kMasterOk);
-        rpc_done->Run();
-    } else {
-        LOG(INFO) << "[update] online-schema-update";
-        table->StoreUpdateRpc(rpc_response, rpc_done);
-        table->ResetRangeFragment();
-        NoticeTabletNodeSchemaUpdated(table);
-    }
-}
-
-bool MasterImpl::IsUpdateCf(TablePtr table) {
-    TableSchema schema;
-    if (table->GetOldSchema(&schema)) {
-        return IsSchemaCfDiff(table->GetSchema(), schema);
-    }
-    return true;
-}
-
-void MasterImpl::UpdateTableRecordForRenameCallback(TablePtr table, int32_t retry_times,
-                                                    RenameTableResponse* rpc_response,
-                                                    google::protobuf::Closure* rpc_done,
-                                                    std::string old_alias,
-                                                    std::string new_alias,
-                                                    WriteTabletRequest* request,
-                                                    WriteTabletResponse* response,
-                                                    bool failed, int error_code
-                                                    ) {
-    StatusCode status = response->status();
-    if (!failed && status == kTabletNodeOk) {
-        // all the row status should be the same
-        CHECK_GT(response->row_status_list_size(), 0);
-        status = response->row_status_list(0);
-    }
-    delete request;
-    delete response;
-    if (failed || status != kTabletNodeOk) {
-        if (failed) {
-            LOG(ERROR) << "fail to update meta table: "
-                << sofa::pbrpc::RpcErrorCodeToString(error_code) << ", " << table;
-        } else {
-            LOG(ERROR) << "fail to update meta table: "
-                << StatusCodeToString(status) << ", " << table;
-        }
-        if (retry_times <= 0) {
-            LOG(ERROR) << kSms << "abort update meta table, " << table;
-            rpc_response->set_status(kMetaTabletError);
-            rpc_done->Run();
-        } else {
-            WriteClosure done =
-                std::bind(&MasterImpl::UpdateTableRecordForRenameCallback, this,
-                           table, retry_times - 1, rpc_response, rpc_done,
-                           old_alias, new_alias, _1, _2, _3, _4);
-            SuspendMetaOperation(std::bind(&Table::ToMetaTableKeyValue, table, _1, _2),
-                                 false, done);
-        }
-        return;
-    }
-    {
-        MutexLock locker(&alias_mutex_);
-        const std::string& internal_table_name = table->GetSchema().name();
-        alias_[new_alias] =  internal_table_name;
-        alias_.erase(old_alias);
-    }
-    LOG(INFO) << "Rename done. update meta table success, " << table;
-    rpc_response->set_status(kMasterOk);
-    rpc_done->Run();
-}
-
-void MasterImpl::UpdateTabletRecordCallback(TabletPtr tablet, int32_t retry_times,
-                                            WriteTabletRequest* request,
-                                            WriteTabletResponse* response,
-                                            bool failed, int error_code) {
-    StatusCode status = response->status();
-    if (!failed && status == kTabletNodeOk) {
-        // all the row status should be the same
-        CHECK_GT(response->row_status_list_size(), 0);
-        status = response->row_status_list(0);
-    }
-    delete request;
-    delete response;
-    if (failed || status != kTabletNodeOk) {
-        if (failed) {
-            LOG(ERROR) << "fail to update meta tablet: "
-                << sofa::pbrpc::RpcErrorCodeToString(error_code) << ", " << tablet;
-        } else {
-            LOG(ERROR) << "fail to update meta tablet: "
-                << StatusCodeToString(status) << ", " << tablet;
-        }
-        if (retry_times <= 0) {
-            LOG(ERROR) << kSms << "abort update meta tablet, " << tablet;
-        } else {
-            WriteClosure done =
-                std::bind(&MasterImpl::UpdateTabletRecordCallback, this,
-                           tablet, retry_times - 1, _1, _2, _3, _4);
-            SuspendMetaOperation(std::bind(&Tablet::ToMetaTableKeyValue, tablet, _1, _2),
-                                 false, done);
-        }
-        return;
-    }
-    LOG(INFO) << "update meta tablet success, " << tablet;
-}
-
-void MasterImpl::UpdateMetaForLoadCallback(TabletPtr tablet, int32_t retry_times,
-                                           WriteTabletRequest* request,
-                                           WriteTabletResponse* response,
-                                           bool failed, int error_code) {
-    CHECK(tablet->GetStatus() == kTableOnLoad);
-    StatusCode status = response->status();
-    if (!failed && status == kTabletNodeOk) {
-        // all the row status should be the same
-        CHECK_GT(response->row_status_list_size(), 0);
-        status = response->row_status_list(0);
-    }
-    delete request;
-    delete response;
-    std::string server_addr = tablet->GetServerAddr();
-    if (failed || status != kTabletNodeOk) {
-        if (failed) {
-            LOG(ERROR) << "fail to update meta tablet: "
-                << sofa::pbrpc::RpcErrorCodeToString(error_code) << ", " << tablet;
-        } else {
-            LOG(ERROR) << "fail to update meta tablet: "
-                << StatusCodeToString(status) << ", " << tablet;
-        }
-        if (retry_times <= 0) {
-            LOG(ERROR) << kSms << "abort update meta tablet, " << tablet;
-            tablet->SetStatusIf(kTableOffLine, kTableOnLoad);
-            ProcessOffLineTablet(tablet);
-            // load fail, try reload
-            TryLoadTablet(tablet, server_addr);
-
-            // load next tablet
-            TabletNodePtr node;
-            if (tabletnode_manager_->FindTabletNode(server_addr, &node)
-                && node->uuid_ == tablet->GetServerId()) {
-                node->FinishLoad(tablet);
-                TabletPtr next_tablet;
-                while (node->LoadNextWaitTablet(&next_tablet)) {
-                    if (next_tablet->SetAddrAndStatusIf(server_addr, kTableOnLoad, kTableOffLine)) {
-                        next_tablet->SetServerId(node->uuid_);
-                        WriteClosure done =
-                            std::bind(&MasterImpl::UpdateMetaForLoadCallback, this,
-                                       next_tablet, FLAGS_tera_master_meta_retry_times, _1, _2, _3, _4);
-                        BatchWriteMetaTableAsync(std::bind(&Tablet::ToMetaTableKeyValue, next_tablet, _1, _2),
-                                                 false, done);
-                        break;
-                    }
-                    node->FinishLoad(next_tablet);
-                }
-            }
-        } else {
-            WriteClosure done =
-                std::bind(&MasterImpl::UpdateMetaForLoadCallback, this,
-                           tablet, retry_times - 1, _1, _2, _3, _4);
-            SuspendMetaOperation(std::bind(&Tablet::ToMetaTableKeyValue, tablet, _1, _2),
-                                 false, done);
-        }
-        return;
-    }
-    LOG(INFO) << "update meta tablet success, " << tablet;
-
-    // if server down here, let split callback take care of status switch
-    LoadClosure done = std::bind(&MasterImpl::LoadTabletCallback, this,
-                                   tablet, 0, _1, _2, _3, _4);
-    LoadTabletAsync(tablet, done);
-}
-
-void MasterImpl::DeleteTableCallback(TablePtr table,
-                                     std::vector<TabletPtr> tablets,
-                                     int32_t retry_times,
-                                     DeleteTableResponse* rpc_response,
-                                     google::protobuf::Closure* rpc_done,
-                                     WriteTabletRequest* request,
-                                     WriteTabletResponse* response,
-                                     bool failed, int error_code) {
-    StatusCode status = response->status();
-    if (!failed && status == kTabletNodeOk) {
-        // all the row status should be the same
-        CHECK_GT(response->row_status_list_size(), 0);
-        status = response->row_status_list(0);
-    }
-    delete request;
-    delete response;
-    if (failed || status != kTabletNodeOk) {
-        if (failed) {
-            LOG(ERROR) << "fail to delete table meta: "
-                << sofa::pbrpc::RpcErrorCodeToString(error_code) << ", " << table;
-        } else {
-            LOG(ERROR) << "fail to delete table meta: "
-                << StatusCodeToString(status) << ", " << table;
-        }
-        if (retry_times <= 0) {
-            LOG(ERROR) << kSms << "abort delete meta table record, " << table;
-            rpc_response->set_status(kMetaTabletError);
-            rpc_done->Run();
-        } else {
-            WriteClosure done =
-                std::bind(&MasterImpl::DeleteTableCallback, this, table, tablets,
-                           retry_times - 1, rpc_response, rpc_done, _1, _2, _3, _4);
-            SuspendMetaOperation(table, tablets, true, done);
-        }
-        return;
-    }
-    std::string table_alias = table->GetSchema().alias();
-    if (!table_alias.empty()) {
-        MutexLock locker(&alias_mutex_);
-        alias_.erase(table_alias);
-    }
-    // clean tablet manager
-    for (uint32_t i = 0; i < tablets.size(); ++i) {
-        TabletPtr tablet = tablets[i];
-        DeleteTablet(tablet);
-    }
-    if (gc_strategy_ != NULL) {
-        gc_strategy_->Clear(table->GetTableName());
-    }
-    LOG(INFO) << "delete meta table record success, " << table;
-    rpc_response->set_status(kMasterOk);
-    rpc_done->Run();
-}
-
-void MasterImpl::DeleteTablet(TabletPtr tablet) {
-    tablet_manager_->DeleteTablet(tablet->GetTableName(), tablet->GetKeyStart());
-    tablet_availability_->EraseNotReadyTablet(tablet->GetPath());
-}
-
-void MasterImpl::ScanMetaTableAsync(const std::string& table_name,
-                                    const std::string& tablet_key_start,
-                                    const std::string& tablet_key_end,
-                                    ScanClosure done) {
-    std::string meta_addr;
-    if (!tablet_manager_->GetMetaTabletAddr(&meta_addr)) {
-        SuspendMetaOperation(table_name, tablet_key_start, tablet_key_end, done);
-        return;
-    }
-
-    ScanTabletRequest* request = new ScanTabletRequest;
-    ScanTabletResponse* response = new ScanTabletResponse;
-    request->set_sequence_id(this_sequence_id_.Inc());
-    request->set_table_name(FLAGS_tera_master_meta_table_name);
-    std::string scan_key_start, scan_key_end;
-    MetaTableScanRange(table_name, tablet_key_start, tablet_key_end,
-                       &scan_key_start, &scan_key_end);
-    request->set_start(scan_key_start);
-    request->set_end(scan_key_end);
-
-    LOG(INFO) << "ScanMetaTableAsync id: " << request->sequence_id() << ", "
-        << "table: " << table_name << ", range: ["
-        << DebugString(tablet_key_start) << ", " << DebugString(tablet_key_end);
-    tabletnode::TabletNodeClient meta_node_client(meta_addr);
-    meta_node_client.ScanTablet(request, response, done);
-}
-
-void MasterImpl::ScanMetaCallbackForSplit(TabletPtr tablet,
-                                          ScanTabletRequest* request,
-                                          ScanTabletResponse* response,
-                                          bool failed, int error_code) {
-    CHECK(tablet->GetStatus() == kTableOnSplit);
-    delete request;
-
-    if (failed || response->status() != kTabletNodeOk) {
-        if (failed) {
-            LOG(ERROR) << "fail to scan meta table: "
-                << sofa::pbrpc::RpcErrorCodeToString(error_code) << ", " << tablet;
-        } else {
-            LOG(ERROR) << "fail to scan meta table: "
-                << StatusCodeToString(response->status()) << ", " << tablet;
-        }
-        ScanClosure done =
-            std::bind(&MasterImpl::ScanMetaCallbackForSplit, this, tablet, _1, _2, _3, _4);
-        SuspendMetaOperation(tablet->GetTableName(), tablet->GetKeyStart(),
-                             tablet->GetKeyEnd(), done);
-        delete response;
-        return;
-    }
-
-    uint32_t record_size = response->results().key_values_size();
-    VLOG(5) << "scan meta table: " << record_size << " records";
-    if (record_size > 2 || record_size == 0) {
-        LOG(ERROR) << kSms << "split into " << record_size << " pieces, "
-            << tablet;
-        // TryKickTabletNode(tablet->GetServerAddr());
-        WriteClosure closure =
-                std::bind(&MasterImpl::RepairMetaAfterSplitCallback, this,
-                           tablet, response, FLAGS_tera_master_meta_retry_times,
-                           _1, _2, _3, _4);
-        RepairMetaTableAsync(tablet, response, closure);
-        return;
-    }
-
-    std::string server_addr = tablet->GetServerAddr();
-    const std::string& key_start = tablet->GetKeyStart();
-    const std::string& key_end = tablet->GetKeyEnd();
-
-    const KeyValuePair& first_record = response->results().key_values(0);
-    TabletMeta first_meta;
-    ParseMetaTableKeyValue(first_record.key(), first_record.value(),
-                           &first_meta);
-    const std::string& first_key_start = first_meta.key_range().key_start();
-    const std::string& first_key_end = first_meta.key_range().key_end();
-
-    if (record_size == 1) {
-        if (tablet->Verify(first_key_start, first_key_end, first_meta.table_name(),
-                           first_meta.path(), first_meta.server_addr())) {
-            LOG(WARNING) << "split not complete, " << tablet;
-            tablet->SetStatus(kTableOffLine);
-            ProcessOffLineTablet(tablet);
-            TryLoadTablet(tablet);
-            delete response;
-        } else {
-            LOG(ERROR) << kSms << "split into " << record_size << " pieces, "
-                << tablet;
-            WriteClosure closure =
-                    std::bind(&MasterImpl::RepairMetaAfterSplitCallback, this,
-                               tablet, response, FLAGS_tera_master_meta_retry_times,
-                               _1, _2, _3, _4);
-            RepairMetaTableAsync(tablet, response, closure);
-        }
-        return;
-    }
-
-    const KeyValuePair& second_record = response->results().key_values(1);
-    TabletMeta second_meta;
-    ParseMetaTableKeyValue(second_record.key(), second_record.value(),
-                           &second_meta);
-    const std::string& second_key_start = second_meta.key_range().key_start();
-    const std::string& second_key_end = second_meta.key_range().key_end();
-
-    if (first_key_start != key_start || first_key_end != second_key_start
-        || second_key_end != key_end || key_start >= second_key_start
-        || (!key_end.empty() && key_end <= second_key_start)
-        || (key_end.empty() && second_key_start.empty())) {
-        LOG(ERROR) << kSms << "two splits are not successive, " << tablet;
-        // TryKickTabletNode(tablet->GetServerAddr());
-        WriteClosure closure =
-                std::bind(&MasterImpl::RepairMetaAfterSplitCallback, this,
-                           tablet, response, FLAGS_tera_master_meta_retry_times,
-                           _1, _2, _3, _4);
-        RepairMetaTableAsync(tablet, response, closure);
-        return;
-    }
-
-    first_meta.set_status(kTableOffLine);
-    second_meta.set_status(kTableOffLine);
-    TabletPtr first_tablet, second_tablet;
-    TablePtr table = tablet->GetTable();
-    table->SplitTablet(tablet, first_meta, second_meta, &first_tablet, &second_tablet);
-
-    tablet_availability_->EraseNotReadyTablet(tablet->GetPath());
-    tablet_availability_->AddNotReadyTablet(first_tablet->GetPath());
-    tablet_availability_->AddNotReadyTablet(second_tablet->GetPath());
-    LOG(INFO) << "split finish, " << tablet << ", try load child tablets, "
-        << "\nfirst: " << first_meta.ShortDebugString()
-        << "\nsecond: " << second_meta.ShortDebugString();
-    ProcessOffLineTablet(first_tablet);
-    TryLoadTablet(first_tablet, server_addr);
-    ProcessOffLineTablet(second_tablet);
-    TryLoadTablet(second_tablet, server_addr);
-    delete response;
-}
-
-void MasterImpl::RepairMetaTableAsync(TabletPtr tablet,
-                                      ScanTabletResponse* scan_resp,
-                                      WriteClosure done) {
-    std::string meta_addr;
-    if (!tablet_manager_->GetMetaTabletAddr(&meta_addr)) {
-        SuspendMetaOperation(tablet, scan_resp, done);
-        return;
-    }
-
-    WriteTabletRequest* request = new WriteTabletRequest;
-    WriteTabletResponse* response = new WriteTabletResponse;
-    request->set_sequence_id(this_sequence_id_.Inc());
-    request->set_tablet_name(FLAGS_tera_master_meta_table_name);
-    request->set_is_sync(true);
-    request->set_is_instant(true);
-    // first, erase all invalid record
-    for (int32_t i = 0; i < scan_resp->results().key_values_size(); i++) {
-        const KeyValuePair& record = scan_resp->results().key_values(i);
-        RowMutationSequence* mu_seq = request->add_row_list();
-        mu_seq->set_row_key(record.key());
-        Mutation* mutation = mu_seq->add_mutation_sequence();
-        mutation->set_type(kDeleteRow);
-    }
-    // then, add the correct record
-    std::string packed_key;
-    std::string packed_value;
-    tablet->ToMetaTableKeyValue(&packed_key, &packed_value);
-    RowMutationSequence* mu_seq = request->add_row_list();
-    mu_seq->set_row_key(packed_key);
-    Mutation* mutation = mu_seq->add_mutation_sequence();
-    mutation->set_type(kPut);
-    mutation->set_value(packed_value);
-
-
-    LOG(INFO) << "RepairMetaTableAsync id: " << request->sequence_id() << ", "
-        << tablet;
-    tabletnode::TabletNodeClient meta_node_client(meta_addr);
-    meta_node_client.WriteTablet(request, response, done);
-}
-
-void MasterImpl::RepairMetaAfterSplitCallback(TabletPtr tablet,
-                                              ScanTabletResponse* scan_resp,
-                                              int32_t retry_times,
-                                              WriteTabletRequest* request,
-                                              WriteTabletResponse* response,
-                                              bool failed, int error_code) {
-    CHECK(tablet->GetStatus() == kTableOnSplit);
-    StatusCode status = response->status();
-    if (!failed && status == kTabletNodeOk) {
-        // all the row status should be the same
-        CHECK_GT(response->row_status_list_size(), 0);
-        status = response->row_status_list(0);
-    }
-    delete request;
-    delete response;
-
-    if (failed || status != kTabletNodeOk) {
-        if (failed) {
-            LOG(ERROR) << "fail to repair meta table: "
-                << sofa::pbrpc::RpcErrorCodeToString(error_code) << ", " << tablet;
-        } else {
-            LOG(ERROR) << "fail to repair meta table: "
-                << StatusCodeToString(response->status()) << ", " << tablet;
-        }
-        if (retry_times <= 0) {
-            LOG(ERROR) << kSms << "abort repair meta, " << tablet;
-            delete scan_resp;
-            // we can still repair it at next split
-            tablet->SetStatusIf(kTableOffLine, kTableOnSplit);
-            ProcessOffLineTablet(tablet);
-            TryLoadTablet(tablet);
-        } else {
-            WriteClosure done =
-                std::bind(&MasterImpl::RepairMetaAfterSplitCallback, this,
-                           tablet, scan_resp, retry_times - 1, _1, _2, _3, _4);
-            SuspendMetaOperation(tablet, scan_resp, done);
-        }
-        return;
-    }
-    LOG(INFO) << "repair meta success, " << tablet;
-
-    delete scan_resp;
-    tablet->SetStatusIf(kTableOffLine, kTableOnSplit);
-    ProcessOffLineTablet(tablet);
-    TryLoadTablet(tablet);
-}
-
-void MasterImpl::SuspendMetaOperation(TablePtr table, const std::vector<TabletPtr>& tablets,
-                                      bool is_delete, WriteClosure done) {
-    std::vector<ToMetaFunc> meta_entries;
-    TablePtr null_ptr;
-    if (table != null_ptr) {
-        meta_entries.push_back(std::bind(&Table::ToMetaTableKeyValue, table, _1, _2));
-    }
-    for (size_t i = 0; i < tablets.size(); ++i) {
-        meta_entries.push_back(std::bind(&Tablet::ToMetaTableKeyValue, tablets[i], _1, _2));
-    }
-    SuspendMetaOperation(meta_entries, is_delete, done);
-}
-
-void MasterImpl::SuspendMetaOperation(ToMetaFunc meta_entry,
-                                      bool is_delete, WriteClosure done) {
-    std::vector<ToMetaFunc> meta_entries;
-    meta_entries.push_back(meta_entry);
-    SuspendMetaOperation(meta_entries, is_delete, done);
-}
-
-void MasterImpl::SuspendMetaOperation(std::vector<ToMetaFunc> meta_entries,
-                                      bool is_delete, WriteClosure done) {
-    WriteTask* task = new WriteTask;
-    task->type_ = kWrite;
-    task->done_ = done;
-    task->meta_entries_ = meta_entries;
-    task->is_delete_ = is_delete;
-    PushToMetaPendingQueue((MetaTask*)task);
-}
-
-void MasterImpl::SuspendMetaOperation(const std::string& table_name,
-                                      const std::string& tablet_key_start,
-                                      const std::string& tablet_key_end,
-                                      ScanClosure done) {
-    ScanTask* task = new ScanTask;
-    task->type_ = kScan;
-    task->done_ = done;
-    task->table_name_ = table_name;
-    task->tablet_key_start_ = tablet_key_start;
-    task->tablet_key_end_ = tablet_key_end;
-    PushToMetaPendingQueue((MetaTask*)task);
-}
-
-void MasterImpl::SuspendMetaOperation(TabletPtr tablet,
-                                      ScanTabletResponse* scan_resp,
-                                      WriteClosure done) {
-    RepairTask* task = new RepairTask;
-    task->type_ = kRepair;
-    task->tablet_ = tablet;
-    task->done_ = done;
-    task->scan_resp_ = scan_resp;
-    PushToMetaPendingQueue((MetaTask*)task);
-}
-
-void MasterImpl::PushToMetaPendingQueue(MetaTask* task) {
-    bool reload_meta_table = false;
-    meta_task_mutex_.Lock();
-    if (meta_task_queue_.empty()) {
-        reload_meta_table = true;
-    }
-    meta_task_queue_.push(task);
-    meta_task_mutex_.Unlock();
-    if (reload_meta_table) {
-        TabletPtr meta_tablet;
-        tablet_manager_->FindTablet(FLAGS_tera_master_meta_table_name, "",
-                                     &meta_tablet);
-        TryMoveTablet(meta_tablet);
-    }
-}
-
-void MasterImpl::ResumeMetaOperation() {
-    meta_task_mutex_.Lock();
-    while (!meta_task_queue_.empty()) {
-        MetaTask* task = meta_task_queue_.front();
-        if (task->type_ == kWrite) {
-            WriteTask* write_task = (WriteTask*)task;
-            BatchWriteMetaTableAsync(write_task->meta_entries_,
-                                     write_task->is_delete_, write_task->done_);
-            delete write_task;
-        } else if (task->type_ == kScan) {
-            ScanTask* scan_task = (ScanTask*)task;
-            ScanMetaTableAsync(scan_task->table_name_,
-                               scan_task->tablet_key_start_,
-                               scan_task->tablet_key_end_, scan_task->done_);
-            delete scan_task;
-        } else if (task->type_ == kRepair) {
-            RepairTask* repair_task = (RepairTask*)task;
-            RepairMetaTableAsync(repair_task->tablet_, repair_task->scan_resp_,
-                                 repair_task->done_);
-            delete repair_task;
-        }
-        meta_task_queue_.pop();
-    }
-    meta_task_mutex_.Unlock();
-}
-
-void MasterImpl::TryMoveTablet(TabletPtr tablet, const std::string& server_addr, bool in_place) {
-    if (!in_place && (tablet->GetServerAddr() == server_addr)) {
-        return;
-    }
-    LOG(INFO) << "Move " << tablet << " from " << tablet->GetServerAddr()
-        << " to " << server_addr;
-    if (tablet->SetStatusIf(kTableUnLoading, kTableReady)) {
-        tablet->SetExpectServerAddr(server_addr);
-        TabletNodePtr node;
-        if (!server_addr.empty() &&
-            tabletnode_manager_->FindTabletNode(server_addr, &node)) {
-            node->PlanToMoveIn();
-        }
-        tablet_availability_->AddNotReadyTablet(tablet->GetPath());
-        UnloadClosure done =
-            std::bind(&MasterImpl::UnloadTabletCallback, this, tablet,
-                       FLAGS_tera_master_impl_retry_times, _1, _2, _3, _4);
-        UnloadTabletAsync(tablet, done);
-    }
-}
-
-void MasterImpl::ProcessOffLineTablet(TabletPtr tablet) {
-    if (!tablet->IsBound()) {
-        return;
-    }
-    tablet->SetStatusIf(kTabletDisable, kTableOffLine, kTableDisable);
-}
-
-void MasterImpl::ProcessReadyTablet(TabletPtr tablet) {
-    if (tablet->SetStatusIf(kTableUnLoading, kTableReady, kTableDisable)) {
-        UnloadClosure done =
-            std::bind(&MasterImpl::UnloadTabletCallback, this, tablet,
-                       FLAGS_tera_master_impl_retry_times, _1, _2, _3, _4);
-        UnloadTabletAsync(tablet, done);
-        return;
-    }
-
-    if (FLAGS_tera_online_schema_update_enabled
-        && tablet->GetTable()->GetSchemaIsSyncing()
-        && !tablet->GetTable()->IsSchemaSyncedAtRange(tablet->GetKeyStart(), tablet->GetKeyEnd())) {
-        LOG(INFO) << "[update] tablet ready but schema not synced: " << tablet;
-        NoticeTabletNodeSchemaUpdated(tablet);
-    }
-}
-
-bool MasterImpl::CreateStatTable() {
-    master::MasterClient master_client(local_addr_);
-
-    CreateTableRequest request;
-    CreateTableResponse response;
-    request.set_sequence_id(0);
-    request.set_table_name(FLAGS_tera_master_stat_table_name);
-    request.set_user_token(user_manager_->UserNameToToken("root"));
-    TableSchema* schema = request.mutable_schema();
-
-    schema->set_name(FLAGS_tera_master_stat_table_name);
-    schema->set_raw_key(Binary);
-    schema->set_split_size(FLAGS_tera_master_stat_table_splitsize);
-
-    LocalityGroupSchema* lg = schema->add_locality_groups();
-    lg->set_name("lg0");
-    lg->set_store_type(FlashStore);
-    lg->set_id(0);
-
-    ColumnFamilySchema* cf = schema->add_column_families();
-    cf->set_name("tsinfo");
-    cf->set_time_to_live(FLAGS_tera_master_stat_table_ttl);
-    cf->set_locality_group("lg0");
-
-    master_client.CreateTable(&request, &response);
-    switch (response.status()) {
-        case kMasterOk:
-            return true;
-        case kTableExist:
-            return true;
-        default:
-            return false;
-    }
-}
-
-void MasterImpl::DumpStatCallBack(RowMutation* mutation) {
-    VLOG(15) << "dump stat success:" << mutation->RowKey();
-    const ErrorCode& error_code = mutation->GetError();
-    if (error_code.GetType() != ErrorCode::kOK) {
-        VLOG(15) << "exception occured, reason:" << error_code.GetReason();
-    }
-    delete mutation;
-}
-
-void MasterImpl::DumpTabletNodeAddrToTable(const std::string& addr) {
-    std::string key = "#" + addr;
-    RowMutation* mutation = stat_table_->NewRowMutation(key);
-    mutation->Put("tsinfo", "", "");
-    mutation->SetCallBack(&DumpStatCallBack);
-    stat_table_->ApplyMutation(mutation);
-}
-
-void MasterImpl::DumpStatToTable(const TabletNode& stat) {
-    int64_t cur_ts = get_micros() & 0x00FFFFFFFFFFFFFF;
-    uint64_t inv_ts = (1UL << 56) - cur_ts;
-    {
-        MutexLock lock(&stat_table_mutex_);
-        if (ts_stat_update_time_[stat.addr_] == 0) {
-            stat_table_mutex_.Unlock();
-            DumpTabletNodeAddrToTable(stat.addr_);
-            stat_table_mutex_.Lock();
-        }
-        if (cur_ts - ts_stat_update_time_[stat.addr_]
-            < FLAGS_tera_master_stat_table_interval * 1000000) {
-            return;
-        }
-        ts_stat_update_time_[stat.addr_] = cur_ts;
-    }
-
-    char buf[20];
-    std::string key, value;
-    snprintf(buf, 20, "%16ld", inv_ts);
-    key = stat.addr_ + std::string(buf, 16);
-    stat.info_.SerializeToString(&value);
-
-    RowMutation* mutation = stat_table_->NewRowMutation(key);
-    mutation->Put("tsinfo", "", value);
-    mutation->SetCallBack(&DumpStatCallBack);
-    stat_table_->ApplyMutation(mutation);
 }
 
 void MasterImpl::ScheduleTabletNodeGc() {
@@ -5207,6 +2543,60 @@ void MasterImpl::EnableTabletNodeGcTimer() {
         ScheduleTabletNodeGc();
     }
     gc_enabled_ = true;
+}
+
+void MasterImpl::DoGcTrashClean() {
+    {
+        MutexLock lock(&mutex_);
+        if (!gc_trash_clean_enabled_) {
+            gc_trash_clean_timer_id_ = kInvalidTimerId;
+            return;
+        }
+    }
+
+    int64_t start_ts = get_micros();
+    io::CleanTrackableGcTrash();
+    LOG(INFO) << "[gc] clean trackable gc trash, cost: "
+        << (get_micros() - start_ts) / 1000 << " ms";
+
+    MutexLock lock(&mutex_);
+    ScheduleGcTrashClean();
+}
+
+void MasterImpl::ScheduleGcTrashClean() {
+    mutex_.AssertHeld();
+    VLOG(10) << "[gc] ScheduleGcTrashClean";
+    ThreadPool::Task task =
+        std::bind(&MasterImpl::DoGcTrashClean, this);
+    gc_timer_id_ = thread_pool_->DelayTask(
+        FLAGS_tera_master_gc_trash_clean_period_s * 1000, task);
+}
+
+void MasterImpl::EnableGcTrashCleanTimer() {
+    if (!FLAGS_tera_master_gc_trash_enabled) {
+        return;
+    }
+
+    MutexLock lock(&mutex_);
+    if (gc_trash_clean_timer_id_ == kInvalidTimerId) {
+        ScheduleGcTrashClean();
+    }
+    gc_trash_clean_enabled_ = true;
+}
+
+void MasterImpl::DisableGcTrashCleanTimer() {
+    if (!FLAGS_tera_master_gc_trash_enabled) {
+        return;
+    }
+
+    MutexLock lock(&mutex_);
+    if (gc_trash_clean_timer_id_ != kInvalidTimerId) {
+        bool non_block = true;
+        if (thread_pool_->CancelTask(gc_timer_id_, non_block)) {
+            gc_trash_clean_timer_id_ = kInvalidTimerId;
+        }
+    }
+    gc_trash_clean_enabled_ = false;
 }
 
 void MasterImpl::DoAvailableCheck() {
@@ -5285,9 +2675,9 @@ void MasterImpl::DoTabletNodeGcPhase2() {
     }
 
     LOG(INFO) << "[gc] try clean trash dir.";
-    int64_t start = common::timer::get_micros();
+    int64_t start = get_micros();
     io::CleanTrashDir();
-    int64_t cost = (common::timer::get_micros() - start) / 1000;
+    int64_t cost = (get_micros() - start) / 1000;
     LOG(INFO) << "[gc] clean trash dir done, cost: " << cost << "ms.";
 
     MutexLock lock(&mutex_);
@@ -5296,79 +2686,6 @@ void MasterImpl::DoTabletNodeGcPhase2() {
     } else {
         gc_timer_id_ = kInvalidTimerId;
     }
-}
-
-void MasterImpl::RenameTable(const RenameTableRequest* request,
-                             RenameTableResponse* response,
-                             google::protobuf::Closure* done) {
-    response->set_sequence_id(request->sequence_id());
-    MasterStatus master_status = GetMasterStatus();
-    if (master_status != kIsRunning) {
-        LOG(ERROR) << "master is not ready, status_ = "
-            << StatusCodeToString(static_cast<StatusCode>(master_status));
-        response->set_status(static_cast<StatusCode>(master_status));
-        done->Run();
-        return;
-    }
-    std::string old_alias = request->old_table_name();
-    std::string new_alias = request->new_table_name();
-    std::string internal_table_name;
-
-    {
-        MutexLock locker(&alias_mutex_);
-        if (alias_.find(old_alias) == alias_.end()) {
-            LOG(ERROR) << "Fail to reanme, " << old_alias << " not exist";
-            response->set_status(kTableNotExist);
-            done->Run();
-            return;
-        } else if (alias_.find(new_alias) != alias_.end()) {
-            LOG(ERROR) << "Fail to rename, " << new_alias << "already exist";
-            response->set_status(kTableExist);
-            done->Run();
-            return;
-        } else if (new_alias.find("@") != std::string::npos) {
-            LOG(ERROR) << "Fail to rename, "
-                << new_alias << "contains invalid chars: @";
-            response->set_status(kInvalidArgument);
-            done->Run();
-            return;
-        } else if (new_alias.empty()) {
-            LOG(ERROR) << "Fail to rename, new alias is empty";
-            response->set_status(kInvalidArgument);
-            done->Run();
-            return;
-        } else {
-            internal_table_name = alias_[old_alias];
-        }
-    }
-
-    TablePtr table;
-    if (!tablet_manager_->FindTable(internal_table_name, &table)) {
-        LOG(ERROR) << "Fail to update table: " << internal_table_name
-            << ", table not exist";
-        response->set_status(kTableNotExist);
-        done->Run();
-        return;
-    }
-    TablePtr table2;
-    if (tablet_manager_->FindTable(new_alias, &table2)) {
-        LOG(ERROR) << "Fail to rename table to: " << new_alias
-            << ", table exist";
-        response->set_status(kTableExist);
-        done->Run();
-        return;
-    }
-    TableSchema schema;
-    schema.CopyFrom(table->GetSchema());
-    schema.set_alias(new_alias);
-    table->SetSchema(schema);
-    // write meta tablet
-    WriteClosure closure =
-        std::bind(&MasterImpl::UpdateTableRecordForRenameCallback, this, table,
-                   FLAGS_tera_master_meta_retry_times, response, done,
-                   old_alias, new_alias, _1, _2, _3, _4);
-    BatchWriteMetaTableAsync(std::bind(&Table::ToMetaTableKeyValue, table, _1, _2),
-                             false, closure);
 }
 
 void MasterImpl::RefreshTableCounter() {
@@ -5390,6 +2707,87 @@ void MasterImpl::RefreshTableCounter() {
 std::string MasterImpl::ProfilingLog() {
     return "[main : " + thread_pool_->ProfilingLog() + "] [query : "
         + query_thread_pool_->ProfilingLog() + "]";
+}
+
+bool TryLoadTablet(TabletPtr tablet, TabletNodePtr node) {
+    if (!tablet->LockTransition()) {
+        LOG(WARNING) << "tablet: " << tablet->GetPath() << "is in transition, giveup this load try";
+        return false;
+    }
+    std::shared_ptr<Procedure> load(new LoadTabletProcedure(tablet, node, MasterEnv().GetThreadPool().get()));
+    if (MasterEnv().GetExecutor()->AddProcedure(load) == 0) {
+        LOG(WARNING) << "add to procedure_executor fail, may duplicated procid: " << load->ProcId();
+        tablet->UnlockTransition();
+        return false;
+    }
+    return true;
+}
+
+bool TryUnloadTablet(TabletPtr tablet) {
+    if (!tablet->LockTransition()) {
+        LOG(WARNING) << "tablet: " << tablet->GetPath() << "is in transition, giveup this unload try";
+        return false;
+    }
+    std::shared_ptr<Procedure> unload(new UnloadTabletProcedure(tablet, MasterEnv().GetThreadPool().get(), false));
+    if (MasterEnv().GetExecutor()->AddProcedure(unload) == 0) {
+        LOG(WARNING) << "add to procedure_executor fail, may duplicated procid: " << unload->ProcId();
+        tablet->UnlockTransition();
+        return false;
+    }
+    return true;
+}
+
+bool TryMoveTablet(TabletPtr tablet, TabletNodePtr node) {
+    if (!tablet->LockTransition()) {
+        LOG(WARNING) << "tablet: " << tablet->GetPath() << "is in transition, giveup this move try";
+        return false;
+    }
+    std::shared_ptr<Procedure> move(new MoveTabletProcedure(tablet, node, MasterEnv().GetThreadPool().get()));
+    if (MasterEnv().GetExecutor()->AddProcedure(move) == 0) {
+        LOG(WARNING) << "add to procedure_executor fail, may duplicated procid: " << move->ProcId();
+        tablet->UnlockTransition();
+        return false;
+    }
+    return true;
+}
+
+bool TryMergeTablet(TabletPtr tablet) {
+    TabletPtr peer;
+    if (!MasterEnv().GetTabletManager()->PickMergeTablet(tablet, &peer)) {
+        LOG(WARNING) << "merge abort, cannot get proper merge peer, tablet: " << tablet;
+        return false;
+    }
+    if (!tablet->LockTransition()) {
+        LOG(WARNING) << "tablet: " << tablet->GetPath() << "is in transition, giveup this merge try";
+        return false;
+    }
+    if (!peer->LockTransition()) {
+        tablet->UnlockTransition();
+        LOG(WARNING) << "merge peer is in transition, give up this merge try: " << peer;
+        return false;
+    }
+    std::shared_ptr<Procedure> merge(new MergeTabletProcedure(tablet, peer, MasterEnv().GetThreadPool().get()));
+    if(MasterEnv().GetExecutor()->AddProcedure(merge) == 0) {
+        LOG(WARNING) << "add to procedure_executor fail, may duplicated procid: " << merge->ProcId();
+        tablet->UnlockTransition();
+        peer->UnlockTransition();
+        return false;
+    }
+    return true;
+}
+
+bool TrySplitTablet(TabletPtr tablet, std::string split_key) {
+    if (!tablet->LockTransition()) {
+        LOG(WARNING) << "tablet: " << tablet->GetPath() << "is in transition, giveup this split try";
+        return false;
+    }
+    std::shared_ptr<Procedure> split(new SplitTabletProcedure(tablet, split_key, MasterEnv().GetThreadPool().get()));
+    if(MasterEnv().GetExecutor()->AddProcedure(split) == 0) {
+        LOG(WARNING) << "add to procedure_executor fail, may duplicated procid: " << split->ProcId();
+        tablet->UnlockTransition();
+        return false;
+    }
+    return true;
 }
 
 } // namespace master

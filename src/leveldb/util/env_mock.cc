@@ -51,6 +51,9 @@ void MockEnv::SetPrefix(const std::string& p)
 // Log error message
 static Status IOError(const std::string& context, int err_number)
 {
+    if (err_number == EACCES) {
+        return Status::IOPermissionDenied(context, strerror(err_number));
+    }
     return Status::IOError(context, strerror(err_number));
 }
 
@@ -249,7 +252,8 @@ Status MockEnv::NewSequentialFile(const std::string& fname, SequentialFile** res
 }
 
 // random read file
-Status MockEnv::NewRandomAccessFile(const std::string& fname, RandomAccessFile** result)
+Status MockEnv::NewRandomAccessFile(const std::string& fname, RandomAccessFile** result,
+                                    const EnvOptions&)
 {
     *result = NULL;
     Status s;
@@ -264,7 +268,8 @@ Status MockEnv::NewRandomAccessFile(const std::string& fname, RandomAccessFile**
 
 // writable
 Status MockEnv::NewWritableFile(const std::string& fname,
-        WritableFile** result)
+                                WritableFile** result, 
+                                const EnvOptions&)
 {
     Status s;
     FILE* f = fopen(MockPath(fname).c_str(), "w");

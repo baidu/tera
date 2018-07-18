@@ -78,7 +78,7 @@ class SpecialEnv : public EnvWrapper {
 
   // Force write to manifest files to fail while this pointer is non-NULL
   port::AtomicPointer manifest_write_error_;
-
+  
   bool count_random_reads_;
   AtomicCounter random_read_counter_;
 
@@ -97,7 +97,24 @@ class SpecialEnv : public EnvWrapper {
     manifest_write_error_.Release_Store(NULL);
   }
 
-  Status NewWritableFile(const std::string& f, WritableFile** r) {
+  Status NewWritableFile(const std::string& f, WritableFile** r, const EnvOptions&) {
+    class InitLoadLockFile : public WritableFile {
+     private:
+      SpecialEnv* env_;
+      WritableFile* base_;
+
+     public:
+      InitLoadLockFile(SpecialEnv* env, WritableFile* base)
+          : env_(env),
+            base_(base) {
+      }
+      ~InitLoadLockFile() { delete base_; }
+      Status Append(const Slice& data) { return base_->Append(data); }
+      Status Close() { return base_->Close(); }
+      Status Flush() { return base_->Flush(); }
+      Status Sync() { return base_->Sync(); }
+    };
+
     class SSTableFile : public WritableFile {
      private:
       SpecialEnv* env_;
@@ -131,7 +148,8 @@ class SpecialEnv : public EnvWrapper {
       SpecialEnv* env_;
       WritableFile* base_;
      public:
-      ManifestFile(SpecialEnv* env, WritableFile* b) : env_(env), base_(b) { }
+      ManifestFile(SpecialEnv* env, WritableFile* b) 
+          : env_(env), base_(b) { }
       ~ManifestFile() { delete base_; }
       Status Append(const Slice& data) {
         env_->write_retry_c_.Increment();
@@ -159,18 +177,21 @@ class SpecialEnv : public EnvWrapper {
       return Status::IOError("simulated write error");
     }
 
-    Status s = target()->NewWritableFile(f, r);
+    Status s = target()->NewWritableFile(f, r, EnvOptions());
     if (s.ok()) {
       if (strstr(f.c_str(), ".sst") != NULL) {
         *r = new SSTableFile(this, *r);
       } else if (strstr(f.c_str(), "MANIFEST") != NULL) {
         *r = new ManifestFile(this, *r);
+      } else if (strstr(f.c_str(), "__init_load_filelock") != NULL) {
+        *r = new InitLoadLockFile(this, *r);
       }
     }
     return s;
   }
 
-  Status NewRandomAccessFile(const std::string& f, RandomAccessFile** r) {
+  Status NewRandomAccessFile(const std::string& f, RandomAccessFile** r,
+                             const EnvOptions& options) {
     class CountingFile : public RandomAccessFile {
      private:
       RandomAccessFile* target_;
@@ -187,7 +208,7 @@ class SpecialEnv : public EnvWrapper {
       }
     };
 
-    Status s = target()->NewRandomAccessFile(f, r);
+    Status s = target()->NewRandomAccessFile(f, r, options);
     if (s.ok() && count_random_reads_) {
       *r = new CountingFile(*r, &random_read_counter_);
     }
@@ -267,6 +288,32 @@ class DBTest {
       default:
         break;
     }
+    return options;
+  }
+
+  Options SplitOptions() {
+    Options options;
+    options.dump_mem_on_shutdown = false;
+    Logger* logger;
+    Env::Default()->NewLogger("/tmp/db_test_split.log", &logger);
+    Env::Default()->SetLogger(logger);
+    options.info_log = logger;
+    switch (option_config_) {
+      case kFilter:
+        options.filter_policy = filter_policy_;
+        break;
+      case kUncompressed:
+        options.compression = kNoCompression;
+        break;
+      default:
+        break;
+    }
+
+    std::vector<uint64_t> parent_tablets;
+    parent_tablets.push_back(12);
+    options.parent_tablets = parent_tablets;
+    options.key_start = "1";
+    options.key_end = "4";
     return options;
   }
 
@@ -872,6 +919,70 @@ TEST(DBTest, Recover) {
   } while (ChangeOptions());
 }
 
+TEST(DBTest, RecoverWithLostCurrent0) {
+  ASSERT_OK(Put("1", "v1"));
+  ASSERT_OK(Put("2", "v1"));
+  ASSERT_OK(Put("3", "v1"));
+  ASSERT_OK(Put("4", "v1"));
+  ASSERT_OK(Put("5", "v1"));
+  Reopen();
+  Options current_opt = CurrentOptions();
+  current_opt.dump_mem_on_shutdown = true;
+  Reopen(&current_opt);
+  Compact("1","6");
+  Close();
+  std::string old_dbname = dbname_;
+  dbname_ = dbname_.replace(dbname_.length() - 2, 1, "3");
+  Options opt = SplitOptions();
+
+  opt.env = env_;
+  Reopen(&opt);
+  ASSERT_OK(env_->DeleteFile(CurrentFileName(dbname_ + "/0")));
+  leveldb::WritableFile* lock_file;
+  ASSERT_OK(env_->NewWritableFile(dbname_ + "/0/__init_load_filelock", &lock_file, EnvOptions()));
+  ASSERT_OK(lock_file->Append("\n"));
+  ASSERT_OK(lock_file->Sync());
+  ASSERT_OK(lock_file->Close());
+  delete lock_file;
+  Reopen(&opt);
+  ASSERT_OK(Put("foo", "v1"));
+  dbname_ = old_dbname;
+}
+
+TEST(DBTest, RecoverWithLostCurrent1) {
+  // before write anything delete current file 
+  ASSERT_OK(env_->DeleteFile(CurrentFileName(dbname_ + "/0")));
+  leveldb::WritableFile* lock_file;
+  ASSERT_OK(env_->NewWritableFile(dbname_ + "/0/__init_load_filelock", &lock_file, EnvOptions()));
+  ASSERT_OK(lock_file->Append("\n"));
+  ASSERT_OK(lock_file->Sync());
+  ASSERT_OK(lock_file->Close());
+  delete lock_file;
+  do {
+    Reopen();
+    ASSERT_OK(Put("foo", "v3"));
+    Reopen();
+    ASSERT_EQ("v3", Get("foo"));
+  } while (ChangeOptions());
+}
+
+TEST(DBTest, RecoverWithLostManifest) {
+  // before write anything delete current file 
+  ASSERT_OK(env_->DeleteFile(DescriptorFileName(dbname_ + "/0", 1)));
+  leveldb::WritableFile* lock_file;
+  ASSERT_OK(env_->NewWritableFile(dbname_ + "/0/__init_load_filelock", &lock_file, EnvOptions()));
+  ASSERT_OK(lock_file->Append("\n"));
+  ASSERT_OK(lock_file->Sync());
+  ASSERT_OK(lock_file->Close());
+  delete lock_file;
+  do {
+    Reopen();
+    ASSERT_OK(Put("foo", "v3"));
+    Reopen();
+    ASSERT_EQ("v3", Get("foo"));
+  } while (ChangeOptions());
+}
+
 TEST(DBTest, RecoveryWithEmptyLog) {
   do {
     ASSERT_OK(Put("foo", "v1"));
@@ -1112,7 +1223,7 @@ TEST(DBTest, ApproximateSizes) {
       }
 
       ASSERT_EQ(NumTableFilesAtLevel(0), 0);
-//       ASSERT_GT(NumTableFilesAtLevel(1), 0);
+      ASSERT_GT(NumTableFilesAtLevel(1), 0);
     }
   } while (ChangeOptions());
 }
@@ -1221,7 +1332,7 @@ TEST(DBTest, HiddenValuesAreRemoved) {
     ASSERT_OK(dbfull()->TEST_CompactMemTable());
     // tera-leveldb:kL0_CompactionTrigger == 2, compact will happen
     // google-leveldb:kL0_CompactionTrigger == 4, there is no compaction
-    // ASSERT_GT(NumTableFilesAtLevel(0), 0);
+    ASSERT_GT(NumTableFilesAtLevel(0), 0);
 
     ASSERT_EQ(big, Get("foo", snapshot));
     ASSERT_TRUE(Between(Size("", "pastfoo"), 50000, 60000));
@@ -1229,10 +1340,10 @@ TEST(DBTest, HiddenValuesAreRemoved) {
     ASSERT_EQ(AllEntriesFor("foo"), "[ tiny, " + big + " ]");
     Slice x("x");
     dbfull()->TEST_CompactRange(0, NULL, &x);
-//     dbfull()->TEST_CompactRange(1, NULL, &x);
-//     ASSERT_EQ(AllEntriesFor("foo"), "[ tiny ]");
-//     ASSERT_EQ(NumTableFilesAtLevel(0), 0);
-//     ASSERT_GE(NumTableFilesAtLevel(2), 1);
+    dbfull()->TEST_CompactRange(1, NULL, &x);
+    ASSERT_EQ(AllEntriesFor("foo"), "[ tiny ]");
+    ASSERT_EQ(NumTableFilesAtLevel(0), 0);
+    ASSERT_GE(NumTableFilesAtLevel(2), 1);
     dbfull()->TEST_CompactRange(1, NULL, &x);
     ASSERT_EQ(AllEntriesFor("foo"), "[ tiny ]");
 
@@ -1850,6 +1961,7 @@ class ModelDB: public DB {
         snapshots_.erase(it);
     }
   }
+
   virtual const uint64_t Rollback(uint64_t snapshot_seq, uint64_t rollback_point = kMaxSequenceNumber) {
       // TODO
       return 0;
@@ -1898,6 +2010,8 @@ class ModelDB: public DB {
   virtual bool FindKeyRange(std::string* smallest_key, std::string* largest_key) {
       return false;
   }
+
+  virtual void GetCurrentLevelSize(std::vector<int64_t>* result) {}
 
   virtual uint64_t GetScopeSize(const std::string& start_key,
                                 const std::string& end_key,

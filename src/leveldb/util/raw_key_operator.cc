@@ -7,7 +7,7 @@
 #include <pthread.h>
 
 #include "coding.h"
-#include "../utils/counter.h"
+#include "../common/counter.h"
 
 namespace leveldb {
 

@@ -88,6 +88,8 @@ public:
 
     virtual const uint64_t Rollback(uint64_t snapshot_seq, uint64_t rollback_point = kMaxSequenceNumber);
 
+    virtual bool ShouldForceUnloadOnError();
+
     // DB implementations can export properties about their state
     // via this method.  If "property" is a valid property understood by this
     // DB implementation, fills "*value" with its current value and returns
@@ -119,6 +121,10 @@ public:
     // lgsize: each lg size, include all storage
     virtual void GetApproximateSizes(uint64_t* size, std::vector<uint64_t>* lgsize);
 
+    // tera-specific
+    // result: each level's total file size
+    virtual void GetCurrentLevelSize(std::vector<int64_t> *result);
+
     // Compact the underlying storage for the key range [*begin,*end].
     // In particular, deleted and overwritten versions are discarded,
     // and the data is rearranged to reduce the cost of operations
@@ -140,6 +146,9 @@ public:
 
     // Add all sst files inherited from other tablets
     virtual void AddInheritedLiveFiles(std::vector<std::set<uint64_t> >* live);
+
+    // Strategy : Always return True begin shutdown1 finished. Else return False
+    virtual bool IsShutdown1Finished() const;
 
     // for unit test
     Status TEST_CompactMemTable();
@@ -173,7 +182,10 @@ private:
     State state_;
     std::vector<DBImpl*> lg_list_;
     port::Mutex mutex_;
+    // store not null at shutdown1 start
     port::AtomicPointer shutting_down_;
+    // store not null at shutdown1 finished and waiting for shutdown2
+    port::AtomicPointer shutdown1_finished_;
     port::CondVar bg_cv_;
     port::CondVar bg_cv_timer_;
     port::CondVar bg_cv_sleeper_;

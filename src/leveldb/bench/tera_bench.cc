@@ -268,7 +268,7 @@ int main(int argc, char** argv) {
       FLAGS_value_size = n;
     } else if (sscanf(argv[i], "--tablet_num=%d%c", &n, &junk) == 1) {
       FLAGS_tablet_num = n;
-    } else if (sscanf(argv[i], "--cf=%s", cf_list) == 1) {
+    } else if (sscanf(argv[i], "--cf=%1023s", cf_list) == 1) {
       FLAGS_cf_list = std::string(cf_list);
     } else if (sscanf(argv[i], "--start_key=%d%c", &n, &junk) == 1) {
       FLAGS_start_key = n;

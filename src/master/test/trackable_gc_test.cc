@@ -10,14 +10,18 @@
 #include "io/utils_leveldb.h"
 #include "master/tablet_manager.h"
 #include "utils/utils_cmd.h"
+#include "master/master_env.h"
+#include "leveldb/env.h"
 
-DECLARE_bool(tera_zk_enabled);
+DECLARE_string(tera_coord_type);
 DECLARE_string(tera_leveldb_env_type);
 DECLARE_string(tera_master_gc_strategy);
 DECLARE_string(tera_tabletnode_path_prefix);
 
 namespace tera {
 namespace master {
+
+using leveldb::EnvOptions;
 
 class TrackableGcTest : public ::testing::Test {
 public:
@@ -29,9 +33,10 @@ public:
     }
 
     TablePtr CreateTable(const std::string& name) {
-        TablePtr table(new Table(name));
+        TableSchema schema;
+        TablePtr table(new Table(name, schema, kTableEnable));
         TableMeta meta;
-        EXPECT_TRUE(mgr_.AddTable(name, meta, &table, nullptr));
+        EXPECT_TRUE(mgr_.AddTable(table, nullptr));
         std::cout << "create table " << name << " success" << std::endl;
 
         return table;
@@ -42,15 +47,16 @@ public:
         meta.set_table_name(table_name);
         meta.mutable_key_range()->set_key_start(start);
         meta.mutable_key_range()->set_key_end(end);
-
+        meta.set_status(TabletMeta::kTabletOffline);
         return meta;
     }
 
     TabletPtr CreateTablet(const std::string& start, const std::string& end, TablePtr table) {
         TabletMeta meta = CreateTabletMeta(table->GetTableName(), start, end);
-        TabletPtr tablet(new Tablet(meta, table));
-        TableSchema schema;
-        EXPECT_TRUE(mgr_.AddTablet(meta, schema, &tablet));
+        TabletPtr tablet = TabletManager::CreateTablet(table, meta);
+        //TableSchema schema;
+        StatusCode status;
+        EXPECT_TRUE(table->AddTablet(tablet, &status));
         std::cout << "create tablet [" << start << ", " << end << "]" << " success" << std::endl;
 
         return tablet;
@@ -76,7 +82,7 @@ public:
                 EXPECT_TRUE(dir_pos != std::string::npos);
                 EXPECT_TRUE(env->CreateDir(path.substr(0, dir_pos)).ok());
                 leveldb::WritableFile* writable_file;
-                EXPECT_TRUE(env->NewWritableFile(path, &writable_file).ok());
+                EXPECT_TRUE(env->NewWritableFile(path, &writable_file, EnvOptions()).ok());
                 delete writable_file;
             }
         }
@@ -223,6 +229,8 @@ public:
         TabletPtr tablet_2, tablet_3;
         TabletMeta meta_2 = CreateTabletMeta(table->GetTableName(), "a", "k");
         TabletMeta meta_3 = CreateTabletMeta(table->GetTableName(), "k", "z");
+        tablet_2.reset(new Tablet(meta_2, tablet_1->GetTable()));
+        tablet_3.reset(new Tablet(meta_3, tablet_1->GetTable()));
 
         table->SplitTablet(tablet_1, meta_2, meta_3, &tablet_2, &tablet_3);
 
@@ -277,8 +285,8 @@ public:
         ASSERT_EQ(1, table->useful_inh_files_[2][file2].ref);
         ASSERT_EQ(0, table->obsolete_inh_files_.size());
 
-        TabletPtr tablet_3;
         TabletMeta meta_3 = CreateTabletMeta(table->GetTableName(), "a", "z");
+        TabletPtr tablet_3(new Tablet(meta_3, tablet_1->GetTable()));
         table->MergeTablets(tablet_1, tablet_2, meta_3, &tablet_3);
 
         // afer merge:
@@ -402,7 +410,8 @@ public:
         TabletPtr tablet_2, tablet_3;
         TabletMeta meta_2 = CreateTabletMeta(table->GetTableName(), "a", "k");
         TabletMeta meta_3 = CreateTabletMeta(table->GetTableName(), "k", "z");
-
+        tablet_2.reset(new Tablet(meta_2, tablet_1->GetTable()));
+        tablet_3.reset(new Tablet(meta_3, tablet_1->GetTable()));
         table->SplitTablet(tablet_1, meta_2, meta_3, &tablet_2, &tablet_3);
 
         // suppose after split, tablet_2 will ref file1 and talbet_3 has no ref
@@ -490,6 +499,10 @@ public:
 
 protected:
     virtual void SetUp() {
+        std::shared_ptr<TabletAvailability> tablet_availability(new TabletAvailability(nullptr));
+        MasterEnv().Init(nullptr, nullptr, nullptr, nullptr, nullptr, 
+                         std::shared_ptr<ThreadPool>(new ThreadPool), nullptr,
+                         tablet_availability, nullptr);
         std::cout << "SetUp" << std::endl;
     }
 
@@ -500,7 +513,7 @@ protected:
 
     static void SetUpTestCase() {
         std::cout << "SetUpTestCase" << std::endl;
-        FLAGS_tera_zk_enabled = false;
+        FLAGS_tera_coord_type = "fake_zk";
         FLAGS_tera_leveldb_env_type = "local";
         FLAGS_tera_master_gc_strategy = "trackable";
         FLAGS_tera_tabletnode_path_prefix = "./";

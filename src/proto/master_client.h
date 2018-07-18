@@ -21,15 +21,6 @@ public:
                  int32_t rpc_timeout = FLAGS_tera_rpc_timeout_period);
     virtual ~MasterClient();
 
-    virtual bool GetSnapshot(const GetSnapshotRequest* request,
-                             GetSnapshotResponse* response);
-
-    virtual bool DelSnapshot(const DelSnapshotRequest* request,
-                             DelSnapshotResponse* response);
-
-    virtual bool GetRollback(const RollbackRequest* request,
-                             RollbackResponse* response);
-
     virtual bool CreateTable(const CreateTableRequest* request,
                              CreateTableResponse* response);
 
@@ -51,9 +42,6 @@ public:
     virtual bool SearchTable(const SearchTableRequest* request,
                              SearchTableResponse* response);
 
-    virtual bool CompactTable(const CompactTableRequest* request,
-                              CompactTableResponse* response);
-
     virtual bool ShowTables(const ShowTablesRequest* request,
                             ShowTablesResponse* response);
 
@@ -71,8 +59,6 @@ public:
 
     virtual bool OperateUser(const OperateUserRequest* request,
                              OperateUserResponse* response);
-    virtual bool RenameTable(const RenameTableRequest* request,
-                             RenameTableResponse* response);
 private:
     int32_t rpc_timeout_;
 };

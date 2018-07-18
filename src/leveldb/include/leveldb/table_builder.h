@@ -85,9 +85,12 @@ class TableBuilder {
   bool ok() const { return status().ok(); }
   void WriteBlock(BlockBuilder* block, BlockHandle* handle);
   void WriteRawBlock(const Slice& data, CompressionType, BlockHandle* handle);
+  void AppendToFile(const Slice& slice);
+  void FlushBatchBuffer();
 
   struct Rep;
   Rep* rep_;
+  std::string batch_write_buffer_;
 
   // No copying allowed
   TableBuilder(const TableBuilder&);

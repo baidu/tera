@@ -183,6 +183,83 @@ TEST(CacheTest, NewId) {
   ASSERT_NE(a, b);
 }
 
+class BlockBasedCacheTest {
+ public:
+  static BlockBasedCacheTest* current_;
+
+  static void Deleter(const Slice& key, void* v) {
+    current_->deleted_keys_.push_back(DecodeKey(key));
+    current_->deleted_values_.push_back(DecodeValue(v));
+  }
+
+  static const int kCacheSize = 3;
+  std::vector<int> deleted_keys_;
+  std::vector<int> deleted_values_;
+  Cache* cache_;
+
+  BlockBasedCacheTest() : cache_(NewBlockBasedCache(kCacheSize)) {
+    current_ = this;
+  }
+
+  ~BlockBasedCacheTest() {
+    delete cache_;
+  }
+
+  int Lookup(int key) {
+    Cache::Handle* handle = cache_->Lookup(EncodeKey(key));
+    const int r = (handle == NULL) ? -1 : DecodeValue(cache_->Value(handle));
+    if (handle != NULL) {
+      cache_->Release(handle);
+    }
+    return r;
+  }
+
+  void Insert(int key, int value, bool force_release = true) {
+    Cache::Handle* handle = cache_->Insert(EncodeKey(key), EncodeValue(value), 0xffffffffffffffff,
+                                           &BlockBasedCacheTest::Deleter);
+    if (force_release) {
+        cache_->Release(handle);
+    }
+  }
+
+  void Erase(int key) {
+    cache_->Erase(EncodeKey(key));
+  }
+};
+BlockBasedCacheTest* BlockBasedCacheTest::current_;
+
+TEST(BlockBasedCacheTest, CommonEvictionPolicy) {
+  Insert(100, 101);
+  Insert(200, 201);
+
+  // Frequently used entry must be kept around
+  for (int i = 0; i < kCacheSize + 100; i++) {
+    Insert(1000+i, 2000+i);
+    ASSERT_EQ(2000+i, Lookup(1000+i));
+    ASSERT_EQ(101, Lookup(100));
+  }
+  ASSERT_EQ(101, Lookup(100));
+  ASSERT_EQ(-1, Lookup(200));
+}
+
+TEST(BlockBasedCacheTest, SpecialEvictionPolicy) {
+  Insert(100, 101);
+  Insert(200, 201);
+  Insert(300, 301);
+
+  Insert(400, 401, false);
+  // Evict the oldest 100
+  ASSERT_EQ(-1, Lookup(100));
+
+  Insert(500, 501);
+  Insert(600, 601);
+  Insert(700, 701);
+  // the ref of the oldest 400 is 2, so not evicted
+  // the 500 is evicted instead
+  ASSERT_EQ(-1, Lookup(500));
+  ASSERT_EQ(401, Lookup(400));
+}
+
 }  // namespace leveldb
 
 int main(int argc, char** argv) {

@@ -5,6 +5,8 @@
 #include "io/tablet_writer.h"
 
 #include <set>
+#include <unordered_set>
+#include <memory>
 
 #include <gflags/gflags.h>
 #include <glog/logging.h>
@@ -16,9 +18,13 @@
 #include "leveldb/lg_coding.h"
 #include "proto/proto_helper.h"
 #include "tera/table_descriptor.h"
-#include "utils/counter.h"
+#include "common/counter.h"
 #include "utils/string_util.h"
-#include "utils/timer.h"
+#include "common/timer.h"
+
+#include "tabletnode/tabletnode_metric_name.h"
+#include "common/metric/ratio_subscriber.h"
+#include "common/metric/prometheus_subscriber.h"
 
 DECLARE_int32(tera_asyncwriter_pending_limit);
 DECLARE_bool(tera_enable_level0_limit);
@@ -29,6 +35,31 @@ DECLARE_bool(tera_sync_log);
 
 namespace tera {
 namespace io {
+
+using tera::tabletnode::kRowDelayMetric;
+using tera::tabletnode::kRowCountMetric;
+
+using tera::tabletnode::kApiLabelWrite;
+using tera::Subscriber;
+
+using tera::tabletnode::kFlushToDiskDelayMetric;
+using tera::tabletnode::kFlushCheck;
+using tera::tabletnode::kFlushWrite;
+using tera::tabletnode::kFlushBatch;
+using tera::tabletnode::kFlushFinish;
+
+tera::MetricCounter flush_to_disk_check_delay(kFlushToDiskDelayMetric, kFlushCheck);
+tera::MetricCounter flush_to_disk_write_delay(kFlushToDiskDelayMetric, kFlushWrite);
+tera::MetricCounter flush_to_disk_batch_delay(kFlushToDiskDelayMetric, kFlushBatch);
+tera::MetricCounter flush_to_disk_finish_delay(kFlushToDiskDelayMetric, kFlushFinish);
+
+tera::MetricCounter row_write_count(kRowCountMetric, kApiLabelWrite, {SubscriberType::QPS});
+tera::MetricCounter row_write_delay(kRowDelayMetric, kApiLabelWrite, {});
+
+tera::AutoSubscriberRegister row_write_delay_per_row(std::unique_ptr<Subscriber>(new tera::RatioSubscriber(
+    MetricId("tera_ts_row_write_delay_us_per_row"),
+    std::unique_ptr<Subscriber>(new tera::PrometheusSubscriber(MetricId(kRowDelayMetric, kApiLabelWrite), SubscriberType::SUM)),
+    std::unique_ptr<Subscriber>(new tera::PrometheusSubscriber(MetricId(kRowCountMetric, kApiLabelWrite), SubscriberType::SUM)))));
 
 TabletWriter::TabletWriter(TabletIO* tablet_io)
     : tablet_(tablet_io), stopped_(true),
@@ -157,13 +188,19 @@ void TabletWriter::DoWork() {
         }
         // 否则 flush
         VLOG(7) << "write data, sleep_duration: " << sleep_duration;
-
+        sync_timestamp_ = GetTimeStampInMs();
         FlushToDiskBatch(sealed_buffer_);
         sealed_buffer_->clear();
-        sync_timestamp_ = GetTimeStampInMs();
     }
     LOG(INFO) << "AsyncWriter::DoWork done";
     worker_done_event_.Set();
+}
+
+bool TabletWriter::IsBusy() {
+    const uint64_t MAX_PENDING_SIZE = FLAGS_tera_asyncwriter_pending_limit * 1024UL;
+
+    MutexLock lock(&task_mutex_);
+    return active_buffer_size_ >= MAX_PENDING_SIZE;
 }
 
 bool TabletWriter::SwapActiveBuffer(bool force) {
@@ -205,7 +242,7 @@ void TabletWriter::BatchRequest(WriteTaskBuffer* task_buffer,
             StatusCode* status = &((*status_vec)[i]);
             const RowMutationSequence& row_mu = *row_mutation_vec[i];
             const std::string& row_key = row_mu.row_key();
-            int32_t mu_num = row_mu.mutation_sequence().size();
+            uint32_t mu_num = row_mu.mutation_sequence().size();
             if (*status != kTabletNodeOk) {
                 VLOG(11) << "batch write fail, row " << DebugString(row_key)
                     << ", status " << StatusCodeToString(*status);
@@ -235,7 +272,7 @@ void TabletWriter::BatchRequest(WriteTaskBuffer* task_buffer,
                     batch->Delete(tera_key);
                 }
             } else {
-                for (int32_t t = 0; t < mu_num; ++t) {
+                for (uint32_t t = 0; t < mu_num; ++t) {
                     const Mutation& mu = row_mu.mutation_sequence().Get(t);
                     std::string tera_key;
                     leveldb::TeraKeyType type = leveldb::TKT_VALUE;
@@ -317,6 +354,8 @@ void TabletWriter::FinishTask(WriteTaskBuffer* task_buffer, StatusCode status) {
     for (uint32_t task_idx = 0; task_idx < task_buffer->size(); ++task_idx) {
         WriteTask& task = (*task_buffer)[task_idx];
         tablet_->GetCounter().write_rows.Add(task.row_mutation_vec->size());
+        row_write_count.Add(task.row_mutation_vec->size());
+        row_write_delay.Add(get_micros() - task.start_time);
         for (uint32_t i = 0; i < task.row_mutation_vec->size(); i++) {
             tablet_->GetCounter().write_kvs.Add((*task.row_mutation_vec)[i]->mutation_sequence_size());
             // set batch_write status for row_mu
@@ -329,7 +368,7 @@ void TabletWriter::FinishTask(WriteTaskBuffer* task_buffer, StatusCode status) {
     return;
 }
 
-// set status to kTxnFail, if transaction conflicts.
+// set status to kTxnFail, if single row transaction or putifabsent conflicts
 bool TabletWriter::CheckSingleRowTxnConflict(const RowMutationSequence& row_mu,
                                              std::set<std::string>* commit_row_key_set,
                                              StatusCode* status) {
@@ -421,18 +460,42 @@ void TabletWriter::CheckRows(WriteTaskBuffer* task_buffer) {
 }
 
 StatusCode TabletWriter::FlushToDiskBatch(WriteTaskBuffer* task_buffer) {
-    int64_t ts = get_micros();
+    int64_t start_ts, check_cost, batch_cost, write_cost, finish_cost;
+
+    start_ts = get_micros();
     CheckRows(task_buffer);
+    check_cost = get_micros();
 
     leveldb::WriteBatch batch;
     BatchRequest(task_buffer, &batch);
+    batch_cost = get_micros();
     StatusCode status = kTabletNodeOk;
-    const bool disable_wal = false;
-    tablet_->WriteBatch(&batch, disable_wal, FLAGS_tera_sync_log, &status);
+    if (tablet_->IsUrgentUnload()) {
+        LOG(INFO) << "tablet unload slow, reject to write log and memtable";
+    } else {
+        const bool disable_wal = false;
+        tablet_->WriteBatch(&batch, disable_wal, FLAGS_tera_sync_log, &status);
+    }
     batch.Clear();
+    write_cost = get_micros();
 
     FinishTask(task_buffer, status);
-    VLOG(7) << "finish a batch: " << task_buffer->size() << ", use " << get_micros() - ts;
+    finish_cost = get_micros();
+    int64_t check_delay = check_cost - start_ts;
+    int64_t batch_delay = batch_cost - check_cost;
+    int64_t write_delay = write_cost - batch_cost;
+    int64_t finish_delay = finish_cost - write_cost;
+
+    flush_to_disk_check_delay.Add(check_delay);
+    flush_to_disk_batch_delay.Add(batch_delay);
+    flush_to_disk_write_delay.Add(write_delay);
+    flush_to_disk_finish_delay.Add(finish_delay);
+
+    VLOG(7) << "finish a batch: " << task_buffer->size() << ", cost(check/batch/write/finish): "
+        << check_delay << "/"
+        << batch_delay << "/"
+        << write_delay << "/"
+        << finish_delay;
     return status;
 }
 

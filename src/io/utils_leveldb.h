@@ -18,6 +18,9 @@ void InitDfsEnv();
 // return the base env leveldb used (dfs/local), singleton
 leveldb::Env* LeveldbBaseEnv();
 
+// return the ssd block cache env, singleton
+leveldb::Env* DefaultFlashBlockCacheEnv();
+
 // return the mem env leveldb used, singleton
 leveldb::Env* LeveldbMemEnv();
 
@@ -30,11 +33,28 @@ leveldb::Env* LeveldbMockEnv();
 
 std::string GetTrashDir();
 
+std::string GetTrackableGcTrashDir();
+
 bool MoveEnvDirToTrash(const std::string& subdir);
+
+leveldb::Status MoveSstToTrackableGcTrash(const std::string& table_name,
+                                          uint64_t tablet_id,
+                                          uint32_t lg_id,
+                                          uint64_t file_id);
 
 void CleanTrashDir();
 
+bool TryDeleteEmptyDir(const std::string& dir_path,
+                       size_t total_children_size,
+                       size_t deleted_children_size);
+
+leveldb::Status DeleteTrashFileIfExpired(const std::string& file_path);
+
+void CleanTrackableGcTrash();
+
 leveldb::Status DeleteEnvDir(const std::string& subdir);
+
+leveldb::Status DeleteOldFlashCache(const std::vector<std::string>& path_list);
 
 } // namespace io
 } // namespace tera

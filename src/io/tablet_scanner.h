@@ -33,12 +33,18 @@ struct ScanOptions {
     ColumnFamilyMap column_family_list;
     std::set<std::string> iter_cf_set;
     int64_t timeout;
+    uint64_t max_qualifiers;
+    // If sdk uses batch scan, we will use prefetch scan iterator.;
+    bool is_batch_scan;
 
     ScanOptions()
             : max_versions(std::numeric_limits<uint32_t>::max()),
               max_size(std::numeric_limits<uint32_t>::max()),
               number_limit(std::numeric_limits<int64_t>::max()),
-              ts_start(kOldestTs), ts_end(kLatestTs), snapshot_id(0), timeout(std::numeric_limits<int64_t>::max() / 2)
+              ts_start(kOldestTs), ts_end(kLatestTs), snapshot_id(0),
+              timeout(std::numeric_limits<int64_t>::max() / 2),
+              max_qualifiers(std::numeric_limits<uint64_t>::max()),
+              is_batch_scan(false)
     {}
 };
 
@@ -55,6 +61,7 @@ struct ScanContext {
     leveldb::Iterator* it; // init to NULL
     leveldb::CompactStrategy* compact_strategy;
     uint32_t version_num;
+    uint64_t qu_num;
     std::string last_key;
     std::string last_col;
     std::string last_qual;

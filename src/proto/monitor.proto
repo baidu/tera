@@ -45,6 +45,7 @@ message TabletNodeStat {
     optional string status_m = 31;
     optional uint32 tablet_onload = 32;
     optional uint32 tablet_onsplit = 33;
+    optional uint32 tablet_unloading = 34;
  
     repeated ExtraStat extra_stat = 40;
 

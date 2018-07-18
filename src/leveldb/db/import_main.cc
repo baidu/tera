@@ -95,7 +95,7 @@ Status DirectBuildTable(const std::string& dbname,
   std::string fname = TableFileName(dbname, file_no);
   uint64_t file_size = 0;
     WritableFile* file;
-    s = env->NewWritableFile(fname, &file);
+    s = env->NewWritableFile(fname, &file, EnvOptions(options));
     if (!s.ok()) {
       return s;
     }

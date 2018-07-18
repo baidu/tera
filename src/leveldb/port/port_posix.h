@@ -46,9 +46,7 @@
 #endif
 
 #include <pthread.h>
-#ifdef SNAPPY
 #include <snappy.h>
-#endif
 #include <stdint.h>
 #include <string>
 #include "port/atomic_pointer.h"
@@ -124,33 +122,21 @@ extern void InitOnce(OnceType* once, void (*initializer)());
 
 inline bool Snappy_Compress(const char* input, size_t length,
                             ::std::string* output) {
-#ifdef SNAPPY
   output->resize(snappy::MaxCompressedLength(length));
   size_t outlen;
   snappy::RawCompress(input, length, &(*output)[0], &outlen);
   output->resize(outlen);
   return true;
-#endif
-
-  return false;
 }
 
 inline bool Snappy_GetUncompressedLength(const char* input, size_t length,
                                          size_t* result) {
-#ifdef SNAPPY
   return snappy::GetUncompressedLength(input, length, result);
-#else
-  return false;
-#endif
 }
 
 inline bool Snappy_Uncompress(const char* input, size_t length,
                               char* output) {
-#ifdef SNAPPY
   return snappy::RawUncompress(input, length, output);
-#else
-  return false;
-#endif
 }
 
 /////////// Compression Ext ///////////

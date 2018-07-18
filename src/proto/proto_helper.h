@@ -21,12 +21,12 @@ typedef ::google::protobuf::RepeatedPtrField< ::tera::RowResult> RowResultList;
 typedef ::google::protobuf::RepeatedPtrField< ::tera::RowReaderInfo> RowReaderList;
 
 std::string StatusCodeToString(StatusCode status);
-std::string StatusCodeToString(TabletStatus status);
+std::string StatusCodeToString(TabletMeta::TabletStatus status);
 std::string StatusCodeToString(TableStatus status);
 std::string StatusCodeToString(CompactStatus status);
 
 void SetStatusCode(const StatusCode& code, StatusCode* tera_status);
-void SetStatusCode(const TabletStatus& tablet_status, StatusCode* tera_status);
+void SetStatusCode(const TabletMeta::TabletStatus& tablet_status, StatusCode* tera_status);
 void SetStatusCode(const TableStatus& table_status, StatusCode* tera_status);
 void SetStatusCode(const CompactStatus& code, StatusCode* tera_status);
 

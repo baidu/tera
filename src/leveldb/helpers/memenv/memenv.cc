@@ -254,7 +254,8 @@ class MemoryEnv : public EnvWrapper {
   }
 
   virtual Status NewRandomAccessFile(const std::string& fname,
-                                     RandomAccessFile** result) {
+                                     RandomAccessFile** result,
+                                     const EnvOptions& options) {
     MutexLock lock(&mutex_);
     if (file_map_.find(fname) == file_map_.end()) {
       *result = NULL;
@@ -266,7 +267,7 @@ class MemoryEnv : public EnvWrapper {
   }
 
   virtual Status NewWritableFile(const std::string& fname,
-                                 WritableFile** result) {
+                                 WritableFile** result, const EnvOptions&) {
     MutexLock lock(&mutex_);
     if (file_map_.find(fname) != file_map_.end()) {
       DeleteFileInternal(fname);

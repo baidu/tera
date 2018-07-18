@@ -32,12 +32,6 @@ message TabletLocation {
     required string server_addr = 2;
 }
 
-message Rollback {
-    optional string name = 1;
-    optional uint64 snapshot_id = 2;
-    optional uint64 rollback_point = 3;
-}
-
 message ScanOption {
     optional KeyRange key_range = 1;
     optional int32 max_version = 2;
@@ -64,6 +58,7 @@ message TabletCounter {
     optional double write_workload = 11 [default = 0.0];
 
     optional bool is_on_busy = 15 [default = false];
+    optional TabletMeta.TabletStatus db_status = 16;
 }
 
 message TableCounter {
@@ -88,12 +83,32 @@ message TableMeta {
     optional string table_name = 1;
     optional TableStatus status = 2;
     optional TableSchema schema = 3;
-    repeated uint64 snapshot_list = 4;
     optional uint64 create_time = 5;
-    repeated string rollback_names = 6;
 }
 
 message TabletMeta {
+    enum TabletStatus {
+        kTabletNotInit = 41;
+        kTabletOffline = 57;
+        kTabletReady = 42;
+        //kTableUnLoad = 49;
+        //kTableWaitLoad = 58;
+        kTabletLoading = 43;
+        kTabletLoadFail = 60;
+        //kTableWaitSplit = 59;
+        kTabletOnSplit = 44;
+        kTabletSplited = 51;
+        //kTableSplitFail = 61;
+        kTabletUnloading = 52;
+        kTabletUnloading2 = 68;
+        kTabletUnloadFail = 62;
+        //kTableOnMerge = 50;
+        kTabletDisable = 64;
+        kTabletDelayOffline = 65;
+        //kTabletOnSnapshot = 66;
+        //kTabletDelSnapshot = 67;
+        kTabletCorruption = 90;
+    };
     required string table_name = 1;
     required string path = 2;
     required KeyRange key_range = 3;
@@ -103,10 +118,9 @@ message TabletMeta {
     optional bool compress = 7;     // for Compatible
     optional CompactStatus compact_status = 8 [default = kTableNotCompact];
     optional StoreMedium store_medium = 9 [default = DiskStore]; // for Compatible
-    repeated uint64 snapshot_list = 11;
     repeated uint64 parent_tablets = 12;
     repeated int64 lg_size = 13;
-    repeated Rollback rollbacks = 14;
+    optional int64 last_move_time_us = 15;
 }
 
 message TableMetaList {
@@ -129,4 +143,13 @@ message SdkTabletCookie {
 message SdkCookie {
     required string table_name = 1;
     repeated SdkTabletCookie tablets = 2;
+}
+
+message PrimaryInfo {
+    optional string table_name = 1;
+    optional bytes row_key = 2;
+    optional bytes column_family = 3;
+    optional bytes qualifier = 4;
+    optional int64 gtxn_start_ts = 5;
+    optional string client_session = 6;
 }

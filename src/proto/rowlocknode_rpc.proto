@@ -1,0 +1,19 @@
+import "sofa/pbrpc/rpc_option.proto";
+import "status_code.proto";
+
+package tera;
+
+message RowlockRequest {
+    required string table_name = 1;
+    required string row = 2;
+}
+
+message RowlockResponse {
+    required StatusCode lock_status = 1;
+}
+
+service RowlockService {
+    rpc Lock(RowlockRequest) returns(RowlockResponse);
+    rpc UnLock(RowlockRequest) returns(RowlockResponse);
+}
+option cc_generic_services = true;

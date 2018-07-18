@@ -7,6 +7,7 @@
 
 #include "common/base/scoped_ptr.h"
 #include "common/thread_pool.h"
+#include "common/request_done_wrapper.h"
 
 #include "proto/tabletnode_rpc.pb.h"
 #include "tabletnode/rpc_schedule.h"
@@ -16,6 +17,94 @@ namespace tera {
 namespace tabletnode {
 
 class TabletNodeImpl;
+
+
+class ReadDoneWrapper final : public RequestDoneWrapper {
+public:
+    static google::protobuf::Closure* NewInstance(int64_t start_micros,
+                                                  const ReadTabletRequest* request,
+                                                  ReadTabletResponse* response,
+                                                  google::protobuf::Closure* done) {
+        return new ReadDoneWrapper(start_micros, request, response, done);
+    }
+
+    virtual void Run() override;
+
+    virtual ~ReadDoneWrapper() {}
+
+protected:
+    //Just Can Create on Heap;
+    ReadDoneWrapper(int64_t start_micros,
+                    const ReadTabletRequest* request,
+                    ReadTabletResponse* response,
+                    google::protobuf::Closure* done):
+        RequestDoneWrapper(done),
+        start_micros_(start_micros),
+        request_(request),
+        response_(response) {}
+
+    int64_t start_micros_;
+    const ReadTabletRequest* request_;
+    ReadTabletResponse* response_;
+};
+
+class WriteDoneWrapper final : public RequestDoneWrapper {
+public:
+    static google::protobuf::Closure* NewInstance(int64_t start_micros,
+                                                  const WriteTabletRequest* request,
+                                                  WriteTabletResponse* response,
+                                                  google::protobuf::Closure* done) {
+        return new WriteDoneWrapper(start_micros, request, response, done);
+    }
+
+    virtual void Run() override;
+
+    virtual ~WriteDoneWrapper() {}
+
+protected:
+    //Just Can Create on Heap;
+    WriteDoneWrapper(int64_t start_micros,
+                     const WriteTabletRequest* request,
+                     WriteTabletResponse* response,
+                     google::protobuf::Closure* done):
+        RequestDoneWrapper(done),
+        start_micros_(start_micros),
+        request_(request),
+        response_(response) {}
+
+    int64_t start_micros_;
+    const WriteTabletRequest* request_;
+    WriteTabletResponse* response_;
+};
+
+class ScanDoneWrapper final : public RequestDoneWrapper {
+public:
+    static google::protobuf::Closure* NewInstance(int64_t start_micros,
+                                                  const ScanTabletRequest* request,
+                                                  ScanTabletResponse* response,
+                                                  google::protobuf::Closure* done) {
+        return new ScanDoneWrapper(start_micros, request, response, done);
+    }
+
+    virtual void Run() override;
+
+    virtual ~ScanDoneWrapper() {}
+
+protected:
+    //Just Can Create on Heap;
+    ScanDoneWrapper(int64_t start_micros,
+                    const ScanTabletRequest* request,
+                    ScanTabletResponse* response,
+                    google::protobuf::Closure* done):
+        RequestDoneWrapper(done),
+        start_micros_(start_micros),
+        request_(request),
+        response_(response) {}
+
+    int64_t start_micros_;
+    const ScanTabletRequest* request_;
+    ScanTabletResponse* response_;
+};
 
 class RemoteTabletNode : public TabletNodeServer {
 public:
@@ -47,27 +136,17 @@ public:
                     ScanTabletResponse* response,
                     google::protobuf::Closure* done);
 
-    void GetSnapshot(google::protobuf::RpcController* controller,
-                     const SnapshotRequest* request,
-                     SnapshotResponse* response,
-                     google::protobuf::Closure* done);
-
-    void ReleaseSnapshot(google::protobuf::RpcController* controller,
-                         const ReleaseSnapshotRequest* request,
-                         ReleaseSnapshotResponse* response,
-                         google::protobuf::Closure* done);
-
-    void Rollback(google::protobuf::RpcController* controller,
-                  const SnapshotRollbackRequest* request,
-                  SnapshotRollbackResponse* response,
-                  google::protobuf::Closure* done);
-
     void Query(google::protobuf::RpcController* controller,
                const QueryRequest* request,
                QueryResponse* response,
                google::protobuf::Closure* done);
 
     void SplitTablet(google::protobuf::RpcController* controller,
+                     const SplitTabletRequest* request,
+                     SplitTabletResponse* response,
+                     google::protobuf::Closure* done);
+
+    void ComputeSplitKey(google::protobuf::RpcController* controller,
                      const SplitTabletRequest* request,
                      SplitTabletResponse* response,
                      google::protobuf::Closure* done);
@@ -111,21 +190,6 @@ private:
                        google::protobuf::Closure* done,
                        WriteRpcTimer* timer = NULL);
 
-    void DoGetSnapshot(google::protobuf::RpcController* controller,
-                       const SnapshotRequest* request,
-                       SnapshotResponse* response,
-                       google::protobuf::Closure* done);
-
-    void DoReleaseSnapshot(google::protobuf::RpcController* controller,
-                           const ReleaseSnapshotRequest* request,
-                           ReleaseSnapshotResponse* response,
-                           google::protobuf::Closure* done);
-
-    void DoRollback(google::protobuf::RpcController* controller,
-                    const SnapshotRollbackRequest* request,
-                    SnapshotRollbackResponse* response,
-                    google::protobuf::Closure* done);
-
     void DoQuery(google::protobuf::RpcController* controller,
                  const QueryRequest* request, QueryResponse* response,
                  google::protobuf::Closure* done);
@@ -136,6 +200,11 @@ private:
                       google::protobuf::Closure* done);
 
     void DoSplitTablet(google::protobuf::RpcController* controller,
+                       const SplitTabletRequest* request,
+                       SplitTabletResponse* response,
+                       google::protobuf::Closure* done);
+    
+    void DoComputeSplitKey(google::protobuf::RpcController* controller,
                        const SplitTabletRequest* request,
                        SplitTabletResponse* response,
                        google::protobuf::Closure* done);

@@ -7,7 +7,7 @@
 // found in the LICENSE file. See the AUTHORS file for names of contributors.
 
 
-#include "leveldb/env_cache.h"
+#include "leveldb/env_flash_block_cache.h"
 
 #include "leveldb/env.h"
 #include "leveldb/slog.h"
@@ -15,10 +15,91 @@
 #include "util/string_ext.h"
 #include "util/testharness.h"
 #include "util/testutil.h"
+#include "util/env_posix.h"
 
 namespace leveldb {
 
 static const int kDelayMicros = 100000;
+
+class PosixWritableFileTest {
+public:
+    Env* env_;
+    PosixWritableFile* file_ = nullptr;
+    const std::string kTmpFileName = "/tmp/posix_writable_test_file";
+
+public:
+    PosixWritableFileTest() : env_(Env::Default()) {
+        EnvOptions env_opt;
+        env_opt.use_direct_io_write = true;
+        env_opt.posix_write_buffer_size = 256<<10;
+        WritableFile* file;
+        env_->NewWritableFile(kTmpFileName, &file, env_opt);
+        if (file) {
+            file_ = dynamic_cast<PosixWritableFile*>(file);
+        }
+    }
+
+    ~PosixWritableFileTest() {
+        env_->DeleteFile(kTmpFileName);
+    }
+};
+
+TEST(PosixWritableFileTest, PosixWriteTest) {
+    std::string content1((1 << 20) + 50, 'k');
+    file_->Append(content1);
+    uint64_t size(0);
+    env_->GetFileSize(kTmpFileName, &size);
+    ASSERT_EQ(size, 1 << 20);
+    ASSERT_EQ(file_->pos_, 50);
+    ASSERT_TRUE(file_->is_dio_);
+
+    std::string content2((1 << 20) + 80, 't');
+    file_->Append(content2);
+    env_->GetFileSize(kTmpFileName, &size);
+    ASSERT_EQ(size, 1 << 21);
+    ASSERT_EQ(file_->pos_, 130);
+    ASSERT_TRUE(file_->is_dio_);
+
+    std::string content3(file_->align_size_ - 130, 'p');
+    file_->Append(content3);
+    env_->GetFileSize(kTmpFileName, &size);
+    ASSERT_EQ(size, 1 << 21);
+    ASSERT_EQ(file_->pos_, file_->align_size_);
+    ASSERT_TRUE(file_->is_dio_);
+
+    file_->Flush();
+    env_->GetFileSize(kTmpFileName, &size);
+    ASSERT_EQ(size, (1 << 21) + file_->align_size_);
+    ASSERT_EQ(file_->pos_, 0);
+    ASSERT_TRUE(file_->is_dio_);
+
+    std::string content4(30, 'p');
+    file_->Append(content4);
+    env_->GetFileSize(kTmpFileName, &size);
+    ASSERT_EQ(size, (1 << 21) + file_->align_size_);
+    ASSERT_EQ(file_->pos_, 30);
+    ASSERT_TRUE(file_->is_dio_);
+
+    file_->Flush();
+    env_->GetFileSize(kTmpFileName, &size);
+    ASSERT_EQ(size, (1 << 21) + file_->align_size_ + 30);
+    ASSERT_EQ(file_->pos_, 0);
+    ASSERT_TRUE(!file_->is_dio_);
+
+    ASSERT_TRUE(file_->Close().ok());
+    RandomAccessFile* rfile;
+    EnvOptions env_opt;
+    env_opt.use_direct_io_read = true;
+    env_->NewRandomAccessFile(kTmpFileName, &rfile, env_opt);
+    Slice result;
+    char* buf = new char[30 << 20];
+    rfile->Read(0, 30 << 20, &result, buf);
+    ASSERT_EQ(content1.size() + content2.size()
+              + content3.size() + content4.size(), result.size());
+    ASSERT_EQ(content1 + content2 + content3 + content4, result.ToString());
+
+    delete [] buf;
+}
 
 class EnvPosixTest {
 private:
@@ -109,7 +190,105 @@ TEST(EnvPosixTest, StartThread) {
     ASSERT_EQ(state.val, 3);
 }
 
-#if 0 // disable by anqin, because it needs HDFS env
+#define TEST_DATA_SIZE  384 // will cross buffer boundary
+#define TEST_DATA_NUM   500
+const std::string block_based_cache_paths = "./block_based_dir";
+const std::string base_env_path = "./base_dir/";
+class FlashBlockCacheEnvTest {
+public:
+    FlashBlockCacheEnvTest() {
+        // init env
+        Logger* logger;
+        Env::Default()->NewLogger("/tmp/block_cache.log", &logger);
+        Env::Default()->SetLogger(logger);
+        base_env = Env::Default();
+        flash_block_cache_env = new leveldb::FlashBlockCacheEnv(base_env);
+        cache_dir = block_based_cache_paths;
+        base_dir = base_env_path;
+        test_sst_file = base_dir + "/00001234.sst";
+
+        // init block-based cache
+        leveldb::FlashBlockCacheOptions opts;
+        opts.block_size = 8192;
+        opts.blockset_size = 64UL << 20;
+        opts.fid_batch_num = 10000;
+        opts.cache_size = 512UL << 20;
+        opts.meta_block_cache_size = 2000;
+        opts.meta_table_cache_size = 500;
+        opts.write_buffer_size = 1048576UL;
+        reinterpret_cast<leveldb::FlashBlockCacheEnv*>(flash_block_cache_env)->LoadCache(opts, cache_dir + "/block_cache");
+
+        // prepare test data
+        SetupTestData();
+    }
+
+    void SetupTestData() {
+        fprintf(stderr, "SetupTestData()\n");
+        Status s = flash_block_cache_env->CreateDir(base_dir);
+        flash_block_cache_env->DeleteFile(test_sst_file);
+        //ASSERT_TRUE(s.ok()) << ": status = " << s.ToString();
+
+        WritableFile* wf = NULL;
+        s = flash_block_cache_env->NewWritableFile(test_sst_file, &wf, EnvOptions());
+        ASSERT_TRUE(s.ok()) << ": status = " << s.ToString();
+
+        Random rnd(test::RandomSeed());
+        uint32_t succ_num = 0;
+        test_data.resize(TEST_DATA_NUM);
+        for (uint32_t i = 0; i < TEST_DATA_NUM; ++i) {
+            std::string key;
+            test::RandomString(&rnd, TEST_DATA_SIZE, &key);
+            s = wf->Append(key);
+            if (s.ok()) {
+                succ_num++;
+            }
+            test_data[i] = key;
+        }
+        ASSERT_EQ(succ_num, TEST_DATA_NUM);
+        delete wf;
+    }
+
+    void CheckRandomRead(uint32_t idx, const std::string& tip = "") {
+        RandomAccessFile* rfile;
+        Status s = flash_block_cache_env->NewRandomAccessFile(test_sst_file,
+                                    TEST_DATA_SIZE * TEST_DATA_NUM, &rfile, EnvOptions());
+        ASSERT_TRUE(s.ok()) << ": status = " << s.ToString();
+
+        Slice data;
+        char scratch[8 * 1024];
+        s = rfile->Read(idx * TEST_DATA_SIZE, TEST_DATA_SIZE, &data, scratch);
+        ASSERT_TRUE(s.ok()) << ": status = " << s.ToString();
+        ASSERT_TRUE(memcmp(data.data(), &test_data[idx][0], TEST_DATA_SIZE) == 0)
+            << tip << ": data = " << data.data()
+            << "\n vs. test_data[" << idx << "] = " << test_data[idx];
+        delete rfile;
+    }
+
+public:
+    Env* base_env;
+    Env* flash_block_cache_env;
+    std::string cache_dir;
+    std::string base_dir;
+    std::string test_sst_file;
+    std::vector<std::string> test_data;
+};
+
+TEST(FlashBlockCacheEnvTest, RandomReadTest) {
+    Random rnd(test::RandomSeed());
+    for (uint32_t i = 0; i < TEST_DATA_NUM; ++i) {
+        uint32_t idx = rnd.Uniform(TEST_DATA_NUM);
+        CheckRandomRead(idx);
+    }
+}
+
+TEST(FlashBlockCacheEnvTest, SequenceReadTest) {
+    for (uint32_t i = 0; i < TEST_DATA_NUM; ++i) {
+        CheckRandomRead(i);
+    }
+}
+
+// disable by anqin, because it needs HDFS env
+#if 0
 
 #define TEST_DATA_SIZE  384 // will cross buffer boundary
 #define TEST_DATA_NUM   500
@@ -153,7 +332,7 @@ public:
         Status s = env_->CreateDir(tmpdir_);
         ASSERT_TRUE(s.ok()) << ": status = " << s.ToString();
         WritableFile* wf = NULL;
-        s = env_->NewWritableFile(tmpdir_ + "/" + dbname_, &wf);
+        s = env_->NewWritableFile(tmpdir_ + "/" + dbname_, &wf, EnvOptions());
         ASSERT_TRUE(s.ok());
 
         Random rnd(test::RandomSeed());

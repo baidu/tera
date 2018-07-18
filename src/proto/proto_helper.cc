@@ -12,8 +12,8 @@ std::string StatusCodeToString(StatusCode status) {
     return StatusCode_Name(status);
 }
 
-std::string StatusCodeToString(TabletStatus status) {
-    return TabletStatus_Name(status);
+std::string StatusCodeToString(TabletMeta::TabletStatus status) {
+    return TabletMeta::TabletStatus_Name(status);
 }
 
 std::string StatusCodeToString(TableStatus status) {
@@ -30,7 +30,7 @@ void SetStatusCode(const StatusCode& code, StatusCode* tera_status) {
     }
 }
 
-void SetStatusCode(const TabletStatus& tablet_status, StatusCode* tera_status) {
+void SetStatusCode(const TabletMeta::TabletStatus& tablet_status, StatusCode* tera_status) {
     if (tera_status) {
         *tera_status = static_cast<StatusCode>(tablet_status);
     }

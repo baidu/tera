@@ -51,7 +51,8 @@ bool ZooKeeperAdapter::Init(const std::string& server_list,
                             const std::string& root_path,
                             uint32_t session_timeout,
                             const std::string& id,
-                            int* zk_errno) {
+                            int* zk_errno,
+                            int wait_timeout) {
     MutexLock mutex(&state_mutex_);
 
     if (NULL != handle_) {
@@ -79,7 +80,12 @@ bool ZooKeeperAdapter::Init(const std::string& server_list,
     }
 
     while (state_ == ZS_DISCONN || state_ == ZS_CONNECTING) {
-        state_cond_.Wait();
+        if (wait_timeout > 0) {
+            state_cond_.TimeWait(wait_timeout);
+            break;
+        } else {
+            state_cond_.Wait();
+        }
     }
 
     int code = ZE_OK;
@@ -427,7 +433,7 @@ bool ZooKeeperAdapter::ListAndWatchChildren(const std::string& path,
     }
 }
 
-bool ZooKeeperAdapter::CheckExist(const std::string&path, bool* is_exist,
+bool ZooKeeperAdapter::CheckExist(const std::string& path, bool* is_exist,
                                   int* zk_errno) {
     MutexLock mutex(&state_mutex_);
     if (!ZooKeeperUtil::IsValidPath(path)) {
@@ -841,6 +847,43 @@ void ZooKeeperAdapter::WatchLostEventCallBack(int state, std::string path) {
     // shit...
 }
 
+bool ZooKeeperAdapter::WatchZkLock(const std::string &path, int* zk_errno) {
+    LOG(INFO) << "watch zk lock, path = " << path;
+    MutexLock mutex(&state_mutex_);
+    if (!ZooKeeperUtil::IsValidPath(path)) {
+        SetZkAdapterCode(ZE_ARG, zk_errno);
+        return false;
+    }
+    if (NULL == handle_) {
+        SetZkAdapterCode(ZE_NOT_INIT, zk_errno);
+        return false;
+    }
+
+    pthread_rwlock_wrlock(&locks_lock_);
+    LockMap::iterator itor = locks_.find(path);
+    if (itor == locks_.end()) {
+        pthread_rwlock_unlock(&locks_lock_);
+        LOG(WARNING) << "lock not exist";
+        SetZkAdapterCode(ZE_LOCK_NOT_EXIST, zk_errno);
+        return false;
+    }
+
+    ZooKeeperLock * lock = itor->second;
+    state_mutex_.Unlock();
+    if (!lock->CheckAndWatchNodeForLock(zk_errno)) {
+        LOG(WARNING) << "watch master lock failed";
+        state_mutex_.Lock();
+        delete lock;
+        locks_.erase(itor);
+        pthread_rwlock_unlock(&locks_lock_);
+        return false;
+    } else {
+        state_mutex_.Lock();
+        pthread_rwlock_unlock(&locks_lock_);
+        return true;
+    }
+}
+
 bool ZooKeeperAdapter::SyncLock(const std::string& path, int* zk_errno,
                                 int32_t timeout) {
     MutexLock mutex(&state_mutex_);
@@ -1126,7 +1169,12 @@ void ZooKeeperAdapter::LockEventCallBack(std::string path) {
         return;
     }
     state_mutex_.Unlock();
-    lock->OnWatchNodeDeleted(path);
+    if (lock->CheckSelfNodePath(path)) {
+        OnZkLockDeleted();
+    } else {
+        lock->OnWatchNodeDeleted(path);
+    }
+
     state_mutex_.Lock();
     pthread_rwlock_unlock(&locks_lock_);
 }

@@ -10,6 +10,12 @@
 
 namespace leveldb {
 
+EnvOptions::EnvOptions(const Options& options) {
+    use_direct_io_read = options.use_direct_io_read;
+    use_direct_io_write = options.use_direct_io_write;
+    posix_write_buffer_size = options.posix_write_buffer_size;
+}
+
 Env::~Env() {
 }
 
@@ -61,7 +67,7 @@ static Status DoWriteStringToFile(Env* env, const Slice& data,
                                   const std::string& fname,
                                   bool should_sync) {
   WritableFile* file;
-  Status s = env->NewWritableFile(fname, &file);
+  Status s = env->NewWritableFile(fname, &file, EnvOptions());
   if (!s.ok()) {
     return s;
   }

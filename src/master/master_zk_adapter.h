@@ -57,6 +57,7 @@ protected:
 
     virtual bool LockMasterLock();
     virtual bool UnlockMasterLock();
+    virtual bool WatchMasterLock();
     virtual bool CreateMasterNode();
     virtual bool DeleteMasterNode();
 
@@ -66,10 +67,10 @@ protected:
 
     virtual void OnSafeModeMarkCreated();
     virtual void OnSafeModeMarkDeleted();
-    virtual void OnMasterLockLost();
     virtual void OnTabletNodeListDeleted();
     virtual void OnRootTabletNodeDeleted();
     virtual void OnMasterNodeDeleted();
+    virtual void OnZkLockDeleted();
     virtual void OnTabletServerKickMarkCreated();
     virtual void OnTabletServerKickMarkDeleted();
     virtual void OnTabletServerStart(const std::string& ts_host);

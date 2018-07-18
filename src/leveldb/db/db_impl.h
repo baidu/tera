@@ -14,6 +14,8 @@
 #include "db/db_table.h"
 #include "db/dbformat.h"
 #include "db/log_writer.h"
+#include "db/version_set.h"
+#include "leveldb/compact_strategy.h"
 #include "leveldb/db.h"
 #include "leveldb/env.h"
 #include "port/port.h"
@@ -48,9 +50,12 @@ class DBImpl : public DB {
   virtual const uint64_t Rollback(uint64_t snapshot_seq, uint64_t rollback_point = kMaxSequenceNumber);
   virtual bool GetProperty(const Slice& property, std::string* value);
   virtual void GetApproximateSizes(const Range* range, int n, uint64_t* sizes);
+  virtual void GetCurrentLevelSize(std::vector<int64_t> *);
   // lgsize not used in db_impl, just for interface compatable
   virtual void GetApproximateSizes(uint64_t* size, std::vector<uint64_t>* lgsize = NULL);
   virtual void CompactRange(const Slice* begin, const Slice* end, int lg_no = -1);
+
+  virtual bool ShouldForceUnloadOnError();
 
   void AddBoundLogSize(uint64_t size);
 
@@ -96,6 +101,12 @@ class DBImpl : public DB {
   friend class DBTable;
   struct CompactionState;
   struct Writer;
+  struct CompactionTask {
+    int64_t id; // compaction thread id
+    double score; // compaction score
+    uint64_t timeout; // compaction task delay time
+    DBImpl* db;
+  };
 
   Iterator* NewInternalIterator(const ReadOptions&,
                                 SequenceNumber* latest_snapshot);
@@ -105,15 +116,23 @@ class DBImpl : public DB {
 
   void MaybeIgnoreError(Status* s) const;
 
+  // parallel compaction
+  Status ParallelCompaction(Compaction* c);
+
+  CompactStrategy* NewCompactStrategy(CompactionState* compact);
+
+  void HandleCompactionWork(CompactionState* compact,
+                            CompactStrategy* compact_strategy);
+
   // Delete any unneeded files and stale in-memory entries.
   void DeleteObsoleteFiles();
 
   // Compact the in-memory write buffer to disk.  Switches to a new
   // log-file/memtable and writes a new descriptor iff successful.
-  Status CompactMemTable()
+  Status CompactMemTable(bool* sched_idle = NULL)
       EXCLUSIVE_LOCKS_REQUIRED(mutex_);
 
-  Status WriteLevel0Table(MemTable* mem, VersionEdit* edit, Version* base)
+  Status WriteLevel0Table(MemTable* mem, VersionEdit* edit, Version* base, uint64_t* number = NULL)
       EXCLUSIVE_LOCKS_REQUIRED(mutex_);
 
   Status MakeRoomForWrite(bool force /* compact even if there is room? */)
@@ -121,11 +140,9 @@ class DBImpl : public DB {
 
   void MaybeScheduleCompaction() EXCLUSIVE_LOCKS_REQUIRED(mutex_);
   static void BGWork(void* db);
-  void BackgroundCall();
-  Status BackgroundCompaction() EXCLUSIVE_LOCKS_REQUIRED(mutex_);
+  void BackgroundCall(CompactionTask* task);
+  Status BackgroundCompaction(bool* sched_idle) EXCLUSIVE_LOCKS_REQUIRED(mutex_);
   void CleanupCompaction(CompactionState* compact)
-      EXCLUSIVE_LOCKS_REQUIRED(mutex_);
-  Status DoCompactionWork(CompactionState* compact)
       EXCLUSIVE_LOCKS_REQUIRED(mutex_);
 
   Status OpenCompactionOutputFile(CompactionState* compact);
@@ -153,6 +170,10 @@ class DBImpl : public DB {
   uint64_t GetLastVerSequence();
   bool CheckMemTableCompaction(uint64_t last_sequence);
   MemTable* NewMemTable() const;
+
+  // new db transaction process
+  Status BeginNewDbTransaction();
+  Status CommitNewDbTransaction();
 
   // Constant after construction
   Env* const env_;
@@ -196,18 +217,23 @@ class DBImpl : public DB {
   std::set<uint64_t> pending_outputs_;
 
   // Has a background compaction been scheduled or is running?
-  bool bg_compaction_scheduled_;
-  double bg_compaction_score_;
-  uint64_t bg_compaction_timeout_;
-  int64_t bg_schedule_id_;
+  std::vector<CompactionTask*> bg_compaction_tasks_;
+  std::vector<double> bg_compaction_score_;
+  std::vector<int64_t> bg_schedule_id_;
 
   // Information for a manual compaction
+  enum ManualCompactState {
+    kManualCompactIdle,         // manual compact inited
+    kManualCompactConflict,     // manual compact run simultaneously
+  };
   struct ManualCompaction {
     int level;
     bool done;
+    bool being_sched;
     const InternalKey* begin;   // NULL means beginning of key range
     const InternalKey* end;     // NULL means end of key range
     InternalKey tmp_storage;    // Used to keep track of compaction progress
+    ManualCompactState compaction_conflict; // 0 == idle, 1 == conflict, 2 == wake
   };
   ManualCompaction* manual_compaction_;
 
@@ -217,9 +243,14 @@ class DBImpl : public DB {
   Status bg_error_;
   int consecutive_compaction_errors_;
 
+  // Don't change compaction schedule process, only record all background error
+  Status stink_bg_error_;
+
   // true if disable WAL
   bool flush_on_destroy_;
-
+  
+  // true , if first create dbname DIR, or last time load DB failed with txn
+  bool need_newdb_txn_;
 
   // Per level compaction stats.  stats_[level] stores the stats for
   // compactions that produced data for the specified "level".

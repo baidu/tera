@@ -1,0 +1,29 @@
+digraph {
+    kTabletLoading
+    kTabletLoadFail
+    kTabletReady
+    kTabletUnloading
+    kTabletUnloadFail
+    kTabletOffline
+    kTabletDisable
+    kTabletDelayOffline
+    kTabletOffline ->    kTabletLoading         [label="kLoadTablet"]        
+    kTabletOffline ->    kTabletDelayOffline    [label="kTsDelayOffline"]
+    kTabletOffline ->    kTabletLoadFail        [label="kTabletLoadFail"]
+    kTabletOffline ->    kTabletDisable         [label="kTableDisable"]      
+    kTabletDelayOffline ->    kTabletOffline    [label="kTsOffline"]         
+    kTabletDelayOffline ->    kTabletOffline    [label="kTsRestart"]         
+    kTabletLoading ->    kTabletReady           [label="kTsLoadSucc"]       
+    kTabletLoading ->    kTabletOffline         [label="kTsLoadFail"]       
+    kTabletLoading ->    kTabletDelayOffline    [label="kTsDelayOffline"]
+    kTabletLoading ->    kTabletOffline         [label="kTsRestart"]         
+    kTabletLoading ->    kTabletOffline         [label="kTsOffline"]         
+    kTabletUnloading ->  kTabletOffline         [label="kTsUnLoadSucc"]     
+    kTabletUnloading ->  kTabletUnloadFail      [label="kTsUnLoadFail"]     
+    kTabletUnloading ->  kTabletOffline         [label="kTsOffline"]         
+    kTabletReady ->      kTabletUnloading       [label="kUnLoadTablet"]      
+    kTabletReady ->      kTabletOffline         [label="kTsOffline"]         
+    kTabletUnloadFail -> kTabletOffline         [label="kTsOffline"]         
+    kTabletLoadFail ->   kTabletLoading         [label="kLoadTablet"]        
+    kTabletDisable ->    kTabletOffline         [label="kTableEnable"]       
+}

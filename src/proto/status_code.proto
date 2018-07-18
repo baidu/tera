@@ -22,6 +22,7 @@ enum StatusCode {
     kTabletNodeOffLine = 31;
     kTabletNodeOnKick = 32;
     kTabletNodeWaitKick = 33;
+    kTabletNodePendingOffLine = 34;
 
     // table status
     kTabletNotInit = 41;
@@ -96,28 +97,19 @@ enum StatusCode {
 
     kTableStatusEnable = 1000;
     kTableStatusDisable = 1001;
-}
 
-enum TabletStatus {
-    kTableNotInit = 41;
-    kTableOffLine = 57;
-    kTableReady = 42;
-    kTableUnLoad = 49;
-    kTableWaitLoad = 58;
-    kTableOnLoad = 43;
-    kTableLoadFail = 60;
-    kTableWaitSplit = 59;
-    kTableOnSplit = 44;
-    kTableSplited = 51;
-    kTableSplitFail = 61;
-    kTableUnLoading = 52;
-    kTableUnLoading2 = 68;
-    kTableUnLoadFail = 62;
-    kTableOnMerge = 50;
-    kTabletDisable = 64;
-    kTabletPending = 65;
-    kTabletOnSnapshot = 66;
-    kTabletDelSnapshot = 67;
+    // Timeoracle
+    kTimeoracleOk   = 2000;
+    kTimeoracleBusy = 2001;
+
+    // rowlock service
+    kLockSucc = 2100;
+    kLockFail = 2101;
+    kLockUnknown = 2102;
+
+    // LoadBalancer
+    kLoadBalancerOk = 2200;
+    kLoadBalancerError = 2201;
 }
 
 enum TableStatus {

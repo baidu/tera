@@ -77,10 +77,6 @@ public:
     virtual void SetTimeOut(int64_t timeout_ms) = 0;
     virtual int64_t TimeOut() = 0;
 
-    // EXPRIMENTAL
-    // Returns transaction if exists.
-    virtual Transaction* GetTransaction() = 0;
-
     // Each mutation has an operation. A row mutation is a series of mutations.
     enum Type {
         kPut,
@@ -109,7 +105,6 @@ public:
     virtual uint32_t Size() = 0;
     // Get a mutation specified by "index".
     virtual const RowMutation::Mutation& GetMutation(uint32_t index) = 0;
-    virtual Table* GetTable() = 0;
 
     // DEVELOPING
     virtual void Reset(const std::string& row_key) = 0;

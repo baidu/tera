@@ -20,21 +20,6 @@ public:
     explicit RemoteMaster(MasterImpl* master_impl);
     ~RemoteMaster();
 
-    void GetSnapshot(google::protobuf::RpcController* controller,
-                     const GetSnapshotRequest* request,
-                     GetSnapshotResponse* response,
-                     google::protobuf::Closure* done);
-
-    void DelSnapshot(google::protobuf::RpcController* controller,
-                     const DelSnapshotRequest* request,
-                     DelSnapshotResponse* response,
-                     google::protobuf::Closure* done);
-
-    void GetRollback(google::protobuf::RpcController* controller,
-                     const RollbackRequest* request,
-                     RollbackResponse* response,
-                     google::protobuf::Closure* done);
-
     void CreateTable(google::protobuf::RpcController* controller,
                      const CreateTableRequest* request,
                      CreateTableResponse* response,
@@ -65,11 +50,6 @@ public:
                      UpdateCheckResponse* response,
                      google::protobuf::Closure* done);
 
-    void CompactTable(google::protobuf::RpcController* controller,
-                      const CompactTableRequest* request,
-                      CompactTableResponse* response,
-                      google::protobuf::Closure* done);
-
     void SearchTable(google::protobuf::RpcController* controller,
                      const SearchTableRequest* request,
                      SearchTableResponse* response,
@@ -95,24 +75,7 @@ public:
                      OperateUserResponse* response,
                      google::protobuf::Closure* done);
 
-    void RenameTable(google::protobuf::RpcController* controller,
-                const RenameTableRequest* request,
-                RenameTableResponse* response,
-                google::protobuf::Closure* done);
-
 private:
-    void DoGetSnapshot(google::protobuf::RpcController* controller,
-                       const GetSnapshotRequest* request,
-                       GetSnapshotResponse* response,
-                       google::protobuf::Closure* done);
-    void DoDelSnapshot(google::protobuf::RpcController* controller,
-                       const DelSnapshotRequest* request,
-                       DelSnapshotResponse* response,
-                       google::protobuf::Closure* done);
-    void DoRollback(google::protobuf::RpcController* controller,
-                  const RollbackRequest* request,
-                  RollbackResponse* response,
-                  google::protobuf::Closure* done);
     void DoCreateTable(google::protobuf::RpcController* controller,
                        const CreateTableRequest* request,
                        CreateTableResponse* response,
@@ -142,11 +105,6 @@ private:
                        const UpdateCheckRequest* request,
                        UpdateCheckResponse* response,
                        google::protobuf::Closure* done);
-
-    void DoCompactTable(google::protobuf::RpcController* controller,
-                        const CompactTableRequest* request,
-                        CompactTableResponse* response,
-                        google::protobuf::Closure* done);
 
     void DoSearchTable(google::protobuf::RpcController* controller,
                        const SearchTableRequest* request,

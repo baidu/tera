@@ -21,6 +21,7 @@ bool IsIdentifierChar(const char c) {
             c == '.' ||
             c == '_' ||
             c == '-');
+    // \# is also a valid identifier char
 }
 
 Tokenizer::Tokenizer(const std::string& input)
@@ -30,6 +31,7 @@ Tokenizer::~Tokenizer() {}
 
 void Tokenizer::ConsumeUselessChars() {
     while (cur_pos_ < origin_.size()) {
+        char c_next = (cur_pos_ + 1 < origin_.size() ? origin_[cur_pos_ + 1] : 0);
         switch (origin_[cur_pos_]) {
         case '\n':
         case '\t':
@@ -37,6 +39,10 @@ void Tokenizer::ConsumeUselessChars() {
         case ' ':
             cur_pos_++;
             continue;
+        case '\\':
+           if (c_next == '#') {
+               return;
+           } 
         case '#':
             // reach a line-comment, discard all chars in this line
             while (++cur_pos_ < origin_.size()) {
@@ -56,10 +62,13 @@ void Tokenizer::ConsumeIdentifier() {
     current_.type = IDENTIFIER;
     while (cur_pos_ < origin_.size()) {
         char c = origin_[cur_pos_];
-        if (IsIdentifierChar(c)) {
+        char c_next = (cur_pos_ + 1 < origin_.size() ? origin_[cur_pos_ + 1] : 0);
+        if (c == '\\' && c_next == '#') {
+            current_.push_back(c_next);
+            cur_pos_ += 2;
+        } else if (IsIdentifierChar(c)) {
             current_.push_back(c);
             cur_pos_++;
-            continue;
         } else {
             break;
         }

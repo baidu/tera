@@ -22,6 +22,7 @@
 #include <vector>
 #include <stdint.h>
 #include "leveldb/status.h"
+#include "leveldb/options.h"
 
 namespace leveldb {
 
@@ -38,6 +39,18 @@ enum ThreadPoolScore {
    kDumpMemTableScore = 60,
    kDeleteLogScore = 50,
    kManualCompactScore = 10,
+};
+
+const size_t kDefaultPageSize = 4 * 1024;
+
+struct EnvOptions {
+  EnvOptions() {}
+
+  explicit EnvOptions(const Options& options);
+
+  bool use_direct_io_read = false;
+  bool use_direct_io_write = false;
+  uint64_t posix_write_buffer_size = 512 << 10;
 };
 
 class Env {
@@ -70,11 +83,13 @@ class Env {
   // The returned file may be concurrently accessed by multiple threads.
   // Implement may check file size against the given fsize.
   virtual Status NewRandomAccessFile(const std::string& fname,
-                                     RandomAccessFile** result) = 0;
+                                     RandomAccessFile** result,
+                                     const EnvOptions& options) = 0;
 
   virtual Status NewRandomAccessFile(const std::string& fname,
                                      uint64_t fsize,
-                                     RandomAccessFile** result) = 0;
+                                     RandomAccessFile** result,
+                                     const EnvOptions& options) = 0;
 
   // Create an object that writes to a new file with the specified
   // name.  Deletes any existing file with the same name and creates a
@@ -84,7 +99,8 @@ class Env {
   //
   // The returned file will only be accessed by one thread at a time.
   virtual Status NewWritableFile(const std::string& fname,
-                                 WritableFile** result) = 0;
+                                 WritableFile** result,
+                                 const EnvOptions& options) = 0;
 
   // Returns:
   //   OK:       exists
@@ -242,6 +258,10 @@ class RandomAccessFile {
   // Safe for concurrent use by multiple threads.
   virtual Status Read(uint64_t offset, size_t n, Slice* result,
                       char* scratch) const = 0;
+  
+  // Use the returned alignment value to allocate
+  // aligned buffer for Direct I/O
+  virtual size_t GetRequiredBufferAlignment() const { return kDefaultPageSize; }
 
  private:
   // No copying allowed
@@ -335,14 +355,16 @@ class EnvWrapper : public Env {
   Status NewSequentialFile(const std::string& f, SequentialFile** r) {
     return target_->NewSequentialFile(f, r);
   }
-  Status NewRandomAccessFile(const std::string& f, RandomAccessFile** r) {
-    return target_->NewRandomAccessFile(f, r);
+  Status NewRandomAccessFile(const std::string& f, RandomAccessFile** r,
+                             const EnvOptions& options) {
+    return target_->NewRandomAccessFile(f, r, options);
   }
-  Status NewRandomAccessFile(const std::string& f, uint64_t s, RandomAccessFile** r) {
-    return NewRandomAccessFile(f, r);
+  Status NewRandomAccessFile(const std::string& f, uint64_t s, RandomAccessFile** r,
+                             const EnvOptions& options) {
+    return NewRandomAccessFile(f, r, options);
   }
-  Status NewWritableFile(const std::string& f, WritableFile** r) {
-    return target_->NewWritableFile(f, r);
+  Status NewWritableFile(const std::string& f, WritableFile** r, const EnvOptions& o) {
+    return target_->NewWritableFile(f, r, o);
   }
   Status FileExists(const std::string& f) { return target_->FileExists(f); }
   Status GetChildren(const std::string& dir, std::vector<std::string>* r) {

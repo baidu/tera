@@ -4,6 +4,9 @@
 
 #include "io/tablet_io.h"
 
+#include <iostream>
+#include <thread>
+#include <vector>
 #include <stdlib.h>
 
 #include "gflags/gflags.h"
@@ -18,7 +21,7 @@
 #include "leveldb/table_utils.h"
 #include "proto/proto_helper.h"
 #include "proto/status_code.pb.h"
-#include "utils/timer.h"
+#include "common/timer.h"
 #include "utils/utils_cmd.h"
 #include "utils/string_util.h"
 #include "io/tablet_scanner.h"
@@ -93,7 +96,7 @@ TEST_F(TabletIOTest, General) {
 
     TabletIO tablet(key_start, key_end, tablet_path);
     EXPECT_TRUE(tablet.Load(TableSchema(), tablet_path, std::vector<uint64_t>(),
-                            empty_snaphsots_, empty_rollback_, NULL, NULL, NULL, &status));
+                            std::set<std::string>(), NULL, NULL, NULL, &status));
 
     std::string key = "555";
     std::string value = "value of 555";
@@ -118,7 +121,7 @@ TEST_F(TabletIOTest, Split) {
 
     TabletIO tablet(key_start, key_end, tablet_path);
     EXPECT_TRUE(tablet.Load(TableSchema(), tablet_path, std::vector<uint64_t>(),
-                            empty_snaphsots_, empty_rollback_, NULL, NULL, NULL, &status));
+                            std::set<std::string>(), NULL, NULL, NULL, &status));
 
     // prepare test data
     EXPECT_TRUE(PrepareTestData(&tablet, N));
@@ -139,7 +142,7 @@ TEST_F(TabletIOTest, Split) {
     key_end = "8000";
     TabletIO other_tablet(key_start, key_end, tablet_path);
     EXPECT_TRUE(other_tablet.Load(TableSchema(), tablet_path, std::vector<uint64_t>(),
-                            empty_snaphsots_, empty_rollback_, NULL, NULL, NULL, &status));
+                                  std::set<std::string>(), NULL, NULL, NULL, &status));
     other_tablet.GetDataSize(&size, NULL, &status);
     LOG(INFO) << "table[" << key_start << ", " << key_end
         << "]: size = " << size;
@@ -155,7 +158,7 @@ TEST_F(TabletIOTest, Split) {
     key_end = "5000";
     TabletIO l_tablet(key_start, key_end, tablet_path);
     EXPECT_TRUE(l_tablet.Load(TableSchema(), tablet_path, std::vector<uint64_t>(),
-                            empty_snaphsots_, empty_rollback_, NULL, NULL, NULL, &status));
+                              std::set<std::string>(), NULL, NULL, NULL, &status));
     l_tablet.GetDataSize(&size, NULL, &status);
     LOG(INFO) << "table[" << key_start << ", " << key_end
         << "]: size = " << size;
@@ -165,7 +168,7 @@ TEST_F(TabletIOTest, Split) {
     key_end = "";
     TabletIO r_tablet(key_start, key_end, tablet_path);
     EXPECT_TRUE(r_tablet.Load(TableSchema(), tablet_path, std::vector<uint64_t>(),
-                            empty_snaphsots_, empty_rollback_, NULL, NULL, NULL, &status));
+                              std::set<std::string>(), NULL, NULL, NULL, &status));
     r_tablet.GetDataSize(&size, NULL, &status);
     LOG(INFO) << "table[" << key_start << ", " << key_end
         << "]: size = " << size;
@@ -182,7 +185,7 @@ TEST_F(TabletIOTest, SplitAndCheckSize) {
 
     TabletIO tablet(key_start, key_end, tablet_path);
     EXPECT_TRUE(tablet.Load(TableSchema(), tablet_path, std::vector<uint64_t>(),
-                            empty_snaphsots_, empty_rollback_, NULL, NULL, NULL, &status));
+                            std::set<std::string>(), NULL, NULL, NULL, &status));
 
     // prepare test data
     EXPECT_TRUE(PrepareTestData(&tablet, N));
@@ -202,7 +205,7 @@ TEST_F(TabletIOTest, SplitAndCheckSize) {
     // open from split key to check scope size
     TabletIO l_tablet(key_start, split_key, tablet_path);
     EXPECT_TRUE(l_tablet.Load(TableSchema(), tablet_path, std::vector<uint64_t>(),
-                            empty_snaphsots_, empty_rollback_, NULL, NULL, NULL, &status));
+                              std::set<std::string>(), NULL, NULL, NULL, &status));
     l_tablet.GetDataSize(&size, NULL, &status);
     LOG(INFO) << "table[" << key_start << ", " << split_key
         << "]: size = " << size;
@@ -210,7 +213,7 @@ TEST_F(TabletIOTest, SplitAndCheckSize) {
 
     TabletIO r_tablet(split_key, key_end, tablet_path);
     EXPECT_TRUE(r_tablet.Load(TableSchema(), tablet_path, std::vector<uint64_t>(),
-                            empty_snaphsots_, empty_rollback_, NULL, NULL, NULL, &status));
+                              std::set<std::string>(), NULL, NULL, NULL, &status));
     r_tablet.GetDataSize(&size, NULL, &status);
     LOG(INFO) << "table[" << split_key << ", " << key_end
         << "]: size = " << size;
@@ -227,7 +230,7 @@ TEST_F(TabletIOTest, OverWrite) {
 
     TabletIO tablet(key_start, key_end, tablet_path);
     EXPECT_TRUE(tablet.Load(TableSchema(), tablet_path, std::vector<uint64_t>(),
-                            empty_snaphsots_, empty_rollback_, NULL, NULL, NULL, &status));
+                            std::set<std::string>(), NULL, NULL, NULL, &status));
 
     std::string key = "555";
     std::string value = "value of 555";
@@ -253,7 +256,7 @@ TEST_F(TabletIOTest, Compact) {
 
     TabletIO tablet(key_start, key_end, tablet_path);
     EXPECT_TRUE(tablet.Load(TableSchema(), tablet_path, std::vector<uint64_t>(),
-                            empty_snaphsots_, empty_rollback_, NULL, NULL, NULL, &status));
+                            std::set<std::string>(), NULL, NULL, NULL, &status));
 
     // prepare test data
     EXPECT_TRUE(PrepareTestData(&tablet, 100));
@@ -269,7 +272,7 @@ TEST_F(TabletIOTest, Compact) {
     std::string new_key_end = StringFormat("%011llu", 50); // NumberToString(800);
     TabletIO new_tablet(new_key_start, new_key_end, tablet_path);
     EXPECT_TRUE(new_tablet.Load(TableSchema(), tablet_path, std::vector<uint64_t>(),
-                            empty_snaphsots_, empty_rollback_, NULL, NULL, NULL, &status));
+                                std::set<std::string>(), NULL, NULL, NULL, &status));
     EXPECT_TRUE(new_tablet.Compact(0, &status));
 
     uint64_t new_table_size = 0;
@@ -291,6 +294,109 @@ TEST_F(TabletIOTest, Compact) {
     EXPECT_TRUE(new_tablet.Unload());
 }
 
+TEST_F(TabletIOTest, LowLevelSeek) {
+    std::string tablet_path = working_dir + "llseek_tablet";
+    std::string key_start = "";
+    std::string key_end = "";
+    StatusCode status;
+
+    TabletIO tablet(key_start, key_end, tablet_path);
+    EXPECT_TRUE(tablet.Load(GetTableSchema(), tablet_path, std::vector<uint64_t>(),
+                            std::set<std::string>(), NULL, NULL, NULL, &status));
+
+    // init scan
+    ScanOptions scan_options;
+    ColumnFamilyMap cf_map;
+    std::set<std::string> qu_set;
+    qu_set.insert("qualifer");
+    qu_set.insert("2a");
+    qu_set.insert("1a");
+    cf_map["column"] = qu_set;
+    scan_options.column_family_list = cf_map;
+    scan_options.iter_cf_set.insert("column");
+
+    std::string tkey1;
+    // delete this key
+    tablet.GetRawKeyOperator()->EncodeTeraKey("row", "", "", get_micros(), leveldb::TKT_DEL, &tkey1);
+    tablet.WriteOne(tkey1, "" , false, NULL);
+    tablet.GetRawKeyOperator()->EncodeTeraKey("row1", "", "", get_micros(), leveldb::TKT_DEL, &tkey1);
+    tablet.WriteOne(tkey1, "" , false, NULL);
+
+    // write cell
+    tablet.GetRawKeyOperator()->EncodeTeraKey("row", "column", "qualifer", get_micros(), leveldb::TKT_VALUE, &tkey1);
+    tablet.WriteOne(tkey1, "lala" , false, NULL);
+    RowResult value_list;
+
+    EXPECT_TRUE(tablet.LowLevelSeek("row", scan_options, &value_list, &status));
+    EXPECT_EQ(value_list.key_values_size(), 1);
+
+    // delete cell
+    tablet.GetRawKeyOperator()->EncodeTeraKey("row", "", "", get_micros(), leveldb::TKT_DEL, &tkey1);
+    tablet.WriteOne(tkey1, "" , false, NULL);
+    EXPECT_TRUE(tablet.LowLevelSeek("row", scan_options, &value_list, &status));
+    EXPECT_EQ(value_list.key_values_size(), 0);
+
+    // write cell again
+    tablet.GetRawKeyOperator()->EncodeTeraKey("row", "column", "2a", get_micros(), leveldb::TKT_VALUE, &tkey1);
+    tablet.WriteOne(tkey1, "lala" , false, NULL);
+    EXPECT_TRUE(tablet.LowLevelSeek("row", scan_options, &value_list, &status));
+    EXPECT_EQ(value_list.key_values_size(), 1);
+
+    // clean
+    tablet.GetRawKeyOperator()->EncodeTeraKey("row", "", "", get_micros(), leveldb::TKT_DEL, &tkey1);
+    tablet.WriteOne(tkey1, "", false, NULL);
+    tablet.GetRawKeyOperator()->EncodeTeraKey("row1", "", "", get_micros(), leveldb::TKT_DEL, &tkey1);
+    tablet.WriteOne(tkey1, "", false, NULL);
+
+    // write 5 versions
+    tablet.GetRawKeyOperator()->EncodeTeraKey("row", "column", "1a", get_micros(), leveldb::TKT_VALUE, &tkey1);
+    tablet.WriteOne(tkey1, "lala1", false, NULL);
+    int64_t start_ts = get_micros();
+    tablet.GetRawKeyOperator()->EncodeTeraKey("row", "column", "1a", start_ts, leveldb::TKT_VALUE, &tkey1);
+    tablet.WriteOne(tkey1, "lala2", false, NULL);
+    tablet.GetRawKeyOperator()->EncodeTeraKey("row", "column", "1a", get_micros(), leveldb::TKT_VALUE, &tkey1);
+    tablet.WriteOne(tkey1, "lala3", false, NULL);
+    int64_t end_ts = get_micros();
+    tablet.GetRawKeyOperator()->EncodeTeraKey("row", "column", "1a", end_ts, leveldb::TKT_VALUE, &tkey1);
+    tablet.WriteOne(tkey1, "lala4", false, NULL);
+    tablet.GetRawKeyOperator()->EncodeTeraKey("row", "column", "1a", get_micros(), leveldb::TKT_VALUE, &tkey1);
+    tablet.WriteOne(tkey1, "lala5", false, NULL);
+    tablet.GetRawKeyOperator()->EncodeTeraKey("row1", "column", "1a", get_micros(), leveldb::TKT_VALUE, &tkey1);
+    tablet.WriteOne(tkey1, "lala5", false, NULL);
+
+    // read all versions ( write 5 versions, but schema set max_versions = 3 )
+    EXPECT_TRUE(tablet.LowLevelSeek("row", scan_options, &value_list, &status));
+    EXPECT_EQ(value_list.key_values_size(), 3);
+
+    // for max_versions
+    // read 2 versions
+    scan_options.max_versions = 2;
+    EXPECT_TRUE(tablet.LowLevelSeek("row", scan_options, &value_list, &status));
+    EXPECT_EQ(value_list.key_values_size(), 2);
+
+    // for timerange and max_versions
+    // read 2 versions ( write 5 versions, but schema set max_versions = 3)
+    scan_options.max_versions = 4;
+    scan_options.ts_start = start_ts;
+    scan_options.ts_end = end_ts;
+    EXPECT_TRUE(tablet.LowLevelSeek("row", scan_options, &value_list, &status));
+    EXPECT_EQ(value_list.key_values_size(), 2);
+
+    // start_ts not in top 3 versions
+    scan_options.ts_start = start_ts;
+    scan_options.ts_end = start_ts;
+    EXPECT_TRUE(tablet.LowLevelSeek("row", scan_options, &value_list, &status));
+    EXPECT_EQ(value_list.key_values_size(), 0);
+
+    // end_ts in top 3 versions
+    scan_options.ts_start = end_ts;
+    scan_options.ts_end = end_ts;
+    EXPECT_TRUE(tablet.LowLevelSeek("row", scan_options, &value_list, &status));
+    EXPECT_EQ(value_list.key_values_size(), 1);
+
+    EXPECT_TRUE(tablet.Unload());
+}
+
 TEST_F(TabletIOTest, LowLevelScan) {
     std::string tablet_path = working_dir + "llscan_tablet";
     std::string key_start = "";
@@ -299,7 +405,7 @@ TEST_F(TabletIOTest, LowLevelScan) {
 
     TabletIO tablet(key_start, key_end, tablet_path);
     EXPECT_TRUE(tablet.Load(GetTableSchema(), tablet_path, std::vector<uint64_t>(),
-                            empty_snaphsots_, empty_rollback_, NULL, NULL, NULL, &status));
+                            std::set<std::string>(), NULL, NULL, NULL, &status));
 
     std::string tkey1;
 
@@ -322,19 +428,19 @@ TEST_F(TabletIOTest, LowLevelScan) {
     uint32_t read_bytes = 0;
     bool is_complete = false;
     EXPECT_TRUE(tablet.LowLevelScan(start_tera_key, "", ScanOptions(),
-                                    &value_list, &next_start_point, &read_row_count, &read_bytes, &is_complete, NULL));
+                                    &value_list, &next_start_point, &read_row_count, &read_bytes, &is_complete, &status));
     EXPECT_EQ(value_list.key_values_size(), 1);
 
     tablet.GetRawKeyOperator()->EncodeTeraKey("row", "", "", get_micros(), leveldb::TKT_DEL, &tkey1);
     tablet.WriteOne(tkey1, "lala" , false, NULL);
     EXPECT_TRUE(tablet.LowLevelScan(start_tera_key, "", ScanOptions(),
-                                    &value_list, &next_start_point, &read_row_count, &read_bytes, &is_complete, NULL));
+                                    &value_list, &next_start_point, &read_row_count, &read_bytes, &is_complete, &status));
     EXPECT_EQ(value_list.key_values_size(), 0);
 
     tablet.GetRawKeyOperator()->EncodeTeraKey("row", "column", "2a", get_micros(), leveldb::TKT_VALUE, &tkey1);
     tablet.WriteOne(tkey1, "lala" , false, NULL);
     EXPECT_TRUE(tablet.LowLevelScan(start_tera_key, "", ScanOptions(),
-                                    &value_list, &next_start_point, &read_row_count, &read_bytes, &is_complete, NULL));
+                                    &value_list, &next_start_point, &read_row_count, &read_bytes, &is_complete, &status));
     EXPECT_EQ(value_list.key_values_size(), 1);
 
     tablet.GetRawKeyOperator()->EncodeTeraKey("row", "", "", get_micros(), leveldb::TKT_DEL, &tkey1);
@@ -357,17 +463,17 @@ TEST_F(TabletIOTest, LowLevelScan) {
     end_row_key = std::string("row1\0", 5);
     ScanOptions scan_options;
     EXPECT_TRUE(tablet.LowLevelScan(start_tera_key, end_row_key, scan_options,
-                                    &value_list, &next_start_point, &read_row_count, &read_bytes, &is_complete, NULL));
+                                    &value_list, &next_start_point, &read_row_count, &read_bytes, &is_complete, &status));
     EXPECT_EQ(value_list.key_values_size(), 5);
     tablet.GetRawKeyOperator()->EncodeTeraKey("row", "", "", 0, leveldb::TKT_FORSEEK, &start_tera_key);
     end_row_key = std::string("row\0", 5);
     scan_options.column_family_list["column"].insert("1a");
     EXPECT_TRUE(tablet.LowLevelScan(start_tera_key, end_row_key, scan_options,
-                                    &value_list, &next_start_point, &read_row_count, &read_bytes, &is_complete, NULL));
+                                    &value_list, &next_start_point, &read_row_count, &read_bytes, &is_complete, &status));
     EXPECT_EQ(value_list.key_values_size(), 3);
     scan_options.max_versions = 2;
     EXPECT_TRUE(tablet.LowLevelScan(start_tera_key, end_row_key, scan_options,
-                                    &value_list, &next_start_point, &read_row_count, &read_bytes, &is_complete, NULL));
+                                    &value_list, &next_start_point, &read_row_count, &read_bytes, &is_complete, &status));
     EXPECT_EQ(value_list.key_values_size(), 2);
     EXPECT_TRUE(tablet.Unload());
 }
@@ -382,7 +488,7 @@ TEST_F(TabletIOTest, SplitToSubTable) {
 
     TabletIO tablet(key_start, key_end, tablet_path);
     EXPECT_TRUE(tablet.Load(TableSchema(), tablet_path, std::vector<uint64_t>(),
-                            empty_snaphsots_, empty_rollback_, NULL, NULL, NULL, &status));
+                            std::set<std::string>(), NULL, NULL, NULL, &status));
 
     // prepare test data
     EXPECT_TRUE(PrepareTestData(&tablet, N / 2, 0));
@@ -391,7 +497,7 @@ TEST_F(TabletIOTest, SplitToSubTable) {
     // make sure all data are dumped into sst
     EXPECT_TRUE(tablet.Unload());
     EXPECT_TRUE(tablet.Load(TableSchema(), tablet_path, std::vector<uint64_t>(),
-                            empty_snaphsots_, empty_rollback_, NULL, NULL, NULL, &status));
+                            std::set<std::string>(), NULL, NULL, NULL, &status));
 
     // for first tablet
     tablet.GetDataSize(&size, NULL, &status);
@@ -418,7 +524,7 @@ TEST_F(TabletIOTest, SplitToSubTable) {
     // 1. load sub-table 1
     TabletIO l_tablet(key_start, split_key, split_path_1);
     EXPECT_TRUE(l_tablet.Load(TableSchema(), split_path_1, parent_tablet,
-                            empty_snaphsots_, empty_rollback_, NULL, NULL, NULL, &status));
+                              std::set<std::string>(), NULL, NULL, NULL, &status));
     l_tablet.GetDataSize(&size, NULL, &status);
     LOG(INFO) << "table[" << key_start << ", " << split_key
         << "]: size = " << size;
@@ -436,7 +542,7 @@ TEST_F(TabletIOTest, SplitToSubTable) {
     // 2. load sub-table 2
     TabletIO r_tablet(split_key, key_end, split_path_2);
     EXPECT_TRUE(r_tablet.Load(TableSchema(), split_path_2, parent_tablet,
-                            empty_snaphsots_, empty_rollback_, NULL, NULL, NULL, &status));
+                              std::set<std::string>(), NULL, NULL, NULL, &status));
     r_tablet.GetDataSize(&size, NULL, &status);
     LOG(INFO) << "table[" << split_key << ", " << key_end
         << "]: size = " << size;
@@ -544,6 +650,98 @@ TEST_F(TabletIOTest, FindAverageKey) {
     ASSERT_EQ(ave, "a\xff\xff\x80");
 }
 
+static void TabletUnloadWapper(TabletIO* tablet) {
+    tablet->Unload();
+}
+
+TEST_F(TabletIOTest, TryUnload) {
+    std::string tablet_path = working_dir + "unload_try";
+    std::string key_start = "";
+    std::string key_end = "";
+    StatusCode status;
+
+    TabletIO tablet(key_start, key_end, tablet_path);
+    EXPECT_TRUE(tablet.Load(GetTableSchema(), tablet_path, std::vector<uint64_t>(),
+                            std::set<std::string>(), NULL, NULL, NULL, &status));
+    tablet.db_ref_count_++;
+    std::vector<std::thread> threads;
+    threads.reserve(2);
+    EXPECT_TRUE(tablet.try_unload_count_ == 0);
+    for (int i = 0; i < 2; ++i) {
+        threads.push_back(std::thread(&TabletUnloadWapper, &tablet));
+    }
+    sleep(2);
+    EXPECT_TRUE(tablet.try_unload_count_ == 2);
+    tablet.db_ref_count_--;
+    for (int i = 0; i < 2; ++i) {
+        threads[i].join();
+    }
+    threads.clear();
+}
+
+TEST_F(TabletIOTest, OnSlowUnloadOP) {
+    std::string tablet_path = working_dir + "unload_slow_op";
+    std::string key_start = "";
+    std::string key_end = "";
+    StatusCode status;
+
+    TabletIO tablet(key_start, key_end, tablet_path);
+    EXPECT_TRUE(tablet.Load(GetTableSchema(), tablet_path, std::vector<uint64_t>(),
+                            std::set<std::string>(), NULL, NULL, NULL, &status));
+    tablet.db_ref_count_++;
+    std::vector<std::thread> threads;
+    threads.reserve(3);
+    EXPECT_TRUE(tablet.try_unload_count_ == 0);
+    for (int i = 0; i < 3; ++i) {
+        threads.push_back(std::thread(&TabletUnloadWapper, &tablet));
+    }
+    sleep(5);
+    EXPECT_TRUE(tablet.try_unload_count_ == 3);
+    uint64_t size = 0;
+    std::vector<uint64_t> lgsize;
+    // GetDataSize
+    EXPECT_TRUE(tablet.GetDataSize(&size, &lgsize, &status) == false);
+    EXPECT_TRUE(size == 0);
+    EXPECT_TRUE(lgsize.size() == 0);
+
+    // LowLevelScan
+
+    std::string start_tera_key;
+    tablet.GetRawKeyOperator()->EncodeTeraKey("123213", "", "", kLatestTs, leveldb::TKT_FORSEEK,
+                                              &start_tera_key);
+    std::string end_row_key = "123213" + '\0';
+
+    RowResult value_list;
+    KeyValuePair next_start_point;
+    uint32_t read_row_count = 0;
+    uint32_t read_bytes = 0;
+    bool is_complete = false;
+    status = kTabletNodeOk;
+    EXPECT_FALSE(tablet.LowLevelScan(start_tera_key, end_row_key, ScanOptions(), &value_list,
+                                    &next_start_point, &read_row_count, &read_bytes,
+                                    &is_complete, &status));
+    EXPECT_TRUE(status == kKeyNotInRange);
+    status = kTabletNodeOk;
+
+    // LowLevelSeek
+    EXPECT_FALSE(tablet.LowLevelSeek("row", ScanOptions(), &value_list, &status));
+    EXPECT_TRUE(status == kKeyNotInRange);
+    status = kTabletNodeOk;
+    
+    // ReadRows
+    RowReaderInfo row_reader;
+    EXPECT_FALSE(tablet.ReadCells(row_reader, &value_list, 0, &status, 1000));
+    EXPECT_TRUE(status != kTabletNodeOk);
+    status = kTabletNodeOk;
+
+    tablet.db_ref_count_--;
+    for (int i = 0; i < 3; ++i) {
+        threads[i].join();
+    }
+    threads.clear();
+}
+
+
 TEST_F(TabletIOTest, RowBloomFilter) {
     const int32_t NR = 10000;
     const int32_t CR = 10;
@@ -554,7 +752,7 @@ TEST_F(TabletIOTest, RowBloomFilter) {
 
     TabletIO tablet(key_start, key_end, tablet_path);
     EXPECT_TRUE(tablet.Load(GetTableSchema(), tablet_path, std::vector<uint64_t>(),
-                            empty_snaphsots_, empty_rollback_, NULL, NULL, NULL, &status));
+                            std::set<std::string>(), NULL, NULL, NULL, &status));
 
     // prepare data
     leveldb::WriteBatch batch;
@@ -594,7 +792,7 @@ TEST_F(TabletIOTest, RowBloomFilter) {
         bool is_complete = false;
         ASSERT_TRUE(tablet.LowLevelScan(start_tera_key, end_row_key, ScanOptions(), &value_list,
                                         &next_start_point, &read_row_count, &read_bytes,
-                                        &is_complete, NULL));
+                                        &is_complete, &status));
         ASSERT_EQ(value_list.key_values_size(), CR);
         for (int32_t j = 0; j < CR; j++) {
             char buf[16];

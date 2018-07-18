@@ -152,7 +152,7 @@ bool DumpTable(Env* env, const std::string& fname) {
   Table* table = NULL;
   Status s = env->GetFileSize(fname, &file_size);
   if (s.ok()) {
-    s = env->NewRandomAccessFile(fname, &file);
+    s = env->NewRandomAccessFile(fname, &file, EnvOptions());
   }
   if (s.ok()) {
     // We use the default comparator, which may or may not match the

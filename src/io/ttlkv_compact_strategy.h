@@ -36,7 +36,7 @@ public:
                                 std::string* merged_key);
 
     virtual const char* Name() const;
-
+    
     virtual void SetSnapshot(uint64_t snapshot);
 
 private:

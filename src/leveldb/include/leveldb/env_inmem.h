@@ -27,10 +27,12 @@ public:
             SequentialFile** result);
 
     virtual Status NewRandomAccessFile(const std::string& fname,
-            RandomAccessFile** result);
+                                       RandomAccessFile** result,
+                                       const EnvOptions& options);
 
     virtual Status NewWritableFile(const std::string& fname,
-            WritableFile** result);
+                                   WritableFile** result,
+                                   const EnvOptions& options);
 
     virtual Status FileExists(const std::string& fname);
 

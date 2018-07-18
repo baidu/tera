@@ -23,30 +23,6 @@ MasterClient::MasterClient(const std::string& server_addr,
 
 MasterClient::~MasterClient() {}
 
-bool MasterClient::GetSnapshot(const GetSnapshotRequest* request,
-                               GetSnapshotResponse* response) {
-    return SendMessageWithRetry(&MasterServer::Stub::GetSnapshot,
-                                request, response,
-                                (std::function<void (GetSnapshotRequest*, GetSnapshotResponse*, bool, int)>)NULL,
-                                "GetSnapshot", rpc_timeout_);
-}
-
-bool MasterClient::DelSnapshot(const DelSnapshotRequest* request,
-                               DelSnapshotResponse* response) {
-    return SendMessageWithRetry(&MasterServer::Stub::DelSnapshot,
-                                request, response,
-                                (std::function<void (DelSnapshotRequest*, DelSnapshotResponse*, bool, int)>)NULL,
-                                "DelSnapshot", rpc_timeout_);
-}
-
-bool MasterClient::GetRollback(const RollbackRequest* request,
-                               RollbackResponse* response) {
-    return SendMessageWithRetry(&MasterServer::Stub::GetRollback,
-                                request, response,
-                                (std::function<void (RollbackRequest*, RollbackResponse*, bool, int)>)NULL,
-                                "GetRollback", rpc_timeout_);
-}
-
 bool MasterClient::CreateTable(const CreateTableRequest* request,
                                CreateTableResponse* response) {
     return SendMessageWithRetry(&MasterServer::Stub::CreateTable,
@@ -103,14 +79,6 @@ bool MasterClient::SearchTable(const SearchTableRequest* request,
                                 "SearchTable", rpc_timeout_);
 }
 
-bool MasterClient::CompactTable(const CompactTableRequest* request,
-                                CompactTableResponse* response) {
-    return SendMessageWithRetry(&MasterServer::Stub::CompactTable,
-                                request, response,
-                                (std::function<void (CompactTableRequest*, CompactTableResponse*, bool, int)>)NULL,
-                                "CompactTable", rpc_timeout_);
-}
-
 bool MasterClient::ShowTables(const ShowTablesRequest* request,
                               ShowTablesResponse* response) {
     return SendMessageWithRetry(&MasterServer::Stub::ShowTables,
@@ -157,14 +125,6 @@ bool MasterClient::OperateUser(const OperateUserRequest* request,
                                 request, response,
                                 (std::function<void (OperateUserRequest*, OperateUserResponse*, bool, int)>)NULL,
                                 "OperateUser", rpc_timeout_);
-}
-
-bool MasterClient::RenameTable(const RenameTableRequest* request,
-                               RenameTableResponse* response) {
-    return SendMessageWithRetry(&MasterServer::Stub::RenameTable,
-                                request, response,
-                                (std::function<void (RenameTableRequest*, RenameTableResponse*, bool, int)>)NULL,
-                                "RenameTable", rpc_timeout_);
 }
 
 } // namespace master

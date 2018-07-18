@@ -12,6 +12,7 @@
 #include "error_code.h"
 #include "table.h"
 #include "table_descriptor.h"
+#include "transaction.h"
 
 #pragma GCC visibility push(default)
 namespace tera {
@@ -78,16 +79,6 @@ public:
     virtual bool DeleteUserFromGroup(const std::string& user,
                                      const std::string& group, ErrorCode* err) = 0;
 
-    // EXPERIMENTAL
-
-    // Create a snapshot for the table.
-    virtual bool GetSnapshot(const std::string& name, uint64_t* snapshot, ErrorCode* err) = 0;
-    // Delete a specified snapshot.
-    virtual bool DelSnapshot(const std::string& name, uint64_t snapshot, ErrorCode* err) = 0;
-    // Perform a rollback operation to a specified snapshot
-    virtual bool Rollback(const std::string& name, uint64_t snapshot,
-                          const std::string& rollback_name, ErrorCode* err) = 0;
-
     // DEPRECATED
 
     // Use DropTable instead.
@@ -98,9 +89,9 @@ public:
     virtual bool GetTabletLocation(const std::string& table_name, std::vector<TabletInfo>* tablets,
                                    ErrorCode* err) = 0;
 
-    // Rename a table.
-    virtual bool Rename(const std::string& old_table_name, const std::string& new_table_name,
-                        ErrorCode* err) = 0 ;
+    /// New a global transaction
+    virtual Transaction* NewGlobalTransaction() = 0;
+
     Client() {}
     virtual ~Client() {}
 

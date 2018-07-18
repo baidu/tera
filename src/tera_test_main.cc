@@ -34,7 +34,6 @@ DEFINE_int64(pending_num, 100000, "");
 DECLARE_string(flagfile);
 
 using namespace tera;
-using namespace common::timer;
 
 void Usage(const std::string& prg_name) {
     std::cout << "DESCRIPTION \n\
@@ -43,13 +42,13 @@ void Usage(const std::string& prg_name) {
        version \n";
 }
 
-static common::Counter w_pending;
-static common::Counter w_succ;
-static common::Counter w_total;
-static common::Counter r_pending;
-static common::Counter r_succ;
-static common::Counter r_total;
-static common::Counter launch_time;
+static Counter w_pending;
+static Counter w_succ;
+static Counter w_total;
+static Counter r_pending;
+static Counter r_succ;
+static Counter r_total;
+static Counter launch_time;
 
 void PrintStat() {
     LOG(INFO) << "Write total " << w_total.Get()
@@ -298,7 +297,7 @@ int32_t SharedTableImplTest(int32_t argc, char** argv, ErrorCode* err) {
         thread_pool.AddTask(task);
     }
     while (thread_pool.PendingNum() > 0) {
-        std::cerr << common::timer::get_time_str(time(NULL)) << " "
+        std::cerr << get_time_str(time(NULL)) << " "
             << "waiting for test finish, pending " << thread_pool.PendingNum()
             << " tasks ..." << std::endl;
         sleep(1);

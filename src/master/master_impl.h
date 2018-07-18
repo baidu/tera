@@ -24,10 +24,14 @@
 #include "proto/master_rpc.pb.h"
 #include "proto/table_meta.pb.h"
 #include "sdk/client_impl.h"
+#include "sdk/stat_table.h"
 #include "sdk/table_impl.h"
 
-DECLARE_int32(tera_master_impl_retry_times);
+#include "tablet_state_machine.h"
+#include "procedure_executor.h"
 
+DECLARE_int32(tera_master_impl_retry_times);
+DECLARE_bool(tera_acl_enabled);
 namespace tera {
 
 class LoadTabletRequest;
@@ -52,7 +56,6 @@ class MetaTable;
 class Scheduler;
 class TabletManager;
 class TabletNodeManager;
-class MasterImplTest;
 
 class MasterImpl {
 public:
@@ -72,18 +75,6 @@ public:
     bool Init();
 
     bool Restore(const std::map<std::string, std::string>& tabletnode_list);
-
-    void GetSnapshot(const GetSnapshotRequest* request,
-                     GetSnapshotResponse* response,
-                     google::protobuf::Closure* done);
-
-    void DelSnapshot(const DelSnapshotRequest* request,
-                     DelSnapshotResponse* response,
-                     google::protobuf::Closure* done);
-
-    void GetRollback(const RollbackRequest* request,
-                  RollbackResponse* response,
-                  google::protobuf::Closure* done);
 
     void CreateTable(const CreateTableRequest* request,
                      CreateTableResponse* response,
@@ -109,10 +100,6 @@ public:
                      UpdateCheckResponse* response,
                      google::protobuf::Closure* done);
 
-    void CompactTable(const CompactTableRequest* request,
-                      CompactTableResponse* response,
-                      google::protobuf::Closure* done);
-
     void SearchTable(const SearchTableRequest* request,
                      SearchTableResponse* response,
                      google::protobuf::Closure* done);
@@ -128,10 +115,6 @@ public:
     void ShowTabletNodes(const ShowTabletNodesRequest* request,
                          ShowTabletNodesResponse* response,
                          google::protobuf::Closure* done);
-
-    void RenameTable(const RenameTableRequest* request,
-                     RenameTableResponse* response,
-                     google::protobuf::Closure* done);
 
     void CmdCtrl(const CmdCtrlRequest* request,
                  CmdCtrlResponse* response);
@@ -149,82 +132,31 @@ public:
     void DisableQueryTabletNodeTimer();
 
     bool GetMetaTabletAddr(std::string* addr);
-    void TryLoadTablet(TabletPtr tablet, std::string addr = "");
+
+    void TryKickTabletNode(const std::string& tabletnode_addr);
 
     std::string ProfilingLog();
 
+    bool IsRootUser(const std::string& token);
+
+    template <typename Request> 
+    bool HasPermission(const Request* request, TablePtr table, const char* operate) {
+        if (!FLAGS_tera_acl_enabled || 
+            IsRootUser(request->user_token()) || 
+            ((table->GetSchema().admin_group() == "") && (table->GetSchema().admin() == "")) || 
+            (request->has_user_token() && CheckUserPermissionOnTable(request->user_token(), table))) {
+            return true;
+        } else {
+            std::string token = request->has_user_token() ? request->user_token() : "";
+            LOG(WARNING) << "[acl]" << user_manager_->TokenToUserName(token) 
+                << ":" << token << "fail to " << operate;
+            return false;
+        }
+    }
+
 private:
-    typedef std::function<void (SnapshotRequest*, SnapshotResponse*, bool, int)> SnapshotClosure;
-    typedef std::function<void (SnapshotRollbackRequest*, SnapshotRollbackResponse*, bool, int)> RollbackClosure;
-    typedef std::function<void (ReleaseSnapshotRequest*, ReleaseSnapshotResponse*, bool, int)> DelSnapshotClosure;
     typedef std::function<void (QueryRequest*, QueryResponse*, bool, int)> QueryClosure;
     typedef std::function<void (UpdateRequest*, UpdateResponse*, bool, int)> UpdateClosure;
-    typedef std::function<void (LoadTabletRequest*, LoadTabletResponse*, bool, int)> LoadClosure;
-    typedef std::function<void (UnloadTabletRequest*, UnloadTabletResponse*, bool, int)> UnloadClosure;
-    typedef std::function<void (SplitTabletRequest*, SplitTabletResponse*, bool, int)> SplitClosure;
-    typedef std::function<void (WriteTabletRequest*, WriteTabletResponse*, bool, int)> WriteClosure;
-    typedef std::function<void (ScanTabletRequest*, ScanTabletResponse*, bool, int)> ScanClosure;
-    typedef std::function<void (std::string*, std::string*)> ToMetaFunc;
-    typedef std::shared_ptr<Mutex> MutexPtr;
-
-    enum MetaTaskType {
-        kWrite = 0,
-        kScan,
-        kRepair
-    };
-    struct MetaTask {
-        MetaTaskType type_;
-    };
-    struct WriteTask {
-        MetaTaskType type_;
-        WriteClosure done_;
-        std::vector<ToMetaFunc> meta_entries_;
-        bool is_delete_;
-    };
-    struct ScanTask {
-        MetaTaskType type_;
-        ScanClosure done_;
-        std::string table_name_;
-        std::string tablet_key_start_;
-        std::string tablet_key_end_;
-    };
-    struct RepairTask {
-        MetaTaskType type_;
-        WriteClosure done_;
-        TabletPtr tablet_;
-        ScanTabletResponse* scan_resp_;
-    };
-    struct SnapshotTask {
-        const GetSnapshotRequest* request;
-        GetSnapshotResponse* response;
-        google::protobuf::Closure* done;
-        TablePtr table;
-        std::vector<TabletPtr> tablets;
-        std::vector<uint64_t> snapshot_id;
-        int task_num;
-        int finish_num;
-        mutable Mutex mutex;
-        bool aborted;
-    };
-
-    struct RollbackTask {
-        const RollbackRequest* request;
-        RollbackResponse* response;
-        google::protobuf::Closure* done;
-        TablePtr table;
-        std::vector<TabletPtr> tablets;
-        std::vector<uint64_t> rollback_points;
-        int task_num;
-        int finish_num;
-        mutable Mutex mutex;
-        bool aborted;
-    };
-
-    struct MergeParam {
-        MutexPtr mutex;
-        TabletPtr counter_part;
-        MergeParam(MutexPtr mu, TabletPtr tb) : mutex(mu), counter_part(tb) {}
-    };
 
     void SafeModeCmdCtrl(const CmdCtrlRequest* request,
                          CmdCtrlResponse* response);
@@ -233,6 +165,8 @@ private:
                                CmdCtrlResponse* response);
     void TabletCmdCtrl(const CmdCtrlRequest* request,
                        CmdCtrlResponse* response);
+    void TableCmdCtrl(const CmdCtrlRequest* request,
+                      CmdCtrlResponse* response);
     void MetaCmdCtrl(const CmdCtrlRequest* request,
                      CmdCtrlResponse* response);
 
@@ -244,11 +178,6 @@ private:
                           const std::string& key_end,
                           const std::string& server_addr, StatusCode* status);
 
-    void RetryLoadTablet(TabletPtr tablet, int32_t retry_times);
-    void RetryUnloadTablet(TabletPtr tablet, int32_t retry_times);
-    bool TrySplitTablet(TabletPtr tablet, const std::string& split_key = "");
-    bool TryMergeTablet(TabletPtr tablet);
-    void TryMoveTablet(TabletPtr tablet, const std::string& server_addr = "", bool in_place = false);
 
     void TryReleaseCache(bool enbaled_debug = false);
     void ReleaseCacheWrapper();
@@ -261,27 +190,8 @@ private:
 
     bool CreateAndLoadTable(const std::string& table_name,
                             bool compress, StoreMedium store, StatusCode* status);
-    void LoadTabletAsync(TabletPtr tablet, LoadClosure done,
-                         uint64_t timer_id = 0);
-    void LoadTabletCallback(TabletPtr tablet, int32_t retry,
-                            LoadTabletRequest* request,
-                            LoadTabletResponse* response, bool failed,
-                            int error_code);
 
     bool RemoveTablet(const TabletMeta& meta, StatusCode* status);
-    virtual void UnloadTabletAsync(TabletPtr tablet, UnloadClosure done);
-    void UnloadTabletCallback(TabletPtr tablet, int32_t retry,
-                              UnloadTabletRequest* request,
-                              UnloadTabletResponse* response, bool failed,
-                              int error_code);
-    void MoveTabletCallback(TabletPtr tablet, int32_t retry,
-                            UnloadTabletRequest* request,
-                            UnloadTabletResponse* response,
-                            bool failed, int error_code);
-    void DeleteTabletCallback(TabletPtr tablet, int32_t retry,
-                              UnloadTabletRequest* request,
-                              UnloadTabletResponse* response,
-                              bool failed, int error_code);
 
     void ScheduleLoadBalance();
     void LoadBalance();
@@ -294,57 +204,11 @@ private:
                                const std::vector<TabletPtr>& tablet_list,
                                const std::string& table_name = "");
 
-    void GetSnapshotAsync(TabletPtr tablet, int64_t snapshot_id, int32_t timeout,
-                          SnapshotClosure done);
-    void GetSnapshotCallback(int32_t tablet_id, SnapshotTask* task,
-                             SnapshotRequest* master_request,
-                             SnapshotResponse* master_response,
-                             bool failed, int error_code);
-    void AddSnapshotCallback(TablePtr table,
-                             std::vector<TabletPtr> tablets,
-                             int32_t retry_times,
-                             const GetSnapshotRequest* rpc_request,
-                             GetSnapshotResponse* rpc_response,
-                             google::protobuf::Closure* rpc_done,
-                             WriteTabletRequest* request,
-                             WriteTabletResponse* response,
-                             bool failed, int error_code);
-    void DelSnapshotCallback(TablePtr table,
-                             std::vector<TabletPtr> tablets,
-                             int32_t retry_times,
-                             const DelSnapshotRequest* rpc_request,
-                             DelSnapshotResponse* rpc_response,
-                             google::protobuf::Closure* rpc_done,
-                             WriteTabletRequest* request,
-                             WriteTabletResponse* response,
-                             bool failed, int error_code);
-    void RollbackAsync(TabletPtr tablet, uint64_t snapshot_id, int32_t timeout,
-                          RollbackClosure done);
-    void RollbackCallback(int32_t tablet_id, RollbackTask* task,
-                          SnapshotRollbackRequest* master_request,
-                          SnapshotRollbackResponse* master_response,
-                          bool failed, int error_code);
-    void AddRollbackCallback(TablePtr table,
-                             std::vector<TabletPtr> tablets,
-                             int32_t retry_times,
-                             const RollbackRequest* rpc_request,
-                             RollbackResponse* rpc_response,
-                             google::protobuf::Closure* rpc_done,
-                             WriteTabletRequest* request,
-                             WriteTabletResponse* response,
-                             bool failed, int error_code);
-
     void ScheduleQueryTabletNode();
     void QueryTabletNode();
     void QueryTabletNodeAsync(std::string addr, int32_t timeout,
                               bool is_gc, QueryClosure done);
 
-    void ReleaseSnpashot(TabletPtr tablet, uint64_t snapshot);
-    void ReleaseSnapshotCallback(ReleaseSnapshotRequest* request,
-                               ReleaseSnapshotResponse* response,
-                               bool failed,
-                               int error_code);
-    void ClearUnusedSnapshots(TabletPtr tablet, const TabletMeta& meta);
     void QueryTabletNodeCallback(std::string addr, QueryRequest* request,
                                  QueryResponse* response, bool failed,
                                  int error_code);
@@ -358,106 +222,27 @@ private:
                                 std::vector<TabletMeta>* tablet_list,
                                 sem_t* finish_counter, Mutex* mutex);
 
-    void SplitTabletAsync(TabletPtr tablet, const std::string& split_key = "");
-    void SplitTabletCallback(TabletPtr tablet, SplitTabletRequest* request,
-                             SplitTabletResponse* response, bool failed,
-                             int error_code);
-
-    void MergeTabletAsync(TabletPtr tablet_p1, TabletPtr tablet_p2);
-    virtual void MergeTabletAsyncPhase2(TabletPtr tablet_p1, TabletPtr tablet_p2);
-    void MergeTabletUnloadCallback(TabletPtr tablet);
-    void MergeTabletWriteMetaCallback(TabletPtr tablet_c, TabletPtr tablet_p1,
-                                      TabletPtr tablet_p2, int32_t retry_times,
-                                      WriteTabletRequest* request,
-                                      WriteTabletResponse* response,
-                                      bool failed, int error_code);
-    void MergeTabletFailed(TabletPtr tablet_p1, TabletPtr tablet_p2);
-
-    void BatchWriteMetaTableAsync(ToMetaFunc meta_entry, bool is_delete, WriteClosure done);
-    void BatchWriteMetaTableAsync(std::vector<ToMetaFunc> meta_entries,
-                                  bool is_delete, WriteClosure done);
-    void BatchWriteMetaTableAsync(TablePtr table,
-                                  const std::vector<TabletPtr>& tablets,
-                                  bool is_delete, WriteClosure done);
-    void AddMetaCallback(TablePtr table, std::vector<TabletPtr> tablets,
-                         int32_t retry_times,
-                         const CreateTableRequest* rpc_request,
-                         CreateTableResponse* rpc_response,
-                         google::protobuf::Closure* rpc_done,
-                         WriteTabletRequest* request,
-                         WriteTabletResponse* response,
-                         bool failed, int error_code);
+    void AddMetaCallback(std::vector<TabletPtr> tablets, 
+                        CreateTableResponse* rpc_response, 
+                        google::protobuf::Closure* rpc_done, 
+                        bool succ);
     void AddUserInfoToMetaCallback(UserPtr user_ptr,
-                                   int32_t retry_times,
                                    const OperateUserRequest* rpc_request,
                                    OperateUserResponse* rpc_response,
                                    google::protobuf::Closure* rpc_done,
-                                   WriteTabletRequest* request,
-                                   WriteTabletResponse* response,
-                                   bool rpc_failed, int error_code);
-    void UpdateTableRecordForDisableCallback(TablePtr table, int32_t retry_times,
-                                             DisableTableResponse* rpc_response,
-                                             google::protobuf::Closure* rpc_done,
-                                             WriteTabletRequest* request,
-                                             WriteTabletResponse* response,
-                                             bool failed, int error_code);
-    void UpdateTableRecordForEnableCallback(TablePtr table, int32_t retry_times,
+                                   bool succ);
+
+    void UpdateTableRecordForEnableCallback(TablePtr table,
                                             EnableTableResponse* rpc_response,
                                             google::protobuf::Closure* rpc_done,
-                                            WriteTabletRequest* request,
-                                            WriteTabletResponse* response,
-                                            bool failed, int error_code);
-
-    void UpdateTableRecordForUpdateCallback(TablePtr table, int32_t retry_times,
+                                            bool succ);
+    
+    void UpdateTableRecordForUpdateCallback(TablePtr table,
                                             UpdateTableResponse* rpc_response,
                                             google::protobuf::Closure* rpc_done,
-                                            WriteTabletRequest* request,
-                                            WriteTabletResponse* response,
-                                            bool failed, int error_code);
-    void UpdateTableRecordForRenameCallback(TablePtr table, int32_t retry_times,
-                                            RenameTableResponse* rpc_response,
-                                            google::protobuf::Closure* rpc_done,
-                                            std::string old_alias,
-                                            std::string new_alias,
-                                            WriteTabletRequest* request,
-                                            WriteTabletResponse* response,
-                                            bool failed, int error_code
-                                            );
-    void UpdateTabletRecordCallback(TabletPtr tablet, int32_t retry_times,
-                                    WriteTabletRequest* request,
-                                    WriteTabletResponse* response,
-                                    bool failed, int error_code);
-    void UpdateMetaForLoadCallback(TabletPtr tablet, int32_t retry_times,
-                                    WriteTabletRequest* request,
-                                    WriteTabletResponse* response,
-                                    bool failed, int error_code);
-    void DeleteTableCallback(TablePtr table,
-                             std::vector<TabletPtr> tablets,
-                             int32_t retry_times,
-                             DeleteTableResponse* rpc_response,
-                             google::protobuf::Closure* rpc_done,
-                             WriteTabletRequest* request,
-                             WriteTabletResponse* response,
-                             bool failed, int error_code);
-
-    void ScanMetaTableAsync(const std::string& table_name,
-                            const std::string& tablet_key_start,
-                            const std::string& tablet_key_end,
-                            ScanClosure done);
-    void ScanMetaCallbackForSplit(TabletPtr tablet,
-                                  ScanTabletRequest* request,
-                                  ScanTabletResponse* response,
-                                  bool failed, int error_code);
-
-    void RepairMetaTableAsync(TabletPtr tablet,
-                              ScanTabletResponse* response,
-                              WriteClosure done);
-    void RepairMetaAfterSplitCallback(TabletPtr tablet,
-                                      ScanTabletResponse* scan_resp,
-                                      int32_t retry_times,
-                                      WriteTabletRequest* request,
-                                      WriteTabletResponse* response,
-                                      bool failed, int error_code);
+                                            bool succ);
+    
+    void DisableAllTablets(TablePtr table);
 
     void UpdateSchemaCallback(std::string table_name,
                               std::string tablet_path,
@@ -484,75 +269,43 @@ private:
     // load metatable on a tabletserver
     bool LoadMetaTablet(std::string* server_addr);
     void UnloadMetaTablet(const std::string& server_addr);
+    void RestartTabletNode(const std::string& addr, const std::string& uuid);
 
     void AddTabletNode(const std::string& tabletnode_addr,
                        const std::string& tabletnode_id);
-    void DeleteTabletNode(const std::string& tabletnode_addr);
-    void TryKickTabletNode(const std::string& tabletnode_addr);
+    void DeleteTabletNode(const std::string& tabletnode_addr, const std::string& uuid);
     void KickTabletNode(TabletNodePtr node);
     void TryEnterSafeMode();
     void TryLeaveSafeMode();
     bool EnterSafeMode(StatusCode* status = NULL);
     bool LeaveSafeMode(StatusCode* status = NULL);
-    void TryMovePendingTablets(std::string tabletnode_addr);
     void TryMovePendingTablet(TabletPtr tablet);
-    void MoveOffLineTablets(const std::vector<TabletPtr>& tablet_list);
     double LiveNodeTabletRatio();
     void LoadAllDeadNodeTablets();
-    void LoadAllOffLineTablets();
 
     void CollectAllTabletInfo(const std::map<std::string, std::string>& tabletnode_list,
                               std::vector<TabletMeta>* tablet_list);
-    bool RestoreMetaTablet(const std::vector<TabletMeta>& tablet_list,
-                           std::string* meta_tablet_addr);
+    bool RestoreMetaTablet(const std::vector<TabletMeta>& tablet_list);
+    
     void RestoreUserTablet(const std::vector<TabletMeta>& report_tablet_list);
-    void LoadAllOffLineTablet();
 
-    void SuspendMetaOperation(TablePtr table, const std::vector<TabletPtr>& tablets,
-                              bool is_delete, WriteClosure done);
-    void SuspendMetaOperation(ToMetaFunc meta_entry,
-                              bool is_delete, WriteClosure done);
-    void SuspendMetaOperation(std::vector<ToMetaFunc> meta_entries,
-                              bool is_delete, WriteClosure done);
-
-    void SuspendMetaOperation(const std::string& table_name,
-                              const std::string& tablet_key_start,
-                              const std::string& tablet_key_end,
-                              ScanClosure done);
-    void SuspendMetaOperation(TabletPtr tablet, ScanTabletResponse* scan_resp,
-                              WriteClosure done);
-    void PushToMetaPendingQueue(MetaTask* task);
-    void ResumeMetaOperation();
-    void ProcessOffLineTablet(TabletPtr tablet);
-    void ProcessReadyTablet(TabletPtr tablet);
 
     bool CheckStatusSwitch(MasterStatus old_status, MasterStatus new_status);
 
-    // stat table
-    bool CreateStatTable();
-    static void DumpStatCallBack(RowMutation* mutation);
-    void DumpTabletNodeAddrToTable(const std::string& addr);
-    void DumpStatToTable(const TabletNode& stat);
-
     // garbage clean
+    void EnableGcTrashCleanTimer();
+    void DisableGcTrashCleanTimer();
+    void ScheduleGcTrashClean();
+    void DoGcTrashClean();
     void EnableTabletNodeGcTimer();
     void DisableTabletNodeGcTimer();
     void ScheduleTabletNodeGc();
     void DoTabletNodeGc();
     void DoTabletNodeGcPhase2();
 
-    bool IsRootUser(const std::string& token);
-
     bool CheckUserPermissionOnTable(const std::string& token, TablePtr table);
 
-    template <typename Request>
-    bool HasPermissionOnTable(const Request* request, TablePtr table);
 
-    template <typename Request, typename Response, typename Callback>
-    bool HasPermissionOrReturn(const Request* request, Response* response,
-                               Callback* done, TablePtr table, const char* operate);
-
-    void FillAlias(const std::string& key, const std::string& value);
     void RefreshTableCounter();
 
     void DoAvailableCheck();
@@ -560,21 +313,23 @@ private:
     void EnableAvailabilityCheck();
     void DeleteTablet(TabletPtr tablet);
     void CopyTableMetaToUser(TablePtr table, TableMeta* meta_ptr);
-    bool IsUpdateCf(TablePtr table);
+    //bool IsUpdateCf(TablePtr table);
 
 private:
     mutable Mutex status_mutex_;
     MasterStatus status_;
     std::string local_addr_;
 
+    std::shared_ptr<ThreadPool> thread_pool_;
+
     mutable Mutex tabletnode_mutex_;
     bool restored_;
     std::shared_ptr<TabletManager> tablet_manager_;
     std::shared_ptr<TabletNodeManager> tabletnode_manager_;
     std::shared_ptr<UserManager> user_manager_;
-    scoped_ptr<MasterZkAdapterBase> zk_adapter_;
-    scoped_ptr<Scheduler> size_scheduler_;
-    scoped_ptr<Scheduler> load_scheduler_;
+    std::shared_ptr<MasterZkAdapterBase> zk_adapter_;
+    std::shared_ptr<Scheduler> size_scheduler_;
+    std::shared_ptr<Scheduler> load_scheduler_;
 
     Mutex mutex_;
     int64_t release_cache_timer_id_;
@@ -589,35 +344,38 @@ private:
     bool load_balance_scheduled_;
     bool load_balance_enabled_;
 
-    scoped_ptr<ThreadPool> thread_pool_;
-    AutoResetEvent query_event_;
-
-    mutable Mutex meta_task_mutex_;
-    std::queue<MetaTask*> meta_task_queue_;
-
     mutable Mutex tabletnode_timer_mutex_;
     std::map<std::string, int64_t> tabletnode_timer_id_map_;
 
     mutable Mutex tablet_mutex_;
 
-    TabletPtr meta_tablet_;
+    MetaTabletPtr meta_tablet_;
 
     // stat table
-    bool is_stat_table_;
-    std::map<std::string, int64_t> ts_stat_update_time_;
-    mutable Mutex stat_table_mutex_;
-    TableImpl* stat_table_;
+    std::shared_ptr<tera::sdk::StatTable> stat_table_;
 
     // tabletnode garbage clean
+    bool gc_trash_clean_enabled_;
+    int64_t gc_trash_clean_timer_id_;
     bool gc_enabled_;
     int64_t gc_timer_id_;
     bool gc_query_enable_;
     std::shared_ptr<GcStrategy> gc_strategy_;
-    std::map<std::string, std::string> alias_;
-    mutable Mutex alias_mutex_;
 
+    
+    std::shared_ptr<ProcedureExecutor> executor_;
     std::shared_ptr<TabletAvailability> tablet_availability_;
 };
+
+bool TryLoadTablet(TabletPtr tablet, TabletNodePtr node = TabletNodePtr(nullptr));
+
+bool TryUnloadTablet(TabletPtr tablet);
+
+bool TryMoveTablet(TabletPtr tablet, TabletNodePtr node = TabletNodePtr(nullptr));
+
+bool TryMergeTablet(TabletPtr tablet);
+
+bool TrySplitTablet(TabletPtr tablet, std::string split_key = "");
 
 } // namespace master
 } // namespace tera

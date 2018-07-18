@@ -7,8 +7,10 @@
 
 #include <string>
 
+#include "common/timer.h"
 #include "sdk/mutate_impl.h"
 #include "tera.h"
+#include <memory>
 
 namespace common {
 class ThreadPool;
@@ -17,10 +19,11 @@ class ThreadPool;
 namespace tera {
 
 class TableImpl;
+class Cell;
 
 class SingleRowTxn : public Transaction {
 public:
-    SingleRowTxn(Table* table, const std::string& row_key,
+    SingleRowTxn(std::shared_ptr<TableImpl> table_impl, const std::string& row_key,
                  common::ThreadPool* thread_pool);
     virtual ~SingleRowTxn();
 
@@ -45,8 +48,29 @@ public:
     /// 提交事务
     virtual ErrorCode Commit();
 
-    /// 请忽略此接口
-    virtual int64_t GetStartTimestamp() { abort(); }
+    virtual int64_t GetStartTimestamp() { return start_timestamp_; }
+    
+    virtual int64_t GetCommitTimestamp() { return commit_timestamp_; }
+
+    virtual void Ack(Table* t, 
+                     const std::string& row_key, 
+                     const std::string& column_family, 
+                     const std::string& qualifier);
+
+    virtual void Notify(Table* t,
+                        const std::string& row_key, 
+                        const std::string& column_family, 
+                        const std::string& qualifier);
+
+    // not support
+    virtual void SetIsolation(const IsolationLevel& isolation_level) { abort(); }
+
+    // use default isolation level snapshot 
+    virtual IsolationLevel Isolation() { return IsolationLevel::kSnapshot; }
+
+    virtual void SetTimeout(int64_t timeout_ms) {
+        mutation_buffer_.SetTimeOut(timeout_ms);
+    }
 
 public:
     /// 内部读操作回调
@@ -61,8 +85,10 @@ private:
     bool MarkHasRead();
 
     void MarkNoRead();
+
+    void InternalNotify();
 private:
-    Table* table_;
+    std::shared_ptr<TableImpl> table_impl_;
     const std::string row_key_;
     common::ThreadPool* thread_pool_;
 
@@ -77,9 +103,16 @@ private:
     int64_t reader_start_timestamp_;
     int64_t reader_end_timestamp_;
 
+    int64_t start_timestamp_;
+    int64_t commit_timestamp_;
+
+    int64_t ttl_timestamp_ms_;
+
     RowMutationImpl mutation_buffer_;
     Callback user_commit_callback_;
     void* user_commit_context_;
+
+    std::vector<Cell> notify_cells_;
 
     mutable Mutex mu_;
 };

@@ -29,9 +29,36 @@ namespace leveldb {
 
 class Cache;
 
+// An entry is a variable length heap-allocated structure.  Entries
+// are kept in a circular doubly linked list ordered by access time.
+struct LRUHandle {
+  void* value;
+  void (*deleter)(const Slice&, void* value);
+  LRUHandle* next_hash;
+  LRUHandle* next;
+  LRUHandle* prev;
+  size_t charge;      // TODO(opt): Only allow uint32_t?
+  size_t key_length;
+  uint32_t refs;
+  uint32_t hash;      // Hash of key(); used for fast sharding and comparisons
+  uint64_t cache_id; // cache id, user spec
+  char key_data[1];   // Beginning of key
+
+  Slice key() const {
+    // For cheaper lookups, we allow a temporary Handle object
+    // to store a pointer to a key in "value".
+    if (next == this) {
+      return *(reinterpret_cast<Slice*>(value));
+    } else {
+      return Slice(key_data, key_length);
+    }
+  }
+};
+
 // Create a new cache with a fixed size capacity.  This implementation
 // of Cache uses a least-recently-used eviction policy.
 extern Cache* NewLRUCache(size_t capacity);
+extern Cache* NewBlockBasedCache(size_t capacity);
 
 class Cache {
  public:

@@ -43,7 +43,7 @@ TEST(MemEnvTest, Basics) {
   ASSERT_EQ(0u, children.size());
 
   // Create a file.
-  ASSERT_OK(env_->NewWritableFile("/dir/f", &writable_file));
+  ASSERT_OK(env_->NewWritableFile("/dir/f", &writable_file, EnvOptions()));
   delete writable_file;
 
   // Check that the file exists.
@@ -55,7 +55,7 @@ TEST(MemEnvTest, Basics) {
   ASSERT_EQ("f", children[0]);
 
   // Write to the file.
-  ASSERT_OK(env_->NewWritableFile("/dir/f", &writable_file));
+  ASSERT_OK(env_->NewWritableFile("/dir/f", &writable_file, EnvOptions()));
   ASSERT_OK(writable_file->Append("abc"));
   delete writable_file;
 
@@ -76,7 +76,7 @@ TEST(MemEnvTest, Basics) {
   RandomAccessFile* rand_file;
   ASSERT_TRUE(!env_->NewSequentialFile("/dir/non_existent", &seq_file).ok());
   ASSERT_TRUE(!seq_file);
-  ASSERT_TRUE(!env_->NewRandomAccessFile("/dir/non_existent", &rand_file).ok());
+  ASSERT_TRUE(!env_->NewRandomAccessFile("/dir/non_existent", &rand_file, EnvOptions()).ok());
   ASSERT_TRUE(!rand_file);
 
   // Check that deleting works.
@@ -97,7 +97,7 @@ TEST(MemEnvTest, ReadWrite) {
 
   ASSERT_OK(env_->CreateDir("/dir"));
 
-  ASSERT_OK(env_->NewWritableFile("/dir/f", &writable_file));
+  ASSERT_OK(env_->NewWritableFile("/dir/f", &writable_file, EnvOptions()));
   ASSERT_OK(writable_file->Append("hello "));
   ASSERT_OK(writable_file->Append("world"));
   delete writable_file;
@@ -117,7 +117,7 @@ TEST(MemEnvTest, ReadWrite) {
   delete seq_file;
 
   // Random reads.
-  ASSERT_OK(env_->NewRandomAccessFile("/dir/f", &rand_file));
+  ASSERT_OK(env_->NewRandomAccessFile("/dir/f", &rand_file, EnvOptions()));
   ASSERT_OK(rand_file->Read(6, 5, &result, scratch)); // Read "world".
   ASSERT_EQ(0, result.compare("world"));
   ASSERT_OK(rand_file->Read(0, 5, &result, scratch)); // Read "hello".
@@ -144,7 +144,7 @@ TEST(MemEnvTest, Misc) {
   ASSERT_TRUE(!test_dir.empty());
 
   WritableFile* writable_file;
-  ASSERT_OK(env_->NewWritableFile("/a/b", &writable_file));
+  ASSERT_OK(env_->NewWritableFile("/a/b", &writable_file, EnvOptions()));
 
   // These are no-ops, but we test they return success.
   ASSERT_OK(writable_file->Sync());
@@ -163,7 +163,7 @@ TEST(MemEnvTest, LargeWrite) {
   }
 
   WritableFile* writable_file;
-  ASSERT_OK(env_->NewWritableFile("/dir/f", &writable_file));
+  ASSERT_OK(env_->NewWritableFile("/dir/f", &writable_file, EnvOptions()));
   ASSERT_OK(writable_file->Append("foo"));
   ASSERT_OK(writable_file->Append(write_data));
   delete writable_file;

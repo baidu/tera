@@ -5,7 +5,7 @@
 #define private public
 
 #include "tabletnode_sysinfo.h"
-#include "utils/timer.h"
+#include "common/timer.h"
 #include "gtest/gtest.h"
 
 namespace tera {

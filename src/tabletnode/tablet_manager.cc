@@ -13,7 +13,6 @@
 #include "proto/proto_helper.h"
 
 DECLARE_int32(tera_io_retry_period);
-DECLARE_int32(tera_tabletnode_retry_period);
 
 namespace tera {
 namespace tabletnode {
@@ -126,17 +125,17 @@ void TabletManager::GetAllTabletMeta(std::vector<TabletMeta*>* tablet_meta_list)
         tablet_meta->set_path(tablet_io->GetTablePath());
         tablet_meta->mutable_key_range()->set_key_start(range.key_start);
         tablet_meta->mutable_key_range()->set_key_end(range.key_end);
-        tablet_meta->set_status(TabletStatus(tablet_io->GetStatus()));
+        tablet_meta->set_status(TabletMeta::TabletStatus(tablet_io->GetStatus()));
         uint64_t size;
         tablet_io->GetDataSize(&size);
         tablet_meta->set_size(size);
         tablet_meta->set_compact_status(tablet_io->GetCompactStatus());
         tablet_meta_list->push_back(tablet_meta);
-        std::vector<uint64_t> snapshots;
-        tablet_io->ListSnapshot(&snapshots);
-        for (uint32_t i = 0; i < snapshots.size(); ++i) {
-            tablet_meta->add_snapshot_list(snapshots[i]);
-        }
+        //std::vector<uint64_t> snapshots;
+        //tablet_io->ListSnapshot(&snapshots);
+        //for (uint32_t i = 0; i < snapshots.size(); ++i) {
+        //    tablet_meta->add_snapshot_list(snapshots[i]);
+        //}
     }
 }
 

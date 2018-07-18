@@ -45,6 +45,8 @@ public:
     bool Unlock(int* zk_errno);
     bool IsAcquired() {return is_acquired_;}
     void OnWatchNodeDeleted(const std::string& path);
+    bool CheckAndWatchNodeForLock(int* zk_errno);
+    bool CheckSelfNodePath(const std::string& path);
 
 private:
     ZooKeeperAdapter * adapter_;

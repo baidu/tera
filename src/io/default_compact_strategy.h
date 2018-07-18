@@ -20,8 +20,12 @@ using leveldb::Slice;
 
 class DefaultCompactStrategy : public leveldb::CompactStrategy {
 public:
-    DefaultCompactStrategy(const TableSchema& schema);
-    virtual ~DefaultCompactStrategy();
+    DefaultCompactStrategy(const TableSchema& schema,
+                           const std::map<std::string, int32_t>& cf_indexs,
+                           const leveldb::RawKeyOperator& raw_key_operator,
+                           leveldb::Comparator* cmp);
+
+    virtual ~DefaultCompactStrategy() {}
 
     virtual bool Drop(const Slice& k, uint64_t n,
                       const std::string& lower_bound);
@@ -58,9 +62,9 @@ private:
                                 const std::string& lower_bound);
 
 private:
-    std::map<std::string, int32_t> cf_indexs_;
-    TableSchema schema_;
-    const leveldb::RawKeyOperator* raw_key_operator_;
+    const TableSchema& schema_;
+    const std::map<std::string, int32_t>& cf_indexs_;
+    const leveldb::RawKeyOperator& raw_key_operator_;
     leveldb::Comparator* cmp_;
 
     std::string last_key_;
@@ -84,6 +88,7 @@ private:
 class DefaultCompactStrategyFactory : public leveldb::CompactStrategyFactory {
 public:
     DefaultCompactStrategyFactory(const TableSchema& schema);
+    virtual ~DefaultCompactStrategyFactory();
     virtual DefaultCompactStrategy* NewInstance();
     virtual void SetArg(const void* arg);
     virtual const char* Name() const {
@@ -92,6 +97,9 @@ public:
 
 private:
     TableSchema schema_;
+    std::map<std::string, int32_t> cf_indexs_;
+    const leveldb::RawKeyOperator* raw_key_operator_;
+    leveldb::Comparator* cmp_;
     mutable Mutex mutex_;
 };
 

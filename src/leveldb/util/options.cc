@@ -53,7 +53,29 @@ Options::Options()
       disable_wal(false),
       ignore_corruption_in_open(false),
       ttl_percentage(99),
-      del_percentage(20) {
+      del_percentage(20),
+      max_background_compactions(5),
+      slow_down_level0_score_limit(30),
+      max_sub_parallel_compaction(10),
+      use_direct_io_read(false),
+      use_direct_io_write(false),
+      posix_write_buffer_size(512<<10),
+      table_builder_batch_write(false),
+      table_builder_batch_size(0) { }
+
+FlashBlockCacheOptions::FlashBlockCacheOptions()
+  : force_update_conf_enabled(false),
+    cache_size(350UL << 30),
+    blockset_size(1UL << 30),
+    block_size(8192),
+    fid_batch_num(100000),
+    meta_block_cache_size(2000),
+    meta_table_cache_size(500),
+    write_buffer_size(1048576UL),
+    env(NULL),
+    cache_env(NULL) {
+  blockset_num = cache_size / blockset_size + 1;
+  blocks_per_set = blockset_size / block_size + 1;
 }
 
 }  // namespace leveldb

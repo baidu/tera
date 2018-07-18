@@ -79,6 +79,11 @@ public:
     // Set max version number per column.
     void SetMaxVersions(int32_t versions);
 
+    // Set the the max qualifiers of each column family when read this row
+    // This is useful when a column family contains too many qualifiers
+    // If this value is not set, the default value is std::numeric_limits<uint64_t>::max()
+    void SetMaxQualifiers(uint64_t max_qualifiers);
+
     // Set time range for the scan result,
     // which likes the SQL statement (SELECT * from Table WHERE timestamp in [ts_start, ts_end]).
     // Return the newest value first.

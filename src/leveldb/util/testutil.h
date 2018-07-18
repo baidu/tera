@@ -41,13 +41,14 @@ class ErrorEnv : public EnvWrapper {
                num_writable_file_errors_(0) { }
 
   virtual Status NewWritableFile(const std::string& fname,
-                                 WritableFile** result) {
+                                 WritableFile** result,
+                                 const EnvOptions& options) {
     if (writable_file_error_ && num_writable_file_errors_ < 10) {
       ++num_writable_file_errors_;
       *result = NULL;
       return Status::IOError(fname, "fake error");
     }
-    return target()->NewWritableFile(fname, result);
+    return target()->NewWritableFile(fname, result, options);
   }
 };
 

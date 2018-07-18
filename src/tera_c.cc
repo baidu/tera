@@ -39,7 +39,7 @@ static bool SaveError(char** errptr, const ErrorCode& s) {
     }
     if (errptr == NULL) {
         fprintf(stderr, "%s tera error: %s.\n",
-                common::timer::get_curtime_str().c_str(), s.GetReason().c_str());
+                tera::get_curtime_str().c_str(), s.GetReason().c_str());
         return true;
     }
 
@@ -164,7 +164,7 @@ bool tera_table_put_kv(tera_table_t* table, const char* key, uint64_t keylen,
     delete mutation;
     if (SaveError(errptr, err)) {
         fprintf(stderr, "%s tera error: %s.\n",
-                common::timer::get_curtime_str().c_str(), err.GetReason().c_str());
+                tera::get_curtime_str().c_str(), err.GetReason().c_str());
         return false;
     }
     return true;
@@ -197,7 +197,7 @@ bool tera_table_delete(tera_table_t* table, const char* row_key, uint64_t keylen
     delete mutation;
     if (SaveError(NULL, err)) {
         fprintf(stderr, "%s tera delete error: %s.\n",
-                common::timer::get_curtime_str().c_str(), err.GetReason().c_str());
+                tera::get_curtime_str().c_str(), err.GetReason().c_str());
         return false;
     }
     return true;
@@ -445,6 +445,7 @@ tera_result_stream_t* tera_table_scan(tera_table_t* table,
     tera_result_stream_t* result = new tera_result_stream_t;
     result->rep = table->rep->Scan(*desc->rep, &err);
     if (SaveError(errptr, err)) {
+        delete result;
         return NULL;
     }
     return result;

@@ -1,3 +1,6 @@
+#include <assert.h>
+#include <stdio.h>
+
 #include "tera.h"
 
 int main() {

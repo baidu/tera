@@ -147,6 +147,10 @@ class DB {
   virtual void GetApproximateSizes(uint64_t* size,
                                    std::vector<uint64_t>* lgsize = NULL) = 0;
 
+  // tera-specific
+  // result: each level's total file size
+  virtual void GetCurrentLevelSize(std::vector<int64_t>* result) = 0;
+
   // Compact the underlying storage for the key range [*begin,*end].
   // In particular, deleted and overwritten versions are discarded,
   // and the data is rearranged to reduce the cost of operations
@@ -173,6 +177,13 @@ class DB {
 
   // Add all sst files inherited from other tablets
   virtual void AddInheritedLiveFiles(std::vector<std::set<uint64_t> >* live) = 0;
+
+  virtual bool ShouldForceUnloadOnError() { return false; }
+
+  // Default : False, 
+  // Only activate the strategy for speeding up the process of shutdown DB.
+  // Strategy : Always return True begin shutdown1 finished.
+  virtual bool IsShutdown1Finished() const { return false; }
 
  private:
   // No copying allowed

@@ -19,7 +19,7 @@ include ../../depends.mk
 include build_config.mk
 
 CFLAGS += -I. -I./include $(PLATFORM_CCFLAGS) $(OPT)
-CXXFLAGS += -I. -I./include $(PLATFORM_CXXFLAGS) $(OPT)
+CXXFLAGS += -I. -I./include $(PLATFORM_CXXFLAGS) $(OPT) -std=gnu++11
 
 LDFLAGS += $(PLATFORM_LDFLAGS) -L$(SNAPPY_LIBDIR) -lrt -ldl -lsnappy
 LIBS += $(PLATFORM_LIBS)
@@ -41,7 +41,6 @@ TESTS = \
 	crc32c_test \
 	db_test \
 	dbformat_test \
-	env_test \
 	filename_test \
 	filter_block_test \
 	issue178_test \
@@ -153,8 +152,8 @@ db_test: db/db_test.o $(LIBOBJECTS) $(TESTHARNESS)
 dbformat_test: db/dbformat_test.o $(LIBOBJECTS) $(TESTHARNESS)
 	$(CXX) db/dbformat_test.o $(LIBOBJECTS) $(TESTHARNESS) -o $@ $(LIBS) $(LDFLAGS)
 
-env_test: util/env_test.o $(LIBOBJECTS) $(TESTHARNESS)
-	$(CXX) util/env_test.o $(LIBOBJECTS) $(TESTHARNESS) -o $@ $(LIBS) $(LDFLAGS)
+#env_test: util/env_test.o $(LIBOBJECTS) $(TESTHARNESS)
+	#$(CXX) util/env_test.o $(LIBOBJECTS) $(TESTHARNESS) -o $@ $(LIBS) $(LDFLAGS)
 
 filename_test: db/filename_test.o $(LIBOBJECTS) $(TESTHARNESS)
 	$(CXX) db/filename_test.o $(LIBOBJECTS) $(TESTHARNESS) -o $@ $(LIBS) $(LDFLAGS)

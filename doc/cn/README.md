@@ -1,5 +1,5 @@
-# Tera文档专区
 
+# Tera文档专区
 ## 简介
 
 [系统设计](../tera_design.md)
@@ -10,9 +10,15 @@
 
 [体验单机Tera](onebox.md)
 
-[命令行工具teracli使用方法](teracli.md)
+[命令行工具teracli使用方法](../tools/teracli.md)
 
-[主要api使用方法](sdk_guide.md)
+[集群间数据迁移的dump工具terautil使用方法](../tools/terautil.md)
+
+[造数据的工具 & 读写数据使用方法](../tools/benchmark.md)
+
+[性能测试工具ycsb的使用方法](../tools/ycsb.md)
+
+[主要api使用方法](../sdk_reference/readme.md)
 
 [搭建tera集群](cluster_setup.md)
 
@@ -35,3 +41,4 @@
 ## 版本发布
 
 [版本发布及管理](../release_management.md)
+

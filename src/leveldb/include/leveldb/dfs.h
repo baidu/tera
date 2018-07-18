@@ -7,6 +7,7 @@
 
 #include <stdint.h>
 #include <string>
+#include <sys/stat.h>
 #include <vector>
 
 namespace leveldb {
@@ -70,8 +71,12 @@ public:
     static Dfs* NewDfs(const std::string& so_path, const std::string& conf);
     /// Returns 0 on success.
     virtual int32_t UnlockDirectory(const std::string& path) = 0;
+
+    virtual int32_t ClearDirOwner(const std::string& path) = 0;
     /// Returns DfsFile handler on success, NULL on error.WithTime
     virtual DfsFile* OpenFile(const std::string& filename, int32_t flags) = 0;
+
+    virtual int32_t Stat(const std::string& filename, struct stat* fstat) = 0;
 private:
     Dfs(const Dfs&);
     void operator=(const Dfs&);

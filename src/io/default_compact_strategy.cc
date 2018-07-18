@@ -10,25 +10,20 @@
 namespace tera {
 namespace io {
 
-DefaultCompactStrategy::DefaultCompactStrategy(const TableSchema& schema)
+DefaultCompactStrategy::DefaultCompactStrategy(const TableSchema& schema,
+                                               const std::map<std::string, int32_t>& cf_indexs,
+                                               const leveldb::RawKeyOperator& raw_key_operator,
+                                               leveldb::Comparator* cmp)
     : schema_(schema),
-      raw_key_operator_(GetRawKeyOperatorFromSchema(schema_)),
-      cmp_(NewRowKeyComparator(raw_key_operator_)),
+      cf_indexs_(cf_indexs),
+      raw_key_operator_(raw_key_operator),
+      cmp_(cmp),
       last_ts_(-1), last_type_(leveldb::TKT_FORSEEK), cur_type_(leveldb::TKT_FORSEEK),
       del_row_ts_(-1), del_col_ts_(-1), del_qual_ts_(-1), cur_ts_(-1),
       del_row_seq_(0), del_col_seq_(0), del_qual_seq_(0), version_num_(0),
       snapshot_(leveldb::kMaxSequenceNumber) {
-    // build index
-    for (int32_t i = 0; i < schema_.column_families_size(); ++i) {
-        const std::string name = schema_.column_families(i).name();
-        cf_indexs_[name] = i;
-    }
     has_put_ = false;
     VLOG(11) << "DefaultCompactStrategy construct";
-}
-
-DefaultCompactStrategy::~DefaultCompactStrategy() {
-    delete cmp_;
 }
 
 const leveldb::Comparator* DefaultCompactStrategy::RowKeyComparator() {
@@ -50,7 +45,7 @@ bool DefaultCompactStrategy::Drop(const Slice& tera_key, uint64_t n,
     int64_t ts = -1;
     leveldb::TeraKeyType type;
 
-    if (!raw_key_operator_->ExtractTeraKey(tera_key, &key, &col, &qual, &ts, &type)) {
+    if (!raw_key_operator_.ExtractTeraKey(tera_key, &key, &col, &qual, &ts, &type)) {
         LOG(WARNING) << "invalid tera key: " << tera_key.ToString();
         return true;
     }
@@ -132,7 +127,7 @@ bool DefaultCompactStrategy::Drop(const Slice& tera_key, uint64_t n,
             del_qual_ts_ = ts;
             del_qual_seq_ = n;
             if (CheckCompactLowerBound(key, lower_bound) && snapshot_ == leveldb::kMaxSequenceNumber) {
-              VLOG(15) << "tera.DefaultCompactStrategy: can drop delete qualifier tag";
+              VLOG(15) << "tera.DefaultCompactStrategy: can drop delete qualifiers tag";
               return true;
             }
         }
@@ -149,6 +144,19 @@ bool DefaultCompactStrategy::Drop(const Slice& tera_key, uint64_t n,
                 VLOG(20) << "compact drop true: " << key.ToString()
                     << ", version " << version_num_
                     << ", timestamp " << ts;
+                return true;
+            }
+        }
+    } 
+    
+    if (type == leveldb::TKT_DEL_QUALIFIER) {
+        if (n <= snapshot_) {
+            uint32_t max_versions = static_cast<uint32_t>(schema_.column_families(cf_id).max_versions());
+            if (version_num_ >= max_versions) {
+                // drop out-of-range delete qualifier mark
+                VLOG(20) << "compact drop true: " << key.ToString()
+                         << ", version " << version_num_ 
+                         << ", timestamp " << ts;
                 return true;
             }
         }
@@ -218,12 +226,12 @@ bool DefaultCompactStrategy::InternalMergeProcess(leveldb::Iterator* it,
             if (ikey.sequence > snapshot_) {
                 break;
             }
-            if (!raw_key_operator_->ExtractTeraKey(ikey.user_key, &key, &col, &qual, &ts, &type)) {
+            if (!raw_key_operator_.ExtractTeraKey(ikey.user_key, &key, &col, &qual, &ts, &type)) {
                 LOG(WARNING) << "invalid internal key for tera: " << itkey.ToString();
                 break;
             }
         } else {
-            if (!raw_key_operator_->ExtractTeraKey(itkey, &key, &col, &qual, &ts, &type)) {
+            if (!raw_key_operator_.ExtractTeraKey(itkey, &key, &col, &qual, &ts, &type)) {
                 LOG(WARNING) << "invalid tera key: " << itkey.ToString();
                 break;
             }
@@ -256,11 +264,12 @@ bool DefaultCompactStrategy::InternalMergeProcess(leveldb::Iterator* it,
 }
 
 bool DefaultCompactStrategy::ScanDrop(const Slice& tera_key, uint64_t n) {
+    bool key_col_qual_same = false;
     Slice key, col, qual;
     int64_t ts = -1;
     leveldb::TeraKeyType type;
 
-    if (!raw_key_operator_->ExtractTeraKey(tera_key, &key, &col, &qual, &ts, &type)) {
+    if (!raw_key_operator_.ExtractTeraKey(tera_key, &key, &col, &qual, &ts, &type)) {
         LOG(WARNING) << "invalid tera key: " << tera_key.ToString();
         return true;
     }
@@ -345,6 +354,7 @@ bool DefaultCompactStrategy::ScanDrop(const Slice& tera_key, uint64_t n) {
         }
         return true;
     } else {
+        key_col_qual_same = true;
         last_type_ = type;
     }
 
@@ -362,8 +372,7 @@ bool DefaultCompactStrategy::ScanDrop(const Slice& tera_key, uint64_t n) {
 
     CHECK(cf_id >= 0) << "illegel column family";
     if (type == leveldb::TKT_VALUE) {
-        if (cur_ts_ == last_ts_ && last_qual_ == qual.ToString() &&
-            last_col_ == col.ToString() && last_key_ == key.ToString()) {
+        if (cur_ts_ == last_ts_ && key_col_qual_same) {
             // this is the same key, do not chang version num
         } else {
             version_num_++;
@@ -417,7 +426,7 @@ bool DefaultCompactStrategy::CheckTag(const Slice& tera_key, bool* del_tag, int6
     int64_t ts = -1;
     leveldb::TeraKeyType type;
 
-    if (!raw_key_operator_->ExtractTeraKey(tera_key, &key, &col, &qual, &ts, &type)) {
+    if (!raw_key_operator_.ExtractTeraKey(tera_key, &key, &col, &qual, &ts, &type)) {
         LOG(WARNING) << "invalid tera key: " << tera_key.ToString();
         return false;
     }
@@ -448,7 +457,7 @@ bool DefaultCompactStrategy::CheckCompactLowerBound(const Slice& cur_key,
     }
 
     Slice rkey;
-    CHECK (raw_key_operator_->ExtractTeraKey(lower_bound, &rkey, NULL, NULL, NULL, NULL));
+    CHECK (raw_key_operator_.ExtractTeraKey(lower_bound, &rkey, NULL, NULL, NULL, NULL));
     int res = rkey.compare(cur_key);
     if (res > 0) {
         return true;
@@ -458,7 +467,19 @@ bool DefaultCompactStrategy::CheckCompactLowerBound(const Slice& cur_key,
 }
 
 DefaultCompactStrategyFactory::DefaultCompactStrategyFactory(const TableSchema& schema)
-    : schema_(schema) {}
+    : schema_(schema),
+      raw_key_operator_(GetRawKeyOperatorFromSchema(schema_)),
+      cmp_(NewRowKeyComparator(raw_key_operator_)) {
+    // build index at tablet io loading
+    for (int32_t i = 0; i < schema_.column_families_size(); ++i) {
+        const std::string& name = schema_.column_families(i).name();
+        cf_indexs_[name] = i;
+    }
+}
+
+DefaultCompactStrategyFactory::~DefaultCompactStrategyFactory() {
+    delete cmp_;
+}
 
 void DefaultCompactStrategyFactory::SetArg(const void* arg) {
     MutexLock lock(&mutex_);
@@ -467,7 +488,7 @@ void DefaultCompactStrategyFactory::SetArg(const void* arg) {
 
 DefaultCompactStrategy* DefaultCompactStrategyFactory::NewInstance() {
     MutexLock lock(&mutex_);
-    return new DefaultCompactStrategy(schema_);
+    return new DefaultCompactStrategy(schema_, cf_indexs_, *raw_key_operator_, cmp_);
 }
 
 } // namespace io

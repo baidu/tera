@@ -179,6 +179,46 @@ bool ZooKeeperLock::Unlock(int* zk_errno) {
     return true;
 }
 
+bool ZooKeeperLock::CheckAndWatchNodeForLock(int* zk_errno) {
+    pthread_mutex_lock(&mutex_);
+    std::string path = lock_path_ + "/" + self_node_.name;
+    LOG(INFO) << "check and watch lock node [" << path << "]";
+    if (!IsAcquired()) {
+        pthread_mutex_unlock(&mutex_);
+        SetZkAdapterCode(ZE_LOCK_NOT_ACQUIRED, zk_errno);
+        return false;
+    }
+    *zk_errno = ZE_OK;
+    bool is_exist;
+    if (!adapter_->CheckAndWatchExistForLock(path, &is_exist,
+                                                  zk_errno)) {
+        pthread_mutex_unlock(&mutex_);
+        LOG(WARNING) << "check and watch exist for lock failed";
+        SetZkAdapterCode(ZE_UNKNOWN, zk_errno);
+        return false;
+    }
+    if (is_exist) {
+        pthread_mutex_unlock(&mutex_);
+        SetZkAdapterCode(ZE_OK, zk_errno);
+        return true;
+    } else {
+        pthread_mutex_unlock(&mutex_);
+        LOG(WARNING) << "lock node not exist, watch failed";
+        SetZkAdapterCode(ZE_LOCK_NOT_EXIST, zk_errno);
+        return false;
+    }
+}
+
+bool ZooKeeperLock::CheckSelfNodePath(const std::string& path) {
+    pthread_mutex_lock(&mutex_);
+    const std::string self_lock_path = lock_path_ + "/" + self_node_.name;
+    pthread_mutex_unlock(&mutex_);
+    if (path.compare(self_lock_path) == 0) {
+        return true;
+    }
+    return false;
+}
+
 void ZooKeeperLock::OnWatchNodeDeleted(const std::string& path) {
     pthread_mutex_lock(&mutex_);
     if (IsAcquired()) {
@@ -213,6 +253,7 @@ void ZooKeeperLock::OnWatchNodeDeleted(const std::string& path) {
     }
 
     is_acquired_ = true;
+    pthread_mutex_unlock(&mutex_);
     LOG(INFO) << "get lock success";
     callback_func_(lock_path_, zk_ret, callback_param_);
 }

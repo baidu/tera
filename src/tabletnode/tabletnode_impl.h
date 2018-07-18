@@ -6,14 +6,20 @@
 #define TERA_TABLETNODE_TABLETNODE_IMPL_H_
 
 #include <string>
+#include <memory>
 
 #include "common/base/scoped_ptr.h"
+#include "common/event.h"
+#include "common/metric/collector_report_publisher.h"
+#include "common/metric/metric_counter.h"
+#include "common/thread.h"
 #include "common/thread_pool.h"
 
 #include "io/tablet_io.h"
 #include "proto/master_rpc.pb.h"
 #include "proto/tabletnode.pb.h"
 #include "proto/tabletnode_rpc.pb.h"
+#include "sdk/stat_table.h"
 #include "tabletnode/rpc_compactor.h"
 #include "tabletnode/tabletnode_sysinfo.h"
 #include "utils/rpc_timer_list.h"
@@ -38,7 +44,7 @@ public:
         std::vector<const RowMutationSequence*> row_mutation_vec;
         std::vector<StatusCode> row_status_vec;
         std::vector<int32_t> row_index_vec;
-        Counter* row_done_counter;
+        std::shared_ptr<Counter> row_done_counter;
 
         const WriteTabletRequest* request;
         WriteTabletResponse* response;
@@ -46,7 +52,7 @@ public:
         WriteRpcTimer* timer;
 
         WriteTabletTask(const WriteTabletRequest* req, WriteTabletResponse* resp,
-                   google::protobuf::Closure* d, WriteRpcTimer* t, Counter* c)
+                   google::protobuf::Closure* d, WriteRpcTimer* t, std::shared_ptr<Counter> c)
             : row_done_counter(c), request(req), response(resp), done(d), timer(t) {}
     };
 
@@ -93,16 +99,6 @@ public:
                     ScanTabletResponse* response,
                     google::protobuf::Closure* done);
 
-    void GetSnapshot(const SnapshotRequest* request, SnapshotResponse* response,
-                     google::protobuf::Closure* done);
-
-    void ReleaseSnapshot(const ReleaseSnapshotRequest* request,
-                         ReleaseSnapshotResponse* response,
-                         google::protobuf::Closure* done);
-
-    void Rollback(const SnapshotRollbackRequest* request, SnapshotRollbackResponse* response,
-                  google::protobuf::Closure* done);
-
     void CmdCtrl(const TsCmdCtrlRequest* request, TsCmdCtrlResponse* response,
                  google::protobuf::Closure* done);
 
@@ -110,6 +106,10 @@ public:
                google::protobuf::Closure* done);
 
     void SplitTablet(const SplitTabletRequest* request,
+                     SplitTabletResponse* response,
+                     google::protobuf::Closure* done);
+    
+    void ComputeSplitKey(const SplitTabletRequest* request,
                      SplitTabletResponse* response,
                      google::protobuf::Closure* done);
 
@@ -125,15 +125,15 @@ public:
     void SetSessionId(const std::string& session_id);
     std::string GetSessionId();
 
-    std::string BlockCacheProfileInfo();
-
-    std::string TableCacheProfileInfo();
-
     TabletNodeSysInfo& GetSysInfo();
 
     void RefreshSysInfo();
+    
+    void GetBackgroundErrors(std::vector<tera::TabletBackgroundErrorInfo>* background_errors);
 
     void TryReleaseMallocCache();
+
+    void RefreshLevelSize();
 
 private:
     // call this when fail to write TabletIO
@@ -157,21 +157,14 @@ private:
                          const std::string& key_start,
                          const std::string& key_end);
 
-    void UpdateMetaTableAsync(const SplitTabletRequest* request,
-             SplitTabletResponse* response, google::protobuf::Closure* done,
-             const std::string& path, const std::string& key_split,
-             const TableSchema& schema, int64_t first_size, int64_t second_size,
-             const TabletMeta& meta);
-    void UpdateMetaTableCallback(const SplitTabletRequest* rpc_request,
-             SplitTabletResponse* rpc_response, google::protobuf::Closure* rpc_done,
-             WriteTabletRequest* request, WriteTabletResponse* response,
-             bool failed, int error_code);
 
     void InitCacheSystem();
 
     void ReleaseMallocCache();
     void EnableReleaseMallocCacheTimer(int32_t expand_factor = 1);
     void DisableReleaseMallocCacheTimer();
+
+    void RefreshTabletsStatus();
 
     void GetInheritedLiveFiles(std::vector<TabletInheritedFileInfo>* inherited);
     void GetInheritedLiveFiles(std::vector<InheritedLiveFiles>& inherited);
@@ -188,6 +181,7 @@ private:
     mutable Mutex status_mutex_;
     TabletNodeStatus status_;
     Mutex mutex_;
+    bool running_;
 
     scoped_ptr<TabletManager> tablet_manager_;
     scoped_ptr<TabletNodeZkAdapterBase> zk_adapter_;
@@ -199,13 +193,35 @@ private:
     int64_t release_cache_timer_id_;
 
     TabletNodeSysInfo sysinfo_;
+    std::vector<MetricCounter> level_size_;
 
+    // do some tablets health check with a timer
+    common::Thread tablet_healthcheck_thread_;
+    // Exit() called should set this event
+    common::AutoResetEvent exit_event_;
+    
     scoped_ptr<ThreadPool> thread_pool_;
 
     leveldb::Logger* ldb_logger_;
     leveldb::Cache* ldb_block_cache_;
     leveldb::Cache* m_memory_cache;
     leveldb::TableCache* ldb_table_cache_;
+    
+    // metric for caches
+    struct CacheMetrics {
+        tera::AutoCollectorRegister block_cache_hitrate_;
+        tera::AutoCollectorRegister block_cache_entries_;
+        tera::AutoCollectorRegister block_cache_charge_;
+        
+        tera::AutoCollectorRegister table_cache_hitrate_;
+        tera::AutoCollectorRegister table_cache_entries_;
+        tera::AutoCollectorRegister table_cache_charge_;
+        
+        CacheMetrics(leveldb::Cache* block_cache, leveldb::TableCache* table_cache);
+    };
+    
+    scoped_ptr<CacheMetrics> cache_metrics_;
+    scoped_ptr<tera::AutoCollectorRegister> snappy_ratio_metric_;
 };
 
 } // namespace tabletnode
