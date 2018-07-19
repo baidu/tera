@@ -1,0 +1,20 @@
+import "sofa/pbrpc/rpc_option.proto";
+import "status_code.proto";
+
+package tera;
+
+message GetTimestampRequest {
+    optional uint64 count = 1;
+}
+
+message GetTimestampResponse {
+    optional StatusCode status = 1;
+    optional int64 start_timestamp = 2;
+    optional uint64 count = 3;
+}
+
+service TimeoracleServer {
+    rpc GetTimestamp(GetTimestampRequest) returns(GetTimestampResponse);
+}
+
+option cc_generic_services = true;

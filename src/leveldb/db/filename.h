@@ -97,11 +97,26 @@ extern uint64_t BuildFullFileNumber(const std::string& dbname,
 //      from (/table1, 3)
 std::string BuildTabletPath(const std::string& prefix, uint64_t tablet);
 
+std::string BuildTabletLgPath(const std::string& prfix, uint64_t tablet, uint64_t lg);
+
 // Build file path from tablet_num & lg_num & file number
 // E.g. construct "/table1/tablet000003/0/00000001.sst"
 //      from (/table1, 3, 0, 1)
 std::string BuildTableFilePath(const std::string& prefix, uint64_t tablet,
                                uint64_t lg, uint64_t number);
+
+// Build trash file path from tablet_num & lg & file number & time
+// E.g. construct "/table1/tablet000003/0/00000001.sst.20170718-17-08-30"
+//      from (/table1, 3, 0, 1, 20170718-17-08-30)
+std::string BuildTrashTableFilePath(const std::string& prefix, uint64_t tablet,
+                                    uint32_t lg_id, uint64_t number,
+                                    const std::string& time);
+
+// get time string from trash file path
+// E.g. get "20170718-17-08-30"
+//      from  "/table1/tablet000003/0/00000001.sst.20170718-17-08-30"
+// if path is invalid, return ""
+std::string GetTimeStrFromTrashFile(const std::string& path);
 
 // Build file path from lg_num & full file number
 // E.g. construct "/table1/tablet000003/0/00000001.sst"

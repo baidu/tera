@@ -19,7 +19,7 @@
 #include "proto/tabletnode.pb.h"
 #include "tera.h"
 #include "utils/utils_cmd.h"
-#include "utils/timer.h"
+#include "common/timer.h"
 
 DEFINE_string(tera_monitor_default_request_filename, "tera_monitor.request", "");
 DEFINE_string(tera_monitor_default_response_filename, "tera_monitor.response", "");
@@ -34,6 +34,7 @@ DECLARE_string(tera_ins_addr_list);
 DECLARE_string(tera_ins_root_path);
 DECLARE_bool(tera_zk_enabled);
 DECLARE_bool(tera_ins_enabled);
+DECLARE_string(tera_coord_type);
 DECLARE_int64(tera_master_stat_table_interval);
 
 using namespace tera;
@@ -66,6 +67,7 @@ void FillTabletNodeStat(const TabletNodeInfo& info, TabletNodeStat* stat) {
     stat->set_status_m(info.status_m());
     stat->set_tablet_onload(info.tablet_onload());
     stat->set_tablet_onsplit(info.tablet_onsplit());
+    stat->set_tablet_unloading(info.tablet_unloading());
 
     stat->set_read_pending(info.read_pending());
     stat->set_write_pending(info.write_pending());
@@ -296,9 +298,11 @@ void InitFlags(int32_t argc, char** argv, const MonitorRequest& request) {
         if (request.has_tera_zk_root()) {
             FLAGS_tera_ins_root_path = request.tera_zk_root();
         }
+        FLAGS_tera_coord_type = "ins";
         FLAGS_tera_ins_enabled = true;
         FLAGS_tera_zk_enabled = false;
     } else {
+        FLAGS_tera_coord_type = "zk";
         if (request.has_tera_zk_addr()) {
             FLAGS_tera_zk_addr_list = request.tera_zk_addr();
         }

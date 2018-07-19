@@ -48,8 +48,9 @@ public:
   int32_t ListDirectory(const std::string& path, std::vector<std::string>* result);
   int32_t LockDirectory(const std::string& path);
   int32_t UnlockDirectory(const std::string& path);
+  int32_t ClearDirOwner(const std::string& path);
   DfsFile* OpenFile(const std::string& filename, int32_t flags);
-
+  int32_t Stat(const std::string& filename, struct stat* fstat);
 private:
   void* fs_;
 
@@ -92,8 +93,10 @@ public:
   int32_t ListDirectory(const std::string& path, std::vector<std::string>* result);
   int32_t LockDirectory(const std::string& path);
   int32_t UnlockDirectory(const std::string& path);
+  int32_t ClearDirOwner(const std::string& path);
   DfsFile* OpenFile(const std::string& filename, int32_t flags);
 
+  int32_t Stat(const std::string& filename, struct stat* fstat);
 private:
   void* GetFSHandle(const std::string& path);
   std::vector<void*> fs_list_;

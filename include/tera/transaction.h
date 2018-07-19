@@ -15,9 +15,15 @@
 #pragma GCC visibility push(default)
 namespace tera {
 
-
 class RowReader;
 class RowMutation;
+class Table;
+
+/// 事务隔离级别
+enum class IsolationLevel {
+    kReadCommitedSnapshot = 0,
+    kSnapshot             = 1
+};
 
 /// 事务操作接口
 class Transaction {
@@ -47,8 +53,32 @@ public:
     /// 异步模式下，通过GetError()获取提交结果
     virtual ErrorCode Commit() = 0;
 
-    /// 获取事务开始时间戳，仅在多行事务场景下有效
+    /// 获取事务开始时间戳
     virtual int64_t GetStartTimestamp() = 0;
+
+    /// 获取事务提交时间戳
+    virtual int64_t GetCommitTimestamp() = 0;
+
+    /// 仅全局事务支持
+    virtual void Ack(Table* t, 
+                     const std::string& row_key, 
+                     const std::string& column_family, 
+                     const std::string& qualifier) = 0;
+
+    /// 仅全局事务支持
+    virtual void Notify(Table* t,
+                        const std::string& row_key, 
+                        const std::string& column_family, 
+                        const std::string& qualifier) = 0;
+
+    /// 设置隔离级别
+    virtual void SetIsolation(const IsolationLevel& isolation_level) = 0;
+
+    /// 获取隔离级别
+    virtual IsolationLevel Isolation() = 0;
+
+    // Set commit timeout(ms).
+    virtual void SetTimeout(int64_t timeout_ms) = 0;
 
     Transaction() {}
     virtual ~Transaction() {}
@@ -57,10 +87,6 @@ private:
     Transaction(const Transaction&);
     void operator=(const Transaction&);
 };
-
-/// cross-row, cross-table transaction
-/// 跨行，跨表事务
-Transaction* NewTransaction();
 
 } // namespace tera
 #pragma GCC visibility pop

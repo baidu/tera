@@ -1,0 +1,20 @@
+import "status_code.proto";
+import "tabletnode_rpc.proto";
+
+package tera;
+
+message TabletLoadContext {
+    required LoadTabletRequest load_request = 1; 
+    required bytes tabletnode_session_id = 2;
+}
+
+// tablet loading and compaction corruption message
+message TabletCorruptMessage {
+    required bytes tablet = 1;
+    required bytes tabletnode = 2;
+    required uint32 corrupt_phase = 3;
+    optional uint32 corrupt_type = 4;
+    optional bytes locality_group = 5;
+    optional bytes detail_message = 6;
+    optional bytes load_context = 7;
+}

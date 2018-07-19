@@ -3,22 +3,23 @@
 // found in the LICENSE file.
 
 #include <functional>
+#include <memory>
 
 #include "common/thread_pool.h"
 #include "common/base/string_format.h"
 
 #include "io/coding.h"
+#include "sdk/global_txn_internal.h"
 #include "sdk/read_impl.h"
 #include "sdk/single_row_txn.h"
 #include "sdk/table_impl.h"
 #include "types.h"
-#include "utils/timer.h"
 
 namespace tera {
 
-SingleRowTxn::SingleRowTxn(Table* table, const std::string& row_key,
+SingleRowTxn::SingleRowTxn(std::shared_ptr<TableImpl> table_impl, const std::string& row_key,
                            common::ThreadPool* thread_pool)
-    : table_(table),
+    : table_impl_(table_impl),
       row_key_(row_key),
       thread_pool_(thread_pool),
       has_read_(false),
@@ -27,9 +28,13 @@ SingleRowTxn::SingleRowTxn(Table* table, const std::string& row_key,
       reader_max_versions_(1),
       reader_start_timestamp_(kOldestTs),
       reader_end_timestamp_(kLatestTs),
-      mutation_buffer_(table, row_key),
+      start_timestamp_(0),
+      commit_timestamp_(0),
+      ttl_timestamp_ms_(kLatestTs),
+      mutation_buffer_(table_impl_.get(), row_key),
       user_commit_callback_(NULL),
       user_commit_context_(NULL) {
+    start_timestamp_ = get_micros();
 }
 
 SingleRowTxn::~SingleRowTxn() {
@@ -79,8 +84,11 @@ void ReadCallbackWrapper(RowReader* row_reader) {
 ErrorCode SingleRowTxn::Get(RowReader* row_reader) {
     RowReaderImpl* reader_impl = static_cast<RowReaderImpl*>(row_reader);
     reader_impl->SetTransaction(this);
+    int64_t odd_time_ms = ttl_timestamp_ms_ - get_millis();
+    if (odd_time_ms < reader_impl->TimeOut()) {
+        reader_impl->SetTimeOut(odd_time_ms > 0 ? odd_time_ms : 1);
+    }
     bool is_async = reader_impl->IsAsync();
-
 
     // safe check
     if (reader_impl->RowName() != row_key_) {
@@ -114,7 +122,7 @@ ErrorCode SingleRowTxn::Get(RowReader* row_reader) {
     reader_impl->SetCallBack(ReadCallbackWrapper);
     reader_impl->SetContext(this);
 
-    table_->Get(reader_impl);
+    table_impl_->Get(reader_impl);
     if (is_async) {
         return ErrorCode();
     } else {
@@ -185,6 +193,12 @@ void CommitCallbackWrapper(RowMutation* row_mu) {
 
 /// 提交事务
 ErrorCode SingleRowTxn::Commit() {
+    int64_t odd_time_ms = ttl_timestamp_ms_ - get_millis();
+    if (odd_time_ms < mutation_buffer_.TimeOut()) {
+        mutation_buffer_.SetTimeOut(odd_time_ms > 0 ? odd_time_ms : 1);
+    }
+    commit_timestamp_ = get_micros();
+    InternalNotify();
     if (mutation_buffer_.MutationNum() > 0) {
         if (user_commit_callback_ != NULL) {
             // use our callback wrapper
@@ -192,7 +206,7 @@ ErrorCode SingleRowTxn::Commit() {
             mutation_buffer_.SetContext(this);
         }
         mutation_buffer_.SetTransaction(this);
-        table_->ApplyMutation(&mutation_buffer_);
+        table_impl_->ApplyMutation(&mutation_buffer_);
         if (mutation_buffer_.IsAsync()) {
             return ErrorCode();
         } else {
@@ -263,6 +277,34 @@ void SingleRowTxn::Serialize(RowMutationSequence* mu_seq) {
                 kv->set_value(it->second);
             }
         }
+    }
+}
+
+void SingleRowTxn::Ack(Table* t, 
+                     const std::string& row_key, 
+                     const std::string& column_family, 
+                     const std::string& qualifier) {
+    std::unique_ptr<tera::RowMutation> mutation(t->NewRowMutation(row_key));
+    std::string notify_qulifier = PackNotifyName(column_family, qualifier);
+    mutation->DeleteColumns(kNotifyColumnFamily, notify_qulifier, start_timestamp_);
+    this->ApplyMutation(mutation.get());
+}
+
+void SingleRowTxn::Notify(Table* t,
+                        const std::string& row_key, 
+                        const std::string& column_family, 
+                        const std::string& qualifier) {
+    Cell cell(t, row_key, column_family, qualifier);
+    notify_cells_.push_back(cell);
+}
+
+void SingleRowTxn::InternalNotify() {
+    for (auto cell : notify_cells_) {
+        std::unique_ptr<tera::RowMutation> mutation(cell.Table()->NewRowMutation(cell.RowKey()));
+        std::string notify_qulifier = PackNotifyName(cell.ColFamily(), cell.Qualifier());
+        mutation->Put(kNotifyColumnFamily, notify_qulifier, commit_timestamp_);
+        // single row transaction may notify different rows
+        cell.Table()->ApplyMutation(mutation.get());
     }
 }
 

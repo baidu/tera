@@ -24,7 +24,8 @@ public:
     enum TYPE {
         READ,
         MUTATION,
-        SCAN
+        SCAN,
+        TASKBATCH,
     };
     TYPE Type() { return type_; }
 
@@ -47,6 +48,14 @@ public:
     void IncRef();
     void DecRef();
     void ExcludeOtherRef();
+
+    virtual bool IsAsync() = 0;
+    virtual uint32_t Size() = 0;
+    virtual int64_t TimeOut() = 0;
+    virtual void Wait() = 0;
+    virtual void SetError(ErrorCode::ErrorCodeType err,
+                          const std::string& reason) = 0;
+    virtual const std::string& RowKey() = 0;
 
 protected:
     SdkTask(TYPE type)
@@ -76,7 +85,10 @@ typedef void (*StatCallback)(Table* table, SdkTask* task);
 
 struct SdkTaskDueTimeComp {
     bool operator() (SdkTask* lhs, SdkTask* rhs) {
-        return lhs->DueTime() < rhs->DueTime();
+        if (lhs->DueTime() != rhs->DueTime()) {
+            return lhs->DueTime() < rhs->DueTime();
+        }
+        return lhs->GetId() < rhs->GetId();
     }
 };
 

@@ -20,13 +20,11 @@ namespace tabletnode {
 
 class TabletNodeClient : public RpcClient<TabletNodeServer::Stub> {
 public:
-    static void SetThreadPool(ThreadPool* thread_pool);
-
     static void SetRpcOption(int32_t max_inflow = -1, int32_t max_outflow = -1,
                              int32_t pending_buffer_size = -1,
                              int32_t thread_num = -1);
 
-    TabletNodeClient(const std::string& addr = "",
+    TabletNodeClient(ThreadPool* thread_pool, const std::string& addr = "",
                      int32_t rpc_timeout = FLAGS_tera_rpc_timeout_period);
 
     ~TabletNodeClient();
@@ -51,23 +49,15 @@ public:
                     ScanTabletResponse* response,
                     std::function<void (ScanTabletRequest*, ScanTabletResponse*, bool, int)> done = NULL);
 
-    bool GetSnapshot(const SnapshotRequest* request,
-                     SnapshotResponse* response,
-                     std::function<void (SnapshotRequest*, SnapshotResponse*, bool, int)> done = NULL);
-    bool ReleaseSnapshot(const ReleaseSnapshotRequest* request,
-                         ReleaseSnapshotResponse* response,
-                         std::function<void (ReleaseSnapshotRequest*, ReleaseSnapshotResponse*, bool, int)> done = NULL);
-    bool Rollback(const SnapshotRollbackRequest* request,
-                  SnapshotRollbackResponse* response,
-                  std::function<void (SnapshotRollbackRequest*, SnapshotRollbackResponse*, bool, int)> done = NULL);
-
-
     bool Query(ThreadPool* thread_pool, const QueryRequest* request,
                QueryResponse* response,
                std::function<void (QueryRequest*, QueryResponse*, bool, int)> done = NULL);
 
     bool SplitTablet(const SplitTabletRequest* request,
                      SplitTabletResponse* response,
+                     std::function<void (SplitTabletRequest*, SplitTabletResponse*, bool, int)> done = NULL);
+
+    bool ComputeSplitKey(const SplitTabletRequest* request, SplitTabletResponse* response, 
                      std::function<void (SplitTabletRequest*, SplitTabletResponse*, bool, int)> done = NULL);
 
     bool CompactTablet(const CompactTabletRequest* request,
@@ -83,7 +73,7 @@ public:
 
 private:
     int32_t rpc_timeout_;
-    static ThreadPool* thread_pool_;
+    ThreadPool* thread_pool_;
 };
 
 } // namespace sdk

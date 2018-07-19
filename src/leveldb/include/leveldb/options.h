@@ -74,11 +74,17 @@ struct LG_info {
 
   int32_t sst_size;
 
-  int32_t write_buffer_size;
+  size_t write_buffer_size;
 
   Cache* block_cache;
 
   int64_t seek_latency;
+
+  bool use_direct_io_read;
+  bool use_direct_io_write;
+  uint64_t posix_write_buffer_size;
+  bool table_builder_batch_write;
+  uint64_t table_builder_batch_size;
   // Other LG properties
   // ...
 
@@ -93,7 +99,12 @@ struct LG_info {
         sst_size(kDefaultSstSize),
         write_buffer_size(32 << 20),
         block_cache(NULL),
-        seek_latency(0) {}
+        seek_latency(0),
+        use_direct_io_read(false),
+        use_direct_io_write(false),
+        posix_write_buffer_size(512<<10),
+        table_builder_batch_write(false),
+        table_builder_batch_size(0) {}
 };
 
 // Options to control the behavior of a database (passed to DB::Open)
@@ -223,6 +234,8 @@ struct Options {
   std::set<uint32_t>* exist_lg_list;
   std::map<uint32_t, LG_info*>* lg_info_list;
 
+  std::set<uint32_t> ignore_corruption_in_open_lg_list;
+
   // compaction strategy to determine how to
   // drop the obsoleted kv records
   bool enable_strategy_when_get;
@@ -310,12 +323,30 @@ struct Options {
   bool ignore_corruption_in_open;
 
   // Statistic: By default, if 10% entry timeout, will trigger compaction
-  // Default: 10 %
+  // Default: 99 %
   uint64_t ttl_percentage;
 
   // Statistic: delete tag's percentage in sst
-  // Default: 10 %
+  // Default: 20 %
   uint64_t del_percentage;
+
+  // Max thread alloc for lg's compaction
+  // Default: 5
+  uint32_t max_background_compactions;
+
+  // if level0's file num >= limit, use sqrt slow down level score
+  // Default: 30
+  int slow_down_level0_score_limit;
+
+  // parallel compaction
+  int max_sub_parallel_compaction;
+
+  bool use_direct_io_read;
+  bool use_direct_io_write;
+  uint64_t posix_write_buffer_size;
+
+  bool table_builder_batch_write;
+  uint64_t table_builder_batch_size;
 
   // Create an Options object with default values for all fields.
   Options();
@@ -356,13 +387,20 @@ struct ReadOptions {
   // db option
   const Options* db_opt;
 
+  // use prefetch_scan?
+  bool prefetch_scan;
+  // size to prefetch, default:1MB
+  uint64_t prefetch_scan_size;
+
   ReadOptions(const Options* db_option)
       : verify_checksums(false),
         fill_cache(true),
         snapshot(kMaxSequenceNumber),
         target_lgs(NULL),
         read_single_row(false),
-        db_opt(db_option) {
+        db_opt(db_option),
+        prefetch_scan(false),
+        prefetch_scan_size(1 << 20) {
   }
   ReadOptions() {
     *this = ReadOptions(NULL);
@@ -395,6 +433,61 @@ struct WriteOptions {
       : sync(false),
         disable_wal(false) {
   }
+};
+
+// block based cache options
+struct FlashBlockCacheOptions {
+    Options opts;
+
+    // SSD's dir
+    std::string cache_dir;
+
+    // ignore local conf, force update conf from FLAG file
+    bool force_update_conf_enabled;
+
+    // Max available size for ssd cache
+    // Default: 350G
+    uint64_t cache_size;
+
+    // Size of each block set
+    // Default: 1GB
+    uint64_t blockset_size;
+
+    // Size of user data packed per block.
+    // Default: 8KB
+    uint64_t block_size;
+
+    // Batch write size for fid alloctor
+    // Default: 100000
+    uint64_t fid_batch_num;
+
+    // block set number, which is equal to cache_size / blockset_size
+    uint64_t blockset_num;
+
+    // number of blocks per block set
+    uint64_t blocks_per_set;
+
+    // block cache's meta leveldb's block cache size
+    // Default: 2G
+    uint64_t meta_block_cache_size;
+
+    // block cache's meta leveldb's table cache size
+    // Default: 512M
+    uint64_t meta_table_cache_size;
+
+    // block cache's meta leveldb's write buffer size
+    // Default: 1M
+    uint64_t write_buffer_size;
+
+    // Base env for block cache
+    // Default: dfs_env
+    Env* env;
+
+    // Local env for block cache
+    // Default: posix_env
+    Env* cache_env;
+
+    FlashBlockCacheOptions();
 };
 
 }  // namespace leveldb

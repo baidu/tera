@@ -11,6 +11,7 @@
 
 DECLARE_double(tera_master_load_balance_size_ratio_trigger);
 DECLARE_int32(tera_master_load_balance_ts_load_threshold);
+DECLARE_int64(tera_master_load_balance_ts_size_threshold);
 DECLARE_int32(tera_master_load_balance_scan_weight);
 
 namespace tera {
@@ -76,8 +77,8 @@ bool SizeScheduler::MayMoveOut(const TabletNodePtr& node,
                                const std::string& table_name) {
     VLOG(16) << "[size-sched] MayMoveOut()";
     int64_t node_size = node->GetSize(table_name);
-    if (node_size <= 0) {
-        VLOG(16) << "[size-sched] node has no data";
+    if (node_size <= FLAGS_tera_master_load_balance_ts_size_threshold) {
+        VLOG(16) << "[size-sched] node do not need loadbalance";
         return false;
     }
     return true;

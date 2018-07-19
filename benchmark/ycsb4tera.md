@@ -30,6 +30,13 @@
     
     更新（写入）占所有操作的比例
     updateproportion: what proportion of operations should be updates (default: 0.05)
+
+    每秒总共操作的次数
+    target: target ops/sec all threads (default: unthrottled)
+
+    客户端线程数
+    thread: number of client threads (default: 1)
+
 ```
 以下参数对于tera的测试意义不大，使用默认值即可：
 

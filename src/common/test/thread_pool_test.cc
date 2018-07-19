@@ -56,7 +56,7 @@ TEST(TimerTest, test1) {
 
     clock_gettime(CLOCK_REALTIME, &ts1);
     gettimeofday(&tv, NULL);
-    int64_t ts = common::timer::get_micros();
+    int64_t ts = get_micros();
 
     int delta = 0;
     delta = ts1.tv_sec - tv.tv_sec;

@@ -24,7 +24,7 @@
 #include "leveldb/table_utils.h"
 #include "proto/proto_helper.h"
 #include "proto/status_code.pb.h"
-#include "utils/timer.h"
+#include "common/timer.h"
 #include "utils/utils_cmd.h"
 
 DECLARE_int32(tera_io_retry_max_times);
@@ -104,7 +104,7 @@ TEST_F(TabletIOTest, General) {
     leveldb::Status s = leveldb::Env::Default()->NewLogger("./log/leveldblog", &ldb_logger);
     assert(s.ok());
     EXPECT_TRUE(tablet.Load(TableSchema(), tablet_path, std::vector<uint64_t>(),
-                            empty_snaphsots_, empty_rollback_, ldb_logger, NULL, NULL, &status));
+                            std::set<std::string>(), ldb_logger, NULL, NULL, &status));
 
     std::string key = "555";
     std::string value = "value of 555";
@@ -147,7 +147,7 @@ TEST_F(TabletIOTest, CurrentLost) {
     assert(s.ok());
 
     ASSERT_FALSE(tablet.Load(TableSchema(), tablet_path, std::vector<uint64_t>(),
-                            empty_snaphsots_, empty_rollback_, ldb_logger, NULL, NULL, &status));
+                             std::set<std::string>(),  ldb_logger, NULL, NULL, &status));
 
     env->ResetMock();
 }
@@ -178,7 +178,7 @@ TEST_F(TabletIOTest, CurrentReadFailed) {
     assert(s.ok());
 
     ASSERT_FALSE(tablet.Load(TableSchema(), tablet_path, std::vector<uint64_t>(),
-                            empty_snaphsots_, empty_rollback_, ldb_logger, NULL, NULL, &status));
+                             std::set<std::string>(), ldb_logger, NULL, NULL, &status));
 
     env->ResetMock();
 }
@@ -216,7 +216,7 @@ TEST_F(TabletIOTest, CurrentCorrupted) {
     assert(s.ok());
 
     ASSERT_FALSE(tablet.Load(TableSchema(), tablet_path, std::vector<uint64_t>(),
-                            empty_snaphsots_, empty_rollback_, ldb_logger, NULL, NULL, &status));
+                             std::set<std::string>(), ldb_logger, NULL, NULL, &status));
 
     env->ResetMock();
 }
@@ -254,7 +254,7 @@ TEST_F(TabletIOTest, ManifestLost) {
     assert(s.ok());
 
     ASSERT_FALSE(tablet.Load(TableSchema(), tablet_path, std::vector<uint64_t>(),
-                            empty_snaphsots_, empty_rollback_, ldb_logger, NULL, NULL, &status));
+                             std::set<std::string>(), ldb_logger, NULL, NULL, &status));
 
     env->ResetMock();
 }
@@ -284,7 +284,7 @@ TEST_F(TabletIOTest, ManifestReadFailed) {
     assert(s.ok());
 
     ASSERT_FALSE(tablet.Load(TableSchema(), tablet_path, std::vector<uint64_t>(),
-                            empty_snaphsots_, empty_rollback_, ldb_logger, NULL, NULL, &status));
+                             std::set<std::string>(), ldb_logger, NULL, NULL, &status));
 
     env->ResetMock();
 }
@@ -322,7 +322,7 @@ TEST_F(TabletIOTest, ManifestCorrupted) {
     assert(s.ok());
 
     ASSERT_FALSE(tablet.Load(TableSchema(), tablet_path, std::vector<uint64_t>(),
-                            empty_snaphsots_, empty_rollback_, ldb_logger, NULL, NULL, &status));
+                             std::set<std::string>(), ldb_logger, NULL, NULL, &status));
 
     env->ResetMock();
 }
@@ -353,7 +353,7 @@ TEST_F(TabletIOTest, SstLost) {
     assert(s.ok());
 
     ASSERT_FALSE(tablet.Load(TableSchema(), tablet_path, std::vector<uint64_t>(),
-                            empty_snaphsots_, empty_rollback_, ldb_logger, NULL, NULL, &status));
+                             std::set<std::string>(), ldb_logger, NULL, NULL, &status));
 
     env->ResetMock();
 }
@@ -367,26 +367,29 @@ TEST_F(TabletIOTest, SstLostButIgnore) {
     TabletIO tablet(key_start, key_end, tablet_path);
     leveldb::MockEnv* env = (leveldb::MockEnv*)LeveldbMockEnv();
 
-    std::string fname = mock_env_prefix + tablet_path + "/0/__oops";
-    int fd = open(fname.c_str(), O_RDWR | O_CREAT);
-    if (fd == -1) {
-        std::cout << strerror(errno) << fname << std::endl;
-        abort();
-    }
     env->SetPrefix(mock_env_prefix);
-
     env->SetGetChildrenCallback(DropSst);
     tablet.SetMockEnv(env);
 
     leveldb::Logger* ldb_logger;
     leveldb::Status s = leveldb::Env::Default()->NewLogger("./log/leveldblog", &ldb_logger);
     assert(s.ok());
+    std::set<std::string> ignore_err_lgs;
+    ignore_err_lgs.insert("lg0");
+    TableSchema schema = TableSchema();
 
-    ASSERT_TRUE(tablet.Load(TableSchema(), tablet_path, std::vector<uint64_t>(),
-                            empty_snaphsots_, empty_rollback_, ldb_logger, NULL, NULL, &status));
+    LocalityGroupSchema* lg = schema.add_locality_groups();
+    lg->set_name("lg0");
+
+    ColumnFamilySchema* cf = schema.add_column_families();
+    cf->set_name("column");
+    cf->set_locality_group("lg0");
+    cf->set_max_versions(3);
+
+    ASSERT_TRUE(tablet.Load(schema, tablet_path, std::vector<uint64_t>(),
+                            ignore_err_lgs, ldb_logger, NULL, NULL, &status));
 
     env->ResetMock();
-    close(fd);
 }
 //#endif
 

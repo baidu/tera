@@ -16,7 +16,7 @@
 #include "proto/proto_helper.h"
 #include "io/mock_tablet_io.h"
 
-DECLARE_bool(tera_zk_enabled);
+DECLARE_string(tera_coord_type);
 DECLARE_int32(tera_tabletnode_retry_period);
 DECLARE_string(tera_leveldb_env_type);
 
@@ -40,7 +40,7 @@ public:
           m_ret_io_split(false),
           m_start_key("start_key"), m_end_key("end_key"),
           m_schema(DefaultTableSchema()) {
-        FLAGS_tera_zk_enabled = false;
+        FLAGS_tera_coord_type = "fake_zk";
 
         m_tablet_meta.set_table_name("name");
         m_tablet_meta.set_path("path");

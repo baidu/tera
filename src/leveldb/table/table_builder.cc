@@ -18,7 +18,7 @@
 #include "table/format.h"
 #include "util/coding.h"
 #include "util/crc32c.h"
-#include "../utils/counter.h"
+#include "../common/counter.h"
 
 namespace leveldb {
 
@@ -78,6 +78,9 @@ TableBuilder::TableBuilder(const Options& options, WritableFile* file)
     : rep_(new Rep(options, file)) {
   if (rep_->filter_block != NULL) {
     rep_->filter_block->StartBlock(0);
+  }
+  if (rep_->options.table_builder_batch_write) {
+      assert(rep_->options.table_builder_batch_size > 0);
   }
 }
 
@@ -142,7 +145,6 @@ void TableBuilder::Flush() {
   WriteBlock(&r->data_block, &r->pending_handle);
   if (ok()) {
     r->pending_index_entry = true;
-    r->status = r->file->Flush();
   }
   if (r->filter_block != NULL) {
     r->filter_block->StartBlock(r->offset);
@@ -216,14 +218,14 @@ void TableBuilder::WriteRawBlock(const Slice& block_contents,
   Rep* r = rep_;
   handle->set_offset(r->offset);
   handle->set_size(block_contents.size());
-  r->status = r->file->Append(block_contents);
+  AppendToFile(block_contents);
   if (r->status.ok()) {
     char trailer[kBlockTrailerSize];
     trailer[0] = type;
     uint32_t crc = crc32c::Value(block_contents.data(), block_contents.size());
     crc = crc32c::Extend(crc, trailer, 1);  // Extend crc to cover block type
     EncodeFixed32(trailer+1, crc32c::Mask(crc));
-    r->status = r->file->Append(Slice(trailer, kBlockTrailerSize));
+    AppendToFile(Slice(trailer, kBlockTrailerSize));
     if (r->status.ok()) {
       r->offset += block_contents.size() + kBlockTrailerSize;
     }
@@ -283,11 +285,13 @@ Status TableBuilder::Finish() {
     footer.set_index_handle(index_block_handle);
     std::string footer_encoding;
     footer.EncodeTo(&footer_encoding);
-    r->status = r->file->Append(footer_encoding);
+    AppendToFile(footer_encoding);
     if (r->status.ok()) {
       r->offset += footer_encoding.size();
     }
   }
+  FlushBatchBuffer();
+  r->status = r->file->Flush();
   return r->status;
 }
 
@@ -309,4 +313,24 @@ uint64_t TableBuilder::SavedSize() const {
   return rep_->saved_size;
 }
 
+void TableBuilder::FlushBatchBuffer() {
+  if (batch_write_buffer_.empty()) {
+    return;
+  }
+  Rep* r = rep_;
+  r->status = r->file->Append(Slice(batch_write_buffer_));
+  batch_write_buffer_.clear();
+}
+
+void TableBuilder::AppendToFile(const Slice& slice) {
+  Rep* r = rep_;
+  if (r->options.table_builder_batch_write) {
+    batch_write_buffer_.append(slice.data(), slice.size());
+    if (batch_write_buffer_.size() >= r->options.table_builder_batch_size) {
+      FlushBatchBuffer();
+    }
+  } else {
+    r->status = r->file->Append(slice);
+  }
+}
 }  // namespace leveldb

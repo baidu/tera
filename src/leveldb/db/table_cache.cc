@@ -34,6 +34,12 @@ static void UnrefEntry(void* arg1, void* arg2) {
   cache->Release(h);
 }
 
+static std::string GetTableFileSign(const std::string& dbname,
+                                    const uint64_t* file_number) {
+    return dbname + std::string(reinterpret_cast<const char*>(file_number),
+                                sizeof(*file_number));
+}
+
 TableCache::TableCache(size_t byte_size)
     : cache_(NewLRUCache(byte_size)) {
 }
@@ -46,14 +52,14 @@ Status TableCache::FindTable(const std::string& dbname, const Options* options,
                              uint64_t file_number, uint64_t file_size,
                              Cache::Handle** handle) {
   Status s;
-  std::string fname = TableFileName(dbname, file_number);
-  Slice key(fname);
+  std::string sign = GetTableFileSign(dbname, &file_number);
+  Slice key(sign);
   MutexLock lock(&mu_);
   *handle = cache_->Lookup(key);
   if (*handle == NULL) {
     //printf("file not in cache %s, try open it\n", fname.c_str());
     Waiter* w = NULL;
-    WaitFileList::iterator it = wait_files_.find(fname);
+    WaitFileList::iterator it = wait_files_.find(sign);
     if (it != wait_files_.end()){
       //printf("file in open_list %s, wait\n", fname.c_str());
       w = it->second;
@@ -70,7 +76,7 @@ Status TableCache::FindTable(const std::string& dbname, const Options* options,
 
       if (--w->wait_num == 0) {
         // last thread wait for open
-        wait_files_.erase(fname);
+        wait_files_.erase(sign);
         //printf("wait done %s, delete cv\n", fname.c_str());
         delete w;
       } else {
@@ -80,20 +86,21 @@ Status TableCache::FindTable(const std::string& dbname, const Options* options,
       //printf("file not in open_list %s, Do open\n", fname.c_str());
       w = new Waiter(&mu_);
       w->wait_num = 1;
-      wait_files_[fname] = w;
+      wait_files_[sign] = w;
 
       // Unlock when open file
       mu_.Unlock();
       RandomAccessFile* file = NULL;
       Table* table = NULL;
-      s = options->env->NewRandomAccessFile(fname, file_size, &file);
+      std::string fname = TableFileName(dbname, file_number);
+      s = options->env->NewRandomAccessFile(fname, file_size, &file, EnvOptions(*options));
       if (s.ok()) {
         s = Table::Open(*options, file, file_size, &table);
       }
 
       if (!s.ok()) {
         assert(table == NULL);
-        fprintf(stderr, "open sstable file failed: [%s]\n", fname.c_str());
+        fprintf(stderr, "open sstable file failed: [%s] %s\n", fname.c_str(), s.ToString().c_str());
         delete file;
         // We do not cache error results so that if the error is transient,
         // or somebody repairs the file, we recover automatically.
@@ -105,7 +112,7 @@ Status TableCache::FindTable(const std::string& dbname, const Options* options,
       }
       mu_.Lock();
       if (--w->wait_num == 0) {
-        wait_files_.erase(fname);
+        wait_files_.erase(sign);
         //printf("open done %s, no wait thread\n", fname.c_str());
         delete w;
       } else {
@@ -173,8 +180,7 @@ Status TableCache::Get(const ReadOptions& options,
 }
 
 void TableCache::Evict(const std::string& dbname, uint64_t file_number) {
-  std::string fname = TableFileName(dbname, file_number);
-  cache_->Erase(Slice(fname));
+  cache_->Erase(Slice(GetTableFileSign(dbname, &file_number)));
 }
 
 }  // namespace leveldb

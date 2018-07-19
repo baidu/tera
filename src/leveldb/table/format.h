@@ -93,6 +93,28 @@ struct BlockContents {
   bool heap_allocated;  // True iff caller should delete[] data.data()
 };
 
+struct DirectIOArgs {
+    uint64_t aligned_offset; // aligned offset 
+    size_t aligned_len;      // aligned len
+};
+
+// calc new aliged offset and len for Direct I/O
+extern char* DirectIOAlign(RandomAccessFile* file, 
+                           uint64_t offset, 
+                           size_t len,
+                           DirectIOArgs* direct_io_args);
+
+// If use_direct_io_read call free() to free memalign()
+// Else call delete[] to free new[] 
+extern void FreeBuf(char* buf, bool use_direct_io_read);
+
+extern Status ReadSstFile(RandomAccessFile* file,
+                          bool use_direct_io_read,
+                          uint64_t offset,
+                          size_t len,
+                          Slice* contents,
+                          char** buf);
+
 // Read the block identified by "handle" from "file".  On failure
 // return non-OK.  On success fill *result and return OK.
 extern Status ReadBlock(RandomAccessFile* file,
@@ -100,8 +122,13 @@ extern Status ReadBlock(RandomAccessFile* file,
                         const BlockHandle& handle,
                         BlockContents* result);
 
-// Implementation details follow.  Clients should ignore,
+Status ParseBlock(size_t n,
+                  size_t offset,
+                  const ReadOptions& options,
+                  Slice contents,
+                  BlockContents* result);
 
+// Implementation details follow.  Clients should ignore,
 inline BlockHandle::BlockHandle()
     : offset_(~static_cast<uint64_t>(0)),
       size_(~static_cast<uint64_t>(0)) {

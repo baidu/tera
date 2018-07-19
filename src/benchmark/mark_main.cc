@@ -6,6 +6,7 @@
 
 #include <iomanip>
 #include <iostream>
+#include <sstream>
 #include <pthread.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -61,6 +62,8 @@ bool parse_row(const char* buffer, ssize_t size,
             *op = GET;
         } else if (strncmp(buffer, "PUT", 3) == 0) {
             *op = PUT;
+        } else if (strncmp(buffer, "PIF", 3) == 0) {
+            *op = PIF;
         } else {
             return false;
         }
@@ -76,13 +79,14 @@ bool parse_row(const char* buffer, ssize_t size,
         delim = end;
     }
     row->assign(buffer, delim - buffer);
-    if ((delim == end && mode != WRITE && (mode != MIX || *op != PUT)) ||
-        (delim == end && mode == DELETE)) {
+    if ((delim == end && mode != WRITE && 
+        (mode != MIX || (*op != PUT && *op != PIF)))
+        ||(delim == end && mode == DELETE)) {
         return true;
     }
 
     // parse value
-    if (mode == WRITE || (mode == MIX && *op == PUT)) {
+    if (mode == WRITE || (mode == MIX && (*op == PUT || *op == PIF))) {
         if (delim == end) {
             return false;
         }
@@ -170,7 +174,7 @@ bool parse_row(const char* buffer, ssize_t size,
     }
     if (comma == end) {
         return true;
-    } else if (mode == WRITE || (mode == MIX && *op == PUT)) {
+    } else if (mode == WRITE || (mode == MIX && (*op == PUT || *op == PIF))) {
         return false;
     }
 
@@ -217,10 +221,11 @@ bool get_next_row(int* op, std::string* row,
 void print_header() {
     std::cout << "HH:MM:SS OPT\t";
     if (mode != SCAN && type == ASYNC) {
-        std::cout << "SENT [speed/total]\t\t";
+        std::cout << "SENT [total/speed]\t\t";
     }
-    std::cout << "FINISH [speed/total]\t\t";
-    std::cout << "SUCCESS [speed/total]\t\t";
+    std::cout << "FINISH [total/speed]\t\t";
+    std::cout << "SUCCESS [total/speed]\t\t";
+    std::cout << "CONFLICT [total/speed]\t\t";
     if (mode != SCAN && type == ASYNC) {
         std::cout << "PENDING [count]";
     }
@@ -271,24 +276,28 @@ void print_size_and_count(int64_t size, int64_t count) {
 }
 
 void print_statistic(Statistic* statistic) {
-    int64_t old_total_count, old_finish_count, old_success_count;
-    int64_t old_total_size, old_finish_size, old_success_size;
+    int64_t old_total_count, old_finish_count, old_success_count, old_conflict_count;
+    int64_t old_total_size, old_finish_size, old_success_size, old_conflict_size;
     statistic->GetLastStatistic(&old_total_count, &old_total_size,
                                 &old_finish_count, &old_finish_size,
-                                &old_success_count, &old_success_size);
+                                &old_success_count, &old_success_size,
+                                &old_conflict_count, &old_conflict_size);
 
-    int64_t new_total_count, new_finish_count, new_success_count;
-    int64_t new_total_size, new_finish_size, new_success_size;
+    int64_t new_total_count, new_finish_count, new_success_count, new_conflict_count;
+    int64_t new_total_size, new_finish_size, new_success_size, new_conflict_size;
     statistic->GetStatistic(&new_total_count, &new_total_size,
                             &new_finish_count, &new_finish_size,
-                            &new_success_count, &new_success_size);
+                            &new_success_count, &new_success_size,
+                            &new_conflict_count, &new_conflict_size);
 
     int64_t total_count = new_total_count - old_total_count;
     int64_t finish_count = new_finish_count - old_finish_count;
     int64_t success_count = new_success_count - old_success_count;
+    int64_t conflict_count = new_conflict_count - old_conflict_count;
     int64_t total_size = new_total_size - old_total_size;
     int64_t finish_size = new_finish_size - old_finish_size;
     int64_t success_size = new_success_size - old_success_size;
+    int64_t conflict_size = new_conflict_size - old_conflict_size;
 
     int64_t total_pending_count = new_total_count - new_finish_count;
     // scan
@@ -317,6 +326,11 @@ void print_statistic(Statistic* statistic) {
     std::cout << "/";
     print_size_and_count(success_size, success_count);
     std::cout << "\t\t";
+    
+    print_size_and_count(new_conflict_size, new_conflict_count);
+    std::cout << "/";
+    print_size_and_count(conflict_size, conflict_count);
+    std::cout << "\t\t";
 
     if (mode != SCAN && type == ASYNC) {
         std::cout << total_pending_count;
@@ -341,6 +355,11 @@ void print_marker(Statistic* statistic) {
     std::cout << " [SUCCESS]" << std::endl;
     Marker* success_marker = statistic->GetSuccessMarker();
     print_marker(success_marker);
+    if (statistic->GetOpt() == PUT) {
+        std::cout << " [CONFLICT]" << std::endl;
+        Marker* conflict_marker = statistic->GetConflictMarker();
+        print_marker(conflict_marker);
+    }
 }
 
 void* print_proc(void* param) {
@@ -416,11 +435,12 @@ void* print_proc(void* param) {
 }
 
 void print_summary(Statistic* marker, double duration) {
-    int64_t total_count, finish_count, success_count;
-    int64_t total_size, finish_size, success_size;
+    int64_t total_count, finish_count, success_count, conflict_count;
+    int64_t total_size, finish_size, success_size, conflict_size;
     marker->GetStatistic(&total_count, &total_size,
                          &finish_count, &finish_size,
-                         &success_count, &success_size);
+                         &success_count, &success_size,
+                         &conflict_count, &conflict_size);
 
     print_opt(marker);
     std::streamsize precision = std::cout.precision();
@@ -432,7 +452,10 @@ void print_summary(Statistic* marker, double duration) {
                          << (double)finish_size / 1048576 / duration << " MB/s\n"
         << "     succ: " << success_size << " bytes "
                          << success_count << " records "
-                         << (double)success_size / 1048576 / duration << " MB/s"
+                         << (double)success_size / 1048576 / duration << " MB/s\n"
+        << " conflict: " << conflict_size << " bytes "
+                         << conflict_count << " records "
+                         << (double)conflict_size / 1048576 / duration << " MB/s"
         << std::endl;
     std::cout.precision(precision);
     std::cout.flags(flag);
@@ -616,10 +639,11 @@ int main(int argc, char** argv) {
 
         switch (opt) {
         case PUT:
+        case PIF:
             if (type == SYNC && mode == MIX && last_opt == GET) {
                 adapter->CommitSyncRead();
             }
-            adapter->Write(row, column, largest_ts, value);
+            adapter->Write(opt, row, column, largest_ts, value);
             break;
         case GET:
             if (type == SYNC && mode == MIX && last_opt == PUT) {

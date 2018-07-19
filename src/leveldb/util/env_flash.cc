@@ -21,7 +21,7 @@
 #include "util/hash.h"
 #include "util/mutexlock.h"
 #include "helpers/memenv/memenv.h"
-#include "../utils/counter.h"
+#include "../common/counter.h"
 
 #include "leveldb/env_flash.h"
 
@@ -38,6 +38,9 @@ const int64_t kUpdateFlashRetryIntervalMillis = 60 * 1000;
 
 // Log error message
 static Status IOError(const std::string& context, int err_number) {
+    if (err_number == EACCES) {
+        return Status::IOPermissionDenied(context, strerror(err_number));
+    }
     return Status::IOError(context, strerror(err_number));
 }
 
@@ -68,18 +71,20 @@ Status CopyToLocal(const std::string& local_fname, Env* env,
         if (!s.ok()) {
             Log("[env_flash] create dir: %s failed: %s, exit",
                 local_fname.substr(0, dir_pos).c_str(), s.ToString().c_str());
-            exit(-1);
+            _exit(-1);
         }
     }
 
 //    Log("[env_flash] open local %s\n", local_fname.c_str());
     WritableFile* local_file = NULL;
-    s = Env::Default()->NewWritableFile(local_fname, &local_file);
+    EnvOptions env_opt;
+    env_opt.use_direct_io_write = true;
+    s = Env::Default()->NewWritableFile(local_fname, &local_file, env_opt);
     if (!s.ok()) {
         if (!vanish_allowed) {
             Log("[env_flash] create file: %s failed: %s, exit",
                 local_fname.c_str(), s.ToString().c_str());
-            exit(-1);
+            _exit(-1);
         }
         delete dfs_file;
         return s;
@@ -90,6 +95,8 @@ Status CopyToLocal(const std::string& local_fname, Env* env,
     local_size = 0;
     while (dfs_file->Read(1048576, &result, buf).ok() && result.size() > 0
         && local_file->Append(result).ok()) {
+        ssd_write_counter.Inc();
+        ssd_write_size_counter.Add(result.size());
         local_size += result.size();
     }
     delete [] buf;
@@ -175,13 +182,20 @@ private:
     mutable uint64_t flash_file_last_check_micros_;
     mutable uint64_t flash_file_check_interval_micros_;
     mutable uint64_t read_dfs_count_;
+    EnvOptions env_opt_;
+    size_t logical_sector_size_;
 public:
-    FlashRandomAccessFile(FlashEnv* flash_env, const std::string& fname, uint64_t fsize)
+    FlashRandomAccessFile(FlashEnv* flash_env, 
+                          const std::string& fname,
+                          uint64_t fsize,
+                          const EnvOptions& options)
         : flash_env_(flash_env), dfs_file_(NULL), flash_file_(NULL), fname_(fname),
           local_fname_(flash_env->FlashPath(fname) + fname), fsize_(fsize),
           flash_file_is_checking_(false), flash_file_last_check_micros_(0),
           flash_file_check_interval_micros_(kFlashFileCheckIntervalMicros),
-          read_dfs_count_(0) {
+          read_dfs_count_(0),
+          env_opt_(options),
+          logical_sector_size_(kDefaultPageSize) {
 
         // copy file to cache if force read from cache
         if (flash_env_->ForceReadFromCache()) {
@@ -195,8 +209,10 @@ public:
 
         // if cache file is identical with dfs file, use cache file
         if (flash_env_->FlashFileIdentical(fname, fsize)) {
-            Status s = flash_env_->CacheEnv()->NewRandomAccessFile(local_fname_, &flash_file_);
+
+            Status s = flash_env_->CacheEnv()->NewRandomAccessFile(local_fname_, &flash_file_, env_opt_);
             if (s.ok()) {
+                logical_sector_size_ = flash_file_->GetRequiredBufferAlignment();
                 return;
             }
             Log("[env_flash] local file check pass, but open for RandomAccess fail [%s]: %s\n",
@@ -207,7 +223,7 @@ public:
 
         // else, use dfs file
         flash_env_->ScheduleUpdateFlash(fname, fsize, 1);
-        flash_env_->BaseEnv()->NewRandomAccessFile(fname, &dfs_file_);
+        flash_env_->BaseEnv()->NewRandomAccessFile(fname, &dfs_file_, env_opt_);
         flash_file_last_check_micros_ = Env::Default()->NowMicros();
     }
     ~FlashRandomAccessFile() {
@@ -229,7 +245,7 @@ public:
                 mutex_.Unlock();
                 RandomAccessFile* tmp_file = NULL;
                 if (flash_env_->FlashFileIdentical(fname_, fsize_)) {
-                    flash_env_->CacheEnv()->NewRandomAccessFile(local_fname_, &tmp_file);
+                    flash_env_->CacheEnv()->NewRandomAccessFile(local_fname_, &tmp_file, env_opt_);
                 }
                 mutex_.Lock();
                 if (tmp_file != NULL) {
@@ -259,6 +275,12 @@ public:
         }
         return dfs_file_->Read(offset, n, result, scratch);
     }
+
+
+    size_t GetRequiredBufferAlignment() const { 
+      return logical_sector_size_;
+    }
+    
     bool isValid() {
         return (dfs_file_ || flash_file_);
     }
@@ -270,10 +292,11 @@ private:
     WritableFile* dfs_file_;
     WritableFile* flash_file_;
     std::string local_fname_;
+    EnvOptions env_opt_;
 public:
-    FlashWritableFile(FlashEnv* flash_env, const std::string& fname)
-        :dfs_file_(NULL), flash_file_(NULL) {
-        Status s = flash_env->BaseEnv()->NewWritableFile(fname, &dfs_file_);
+    FlashWritableFile(FlashEnv* flash_env, const std::string& fname, const EnvOptions& options)
+        :dfs_file_(NULL), flash_file_(NULL), env_opt_(options) {
+        Status s = flash_env->BaseEnv()->NewWritableFile(fname, &dfs_file_, env_opt_);
         if (!s.ok()) {
             return;
         }
@@ -287,7 +310,7 @@ public:
                 flash_env->CacheEnv()->CreateDir(local_fname_.substr(0,i));
             }
         }
-        s = flash_env->CacheEnv()->NewWritableFile(local_fname_, &flash_file_);
+        s = flash_env->CacheEnv()->NewWritableFile(local_fname_, &flash_file_, env_opt_);
         if (!s.ok()) {
             Log("[env_flash] Open local flash file for write fail: %s\n",
                 local_fname_.c_str());
@@ -392,10 +415,12 @@ Status FlashEnv::NewSequentialFile(const std::string& fname, SequentialFile** re
 
 // random read file
 Status FlashEnv::NewRandomAccessFile(const std::string& fname,
-        uint64_t fsize, RandomAccessFile** result)
+                                     uint64_t fsize,
+                                     RandomAccessFile** result,
+                                     const EnvOptions& options)
 {
     FlashRandomAccessFile* f =
-        new FlashRandomAccessFile(this, fname, fsize);
+        new FlashRandomAccessFile(this, fname, fsize, options);
     if (f == NULL || !f->isValid()) {
         *result = NULL;
         delete f;
@@ -406,17 +431,19 @@ Status FlashEnv::NewRandomAccessFile(const std::string& fname,
 }
 
 Status FlashEnv::NewRandomAccessFile(const std::string& fname,
-                                     RandomAccessFile** result) {
+                                     RandomAccessFile** result,
+                                     const EnvOptions& options) {
     // not implement
     abort();
 }
 
 // writable
 Status FlashEnv::NewWritableFile(const std::string& fname,
-        WritableFile** result)
+                                 WritableFile** result, 
+                                 const EnvOptions& options)
 {
     Status s;
-    FlashWritableFile* f = new FlashWritableFile(this, fname);
+    FlashWritableFile* f = new FlashWritableFile(this, fname, options);
     if (f == NULL || !f->isValid()) {
         *result = NULL;
         delete f;
@@ -501,7 +528,7 @@ void FlashEnv::SetFlashPath(const std::string& path, bool vanish_allowed) {
                 && !Env::Default()->CreateDir(flash_paths_.back()).ok()) {
                 Log("[env_flash] cannot access cache dir: %s\n",
                     flash_paths_.back().c_str());
-                exit(-1);
+                _exit(-1);
             }
         }
     }

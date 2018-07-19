@@ -5,7 +5,6 @@
 // Copyright (c) 2011 The LevelDB Authors. All rights reserved.
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file. See the AUTHORS file for names of contributors.
-
 #include <map>
 #include <queue>
 #include <set>
@@ -18,16 +17,12 @@
 #include <string.h>
 #include <sys/mman.h>
 #include <sys/stat.h>
-#ifdef OS_LINUX
+#include <malloc.h>
 #include <sys/syscall.h>
-#endif
 #include <sys/time.h>
 #include <sys/types.h>
 #include <time.h>
 #include <unistd.h>
-#if defined(LEVELDB_PLATFORM_ANDROID)
-#include <sys/stat.h>
-#endif
 #include "leveldb/env.h"
 #include "leveldb/slice.h"
 #include "port/port.h"
@@ -36,7 +31,8 @@
 #include "util/posix_logger.h"
 #include "util/string_ext.h"
 #include "util/thread_pool.h"
-#include "../utils/counter.h"
+#include "../common/counter.h"
+#include "util/env_posix.h"
 
 namespace leveldb {
 
@@ -56,9 +52,75 @@ tera::Counter posix_seek_counter;
 tera::Counter posix_info_counter;
 tera::Counter posix_other_counter;
 
+// Reference from rocksdb
+namespace {
+size_t GetLogicalBufferSize(int fd) {
+  struct stat buf;
+  int result = fstat(fd, &buf);
+  if (result == -1) {
+    return kDefaultPageSize;
+  }
+  if (major(buf.st_dev) == 0) {
+    // Unnamed devices (e.g. non-device mounts), reserved as null device number.
+    // These don't have an entry in /sys/dev/block/. Return a sensible default.
+    return kDefaultPageSize;
+  }
+
+  // Reading queue/logical_block_size does not require special permissions.
+  const int kBufferSize = 100;
+  char path[kBufferSize];
+  char real_path[PATH_MAX + 1];
+  snprintf(path, kBufferSize, "/sys/dev/block/%u:%u", major(buf.st_dev),
+           minor(buf.st_dev));
+  if (realpath(path, real_path) == nullptr) {
+    return kDefaultPageSize;
+  }
+  std::string device_dir(real_path);
+  if (!device_dir.empty() && device_dir.back() == '/') {
+    device_dir.pop_back();
+  }
+  // NOTE: sda3 does not have a `queue/` subdir, only the parent sda has it.
+  // $ ls -al '/sys/dev/block/8:3'
+  // lrwxrwxrwx. 1 root root 0 Jun 26 01:38 /sys/dev/block/8:3 ->
+  // ../../block/sda/sda3
+  size_t parent_end = device_dir.rfind('/', device_dir.length() - 1);
+  if (parent_end == std::string::npos) {
+    return kDefaultPageSize;
+  }
+  size_t parent_begin = device_dir.rfind('/', parent_end - 1);
+  if (parent_begin == std::string::npos) {
+    return kDefaultPageSize;
+  }
+  if (device_dir.substr(parent_begin + 1, parent_end - parent_begin - 1) !=
+      "block") {
+    device_dir = device_dir.substr(0, parent_end);
+  }
+  std::string fname = device_dir + "/queue/logical_block_size";
+  FILE* fp;
+  size_t size = 0;
+  fp = fopen(fname.c_str(), "r");
+  if (fp != nullptr) {
+    char* line = nullptr;
+    size_t len = 0;
+    if (getline(&line, &len, fp) != -1) {
+      sscanf(line, "%zu", &size);
+    }
+    free(line);
+    fclose(fp);
+  }
+  if (size != 0 && (size & (size - 1)) == 0) {
+    return size;
+  }
+  return kDefaultPageSize;
+}
+} //  namespace
+
 namespace {
 
 static Status IOError(const std::string& context, int err_number) {
+  if (err_number == EACCES) {
+    return Status::IOPermissionDenied(context, strerror(err_number));
+  }
   return Status::IOError(context, strerror(err_number));
 }
 
@@ -104,10 +166,16 @@ class PosixRandomAccessFile: public RandomAccessFile {
  private:
   std::string filename_;
   int fd_;
+  EnvOptions env_opt_;
+  int logical_sector_size_;
 
  public:
-  PosixRandomAccessFile(const std::string& fname, int fd)
-      : filename_(fname), fd_(fd) { }
+  PosixRandomAccessFile(const std::string& fname, int fd, const EnvOptions& options)
+      : filename_(fname),
+        fd_(fd),
+        env_opt_(options),
+        logical_sector_size_(GetLogicalBufferSize(fd_)) { }
+
   virtual ~PosixRandomAccessFile() { close(fd_); }
 
   virtual Status Read(uint64_t offset, size_t n, Slice* result,
@@ -122,9 +190,16 @@ class PosixRandomAccessFile: public RandomAccessFile {
     } else {
       posix_read_size_counter.Add(r);
     }
-    posix_fadvise(fd_, 0, 0, POSIX_FADV_DONTNEED);
+    if (!env_opt_.use_direct_io_read) {
+        posix_fadvise(fd_, 0, 0, POSIX_FADV_DONTNEED);
+    }
     return s;
   }
+
+  virtual size_t GetRequiredBufferAlignment() const {
+    return logical_sector_size_;
+  }
+
 };
 
 // Helper class to limit mmap file usage so that we do not end up
@@ -132,9 +207,13 @@ class PosixRandomAccessFile: public RandomAccessFile {
 // problems for very large databases.
 class MmapLimiter {
  public:
-  // Up to 1000 mmaps for 64-bit binaries; none for smaller pointer sizes.
   MmapLimiter() {
-    SetAllowed(sizeof(void*) >= 8 ? 1000 : 0);
+    //Disable mmap in tera for reducing memory use.
+    SetAllowed(0);
+
+    // Up to 1000 mmaps for 64-bit binaries; none for smaller pointer sizes.
+    //SetAllowed(sizeof(void*) >= 8 ? 1000 : 0);
+    //If you want to enable mmap, uncomment the line above.
   }
 
   // If another mmap slot is available, acquire it and return true.
@@ -385,91 +464,7 @@ class PosixMmapFile : public WritableFile {
   }
 };
 
-class PosixWritableFile : public WritableFile {
- private:
-  std::string filename_;
-  FILE* file_;
 
- public:
-  PosixWritableFile(const std::string& fname, FILE* f)
-      : filename_(fname), file_(f) { }
-
-  ~PosixWritableFile() {
-    if (file_ != NULL) {
-      // Ignoring any potential errors
-      fclose(file_);
-    }
-  }
-
-  virtual Status Append(const Slice& data) {
-    posix_write_counter.Inc();
-    size_t r = fwrite_unlocked(data.data(), 1, data.size(), file_);
-    if (r != data.size()) {
-      return IOError(filename_, errno);
-    }
-    posix_write_size_counter.Add(r);
-    return Status::OK();
-  }
-
-  virtual Status Close() {
-    posix_close_counter.Inc();
-    Status result;
-    if (fclose(file_) != 0) {
-      result = IOError(filename_, errno);
-    }
-    file_ = NULL;
-    return result;
-  }
-
-  virtual Status Flush() {
-    posix_sync_counter.Inc();
-    if (fflush_unlocked(file_) != 0) {
-      return IOError(filename_, errno);
-    }
-    return Status::OK();
-  }
-
-  Status SyncDirIfManifest() {
-    const char* f = filename_.c_str();
-    const char* sep = strrchr(f, '/');
-    Slice basename;
-    std::string dir;
-    if (sep == NULL) {
-      dir = ".";
-      basename = f;
-    } else {
-      dir = std::string(f, sep - f);
-      basename = sep + 1;
-    }
-    Status s;
-    if (basename.starts_with("MANIFEST")) {
-      int fd = open(dir.c_str(), O_RDONLY);
-      if (fd < 0) {
-        s = IOError(dir, errno);
-      } else {
-        if (fsync(fd) < 0) {
-          s = IOError(dir, errno);
-        }
-        close(fd);
-      }
-    }
-    return s;
-  }
-
-  virtual Status Sync() {
-    posix_sync_counter.Inc();
-    // Ensure new files referred to by the manifest are in the filesystem.
-    Status s = SyncDirIfManifest();
-    if (!s.ok()) {
-      return s;
-    }
-    if (fflush_unlocked(file_) != 0 ||
-        fdatasync(fileno(file_)) != 0) {
-      s = Status::IOError(filename_, strerror(errno));
-    }
-    return s;
-  }
-};
 
 static int LockOrUnlock(int fd, bool lock) {
   errno = 0;
@@ -529,14 +524,19 @@ class PosixEnv : public Env {
   }
 
   virtual Status NewRandomAccessFile(const std::string& fname,
-                                     RandomAccessFile** result) {
+                                     RandomAccessFile** result,
+                                     const EnvOptions& options) {
     posix_open_counter.Inc();
     *result = NULL;
     Status s;
-    int fd = open(fname.c_str(), O_RDONLY);
+    int flags = O_RDONLY;
+    if (options.use_direct_io_read) {
+        flags |= O_DIRECT;
+    }
+    int fd = open(fname.c_str(), flags);
     if (fd < 0) {
       s = IOError(fname, errno);
-    } else if (mmap_limit_.Acquire()) {
+    } else if (!options.use_direct_io_read && mmap_limit_.Acquire()) {
       uint64_t size;
       s = GetFileSize(fname, &size);
       if (s.ok()) {
@@ -552,37 +552,31 @@ class PosixEnv : public Env {
         mmap_limit_.Release();
       }
     } else {
-      *result = new PosixRandomAccessFile(fname, fd);
+      *result = new PosixRandomAccessFile(fname, fd, options);
     }
     return s;
   }
 
   virtual Status NewRandomAccessFile(const std::string& fname, uint64_t fsize,
-                                     RandomAccessFile** result) {
-    return NewRandomAccessFile(fname, result);
+                                     RandomAccessFile** result,
+                                     const EnvOptions& options) {
+    return NewRandomAccessFile(fname, result, options);
   }
 
   virtual Status NewWritableFile(const std::string& fname,
-                                 WritableFile** result) {
+                                 WritableFile** result,
+                                 const EnvOptions& options) {
     posix_open_counter.Inc();
     Status s;
-#if 0
-    const int fd = open(fname.c_str(), O_CREAT | O_RDWR | O_TRUNC, 0644);
+    const int fd = options.use_direct_io_write ?
+                   open(fname.c_str(), O_CREAT | O_WRONLY | O_TRUNC | O_DIRECT, 0644) :
+                   open(fname.c_str(), O_CREAT | O_WRONLY | O_TRUNC, 0644);
     if (fd < 0) {
       *result = NULL;
       s = IOError(fname, errno);
     } else {
-      *result = new PosixMmapFile(fname, fd, page_size_);
+      *result = new PosixWritableFile(fname, fd, options);
     }
-#else
-    FILE* f = fopen(fname.c_str(), "w");
-    if (f == NULL) {
-      *result = NULL;
-      s = IOError(fname, errno);
-    } else {
-      *result = new PosixWritableFile(fname, f);
-    }
-#endif
     return s;
   }
 
@@ -775,7 +769,7 @@ class PosixEnv : public Env {
       *result = env;
     } else {
       char buf[100];
-      snprintf(buf, sizeof(buf), "/tmp/leveldbtest-%d", int(geteuid()));
+      snprintf(buf, sizeof(buf), "/tmp/leveldbtest-%d", int(gettid()));
       *result = buf;
     }
     // Directory may already exist
@@ -907,6 +901,190 @@ Env* Env::Default() {
 
 Env* NewPosixEnv() {
   return new PosixEnv;
+}
+
+PosixWritableFile::PosixWritableFile(const std::string& fname,
+                  int fd,
+                  const EnvOptions& options)
+  : filename_(fname),
+    fd_(fd),
+    pos_(0),
+    is_dio_(options.use_direct_io_write),
+    buffer_size_(options.posix_write_buffer_size),
+    align_size_(GetLogicalBufferSize(fd_)) {
+  //Buffer size should never be set to zero
+  assert(buffer_size_ > 0);
+  if (is_dio_) {
+    //See format.cc:76 DirectIOAlign() about this code.
+    buffer_size_ = buffer_size_ % align_size_ == 0 ? buffer_size_ :
+                   (buffer_size_ + align_size_ - 1) & (~(align_size_ - 1));
+    buf_ = (char*)memalign(align_size_, buffer_size_);
+    //fprintf(stderr, "Dio: %s, Aligned Buffer Size: %lu\n", filename_.c_str(), buffer_size_);
+  } else {
+    buf_ = (char*)malloc(buffer_size_);
+  }
+}
+
+PosixWritableFile::~PosixWritableFile() {
+  if (fd_ >= 0) {
+    // Ignoring any potential errors
+    posix_close_counter.Inc();
+    Close();
+  }
+  free(buf_);
+  buf_ = NULL;
+}
+
+Status PosixWritableFile::Append(const Slice& data) {
+  size_t n = data.size();
+  const char* p = data.data();
+
+  // Fit as much as possible into buffer.
+  size_t copy = std::min(n, buffer_size_ - pos_);
+  memcpy(buf_ + pos_, p, copy);
+  p += copy;
+  n -= copy;
+  pos_ += copy;
+  if (n == 0) {
+    return Status::OK();
+  }
+
+  // Can't fit in buffer, so need to do at least one write.
+  Status s = FlushBuffered();
+  if (!s.ok()) {
+    return s;
+  }
+
+  // In DIO: Small writes go to buffer, large writes are appended again for aligned write.
+  // Not In DIO: Small writes go to buffer, large writes are written directly.
+  if (n < buffer_size_) {
+    memcpy(buf_, p, n);
+    pos_ = n;
+    return Status::OK();
+  }
+
+  if (is_dio_) {
+    return Append(Slice(p, n));
+  } else {
+    return WriteRaw(p, n);
+  }
+}
+
+Status PosixWritableFile::Close() {
+  posix_close_counter.Inc();
+  Status result = FlushBuffered();
+  const int r = close(fd_);
+  if (r < 0 && result.ok()) {
+    result = IOError(filename_, errno);
+  }
+  fd_ = -1;
+  return result;
+}
+
+Status PosixWritableFile::Flush() {
+  return FlushBuffered();
+}
+
+Status PosixWritableFile::SyncDirIfManifest() {
+  const char* f = filename_.c_str();
+  const char* sep = strrchr(f, '/');
+  Slice basename;
+  std::string dir;
+  if (sep == nullptr) {
+    dir = ".";
+    basename = f;
+  } else {
+    dir = std::string(f, sep - f);
+    basename = sep + 1;
+  }
+  Status s;
+  if (basename.starts_with("MANIFEST")) {
+    int fd = open(dir.c_str(), O_RDONLY);
+    if (fd < 0) {
+      s = IOError(dir, errno);
+    } else {
+      if (fsync(fd) < 0) {
+        s = IOError(dir, errno);
+      }
+      close(fd);
+    }
+  }
+  return s;
+}
+
+Status PosixWritableFile::Sync() {
+  posix_sync_counter.Inc();
+  // Ensure new files referred to by the manifest are in the filesystem.
+  Status s = SyncDirIfManifest();
+  if (!s.ok()) {
+    return s;
+  }
+  s = FlushBuffered();
+  if (s.ok()) {
+    if (fdatasync(fd_) != 0) {
+      s = IOError(filename_, errno);
+    }
+  }
+  return s;
+}
+
+Status PosixWritableFile::LeaveDio() {
+  int flags = fcntl(fd_, F_GETFL, 0);
+  if(flags < 0) {
+    return IOError(filename_, errno);
+  }
+  flags &= ~O_DIRECT;
+  if(fcntl(fd_, F_SETFL, flags) < 0) {
+    return IOError(filename_, errno);
+  }
+  is_dio_ = false;
+  return Status::OK();
+}
+
+Status PosixWritableFile::FlushBuffered() {
+  Status s;
+  // Once flushed with not aligned buffer_size_, 
+  // we flush the last aligned buffer, and leave
+  // dio mode, and never enter again.
+  if (is_dio_ && 
+      (pos_ & (align_size_ - 1)) != 0) {
+    // For example, assume buffer_size_ is 524288 (aka 512kB), and align_size is 512 bytes.
+    // When user write 400000 bytes to buffer and call Flush(). We do followed steps:
+    // 1. get the maximum aligned size for a dio write by caculationg 400000 & (~(512 -1)) = 399872.
+    size_t aligned_pos = pos_ & (~(align_size_ - 1));
+    if (aligned_pos != 0) {
+    // 2. Write this 399872 bytes to file in dio mode.
+      s = WriteRaw(buf_, aligned_pos);
+    }
+    // 3. Leave Dio Mode (never enter again).
+    s = LeaveDio();
+    if (!s.ok()) {
+      return s;
+    }
+    // 4. Write the last 400000 - 399872 = 128 bytes to file in page io mode.
+    s = WriteRaw(buf_ + aligned_pos, pos_ - aligned_pos);
+  } else {
+    s = WriteRaw(buf_, pos_);
+  }
+  pos_ = 0;
+  return s;
+}
+
+Status PosixWritableFile::WriteRaw(const char* p, size_t n) {
+  posix_write_counter.Inc();
+  posix_write_size_counter.Add(n);
+  while (n > 0) {
+    ssize_t r = write(fd_, p, n);
+    if (r < 0) {
+      if (errno == EINTR) {
+        continue;  // Retry
+      }
+      return IOError(filename_, errno);
+    }
+    p += r;
+    n -= r;
+  }
+  return Status::OK();
 }
 
 }  // namespace leveldb

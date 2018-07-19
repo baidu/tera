@@ -39,7 +39,7 @@ Status BuildTable(const std::string& dbname,
   std::string fname = TableFileName(dbname, meta->number);
   if (iter->Valid()) {
     WritableFile* file;
-    s = env->NewWritableFile(fname, &file);
+    s = env->NewWritableFile(fname, &file, EnvOptions(options));
     if (!s.ok()) {
       return s;
     }
@@ -110,6 +110,7 @@ Status BuildTable(const std::string& dbname,
       *saved_size = 0;
       if (s.ok() && builder->NumEntries()) {
         meta->file_size = builder->FileSize();
+        meta->data_size = meta->file_size;
         assert(meta->file_size > 0);
         *saved_size = builder->SavedSize();
 
@@ -138,9 +139,6 @@ Status BuildTable(const std::string& dbname,
 
     // Finish and check for file errors
     if (s.ok()) {
-      s = file->Sync();
-    }
-    if (s.ok()) {
       s = file->Close();
     }
     delete file;
@@ -164,7 +162,7 @@ Status BuildTable(const std::string& dbname,
 
   if (s.ok() && meta->file_size > 0) {
     // Keep it
-  } else {
+  } else if (!s.IsIOPermissionDenied()) {
     env->DeleteFile(fname);
   }
   return s;

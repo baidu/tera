@@ -14,38 +14,42 @@
 
 #include "db/filename.h"
 #include "db/table_cache.h"
+#include "common/base/string_ext.h"
+#include "common/metric/cache_collector.h"
+#include "common/metric/prometheus_subscriber.h"
+#include "common/metric/ratio_collector.h"
+#include "common/metric/metric_counter.h"
 #include "common/thread.h"
 #include "io/io_utils.h"
 #include "io/utils_leveldb.h"
+#include "leveldb/env_flash_block_cache.h"
 #include "leveldb/cache.h"
-#include "leveldb/env_cache.h"
 #include "leveldb/env_dfs.h"
 #include "leveldb/env_flash.h"
 #include "leveldb/env_inmem.h"
+#include "leveldb/config.h"
 #include "leveldb/slog.h"
 #include "leveldb/table_utils.h"
 #include "proto/kv_helper.h"
 #include "proto/proto_helper.h"
 #include "proto/tabletnode_client.h"
 #include "tabletnode/tablet_manager.h"
+#include "tabletnode/tabletnode_metric_name.h"
 #include "tabletnode/tabletnode_zk_adapter.h"
 #include "types.h"
 #include "utils/config_utils.h"
-#include "utils/counter.h"
+#include "common/counter.h"
 #include "utils/string_util.h"
-#include "utils/timer.h"
+#include "common/timer.h"
 #include "utils/utils_cmd.h"
 
 DECLARE_string(tera_tabletnode_port);
 DECLARE_int64(tera_heartbeat_period);
 DECLARE_int64(tera_heartbeat_retry_period_factor);
 DECLARE_int32(tera_heartbeat_retry_times);
-
 DECLARE_bool(tera_tabletnode_tcm_cache_release_enabled);
-DECLARE_int32(bobby_sofa_server_max_pending_buffer_size);
 DECLARE_int32(tera_tabletnode_tcm_cache_release_period);
 
-DECLARE_int32(tera_tabletnode_impl_thread_min_num);
 DECLARE_int32(tera_tabletnode_impl_thread_max_num);
 
 DECLARE_bool(tera_zk_enabled);
@@ -68,7 +72,16 @@ DECLARE_string(tera_tabletnode_path_prefix);
 
 // cache-related
 DECLARE_int32(tera_memenv_block_cache_size);
-DECLARE_bool(tera_tabletnode_cache_enabled);
+DECLARE_bool(tera_tabletnode_flash_block_cache_enabled);
+DECLARE_bool(tera_tabletnode_delete_old_flash_cache_enabled);
+DECLARE_bool(flash_block_cache_force_update_conf_enabled);
+DECLARE_int64(flash_block_cache_size);
+DECLARE_int64(flash_block_cache_blockset_size);
+DECLARE_int64(flash_block_cache_block_size);
+DECLARE_int64(flash_block_cache_fid_batch_num);
+DECLARE_int64(meta_block_cache_size);
+DECLARE_int64(meta_table_cache_size);
+DECLARE_int64(flash_block_cache_write_buffer_size);
 DECLARE_string(tera_tabletnode_cache_paths);
 DECLARE_int32(tera_tabletnode_cache_block_size);
 DECLARE_string(tera_tabletnode_cache_name);
@@ -84,35 +97,66 @@ DECLARE_string(tera_leveldb_env_type);
 DECLARE_string(tera_local_addr);
 DECLARE_bool(tera_ins_enabled);
 DECLARE_bool(tera_mock_ins_enabled);
+DECLARE_string(tera_coord_type);
 
 DECLARE_bool(tera_io_cache_path_vanish_allowed);
 DECLARE_int64(tera_tabletnode_tcm_cache_size);
+DECLARE_int64(tera_refresh_tablets_status_interval_ms);
 
 DECLARE_string(flagfile);
 
 using namespace std::placeholders;
 
-extern tera::Counter range_error_counter;
-extern tera::Counter rand_read_delay;
-
 static const int GC_LOG_LEVEL = FLAGS_tera_tabletnode_gc_log_level;
+
+namespace leveldb {
+extern tera::Counter snappy_before_size_counter;
+extern tera::Counter snappy_after_size_counter;
+}
 
 namespace tera {
 namespace tabletnode {
+using tera::SubscriberType;
+
+tera::MetricCounter read_error_counter(kErrorCountMetric, kApiLabelRead,
+                                       {SubscriberType::QPS, SubscriberType::SUM});
+tera::MetricCounter write_error_counter(kErrorCountMetric, kApiLabelWrite,
+                                        {SubscriberType::QPS, SubscriberType::SUM});
+tera::MetricCounter scan_error_counter(kErrorCountMetric, kApiLabelScan,
+                                        {SubscriberType::QPS, SubscriberType::SUM});
+
+tera::MetricCounter read_range_error_counter(kRangeErrorMetric, kApiLabelRead, {SubscriberType::QPS});
+tera::MetricCounter write_range_error_counter(kRangeErrorMetric, kApiLabelWrite, {SubscriberType::QPS});
+tera::MetricCounter scan_range_error_counter(kRangeErrorMetric, kApiLabelScan, {SubscriberType::QPS});
+
+TabletNodeImpl::CacheMetrics::CacheMetrics(leveldb::Cache* block_cache, leveldb::TableCache* table_cache)
+    : block_cache_hitrate_(kBlockCacheHitRateMetric,
+        std::unique_ptr<Collector>(new LRUCacheCollector(block_cache, CacheCollectType::kHitRate))),
+      block_cache_entries_(kBlockCacheEntriesMetric,
+        std::unique_ptr<Collector>(new LRUCacheCollector(block_cache, CacheCollectType::kEntries))),
+      block_cache_charge_(kBlockCacheChargeMetric,
+        std::unique_ptr<Collector>(new LRUCacheCollector(block_cache, CacheCollectType::kCharge))),
+      table_cache_hitrate_(kTableCacheHitRateMetric,
+        std::unique_ptr<Collector>(new TableCacheCollector(table_cache, CacheCollectType::kHitRate))),
+      table_cache_entries_(kTableCacheEntriesMetric,
+        std::unique_ptr<Collector>(new TableCacheCollector(table_cache, CacheCollectType::kEntries))),
+      table_cache_charge_(kTableCacheChargeMetric,
+        std::unique_ptr<Collector>(new TableCacheCollector(table_cache, CacheCollectType::kCharge))) {}
 
 TabletNodeImpl::TabletNodeImpl()
     : status_(kNotInited),
+      running_(true),
       tablet_manager_(new TabletManager()),
       zk_adapter_(NULL),
       release_cache_timer_id_(kInvalidTimerId),
-      thread_pool_(new ThreadPool(FLAGS_tera_tabletnode_impl_thread_max_num)) {
+      thread_pool_(new ThreadPool(FLAGS_tera_tabletnode_impl_thread_max_num)),
+      cache_metrics_(NULL) {
     if (FLAGS_tera_local_addr == "") {
         local_addr_ = utils::GetLocalHostName()+ ":" + FLAGS_tera_tabletnode_port;
     } else {
         local_addr_ = FLAGS_tera_local_addr + ":" + FLAGS_tera_tabletnode_port;
     }
     sysinfo_.SetServerAddr(local_addr_);
-    TabletNodeClient::SetThreadPool(thread_pool_.get());
 
     leveldb::Env::Default()->SetBackgroundThreads(FLAGS_tera_tabletnode_compact_thread_num);
     leveldb::Env::Default()->RenameFile(FLAGS_tera_leveldb_log_path,
@@ -148,66 +192,107 @@ TabletNodeImpl::TabletNodeImpl()
     CHECK(MallocExtension::instance()->GetNumericProperty(tcm_property, &tcm_t));
     LOG(INFO) << tcm_property << "=" << tcm_t;
     sysinfo_.SetProcessStartTime(get_micros());
-}
-
-TabletNodeImpl::~TabletNodeImpl() {
-    if (FLAGS_tera_tabletnode_cache_enabled) {
-        leveldb::ThreeLevelCacheEnv::RemoveCachePaths();
+    for (int level = 0; level != leveldb::config::kNumLevels; ++level) {
+      level_size_.push_back(tera::MetricCounter{kLevelSize, "level:" + std::to_string(level),
+                                               {tera::SubscriberType::LATEST}, false});
+      level_size_.back().Set(0);  
     }
 }
 
+TabletNodeImpl::~TabletNodeImpl() {}
+
 bool TabletNodeImpl::Init() {
-    if (FLAGS_tera_zk_enabled) {
+    if (FLAGS_tera_coord_type.empty()) {
+        LOG(ERROR) << "Note: We don't recommend that use '"
+                   << "--tera_[zk|ins|mock_zk|mock_ins]_enabled' flag for your cluster coord"
+                   << " replace by '--tera_coord_type=[zk|ins|mock_zk|mock_ins|fake_zk]'"
+                   << " flag is usually recommended.";
+    }
+    if (FLAGS_tera_coord_type == "zk" ||
+            (FLAGS_tera_coord_type.empty() && FLAGS_tera_zk_enabled)) {
         zk_adapter_.reset(new TabletNodeZkAdapter(this, local_addr_));
-    } else if(FLAGS_tera_ins_enabled) {
+    } else if (FLAGS_tera_coord_type == "ins" ||
+            (FLAGS_tera_coord_type.empty() && FLAGS_tera_ins_enabled)) {
         LOG(INFO) << "ins mode!";
         zk_adapter_.reset(new InsTabletNodeZkAdapter(this, local_addr_));
-    } else if (FLAGS_tera_mock_zk_enabled) {
+    } else if (FLAGS_tera_coord_type == "mock_zk" ||
+            (FLAGS_tera_coord_type.empty() && FLAGS_tera_mock_zk_enabled)) {
         LOG(INFO) << "mock zk mode!";
         zk_adapter_.reset(new MockTabletNodeZkAdapter(this, local_addr_));
-    } else if (FLAGS_tera_mock_ins_enabled) {
+    } else if (FLAGS_tera_coord_type == "mock_ins" ||
+            (FLAGS_tera_coord_type.empty() && FLAGS_tera_mock_ins_enabled)) {
         LOG(INFO) << "mock ins mode!";
         zk_adapter_.reset(new MockInsTabletNodeZkAdapter(this, local_addr_));
-    } else {
+    } else if (FLAGS_tera_coord_type == "fake_zk" ||
+            FLAGS_tera_coord_type.empty()) {
         LOG(INFO) << "fake zk mode!";
         zk_adapter_.reset(new FakeTabletNodeZkAdapter(this, local_addr_));
     }
 
     SetTabletNodeStatus(kIsIniting);
     thread_pool_->AddTask(std::bind(&TabletNodeZkAdapterBase::Init, zk_adapter_.get()));
+
+    // register cache metrics
+    cache_metrics_.reset(new CacheMetrics(ldb_block_cache_, ldb_table_cache_));
+    // register snappy metrics
+    snappy_ratio_metric_.reset(new AutoCollectorRegister(kSnappyCompressionRatioMetric, std::unique_ptr<Collector>(
+        new RatioCollector(&leveldb::snappy_before_size_counter, &leveldb::snappy_after_size_counter, true))));
+
+    // update tablets status at background
+    tablet_healthcheck_thread_.Start(std::bind(&TabletNodeImpl::RefreshTabletsStatus, this));
     return true;
 }
 
 void TabletNodeImpl::InitCacheSystem() {
-    if (!FLAGS_tera_tabletnode_cache_enabled) {
-        // compitable with legacy FlashEnv
-        leveldb::FlashEnv* flash_env = (leveldb::FlashEnv*)io::LeveldbFlashEnv();
-        flash_env->SetFlashPath(FLAGS_tera_tabletnode_cache_paths,
-                                FLAGS_tera_io_cache_path_vanish_allowed);
-        flash_env->SetUpdateFlashThreadNumber(FLAGS_tera_tabletnode_cache_update_thread_num);
-        flash_env->SetIfForceReadFromCache(FLAGS_tera_tabletnode_cache_force_read_from_cache);
+    if (FLAGS_tera_tabletnode_flash_block_cache_enabled) {
+        LOG(INFO) << "flash block cache path: " << FLAGS_tera_tabletnode_cache_paths;
+        std::vector<std::string> path_list;
+        SplitString(FLAGS_tera_tabletnode_cache_paths, ";", &path_list);
+
+        leveldb::Env* posix_env = leveldb::Env::Default();
+        for (uint32_t i = 0; i < path_list.size(); ++i) {
+            posix_env->CreateDir(path_list[i]);
+        }
+
+        if (FLAGS_tera_tabletnode_delete_old_flash_cache_enabled) {
+            tera::io::DeleteOldFlashCache(path_list);
+        }
+
+        LOG(INFO) << "activate flash block cache system";
+        leveldb::Env* block_cache_env = io::DefaultFlashBlockCacheEnv();
+        for (uint32_t i = 0; i < path_list.size(); ++i) {
+            leveldb::FlashBlockCacheOptions opts;
+
+            //opts.force_update_conf_enabled = FLAGS_flash_block_cache_force_update_conf_enabled;
+            opts.force_update_conf_enabled = false;
+            opts.cache_size = FLAGS_flash_block_cache_size;
+            opts.blockset_size = FLAGS_flash_block_cache_blockset_size;
+            opts.block_size = FLAGS_flash_block_cache_block_size;
+
+            opts.fid_batch_num = FLAGS_flash_block_cache_fid_batch_num;
+            opts.meta_block_cache_size = FLAGS_meta_block_cache_size;
+            opts.meta_table_cache_size = FLAGS_meta_table_cache_size;
+            opts.write_buffer_size = FLAGS_flash_block_cache_write_buffer_size;
+            LOG(INFO) << "load cache: " << path_list[i];
+            reinterpret_cast<leveldb::FlashBlockCacheEnv*>(block_cache_env)->LoadCache(opts, path_list[i] + "/flash_block_cache");
+        }
         return;
     }
-
-    LOG(INFO) << "activate new cache system";
-    // new cache mechanism
-    leveldb::ThreeLevelCacheEnv::SetCachePaths(FLAGS_tera_tabletnode_cache_paths);
-    leveldb::ThreeLevelCacheEnv::s_mem_cache_size_in_KB_ = FLAGS_tera_tabletnode_cache_mem_size;
-    leveldb::ThreeLevelCacheEnv::s_disk_cache_size_in_MB_ = FLAGS_tera_tabletnode_cache_disk_size;
-    leveldb::ThreeLevelCacheEnv::s_block_size_ = FLAGS_tera_tabletnode_cache_block_size;
-    leveldb::ThreeLevelCacheEnv::s_disk_cache_file_num_ = FLAGS_tera_tabletnode_cache_disk_filenum;
-    leveldb::ThreeLevelCacheEnv::s_disk_cache_file_name_ = FLAGS_tera_tabletnode_cache_name;
-
-    if (FLAGS_tera_tabletnode_cache_log_level < 3) {
-        LEVELDB_SET_LOG_LEVEL(WARNING);
-    } else if (FLAGS_tera_tabletnode_cache_log_level < 4) {
-        LEVELDB_SET_LOG_LEVEL(INFO);
-    } else {
-        LEVELDB_SET_LOG_LEVEL(DEBUG);
-    }
+    // compitable with legacy FlashEnv
+    leveldb::FlashEnv* flash_env = (leveldb::FlashEnv*)io::LeveldbFlashEnv();
+    flash_env->SetFlashPath(FLAGS_tera_tabletnode_cache_paths,
+                            FLAGS_tera_io_cache_path_vanish_allowed);
+    flash_env->SetUpdateFlashThreadNumber(FLAGS_tera_tabletnode_cache_update_thread_num);
+    flash_env->SetIfForceReadFromCache(FLAGS_tera_tabletnode_cache_force_read_from_cache);
+    return;
 }
 
 bool TabletNodeImpl::Exit() {
+    running_ = false;
+    exit_event_.Set();
+
+    cache_metrics_.reset(NULL);
+
     std::vector<io::TabletIO*> tablet_ios;
     tablet_manager_->GetAllTablets(&tablet_ios);
 
@@ -235,9 +320,24 @@ bool TabletNodeImpl::Exit() {
     for (uint32_t i = 0; i < tablet_ios.size(); ++i) {
         unload_threads[i].Join();
     }
+    tablet_healthcheck_thread_.Join();
 
     zk_adapter_->Exit();
     return true;
+}
+
+void TabletNodeImpl::RefreshTabletsStatus() {
+    while (running_) {
+        int64_t ts = get_millis();
+        LOG(INFO) << "begin refresh tablets status...";
+        sysinfo_.RefreshTabletsStatus(tablet_manager_.get());
+
+        LOG(INFO) << "finish refresh tablets status. cost: "
+                  << get_millis() - ts << " ms, next round after "
+                  << FLAGS_tera_refresh_tablets_status_interval_ms << " ms";
+        exit_event_.TimeWait(FLAGS_tera_refresh_tablets_status_interval_ms);
+    }
+    LOG(INFO) << "exit refresh tablets status";
 }
 
 void TabletNodeImpl::UnloadTabletProc(io::TabletIO* tablet_io, Counter* worker_count) {
@@ -277,60 +377,59 @@ void TabletNodeImpl::LoadTablet(const LoadTabletRequest* request,
     const std::string& key_start = request->key_range().key_start();
     const std::string& key_end = request->key_range().key_end();
     const TableSchema& schema = request->schema();
-    // to recover snapshots
-    assert(request->snapshots_id_size() == request->snapshots_sequence_size());
-    std::map<uint64_t, uint64_t> snapshots;
-    int32_t num_of_snapshots = request->snapshots_id_size();
-    for (int32_t i = 0; i < num_of_snapshots; ++i) {
-        snapshots[request->snapshots_id(i)] = request->snapshots_sequence(i);
-    }
-
-    // to recover rollbacks
-    std::map<uint64_t, uint64_t> rollbacks;
-    int32_t num_of_rollbacks = request->rollbacks_size();
-    for (int32_t i = 0; i < num_of_rollbacks; ++i) {
-        rollbacks[request->rollbacks(i).snapshot_id()] = request->rollbacks(i).rollback_point();
-        VLOG(10) << "load tablet with rollback " << request->rollbacks(i).snapshot_id()
-                 << "-" << request->rollbacks(i).rollback_point();
-    }
-
-    LOG(INFO) << "start load tablet, id: " << request->sequence_id()
-        << ", sessionid " << request->session_id()
-        << ", ts_id " << sid
-        << ", table: " << request->tablet_name()
-        << ", range: [" << DebugString(key_start)
-        << ", " << DebugString(key_end)
-        << "], path: " << request->path()
-        << ", parent: " << (request->parent_tablets_size() > 0 ? request->parent_tablets(0) : 0)
-        << ", schema: " << request->schema().ShortDebugString();
 
     std::vector<uint64_t> parent_tablets;
     for (int i = 0; i < request->parent_tablets_size(); ++i) {
         CHECK(i < 2) << "parent_tablets should less than 2: " << i;
         parent_tablets.push_back(request->parent_tablets(i));
     }
+    std::set<std::string> ignore_err_lgs;
+    for (int i = 0; i < request->ignore_err_lgs_size(); ++i) {
+        VLOG(10) << "oops lg:" << request->ignore_err_lgs(i);
+        ignore_err_lgs.insert(request->ignore_err_lgs(i));
+    }
 
     io::TabletIO* tablet_io = NULL;
     StatusCode status = kTabletNodeOk;
     if (!tablet_manager_->AddTablet(request->tablet_name(), request->path(),
                                      key_start, key_end, &tablet_io, &status)) {
-        LOG(ERROR) << "fail to add tablet: " << request->path()
-            << " [" << DebugString(key_start) << ", "
-            << DebugString(key_end) << "], status: "
-            << StatusCodeToString(status);
-        response->set_status((StatusCode)tablet_io->GetStatus());
+        io::TabletIO::TabletStatus tablet_status = tablet_io->GetStatus();
+        if (tablet_status == io::TabletIO::TabletStatus::kOnLoad || 
+                tablet_status == io::TabletIO::TabletStatus::kReady) {
+            VLOG(6) << "ignore this load tablet request, tablet: " << request->path()
+                << " [" << DebugString(key_start) << ", "
+                << DebugString(key_end) << "], status: "
+                << StatusCodeToString((StatusCode)tablet_status);
+        }
+        else {
+             LOG(ERROR) << "fail to add tablet: " << request->path()
+                << " [" << DebugString(key_start) << ", "
+                << DebugString(key_end) << "], status: "
+                << StatusCodeToString((StatusCode)tablet_status);
+        }
+        response->set_status((StatusCode)tablet_status);
         tablet_io->DecRef();
     } else {
+        LOG(INFO) << "start load tablet, id: " << request->sequence_id()
+            << ", sessionid " << request->session_id()
+            << ", ts_id " << sid
+            << ", table: " << request->tablet_name()
+            << ", range: [" << DebugString(key_start)
+            << ", " << DebugString(key_end)
+            << "], path: " << request->path()
+            << ", parent: " << (request->parent_tablets_size() > 0 ? request->parent_tablets(0) : 0)
+            << ", schema: " << request->schema().ShortDebugString();
         ///TODO: User per user memery_cache according to user quota.
         tablet_io->SetMemoryCache(m_memory_cache);
         if (!tablet_io->Load(schema, request->path(), parent_tablets,
-                             snapshots, rollbacks, ldb_logger_,
+                             ignore_err_lgs, ldb_logger_,
                              ldb_block_cache_, ldb_table_cache_, &status)) {
+            std::string err_msg = tablet_io->GetLastErrorMessage();
             tablet_io->DecRef();
             LOG(ERROR) << "fail to load tablet: " << request->path()
                 << " [" << DebugString(key_start) << ", "
                 << DebugString(key_end) << "], status: "
-                << StatusCodeToString(status);
+                << StatusCodeToString(status) << ",err_msg: " << err_msg;
             if (!tablet_manager_->RemoveTablet(request->tablet_name(), key_start,
                                                key_end, &status)) {
                 LOG(ERROR) << "fail to remove tablet: " << request->path()
@@ -339,6 +438,13 @@ void TabletNodeImpl::LoadTablet(const LoadTabletRequest* request,
                     << StatusCodeToString(status);
             }
             response->set_status(kIOError);
+            std::string load_context =
+                tera::sdk::StatTable::SerializeLoadContext(*request, sid);
+            std::string msg =
+                tera::sdk::StatTable::SerializeCorrupt(sdk::CorruptPhase::kLoading,
+                                                       local_addr_, request->path(),
+                                                       load_context, err_msg);
+            response->set_detail_fail_msg(msg);
         } else {
             tablet_io->DecRef();
             response->set_status(kTabletNodeOk);
@@ -365,10 +471,19 @@ bool TabletNodeImpl::UnloadTablet(const std::string& tablet_name,
     }
 
     if (!tablet_io->Unload(status)) {
-        LOG(ERROR) << "fail to unload tablet: " << tablet_io->GetTablePath()
-            << " [" << DebugString(start) << ", " << DebugString(end)
-            << "], status: " << StatusCodeToString(*status);
-        *status = (StatusCode)tablet_io->GetStatus();
+        io::TabletIO::TabletStatus tablet_status = tablet_io->GetStatus();
+        if (tablet_status == io::TabletIO::TabletStatus::kUnLoading || 
+                tablet_status == io::TabletIO::TabletStatus::kUnLoading2) {
+            VLOG(6) << "ignore this unload tablet request: " << tablet_io->GetTablePath() 
+                << "[" << DebugString(start) << "," << DebugString(end) 
+                << "], status: " << StatusCodeToString((StatusCode)tablet_status);
+        }
+        else {
+            LOG(ERROR) << "fail to unload tablet: " << tablet_io->GetTablePath()
+                << " [" << DebugString(start) << ", " << DebugString(end)
+                << "], status: " << StatusCodeToString(*status);
+        }
+        *status = (StatusCode)tablet_status;
         tablet_io->DecRef();
         return false;
     }
@@ -389,6 +504,19 @@ void TabletNodeImpl::UnloadTablet(const UnloadTabletRequest* request,
                                   UnloadTabletResponse* response,
                                   google::protobuf::Closure* done) {
     response->set_sequence_id(request->sequence_id());
+    std::string sid = GetSessionId();
+    // master vervison lower than 2.10 has not session_id field, so just 
+    if (request->has_session_id() && 
+        ((sid.size() == 0) ||
+        request->session_id().compare(0, sid.size(), sid) != 0)) {
+        LOG(WARNING) << "unload session id not match, seq_id: " << request->sequence_id() << "tablet: " 
+            << request->tablet_name() << ", [" << request->key_range().key_start() << ", " 
+            << request->key_range().key_end() << "], session_id " << request->session_id() << ", ts_id " << sid;
+        response->set_status(kIllegalAccess);
+        done->Run();
+        return;
+    }
+
     StatusCode status = kTabletNodeOk;
     UnloadTablet(request->tablet_name(), request->key_range().key_start(),
                  request->key_range().key_end(), &status);
@@ -466,27 +594,49 @@ void TabletNodeImpl::ReadTablet(int64_t start_micros,
                                 const ReadTabletRequest* request,
                                 ReadTabletResponse* response,
                                 google::protobuf::Closure* done) {
+    bool is_timeout = false;
     int32_t row_num = request->row_info_list_size();
     uint64_t snapshot_id = request->snapshot_id() == 0 ? 0 : request->snapshot_id();
     uint32_t read_success_num = 0;
 
+    int64_t client_timeout_ms = std::numeric_limits<int64_t>::max() / 2;
+    if (request->has_client_timeout_ms()) {
+        client_timeout_ms = request->client_timeout_ms();
+    }
+    int64_t end_time_ms = start_micros / 1000 + client_timeout_ms;
+    VLOG(20) << "start_ms: " << start_micros / 1000 << ", client_timeout_ms: " << client_timeout_ms
+             << " end_ms: " << end_time_ms;
+
     for (int32_t i = 0; i < row_num; i++) {
+        int64_t time_remain_ms = end_time_ms - GetTimeStampInMs();
         StatusCode row_status = kTabletNodeOk;
         io::TabletIO* tablet_io = tablet_manager_->GetTablet(
             request->tablet_name(), request->row_info_list(i).key(), &row_status);
         if (tablet_io == NULL) {
-            range_error_counter.Inc();
+            read_error_counter.Inc();
+            read_range_error_counter.Inc();
             response->mutable_detail()->add_status(kKeyNotInRange);
         } else {
+            VLOG(20) << "time_remain_ms: " << time_remain_ms;
             if (tablet_io->ReadCells(request->row_info_list(i),
                                      response->mutable_detail()->add_row_result(),
-                                     snapshot_id, &row_status)) {
+                                     snapshot_id, &row_status, time_remain_ms)) {
                 read_success_num++;
             } else {
+                if (row_status != kKeyNotExist && row_status != kRPCTimeout) {
+                    read_error_counter.Inc();
+                }
                 response->mutable_detail()->mutable_row_result()->RemoveLast();
             }
             tablet_io->DecRef();
             response->mutable_detail()->add_status(row_status);
+        }
+
+        if (row_status == kRPCTimeout) {
+            is_timeout = true;
+            LOG(WARNING) << "seq_id: " << request->sequence_id() << " timeout,"
+                    << " clinet_timeout_ms: " << request->client_timeout_ms();
+            break;
         }
     }
 
@@ -495,15 +645,14 @@ void TabletNodeImpl::ReadTablet(int64_t start_micros,
         << ", read_suc: " << read_success_num;
     response->set_sequence_id(request->sequence_id());
     response->set_success_num(read_success_num);
-    response->set_status(kTabletNodeOk);
-    done->Run();
 
-    int64_t now_ms = get_micros();
-    int64_t used_ms =  now_ms - start_micros;
-    if (used_ms <= 0) {
-        LOG(ERROR) << "now ms: "<< now_ms << " start_ms: "<< start_micros;
+    if (is_timeout) {
+        response->set_status(kRPCTimeout);
+    } else {
+        response->set_status(kTabletNodeOk);
     }
-    rand_read_delay.Add(used_ms);
+
+    done->Run();
 }
 
 void TabletNodeImpl::WriteTablet(const WriteTabletRequest* request,
@@ -527,12 +676,12 @@ void TabletNodeImpl::WriteTablet(const WriteTabletRequest* request,
         return;
     }
 
-    Counter* row_done_counter = new Counter;
+    std::shared_ptr<Counter> row_done_counter(new Counter);
     for (int32_t i = 0; i < row_num; i++) {
         io::TabletIO* tablet_io = tablet_manager_->GetTablet(
             request->tablet_name(), request->row_list(i).row_key(), &status);
         if (tablet_io == NULL) {
-            range_error_counter.Inc();
+            write_range_error_counter.Inc();
         }
         it = tablet_task_map.find(tablet_io);
         WriteTabletTask* tablet_task = NULL;
@@ -579,6 +728,7 @@ void TabletNodeImpl::WriteTablet(const WriteTabletRequest* request,
 
 void TabletNodeImpl::WriteTabletFail(WriteTabletTask* tablet_task, StatusCode status) {
     int32_t row_num = tablet_task->row_status_vec.size();
+    write_error_counter.Add(row_num);
     for (int32_t i = 0; i < row_num; i++) {
         tablet_task->row_status_vec[i] = status;
     }
@@ -600,117 +750,9 @@ void TabletNodeImpl::WriteTabletCallback(WriteTabletTask* tablet_task,
             RpcTimerList::Instance()->Erase(tablet_task->timer);
             delete tablet_task->timer;
         }
-        delete tablet_task->row_done_counter;
     }
 
     delete tablet_task;
-}
-
-void TabletNodeImpl::GetSnapshot(const SnapshotRequest* request,
-                                 SnapshotResponse* response,
-                                 google::protobuf::Closure* done) {
-    StatusCode status = kTabletNodeOk;
-    io::TabletIO* tablet_io = tablet_manager_->GetTablet(request->table_name(),
-                                                          request->key_range().key_start(),
-                                                          request->key_range().key_end(),
-                                                          &status);
-    if (tablet_io == NULL) {
-        LOG(WARNING) << "get snapshot fail to get tablet: " << request->table_name()
-            << " [" << DebugString(request->key_range().key_start())
-            << ", " << DebugString(request->key_range().key_end())
-            << "], status: " << StatusCodeToString(status);
-        response->set_status(kKeyNotInRange);
-        done->Run();
-        return;
-    }
-    uint64_t snapshot = tablet_io->GetSnapshot(request->snapshot_id(), (0x1ull << 56) - 1, &status);
-    if (status != kTabletNodeOk) {
-        response->set_status(status);
-    } else if (snapshot == 0) {
-        LOG(ERROR) << "fail to get snapshot: " << tablet_io->GetTablePath()
-            << " [" << DebugString(tablet_io->GetStartKey())
-            << ", " << DebugString(tablet_io->GetEndKey()) << "]";
-        response->set_status(kSnapshotNotExist);
-    } else {
-        response->set_sequence_id(request->sequence_id());
-        response->set_status(kTabletNodeOk);
-        response->set_snapshot_seq(snapshot);
-        LOG(INFO) << "get snapshot: " << snapshot
-            << ", tablet: " << tablet_io->GetTablePath()
-            << " [" << DebugString(tablet_io->GetStartKey())
-            << ", " << DebugString(tablet_io->GetEndKey()) << "]";
-    }
-    tablet_io->DecRef();
-    done->Run();
-}
-
-void TabletNodeImpl::ReleaseSnapshot(const ReleaseSnapshotRequest* request,
-                                     ReleaseSnapshotResponse* response,
-                                     google::protobuf::Closure* done) {
-    StatusCode status = kTabletNodeOk;
-    io::TabletIO* tablet_io = tablet_manager_->GetTablet(request->table_name(),
-                                                          request->key_range().key_start(),
-                                                          request->key_range().key_end(),
-                                                          &status);
-    if (tablet_io == NULL) {
-        LOG(WARNING) << "release snapshot fail to get tablet: " << request->table_name()
-            << " [" << DebugString(request->key_range().key_start())
-            << ", " << DebugString(request->key_range().key_end())
-            << "], status: " << StatusCodeToString(status);
-        response->set_status(kKeyNotInRange);
-        done->Run();
-        return;
-    }
-    response->set_sequence_id(request->sequence_id());
-    if (tablet_io->ReleaseSnapshot(request->snapshot_id(), &status)) {
-        response->set_status(kTabletNodeOk);
-        LOG(INFO) << "released snapshot: " << request->snapshot_id()
-            << ", tablet: " << tablet_io->GetTablePath()
-            << " [" << DebugString(tablet_io->GetStartKey())
-            << ", " << DebugString(tablet_io->GetEndKey()) << "]";
-    } else {
-        response->set_status(status);
-        LOG(ERROR) << "release snapshot fail: " << request->snapshot_id()
-                << ", tablet: " << tablet_io->GetTablePath()
-                << " [" << DebugString(tablet_io->GetStartKey())
-                << ", " << DebugString(tablet_io->GetEndKey())
-                << "], status: " << StatusCodeToString(status);
-    }
-    tablet_io->DecRef();
-    response->set_snapshot_id(request->snapshot_id());
-    done->Run();
-}
-
-void TabletNodeImpl::Rollback(const SnapshotRollbackRequest* request, SnapshotRollbackResponse* response,
-                              google::protobuf::Closure* done) {
-    StatusCode status = kTabletNodeOk;
-    io::TabletIO* tablet_io = tablet_manager_->GetTablet(request->table_name(),
-                                                          request->key_range().key_start(),
-                                                          request->key_range().key_end(),
-                                                          &status);
-    if (tablet_io == NULL) {
-        LOG(WARNING) << "rollback to snapshot fail to get tablet: " << request->table_name()
-            << " [" << DebugString(request->key_range().key_start())
-            << ", " << DebugString(request->key_range().key_end())
-            << "], status: " << StatusCodeToString(status);
-        response->set_status(kKeyNotInRange);
-        done->Run();
-        return;
-    }
-    uint64_t rollback_point = tablet_io->Rollback(request->snapshot_id(), &status);
-    if (status != kTabletNodeOk) {
-        response->set_status(status);
-    } else {
-        response->set_sequence_id(request->sequence_id());
-        response->set_status(kTabletNodeOk);
-        response->set_rollback_point(rollback_point);
-        LOG(INFO) << "rollback point " << rollback_point << " to snapshot: " << request->snapshot_id()
-            << ", tablet: " << tablet_io->GetTablePath()
-            << " [" << DebugString(tablet_io->GetStartKey())
-            << ", " << DebugString(tablet_io->GetEndKey()) << "]";
-    }
-    tablet_io->DecRef();
-    done->Run();
 }
 
 void TabletNodeImpl::CmdCtrl(const TsCmdCtrlRequest* request,
@@ -771,6 +813,15 @@ void TabletNodeImpl::Query(const QueryRequest* request,
             *files = inherited[i];
         }
     }
+
+    // if have background errors, package into 'response' and return to 'master'
+    std::vector<TabletBackgroundErrorInfo> background_errors;
+    GetBackgroundErrors(&background_errors);
+    for (auto background_error : background_errors) {
+        TabletBackgroundErrorInfo* tablet_background_error =
+            response->add_tablet_background_errors();
+        tablet_background_error->CopyFrom(background_error);
+    }
     done->Run();
 }
 
@@ -806,12 +857,14 @@ void TabletNodeImpl::ScanTablet(const ScanTabletRequest* request,
                                             request->start(), &status);
 
     if (tablet_io == NULL) {
-        range_error_counter.Inc();
+        scan_range_error_counter.Inc();
         response->set_status(status);
         done->Run();
     } else {
         response->set_end(tablet_io->GetEndKey());
-        tablet_io->ScanRows(request, response, done);
+        if (!tablet_io->ScanRows(request, response, done)) {
+            scan_error_counter.Inc();
+        }
         tablet_io->DecRef();
     }
 }
@@ -837,6 +890,23 @@ void TabletNodeImpl::SplitTablet(const SplitTabletRequest* request,
         done->Run();
         return;
     }
+    // Master is not responsible for update children tablets to meta table, refuse to split
+    if (!request->has_master_update_meta() || !request->master_update_meta()) {
+        LOG(ERROR) << kSms <<"SplitRequest without master_update_meta, maybe "
+                "request from old master, refuse split!" << *tablet_io;
+        response->set_status(kTableNotSupport);
+        done->Run();
+
+    }
+
+    // Master is not responsible for update children tablets to meta table, refuse to split
+    if (!request->has_master_update_meta() || !request->master_update_meta()) {
+        LOG(WARNING) <<"SplitRequest without master_update_meta, maybe "
+                "request from old master, refuse split!" << *tablet_io;
+        response->set_status(kTableNotSupport);
+        done->Run();
+
+    }
 
     if (!tablet_io->Split(&split_key, &status)) {
         LOG(ERROR) << "fail to split tablet: " << tablet_io->GetTablePath()
@@ -852,10 +922,6 @@ void TabletNodeImpl::SplitTablet(const SplitTabletRequest* request,
         done->Run();
         return;
     }
-    uint64_t tablet_size = 0;
-    tablet_io->GetDataSize(&tablet_size);
-    int64_t first_half_size = tablet_size / 2;
-    int64_t second_half_size = tablet_size / 2;
     LOG(INFO) << "split tablet: " << tablet_io->GetTablePath()
         << " [" << DebugString(tablet_io->GetStartKey())
         << ", " << DebugString(tablet_io->GetEndKey())
@@ -888,10 +954,56 @@ void TabletNodeImpl::SplitTablet(const SplitTabletRequest* request,
                 << ", " << DebugString(request->key_range().key_end())
                 << "], status: " << StatusCodeToString(status);
     }
-
-    UpdateMetaTableAsync(request, response, done, path, split_key, schema,
-                         first_half_size, second_half_size, request->tablet_meta());
+    response->set_status(kTabletNodeOk);
+    response->add_split_keys(split_key);
+    done->Run();
 }
+
+void TabletNodeImpl::ComputeSplitKey(const SplitTabletRequest* request,
+                                 SplitTabletResponse* response,
+                                 google::protobuf::Closure* done) {
+    response->set_sequence_id(request->sequence_id());
+
+    std::string split_key;
+    StatusCode status = kTabletNodeOk;
+    io::TabletIO* tablet_io = tablet_manager_->GetTablet(request->tablet_name(),
+                                                request->key_range().key_start(),
+                                                request->key_range().key_end(),
+                                                &status);
+    if (tablet_io == NULL) {
+        LOG(WARNING) << "split fail to get tablet: " << request->tablet_name()
+            << " [" << DebugString(request->key_range().key_start())
+            << ", " << DebugString(request->key_range().key_end())
+            << "], status: " << StatusCodeToString(status);
+        response->set_status(kKeyNotInRange);
+        done->Run();
+        return;
+    }
+
+    if (!tablet_io->Split(&split_key, &status)) {
+        LOG(ERROR) << "fail to split tablet: " << tablet_io->GetTablePath()
+            << " [" << DebugString(tablet_io->GetStartKey())
+            << ", " << DebugString(tablet_io->GetEndKey())
+            << "], split_key: " << DebugString(split_key) << ". status: " << StatusCodeToString(status);
+        if (status == kTableNotSupport) {
+            response->set_status(kTableNotSupport);
+        } else {
+            response->set_status((StatusCode)tablet_io->GetStatus());
+        }
+        tablet_io->DecRef();
+        done->Run();
+        return;
+    }
+    LOG(INFO) << "split tablet: " << tablet_io->GetTablePath()
+        << " [" << DebugString(tablet_io->GetStartKey())
+        << ", " << DebugString(tablet_io->GetEndKey())
+        << "], split key: " << DebugString(split_key);
+    response->set_status(kTabletNodeOk);
+    response->add_split_keys(split_key);
+    tablet_io->DecRef();
+    done->Run();
+}
+
 
 bool TabletNodeImpl::CheckInKeyRange(const KeyList& key_list,
                                      const std::string& key_start,
@@ -954,7 +1066,7 @@ void TabletNodeImpl::LeaveSafeMode() {
 
 void TabletNodeImpl::ExitService() {
     LOG(FATAL) << "master kick me!";
-    exit(1);
+    _exit(1);
 }
 
 void TabletNodeImpl::SetTabletNodeStatus(const TabletNodeStatus& status) {
@@ -971,96 +1083,6 @@ void TabletNodeImpl::SetRootTabletAddr(const std::string& root_tablet_addr) {
     root_tablet_addr_ = root_tablet_addr;
 }
 
-void TabletNodeImpl::UpdateMetaTableAsync(const SplitTabletRequest* rpc_request,
-         SplitTabletResponse* rpc_response, google::protobuf::Closure* rpc_done,
-         const std::string& path, const std::string& key_split,
-         const TableSchema& schema, int64_t first_size, int64_t second_size,
-         const TabletMeta& meta) {
-    WriteTabletRequest* request = new WriteTabletRequest;
-    WriteTabletResponse* response = new WriteTabletResponse;
-    request->set_sequence_id(this_sequence_id_++);
-    request->set_tablet_name(FLAGS_tera_master_meta_table_name);
-    request->set_is_sync(true);
-    request->set_is_instant(true);
-
-    TabletMeta tablet_meta;
-    tablet_meta.CopyFrom(meta);
-    tablet_meta.set_server_addr(local_addr_);
-    tablet_meta.clear_parent_tablets();
-    tablet_meta.add_parent_tablets(leveldb::GetTabletNumFromPath(path));
-
-    std::string meta_key, meta_value;
-    VLOG(5) << "update meta for split tablet: " << path
-        << " [" << DebugString(rpc_request->key_range().key_start())
-        << ", " << DebugString(rpc_request->key_range().key_end()) << "]";
-
-    CHECK(2 == rpc_request->child_tablets_size());
-    // first write 2nd half
-    tablet_meta.set_path(leveldb::GetChildTabletPath(path, rpc_request->child_tablets(0)));
-    tablet_meta.set_size(second_size);
-    tablet_meta.mutable_key_range()->set_key_start(key_split);
-    tablet_meta.mutable_key_range()->set_key_end(rpc_request->key_range().key_end());
-    MakeMetaTableKeyValue(tablet_meta, &meta_key, &meta_value);
-    RowMutationSequence* mu_seq = request->add_row_list();
-    mu_seq->set_row_key(meta_key);
-    Mutation* mutation = mu_seq->add_mutation_sequence();
-    mutation->set_type(kPut);
-    mutation->set_value(meta_value);
-    VLOG(5) << "write meta: key [" << DebugString(meta_key)
-        << "], value_size: " << meta_value.size();
-
-    // then write 1st half
-    // update root_tablet_addr in fake zk mode
-    if (!FLAGS_tera_zk_enabled) {
-        zk_adapter_->GetRootTableAddr(&root_tablet_addr_);
-    }
-    TabletNodeClient meta_tablet_client(root_tablet_addr_);
-
-    tablet_meta.set_path(leveldb::GetChildTabletPath(path, rpc_request->child_tablets(1)));
-    tablet_meta.set_size(first_size);
-    tablet_meta.mutable_key_range()->set_key_start(rpc_request->key_range().key_start());
-    tablet_meta.mutable_key_range()->set_key_end(key_split);
-    MakeMetaTableKeyValue(tablet_meta, &meta_key, &meta_value);
-    mu_seq = request->add_row_list();
-    mu_seq->set_row_key(meta_key);
-    mutation = mu_seq->add_mutation_sequence();
-    mutation->set_type(kPut);
-    mutation->set_value(meta_value);
-    VLOG(5) << "write meta: key [" << DebugString(meta_key)
-        << "], value_size: " << meta_value.size();
-
-    std::function<void (WriteTabletRequest*, WriteTabletResponse*, bool, int)> done =
-        std::bind(&TabletNodeImpl::UpdateMetaTableCallback, this, rpc_request,
-                   rpc_response, rpc_done, _1, _2, _3, _4);
-    meta_tablet_client.WriteTablet(request, response, done);
-}
-
-
-void TabletNodeImpl::UpdateMetaTableCallback(const SplitTabletRequest* rpc_request,
-         SplitTabletResponse* rpc_response, google::protobuf::Closure* rpc_done,
-         WriteTabletRequest* request, WriteTabletResponse* response, bool failed,
-         int error_code) {
-    if (failed) {
-        rpc_response->set_status(kMetaTabletError);
-    } else if (response->status() != kTabletNodeOk) {
-        LOG(ERROR) << "fail to update meta for tablet: "
-            << request->tablet_name() << " ["
-            << DebugString(rpc_request->key_range().key_start())
-            << ", " << DebugString(rpc_request->key_range().key_end())
-            << "], status: " << StatusCodeToString(response->status());
-        rpc_response->set_status(kMetaTabletError);
-    } else {
-        LOG(INFO) << "split tablet success: " << rpc_request->tablet_name()
-            << " [" << DebugString(rpc_request->key_range().key_start())
-            << ", " << DebugString(rpc_request->key_range().key_end()) << "]";
-        rpc_response->set_status(kTabletNodeOk);
-    }
-
-    delete request;
-    delete response;
-    rpc_done->Run();
-}
-
 /*
  * all cached tablets/files:
  * ------------------------------------------
@@ -1072,7 +1094,7 @@ void TabletNodeImpl::UpdateMetaTableCallback(const SplitTabletRequest* rpc_reque
  * ------------------------------------------
  */
 void TabletNodeImpl::GarbageCollect() {
-    if (FLAGS_tera_tabletnode_cache_enabled) {
+    if (FLAGS_tera_tabletnode_flash_block_cache_enabled) {
         return;
     }
     int64_t start_ms = get_micros();
@@ -1189,22 +1211,6 @@ void TabletNodeImpl::SetSessionId(const std::string& session_id) {
 std::string TabletNodeImpl::GetSessionId() {
     MutexLock lock(&status_mutex_);
     return session_id_;
-}
-
-std::string TabletNodeImpl::BlockCacheProfileInfo() {
-    std::stringstream ss;
-    ss << ldb_block_cache_->HitRate(true);
-    ss << " " << ldb_block_cache_->Entries();
-    ss << " " << ldb_block_cache_->TotalCharge();
-    return ss.str();
-}
-
-std::string TabletNodeImpl::TableCacheProfileInfo() {
-    std::stringstream ss;
-    ss << ldb_table_cache_->HitRate(true);
-    ss << " " << ldb_table_cache_->TableEntries();
-    ss << " " << ldb_table_cache_->ByteSize();
-    return ss.str();
 }
 
 TabletNodeSysInfo& TabletNodeImpl::GetSysInfo() {
@@ -1330,5 +1336,96 @@ void TabletNodeImpl::GetInheritedLiveFiles(std::vector<InheritedLiveFiles>& inhe
     }
     LOG(INFO) << "[gc] add inherited file " << total << " total";
 }
+
+void TabletNodeImpl::GetBackgroundErrors(std::vector<TabletBackgroundErrorInfo>* background_errors) {
+    std::vector<io::TabletIO*> tablet_ios;
+    tablet_manager_->GetAllTablets(&tablet_ios);
+    std::vector<io::TabletIO*>::iterator it = tablet_ios.begin();
+    uint64_t reported_error_msg_len = 0;
+    while (it != tablet_ios.end()) {
+        io::TabletIO* tablet_io = *it;
+        if (tablet_io->ShouldForceUnloadOnError()) {
+            LOG(WARNING) << *tablet_io << ", has internal error triggered unload";
+            StatusCode status;
+            if (!tablet_io->Unload(&status)) {
+                LOG(ERROR) << *tablet_io << ", Unload tablet failed, status: "
+                    << StatusCodeToString(status);
+            }
+            if (!tablet_manager_->RemoveTablet(tablet_io->GetTableName(),
+                        tablet_io->GetStartKey(), tablet_io->GetEndKey(), &status)) {
+                LOG(ERROR) << *tablet_io << ", remove from TabletManager failed, status: "
+                    << StatusCodeToString(status);
+            }
+            tablet_io->DecRef();
+            it = tablet_ios.erase(it);
+            continue;
+        }
+        std::string background_error_msg = "";
+        tablet_io->CheckBackgroundError(&background_error_msg);
+        if (!background_error_msg.empty()){
+            std::string msg =
+                tera::sdk::StatTable::SerializeCorrupt(sdk::CorruptPhase::kCompacting,
+                                                       local_addr_,
+                                                       tablet_io->GetTablePath(),
+                                                       "",
+                                                       background_error_msg);
+
+            VLOG(15) << "background error @ " << tablet_io->GetTablePath()
+                       << ":" << background_error_msg;
+            reported_error_msg_len += msg.length();
+
+            // if the length of error message overrun the limit，
+            // only part of them would be reported
+            if (reported_error_msg_len < kReportErrorSize) {
+                tera::TabletBackgroundErrorInfo background_error;
+                background_error.set_tablet_name(tablet_io->GetTablePath());
+                background_error.set_detail_info(msg);
+                background_errors->push_back(background_error);
+            }
+        }
+        ++it;
+        tablet_io->DecRef();
+    }
+}
+
+
+void TabletNodeImpl::RefreshLevelSize() {
+    std::vector<io::TabletIO*> tablet_ios;
+    tablet_manager_->GetAllTablets(&tablet_ios);
+    std::vector<io::TabletIO*>::iterator it = tablet_ios.begin();
+    std::vector<int64_t> level_size_total(leveldb::config::kNumLevels, 0);
+    std::vector<int64_t> db_level_size;
+    while (it != tablet_ios.end()) {
+        io::TabletIO* tablet_io = *it;
+        if (tablet_io->ShouldForceUnloadOnError()) {
+            LOG(WARNING) << *tablet_io << ", has internal error triggered unload";
+            StatusCode status;
+            if (!tablet_io->Unload(&status)) {
+                LOG(ERROR) << *tablet_io << ", Unload tablet failed, status: "
+                    << StatusCodeToString(status);
+            }
+            if (!tablet_manager_->RemoveTablet(tablet_io->GetTableName(),
+                        tablet_io->GetStartKey(), tablet_io->GetEndKey(), &status)) {
+                LOG(ERROR) << *tablet_io << ", remove from TabletManager failed, status: "
+                    << StatusCodeToString(status);
+            }
+            tablet_io->DecRef();
+            it = tablet_ios.erase(it);
+            continue;
+        }
+        if (tablet_io->GetDBLevelSize(&db_level_size)) {
+            assert(db_level_size.size() == level_size_total.size());
+            for (int level = 0; level != leveldb::config::kNumLevels; ++level) {
+                level_size_total[level] += db_level_size[level];
+            }
+        }
+        tablet_io->DecRef();
+        it = tablet_ios.erase(it);
+    }
+    for (int level = 0; level != leveldb::config::kNumLevels; ++level) {
+        level_size_[level].Set(level_size_total[level]);
+    }
+}
+
 } // namespace tabletnode
 } // namespace tera

@@ -11,7 +11,6 @@
 #include "db/filename.h"
 #include "db/version_set.h"
 #include "util/coding.h"
-
 namespace leveldb {
 
 // Tag numbers for serialized VersionEdit.  These numbers are written to
@@ -29,6 +28,7 @@ enum Tag {
   kNewFile              = 10,
   kDeletedFile          = 11,
   kNewFileInfo          = 12,
+  kSstFileDataSize      = 13,
 
   // no more than 1<<20
   kMaxTag               = 1 << 20,
@@ -147,6 +147,13 @@ void VersionEdit::EncodeTo(std::string* dst) const {
     PutVarint32(dst, str.size() + kMaxTag);
     PutVarint32(dst, kNewFileInfo);
     dst->append(str.data(), str.size());
+
+    // record sst FileData
+    str.clear();
+    PutVarint64(&str, f.data_size);
+    PutVarint32(dst, str.size() + kMaxTag);
+    PutVarint32(dst, kSstFileDataSize);
+    dst->append(str.data(), str.size());
   }
 }
 
@@ -169,6 +176,43 @@ static bool GetLevel(Slice* input, int* level) {
   } else {
     return false;
   }
+}
+
+Status VersionEdit::DecodeNewFileInfo(Slice* input, FileMetaData* f) {
+  bool decode_continue = true;
+
+  while (decode_continue && input->size() > 0) {
+    uint32_t len = 0;
+    uint32_t tag = 0;
+    Slice file_input = *input;
+    GetVarint32(&file_input, &len);
+    if (len <= kMaxTag) {
+      break;
+    }
+
+    GetVarint32(&file_input, &tag);
+    switch (tag) {
+      case kNewFileInfo:
+        GetVarint32(input, &len);// ignore len
+        GetVarint32(input, &tag);// ignore tag
+        GetVarint64(input, &f->del_percentage);
+        GetVarint64(input, &f->ttl_percentage);
+        GetVarint64(input, &f->check_ttl_ts);
+        break;
+      case kSstFileDataSize:
+        GetVarint32(input, &len);
+        GetVarint32(input, &tag);
+        GetVarint64(input, &f->data_size);
+        break;
+      default:
+        fprintf(stderr, "NewFile %lu without info, skip tag %d, len %d\n",
+                f->number & 0xffffffff,
+                tag, len);
+        decode_continue = false;
+        break;
+    }
+  }
+  return Status::OK();
 }
 
 Status VersionEdit::DecodeFrom(const Slice& src) {
@@ -285,29 +329,7 @@ Status VersionEdit::DecodeFrom(const Slice& src) {
               f.largest_fake = true;
             }
 
-            // new file format parser
-            Slice file_ptr = input;
-            uint32_t file_tag;
-            GetVarint32(&file_ptr, &file_tag);
-            if (file_tag > kMaxTag) {
-              // file_tag - kMaxTag;
-              GetVarint32(&file_ptr, &tag);
-            }
-            switch (tag) {
-              case kNewFileInfo:
-                GetVarint32(&input, &tag);// ignore len
-                GetVarint32(&input, &tag);// ignore tag
-                GetVarint64(&input, &f.del_percentage);
-                GetVarint64(&input, &f.ttl_percentage);
-                GetVarint64(&input, &f.check_ttl_ts);
-                break;
-
-              default:
-                fprintf(stderr, "NewFile %lu without info, skip tag %d, len %d\n",
-                        f.number & 0xffffffff,
-                        tag, file_tag);
-                break;
-            }
+            DecodeNewFileInfo(&input, &f);
             new_files_.push_back(std::make_pair(level, f));
           } else {
             msg = "new-file entry 1";
@@ -400,6 +422,8 @@ std::string VersionEdit::DebugString() const {
     AppendNumberTo(&r, file_number);
     r.append(" size ");
     AppendNumberTo(&r, f.file_size);
+    r.append(" data_size ");
+    AppendNumberTo(&r, f.data_size);
     r.append(" ");
     r.append(f.smallest.DebugString());
     r.append(" .. ");

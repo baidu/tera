@@ -2,7 +2,7 @@
 
 set -e -u -E # this script will exit if any sub-command fails
 
-MIRROR=china
+MIRROR=origin
 if [ $# -ge 1 ]; then
     MIRROR=$1
 fi
@@ -49,8 +49,8 @@ if [ ${PROTOBUF_VERSION} == "DISABLE" ]; then
 elif [ ! -f "${FLAG_DIR}/protobuf_${PROTOBUF_VERSION}" ] \
     || [ ! -f "${DEPS_PREFIX}/lib/libprotobuf.a" ] \
     || [ ! -d "${DEPS_PREFIX}/include/google/protobuf" ]; then
-    wget --no-check-certificate -O protobuf-${PROTOBUF_VERSION}.tar.bz2 ${PROTOBUF_URL}
-    tar jxf protobuf-${PROTOBUF_VERSION}.tar.bz2 --recursive-unlink
+    wget --no-check-certificate -O protobuf-${PROTOBUF_VERSION}.tar.gz ${PROTOBUF_URL}
+    tar zxf protobuf-${PROTOBUF_VERSION}.tar.gz --recursive-unlink
     cd protobuf-${PROTOBUF_VERSION}
     ./configure ${DEPS_CONFIG}
     make -j4
@@ -239,6 +239,22 @@ elif [ ! -f "${FLAG_DIR}/nose_${NOSE_VERSION}" ] \
     touch "${FLAG_DIR}/nose_${NOSE_VERSION}"
 fi
 
+# mongoose (for test)
+if [ ${MONGOOSE_VERSION} == "DISABLE" ]; then
+    echo "Disable mongoose."
+elif [ ! -f "${FLAG_DIR}/mongoose_${MONGOOSE_VERSION}" ] \
+    || [ ! -f "${DEPS_PREFIX}/include/mongoose.h" ] \
+    || [ ! -f "${DEPS_PREFIX}/lib/libmongoose.a" ]; then
+    wget --no-check-certificate -O mongoose-${MONGOOSE_VERSION}.tar.gz ${MONGOOSE_URL}
+    tar zxf mongoose-${MONGOOSE_VERSION}.tar.gz --recursive-unlink
+    cd mongoose-${MONGOOSE_VERSION}
+    gcc -c -D_GNU_SOURCE -D__STDC_LIMIT_MACROS -g2 -pipe -Wall -Werror -fPIC mongoose.c
+    ar -lr libmongoose.a mongoose.o
+    cp mongoose.h ${DEPS_PREFIX}/include
+    cp libmongoose.a ${DEPS_PREFIX}/lib
+    touch "${FLAG_DIR}/mongoose_${MONGOOSE_VERSION}"
+fi
+
 cd ${WORK_DIR}
 
 ########################################
@@ -261,4 +277,4 @@ sed -i "s:^INS_PREFIX=.*:INS_PREFIX=$DEPS_PREFIX:" depends.mk
 ########################################
 
 make clean
-make -j4
+make -j8

@@ -6,41 +6,54 @@
 
 #include "master/master_impl.h"
 #include "master/workload_scheduler.h"
-#include "utils/timer.h"
+#include "common/timer.h"
 
 DECLARE_string(tera_master_meta_table_name);
 DECLARE_int32(tera_master_max_load_concurrency);
 DECLARE_int32(tera_master_max_split_concurrency);
 DECLARE_int32(tera_master_load_interval);
 DECLARE_bool(tera_master_meta_isolate_enabled);
+DECLARE_int32(tera_master_tabletnode_timeout);
+DECLARE_int32(tera_master_max_unload_concurrency);
 
 namespace tera {
 namespace master {
 
+void BindTabletToTabletNode(TabletPtr tablet, TabletNodePtr node) {
+    tablet->AssignTabletNode(node);
+    node->UpdateSize(tablet);
+}
+
 TabletNode::TabletNode() : state_(kOffLine),
     report_status_(kTabletNodeIsRunning), data_size_(0), qps_(0), load_(0),
-    update_time_(0), query_fail_count_(0), onload_count_(0),
+    update_time_(0), query_fail_count_(0), onload_count_(0), unloading_count_(0),
     onsplit_count_(0), plan_move_in_count_(0) {
     info_.set_addr("");
     info_.set_status_m(NodeStateToString(state_));
     info_.set_timestamp(get_micros());
+    timestamp_ = get_millis();
+    //ref_count_.Inc();
+
 }
 
 TabletNode::TabletNode(const std::string& addr, const std::string& uuid)
     : addr_(addr), uuid_(uuid), state_(kOffLine),
       report_status_(kTabletNodeIsRunning), data_size_(0), qps_(0), load_(0),
-      update_time_(0), query_fail_count_(0), onload_count_(0),
+      update_time_(0), query_fail_count_(0), onload_count_(0), unloading_count_(0),
       onsplit_count_(0), plan_move_in_count_(0) {
     info_.set_addr(addr);
     info_.set_status_m(NodeStateToString(state_));
     info_.set_timestamp(get_micros());
+    timestamp_ = get_millis();
 }
 
 TabletNode::TabletNode(const TabletNode& t) {
     MutexLock lock(&t.mutex_);
     addr_ = t.addr_;
+    state_ = kOffLine;
     uuid_ = t.uuid_;
     state_ = t.state_;
+    timestamp_ = t.timestamp_;
     report_status_ = t.report_status_;
     info_ = t.info_;
     data_size_ = t.data_size_;
@@ -54,14 +67,15 @@ TabletNode::TabletNode(const TabletNode& t) {
     counter_list_ = t.counter_list_;
     query_fail_count_ = t.query_fail_count_;
     onload_count_ = t.onload_count_;
+    unloading_count_ = t.unloading_count_;
     onsplit_count_ = t.onsplit_count_;
     plan_move_in_count_ = t.plan_move_in_count_;
-    wait_load_list_ = t.wait_load_list_;
-    wait_split_list_ = t.wait_split_list_;
     recent_load_time_list_ = t.recent_load_time_list_;
 }
 
-TabletNode::~TabletNode() {}
+TabletNode::~TabletNode() {
+    
+}
 
 TabletNodeInfo TabletNode::GetInfo() {
     MutexLock lock(&mutex_);
@@ -159,7 +173,7 @@ bool TabletNode::MayLoadNow() {
     return false;
 }
 
-bool TabletNode::TryLoad(TabletPtr tablet) {
+void TabletNode::UpdateSize(TabletPtr tablet) {
     MutexLock lock(&mutex_);
     data_size_ += tablet->GetDataSize();
     if (table_size_.find(tablet->GetTableName()) != table_size_.end()) {
@@ -173,14 +187,15 @@ bool TabletNode::TryLoad(TabletPtr tablet) {
     } else {
         table_qps_[tablet->GetTableName()] = tablet->GetQps();
     }
-    //VLOG(5) << "load on: " << addr_ << ", size: " << tablet->GetDataSize()
-    //      << ", total size: " << data_size_;
-    if (wait_load_list_.empty()
-        && onload_count_ < static_cast<uint32_t>(FLAGS_tera_master_max_load_concurrency)) {
+
+}
+
+bool TabletNode::TryLoad(TabletPtr tablet) {
+    MutexLock lock(&mutex_);
+    if (onload_count_ < static_cast<uint32_t>(FLAGS_tera_master_max_load_concurrency)) {
         BeginLoad();
         return true;
     }
-    wait_load_list_.push_back(tablet);
     return false;
 }
 
@@ -196,46 +211,22 @@ void TabletNode::BeginLoad() {
 
 bool TabletNode::FinishLoad(TabletPtr tablet) {
     MutexLock lock(&mutex_);
-    assert(onload_count_ > 0);
-    --onload_count_;
-    return true;
-}
-
-bool TabletNode::LoadNextWaitTablet(TabletPtr* tablet) {
-    MutexLock lock(&mutex_);
-    if (onload_count_ >= static_cast<uint32_t>(FLAGS_tera_master_max_load_concurrency)) {
-        return false;
+    //assert(onload_count_ > 0);
+    if (onload_count_ > 0) {
+     --onload_count_;
     }
-    std::list<TabletPtr>::iterator it = wait_load_list_.begin();
-    if (it == wait_load_list_.end()) {
-        return false;
-    }
-    *tablet = *it;
-    wait_load_list_.pop_front();
-    BeginLoad();
     return true;
 }
 
 bool TabletNode::TrySplit(TabletPtr tablet, const std::string& split_key) {
     MutexLock lock(&mutex_);
-    data_size_ -= tablet->GetDataSize();
-//    VLOG(5) << "split on: " << addr_ << ", size: " << tablet->GetDataSize()
-//        << ", total size: " << data_size_;
-    if (wait_split_list_.empty()
-        && onsplit_count_ < static_cast<uint32_t>(FLAGS_tera_master_max_split_concurrency)) {
+    // data_size_ should be modified by LoadTabletProcedure UnloadTabletProcedure and QueryCallback
+    // should not be modified by TrySplit
+    if (onsplit_count_ < static_cast<uint32_t>(FLAGS_tera_master_max_split_concurrency)) {
         ++onsplit_count_;
-        return true;
+        data_size_ -= tablet->GetDataSize();
+        return true;        
     }
-    std::list<std::pair<TabletPtr, std::string> >::iterator it;
-    for (it = wait_split_list_.begin(); it != wait_split_list_.end(); ++it) {
-        if (it->first == tablet) {
-            return false;
-        }
-    }
-    if (it == wait_split_list_.end()) {
-        wait_split_list_.push_back(std::make_pair(tablet, split_key));
-    }
-
     return false;
 }
 
@@ -245,24 +236,25 @@ bool TabletNode::FinishSplit() {
     return true;
 }
 
-bool TabletNode::SplitNextWaitTablet(TabletPtr* tablet, std::string* split_key) {
+bool TabletNode::CanUnload() {
     MutexLock lock(&mutex_);
-    if (onsplit_count_ >= static_cast<uint32_t>(FLAGS_tera_master_max_split_concurrency)) {
-        return false;
+    if (unloading_count_ < static_cast<uint32_t>(FLAGS_tera_master_max_unload_concurrency)) {
+        ++unloading_count_;
+        return true;
     }
-    std::list<std::pair<TabletPtr, std::string> >::iterator it = wait_split_list_.begin();
-    if (it == wait_split_list_.end()) {
-        return false;
-    }
-    *tablet = it->first;
-    *split_key = it->second;
-    wait_split_list_.pop_front();
-    ++onsplit_count_;
-    return true;
+    return false;
+}
+
+void TabletNode::FinishUnload() {
+    MutexLock lock(&mutex_);
+    --unloading_count_;
 }
 
 NodeState TabletNode::GetState() {
     MutexLock lock(&mutex_);
+    if (state_ == kOffLine && get_millis() - timestamp_ < FLAGS_tera_master_tabletnode_timeout) {
+        return kPendingOffLine;
+    }
     return state_;
 }
 
@@ -276,6 +268,8 @@ bool TabletNode::SetState(NodeState new_state, NodeState* old_state) {
             << StatusCodeToString(static_cast<StatusCode>(state_)) << " to "
             << StatusCodeToString(static_cast<StatusCode>(new_state));
         state_ = new_state;
+        info_.set_status_m(NodeStateToString(state_));
+        timestamp_ = get_millis();
         return true;
     }
     VLOG(5) << addr_ << " not support state switch "
@@ -293,12 +287,17 @@ bool TabletNode::CheckStateSwitch(NodeState old_state, NodeState new_state) {
         }
         break;
     case kOffLine:
-        if (new_state == kReady || new_state == kWaitKick) {
+        if (new_state == kReady) {
             return true;
         }
         break;
     case kWaitKick:
-        if (new_state == kOnKick) {
+        if (new_state == kOnKick || new_state == kOffLine) {
+            return true;
+        }
+        break;
+    case kOnKick:
+        if (new_state == kOffLine) {
             return true;
         }
         break;
@@ -324,7 +323,7 @@ void TabletNode::ResetQueryFailCount() {
 }
 
 TabletNodeManager::TabletNodeManager(MasterImpl* master_impl)
-    : master_impl_(master_impl) {}
+    : tabletnode_added_(&mutex_), master_impl_(master_impl) {}
 
 TabletNodeManager::~TabletNodeManager() {
     MutexLock lock(&mutex_);
@@ -336,30 +335,40 @@ TabletNodePtr TabletNodeManager::AddTabletNode(const std::string& addr,
     TabletNodePtr null_ptr;
     std::pair<TabletNodeList::iterator, bool> ret = tabletnode_list_.insert(
         std::pair<std::string, TabletNodePtr>(addr, null_ptr));
-    if (!ret.second) {
-        LOG(ERROR) << "tabletnode [" << addr << "] exists";
-        return ret.first->second;
-    }
     TabletNodePtr& state = ret.first->second;
-    state.reset(new TabletNode(addr, uuid));
-    LOG(INFO) << "add tabletnode : " << addr << ", id : " << uuid;
+    // already has one TS at the same IP:PORT addr, return the existing TabletNodePtr
+    if (!ret.second) {
+        TabletNodePtr existing_node = ret.first->second;
+        LOG(ERROR) << "tabletnode [" << addr << " exist, existing uuid: " 
+                << existing_node->uuid_ << ", to be added uuid: " << uuid;
+        return existing_node;
+    }
+    else {
+        LOG(INFO) << "add tabletnode : " << addr << ", id : " << uuid;
+        state.reset(new TabletNode(addr, uuid));
+    }
+    // kReady represent heartbeat status
+    state->SetState(kReady, NULL);
+    tabletnode_added_.Broadcast();
     return state;
 }
 
-void TabletNodeManager::DelTabletNode(const std::string& addr) {
-    TabletNodePtr state;
-    {
-        MutexLock lock(&mutex_);
-        TabletNodeList::iterator it = tabletnode_list_.find(addr);
-        if (it == tabletnode_list_.end()) {
-            LOG(ERROR) << "tabletnode [" << addr << "] does not exist";
-            return;
-        }
-        state = it->second;
-        tabletnode_list_.erase(it);
+TabletNodePtr TabletNodeManager::DelTabletNode(const std::string& addr) {
+    TabletNodePtr state(nullptr);
+    
+    MutexLock lock(&mutex_);
+    TabletNodeList::iterator it = tabletnode_list_.find(addr);
+    if (it == tabletnode_list_.end()) {
+        LOG(ERROR) << "tabletnode [" << addr << "] does not exist";
+        return state;
     }
+    state = it->second;
+    state->SetState(kOffLine, NULL);
+    tabletnode_list_.erase(it);
+    
     // delete node may block, so we'd better release the mutex before that
-    LOG(INFO) << "delete tabletnode : " << addr;
+    LOG(INFO) << "delete tabletnode: " << addr << ", uuid: " << state->uuid_;
+    return state;
 }
 
 void TabletNodeManager::UpdateTabletNode(const std::string& addr,
@@ -385,6 +394,7 @@ void TabletNodeManager::UpdateTabletNode(const std::string& addr,
     node->info_.set_status_m(NodeStateToString(node->state_));
     node->info_.set_tablet_onload(node->onload_count_);
     node->info_.set_tablet_onsplit(node->onsplit_count_);
+    node->info_.set_tablet_unloading(node->unloading_count_);
 
     node->average_counter_.read_pending_ =
         CounterWeightedSum(state.info_.read_pending(),
@@ -427,33 +437,34 @@ void TabletNodeManager::GetAllTabletNodeInfo(std::vector<TabletNodePtr>* array) 
     }
 }
 
-bool TabletNodeManager::FindTabletNode(const std::string& addr,
+TabletNodePtr TabletNodeManager::FindTabletNode(const std::string& addr,
                                        TabletNodePtr* state) {
+    TabletNodePtr node;
     MutexLock lock(&mutex_);
     TabletNodeList::iterator it = tabletnode_list_.find(addr);
     if (it == tabletnode_list_.end()) {
-        LOG(WARNING) << "tabletnode [" << addr << "] does not exist";
-        return false;
+        //LOG(WARNING) << "tabletnode [" << addr << "] does not exist";
+        return node;
     }
+    node = it->second;
     if (NULL != state) {
         *state = it->second;
     }
-    return true;
+    return node;
 }
 
-bool TabletNodeManager::ScheduleTabletNode(Scheduler* scheduler, const std::string& table_name,
-                                           bool is_move, std::string* node_addr) {
-    TabletNodePtr node;
-    if (ScheduleTabletNode(scheduler, table_name, is_move, &node)) {
-        *node_addr = node->GetAddr();
-        return true;
-    }
-    return false;
+bool TabletNodeManager::ScheduleTabletNodeOrWait(Scheduler* scheduler, 
+        const std::string& table_name, bool is_move, TabletNodePtr* node) {
+    return ScheduleTabletNode(scheduler, table_name, is_move, node, true);
 }
 
 bool TabletNodeManager::ScheduleTabletNode(Scheduler* scheduler, const std::string& table_name,
                                            bool is_move, TabletNodePtr* node) {
-    VLOG(7) << "ScheduleTabletNode()";
+    return ScheduleTabletNode(scheduler, table_name, is_move, node, false);
+}
+
+bool TabletNodeManager::ScheduleTabletNode(Scheduler* scheduler, const std::string& table_name,
+                                           bool is_move, TabletNodePtr* node, bool wait) {
     MutexLock lock(&mutex_);
     std::string meta_node_addr;
     master_impl_->GetMetaTabletAddr(&meta_node_addr);
@@ -461,6 +472,15 @@ bool TabletNodeManager::ScheduleTabletNode(Scheduler* scheduler, const std::stri
     TabletNodePtr null_ptr, meta_node;
     std::vector<TabletNodePtr> candidates;
     std::vector<TabletNodePtr> slow_candidates;
+    while (tabletnode_list_.empty()) {
+        if (!wait) {
+            LOG(WARNING) << "currently no available tabletnode"; 
+            return false;
+        }
+        // If tabletnode_list is empty, we should hang and wait TabletNodeManager::AddTabletNode wake us
+        LOG(WARNING) << "currently no available tabletnode, ScheduleTabletNode suspended"; 
+        tabletnode_added_.Wait();
+    }
 
     TabletNodeList::const_iterator it = tabletnode_list_.begin();
     for (; it != tabletnode_list_.end(); ++it) {
@@ -552,6 +572,8 @@ std::string NodeStateToString(NodeState state) {
             return "kReady";
         case kOffLine:
             return "kOffLine";
+        case kPendingOffLine:
+            return "kPendingOffLine";
         case kOnKick:
             return "kOnKick";
         case kWaitKick:

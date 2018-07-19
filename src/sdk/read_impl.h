@@ -13,7 +13,7 @@
 #include "sdk/sdk_task.h"
 #include "tera.h"
 #include "types.h"
-#include "utils/timer.h"
+#include "common/timer.h"
 
 namespace tera {
 
@@ -44,6 +44,8 @@ public:
     void SetMaxVersions(uint32_t max_version);
     /// 返回max_version
     uint32_t GetMaxVersions();
+    void SetMaxQualifiers(uint64_t max_qualifiers);
+    uint64_t GetMaxQualifiers();
     /// 设置超时时间(只影响当前操作,不影响Table::SetReadTimeout设置的默认读超时)
     void SetTimeOut(int64_t timeout_ms);
     /// 设置异步回调, 操作会异步返回
@@ -120,6 +122,8 @@ public:
 
     Table* GetTable() { return (Table*)table_; }
 
+    uint32_t Size() { return 0; }
+
 private:
     TableImpl* table_;
     std::string row_key_;
@@ -137,6 +141,7 @@ private:
     int64_t ts_start_;
     int64_t ts_end_;
     uint32_t max_version_;
+    uint64_t max_qualifiers_;
     uint64_t snapshot_id_;
 
     int64_t timeout_ms_;

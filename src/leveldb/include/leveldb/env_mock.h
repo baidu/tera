@@ -32,9 +32,12 @@ public:
     void SetSequentialFileReadCallback(bool (*p)(int32_t i, char* scratch, size_t* mock_size));
     virtual Status NewSequentialFile(const std::string& fname, SequentialFile** result);
 
-    virtual Status NewRandomAccessFile(const std::string& fname, RandomAccessFile** result);
+    virtual Status NewRandomAccessFile(const std::string& fname, RandomAccessFile** result,
+                                       const EnvOptions& options);
 
-    virtual Status NewWritableFile(const std::string& fname, WritableFile** result);
+    virtual Status NewWritableFile(const std::string& fname, 
+                                   WritableFile** result, 
+                                   const EnvOptions& options);
 
     virtual Status FileExists(const std::string& fname);
 

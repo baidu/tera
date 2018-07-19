@@ -6,8 +6,10 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file. See the AUTHORS file for names of contributors.
 
+#include <cstring>
+#include <stdio.h>
+#include <malloc.h>
 #include "table/format.h"
-
 #include "leveldb/env.h"
 #include "port/port.h"
 #include "table/block.h"
@@ -67,6 +69,85 @@ Status Footer::DecodeFrom(Slice* input) {
   return result;
 }
 
+char* DirectIOAlign(RandomAccessFile* file, uint64_t offset, size_t len,
+                    DirectIOArgs* direct_io_args) {
+  assert(direct_io_args);
+  assert(offset >= 0 && len >= 0);
+  /* use this formula you will find the number Y, 
+   * which Y is the first bigger number than X, at the same time Y is the power of 2.
+   * Y = (X + (2^n - 1)) & (~(2^n - 1))
+   * 
+   * this function , accept len [is X] to find aligned_len [is Y + alignment], 
+   * accept offset [is X] to find aligned_offset [is Y - alignment]
+   * 
+   * example: offset = 123 len = 610 - 123
+   *         123              610
+   *          [................]                   need buffer
+   *
+   * aligned_offset = 0, aligned_len = 1024
+   *    [.................|.................]      alloc buffer x % alignment == 0
+   *    x               x+512              x+1024  
+   */
+  size_t alignment = file->GetRequiredBufferAlignment();
+  direct_io_args->aligned_len = alignment + (len % alignment > 0 ?
+    (len + alignment - 1) & (~(alignment - 1)) : len);
+
+  direct_io_args->aligned_offset = offset > 0 ? 
+    ((offset + alignment - 1) & (~(alignment -1))) - alignment : 0;
+  return (char*)memalign(alignment, direct_io_args->aligned_len);
+}
+
+void FreeBuf(char* buf, bool use_direct_io_read) {
+  if (buf != NULL) {
+    if (use_direct_io_read) {
+      free(buf);
+    } else {
+      delete[] buf;
+    }
+    buf = NULL;
+  }
+}
+
+Status ReadSstFile(RandomAccessFile* file,
+                   bool use_direct_io_read,
+                   uint64_t offset,
+                   size_t len,
+                   Slice* contents,
+                   char** buf) {
+  Status s;
+  if (use_direct_io_read) {
+    // calc and malloc align memory for direct io
+    DirectIOArgs read_args;
+    *buf = DirectIOAlign(file, offset, len, &read_args);
+    if (*buf == NULL) {
+      return Status::Corruption("direct io allgn failed");
+    }
+    //read to align buf
+    s = file->Read(read_args.aligned_offset, read_args.aligned_len, contents, *buf);
+    if (!s.ok()) {
+      FreeBuf(*buf, use_direct_io_read);
+      return s;
+    }
+    // reset 'contents' to actual block contents
+    uint64_t align_offset = offset - read_args.aligned_offset;
+    if (contents->size() >= align_offset + len) {
+      contents->remove_prefix(align_offset);
+      contents->remove_suffix(contents->size() - len);
+    } else {
+      FreeBuf(*buf, use_direct_io_read);
+      return Status::Corruption("direct io read contents size invalid");
+    }
+  } else {
+    *buf = new char[len];
+    s = file->Read(offset, len, contents, *buf);
+    if (!s.ok()) {
+      FreeBuf(*buf, use_direct_io_read);
+      return s;
+    }
+  }
+  return s;
+}
+
 Status ReadBlock(RandomAccessFile* file,
                  const ReadOptions& options,
                  const BlockHandle& handle,
@@ -78,15 +159,27 @@ Status ReadBlock(RandomAccessFile* file,
   // Read the block contents as well as the type/crc footer.
   // See table_builder.cc for the code that built this structure.
   size_t n = static_cast<size_t>(handle.size());
-  char* buf = new char[n + kBlockTrailerSize];
+  size_t len = n + kBlockTrailerSize;
+  uint64_t offset = handle.offset();
   Slice contents;
-  Status s = file->Read(handle.offset(), n + kBlockTrailerSize, &contents, buf);
+  char* buf = NULL;
+  const Options& db_opt = *(options.db_opt);
+  Status s = ReadSstFile(file, db_opt.use_direct_io_read, offset, len, &contents, &buf);
   if (!s.ok()) {
-    delete[] buf;
     return s;
   }
+  s = ParseBlock(n, offset, options, contents, result);
+  FreeBuf(buf, db_opt.use_direct_io_read);
+  return s;
+}
+
+Status ParseBlock(size_t n,
+                  size_t offset,
+                  const ReadOptions& options,
+                  Slice contents,
+                  BlockContents* result) {
+
   if (contents.size() != n + kBlockTrailerSize) {
-    delete[] buf;
     return Status::Corruption("truncated block read");
   }
 
@@ -96,43 +189,33 @@ Status ReadBlock(RandomAccessFile* file,
     const uint32_t crc = crc32c::Unmask(DecodeFixed32(data + n + 1));
     const uint32_t actual = crc32c::Value(data, n + 1);
     if (actual != crc) {
-      delete[] buf;
-      s = Status::Corruption("block checksum mismatch");
-      return s;
+      char err[128] = {'\0'};
+      sprintf(err, "block checksum mismatch: crc %u, actual %u, offset %lu, size %lu",
+              crc, actual, offset, n + kBlockTrailerSize);
+      return Status::Corruption(Slice(err, strlen(err)));
     }
   }
 
-  switch (data[n]) {
-    case kNoCompression:
-      if (data != buf) {
-        // File implementation gave us pointer to some other data.
-        // Use it directly under the assumption that it will be live
-        // while the file is open.
-        delete[] buf;
-        result->data = Slice(data, n);
-        result->heap_allocated = false;
-        result->cachable = false;  // Do not double-cache
-      } else {
-        result->data = Slice(buf, n);
-        result->heap_allocated = true;
-        result->cachable = true;
-      }
 
-      // Ok
+  switch (data[n]) {
+    case kNoCompression: {
+      char* buf = new char[n];
+      memcpy(buf, contents.data(), n);
+      result->data = Slice(buf, n);
+      result->heap_allocated = true;
+      result->cachable = true;
       break;
+    }
     case kSnappyCompression: {
       size_t ulength = 0;
       if (!port::Snappy_GetUncompressedLength(data, n, &ulength)) {
-        delete[] buf;
         return Status::Corruption("Snappy: corrupted compressed block contents");
       }
       char* ubuf = new char[ulength];
       if (!port::Snappy_Uncompress(data, n, ubuf)) {
-        delete[] buf;
         delete[] ubuf;
         return Status::Corruption("Snappy: corrupted compressed block contents");
       }
-      delete[] buf;
       result->data = Slice(ubuf, ulength);
       result->heap_allocated = true;
       result->cachable = true;
@@ -144,10 +227,8 @@ Status ReadBlock(RandomAccessFile* file,
         uncompressed_buffer.resize(uncompressed_size);
         if (!port::Bmz_Uncompress(data, n, &uncompressed_buffer[0],
                                   &uncompressed_size)) {
-            delete[] buf;
             return Status::Corruption("Bmz: corrupted compressed block contents");
         }
-        delete[] buf;
         result->data = Slice(&uncompressed_buffer[0], uncompressed_size);
         result->heap_allocated = true;
         result->cachable = true;
@@ -159,17 +240,14 @@ Status ReadBlock(RandomAccessFile* file,
         uncompressed_buffer.resize(uncompressed_size);
         if (!port::Lz4_Uncompress(data, n, &uncompressed_buffer[0],
                                   &uncompressed_size)) {
-            delete[] buf;
             return Status::Corruption("LZ4: corrupted compressed block contents");
         }
-        delete[] buf;
         result->data = Slice(&uncompressed_buffer[0], uncompressed_size);
         result->heap_allocated = true;
         result->cachable = true;
         break;
     }
     default:
-      delete[] buf;
       return Status::Corruption("bad block type");
   }
 

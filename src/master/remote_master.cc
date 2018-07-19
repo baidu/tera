@@ -26,36 +26,6 @@ RemoteMaster::RemoteMaster(MasterImpl* master_impl)
 
 RemoteMaster::~RemoteMaster() {}
 
-void RemoteMaster::GetSnapshot(google::protobuf::RpcController* controller,
-                               const GetSnapshotRequest* request,
-                               GetSnapshotResponse* response,
-                               google::protobuf::Closure* done) {
-    LOG(INFO) << "accept RPC (GetSnapshot): " << tera::utils::GetRemoteAddress(controller);
-    ThreadPool::Task callback =
-        std::bind(&RemoteMaster::DoGetSnapshot, this, controller, request, response, done);
-    thread_pool_->AddTask(callback);
-}
-
-void RemoteMaster::DelSnapshot(google::protobuf::RpcController* controller,
-                               const DelSnapshotRequest* request,
-                               DelSnapshotResponse* response,
-                               google::protobuf::Closure* done) {
-    LOG(INFO) << "accept RPC (DelSnapshot): " << tera::utils::GetRemoteAddress(controller);
-    ThreadPool::Task callback =
-        std::bind(&RemoteMaster::DoDelSnapshot, this, controller, request, response, done);
-    thread_pool_->AddTask(callback);
-}
-
-void RemoteMaster::GetRollback(google::protobuf::RpcController* controller,
-                               const RollbackRequest* request,
-                               RollbackResponse* response,
-                               google::protobuf::Closure* done) {
-    LOG(INFO) << "accept RPC (Rollback): " << tera::utils::GetRemoteAddress(controller);
-    ThreadPool::Task callback =
-        std::bind(&RemoteMaster::DoRollback, this, controller, request, response, done);
-    thread_pool_->AddTask(callback);
-}
-
 void RemoteMaster::CreateTable(google::protobuf::RpcController* controller,
                                const CreateTableRequest* request,
                                CreateTableResponse* response,
@@ -116,16 +86,6 @@ void RemoteMaster::UpdateCheck(google::protobuf::RpcController* controller,
     thread_pool_->AddTask(callback);
 }
 
-void RemoteMaster::CompactTable(google::protobuf::RpcController* controller,
-                                const CompactTableRequest* request,
-                                CompactTableResponse* response,
-                                google::protobuf::Closure* done) {
-    LOG(INFO) << "accept RPC (CompactTable): " << tera::utils::GetRemoteAddress(controller);
-    ThreadPool::Task callback =
-        std::bind(&RemoteMaster::DoCompactTable, this, controller, request, response, done);
-    thread_pool_->AddTask(callback);
-}
-
 void RemoteMaster::SearchTable(google::protobuf::RpcController* controller,
                                const SearchTableRequest* request,
                                SearchTableResponse* response,
@@ -176,44 +136,7 @@ void RemoteMaster::OperateUser(google::protobuf::RpcController* controller,
     thread_pool_->AddTask(callback);
 }
 
-void RemoteMaster::RenameTable(google::protobuf::RpcController* controller,
-                               const RenameTableRequest* request,
-                               RenameTableResponse* response,
-                               google::protobuf::Closure* done) {
-    LOG(INFO) << "accept RPC (RenameTable): " << tera::utils::GetRemoteAddress(controller);
-    master_impl_->RenameTable(request, response, done);
-    LOG(INFO) << "finish RPC (RenameTable)";
-}
-
 // internal
-
-void RemoteMaster::DoGetSnapshot(google::protobuf::RpcController* controller,
-                                 const GetSnapshotRequest* request,
-                                 GetSnapshotResponse* response,
-                                 google::protobuf::Closure* done) {
-    LOG(INFO) << "run RPC (GetSnapshot)";
-    master_impl_->GetSnapshot(request, response, done);
-    LOG(INFO) << "finish RPC (GetSnapshot)";
-}
-
-void RemoteMaster::DoDelSnapshot(google::protobuf::RpcController* controller,
-                                 const DelSnapshotRequest* request,
-                                 DelSnapshotResponse* response,
-                                 google::protobuf::Closure* done) {
-    LOG(INFO) << "run RPC (DelSnapshot)";
-    master_impl_->DelSnapshot(request, response, done);
-    LOG(INFO) << "finish RPC (DelSnapshot)";
-}
-
-void RemoteMaster::DoRollback(google::protobuf::RpcController* controller,
-                             const RollbackRequest* request,
-                             RollbackResponse* response,
-                             google::protobuf::Closure* done) {
-    LOG(INFO) << "run RPC (Rollback)";
-    master_impl_->GetRollback(request, response, done);
-    LOG(INFO) << "finish RPC (Rollback)";
-}
-
 void RemoteMaster::DoCreateTable(google::protobuf::RpcController* controller,
                                  const CreateTableRequest* request,
                                  CreateTableResponse* response,
@@ -266,15 +189,6 @@ void RemoteMaster::DoUpdateCheck(google::protobuf::RpcController* controller,
     LOG(INFO) << "accept RPC (UpdateCheck)";
     master_impl_->UpdateCheck(request, response, done);
     LOG(INFO) << "finish RPC (UpdateCheck)";
-}
-
-void RemoteMaster::DoCompactTable(google::protobuf::RpcController* controller,
-                                  const CompactTableRequest* request,
-                                  CompactTableResponse* response,
-                                  google::protobuf::Closure* done) {
-    LOG(INFO) << "run RPC (CompactTable)";
-    master_impl_->CompactTable(request, response, done);
-    LOG(INFO) << "finish RPC (CompactTable)";
 }
 
 void RemoteMaster::DoSearchTable(google::protobuf::RpcController* controller,

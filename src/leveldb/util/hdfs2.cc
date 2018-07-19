@@ -7,8 +7,9 @@
 
 #include "hdfs.h"
 #include "include/hdfs2.h"
+#include "hdfs_util.h"
 #include "util/hash.h"
-#include "../utils/counter.h"
+#include "../common/counter.h"
 
 namespace leveldb {
 
@@ -255,6 +256,21 @@ int32_t Hdfs2::LockDirectory(const std::string& path) {
 int32_t Hdfs2::UnlockDirectory(const std::string& path) {
   // no implementation
   return -1;
+}
+
+int32_t Hdfs2::ClearDirOwner(const std::string& path) {
+  // hdfs has no dir owner, so return succ directly
+  return 0;
+}
+
+int32_t Hdfs2::Stat(const std::string& filepath, struct stat* st) {
+  hdfsFileInfo* pFileInfo = (*hdfsGetPathInfo)((hdfsFS)GetFSHandle(filepath), filepath.c_str());
+  if (pFileInfo != NULL) {
+    HdfsFileInfo2PosixFileStat(pFileInfo, st);
+    return 0;
+  }
+  return -1;
+
 }
 
 

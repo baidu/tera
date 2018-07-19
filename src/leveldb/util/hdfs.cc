@@ -6,10 +6,10 @@
 
 #include <assert.h>
 #include <dlfcn.h>
-
 #include "hdfs.h"
 #include "include/hdfs.h"
-#include "../utils/counter.h"
+#include "hdfs_util.h"
+#include "../common/counter.h"
 
 namespace leveldb {
 
@@ -233,6 +233,21 @@ int32_t Hdfs::UnlockDirectory(const std::string& path) {
   return -1;
 }
 
+
+int32_t Hdfs::Stat(const std::string& filename, struct stat* fstat) {
+  hdfsFileInfo* pFileInfo = (*hdfsGetPathInfo)((hdfsFS)fs_, filename.c_str());
+  if (pFileInfo != NULL) {
+    HdfsFileInfo2PosixFileStat(pFileInfo, fstat);
+    (*hdfsFreeFileInfo)(pFileInfo, 1);
+    return 0;
+  }
+  return -1;
 }
 
+int32_t Hdfs::ClearDirOwner(const std::string& path) {
+  // hdfs has no dir owner, so we return succ directly
+  return 0;
+}
+
+}
 /* vim: set expandtab ts=2 sw=2 sts=2 tw=100: */

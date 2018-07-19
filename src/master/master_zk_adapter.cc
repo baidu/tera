@@ -43,6 +43,13 @@ bool MasterZkAdapter::Init(std::string* root_tablet_addr,
         Reset();
         return false;
     }
+
+    if (!WatchMasterLock()) {
+        UnlockMasterLock();
+        Reset();
+        return false;
+    }
+
     if (!CreateMasterNode()) {
         UnlockMasterLock();
         Reset();
@@ -106,7 +113,7 @@ bool MasterZkAdapter::LockMasterLock() {
     int zk_errno = zk::ZE_OK;
     while (!SyncLock(kMasterLockPath, &zk_errno, -1)) {
         if (retry_count++ >= FLAGS_tera_zk_retry_max_times) {
-            LOG(ERROR) << "fail to acquire master lock";
+            LOG(ERROR) << "fail to acquire master lock " << zk::ZkErrnoToString(zk_errno);
             return false;
         }
         LOG(ERROR) << "retry lock master-lock in "
@@ -142,7 +149,7 @@ bool MasterZkAdapter::CreateMasterNode() {
     int zk_errno = zk::ZE_OK;
     while (!CreateEphemeralNode(kMasterNodePath, server_addr_, &zk_errno)) {
         if (retry_count++ >= FLAGS_tera_zk_retry_max_times) {
-            LOG(ERROR) << "fail to create master node";
+            LOG(ERROR) << "fail to create master node " << zk::ZkErrnoToString(zk_errno);
             return false;
         }
         LOG(ERROR) << "retry create master node in "
@@ -161,7 +168,7 @@ bool MasterZkAdapter::DeleteMasterNode() {
     while (!DeleteNode(kMasterNodePath, &zk_errno)
         && zk_errno != zk::ZE_NOT_EXIST) {
         if (retry_count++ >= FLAGS_tera_zk_retry_max_times) {
-            LOG(ERROR) << "fail to delete master node";
+            LOG(ERROR) << "fail to delete master node " << zk::ZkErrnoToString(zk_errno);
             return false;
         }
         LOG(ERROR) << "retry delete master node in "
@@ -181,7 +188,8 @@ bool MasterZkAdapter::KickTabletServer(const std::string& ts_host,
     while (!CreatePersistentNode(kKickPath + "/" + ts_zk_id, ts_host, &zk_errno)
         && zk_errno != zk::ZE_EXIST) {
         if (retry_count++ >= FLAGS_tera_zk_retry_max_times) {
-            LOG(ERROR) << "fail to kick ts [" << ts_host << "]";
+            LOG(ERROR) << "fail to kick ts [" << ts_host << "] "
+                << zk::ZkErrnoToString(zk_errno);
             return false;
         }
         LOG(ERROR) << "retry kick ts in "
@@ -201,7 +209,7 @@ bool MasterZkAdapter::MarkSafeMode() {
     while (!CreatePersistentNode(kSafeModeNodePath, "safemode", &zk_errno)
         && zk_errno != zk::ZE_EXIST) {
         if (retry_count++ >= FLAGS_tera_zk_retry_max_times) {
-            LOG(ERROR) << "fail to mark safemode";
+            LOG(ERROR) << "fail to mark safemode " << zk::ZkErrnoToString(zk_errno);
             return false;
         }
         LOG(ERROR) << "retry mark safemode in "
@@ -221,7 +229,7 @@ bool MasterZkAdapter::UnmarkSafeMode() {
     while (!DeleteNode(kSafeModeNodePath, &zk_errno)
         && zk_errno != zk::ZE_NOT_EXIST) {
         if (retry_count++ >= FLAGS_tera_zk_retry_max_times) {
-            LOG(ERROR) << "fail to unmark safemode";
+            LOG(ERROR) << "fail to unmark safemode " << zk::ZkErrnoToString(zk_errno);
             return false;
         }
         LOG(ERROR) << "retry unmark safemode in "
@@ -241,7 +249,7 @@ bool MasterZkAdapter::UpdateRootTabletNode(const std::string& root_tablet_addr) 
     while (!WriteNode(kRootTabletNodePath, root_tablet_addr, &zk_errno)
         && zk_errno != zk::ZE_NOT_EXIST) {
         if (retry_count++ >= FLAGS_tera_zk_retry_max_times) {
-            LOG(INFO) << "fail to update root node";
+            LOG(INFO) << "fail to update root node " << zk::ZkErrnoToString(zk_errno);
             return false;
         }
         LOG(ERROR) << "retry update root node in "
@@ -260,7 +268,7 @@ bool MasterZkAdapter::UpdateRootTabletNode(const std::string& root_tablet_addr) 
     while (!CreatePersistentNode(kRootTabletNodePath, root_tablet_addr,
                                  &zk_errno)) {
         if (retry_count++ >= FLAGS_tera_zk_retry_max_times) {
-            LOG(ERROR) << "fail to create root node";
+            LOG(ERROR) << "fail to create root node " << zk::ZkErrnoToString(zk_errno);
             return false;
         }
         LOG(ERROR) << "retry create root node in "
@@ -279,7 +287,7 @@ bool MasterZkAdapter::WatchRootTabletNode(bool* is_exist,
     int zk_errno = zk::ZE_OK;
     while (!CheckAndWatchExist(kRootTabletNodePath, is_exist, &zk_errno)) {
         if (retry_count++ >= FLAGS_tera_zk_retry_max_times) {
-            LOG(ERROR) << "fail to check root node exist";
+            LOG(ERROR) << "fail to check root node exist " << zk::ZkErrnoToString(zk_errno);
             return false;
         }
         LOG(ERROR) << "retry check root node exist in "
@@ -298,7 +306,7 @@ bool MasterZkAdapter::WatchRootTabletNode(bool* is_exist,
     while (!ReadAndWatchNode(kRootTabletNodePath, root_tablet_addr, &zk_errno)
         && zk_errno != zk::ZE_NOT_EXIST) {
         if (retry_count++ >= FLAGS_tera_zk_retry_max_times) {
-            LOG(ERROR) << "fail to read root node";
+            LOG(ERROR) << "fail to read root node " << zk::ZkErrnoToString(zk_errno);
             return false;
         }
         LOG(ERROR) << "retry read root node in "
@@ -321,7 +329,7 @@ bool MasterZkAdapter::WatchSafeModeMark(bool* is_safemode) {
     int zk_errno = zk::ZE_OK;
     while (!CheckAndWatchExist(kSafeModeNodePath, is_safemode, &zk_errno)) {
         if (retry_count++ >= FLAGS_tera_zk_retry_max_times) {
-            LOG(ERROR) << "fail to watch safemode mark";
+            LOG(ERROR) << "fail to watch safemode mark" << zk::ZkErrnoToString(zk_errno);
             return false;
         }
         LOG(ERROR) << "retry watch safe mode mark in "
@@ -342,7 +350,7 @@ bool MasterZkAdapter::WatchTabletNodeList(std::map<std::string, std::string>* ta
     while (!ListAndWatchChildren(kTsListPath, &name_list, &data_list,
                                  &zk_errno)) {
         if (retry_count++ >= FLAGS_tera_zk_retry_max_times) {
-            LOG(ERROR) << "fail to watch tabletnode list";
+            LOG(ERROR) << "fail to watch tabletnode list " << zk::ZkErrnoToString(zk_errno);
             return false;
         }
         LOG(ERROR) << "retry watch tabletnode list in "
@@ -379,20 +387,30 @@ bool MasterZkAdapter::WatchTabletNodeList(std::map<std::string, std::string>* ta
     return true;
 }
 
+bool MasterZkAdapter::WatchMasterLock() {
+    LOG(INFO) << "watch master lock ...";
+    int32_t retry_count = 0;
+    int zk_errno = zk::ZE_OK;
+    while (!WatchZkLock(kMasterLockPath, &zk_errno)) {
+        if (retry_count++ >= FLAGS_tera_zk_retry_max_times) {
+            LOG(ERROR) << "fail to watch master lock " << zk::ZkErrnoToString(zk_errno);
+            return false;
+        }
+        LOG(ERROR) << "retry watch master-lock in "
+            << FLAGS_tera_zk_retry_period << " ms, retry=" << retry_count;
+        ThisThread::Sleep(FLAGS_tera_zk_retry_period);
+        zk_errno = zk::ZE_OK;
+    }
+    LOG(INFO) << "watch master lock success";
+    return true;
+}
+
 void MasterZkAdapter::OnSafeModeMarkCreated() {
     LOG(ERROR) << "safemode mark node is created";
 }
 
 void MasterZkAdapter::OnSafeModeMarkDeleted() {
     LOG(ERROR) << "safemode mark node is deleted";
-}
-
-void MasterZkAdapter::OnMasterLockLost() {
-    LOG(ERROR) << "master lock lost";
-    master_impl_->SetMasterStatus(MasterImpl::kIsSecondary);
-    master_impl_->DisableQueryTabletNodeTimer();
-    DeleteMasterNode();
-    Reset();
 }
 
 void MasterZkAdapter::OnTabletNodeListDeleted() {
@@ -424,10 +442,18 @@ void MasterZkAdapter::OnRootTabletNodeDeleted() {
 
 void MasterZkAdapter::OnMasterNodeDeleted() {
     LOG(ERROR) << "master node deleted";
+    // TODO: not support from kRuning to secondary
     master_impl_->SetMasterStatus(MasterImpl::kIsSecondary);
     master_impl_->DisableQueryTabletNodeTimer();
     UnlockMasterLock();
     Reset();
+}
+
+void MasterZkAdapter::OnZkLockDeleted() {
+    LOG(ERROR) << "master lock deleted, kill-self";
+    master_impl_->DisableQueryTabletNodeTimer();
+    Reset();
+    _Exit(EXIT_FAILURE);
 }
 
 void MasterZkAdapter::OnTabletServerKickMarkCreated() {

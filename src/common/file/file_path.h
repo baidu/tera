@@ -8,6 +8,8 @@
 #include<unistd.h>
 #include<string>
 #include<vector>
+#include <sys/types.h> 
+#include <sys/stat.h>
 
 void SplitStringPath(const std::string& full_path,
                      std::string* dir_part,
@@ -27,6 +29,11 @@ std::string UidToName(uid_t uid);
 
 bool ListCurrentDir(const std::string& dir_path,
                     std::vector<std::string>* file_list);
+
+typedef std::pair<std::string, struct stat> FileStateInfo;
+
+bool ListCurrentDirWithStat(const std::string& dir_path,
+                            std::vector<FileStateInfo>* file_list);
 
 bool IsExist(const std::string& path);
 

@@ -13,26 +13,60 @@
 #include "common/timer.h"
 #include "utils/string_util.h"
 
-DECLARE_bool(tera_master_availability_show_details_enabled);
-DECLARE_int64(tera_master_availability_error_threshold);
-DECLARE_int64(tera_master_availability_fatal_threshold);
-DECLARE_int64(tera_master_availability_warning_threshold);
-DECLARE_int64(tera_master_not_available_threshold);
+DEFINE_bool(tera_master_availability_show_details_enabled, false, "whether show details of not-ready tablets"); 
+DEFINE_int64(tera_master_availability_error_threshold, 600, "10 minutes, the threshold (in s) of error availability");   
+DEFINE_int64(tera_master_availability_fatal_threshold, 3600, "1 hour, the threshold (in s) of fatal availability"); 
+DEFINE_int64(tera_master_availability_warning_threshold, 60, "1 minute, the threshold (in s) of warning availability"); 
+DEFINE_int64(tera_master_not_available_threshold, 0, "the threshold (in s) of not available");
 DECLARE_string(tera_master_meta_table_name);
 DECLARE_string(tera_master_meta_table_path);
 
 namespace tera {
 namespace master {
 
+static std::string GetNameFromPath(const std::string& path) {
+    if (path == FLAGS_tera_master_meta_table_path) {
+        return FLAGS_tera_master_meta_table_name;
+    }
+    std::vector<std::string> t;
+    SplitString(path, "/", &t); // table_name/tablet00...001
+    if (!t.empty()) {
+        return t[0];
+    } else {
+        return "";
+    }
+}
+
+
 TabletAvailability::TabletAvailability(std::shared_ptr<TabletManager> t)
     : tablet_manager_(t) {
     start_ts_ = get_micros();
 }
 
-void TabletAvailability::AddNotReadyTablet(const std::string& path) {
+void TabletAvailability::AddNotReadyTablet(const std::string& path,
+                                           const TabletMeta::TabletStatus& tablet_status) {
+    if (tablet_status == TabletMeta::kTabletReady || tablet_status == TabletMeta::kTabletDisable) {
+        return;
+    }
+
     MutexLock lock(&mutex_);
     int64_t ts = get_micros();
     tablets_.insert(std::pair<std::string, int64_t>(path, ts));
+    auto iter = not_ready_tablet_metrics_.emplace(
+        path,
+        MetricCounter{
+            metric_name_,
+            "table:" + GetNameFromPath(path) + ",tablet:" + path,
+            {SubscriberType::LATEST},
+            false
+        });
+
+    if (iter.second) {
+        VLOG(12) << "[Add NotReady To Metric]: " << static_cast<int64_t>(TabletErrorStatus::kNotReady);
+        iter.first->second.Set(static_cast<int64_t>(TabletErrorStatus::kNotReady));
+    } else {
+        VLOG(12) << "[Add NotReady To Metric Failed]: " << static_cast<int64_t>(TabletErrorStatus::kNotReady);
+    }
 
     if (tablets_hist_cost_[path].start_ts > 0) {
         VLOG(10) << "notready again " << path;
@@ -51,6 +85,7 @@ void TabletAvailability::AddNotReadyTablet(const std::string& path) {
 void TabletAvailability::EraseNotReadyTablet(const std::string& path) {
     MutexLock lock(&mutex_);
     tablets_.erase(path);
+    not_ready_tablet_metrics_.erase(path);
 
     if (tablets_hist_cost_.find(path) == tablets_hist_cost_.end() ||
         tablets_hist_cost_[path].start_ts == 0) {
@@ -71,33 +106,41 @@ void TabletAvailability::EraseNotReadyTablet(const std::string& path) {
         << ", reready " << tablets_hist_cost_[path].reready_num;
 }
 
-static std::string GetNameFromPath(const std::string& path) {
-    if (path == FLAGS_tera_master_meta_table_path) {
-        return FLAGS_tera_master_meta_table_name;
-    }
-    std::vector<std::string> t;
-    SplitString(path, "/", &t); // table_name/tablet00...001
-    return t[0];
-}
-
 void TabletAvailability::LogAvailability() {
-    MutexLock lock(&mutex_);
     int64_t not_avai_count = 0;
     int64_t not_avai_warning = 0;
     int64_t not_avai_error = 0;
     int64_t not_avai_fatal = 0;
-    int64_t start = ::common::timer::get_micros();
+    int64_t start = get_micros();
+    std::map<std::string, int64_t> tablets_snapshot;
     std::map<std::string, int64_t>::iterator it;
-    for (it = tablets_.begin(); it != tablets_.end(); ++it) {
+    std::set<std::string> ignore_tables;
+    {
+        MutexLock lock(&mutex_);
+        tablets_snapshot = tablets_;
+    }
+    for (it = tablets_snapshot.begin(); it != tablets_snapshot.end(); ++it) {
         std::string table_name = GetNameFromPath(it->first);
         TablePtr table;
         if (!tablet_manager_->FindTable(table_name, &table)) {
             LOG(ERROR) << "[availability] unknown table:" << table_name;
+            ignore_tables.insert(it->first);
             continue;
         }
         if (table->GetStatus() != kTableEnable) {
+            ignore_tables.insert(it->first);
+        }
+    }
+    int64_t all_tablets = tablet_manager_->GetAllTabletsCount();
+    
+    MutexLock lock(&mutex_);
+    for (it = tablets_.begin(); it != tablets_.end(); ++it) {
+        if (ignore_tables.find(it->first) != ignore_tables.end() ) {
             continue;
         }
+
+        auto metric_iter = not_ready_tablet_metrics_.find(it->first);
+        assert(metric_iter != not_ready_tablet_metrics_.end());
 
         if ((start - it->second) > FLAGS_tera_master_not_available_threshold * 1000 * 1000LL) {
             VLOG(12) << "[availability] not available:" << it->first;
@@ -105,20 +148,22 @@ void TabletAvailability::LogAvailability() {
         }
         if ((start - it->second) > FLAGS_tera_master_availability_fatal_threshold * 1000 * 1000LL) {
             not_avai_fatal++;
+            metric_iter->second.Set(static_cast<int64_t>(TabletErrorStatus::kFatal));
             if (FLAGS_tera_master_availability_show_details_enabled) {
                 LOG(INFO) << "[availability] fatal-tablet:" << it->first;
             }
         } else if ((start - it->second) > FLAGS_tera_master_availability_error_threshold * 1000 * 1000LL) {
             not_avai_error++;
+            metric_iter->second.Set(static_cast<int64_t>(TabletErrorStatus::kError));
             if (FLAGS_tera_master_availability_show_details_enabled) {
                 LOG(INFO) << "[availability] error-tablet:" << it->first;
             }
         } else if ((start - it->second) > FLAGS_tera_master_availability_warning_threshold * 1000 * 1000LL) {
             not_avai_warning++;
+            metric_iter->second.Set(static_cast<int64_t>(TabletErrorStatus::kWarning));
         }
     }
 
-    int64_t all_tablets = tablet_manager_->GetAllTabletsCount();
     LOG(INFO) << "[availability][current-status] fatal=" << not_avai_fatal
         << " f-ratio=" << RoundNumberToNDecimalPlaces((double)not_avai_fatal/all_tablets, 6)
         << ", error=" << not_avai_error
@@ -155,6 +200,9 @@ void TabletAvailability::LogAvailability() {
         }
     }
     int64_t nr_notready_tablets = tablets_hist_cost_.size();
+    double time_percent = 1.0 - (double)total_time / (all_time * all_tablets + 1);
+    ready_time_percent.Set(static_cast<int64_t>(time_percent * 10000));
+
     LOG(INFO) << "[availability][tablet_staticstic] time_interval: " << all_time / 1000
       << ", notready_time: " << total_time / 1000
       << ", total_time: " << (all_time * all_tablets) / 1000
@@ -165,7 +213,7 @@ void TabletAvailability::LogAvailability() {
       << ", notready_count: " << total_notready
       << ", reready_count: " << total_reready;
 
-    int64_t cost = ::common::timer::get_micros() - start;
+    int64_t cost = get_micros() - start;
     LOG(INFO) << "[availability] cost time:" << cost/1000 << " ms";
 }
 

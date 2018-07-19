@@ -422,6 +422,9 @@ void InsTabletNodeZkAdapter::OnKickMarkCreated() {
 }
 
 void InsTabletNodeZkAdapter::OnLockChange(std::string session_id, bool deleted) {
+    LOG(INFO) << "[OnLockChange] session_id = " << session_id 
+              << " deleted = " << deleted
+              << " now_session_id = " << ins_sdk_->GetSessionID();
     if (deleted || session_id != ins_sdk_->GetSessionID()) {
         LOG(ERROR) << "I lost my lock , so quit";
         _Exit(EXIT_FAILURE);

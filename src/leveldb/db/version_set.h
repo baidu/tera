@@ -19,6 +19,7 @@
 #ifndef STORAGE_LEVELDB_DB_VERSION_SET_H_
 #define STORAGE_LEVELDB_DB_VERSION_SET_H_
 
+#include <deque>
 #include <map>
 #include <set>
 #include <vector>
@@ -26,6 +27,7 @@
 #include "db/version_edit.h"
 #include "port/port.h"
 #include "port/thread_annotations.h"
+#include "leveldb/env.h"
 
 namespace leveldb {
 
@@ -56,6 +58,7 @@ extern int FindFile(const InternalKeyComparator& icmp,
 //           in sorted order.
 extern bool SomeFileOverlapsRange(
     const InternalKeyComparator& icmp,
+    const Comparator* ucmp,
     bool disjoint_sorted_files,
     const std::vector<FileMetaData*>& files,
     const Slice* smallest_user_key,
@@ -147,8 +150,8 @@ class Version {
   // Level that should be compacted next and its compaction score.
   // Score < 1 means compaction is not strictly needed.  These fields
   // are initialized by Finalize().
-  double compaction_score_;
-  int compaction_level_;
+  std::vector<double> compaction_score_;
+  std::vector<int> compaction_level_;
 
   explicit Version(VersionSet* vset)
       : vset_(vset), next_(this), prev_(this), refs_(0),
@@ -157,9 +160,13 @@ class Version {
         ttl_trigger_compact_(NULL),
         ttl_trigger_compact_level_(-1),
         del_trigger_compact_(NULL),
-        del_trigger_compact_level_(-1),
-        compaction_score_(-1),
-        compaction_level_(-1) {
+        del_trigger_compact_level_(-1) {
+    compaction_score_.resize(config::kNumLevels - 1);
+    compaction_level_.resize(config::kNumLevels - 1);
+    for (size_t i = 0; i < config::kNumLevels - 1; i++) {
+      compaction_score_[i] = -1.0;
+      compaction_level_[i] = -1;
+    }
   }
 
   ~Version();
@@ -182,11 +189,15 @@ class VersionSet {
   // current version.  Will release *mu while actually writing to the file.
   // REQUIRES: *mu is held on entry.
   // REQUIRES: no other thread concurrently calls LogAndApply()
+  void LogAndApplyHelper(VersionSetBuilder* builder,
+                         VersionEdit* edit);
   Status LogAndApply(VersionEdit* edit, port::Mutex* mu)
       EXCLUSIVE_LOCKS_REQUIRED(mu);
 
   // Recover the last saved descriptor from persistent storage.
   Status Recover();
+
+  void GetCurrentLevelSize(std::vector<int64_t> *);
 
   // Return the current version.
   Version* current() const { return current_; }
@@ -231,7 +242,8 @@ class VersionSet {
   // being compacted, or zero if there is no such log file.
   uint64_t PrevLogNumber() const { return prev_log_number_; }
 
-  double CompactionScore(uint64_t* timeout) const;
+  // <compaction score, task delay time>
+  void CompactionScore(std::vector<std::pair<double, uint64_t> >* scores);
   // Pick level and inputs for a new compaction.
   // Returns NULL if there is no compaction to be done.
   // Otherwise returns a pointer to a heap-allocated object that
@@ -245,7 +257,10 @@ class VersionSet {
   Compaction* CompactRange(
       int level,
       const InternalKey* begin,
-      const InternalKey* end);
+      const InternalKey* end, bool* being_compacted);
+
+  // release file's being_compacted flag, and release level0's lock
+  void ReleaseCompaction(Compaction* c, Status& s);
 
   // Return the maximum overlapping data (in bytes) at next level for any
   // file at a level >= 1.
@@ -259,6 +274,7 @@ class VersionSet {
   // May also mutate some internal state.
   void AddLiveFiles(std::set<uint64_t>* live);
   void AddLiveFiles(std::map<uint64_t, int>* live);
+  void AddLiveFilesWithSize(std::map<uint64_t, uint64_t>* live);
 
   // Return the approximate offset in the database of the data for
   // "key" as of version "v".
@@ -271,10 +287,17 @@ class VersionSet {
   };
   const char* LevelSummary(LevelSummaryStorage* scratch) const;
 
+  void GenerateSubCompaction(Compaction* compact, std::vector<Compaction*> * compact_vec,
+                             port::Mutex* mu);
+
  private:
   friend class Compaction;
   friend class Version;
   friend class VersionSetBuilder;
+  struct ManifestWriter;
+
+  Compaction* NewSubCompact(Compaction* compact);
+  uint64_t GetApproximateSizeByLevel(Version* v, int level, const InternalKey& ikey);
 
   void Finalize(Version* v);
 
@@ -301,9 +324,19 @@ class VersionSet {
 
   bool ModifyFileSize(FileMetaData* f);
 
+  // milti thread compaction relatively
+  void PrintFilesInCompaction(const std::vector<FileMetaData*>& inputs);
+  bool FilesInCompaction(const std::vector<FileMetaData*>& inputs);
+  void PrintRangeInCompaction(const InternalKey* smallest, const InternalKey* largest, int level);
+  bool RangeInCompaction(const InternalKey* smallest, const InternalKey* largest, int level);
+  bool IsOverlapInFileRange(FileMetaData* lf, FileMetaData* f);
+  bool PickFutureCompaction(int level, std::vector<FileMetaData*>* inputs);
+  bool PickCompactionBySize(int level, std::vector<FileMetaData*>* inputs);
+
   Env* const env_;
   const std::string dbname_;
   const Options* const options_;
+  EnvOptions env_opt_;
   TableCache* const table_cache_;
   const InternalKeyComparator icmp_;
   InternalKey db_key_start_;
@@ -316,6 +349,8 @@ class VersionSet {
   uint64_t log_number_;
   uint64_t prev_log_number_;  // 0 or backing store for memtable being compacted
 
+  std::deque<ManifestWriter*> manifest_writers_;
+
   // Opened lazily
   WritableFile* descriptor_file_;
   log::Writer* descriptor_log_;
@@ -325,10 +360,13 @@ class VersionSet {
   // Per-level key at which the next compaction at that level should start.
   // Either an empty string, or a valid InternalKey.
   std::string compact_pointer_[config::kNumLevels];
+  std::vector<Compaction*> level0_compactions_in_progress_;
+  std::vector<int64_t> level_size_counter_;
 
   // No copying allowed
   VersionSet(const VersionSet&);
   void operator=(const VersionSet&);
+
 };
 
 // A Compaction encapsulates information about a compaction.
@@ -372,6 +410,8 @@ class Compaction {
   // before processing "internal_key".
   bool ShouldStopBefore(const Slice& internal_key);
 
+  void MarkBeingCompacted(bool flag);
+
   // Release the input version for the compaction, once the compaction
   // is successful.
   void ReleaseInputs();
@@ -384,6 +424,7 @@ class Compaction {
  private:
   friend class Version;
   friend class VersionSet;
+  friend class DBImpl;
 
   explicit Compaction(int level);
 
@@ -420,6 +461,10 @@ class Compaction {
 
   // support self compaction
   bool force_non_trivial_;
+
+  // support parallel compaction
+  std::string sub_compact_start_;   // own by child
+  std::string sub_compact_end_; // own by child
 };
 
 }  // namespace leveldb

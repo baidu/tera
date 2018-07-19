@@ -13,7 +13,7 @@
 #include "sdk/sdk_task.h"
 #include "tera.h"
 #include "types.h"
-#include "utils/timer.h"
+#include "common/timer.h"
 
 namespace tera {
 
@@ -135,9 +135,6 @@ public:
     /// 重试次数
     uint32_t RetryTimes();
 
-    /// 返回所属事务
-    Transaction* GetTransaction() { return txn_; }
-
     Table* GetTable() { return (Table*)table_; }
 
 public:
@@ -169,6 +166,9 @@ public:
 
     void AddCommitTimes() { commit_times_++; }
     int64_t GetCommitTimes() { return commit_times_; }
+
+    /// 返回所属事务
+    Transaction* GetTransaction() { return txn_; }
 
     /// 设置所属事务
     void SetTransaction(Transaction* txn) { txn_ = txn; }

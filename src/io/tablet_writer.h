@@ -6,6 +6,7 @@
 #define TERA_TABLETNODE_TABLET_WRITER_H_
 
 #include <functional>
+#include <set>
 
 #include "common/event.h"
 #include "common/mutex.h"
@@ -29,9 +30,11 @@ public:
                                 std::vector<StatusCode>*)> WriteCallback;
 
     struct WriteTask {
+        WriteTask():start_time(get_micros()) {}
         std::vector<const RowMutationSequence*>* row_mutation_vec;
         std::vector<StatusCode>* status_vec;
         WriteCallback callback;
+        int64_t start_time;
     };
 
     typedef std::vector<WriteTask> WriteTaskBuffer;
@@ -47,6 +50,7 @@ public:
                                      bool kv_only);
     void Start();
     void Stop();
+    bool IsBusy();
 
 private:
     void DoWork();
@@ -57,6 +61,7 @@ private:
     bool CheckSingleRowTxnConflict(const RowMutationSequence& row_mu,
                                    std::set<std::string>* commit_row_key_set,
                                    StatusCode* status);
+
     bool CheckIllegalRowArg(const RowMutationSequence& row_mu,
                             const std::set<std::string>& cf_set,
                             StatusCode* status);

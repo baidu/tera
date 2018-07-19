@@ -13,19 +13,23 @@
 
 #include "common/mutex.h"
 #include "common/thread_pool.h"
-
 #include "master/tablet_manager.h"
 #include "proto/proto_helper.h"
 
 namespace tera {
 namespace master {
 
+class Tablet;
+typedef std::shared_ptr<Tablet> TabletPtr;
+
 enum NodeState {
     kReady = kTabletNodeReady,
     kOffLine = kTabletNodeOffLine, // before first query succe
+    kPendingOffLine = kTabletNodePendingOffLine,
     kOnKick = kTabletNodeOnKick,
     kWaitKick = kTabletNodeWaitKick
 };
+
 
 std::string NodeStateToString(NodeState state);
 
@@ -34,6 +38,8 @@ struct TabletNode {
     std::string addr_;
     std::string uuid_;
     NodeState state_;
+    // state timestamp
+    int64_t timestamp_;
 
     // updated by query
     StatusCode report_status_;
@@ -61,10 +67,11 @@ struct TabletNode {
 
     uint32_t query_fail_count_;
     uint32_t onload_count_;
+    uint32_t unloading_count_;
     uint32_t onsplit_count_;
     uint32_t plan_move_in_count_;
-    std::list<TabletPtr> wait_load_list_;
-    std::list<std::pair<TabletPtr, std::string> > wait_split_list_; // (tablet, split_key)
+    //std::list<TabletPtr> wait_load_list_;
+    //std::list<std::pair<TabletPtr, std::string> > wait_split_list_; // (tablet, split_key)
 
     // The start time of recent load operation.
     // Used to tell if node load too many tablets within short time.
@@ -95,28 +102,42 @@ struct TabletNode {
     // To tell if node load too many tablets within short time.
     bool MayLoadNow();
 
+    void UpdateSize(TabletPtr tablet);
+
     bool TryLoad(TabletPtr tablet);
     void BeginLoad();
     bool FinishLoad(TabletPtr tablet);
-    bool LoadNextWaitTablet(TabletPtr* tablet);
 
     bool TrySplit(TabletPtr tablet, const std::string& split_key = "");
     bool FinishSplit();
-    bool SplitNextWaitTablet(TabletPtr* tablet, std::string* split_key);
+
+    bool CanUnload();
+    void FinishUnload();
 
     NodeState GetState();
+    bool NodeDown() {
+        MutexLock lock(&mutex_);
+        if (state_ == kOffLine) {
+            return true;
+        }
+        return false;
+    }
+
     bool SetState(NodeState new_state, NodeState* old_state);
     bool CheckStateSwitch(NodeState old_state, NodeState new_state);
 
     uint32_t GetQueryFailCount();
     uint32_t IncQueryFailCount();
     void ResetQueryFailCount();
+    int64_t GetTimeStamp() {return timestamp_;}    
 
 private:
     TabletNode& operator=(const TabletNode& t);
 };
 
 typedef std::shared_ptr<TabletNode> TabletNodePtr;
+
+void BindTabletToTabletNode(TabletPtr tablet, TabletNodePtr node);
 
 class WorkloadGetter;
 class Scheduler;
@@ -128,15 +149,17 @@ public:
     ~TabletNodeManager();
 
     TabletNodePtr AddTabletNode(const std::string& addr, const std::string& uuid);
-    void DelTabletNode(const std::string& addr);
+
+    // return the deleted tabletnode, if not exists return TabletNodePtr(nullptr)
+    TabletNodePtr DelTabletNode(const std::string& addr);
     void UpdateTabletNode(const std::string& addr, const TabletNode& info);
-    bool FindTabletNode(const std::string& addr, TabletNodePtr* info);
+    TabletNodePtr FindTabletNode(const std::string& addr, TabletNodePtr* info);
     void GetAllTabletNodeAddr(std::vector<std::string>* addr_array);
     void GetAllTabletNodeId(std::map<std::string, std::string>* id_map);
     void GetAllTabletNodeInfo(std::vector<TabletNodePtr>* info_array);
     bool ScheduleTabletNode(Scheduler* scheduler, const std::string& table_name,
-                            bool is_move, std::string* node_addr);
-    bool ScheduleTabletNode(Scheduler* scheduler, const std::string& table_name,
+                            bool is_move, TabletNodePtr* node);
+    bool ScheduleTabletNodeOrWait(Scheduler* scheduler, const std::string& table_name,
                             bool is_move, TabletNodePtr* node);
     bool ShouldMoveData(Scheduler* scheduler, const std::string& table_name,
                         TabletNodePtr src_node, TabletNodePtr dst_node,
@@ -144,8 +167,14 @@ public:
                         size_t* tablet_index);
     bool CheckStateSwitch(NodeState old_state, NodeState new_state);
 
+    void GetTablets(const std::string& server_addr, std::vector<TabletPtr>* tablet_list);
+
 private:
+    bool ScheduleTabletNode(Scheduler* scheduler, const std::string& table_name,
+                            bool is_move, TabletNodePtr* node, bool wait);
+
     mutable Mutex mutex_;
+    CondVar tabletnode_added_;
     MasterImpl* master_impl_;
 
     typedef std::map<std::string, TabletNodePtr> TabletNodeList;

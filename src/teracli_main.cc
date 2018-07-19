@@ -2,7 +2,6 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 //
-
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
@@ -10,13 +9,14 @@
 #include <readline/readline.h>
 
 #include <fstream>
+#include <fcntl.h>
 #include <iomanip>
 #include <iostream>
 #include <limits>
 #include <map>
 #include <memory>
 #include <sstream>
-
+#include <errno.h>
 #include <gflags/gflags.h>
 #include <glog/logging.h>
 
@@ -26,6 +26,10 @@
 #include "common/console/progress_bar.h"
 #include "common/file/file_path.h"
 #include "io/coding.h"
+#include "io/utils_leveldb.h"
+#include "leveldb/dfs.h"
+#include "util/nfs.h"
+#include "util/hdfs.h"
 #include "proto/kv_helper.h"
 #include "proto/proto_helper.h"
 #include "proto/tabletnode.pb.h"
@@ -35,7 +39,9 @@
 #include "sdk/sdk_utils.h"
 #include "sdk/sdk_zk.h"
 #include "sdk/table_impl.h"
+#include "sdk/stat_table.h"
 #include "tera.h"
+#include "types.h"
 #include "utils/crypt.h"
 #include "utils/string_util.h"
 #include "utils/tprinter.h"
@@ -50,15 +56,23 @@ DECLARE_string(tera_zk_root_path);
 DECLARE_bool(tera_sdk_batch_scan_enabled);
 DECLARE_int64(tera_sdk_status_timeout);
 
+DECLARE_string(tera_leveldb_env_type);
+DECLARE_string(tera_leveldb_env_dfs_type);
+DECLARE_string(tera_leveldb_env_nfs_mountpoint);
+DECLARE_string(tera_leveldb_env_nfs_conf_path);
+DECLARE_string(tera_leveldb_env_hdfs2_nameservice_list);
+DECLARE_string(tera_dfs_so_path);
+DECLARE_string(tera_dfs_conf);
+DECLARE_uint64(tera_sdk_read_max_qualifiers);
+
 DEFINE_int32(tera_client_batch_put_num, 1000, "num of each batch in batch put mode");
 DEFINE_int32(tera_client_scan_package_size, 1024, "the package size (in KB) of each scan request");
 
 DEFINE_int64(snapshot, 0, "read | scan snapshot");
-DEFINE_string(rollback_switch, "close", "Pandora's box, do not open");
-DEFINE_string(rollback_name, "", "rollback operation's name");
 
 DEFINE_int32(lg, -1, "locality group number.");
 DEFINE_int32(concurrency, 1, "concurrency for compact table.");
+DEFINE_int32(compact_timeout, 120000, "tablet compact timeout(ms), default 20min");
 DEFINE_int64(timestamp, -1, "timestamp.");
 DEFINE_string(tablets_file, "", "tablet set file");
 
@@ -70,6 +84,15 @@ DEFINE_bool(rowkey_count, false, "is print rowkey count when scan");
 // using FLAGS instead of isatty() for compatibility
 DEFINE_bool(stdout_is_tty, true, "is stdout connected to a tty");
 DEFINE_bool(reorder_tablets, false, "reorder tablets by ts list");
+
+// dfs related FLAGS
+DEFINE_bool(asowner, false, "become owner and execute the command");
+DEFINE_bool(e, false, "test dfs file exist or not");
+DEFINE_bool(z, false, "test dfs file is zero or not");
+DEFINE_bool(d, false, "test dfs file is directory or not");
+DEFINE_bool(override, false, "dfs put file override the existing one");
+DEFINE_bool(attribute, false, "dfs list file detail attribute");
+DEFINE_bool(recursive, false, "dfs remove file recursively");
 
 volatile int32_t g_start_time = 0;
 volatile int32_t g_end_time = 0;
@@ -88,14 +111,23 @@ using namespace tera;
 typedef std::shared_ptr<Table> TablePtr;
 typedef std::shared_ptr<TableImpl> TableImplPtr;
 typedef std::map<std::string, int32_t(*)(Client*, int32_t, std::string*, ErrorCode*)> CommandTable;
-
+// FileSystem command table
+typedef std::map<std::string, int32_t(*)(int32_t, std::string*, ErrorCode*)> FSCommandTable;
+//typedef std::map<std::string, std::function<int32_t(int32_t, std::string*, ErrorCode*)> > FSCommandTable;
 /// global variables of single-row-txn used in interactive mode
 tera::Transaction* g_row_txn = NULL;
 Table* g_row_txn_table = NULL;
 
+leveldb::Dfs* g_dfs = NULL;
+
 static CommandTable& GetCommandTable(){
     static CommandTable command_table;
     return command_table;
+}
+
+static FSCommandTable& GetFSCommandTable() {
+    static FSCommandTable fs_command_table;
+    return fs_command_table;
 }
 
 const char* builtin_cmd_list[] = {
@@ -142,10 +174,6 @@ const char* builtin_cmd_list[] = {
 
     "drop",
     "drop <tablename>",
-
-    "rename",
-    "rename <old table name> <new table name>                           \n\
-            rename table's name",
 
     "put",
     "put <tablename> <rowkey> [<columnfamily:qualifier>] <value>",
@@ -224,6 +252,13 @@ const char* builtin_cmd_list[] = {
          commit                                                           \n\
          (only support single row transaction)",
 
+    "cas",
+    "cas <tablename> <rowkey> <columnfamily:qualifier> <old_value> <new_value>                     \n\
+         Compare and set a value atomically. (The txn value of table schema must be 'on')          \n\
+         This command will compare the value at rowkey:columnfamily:qualifier with <old_value>:    \n\
+         -> equal    : put <new_value> to this location.                                           \n\
+         -> not equal: do nothing.",
+
     "user",
     "user <operation> <params>                                            \n\
           create          <username> <password>                           \n\
@@ -236,8 +271,14 @@ const char* builtin_cmd_list[] = {
     "tablet",
     "tablet <operation> <params>                                          \n\
             move    <tablet_path> <target_addr>                           \n\
+            movex   <tablet_path> <target_addr> <lg_list>                 \n\
+                    * only for force move tablet ignore error             \n\
             reload  <tablet_path>                                         \n\
                     force to unload and load on the same ts               \n\
+            reloadx <tablet_path> <lg_list>                               \n\
+                    force to unload and load on the same ts               \n\
+                    * only for force reload tablet ignore error           \n\
+                    lg_list : lg1:lg2:lg3                                 \n\
             compact <tablet_path>                                         \n\
             split   <tablet_path>                                         \n\
             merge   <tablet_path>                                         \n\
@@ -280,6 +321,14 @@ const char* builtin_cmd_list[] = {
     "findtablet",
     "findtablet <tablename> <rowkey-prefix>                               \n\
                 <tablename> <start-key> <end-key>",
+    
+    "stat",
+    "stat <command>   <args>                                              \n\
+          corruption  [tabletnode] [tabletpath]                           \n\
+          -- show tablet load or compaction corruption detail message     \n\
+                                                                          \n\
+          example:                                                        \n\
+            ./teracli stat corruption hostname::port t1/tablet00000001",
 
     "cookie",
     "cookie <command> <args>                                              \n\
@@ -290,9 +339,50 @@ const char* builtin_cmd_list[] = {
     "help [cmd]                                                           \n\
           show manual for a or all cmd(s)",
 
+    "dfs",
+    "dfs [cmd]        args                                                \n\
+         mkdir        $NFS_PATH                                           \n\
+         touchz       $NFS_PATH                                           \n\
+         test         [-e|-z|-d]     $NFS_PATH                            \n\
+         get          $NFS_PATH      $LOCAL_PATH                          \n\
+         put          [--override]   $LOCAL_PATH    $NFS_PATH             \n\
+         ls           [--attribute]  $NFS_PATH                            \n\
+         lsr          [--attribute]  $NFS_PATH                            \n\
+         dus          $NFS_PATH                                           \n\
+         rm           [--recursive]  $NFS_PATH                            \n\
+         stat         $NFS_PATH                                           \n\
+         rename       $NFS_PATH_SRC  $NFS_PATH_DEST                       \n\
+         unlockdir    $NFS_PATH                                           \n\
+         checksum     $NFS_PATH      $OFFSET        $LENGTH               \n\
+         forcerelease $NFS_PATH",
+
+    "gtxn",
+    "gtxn                                                                 \n\
+         complete a global transaction with input from std input or file. \n\
+         pay attention to set flags '--tera_sdk_client_for_gtxn' and      \n\
+         '--tera_sdk_tso_client_enabled' equal to true.                   \n\
+                                                                          \n\
+         input file format:                                               \n\
+         BEGIN                                                            \n\
+             statement [\\n statement] ...                                \n\
+         COMMIT                                                           \n\
+                                                                          \n\
+         statement:                                                       \n\
+             PUT|GET|DEL <tablename> <rowkey> <cf:qu> [put_value]         \n\
+                                                                          \n\
+         example: cat input_file | ./teracli gtxn                         \n\
+                                                                          \n\
+         input_file example:                                              \n\
+         BEGIN                                                            \n\
+             PUT table1 key1 cf1:qu1 value1                               \n\
+             DEL table2 key2 cf2:qu2                                      \n\
+             GET table3 key3 cf3:qu3                                      \n\
+         COMMIT",
+ 
     "version",
     "version                                                              \n\
              show version info",
+
 };
 
 static void PrintCmdHelpInfo(const char* msg) {
@@ -511,7 +601,7 @@ int32_t DisableOp(Client* client, int32_t argc, std::string* argv, ErrorCode* er
     }
     TableMeta table_meta;
     TabletMetaList tablet_list;
-    tera::ClientImpl* client_impl = static_cast<tera::ClientImpl*>(client);
+    std::shared_ptr<tera::ClientImpl> client_impl((static_cast<ClientWrapper*>(client))->GetClientImpl());
     if (!client_impl->ShowTablesInfo(tablename, &table_meta, &tablet_list, err)) {
         LOG(ERROR) << "table not exist: " << tablename;
         return -1;
@@ -528,7 +618,8 @@ int32_t DisableOp(Client* client, int32_t argc, std::string* argv, ErrorCode* er
         for (int32_t i = 0; i < tablet_list.meta_size(); ++i) {
             const TabletMeta& tablet = tablet_list.meta(i);
             VLOG(10) << "tablet status: " << StatusCodeToString(tablet.status());
-            if (tablet.status() == kTabletDisable || tablet.status() == kTableOffLine) {
+            if (tablet.status() == TabletMeta::kTabletDisable || 
+                tablet.status() == TabletMeta::kTabletOffline) {
                 tablet_cnt++;
             }
         }
@@ -662,21 +753,21 @@ int32_t PutOp(Client* client, int32_t argc, std::string* argv, ErrorCode* err) {
         value = argv[5];
     }
 
-    RowMutation* mutation = table->NewRowMutation(rowkey);
+    std::unique_ptr<RowMutation> mutation(table->NewRowMutation(rowkey));
     if (FLAGS_timestamp == -1) {
         mutation->Put(columnfamily, qualifier, value);
     } else {
         mutation->Put(columnfamily, qualifier, FLAGS_timestamp, value);
     }
     if (g_row_txn != NULL) {
-        g_row_txn->ApplyMutation(mutation);
+        g_row_txn->ApplyMutation(mutation.get());
     } else {
-        table->ApplyMutation(mutation);
+        table->ApplyMutation(mutation.get());
     }
     if (mutation->GetError().GetType() != tera::ErrorCode::kOK) {
         std::cout << mutation->GetError().ToString() << std::endl;
+        return -1;
     }
-    delete mutation;
     return 0;
 }
 
@@ -912,7 +1003,7 @@ int32_t GetOp(Client* client, int32_t argc, std::string* argv, ErrorCode* err) {
     std::string columnfamily = "";
     std::string qualifier = "";
     std::string value;
-    RowReader* reader = table->NewRowReader(rowkey);
+    std::unique_ptr<RowReader> reader(table->NewRowReader(rowkey));
     if (argc == 4) {
         // use table as kv or get row
     } else if (argc == 5) {
@@ -924,10 +1015,11 @@ int32_t GetOp(Client* client, int32_t argc, std::string* argv, ErrorCode* err) {
             reader->AddColumnFamily(columnfamily);
         }
     }
+    reader->SetMaxQualifiers(FLAGS_tera_sdk_read_max_qualifiers);
     if (g_row_txn != NULL) {
-        g_row_txn->Get(reader);
+        g_row_txn->Get(reader.get());
     } else {
-        table->Get(reader);
+        table->Get(reader.get());
     }
     while (!reader->Done()) {
         std::cout << PrintableFormatter(reader->RowName()) << ":"
@@ -939,8 +1031,8 @@ int32_t GetOp(Client* client, int32_t argc, std::string* argv, ErrorCode* err) {
     if (reader->GetError().GetType() != tera::ErrorCode::kOK
         && reader->GetError().GetType() != tera::ErrorCode::kNotFound) {
         std::cout << reader->GetError().ToString() << std::endl;
+        return -1;
     }
-    delete reader;
     return 0;
 }
 
@@ -1052,6 +1144,7 @@ int32_t ScanRange(TablePtr& table, ScanDescriptor& desc, ErrorCode* err) {
     desc.SetBufferSize(FLAGS_tera_client_scan_package_size << 10);
     desc.SetAsync(FLAGS_tera_sdk_batch_scan_enabled);
     desc.SetSnapshot(FLAGS_snapshot);
+    desc.SetMaxQualifiers(FLAGS_tera_sdk_read_max_qualifiers);
 
     ResultStream* result_stream;
     if ((result_stream = table->Scan(desc, err)) == NULL) {
@@ -1161,7 +1254,7 @@ std::string BytesNumberToString(const uint64_t size) {
 
 std::string DateNumberToString(int64_t ts) {
     if (FLAGS_stdout_is_tty) {
-        return common::timer::get_time_str(ts);
+        return get_time_str(ts);
     }
     return NumberToString(ts);
 }
@@ -1171,8 +1264,12 @@ static std::string GetTabletStatusString(const TabletMetaList& tablet_list, int6
     if ((tablet_list.timestamp_size() > 0)) {
         // new tera master
         int64_t delta = now - tablet_list.timestamp(i);
-        TabletStatus status = tablet_list.meta(i).status();
-        if ((status == kTableReady) && (delta > FLAGS_tera_sdk_status_timeout * 1000000)) {
+        TabletMeta::TabletStatus status = tablet_list.meta(i).status();
+        TabletMeta::TabletStatus db_status = tablet_list.counter(i).db_status();
+        if (db_status == TabletMeta::kTabletCorruption) {
+            return StatusCodeToString(db_status);
+        }
+        if ((status == TabletMeta::kTabletReady) && (delta > FLAGS_tera_sdk_status_timeout * 1000000)) {
             return "kUnknown";
         } else {
             return StatusCodeToString(tablet_list.meta(i).status());
@@ -1187,7 +1284,7 @@ int32_t ShowTabletList(const TabletMetaList& tablet_list, bool is_server_addr, b
     TPrinter printer;
     int cols;
     std::vector<string> row;
-    int64_t now = common::timer::get_micros();
+    int64_t now = get_micros();
     if (is_x) {
         if (is_server_addr) {
             cols = 14;
@@ -1288,7 +1385,7 @@ void SetTableCounter(const std::string& table_name,
         }
         size += tablet_list.meta(i).size();
         tablet++;
-        if (tablet_list.meta(i).status() != kTableReady) {
+        if (tablet_list.meta(i).status() != TabletMeta::kTabletReady) {
             notready++;
         }
         lread += tablet_list.counter(i).low_read_cell();
@@ -1339,7 +1436,7 @@ void SetTableCounter(const std::string& table_name,
 int32_t ShowAllTables(Client* client, bool is_x, bool show_all, ErrorCode* err) {
     TableMetaList table_list;
     TabletMetaList tablet_list;
-    tera::ClientImpl* client_impl = static_cast<tera::ClientImpl*>(client);
+    std::shared_ptr<tera::ClientImpl> client_impl((static_cast<ClientWrapper*>(client))->GetClientImpl());
     if (!client_impl->ShowTablesInfo(&table_list, &tablet_list, !show_all, err)) {
         LOG(ERROR) << "fail to get meta data from tera.";
         return -1;
@@ -1372,15 +1469,11 @@ int32_t ShowAllTables(Client* client, bool is_x, bool show_all, ErrorCode* err) 
     }
     for (int32_t table_no = 0; table_no < table_list.meta_size(); ++table_no) {
         std::string tablename = table_list.meta(table_no).table_name();
-        std::string table_alias = tablename;
-        if (!table_list.meta(table_no).schema().alias().empty()) {
-            table_alias = table_list.meta(table_no).schema().alias();
-        }
         TableCounter counter;
         if (table_list.counter_size() > 0) {
             counter = table_list.counter(table_no);
         } else {
-            SetTableCounter(table_alias, tablet_list, &counter);
+            SetTableCounter(tablename, tablet_list, &counter);
         }
         TableStatus status = table_list.meta(table_no).status();
         std::string lg_size_str = "";
@@ -1394,10 +1487,14 @@ int32_t ShowAllTables(Client* client, bool is_x, bool show_all, ErrorCode* err) 
             lg_size_str = "-";
         }
         int64_t notready;
+        std::string print_size;
         if (status == kTableDisable) {
             notready = 0;
+            print_size = "-";
+            lg_size_str = "-";
         } else {
             notready = counter.notready_num();
+            print_size = BytesNumberToString(counter.size());
         }
         sum_size += counter.size();
         sum_tablet += counter.tablet_num();
@@ -1412,9 +1509,9 @@ int32_t ShowAllTables(Client* client, bool is_x, bool show_all, ErrorCode* err) 
         if (is_x) {
             printer.AddRow(cols,
                            NumberToString(table_no).data(),
-                           table_alias.data(),
+                           tablename.data(),
                            StatusCodeToString(status).data(),
-                           BytesNumberToString(counter.size()).data(),
+                           print_size.data(),
                            lg_size_str.data(),
                            NumberToString(counter.tablet_num()).data(),
                            NumberToString(notready).data(),
@@ -1431,9 +1528,9 @@ int32_t ShowAllTables(Client* client, bool is_x, bool show_all, ErrorCode* err) 
         } else {
             printer.AddRow(cols,
                            NumberToString(table_no).data(),
-                           table_alias.data(),
+                           tablename.data(),
                            StatusCodeToString(status).data(),
-                           BytesNumberToString(counter.size()).data(),
+                           print_size.data(),
                            lg_size_str.data(),
                            NumberToString(counter.tablet_num()).data(),
                            NumberToString(notready).data());
@@ -1483,7 +1580,7 @@ int32_t ShowSingleTable(Client* client, const string& table_name,
     TableMeta table_meta;
     TabletMetaList tablet_list;
 
-    tera::ClientImpl* client_impl = static_cast<tera::ClientImpl*>(client);
+    std::shared_ptr<tera::ClientImpl> client_impl((static_cast<ClientWrapper*>(client))->GetClientImpl());
     if (!client_impl->ShowTablesInfo(table_name, &table_meta, &tablet_list, err)) {
         LOG(ERROR) << "table not exist: " << table_name;
         return -1;
@@ -1492,7 +1589,7 @@ int32_t ShowSingleTable(Client* client, const string& table_name,
     if (FLAGS_stdout_is_tty) {
         std::cout << std::endl;
         std::cout << "create time: "
-            << common::timer::get_time_str(table_meta.create_time()) << std::endl;
+            << get_time_str(table_meta.create_time()) << std::endl;
         std::cout << std::endl;
     }
     ShowTabletList(tablet_list, true, is_x);
@@ -1504,7 +1601,7 @@ int32_t ShowSingleTabletNodeInfo(Client* client, const string& addr,
                                  bool is_x, ErrorCode* err) {
     TabletNodeInfo info;
     TabletMetaList tablet_list;
-    tera::ClientImpl* client_impl = static_cast<tera::ClientImpl*>(client);
+    std::shared_ptr<tera::ClientImpl> client_impl((static_cast<ClientWrapper*>(client))->GetClientImpl());
     if (!client_impl->ShowTabletNodesInfo(addr, &info, &tablet_list, err)) {
         LOG(ERROR) << "fail to show tabletnode: " << addr;
         return -1;
@@ -1514,15 +1611,16 @@ int32_t ShowSingleTabletNodeInfo(Client* client, const string& addr,
     std::cout << "  address:  " << info.addr() << std::endl;
     std::cout << "  status:   " << info.status_m() << std::endl;
     std::cout << "  update time:   "
-        << common::timer::get_time_str(info.timestamp() / 1000000) << "\n\n";
+        << get_time_str(info.timestamp() / 1000000) << "\n\n";
 
-    int cols = 4;
-    TPrinter printer(cols, "workload", "tablets", "load", "split");
+    int cols = 5;
+    TPrinter printer(cols, "workload", "tablets", "load", "split", "unload");
     std::vector<string> row;
     row.push_back(BytesNumberToString(info.load()));
     row.push_back(NumberToString(info.tablet_total()));
     row.push_back(NumberToString(info.tablet_onload()));
     row.push_back(NumberToString(info.tablet_onsplit()));
+    row.push_back(NumberToString(info.tablet_unloading()));
     printer.AddRow(row);
     printer.Print(g_printer_opt);
 
@@ -1576,13 +1674,13 @@ int32_t ShowSingleTabletNodeInfo(Client* client, const string& addr,
 
 int32_t ShowTabletNodesInfo(Client* client, bool is_x, ErrorCode* err) {
     std::vector<TabletNodeInfo> infos;
-    tera::ClientImpl* client_impl = static_cast<tera::ClientImpl*>(client);
+    std::shared_ptr<tera::ClientImpl> client_impl((static_cast<ClientWrapper*>(client))->GetClientImpl());
     if (!client_impl->ShowTabletNodesInfo(&infos, err)) {
         LOG(ERROR) << "fail to get meta data from tera.";
         return -1;
     }
 
-    int64_t now = common::timer::get_micros();
+    int64_t now = get_micros();
     int cols;
     TPrinter printer;
     if (is_x) {
@@ -1635,10 +1733,10 @@ int32_t ShowTabletNodesInfo(Client* client, bool is_x, ErrorCode* err) {
             printer.AddRow(row);
         }
     } else {
-        cols = 7;
+        cols = 8;
         printer.Reset(cols,
                        " ", "address", "status", "workload",
-                       "tablet", "load", "busy");
+                       "tablet", "load", "busy", "unload");
         std::vector<string> row;
         for (size_t i = 0; i < infos.size(); ++i) {
             row.clear();
@@ -1653,6 +1751,7 @@ int32_t ShowTabletNodesInfo(Client* client, bool is_x, ErrorCode* err) {
             row.push_back(NumberToString(infos[i].tablet_total()));
             row.push_back(NumberToString(infos[i].tablet_onload()));
             row.push_back(NumberToString(infos[i].tablet_onbusy()));
+            row.push_back(NumberToString(infos[i].tablet_unloading()));
             printer.AddRow(row);
         }
     }
@@ -1709,7 +1808,7 @@ int32_t ShowSchemaOp(Client* client, int32_t argc, std::string* argv, ErrorCode*
     std::string table_name = argv[2];
     TableSchema table_schema;
 
-    tera::ClientImpl* client_impl = static_cast<tera::ClientImpl*>(client);
+    std::shared_ptr<tera::ClientImpl> client_impl((static_cast<ClientWrapper*>(client))->GetClientImpl());
     if (!client_impl->ShowTableSchema(table_name, &table_schema, err)) {
         LOG(ERROR) << "table not exist: " << table_name;
         return -1;
@@ -2111,46 +2210,6 @@ int32_t GetRandomNumKey(int32_t key_size,std::string *p_key){
     return 0;
 }
 
-int32_t SnapshotOp(Client* client, int32_t argc, std::string* argv, ErrorCode* err) {
-    if (argc < 4) {
-      PrintCmdHelpInfo(argv[1]);
-      return -1;
-    }
-
-    std::string tablename = argv[2];
-    uint64_t snapshot = 0;
-    if (argc == 5 && strcmp(argv[3].c_str(), "del") == 0) {
-        if (!client->DelSnapshot(tablename, FLAGS_snapshot, err)) {
-            LOG(ERROR) << "fail to del snapshot: " << FLAGS_snapshot << " ," << err->ToString();
-            return -1;
-        }
-        std::cout << "Del snapshot " << snapshot << std::endl;
-    } else if (strcmp(argv[3].c_str(), "create") == 0) {
-        if (!client->GetSnapshot(tablename, &snapshot, err)) {
-            LOG(ERROR) << "fail to get snapshot: " << err->ToString();
-            return -1;
-        }
-        std::cout << "new snapshot: " << snapshot << std::endl;
-    }  else if (FLAGS_rollback_switch == "open" && strcmp(argv[3].c_str(), "rollback") == 0) {
-        if (FLAGS_snapshot == 0) {
-            std::cerr << "missing or invalid --snapshot option" << std::endl;
-            return -1;
-        } else if (FLAGS_rollback_name == "") {
-            std::cerr << "missing or invalid --rollback_name option" << std::endl;
-            return -1;
-        }
-        if (!client->Rollback(tablename, FLAGS_snapshot, FLAGS_rollback_name, err)) {
-            LOG(ERROR) << "fail to rollback to snapshot: " << err->ToString();
-            return -1;
-        }
-        std::cout << "rollback to snapshot: " << FLAGS_snapshot << std::endl;
-    } else {
-        PrintCmdHelpInfo(argv[1]);
-        return -1;
-    }
-    return 0;
-}
-
 int32_t SafeModeOp(Client* client, int32_t argc, std::string* argv, ErrorCode* err) {
     if (argc < 3) {
         PrintCmdHelpInfo(argv[1]);
@@ -2238,7 +2297,8 @@ int32_t ReloadConfigOp(Client* client, int32_t argc, std::string* argv, ErrorCod
         TsCmdCtrlResponse response;
         request.set_sequence_id(0);
         request.set_command("reload config");
-        tabletnode::TabletNodeClient tabletnode_client(addr, 3600000);
+        common::ThreadPool thread_pool(FLAGS_concurrency);
+        tabletnode::TabletNodeClient tabletnode_client(&thread_pool, addr, 3600000);
         if (!tabletnode_client.CmdCtrl(&request, &response)
             || (response.status() != kTabletNodeOk)) {
             LOG(ERROR) << "fail to reload config: " << addr;
@@ -2256,7 +2316,8 @@ int32_t CompactTablet(TabletInfo& tablet, int lg) {
     request.set_tablet_name(tablet.table_name);
     request.mutable_key_range()->set_key_start(tablet.start_key);
     request.mutable_key_range()->set_key_end(tablet.end_key);
-    tabletnode::TabletNodeClient tabletnode_client(tablet.server_addr, 60000);
+    common::ThreadPool thread_pool(FLAGS_concurrency);
+    tabletnode::TabletNodeClient tabletnode_client(&thread_pool, tablet.server_addr, FLAGS_compact_timeout);
 
     std::string path;
     if (lg >= 0) {
@@ -2290,6 +2351,77 @@ int32_t CompactTablet(TabletInfo& tablet, int lg) {
     std::cout << "compact tablet success: " << path << ", data size: "
         << BytesNumberToString(response.compact_size()) << std::endl;
     return 0;
+}
+
+static bool ComputeCompactInsertKeys(RawKey rawkey, std::string* start_key, std::string* end_key) {
+    static std::string x0("\x0", 1);
+    static std::string x1("\x1", 1);
+    *start_key = (rawkey == Readable ? *start_key + x1 : *start_key + x0);
+
+    // pop all '\x0' charcters at the tailing of end_key. Note that Readable should not contain any
+    // '\x0' characters but here we do not
+    while (end_key->size() > 0) {
+        unsigned char last = end_key->at(end_key->size() - 1);
+        if (last == '\x0') {
+            end_key->pop_back();
+        }
+        // for Readable key, if the last nonzero character of end_key is '\x1', the wanted key that
+        // is barely smaller than end_key is computed as: end_key.substr(0, end_key.rfind('\x1'));
+        // eg: end_key: abcde'\x1' -> wanted key: abcde
+        else if (rawkey == Readable && last == '\x1'){
+            end_key->pop_back();
+            return true;
+        }
+        else {
+            break;
+        }
+    }
+    // for other case, the wanted key that is barely smaller than end_key is computed as:  minus the
+    // last char of end_key with 1 and append '\x255' to end key until it reaches the max keysize
+    // allowed. Notice that the last char of end_key will not be '\x0' for Binary key and not be
+    // '\x0' nor '\x1' for Readable key here
+    if (end_key->size() > 0) {
+        (*end_key)[end_key->size() - 1] = char((*end_key)[end_key->size() - 1] - 1);
+    }
+    end_key->resize(kRowkeySize - 1, char(255));
+    return true;
+}
+
+void CompactPreprocess(TableImplPtr table, const std::vector<TabletInfo>& tablet_infos) {
+    std::vector<RowReader*> readers;
+    for (std::size_t i = 0; i < tablet_infos.size(); ++i) {
+        const TabletInfo& tablet_info = tablet_infos[i];
+        std::string start_key(tablet_info.start_key);
+        std::string end_key(tablet_info.end_key);
+        ComputeCompactInsertKeys(table->GetTableSchema().raw_key(), &start_key, &end_key);
+        std::vector<RowReader*> readers;
+        RowReader* start_reader = table->NewRowReader(start_key);
+        RowReader* end_reader = table->NewRowReader(end_key);
+        readers.push_back(start_reader);
+        readers.push_back(end_reader);
+    }
+    if (readers.size() > 0) {
+        table->Get(readers);
+    }
+    std::vector<RowMutation*> mutations;
+    for (std::size_t i = 0; i < readers.size(); ++i) {
+        if (readers[i]->GetError().GetType() == tera::ErrorCode::kNotFound) {
+            RowMutation* mutation = table->NewRowMutation(readers[i]->RowKey());
+            mutation->DeleteRow();
+            mutations.push_back(mutation);
+        }
+        delete readers[i];
+    }
+    if (mutations.size() > 0) {
+        table->ApplyMutation(mutations);
+        for (std::size_t i = 0; i < mutations.size(); ++i) {
+            if (mutations[i]->GetError().GetType() != tera::ErrorCode::kOK) {
+                LOG(WARNING) <<"write key " << DebugString(mutations[i]->RowKey())
+                    << " failed, error: " << mutations[i]->GetError().ToString();
+            }
+            delete mutations[i];
+        }
+    }
 }
 
 int32_t CompactTabletOp(Client* client, int32_t argc, std::string* argv, ErrorCode* err) {
@@ -2336,6 +2468,19 @@ int32_t CompactTabletOp(Client* client, int32_t argc, std::string* argv, ErrorCo
         LOG(ERROR) << "fail to find tablet: " << tablet_path
             << ", total tablets: " << tablet_list.size();
         return -4;
+    }
+    std::string command = argv[1];
+    if (command == "compactx")
+    {
+        TablePtr table_ptr;
+        table_ptr.reset(client->OpenTable(table, err));
+        TableImplPtr table_impl(static_cast<TableWrapper*>(table_ptr.get())->GetTableImpl());
+        if (table_impl == NULL) {
+            LOG(ERROR) << "fail to open table: " << table;
+            return -5;
+        }
+        std::vector<TabletInfo> tablet_infos(1, *tablet_it);
+        CompactPreprocess(table_impl, tablet_infos);
     }
 
     return CompactTablet(*tablet_it, lg);
@@ -2409,56 +2554,40 @@ int32_t ScanTabletOp(Client* client, int32_t argc, std::string* argv, ErrorCode*
 }
 
 int32_t TabletOp(Client* client, int32_t argc, std::string* argv, ErrorCode* err) {
-    if ((argc != 4) && (argc != 5)) {
+    if ((argc != 4) && (argc != 5) && (argc != 6)) {
         PrintCmdHelpInfo(argv[1]);
         return -1;
     }
 
     std::string op = argv[2];
-
-    if (op == "compact") {
-        return CompactTabletOp(client, argc, argv, err);
-    } else if (op == "scan" || op == "scanallv") {
-        return ScanTabletOp(client, argc, argv, err);
-    } else if (op != "move" && op != "split" && op != "merge" && op != "reload") {
-        PrintCmdHelpInfo(argv[1]);
-        return -1;
-    }
-
     std::string tablet_id = argv[3];
     std::string server_addr;
-    if (argc == 5) {
-        server_addr = argv[4];
-    }
 
     std::vector<std::string> arg_list;
     arg_list.push_back(op);
     arg_list.push_back(tablet_id);
-    arg_list.push_back(server_addr);
+    if (op == "compact" || op == "compactx") {
+        return CompactTabletOp(client, argc, argv, err);
+    } else if (op == "scan" || op == "scanallv") {
+        return ScanTabletOp(client, argc, argv, err);
+    } else if (argc == 4 && (op == "reload" || op == "merge" || op == "split")) {
+        // nothing to do
+    } else if (argc == 5 && (op == "reloadx" || op == "move" || op == "split")) {
+        // reloadx->lg_list  move->server_addr  split->split_key
+        arg_list.push_back(argv[4]);
+    } else if (argc == 6 && op == "movex") {
+        arg_list.push_back(argv[4]); // server_addr
+        arg_list.push_back(argv[5]); // lg_list
+    } else {
+        PrintCmdHelpInfo(argv[1]);
+        return -1;
+    }
     if (!client->CmdCtrl("tablet", arg_list, NULL, NULL, err)) {
         LOG(ERROR) << "fail to " << op << " tablet " << tablet_id;
         return -1;
     }
     std::cout << op << " tablet " << tablet_id << " success" << std::endl;
 
-    return 0;
-}
-
-int32_t RenameOp(Client* client, int32_t argc, std::string* argv, ErrorCode* err) {
-    if (argc != 4 ) {
-        PrintCmdHelpInfo(argv[1]);
-        return -1;
-    }
-    std::vector<std::string> arg_list;
-    std::string old_table_name = argv[2];
-    std::string new_table_name = argv[3];
-    if (!client->Rename(old_table_name, new_table_name, err)) {
-        LOG(ERROR) << "fail to rename table: "
-                   << old_table_name << " -> " << new_table_name << std::endl;
-        return -1;
-    }
-    std::cout << "rename OK: " << old_table_name
-              << " -> " << new_table_name << std::endl;
     return 0;
 }
 
@@ -2543,6 +2672,20 @@ int32_t CompactOp(Client* client, int32_t argc, std::string* argv, ErrorCode* er
     }
     ReorderTabletList(&tablet_list);
 
+    std::string command = argv[1];
+    if (command == "compactx")
+    {
+        TablePtr table;
+        table.reset(client->OpenTable(tablename, err));
+        TableImplPtr table_impl(static_cast<TableWrapper*>(table.get())->GetTableImpl());
+        if (table_impl == NULL) {
+            LOG(ERROR) << "fail to open table: " << tablename;
+            return -5;
+        }
+        std::cout << "begin compact preprocess tablet: " << tablename << std::endl;
+        CompactPreprocess(table_impl, tablet_list);
+    }
+
     int conc = FLAGS_concurrency;
     if (conc <= 0 || conc > 1000) {
         LOG(ERROR) << "compact concurrency illegal: " << conc;
@@ -2556,7 +2699,7 @@ int32_t CompactOp(Client* client, int32_t argc, std::string* argv, ErrorCode* er
         thread_pool.AddTask(task);
     }
     while (thread_pool.PendingNum() > 0) {
-        std::cerr << common::timer::get_time_str(time(NULL)) << " "
+        std::cerr << get_time_str(time(NULL)) << " "
             << thread_pool.PendingNum()
             << " tablets waiting for compact ..." << std::endl;
         sleep(5);
@@ -2582,19 +2725,20 @@ int32_t FindTsOp(Client* client, int32_t argc, std::string* argv, ErrorCode* err
     }
 
     std::string tablename = argv[2];
-    tera::ClientImpl* client_impl = static_cast<tera::ClientImpl*>(client);
-    TableImplPtr table(client_impl->OpenTableInternal(tablename, err));
-    if (table == NULL) {
+    TablePtr table;
+    table.reset(client->OpenTable(tablename, err));
+    TableImplPtr table_impl(static_cast<TableWrapper*>(table.get())->GetTableImpl());
+    if (table_impl == NULL) {
         LOG(ERROR) << "fail to open table";
         return -1;
     }
 
     if (argc == 4) {
         std::string rowkey = argv[3];
-        table->ScanMetaTable(rowkey, rowkey + '\0');
+        table_impl->ScanMetaTable(rowkey, rowkey + '\0');
 
         TabletMeta meta;
-        if (!table->GetTabletMetaForKey(rowkey, &meta)) {
+        if (!table_impl->GetTabletMetaForKey(rowkey, &meta)) {
             LOG(ERROR) << "fail to get tablet meta for " << rowkey;
             return -1;
         }
@@ -2602,12 +2746,12 @@ int32_t FindTsOp(Client* client, int32_t argc, std::string* argv, ErrorCode* err
         return 0;
     }
 
-    table->ScanMetaTable("", "");
+    table_impl->ScanMetaTable("", "");
     const int32_t buf_size = 1024 * 1024;
     char rowkey[buf_size];
     while (std::cin.getline(rowkey, buf_size)) {
         TabletMeta meta;
-        if (!table->GetTabletMetaForKey(rowkey, &meta)) {
+        if (!table_impl->GetTabletMetaForKey(rowkey, &meta)) {
             LOG(ERROR) << "fail to get tablet meta for " << rowkey;
             continue;
         }
@@ -2830,7 +2974,7 @@ int32_t MetaOp(Client* client, int32_t argc, std::string* argv, ErrorCode* err) 
     } else if (op == "check" || op == "repair" || op == "show") {
         TableMetaList table_list;
         TabletMetaList tablet_list;
-        tera::ClientImpl* client_impl = static_cast<tera::ClientImpl*>(client);
+        std::shared_ptr<tera::ClientImpl> client_impl((static_cast<ClientWrapper*>(client))->GetClientImpl());
         if (!client_impl->ShowTablesInfo(&table_list, &tablet_list, false, err)) {
             LOG(ERROR) << "fail to get meta data from tera.";
             return -3;
@@ -2877,7 +3021,8 @@ int32_t FindTabletOp(Client*, int32_t argc, std::string* argv, ErrorCode* err) {
     request.set_table_name(FLAGS_tera_master_meta_table_name);
     request.set_start(std::string(argv[2]) + '#');
     request.set_end(std::string(argv[2]) + '$');
-    tera::tabletnode::TabletNodeClient meta_node_client(meta_tablet_addr);
+    common::ThreadPool thread_pool(FLAGS_concurrency);
+    tera::tabletnode::TabletNodeClient meta_node_client(&thread_pool, meta_tablet_addr);
     while (meta_node_client.ScanTablet(&request, &response)) {
         if (response.status() != tera::kTabletNodeOk) {
             std::stringstream ss;
@@ -2930,6 +3075,38 @@ int32_t FindTabletOp(Client*, int32_t argc, std::string* argv, ErrorCode* err) {
     return 0;
 }
 
+int32_t StatOp(Client*, int32_t argc, std::string* argv, ErrorCode*) {
+    if (argc < 3) {
+        PrintCmdHelpInfo("stat");
+        return -1;
+    }
+    std::string op = argv[2];
+    if (op != "corruption") {
+        PrintCmdHelpInfo(argv[1]);
+        return -1;
+    }
+    std::string tabletpath = "";
+    if (argc == 4) {
+        tabletpath = argv[3];
+    }
+    std::string tabletnode = "";
+    if (argc == 5) {
+        tabletnode = argv[4];
+    }
+    int conc = FLAGS_concurrency;
+    if (conc <= 0 || conc > 1000) {
+        LOG(ERROR) << "compact concurrency illegal: " << conc;
+        return -1;
+    }
+    ThreadPool thread_pool(conc);
+    std::unique_ptr<tera::sdk::StatTable> stat_table(
+            new tera::sdk::StatTable(&thread_pool,
+                                     tera::sdk::StatTableCustomer::kClient));
+    stat_table->OpenStatTable();
+    stat_table->SelectTabletsFailMessages(tabletpath, tabletnode);
+    return 0;
+}
+
 int32_t Meta2Op(Client*, int32_t argc, std::string* argv, ErrorCode*) {
     if (argc < 3) {
         PrintCmdHelpInfo("meta");
@@ -2960,7 +3137,8 @@ int32_t Meta2Op(Client*, int32_t argc, std::string* argv, ErrorCode*) {
     request.set_table_name(FLAGS_tera_master_meta_table_name);
     request.set_start("");
     request.set_end("");
-    tera::tabletnode::TabletNodeClient meta_node_client(meta_tablet_addr);
+    common::ThreadPool thread_pool(FLAGS_concurrency);
+    tera::tabletnode::TabletNodeClient meta_node_client(&thread_pool, meta_tablet_addr);
     while (meta_node_client.ScanTablet(&request, &response)) {
         if (response.status() != tera::kTabletNodeOk) {
             std::cerr << "fail to load meta table: "
@@ -3189,6 +3367,206 @@ int TxnOp(Client* client, int32_t argc, std::string* argv, ErrorCode* err) {
     }
 }
 
+int GTxnOp(Client* client, int32_t argc, std::string* argv, ErrorCode* err) {
+    std::vector<std::vector<std::string>> statements;
+    std::string line;
+    while (getline(std::cin, line)) {
+        bool on_skipping = false;
+        uint32_t pos = 0;
+        std::vector<std::string> terms;
+        std::string term;
+        while (pos < line.length()) {
+            char c = line[pos];
+            if (!on_skipping) {
+                if (c == ' ' || c == '\t') {
+                    on_skipping = true;
+                    if (term.length() > 0) {
+                        terms.push_back(term);
+                        term.clear();
+                    }
+                } else {
+                    term.push_back(c); 
+                }
+            } else {
+                if (c != ' ' && c != '\t') {
+                    term.push_back(c);
+                    on_skipping = false;
+                }
+            }
+            ++pos;
+        }
+        if (term.length() > 0) {
+            terms.push_back(term);
+            term.clear();
+        }
+        if (terms.size() > 0) {
+            statements.push_back(terms);
+        }
+    }
+    bool begin_txn = false;
+    std::unique_ptr<Transaction> txn;
+    std::vector<TablePtr> tables; 
+    for (auto statement : statements) {
+        if (!begin_txn) {
+            if (statement.size() == 1 && (statement[0] == "BEGIN")) {
+                txn.reset(client->NewGlobalTransaction());
+                if (txn != NULL) {
+                    begin_txn = true;
+                } else {
+                    std::cerr << "new global txn failed" << std::endl;
+                    return -1;
+                }
+            } else {
+                std::cerr << "intput syntax error @ " << statement[0] << std::endl;
+                return -1;
+            }
+        } else {
+            std::string family;
+            std::string qualifier;
+            switch (statement.size()) {
+                case 1: {
+                    // COMMIT
+                    if (statement[0] != "COMMIT") {
+                        std::cerr << "input syntax error @ " << statement[0] << std::endl;
+                        return -1;
+                    }
+                    txn->Commit();
+                    begin_txn = false;
+                    if (txn->GetError().GetType() != ErrorCode::kOK) {
+                        std::cerr << "txn commit failed" 
+                                  << txn->GetError().ToString() << std::endl;
+                        return -1;
+                    } else {
+                        std::cout << "ok" << std::endl;
+                    }
+                    break;
+                }
+                case 5: {
+                    // PUT tablename rowkey cf:qu value
+                    if (statement[0] != "PUT") {
+                        std::cerr << "input syntax error @ " << statement[0] << std::endl;
+                        return -1;
+                    }
+                    TablePtr mu_table(client->OpenTable(statement[1], err));
+                    if (!mu_table) {
+                        LOG(ERROR) << "fail to open table";
+                        return -1;
+                    }
+                    tables.push_back(mu_table);
+                    std::unique_ptr<RowMutation> mu(mu_table->NewRowMutation(statement[2]));
+                    ParseCfQualifier(statement[3], &family, &qualifier);
+                    mu->Put(family, qualifier, statement[4]);
+                    txn->ApplyMutation(mu.get());
+                    break;
+                }
+                case 4: {
+                    // DEL tablename rowkey cf:qu
+                    if (statement[0] == "DEL") {
+                        TablePtr del_table(client->OpenTable(statement[1], err));
+                        if (!del_table) {
+                            LOG(ERROR) << "fail to open table";
+                            return -1;
+                        }
+                        tables.push_back(del_table);
+                        std::unique_ptr<RowMutation> mu(del_table->NewRowMutation(statement[2]));
+                        ParseCfQualifier(statement[3], &family, &qualifier);
+                        mu->DeleteColumn(family, qualifier);
+                        txn->ApplyMutation(mu.get());
+                    } else if (statement[0] == "GET") {
+                        // GET tablename rowkey cf:qu
+                        TablePtr r_table(client->OpenTable(statement[1], err));
+                        if (!r_table) {
+                            LOG(ERROR) << "fail to open table";
+                            return -1;
+                        }
+                        tables.push_back(r_table);
+                        std::unique_ptr<RowReader> reader(r_table->NewRowReader(statement[2]));
+                        ParseCfQualifier(statement[3], &family, &qualifier);
+                        reader->AddColumn(family, qualifier);
+                        txn->Get(reader.get());
+                        if (reader->GetError().GetType() != ErrorCode::kOK) {
+                            std::cerr << "txn get failed" 
+                                      << reader->GetError().ToString() << std::endl;
+                            return -1;
+                        }
+                        while (!reader->Done()) {
+                            std::cout << reader->Value() << std::endl;
+                            reader->Next();
+                        }
+                    } else {
+                        std::cerr << "input syntax error @ " << statement[0] << std::endl;
+                        return -1;
+                    }
+                    break;
+                }
+                default:
+                    std::cerr << "input syntax error : statement size should 1,4,5 " << std::endl;
+                    return -1;
+            }
+        }
+    }
+    return 0;
+}
+
+int32_t CasOp(Client* client, int32_t argc, std::string* argv, ErrorCode* err) {
+    if (argc != 7) {
+        LOG(ERROR) << "args number error: " << argc << ", need 7";
+        PrintCmdHelpInfo(argv[1]);
+        return -1;
+    }
+
+    const std::string& tablename = argv[2];
+    TablePtr table(client->OpenTable(tablename, err));
+    if (!table) {
+        LOG(ERROR) << "fail to open table";
+        return -1;
+    }
+
+    const std::string& rowkey = argv[3];
+    const std::string& old_val = argv[5];
+    const std::string& new_val = argv[6];
+    std::string columnfamily = "";
+    std::string qualifier = "";
+    ParseCfQualifier(argv[4], &columnfamily, &qualifier);
+
+    std::unique_ptr<tera::Transaction> txn(table->StartRowTransaction(rowkey));
+    if (!txn) {
+        LOG(ERROR) << "fail to start row txn";
+        return -1;
+    }
+
+    std::unique_ptr<tera::RowReader> reader(table->NewRowReader(rowkey));
+    reader->AddColumn(columnfamily, qualifier);
+    txn->Get(reader.get());
+    if (reader->Done()) {
+        std::cout << "cas failed: NotFound" << std::endl;
+        return -1;
+    }
+    std::string cur_val = reader->Value();
+    if (cur_val != old_val) {
+        std::cout << "cas failed: NotEqual" << std::endl;
+        return -1;
+    }
+
+    std::unique_ptr<tera::RowMutation> mutation(table->NewRowMutation(rowkey));
+    mutation->Put(columnfamily, qualifier, new_val);
+    txn->ApplyMutation(mutation.get());
+    if (mutation->GetError().GetType() != tera::ErrorCode::kOK) {
+        std::cout << "cas failed: " << tera::strerr(mutation->GetError()) << std::endl;
+        return -1;
+    }
+
+    auto error_code = txn->Commit();
+    if (error_code.GetType() != tera::ErrorCode::kOK) {
+        std::cout << "cas failed: " << tera::strerr(error_code) << std::endl;
+        return -1;
+    } else {
+        std::cout << "cas success" << std::endl;
+    }
+
+    return 0;
+}
+
 int32_t HelpOp(Client*, int32_t argc, std::string* argv, ErrorCode*) {
     if (argc == 2) {
         PrintAllCmd();
@@ -3215,6 +3593,469 @@ bool ParseCommand(int argc, char** arg_list, std::vector<std::string>* parsed_ar
         parsed_arg_list->push_back(parsed_arg);
     }
     return true;
+}
+
+
+int32_t InitDfsClient() {
+    if (g_dfs != NULL) {
+        return 0;
+    }
+    if (FLAGS_tera_leveldb_env_dfs_type == "nfs") {
+        if (access(FLAGS_tera_leveldb_env_nfs_conf_path.c_str(), R_OK) == 0) {
+            LOG(INFO) << "init nfs system: use configure file" << FLAGS_tera_leveldb_env_nfs_conf_path;
+            leveldb::Nfs::Init(FLAGS_tera_leveldb_env_nfs_mountpoint, FLAGS_tera_leveldb_env_nfs_conf_path);
+            g_dfs = leveldb::Nfs::GetInstance();
+        }
+        else {
+            LOG(FATAL) << "init nfs system: no configure file found";
+            return -1;
+        }
+    } else if (FLAGS_tera_leveldb_env_dfs_type == "hdfs2") {
+        LOG(INFO) << "hdfs2 system support currently, please use hadoop-client";
+        g_dfs = new leveldb::Hdfs2(FLAGS_tera_leveldb_env_hdfs2_nameservice_list);
+    } else if (FLAGS_tera_leveldb_env_dfs_type == "hdfs") {
+        g_dfs = new leveldb::Hdfs();
+    }
+    else {
+        LOG(INFO) << "init dfs system: " << FLAGS_tera_dfs_so_path << "(" << FLAGS_tera_dfs_conf << ")";
+        g_dfs = leveldb::Dfs::NewDfs(FLAGS_tera_dfs_so_path, FLAGS_tera_dfs_conf);
+    }
+    return 0;
+}
+
+int32_t FileSystemOp(Client* client, int32_t argc, std::string* argv, ErrorCode* err) {
+    if (argc < 4) {
+        PrintCmdHelpInfo(argv[1]);
+        return -1;
+    }
+    if (0 != InitDfsClient()) {
+        LOG(FATAL) << "InitDfsClient failed";
+        return -1;
+    }
+    std::string operation = argv[2];
+    if (GetFSCommandTable().find(operation) == GetFSCommandTable().end()) {
+        std::cerr << "unsupported dfs command: " << operation << std::endl;
+        return -1;
+    }
+    int ret = (GetFSCommandTable().find(operation)->second)(argc, argv, err);
+    return ret;
+}
+
+int DfsPrintAttr(const char* pathname, struct stat* st, void* arg = NULL) {
+    char mode_str[10];
+    memset(mode_str, '-', sizeof(mode_str));
+    char time_str[64];
+    strftime(time_str, sizeof(time_str), "%b %d %H:%M %Y", localtime(&st->st_mtime));
+    printf("%c%c%c%c%c%c%c%c%c%c %16lx %16ld %s %s",
+            (S_IFDIR & st->st_mode) ? 'd' : '-',
+            (S_IRUSR & st->st_mode) ? 'r' : '-',
+            (S_IWUSR & st->st_mode) ? 'w' : '-',
+            (S_IXUSR & st->st_mode) ? 'x' : '-',
+            (S_IRGRP & st->st_mode) ? 'r' : '-',
+            (S_IWGRP & st->st_mode) ? 'w' : '-',
+            (S_IXGRP & st->st_mode) ? 'x' : '-',
+            (S_IROTH & st->st_mode) ? 'r' : '-',
+            (S_IWOTH & st->st_mode) ? 'w' : '-',
+            (S_IXOTH & st->st_mode) ? 'x' : '-',
+            st->st_ino,
+            st->st_size, time_str, pathname);
+    if (S_IFDIR & st->st_mode) {
+        printf("/");
+    }
+    printf("\n");
+    return 0;
+}
+
+static std::string FormatPath(const std::string pathname) {
+    std::string result;
+    bool need_strip = false;
+    for (std::string::size_type i = 0; i < pathname.length(); ++i) {
+        if (pathname.at(i) == '/') {
+            if (need_strip) {
+                continue;
+            }
+            else {
+                result.push_back(pathname.at(i));
+                need_strip = true;
+            }
+        } else {
+            need_strip = false;
+            result.push_back(pathname.at(i));
+        }
+    }
+    if (result.at(result.length() - 1) == '/') {
+        result.pop_back();
+    }
+    return result;
+}
+
+int32_t DfsPrintPath(const char* pathname, struct stat* st, void* arg = NULL) {
+    printf("%s", FormatPath(pathname).c_str());
+    if (S_IFDIR & st->st_mode) {
+        printf("/");
+    }
+    printf("\n");
+    return 0;
+}
+
+int32_t DfsSizeSum(const char* pathname, struct stat* st, void* arg) {
+    uint64_t* sum = reinterpret_cast<uint64_t*>(arg);
+    if (!(S_IFDIR & st->st_mode)) {
+        *sum += st->st_size;
+    }
+    return 0;
+}
+
+int32_t DfsTryLockParentPath(const std::string path) {
+    std::string parent_path = path;
+    if (parent_path.at(parent_path.length() - 1) == '/') {
+        parent_path.pop_back();
+    }
+    std::string::size_type pos = parent_path.rfind("/");
+    if (pos == std::string::npos) {
+        fprintf(stderr, "invalid path: %s\n", path.c_str());
+        return -1;
+    }
+    if (pos == 0) {
+        parent_path = "/";
+    }
+    parent_path = parent_path.substr(0, pos);
+    return g_dfs->LockDirectory(parent_path);
+}
+
+int32_t DfsRmPath(const char* pathname, struct stat* st, void*) {
+    int ret = 0;
+    if (S_IFDIR & st->st_mode) {
+        ret = g_dfs->DeleteDirectory(pathname);
+        if (0 != ret) {
+            perror("RmDir fail");
+            return ret;
+        }
+    } else {
+        ret = g_dfs->Delete(pathname);
+        if (0 != ret) {
+            perror("unlink fail");
+        }
+    }
+    return ret;
+}
+
+typedef int(*WalkFunc)(const char*, struct stat*, void* arg);
+int32_t DfsDirWalk(const char* dir_name, WalkFunc func, bool is_recursive, void* arg = NULL) {
+    struct stat st;
+    memset(&st, 0, sizeof(struct stat));
+    char fullpath[4096] = {0};
+    // not a directory, end of recursive call
+    if (0 == g_dfs->Stat(dir_name, &st) && !(S_IFDIR & st.st_mode)) {
+        return 0;
+    }
+    std::vector<std::string> sub_paths;
+    if (0 != g_dfs->ListDirectory(dir_name, &sub_paths)) {
+        return -1;
+    }
+    if (func == DfsRmPath && FLAGS_asowner) {
+        if (0 != g_dfs->LockDirectory(dir_name)) {
+            fprintf(stderr, "Lock Directory %s failed", dir_name);
+            return -1;
+        }
+    }
+    for (std::size_t i = 0; i < sub_paths.size(); ++i) {
+        snprintf(fullpath, sizeof(fullpath), "%s/%s", dir_name, sub_paths[i].c_str());
+        memset(&st, 0, sizeof(struct stat));
+        if (g_dfs->Stat(fullpath, &st) < 0) {
+            perror("Stat failed");
+            continue;
+        }
+        if (is_recursive && (S_IFDIR & st.st_mode)) {
+            DfsDirWalk(fullpath, func, true, arg);
+        }
+        func(fullpath, &st, arg);
+    }
+    return 0;
+}
+
+
+int32_t DfsGetOp(int32_t argc, std::string* argv, ErrorCode* err) {
+    if (argc != 5) {
+        fprintf(stderr, "Invalid arguments");
+        return -1;
+    }
+    int ret = 0;
+    const std::string& src_path = argv[3];
+    const std::string& local_path = argv[4];
+    std::string local_file_path = local_path;
+    int local_fd = 0;
+    if (local_path != "-") {
+        struct stat st;
+        if (stat(local_path.c_str(), &st) == 0 && (S_IFDIR & st.st_mode)) {
+            char* tmp_src_path = strdup(src_path.c_str());
+            char* filename = basename(tmp_src_path);
+            local_file_path.append("/").append(filename);
+            free(tmp_src_path);
+        }
+        local_fd = open(local_file_path.c_str(), O_CREAT | O_WRONLY | O_TRUNC, 0644);
+        if (local_fd < 0) {
+            fprintf(stderr, "local file open fail, path=%s, errno=%d", local_file_path.c_str(), errno);
+            return errno;
+        }
+    }
+    leveldb::DfsFile* file = g_dfs->OpenFile(src_path, leveldb::RDONLY);
+    if (NULL == file) {
+        fprintf(stderr, "open dfs file fail, path=%s, errno=%d", src_path.c_str(), errno);
+        return errno;
+    }
+    char buf[128 * 1024];
+    ssize_t ret_size = 0;
+    while ((ret_size = file->Read(buf, sizeof(buf))) > 0) {
+        ssize_t writelen = write(local_fd, buf, ret_size);
+        if (writelen < 0) {
+            fprintf(stderr, "write local file fail, path=%s, errno=%d", local_file_path.c_str(), errno);
+            ret = errno;
+            break;
+        }
+    }
+    if (local_fd > 0) {
+        close(local_fd);
+    }
+    file->CloseFile();
+
+    return ret;
+}
+
+int32_t DfsPutOp(int32_t argc, std::string* argv, ErrorCode* err) {
+    fprintf(stderr, "not implemented");
+    return -1;
+}
+
+
+int32_t DfsLsOp(int32_t argc, std::string* argv, ErrorCode* err) {
+    const std::string& filename = argv[3];
+    struct stat fstat;
+    int ret = 0;
+    if (0 == g_dfs->Stat(filename.c_str(), &fstat)) {
+        if (S_IFDIR & fstat.st_mode) {
+            if (FLAGS_attribute) {
+                DfsPrintAttr(filename.c_str(), &fstat);
+                ret = DfsDirWalk(filename.c_str(), DfsPrintAttr, FLAGS_recursive);
+            } else {
+                DfsPrintPath(filename.c_str(), &fstat);
+                ret = DfsDirWalk(filename.c_str(), DfsPrintPath, FLAGS_recursive);
+            }
+        }
+        else {
+            if (FLAGS_attribute) {
+                DfsPrintAttr(filename.c_str(), &fstat);
+            }
+            else {
+                DfsPrintPath(filename.c_str(), &fstat);
+            }
+        }
+    }
+    return ret;
+}
+int32_t DfsLsrOp(int32_t argc, std::string* argv, ErrorCode* err) {
+
+    bool old_recursive_flag = FLAGS_recursive;
+    FLAGS_recursive = true;
+    DfsLsOp(argc, argv, err);
+    FLAGS_recursive = old_recursive_flag;
+    return errno;
+}
+
+int32_t DfsDusOp(int32_t argc, std::string* argv, ErrorCode* err) {
+    struct stat st;
+    const std::string& path = argv[3];
+    uint64_t size = 0;
+    if (g_dfs->Stat(path, &st) != 0) {
+        perror("Stat failed");
+        return errno;
+    }
+    if (S_IFDIR & st.st_mode) {
+        DfsDirWalk(path.c_str(), DfsSizeSum, true, &size);
+    } else {
+        DfsSizeSum(path.c_str(), &st, &size);
+    }
+    fprintf(stdout, "%s:\t%lu\n", path.c_str(), size);
+    return 0;
+}
+
+int32_t DfsTouchzOp(int32_t argc, std::string* argv, ErrorCode* err) {
+    const std::string& path = argv[3];
+    struct stat st;
+    std::string::size_type pos = path.rfind("/");
+    if (pos == std::string::npos || pos == path.length() - 1) {
+        fprintf(stderr, "invalid filepath: %s", path.c_str());
+        return -1;
+    }
+
+    int ret = g_dfs->Stat(path, &st);
+    if (0 != ret) {
+        if (errno != ENOENT) {
+            perror("Stat failed");
+            return errno;
+        }
+        std::string parent_path = path.substr(0, pos);
+        ret = g_dfs->CreateDirectory(parent_path);
+        if (0 != ret) {
+            perror("create parent path failed");
+            return errno;
+        }
+        if (FLAGS_asowner) {
+            DfsTryLockParentPath(path);
+        }
+        leveldb::DfsFile* file = g_dfs->OpenFile(path, leveldb::WRONLY);
+        if (NULL == file) {
+            perror("create or open file fail");
+            return errno;
+        }
+    } else {
+        if (S_IFDIR & st.st_mode) {
+            fprintf(stderr, "Touchz fail: %s not Regular file", path.c_str());
+            ret = EISDIR;
+        } else {
+            fprintf(stdout, "%s already exists", path.c_str());
+            ret = EEXIST;
+        }
+    }
+    return ret;
+}
+
+int32_t DfsMkdirOp(int32_t argc, std::string* argv, ErrorCode* err) {
+    const std::string& path = argv[3];
+    if (FLAGS_asowner) {
+        if (0 != DfsTryLockParentPath(path)) {
+            fprintf(stderr, "Try lock parent path failed");
+            return -1;
+        }
+    }
+    int ret = g_dfs->CreateDirectory(path);
+    if (0 != ret) {
+        fprintf(stderr, "Create Path: %s failed, errno=%d\n", path.c_str(), errno);
+        ret = errno;
+    }
+    return ret;
+}
+
+int32_t DfsRmOp(int32_t argc, std::string* argv, ErrorCode* err) {
+    const std::string& path = argv[3];
+    struct stat st;
+    if (0 != g_dfs->Stat(path.c_str(), &st)) {
+        perror("Stat fail: ");
+        return -1;
+    }
+    int ret = 0;
+    if (FLAGS_asowner) {
+        DfsTryLockParentPath(path);
+    }
+    if (st.st_mode & S_IFDIR) {
+        if (FLAGS_recursive) {
+            DfsDirWalk(path.c_str(), DfsRmPath, true, NULL);
+            ret = g_dfs->DeleteDirectory(path);
+        } else {
+            ret = g_dfs->DeleteDirectory(path);
+        }
+    } else {
+        ret = g_dfs->Delete(path);
+    }
+    if (0 != ret) {
+        perror("delete failed: ");
+    }
+
+    return errno;
+}
+
+int32_t DfsTestOp(int32_t argc, std::string* argv, ErrorCode* err) {
+    fprintf(stderr, "not implemented\n");
+    return -1;
+}
+
+int32_t DfsStatOp(int32_t argc, std::string* argv, ErrorCode* err) {
+    struct stat st;
+    const std::string& filename = argv[3];
+    if (0 != g_dfs->Stat(filename, &st)) {
+        return errno;
+    }
+    const char* file_type;
+    if (S_IFREG & st.st_mode) {
+        file_type = "Regular";
+    } else if (S_IFDIR & st.st_mode) {
+        file_type = "Directory";
+    } else {
+        file_type = "Symlink";
+    }
+    fprintf(stdout, "File:\t%s\n", filename.c_str());
+    fprintf(stdout, "Inode:\t0x%lx\n", st.st_ino);
+    fprintf(stdout, "Type:\t%s\n", file_type);
+    fprintf(stdout, "Size:\t%lu\n", st.st_size);
+    fprintf(stdout, "Mode:\t%o\n", st.st_mode & 0777);
+    fprintf(stdout, "Link:\t%lu\n", st.st_nlink);
+    fprintf(stdout, "Atime:\t%lu\t%s", st.st_atime, ctime(&st.st_atime));
+    fprintf(stdout, "Mtime:\t%lu\t%s", st.st_mtime, ctime(&st.st_mtime));
+    fprintf(stdout, "Ctime:\t%lu\t%s", st.st_ctime, ctime(&st.st_ctime));
+
+    return 0;
+}
+
+int32_t DfsRenameOp(int32_t argc, std::string* argv, ErrorCode* err) {
+    if (argc != 5) {
+        fprintf(stderr, "invalid arguments\n");
+        return -1;
+    }
+    std::string& src_path = argv[3];
+    std::string& dest_path = argv[4];
+    if (FLAGS_asowner) {
+        if (0 != DfsTryLockParentPath(dest_path)) {
+            fprintf(stderr, "Lock ParentPath failed");
+            return -1;
+        }
+    }
+
+    int ret = g_dfs->Rename(src_path, dest_path);
+    if (0 != ret) {
+        perror("Rename fail");
+        ret = errno;
+    }
+    return ret;
+}
+
+int32_t DfsUnlockDirOp(int32_t argc, std::string* argv, ErrorCode* err) {
+    const std::string& path = argv[3];
+    return g_dfs->ClearDirOwner(path);
+}
+
+int32_t DfsChecksumOp(int32_t argc, std::string* argv, ErrorCode* err) {
+    fprintf(stderr, "Not Implemented");
+    return -1;
+}
+
+int32_t DfsLChecksumOp(int32_t argc, std::string* argv, ErrorCode* err) {
+    fprintf(stderr, "Not Implemented");
+    return -1;
+}
+
+int32_t DfsForceReleaseOp(int32_t argc, std::string* argv, ErrorCode* err) {
+    fprintf(stderr, "Not Implemented");
+    return -1;
+}
+
+static void InitializeFileSystemCommandTable() {
+    FSCommandTable& fs_command_table = GetFSCommandTable();
+    fs_command_table["get"] = DfsGetOp;
+    fs_command_table["put"] = DfsPutOp;
+    fs_command_table["lsr"] = DfsLsrOp;
+    fs_command_table["ls"] = DfsLsOp;
+    fs_command_table["dus"] = DfsDusOp;
+    fs_command_table["touchz"] = DfsTouchzOp;
+    fs_command_table["mkdir"] = DfsMkdirOp;
+    fs_command_table["rm"] = DfsRmOp;
+    fs_command_table["test"] = DfsTestOp;
+    fs_command_table["stat"] = DfsStatOp;
+    fs_command_table["rename"] = DfsRenameOp;
+    fs_command_table["unlockdir"] = DfsUnlockDirOp;
+    fs_command_table["checksum"] = DfsChecksumOp;
+    fs_command_table["lchecksum"] = DfsLChecksumOp;
+    fs_command_table["forcerelease"] = DfsForceReleaseOp;
+    return;
 }
 
 static void InitializeCommandTable(){
@@ -3254,22 +4095,26 @@ static void InitializeCommandTable(){
     command_table["scanallv"] = ScanOp;
     command_table["safemode"] = SafeModeOp;
     command_table["tablet"] = TabletOp;
-    command_table["rename"] = RenameOp;
     command_table["meta"] = MetaOp;
     command_table["compact"] = CompactOp;
+    command_table["compactx"] = CompactOp;
     command_table["findmaster"] = FindMasterOp;
     command_table["findts"] = FindTsOp;
     command_table["findtablet"] = FindTabletOp;
+    command_table["stat"] = StatOp;
     command_table["meta2"] = Meta2Op;
     command_table["user"] = UserOp;
     command_table["reload"] = ReloadConfigOp;
     command_table["kick"] = KickTabletServerOp;
     command_table["cookie"] = CookieOp;
-    command_table["snapshot"] = SnapshotOp;
     command_table["range"] = RangeOp;
     command_table["rangex"] = RangeOp;
     command_table["txn"] = TxnOp;
+    command_table["gtxn"] = GTxnOp;
     command_table["help"] = HelpOp;
+    command_table["cas"] = CasOp;
+    command_table["dfs"] = FileSystemOp;
+    InitializeFileSystemCommandTable();
 }
 
 int ExecuteCommand(Client* client, int argc, char** arg_list) {

@@ -47,17 +47,12 @@ public:
 
     void SetProcessStartTime(int64_t ts);
 
+    void RefreshTabletsStatus(TabletManager* tablet_manager);
+
 private:
     TabletNodeInfo info_;
     TabletMetaList tablet_list_;
-    int64_t mem_check_ts_;
-    int64_t net_check_ts_;
-    int64_t io_check_ts_;
-    int64_t net_tx_total_;
-    int64_t net_rx_total_;
-    int64_t cpu_check_ts_;
 
-    int64_t tablet_check_ts_;
     mutable Mutex mutex_;
 };
 } // namespace tabletnode

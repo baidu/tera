@@ -877,7 +877,7 @@ std::string NumberToHumanReadableString(
     }
 
     char buffer[16];
-    int length = sprintf(buffer, "%s%.*g%s%s", // NOLINT(runtime/printf)
+    int length = snprintf(buffer, sizeof(buffer), "%s%.*g%s%s", // NOLINT(runtime/printf)
                          neg ? "-": "", n < 1000 ? 3 : 4, n, sep,
                          prefixes[shift]);
     std::string result(buffer, length);

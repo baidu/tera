@@ -33,6 +33,7 @@ struct FileMetaData {
   InternalKey largest;        // Largest internal key served by table
   bool smallest_fake;         // smallest is not real, have out-of-range keys
   bool largest_fake;          // largest is not real, have out-of-range keys
+  bool being_compacted;       // Is this file undergoing compaction?
 
   FileMetaData() :
       refs(0),
@@ -44,7 +45,8 @@ struct FileMetaData {
       file_size(0),
       data_size(0),
       smallest_fake(false),
-      largest_fake(false) { }
+      largest_fake(false),
+      being_compacted(false) { }
 };
 
 class VersionEdit {
@@ -157,6 +159,7 @@ class VersionEdit {
     FileMetaData f;
     f.number = file;
     f.file_size = file_size;
+    f.data_size = f.file_size;
     f.smallest = smallest;
     f.largest = largest;
     f.del_percentage = del_percentage;
@@ -185,6 +188,7 @@ class VersionEdit {
 
   void EncodeTo(std::string* dst) const;
   Status DecodeFrom(const Slice& src);
+  Status DecodeNewFileInfo(Slice* input, FileMetaData* f);
 
   std::string DebugString() const;
 

@@ -22,7 +22,7 @@
 #include "leveldb/table_utils.h"
 #include "nfs.h"
 #include "util/mutexlock.h"
-#include "../utils/counter.h"
+#include "../common/counter.h"
 
 namespace leveldb {
 
@@ -46,6 +46,19 @@ tera::Counter dfs_delete_counter;
 tera::Counter dfs_tell_counter;
 tera::Counter dfs_info_counter;
 
+tera::Counter dfs_read_error_counter;
+tera::Counter dfs_write_error_counter;
+tera::Counter dfs_sync_error_counter;
+tera::Counter dfs_flush_error_counter;
+tera::Counter dfs_list_error_counter;
+tera::Counter dfs_other_error_counter;
+tera::Counter dfs_exists_error_counter;
+tera::Counter dfs_open_error_counter;
+tera::Counter dfs_close_error_counter;
+tera::Counter dfs_delete_error_counter;
+tera::Counter dfs_tell_error_counter;
+tera::Counter dfs_info_error_counter;
+
 tera::Counter dfs_read_hang_counter;
 tera::Counter dfs_write_hang_counter;
 tera::Counter dfs_sync_hang_counter;
@@ -58,6 +71,9 @@ tera::Counter dfs_close_hang_counter;
 tera::Counter dfs_delete_hang_counter;
 tera::Counter dfs_tell_hang_counter;
 tera::Counter dfs_info_hang_counter;
+
+tera::Counter dfs_opened_read_files_counter;
+tera::Counter dfs_opened_write_files_counter;
 
 bool split_filename(const std::string filename,
         std::string* path, std::string* file)
@@ -95,6 +111,9 @@ char* get_time_str(char* p, size_t len)
 // Log error message
 static Status IOError(const std::string& context, int err_number)
 {
+    if (err_number == EACCES) {
+        return Status::IOPermissionDenied(context, strerror(err_number));
+    }
     return Status::IOError(context, strerror(err_number));
 }
 
@@ -111,11 +130,14 @@ public:
         : fs_(fs), filename_(fname), file_(NULL),
           now_pos(-1) {
         tera::AutoCounter ac(&dfs_open_hang_counter, "OpenFile", filename_.c_str());
-        dfs_open_counter.Inc();
         file_ = fs->OpenFile(filename_, RDONLY);
+        dfs_open_counter.Inc();
         // assert(hfile_ != NULL);
         if (file_ == NULL) {
-            Log("[env_dfs]: open file fail: %s\n", filename_.c_str());
+            dfs_open_error_counter.Inc();
+            Log("[env_dfs]: open file for read fail: %s\n", filename_.c_str());
+        } else {
+            dfs_opened_read_files_counter.Inc();
         }
         now_pos = 0;
     }
@@ -123,8 +145,12 @@ public:
     virtual ~DfsReadableFile() {
         if (file_) {
             tera::AutoCounter ac(&dfs_close_hang_counter, "CloseFile", filename_.c_str());
+            if (file_->CloseFile()) {
+                Log("[env_dfs]: close dfs file fail: %s\n", IOError(filename_, errno).ToString().c_str());
+                dfs_close_error_counter.Inc();
+            }
             dfs_close_counter.Inc();
-            file_->CloseFile();
+            dfs_opened_read_files_counter.Dec();
         }
         delete file_;
         file_ = NULL;
@@ -147,6 +173,7 @@ public:
             if (feof()) {
                 // end of the file
             } else {
+                dfs_read_error_counter.Inc();
                 s = IOError(filename_, errno);
             }
         }
@@ -165,6 +192,7 @@ public:
         dfs_read_counter.Inc();
         *result = Slice(scratch, (bytes_read < 0) ? 0 : bytes_read);
         if (bytes_read < 0) {
+            dfs_read_error_counter.Inc();
             s = IOError(filename_, errno);
         }
         if (bytes_read > 0) {
@@ -177,19 +205,21 @@ public:
         int64_t current = 0;
         {
             tera::AutoCounter ac(&dfs_tell_hang_counter, "Skip", filename_.c_str());
-            dfs_tell_counter.Inc();
             current = file_->Tell();
+            dfs_tell_counter.Inc();
         }
         if (current < 0) {
+            dfs_tell_error_counter.Inc();
             return IOError(filename_, errno);
         }
         // seek to new offset
         int64_t newoffset = current + n;
 
         tera::AutoCounter ac(&dfs_other_hang_counter, "Seek", filename_.c_str());
-        dfs_other_counter.Inc();
         int val = file_->Seek(newoffset);
+        dfs_other_counter.Inc();
         if (val < 0) {
+            dfs_other_error_counter.Inc();
             return IOError(filename_, errno);
         }
         return Status::OK();
@@ -211,6 +241,7 @@ private:
         dfs_info_counter.Inc();
         uint64_t size = 0;
         if (fs_->GetFileSize(filename_, &size) != 0) {
+            dfs_info_error_counter.Inc();
             return -1;
         }
         return size;
@@ -226,19 +257,25 @@ private:
 public:
     DfsWritableFile(Dfs* fs, const std::string& fname)
         : fs_(fs), filename_(fname) , file_(NULL) {
-        fs_->Delete(filename_);
         tera::AutoCounter ac(&dfs_open_hang_counter, "OpenFile", filename_.c_str());
-        dfs_open_counter.Inc();
         file_ = fs_->OpenFile(filename_, WRONLY);
+        dfs_open_counter.Inc();
         if (file_ == NULL) {
+            dfs_open_error_counter.Inc();
             Log("[env_dfs]: open file for write fail: %s\n", fname.c_str());
+        } else {
+            dfs_opened_write_files_counter.Inc();
         }
     }
     virtual ~DfsWritableFile() {
         if (file_ != NULL) {
             tera::AutoCounter ac(&dfs_close_hang_counter, "CloseFile", filename_.c_str());
+            if (file_->CloseFile()) {
+                Log("[env_dfs]: close dfs file fail: %s\n", IOError(filename_, errno).ToString().c_str());
+                dfs_close_error_counter.Inc();
+            }
             dfs_close_counter.Inc();
-            file_->CloseFile();
+            dfs_opened_write_files_counter.Dec();
         }
         delete file_;
     }
@@ -262,6 +299,7 @@ public:
         dfs_write_counter.Inc();
 
         if (ret != static_cast<int32_t>(left)) {
+            dfs_write_error_counter.Inc();
             return IOError(filename_, errno);
         }
         dfs_write_size_counter.Add(ret);
@@ -280,14 +318,17 @@ public:
 
     virtual Status Sync() {
         tera::AutoCounter ac(&dfs_sync_hang_counter, "Sync", filename_.c_str());
-        dfs_sync_counter.Inc();
         Status s;
-        tera::Counter dfs_sync_counter;
         uint64_t t = EnvDfs()->NowMicros();
-        if (file_->Sync() != 0) {
+
+        int32_t ret = file_->Sync();
+        dfs_sync_counter.Inc();
+        if (ret != 0) {
+            dfs_sync_error_counter.Inc();
             Log("[env_dfs] dfs sync fail: %s\n", filename_.c_str());
             s = IOError(filename_, errno);
         }
+
         uint64_t diff = EnvDfs()->NowMicros() - t;
         dfs_sync_delay_counter.Add(diff);
         if (diff > 2000000) {
@@ -299,8 +340,14 @@ public:
 
     virtual Status Close() {
         Status result;
-        if (file_ != NULL && file_->CloseFile() != 0) {
-            result = IOError(filename_, errno);
+        if (file_ != NULL) {
+            tera::AutoCounter ac(&dfs_close_hang_counter, "CloseFile", filename_.c_str());
+            if (file_->CloseFile() != 0) {
+                result = IOError(filename_, errno);
+                dfs_close_error_counter.Inc();
+            }
+            dfs_close_counter.Inc();
+            dfs_opened_write_files_counter.Dec();
         }
         delete file_;
         file_ = NULL;
@@ -326,7 +373,7 @@ DfsEnv::~DfsEnv()
 Status DfsEnv::NewSequentialFile(const std::string& fname, SequentialFile** result)
 {
     DfsReadableFile* f = new DfsReadableFile(dfs_, fname);
-    if (!f->isValid()) {
+    if (f == NULL || !f->isValid()) {
         delete f;
         *result = NULL;
         return IOError(fname, errno);
@@ -336,7 +383,9 @@ Status DfsEnv::NewSequentialFile(const std::string& fname, SequentialFile** resu
 }
 
 // random read file
-Status DfsEnv::NewRandomAccessFile(const std::string& fname, RandomAccessFile** result)
+Status DfsEnv::NewRandomAccessFile(const std::string& fname,
+                                   RandomAccessFile** result,
+                                   const EnvOptions&)
 {
     DfsReadableFile* f = new DfsReadableFile(dfs_, fname);
     if (f == NULL || !f->isValid()) {
@@ -350,7 +399,8 @@ Status DfsEnv::NewRandomAccessFile(const std::string& fname, RandomAccessFile** 
 
 // writable
 Status DfsEnv::NewWritableFile(const std::string& fname,
-        WritableFile** result)
+                               WritableFile** result, 
+                               const EnvOptions&)
 {
     Status s;
     DfsWritableFile* f = new DfsWritableFile(dfs_, fname);
@@ -371,17 +421,19 @@ Status DfsEnv::NewWritableFile(const std::string& fname,
 Status DfsEnv::FileExists(const std::string& fname)
 {
     tera::AutoCounter ac(&dfs_exists_hang_counter, "Exists", fname.c_str());
-    dfs_exists_counter.Inc();
     int32_t retval = dfs_->Exists(fname);
+    dfs_exists_counter.Inc();
     if (retval == 0) {
         return Status::OK();
     } else if (errno == ENOENT) {
         return Status::NotFound("filestatus", fname);
     } else if (errno == ETIMEDOUT)  {
         Log("[env_dfs] exists timeout: %s\n", fname.c_str());
+        dfs_exists_error_counter.Inc();
         return Status::TimeOut("filestatus", fname);
     } else {
-        return Status::IOError(fname);
+        dfs_exists_error_counter.Inc();
+        return IOError(fname, errno);
     }
 }
 
@@ -390,6 +442,7 @@ Status DfsEnv::CopyFile(const std::string& from, const std::string& to) {
     dfs_other_counter.Inc();
     std::cerr << "DfsEnv: " << from << " --> " << to << std::endl;
     if (from != to && dfs_->Copy(from, to) != 0) {
+        dfs_other_error_counter.Inc();
         return Status::IOError("DFS Copy", from);
     }
     return Status::OK();
@@ -405,10 +458,12 @@ Status DfsEnv::GetChildren(const std::string& path, std::vector<std::string>* re
     }
     if (errno == ETIMEDOUT)  {
         Log("[env_dfs] GetChildren timeout: %s\n", path.c_str());
+        dfs_list_error_counter.Inc();
         return Status::TimeOut("ListDirectory", path);
     } else {
         Log("[env_dfs] GetChildren call with path not exists: %s\n", path.data());
-        return Status::IOError("Path not exist", path);
+        dfs_list_error_counter.Inc();
+        return IOError("Path not exist " + path, errno);
     }
 }
 
@@ -447,8 +502,10 @@ Status DfsEnv::DeleteFile(const std::string& fname)
     tera::AutoCounter ac(&dfs_delete_hang_counter, "DeleteFile", fname.c_str());
     dfs_delete_counter.Inc();
     if (dfs_->Delete(fname) == 0) {
+        Log("[env_dfs] nobody like this file: %s", fname.c_str());
         return Status::OK();
     }
+    dfs_delete_error_counter.Inc();
     return IOError(fname, errno);
 };
 
@@ -459,6 +516,7 @@ Status DfsEnv::CreateDir(const std::string& name)
     if (dfs_->CreateDirectory(name) == 0) {
         return Status::OK();
     }
+    dfs_other_error_counter.Inc();
     return IOError(name, errno);
 };
 
@@ -467,8 +525,10 @@ Status DfsEnv::DeleteDir(const std::string& name)
     tera::AutoCounter ac(&dfs_delete_hang_counter, "DeleteDirectory", name.c_str());
     dfs_delete_counter.Inc();
     if (dfs_->DeleteDirectory(name) == 0) {
+        Log("[env_dfs] nobody like this dir: %s", name.c_str());
         return Status::OK();
     }
+    dfs_delete_error_counter.Inc();
     return IOError(name, errno);
 };
 
@@ -478,6 +538,7 @@ Status DfsEnv::GetFileSize(const std::string& fname, uint64_t* size)
     dfs_info_counter.Inc();
     *size = 0L;
     if (0 != dfs_->GetFileSize(fname, size)) {
+        dfs_info_error_counter.Inc();
         return IOError(fname, errno);
     } else {
         return Status::OK();
@@ -493,9 +554,9 @@ Status DfsEnv::RenameFile(const std::string& src, const std::string& target)
     if (res == 0) {
         return Status::OK();
     } else {
-        char buf[64];
-        snprintf(buf, sizeof(buf), "dfs return code: %d.", res);
-        return Status::IOError(Slice(buf));
+        dfs_other_error_counter.Inc();
+        Log("[env_dfs] rename: %s -> %s failed", src.c_str(), target.c_str());
+        return IOError("rename (" + src + ") -> (" + target + ") failed", errno);
     }
 }
 
@@ -503,11 +564,11 @@ Status DfsEnv::LockFile(const std::string& fname, FileLock** lock)
 {
     std::size_t found = fname.find_last_of("/");
     if (found == std::string::npos) {
-        return Status::IOError("lock path error: " + fname);
+        return IOError("lock path error: " + fname, EINVAL);
     }
     std::string dir_path(fname.c_str(), found);
     if (dfs_->LockDirectory(dir_path) != 0) {
-        return Status::IOError("lock " + dir_path);
+        return IOError("lock dir failed: " + dir_path, errno);
     }
     *lock = new DfsFileLock(dir_path);
     return Status::OK();

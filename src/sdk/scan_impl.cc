@@ -5,6 +5,7 @@
 #include "sdk/scan_impl.h"
 
 #include <functional>
+#include <algorithm>
 
 #include "common/this_thread.h"
 #include "common/base/string_ext.h"
@@ -14,16 +15,20 @@
 #include "sdk/filter_utils.h"
 #include "sdk/sdk_utils.h"
 #include "sdk/table_impl.h"
-#include "utils/atomic.h"
-#include "utils/timer.h"
+#include "common/atomic.h"
+#include "common/timer.h"
 
 DECLARE_bool(tera_sdk_batch_scan_enabled);
 DECLARE_int64(tera_sdk_scan_number_limit);
 DECLARE_int64(tera_sdk_scan_buffer_size);
 DECLARE_int32(tera_sdk_max_batch_scan_req);
 DECLARE_int32(tera_sdk_batch_scan_max_retry);
+DECLARE_int32(tera_sdk_sync_scan_max_retry);
 DECLARE_int64(tera_sdk_scan_timeout);
 DECLARE_int64(batch_scan_delay_retry_in_us);
+DECLARE_int64(sync_scan_delay_retry_in_ms);
+
+DECLARE_bool(debug_tera_sdk_scan);
 
 namespace tera {
 
@@ -79,7 +84,7 @@ ResultStreamBatchImpl::ResultStreamBatchImpl(TableImpl* table, ScanDescImpl* sca
     slot_last_key_.set_timestamp(INT64_MAX);
 
     mu_.Lock();
-    ScanSessionReset();
+    ScanSessionReset(true);
     mu_.Unlock();
 }
 
@@ -91,8 +96,8 @@ void ResultStreamBatchImpl::GetRpcHandle(ScanTabletRequest** request_ptr,
     MutexLock mutex(&mu_);
     (*request_ptr)->set_part_of_session(part_of_session_);
     (*request_ptr)->set_session_id((int64_t)session_id_);
-    VLOG(28) << "get rpc handle, part_of_session_ " << part_of_session_
-        << ", session_id_ " << session_id_ << ", response " << (uint64_t)(*response_ptr);
+    SCAN_LOG << "get rpc handle, part_of_session_ " << part_of_session_
+             << ", response " << (uint64_t)(*response_ptr);
 }
 
 // insure table_impl no more use scan_impl
@@ -104,8 +109,8 @@ void ResultStreamBatchImpl::ReleaseRpcHandle(ScanTabletRequest* request,
 
     MutexLock mutex(&mu_);
     ref_count_--;
-    VLOG(28) << "release rpc handle and wakeup, ref_count_ " << ref_count_
-        << ", response " << response_ptr;
+    SCAN_LOG << "release rpc handle and wakeup, ref_count_ " << ref_count_
+             << ", response " << response_ptr;
     cv_.Signal();
 }
 
@@ -121,23 +126,22 @@ void ResultStreamBatchImpl::OnFinish(ScanTabletRequest* request,
     MutexLock mutex(&mu_);
     // check session id
     if (request->session_id() != (int64_t)session_id_) {
-        LOG(WARNING) << "session_id not match, " << request->session_id() << ", " << session_id_;
+        SCAN_LOG << "[OnFinish]session_id not match, request session id" << request->session_id();
     } else if (response->status() != kTabletNodeOk) {
         // rpc or ts error, session broken and report error
         session_error_ = response->status();
-        LOG(WARNING) << "session_id " <<session_id_ <<", broken " << StatusCodeToString(session_error_);
+        SCAN_WLOG << "[OnFinish]broken error " << StatusCodeToString(session_error_);
         session_done_ = true;
     } else if ((response->results_id() == 0) &&
                (response->results().key_values_size() == 0) &&
                request->part_of_session()) {
         // handle old ts, results_id not init
-        VLOG(28) << "batch scan old ts";
+        SCAN_WLOG << "[OnFinish]batch scan old ts";
     } else if ((response->results_id() < session_data_idx_) ||
                (response->results_id() >= session_data_idx_ +
                     FLAGS_tera_sdk_max_batch_scan_req)) {
         if (response->results_id() != std::numeric_limits<unsigned long>::max()) {
-            LOG(WARNING) << "ScanCallback session_id " << session_id_
-                << ", session_data_idx " << session_data_idx_
+            SCAN_WLOG << "[OnFinish]session_data_idx " << session_data_idx_
                 << ", stale result_id " << response->results_id()
                 << ", response " << (uint64_t)response;
             session_done_ = true;
@@ -147,24 +151,24 @@ void ResultStreamBatchImpl::OnFinish(ScanTabletRequest* request,
     } else { // scan success, cache result
         int32_t slot_idx = ((response->results_id() - session_data_idx_)
                             + sliding_window_idx_) % FLAGS_tera_sdk_max_batch_scan_req;
-        VLOG(28) << "scan suc, session_id " << session_id_ << ", slot_idx " << slot_idx << ", result_id " << response->results_id()
-            << ", session_data_idx_ " << session_data_idx_
-            << ", sliding_window_idx_ " << sliding_window_idx_
-            << ", resp.kv.size() " << response->results().key_values_size();
+        SCAN_LOG << "[OnFinish]scan suc, slot_idx " << slot_idx << ", result_id " << response->results_id()
+                 << ", session_data_idx_ " << session_data_idx_
+                 << ", sliding_window_idx_ " << sliding_window_idx_
+                 << ", resp.kv.size() " << response->results().key_values_size();
         ScanSlot* slot = &(sliding_window_[slot_idx]);
         if (slot->state_ == SCANSLOT_INVALID) {
             slot->state_ = SCANSLOT_VALID;
             slot->cell_.CopyFrom(response->results());
-            VLOG(28) << "cache scan result, session_id " << session_id_ << ", slot_idx " << slot_idx
-                << ", kv.size() " << slot->cell_.key_values_size()
-                << ", resp.kv.size() " << response->results().key_values_size();
+            SCAN_LOG << "[OnFinish]cache scan result, slot_idx " << slot_idx
+                     << ", kv.size() " << slot->cell_.key_values_size()
+                     << ", resp.kv.size() " << response->results().key_values_size();
         }
         if (response->complete()) {
             session_last_idx_ = (session_last_idx_ > response->results_id()) ?
                                     response->results_id(): session_last_idx_;
             session_end_key_ = response->end();
-            VLOG(28) << "scan complete: session_id " << session_id_ << ", session_end_key " << session_end_key_
-                << ", session_last_idx " << session_last_idx_;
+            SCAN_LOG << "[OnFinish]scan complete: session_end_key " << session_end_key_
+                     << ", session_last_idx " << session_last_idx_;
             session_done_ = true;
         }
     }
@@ -175,7 +179,7 @@ ResultStreamBatchImpl::~ResultStreamBatchImpl() {
     // do something cleanup
     MutexLock mutex(&mu_);
     ref_count_--;
-    VLOG(28) << "before wait scan task finsh, ref_count " << ref_count_;
+    SCAN_LOG << "before wait scan task finsh, ref_count " << ref_count_;
     while (ref_count_ != 0) { cv_.Wait();}
 }
 
@@ -199,9 +203,16 @@ void ResultStreamBatchImpl::ComputeStartKey(const KeyValuePair& kv, KeyValuePair
     return;
 }
 
-void ResultStreamBatchImpl::ScanSessionReset() {
+void ResultStreamBatchImpl::ScanSessionReset(bool reset_retry) {
     mu_.AssertHeld();
     // reset session parameter
+    uint64_t pre_session_id = session_id_;
+    StatusCode pre_session_error = session_error_;
+    bool pre_session_done = session_done_;
+    std::string pre_session_end_key = session_end_key_;
+    if (reset_retry) {
+        session_retry_ = 0;
+    }
     uint64_t tid = (uint64_t)pthread_self();
     session_id_ = ((tid << 48) | ((uint64_t)get_micros())) & (0x7ffffffffffff);
     session_done_ = false;
@@ -224,8 +235,13 @@ void ResultStreamBatchImpl::ScanSessionReset() {
     ComputeStartKey(slot_last_key_, &start_key);
     scan_desc_impl_->SetStart(start_key.key(), start_key.column_family(),
                               start_key.qualifier(), start_key.timestamp());
-    VLOG(28) << "scan session reset, start key " << start_key.key()
-        << ", ref_count " << ref_count_;
+    SCAN_LOG << "session reset [start key " << start_key.key()
+             << ", session_retry " << session_retry_
+             << ", ref_count " << ref_count_
+             << "], previous session info [session_id " << pre_session_id
+             << ", session_error " << StatusCodeToString(pre_session_error)
+             << ", session_done " << pre_session_done
+             << ", session_end_key " << pre_session_end_key << "]";
     mu_.Unlock();
     // do io, release lock
     for (int32_t i = 0; i < FLAGS_tera_sdk_max_batch_scan_req; i++) {
@@ -247,8 +263,9 @@ void ResultStreamBatchImpl::ClearAndScanNextSlot(bool scan_next) {
     next_idx_ = 0;
     session_data_idx_++;
     sliding_window_idx_ = (sliding_window_idx_ + 1) % FLAGS_tera_sdk_max_batch_scan_req;
-    VLOG(28) << "session_id " << session_id_ << ", session_data_idx_ " << session_data_idx_ << ", sliding_window_idx_ "
-        << sliding_window_idx_ << ", ref_count_ " << ref_count_;
+    SCAN_LOG << " session_data_idx_ " << session_data_idx_ 
+             << ", sliding_window_idx_ " << sliding_window_idx_ 
+             << ", ref_count_ " << ref_count_;
     if (scan_next) {
         ref_count_++;
         mu_.Unlock();
@@ -273,8 +290,9 @@ bool ResultStreamBatchImpl::Done(ErrorCode* error) {
             // stale results_id, re-enable another scan req
             if (session_error_ != kTabletNodeOk) {
                 // TODO: kKeyNotInRange, do reset session
-                LOG(WARNING) << "[RETRY " << ++session_retry_ << "] scan session error: "
+                SCAN_LOG << "[RETRY " << ++session_retry_ << "] scan session error: "
                     << StatusCodeToString(session_error_)
+                    << ", session_end_key " << session_end_key_
                     << ", data_idx " << session_data_idx_ << ", slice_idx " << sliding_window_idx_;
                 assert(session_done_);
                 if (session_retry_ <= FLAGS_tera_sdk_batch_scan_max_retry) {
@@ -300,15 +318,16 @@ bool ResultStreamBatchImpl::Done(ErrorCode* error) {
         if (slot->state_ == SCANSLOT_INVALID) { // TODO: error break,  maybe delay retry
             while (ref_count_ > 1) { cv_.Wait();}
             cv_.TimeWaitInUs(FLAGS_batch_scan_delay_retry_in_us, "BatchScanRetryTimeWait");
-            ScanSessionReset();
+            ScanSessionReset(false);
             continue;
         }
 
         // slot valid
         if (next_idx_ < slot->cell_.key_values_size()) { break; }
 
-        VLOG(28) << "session_done_ " << session_done_ << ", session_data_idx_ "
-            << session_data_idx_ << ", session_last_idx_ " << session_last_idx_;
+        SCAN_LOG << "session_done_ " << session_done_ 
+                 << ", session_data_idx_ " << session_data_idx_ 
+                 << ", session_last_idx_ " << session_last_idx_;
         // current slot finish and session not finish, scan next slot
         if (!session_done_) {
             ClearAndScanNextSlot(true);
@@ -324,14 +343,15 @@ bool ResultStreamBatchImpl::Done(ErrorCode* error) {
         // scan finish, exit
         const string& scan_end_key = scan_desc_impl_->GetEndRowKey();
         if (session_end_key_ == "" || (scan_end_key != "" && session_end_key_ >= scan_end_key)) {
-            VLOG(28) << "scan done, scan_end_key " << scan_end_key << ", session_end_key " << session_end_key_;
+            SCAN_LOG << "scan done, scan_end_key " << scan_end_key 
+                     << ", session_end_key " << session_end_key_;
             return true;
         }
 
         // scan next tablet
         slot_last_key_.set_key(session_end_key_);
         slot_last_key_.set_timestamp(INT64_MAX);
-        ScanSessionReset();
+        ScanSessionReset(true);
     }
     return false;
 }
@@ -374,6 +394,7 @@ ResultStreamSyncImpl::ResultStreamSyncImpl(TableImpl* table,
       response_(new tera::ScanTabletResponse),
       result_pos_(0),
       finish_cond_(&finish_mutex_),
+      retry_times_(0),
       finish_(false) {
     table_ptr_->ScanTabletSync(this);
 }
@@ -392,13 +413,37 @@ bool ResultStreamSyncImpl::Done(ErrorCode* err) {
     while (1) {
         const string& scan_end_key = scan_desc_impl_->GetEndRowKey();
         /// scan failed
-        if (response_->status() != kTabletNodeOk) {
+        while (response_->status() != kTabletNodeOk &&
+               retry_times_ <= FLAGS_tera_sdk_sync_scan_max_retry) {
+            LOG(WARNING) << "[RETRY " << ++retry_times_ << "] scan error: "
+                         << StatusCodeToString(response_->status());
+
+            int64_t wait_time;
+            if(response_->status() == kKeyNotInRange) {
+                wait_time = FLAGS_sync_scan_delay_retry_in_ms;
+            } else {
+                /// Wait less than 60 seconds
+                wait_time = std::min(static_cast<int64_t>(FLAGS_sync_scan_delay_retry_in_ms * (1 << (retry_times_ - 1))),
+                                     static_cast<int64_t>(60000));
+            }
+
+            delete response_;
+            response_ = new tera::ScanTabletResponse;
+            result_pos_ = 0;
+            Reset();
+
+            ThisThread::Sleep(wait_time);
+            table_ptr_->ScanTabletSync(this);
+        }
+
+        if(response_->status() != kTabletNodeOk) {
             if (err) {
                 err->SetFailed(ErrorCode::kSystem,
-                               StatusCodeToString(response_->status()));
+                                StatusCodeToString(response_->status()));
             }
             return true;
         }
+
         if (result_pos_ < response_->results().key_values_size()) {
             break;
         }
@@ -542,6 +587,7 @@ ScanDescImpl::ScanDescImpl(const string& rowkey)
       number_limit_(FLAGS_tera_sdk_scan_number_limit),
       is_async_(FLAGS_tera_sdk_batch_scan_enabled),
       max_version_(1),
+      max_qualifiers_(std::numeric_limits<uint64_t>::max()),
       pack_interval_(FLAGS_tera_sdk_scan_timeout),
       snapshot_(0),
       value_converter_(&DefaultValueConverter) {
@@ -558,6 +604,7 @@ ScanDescImpl::ScanDescImpl(const ScanDescImpl& impl)
       number_limit_(impl.number_limit_),
       is_async_(impl.is_async_),
       max_version_(impl.max_version_),
+      max_qualifiers_(impl.max_qualifiers_),
       pack_interval_(impl.pack_interval_),
       snapshot_(impl.snapshot_),
       table_schema_(impl.table_schema_) {
@@ -620,6 +667,10 @@ void ScanDescImpl::AddColumn(const string& cf, const string& qualifier) {
 
 void ScanDescImpl::SetMaxVersions(int32_t versions) {
     max_version_ = versions;
+}
+
+void ScanDescImpl::SetMaxQualifiers(int64_t max_qualifiers) {
+    max_qualifiers_ = max_qualifiers;
 }
 
 void ScanDescImpl::SetPackInterval(int64_t interval) {
@@ -691,6 +742,10 @@ const tera::ColumnFamily* ScanDescImpl::GetColumnFamily(int32_t num) const {
 
 int32_t ScanDescImpl::GetMaxVersion() const {
     return max_version_;
+}
+
+int64_t ScanDescImpl::GetMaxQualifiers() const {
+    return max_qualifiers_;
 }
 
 int64_t ScanDescImpl::GetPackInterval() const {

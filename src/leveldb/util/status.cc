@@ -65,6 +65,9 @@ std::string Status::ToString() const {
       case kTimeOut:
         type = "Timeout error: ";
         break;
+      case kIOPermissionDenied:
+        type = "IO Permission Denied: ";
+        break;
       default:
         snprintf(tmp, sizeof(tmp), "Unknown code(%d): ",
                  static_cast<int>(code()));

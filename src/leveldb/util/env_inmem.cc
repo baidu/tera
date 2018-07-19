@@ -20,7 +20,7 @@
 #include "leveldb/table_utils.h"
 #include "util/mutexlock.h"
 #include "helpers/memenv/memenv.h"
-#include "../utils/counter.h"
+#include "../common/counter.h"
 
 #include "leveldb/env_inmem.h"
 
@@ -73,15 +73,17 @@ class InMemoryRandomAccessFile :public RandomAccessFile{
 private:
     RandomAccessFile* dfs_file_;
     RandomAccessFile* mem_file_;
+    EnvOptions env_opt_;
 public:
-    InMemoryRandomAccessFile(Env* mem_env, Env* dfs_env, const std::string& fname)
-        :dfs_file_(NULL), mem_file_(NULL) {
-        Status s = mem_env->NewRandomAccessFile(fname, &mem_file_);
+    InMemoryRandomAccessFile(Env* mem_env, Env* dfs_env, const std::string& fname,
+                             const EnvOptions& options)
+        :dfs_file_(NULL), mem_file_(NULL), env_opt_(options) {
+        Status s = mem_env->NewRandomAccessFile(fname, &mem_file_, env_opt_);
         if (s.ok()) {
             return;
         }
         mem_file_ = NULL;
-        s = dfs_env->NewRandomAccessFile(fname, &dfs_file_);
+        s = dfs_env->NewRandomAccessFile(fname, &dfs_file_, env_opt_);
         if (!s.ok()) {
             return;
         }
@@ -108,16 +110,16 @@ private:
     WritableFile* dfs_file_;
     WritableFile* mem_file_;
 public:
-    InMemoryWritableFile(Env* mem_env, Env* dfs_env, const std::string& fname)
+    InMemoryWritableFile(Env* mem_env, Env* dfs_env, const std::string& fname, const EnvOptions& options)
         :dfs_file_(NULL), mem_file_(NULL) {
-        Status s = dfs_env->NewWritableFile(fname, &dfs_file_);
+        Status s = dfs_env->NewWritableFile(fname, &dfs_file_, options);
         if (!s.ok()) {
             return;
         }
         if (fname.rfind(".sst") != fname.size()-4) {
             return;
         }
-        s = mem_env->NewWritableFile(fname, &mem_file_);
+        s = mem_env->NewWritableFile(fname, &mem_file_, options);
         assert(s.ok());
     }
     virtual ~InMemoryWritableFile() {
@@ -199,9 +201,10 @@ Status InMemoryEnv::NewSequentialFile(const std::string& fname, SequentialFile**
 
 // random read file
 Status InMemoryEnv::NewRandomAccessFile(const std::string& fname,
-        RandomAccessFile** result)
+                                        RandomAccessFile** result,
+                                        const EnvOptions& options)
 {
-    InMemoryRandomAccessFile* f = new InMemoryRandomAccessFile(mem_env_, dfs_env_, fname);
+    InMemoryRandomAccessFile* f = new InMemoryRandomAccessFile(mem_env_, dfs_env_, fname, options);
     if (f == NULL || !f->isValid()) {
         *result = NULL;
         delete f;
@@ -213,10 +216,11 @@ Status InMemoryEnv::NewRandomAccessFile(const std::string& fname,
 
 // writable
 Status InMemoryEnv::NewWritableFile(const std::string& fname,
-        WritableFile** result)
+                                    WritableFile** result,
+                                    const EnvOptions& options)
 {
     Status s;
-    InMemoryWritableFile* f = new InMemoryWritableFile(mem_env_, dfs_env_, fname);
+    InMemoryWritableFile* f = new InMemoryWritableFile(mem_env_, dfs_env_, fname, options);
     if (f == NULL || !f->isValid()) {
         *result = NULL;
         delete f;

@@ -47,9 +47,10 @@ void sdk_write_callback(tera::RowMutation* row_mu) {
     size_t req_size = ctx->size;
     int64_t req_time = ctx->time;
     adapter->WriteCallback(row_mu, req_size, req_time);
+    delete ctx;
 }
 
-void Adapter::Write(const std::string& row,
+void Adapter::Write(int opt, const std::string& row,
                     std::map<std::string, std::set<std::string> >& column,
                     uint64_t timestamp,
                     std::string& value) {
@@ -74,7 +75,13 @@ void Adapter::Write(const std::string& row,
             if (FLAGS_verify) {
                 add_checksum(row, family, qualifier, &value);
             }
-            row_mu->Put(family, qualifier, value, (int64_t)timestamp);
+            if (opt == PUT) {
+                row_mu->Put(family, qualifier, value, (int64_t)timestamp);
+            } else if (opt == PIF) {
+                row_mu->PutIfAbsent(family, qualifier, value);
+            } else {
+                abort();
+            }
             if (FLAGS_verify) {
                 remove_checksum(&value);
             }
@@ -122,6 +129,8 @@ void Adapter::WriteCallback(tera::RowMutation* row_mu, size_t req_size,
     tera::ErrorCode err = row_mu->GetError();
     if (err.GetType() == tera::ErrorCode::kOK) {
         write_marker_.OnSuccess(req_size, latency);
+    } else if (err.GetType() == tera::ErrorCode::kTxnFail) {
+        write_marker_.OnConflict(req_size, latency); 
     } else {
         /*std::cerr << "fail to write: row=[" << row << "], column=["
             << family << ":" << qualifier << "], timestamp=["

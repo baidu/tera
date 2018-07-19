@@ -79,6 +79,13 @@ class MemTable {
     empty_ = false;
   }
 
+  bool BeingFlushed() { return being_flushed_;}
+  void SetBeingFlushed(bool flag) {
+    assert(flag ? !being_flushed_
+                : being_flushed_);
+    being_flushed_ = flag;
+  }
+
   virtual ~MemTable();
 
  protected:
@@ -97,6 +104,7 @@ class MemTable {
 
   KeyComparator comparator_;
   int refs_;
+  bool being_flushed_;
 
   Arena arena_;
   Table table_;

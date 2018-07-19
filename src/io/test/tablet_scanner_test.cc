@@ -5,6 +5,8 @@
 #include "io/tablet_io.h"
 
 #include <functional>
+#include <thread>
+#include <vector>
 #include <stdlib.h>
 
 #include "gflags/gflags.h"
@@ -20,7 +22,7 @@
 #include "leveldb/table_utils.h"
 #include "proto/proto_helper.h"
 #include "proto/status_code.pb.h"
-#include "utils/timer.h"
+#include "common/timer.h"
 #include "utils/utils_cmd.h"
 
 DECLARE_string(tera_tabletnode_path_prefix);
@@ -225,7 +227,7 @@ TEST_F(TabletScannerTest, General) {
 
     TabletIO tablet(key_start, key_end, tablet_path);
     EXPECT_TRUE(tablet.Load(GetTableSchema(), tablet_path, std::vector<uint64_t>(),
-                            empty_snaphsots_, empty_rollback_, NULL, NULL, NULL, &status));
+                            std::set<std::string>(), NULL, NULL, NULL, &status));
 
     PrepareData(&tablet, 1000000);
     uint64_t nr = 400;
@@ -238,6 +240,47 @@ TEST_F(TabletScannerTest, General) {
     EXPECT_TRUE(tablet.Unload());
 }
 
+static void TabletUnloadWapper(TabletIO* tablet) {
+    tablet->Unload();
+}
+
+TEST_F(TabletScannerTest, GeneralOnUnloadSlow) {
+    std::string tablet_path = working_dir + "general_1";
+    std::string key_start = "";
+    std::string key_end = "";
+    StatusCode status;
+
+    TabletIO tablet(key_start, key_end, tablet_path);
+    EXPECT_TRUE(tablet.Load(GetTableSchema(), tablet_path, std::vector<uint64_t>(),
+                            std::set<std::string>(), NULL, NULL, NULL, &status));
+
+    PrepareData(&tablet, 1000000);
+    uint64_t nr = 400;
+    NewRpcRequest(nr, 5, 500000);
+    // make it unload slow
+    tablet.db_ref_count_++;
+    std::vector<std::thread> threads;
+    threads.reserve(3);
+    EXPECT_TRUE(tablet.try_unload_count_ == 0);
+    for (int i = 0; i < 3; ++i) {
+        threads.push_back(std::thread(&TabletUnloadWapper, &tablet));
+    }
+    sleep(5);
+    EXPECT_TRUE(tablet.try_unload_count_ == 3);
+
+    tablet.try_unload_count_ = 3;
+    for (uint32_t i = 0; i < nr; i++) {
+        EXPECT_FALSE(tablet.ScanRows(req_vec_[i], resp_vec_[i], done_vec_[i]));
+    }
+
+    tablet.db_ref_count_--;
+    for (int i = 0; i < 3; ++i) {
+        threads[i].join();
+    }
+    threads.clear();
+}
+
+
 TEST_F(TabletScannerTest, CacheEvict) {
     std::string tablet_path = working_dir + "CacheEvict";
     std::string key_start = "";
@@ -246,7 +289,7 @@ TEST_F(TabletScannerTest, CacheEvict) {
 
     TabletIO tablet(key_start, key_end, tablet_path);
     EXPECT_TRUE(tablet.Load(GetTableSchema(), tablet_path, std::vector<uint64_t>(),
-                            empty_snaphsots_, empty_rollback_, NULL, NULL, NULL, &status));
+                            std::set<std::string>(), NULL, NULL, NULL, &status));
 
     PrepareData(&tablet, 1000000);
 

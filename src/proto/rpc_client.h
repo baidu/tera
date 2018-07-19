@@ -144,7 +144,7 @@ protected:
                               int32_t rpc_timeout, ThreadPool* thread_pool = 0) {
         if (NULL == server_client_.get()) {
             // sync call
-            if (closure == NULL) {
+            if (!closure) {
                 return false;
             }
 
@@ -168,7 +168,7 @@ protected:
         (server_client_.get()->*func)(rpc_controller, request, response, done);
 
         // sync call
-        if (closure == NULL) {
+        if (!closure) {
             sync_call_event.Wait();
             return (!sync_call_failed);
         }
@@ -196,7 +196,7 @@ protected:
         delete param;
 
         // sync call
-        if (closure == NULL) {
+        if (!closure) {
             client->sync_call_failed = failed;
             client->sync_call_event.Set();
             return;

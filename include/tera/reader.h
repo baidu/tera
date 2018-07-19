@@ -31,6 +31,7 @@ public:
     virtual void AddColumn(const std::string& family, const std::string& qualifier) = 0;
     // Set the maximum number of versions of each column.
     virtual void SetMaxVersions(uint32_t max_version) = 0;
+
     // If set, only returns cells of which update timestamp is within [ts_start, ts_end].
     virtual void SetTimeRange(int64_t ts_start, int64_t ts_end) = 0;
 
@@ -64,15 +65,10 @@ public:
     virtual void SetContext(void* context) = 0;
     virtual void* GetContext() = 0;
     virtual void SetTimeOut(int64_t timeout_ms) = 0;
-    virtual Table* GetTable() = 0;
 
     // Get column filters map.
     typedef std::map<std::string, std::set<std::string> >ReadColumnList;
     virtual const ReadColumnList& GetReadColumnList() = 0;
-
-    // EXPERIMENTAL
-    // Returns transaction if exists.
-    virtual Transaction* GetTransaction() = 0;
 
     // DEVELOPING
     virtual void SetSnapshot(uint64_t snapshot_id) = 0;
@@ -96,6 +92,11 @@ public:
 
     RowReader() {};
     virtual ~RowReader() {};
+
+    // Set the the max qualifiers of each column family when read this row
+    // This is useful when a column family contains too many qualifiers
+    // If this value is not set, the default value is std::numeric_limits<uint64_t>::max()
+    virtual void SetMaxQualifiers(uint64_t max_qualifiers) = 0;
 
 private:
     RowReader(const RowReader&);

@@ -5,6 +5,7 @@
 #include "db/db_table.h"
 
 #include <stdio.h>
+#include <stdint.h>
 
 #include <algorithm>
 #include <iostream>
@@ -98,11 +99,20 @@ Options InitOptionsLG(const Options& options, uint32_t lg_id) {
   opt.sst_size = lg_info->sst_size;
   opt.write_buffer_size = lg_info->write_buffer_size;
   opt.seek_latency = lg_info->seek_latency;
+  opt.use_direct_io_read = lg_info->use_direct_io_read;
+  opt.use_direct_io_write = lg_info->use_direct_io_write;
+  opt.posix_write_buffer_size = lg_info->posix_write_buffer_size;
+  opt.table_builder_batch_write = lg_info->table_builder_batch_write;
+  opt.table_builder_batch_size = lg_info->table_builder_batch_size;
+  if (options.ignore_corruption_in_open_lg_list.find(lg_id) 
+          != options.ignore_corruption_in_open_lg_list.end()) {
+    opt.ignore_corruption_in_open = true;
+  }
   return opt;
 }
 
 DBTable::DBTable(const Options& options, const std::string& dbname)
-  : state_(kNotOpen), shutting_down_(NULL), bg_cv_(&mutex_),
+  : state_(kNotOpen), shutting_down_(NULL), shutdown1_finished_(NULL), bg_cv_(&mutex_),
     bg_cv_timer_(&mutex_), bg_cv_sleeper_(&mutex_),
     options_(InitDefaultOptions(options, dbname)),
     dbname_(dbname), env_(options.env), db_lock_(NULL),
@@ -148,6 +158,7 @@ Status DBTable::Shutdown1() {
   GarbageClean();
 
   Log(options_.info_log, "[%s] shutdown1 done", dbname_.c_str());
+  shutdown1_finished_.Release_Store(this);
   return s;
 }
 
@@ -311,22 +322,6 @@ Status DBTable::Init() {
     uint32_t i = *it;
     DBImpl* impl = lg_list_[i];
     s = impl->RecoverLastDumpToLevel0(lg_edits[i]);
-
-    // LogAndApply to lg's manifest
-    if (s.ok()) {
-      MutexLock lock(&impl->mutex_);
-      s = impl->versions_->LogAndApply(lg_edits[i], &impl->mutex_);
-      if (s.ok()) {
-        impl->DeleteObsoleteFiles();
-        impl->MaybeScheduleCompaction();
-      } else {
-        Log(options_.info_log, "[%s] Fail to modify manifest of lg %d",
-            dbname_.c_str(),
-            i);
-      }
-    } else {
-      Log(options_.info_log, "[%s] Fail to dump log to level 0", dbname_.c_str());
-    }
     delete lg_edits[i];
   }
 
@@ -337,7 +332,7 @@ Status DBTable::Init() {
 
   if (s.ok() && !options_.disable_wal) {
     std::string log_file_name = LogHexFileName(dbname_, last_sequence_ + 1);
-    s = options_.env->NewWritableFile(log_file_name, &logfile_);
+    s = options_.env->NewWritableFile(log_file_name, &logfile_, EnvOptions(options_));
     if (s.ok()) {
       //Log(options_.info_log, "[%s] open logfile %s",
       //    dbname_.c_str(), log_file_name.c_str());
@@ -345,6 +340,16 @@ Status DBTable::Init() {
     } else {
       Log(options_.info_log, "[%s] fail to open logfile %s",
           dbname_.c_str(), log_file_name.c_str());
+    }
+  }
+
+  // make true all CommitNewDbTransaction return OK, before set state_ = kOpened
+  for (auto it : *(options_.exist_lg_list)) {
+    if (s.ok()) {
+      DBImpl* impl = lg_list_[it];
+      s = impl->CommitNewDbTransaction();
+    } else {
+      break;
     }
   }
 
@@ -419,6 +424,9 @@ Status DBTable::Write(const WriteOptions& options, WriteBatch* my_batch) {
 
   // DB with fatal error is unwritable.
   Status s = fatal_error_;
+  if (IsShutdown1Finished()) {
+    s = Status::ShutdownInProgress(dbname_ + ": fail to write on waiting shutdown2"); 
+  }
 
   RecordWriter* last_writer = &w;
   WriteBatch* updates = NULL;
@@ -497,6 +505,9 @@ Status DBTable::Write(const WriteOptions& options, WriteBatch* my_batch) {
       break;
     }
     mutex_.Lock();
+    if (s.IsIOPermissionDenied()) {
+        fatal_error_ = s;
+    }
   }
   if (s.ok()) {
     std::vector<WriteBatch*> lg_updates;
@@ -525,7 +536,6 @@ Status DBTable::Write(const WriteOptions& options, WriteBatch* my_batch) {
         Log(options_.info_log, "[%s] [Fatal] Write to lg%u fail",
             dbname_.c_str(), i);
         s = lg_s;
-        fatal_error_ = lg_s;
         break;
       }
     }
@@ -534,7 +544,10 @@ Status DBTable::Write(const WriteOptions& options, WriteBatch* my_batch) {
       for (uint32_t i = 0; i < lg_list_.size(); ++i) {
         lg_list_[i]->AddBoundLogSize(updates->DataSize());
       }
+    } else {
+        fatal_error_ = s;
     }
+
     // Commit updates
     if (s.ok() && lg_list_.size() > 1) {
       for (uint32_t i = 0; i < lg_list_.size(); ++i) {
@@ -664,6 +677,7 @@ Iterator* DBTable::NewIterator(const ReadOptions& options) {
   } else if (commit_snapshot_ != kMaxSequenceNumber) {
     new_options.snapshot = commit_snapshot_;
   }
+  mutex_.Unlock();
   it = options_.exist_lg_list->begin();
   for (; it != options_.exist_lg_list->end(); ++it) {
     if (options.target_lgs) {
@@ -673,9 +687,21 @@ Iterator* DBTable::NewIterator(const ReadOptions& options) {
         continue;
       }
     }
+    // when shutdown1 finished waiting for shutdown2 hang will eary break
+    if (IsShutdown1Finished()) {
+        break;
+    }
     list.push_back(lg_list_[*it]->NewIterator(new_options));
   }
-  mutex_.Unlock();
+  // when shutdown1 finished waiting for shutdown2 hang will
+  // clean these iterators have created and return a ErrorIterator
+  if (IsShutdown1Finished()) {
+    // will destory abandoned iterator
+    for (auto abandoned_it : list) {
+      delete abandoned_it;
+    }
+    return NewErrorIterator(Status::ShutdownInProgress("tablet waiting for shutdown2"));
+  }
   return NewMergingIterator(options_.comparator, &list[0], list.size());
 }
 
@@ -696,6 +722,19 @@ void DBTable::ReleaseSnapshot(uint64_t sequence_number) {
   }
 }
 
+bool DBTable::ShouldForceUnloadOnError() {
+    MutexLock l(&mutex_);
+    bool permission_error = fatal_error_.IsIOPermissionDenied();
+    if (permission_error) {     //return early
+        return permission_error;
+    }
+    std::set<uint32_t>::iterator it = options_.exist_lg_list->begin();
+    for (; it != options_.exist_lg_list->end(); ++it) {
+        permission_error |= lg_list_[*it]->ShouldForceUnloadOnError();
+    }
+    return permission_error;
+}
+
 const uint64_t DBTable::Rollback(uint64_t snapshot_seq, uint64_t rollback_point) {
   std::set<uint32_t>::iterator it = options_.exist_lg_list->begin();
   uint64_t rollback_seq = rollback_point == kMaxSequenceNumber ? last_sequence_ : rollback_point;;
@@ -708,21 +747,31 @@ const uint64_t DBTable::Rollback(uint64_t snapshot_seq, uint64_t rollback_point)
 bool DBTable::GetProperty(const Slice& property, std::string* value) {
   bool ret = true;
   std::string ret_string;
+
   std::set<uint32_t>::iterator it = options_.exist_lg_list->begin();
   for (; it != options_.exist_lg_list->end(); ++it) {
+    if (shutting_down_.Acquire_Load()) {
+        return ret;
+    }
     std::string lg_value;
     bool lg_ret = lg_list_[*it]->GetProperty(property, &lg_value);
     if (lg_ret) {
       if (options_.exist_lg_list->size() > 1) {
-        ret_string.append(Uint64ToString(*it) + ": {\n");
+        ret_string.append("LG:" + Uint64ToString(*it) + ":");
       }
       ret_string.append(lg_value);
       if (options_.exist_lg_list->size() > 1) {
-        ret_string.append("\n}\n");
+        ret_string.append(" ");
       }
+    } else {
+      ret = false;
+      break;
     }
   }
-  *value = ret_string;
+
+  if (ret) {
+    *value = ret_string;
+  }
   return ret;
 }
 
@@ -936,7 +985,6 @@ Status DBTable::RecoverLogFile(uint64_t log_number, uint64_t recover_limit,
     }
   }
   delete file;
-
   return status;
 }
 
@@ -1095,6 +1143,10 @@ void DBTable::AddInheritedLiveFiles(std::vector<std::set<uint64_t> >* live) {
   //    dbname_.c_str());
 }
 
+bool DBTable::IsShutdown1Finished() const {
+  return shutdown1_finished_.Acquire_Load() != NULL;    
+}
+
 // end of tera-specific
 
 // for unit test
@@ -1131,6 +1183,18 @@ int64_t DBTable::TEST_MaxNextLevelOverlappingBytes() {
 }
 
 int DBTable::SwitchLog(bool blocked_switch) {
+  {
+    MutexLock l(&mutex_);
+    if (fatal_error_.IsIOPermissionDenied() || IsShutdown1Finished()) {
+      if (IsShutdown1Finished()) {
+        fatal_error_ = Status::ShutdownInProgress(dbname_ + 
+                ": fail to switch log on waiting shutdown2");
+      }
+      Log(options_.info_log, "[%s] can not switch log becasue %s",
+          dbname_.c_str(), fatal_error_.ToString().c_str());
+      return 2;
+    }
+  }
   if (!blocked_switch ||
       log::AsyncWriter::BlockLogNum() < options_.max_block_log_number) {
     if (current_log_size_ == 0) {
@@ -1138,7 +1202,7 @@ int DBTable::SwitchLog(bool blocked_switch) {
     }
     WritableFile* logfile = NULL;
     std::string log_file_name = LogHexFileName(dbname_, last_sequence_ + 1);
-    Status s = env_->NewWritableFile(log_file_name, &logfile);
+    Status s = env_->NewWritableFile(log_file_name, &logfile, EnvOptions(options_));
     if (s.ok()) {
       log_->Stop(blocked_switch);
       logfile_ = logfile;
@@ -1156,6 +1220,10 @@ int DBTable::SwitchLog(bool blocked_switch) {
         Log(options_.info_log, "[%s] SwitchLog", dbname_.c_str());
       }
       return 0;   // success
+    } else if (s.IsIOPermissionDenied()) {
+        MutexLock l(&mutex_);
+        fatal_error_ = s;
+        return 2;  // posix error EACCES = 13
     } else {
       Log(options_.info_log, "[%s] fail to open logfile %s. SwitchLog failed",
           dbname_.c_str(), log_file_name.c_str());
@@ -1230,4 +1298,18 @@ void DBTable::GarbageClean() {
   }
 }
 
-} // namespace leveldb
+void DBTable::GetCurrentLevelSize(std::vector<int64_t>* result) {
+  result->clear();
+  result->resize(config::kNumLevels, 0);
+  std::set<uint32_t>::iterator it = options_.exist_lg_list->begin();
+  std::vector<int64_t> lg_level_size;
+  for (; it != options_.exist_lg_list->end(); ++it) {
+    uint32_t i = *it;
+    lg_list_[i]->GetCurrentLevelSize(&lg_level_size);
+    assert(result->size() == lg_level_size.size());
+    for (size_t level = 0; level != lg_level_size.size(); ++ level) {
+      (*result)[level] += lg_level_size[level];
+    }
+  } 
+}
+}
