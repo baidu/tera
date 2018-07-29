@@ -327,7 +327,7 @@ Status FlashBlockCacheImpl::LoadCache() {
     options_.opts.write_buffer_size = options_.write_buffer_size;
     options_.opts.info_log = Logger::DefaultLogger();
 
-    // give meta db's lg0 a seperate PosixEnv including a seperate ThreadPool
+    // give meta db's lg0 a separate PosixEnv including a seperate ThreadPool
     leveldb::LG_info* lg_info = new leveldb::LG_info(0);
     lg_info->env = NewPosixEnv();
     lg_info->env->SetBackgroundThreads(5);
