@@ -13,11 +13,9 @@
 
 namespace leveldb {
 
-class ArenaTest { };
+class ArenaTest {};
 
-TEST(ArenaTest, Empty) {
-  Arena arena;
-}
+TEST(ArenaTest, Empty) { Arena arena; }
 
 TEST(ArenaTest, Simple) {
   std::vector<std::pair<size_t, char*> > allocated;
@@ -30,8 +28,8 @@ TEST(ArenaTest, Simple) {
     if (i % (N / 10) == 0) {
       s = i;
     } else {
-      s = rnd.OneIn(4000) ? rnd.Uniform(6000) :
-          (rnd.OneIn(10) ? rnd.Uniform(100) : rnd.Uniform(20));
+      s = rnd.OneIn(4000) ? rnd.Uniform(6000)
+                          : (rnd.OneIn(10) ? rnd.Uniform(100) : rnd.Uniform(20));
     }
     if (s == 0) {
       // Our arena disallows size 0 allocations.
@@ -51,7 +49,7 @@ TEST(ArenaTest, Simple) {
     bytes += s;
     allocated.push_back(std::make_pair(s, r));
     ASSERT_GE(arena.MemoryUsage(), bytes);
-    if (i > N/10) {
+    if (i > N / 10) {
       ASSERT_LE(arena.MemoryUsage(), bytes * 1.10);
     }
   }
@@ -67,6 +65,4 @@ TEST(ArenaTest, Simple) {
 
 }  // namespace leveldb
 
-int main(int argc, char** argv) {
-  return leveldb::test::RunAllTests();
-}
+int main(int argc, char** argv) { return leveldb::test::RunAllTests(); }

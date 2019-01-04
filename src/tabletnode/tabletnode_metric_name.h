@@ -28,6 +28,7 @@ const char* const kEnvLabelOther = "env:other";
 const char* const kRequestCountMetric = "tera_ts_request_count";
 const char* const kPendingCountMetric = "tera_ts_pending_count";
 const char* const kRejectCountMetric = "tera_ts_reject_count";
+const char* const kQuotaRejectCountMetric = "tera_ts_quota_reject_count";
 const char* const kErrorCountMetric = "tera_ts_error_count";
 const char* const kRangeErrorMetric = "tera_ts_range_error_count";
 
@@ -36,6 +37,7 @@ const char* const kRowCountMetric = "tera_ts_row_count";
 const char* const kRowThroughPutMetric = "tera_ts_row_through_put";
 const char* const kLowLevelReadMetric = "tera_ts_low_level_read";
 const char* const kScanDropCountMetric = "tera_ts_scan_drop_count";
+const char* const kScanFilterCountMetric = "tera_ts_scan_filter_count";
 
 const char* const kRequestDelayMetric = "tera_ts_request_delay_us_total";
 const char* const kFinishedRequestCountMetric = "tera_ts_finished_request_count";
@@ -127,10 +129,10 @@ const char* const kSnappyCompressionRatioMetric = "tera_ts_snappy_compression_pe
 const char* const kNotReadyCountMetric = "tera_ts_not_ready_count";
 const char* const kTabletSizeCounter = "tera_ts_tablet_size_count";
 const char* const kTabletNumCounter = "tera_ts_tablet_num_count";
-} // end namespace tabletnode
-} // end namespace tera
+const char* const kMemTableSize = "tera_ts_mem_table_size";
+}  // end namespace tabletnode
+}  // end namespace tera
 
-#endif // TERA_TABLETNODE_TABLETNODE_METRIC_NAME_H_
+#endif  // TERA_TABLETNODE_TABLETNODE_METRIC_NAME_H_
 
 /* vim: set expandtab ts=4 sw=4 sts=4 tw=100: */
-

@@ -13,10 +13,10 @@
 #include "table.h"
 #include "table_descriptor.h"
 #include "transaction.h"
+#include "hash.h"
 
 #pragma GCC visibility push(default)
 namespace tera {
-
 class Client {
 public:
     // Create a new client
@@ -32,6 +32,9 @@ public:
     // Open a table by name.
     // This operation could fail due to zookeeper down, meta not avaliable, table not exists, etc.
     virtual Table* OpenTable(const std::string& table_name, ErrorCode* err) = 0;
+    virtual Table* OpenTable(const std::string& table_name,
+                             std::function<std::string(const std::string&)> hash_method,
+                             ErrorCode* err) = 0;
 
     // Create a new table with specified descriptor.
     virtual bool CreateTable(const TableDescriptor& desc, ErrorCode* err) = 0;
@@ -39,6 +42,8 @@ public:
     virtual bool CreateTable(const TableDescriptor& desc,
                              const std::vector<std::string>& tablet_delim,
                              ErrorCode* err) = 0;
+    // Create a new hash table with key space (aka [0x0, 0xFFFFFFFFFFFFFFFF]) devied into hash_num equal parts.
+    virtual bool CreateTable(const TableDescriptor& desc, int64_t hash_num, ErrorCode* err) = 0;
 
     // Update table schema. User should call UpdateCheck to check if the update operation is complete.
     virtual bool UpdateTableSchema(const TableDescriptor& desc, ErrorCode* err) = 0;

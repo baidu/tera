@@ -15,10 +15,10 @@
 namespace galaxy {
 namespace ins {
 namespace sdk {
-    class InsSDK;
-} // namespace sdk
-} // namespace ins
-} // namespace galaxy
+class InsSDK;
+}  // namespace sdk
+}  // namespace ins
+}  // namespace galaxy
 
 namespace tera {
 namespace observer {
@@ -26,31 +26,27 @@ namespace observer {
 class RowlockNodeImpl;
 
 class InsRowlockNodeZkAdapter : public RowlockNodeZkAdapterBase {
-public:
-    InsRowlockNodeZkAdapter(RowlockNodeImpl* rowlocknode_impl, const std::string& server_addr);
-    virtual ~InsRowlockNodeZkAdapter();
-    virtual void Init();
-    void OnLockChange(std::string session_id, bool deleted);
+ public:
+  InsRowlockNodeZkAdapter(RowlockNodeImpl* rowlocknode_impl, const std::string& server_addr);
+  virtual ~InsRowlockNodeZkAdapter();
+  virtual void Init();
+  void OnLockChange(std::string session_id, bool deleted);
 
-private:
-    virtual void OnChildrenChanged(const std::string& path,
-            const std::vector<std::string>& name_list,
-            const std::vector<std::string>& data_list) {}
-    virtual void OnNodeValueChanged(const std::string& path,
-            const std::string& value) {}
-    virtual void OnNodeCreated(const std::string& path) {}
-    virtual void OnNodeDeleted(const std::string& path) {}
-    virtual void OnWatchFailed(const std::string& path, int watch_type,
-            int err) {}
-    virtual void OnSessionTimeout() {}
+ private:
+  virtual void OnChildrenChanged(const std::string& path, const std::vector<std::string>& name_list,
+                                 const std::vector<std::string>& data_list) {}
+  virtual void OnNodeValueChanged(const std::string& path, const std::string& value) {}
+  virtual void OnNodeCreated(const std::string& path) {}
+  virtual void OnNodeDeleted(const std::string& path) {}
+  virtual void OnWatchFailed(const std::string& path, int watch_type, int err) {}
+  virtual void OnSessionTimeout() {}
 
-private:
-    RowlockNodeImpl* rowlocknode_impl_;
-    std::string server_addr_;
-    galaxy::ins::sdk::InsSDK* ins_sdk_;
+ private:
+  RowlockNodeImpl* rowlocknode_impl_;
+  std::string server_addr_;
+  galaxy::ins::sdk::InsSDK* ins_sdk_;
 };
 
-} // namespace observer
-} // namespace tera
+}  // namespace observer
+}  // namespace tera
 #endif  // TERA_OBSERVER_ROWLOCKNODE_INS_ROWLOCKNODE_ZK_ADAPTER_H_
-

@@ -20,7 +20,7 @@ namespace leveldb {
 
 void AppendNumberTo(std::string* str, uint64_t num) {
   char buf[30];
-  snprintf(buf, sizeof(buf), "%llu", (unsigned long long) num);
+  snprintf(buf, sizeof(buf), "%llu", (unsigned long long)num);
   str->append(buf);
 }
 
@@ -31,8 +31,7 @@ void AppendEscapedStringTo(std::string* str, const Slice& value) {
       str->push_back(c);
     } else {
       char buf[10];
-      snprintf(buf, sizeof(buf), "\\x%02x",
-               static_cast<unsigned int>(c) & 0xff);
+      snprintf(buf, sizeof(buf), "\\x%02x", static_cast<unsigned int>(c) & 0xff);
       str->append(buf);
     }
   }
@@ -61,7 +60,7 @@ bool ConsumeChar(Slice* in, char c) {
 
 bool ConsumeDecimalNumber(Slice* in, uint64_t* val) {
   if (in->size() > 1 && (*in)[0] == 'H') {
-      return ConsumeHexDecimalNumber(in, val);
+    return ConsumeHexDecimalNumber(in, val);
   }
   uint64_t v = 0;
   int digits = 0;
@@ -71,8 +70,8 @@ bool ConsumeDecimalNumber(Slice* in, uint64_t* val) {
       ++digits;
       const int delta = (c - '0');
       static const uint64_t kMaxUint64 = ~static_cast<uint64_t>(0);
-      if (v > kMaxUint64/10 ||
-          (v == kMaxUint64/10 && static_cast<uint64_t>(delta) > kMaxUint64%10)) {
+      if (v > kMaxUint64 / 10 ||
+          (v == kMaxUint64 / 10 && static_cast<uint64_t>(delta) > kMaxUint64 % 10)) {
         // Overflow
         return false;
       }
@@ -87,20 +86,20 @@ bool ConsumeDecimalNumber(Slice* in, uint64_t* val) {
 }
 
 bool ConsumeHexDecimalNumber(Slice* in, uint64_t* val) {
-    char c = (*in)[0];
-    if (c != 'H') {
-        return false;
-    }
-    in->remove_prefix(1);
-    std::string hex_str = in->ToString();
-    std::string log_num_str;
-    SplitStringStart(hex_str, &log_num_str, NULL);
-    if (log_num_str.empty()) {
-        return false;
-    }
-    *val = StringToUint64(log_num_str, 16);
-    in->remove_prefix(log_num_str.length());
-    return true;
+  char c = (*in)[0];
+  if (c != 'H') {
+    return false;
+  }
+  in->remove_prefix(1);
+  std::string hex_str = in->ToString();
+  std::string log_num_str;
+  SplitStringStart(hex_str, &log_num_str, NULL);
+  if (log_num_str.empty()) {
+    return false;
+  }
+  *val = StringToUint64(log_num_str, 16);
+  in->remove_prefix(log_num_str.length());
+  return true;
 }
 
 }  // namespace leveldb

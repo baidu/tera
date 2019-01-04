@@ -11,27 +11,18 @@ namespace tera {
 namespace tabletnode {
 
 class MockDummyNodeZkAdapter : public zk::DummyNodeZkAdapter {
-public:
-    MOCK_METHOD3(OnChildrenChanged,
-        void(const std::string& path,
-             const std::vector<std::string>& name_list,
-             const std::vector<std::string>& data_list));
-    MOCK_METHOD2(OnNodeValueChanged,
-        void(const std::string& path,
-             const std::string& value));
-    MOCK_METHOD1(OnNodeCreated,
-        void(const std::string& path));
-    MOCK_METHOD1(OnNodeDeleted,
-        void(const std::string& path));
-    MOCK_METHOD3(OnWatchFailed,
-        void(const std::string& path,
-             int watch_type,
-             int err));
-    MOCK_METHOD1(OnSessionTimeout,
-        void());
+ public:
+  MOCK_METHOD3(OnChildrenChanged,
+               void(const std::string& path, const std::vector<std::string>& name_list,
+                    const std::vector<std::string>& data_list));
+  MOCK_METHOD2(OnNodeValueChanged, void(const std::string& path, const std::string& value));
+  MOCK_METHOD1(OnNodeCreated, void(const std::string& path));
+  MOCK_METHOD1(OnNodeDeleted, void(const std::string& path));
+  MOCK_METHOD3(OnWatchFailed, void(const std::string& path, int watch_type, int err));
+  MOCK_METHOD1(OnSessionTimeout, void());
 };
 
-} // namespace tabletnode
-} // namespace tera
+}  // namespace tabletnode
+}  // namespace tera
 
-#endif // TERA_TABLETNODE_MOCK_ZK_ADAPTER_H_
+#endif  // TERA_TABLETNODE_MOCK_ZK_ADAPTER_H_

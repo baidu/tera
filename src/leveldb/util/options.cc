@@ -7,7 +7,6 @@
 // found in the LICENSE file. See the AUTHORS file for names of contributors.
 
 #include "leveldb/options.h"
-
 #include "leveldb/comparator.h"
 #include "leveldb/env.h"
 
@@ -38,7 +37,7 @@ Options::Options()
       write_log_time_out(5),
       flush_triggered_log_num(100000),
       flush_triggered_log_size(40 << 20),
-      manifest_switch_interval(60*60),
+      manifest_switch_interval(10 * 60),
       raw_key_format(kReadable),
       seek_latency(10000000),
       dump_mem_on_shutdown(true),
@@ -59,23 +58,8 @@ Options::Options()
       max_sub_parallel_compaction(10),
       use_direct_io_read(false),
       use_direct_io_write(false),
-      posix_write_buffer_size(512<<10),
+      posix_write_buffer_size(512 << 10),
       table_builder_batch_write(false),
-      table_builder_batch_size(0) { }
-
-FlashBlockCacheOptions::FlashBlockCacheOptions()
-  : force_update_conf_enabled(false),
-    cache_size(350UL << 30),
-    blockset_size(1UL << 30),
-    block_size(8192),
-    fid_batch_num(100000),
-    meta_block_cache_size(2000),
-    meta_table_cache_size(500),
-    write_buffer_size(1048576UL),
-    env(NULL),
-    cache_env(NULL) {
-  blockset_num = cache_size / blockset_size + 1;
-  blocks_per_set = blockset_size / block_size + 1;
-}
-
+      table_builder_batch_size(0),
+      memtable_shard_num(0) {}
 }  // namespace leveldb

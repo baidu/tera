@@ -12,24 +12,24 @@ extern "C" {
  * Method:    nativeInitGlog
  * Signature: (Ljava/lang/String;)V
  */
-JNIEXPORT void JNICALL Java_com_baidu_tera_client_TeraBase_nativeInitGlog
-  (JNIEnv *, jobject, jstring);
+JNIEXPORT void JNICALL
+Java_com_baidu_tera_client_TeraBase_nativeInitGlog(JNIEnv *, jobject, jstring);
 
 /*
  * Class:     com_baidu_tera_client_TeraBase
  * Method:    nativeGlog
  * Signature: (Ljava/lang/String;Ljava/lang/String;)V
  */
-JNIEXPORT void JNICALL Java_com_baidu_tera_client_TeraBase_nativeGlog
-  (JNIEnv *, jobject, jstring, jstring);
+JNIEXPORT void JNICALL
+Java_com_baidu_tera_client_TeraBase_nativeGlog(JNIEnv *, jobject, jstring, jstring);
 
 /*
  * Class:     com_baidu_tera_client_TeraBase
  * Method:    nativeVlog
  * Signature: (JLjava/lang/String;)V
  */
-JNIEXPORT void JNICALL Java_com_baidu_tera_client_TeraBase_nativeVlog
-  (JNIEnv *, jobject, jlong, jstring);
+JNIEXPORT void JNICALL
+Java_com_baidu_tera_client_TeraBase_nativeVlog(JNIEnv *, jobject, jlong, jstring);
 
 #ifdef __cplusplus
 }

@@ -14,7 +14,9 @@
 --tera_local_addr=127.0.0.1
 
 # sdk
---tera_sdk_timeout=20000
+--tera_sdk_write_timeout=20000
+--tera_sdk_read_timeout=20000
+--tera_sdk_scan_timeout=30000
 
 # others
 --online_schema_update_enabled=true

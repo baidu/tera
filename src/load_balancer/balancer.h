@@ -18,22 +18,22 @@ namespace tera {
 namespace load_balancer {
 
 class Balancer {
-public:
-    virtual ~Balancer() {}
+ public:
+  virtual ~Balancer() {}
 
-    // balance the whole cluster
-    virtual bool BalanceCluster(
-            const std::vector<std::shared_ptr<LBTabletNode>>& lb_nodes,
-            std::vector<Plan>* plans) = 0;
+  // balance the whole cluster
+  virtual bool BalanceCluster(const std::vector<std::shared_ptr<LBTabletNode>>& lb_nodes,
+                              std::vector<Plan>* plans) = 0;
 
-    // balance for the specified table
-    virtual bool BalanceCluster(
-            const std::string& table_name,
-            const std::vector<std::shared_ptr<LBTabletNode>>& lb_nodes,
-            std::vector<Plan>* plans) = 0;
+  // balance for the specified table
+  virtual bool BalanceCluster(const std::string& table_name,
+                              const std::vector<std::shared_ptr<LBTabletNode>>& lb_nodes,
+                              std::vector<Plan>* plans) = 0;
+
+  virtual std::string GetName() = 0;
 };
 
-} // namespace load_balancer
-} // namespace tera
+}  // namespace load_balancer
+}  // namespace tera
 
-#endif // TERA_LOAD_BALANCER_BALANCER_H_
+#endif  // TERA_LOAD_BALANCER_BALANCER_H_

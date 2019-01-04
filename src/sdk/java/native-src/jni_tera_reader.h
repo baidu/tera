@@ -12,24 +12,25 @@ extern "C" {
  * Method:    nativeAddColumn
  * Signature: (J[B[B)Z
  */
-JNIEXPORT jboolean JNICALL Java_com_baidu_tera_client_TeraReaderImpl_nativeAddColumn
-  (JNIEnv *, jobject, jlong, jbyteArray, jbyteArray);
+JNIEXPORT jboolean JNICALL
+Java_com_baidu_tera_client_TeraReaderImpl_nativeAddColumn(JNIEnv *, jobject, jlong, jbyteArray,
+                                                          jbyteArray);
 
 /*
  * Class:     com_baidu_tera_client_TeraReaderImpl
  * Method:    nativeAddFamily
  * Signature: (J[B)Z
  */
-JNIEXPORT jboolean JNICALL Java_com_baidu_tera_client_TeraReaderImpl_nativeAddFamily
-  (JNIEnv *, jobject, jlong, jbyteArray);
+JNIEXPORT jboolean JNICALL
+Java_com_baidu_tera_client_TeraReaderImpl_nativeAddFamily(JNIEnv *, jobject, jlong, jbyteArray);
 
 /*
  * Class:     com_baidu_tera_client_TeraReaderImpl
  * Method:    nativeDeleteReader
  * Signature: (J)Z
  */
-JNIEXPORT jboolean JNICALL Java_com_baidu_tera_client_TeraReaderImpl_nativeDeleteReader
-  (JNIEnv *, jobject, jlong);
+JNIEXPORT jboolean JNICALL
+Java_com_baidu_tera_client_TeraReaderImpl_nativeDeleteReader(JNIEnv *, jobject, jlong);
 
 #ifdef __cplusplus
 }

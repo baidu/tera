@@ -12,37 +12,35 @@
 namespace leveldb {
 
 class Thread {
-public:
-    Thread();
-    virtual ~Thread();
+ public:
+  Thread();
+  virtual ~Thread();
 
-    bool Start();
-    void Join();
-    void Cancel();
-    pthread_t Id() const;
-    bool IsRunning() const;
+  bool Start();
+  void Join();
+  void Cancel();
+  pthread_t Id() const;
+  bool IsRunning() const;
 
-    virtual void Run(void* params) = 0;
+  virtual void Run(void* params) = 0;
 
-private:
-    void Stop();
-    static void* StartRunner(void* params);
+ private:
+  void Stop();
+  static void* StartRunner(void* params);
 
-private:
-    bool started_;
-    pthread_t id_;
-    mutable port::Mutex mutex_;
+ private:
+  bool started_;
+  pthread_t id_;
+  mutable port::Mutex mutex_;
 };
 
-inline pthread_t Thread::Id() const {
-    return id_;
-}
+inline pthread_t Thread::Id() const { return id_; }
 
 inline bool Thread::IsRunning() const {
-    MutexLock lock(&mutex_);
-    return started_;
+  MutexLock lock(&mutex_);
+  return started_;
 }
 
-} // namespace leveldb
+}  // namespace leveldb
 
-#endif // LEVELDB_UTIL_THREAD_H_
+#endif  // LEVELDB_UTIL_THREAD_H_

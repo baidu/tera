@@ -63,10 +63,12 @@ class Repairer {
         owns_block_cache_(options_.block_cache != options.block_cache),
         owns_table_cache_(options_.table_cache == NULL),
         table_cache_(options_.table_cache),
-        next_file_number_(1), mem_(NULL), max_sequence_(0) {
+        next_file_number_(1),
+        mem_(NULL),
+        max_sequence_(0) {
     // TableCache can be small since we expect each table to be opened once.
     if (owns_table_cache_) {
-      Log(options_.info_log, "[%s] create new table cache in repairer.", dbname_.c_str());
+      LEVELDB_LOG(options_.info_log, "[%s] create new table cache in repairer.", dbname_.c_str());
       table_cache_ = new TableCache(100 * 2097152LL);
     }
   }
@@ -95,14 +97,12 @@ class Repairer {
       for (size_t i = 0; i < tables_.size(); i++) {
         bytes += tables_[i].meta.file_size;
       }
-      Log(options_.info_log,
-          "**** Repaired leveldb %s; "
-          "recovered %d files; %llu bytes. "
-          "Some data may have been lost. "
-          "****",
-          dbname_.c_str(),
-          static_cast<int>(tables_.size()),
-          bytes);
+      LEVELDB_LOG(options_.info_log,
+                  "**** Repaired leveldb %s; "
+                  "recovered %d files; %llu bytes. "
+                  "Some data may have been lost. "
+                  "****",
+                  dbname_.c_str(), static_cast<int>(tables_.size()), bytes);
     }
     return status;
   }
@@ -171,10 +171,8 @@ class Repairer {
       std::string logname = LogFileName(dbname_, logs_[i]);
       Status status = ConvertLogToTable(logs_[i]);
       if (!status.ok()) {
-        Log(options_.info_log, "[%s] Log #%llu: ignoring conversion error: %s",
-            dbname_.c_str(),
-            (unsigned long long) logs_[i],
-            status.ToString().c_str());
+        LEVELDB_LOG(options_.info_log, "[%s] Log #%llu: ignoring conversion error: %s",
+                    dbname_.c_str(), (unsigned long long)logs_[i], status.ToString().c_str());
       }
       ArchiveFile(logname);
     }
@@ -187,10 +185,8 @@ class Repairer {
       uint64_t lognum;
       virtual void Corruption(size_t bytes, const Status& s) {
         // We print error messages for corruption, but continue repairing.
-        Log(info_log, "Log #%llu: dropping %d bytes; %s",
-            (unsigned long long) lognum,
-            static_cast<int>(bytes),
-            s.ToString().c_str());
+        LEVELDB_LOG(info_log, "Log #%llu: dropping %d bytes; %s", (unsigned long long)lognum,
+                    static_cast<int>(bytes), s.ToString().c_str());
       }
     };
 
@@ -211,20 +207,18 @@ class Repairer {
     // corruptions cause entire commits to be skipped instead of
     // propagating bad information (like overly large sequence
     // numbers).
-    log::Reader reader(lfile, &reporter, false/*do not checksum*/,
-                       0/*initial_offset*/);
+    log::Reader reader(lfile, &reporter, false /*do not checksum*/, 0 /*initial_offset*/);
 
     // Read all the records and add to a memtable
     std::string scratch;
     Slice record;
     WriteBatch batch;
-    mem_ = new MemTable(icmp_);
+    mem_ = new BaseMemTable(icmp_, nullptr);
     mem_->Ref();
     int counter = 0;
     while (reader.ReadRecord(&record, &scratch)) {
       if (record.size() < 12) {
-        reporter.Corruption(
-            record.size(), Status::Corruption("log record too small"));
+        reporter.Corruption(record.size(), Status::Corruption("log record too small"));
         continue;
       }
       WriteBatchInternal::SetContents(&batch, record);
@@ -232,10 +226,8 @@ class Repairer {
       if (status.ok()) {
         counter += WriteBatchInternal::Count(&batch);
       } else {
-        Log(options_.info_log, "[%s] Log #%llu: ignoring %s",
-            dbname_.c_str(),
-            (unsigned long long) log,
-            status.ToString().c_str());
+        LEVELDB_LOG(options_.info_log, "[%s] Log #%llu: ignoring %s", dbname_.c_str(),
+                    (unsigned long long)log, status.ToString().c_str());
         status = Status::OK();  // Keep going with rest of file
       }
     }
@@ -247,8 +239,8 @@ class Repairer {
     meta.number = next_file_number_++;
     Iterator* iter = mem_->NewIterator();
     uint64_t saved_bytes = 0;
-    status = BuildTable(dbname_, env_, options_, table_cache_,
-                        iter, &meta, &saved_bytes, kMaxSequenceNumber);
+    status = BuildTable(dbname_, env_, options_, table_cache_, iter, &meta, &saved_bytes,
+                        kMaxSequenceNumber);
     delete iter;
     mem_->Unref();
     mem_ = NULL;
@@ -257,68 +249,59 @@ class Repairer {
         table_numbers_.push_back(meta.number);
       }
     }
-    Log(options_.info_log, "[%s] Log #%llu: %d ops saved to Table #%llu %s",
-        dbname_.c_str(),
-        (unsigned long long) log,
-        counter,
-        (unsigned long long) meta.number,
-        status.ToString().c_str());
+    LEVELDB_LOG(options_.info_log, "[%s] Log #%llu: %d ops saved to Table #%llu %s",
+                dbname_.c_str(), (unsigned long long)log, counter, (unsigned long long)meta.number,
+                status.ToString().c_str());
     return status;
   }
 
-    Status InsertMemTable(WriteBatch* batch, uint64_t batch_seq) {
-        if (mem_ == NULL) {
-            mem_ = new MemTable(icmp_);
-            mem_->Ref();
-        }
-        assert(batch_seq > max_sequence_);
-        max_sequence_ = batch_seq + WriteBatchInternal::Count(batch) - 1;
-        return WriteBatchInternal::InsertInto(batch, mem_);
+  Status InsertMemTable(WriteBatch* batch, uint64_t batch_seq) {
+    if (mem_ == NULL) {
+      mem_ = new BaseMemTable(icmp_, nullptr);
+      mem_->Ref();
     }
-    bool HasMemTable() const {
-        return mem_ != NULL;
+    assert(batch_seq > max_sequence_);
+    max_sequence_ = batch_seq + WriteBatchInternal::Count(batch) - 1;
+    return WriteBatchInternal::InsertInto(batch, mem_);
+  }
+  bool HasMemTable() const { return mem_ != NULL; }
+  Status BuildTableFile(uint64_t log, uint32_t lg_id, uint64_t* file_number) {
+    FileMetaData meta;
+    meta.number = next_file_number_++;
+    *file_number = meta.number;
+    Iterator* iter = mem_->NewIterator();
+    uint64_t saved_bytes = 0;
+    Status status = BuildTable(dbname_, env_, options_, table_cache_, iter, &meta, &saved_bytes,
+                               kMaxSequenceNumber);
+    delete iter;
+    mem_->Unref();
+    mem_ = NULL;
+    if (status.ok()) {
+      if (meta.file_size > 0) {
+        table_numbers_.push_back(meta.number);
+      }
     }
-    Status BuildTableFile(uint64_t log, uint32_t lg_id, uint64_t* file_number) {
-        FileMetaData meta;
-        meta.number = next_file_number_++;
-        *file_number = meta.number;
-        Iterator* iter = mem_->NewIterator();
-        uint64_t saved_bytes = 0;
-        Status status = BuildTable(dbname_, env_, options_, table_cache_,
-                                   iter, &meta, &saved_bytes, kMaxSequenceNumber);
-        delete iter;
-        mem_->Unref();
-        mem_ = NULL;
-        if (status.ok()) {
-            if (meta.file_size > 0) {
-                table_numbers_.push_back(meta.number);
-            }
-        }
-        Log(options_.info_log, "[%s][lg:%d] Log #%llu: saved to Table #%llu %s",
-            dbname_.c_str(), lg_id,
-            (unsigned long long) log,
-            (unsigned long long) meta.number,
-            status.ToString().c_str());
-        return status;
-    }
-
-    Status AddTableMeta(uint64_t table_number) {
-        TableInfo t;
-        t.meta.number = table_number;
-        Status status = ScanTable(&t);
-        if (!status.ok()) {
-            std::string fname = TableFileName(dbname_, table_number);
-            Log(options_.info_log, "[%s] Table #%llu: ignoring %s",
-                dbname_.c_str(),
-                (unsigned long long) table_number,
+    LEVELDB_LOG(options_.info_log, "[%s][lg:%d] Log #%llu: saved to Table #%llu %s",
+                dbname_.c_str(), lg_id, (unsigned long long)log, (unsigned long long)meta.number,
                 status.ToString().c_str());
-            ArchiveFile(fname);
-        } else {
-            tables_.push_back(t);
-            table_numbers_.push_back(table_number);
-        }
-        return status;
+    return status;
+  }
+
+  Status AddTableMeta(uint64_t table_number) {
+    TableInfo t;
+    t.meta.number = table_number;
+    Status status = ScanTable(&t);
+    if (!status.ok()) {
+      std::string fname = TableFileName(dbname_, table_number);
+      LEVELDB_LOG(options_.info_log, "[%s] Table #%llu: ignoring %s", dbname_.c_str(),
+                  (unsigned long long)table_number, status.ToString().c_str());
+      ArchiveFile(fname);
+    } else {
+      tables_.push_back(t);
+      table_numbers_.push_back(table_number);
     }
+    return status;
+  }
 
   void ExtractMetaData() {
     std::vector<TableInfo> kept;
@@ -328,15 +311,13 @@ class Repairer {
       Status status = ScanTable(&t);
       if (!status.ok()) {
         std::string fname = TableFileName(dbname_, table_numbers_[i]);
-        Log(options_.info_log, "[%s] Table #%llu: ignoring %s",
-            dbname_.c_str(),
-            (unsigned long long) table_numbers_[i],
-            status.ToString().c_str());
+        LEVELDB_LOG(options_.info_log, "[%s] Table #%llu: ignoring %s", dbname_.c_str(),
+                    (unsigned long long)table_numbers_[i], status.ToString().c_str());
         ArchiveFile(fname);
       } else {
         tables_.push_back(t);
         if (t.max_sequence > max_sequence_) {
-            max_sequence_ = t.max_sequence;
+          max_sequence_ = t.max_sequence;
         }
       }
     }
@@ -347,18 +328,16 @@ class Repairer {
     int counter = 0;
     Status status = env_->GetFileSize(fname, &t->meta.file_size);
     if (status.ok()) {
-      Iterator* iter = table_cache_->NewIterator(
-          ReadOptions(&options_), dbname_, t->meta.number, t->meta.file_size);
+      Iterator* iter = table_cache_->NewIterator(ReadOptions(&options_), dbname_, t->meta.number,
+                                                 t->meta.file_size);
       bool empty = true;
       ParsedInternalKey parsed;
       t->max_sequence = 0;
       for (iter->SeekToFirst(); iter->Valid(); iter->Next()) {
         Slice key = iter->key();
         if (!ParseInternalKey(key, &parsed)) {
-          Log(options_.info_log, "[%s] Table #%llu: unparsable key %s",
-              dbname_.c_str(),
-              (unsigned long long) t->meta.number,
-              EscapeString(key).c_str());
+          LEVELDB_LOG(options_.info_log, "[%s] Table #%llu: unparsable key %s", dbname_.c_str(),
+                      (unsigned long long)t->meta.number, EscapeString(key).c_str());
           continue;
         }
 
@@ -380,11 +359,8 @@ class Repairer {
         status = Status::Corruption("sst is empty");
       }
     }
-    Log(options_.info_log, "[%s] Table #%llu: %d entries %s",
-        dbname_.c_str(),
-        (unsigned long long) t->meta.number,
-        counter,
-        status.ToString().c_str());
+    LEVELDB_LOG(options_.info_log, "[%s] Table #%llu: %d entries %s", dbname_.c_str(),
+                (unsigned long long)t->meta.number, counter, status.ToString().c_str());
     return status;
   }
 
@@ -411,11 +387,10 @@ class Repairer {
     for (size_t i = 0; i < tables_.size(); i++) {
       // TODO(opt): separate out into multiple levels
       const TableInfo& t = tables_[i];
-      edit_.AddFile(0, t.meta.number, t.meta.file_size,
-                    t.meta.smallest, t.meta.largest);
+      edit_.AddFile(0, t.meta.number, t.meta.file_size, t.meta.smallest, t.meta.largest);
     }
 
-    //fprintf(stderr, "NewDescriptor:\n%s\n", edit_.DebugString().c_str());
+    // fprintf(stderr, "NewDescriptor:\n%s\n", edit_.DebugString().c_str());
     {
       log::Writer log(file);
       std::string record;
@@ -463,277 +438,257 @@ class Repairer {
     new_file.append("/");
     new_file.append((slash == NULL) ? fname.c_str() : slash + 1);
     Status s = env_->RenameFile(fname, new_file);
-    Log(options_.info_log, "[%s] Archiving %s: %s\n",
-        dbname_.c_str(),
-        fname.c_str(), s.ToString().c_str());
+    LEVELDB_LOG(options_.info_log, "[%s] Archiving %s: %s\n", dbname_.c_str(), fname.c_str(),
+                s.ToString().c_str());
   }
 };
 
 Options InitDefaultOptions(const Options& options, const std::string& dbname) {
-    Options opt = options;
+  Options opt = options;
 
-    Status s = opt.env->CreateDir(dbname);
-    if (!s.ok()) {
-        std::cerr << "[" << dbname << "] fail to create dir: "
-            << s.ToString() << std::endl;
-    }
-    assert(s.ok());
+  Status s = opt.env->CreateDir(dbname);
+  if (!s.ok()) {
+    std::cerr << "[" << dbname << "] fail to create dir: " << s.ToString() << std::endl;
+  }
+  assert(s.ok());
 
-    if (opt.exist_lg_list == NULL) {
-        opt.exist_lg_list = new std::set<uint32_t>;
-        opt.exist_lg_list->insert(0);
-    }
-    return opt;
+  if (opt.exist_lg_list == NULL) {
+    opt.exist_lg_list = new std::set<uint32_t>;
+    opt.exist_lg_list->insert(0);
+  }
+  return opt;
 }
 
 class DBRepairer {
-public:
-    DBRepairer(const std::string& dbname, const Options& options)
-        : dbname_(dbname), env_(options.env),
-          options_(InitDefaultOptions(options, dbname)),
-          created_own_lg_list_(options_.exist_lg_list != options.exist_lg_list),
-          log_number_(0),
-          last_sequence_(0) {
-        std::set<uint32_t>::iterator it = options_.exist_lg_list->begin();
-        for (; it != options_.exist_lg_list->end(); ++it) {
-            Repairer* repair = new Repairer(dbname_ + "/" + Uint64ToString(*it),
-                                            options_);
-            repairers.push_back(repair);
-        }
+ public:
+  DBRepairer(const std::string& dbname, const Options& options)
+      : dbname_(dbname),
+        env_(options.env),
+        options_(InitDefaultOptions(options, dbname)),
+        created_own_lg_list_(options_.exist_lg_list != options.exist_lg_list),
+        log_number_(0),
+        last_sequence_(0) {
+    std::set<uint32_t>::iterator it = options_.exist_lg_list->begin();
+    for (; it != options_.exist_lg_list->end(); ++it) {
+      Repairer* repair = new Repairer(dbname_ + "/" + Uint64ToString(*it), options_);
+      repairers.push_back(repair);
     }
-    ~DBRepairer() {
-        std::set<uint32_t>::iterator it = options_.exist_lg_list->begin();
-        for (; it != options_.exist_lg_list->end(); ++it) {
-            delete repairers[*it];
-        }
-        if (created_own_lg_list_) {
-            delete options_.exist_lg_list;
-        }
+  }
+  ~DBRepairer() {
+    std::set<uint32_t>::iterator it = options_.exist_lg_list->begin();
+    for (; it != options_.exist_lg_list->end(); ++it) {
+      delete repairers[*it];
     }
-
-    Status Run() {
-        Status status = FindFiles();
-        if (status.ok()) {
-            ExtractMetaData();
-            ConvertLogFilesToTables();
-            status = WriteDescriptor();
-        }
-        return status;
+    if (created_own_lg_list_) {
+      delete options_.exist_lg_list;
     }
+  }
 
-private:
-    Status FindFiles() {
-        std::vector<std::string> filenames;
-        Status status = env_->GetChildren(dbname_, &filenames);
-        if (!status.ok()) {
-            return status;
-        }
-        if (filenames.empty()) {
-            return Status::IOError(dbname_, "repair found no files");
-        }
+  Status Run() {
+    Status status = FindFiles();
+    if (status.ok()) {
+      ExtractMetaData();
+      ConvertLogFilesToTables();
+      status = WriteDescriptor();
+    }
+    return status;
+  }
 
-        uint64_t number;
-        FileType type;
-        for (size_t i = 0; i < filenames.size(); i++) {
-            if (ParseFileName(filenames[i], &number, &type)) {
-                if (type == kLogFile) {
-                    logfiles_.push_back(number);
-                    if (number + 1 > log_number_) {
-                        log_number_ = number + 1;
-                    }
-                }
-            }
-        }
-
-        std::set<uint32_t>::iterator it = options_.exist_lg_list->begin();
-        for (; it != options_.exist_lg_list->end(); ++it) {
-            repairers[*it]->FindFiles();
-        }
-        return status;
+ private:
+  Status FindFiles() {
+    std::vector<std::string> filenames;
+    Status status = env_->GetChildren(dbname_, &filenames);
+    if (!status.ok()) {
+      return status;
+    }
+    if (filenames.empty()) {
+      return Status::IOError(dbname_, "repair found no files");
     }
 
-    void ConvertLogFilesToTables() {
-        for (size_t i = 0; i < logfiles_.size(); i++) {
-            std::string logname = LogHexFileName(dbname_, logfiles_[i]);
-            Status status = ConvertLogToTable(logfiles_[i]);
-            if (!status.ok()) {
-                Log(options_.info_log, "[%s] Log #%llu: ignoring conversion error: %s",
-                    dbname_.c_str(),
-                    (unsigned long long) logfiles_[i],
-                    status.ToString().c_str());
-            }
-            ArchiveFile(logname);
+    uint64_t number;
+    FileType type;
+    for (size_t i = 0; i < filenames.size(); i++) {
+      if (ParseFileName(filenames[i], &number, &type)) {
+        if (type == kLogFile) {
+          logfiles_.push_back(number);
+          if (number + 1 > log_number_) {
+            log_number_ = number + 1;
+          }
         }
+      }
     }
 
-    Status ConvertLogToTable(uint64_t log) {
-        struct LogReporter : public log::Reader::Reporter {
-            Env* env;
-            Logger* info_log;
-            uint64_t lognum;
-            virtual void Corruption(size_t bytes, const Status& s) {
-            // We print error messages for corruption, but continue repairing.
-            Log(info_log, "Log #%llu: dropping %d bytes; %s",
-                (unsigned long long) lognum,
-                static_cast<int>(bytes),
-                s.ToString().c_str());
-            }
-        };
+    std::set<uint32_t>::iterator it = options_.exist_lg_list->begin();
+    for (; it != options_.exist_lg_list->end(); ++it) {
+      repairers[*it]->FindFiles();
+    }
+    return status;
+  }
 
-        // Open the log file
-        std::string logname = LogHexFileName(dbname_, log);
-        SequentialFile* lfile;
-        Status status = env_->NewSequentialFile(logname, &lfile);
-        if (!status.ok()) {
-            return status;
-        }
+  void ConvertLogFilesToTables() {
+    for (size_t i = 0; i < logfiles_.size(); i++) {
+      std::string logname = LogHexFileName(dbname_, logfiles_[i]);
+      Status status = ConvertLogToTable(logfiles_[i]);
+      if (!status.ok()) {
+        LEVELDB_LOG(options_.info_log, "[%s] Log #%llu: ignoring conversion error: %s",
+                    dbname_.c_str(), (unsigned long long)logfiles_[i], status.ToString().c_str());
+      }
+      ArchiveFile(logname);
+    }
+  }
 
-        // Create the log reader.
-        LogReporter reporter;
-        reporter.env = env_;
-        reporter.info_log = options_.info_log;
-        reporter.lognum = log;
+  Status ConvertLogToTable(uint64_t log) {
+    struct LogReporter : public log::Reader::Reporter {
+      Env* env;
+      Logger* info_log;
+      uint64_t lognum;
+      virtual void Corruption(size_t bytes, const Status& s) {
+        // We print error messages for corruption, but continue repairing.
+        LEVELDB_LOG(info_log, "Log #%llu: dropping %d bytes; %s", (unsigned long long)lognum,
+                    static_cast<int>(bytes), s.ToString().c_str());
+      }
+    };
 
-        log::Reader reader(lfile, &reporter, false/*do not checksum*/,
-                           0/*initial_offset*/);
+    // Open the log file
+    std::string logname = LogHexFileName(dbname_, log);
+    SequentialFile* lfile;
+    Status status = env_->NewSequentialFile(logname, &lfile);
+    if (!status.ok()) {
+      return status;
+    }
 
-        // Read all the records and add to a memtable
-        std::string scratch;
-        Slice record;
-        WriteBatch batch;
-        int32_t counter = 0;
-        while (reader.ReadRecord(&record, &scratch)) {
-            if (record.size() < 12) {
-                reporter.Corruption(
-                    record.size(), Status::Corruption("log record too small"));
-                continue;
-            }
-            WriteBatchInternal::SetContents(&batch, record);
-            uint64_t batch_seq = WriteBatchInternal::Sequence(&batch);
-            uint64_t batch_count = WriteBatchInternal::Count(&batch);
-            if (batch_seq <= last_sequence_) {
-                Log(options_.info_log, "[%s] duplicate record, ignore %llu ~ %llu",
-                    dbname_.c_str(), static_cast<unsigned long long>(batch_seq),
+    // Create the log reader.
+    LogReporter reporter;
+    reporter.env = env_;
+    reporter.info_log = options_.info_log;
+    reporter.lognum = log;
+
+    log::Reader reader(lfile, &reporter, false /*do not checksum*/, 0 /*initial_offset*/);
+
+    // Read all the records and add to a memtable
+    std::string scratch;
+    Slice record;
+    WriteBatch batch;
+    int32_t counter = 0;
+    while (reader.ReadRecord(&record, &scratch)) {
+      if (record.size() < 12) {
+        reporter.Corruption(record.size(), Status::Corruption("log record too small"));
+        continue;
+      }
+      WriteBatchInternal::SetContents(&batch, record);
+      uint64_t batch_seq = WriteBatchInternal::Sequence(&batch);
+      uint64_t batch_count = WriteBatchInternal::Count(&batch);
+      if (batch_seq <= last_sequence_) {
+        LEVELDB_LOG(options_.info_log, "[%s] duplicate record, ignore %llu ~ %llu", dbname_.c_str(),
+                    static_cast<unsigned long long>(batch_seq),
                     static_cast<unsigned long long>(batch_seq + batch_count - 1));
-                continue;
-            }
+        continue;
+      }
 
-            std::vector<WriteBatch*> lg_batchs;
-            lg_batchs.resize(options_.exist_lg_list->size());
-            std::fill(lg_batchs.begin(), lg_batchs.end(), (WriteBatch*)0);
-            bool created_new_wb = false;
-            if (options_.exist_lg_list->size() > 1) {
-                status = batch.SeperateLocalityGroup(&lg_batchs);
-                created_new_wb = true;
-                if (!status.ok()) {
-                    return status;
-                }
-                for (uint32_t i = 0; i < options_.exist_lg_list->size(); ++i) {
-                    if (lg_batchs[i] != 0) {
-                        WriteBatchInternal::SetSequence(lg_batchs[i], batch_seq);
-                    }
-                }
-            } else {
-                lg_batchs[0] = (&batch);
-            }
-            for (uint32_t i = 0; i < lg_batchs.size(); ++i) {
-                if (lg_batchs[i] == NULL) {
-                    continue;
-                }
-                status = repairers[i]->InsertMemTable(lg_batchs[i], batch_seq);
-                if (!status.ok()) {
-                    Log(options_.info_log, "[%s][lg:%d] Insert log #%llu: ignoring %s",
-                        dbname_.c_str(), i,
-                        (unsigned long long) log,
-                        status.ToString().c_str());
-                    status = Status::OK();  // Keep going with rest of file
-                } else {
-                    counter += WriteBatchInternal::Count(lg_batchs[i]);
-                }
-            }
-            if (created_new_wb) {
-                for (uint32_t i = 0; i < lg_batchs.size(); ++i) {
-                    if (lg_batchs[i] != NULL) {
-                        delete lg_batchs[i];
-                        lg_batchs[i] = NULL;
-                    }
-                }
-            }
-            last_sequence_ = batch_seq + batch_count - 1;
+      std::vector<WriteBatch*> lg_batchs;
+      lg_batchs.resize(options_.exist_lg_list->size());
+      std::fill(lg_batchs.begin(), lg_batchs.end(), (WriteBatch*)0);
+      bool created_new_wb = false;
+      if (options_.exist_lg_list->size() > 1) {
+        status = batch.SeperateLocalityGroup(&lg_batchs);
+        created_new_wb = true;
+        if (!status.ok()) {
+          return status;
         }
-        delete lfile;
-
-        std::set<uint32_t>::iterator it = options_.exist_lg_list->begin();
-        for (; it != options_.exist_lg_list->end(); ++it) {
-            uint32_t i = *it;
-            uint64_t file_num = 0;
-            if (!repairers[i]->HasMemTable()) {
-                continue;
-            }
-            status = repairers[i]->BuildTableFile(log, i, &file_num);
-            if (!status.ok()) {
-                Log(options_.info_log, "[%s][lg:%d] BuildLogFile #%llu: ignoring %s",
-                    dbname_.c_str(), i,
-                    (unsigned long long) log,
-                    status.ToString().c_str());
-                status = Status::OK();  // Keep going with rest of file
-            } else {
-                status = repairers[i]->AddTableMeta(file_num);
-                if (!status.ok()) {
-                    Log(options_.info_log, "[%s][lg:%d] AddTableMeta #%llu: ignoring %s",
-                        dbname_.c_str(), i,
-                        (unsigned long long) log,
-                        status.ToString().c_str());
-                    status = Status::OK();  // Keep going with rest of file
-                }
-            }
+        for (uint32_t i = 0; i < options_.exist_lg_list->size(); ++i) {
+          if (lg_batchs[i] != 0) {
+            WriteBatchInternal::SetSequence(lg_batchs[i], batch_seq);
+          }
         }
-        Log(options_.info_log, "[%s] Log #%llu to Table: %d entries %s",
-            dbname_.c_str(),
-            (unsigned long long) log,
-            counter,
-            status.ToString().c_str());
-        return status;
-    }
-
-    void ExtractMetaData() {
-        std::set<uint32_t>::iterator it = options_.exist_lg_list->begin();
-        for (; it != options_.exist_lg_list->end(); ++it) {
-            repairers[*it]->ExtractMetaData();
-            if (last_sequence_ < repairers[*it]->max_sequence_) {
-                last_sequence_ = repairers[*it]->max_sequence_;
-            }
+      } else {
+        lg_batchs[0] = (&batch);
+      }
+      for (uint32_t i = 0; i < lg_batchs.size(); ++i) {
+        if (lg_batchs[i] == NULL) {
+          continue;
         }
-    }
-
-    Status WriteDescriptor() {
-        Status status;
-        std::set<uint32_t>::iterator it = options_.exist_lg_list->begin();
-        for (; it != options_.exist_lg_list->end(); ++it) {
-            Status s = repairers[*it]->WriteDescriptor();
-            if (!s.ok()) {
-                Log(options_.info_log, "[%s][lg:%d] WriteDescriptor error: %s",
-                    dbname_.c_str(), *it,
-                    s.ToString().c_str());
-                status = s;
-            }
+        status = repairers[i]->InsertMemTable(lg_batchs[i], batch_seq);
+        if (!status.ok()) {
+          LEVELDB_LOG(options_.info_log, "[%s][lg:%d] Insert log #%llu: ignoring %s",
+                      dbname_.c_str(), i, (unsigned long long)log, status.ToString().c_str());
+          status = Status::OK();  // Keep going with rest of file
+        } else {
+          counter += WriteBatchInternal::Count(lg_batchs[i]);
         }
-        return status;
+      }
+      if (created_new_wb) {
+        for (uint32_t i = 0; i < lg_batchs.size(); ++i) {
+          if (lg_batchs[i] != NULL) {
+            delete lg_batchs[i];
+            lg_batchs[i] = NULL;
+          }
+        }
+      }
+      last_sequence_ = batch_seq + batch_count - 1;
     }
+    delete lfile;
 
-    void ArchiveFile(const std::string& fname) {
-        repairers[0]->ArchiveFile(fname);
+    std::set<uint32_t>::iterator it = options_.exist_lg_list->begin();
+    for (; it != options_.exist_lg_list->end(); ++it) {
+      uint32_t i = *it;
+      uint64_t file_num = 0;
+      if (!repairers[i]->HasMemTable()) {
+        continue;
+      }
+      status = repairers[i]->BuildTableFile(log, i, &file_num);
+      if (!status.ok()) {
+        LEVELDB_LOG(options_.info_log, "[%s][lg:%d] BuildLogFile #%llu: ignoring %s",
+                    dbname_.c_str(), i, (unsigned long long)log, status.ToString().c_str());
+        status = Status::OK();  // Keep going with rest of file
+      } else {
+        status = repairers[i]->AddTableMeta(file_num);
+        if (!status.ok()) {
+          LEVELDB_LOG(options_.info_log, "[%s][lg:%d] AddTableMeta #%llu: ignoring %s",
+                      dbname_.c_str(), i, (unsigned long long)log, status.ToString().c_str());
+          status = Status::OK();  // Keep going with rest of file
+        }
+      }
     }
+    LEVELDB_LOG(options_.info_log, "[%s] Log #%llu to Table: %d entries %s", dbname_.c_str(),
+                (unsigned long long)log, counter, status.ToString().c_str());
+    return status;
+  }
 
-private:
-    std::vector<Repairer*> repairers;
-    std::string const dbname_;
-    Env* const env_;
-    Options const options_;
-    bool created_own_lg_list_;
-    uint64_t log_number_;
-    std::vector<uint64_t> logfiles_;
-    uint64_t last_sequence_;
+  void ExtractMetaData() {
+    std::set<uint32_t>::iterator it = options_.exist_lg_list->begin();
+    for (; it != options_.exist_lg_list->end(); ++it) {
+      repairers[*it]->ExtractMetaData();
+      if (last_sequence_ < repairers[*it]->max_sequence_) {
+        last_sequence_ = repairers[*it]->max_sequence_;
+      }
+    }
+  }
+
+  Status WriteDescriptor() {
+    Status status;
+    std::set<uint32_t>::iterator it = options_.exist_lg_list->begin();
+    for (; it != options_.exist_lg_list->end(); ++it) {
+      Status s = repairers[*it]->WriteDescriptor();
+      if (!s.ok()) {
+        LEVELDB_LOG(options_.info_log, "[%s][lg:%d] WriteDescriptor error: %s", dbname_.c_str(),
+                    *it, s.ToString().c_str());
+        status = s;
+      }
+    }
+    return status;
+  }
+
+  void ArchiveFile(const std::string& fname) { repairers[0]->ArchiveFile(fname); }
+
+ private:
+  std::vector<Repairer*> repairers;
+  std::string const dbname_;
+  Env* const env_;
+  Options const options_;
+  bool created_own_lg_list_;
+  uint64_t log_number_;
+  std::vector<uint64_t> logfiles_;
+  uint64_t last_sequence_;
 };
 
 }  // namespace

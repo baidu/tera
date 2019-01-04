@@ -26,9 +26,6 @@ for ((i=1; i<=$TABLETNODE_NUM; i++)); do
         mv ${TABLETNODE_LOG_FILE} ${TABLETNODE_LOG_FILE}.${TIME}
     fi
     LEVELDB_LOG_FILE=${CURRENT_DIR}/../log/leveldb.$i.log
-    if [ -f ${LEVELDB_LOG_FILE} ];then
-        mv ${LEVELDB_LOG_FILE} ${LEVELDB_LOG_FILE}.${TIME}
-    fi
     CACHE_PATH=${CURRENT_DIR}/../cache/tabletnode.$i
     if [ ! -x $CACHE_PATH ];then
         mkdir -p $CACHE_PATH

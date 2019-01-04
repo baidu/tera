@@ -41,6 +41,7 @@ TESTS = \
 	crc32c_test \
 	db_test \
 	dbformat_test \
+	env_test \
 	filename_test \
 	filter_block_test \
 	issue178_test \
@@ -49,7 +50,6 @@ TESTS = \
 	skiplist_test \
 	table_test \
 	version_edit_test \
-	version_set_test \
 	write_batch_test \
 	raw_key_operator_test \
 	tera_key_test
@@ -152,8 +152,8 @@ db_test: db/db_test.o $(LIBOBJECTS) $(TESTHARNESS)
 dbformat_test: db/dbformat_test.o $(LIBOBJECTS) $(TESTHARNESS)
 	$(CXX) db/dbformat_test.o $(LIBOBJECTS) $(TESTHARNESS) -o $@ $(LIBS) $(LDFLAGS)
 
-#env_test: util/env_test.o $(LIBOBJECTS) $(TESTHARNESS)
-	#$(CXX) util/env_test.o $(LIBOBJECTS) $(TESTHARNESS) -o $@ $(LIBS) $(LDFLAGS)
+env_test: util/env_test.o $(LIBOBJECTS) $(TESTHARNESS)
+	$(CXX) util/env_test.o $(LIBOBJECTS) $(TESTHARNESS) -o $@ $(LIBS) $(LDFLAGS)
 
 filename_test: db/filename_test.o $(LIBOBJECTS) $(TESTHARNESS)
 	$(CXX) db/filename_test.o $(LIBOBJECTS) $(TESTHARNESS) -o $@ $(LIBS) $(LDFLAGS)
@@ -176,8 +176,8 @@ skiplist_test: db/skiplist_test.o $(LIBOBJECTS) $(TESTHARNESS)
 version_edit_test: db/version_edit_test.o $(LIBOBJECTS) $(TESTHARNESS)
 	$(CXX) db/version_edit_test.o $(LIBOBJECTS) $(TESTHARNESS) -o $@ $(LIBS) $(LDFLAGS)
 
-version_set_test: db/version_set_test.o $(LIBOBJECTS) $(TESTHARNESS)
-	$(CXX) db/version_set_test.o $(LIBOBJECTS) $(TESTHARNESS) -o $@ $(LIBS) $(LDFLAGS)
+#version_set_test: db/version_set_test.o $(LIBOBJECTS) $(TESTHARNESS)
+	#$(CXX) db/version_set_test.o $(LIBOBJECTS) $(TESTHARNESS) -o $@ $(LIBS) $(LDFLAGS)
 
 write_batch_test: db/write_batch_test.o $(LIBOBJECTS) $(TESTHARNESS)
 	$(CXX) db/write_batch_test.o $(LIBOBJECTS) $(TESTHARNESS) -o $@ $(LIBS) $(LDFLAGS)

@@ -2,12 +2,12 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#ifndef  STORAGE_LEVELDB_UTIL_NFS_WRAPPER_H_
-#define  STORAGE_LEVELDB_UTIL_NFS_WRAPPER_H_
+#ifndef STORAGE_LEVELDB_UTIL_NFS_WRAPPER_H_
+#define STORAGE_LEVELDB_UTIL_NFS_WRAPPER_H_
 
 #include "nfs_version.h"
 
-#include "../include/nfs.h"
+#include "include/nfs.h"
 
 namespace nfs {
 struct NFSFILE;
@@ -15,7 +15,7 @@ struct NFSDIR;
 };
 
 #ifdef __cplusplus
-extern  "C" {
+extern "C" {
 #endif
 
 void InitKylinLog(int loglevel);
@@ -77,4 +77,3 @@ void SetAssignNamespaceIdFunc(nfs::AssignNamespaceIdFunc func);
 #endif
 
 #endif  // STORAGE_LEVELDB_UTIL_NFS_WRAPPER_H_
-

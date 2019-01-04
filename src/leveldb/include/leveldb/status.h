@@ -25,12 +25,12 @@ namespace leveldb {
 class Status {
  public:
   // Create a success status.
-  Status() : state_(NULL) { }
+  Status() : state_(NULL) {}
   ~Status() { delete[] state_; }
 
   // Copy the specified status.
   Status(const Status& s);
-  void operator=(const Status& s);
+  Status& operator=(const Status& s);
 
   // Return a success status.
   static Status OK() { return Status(); }
@@ -63,6 +63,10 @@ class Status {
     return Status(kShutdownInProgress, msg, msg2);
   }
 
+  static Status Reject(const Slice& msg, const Slice& msg2 = Slice()) {
+    return Status(kReject, msg, msg2);
+  }
+
   // Returns true iff the status indicates success.
   bool ok() const { return (state_ == NULL); }
 
@@ -85,6 +89,9 @@ class Status {
   // Returns the string "OK" for success.
   std::string ToString() const;
 
+  // Returns true iff the status indicates an Reject Error.
+  bool IsReject() const { return code() == kReject; }
+
  private:
   // OK status has a NULL state_.  Otherwise, state_ is a new[] array
   // of the following form:
@@ -102,27 +109,25 @@ class Status {
     kIOError = 5,
     kTimeOut = 6,
     kIOPermissionDenied = 13,
-    kShutdownInProgress = 14
+    kShutdownInProgress = 14,
+    kReject = 15
   };
 
-  Code code() const {
-    return (state_ == NULL) ? kOk : static_cast<Code>(state_[4]);
-  }
+  Code code() const { return (state_ == NULL) ? kOk : static_cast<Code>(state_[4]); }
 
   Status(Code code, const Slice& msg, const Slice& msg2);
   static const char* CopyState(const char* s);
 };
 
-inline Status::Status(const Status& s) {
-  state_ = (s.state_ == NULL) ? NULL : CopyState(s.state_);
-}
-inline void Status::operator=(const Status& s) {
+inline Status::Status(const Status& s) { state_ = (s.state_ == NULL) ? NULL : CopyState(s.state_); }
+inline Status& Status::operator=(const Status& s) {
   // The following condition catches both aliasing (when this == &s),
   // and the common case where both s and *this are ok.
   if (state_ != s.state_) {
     delete[] state_;
     state_ = (s.state_ == NULL) ? NULL : CopyState(s.state_);
   }
+  return *this;
 }
 
 }  // namespace leveldb

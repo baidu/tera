@@ -45,15 +45,13 @@ bool ParseNumber(const char* str, long double* value, char** endptr);
 /// @brief interface for parsing string to number
 /// ---------------------------------------------------------------
 template <typename Type>
-bool ParseNumber(const std::string& str, Type* value, char** endptr, int base)
-{
-    return ParseNumber(str.c_str(), value, endptr, base);
+bool ParseNumber(const std::string& str, Type* value, char** endptr, int base) {
+  return ParseNumber(str.c_str(), value, endptr, base);
 }
 
 template <typename Type>
-bool ParseNumber(const std::string& str, Type* value, char** endptr)
-{
-    return ParseNumber(str.c_str(), value, endptr);
+bool ParseNumber(const std::string& str, Type* value, char** endptr) {
+  return ParseNumber(str.c_str(), value, endptr);
 }
 
 /// ---------------------------------------------------------------
@@ -61,37 +59,35 @@ bool ParseNumber(const std::string& str, Type* value, char** endptr)
 /// @return true if total string is successfully parsed.
 /// ---------------------------------------------------------------
 template <typename Type>
-bool StringToNumber(const std::string& str, Type* value, int base)
-{
-//     STATIC_ASSERT(TypeTraits::IsInteger<Type>::Value, "Type must be integral type");
-    char* endptr;
-    bool ret = ParseNumber(str.c_str(), value, &endptr, base);
-    return (ret && *endptr == '\0');
+bool StringToNumber(const std::string& str, Type* value, int base) {
+  //     STATIC_ASSERT(TypeTraits::IsInteger<Type>::Value, "Type must be
+  //     integral type");
+  char* endptr;
+  bool ret = ParseNumber(str.c_str(), value, &endptr, base);
+  return (ret && *endptr == '\0');
 }
 
 template <typename Type>
-bool StringToNumber(const char* str, Type* value, int base)
-{
-//     STATIC_ASSERT(TypeTraits::IsInteger<Type>::Value, "Type must be integral type");
-    char* endptr;
-    bool ret = ParseNumber(str, value, &endptr, base);
-    return (ret && *endptr == '\0');
+bool StringToNumber(const char* str, Type* value, int base) {
+  //     STATIC_ASSERT(TypeTraits::IsInteger<Type>::Value, "Type must be
+  //     integral type");
+  char* endptr;
+  bool ret = ParseNumber(str, value, &endptr, base);
+  return (ret && *endptr == '\0');
 }
 
 template <typename Type>
-bool StringToNumber(const std::string& str, Type* value)
-{
-    char* endptr;
-    bool ret = ParseNumber(str.c_str(), value, &endptr);
-    return (ret && *endptr == '\0');
+bool StringToNumber(const std::string& str, Type* value) {
+  char* endptr;
+  bool ret = ParseNumber(str.c_str(), value, &endptr);
+  return (ret && *endptr == '\0');
 }
 
 template <typename Type>
-bool StringToNumber(const char* str, Type* value)
-{
-    char* endptr;
-    bool ret = ParseNumber(str, value, &endptr);
-    return (ret && *endptr == '\0');
+bool StringToNumber(const char* str, Type* value) {
+  char* endptr;
+  bool ret = ParseNumber(str, value, &endptr);
+  return (ret && *endptr == '\0');
 }
 
 /// ---------------------------------------------------------------
@@ -103,10 +99,7 @@ const int kMaxFloatStringSize = 24;
 const int kMaxIntStringSize = kMaxIntegerStringSize;
 
 /// @brief judge a number if it's nan
-inline bool IsNaN(double value)
-{
-    return !(value > value) && !(value <= value);
-}
+inline bool IsNaN(double value) { return !(value > value) && !(value <= value); }
 
 /// @brief write number to buffer as string
 /// @return end of result
@@ -212,4 +205,4 @@ std::string FormatBinaryMeasure(int64_t n, const char* unit = "");
 
 // } // namespace common
 
-#endif // TERA_COMMON_BASE_STRING_STRING_NUMBER_H_
+#endif  // TERA_COMMON_BASE_STRING_STRING_NUMBER_H_

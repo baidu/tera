@@ -9,7 +9,8 @@
 DEFINE_int64(transactions_count, 200, "the count of transactions");
 DEFINE_int32(warehouses_count, 2, "the count of warsehouses");
 DEFINE_int32(tpcc_thread_pool_size, 20, "size of tpcc thread pool");
-DEFINE_int32(tpcc_run_gtxn_thread_pool_size, 20, "size of tpcc run global transactions thread pool");
+DEFINE_int32(tpcc_run_gtxn_thread_pool_size, 20,
+             "size of tpcc run global transactions thread pool");
 DEFINE_string(db_type, "tera", "test db type");
 DEFINE_string(tera_client_flagfile, "./tera.flag", "the flag file path of tera client");
 DEFINE_string(tera_table_schema_dir, "./tpcc_schemas/", "table schema directory");

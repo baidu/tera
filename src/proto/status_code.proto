@@ -19,20 +19,26 @@ enum StatusCode {
 
     // tablet node manage
     kTabletNodeReady = 30;
-    kTabletNodeOffLine = 31;
+    kTabletNodeOffline = 31;
     kTabletNodeOnKick = 32;
     kTabletNodeWaitKick = 33;
-    kTabletNodePendingOffLine = 34;
+    kTabletNodePendingOffline = 34;
+    kTabletNodeKicked   = 35;
+    // response
+    kTabletNodeOk = 40;
 
     // table status
     kTabletNotInit = 41;
     kTabletReady = 42;
     kTabletOnLoad = 43;
     kTabletOnSplit = 44;
-    kTabletSplited = 51;
-    kTabletOnMerge = 50;
-    kTabletUnLoading = 52;
-    kTabletUnLoading2 = 68;
+    kTabletMerged = 50;
+    kTabletSplitted = 51;
+    kTabletUnloading = 52;
+    kTabletUnloading2 = 68;
+    kTabletWaitLoad  = 69;
+    kTabletWaitUnload = 70;
+
 
     kTableNotFound = 45;
     kTableCorrupt = 46;
@@ -43,8 +49,14 @@ enum StatusCode {
     kIllegalAccess = 71;
     kNotPermission = 72;
     kIOError = 73;
+    kMismatchAuthType = 74;
 
     kTxnFail = 80;
+
+    // quota
+    kQuotaLimited = 90;
+    kQuotaInvalidArg = 91;
+    kFlowControlLimited = 92;
 
     //// master rpc ////
 
@@ -69,9 +81,6 @@ enum StatusCode {
     kSnapshotNotExist = 320;
 
     //// tablet node rpc ////
-
-    // response
-    kTabletNodeOk = 40;
 
     // key
     kKeyNotExist = 402;

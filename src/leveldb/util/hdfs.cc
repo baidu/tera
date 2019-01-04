@@ -9,7 +9,7 @@
 #include "hdfs.h"
 #include "include/hdfs.h"
 #include "hdfs_util.h"
-#include "../common/counter.h"
+#include "common/counter.h"
 
 namespace leveldb {
 
@@ -17,27 +17,22 @@ static hdfsFS (*hdfsConnect)(const char* nn, tPort port);
 static int (*hdfsDisconnect)(hdfsFS fs);
 
 static int (*hdfsCreateDirectory)(hdfsFS fs, const char* path);
-static hdfsFileInfo* (*hdfsListDirectory)(hdfsFS fs, const char* path,
-                                          int *numEntries);
+static hdfsFileInfo* (*hdfsListDirectory)(hdfsFS fs, const char* path, int* numEntries);
 static hdfsFileInfo* (*hdfsGetPathInfo)(hdfsFS fs, const char* path);
-static void (*hdfsFreeFileInfo)(hdfsFileInfo *hdfsFileInfo, int numEntries);
+static void (*hdfsFreeFileInfo)(hdfsFileInfo* hdfsFileInfo, int numEntries);
 
 static int (*hdfsDelete)(hdfsFS fs, const char* path);
-static int (*hdfsExists)(hdfsFS fs, const char *path);
+static int (*hdfsExists)(hdfsFS fs, const char* path);
 static int (*hdfsRename)(hdfsFS fs, const char* oldPath, const char* newPath);
-static int (*hdfsCopy)(hdfsFS srcFS, const char* src,
-                        hdfsFS dstFS, const char* dst);
+static int (*hdfsCopy)(hdfsFS srcFS, const char* src, hdfsFS dstFS, const char* dst);
 
-static hdfsFile (*hdfsOpenFile)(hdfsFS fs, const char* path, int flags,
-                                 int bufferSize, short replication,
-                                 tSize blocksize);
+static hdfsFile (*hdfsOpenFile)(hdfsFS fs, const char* path, int flags, int bufferSize,
+                                short replication, tSize blocksize);
 static int (*hdfsCloseFile)(hdfsFS fs, hdfsFile file);
 
 static tSize (*hdfsRead)(hdfsFS fs, hdfsFile file, void* buffer, tSize length);
-static tSize (*hdfsPread)(hdfsFS fs, hdfsFile file, tOffset position,
-                           void* buffer, tSize length);
-static tSize (*hdfsWrite)(hdfsFS fs, hdfsFile file, const void* buffer,
-                           tSize length);
+static tSize (*hdfsPread)(hdfsFS fs, hdfsFile file, tOffset position, void* buffer, tSize length);
+static tSize (*hdfsWrite)(hdfsFS fs, hdfsFile file, const void* buffer, tSize length);
 static int (*hdfsFlush)(hdfsFS fs, hdfsFile file);
 static int (*hdfsSync)(hdfsFS fs, hdfsFile file);
 static tOffset (*hdfsTell)(hdfsFS fs, hdfsFile file);
@@ -83,9 +78,7 @@ bool Hdfs::LoadSymbol() {
   return true;
 }
 
-HFile::HFile(void* fs, void* file, const std::string& name)
-  : fs_(fs), file_(file), name_(name) {
-}
+HFile::HFile(void* fs, void* file, const std::string& name) : fs_(fs), file_(file), name_(name) {}
 HFile::~HFile() {
   if (file_) {
     CloseFile();
@@ -95,12 +88,8 @@ HFile::~HFile() {
 int32_t HFile::Write(const char* buf, int32_t len) {
   return (*hdfsWrite)((hdfsFS)fs_, (hdfsFile)file_, buf, len);
 }
-int32_t HFile::Flush() {
-  return (*hdfsFlush)((hdfsFS)fs_, (hdfsFile)file_);
-}
-int32_t HFile::Sync() {
-  return (*hdfsSync)((hdfsFS)fs_, (hdfsFile)file_);
-}
+int32_t HFile::Flush() { return (*hdfsFlush)((hdfsFS)fs_, (hdfsFile)file_); }
+int32_t HFile::Sync() { return (*hdfsSync)((hdfsFS)fs_, (hdfsFile)file_); }
 int32_t HFile::Read(char* buf, int32_t len) {
   return (*hdfsRead)((hdfsFS)fs_, (hdfsFile)file_, buf, len);
 }
@@ -111,9 +100,7 @@ int64_t HFile::Tell() {
   int64_t retval = (*hdfsTell)((hdfsFS)fs_, (hdfsFile)file_);
   return retval;
 }
-int32_t HFile::Seek(int64_t offset) {
-  return (*hdfsSeek)((hdfsFS)fs_, (hdfsFile)file_, offset);
-}
+int32_t HFile::Seek(int64_t offset) { return (*hdfsSeek)((hdfsFS)fs_, (hdfsFile)file_, offset); }
 
 int32_t HFile::CloseFile() {
   int32_t retval = 0;
@@ -140,7 +127,7 @@ Hdfs::Hdfs() {
       dl_init_ = true;
     }
   }
-  fs_ =  (*hdfsConnect)("default", 0);
+  fs_ = (*hdfsConnect)("default", 0);
 }
 Hdfs::~Hdfs() {
   if (fs_) {
@@ -180,12 +167,12 @@ int32_t Hdfs::Rename(const std::string& from, const std::string& to) {
 DfsFile* Hdfs::OpenFile(const std::string& filename, int32_t flags) {
   // fprintf(stderr, "OpenFile %s %d\n", filename.c_str(), flags);
   int32_t hflags = (flags == RDONLY ? O_RDONLY : O_WRONLY);
-  hdfsFile file = (*hdfsOpenFile)((hdfsFS)fs_, filename.c_str(), hflags, 0 ,0 ,0);
+  hdfsFile file = (*hdfsOpenFile)((hdfsFS)fs_, filename.c_str(), hflags, 0, 0, 0);
   if (!file) {
     if (hflags == O_WRONLY) {
       // open failed, delete and reopen it
       Delete(filename);
-      file = (*hdfsOpenFile)((hdfsFS)fs_, filename.c_str(), hflags, 0 ,0 ,0);
+      file = (*hdfsOpenFile)((hdfsFS)fs_, filename.c_str(), hflags, 0, 0, 0);
       if (!file) {
         return NULL;
       }
@@ -200,8 +187,7 @@ int32_t Hdfs::Copy(const std::string& from, const std::string& to) {
   return (*hdfsCopy)((hdfsFS)fs_, from.c_str(), (hdfsFS)fs_, to.c_str());
 }
 
-int32_t Hdfs::ListDirectory(const std::string& path,
-                            std::vector<std::string>* result) {
+int32_t Hdfs::ListDirectory(const std::string& path, std::vector<std::string>* result) {
   int numEntries = 0;
   hdfsFileInfo* pHdfsFileInfo = 0;
   if (0 != Exists(path)) {
@@ -233,7 +219,6 @@ int32_t Hdfs::UnlockDirectory(const std::string& path) {
   return -1;
 }
 
-
 int32_t Hdfs::Stat(const std::string& filename, struct stat* fstat) {
   hdfsFileInfo* pFileInfo = (*hdfsGetPathInfo)((hdfsFS)fs_, filename.c_str());
   if (pFileInfo != NULL) {
@@ -248,6 +233,5 @@ int32_t Hdfs::ClearDirOwner(const std::string& path) {
   // hdfs has no dir owner, so we return succ directly
   return 0;
 }
-
 }
 /* vim: set expandtab ts=2 sw=2 sts=2 tw=100: */

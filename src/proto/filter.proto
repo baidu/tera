@@ -1,0 +1,82 @@
+package tera.filter;
+
+enum FilterValueType {
+    kINT64 = 50;
+    kUINT64 = 51;
+    kINT32 = 52;
+    kUINT32 = 53;
+    kINT16 = 54;
+    kUINT16 = 55;
+    kINT8 = 56;
+    kUINT8 = 57;
+    kUnknownValueType = 69;
+}
+
+enum CompareType {
+    kLess = 31;
+    kLessOrEqual = 32;
+    kEqual = 33;
+    kNotEqual = 34;
+    kGreaterOrEqual = 35;
+    kGreater = 36;
+    kNoOp = 37;
+
+}
+
+message ComparatorDesc {
+    required ComparatorType type = 1;
+    optional bytes serialized_comparator = 2;
+
+    enum ComparatorType {
+      kIntegerComparator = 1;
+      kDecimalComparator = 2;
+      kBinaryComparator = 3;
+      kUnknownComparator = 10;
+    }
+}
+
+message IntegerComparatorDesc {
+    required FilterValueType value_type = 1;
+    required uint64 integer_value = 2;
+}
+
+message DecimalComparatorDesc {
+    required double decimal_value = 1;
+}
+
+message BinaryComparatorDesc {
+    required bytes value = 1;
+}
+
+message ValueFilterDesc {
+    optional string column_family = 1;
+    optional bytes column_qualifier = 2;
+    // eg. compare_op=GREATER_OR_EQUAL means output (not filtered) if value >= ref_value, or not output (filtered)
+    required CompareType compare_op = 3;
+    required ComparatorDesc comparator = 4;
+    // if family or qualifier has not been found, output (means not filtered) if false,
+    // do not output (means filtered) if true
+    optional bool filter_if_missing = 5;
+}
+
+message FilterDesc {
+    required FilterType type = 1;
+    optional bytes serialized_filter = 2;
+
+    enum FilterType {
+        kFilterList = 1;
+        kValueFilter = 2;
+        kUnknownType = 20;
+    }
+}
+
+message FilterListDesc {
+    required Operator op = 1;
+    repeated FilterDesc filters = 2;
+
+    enum Operator {
+        kAnd = 1;
+        kOr = 2;
+        kInvalidOp = 3;
+    }
+}

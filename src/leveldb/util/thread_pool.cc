@@ -4,6 +4,7 @@
 //
 // Author: leiliyuan@baidu.com
 
+#include "glog/logging.h"
 #include "leveldb/env.h"
 #include "util/thread_pool.h"
 #include "util/mutexlock.h"
@@ -53,8 +54,8 @@ void ThreadPool::SetBackgroundThreads(int num) {
   total_threads_limit_ = num;
 }
 
-int64_t ThreadPool::Schedule(void (*function)(void*), void* arg,
-                             double priority, int64_t wait_time_millisec) {
+int64_t ThreadPool::Schedule(void (*function)(void*), void* arg, double priority,
+                             int64_t wait_time_millisec) {
   assert(wait_time_millisec >= 0);
   MutexLock lock(&mutex_);
   if (exit_all_threads_) {
@@ -175,8 +176,8 @@ void ThreadPool::BGThread() {
       void* arg = bg_item.arg;
       latest_.erase(it);
       mutex_.Unlock();
-      Log(info_log_, "[ThreadPool(%d/%d)] Do thread id = %ld score = %.2f",
-          active_number_, total_threads_limit_, bg_item.id, bg_item.priority);
+      LOG(INFO) << "[ThreadPool(" << active_number_ << "/" << total_threads_limit_
+                << ")] Do thread id = " << bg_item.id << " score = " << bg_item.priority;
       (*function)(arg);
       mutex_.Lock();
     }
@@ -205,11 +206,10 @@ void ThreadPool::PutInQueue(BGItem& bg_item, int64_t wait_time_millisec) {
 }
 
 bool ThreadPool::IsLatest(const BGItem& latest, double priority, int64_t exe_time) {
-  double priority_diff = std::max(latest.priority - priority,
-                                  priority - latest.priority);
+  double priority_diff = std::max(latest.priority - priority, priority - latest.priority);
   bool same_time = (latest.exe_time == exe_time);
   bool in_pri_queue = latest.exe_time == 0;
   return (priority_diff < 1e-4) && (in_pri_queue || same_time);
 }
 
-} // namespace leveldb
+}  // namespace leveldb

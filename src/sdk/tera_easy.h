@@ -4,8 +4,8 @@
 //
 // Author: yanshiguang02@baidu.com
 
-#ifndef  TERA_TERA_EASY_H_
-#define  TERA_TERA_EASY_H_
+#ifndef TERA_TERA_EASY_H_
+#define TERA_TERA_EASY_H_
 
 #include <stdint.h>
 
@@ -25,26 +25,26 @@ typedef std::map<ColumnKey, Column> Record;
 typedef std::pair<Key, Record> KVPair;
 
 class Table {
-public:
-    Table() {}
+ public:
+  Table() {}
 
-    virtual ~Table() {}
+  virtual ~Table() {}
 
-    virtual bool Read(const Key& row_key, Record* record) = 0;
+  virtual bool Read(const Key& row_key, Record* record) = 0;
 
-    virtual bool Write(const Key& row_key, const Record& record) = 0;
+  virtual bool Write(const Key& row_key, const Record& record) = 0;
 
-    virtual void Flush() = 0;
+  virtual void Flush() = 0;
 
-    virtual bool Delete(const Key& row_key) = 0;
+  virtual bool Delete(const Key& row_key) = 0;
 
-    virtual bool SetScanner(const Key& start, const Key& end) = 0;
+  virtual bool SetScanner(const Key& start, const Key& end) = 0;
 
-    virtual bool NextPair(KVPair* kv_pair) = 0;
+  virtual bool NextPair(KVPair* kv_pair) = 0;
 
-private:
-    Table(const Table&);
-    void operator=(const Table&);
+ private:
+  Table(const Table&);
+  void operator=(const Table&);
 };
 
 Table* OpenTable(const std::string& table_name, const std::string& conf_path = "");
