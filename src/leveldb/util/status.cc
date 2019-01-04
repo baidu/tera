@@ -68,9 +68,11 @@ std::string Status::ToString() const {
       case kIOPermissionDenied:
         type = "IO Permission Denied: ";
         break;
+      case kReject:
+        type = "Reject: ";
+        break;
       default:
-        snprintf(tmp, sizeof(tmp), "Unknown code(%d): ",
-                 static_cast<int>(code()));
+        snprintf(tmp, sizeof(tmp), "Unknown code(%d): ", static_cast<int>(code()));
         type = tmp;
         break;
     }

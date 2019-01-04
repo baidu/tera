@@ -28,7 +28,7 @@ class SnapshotImpl : public Snapshot {
   SnapshotImpl* prev_;
   SnapshotImpl* next_;
 
-  SnapshotList* list_;                 // just for sanity checks
+  SnapshotList* list_;  // just for sanity checks
 };
 
 class SnapshotList {
@@ -39,8 +39,14 @@ class SnapshotList {
   }
 
   bool empty() const { return list_.next_ == &list_; }
-  SnapshotImpl* oldest() const { assert(!empty()); return list_.next_; }
-  SnapshotImpl* newest() const { assert(!empty()); return list_.prev_; }
+  SnapshotImpl* oldest() const {
+    assert(!empty());
+    return list_.next_;
+  }
+  SnapshotImpl* newest() const {
+    assert(!empty());
+    return list_.prev_;
+  }
 
   const SnapshotImpl* New(SequenceNumber seq) {
     SnapshotImpl* s = new SnapshotImpl;

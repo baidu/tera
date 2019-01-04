@@ -30,7 +30,7 @@ struct Comparator {
   }
 };
 
-class SkipTest { };
+class SkipTest {};
 
 TEST(SkipTest, Empty) {
   Arena arena;
@@ -115,8 +115,7 @@ TEST(SkipTest, InsertAndLookup) {
     iter.SeekToLast();
 
     // Compare against model iterator
-    for (std::set<Key>::reverse_iterator model_iter = keys.rbegin();
-         model_iter != keys.rend();
+    for (std::set<Key>::reverse_iterator model_iter = keys.rbegin(); model_iter != keys.rend();
          ++model_iter) {
       ASSERT_TRUE(iter.Valid());
       ASSERT_EQ(*model_iter, iter.key());
@@ -159,7 +158,7 @@ class ConcurrentTest {
   static uint64_t hash(Key key) { return key & 0xff; }
 
   static uint64_t HashNumbers(uint64_t k, uint64_t g) {
-    uint64_t data[2] = { k, g };
+    uint64_t data[2] = {k, g};
     return Hash(reinterpret_cast<char*>(data), sizeof(data), 0);
   }
 
@@ -170,9 +169,7 @@ class ConcurrentTest {
     return ((k << 40) | (g << 8) | (HashNumbers(k, g) & 0xff));
   }
 
-  static bool IsValidKey(Key k) {
-    return hash(k) == (HashNumbers(key(k), gen(k)) & 0xff);
-  }
+  static bool IsValidKey(Key k) { return hash(k) == (HashNumbers(key(k), gen(k)) & 0xff); }
 
   static Key RandomTarget(Random* rnd) {
     switch (rnd->Next() % 10) {
@@ -191,12 +188,8 @@ class ConcurrentTest {
   // Per-key generation
   struct State {
     port::AtomicPointer generation[K];
-    void Set(int k, intptr_t v) {
-      generation[k].Release_Store(reinterpret_cast<void*>(v));
-    }
-    intptr_t Get(int k) {
-      return reinterpret_cast<intptr_t>(generation[k].Acquire_Load());
-    }
+    void Set(int k, intptr_t v) { generation[k].Release_Store(reinterpret_cast<void*>(v)); }
+    intptr_t Get(int k) { return reinterpret_cast<intptr_t>(generation[k].Acquire_Load()); }
 
     State() {
       for (uint32_t k = 0; k < K; k++) {
@@ -215,7 +208,7 @@ class ConcurrentTest {
   SkipList<Key, Comparator> list_;
 
  public:
-  ConcurrentTest() : list_(Comparator(), &arena_) { }
+  ConcurrentTest() : list_(Comparator(), &arena_) {}
 
   // REQUIRES: External synchronization
   void WriteStep(Random* rnd) {
@@ -253,12 +246,9 @@ class ConcurrentTest {
 
         // Note that generation 0 is never inserted, so it is ok if
         // <*,0,*> is missing.
-        ASSERT_TRUE((gen(pos) == 0u) ||
-                    (static_cast<int>(gen(pos)) > initial_state.Get(key(pos)))
-                    ) << "key: " << key(pos)
-                      << "; gen: " << gen(pos)
-                      << "; initgen: "
-                      << initial_state.Get(key(pos));
+        ASSERT_TRUE((gen(pos) == 0u) || (static_cast<int>(gen(pos)) > initial_state.Get(key(pos))))
+            << "key: " << key(pos) << "; gen: " << gen(pos)
+            << "; initgen: " << initial_state.Get(key(pos));
 
         // Advance to next key in the valid key space
         if (key(pos) < key(current)) {
@@ -304,17 +294,9 @@ class TestState {
   int seed_;
   port::AtomicPointer quit_flag_;
 
-  enum ReaderState {
-    STARTING,
-    RUNNING,
-    DONE
-  };
+  enum ReaderState { STARTING, RUNNING, DONE };
 
-  explicit TestState(int s)
-      : seed_(s),
-        quit_flag_(NULL),
-        state_(STARTING),
-        state_cv_(&mu_) {}
+  explicit TestState(int s) : seed_(s), quit_flag_(NULL), state_(STARTING), state_cv_(&mu_) {}
 
   void Wait(ReaderState s) {
     mu_.Lock();
@@ -377,6 +359,4 @@ TEST(SkipTest, Concurrent5) { RunConcurrent(5); }
 
 }  // namespace leveldb
 
-int main(int argc, char** argv) {
-  return leveldb::test::RunAllTests();
-}
+int main(int argc, char** argv) { return leveldb::test::RunAllTests(); }

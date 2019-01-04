@@ -5,11 +5,11 @@
 #include <cstdint>
 #include <memory>
 
-namespace tera{
+namespace tera {
 class Collector {
-public:
-    virtual ~Collector() {}
-    // return a instant value of the metric for tera to dump log and other usage
-    virtual int64_t Collect() = 0;
+ public:
+  virtual ~Collector() {}
+  // return a instant value of the metric for tera to dump log and other usage
+  virtual int64_t Collect() = 0;
 };
 }

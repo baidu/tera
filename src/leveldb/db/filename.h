@@ -49,8 +49,7 @@ extern std::string TableFileName(const std::string& dbname, uint64_t number);
 // Return the name of the descriptor file for the db named by
 // "dbname" and the specified incarnation number.  The result will be
 // prefixed with "dbname".
-extern std::string DescriptorFileName(const std::string& dbname,
-                                      uint64_t number);
+extern std::string DescriptorFileName(const std::string& dbname, uint64_t number);
 
 // Return the name of the current file.  This file contains the name
 // of the current manifest file.  The result will be prefixed with
@@ -74,23 +73,18 @@ extern std::string OldInfoLogFileName(const std::string& dbname);
 // If filename is a leveldb file, store the type of the file in *type.
 // The number encoded in the filename is stored in *number.  If the
 // filename was successfully parsed, returns true.  Else return false.
-extern bool ParseFileName(const std::string& filename,
-                          uint64_t* number,
-                          FileType* type);
+extern bool ParseFileName(const std::string& filename, uint64_t* number, FileType* type);
 
 // Make the CURRENT file point to the descriptor file with the
 // specified number.
-extern Status SetCurrentFile(Env* env, const std::string& dbname,
-                             uint64_t descriptor_number);
-
+extern Status SetCurrentFile(Env* env, const std::string& dbname, uint64_t descriptor_number);
 
 const char* FileTypeToString(FileType type);
 
 // build a full path file number from dbname&filenumber, format:
 // |--tabletnum(4B)--|--filenum(4B)--|
 // tabletnum = 0x80000000|real_tablet_num
-extern uint64_t BuildFullFileNumber(const std::string& dbname,
-                                    uint64_t number);
+extern uint64_t BuildFullFileNumber(const std::string& dbname, uint64_t number);
 
 // Build tablet path from tablet_num
 // E.g. construct "/table1/tablet000003"
@@ -102,15 +96,14 @@ std::string BuildTabletLgPath(const std::string& prfix, uint64_t tablet, uint64_
 // Build file path from tablet_num & lg_num & file number
 // E.g. construct "/table1/tablet000003/0/00000001.sst"
 //      from (/table1, 3, 0, 1)
-std::string BuildTableFilePath(const std::string& prefix, uint64_t tablet,
-                               uint64_t lg, uint64_t number);
+std::string BuildTableFilePath(const std::string& prefix, uint64_t tablet, uint64_t lg,
+                               uint64_t number);
 
 // Build trash file path from tablet_num & lg & file number & time
 // E.g. construct "/table1/tablet000003/0/00000001.sst.20170718-17-08-30"
 //      from (/table1, 3, 0, 1, 20170718-17-08-30)
-std::string BuildTrashTableFilePath(const std::string& prefix, uint64_t tablet,
-                                    uint32_t lg_id, uint64_t number,
-                                    const std::string& time);
+std::string BuildTrashTableFilePath(const std::string& prefix, uint64_t tablet, uint32_t lg_id,
+                                    uint64_t number, const std::string& time);
 
 // get time string from trash file path
 // E.g. get "20170718-17-08-30"
@@ -121,15 +114,13 @@ std::string GetTimeStrFromTrashFile(const std::string& path);
 // Build file path from lg_num & full file number
 // E.g. construct "/table1/tablet000003/0/00000001.sst"
 //      from (/table1, 0, 0x8000000300000001)
-std::string BuildTableFilePath(const std::string& prefix,
-                               uint64_t lg, uint64_t full_number);
+std::string BuildTableFilePath(const std::string& prefix, uint64_t lg, uint64_t full_number);
 
 // Parse a db_impl name to prefix, tablet number, lg number...
 // db_impl name format maybe:
 // /.../tablename/tablet000012/2    (have tablet name, allow split)
 // or /.../tablename/2              (have none tablet name, donot allow split)
-bool ParseDbName(const std::string& dbname, std::string* prefix,
-                 uint64_t* tablet, uint64_t* lg);
+bool ParseDbName(const std::string& dbname, std::string* prefix, uint64_t* tablet, uint64_t* lg);
 
 // Parse a full file number to tablet number & file number
 bool ParseFullFileNumber(uint64_t full_number, uint64_t* tablet, uint64_t* file);

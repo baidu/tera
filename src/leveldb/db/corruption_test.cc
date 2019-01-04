@@ -48,9 +48,9 @@ class CorruptionTest {
   }
 
   ~CorruptionTest() {
-     delete db_;
-     DestroyDB(dbname_, Options());
-     delete tiny_cache_;
+    delete db_;
+    DestroyDB(dbname_, Options());
+    delete tiny_cache_;
   }
 
   Status TryReopen(Options* options = NULL) {
@@ -62,9 +62,7 @@ class CorruptionTest {
     return DB::Open(opt, dbname_, &db_);
   }
 
-  void Reopen(Options* options = NULL) {
-    ASSERT_OK(TryReopen(options));
-  }
+  void Reopen(Options* options = NULL) { ASSERT_OK(TryReopen(options)); }
 
   void RepairDB() {
     delete db_;
@@ -76,7 +74,7 @@ class CorruptionTest {
     std::string key_space, value_space;
     WriteBatch batch;
     for (int i = 0; i < n; i++) {
-      //if ((i % 100) == 0) fprintf(stderr, "@ %d of %d\n", i, n);
+      // if ((i % 100) == 0) fprintf(stderr, "@ %d of %d\n", i, n);
       Slice key = Key(i, &key_space);
       batch.Clear();
       batch.Put(key, Value(i, &value_space));
@@ -95,9 +93,7 @@ class CorruptionTest {
     for (iter->SeekToFirst(); iter->Valid(); iter->Next()) {
       uint64_t key;
       Slice in(iter->key());
-      if (!ConsumeDecimalNumber(&in, &key) ||
-          !in.empty() ||
-          key < next_expected) {
+      if (!ConsumeDecimalNumber(&in, &key) || !in.empty() || key < next_expected) {
         bad_keys++;
         continue;
       }
@@ -111,8 +107,7 @@ class CorruptionTest {
     }
     delete iter;
 
-    fprintf(stderr,
-            "expected=%d..%d; got=%d; bad_keys=%d; bad_values=%d; missed=%d\n",
+    fprintf(stderr, "expected=%d..%d; got=%d; bad_keys=%d; bad_values=%d; missed=%d\n",
             min_expected, max_expected, correct, bad_keys, bad_values, missed);
     ASSERT_LE(min_expected, correct);
     ASSERT_GE(max_expected, correct);
@@ -122,7 +117,7 @@ class CorruptionTest {
     // Pick file to corrupt
     std::string db_path = dbname_;
     if (lg_id >= 0) {
-        db_path = dbname_ + "/" + Uint64ToString(lg_id);
+      db_path = dbname_ + "/" + Uint64ToString(lg_id);
     }
     std::vector<std::string> filenames;
     ASSERT_OK(env_.GetChildren(db_path, &filenames));
@@ -131,8 +126,7 @@ class CorruptionTest {
     std::string fname;
     int picked_number = -1;
     for (size_t i = 0; i < filenames.size(); i++) {
-      if (ParseFileName(filenames[i], &number, &type) &&
-          type == filetype &&
+      if (ParseFileName(filenames[i], &number, &type) && type == filetype &&
           int(number) > picked_number) {  // Pick latest file
         fname = db_path + "/" + filenames[i];
         picked_number = number;
@@ -175,8 +169,7 @@ class CorruptionTest {
   int Property(const std::string& name) {
     std::string property;
     int result;
-    if (db_->GetProperty(name, &property) &&
-        sscanf(property.c_str(), "%d", &result) == 1) {
+    if (db_->GetProperty(name, &property) && sscanf(property.c_str(), "%d", &result) == 1) {
       return result;
     } else {
       return -1;
@@ -201,7 +194,7 @@ class CorruptionTest {
 TEST(CorruptionTest, Recovery) {
   Build(100);
   Check(100, 100);
-  Corrupt(kLogFile, 19, 1);      // WriteBatch tag for first record
+  Corrupt(kLogFile, 19, 1);                      // WriteBatch tag for first record
   Corrupt(kLogFile, log::kBlockSize + 1000, 1);  // Somewhere in second block
   Reopen();
 
@@ -366,6 +359,4 @@ TEST(CorruptionTest, UnrelatedKeys) {
 
 }  // namespace leveldb
 
-int main(int argc, char** argv) {
-  return leveldb::test::RunAllTests();
-}
+int main(int argc, char** argv) { return leveldb::test::RunAllTests(); }

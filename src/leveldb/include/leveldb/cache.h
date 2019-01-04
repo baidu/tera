@@ -37,11 +37,11 @@ struct LRUHandle {
   LRUHandle* next_hash;
   LRUHandle* next;
   LRUHandle* prev;
-  size_t charge;      // TODO(opt): Only allow uint32_t?
+  size_t charge;  // TODO(opt): Only allow uint32_t?
   size_t key_length;
   uint32_t refs;
   uint32_t hash;      // Hash of key(); used for fast sharding and comparisons
-  uint64_t cache_id; // cache id, user spec
+  uint64_t cache_id;  // cache id, user spec
   char key_data[1];   // Beginning of key
 
   Slice key() const {
@@ -62,14 +62,14 @@ extern Cache* NewBlockBasedCache(size_t capacity);
 
 class Cache {
  public:
-  Cache() : rep_(NULL) { }
+  Cache() : rep_(NULL) {}
 
   // Destroys all existing entries by calling the "deleter"
   // function that was passed to the constructor.
   virtual ~Cache();
 
   // Opaque handle to an entry stored in the cache.
-  struct Handle { };
+  struct Handle {};
 
   // Insert a mapping from key->value into the cache and assign it
   // the specified charge against the total cache capacity.

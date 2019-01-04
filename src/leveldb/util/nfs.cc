@@ -12,8 +12,8 @@
 #include "util/hash.h"
 #include "util/mutexlock.h"
 #include "util/string_ext.h"
-#include "../common/timer.h"
-#include "../common/counter.h"
+#include "common/timer.h"
+#include "common/counter.h"
 
 namespace leveldb {
 
@@ -41,8 +41,7 @@ static int (*nfsClose)(nfs::NFSFILE* stream);
 static int (*nfsForceRelease)(const char* path);
 
 static ssize_t (*nfsRead)(nfs::NFSFILE* stream, void* ptr, size_t size);
-static ssize_t (*nfsPRead)(nfs::NFSFILE* stream, void* ptr, size_t size,
-                        uint64_t offset);
+static ssize_t (*nfsPRead)(nfs::NFSFILE* stream, void* ptr, size_t size, uint64_t offset);
 static ssize_t (*nfsWrite)(nfs::NFSFILE* stream, const void* ptr, size_t size);
 
 static int (*nfsFsync)(nfs::NFSFILE* stream);
@@ -57,26 +56,25 @@ void* ResolveSymbol(void* dl, const char* sym) {
   dlerror();
   void* sym_ptr = dlsym(dl, sym);
   const char* error = dlerror();
-  if (strcmp(sym,"SetAssignNamespaceIdFunc") == 0 && error != NULL) {
-      fprintf(stderr, "libnfs.so does not support federation\n");
-      return NULL;
+  if (strcmp(sym, "SetAssignNamespaceIdFunc") == 0 && error != NULL) {
+    fprintf(stderr, "libnfs.so does not support federation\n");
+    return NULL;
   }
-  if (strcmp(sym,"SetDirOwner") == 0 && error != NULL) {
-      fprintf(stderr, "libnfs.so does not support SetDirOwner\n");
-      return NULL;
+  if (strcmp(sym, "SetDirOwner") == 0 && error != NULL) {
+    fprintf(stderr, "libnfs.so does not support SetDirOwner\n");
+    return NULL;
   }
-  if (strcmp(sym,"ClearDirOwner") == 0 && error != NULL) {
-      fprintf(stderr, "libnfs.so does not support ClearDirOwner\n");
-      return NULL;
+  if (strcmp(sym, "ClearDirOwner") == 0 && error != NULL) {
+    fprintf(stderr, "libnfs.so does not support ClearDirOwner\n");
+    return NULL;
   }
 
-  if (strcmp(sym,"ForceRelease") == 0 && error != NULL) {
-      fprintf(stderr, "libnfs.so does not support ForceRelease\n");
-      return NULL;
+  if (strcmp(sym, "ForceRelease") == 0 && error != NULL) {
+    fprintf(stderr, "libnfs.so does not support ForceRelease\n");
+    return NULL;
   }
   if (error != NULL) {
-    fprintf(stderr, "resolve symbol %s from libnfs.so error: %s\n",
-            sym, error);
+    fprintf(stderr, "resolve symbol %s from libnfs.so error: %s\n", sym, error);
     abort();
   }
   return sym_ptr;
@@ -91,7 +89,7 @@ void Nfs::LoadSymbol() {
   }
 
   *(void**)(&printVersion) = ResolveSymbol(dl, "PrintNfsVersion");
-  //fprintf(stderr, "libnfs.so version: \n%s\n\n", (*printVersion)());
+  // fprintf(stderr, "libnfs.so version: \n%s\n\n", (*printVersion)());
 
   *(void**)(&nfsInit) = ResolveSymbol(dl, "Init");
   *(void**)(&nfsSetComlogLevel) = ResolveSymbol(dl, "SetComlogLevel");
@@ -120,9 +118,7 @@ void Nfs::LoadSymbol() {
   *(void**)(&nfsSetAssignNamespaceIdFunc) = ResolveSymbol(dl, "SetAssignNamespaceIdFunc");
 }
 
-NFile::NFile(nfs::NFSFILE* file, const std::string& name)
-  : file_(file), name_(name) {
-}
+NFile::NFile(nfs::NFSFILE* file, const std::string& name) : file_(file), name_(name) {}
 NFile::~NFile() {
   if (file_) {
     CloseFile();
@@ -196,27 +192,25 @@ port::Mutex Nfs::mu_;
 static Nfs* instance = NULL;
 
 int Nfs::CalcNamespaceId(const char* c_path, int max_namespaces) {
-    if (!c_path) {
-      fprintf(stderr, "null path for Nfs::CalcNamespaceId\n");
-      return -1;
-    }
-    std::string path(c_path);
-    size_t pos = path.rfind("tablet");
-    if (pos == std::string::npos) {
-        return 0;
-    }
-    size_t pos2 = path.find('/', pos);
-    if (pos2 == std::string::npos) {
-        pos2 = path.size();
-    }
-    std::string hash_path = path.substr(pos, pos2 - pos);
-    uint32_t index = Hash(hash_path.c_str(), hash_path.size(),
-                          1984) % max_namespaces;
-    return index;
+  if (!c_path) {
+    fprintf(stderr, "null path for Nfs::CalcNamespaceId\n");
+    return -1;
+  }
+  std::string path(c_path);
+  size_t pos = path.rfind("tablet");
+  if (pos == std::string::npos) {
+    return 0;
+  }
+  size_t pos2 = path.find('/', pos);
+  if (pos2 == std::string::npos) {
+    pos2 = path.size();
+  }
+  std::string hash_path = path.substr(pos, pos2 - pos);
+  uint32_t index = Hash(hash_path.c_str(), hash_path.size(), 1984) % max_namespaces;
+  return index;
 }
 
-void Nfs::Init(const std::string& mountpoint, const std::string& conf_path)
-{
+void Nfs::Init(const std::string& mountpoint, const std::string& conf_path) {
   MutexLock l(&mu_);
   if (!dl_init_) {
     LoadSymbol();
@@ -224,7 +218,7 @@ void Nfs::Init(const std::string& mountpoint, const std::string& conf_path)
   }
   (*nfsSetComlogLevel)(2);
   if (nfsSetAssignNamespaceIdFunc) {
-      nfsSetAssignNamespaceIdFunc(&CalcNamespaceId);
+    nfsSetAssignNamespaceIdFunc(&CalcNamespaceId);
   }
   if (0 != (*nfsInit)(mountpoint.c_str(), conf_path.c_str())) {
     char err[256];
@@ -258,7 +252,8 @@ int32_t Nfs::CreateDirectory(const std::string& name) {
     if (0 != (*nfsAccess)(path.c_str(), F_OK) && (*nfsGetErrno)() == ENOENT) {
       if (0 != (*nfsMkdir)(path.c_str()) && (*nfsGetErrno)() != EEXIST) {
         errno = (*nfsGetErrno)();
-        fprintf(stderr, "[%s] Createdir %s fail: %d\n", tera::get_curtime_str().c_str(), name.c_str(), errno);
+        fprintf(stderr, "[%s] Createdir %s fail: %d\n", tera::get_curtime_str().c_str(),
+                name.c_str(), errno);
         return -1;
       }
     }
@@ -270,7 +265,8 @@ int32_t Nfs::DeleteDirectory(const std::string& name) {
   int32_t retval = (*nfsRmdir)(name.c_str());
   if (retval != 0) {
     errno = (*nfsGetErrno)();
-    fprintf(stderr, "[%s] DeleteDirectory %s fail: %d\n", tera::get_curtime_str().c_str(), name.c_str(), errno);
+    fprintf(stderr, "[%s] DeleteDirectory %s fail: %d\n", tera::get_curtime_str().c_str(),
+            name.c_str(), errno);
   }
   return retval;
 }
@@ -279,7 +275,8 @@ int32_t Nfs::Exists(const std::string& filename) {
   if (retval != 0) {
     errno = (*nfsGetErrno)();
     int errno_saved = errno;
-    fprintf(stderr, "[%s] Exists %s fail: %d\n", tera::get_curtime_str().c_str(), filename.c_str(), errno);
+    fprintf(stderr, "[%s] Exists %s fail: %d\n", tera::get_curtime_str().c_str(), filename.c_str(),
+            errno);
     errno = errno_saved;
   }
   return retval;
@@ -289,7 +286,8 @@ int32_t Nfs::Delete(const std::string& filename) {
   if (retval != 0) {
     errno = (*nfsGetErrno)();
     if (errno != EISDIR) {
-      fprintf(stderr, "[%s] Delete %s fail: %d\n", tera::get_curtime_str().c_str(), filename.c_str(), errno);
+      fprintf(stderr, "[%s] Delete %s fail: %d\n", tera::get_curtime_str().c_str(),
+              filename.c_str(), errno);
     }
   }
   return retval;
@@ -301,7 +299,8 @@ int32_t Nfs::GetFileSize(const std::string& filename, uint64_t* size) {
     *size = fileinfo.st_size;
   } else {
     errno = (*nfsGetErrno)();
-    fprintf(stderr, "[%s] Getfilesize %s fail: %d\n", tera::get_curtime_str().c_str(), filename.c_str(), errno);
+    fprintf(stderr, "[%s] Getfilesize %s fail: %d\n", tera::get_curtime_str().c_str(),
+            filename.c_str(), errno);
   }
   return retval;
 }
@@ -309,13 +308,14 @@ int32_t Nfs::Rename(const std::string& from, const std::string& to) {
   int32_t retval = (*nfsRename)(from.c_str(), to.c_str());
   if (retval != 0) {
     errno = (*nfsGetErrno)();
-    fprintf(stderr, "[%s] Rename %s to %s fail: %d\n", tera::get_curtime_str().c_str(), from.c_str(), to.c_str(), errno);
+    fprintf(stderr, "[%s] Rename %s to %s fail: %d\n", tera::get_curtime_str().c_str(),
+            from.c_str(), to.c_str(), errno);
   }
   return retval;
 }
 
 DfsFile* Nfs::OpenFile(const std::string& filename, int32_t flags) {
-  //fprintf(stderr, "OpenFile %s %d\n", filename.c_str(), flags);
+  // fprintf(stderr, "OpenFile %s %d\n", filename.c_str(), flags);
   nfs::NFSFILE* file = NULL;
   if (flags == RDONLY) {
     file = (*nfsOpen)(filename.c_str(), "r");
@@ -327,7 +327,8 @@ DfsFile* Nfs::OpenFile(const std::string& filename, int32_t flags) {
     return new NFile(file, filename);
   }
   errno = (*nfsGetErrno)();
-  fprintf(stderr, "[%s] Openfile %s fail: %d\n", tera::get_curtime_str().c_str(), filename.c_str(), errno);
+  fprintf(stderr, "[%s] Openfile %s fail: %d\n", tera::get_curtime_str().c_str(), filename.c_str(),
+          errno);
   return NULL;
 }
 
@@ -335,7 +336,8 @@ int32_t Nfs::Stat(const std::string& filename, struct stat* fstat) {
   int32_t retval = (*nfsStat)(filename.c_str(), fstat);
   if (retval != 0) {
     errno = (*nfsGetErrno)();
-    //fprintf(stderr, "[%s] Stat %s fail: %d\n", tera::get_curtime_str().c_str(), filename.c_str(), errno);
+    // fprintf(stderr, "[%s] Stat %s fail: %d\n",
+    // tera::get_curtime_str().c_str(), filename.c_str(), errno);
   }
   return retval;
 }
@@ -344,13 +346,13 @@ int32_t Nfs::Copy(const std::string& from, const std::string& to) {
   // not support
   return -1;
 }
-int32_t Nfs::ListDirectory(const std::string& path,
-                           std::vector<std::string>* result) {
+int32_t Nfs::ListDirectory(const std::string& path, std::vector<std::string>* result) {
   nfs::NFSDIR* dir = (*nfsOpendir)(path.c_str());
   if (NULL == dir) {
     errno = (*nfsGetErrno)();
     int errno_saved = errno;
-    fprintf(stderr, "[%s] Opendir %s fail: %d\n", tera::get_curtime_str().c_str(), path.c_str(), errno);
+    fprintf(stderr, "[%s] Opendir %s fail: %d\n", tera::get_curtime_str().c_str(), path.c_str(),
+            errno);
     errno = errno_saved;
     return -1;
   }
@@ -364,7 +366,8 @@ int32_t Nfs::ListDirectory(const std::string& path,
   errno = (*nfsGetErrno)();
   int errno_saved = errno;
   if (0 != errno) {
-    fprintf(stderr, "[%s] List %s error: %d\n", tera::get_curtime_str().c_str(), path.c_str(), errno);
+    fprintf(stderr, "[%s] List %s error: %d\n", tera::get_curtime_str().c_str(), path.c_str(),
+            errno);
     (*nfsClosedir)(dir);
     errno = errno_saved;
     return -1;
@@ -377,8 +380,7 @@ int32_t Nfs::LockDirectory(const std::string& path) {
   int ret = (*nfsSetDirOwner)(path.c_str());
   if (ret != 0) {
     errno = (*nfsGetErrno)();
-    fprintf(stderr, "[LockDirectory] lock dir %s fail, errno: %d\n",
-        path.c_str(), errno);
+    fprintf(stderr, "[LockDirectory] lock dir %s fail, errno: %d\n", path.c_str(), errno);
     return -1;
   }
 
@@ -386,8 +388,7 @@ int32_t Nfs::LockDirectory(const std::string& path) {
   ret = ListDirectory(path, &files);
   if (ret != 0) {
     errno = (*nfsGetErrno)();
-    fprintf(stderr, "[LockDirectory] list dir %s fail, errno: %d\n",
-        path.c_str(), errno);
+    fprintf(stderr, "[LockDirectory] list dir %s fail, errno: %d\n", path.c_str(), errno);
     return -1;
   }
 
@@ -399,7 +400,7 @@ int32_t Nfs::LockDirectory(const std::string& path) {
       if (ret != 0) {
         errno = (*nfsGetErrno)();
         fprintf(stderr, "[LockDirectory] force release file %s fail, errno: %d\n",
-            file_name.c_str(), errno);
+                file_name.c_str(), errno);
         return -1;
       }
     }
@@ -407,13 +408,10 @@ int32_t Nfs::LockDirectory(const std::string& path) {
   return 0;
 }
 
-int32_t Nfs::UnlockDirectory(const std::string& path) {
-  return (*nfsClearDirOwner)(path.c_str());
-}
+int32_t Nfs::UnlockDirectory(const std::string& path) { return (*nfsClearDirOwner)(path.c_str()); }
 
 int32_t Nfs::ClearDirOwner(const std::string& path) {
   return (*nfsForceClearDirOwner)(path.c_str());
 }
-
 }
 /* vim: set expandtab ts=2 sw=2 sts=2 tw=100: */

@@ -8,6 +8,7 @@
 #include <functional>
 #include <iostream>
 #include <map>
+#include <mutex>
 #include <vector>
 #include "proto/master_rpc.pb.h"
 #include "master/procedure.h"
@@ -16,67 +17,67 @@
 namespace tera {
 namespace master {
 
-enum class CreateTablePhase {
-    kPrepare,
-    kUpdateMeta,
-    kLoadTablets,
-    kEofPhase
-};
+enum class CreateTablePhase { kPrepare, kUpdateMeta, kLoadTablets, kEofPhase };
 
-std::ostream& operator<< (std::ostream& o, const CreateTablePhase& phase);
+std::ostream& operator<<(std::ostream& o, const CreateTablePhase& phase);
 
 class CreateTableProcedure : public Procedure {
-public:
-    CreateTableProcedure(const CreateTableRequest* request, 
-            CreateTableResponse* response, 
-            google::protobuf::Closure* closure,
-            ThreadPool* thread_pool);
+ public:
+  CreateTableProcedure(const CreateTableRequest* request, CreateTableResponse* response,
+                       google::protobuf::Closure* closure, ThreadPool* thread_pool);
 
-    virtual std::string ProcId() const;
+  virtual std::string ProcId() const;
 
-    virtual void RunNextStage();
+  virtual void RunNextStage();
 
-    virtual ~CreateTableProcedure() {}
+  virtual ~CreateTableProcedure() {}
 
-    virtual bool Done();
+  virtual bool Done();
 
-private:
-    typedef std::function<void (CreateTableProcedure*, const CreateTablePhase&)> CreateTablePhaseHandler; 
+ private:
+  typedef std::function<void(CreateTableProcedure*, const CreateTablePhase&)>
+      CreateTablePhaseHandler;
 
-    void SetNextPhase(const CreateTablePhase& phase) {phases_.emplace_back(phase);}
+  void SetNextPhase(const CreateTablePhase& phase) {
+    std::lock_guard<std::mutex> lock_guard(phase_mutex_);
+    phases_.emplace_back(phase);
+  }
 
-    CreateTablePhase GetCurrentPhase() {return phases_.back();}
+  CreateTablePhase GetCurrentPhase() {
+    std::lock_guard<std::mutex> lock_guard(phase_mutex_);
+    return phases_.back();
+  }
 
-    void EnterPhaseAndResponseStatus(StatusCode status, const CreateTablePhase& phase) {
-        response_->set_status(status);
-        SetNextPhase(phase);
-    }
+  void EnterPhaseAndResponseStatus(StatusCode status, const CreateTablePhase& phase) {
+    response_->set_status(status);
+    SetNextPhase(phase);
+  }
 
-    void EnterEofPhaseWithResponseStatus(StatusCode status) {
-        EnterPhaseAndResponseStatus(status, CreateTablePhase::kEofPhase);
-    }
+  void EnterEofPhaseWithResponseStatus(StatusCode status) {
+    EnterPhaseAndResponseStatus(status, CreateTablePhase::kEofPhase);
+  }
 
-    void PreCheckHandler(const CreateTablePhase&);
-    void UpdateMetaHandler(const CreateTablePhase&);
-    void LoadTabletsHandler(const CreateTablePhase&);
-    void EofHandler(const CreateTablePhase&);
-    
-    void UpdateMetaDone(bool succ);
+  void PreCheckHandler(const CreateTablePhase&);
+  void UpdateMetaHandler(const CreateTablePhase&);
+  void LoadTabletsHandler(const CreateTablePhase&);
+  void EofHandler(const CreateTablePhase&);
 
-private:
-    const CreateTableRequest* request_;
-    CreateTableResponse* response_;
-    google::protobuf::Closure* rpc_closure_;
-    std::string table_name_;
-    TablePtr table_;
-    std::vector<TabletPtr> tablets_;
-    std::vector<MetaWriteRecord> meta_records_;
-    std::atomic<bool> update_meta_;
-    std::atomic<bool> done_ ;
-    std::vector<CreateTablePhase> phases_;
-    static std::map<CreateTablePhase, CreateTablePhaseHandler> phase_handlers_;
-    ThreadPool* thread_pool_;
+  void UpdateMetaDone(bool succ);
+
+ private:
+  const CreateTableRequest* request_;
+  CreateTableResponse* response_;
+  google::protobuf::Closure* rpc_closure_;
+  std::string table_name_;
+  TablePtr table_;
+  std::vector<TabletPtr> tablets_;
+  std::vector<MetaWriteRecord> meta_records_;
+  std::atomic<bool> update_meta_;
+  std::atomic<bool> done_;
+  std::mutex phase_mutex_;
+  std::vector<CreateTablePhase> phases_;
+  static std::map<CreateTablePhase, CreateTablePhaseHandler> phase_handlers_;
+  ThreadPool* thread_pool_;
 };
-
 }
 }

@@ -19,64 +19,57 @@ namespace tera {
 namespace tabletnode {
 
 class TabletNodeClient : public RpcClient<TabletNodeServer::Stub> {
-public:
-    static void SetRpcOption(int32_t max_inflow = -1, int32_t max_outflow = -1,
-                             int32_t pending_buffer_size = -1,
-                             int32_t thread_num = -1);
+ public:
+  static void SetRpcOption(int32_t max_inflow = -1, int32_t max_outflow = -1,
+                           int32_t pending_buffer_size = -1, int32_t thread_num = -1);
 
-    TabletNodeClient(ThreadPool* thread_pool, const std::string& addr = "",
-                     int32_t rpc_timeout = FLAGS_tera_rpc_timeout_period);
+  TabletNodeClient(ThreadPool* thread_pool, const std::string& addr = "",
+                   int32_t rpc_timeout = FLAGS_tera_rpc_timeout_period);
 
-    ~TabletNodeClient();
+  ~TabletNodeClient();
 
-    bool LoadTablet(const LoadTabletRequest* request,
-                    LoadTabletResponse* response,
-                    std::function<void (LoadTabletRequest*, LoadTabletResponse*, bool, int)> done = NULL);
+  bool LoadTablet(
+      const LoadTabletRequest* request, LoadTabletResponse* response,
+      std::function<void(LoadTabletRequest*, LoadTabletResponse*, bool, int)> done = NULL);
 
-    bool UnloadTablet(const UnloadTabletRequest* request,
-                      UnloadTabletResponse* response,
-                      std::function<void (UnloadTabletRequest*, UnloadTabletResponse*, bool, int)> done = NULL);
+  bool UnloadTablet(
+      const UnloadTabletRequest* request, UnloadTabletResponse* response,
+      std::function<void(UnloadTabletRequest*, UnloadTabletResponse*, bool, int)> done = NULL);
 
-    bool ReadTablet(const ReadTabletRequest* request,
-                    ReadTabletResponse* response,
-                    std::function<void (ReadTabletRequest*, ReadTabletResponse*, bool, int)> done = NULL);
+  bool ReadTablet(
+      const ReadTabletRequest* request, ReadTabletResponse* response,
+      std::function<void(ReadTabletRequest*, ReadTabletResponse*, bool, int)> done = NULL);
 
-    bool WriteTablet(const WriteTabletRequest* request,
-                     WriteTabletResponse* response,
-                     std::function<void (WriteTabletRequest*, WriteTabletResponse*, bool, int)> done = NULL);
+  bool WriteTablet(
+      const WriteTabletRequest* request, WriteTabletResponse* response,
+      std::function<void(WriteTabletRequest*, WriteTabletResponse*, bool, int)> done = NULL);
 
-    bool ScanTablet(const ScanTabletRequest* request,
-                    ScanTabletResponse* response,
-                    std::function<void (ScanTabletRequest*, ScanTabletResponse*, bool, int)> done = NULL);
+  bool ScanTablet(
+      const ScanTabletRequest* request, ScanTabletResponse* response,
+      std::function<void(ScanTabletRequest*, ScanTabletResponse*, bool, int)> done = NULL);
 
-    bool Query(ThreadPool* thread_pool, const QueryRequest* request,
-               QueryResponse* response,
-               std::function<void (QueryRequest*, QueryResponse*, bool, int)> done = NULL);
+  bool Query(ThreadPool* thread_pool, const QueryRequest* request, QueryResponse* response,
+             std::function<void(QueryRequest*, QueryResponse*, bool, int)> done = NULL);
 
-    bool SplitTablet(const SplitTabletRequest* request,
-                     SplitTabletResponse* response,
-                     std::function<void (SplitTabletRequest*, SplitTabletResponse*, bool, int)> done = NULL);
+  bool ComputeSplitKey(
+      const SplitTabletRequest* request, SplitTabletResponse* response,
+      std::function<void(SplitTabletRequest*, SplitTabletResponse*, bool, int)> done = NULL);
 
-    bool ComputeSplitKey(const SplitTabletRequest* request, SplitTabletResponse* response, 
-                     std::function<void (SplitTabletRequest*, SplitTabletResponse*, bool, int)> done = NULL);
+  bool CompactTablet(
+      const CompactTabletRequest* request, CompactTabletResponse* response,
+      std::function<void(CompactTabletRequest*, CompactTabletResponse*, bool, int)> done = NULL);
+  bool CmdCtrl(const TsCmdCtrlRequest* request, TsCmdCtrlResponse* response,
+               std::function<void(TsCmdCtrlRequest*, TsCmdCtrlResponse*, bool, int)> done = NULL);
 
-    bool CompactTablet(const CompactTabletRequest* request,
-                       CompactTabletResponse* response,
-                       std::function<void (CompactTabletRequest*, CompactTabletResponse*, bool, int)> done = NULL);
-    bool CmdCtrl(const TsCmdCtrlRequest* request,
-                 TsCmdCtrlResponse* response,
-                 std::function<void (TsCmdCtrlRequest*, TsCmdCtrlResponse*, bool, int)> done = NULL);
+  bool Update(const UpdateRequest* request, UpdateResponse* response,
+              std::function<void(UpdateRequest*, UpdateResponse*, bool, int)> done = NULL);
 
-    bool Update(const UpdateRequest* request,
-                      UpdateResponse* response,
-                      std::function<void (UpdateRequest*, UpdateResponse*, bool, int)> done = NULL);
-
-private:
-    int32_t rpc_timeout_;
-    ThreadPool* thread_pool_;
+ private:
+  int32_t rpc_timeout_;
+  ThreadPool* thread_pool_;
 };
 
-} // namespace sdk
-} // namespace tera
+}  // namespace sdk
+}  // namespace tera
 
-#endif // TERA_TABLETNODE_TABLETNODE_CLIENT_ASYNC_H_
+#endif  // TERA_TABLETNODE_TABLETNODE_CLIENT_ASYNC_H_

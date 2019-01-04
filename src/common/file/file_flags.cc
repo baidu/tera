@@ -4,6 +4,4 @@
 
 #include <gflags/gflags.h>
 
-DEFINE_int32(file_op_retry_times, 3,
-             "the max retry times when file operation occurred error");
-
+DEFINE_int32(file_op_retry_times, 3, "the max retry times when file operation occurred error");

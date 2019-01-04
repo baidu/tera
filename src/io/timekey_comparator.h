@@ -12,26 +12,25 @@ namespace tera {
 namespace io {
 
 class TimekeyComparator : public leveldb::Comparator {
-public:
-    TimekeyComparator(const leveldb::Comparator* comparator);
-    ~TimekeyComparator();
+ public:
+  TimekeyComparator(const leveldb::Comparator* comparator);
+  ~TimekeyComparator();
 
-    int Compare(const leveldb::Slice& a, const leveldb::Slice& b) const;
+  int Compare(const leveldb::Slice& a, const leveldb::Slice& b) const;
 
-    const char* Name() const;
+  const char* Name() const;
 
-    void FindShortestSeparator(std::string* start,
-                               const leveldb::Slice& limit) const;
+  void FindShortestSeparator(std::string* start, const leveldb::Slice& limit) const;
 
-    void FindShortSuccessor(std::string* key) const;
+  void FindShortSuccessor(std::string* key) const;
 
-private:
-    const leveldb::Comparator* comparator_;
+ private:
+  const leveldb::Comparator* comparator_;
 };
 
 const TimekeyComparator* NewTimekeyComparator(const leveldb::Comparator* comparator);
 
-} // namespace io
-} // namespace tera
+}  // namespace io
+}  // namespace tera
 
-#endif // TERA_IO_TIMEKEY_COMARATOR_H_
+#endif  // TERA_IO_TIMEKEY_COMARATOR_H_

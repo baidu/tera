@@ -29,20 +29,16 @@ class BloomTest {
   std::vector<std::string> keys_;
 
  public:
-  BloomTest() : policy_(NewBloomFilterPolicy(10)) { }
+  BloomTest() : policy_(NewBloomFilterPolicy(10)) {}
 
-  ~BloomTest() {
-    delete policy_;
-  }
+  ~BloomTest() { delete policy_; }
 
   void Reset() {
     keys_.clear();
     filter_.clear();
   }
 
-  void Add(const Slice& s) {
-    keys_.push_back(s.ToString());
-  }
+  void Add(const Slice& s) { keys_.push_back(s.ToString()); }
 
   void Build() {
     std::vector<Slice> key_slices;
@@ -55,16 +51,14 @@ class BloomTest {
     if (kVerbose >= 2) DumpFilter();
   }
 
-  size_t FilterSize() const {
-    return filter_.size();
-  }
+  size_t FilterSize() const { return filter_.size(); }
 
   void DumpFilter() {
     fprintf(stderr, "F(");
-    for (size_t i = 0; i+1 < filter_.size(); i++) {
+    for (size_t i = 0; i + 1 < filter_.size(); i++) {
       const unsigned int c = static_cast<unsigned int>(filter_[i]);
       for (int j = 0; j < 8; j++) {
-        fprintf(stderr, "%c", (c & (1 <<j)) ? '1' : '.');
+        fprintf(stderr, "%c", (c & (1 << j)) ? '1' : '.');
       }
     }
     fprintf(stderr, ")\n");
@@ -90,8 +84,8 @@ class BloomTest {
 };
 
 TEST(BloomTest, EmptyFilter) {
-  ASSERT_TRUE(! Matches("hello"));
-  ASSERT_TRUE(! Matches("world"));
+  ASSERT_TRUE(!Matches("hello"));
+  ASSERT_TRUE(!Matches("world"));
 }
 
 TEST(BloomTest, Small) {
@@ -99,8 +93,8 @@ TEST(BloomTest, Small) {
   Add("world");
   ASSERT_TRUE(Matches("hello"));
   ASSERT_TRUE(Matches("world"));
-  ASSERT_TRUE(! Matches("x"));
-  ASSERT_TRUE(! Matches("foo"));
+  ASSERT_TRUE(!Matches("x"));
+  ASSERT_TRUE(!Matches("foo"));
 }
 
 static int NextLength(int length) {
@@ -134,31 +128,29 @@ TEST(BloomTest, VaryingLengths) {
 
     // All added keys must match
     for (size_t i = 0; i < length; i++) {
-      ASSERT_TRUE(Matches(Key(i, buffer)))
-          << "Length " << length << "; key " << i;
+      ASSERT_TRUE(Matches(Key(i, buffer))) << "Length " << length << "; key " << i;
     }
 
     // Check false positive rate
     double rate = FalsePositiveRate();
     if (kVerbose >= 1) {
-      fprintf(stderr, "False positives: %5.2f%% @ length = %6zd ; bytes = %6zd\n",
-              rate*100.0, length, FilterSize());
+      fprintf(stderr, "False positives: %5.2f%% @ length = %6zd ; bytes = %6zd\n", rate * 100.0,
+              length, FilterSize());
     }
-    ASSERT_LE(rate, 0.02);   // Must not be over 2%
-    if (rate > 0.0125) mediocre_filters++;  // Allowed, but not too often
-    else good_filters++;
+    ASSERT_LE(rate, 0.02);  // Must not be over 2%
+    if (rate > 0.0125)
+      mediocre_filters++;  // Allowed, but not too often
+    else
+      good_filters++;
   }
   if (kVerbose >= 1) {
-    fprintf(stderr, "Filters: %d good, %d mediocre\n",
-            good_filters, mediocre_filters);
+    fprintf(stderr, "Filters: %d good, %d mediocre\n", good_filters, mediocre_filters);
   }
-  ASSERT_LE(mediocre_filters, good_filters/5);
+  ASSERT_LE(mediocre_filters, good_filters / 5);
 }
 
 // Different bits-per-byte
 
 }  // namespace leveldb
 
-int main(int argc, char** argv) {
-  return leveldb::test::RunAllTests();
-}
+int main(int argc, char** argv) { return leveldb::test::RunAllTests(); }

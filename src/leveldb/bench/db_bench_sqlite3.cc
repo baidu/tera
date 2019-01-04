@@ -42,8 +42,7 @@ static const char* FLAGS_benchmarks =
     "fillrand100K,"
     "fillseq100K,"
     "readseq,"
-    "readrand100K,"
-    ;
+    "readrand100K,";
 
 // Number of key/values to place in database
 static int FLAGS_num = 1000000;
@@ -82,8 +81,7 @@ static bool FLAGS_WAL_enabled = true;
 // Use the db with the following name.
 static const char* FLAGS_db = NULL;
 
-inline
-static void ExecErrorCheck(int status, char *err_msg) {
+inline static void ExecErrorCheck(int status, char* err_msg) {
   if (status != SQLITE_OK) {
     fprintf(stderr, "SQL error: %s\n", err_msg);
     sqlite3_free(err_msg);
@@ -91,24 +89,21 @@ static void ExecErrorCheck(int status, char *err_msg) {
   }
 }
 
-inline
-static void StepErrorCheck(int status) {
+inline static void StepErrorCheck(int status) {
   if (status != SQLITE_DONE) {
     fprintf(stderr, "SQL step error: status = %d\n", status);
     exit(1);
   }
 }
 
-inline
-static void ErrorCheck(int status) {
+inline static void ErrorCheck(int status) {
   if (status != SQLITE_OK) {
     fprintf(stderr, "sqlite3 error: status = %d\n", status);
     exit(1);
   }
 }
 
-inline
-static void WalCheckpoint(sqlite3* db_) {
+inline static void WalCheckpoint(sqlite3* db_) {
   // Flush all writes to disk
   if (FLAGS_WAL_enabled) {
     sqlite3_wal_checkpoint_v2(db_, NULL, SQLITE_CHECKPOINT_FULL, NULL, NULL);
@@ -156,7 +151,7 @@ static Slice TrimSpace(Slice s) {
     start++;
   }
   int limit = s.size();
-  while (limit > start && isspace(s[limit-1])) {
+  while (limit > start && isspace(s[limit - 1])) {
     limit--;
   }
   return Slice(s.data() + start, limit - start);
@@ -180,7 +175,7 @@ class Benchmark {
 
   // State kept for progress messages
   int done_;
-  int next_report_;     // When to report next
+  int next_report_;  // When to report next
 
   void PrintHeader() {
     const int kKeySize = 16;
@@ -189,21 +184,17 @@ class Benchmark {
     fprintf(stdout, "Values:     %d bytes each\n", FLAGS_value_size);
     fprintf(stdout, "Entries:    %d\n", num_);
     fprintf(stdout, "RawSize:    %.1f MB (estimated)\n",
-            ((static_cast<int64_t>(kKeySize + FLAGS_value_size) * num_)
-             / 1048576.0));
+            ((static_cast<int64_t>(kKeySize + FLAGS_value_size) * num_) / 1048576.0));
     PrintWarnings();
     fprintf(stdout, "------------------------------------------------\n");
   }
 
   void PrintWarnings() {
 #if defined(__GNUC__) && !defined(__OPTIMIZE__)
-    fprintf(stdout,
-            "WARNING: Optimization is disabled: benchmarks unnecessarily slow\n"
-            );
+    fprintf(stdout, "WARNING: Optimization is disabled: benchmarks unnecessarily slow\n");
 #endif
 #ifndef NDEBUG
-    fprintf(stdout,
-            "WARNING: Assertions are enabled; benchmarks unnecessarily slow\n");
+    fprintf(stdout, "WARNING: Assertions are enabled; benchmarks unnecessarily slow\n");
 #endif
   }
 
@@ -265,13 +256,20 @@ class Benchmark {
 
     done_++;
     if (done_ >= next_report_) {
-      if      (next_report_ < 1000)   next_report_ += 100;
-      else if (next_report_ < 5000)   next_report_ += 500;
-      else if (next_report_ < 10000)  next_report_ += 1000;
-      else if (next_report_ < 50000)  next_report_ += 5000;
-      else if (next_report_ < 100000) next_report_ += 10000;
-      else if (next_report_ < 500000) next_report_ += 50000;
-      else                            next_report_ += 100000;
+      if (next_report_ < 1000)
+        next_report_ += 100;
+      else if (next_report_ < 5000)
+        next_report_ += 500;
+      else if (next_report_ < 10000)
+        next_report_ += 1000;
+      else if (next_report_ < 50000)
+        next_report_ += 5000;
+      else if (next_report_ < 100000)
+        next_report_ += 10000;
+      else if (next_report_ < 500000)
+        next_report_ += 50000;
+      else
+        next_report_ += 100000;
       fprintf(stderr, "... finished %d ops%30s\r", done_, "");
       fflush(stderr);
     }
@@ -286,20 +284,16 @@ class Benchmark {
 
     if (bytes_ > 0) {
       char rate[100];
-      snprintf(rate, sizeof(rate), "%6.1f MB/s",
-               (bytes_ / 1048576.0) / (finish - start_));
+      snprintf(rate, sizeof(rate), "%6.1f MB/s", (bytes_ / 1048576.0) / (finish - start_));
       if (!message_.empty()) {
-        message_  = std::string(rate) + " " + message_;
+        message_ = std::string(rate) + " " + message_;
       } else {
         message_ = rate;
       }
     }
 
-    fprintf(stdout, "%-12s : %11.3f micros/op;%s%s\n",
-            name.ToString().c_str(),
-            (finish - start_) * 1e6 / done_,
-            (message_.empty() ? "" : " "),
-            message_.c_str());
+    fprintf(stdout, "%-12s : %11.3f micros/op;%s%s\n", name.ToString().c_str(),
+            (finish - start_) * 1e6 / done_, (message_.empty() ? "" : " "), message_.c_str());
     if (FLAGS_histogram) {
       fprintf(stdout, "Microseconds per op:\n%s\n", hist_.ToString().c_str());
     }
@@ -307,22 +301,16 @@ class Benchmark {
   }
 
  public:
-  enum Order {
-    SEQUENTIAL,
-    RANDOM
-  };
-  enum DBState {
-    FRESH,
-    EXISTING
-  };
+  enum Order { SEQUENTIAL, RANDOM };
+  enum DBState { FRESH, EXISTING };
 
   Benchmark()
-  : db_(NULL),
-    db_num_(0),
-    num_(FLAGS_num),
-    reads_(FLAGS_reads < 0 ? FLAGS_num : FLAGS_reads),
-    bytes_(0),
-    rand_(301) {
+      : db_(NULL),
+        db_num_(0),
+        num_(FLAGS_num),
+        reads_(FLAGS_reads < 0 ? FLAGS_num : FLAGS_reads),
+        bytes_(0),
+        rand_(301) {
     std::vector<std::string> files;
     std::string test_dir;
     Env::Default()->GetTestDirectory(&test_dir);
@@ -429,10 +417,7 @@ class Benchmark {
     // Open database
     std::string tmp_dir;
     Env::Default()->GetTestDirectory(&tmp_dir);
-    snprintf(file_name, sizeof(file_name),
-             "%s/dbbench_sqlite3-%d.db",
-             tmp_dir.c_str(),
-             db_num_);
+    snprintf(file_name, sizeof(file_name), "%s/dbbench_sqlite3-%d.db", tmp_dir.c_str(), db_num_);
     status = sqlite3_open(file_name, &db_);
     if (status) {
       fprintf(stderr, "open error: %s\n", sqlite3_errmsg(db_));
@@ -441,16 +426,14 @@ class Benchmark {
 
     // Change SQLite cache size
     char cache_size[100];
-    snprintf(cache_size, sizeof(cache_size), "PRAGMA cache_size = %d",
-             FLAGS_num_pages);
+    snprintf(cache_size, sizeof(cache_size), "PRAGMA cache_size = %d", FLAGS_num_pages);
     status = sqlite3_exec(db_, cache_size, NULL, NULL, &err_msg);
     ExecErrorCheck(status, err_msg);
 
     // FLAGS_page_size is defaulted to 1024
     if (FLAGS_page_size != 1024) {
       char page_size[100];
-      snprintf(page_size, sizeof(page_size), "PRAGMA page_size = %d",
-               FLAGS_page_size);
+      snprintf(page_size, sizeof(page_size), "PRAGMA page_size = %d", FLAGS_page_size);
       status = sqlite3_exec(db_, page_size, NULL, NULL, &err_msg);
       ExecErrorCheck(status, err_msg);
     }
@@ -469,9 +452,8 @@ class Benchmark {
 
     // Change locking mode to exclusive and create tables/index for database
     std::string locking_stmt = "PRAGMA locking_mode = EXCLUSIVE";
-    std::string create_stmt =
-          "CREATE TABLE test (key blob, value blob, PRIMARY KEY(key))";
-    std::string stmt_array[] = { locking_stmt, create_stmt };
+    std::string create_stmt = "CREATE TABLE test (key blob, value blob, PRIMARY KEY(key))";
+    std::string stmt_array[] = {locking_stmt, create_stmt};
     int stmt_array_length = sizeof(stmt_array) / sizeof(std::string);
     for (int i = 0; i < stmt_array_length; i++) {
       status = sqlite3_exec(db_, stmt_array[i].c_str(), NULL, NULL, &err_msg);
@@ -479,8 +461,8 @@ class Benchmark {
     }
   }
 
-  void Write(bool write_sync, Order order, DBState state,
-             int num_entries, int value_size, int entries_per_batch) {
+  void Write(bool write_sync, Order order, DBState state, int num_entries, int value_size,
+             int entries_per_batch) {
     // Create new database if state == FRESH
     if (state == FRESH) {
       if (FLAGS_use_existing_db) {
@@ -502,26 +484,22 @@ class Benchmark {
     char* err_msg = NULL;
     int status;
 
-    sqlite3_stmt *replace_stmt, *begin_trans_stmt, *end_trans_stmt;
+    sqlite3_stmt* replace_stmt, *begin_trans_stmt, *end_trans_stmt;
     std::string replace_str = "REPLACE INTO test (key, value) VALUES (?, ?)";
     std::string begin_trans_str = "BEGIN TRANSACTION;";
     std::string end_trans_str = "END TRANSACTION;";
 
     // Check for synchronous flag in options
-    std::string sync_stmt = (write_sync) ? "PRAGMA synchronous = FULL" :
-                                           "PRAGMA synchronous = OFF";
+    std::string sync_stmt = (write_sync) ? "PRAGMA synchronous = FULL" : "PRAGMA synchronous = OFF";
     status = sqlite3_exec(db_, sync_stmt.c_str(), NULL, NULL, &err_msg);
     ExecErrorCheck(status, err_msg);
 
     // Preparing sqlite3 statements
-    status = sqlite3_prepare_v2(db_, replace_str.c_str(), -1,
-                                &replace_stmt, NULL);
+    status = sqlite3_prepare_v2(db_, replace_str.c_str(), -1, &replace_stmt, NULL);
     ErrorCheck(status);
-    status = sqlite3_prepare_v2(db_, begin_trans_str.c_str(), -1,
-                                &begin_trans_stmt, NULL);
+    status = sqlite3_prepare_v2(db_, begin_trans_str.c_str(), -1, &begin_trans_stmt, NULL);
     ErrorCheck(status);
-    status = sqlite3_prepare_v2(db_, end_trans_str.c_str(), -1,
-                                &end_trans_stmt, NULL);
+    status = sqlite3_prepare_v2(db_, end_trans_str.c_str(), -1, &end_trans_stmt, NULL);
     ErrorCheck(status);
 
     bool transaction = (entries_per_batch > 1);
@@ -539,16 +517,14 @@ class Benchmark {
         const char* value = gen_.Generate(value_size).data();
 
         // Create values for key-value pair
-        const int k = (order == SEQUENTIAL) ? i + j :
-                      (rand_.Next() % num_entries);
+        const int k = (order == SEQUENTIAL) ? i + j : (rand_.Next() % num_entries);
         char key[100];
         snprintf(key, sizeof(key), "%016d", k);
 
         // Bind KV values into replace_stmt
         status = sqlite3_bind_blob(replace_stmt, 1, key, 16, SQLITE_STATIC);
         ErrorCheck(status);
-        status = sqlite3_bind_blob(replace_stmt, 2, value,
-                                   value_size, SQLITE_STATIC);
+        status = sqlite3_bind_blob(replace_stmt, 2, value, value_size, SQLITE_STATIC);
         ErrorCheck(status);
 
         // Execute replace_stmt
@@ -584,18 +560,16 @@ class Benchmark {
 
   void Read(Order order, int entries_per_batch) {
     int status;
-    sqlite3_stmt *read_stmt, *begin_trans_stmt, *end_trans_stmt;
+    sqlite3_stmt* read_stmt, *begin_trans_stmt, *end_trans_stmt;
 
     std::string read_str = "SELECT * FROM test WHERE key = ?";
     std::string begin_trans_str = "BEGIN TRANSACTION;";
     std::string end_trans_str = "END TRANSACTION;";
 
     // Preparing sqlite3 statements
-    status = sqlite3_prepare_v2(db_, begin_trans_str.c_str(), -1,
-                                &begin_trans_stmt, NULL);
+    status = sqlite3_prepare_v2(db_, begin_trans_str.c_str(), -1, &begin_trans_stmt, NULL);
     ErrorCheck(status);
-    status = sqlite3_prepare_v2(db_, end_trans_str.c_str(), -1,
-                                &end_trans_stmt, NULL);
+    status = sqlite3_prepare_v2(db_, end_trans_str.c_str(), -1, &end_trans_stmt, NULL);
     ErrorCheck(status);
     status = sqlite3_prepare_v2(db_, read_str.c_str(), -1, &read_stmt, NULL);
     ErrorCheck(status);
@@ -622,7 +596,8 @@ class Benchmark {
         ErrorCheck(status);
 
         // Execute read statement
-        while ((status = sqlite3_step(read_stmt)) == SQLITE_ROW) {}
+        while ((status = sqlite3_step(read_stmt)) == SQLITE_ROW) {
+        }
         StepErrorCheck(status);
 
         // Reset SQLite statement for another use
@@ -652,7 +627,7 @@ class Benchmark {
 
   void ReadSequential() {
     int status;
-    sqlite3_stmt *pStmt;
+    sqlite3_stmt* pStmt;
     std::string read_str = "SELECT * FROM test ORDER BY key";
 
     status = sqlite3_prepare_v2(db_, read_str.c_str(), -1, &pStmt, NULL);
@@ -665,7 +640,6 @@ class Benchmark {
     status = sqlite3_finalize(pStmt);
     ErrorCheck(status);
   }
-
 };
 
 }  // namespace leveldb
@@ -678,13 +652,11 @@ int main(int argc, char** argv) {
     char junk;
     if (leveldb::Slice(argv[i]).starts_with("--benchmarks=")) {
       FLAGS_benchmarks = argv[i] + strlen("--benchmarks=");
-    } else if (sscanf(argv[i], "--histogram=%d%c", &n, &junk) == 1 &&
-               (n == 0 || n == 1)) {
+    } else if (sscanf(argv[i], "--histogram=%d%c", &n, &junk) == 1 && (n == 0 || n == 1)) {
       FLAGS_histogram = n;
     } else if (sscanf(argv[i], "--compression_ratio=%lf%c", &d, &junk) == 1) {
       FLAGS_compression_ratio = d;
-    } else if (sscanf(argv[i], "--use_existing_db=%d%c", &n, &junk) == 1 &&
-               (n == 0 || n == 1)) {
+    } else if (sscanf(argv[i], "--use_existing_db=%d%c", &n, &junk) == 1 && (n == 0 || n == 1)) {
       FLAGS_use_existing_db = n;
     } else if (sscanf(argv[i], "--num=%d%c", &n, &junk) == 1) {
       FLAGS_num = n;
@@ -698,8 +670,7 @@ int main(int argc, char** argv) {
       FLAGS_page_size = n;
     } else if (sscanf(argv[i], "--num_pages=%d%c", &n, &junk) == 1) {
       FLAGS_num_pages = n;
-    } else if (sscanf(argv[i], "--WAL_enabled=%d%c", &n, &junk) == 1 &&
-               (n == 0 || n == 1)) {
+    } else if (sscanf(argv[i], "--WAL_enabled=%d%c", &n, &junk) == 1 && (n == 0 || n == 1)) {
       FLAGS_WAL_enabled = n;
     } else if (strncmp(argv[i], "--db=", 5) == 0) {
       FLAGS_db = argv[i] + 5;
@@ -711,9 +682,9 @@ int main(int argc, char** argv) {
 
   // Choose a location for the test database if none given with --db=<path>
   if (FLAGS_db == NULL) {
-      leveldb::Env::Default()->GetTestDirectory(&default_db_path);
-      default_db_path += "/dbbench";
-      FLAGS_db = default_db_path.c_str();
+    leveldb::Env::Default()->GetTestDirectory(&default_db_path);
+    default_db_path += "/dbbench";
+    FLAGS_db = default_db_path.c_str();
   }
 
   leveldb::Benchmark benchmark;

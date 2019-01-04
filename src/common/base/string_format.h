@@ -18,4 +18,4 @@ size_t StringFormatTo(std::string* dst, const char* format, ...);
 
 std::string StringFormat(const char* format, ...);
 
-#endif // TERA_COMMON_BASE_STRING_FORMAT_H_
+#endif  // TERA_COMMON_BASE_STRING_FORMAT_H_

@@ -6,15 +6,22 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file. See the AUTHORS file for names of contributors.
 
+#include <atomic>
 #include <cstring>
-#include <stdio.h>
+#include <cstdio>
 #include <malloc.h>
-#include "table/format.h"
+
+#include "common/base/string_format.h"
+#include "format.h"
 #include "leveldb/env.h"
+#include "leveldb/persistent_cache.h"
+#include "persistent_cache_helper.h"
 #include "port/port.h"
 #include "table/block.h"
 #include "util/coding.h"
 #include "util/crc32c.h"
+#include "util/dfs_read_thread_limiter.h"
+#include "util/stop_watch.h"
 
 namespace leveldb {
 
@@ -27,8 +34,7 @@ void BlockHandle::EncodeTo(std::string* dst) const {
 }
 
 Status BlockHandle::DecodeFrom(Slice* input) {
-  if (GetVarint64(input, &offset_) &&
-      GetVarint64(input, &size_)) {
+  if (GetVarint64(input, &offset_) && GetVarint64(input, &size_)) {
     return Status::OK();
   } else {
     return Status::Corruption("bad block handle");
@@ -51,8 +57,8 @@ Status Footer::DecodeFrom(Slice* input) {
   const char* magic_ptr = input->data() + kEncodedLength - 8;
   const uint32_t magic_lo = DecodeFixed32(magic_ptr);
   const uint32_t magic_hi = DecodeFixed32(magic_ptr + 4);
-  const uint64_t magic = ((static_cast<uint64_t>(magic_hi) << 32) |
-                          (static_cast<uint64_t>(magic_lo)));
+  const uint64_t magic =
+      ((static_cast<uint64_t>(magic_hi) << 32) | (static_cast<uint64_t>(magic_lo)));
   if (magic != kTableMagicNumber) {
     return Status::InvalidArgument("not an sstable (bad magic number)");
   }
@@ -73,27 +79,29 @@ char* DirectIOAlign(RandomAccessFile* file, uint64_t offset, size_t len,
                     DirectIOArgs* direct_io_args) {
   assert(direct_io_args);
   assert(offset >= 0 && len >= 0);
-  /* use this formula you will find the number Y, 
-   * which Y is the first bigger number than X, at the same time Y is the power of 2.
+  /* use this formula you will find the number Y,
+   * which Y is the first bigger number than X, at the same time Y is the power
+   *of 2.
    * Y = (X + (2^n - 1)) & (~(2^n - 1))
-   * 
-   * this function , accept len [is X] to find aligned_len [is Y + alignment], 
+   *
+   * this function , accept len [is X] to find aligned_len [is Y + alignment],
    * accept offset [is X] to find aligned_offset [is Y - alignment]
-   * 
+   *
    * example: offset = 123 len = 610 - 123
    *         123              610
    *          [................]                   need buffer
    *
    * aligned_offset = 0, aligned_len = 1024
-   *    [.................|.................]      alloc buffer x % alignment == 0
-   *    x               x+512              x+1024  
+   *    [.................|.................]      alloc buffer x % alignment ==
+   *0
+   *    x               x+512              x+1024
    */
   size_t alignment = file->GetRequiredBufferAlignment();
-  direct_io_args->aligned_len = alignment + (len % alignment > 0 ?
-    (len + alignment - 1) & (~(alignment - 1)) : len);
+  direct_io_args->aligned_len =
+      alignment + (len % alignment > 0 ? (len + alignment - 1) & (~(alignment - 1)) : len);
 
-  direct_io_args->aligned_offset = offset > 0 ? 
-    ((offset + alignment - 1) & (~(alignment -1))) - alignment : 0;
+  direct_io_args->aligned_offset =
+      offset > 0 ? ((offset + alignment - 1) & (~(alignment - 1))) - alignment : 0;
   return (char*)memalign(alignment, direct_io_args->aligned_len);
 }
 
@@ -104,28 +112,24 @@ void FreeBuf(char* buf, bool use_direct_io_read) {
     } else {
       delete[] buf;
     }
-    buf = NULL;
   }
 }
 
-Status ReadSstFile(RandomAccessFile* file,
-                   bool use_direct_io_read,
-                   uint64_t offset,
-                   size_t len,
-                   Slice* contents,
-                   char** buf) {
+Status ReadSstFile(RandomAccessFile* file, bool use_direct_io_read, uint64_t offset, size_t len,
+                   Slice* contents, SstDataScratch* scratch) {
   Status s;
+  char* buf = nullptr;
   if (use_direct_io_read) {
     // calc and malloc align memory for direct io
     DirectIOArgs read_args;
-    *buf = DirectIOAlign(file, offset, len, &read_args);
-    if (*buf == NULL) {
-      return Status::Corruption("direct io allgn failed");
+    buf = DirectIOAlign(file, offset, len, &read_args);
+    if (buf == NULL) {
+      return Status::Corruption("direct io align failed");
     }
-    //read to align buf
-    s = file->Read(read_args.aligned_offset, read_args.aligned_len, contents, *buf);
+    // read to align buf
+    s = file->Read(read_args.aligned_offset, read_args.aligned_len, contents, buf);
     if (!s.ok()) {
-      FreeBuf(*buf, use_direct_io_read);
+      FreeBuf(buf, use_direct_io_read);
       return s;
     }
     // reset 'contents' to actual block contents
@@ -133,28 +137,33 @@ Status ReadSstFile(RandomAccessFile* file,
     if (contents->size() >= align_offset + len) {
       contents->remove_prefix(align_offset);
       contents->remove_suffix(contents->size() - len);
+      *scratch = SstDataScratch{buf, std::bind(FreeBuf, std::placeholders::_1, true)};
     } else {
-      FreeBuf(*buf, use_direct_io_read);
-      return Status::Corruption("direct io read contents size invalid");
+      FreeBuf(buf, use_direct_io_read);
+      return Status::Corruption(StringFormat(
+          "direct io read contents size invalid, "
+          "aligned_offset: %lu, aligned_len: %lu, contents_len :%lu",
+          read_args.aligned_offset, read_args.aligned_len, contents->size()));
     }
   } else {
-    *buf = new char[len];
-    s = file->Read(offset, len, contents, *buf);
+    buf = new char[len];
+    s = file->Read(offset, len, contents, buf);
     if (!s.ok()) {
-      FreeBuf(*buf, use_direct_io_read);
+      FreeBuf(buf, use_direct_io_read);
       return s;
     }
+    *scratch = SstDataScratch{buf, std::bind(FreeBuf, std::placeholders::_1, false)};
   }
   return s;
 }
 
-Status ReadBlock(RandomAccessFile* file,
-                 const ReadOptions& options,
-                 const BlockHandle& handle,
+Status ReadBlock(RandomAccessFile* file, const ReadOptions& options, const BlockHandle& handle,
                  BlockContents* result) {
   result->data = Slice();
   result->cachable = false;
   result->heap_allocated = false;
+  result->read_from_persistent_cache = false;
+  auto persistent_cache = options.db_opt->persistent_cache;
 
   // Read the block contents as well as the type/crc footer.
   // See table_builder.cc for the code that built this structure.
@@ -162,40 +171,71 @@ Status ReadBlock(RandomAccessFile* file,
   size_t len = n + kBlockTrailerSize;
   uint64_t offset = handle.offset();
   Slice contents;
-  char* buf = NULL;
-  const Options& db_opt = *(options.db_opt);
-  Status s = ReadSstFile(file, db_opt.use_direct_io_read, offset, len, &contents, &buf);
+  SstDataScratch scratch;
+  Status s;
+
+  if (persistent_cache) {
+    std::string fname = file->GetFileName();
+    Slice key{fname};
+    key.remove_specified_prefix(options.db_opt->dfs_storage_path_prefix);
+    if (PersistentCacheHelper::TryReadFromPersistentCache(persistent_cache, key, offset, len,
+                                                          &contents, &scratch).ok()) {
+      s = ParseBlock(n, offset, options, contents, result);
+      if (s.ok()) {
+        result->read_from_persistent_cache = true;
+        return s;
+      } else {
+        LEVELDB_LOG(
+            "Error parsing block content read from persistent_cache, fname: "
+            "%s. "
+            "Evict it and try read from dfs.\n",
+            file->GetFileName().c_str());
+        persistent_cache->ForceEvict(key);
+      }
+    }
+    if (options.enable_dfs_read_thread_limiter) {
+      auto token = DfsReadThreadLimiter::Instance().GetToken();
+      // If enabled dfs thread limiter, first acquire the semaphore, then read.
+      if (token) {
+        s = ReadSstFile(file, options.db_opt->use_direct_io_read, offset, len, &contents, &scratch);
+      } else {
+        // Acquire failed, reject this request.
+        s = Status::Reject("Too many dfs read requests.");
+      }
+    } else {
+      // Else, limiter is not enabled, just read from dfs file system.
+      s = ReadSstFile(file, options.db_opt->use_direct_io_read, offset, len, &contents, &scratch);
+    }
+  } else {
+    s = ReadSstFile(file, options.db_opt->use_direct_io_read, offset, len, &contents, &scratch);
+  }
+
   if (!s.ok()) {
     return s;
   }
+
   s = ParseBlock(n, offset, options, contents, result);
-  FreeBuf(buf, db_opt.use_direct_io_read);
   return s;
 }
 
-Status ParseBlock(size_t n,
-                  size_t offset,
-                  const ReadOptions& options,
-                  Slice contents,
+Status ParseBlock(size_t n, size_t offset, const ReadOptions& options, Slice contents,
                   BlockContents* result) {
-
   if (contents.size() != n + kBlockTrailerSize) {
     return Status::Corruption("truncated block read");
   }
 
   // Check the crc of the type and the block contents
-  const char* data = contents.data();    // Pointer to where Read put the data
+  const char* data = contents.data();  // Pointer to where Read put the data
   if (options.verify_checksums) {
     const uint32_t crc = crc32c::Unmask(DecodeFixed32(data + n + 1));
     const uint32_t actual = crc32c::Value(data, n + 1);
     if (actual != crc) {
       char err[128] = {'\0'};
-      sprintf(err, "block checksum mismatch: crc %u, actual %u, offset %lu, size %lu",
-              crc, actual, offset, n + kBlockTrailerSize);
+      sprintf(err, "block checksum mismatch: crc %u, actual %u, offset %lu, size %lu", crc, actual,
+              offset, n + kBlockTrailerSize);
       return Status::Corruption(Slice(err, strlen(err)));
     }
   }
-
 
   switch (data[n]) {
     case kNoCompression: {
@@ -222,30 +262,28 @@ Status ParseBlock(size_t n,
       break;
     }
     case kBmzCompression: {
-        size_t uncompressed_size = 4 * 1024 * 2; // should be doubled block size, say > 4K * 2
-        std::vector<char> uncompressed_buffer;
-        uncompressed_buffer.resize(uncompressed_size);
-        if (!port::Bmz_Uncompress(data, n, &uncompressed_buffer[0],
-                                  &uncompressed_size)) {
-            return Status::Corruption("Bmz: corrupted compressed block contents");
-        }
-        result->data = Slice(&uncompressed_buffer[0], uncompressed_size);
-        result->heap_allocated = true;
-        result->cachable = true;
-        break;
+      size_t uncompressed_size = 4 * 1024 * 2;  // should be doubled block size, say > 4K * 2
+      std::vector<char> uncompressed_buffer;
+      uncompressed_buffer.resize(uncompressed_size);
+      if (!port::Bmz_Uncompress(data, n, &uncompressed_buffer[0], &uncompressed_size)) {
+        return Status::Corruption("Bmz: corrupted compressed block contents");
+      }
+      result->data = Slice(&uncompressed_buffer[0], uncompressed_size);
+      result->heap_allocated = true;
+      result->cachable = true;
+      break;
     }
     case kLZ4Compression: {
-        size_t uncompressed_size = 4 * 1024 * 2; // should be doubled block size, say > 4K * 2
-        std::vector<char> uncompressed_buffer;
-        uncompressed_buffer.resize(uncompressed_size);
-        if (!port::Lz4_Uncompress(data, n, &uncompressed_buffer[0],
-                                  &uncompressed_size)) {
-            return Status::Corruption("LZ4: corrupted compressed block contents");
-        }
-        result->data = Slice(&uncompressed_buffer[0], uncompressed_size);
-        result->heap_allocated = true;
-        result->cachable = true;
-        break;
+      size_t uncompressed_size = 4 * 1024 * 2;  // should be doubled block size, say > 4K * 2
+      std::vector<char> uncompressed_buffer;
+      uncompressed_buffer.resize(uncompressed_size);
+      if (!port::Lz4_Uncompress(data, n, &uncompressed_buffer[0], &uncompressed_size)) {
+        return Status::Corruption("LZ4: corrupted compressed block contents");
+      }
+      result->data = Slice(&uncompressed_buffer[0], uncompressed_size);
+      result->heap_allocated = true;
+      result->cachable = true;
+      break;
     }
     default:
       return Status::Corruption("bad block type");
@@ -253,5 +291,4 @@ Status ParseBlock(size_t n,
 
   return Status::OK();
 }
-
 }  // namespace leveldb

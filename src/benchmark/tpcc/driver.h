@@ -20,49 +20,50 @@ namespace tera {
 namespace tpcc {
 
 class Driver {
-public:
-    Driver(RandomGenerator* random_gen, TpccDb* db);
-    ~Driver(){}
-    void RunTransactions();
-    void Join();
+ public:
+  Driver(RandomGenerator* random_gen, TpccDb* db);
+  ~Driver() {}
+  void RunTransactions();
+  void Join();
 
-private:
-    void PrintJoinTimeoutInfo(int need_cnt, int table_enum_num);
+ private:
+  void PrintJoinTimeoutInfo(int need_cnt, int table_enum_num);
 
-    // for run transaction
-    void RunOneTransaction();
-    //
-    void RunStockLevelTxn();
+  // for run transaction
+  void RunOneTransaction();
+  //
+  void RunStockLevelTxn();
 
-    void RunOrderStatusTxn();
+  void RunOrderStatusTxn();
 
-    void RunDeliveryTxn();
+  void RunDeliveryTxn();
 
-    void RunPaymentTxn();
+  void RunPaymentTxn();
 
-    void RunNewOrderTxn();
+  void RunNewOrderTxn();
 
-    // for async run txn
-    void PushToInsertQueue(const ThreadPool::Task& task);
+  // for async run txn
+  void PushToInsertQueue(const ThreadPool::Task& task);
 
-    int32_t FindWareHouse();
+  int32_t FindWareHouse();
 
-    int32_t FindDistrict();
-    
-    int32_t FindCustomerId();
-    
-    int32_t FindItemId();
-private:
-    typedef std::vector<std::pair<Counter, Counter>> TxnStates; 
-    CompletedEvent event_;
-    RandomGenerator* rand_gen_;
-    TpccDb* db_;
-    TxnStates states_;
-    std::string now_datatime_;
-    common::ThreadPool thread_pool_;
+  int32_t FindDistrict();
+
+  int32_t FindCustomerId();
+
+  int32_t FindItemId();
+
+ private:
+  typedef std::vector<std::pair<Counter, Counter>> TxnStates;
+  CompletedEvent event_;
+  RandomGenerator* rand_gen_;
+  TpccDb* db_;
+  TxnStates states_;
+  std::string now_datatime_;
+  common::ThreadPool thread_pool_;
 };
 
-} // namespace tpcc
-} // namespace tera
+}  // namespace tpcc
+}  // namespace tera
 
 #endif /* TERA_BENCHMARK_TPCC_DATA_GENERATOR_H */

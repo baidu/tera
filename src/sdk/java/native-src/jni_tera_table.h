@@ -10,66 +10,70 @@ extern "C" {
 /*
  * Class:     com_baidu_tera_client_TeraTableImpl
  * Method:    nativePut
- * Signature: (JLjava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;J)Z
+ * Signature:
+ * (JLjava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;J)Z
  */
-JNIEXPORT jboolean JNICALL Java_com_baidu_tera_client_TeraTableImpl_nativePut
-  (JNIEnv *, jobject, jlong, jstring, jstring, jstring, jstring, jlong);
+JNIEXPORT jboolean JNICALL
+Java_com_baidu_tera_client_TeraTableImpl_nativePut(JNIEnv *, jobject, jlong, jstring, jstring,
+                                                   jstring, jstring, jlong);
 
 /*
  * Class:     com_baidu_tera_client_TeraTableImpl
  * Method:    nativeGet
- * Signature: (JLjava/lang/String;Ljava/lang/String;Ljava/lang/String;J)Ljava/lang/String;
+ * Signature:
+ * (JLjava/lang/String;Ljava/lang/String;Ljava/lang/String;J)Ljava/lang/String;
  */
-JNIEXPORT jstring JNICALL Java_com_baidu_tera_client_TeraTableImpl_nativeGet
-  (JNIEnv *, jobject, jlong, jstring, jstring, jstring, jlong);
+JNIEXPORT jstring JNICALL
+Java_com_baidu_tera_client_TeraTableImpl_nativeGet(JNIEnv *, jobject, jlong, jstring, jstring,
+                                                   jstring, jlong);
 
 /*
  * Class:     com_baidu_tera_client_TeraTableImpl
  * Method:    nativeNewMutation
  * Signature: (J[B)J
  */
-JNIEXPORT jlong JNICALL Java_com_baidu_tera_client_TeraTableImpl_nativeNewMutation
-  (JNIEnv *, jobject, jlong, jbyteArray);
+JNIEXPORT jlong JNICALL
+Java_com_baidu_tera_client_TeraTableImpl_nativeNewMutation(JNIEnv *, jobject, jlong, jbyteArray);
 
 /*
  * Class:     com_baidu_tera_client_TeraTableImpl
  * Method:    nativeApplyMutation
  * Signature: (JJ)Z
  */
-JNIEXPORT jboolean JNICALL Java_com_baidu_tera_client_TeraTableImpl_nativeApplyMutation
-  (JNIEnv *, jobject, jlong, jlong);
+JNIEXPORT jboolean JNICALL
+Java_com_baidu_tera_client_TeraTableImpl_nativeApplyMutation(JNIEnv *, jobject, jlong, jlong);
 
 /*
  * Class:     com_baidu_tera_client_TeraTableImpl
  * Method:    nativeFlushCommits
  * Signature: (J)V
  */
-JNIEXPORT void JNICALL Java_com_baidu_tera_client_TeraTableImpl_nativeFlushCommits
-  (JNIEnv *, jobject, jlong);
+JNIEXPORT void JNICALL
+Java_com_baidu_tera_client_TeraTableImpl_nativeFlushCommits(JNIEnv *, jobject, jlong);
 
 /*
  * Class:     com_baidu_tera_client_TeraTableImpl
  * Method:    nativeNewReader
  * Signature: (J[B)J
  */
-JNIEXPORT jlong JNICALL Java_com_baidu_tera_client_TeraTableImpl_nativeNewReader
-  (JNIEnv *, jobject, jlong, jbyteArray);
+JNIEXPORT jlong JNICALL
+Java_com_baidu_tera_client_TeraTableImpl_nativeNewReader(JNIEnv *, jobject, jlong, jbyteArray);
 
 /*
  * Class:     com_baidu_tera_client_TeraTableImpl
  * Method:    nativeApplyReader
  * Signature: (JJ)J
  */
-JNIEXPORT jlong JNICALL Java_com_baidu_tera_client_TeraTableImpl_nativeApplyReader
-  (JNIEnv *, jobject, jlong, jlong);
+JNIEXPORT jlong JNICALL
+Java_com_baidu_tera_client_TeraTableImpl_nativeApplyReader(JNIEnv *, jobject, jlong, jlong);
 
 /*
  * Class:     com_baidu_tera_client_TeraTableImpl
  * Method:    nativeScan
  * Signature: (JJ)J
  */
-JNIEXPORT jlong JNICALL Java_com_baidu_tera_client_TeraTableImpl_nativeScan
-  (JNIEnv *, jobject, jlong, jlong);
+JNIEXPORT jlong JNICALL
+Java_com_baidu_tera_client_TeraTableImpl_nativeScan(JNIEnv *, jobject, jlong, jlong);
 
 #ifdef __cplusplus
 }

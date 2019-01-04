@@ -2,8 +2,8 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#ifndef  TERA_SDK_SINGLE_ROW_TXN_H_
-#define  TERA_SDK_SINGLE_ROW_TXN_H_
+#ifndef TERA_SDK_SINGLE_ROW_TXN_H_
+#define TERA_SDK_SINGLE_ROW_TXN_H_
 
 #include <string>
 
@@ -22,101 +22,96 @@ class TableImpl;
 class Cell;
 
 class SingleRowTxn : public Transaction {
-public:
-    SingleRowTxn(std::shared_ptr<TableImpl> table_impl, const std::string& row_key,
-                 common::ThreadPool* thread_pool);
-    virtual ~SingleRowTxn();
+ public:
+  SingleRowTxn(std::shared_ptr<TableImpl> table_impl, const std::string& row_key,
+               common::ThreadPool* thread_pool);
+  virtual ~SingleRowTxn();
 
-    /// 提交一个修改操作
-    virtual void ApplyMutation(RowMutation* row_mu);
-    /// 读取操作
-    virtual ErrorCode Get(RowReader* row_reader);
+  /// 提交一个修改操作
+  virtual void ApplyMutation(RowMutation* row_mu);
+  /// 读取操作
+  virtual ErrorCode Get(RowReader* row_reader);
 
-    /// 设置提交回调, 提交操作会异步返回
-    virtual void SetCommitCallback(Callback callback);
-    /// 获取提交回调
-    virtual Callback GetCommitCallback();
+  /// 设置提交回调, 提交操作会异步返回
+  virtual void SetCommitCallback(Callback callback);
+  /// 获取提交回调
+  virtual Callback GetCommitCallback();
 
-    /// 设置用户上下文，可在回调函数中获取
-    virtual void SetContext(void* context);
-    /// 获取用户上下文
-    virtual void* GetContext();
+  /// 设置用户上下文，可在回调函数中获取
+  virtual void SetContext(void* context);
+  /// 获取用户上下文
+  virtual void* GetContext();
 
-    /// 获得结果错误码
-    virtual const ErrorCode& GetError();
+  /// 获得结果错误码
+  virtual const ErrorCode& GetError();
 
-    /// 提交事务
-    virtual ErrorCode Commit();
+  /// 提交事务
+  virtual ErrorCode Commit();
 
-    virtual int64_t GetStartTimestamp() { return start_timestamp_; }
-    
-    virtual int64_t GetCommitTimestamp() { return commit_timestamp_; }
+  virtual int64_t GetStartTimestamp() { return start_timestamp_; }
 
-    virtual void Ack(Table* t, 
-                     const std::string& row_key, 
-                     const std::string& column_family, 
-                     const std::string& qualifier);
+  virtual int64_t GetCommitTimestamp() { return commit_timestamp_; }
 
-    virtual void Notify(Table* t,
-                        const std::string& row_key, 
-                        const std::string& column_family, 
-                        const std::string& qualifier);
+  virtual void Ack(Table* t, const std::string& row_key, const std::string& column_family,
+                   const std::string& qualifier);
 
-    // not support
-    virtual void SetIsolation(const IsolationLevel& isolation_level) { abort(); }
+  virtual void Notify(Table* t, const std::string& row_key, const std::string& column_family,
+                      const std::string& qualifier);
 
-    // use default isolation level snapshot 
-    virtual IsolationLevel Isolation() { return IsolationLevel::kSnapshot; }
+  // not support
+  virtual void SetIsolation(const IsolationLevel& isolation_level) { abort(); }
 
-    virtual void SetTimeout(int64_t timeout_ms) {
-        mutation_buffer_.SetTimeOut(timeout_ms);
-    }
+  // use default isolation level snapshot
+  virtual IsolationLevel Isolation() { return IsolationLevel::kSnapshot; }
 
-public:
-    /// 内部读操作回调
-    void ReadCallback(RowReaderImpl* reader_impl);
-    /// 内部提交回调
-    void CommitCallback(RowMutationImpl* mu_impl);
-    /// 序列化
-    void Serialize(RowMutationSequence* mu_seq);
+  virtual void SetTimeout(int64_t timeout_ms) { mutation_buffer_.SetTimeOut(timeout_ms); }
 
-private:
-    // prevent users from reading more than once in one single-row-txn
-    bool MarkHasRead();
+ public:
+  /// 内部读操作回调
+  void ReadCallback(RowReaderImpl* reader_impl);
+  /// 内部提交回调
+  void CommitCallback(RowMutationImpl* mu_impl);
+  /// 序列化
+  void Serialize(RowMutationSequence* mu_seq);
 
-    void MarkNoRead();
+ private:
+  // prevent users from reading more than once in one single-row-txn
+  bool MarkHasRead();
 
-    void InternalNotify();
-private:
-    std::shared_ptr<TableImpl> table_impl_;
-    const std::string row_key_;
-    common::ThreadPool* thread_pool_;
+  void MarkNoRead();
 
-    bool has_read_;
-    RowReader::Callback user_reader_callback_;
-    void* user_reader_context_;
-    RowReader::ReadColumnList read_column_list_;
-    //               columnfamily          qualifier             timestamp  value
-    typedef std::map<std::string, std::map<std::string, std::map<int64_t, std::string>> > ReadResult;
-    ReadResult read_result_;
-    uint32_t reader_max_versions_;
-    int64_t reader_start_timestamp_;
-    int64_t reader_end_timestamp_;
+  void InternalNotify();
 
-    int64_t start_timestamp_;
-    int64_t commit_timestamp_;
+ private:
+  std::shared_ptr<TableImpl> table_impl_;
+  const std::string row_key_;
+  common::ThreadPool* thread_pool_;
 
-    int64_t ttl_timestamp_ms_;
+  bool has_read_;
+  RowReader::Callback user_reader_callback_;
+  void* user_reader_context_;
+  RowReader::ReadColumnList read_column_list_;
+  //               columnfamily          qualifier             timestamp  value
+  typedef std::map<std::string, std::map<std::string, std::map<int64_t, std::string>>> ReadResult;
+  ReadResult read_result_;
+  uint32_t reader_max_versions_;
+  int64_t reader_start_timestamp_;
+  int64_t reader_end_timestamp_;
 
-    RowMutationImpl mutation_buffer_;
-    Callback user_commit_callback_;
-    void* user_commit_context_;
+  int64_t start_timestamp_;
+  int64_t commit_timestamp_;
 
-    std::vector<Cell> notify_cells_;
+  int64_t ttl_timestamp_ms_;
 
-    mutable Mutex mu_;
+  RowMutationImpl mutation_buffer_;
+  Callback user_commit_callback_;
+  void* user_commit_context_;
+
+  std::vector<Cell> notify_cells_;
+
+  mutable Mutex mu_;
 };
 
-} // namespace tera
+}  // namespace tera
 
 #endif  // TERA_SDK_SINGLE_ROW_TXN_H_

@@ -29,32 +29,23 @@ void tera_client_close(tera_client_t* client);
 tera_table_t* tera_table_open(tera_client_t* client, const char* table_name, char** err);
 void tera_table_close(tera_table_t* table);
 
-bool tera_table_get(tera_table_t* table,
-                    const char* row_key, uint64_t keylen,
-                    const char* family, const char* qualifier,
-                    uint64_t qulen, char** value, uint64_t* vallen,
+bool tera_table_get(tera_table_t* table, const char* row_key, uint64_t keylen, const char* family,
+                    const char* qualifier, uint64_t qulen, char** value, uint64_t* vallen,
                     char** errptr, uint64_t snapshot_id);
 
-bool tera_table_getint64(tera_table_t* table,
-                         const char* row_key, uint64_t keylen,
-                         const char* family, const char* qualifier,
-                         uint64_t qulen, int64_t* value,
+bool tera_table_getint64(tera_table_t* table, const char* row_key, uint64_t keylen,
+                         const char* family, const char* qualifier, uint64_t qulen, int64_t* value,
                          char** errptr, uint64_t snapshot_id);
 
-bool tera_table_put(tera_table_t* table,
-                    const char* row_key, uint64_t keylen,
-                    const char* family, const char* qualifier,
-                    uint64_t qulen, const char* value, uint64_t vallen,
+bool tera_table_put(tera_table_t* table, const char* row_key, uint64_t keylen, const char* family,
+                    const char* qualifier, uint64_t qulen, const char* value, uint64_t vallen,
                     char** errptr);
 
-bool tera_table_put_kv(tera_table_t* table, const char* key, uint64_t keylen,
-                       const char* value, uint64_t vallen, int32_t ttl,
-                       char** errptr);
+bool tera_table_put_kv(tera_table_t* table, const char* key, uint64_t keylen, const char* value,
+                       uint64_t vallen, int32_t ttl, char** errptr);
 
-bool tera_table_putint64(tera_table_t* table,
-                         const char* row_key, uint64_t keylen,
-                         const char* family, const char* qualifier,
-                         uint64_t qulen, int64_t value,
+bool tera_table_putint64(tera_table_t* table, const char* row_key, uint64_t keylen,
+                         const char* family, const char* qualifier, uint64_t qulen, int64_t value,
                          char** errptr);
 
 bool tera_table_delete(tera_table_t* table, const char* row_key, uint64_t keylen,
@@ -64,27 +55,28 @@ bool tera_table_is_put_finished(tera_table_t* table);
 bool tera_table_is_get_finished(tera_table_t* table);
 
 void tera_table_apply_reader(tera_table_t* table, tera_row_reader_t* reader);
-void tera_table_apply_reader_batch(tera_table_t* table, tera_row_reader_t** reader_batch, int64_t num);
+void tera_table_apply_reader_batch(tera_table_t* table, tera_row_reader_t** reader_batch,
+                                   int64_t num);
 tera_row_mutation_t* tera_row_mutation(tera_table_t* table, const char* row_key, uint64_t keylen);
 void tera_table_apply_mutation(tera_table_t* table, tera_row_mutation_t* mutation);
-void tera_table_apply_mutation_batch(tera_table_t* table, tera_row_mutation_t** mutation_batch, int64_t num);
-void tera_row_mutation_put_kv(tera_row_mutation_t* mu,
-                              const char* val, uint64_t vallen, int32_t ttl);
-void tera_row_mutation_put(tera_row_mutation_t* mu, const char* cf,
-                           const char* qu, uint64_t qulen,
+void tera_table_apply_mutation_batch(tera_table_t* table, tera_row_mutation_t** mutation_batch,
+                                     int64_t num);
+void tera_row_mutation_put_kv(tera_row_mutation_t* mu, const char* val, uint64_t vallen,
+                              int32_t ttl);
+void tera_row_mutation_put(tera_row_mutation_t* mu, const char* cf, const char* qu, uint64_t qulen,
                            const char* val, uint64_t vallen);
-void tera_row_mutation_put_with_timestamp(tera_row_mutation_t* mu, const char* cf,
-                                          const char* qu, uint64_t qulen,
-                                          int64_t timestamp,
-                                          const char* val, uint64_t vallen);
-void tera_row_mutation_put_int64(tera_row_mutation_t* mu, const char* cf,
-                                 const char* qu, uint64_t qulen, int64_t val);
-void tera_row_mutation_delete_column(tera_row_mutation_t* mu, const char* cf,
-                                     const char* qu, uint64_t qulen);
+void tera_row_mutation_put_with_timestamp(tera_row_mutation_t* mu, const char* cf, const char* qu,
+                                          uint64_t qulen, int64_t timestamp, const char* val,
+                                          uint64_t vallen);
+void tera_row_mutation_put_int64(tera_row_mutation_t* mu, const char* cf, const char* qu,
+                                 uint64_t qulen, int64_t val);
+void tera_row_mutation_delete_column(tera_row_mutation_t* mu, const char* cf, const char* qu,
+                                     uint64_t qulen);
 void tera_row_mutation_delete_column_all_versions(tera_row_mutation_t* mu, const char* cf,
                                                   const char* qu, uint64_t qulen);
 void tera_row_mutation_delete_column_with_version(tera_row_mutation_t* mu, const char* cf,
-                                                  const char* qu, uint64_t qulen, int64_t timestamp);
+                                                  const char* qu, uint64_t qulen,
+                                                  int64_t timestamp);
 void tera_row_mutation_delete_row(tera_row_mutation_t* mu);
 void tera_row_mutation_delete_family(tera_row_mutation_t* mu, const char* cf);
 void tera_row_mutation_set_callback(tera_row_mutation_t* mu, MutationCallbackType callback);
@@ -92,8 +84,7 @@ void tera_row_mutation_rowkey(tera_row_mutation_t* mu, char** val, uint64_t* val
 int64_t tera_row_mutation_get_status_code(tera_row_mutation_t* mu);
 void tera_row_mutation_destroy(tera_row_mutation_t* mu);
 
-tera_result_stream_t* tera_table_scan(tera_table_t* table,
-                                      const tera_scan_descriptor_t* desc,
+tera_result_stream_t* tera_table_scan(tera_table_t* table, const tera_scan_descriptor_t* desc,
                                       char** errptr);
 
 // scan descriptor
@@ -101,14 +92,14 @@ tera_scan_descriptor_t* tera_scan_descriptor(const char* start_key, uint64_t key
 void tera_scan_descriptor_add_column(tera_scan_descriptor_t* desc, const char* cf,
                                      const char* qualifier, uint64_t qulen);
 void tera_scan_descriptor_add_column_family(tera_scan_descriptor_t* desc, const char* cf);
-bool tera_scan_descriptor_is_async(tera_scan_descriptor_t* desc);
 void tera_scan_descriptor_set_buffer_size(tera_scan_descriptor_t* desc, int64_t size);
-void tera_scan_descriptor_set_end(tera_scan_descriptor_t* desc, const char* end_key, uint64_t keylen);
+void tera_scan_descriptor_set_end(tera_scan_descriptor_t* desc, const char* end_key,
+                                  uint64_t keylen);
 void tera_scan_descriptor_set_pack_interval(tera_scan_descriptor_t* desc, int64_t interval);
-void tera_scan_descriptor_set_is_async(tera_scan_descriptor_t* desc, bool is_async);
 void tera_scan_descriptor_set_max_versions(tera_scan_descriptor_t* desc, int32_t versions);
 void tera_scan_descriptor_set_snapshot(tera_scan_descriptor_t* desc, uint64_t snapshot_id);
-void tera_scan_descriptor_set_time_range(tera_scan_descriptor_t* desc, int64_t ts_start, int64_t ts_end);
+void tera_scan_descriptor_set_time_range(tera_scan_descriptor_t* desc, int64_t ts_start,
+                                         int64_t ts_end);
 bool tera_scan_descriptor_set_filter(tera_scan_descriptor_t* desc, char* filter_str);
 void tera_scan_descriptor_destroy(tera_scan_descriptor_t* desc);
 
@@ -127,7 +118,8 @@ void tera_result_stream_destroy(tera_result_stream_t* desc);
 // row reader
 tera_row_reader_t* tera_row_reader(tera_table_t* table, const char* row_key, uint64_t keylen);
 void tera_row_reader_add_column_family(tera_row_reader_t* reader, const char* family);
-void tera_row_reader_add_column(tera_row_reader_t* reader, const char* cf, const char* qu, uint64_t len);
+void tera_row_reader_add_column(tera_row_reader_t* reader, const char* cf, const char* qu,
+                                uint64_t len);
 void tera_row_reader_set_callback(tera_row_reader_t* reader, ReaderCallbackType callback);
 void tera_row_reader_set_timestamp(tera_row_reader_t* reader, int64_t ts);
 void tera_row_reader_set_time_range(tera_row_reader_t* reader, int64_t start, int64_t end);
@@ -146,7 +138,7 @@ int64_t tera_row_reader_get_status_code(tera_row_reader_t* reader);
 void tera_row_reader_destroy(tera_row_reader_t* reader);
 
 #ifdef __cplusplus
-}  /* end extern "C" */
+} /* end extern "C" */
 #endif
 
 #pragma GCC visibility pop

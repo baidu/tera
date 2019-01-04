@@ -107,7 +107,7 @@ class Common:
         self.SENDMAIL = '/usr/sbin/sendmail'
         self.MAIL_PATH = '../tmp/mail_report'
         self.WEB_PATH = '../tmp/web_report'
-        self.MAIL_HEADER = 'Sender: tera_eva <tera_eva@baidu.com>\nTo: tera_dev <tera_dev@baidu.com>\n\
+        self.MAIL_HEADER = 'Sender: tera_eva <tera_eva@baidu.com>\nTo: tera-user <tera-user@baidu.com>\n\
 Content-type: text/html\nSubject: EVA report\n\n'
 
         self.g_query_thread = None

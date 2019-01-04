@@ -10,18 +10,14 @@
 
 // namespace common {
 
-TEST(Ascii, Init)
-{
-    setlocale(LC_ALL, "C");
-}
+TEST(Ascii, Init) { setlocale(LC_ALL, "C"); }
 
-#define ASCII_TEST_CTYPE_FUNCTION_EQUIVALENCE(type, New, std) \
-TEST(Ascii, New) \
-{ \
-    for (int c = 0; c <= UCHAR_MAX; ++c) \
-        EXPECT_EQ(static_cast<type>(std(c)), Ascii::New(c)) \
-            << c << "(" << (isprint(c) ? static_cast<char>(c): ' ') << ")"; \
-}
+#define ASCII_TEST_CTYPE_FUNCTION_EQUIVALENCE(type, New, std)              \
+  TEST(Ascii, New) {                                                       \
+    for (int c = 0; c <= UCHAR_MAX; ++c)                                   \
+      EXPECT_EQ(static_cast<type>(std(c)), Ascii::New(c))                  \
+          << c << "(" << (isprint(c) ? static_cast<char>(c) : ' ') << ")"; \
+  }
 
 ASCII_TEST_CTYPE_FUNCTION_EQUIVALENCE(bool, IsLower, islower)
 ASCII_TEST_CTYPE_FUNCTION_EQUIVALENCE(bool, IsUpper, isupper)
@@ -30,7 +26,7 @@ ASCII_TEST_CTYPE_FUNCTION_EQUIVALENCE(bool, IsDigit, isdigit)
 ASCII_TEST_CTYPE_FUNCTION_EQUIVALENCE(bool, IsAlphaNumber, isalnum)
 ASCII_TEST_CTYPE_FUNCTION_EQUIVALENCE(bool, IsHexDigit, isxdigit)
 
-#ifdef __GNUC__ // windows has no function named 'isblank'
+#ifdef __GNUC__  // windows has no function named 'isblank'
 ASCII_TEST_CTYPE_FUNCTION_EQUIVALENCE(bool, IsBlank, isblank)
 #endif
 

@@ -25,12 +25,11 @@ std::string GetLocalHostAddr();
 
 std::string GetLocalHostName();
 
-bool ExecuteShellCmd(const std::string cmd,
-                     std::string* ret_str = NULL);
+bool ExecuteShellCmd(const std::string& cmd, std::string* ret_str = NULL);
 
 void SetupLog(const std::string& program_name);
 
-} // namespace utils
-} // namespace tera
+}  // namespace utils
+}  // namespace tera
 
-#endif // TERA_UTILS_UTILS_CMD_H_
+#endif  // TERA_UTILS_UTILS_CMD_H_

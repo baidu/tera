@@ -16,11 +16,9 @@
 namespace leveldb {
 namespace log {
 
-Reader::Reporter::~Reporter() {
-}
+Reader::Reporter::~Reporter() {}
 
-Reader::Reader(SequentialFile* file, Reporter* reporter, bool checksum,
-               uint64_t initial_offset)
+Reader::Reader(SequentialFile* file, Reporter* reporter, bool checksum, uint64_t initial_offset)
     : file_(file),
       reporter_(reporter),
       checksum_(checksum),
@@ -29,12 +27,9 @@ Reader::Reader(SequentialFile* file, Reporter* reporter, bool checksum,
       eof_(false),
       last_record_offset_(0),
       end_of_buffer_offset_(0),
-      initial_offset_(initial_offset) {
-}
+      initial_offset_(initial_offset) {}
 
-Reader::~Reader() {
-  delete[] backing_store_;
-}
+Reader::~Reader() { delete[] backing_store_; }
 
 bool Reader::SkipToInitialBlock() {
   size_t offset_in_block = initial_offset_ % kBlockSize;
@@ -116,8 +111,7 @@ bool Reader::ReadRecord(Slice* record, std::string* scratch) {
 
       case kMiddleType:
         if (!in_fragmented_record) {
-          ReportCorruption(fragment.size(),
-                           "missing start of fragmented record(1)");
+          ReportCorruption(fragment.size(), "missing start of fragmented record(1)");
         } else {
           scratch->append(fragment.data(), fragment.size());
         }
@@ -125,8 +119,7 @@ bool Reader::ReadRecord(Slice* record, std::string* scratch) {
 
       case kLastType:
         if (!in_fragmented_record) {
-          ReportCorruption(fragment.size(),
-                           "missing start of fragmented record(2)");
+          ReportCorruption(fragment.size(), "missing start of fragmented record(2)");
         } else {
           scratch->append(fragment.data(), fragment.size());
           *record = Slice(*scratch);
@@ -153,9 +146,7 @@ bool Reader::ReadRecord(Slice* record, std::string* scratch) {
       default: {
         char buf[40];
         snprintf(buf, sizeof(buf), "unknown record type %u", record_type);
-        ReportCorruption(
-            (fragment.size() + (in_fragmented_record ? scratch->size() : 0)),
-            buf);
+        ReportCorruption((fragment.size() + (in_fragmented_record ? scratch->size() : 0)), buf);
         in_fragmented_record = false;
         scratch->clear();
         break;
@@ -165,17 +156,14 @@ bool Reader::ReadRecord(Slice* record, std::string* scratch) {
   return false;
 }
 
-uint64_t Reader::LastRecordOffset() {
-  return last_record_offset_;
-}
+uint64_t Reader::LastRecordOffset() { return last_record_offset_; }
 
 void Reader::ReportCorruption(size_t bytes, const char* reason) {
   ReportDrop(bytes, Status::Corruption(reason));
 }
 
 void Reader::ReportDrop(size_t bytes, const Status& reason) {
-  if (reporter_ != NULL &&
-      end_of_buffer_offset_ - buffer_.size() - bytes >= initial_offset_) {
+  if (reporter_ != NULL && end_of_buffer_offset_ - buffer_.size() - bytes >= initial_offset_) {
     reporter_->Corruption(bytes, reason);
   }
 }
@@ -248,8 +236,7 @@ unsigned int Reader::ReadPhysicalRecord(Slice* result) {
     buffer_.remove_prefix(kHeaderSize + length);
 
     // Skip physical record that started before initial_offset_
-    if (end_of_buffer_offset_ - buffer_.size() - kHeaderSize - length <
-        initial_offset_) {
+    if (end_of_buffer_offset_ - buffer_.size() - kHeaderSize - length < initial_offset_) {
       result->clear();
       return kBadRecord;
     }

@@ -16,17 +16,14 @@
 
 namespace leveldb {
 
-Comparator::~Comparator() { }
+Comparator::~Comparator() {}
 
 namespace {
 class RowKeyComparator : public Comparator {
  public:
-  RowKeyComparator(const RawKeyOperator* key_operator)
-    : key_operator_(key_operator) {}
+  RowKeyComparator(const RawKeyOperator* key_operator) : key_operator_(key_operator) {}
 
-  virtual const char* Name() const {
-    return "leveldb.RowKeyComparator";
-  }
+  virtual const char* Name() const { return "leveldb.RowKeyComparator"; }
 
   virtual int Compare(const Slice& a, const Slice& b) const {
     Slice a_key, a_col, a_qual;
@@ -37,23 +34,17 @@ class RowKeyComparator : public Comparator {
     leveldb::TeraKeyType b_type;
 
     if (!key_operator_->ExtractTeraKey(a, &a_key, &a_col, &a_qual, &a_ts, &a_type)) {
-        return key_operator_->Compare(a, b);
+      return key_operator_->Compare(a, b);
     }
     if (!key_operator_->ExtractTeraKey(b, &b_key, &b_col, &b_qual, &b_ts, &b_type)) {
-        return key_operator_->Compare(a, b);
+      return key_operator_->Compare(a, b);
     }
     return a_key.compare(b_key);
   }
 
-  virtual void FindShortestSeparator(
-      std::string* start,
-      const Slice& limit) const {
-    return;
-  }
+  virtual void FindShortestSeparator(std::string* start, const Slice& limit) const { return; }
 
-  virtual void FindShortSuccessor(std::string* key) const {
-    return;
-  }
+  virtual void FindShortSuccessor(std::string* key) const { return; }
 
  private:
   const RawKeyOperator* key_operator_;
@@ -61,24 +52,17 @@ class RowKeyComparator : public Comparator {
 
 class BytewiseComparatorImpl : public Comparator {
  public:
-  BytewiseComparatorImpl() { }
+  BytewiseComparatorImpl() {}
 
-  virtual const char* Name() const {
-    return "leveldb.BytewiseComparator";
-  }
+  virtual const char* Name() const { return "leveldb.BytewiseComparator"; }
 
-  virtual int Compare(const Slice& a, const Slice& b) const {
-    return a.compare(b);
-  }
+  virtual int Compare(const Slice& a, const Slice& b) const { return a.compare(b); }
 
-  virtual void FindShortestSeparator(
-      std::string* start,
-      const Slice& limit) const {
+  virtual void FindShortestSeparator(std::string* start, const Slice& limit) const {
     // Find length of common prefix
     size_t min_length = std::min(start->size(), limit.size());
     size_t diff_index = 0;
-    while ((diff_index < min_length) &&
-           ((*start)[diff_index] == limit[diff_index])) {
+    while ((diff_index < min_length) && ((*start)[diff_index] == limit[diff_index])) {
       diff_index++;
     }
 
@@ -102,7 +86,7 @@ class BytewiseComparatorImpl : public Comparator {
       const uint8_t byte = (*key)[i];
       if (byte != static_cast<uint8_t>(0xff)) {
         (*key)[i] = byte + 1;
-        key->resize(i+1);
+        key->resize(i + 1);
         return;
       }
     }
@@ -112,24 +96,18 @@ class BytewiseComparatorImpl : public Comparator {
 
 class TeraBinaryComparatorImpl : public Comparator {
  public:
-  TeraBinaryComparatorImpl() : key_operator_(BinaryRawKeyOperator()){ }
+  TeraBinaryComparatorImpl() : key_operator_(BinaryRawKeyOperator()) {}
 
-  virtual const char* Name() const {
-    return "tera.TeraBinaryComparator";
-  }
+  virtual const char* Name() const { return "tera.TeraBinaryComparator"; }
 
-  virtual int Compare(const Slice& a, const Slice& b) const {
-    return key_operator_->Compare(a, b);
-  }
+  virtual int Compare(const Slice& a, const Slice& b) const { return key_operator_->Compare(a, b); }
 
-  virtual void FindShortestSeparator(
-      std::string* start,
-      const Slice& limit) const {
-      // TODO: this may waste storage space
+  virtual void FindShortestSeparator(std::string* start, const Slice& limit) const {
+    // TODO: this may waste storage space
   }
 
   virtual void FindShortSuccessor(std::string* key) const {
-      // TODO: this may waste storage space
+    // TODO: this may waste storage space
   }
 
  private:
@@ -137,36 +115,29 @@ class TeraBinaryComparatorImpl : public Comparator {
 };
 
 class TeraTTLKvComparatorImpl : public Comparator {
-public:
-    TeraTTLKvComparatorImpl() :
-            key_operator_(KvRawKeyOperator()) {
-    }
+ public:
+  TeraTTLKvComparatorImpl() : key_operator_(KvRawKeyOperator()) {}
 
-    virtual const char* Name() const {
-        return "tera.TeraTTLKvComparator";
-    }
+  virtual const char* Name() const { return "tera.TeraTTLKvComparator"; }
 
-    virtual int Compare(const Slice& a, const Slice& b) const {
-        Slice row_key_a, row_key_b;
-        int64_t timestamp_a, timestamp_b;
-        key_operator_->ExtractTeraKey(a, &row_key_a, NULL, NULL, &timestamp_a,
-                NULL);
-        key_operator_->ExtractTeraKey(b, &row_key_b, NULL, NULL, &timestamp_b,
-                NULL);
-        return row_key_a.compare(row_key_b);
-    }
+  virtual int Compare(const Slice& a, const Slice& b) const {
+    Slice row_key_a, row_key_b;
+    int64_t timestamp_a, timestamp_b;
+    key_operator_->ExtractTeraKey(a, &row_key_a, NULL, NULL, &timestamp_a, NULL);
+    key_operator_->ExtractTeraKey(b, &row_key_b, NULL, NULL, &timestamp_b, NULL);
+    return row_key_a.compare(row_key_b);
+  }
 
-    virtual void FindShortestSeparator(std::string* start,
-            const Slice& limit) const {
-        // TODO: this may waste storage space
-    }
+  virtual void FindShortestSeparator(std::string* start, const Slice& limit) const {
+    // TODO: this may waste storage space
+  }
 
-    virtual void FindShortSuccessor(std::string* key) const {
-        // TODO: this may waste storage space
-    }
+  virtual void FindShortSuccessor(std::string* key) const {
+    // TODO: this may waste storage space
+  }
 
-private:
-    const RawKeyOperator* key_operator_;
+ private:
+  const RawKeyOperator* key_operator_;
 };
 }  // namespace
 
@@ -176,28 +147,28 @@ static const Comparator* terabinary;
 static const Comparator* terakv;
 
 static void InitModule() {
-    bytewise = new BytewiseComparatorImpl;
-    terabinary = new TeraBinaryComparatorImpl;
-    terakv = new TeraTTLKvComparatorImpl;
+  bytewise = new BytewiseComparatorImpl;
+  terabinary = new TeraBinaryComparatorImpl;
+  terakv = new TeraTTLKvComparatorImpl;
 }
 
 const Comparator* BytewiseComparator() {
-    port::InitOnce(&once, InitModule);
-    return bytewise;
+  port::InitOnce(&once, InitModule);
+  return bytewise;
 }
 
 const Comparator* TeraBinaryComparator() {
-    port::InitOnce(&once, InitModule);
-    return terabinary;
+  port::InitOnce(&once, InitModule);
+  return terabinary;
 }
 
 const Comparator* TeraTTLKvComparator() {
-    port::InitOnce(&once, InitModule);
-    return terakv;
+  port::InitOnce(&once, InitModule);
+  return terakv;
 }
 
 Comparator* NewRowKeyComparator(const RawKeyOperator* key_operator) {
-    Comparator* cmp = new RowKeyComparator(key_operator);
-    return cmp;
+  Comparator* cmp = new RowKeyComparator(key_operator);
+  return cmp;
 }
 }  // namespace leveldb

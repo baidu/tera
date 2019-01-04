@@ -17,16 +17,18 @@
 #ifndef STORAGE_LEVELDB_INCLUDE_ENV_H_
 #define STORAGE_LEVELDB_INCLUDE_ENV_H_
 
+#include <stdint.h>
 #include <cstdarg>
+#include <sstream>
 #include <string>
 #include <vector>
-#include <stdint.h>
-#include "leveldb/status.h"
 #include "leveldb/options.h"
+#include "leveldb/status.h"
 
 namespace leveldb {
 
 class FileLock;
+class LogOption;
 class Logger;
 class RandomAccessFile;
 class SequentialFile;
@@ -34,12 +36,14 @@ class Slice;
 class WritableFile;
 
 enum ThreadPoolScore {
-   kDeleteLogUrgentScore = 100,
-   kDumpMemTableUrgentScore = 90,
-   kDumpMemTableScore = 60,
-   kDeleteLogScore = 50,
-   kManualCompactScore = 10,
+  kDeleteLogUrgentScore = 100,
+  kDumpMemTableUrgentScore = 90,
+  kDumpMemTableScore = 60,
+  kDeleteLogScore = 50,
+  kManualCompactScore = 10,
 };
+
+enum class SystemFileType { kRegularFile, kDir, kOthers };
 
 const size_t kDefaultPageSize = 4 * 1024;
 
@@ -55,7 +59,7 @@ struct EnvOptions {
 
 class Env {
  public:
-  Env() { }
+  Env() {}
   virtual ~Env();
 
   // Return a default environment suitable for the current operating
@@ -71,8 +75,7 @@ class Env {
   // not exist, returns a non-OK status.
   //
   // The returned file will only be accessed by one thread at a time.
-  virtual Status NewSequentialFile(const std::string& fname,
-                                   SequentialFile** result) = 0;
+  virtual Status NewSequentialFile(const std::string& fname, SequentialFile** result) = 0;
 
   // Create a brand new random access read-only file with the
   // specified name.  On success, stores a pointer to the new file in
@@ -82,14 +85,11 @@ class Env {
   //
   // The returned file may be concurrently accessed by multiple threads.
   // Implement may check file size against the given fsize.
-  virtual Status NewRandomAccessFile(const std::string& fname,
-                                     RandomAccessFile** result,
+  virtual Status NewRandomAccessFile(const std::string& fname, RandomAccessFile** result,
                                      const EnvOptions& options) = 0;
 
-  virtual Status NewRandomAccessFile(const std::string& fname,
-                                     uint64_t fsize,
-                                     RandomAccessFile** result,
-                                     const EnvOptions& options) = 0;
+  virtual Status NewRandomAccessFile(const std::string& fname, uint64_t fsize,
+                                     RandomAccessFile** result, const EnvOptions& options) = 0;
 
   // Create an object that writes to a new file with the specified
   // name.  Deletes any existing file with the same name and creates a
@@ -98,8 +98,7 @@ class Env {
   // returns non-OK.
   //
   // The returned file will only be accessed by one thread at a time.
-  virtual Status NewWritableFile(const std::string& fname,
-                                 WritableFile** result,
+  virtual Status NewWritableFile(const std::string& fname, WritableFile** result,
                                  const EnvOptions& options) = 0;
 
   // Returns:
@@ -112,8 +111,7 @@ class Env {
   // Store in *result the names of the children of the specified directory.
   // The names are relative to "dir".
   // Original contents of *results are dropped.
-  virtual Status GetChildren(const std::string& dir,
-                             std::vector<std::string>* result) = 0;
+  virtual Status GetChildren(const std::string& dir, std::vector<std::string>* result) = 0;
 
   // Delete the named file.
   virtual Status DeleteFile(const std::string& fname) = 0;
@@ -126,19 +124,21 @@ class Env {
 
   // Deprecated, use GetChildren
 
-  virtual Status CopyFile(const std::string& from,
-                          const std::string& to) = 0;
+  virtual Status CopyFile(const std::string& from, const std::string& to) = 0;
 
   // Delete the specified directory recursive.
   virtual Status DeleteDirRecursive(const std::string& name) = 0;
+
+  // Detect file type
+  virtual Status GetFileType(const std::string& path, SystemFileType* type) = 0;
+  virtual Status IsSamePath(const std::string& path1, const std::string& path2, bool* same) = 0;
   // end of tera_specific
 
   // Store the size of fname in *file_size.
   virtual Status GetFileSize(const std::string& fname, uint64_t* file_size) = 0;
 
   // Rename file src to target.
-  virtual Status RenameFile(const std::string& src,
-                            const std::string& target) = 0;
+  virtual Status RenameFile(const std::string& src, const std::string& target) = 0;
 
   // Lock the specified file.  Used to prevent concurrent access to
   // the same db by multiple processes.  On failure, stores NULL in
@@ -170,11 +170,8 @@ class Env {
   // added to the same Env may run concurrently in different threads.
   // I.e., the caller may not assume that background work items are
   // serialized.
-  virtual int64_t Schedule(
-      void (*function)(void* arg),
-      void* arg,
-      double prio = 0.0,
-      int64_t wait_time_millisec = 0) = 0;
+  virtual int64_t Schedule(void (*function)(void* arg), void* arg, double prio = 0.0,
+                           int64_t wait_time_millisec = 0) = 0;
 
   // Update background task priority with the schedule id return by Schedule.
   // If wait_time_millisec < 0, the exec time will not be updated.
@@ -191,7 +188,7 @@ class Env {
   virtual Status GetTestDirectory(std::string* path) = 0;
 
   // Create and return a log file for storing informational messages.
-  virtual Status NewLogger(const std::string& fname, Logger** result) = 0;
+  virtual Status NewLogger(const std::string& fname, const LogOption& opt, Logger** result) = 0;
   virtual void SetLogger(Logger* logger) = 0;
 
   // Returns the number of micro-seconds since some fixed point in time. Only
@@ -213,7 +210,7 @@ class Env {
 // A file abstraction for reading sequentially through a file
 class SequentialFile {
  public:
-  SequentialFile() { }
+  SequentialFile() {}
   virtual ~SequentialFile();
 
   // Read up to "n" bytes from the file.  "scratch[0..n-1]" may be
@@ -244,7 +241,7 @@ class SequentialFile {
 // A file abstraction for randomly reading the contents of a file.
 class RandomAccessFile {
  public:
-  RandomAccessFile() { }
+  RandomAccessFile() {}
   virtual ~RandomAccessFile();
 
   // Read up to "n" bytes from the file starting at "offset".
@@ -256,12 +253,15 @@ class RandomAccessFile {
   // status.
   //
   // Safe for concurrent use by multiple threads.
-  virtual Status Read(uint64_t offset, size_t n, Slice* result,
-                      char* scratch) const = 0;
-  
+  virtual Status Read(uint64_t offset, size_t n, Slice* result, char* scratch) const = 0;
+
   // Use the returned alignment value to allocate
   // aligned buffer for Direct I/O
   virtual size_t GetRequiredBufferAlignment() const { return kDefaultPageSize; }
+  virtual std::string GetFileName() const {
+    assert(!"Not Implement");
+    return "";
+  };
 
  private:
   // No copying allowed
@@ -274,13 +274,17 @@ class RandomAccessFile {
 // at a time to the file.
 class WritableFile {
  public:
-  WritableFile() { }
+  WritableFile() {}
   virtual ~WritableFile();
 
   virtual Status Append(const Slice& data) = 0;
   virtual Status Close() = 0;
   virtual Status Flush() = 0;
   virtual Status Sync() = 0;
+  virtual std::string GetFileName() const {
+    assert(!"Not Implement");
+    return "";
+  };
 
  private:
   // No copying allowed
@@ -288,14 +292,58 @@ class WritableFile {
   void operator=(const WritableFile&);
 };
 
+struct LogOption {
+ public:
+  class LogOptionBuilder;
+
+  std::string ToString() const {
+    std::ostringstream ss;
+    ss << "max_log_size:" << max_log_size << ", flush_trigger_size:" << flush_trigger_size
+       << ", flush_trigger_interval_ms:" << flush_trigger_interval_ms;
+    return ss.str();
+  }
+
+  uint64_t max_log_size;
+  uint32_t flush_trigger_size;
+  uint32_t flush_trigger_interval_ms;
+
+ private:
+  LogOption()
+      : max_log_size(1 << 30), flush_trigger_size(1 << 20), flush_trigger_interval_ms(1000) {}
+};
+
+class LogOption::LogOptionBuilder {
+ public:
+  LogOptionBuilder() {}
+  LogOptionBuilder& SetMaxLogSize(uint64_t size) {
+    opt_.max_log_size = size;
+    return *this;
+  }
+  LogOptionBuilder& SetFlushTriggerSize(uint32_t size) {
+    opt_.flush_trigger_size = size;
+    return *this;
+  }
+  LogOptionBuilder& SetFlushTriggerIntervalMs(uint32_t interval) {
+    opt_.flush_trigger_interval_ms = interval;
+    return *this;
+  }
+  LogOption Build() { return opt_; }
+
+ private:
+  LogOption opt_;
+};
+
 // An interface for writing log messages.
 class Logger {
  public:
-  Logger() { }
+  Logger() {}
   virtual ~Logger();
 
   // Write an entry to the log file with the specified format.
-  virtual void Logv(const char* format, va_list ap) = 0;
+  virtual void Logv(const char* file, int64_t line, const char* format, va_list ap) = 0;
+
+  // Logger should ensure all log messages have been saved after Exit called.
+  virtual void Exit() {}
 
   // Default Logger can be used anywhere
   static void SetDefaultLogger(Logger* logger);
@@ -311,33 +359,34 @@ class Logger {
 // Identifies a locked file.
 class FileLock {
  public:
-  FileLock() { }
+  FileLock() {}
   virtual ~FileLock();
+
  private:
   // No copying allowed
   FileLock(const FileLock&);
   void operator=(const FileLock&);
 };
 
+#define LEVELDB_LOG(args...) leveldb::LogImpl(__FILE__, __LINE__, args)
+
 // Log the specified data to *info_log if info_log is non-NULL.
-extern void Log(Logger* info_log, const char* format, ...)
-#   if defined(__GNUC__) || defined(__clang__)
-    __attribute__((__format__ (__printf__, 2, 3)))
-#   endif
+extern void LogImpl(const char* file, int64_t line, Logger* info_log, const char* format, ...)
+#if defined(__GNUC__) || defined(__clang__)
+    __attribute__((__format__(__printf__, 4, 5)))
+#endif
     ;
-extern void Log(const char* format, ...)
-#   if defined(__GNUC__) || defined(__clang__)
-    __attribute__((__format__ (__printf__, 1, 2)))
-#   endif
+extern void LogImpl(const char* file, int64_t line, const char* format, ...)
+#if defined(__GNUC__) || defined(__clang__)
+    __attribute__((__format__(__printf__, 3, 4)))
+#endif
     ;
 
 // A utility routine: write "data" to the named file.
-extern Status WriteStringToFile(Env* env, const Slice& data,
-                                const std::string& fname);
+extern Status WriteStringToFile(Env* env, const Slice& data, const std::string& fname);
 
 // A utility routine: read contents of named file into *data
-extern Status ReadFileToString(Env* env, const std::string& fname,
-                               std::string* data);
+extern Status ReadFileToString(Env* env, const std::string& fname, std::string* data);
 
 // An implementation of Env that forwards all calls to another Env.
 // May be useful to clients who wish to override just part of the
@@ -345,7 +394,7 @@ extern Status ReadFileToString(Env* env, const std::string& fname,
 class EnvWrapper : public Env {
  public:
   // Initialize an EnvWrapper that delegates all calls to *t
-  explicit EnvWrapper(Env* t) : target_(t) { }
+  explicit EnvWrapper(Env* t) : target_(t) {}
   virtual ~EnvWrapper();
 
   // Return the target to which this Env forwards all calls
@@ -373,21 +422,13 @@ class EnvWrapper : public Env {
   Status DeleteFile(const std::string& f) { return target_->DeleteFile(f); }
   Status CreateDir(const std::string& d) { return target_->CreateDir(d); }
   Status DeleteDir(const std::string& d) { return target_->DeleteDir(d); }
-  Status CopyFile(const std::string& f, const std::string& t) {
-    return target_->CopyFile(f, t);
-  }
-  Status DeleteDirRecursive(const std::string& name) {
-    return target_->DeleteDirRecursive(name);
-  }
-  Status GetFileSize(const std::string& f, uint64_t* s) {
-    return target_->GetFileSize(f, s);
-  }
+  Status CopyFile(const std::string& f, const std::string& t) { return target_->CopyFile(f, t); }
+  Status DeleteDirRecursive(const std::string& name) { return target_->DeleteDirRecursive(name); }
+  Status GetFileSize(const std::string& f, uint64_t* s) { return target_->GetFileSize(f, s); }
   Status RenameFile(const std::string& s, const std::string& t) {
     return target_->RenameFile(s, t);
   }
-  Status LockFile(const std::string& f, FileLock** l) {
-    return target_->LockFile(f, l);
-  }
+  Status LockFile(const std::string& f, FileLock** l) { return target_->LockFile(f, l); }
   Status UnlockFile(FileLock* l) { return target_->UnlockFile(l); }
   int64_t Schedule(void (*f)(void*), void* a, double prio, int64_t wait_time_millisec = 0) {
     return target_->Schedule(f, a, prio, wait_time_millisec);
@@ -396,27 +437,22 @@ class EnvWrapper : public Env {
   void ReSchedule(int64_t id, double prio, int64_t millisec = -1) {
     return target_->ReSchedule(id, prio, millisec);
   }
-  void StartThread(void (*f)(void*), void* a) {
-    return target_->StartThread(f, a);
+  void StartThread(void (*f)(void*), void* a) { return target_->StartThread(f, a); }
+  virtual Status GetTestDirectory(std::string* path) { return target_->GetTestDirectory(path); }
+  virtual Status NewLogger(const std::string& fname, const LogOption& opt, Logger** result) {
+    return target_->NewLogger(fname, opt, result);
   }
-  virtual Status GetTestDirectory(std::string* path) {
-    return target_->GetTestDirectory(path);
-  }
-  virtual Status NewLogger(const std::string& fname, Logger** result) {
-    return target_->NewLogger(fname, result);
-  }
-  virtual void SetLogger(Logger* logger) {
-    return target_->SetLogger(logger);
-  }
-  uint64_t NowMicros() {
-    return target_->NowMicros();
-  }
-  void SleepForMicroseconds(int micros) {
-    target_->SleepForMicroseconds(micros);
-  }
-  int SetBackgroundThreads(int number) {
-    return target_->SetBackgroundThreads(number);
-  }
+  virtual void SetLogger(Logger* logger) { return target_->SetLogger(logger); }
+  uint64_t NowMicros() { return target_->NowMicros(); }
+  void SleepForMicroseconds(int micros) { target_->SleepForMicroseconds(micros); }
+  int SetBackgroundThreads(int number) { return target_->SetBackgroundThreads(number); }
+  Status GetFileType(const std::string& path, SystemFileType* type) {
+    return target_->GetFileType(path, type);
+  };
+  Status IsSamePath(const std::string& path1, const std::string& path2, bool* same) {
+    return target_->IsSamePath(path1, path2, same);
+  };
+
  private:
   Env* target_;
 };

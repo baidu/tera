@@ -8,10 +8,10 @@
 #include <map>
 #include <memory>
 #include <string>
+#include <thread>
 #include <vector>
 
 #include "common/mutex.h"
-#include "common/thread.h"
 #include "observer/executor/key_selector.h"
 #include "tera.h"
 
@@ -19,29 +19,30 @@ namespace tera {
 namespace observer {
 
 class RandomKeySelector : public KeySelector {
-public:
-	RandomKeySelector();
-	virtual ~RandomKeySelector();
+ public:
+  RandomKeySelector();
+  virtual ~RandomKeySelector();
 
-	virtual bool SelectStart(std::string* table_name,
-							 std::string* start_key);
-	virtual ErrorCode Observe(const std::string& table_name);
-private:
-	void Update();
+  virtual bool SelectRange(std::string* table_name, std::string* start_key, std::string* end_key);
 
-private:
-	tera::Client* client_;
-	mutable Mutex table_mutex_;
-	std::vector<std::string> observe_tables_;
-	std::shared_ptr<std::map<std::string, std::vector<tera::TabletInfo>>> tables_;
-	common::Thread update_thread_;
+  virtual ErrorCode Observe(const std::string& table_name);
 
-	mutable Mutex quit_mutex_;
-	bool quit_;
-	common::CondVar cond_;
+ private:
+  void Update();
+
+ private:
+  tera::Client* client_;
+  mutable Mutex table_mutex_;
+  std::vector<std::string> observe_tables_;
+  std::shared_ptr<std::map<std::string, std::vector<tera::TabletInfo>>> tables_;
+  std::thread update_thread_;
+
+  mutable Mutex quit_mutex_;
+  bool quit_;
+  common::CondVar cond_;
 };
 
-} // namespace observer
-} // namespace tera
+}  // namespace observer
+}  // namespace tera
 
 #endif  // TERA_OBSERVER_EXECUTOR_RANDOM_KEY_SELECTOR_H_

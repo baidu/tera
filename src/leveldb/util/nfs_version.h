@@ -2,7 +2,7 @@
 #define STORAGE_LEVELDB_UTIL_NFS_VERSION_H_
 
 #ifdef __cplusplus
-   extern  "C" {
+extern "C" {
 #endif
 
 extern const char kNfsSvnInfo[];
@@ -14,7 +14,7 @@ extern const char kNfsCompiler[];
 const char* PrintNfsVersion();
 
 #ifdef __cplusplus
-   }
+}
 #endif
 
-#endif // STORAGE_LEVELDB_UTIL_NFS_VERSION_H_
+#endif  // STORAGE_LEVELDB_UTIL_NFS_VERSION_H_

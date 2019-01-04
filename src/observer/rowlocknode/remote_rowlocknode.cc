@@ -11,26 +11,22 @@ DECLARE_int32(rowlock_thread_max_num);
 namespace tera {
 namespace observer {
 
-RemoteRowlockNode::RemoteRowlockNode(RowlockNodeImpl* rowlocknode_impl) :
-    rowlocknode_impl_(rowlocknode_impl) {
-}
+RemoteRowlockNode::RemoteRowlockNode(RowlockNodeImpl* rowlocknode_impl)
+    : rowlocknode_impl_(rowlocknode_impl) {}
 
-RemoteRowlockNode::~RemoteRowlockNode() {
-}
+RemoteRowlockNode::~RemoteRowlockNode() {}
 
 void RemoteRowlockNode::Lock(google::protobuf::RpcController* controller,
-                                const RowlockRequest* request,
-                                RowlockResponse* response,
-                                google::protobuf::Closure* done) {
-    rowlocknode_impl_->TryLock(request, response, done);
+                             const RowlockRequest* request, RowlockResponse* response,
+                             google::protobuf::Closure* done) {
+  rowlocknode_impl_->TryLock(request, response, done);
 }
 
 void RemoteRowlockNode::UnLock(google::protobuf::RpcController* controller,
-                               const RowlockRequest* request,
-                               RowlockResponse* response,
+                               const RowlockRequest* request, RowlockResponse* response,
                                google::protobuf::Closure* done) {
-    rowlocknode_impl_->UnLock(request, response, done);
+  rowlocknode_impl_->UnLock(request, response, done);
 }
 
-} // namespace observer
-} // namespace tera
+}  // namespace observer
+}  // namespace tera

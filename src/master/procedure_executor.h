@@ -24,69 +24,77 @@ namespace master {
 class ProcedureExecutor;
 
 class ProcedureWrapper {
-public:
-    explicit ProcedureWrapper(std::shared_ptr<Procedure> proc) : scheduling_(false), proc_(proc) {}
-    void RunNextStage(std::shared_ptr<ProcedureExecutor> proc_executor);
-    
-    bool Done() {
-        return proc_->Done();
-    }
+ public:
+  explicit ProcedureWrapper(std::shared_ptr<Procedure> proc)
+      : scheduling_(false), proc_(proc), got_lock_(false) {}
+  void RunNextStage(std::shared_ptr<ProcedureExecutor> proc_executor);
 
-    std::string ProcId() {
-        return proc_->ProcId();
-    }
+  bool Done() { return proc_->Done(); }
 
-    bool TrySchedule() {
-        if (proc_->Done() || scheduling_) {
-            return false;
-        }
-        scheduling_.store(true);
-        return true;
-    }
+  std::string ProcId() { return proc_->ProcId(); }
 
-    std::atomic<bool> scheduling_;
-    std::shared_ptr<Procedure> proc_;
+  bool TrySchedule() {
+    if (!TryGetLock()) {
+      return false;
+    }
+    if (proc_->Done() || scheduling_) {
+      return false;
+    }
+    scheduling_.store(true);
+    return true;
+  }
+
+  bool TryGetLock() {
+    if (got_lock_) {
+      return true;
+    }
+    if (!ProcedureLimiter::Instance().GetLock(proc_->GetLockType())) {
+      return false;
+    }
+    got_lock_ = true;
+    return true;
+  }
+
+  std::atomic<bool> scheduling_;
+  std::shared_ptr<Procedure> proc_;
+  bool got_lock_;
 };
 
 class ProcedureExecutor : public std::enable_shared_from_this<ProcedureExecutor> {
-public:
-    ProcedureExecutor();
+ public:
+  ProcedureExecutor();
 
-    ~ProcedureExecutor() {
-        Stop();
-    }
-    
-    bool Start();
-    void Stop();
+  ~ProcedureExecutor() { Stop(); }
 
-    uint64_t AddProcedure(std::shared_ptr<Procedure> proc);
-    
-    void ScheduleProcedures();
+  bool Start();
+  void Stop();
 
-private:
-    bool RemoveProcedure(const std::string& proc_id);
-    friend class ProcedureWrapper;
+  uint64_t AddProcedure(std::shared_ptr<Procedure> proc);
 
-private:
-    std::mutex mutex_;
-    std::condition_variable cv_;
-    bool running_;
-    
-    uint64_t proc_index_;
-    std::map<std::string, uint64_t> procedure_indexs_;
-    // use integer as map key thus we can schedule Procedures 
-    // according to the order as they are added to the map
-    std::map<uint64_t, std::shared_ptr<ProcedureWrapper>> procedures_;
-    
-    // ThreadPool used to run
-    std::shared_ptr<ThreadPool> thread_pool_;
-    // polling all Procedures and add Procedure can be scheduled to thread_pool, running the 
-    // Procedure background in thread_pool_
-    // A procedure may be scheduled several times until the Procedure is Done
-    std::thread schedule_thread_;
+  void ScheduleProcedures();
 
+ private:
+  bool RemoveProcedure(const std::string& proc_id);
+  friend class ProcedureWrapper;
+
+ private:
+  std::mutex mutex_;
+  std::condition_variable cv_;
+  std::atomic<bool> running_;
+
+  uint64_t proc_index_;
+  std::map<std::string, uint64_t> procedure_indexs_;
+  // use integer as map key thus we can schedule Procedures
+  // according to the order as they are added to the map
+  std::map<uint64_t, std::shared_ptr<ProcedureWrapper>> procedures_;
+
+  // ThreadPool used to run
+  std::shared_ptr<ThreadPool> thread_pool_;
+  // polling all Procedures and add Procedure can be scheduled to thread_pool,
+  // running the
+  // Procedure background in thread_pool_
+  // A procedure may be scheduled several times until the Procedure is Done
+  std::thread schedule_thread_;
 };
-
-
-}   
+}
 }

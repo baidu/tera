@@ -4,8 +4,8 @@
 //
 // Author: Xu Peilin (xupeilin@baidu.com)
 
-#ifndef  TERA_SDK_SDK_UTILS_H_
-#define  TERA_SDK_SDK_UTILS_H_
+#ifndef TERA_SDK_SDK_UTILS_H_
+#define TERA_SDK_SDK_UTILS_H_
 
 #include "proto/table_meta.pb.h"
 #include "tera.h"
@@ -25,12 +25,9 @@ void TableDescToSchema(const TableDescriptor& desc, TableSchema* schema);
 
 void TableSchemaToDesc(const TableSchema& schema, TableDescriptor* desc);
 
-bool SetCfProperties(const string& name, const string& value,
-                     ColumnFamilyDescriptor* desc);
-bool SetLgProperties(const string& name, const string& value,
-                     LocalityGroupDescriptor* desc);
-bool SetTableProperties(const string& name, const string& value,
-                        TableDescriptor* desc);
+bool SetCfProperties(const string& name, const string& value, ColumnFamilyDescriptor* desc);
+bool SetLgProperties(const string& name, const string& value, LocalityGroupDescriptor* desc);
+bool SetTableProperties(const string& name, const string& value, TableDescriptor* desc);
 
 bool FillTableDescriptor(PropTree& schema_tree, TableDescriptor* desc);
 bool UpdateTableDescriptor(PropTree& schema_tree, TableDescriptor* table_desc, ErrorCode* err);
@@ -56,5 +53,19 @@ bool IsTransactionTable(const TableSchema& schema);
 
 void FindGlobalTransactionCfs(const TableSchema& schema, std::set<string>* column_families);
 
-} // namespace tera
-#endif // TERA_SDK_SDK_UTILS_H_
+void GenerateHashDelimiters(int64_t hash_num, std::vector<string>* delims);
+
+enum class FieldType {
+  kRowkey = 0,
+  kColumnFamily,
+  kKVColumnFamily,
+  kQualifier,
+  kKVQualifier,
+  kTimeStamp,
+  kValue
+};
+
+void SetMutationErrorIfInvalid(const string& field, const FieldType& field_type, ErrorCode* err);
+
+}  // namespace tera
+#endif  // TERA_SDK_SDK_UTILS_H_

@@ -1,155 +1,163 @@
 import "status_code.proto";
 import "table_schema.proto";
+import "access_control.proto";
 
 package tera;
 
 message KeyRange {
-    optional bytes key_start = 1;
-    optional bytes key_end = 2;
+  optional bytes key_start = 1;
+  optional bytes key_end = 2;
 }
 
 message RowResult {
-    repeated KeyValuePair key_values = 3;
+  repeated KeyValuePair key_values = 3;
 }
 
 message BytesList {
-    repeated bytes content = 1;
-    repeated StatusCode status = 2;
-    repeated RowResult row_result = 3;
+  repeated bytes content = 1;
+  repeated StatusCode status = 2;
+  repeated RowResult row_result = 3;
 }
 
 message KeyValuePair {
-    optional bytes key = 1;
-    optional bytes value = 2;
-    optional bool del = 3;
-    optional bytes column_family = 4;
-    optional bytes qualifier = 5;
-    optional int64 timestamp = 6;
+  optional bytes key = 1;
+  optional bytes value = 2;
+  optional bool del = 3;
+  optional bytes column_family = 4;
+  optional bytes qualifier = 5;
+  optional int64 timestamp = 6;
 }
 
 message TabletLocation {
-    required KeyRange key_range = 1;
-    required string server_addr = 2;
+  required KeyRange key_range = 1;
+  required string server_addr = 2;
 }
 
 message ScanOption {
-    optional KeyRange key_range = 1;
-    optional int32 max_version = 2;
-    optional int64 size_limit = 3; 
-    optional bytes start = 4;
-    optional bytes end = 5;
-    optional string start_family = 6;
-    optional bytes start_qualifier = 7;
-    optional uint64 snapshot_id = 8;
-    optional bool round_down = 9;
+  optional KeyRange key_range = 1;
+  optional int32 max_version = 2;
+  optional int64 size_limit = 3;
+  optional bytes start = 4;
+  optional bytes end = 5;
+  optional string start_family = 6;
+  optional bytes start_qualifier = 7;
+  optional uint64 snapshot_id = 8;
+  optional bool round_down = 9;
 }
 
 message TabletCounter {
-    optional uint32 low_read_cell = 1;
-    optional uint32 scan_rows = 2;
-    optional uint32 scan_kvs = 3;
-    optional uint32 scan_size = 4;
-    optional uint32 read_rows = 5;
-    optional uint32 read_kvs = 6;
-    optional uint32 read_size = 7;
-    optional uint32 write_rows = 8;
-    optional uint32 write_kvs = 9;
-    optional uint32 write_size = 10;
-    optional double write_workload = 11 [default = 0.0];
+  optional uint32 low_read_cell = 1;
+  optional uint32 scan_rows = 2;
+  optional uint32 scan_kvs = 3;
+  optional uint32 scan_size = 4;
+  optional uint32 read_rows = 5;
+  optional uint32 read_kvs = 6;
+  optional uint32 read_size = 7;
+  optional uint32 write_rows = 8;
+  optional uint32 write_kvs = 9;
+  optional uint32 write_size = 10;
+  optional double write_workload = 11 [default = 0.0];
 
-    optional bool is_on_busy = 15 [default = false];
-    optional TabletMeta.TabletStatus db_status = 16;
+  optional bool is_on_busy = 15 [default = false];
+  optional TabletMeta.TabletStatus db_status = 16;
 }
 
 message TableCounter {
-    optional int64 lread = 1;
-    optional int64 scan_rows = 2;
-    optional int64 scan_max = 3;
-    optional int64 scan_size = 4;
-    optional int64 read_rows = 5;
-    optional int64 read_max = 6;
-    optional int64 read_size = 7;
-    optional int64 write_rows = 8;
-    optional int64 write_max = 9;
-    optional int64 write_size = 10;
+  optional int64 lread = 1;
+  optional int64 scan_rows = 2;
+  optional int64 scan_max = 3;
+  optional int64 scan_size = 4;
+  optional int64 read_rows = 5;
+  optional int64 read_max = 6;
+  optional int64 read_size = 7;
+  optional int64 write_rows = 8;
+  optional int64 write_max = 9;
+  optional int64 write_size = 10;
 
-    optional int64 tablet_num = 20;
-    optional int64 notready_num = 21;
-    optional int64 size = 22;
-    repeated int64 lg_size = 23;
+  optional int64 tablet_num = 20;
+  optional int64 notready_num = 21;
+  optional int64 size = 22;
+  repeated int64 lg_size = 23;
 }
 
 message TableMeta {
-    optional string table_name = 1;
-    optional TableStatus status = 2;
-    optional TableSchema schema = 3;
-    optional uint64 create_time = 5;
+  optional string table_name = 1;
+  optional TableStatus status = 2;
+  optional TableSchema schema = 3;
+  optional uint64 create_time = 5;
+  optional AuthPolicyType auth_policy_type = 8;
 }
 
 message TabletMeta {
-    enum TabletStatus {
-        kTabletNotInit = 41;
-        kTabletOffline = 57;
-        kTabletReady = 42;
-        //kTableUnLoad = 49;
-        //kTableWaitLoad = 58;
-        kTabletLoading = 43;
-        kTabletLoadFail = 60;
-        //kTableWaitSplit = 59;
-        kTabletOnSplit = 44;
-        kTabletSplited = 51;
-        //kTableSplitFail = 61;
-        kTabletUnloading = 52;
-        kTabletUnloading2 = 68;
-        kTabletUnloadFail = 62;
-        //kTableOnMerge = 50;
-        kTabletDisable = 64;
-        kTabletDelayOffline = 65;
-        //kTabletOnSnapshot = 66;
-        //kTabletDelSnapshot = 67;
-        kTabletCorruption = 90;
-    };
-    required string table_name = 1;
-    required string path = 2;
-    required KeyRange key_range = 3;
-    optional string server_addr = 4;
-    optional TabletStatus status = 5;
-    optional int64 size = 6;
-    optional bool compress = 7;     // for Compatible
-    optional CompactStatus compact_status = 8 [default = kTableNotCompact];
-    optional StoreMedium store_medium = 9 [default = DiskStore]; // for Compatible
-    repeated uint64 parent_tablets = 12;
-    repeated int64 lg_size = 13;
-    optional int64 last_move_time_us = 15;
+  enum TabletStatus {
+    kTabletNotInit = 41;
+    kTabletReady = 42;
+    kTabletLoading = 43;
+    kTabletOnSplit = 44;
+    // kTableUnLoad      = 49;
+    kTabletMerged = 50;
+    kTabletSplitted = 51;
+    kTabletUnloading = 52;
+    kTabletOffline = 57;
+    // kTableWaitLoad    = 58;
+    // kTableWaitSplit   = 59;
+    kTabletLoadFail = 60;
+    // kTableSplitFail   = 61;
+    kTabletUnloadFail = 62;
+    // kTableOnMerge     = 50;
+    kTabletDisable = 64;
+    kTabletDelayOffline = 65;
+    // kTabletOnSnapshot = 66;
+    kTabletUnloading2 = 68;
+    // kTabletDelSnapshot= 67;
+    kTabletCorruption = 90;
+    kTabletManifestError = 91;
+  };
+  required string table_name = 1;
+  required string path = 2;
+  required KeyRange key_range = 3;
+  optional string server_addr = 4;
+  optional TabletStatus status = 5;
+  optional int64 size = 6;
+  optional bool compress = 7;  // for Compatible
+  optional CompactStatus compact_status = 8 [default = kTableNotCompact];
+  optional StoreMedium store_medium = 9
+      [default = DiskStore];  // for Compatible
+  repeated uint64 parent_tablets = 12;
+  repeated int64 lg_size = 13;
+  optional int64 last_move_time_us = 15;
+  optional int64 data_size_on_flash = 16;
+  optional int64 create_time = 17;
+  optional uint64 version = 18;
 }
 
 message TableMetaList {
-    repeated TableMeta meta = 1;
-    repeated TableCounter counter = 2;
+  repeated TableMeta meta = 1;
+  repeated TableCounter counter = 2;
 }
 
 message TabletMetaList {
-    repeated TabletMeta meta = 1;
-    repeated TabletCounter counter = 2;
-    repeated int64 timestamp = 3;  // meta update timestamp
+  repeated TabletMeta meta = 1;
+  repeated TabletCounter counter = 2;
+  repeated int64 timestamp = 3;  // meta update timestamp
 }
 
 message SdkTabletCookie {
-    optional TabletMeta meta = 1;
-    optional int64 update_time = 2;
-    optional int32 status = 3;
+  optional TabletMeta meta = 1;
+  optional int64 update_time = 2;
+  optional int32 status = 3;
 }
 
 message SdkCookie {
-    required string table_name = 1;
-    repeated SdkTabletCookie tablets = 2;
+  required string table_name = 1;
+  repeated SdkTabletCookie tablets = 2;
 }
 
 message PrimaryInfo {
-    optional string table_name = 1;
-    optional bytes row_key = 2;
-    optional bytes column_family = 3;
-    optional bytes qualifier = 4;
-    optional int64 gtxn_start_ts = 5;
-    optional string client_session = 6;
+  optional string table_name = 1;
+  optional bytes row_key = 2;
+  optional bytes column_family = 3;
+  optional bytes qualifier = 4;
+  optional int64 gtxn_start_ts = 5;
+  optional string client_session = 6;
 }

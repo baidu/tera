@@ -58,6 +58,8 @@ message TableSchema {
     optional string alias = 13; // table alias
     optional string admin = 14;
     optional bool enable_txn = 15 [default = false];
+    optional bool enable_hash = 16 [default = false];
+    optional uint32 bloom_filter_bits_per_key = 17 [default = 10];
 
     // deprecated, instead by raw_key GeneralKv
     optional bool kv_only = 9 [default = false];

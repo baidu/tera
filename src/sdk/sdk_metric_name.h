@@ -3,8 +3,8 @@
 // found in the LICENSE file.
 
 #ifndef TERA_SDK_METRIC_NAME_H_
-#define TERA_SDK_METRIC_NAME_H_ 
- 
+#define TERA_SDK_METRIC_NAME_H_
+
 #include <string>
 
 #include "common/metric/hardware_collectors.h"
@@ -51,8 +51,8 @@ const char* const kGTxnNotifiesFailCountMetric = "tera_sdk_gtxn_notifies_fail_co
 
 const char* const kGTxnTsoDelayMetric = "tera_sdk_gtxn_tso_delay_us";
 const char* const kGTxnTsoRequestCountMetric = "tera_sdk_gtxn_tso_request_count";
-} // end namespace tera 
- 
-#endif // TERA_SDK_METRIC_NAME_H_
- 
+}  // end namespace tera
+
+#endif  // TERA_SDK_METRIC_NAME_H_
+
 /* vim: set expandtab ts=4 sw=4 sts=4 tw=100: */

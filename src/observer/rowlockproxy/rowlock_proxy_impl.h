@@ -23,48 +23,43 @@ class RowlockProxyZkAdapterBase;
 class RowLockStub;
 
 class RowlockProxyImpl {
-public:
-    RowlockProxyImpl();
-    ~RowlockProxyImpl();
+ public:
+  RowlockProxyImpl();
+  ~RowlockProxyImpl();
 
-    bool Init();
+  bool Init();
 
-    void TryLock(const RowlockRequest* request,
-                 RowlockResponse* response,
-                 google::protobuf::Closure* done);
+  void TryLock(const RowlockRequest* request, RowlockResponse* response,
+               google::protobuf::Closure* done);
 
-    void UnLock(const RowlockRequest* request,
-                RowlockResponse* response,
-                google::protobuf::Closure* done);
+  void UnLock(const RowlockRequest* request, RowlockResponse* response,
+              google::protobuf::Closure* done);
 
-    // for zk
-    void SetServerNumber(uint32_t number);
-    uint32_t GetServerNumber();
-    void UpdateServers(uint32_t id, const std::string& addr);
-private:
-    uint64_t GetRowKey(const std::string& table_name,
-                       const std::string& row) const;
-    // rowkey -> server addr
-    std::string ScheduleRowKey(uint64_t row_key);
-    void ProxyCallBack(google::protobuf::Closure* done,
-                       const RowlockRequest* request,
-                       RowlockResponse* response,
-                       bool failed,
-                       int error_code);
+  // for zk
+  void SetServerNumber(uint32_t number);
+  uint32_t GetServerNumber();
+  void UpdateServers(uint32_t id, const std::string& addr);
 
-private:
-    common::Mutex server_addrs_mutex_;
-    // a map from virtual node to server addr
-    // key: vector index, virtual node number
-    // value: vector value, server address
-    // shared_ptr: used for copy-on-write
-    std::shared_ptr<std::vector<std::string>> server_addrs_;
+ private:
+  uint64_t GetRowKey(const std::string& table_name, const std::string& row) const;
+  // rowkey -> server addr
+  std::string ScheduleRowKey(uint64_t row_key);
+  void ProxyCallBack(google::protobuf::Closure* done, const RowlockRequest* request,
+                     RowlockResponse* response, bool failed, int error_code);
 
-    uint32_t server_number_;
-    std::unique_ptr<RowlockProxyZkAdapterBase> zk_adapter_;
+ private:
+  common::Mutex server_addrs_mutex_;
+  // a map from virtual node to server addr
+  // key: vector index, virtual node number
+  // value: vector value, server address
+  // shared_ptr: used for copy-on-write
+  std::shared_ptr<std::vector<std::string>> server_addrs_;
+
+  uint32_t server_number_;
+  std::unique_ptr<RowlockProxyZkAdapterBase> zk_adapter_;
 };
 
-} // namespace observer
-} // namespace tera
+}  // namespace observer
+}  // namespace tera
 
 #endif  // TERA_OBSERVER_ROWLOCKPROXY_ROWLOCK_PROXY_IMPL_H_

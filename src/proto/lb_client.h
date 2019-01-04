@@ -16,20 +16,18 @@ namespace tera {
 namespace load_balancer {
 
 class LBClient : public RpcClient<LoadBalancerService::Stub> {
-public:
-    LBClient(const std::string& server_addr = "",
-             int32_t rpc_timeout = FLAGS_tera_rpc_timeout_period);
-    virtual ~LBClient();
+ public:
+  LBClient(const std::string& server_addr = "",
+           int32_t rpc_timeout = FLAGS_tera_rpc_timeout_period);
+  virtual ~LBClient();
 
-    virtual bool CmdCtrl(const CmdCtrlRequest* request,
-                         CmdCtrlResponse* response);
+  virtual bool CmdCtrl(const CmdCtrlRequest* request, CmdCtrlResponse* response);
 
-private:
-    int32_t rpc_timeout_;
+ private:
+  int32_t rpc_timeout_;
 };
 
-} // namespace load_balancer
-} // namespace tera
+}  // namespace load_balancer
+}  // namespace tera
 
-#endif // TERA_LOAD_BALANCER_LB_CLIENT_H_
-
+#endif  // TERA_LOAD_BALANCER_LB_CLIENT_H_

@@ -5,14 +5,16 @@
 #ifndef TERA_TABLETNODE_TABLETNODE_IMPL_H_
 #define TERA_TABLETNODE_TABLETNODE_IMPL_H_
 
-#include <string>
+#include <atomic>
 #include <memory>
+#include <string>
+#include <thread>
+#include <unordered_set>
 
 #include "common/base/scoped_ptr.h"
 #include "common/event.h"
 #include "common/metric/collector_report_publisher.h"
 #include "common/metric/metric_counter.h"
-#include "common/thread.h"
 #include "common/thread_pool.h"
 
 #include "io/tablet_io.h"
@@ -31,200 +33,225 @@ class TabletManager;
 class TabletNodeZkAdapterBase;
 
 class TabletNodeImpl {
-public:
-    enum TabletNodeStatus {
-        kNotInited = kTabletNodeNotInited,
-        kIsIniting = kTabletNodeIsIniting,
-        kIsBusy = kTabletNodeIsBusy,
-        kIsReadonly = kTabletNodeIsReadonly,
-        kIsRunning = kTabletNodeIsRunning
-    };
+ public:
+  enum TabletNodeStatus {
+    kNotInited = kTabletNodeNotInited,
+    kIsIniting = kTabletNodeIsIniting,
+    kIsBusy = kTabletNodeIsBusy,
+    kIsReadonly = kTabletNodeIsReadonly,
+    kIsRunning = kTabletNodeIsRunning
+  };
 
-    struct WriteTabletTask {
-        std::vector<const RowMutationSequence*> row_mutation_vec;
-        std::vector<StatusCode> row_status_vec;
-        std::vector<int32_t> row_index_vec;
-        std::shared_ptr<Counter> row_done_counter;
+  struct WriteTabletTask {
+    std::vector<const RowMutationSequence*> row_mutation_vec;
+    std::vector<StatusCode> row_status_vec;
+    std::vector<int32_t> row_index_vec;
+    std::shared_ptr<Counter> row_done_counter;
 
-        const WriteTabletRequest* request;
-        WriteTabletResponse* response;
-        google::protobuf::Closure* done;
-        WriteRpcTimer* timer;
+    const WriteTabletRequest* request;
+    WriteTabletResponse* response;
+    google::protobuf::Closure* done;
+    WriteRpcTimer* timer;
 
-        WriteTabletTask(const WriteTabletRequest* req, WriteTabletResponse* resp,
-                   google::protobuf::Closure* d, WriteRpcTimer* t, std::shared_ptr<Counter> c)
-            : row_done_counter(c), request(req), response(resp), done(d), timer(t) {}
-    };
+    WriteTabletTask(const WriteTabletRequest* req, WriteTabletResponse* resp,
+                    google::protobuf::Closure* d, WriteRpcTimer* t, std::shared_ptr<Counter> c)
+        : row_done_counter(c), request(req), response(resp), done(d), timer(t) {}
+  };
 
-    TabletNodeImpl();
-    ~TabletNodeImpl();
+  TabletNodeImpl();
+  ~TabletNodeImpl();
 
-    bool Init();
+  bool Init();
 
-    bool Exit();
+  bool Exit();
 
-    void GarbageCollect();
+  void GarbageCollect();
+  void PersistentCacheGarbageCollect(const std::set<std::string>& inherited_files,
+                                     const std::set<std::string>& active_tablets);
 
-    void LoadTablet(const LoadTabletRequest* request,
-                    LoadTabletResponse* response,
-                    google::protobuf::Closure* done);
+  StatusCode QueryTabletStatus(const std::string& table_name, const std::string& key_start,
+                               const std::string& key_end);
 
-    bool UnloadTablet(const std::string& tablet_name,
-                      const std::string& start, const std::string& end,
-                      StatusCode* status);
+  void LoadTablet(const LoadTabletRequest* request, LoadTabletResponse* response);
 
-    void UnloadTablet(const UnloadTabletRequest* request,
-                      UnloadTabletResponse* response,
-                      google::protobuf::Closure* done);
+  bool UnloadTablet(const std::string& tablet_name, const std::string& start,
+                    const std::string& end, StatusCode* status);
 
-    void CompactTablet(const CompactTabletRequest* request,
-                       CompactTabletResponse* response,
-                       google::protobuf::Closure* done);
+  void UnloadTablet(const UnloadTabletRequest* request, UnloadTabletResponse* response);
 
-    void Update(const UpdateRequest* request,
-                UpdateResponse* response,
-                google::protobuf::Closure* done);
+  void CompactTablet(const CompactTabletRequest* request, CompactTabletResponse* response,
+                     google::protobuf::Closure* done);
 
-    void ReadTablet(int64_t start_micros,
-                    const ReadTabletRequest* request,
-                    ReadTabletResponse* response,
-                    google::protobuf::Closure* done);
+  void Update(const UpdateRequest* request, UpdateResponse* response,
+              google::protobuf::Closure* done);
 
-    void WriteTablet(const WriteTabletRequest* request,
-                     WriteTabletResponse* response,
-                     google::protobuf::Closure* done,
-                     WriteRpcTimer* timer = NULL);
+  void ReadTablet(int64_t start_micros, const ReadTabletRequest* request,
+                  ReadTabletResponse* response, google::protobuf::Closure* done,
+                  ThreadPool* read_thread_pool);
 
-    void ScanTablet(const ScanTabletRequest* request,
-                    ScanTabletResponse* response,
-                    google::protobuf::Closure* done);
+  void WriteTablet(const WriteTabletRequest* request, WriteTabletResponse* response,
+                   google::protobuf::Closure* done, WriteRpcTimer* timer = NULL);
 
-    void CmdCtrl(const TsCmdCtrlRequest* request, TsCmdCtrlResponse* response,
-                 google::protobuf::Closure* done);
+  void ScanTablet(const ScanTabletRequest* request, ScanTabletResponse* response,
+                  google::protobuf::Closure* done);
 
-    void Query(const QueryRequest* request, QueryResponse* response,
+  void CmdCtrl(const TsCmdCtrlRequest* request, TsCmdCtrlResponse* response,
                google::protobuf::Closure* done);
 
-    void SplitTablet(const SplitTabletRequest* request,
-                     SplitTabletResponse* response,
-                     google::protobuf::Closure* done);
-    
-    void ComputeSplitKey(const SplitTabletRequest* request,
-                     SplitTabletResponse* response,
-                     google::protobuf::Closure* done);
+  void Query(const QueryRequest* request, QueryResponse* response, google::protobuf::Closure* done);
 
-    void EnterSafeMode();
-    void LeaveSafeMode();
-    void ExitService();
+  void ComputeSplitKey(const SplitTabletRequest* request, SplitTabletResponse* response,
+                       google::protobuf::Closure* done);
 
-    void SetTabletNodeStatus(const TabletNodeStatus& status);
-    TabletNodeStatus GetTabletNodeStatus();
+  void EnterSafeMode();
+  void LeaveSafeMode();
+  void ExitService();
 
-    void SetRootTabletAddr(const std::string& root_tablet_addr);
+  void SetTabletNodeStatus(const TabletNodeStatus& status);
+  TabletNodeStatus GetTabletNodeStatus();
 
-    void SetSessionId(const std::string& session_id);
-    std::string GetSessionId();
+  void SetRootTabletAddr(const std::string& root_tablet_addr);
 
-    TabletNodeSysInfo& GetSysInfo();
+  void SetSessionId(const std::string& session_id);
+  std::string GetSessionId();
 
-    void RefreshSysInfo();
-    
-    void GetBackgroundErrors(std::vector<tera::TabletBackgroundErrorInfo>* background_errors);
+  TabletNodeSysInfo& GetSysInfo();
 
-    void TryReleaseMallocCache();
+  void RefreshAndDumpSysInfo();
 
-    void RefreshLevelSize();
+  void GetBackgroundErrors(std::vector<tera::TabletBackgroundErrorInfo>* background_errors);
 
-private:
-    // call this when fail to write TabletIO
-    void WriteTabletFail(WriteTabletTask* tablet_task, StatusCode status);
+  void TryReleaseMallocCache();
 
-    // write callback for TabletIO::Write()
-    void WriteTabletCallback(WriteTabletTask* tablet_task,
-                             std::vector<const RowMutationSequence*>* row_mutation_vec,
-                             std::vector<StatusCode>* status_vec);
+  void RefreshLevelSize();
 
-    bool CheckInKeyRange(const KeyList& key_list,
-                         const std::string& key_start,
-                         const std::string& key_end);
-    bool CheckInKeyRange(const KeyValueList& pair_list,
-                         const std::string& key_start,
-                         const std::string& key_end);
-    bool CheckInKeyRange(const RowMutationList& row_list,
-                         const std::string& key_start,
-                         const std::string& key_end);
-    bool CheckInKeyRange(const RowReaderList& reader_list,
-                         const std::string& key_start,
-                         const std::string& key_end);
+ private:
+  // call this when fail to write TabletIO
+  void WriteTabletFail(WriteTabletTask* tablet_task, StatusCode status);
 
+  // write callback for TabletIO::Write()
+  void WriteTabletCallback(WriteTabletTask* tablet_task,
+                           std::vector<const RowMutationSequence*>* row_mutation_vec,
+                           std::vector<StatusCode>* status_vec);
 
-    void InitCacheSystem();
+  bool CheckInKeyRange(const KeyList& key_list, const std::string& key_start,
+                       const std::string& key_end);
+  bool CheckInKeyRange(const KeyValueList& pair_list, const std::string& key_start,
+                       const std::string& key_end);
+  bool CheckInKeyRange(const RowMutationList& row_list, const std::string& key_start,
+                       const std::string& key_end);
+  bool CheckInKeyRange(const RowReaderList& reader_list, const std::string& key_start,
+                       const std::string& key_end);
 
-    void ReleaseMallocCache();
-    void EnableReleaseMallocCacheTimer(int32_t expand_factor = 1);
-    void DisableReleaseMallocCacheTimer();
+  bool InitCacheSystem();
+  void InitDfsReadThreadLimiter();
 
-    void RefreshTabletsStatus();
+  void ReleaseMallocCache();
+  void EnableReleaseMallocCacheTimer(int32_t expand_factor = 1);
+  void DisableReleaseMallocCacheTimer();
 
-    void GetInheritedLiveFiles(std::vector<TabletInheritedFileInfo>* inherited);
-    void GetInheritedLiveFiles(std::vector<InheritedLiveFiles>& inherited);
+  void RefreshTabletsStatus();
 
-    void GarbageCollectInPath(const std::string& path, leveldb::Env* env,
-                              const std::set<std::string>& inherited_files,
-                              const std::set<std::string> active_tablets);
+  void GetInheritedLiveFiles(std::vector<TabletInheritedFileInfo>* inherited);
+  void GetInheritedLiveFiles(std::vector<InheritedLiveFiles>& inherited);
 
-    bool ApplySchema(const UpdateRequest* request);
+  void GarbageCollectInPath(const std::string& path, leveldb::Env* env,
+                            const std::set<std::string>& inherited_files,
+                            const std::set<std::string>& active_tablets);
 
-    void UnloadTabletProc(io::TabletIO* tablet_io, Counter* worker_count);
+  bool ApplySchema(const UpdateRequest* request);
 
-private:
-    mutable Mutex status_mutex_;
-    TabletNodeStatus status_;
-    Mutex mutex_;
-    bool running_;
+  void UnloadTabletProc(io::TabletIO* tablet_io, Counter* worker_count);
 
-    scoped_ptr<TabletManager> tablet_manager_;
-    scoped_ptr<TabletNodeZkAdapterBase> zk_adapter_;
+ private:
+  mutable Mutex status_mutex_;
+  TabletNodeStatus status_;
+  Mutex mutex_;
+  bool running_;
 
-    uint64_t this_sequence_id_;
-    std::string local_addr_;
-    std::string root_tablet_addr_;
-    std::string session_id_;
-    int64_t release_cache_timer_id_;
+  std::shared_ptr<TabletManager> tablet_manager_;
+  scoped_ptr<TabletNodeZkAdapterBase> zk_adapter_;
 
-    TabletNodeSysInfo sysinfo_;
-    std::vector<MetricCounter> level_size_;
+  uint64_t this_sequence_id_;
+  std::string local_addr_;
+  std::string root_tablet_addr_;
+  std::string session_id_;
+  int64_t release_cache_timer_id_;
 
-    // do some tablets health check with a timer
-    common::Thread tablet_healthcheck_thread_;
-    // Exit() called should set this event
-    common::AutoResetEvent exit_event_;
-    
-    scoped_ptr<ThreadPool> thread_pool_;
+  TabletNodeSysInfo sysinfo_;
+  std::vector<MetricCounter> level_size_;
 
-    leveldb::Logger* ldb_logger_;
-    leveldb::Cache* ldb_block_cache_;
-    leveldb::Cache* m_memory_cache;
-    leveldb::TableCache* ldb_table_cache_;
-    
-    // metric for caches
-    struct CacheMetrics {
-        tera::AutoCollectorRegister block_cache_hitrate_;
-        tera::AutoCollectorRegister block_cache_entries_;
-        tera::AutoCollectorRegister block_cache_charge_;
-        
-        tera::AutoCollectorRegister table_cache_hitrate_;
-        tera::AutoCollectorRegister table_cache_entries_;
-        tera::AutoCollectorRegister table_cache_charge_;
-        
-        CacheMetrics(leveldb::Cache* block_cache, leveldb::TableCache* table_cache);
-    };
-    
-    scoped_ptr<CacheMetrics> cache_metrics_;
-    scoped_ptr<tera::AutoCollectorRegister> snappy_ratio_metric_;
+  // do some tablets health check with a timer
+  std::thread tablet_healthcheck_thread_;
+  // Exit() called should set this event
+  common::AutoResetEvent exit_event_;
+
+  scoped_ptr<ThreadPool> thread_pool_;
+
+  leveldb::Logger* ldb_logger_;
+  leveldb::Cache* ldb_block_cache_;
+  leveldb::Cache* m_memory_cache;
+  leveldb::TableCache* ldb_table_cache_;
+
+  // metric for caches
+  struct CacheMetrics {
+    tera::AutoCollectorRegister block_cache_hitrate_;
+    tera::AutoCollectorRegister block_cache_entries_;
+    tera::AutoCollectorRegister block_cache_charge_;
+
+    tera::AutoCollectorRegister table_cache_hitrate_;
+    tera::AutoCollectorRegister table_cache_entries_;
+    tera::AutoCollectorRegister table_cache_charge_;
+
+    CacheMetrics(leveldb::Cache* block_cache, leveldb::TableCache* table_cache);
+  };
+
+  scoped_ptr<CacheMetrics> cache_metrics_;
+  scoped_ptr<tera::AutoCollectorRegister> snappy_ratio_metric_;
+  // persistent cache's garbage files will be delayed for one gc period before remove.
+  std::unordered_set<std::string> delayed_gc_files_;
 };
 
-} // namespace tabletnode
-} // namespace tera
+class ReadTabletTask : public std::enable_shared_from_this<ReadTabletTask> {
+ public:
+  using RowResults = std::vector<std::shared_ptr<RowResult>>;
+  ReadTabletTask(int64_t start_micros, std::shared_ptr<TabletManager> tablet_manager,
+                 const ReadTabletRequest* request, ReadTabletResponse* response,
+                 google::protobuf::Closure* done, ThreadPool* read_thread_pool);
 
-#endif // TERA_TABLETNODE_TABLETNODE_IMPL_H_
+  void StartRead();
+
+ private:
+  struct ShardRequest {
+    int64_t offset;
+    int64_t row_num;
+    RowResults* row_results;
+    ShardRequest(int64_t off, int64_t r_num, RowResults* r_results)
+        : offset(off), row_num(r_num), row_results(r_results) {}
+  };
+
+  void DoRead(std::shared_ptr<ShardRequest> shard_req);
+  void FinishShardRequest(const std::shared_ptr<ShardRequest>& shard_req);
+
+ private:
+  std::shared_ptr<TabletManager> tablet_manager_;
+  const ReadTabletRequest* request_;
+  ReadTabletResponse* response_;
+  google::protobuf::Closure* done_;
+  ThreadPool* read_thread_pool_;
+
+  Counter finished_;
+  Counter read_success_num_;
+  std::atomic<bool> has_timeout_{false};
+
+  int64_t end_time_ms_;
+  uint64_t snapshot_id_;
+  int32_t total_row_num_;
+
+  std::vector<RowResults> row_results_list_;
+};
+
+}  // namespace tabletnode
+}  // namespace tera
+
+#endif  // TERA_TABLETNODE_TABLETNODE_IMPL_H_

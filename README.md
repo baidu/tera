@@ -47,20 +47,19 @@ Tera is built on several pieces of open source infrastructure.
 
 - __Filesystem__ (required)
 
-	Tera uses the distributed file system to store transaction log and data files. So Tera uses an abstract file system interface, called Env, to adapt to different implementations of file systems (e.g., [BFS](https://github.com/baidu/bfs), HDFS, HDFS2, POXIS filesystem).
+    Tera uses the distributed file system to store transaction log and data files. So Tera uses an abstract file system interface, called Env, to adapt to different implementations of file systems (e.g., [BFS](https://github.com/baidu/bfs), HDFS, HDFS2, POXIS filesystem).
 
 - __Distributed lock service__ (required)
 
-	Tera relies on a highly-available and persistent distributed lock service, which is used for a variety of tasks: to ensure that there is at most one active master at any time; to store meta table's location, to discover new tablet server and finalize tablet server deaths. Tera has an adapter class to adapt to different implementations of lock service (e.g., ZooKeeper, [Nexus](https://github.com/baidu/ins))
+    Tera relies on a highly-available and persistent distributed lock service, which is used for a variety of tasks: to ensure that there is at most one active master at any time; to store meta table's location, to discover new tablet server and finalize tablet server deaths. Tera has an adapter class to adapt to different implementations of lock service (e.g., ZooKeeper, [Nexus](https://github.com/baidu/ins))
 
 - __High performance RPC framework__ (required)
 
-	Tera is designed to handle a variety of demanding workloads, which range from throughput-oriented applications to latency-sensitive service. So Tera needs a high performance network programming framework. Now Tera heavily relies on [Sofa-pbrpc](https://github.com/baidu/sofa-pbrpc/) to meet the performance demand.
+    Tera is designed to handle a variety of demanding workloads, which range from throughput-oriented applications to latency-sensitive service. So Tera needs a high performance network programming framework. Now Tera heavily relies on [Sofa-pbrpc](https://github.com/baidu/sofa-pbrpc/) to meet the performance demand.
 
 - __Cluster management system__ (not necessary)
 
-	A Tera cluster in Baidu typically operates in a shared pool of machines
-that runs a wide variety of other distributed applications. So Tera can be deployed in a cluster management system [Galaxy](https://github.com/baidu/galaxy), which uses for scheduling jobs, managing resources on shared machines, dealing with machine failures, and monitoring machine status. Besides, Tera can also be deployed on RAW machine or in Docker container.
+    A Tera cluster in Baidu typically operates in a shared pool of machines that runs a wide variety of other distributed applications. So Tera can be deployed in a cluster management system [Galaxy](https://github.com/baidu/galaxy), which uses for scheduling jobs, managing resources on shared machines, dealing with machine failures, and monitoring machine status. Besides, Tera can also be deployed on RAW machine or in Docker container.
 
 ## Documents
 
@@ -69,19 +68,19 @@ that runs a wide variety of other distributed applications. So Tera can be deplo
 ## Quick start
 * __How to build__
 
-	Use sh [./build.sh](BUILD) to build Tera.
+    Use sh [./build.sh](BUILD) to build Tera.
 
 * __How to deploy__
 
-	[Pseudo Distributed Mode](doc/en/onebox.md)
+    [Pseudo Distributed Mode](doc/en/onebox.md)
 
-	[Build on Docker](example/docker)
+    [Build on Docker](example/docker)
 
 * __How to access__
 
-	[teracli](doc/en/teracli.md)
+    [teracli](doc/en/teracli.md)
 
-	[API](doc/en/sdk_guide.md)
+    [API](doc/en/sdk_guide.md)
 
 ## Contributing to Tera
 Contributions are welcomed and greatly appreciated.
@@ -91,5 +90,5 @@ Read [Roadmap](doc/en/roadmap.md) to get a general knowledge about our developme
 See [Contributions](doc/en/contributor.md) for more details.
 
 ## Follow us
-To join us, please send resume to {dist-lab, tera_dev, opensearch} at baidu.com.
+To join us, please send resume to tera-user at baidu.com.
 

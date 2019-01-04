@@ -15,7 +15,10 @@
 #include <string>
 #include <set>
 #include <map>
+#include <memory>
 #include <vector>
+
+#include "common/semaphore.h"
 
 namespace leveldb {
 
@@ -24,7 +27,7 @@ namespace leveldb {
 static const uint64_t kMaxSequenceNumber = ((0x1ull << 56) - 1);
 
 static const size_t kDefaultBlockSize = 4096;
-static const size_t kDefaultSstSize = 8 * 1024 * 1024; // 8 MB
+static const size_t kDefaultSstSize = 8 * 1024 * 1024;  // 8 MB
 class Cache;
 class TableCache;
 class CompactStrategyFactory;
@@ -32,6 +35,7 @@ class Comparator;
 class Env;
 class FilterPolicy;
 class Logger;
+class PersistentCache;
 
 // DB contents are stored in a set of blocks, each of which holds a
 // sequence of key,value pairs.  Each block may be compressed before
@@ -40,10 +44,10 @@ class Logger;
 enum CompressionType {
   // NOTE: do not change the values of existing entries, as these are
   // part of the persistent format on disk.
-  kNoCompression     = 0x0,
+  kNoCompression = 0x0,
   kSnappyCompression = 0x1,
-  kBmzCompression    = 0x2,
-  kLZ4Compression    = 0x3
+  kBmzCompression = 0x2,
+  kLZ4Compression = 0x3
 };
 
 enum RawKeyFormat {
@@ -85,6 +89,8 @@ struct LG_info {
   uint64_t posix_write_buffer_size;
   bool table_builder_batch_write;
   uint64_t table_builder_batch_size;
+  int32_t memtable_shard_num;
+  std::shared_ptr<PersistentCache> persistent_cache;
   // Other LG properties
   // ...
 
@@ -102,9 +108,10 @@ struct LG_info {
         seek_latency(0),
         use_direct_io_read(false),
         use_direct_io_write(false),
-        posix_write_buffer_size(512<<10),
+        posix_write_buffer_size(512 << 10),
         table_builder_batch_write(false),
-        table_builder_batch_size(0) {}
+        table_builder_batch_size(0),
+        memtable_shard_num(0) {}
 };
 
 // Options to control the behavior of a database (passed to DB::Open)
@@ -269,11 +276,15 @@ struct Options {
   // default: 3600(seconds)
   uint64_t manifest_switch_interval;
 
+  // Create new manifest to avoid dfs failure
+  // default: 2(MB)
+  uint64_t manifest_switch_size;
+
   // tera raw key encoding format
   RawKeyFormat raw_key_format;
 
   // seek latency(in ns)
-  int seek_latency;
+  int64_t seek_latency;
 
   // dump imm & mem table at db close, and unlink all log file
   bool dump_mem_on_shutdown;
@@ -347,6 +358,10 @@ struct Options {
 
   bool table_builder_batch_write;
   uint64_t table_builder_batch_size;
+  int32_t memtable_shard_num;
+  std::shared_ptr<PersistentCache> persistent_cache;
+  // used for removing leveldb path's prefix when access persistent cache.
+  std::string dfs_storage_path_prefix;
 
   // Create an Options object with default values for all fields.
   Options();
@@ -363,6 +378,11 @@ struct ReadOptions {
   // Callers may wish to set this field to false for bulk scans.
   // Default: true
   bool fill_cache;
+
+  // Should the file this iteration read be cached in persistent cache?
+  // It's invalid when persistent cache is disabled.
+  // Default: true
+  bool fill_persistent_cache;
 
   // If "snapshot" is non-NULL, read as of the supplied snapshot
   // (which must belong to the DB that is being read and which must
@@ -392,19 +412,23 @@ struct ReadOptions {
   // size to prefetch, default:1MB
   uint64_t prefetch_scan_size;
 
+  // If limit the max thread for reading from dfs, which will reserve some empty thread for
+  // reading from ssd.
+  // Default: false
+  bool enable_dfs_read_thread_limiter;
+
   ReadOptions(const Options* db_option)
       : verify_checksums(false),
         fill_cache(true),
+        fill_persistent_cache(true),
         snapshot(kMaxSequenceNumber),
         target_lgs(NULL),
         read_single_row(false),
         db_opt(db_option),
         prefetch_scan(false),
-        prefetch_scan_size(1 << 20) {
-  }
-  ReadOptions() {
-    *this = ReadOptions(NULL);
-  }
+        prefetch_scan_size(1 << 20),
+        enable_dfs_read_thread_limiter(false) {}
+  ReadOptions() { *this = ReadOptions(NULL); }
 };
 
 // Options that control write operations
@@ -429,67 +453,8 @@ struct WriteOptions {
 
   bool disable_wal;
 
-  WriteOptions()
-      : sync(false),
-        disable_wal(false) {
-  }
+  WriteOptions() : sync(false), disable_wal(false) {}
 };
-
-// block based cache options
-struct FlashBlockCacheOptions {
-    Options opts;
-
-    // SSD's dir
-    std::string cache_dir;
-
-    // ignore local conf, force update conf from FLAG file
-    bool force_update_conf_enabled;
-
-    // Max available size for ssd cache
-    // Default: 350G
-    uint64_t cache_size;
-
-    // Size of each block set
-    // Default: 1GB
-    uint64_t blockset_size;
-
-    // Size of user data packed per block.
-    // Default: 8KB
-    uint64_t block_size;
-
-    // Batch write size for fid alloctor
-    // Default: 100000
-    uint64_t fid_batch_num;
-
-    // block set number, which is equal to cache_size / blockset_size
-    uint64_t blockset_num;
-
-    // number of blocks per block set
-    uint64_t blocks_per_set;
-
-    // block cache's meta leveldb's block cache size
-    // Default: 2G
-    uint64_t meta_block_cache_size;
-
-    // block cache's meta leveldb's table cache size
-    // Default: 512M
-    uint64_t meta_table_cache_size;
-
-    // block cache's meta leveldb's write buffer size
-    // Default: 1M
-    uint64_t write_buffer_size;
-
-    // Base env for block cache
-    // Default: dfs_env
-    Env* env;
-
-    // Local env for block cache
-    // Default: posix_env
-    Env* cache_env;
-
-    FlashBlockCacheOptions();
-};
-
 }  // namespace leveldb
 
 #endif  // STORAGE_LEVELDB_INCLUDE_OPTIONS_H_
