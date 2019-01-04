@@ -26,12 +26,7 @@ namespace log {
 
 class AsyncWriter {
  public:
-  enum Mode {
-    kNoAction,
-    kAddRecord,
-    kSync,
-    kFlush
-  };
+  enum Mode { kNoAction, kAddRecord, kSync, kFlush };
   // Create a writer that will append data to "*dest".
   // "*dest" must be initially empty.
   // "*dest" must remain live while this Writer is in use.
@@ -74,7 +69,7 @@ class AsyncWriter {
   bool finished_;
   std::string* slice_data_;
   bool stop_;
-  bool blocked_;    // whether the current writter blocked
+  bool blocked_;  // whether the current writter blocked
   Status s_;
 
   static int block_log_number;

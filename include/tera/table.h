@@ -8,12 +8,15 @@
 #include <stdint.h>
 #include <string>
 #include <vector>
+#include <functional>
 
 #include "error_code.h"
+#include "batch_mutation.h"
 #include "mutation.h"
 #include "reader.h"
 #include "scan.h"
 #include "table_descriptor.h"
+#include "hash.h"
 
 #pragma GCC visibility push(default)
 namespace tera {
@@ -33,6 +36,7 @@ struct TabletInfo {
     std::string status;
 };
 
+class BatchMutation;
 class RowMutation;
 class RowReader;
 class Transaction;
@@ -44,6 +48,10 @@ public:
     // Return a row mutation handle. User should delete it when it is no longer
     // needed.
     virtual RowMutation* NewRowMutation(const std::string& row_key) = 0;
+
+    // Return a batch mutation handle. User should delete it when it is no longer
+    // needed.
+    virtual BatchMutation* NewBatchMutation() = 0;
     // Apply the specified row_mutation(s) to the database. Support batch put.
     // Users can set a callback in "row_mutation" to activate async put.
     // Use RowMutation::GetError() to check return code.
@@ -139,6 +147,12 @@ public:
     virtual bool Get(const std::string& row_key, const std::string& family,
                      const std::string& qualifier, int64_t* value,
                      ErrorCode* err, uint64_t snapshot_id) = 0;
+    virtual bool IsHashTable() = 0;
+    virtual std::function<std::string(const std::string&)> GetHashMethod() = 0;
+    virtual bool GetTablet(const std::string& row_key, std::string* tablet) = 0;
+
+    // For BatchMutation
+    virtual void ApplyMutation(BatchMutation* batch_mutation) = 0;
 
     Table() {}
     virtual ~Table() {}

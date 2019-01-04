@@ -79,12 +79,13 @@ extern void InitOnce(port::OnceType*, void (*initializer)());
 class AtomicPointer {
  private:
   intptr_t rep_;
+
  public:
   // Initialize to arbitrary value
   AtomicPointer();
 
   // Initialize to hold v
-  explicit AtomicPointer(void* v) : rep_(v) { }
+  explicit AtomicPointer(void* v) : rep_(v) {}
 
   // Read and return the stored pointer with the guarantee that no
   // later memory access (read or write) by this thread can be
@@ -107,14 +108,12 @@ class AtomicPointer {
 
 // Store the snappy compression of "input[0,input_length-1]" in *output.
 // Returns false if snappy is not supported by this port.
-extern bool Snappy_Compress(const char* input, size_t input_length,
-                            std::string* output);
+extern bool Snappy_Compress(const char* input, size_t input_length, std::string* output);
 
 // If input[0,input_length-1] looks like a valid snappy compressed
 // buffer, store the size of the uncompressed data in *result and
 // return true.  Else return false.
-extern bool Snappy_GetUncompressedLength(const char* input, size_t length,
-                                         size_t* result);
+extern bool Snappy_GetUncompressedLength(const char* input, size_t length, size_t* result);
 
 // Attempt to snappy uncompress input[0,input_length-1] into *output.
 // Returns true if successful, false if the input is invalid lightweight
@@ -123,8 +122,7 @@ extern bool Snappy_GetUncompressedLength(const char* input, size_t length,
 // REQUIRES: at least the first "n" bytes of output[] must be writable
 // where "n" is the result of a successful call to
 // Snappy_GetUncompressedLength.
-extern bool Snappy_Uncompress(const char* input_data, size_t input_length,
-                              char* output);
+extern bool Snappy_Uncompress(const char* input_data, size_t input_length, char* output);
 
 // ------------------ Miscellaneous -------------------
 

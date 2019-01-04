@@ -28,6 +28,9 @@ public:
         kNotImpl   = 9,
         kTxnFail   = 10,
 
+        kAuthBadParam = 21,
+        kAuthLoginFailed = 22,
+
         // only for global transaction error
         kGTxnDataTooLarge      = 101,
         kGTxnNotSupport        = 102,

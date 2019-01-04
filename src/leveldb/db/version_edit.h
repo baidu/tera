@@ -22,37 +22,38 @@ class VersionSetBuilder;
 
 struct FileMetaData {
   int refs;
-  int allowed_seeks;          // Seeks allowed until compaction
-  uint64_t check_ttl_ts;       // statistic: Descripe this sst file when to timeout check
-  uint64_t ttl_percentage;     // statistic: By default, if 50% entry timeout, will trigger compaction
-  uint64_t del_percentage;     // statistic: delete tag's percentage in sst
+  int allowed_seeks;        // Seeks allowed until compaction
+  uint64_t check_ttl_ts;    // statistic: Descripe this sst file when to timeout check
+  uint64_t ttl_percentage;  // statistic: By default, if 50% entry timeout, will
+                            // trigger compaction
+  uint64_t del_percentage;  // statistic: delete tag's percentage in sst
   uint64_t number;
-  uint64_t file_size;         // File size in bytes
-  uint64_t data_size;         // data_size <= file_size
-  InternalKey smallest;       // Smallest internal key served by table
-  InternalKey largest;        // Largest internal key served by table
-  bool smallest_fake;         // smallest is not real, have out-of-range keys
-  bool largest_fake;          // largest is not real, have out-of-range keys
-  bool being_compacted;       // Is this file undergoing compaction?
+  uint64_t file_size;    // File size in bytes
+  uint64_t data_size;    // data_size <= file_size
+  InternalKey smallest;  // Smallest internal key served by table
+  InternalKey largest;   // Largest internal key served by table
+  bool smallest_fake;    // smallest is not real, have out-of-range keys
+  bool largest_fake;     // largest is not real, have out-of-range keys
+  bool being_compacted;  // Is this file undergoing compaction?
 
-  FileMetaData() :
-      refs(0),
-      allowed_seeks(1 << 30),
-      check_ttl_ts(0),
-      ttl_percentage(0),
-      del_percentage(0),
-      number(0),
-      file_size(0),
-      data_size(0),
-      smallest_fake(false),
-      largest_fake(false),
-      being_compacted(false) { }
+  FileMetaData()
+      : refs(0),
+        allowed_seeks(1 << 30),
+        check_ttl_ts(0),
+        ttl_percentage(0),
+        del_percentage(0),
+        number(0),
+        file_size(0),
+        data_size(0),
+        smallest_fake(false),
+        largest_fake(false),
+        being_compacted(false) {}
 };
 
 class VersionEdit {
  public:
   VersionEdit() { Clear(); }
-  ~VersionEdit() { }
+  ~VersionEdit() {}
 
   void Clear();
 
@@ -80,35 +81,32 @@ class VersionEdit {
     compact_pointers_.push_back(std::make_pair(level, key));
   }
 
-  uint64_t GetLastSequence() const {
-    return last_sequence_;
-  }
-  uint64_t GetLogNumber() const {
-    return log_number_;
-  }
-  uint64_t GetNextFileNumber() const {
-    return next_file_number_;
-  }
-  std::string GetComparatorName() const {
-    return comparator_;
+  void SetStartKey(const std::string key) {
+    has_start_key_ = true;
+    start_key_ = key;
   }
 
-  bool HasNextFileNumber() const {
-    return has_next_file_number_;
+  void SetEndKey(const std::string key) {
+    has_end_key_ = true;
+    end_key_ = key;
   }
-  bool HasLastSequence() const {
-    return has_last_sequence_;
-  }
-  bool HasLogNumber() const {
-    return has_log_number_;
-  }
-  bool HasComparator() const {
-    return has_comparator_;
-  }
-  bool HasFiles(std::vector<uint64_t>* deleted_files,
-                std::vector<uint64_t>* added_files) {
-      bool has_files = deleted_files_.size() > 0
-          || new_files_.size() > 0;
+
+  uint64_t GetLastSequence() const { return last_sequence_; }
+  uint64_t GetLogNumber() const { return log_number_; }
+  uint64_t GetNextFileNumber() const { return next_file_number_; }
+  std::string GetComparatorName() const { return comparator_; }
+  std::string GetStartKey() const { return start_key_; }
+  std::string GetEndKey() const { return end_key_; }
+
+  bool HasNextFileNumber() const { return has_next_file_number_; }
+  bool HasLastSequence() const { return has_last_sequence_; }
+  bool HasLogNumber() const { return has_log_number_; }
+  bool HasComparator() const { return has_comparator_; }
+  bool HasStartKey() const { return has_start_key_; }
+  bool HasEndKey() const { return has_end_key_; }
+
+  bool HasFiles(std::vector<uint64_t>* deleted_files, std::vector<uint64_t>* added_files) {
+    bool has_files = deleted_files_.size() > 0 || new_files_.size() > 0;
     //  if (deleted_files && deleted_files_.size() > 0) {
     //    DeletedFileSet::iterator set_it = deleted_files_.begin();
     //    for (; set_it != deleted_files_.end(); ++set_it) {
@@ -122,25 +120,25 @@ class VersionEdit {
     //      added_files->push_back(file.number);
     //    }
     //  }
-      return has_files;
+    return has_files;
   }
 
   void ModifyForMerge(std::map<uint64_t, uint64_t> num_map) {
-    //if (num_map.size() == 0) {
+    // if (num_map.size() == 0) {
     //    return;
     //}
 
     //// deleted file
-    //DeletedFileSet deleted_files(deleted_files_);
-    //deleted_files_.clear();
-    //DeletedFileSet::iterator set_it = deleted_files.begin();
-    //for (; set_it != deleted_files.end(); ++set_it) {
+    // DeletedFileSet deleted_files(deleted_files_);
+    // deleted_files_.clear();
+    // DeletedFileSet::iterator set_it = deleted_files.begin();
+    // for (; set_it != deleted_files.end(); ++set_it) {
     //  std::pair<int, uint64_t> pair = *set_it;
     //  pair.second = num_map[pair.second];
     //  deleted_files_.insert(pair);
     //}
     //// new files
-    //for (uint32_t i = 0; i < new_files_.size(); ++i) {
+    // for (uint32_t i = 0; i < new_files_.size(); ++i) {
     //  FileMetaData& file = new_files_[i].second;
     //  file.number = num_map[file.number];
     //}
@@ -149,12 +147,8 @@ class VersionEdit {
   // Add the specified file at the specified number.
   // REQUIRES: This version has not been saved (see VersionSet::SaveTo)
   // REQUIRES: "smallest" and "largest" are smallest and largest keys in file
-  void AddFile(int level, uint64_t file,
-               uint64_t file_size,
-               const InternalKey& smallest,
-               const InternalKey& largest,
-               uint64_t del_percentage = 0,
-               uint64_t check_ttl_ts = 0,
+  void AddFile(int level, uint64_t file, uint64_t file_size, const InternalKey& smallest,
+               const InternalKey& largest, uint64_t del_percentage = 0, uint64_t check_ttl_ts = 0,
                uint64_t ttl_percentage = 0) {
     FileMetaData f;
     f.number = file;
@@ -168,9 +162,7 @@ class VersionEdit {
     new_files_.push_back(std::make_pair(level, f));
   }
 
-  void AddFile(int level, const FileMetaData& f) {
-    new_files_.push_back(std::make_pair(level, f));
-  }
+  void AddFile(int level, const FileMetaData& f) { new_files_.push_back(std::make_pair(level, f)); }
 
   // Delete the specified "file" from the specified "level".
   void DeleteFile(int level, int64_t number) {
@@ -196,20 +188,24 @@ class VersionEdit {
   friend class VersionSet;
   friend class VersionSetBuilder;
 
-  typedef std::vector< std::pair<int, FileMetaData> > FileMetaSet;
+  typedef std::vector<std::pair<int, FileMetaData> > FileMetaSet;
 
   std::string comparator_;
   uint64_t log_number_;
   uint64_t prev_log_number_;
   uint64_t next_file_number_;
   SequenceNumber last_sequence_;
+  std::string start_key_;
+  std::string end_key_;
   bool has_comparator_;
   bool has_log_number_;
   bool has_prev_log_number_;
   bool has_next_file_number_;
   bool has_last_sequence_;
+  bool has_start_key_;
+  bool has_end_key_;
 
-  std::vector< std::pair<int, InternalKey> > compact_pointers_;
+  std::vector<std::pair<int, InternalKey> > compact_pointers_;
 
   // Files in Version could be deleted by file number or file meta.
   // If deleted by file number, any file meta on this file would be deleted.

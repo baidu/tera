@@ -6,19 +6,21 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file. See the AUTHORS file for names of contributors.
 
-#include "leveldb/table_builder.h"
-
 #include <assert.h>
+
+#include "common/counter.h"
+#include "format.h"
+#include "leveldb/table_builder.h"
 #include "leveldb/comparator.h"
 #include "leveldb/env.h"
 #include "leveldb/filter_policy.h"
 #include "leveldb/options.h"
+#include "leveldb/persistent_cache.h"
+#include "persistent_cache/persistent_cache_file.h"
 #include "table/block_builder.h"
 #include "table/filter_block.h"
-#include "table/format.h"
 #include "util/coding.h"
 #include "util/crc32c.h"
-#include "../common/counter.h"
 
 namespace leveldb {
 
@@ -36,7 +38,7 @@ struct TableBuilder::Rep {
   std::string last_key;
   int64_t num_entries;
   uint64_t saved_size;
-  bool closed;          // Either Finish() or Abandon() has been called.
+  bool closed;  // Either Finish() or Abandon() has been called.
   FilterBlockBuilder* filter_block;
 
   // We do not emit the index entry for a block until we have seen the
@@ -52,6 +54,7 @@ struct TableBuilder::Rep {
   BlockHandle pending_handle;  // Handle to add to index block
 
   std::string compressed_output;
+  WriteableCacheFile* cache_file;
 
   Rep(const Options& opt, WritableFile* f)
       : options(opt),
@@ -63,14 +66,33 @@ struct TableBuilder::Rep {
         num_entries(0),
         saved_size(0),
         closed(false),
-        filter_block(opt.filter_policy == NULL ? NULL
-                     : new FilterBlockBuilder(opt.filter_policy)),
-        pending_index_entry(false) {
+        filter_block(opt.filter_policy == NULL ? NULL : new FilterBlockBuilder(opt.filter_policy)),
+        pending_index_entry(false),
+        cache_file(nullptr) {
     index_block_options.block_restart_interval = 1;
+    if (options.persistent_cache) {
+      std::string file_name = file->GetFileName();
+      Slice sub_filename{file_name};
+      sub_filename.remove_specified_prefix(options.dfs_storage_path_prefix);
+      auto s =
+          options.persistent_cache->NewWriteableCacheFile(sub_filename.ToString(), &cache_file);
+      if (!s.ok()) {
+        LEVELDB_LOG("Create cache file failed: %s : %s\n", file->GetFileName().c_str(),
+                    s.ToString().c_str());
+        delete cache_file;
+        cache_file = nullptr;
+      }
+    }
   }
 
   ~Rep() {
     delete filter_block;
+    // cache_file should be close and set to nullptr in TableBuilder::Finish().
+    // If not, it means we build table failed, so just abandon this cache_file.
+    if (cache_file) {
+      cache_file->Abandon();
+      cache_file = nullptr;
+    }
   }
 };
 
@@ -80,7 +102,7 @@ TableBuilder::TableBuilder(const Options& options, WritableFile* file)
     rep_->filter_block->StartBlock(0);
   }
   if (rep_->options.table_builder_batch_write) {
-      assert(rep_->options.table_builder_batch_size > 0);
+    assert(rep_->options.table_builder_batch_size > 0);
   }
 }
 
@@ -212,8 +234,7 @@ void TableBuilder::WriteBlock(BlockBuilder* block, BlockHandle* handle) {
   r->saved_size += raw.size() - block_contents.size();
 }
 
-void TableBuilder::WriteRawBlock(const Slice& block_contents,
-                                 CompressionType type,
+void TableBuilder::WriteRawBlock(const Slice& block_contents, CompressionType type,
                                  BlockHandle* handle) {
   Rep* r = rep_;
   handle->set_offset(r->offset);
@@ -224,7 +245,7 @@ void TableBuilder::WriteRawBlock(const Slice& block_contents,
     trailer[0] = type;
     uint32_t crc = crc32c::Value(block_contents.data(), block_contents.size());
     crc = crc32c::Extend(crc, trailer, 1);  // Extend crc to cover block type
-    EncodeFixed32(trailer+1, crc32c::Mask(crc));
+    EncodeFixed32(trailer + 1, crc32c::Mask(crc));
     AppendToFile(Slice(trailer, kBlockTrailerSize));
     if (r->status.ok()) {
       r->offset += block_contents.size() + kBlockTrailerSize;
@@ -232,9 +253,7 @@ void TableBuilder::WriteRawBlock(const Slice& block_contents,
   }
 }
 
-Status TableBuilder::status() const {
-  return rep_->status;
-}
+Status TableBuilder::status() const { return rep_->status; }
 
 Status TableBuilder::Finish() {
   Rep* r = rep_;
@@ -246,8 +265,7 @@ Status TableBuilder::Finish() {
 
   // Write filter block
   if (ok() && r->filter_block != NULL) {
-    WriteRawBlock(r->filter_block->Finish(), kNoCompression,
-                  &filter_block_handle);
+    WriteRawBlock(r->filter_block->Finish(), kNoCompression, &filter_block_handle);
   }
 
   // Write metaindex block
@@ -292,6 +310,19 @@ Status TableBuilder::Finish() {
   }
   FlushBatchBuffer();
   r->status = r->file->Flush();
+
+  if (rep_->cache_file) {
+    if (ok()) {
+      std::string file_name = rep_->file->GetFileName();
+      Slice key{file_name};
+      key.remove_specified_prefix(rep_->options.dfs_storage_path_prefix);
+      rep_->cache_file->Close(key);
+    } else {
+      rep_->cache_file->Abandon();
+    }
+    rep_->cache_file = nullptr;
+  }
+
   return r->status;
 }
 
@@ -301,17 +332,11 @@ void TableBuilder::Abandon() {
   r->closed = true;
 }
 
-uint64_t TableBuilder::NumEntries() const {
-  return rep_->num_entries;
-}
+uint64_t TableBuilder::NumEntries() const { return rep_->num_entries; }
 
-uint64_t TableBuilder::FileSize() const {
-  return rep_->offset;
-}
+uint64_t TableBuilder::FileSize() const { return rep_->offset; }
 
-uint64_t TableBuilder::SavedSize() const {
-  return rep_->saved_size;
-}
+uint64_t TableBuilder::SavedSize() const { return rep_->saved_size; }
 
 void TableBuilder::FlushBatchBuffer() {
   if (batch_write_buffer_.empty()) {
@@ -319,6 +344,7 @@ void TableBuilder::FlushBatchBuffer() {
   }
   Rep* r = rep_;
   r->status = r->file->Append(Slice(batch_write_buffer_));
+  AppendToCacheFile(Slice(batch_write_buffer_));
   batch_write_buffer_.clear();
 }
 
@@ -331,6 +357,20 @@ void TableBuilder::AppendToFile(const Slice& slice) {
     }
   } else {
     r->status = r->file->Append(slice);
+    AppendToCacheFile(slice);
   }
 }
-}  // namespace leveldb
+
+void TableBuilder::AppendToCacheFile(const Slice& slice) {
+  if (!rep_->cache_file) {
+    return;
+  }
+  auto s = rep_->cache_file->Append(slice);
+  if (!s.ok()) {
+    LEVELDB_LOG("Append to cache file failed: %s : %s\n", rep_->cache_file->Path().c_str(),
+                s.ToString().c_str());
+    rep_->cache_file->Abandon();
+    rep_->cache_file = nullptr;
+  }
+}
+}  // leveldb

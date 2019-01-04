@@ -12,29 +12,26 @@
 namespace leveldb {
 
 class LGWriteThread : public Thread {
-public:
-    LGWriteThread(uint32_t lg_id, DBImpl* impl,
-                  const WriteOptions& opts, WriteBatch* bench)
-        : wopts_(opts), wbench_(bench);
-    virtual ~LGWriteThread() {}
+ public:
+  LGWriteThread(uint32_t lg_id, DBImpl* impl, const WriteOptions& opts, WriteBatch* bench)
+      : wopts_(opts), wbench_(bench);
+  virtual ~LGWriteThread() {}
 
-    virtual void Run(void* params) {
-        std::cout << "LG Thread #" << lg_id_ << ": Write()" << std::endl;
-        lg_impl_->Write(wopts_, wbatch_);
-    }
+  virtual void Run(void* params) {
+    std::cout << "LG Thread #" << lg_id_ << ": Write()" << std::endl;
+    lg_impl_->Write(wopts_, wbatch_);
+  }
 
-    Status GetResult() {
-        return ret_;
-    }
+  Status GetResult() { return ret_; }
 
-private:
-    uint32_t lg_id_;
-    DBImpl* lg_impl_;
-    const WriteOptions& wopts_;
-    WriteBatch* wbatch_;
-    Status ret_;
+ private:
+  uint32_t lg_id_;
+  DBImpl* lg_impl_;
+  const WriteOptions& wopts_;
+  WriteBatch* wbatch_;
+  Status ret_;
 };
 
-} // namespace leveldb
+}  // namespace leveldb
 
-#endif // LEVELDB_DB_LG_WRITE_THREAD_H_
+#endif  // LEVELDB_DB_LG_WRITE_THREAD_H_

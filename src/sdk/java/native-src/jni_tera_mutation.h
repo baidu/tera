@@ -12,40 +12,44 @@ extern "C" {
  * Method:    nativeAdd
  * Signature: (J[B[B[B)Z
  */
-JNIEXPORT jboolean JNICALL Java_com_baidu_tera_client_TeraMutationImpl_nativeAdd
-  (JNIEnv *, jobject, jlong, jbyteArray, jbyteArray, jbyteArray);
+JNIEXPORT jboolean JNICALL
+Java_com_baidu_tera_client_TeraMutationImpl_nativeAdd(JNIEnv *, jobject, jlong, jbyteArray,
+                                                      jbyteArray, jbyteArray);
 
 /*
  * Class:     com_baidu_tera_client_TeraMutationImpl
  * Method:    nativeDeleteRow
  * Signature: (J)Z
  */
-JNIEXPORT jboolean JNICALL Java_com_baidu_tera_client_TeraMutationImpl_nativeDeleteRow
-  (JNIEnv *, jobject, jlong);
+JNIEXPORT jboolean JNICALL
+Java_com_baidu_tera_client_TeraMutationImpl_nativeDeleteRow(JNIEnv *, jobject, jlong);
 
 /*
  * Class:     com_baidu_tera_client_TeraMutationImpl
  * Method:    nativeDeleteFamily
  * Signature: (J[B)Z
  */
-JNIEXPORT jboolean JNICALL Java_com_baidu_tera_client_TeraMutationImpl_nativeDeleteFamily
-  (JNIEnv *, jobject, jlong, jbyteArray);
+JNIEXPORT jboolean JNICALL
+Java_com_baidu_tera_client_TeraMutationImpl_nativeDeleteFamily(JNIEnv *, jobject, jlong,
+                                                               jbyteArray);
 
 /*
  * Class:     com_baidu_tera_client_TeraMutationImpl
  * Method:    nativeDeleteColumn
  * Signature: (J[B[B)Z
  */
-JNIEXPORT jboolean JNICALL Java_com_baidu_tera_client_TeraMutationImpl_nativeDeleteColumn
-  (JNIEnv *, jobject, jlong, jbyteArray, jbyteArray);
+JNIEXPORT jboolean JNICALL
+Java_com_baidu_tera_client_TeraMutationImpl_nativeDeleteColumn(JNIEnv *, jobject, jlong, jbyteArray,
+                                                               jbyteArray);
 
 /*
  * Class:     com_baidu_tera_client_TeraMutationImpl
  * Method:    nativeDeleteColumns
  * Signature: (J[B[B)Z
  */
-JNIEXPORT jboolean JNICALL Java_com_baidu_tera_client_TeraMutationImpl_nativeDeleteColumns
-  (JNIEnv *, jobject, jlong, jbyteArray, jbyteArray);
+JNIEXPORT jboolean JNICALL
+Java_com_baidu_tera_client_TeraMutationImpl_nativeDeleteColumns(JNIEnv *, jobject, jlong,
+                                                                jbyteArray, jbyteArray);
 
 #ifdef __cplusplus
 }

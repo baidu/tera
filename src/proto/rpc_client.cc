@@ -12,4 +12,4 @@ sofa::pbrpc::RpcClientOptions RpcClientBase::rpc_client_options_;
 sofa::pbrpc::RpcClient RpcClientBase::rpc_client_;
 Mutex RpcClientBase::mutex_;
 
-} // namespace tera
+}  // namespace tera

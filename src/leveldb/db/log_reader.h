@@ -44,8 +44,7 @@ class Reader {
   //
   // The Reader will start reading at the first record located at physical
   // position >= initial_offset within the file.
-  Reader(SequentialFile* file, Reporter* reporter, bool checksum,
-         uint64_t initial_offset);
+  Reader(SequentialFile* file, Reporter* reporter, bool checksum, uint64_t initial_offset);
 
   ~Reader();
 
@@ -67,7 +66,7 @@ class Reader {
   bool const checksum_;
   char* const backing_store_;
   Slice buffer_;
-  bool eof_;   // Last Read() indicated EOF by returning < kBlockSize
+  bool eof_;  // Last Read() indicated EOF by returning < kBlockSize
 
   // Offset of the last record returned by ReadRecord.
   uint64_t last_record_offset_;

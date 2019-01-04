@@ -14,36 +14,35 @@ namespace tera {
 namespace master {
 
 enum class TableEvent {
-    kEnableTable,
-    kDisableTable,
-    kDeleteTable,
+  kEnableTable,
+  kDisableTable,
+  kDeleteTable,
 };
 
-std::ostream& operator<< (std::ostream& o, const TableEvent event);
+std::ostream& operator<<(std::ostream& o, const TableEvent event);
 
 class TableStateMachine {
-public:
-    TableStateMachine(TableStatus init_status) : curr_status_(init_status) {}
-    ~TableStateMachine() {}
+ public:
+  TableStateMachine(TableStatus init_status) : curr_status_(init_status) {}
+  ~TableStateMachine() {}
 
-    bool DoStateTransition(const TableEvent event) {
-        TableStatus post_status;
-        if (state_transitions_.DoStateTransition(curr_status_, event, &post_status)) {
-            curr_status_ = post_status;
-            return true;
-        }
-        return false;
-    };
-    
-    TableStatus GetStatus() { return curr_status_; }
-    void SetStatus(TableStatus status) { curr_status_ = status; }
+  bool DoStateTransition(const TableEvent event) {
+    TableStatus post_status;
+    if (state_transitions_.DoStateTransition(curr_status_, event, &post_status)) {
+      curr_status_ = post_status;
+      return true;
+    }
+    return false;
+  };
 
-    typedef StateTransitionRules<TableStatus, TableEvent> TableStateTransitionRulesType;
-private:
-    TableStatus curr_status_;
-    const static TableStateTransitionRulesType state_transitions_;
+  TableStatus GetStatus() { return curr_status_; }
+  void SetStatus(TableStatus status) { curr_status_ = status; }
 
+  typedef StateTransitionRules<TableStatus, TableEvent> TableStateTransitionRulesType;
+
+ private:
+  TableStatus curr_status_;
+  const static TableStateTransitionRulesType state_transitions_;
 };
 }
 }
-

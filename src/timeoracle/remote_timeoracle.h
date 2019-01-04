@@ -14,60 +14,57 @@ namespace tera {
 namespace timeoracle {
 
 class ClosureGuard {
-public:
-    ClosureGuard(::google::protobuf::Closure* done) : done_(done) {
-    }
+ public:
+  ClosureGuard(::google::protobuf::Closure* done) : done_(done) {}
 
-    ~ClosureGuard() {
-        if (done_) {
-            done_->Run();
-        }
+  ~ClosureGuard() {
+    if (done_) {
+      done_->Run();
     }
+  }
 
-    ::google::protobuf::Closure* release() {
-        auto done = done_;
-        done_ = nullptr;
-        return done;
-    }
+  ::google::protobuf::Closure* release() {
+    auto done = done_;
+    done_ = nullptr;
+    return done;
+  }
 
-private:
-    ClosureGuard(const ClosureGuard&) = delete;
-private:
-    ::google::protobuf::Closure* done_;
+ private:
+  ClosureGuard(const ClosureGuard&) = delete;
+
+ private:
+  ::google::protobuf::Closure* done_;
 };
 
 class RemoteTimeoracle : public TimeoracleServer {
-public:
-    RemoteTimeoracle(int64_t start_timestamp) : timeoracle_(start_timestamp) {
+ public:
+  RemoteTimeoracle(int64_t start_timestamp) : timeoracle_(start_timestamp) {}
+
+  virtual void GetTimestamp(::google::protobuf::RpcController* controller,
+                            const ::tera::GetTimestampRequest* request,
+                            ::tera::GetTimestampResponse* response,
+                            ::google::protobuf::Closure* done) {
+    ClosureGuard closure_guard(done);
+
+    int64_t count = request->count();
+    int64_t start_timestamp = timeoracle_.GetTimestamp(count);
+
+    if (start_timestamp) {
+      response->set_start_timestamp(start_timestamp);
+      response->set_count(count);
+      response->set_status(kTimeoracleOk);
+    } else {
+      response->set_status(kTimeoracleBusy);
     }
+  }
 
-    virtual void GetTimestamp(::google::protobuf::RpcController* controller,
-                              const ::tera::GetTimestampRequest* request,
-                              ::tera::GetTimestampResponse* response,
-                              ::google::protobuf::Closure* done) {
-        ClosureGuard    closure_guard(done);
+  Timeoracle* GetTimeoracle() { return &timeoracle_; }
 
-        int64_t count = request->count();
-        int64_t start_timestamp = timeoracle_.GetTimestamp(count);
-
-        if (start_timestamp) {
-            response->set_start_timestamp(start_timestamp);
-            response->set_count(count);
-            response->set_status(kTimeoracleOk);
-        } else {
-            response->set_status(kTimeoracleBusy);
-        }
-    }
-
-    Timeoracle* GetTimeoracle() {
-        return &timeoracle_;
-    }
-
-private:
-    Timeoracle      timeoracle_;
+ private:
+  Timeoracle timeoracle_;
 };
 
-} // namespace timeoracle
-} // namespace tera
+}  // namespace timeoracle
+}  // namespace tera
 
-#endif // TERA_TIMEORACLE_REMOTE_TIMEORACLE_H
+#endif  // TERA_TIMEORACLE_REMOTE_TIMEORACLE_H

@@ -107,16 +107,6 @@ class ScanDescriptor(object):
         """
         lib.tera_scan_descriptor_set_buffer_size(self.desc, buffer_size)
 
-    def SetIsAsync(self, is_async):
-        """
-        sdk内部启用并行scan操作，加快scan速率
-        开启或者不开启，给用户的逻辑完全一样，默认不开启
-
-        Args:
-            is_async(bool): 是否启用并行scan
-        """
-        lib.tera_scan_descriptor_set_is_async(self.desc, is_async)
-
     def SetPackInterval(self, interval):
         """
         设置scan操作的超时时长，单位ms
@@ -147,13 +137,6 @@ class ScanDescriptor(object):
         """
         lib.tera_scan_descriptor_add_column_family(self.desc, cf)
 
-    def IsAsync(self):
-        """
-        Returns:
-            (bool) 当前scan操作是否为async方式
-        """
-        return lib.tera_scan_descriptor_is_async(self.desc)
-
     def SetTimeRange(self, start, end):
         """
         设置返回版本的时间范围
@@ -166,17 +149,6 @@ class ScanDescriptor(object):
                 Epoch (00:00:00 UTC, January 1, 1970), measured in us
         """
         lib.tera_scan_descriptor_set_time_range(self.desc, start, end)
-
-    def SetFilter(self, filter_str):
-        """
-        设置过滤器（当前只支持比较初级的功能）
-
-        Args:
-            filter_str(string): 过滤字符串
-        Returns:
-            (bool) 返回True表示filter_str解析成功，支持这种过滤方式，否则表示解析失败
-        """
-        return lib.tera_scan_descriptor_set_filter(self.desc, filter_str)
 
 
 class ResultStream(object):
@@ -925,9 +897,6 @@ def init_function_prototype_for_scan():
     lib.tera_scan_descriptor_add_column_family.argtypes = [c_void_p, c_char_p]
     lib.tera_scan_descriptor_add_column_family.restype = None
 
-    lib.tera_scan_descriptor_is_async.argtypes = [c_void_p]
-    lib.tera_scan_descriptor_is_async.restype = c_bool
-
     lib.tera_scan_descriptor_set_buffer_size.argtypes = [c_void_p, c_int64]
     lib.tera_scan_descriptor_set_buffer_size.restype = None
 
@@ -936,9 +905,6 @@ def init_function_prototype_for_scan():
 
     lib.tera_scan_descriptor_set_pack_interval.argtypes = [c_char_p, c_int64]
     lib.tera_scan_descriptor_set_pack_interval.restype = None
-
-    lib.tera_scan_descriptor_set_is_async.argtypes = [c_void_p, c_bool]
-    lib.tera_scan_descriptor_set_is_async.restype = None
 
     lib.tera_scan_descriptor_set_max_versions.argtypes = [c_void_p, c_int32]
     lib.tera_scan_descriptor_set_max_versions.restype = None
@@ -949,9 +915,6 @@ def init_function_prototype_for_scan():
     lib.tera_scan_descriptor_set_time_range.argtypes = [c_void_p,
                                                         c_int64, c_int64]
     lib.tera_scan_descriptor_set_time_range.restype = None
-
-    lib.tera_scan_descriptor_set_filter.argtypes = [c_void_p, c_char_p]
-    lib.tera_scan_descriptor_set_filter.restype = c_bool
 
 
 def init_function_prototype_for_client():

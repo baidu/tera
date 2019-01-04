@@ -13,7 +13,7 @@
 
 namespace leveldb {
 
-class Coding { };
+class Coding {};
 
 TEST(Coding, Fixed32) {
   std::string s;
@@ -43,15 +43,15 @@ TEST(Coding, Fixed64) {
     uint64_t v = static_cast<uint64_t>(1) << power;
     uint64_t actual;
     actual = DecodeFixed64(p);
-    ASSERT_EQ(v-1, actual);
+    ASSERT_EQ(v - 1, actual);
     p += sizeof(uint64_t);
 
     actual = DecodeFixed64(p);
-    ASSERT_EQ(v+0, actual);
+    ASSERT_EQ(v + 0, actual);
     p += sizeof(uint64_t);
 
     actual = DecodeFixed64(p);
-    ASSERT_EQ(v+1, actual);
+    ASSERT_EQ(v + 1, actual);
     p += sizeof(uint64_t);
   }
 }
@@ -112,8 +112,8 @@ TEST(Coding, Varint64) {
     // Test values near powers of two
     const uint64_t power = 1ull << k;
     values.push_back(power);
-    values.push_back(power-1);
-    values.push_back(power+1);
+    values.push_back(power - 1);
+    values.push_back(power + 1);
   }
 
   std::string s;
@@ -133,14 +133,12 @@ TEST(Coding, Varint64) {
     ASSERT_EQ(VarintLength(actual), p - start);
   }
   ASSERT_EQ(p, limit);
-
 }
 
 TEST(Coding, Varint32Overflow) {
   uint32_t result;
   std::string input("\x81\x82\x83\x84\x85\x11");
-  ASSERT_TRUE(GetVarint32Ptr(input.data(), input.data() + input.size(), &result)
-              == NULL);
+  ASSERT_TRUE(GetVarint32Ptr(input.data(), input.data() + input.size(), &result) == NULL);
 }
 
 TEST(Coding, Varint32Truncation) {
@@ -158,8 +156,7 @@ TEST(Coding, Varint32Truncation) {
 TEST(Coding, Varint64Overflow) {
   uint64_t result;
   std::string input("\x81\x82\x83\x84\x85\x81\x82\x83\x84\x85\x11");
-  ASSERT_TRUE(GetVarint64Ptr(input.data(), input.data() + input.size(), &result)
-              == NULL);
+  ASSERT_TRUE(GetVarint64Ptr(input.data(), input.data() + input.size(), &result) == NULL);
 }
 
 TEST(Coding, Varint64Truncation) {
@@ -195,43 +192,41 @@ TEST(Coding, Strings) {
 }
 
 TEST(Coding, PutLG) {
-    std::string a_input("dfsfsfsfsfs");
-    Slice b_slice = a_input;
-    uint32_t a_id = 3;
-    PutFixed32LGId(&a_input, a_id);
+  std::string a_input("dfsfsfsfsfs");
+  Slice b_slice = a_input;
+  uint32_t a_id = 3;
+  PutFixed32LGId(&a_input, a_id);
 
-    uint32_t b_id = 9999999;
-    Slice a_slice = a_input;
-    ASSERT_TRUE(GetFixed32LGId(&a_slice, &b_id));
+  uint32_t b_id = 9999999;
+  Slice a_slice = a_input;
+  ASSERT_TRUE(GetFixed32LGId(&a_slice, &b_id));
 
-    ASSERT_EQ(a_id, b_id);
-    ASSERT_EQ(a_slice.ToString(), b_slice.ToString());
+  ASSERT_EQ(a_id, b_id);
+  ASSERT_EQ(a_slice.ToString(), b_slice.ToString());
 }
 
 TEST(Coding, PutLG_ugly) {
-    Slice a_slice("dfsfsfsfsfs");
-    Slice b_slice = a_slice;
-    uint32_t a_id = 3;
-    uint32_t b_id = 3;
-    ASSERT_TRUE(false == GetFixed32LGId(&a_slice, &b_id));
+  Slice a_slice("dfsfsfsfsfs");
+  Slice b_slice = a_slice;
+  uint32_t a_id = 3;
+  uint32_t b_id = 3;
+  ASSERT_TRUE(false == GetFixed32LGId(&a_slice, &b_id));
 
-    ASSERT_EQ(a_id, b_id);
-    ASSERT_EQ(a_slice.ToString(), b_slice.ToString());
+  ASSERT_EQ(a_id, b_id);
+  ASSERT_EQ(a_slice.ToString(), b_slice.ToString());
 }
 
 TEST(Coding, PutFixed64Cmp) {
-    std::string sa, sb;
-    PutFixed64(&sa, 100);
-    PutFixed64(&sb, 50);
-    ASSERT_TRUE(sa > sb);
-    uint64_t a = DecodeFixed64(sa.c_str());
-    uint64_t b = DecodeFixed64(sb.c_str());
-    ASSERT_TRUE(a == 100);
-    ASSERT_TRUE(b == 50);
+  std::string sa, sb;
+  PutFixed64(&sa, 100);
+  PutFixed64(&sb, 50);
+  ASSERT_TRUE(sa > sb);
+  uint64_t a = DecodeFixed64(sa.c_str());
+  uint64_t b = DecodeFixed64(sb.c_str());
+  ASSERT_TRUE(a == 100);
+  ASSERT_TRUE(b == 50);
 }
 
 }  // namespace leveldb
 
-int main(int argc, char** argv) {
-  return leveldb::test::RunAllTests();
-}
+int main(int argc, char** argv) { return leveldb::test::RunAllTests(); }

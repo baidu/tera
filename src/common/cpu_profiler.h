@@ -17,54 +17,54 @@
 namespace tera {
 
 class CpuProfiler {
-public:
-    /**
-     * @brief Init CpuProfiler and the detect thread will start
-    **/
-    explicit CpuProfiler(const std::string& profiler_file="CPU");
+ public:
+  /**
+   * @brief Init CpuProfiler and the detect thread will start
+  **/
+  explicit CpuProfiler(const std::string& profiler_file = "CPU");
 
-    ~CpuProfiler();
+  ~CpuProfiler();
 
-    CpuProfiler& SetEnable(bool enable) {
-        if (enable) {
-            LOG(INFO) << "[Cpu Profiler] Cpu Profiler Enabled";
-        } else {
-            LOG(INFO) << "[Cpu Profiler] Cpu Profiler Disabled";
-        }
-
-        {
-            std::unique_lock<std::mutex> lock(lock_);
-            enable_ = enable;
-        }
-        cv_.notify_one();
-        return *this;
+  CpuProfiler& SetEnable(bool enable) {
+    if (enable) {
+      LOG(INFO) << "[Cpu Profiler] Cpu Profiler Enabled";
+    } else {
+      LOG(INFO) << "[Cpu Profiler] Cpu Profiler Disabled";
     }
 
-    CpuProfiler& SetInterval(int second) {
-        {
-            std::unique_lock<std::mutex> lock(lock_);
-            interval_ = std::chrono::seconds(second);
-        }
-        cv_.notify_one();
-        return *this;
+    {
+      std::unique_lock<std::mutex> lock(lock_);
+      enable_ = enable;
     }
+    cv_.notify_one();
+    return *this;
+  }
 
-private:
-    void run();
+  CpuProfiler& SetInterval(int second) {
+    {
+      std::unique_lock<std::mutex> lock(lock_);
+      interval_ = std::chrono::seconds(second);
+    }
+    cv_.notify_one();
+    return *this;
+  }
 
-private:
-    std::atomic<bool> exit_;
-    bool enable_{false};
-    std::chrono::seconds interval_{10};
-    //Never Changed, So we can use profiler_file_.c_str() in safe.
-    const std::string profiler_file_;
-    std::mutex lock_;
-    std::condition_variable cv_;
-    std::thread thread_;
+ private:
+  void run();
+
+ private:
+  std::atomic<bool> exit_;
+  bool enable_{false};
+  std::chrono::seconds interval_{10};
+  // Never Changed, So we can use profiler_file_.c_str() in safe.
+  const std::string profiler_file_;
+  std::mutex lock_;
+  std::condition_variable cv_;
+  std::thread thread_;
 };
 
-} // namespace tera
+}  // namespace tera
 
-#endif  //TERA_CPU_PROFILER_H
+#endif  // TERA_CPU_PROFILER_H
 
 /* vim: set ts=4 sw=4 sts=4 tw=100 */

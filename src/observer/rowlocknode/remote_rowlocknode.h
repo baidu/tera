@@ -13,25 +13,20 @@ namespace tera {
 namespace observer {
 
 class RemoteRowlockNode : public RowlockService {
-public:
-    explicit RemoteRowlockNode(RowlockNodeImpl* rowlocknode_impl);
-    ~RemoteRowlockNode();
+ public:
+  explicit RemoteRowlockNode(RowlockNodeImpl* rowlocknode_impl);
+  ~RemoteRowlockNode();
 
-    void Lock(google::protobuf::RpcController* controller,
-            const RowlockRequest* request,
-            RowlockResponse* response,
-            google::protobuf::Closure* done);
+  void Lock(google::protobuf::RpcController* controller, const RowlockRequest* request,
+            RowlockResponse* response, google::protobuf::Closure* done);
 
-    void UnLock(google::protobuf::RpcController* controller,
-            const RowlockRequest* request,
-            RowlockResponse* response,
-            google::protobuf::Closure* done);
+  void UnLock(google::protobuf::RpcController* controller, const RowlockRequest* request,
+              RowlockResponse* response, google::protobuf::Closure* done);
 
-private:
-    RowlockNodeImpl* rowlocknode_impl_;
+ private:
+  RowlockNodeImpl* rowlocknode_impl_;
 };
 
-} // namespace observer
-} // namespace tera
+}  // namespace observer
+}  // namespace tera
 #endif  // TERA_OBSERVER_ROWLOCKNODE_REMOTE_ROWLOCKNODE_H_
-

@@ -36,10 +36,10 @@
 /// #define SOMEMACRO() PP_DISALLOW_IN_HEADER_FILE()
 /// A compile error will be issued if SOMEMACRO() is used in header files
 #ifdef __GNUC__
-# define PP_DISALLOW_IN_HEADER_FILE() \
-    STATIC_ASSERT(__INCLUDE_LEVEL__ == 0, "This macro can not be used in header files");
+#define PP_DISALLOW_IN_HEADER_FILE() \
+  STATIC_ASSERT(__INCLUDE_LEVEL__ == 0, "This macro can not be used in header files");
 #else
-# define PP_DISALLOW_IN_HEADER_FILE()
+#define PP_DISALLOW_IN_HEADER_FILE()
 #endif
 
-#endif // TERA_COMMON_BASE_PREPROCESS_H_
+#endif  // TERA_COMMON_BASE_PREPROCESS_H_

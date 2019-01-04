@@ -17,7 +17,7 @@
 namespace leveldb {
 
 class ThreadPool {
-public:
+ public:
   ThreadPool();
   ~ThreadPool();
 
@@ -35,7 +35,7 @@ public:
   void SetLogger(Logger* info_log) { info_log_ = info_log; }
   int64_t GetPendingTaskNum();
 
-private:
+ private:
   struct BGItem {
     void* arg;
     void (*function)(void*);
@@ -83,6 +83,6 @@ private:
   BGMap latest_;
 };
 
-} // namespace leveldb
+}  // namespace leveldb
 
-#endif // LEVELDB_THREAD_POOL_H_
+#endif  // LEVELDB_THREAD_POOL_H_

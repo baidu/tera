@@ -18,41 +18,42 @@ namespace tera {
 namespace load_balancer {
 
 class UnityBalancer : public Balancer {
-public:
-    explicit UnityBalancer(const LBOptions& options);
-    virtual ~UnityBalancer();
+ public:
+  explicit UnityBalancer(const LBOptions& options);
+  virtual ~UnityBalancer();
 
-    virtual bool BalanceCluster(
-            const std::vector<std::shared_ptr<LBTabletNode>>& lb_nodes,
-            std::vector<Plan>* plans) override;
+  virtual bool BalanceCluster(const std::vector<std::shared_ptr<LBTabletNode>>& lb_nodes,
+                              std::vector<Plan>* plans) override;
 
-    // if table_name is empty, balance whole culster,
-    // otherwhise balance the specified table of table_name
-    virtual bool BalanceCluster(
-            const std::string& table_name,
-            const std::vector<std::shared_ptr<LBTabletNode>>& lb_nodes,
-            std::vector<Plan>* plans) override;
+  // if table_name is empty, balance whole culster,
+  // otherwhise balance the specified table of table_name
+  virtual bool BalanceCluster(const std::string& table_name,
+                              const std::vector<std::shared_ptr<LBTabletNode>>& lb_nodes,
+                              std::vector<Plan>* plans) override;
 
-    virtual bool NeedBalance(const std::shared_ptr<Cluster>& cluster);
+  bool NeedBalance(const std::shared_ptr<Cluster>& cluster);
 
-protected:
-    virtual void InitCostFunctions(const std::shared_ptr<Cluster>& cluster);
+  virtual std::string GetName() override;
 
-    virtual double ComputeCost(double previous_cost);
+ protected:
+  void InitCostFunctions(const std::shared_ptr<Cluster>& cluster);
 
-    virtual Action* NextAction(const std::shared_ptr<Cluster>& cluster);
+  double ComputeCost(double previous_cost);
 
-    // diff the initial cluster state with the current cluster state, then create plans
-    virtual void CreatePlans(const std::shared_ptr<Cluster>& cluster, std::vector<Plan>* plans);
+  Action* NextAction(const std::shared_ptr<Cluster>& cluster);
 
-private:
-    std::vector<std::shared_ptr<CostFunction>> cost_functions_;
-    std::vector<std::shared_ptr<ActionGenerator>> action_generators_;
+  // diff the initial cluster state with the current cluster state, then create
+  // plans
+  void CreatePlans(const std::shared_ptr<Cluster>& cluster, std::vector<Plan>* plans);
 
-    LBOptions lb_options_;
+ private:
+  std::vector<std::shared_ptr<CostFunction>> cost_functions_;
+  std::vector<std::shared_ptr<ActionGenerator>> action_generators_;
+
+  LBOptions lb_options_;
 };
 
-} // namespace load_balancer
-} // namespace tera
+}  // namespace load_balancer
+}  // namespace tera
 
-#endif // TERA_LOAD_BALANCER_UNITY_BALANCER_H_
+#endif  // TERA_LOAD_BALANCER_UNITY_BALANCER_H_

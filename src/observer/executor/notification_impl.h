@@ -7,10 +7,9 @@
 
 #include <memory>
 #include <string>
-#include <vector>
 #include "observer/executor/notify_cell.h"
 
-#include "observer/executor/notification.h"
+#include "observer/notification.h"
 #include "tera.h"
 
 namespace tera {
@@ -19,29 +18,37 @@ namespace observer {
 Notification* GetNotification(const std::shared_ptr<NotifyCell>& notify_cell);
 
 class NotificationImpl : public Notification {
-public:
-    explicit NotificationImpl(const std::shared_ptr<NotifyCell>& notify_cell);
-    virtual ~NotificationImpl() {}
+ public:
+  explicit NotificationImpl(const std::shared_ptr<NotifyCell>& notify_cell);
+  virtual ~NotificationImpl() {}
 
-    virtual void Ack(Table* t,
-                     const std::string& row_key,
-                     const std::string& column_family,
-                     const std::string& qualifier);
+  virtual void SetAckCallBack(Notification::Callback callback);
+  virtual void SetAckContext(void* context);
+  virtual void* GetAckContext();
 
-    virtual void Notify(Table* t,
-                        const std::string& row_key,
-                        const std::string& column_family,
-                        const std::string& qualifier);
+  virtual void Ack(Table* t, const std::string& row_key, const std::string& column_family,
+                   const std::string& qualifier);
 
-    virtual void Done();
+  virtual void SetNotifyCallBack(Notification::Callback callback);
+  virtual void SetNotifyContext(void* context);
+  virtual void* GetNotifyContext();
 
-private:
-    std::shared_ptr<NotifyCell> notify_cell_;
-    int64_t start_timestamp_;
-    int64_t notify_timestamp_;
+  virtual void Notify(Table* t, const std::string& row_key, const std::string& column_family,
+                      const std::string& qualifier);
+
+  virtual void Done();
+
+ private:
+  std::shared_ptr<NotifyCell> notify_cell_;
+  int64_t start_timestamp_;
+  int64_t notify_timestamp_;
+  Notification::Callback ack_callback_;
+  Notification::Callback notify_callback_;
+  void* ack_context_;
+  void* notify_context_;
 };
 
-} // namespace observer
-} // namespace tera
+}  // namespace observer
+}  // namespace tera
 
 #endif  // TERA_OBSERVER_EXECUTOR_NOTIFICATION_IMPL_H_

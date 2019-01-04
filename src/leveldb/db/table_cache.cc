@@ -34,36 +34,31 @@ static void UnrefEntry(void* arg1, void* arg2) {
   cache->Release(h);
 }
 
-static std::string GetTableFileSign(const std::string& dbname,
-                                    const uint64_t* file_number) {
-    return dbname + std::string(reinterpret_cast<const char*>(file_number),
-                                sizeof(*file_number));
+static std::string GetTableFileSign(const std::string& dbname, const uint64_t* file_number) {
+  return dbname + std::string(reinterpret_cast<const char*>(file_number), sizeof(*file_number));
 }
 
-TableCache::TableCache(size_t byte_size)
-    : cache_(NewLRUCache(byte_size)) {
-}
+TableCache::TableCache(size_t byte_size) : cache_(NewLRUCache(byte_size)) {}
 
-TableCache::~TableCache() {
-  delete cache_;
-}
+TableCache::~TableCache() { delete cache_; }
 
 Status TableCache::FindTable(const std::string& dbname, const Options* options,
-                             uint64_t file_number, uint64_t file_size,
-                             Cache::Handle** handle) {
+                             uint64_t file_number, uint64_t file_size, Cache::Handle** handle) {
   Status s;
   std::string sign = GetTableFileSign(dbname, &file_number);
   Slice key(sign);
-  MutexLock lock(&mu_);
+  auto index = GetIndex(file_number);
+  auto& mu = this->mu_[index];
+  MutexLock lock(&mu);
   *handle = cache_->Lookup(key);
   if (*handle == NULL) {
-    //printf("file not in cache %s, try open it\n", fname.c_str());
+    // printf("file not in cache %s, try open it\n", fname.c_str());
     Waiter* w = NULL;
-    WaitFileList::iterator it = wait_files_.find(sign);
-    if (it != wait_files_.end()){
-      //printf("file in open_list %s, wait\n", fname.c_str());
+    WaitFileList::iterator it = wait_files_[index].find(sign);
+    if (it != wait_files_[index].end()) {
+      // printf("file in open_list %s, wait\n", fname.c_str());
       w = it->second;
-      w->wait_num ++;
+      w->wait_num++;
       while (!w->done) {
         w->cv.Wait();
       }
@@ -76,20 +71,20 @@ Status TableCache::FindTable(const std::string& dbname, const Options* options,
 
       if (--w->wait_num == 0) {
         // last thread wait for open
-        wait_files_.erase(sign);
-        //printf("wait done %s, delete cv\n", fname.c_str());
+        wait_files_[index].erase(sign);
+        // printf("wait done %s, delete cv\n", fname.c_str());
         delete w;
       } else {
-        //printf("wait done %s, not last\n", fname.c_str());
+        // printf("wait done %s, not last\n", fname.c_str());
       }
     } else {
-      //printf("file not in open_list %s, Do open\n", fname.c_str());
-      w = new Waiter(&mu_);
+      // printf("file not in open_list %s, Do open\n", fname.c_str());
+      w = new Waiter(&mu);
       w->wait_num = 1;
-      wait_files_[sign] = w;
+      wait_files_[index][sign] = w;
 
       // Unlock when open file
-      mu_.Unlock();
+      mu.Unlock();
       RandomAccessFile* file = NULL;
       Table* table = NULL;
       std::string fname = TableFileName(dbname, file_number);
@@ -110,13 +105,13 @@ Status TableCache::FindTable(const std::string& dbname, const Options* options,
         tf->table = table;
         *handle = cache_->Insert(key, tf, table->IndexBlockSize(), &DeleteEntry);
       }
-      mu_.Lock();
+      mu.Lock();
       if (--w->wait_num == 0) {
-        wait_files_.erase(sign);
-        //printf("open done %s, no wait thread\n", fname.c_str());
+        wait_files_[index].erase(sign);
+        // printf("open done %s, no wait thread\n", fname.c_str());
         delete w;
       } else {
-        //printf("open done %s, signal all wait thread\n", fname.c_str());
+        // printf("open done %s, signal all wait thread\n", fname.c_str());
         w->status = s;
         w->done = true;
         w->cv.SignalAll();
@@ -126,21 +121,14 @@ Status TableCache::FindTable(const std::string& dbname, const Options* options,
   return s;
 }
 
-Iterator* TableCache::NewIterator(const ReadOptions& options,
-                                  const std::string& dbname,
-                                  uint64_t file_number,
-                                  uint64_t file_size,
-                                  Table** tableptr) {
+Iterator* TableCache::NewIterator(const ReadOptions& options, const std::string& dbname,
+                                  uint64_t file_number, uint64_t file_size, Table** tableptr) {
   return NewIterator(options, dbname, file_number, file_size, "", "", tableptr);
 }
 
-Iterator* TableCache::NewIterator(const ReadOptions& options,
-                                  const std::string& dbname,
-                                  uint64_t file_number,
-                                  uint64_t file_size,
-                                  const Slice& smallest,
-                                  const Slice& largest,
-                                  Table** tableptr) {
+Iterator* TableCache::NewIterator(const ReadOptions& options, const std::string& dbname,
+                                  uint64_t file_number, uint64_t file_size, const Slice& smallest,
+                                  const Slice& largest, Table** tableptr) {
   assert(options.db_opt);
   if (tableptr != NULL) {
     *tableptr = NULL;
@@ -161,12 +149,8 @@ Iterator* TableCache::NewIterator(const ReadOptions& options,
   return result;
 }
 
-Status TableCache::Get(const ReadOptions& options,
-                       const std::string& dbname,
-                       uint64_t file_number,
-                       uint64_t file_size,
-                       const Slice& k,
-                       void* arg,
+Status TableCache::Get(const ReadOptions& options, const std::string& dbname, uint64_t file_number,
+                       uint64_t file_size, const Slice& k, void* arg,
                        void (*saver)(void*, const Slice&, const Slice&)) {
   assert(options.db_opt);
   Cache::Handle* handle = NULL;

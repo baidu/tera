@@ -14,7 +14,7 @@ TEST_OPT = -g2 -Wall -Dprivate=public
 
 INCPATH += -I./src -I./include -I./src/leveldb/include -I./src/leveldb -I./src/sdk \
            -I./src/sdk/java/native-src $(DEPS_INCPATH) 
-LEVELDB_INCPATH = -I../ 
+LEVELDB_INCPATH = "-I../ -I../../thirdparty/include/"
 CFLAGS += $(OPT) $(INCPATH) -fPIC -fvisibility=hidden # hide internal symbol of tera
 TEST_CFLAGS += $(TEST_OPT) $(INCPATH) -fPIC -fvisibility=hidden # hide internal symbol of tera
 CXXFLAGS += -std=gnu++11 $(CFLAGS)
@@ -28,11 +28,16 @@ PROTO_FILES := $(wildcard src/proto/*.proto)
 PROTO_OUT_CC := $(PROTO_FILES:.proto=.pb.cc)
 PROTO_OUT_H := $(PROTO_FILES:.proto=.pb.h)
 
+ACCESS_SRC := $(wildcard src/access/*.cc) $(wildcard src/access/authorization/*.cc) \
+              $(wildcard src/access/helpers/*.cc) $(wildcard src/access/giano/*.cc) \
+              $(wildcard src/access/identification/*.cc) $(wildcard src/access/verification/*.cc)
+QUOTA_SRC := $(wildcard src/quota/*.cc) $(wildcard src/quota/helpers/*.cc) \
+             $(wildcard src/quota/limiter/*.cc)
 MASTER_SRC := $(wildcard src/master/*.cc)
 TABLETNODE_SRC := $(wildcard src/tabletnode/*.cc)
 IO_SRC := $(wildcard src/io/*.cc)
 SDK_SRC := $(wildcard src/sdk/*.cc) $(wildcard src/sdk/test/global_txn_testutils.cc) \
-		   src/observer/rowlocknode/zk_rowlock_client_zk_adapter.cc src/observer/rowlocknode/ins_rowlock_client_zk_adapter.cc
+		   src/observer/rowlocknode/rowlocknode_zk_adapter.cc src/observer/rowlocknode/ins_rowlocknode_zk_adapter.cc
 HTTP_SRC := $(wildcard src/sdk/http/*.cc)
 PROTO_SRC := $(filter-out %.pb.cc, $(wildcard src/proto/*.cc)) $(PROTO_OUT_CC)
 JNI_TERA_SRC := $(wildcard src/sdk/java/native-src/*.cc)
@@ -44,9 +49,9 @@ COMMON_SRC := $(wildcard src/common/base/*.cc) $(wildcard src/common/net/*.cc) \
               $(wildcard src/common/console/*.cc) $(wildcard src/common/log/*.cc) \
 			  $(wildcard src/common/metric/*.cc) $(wildcard src/common/*.cc)
 SERVER_WRAPPER_SRC := src/tera_main_wrapper.cc
-SERVER_SRC := src/tera_main.cc src/tera_entry.cc
-CLIENT_SRC := src/teracli_main.cc
-TERAUTIL_SRC := src/terautil.cc
+SERVER_SRC := src/tera_main.cc src/common/tera_entry.cc
+CLIENT_SRC := src/teracli_main.cc src/io/io_flags.cc
+TERAUTIL_SRC := src/terautil.cc src/io/io_flags.cc
 GTXN_TEST_SRC := src/sdk/test/global_txn_test_tool.cc
 TEST_CLIENT_SRC := src/tera_test_main.cc
 TERA_C_SRC := src/tera_c.cc
@@ -61,7 +66,7 @@ TEST_SRC := src/utils/test/prop_tree_test.cc src/utils/test/tprinter_test.cc \
 			src/observer/test/observer_test.cc \
 			$(wildcard src/sdk/test/*_test.cc) $(COMMON_TEST_SRC)
 
-TIMEORACLE_SRC := $(wildcard src/timeoracle/*.cc) src/tera_entry.cc
+TIMEORACLE_SRC := $(wildcard src/timeoracle/*.cc) src/common/tera_entry.cc
 TIMEORACLE_BENCH_SRC := src/timeoracle/bench/timeoracle_bench.cc
 ROWLOCK_SRC := $(wildcard src/observer/rowlocknode/*.cc) src/sdk/rowlock_client.cc
 ROWLOCK_PROXY_SRC := $(wildcard src/observer/rowlockproxy/*.cc) 
@@ -71,6 +76,8 @@ OBSERVER_DEMO_SRC := $(wildcard src/observer/observer_demo.cc)
 TEST_OUTPUT := test_output
 UNITTEST_OUTPUT := $(TEST_OUTPUT)/unittest
 
+ACCESS_OBJ := $(ACCESS_SRC:.cc=.o)
+QUOTA_OBJ := $(QUOTA_SRC:.cc=.o)
 MASTER_OBJ := $(MASTER_SRC:.cc=.o)
 TABLETNODE_OBJ := $(TABLETNODE_SRC:.cc=.o)
 IO_OBJ := $(IO_SRC:.cc=.o)
@@ -97,7 +104,7 @@ ROWLOCK_OBJ := $(ROWLOCK_SRC:.cc=.o)
 ROWLOCK_PROXY_OBJ := $(ROWLOCK_PROXY_SRC:.cc=.o)
 OBSERVER_OBJ := $(OBSERVER_SRC:.cc=.o)
 OBSERVER_DEMO_OBJ := $(OBSERVER_DEMO_SRC:.cc=.o)
-ALL_OBJ := $(MASTER_OBJ) $(TABLETNODE_OBJ) $(IO_OBJ) $(SDK_OBJ) $(PROTO_OBJ) \
+ALL_OBJ := $(ACCESS_OBJ) $(QUOTA_OBJ) $(MASTER_OBJ) $(TABLETNODE_OBJ) $(IO_OBJ) $(SDK_OBJ) $(PROTO_OBJ) \
            $(JNI_TERA_OBJ) $(OTHER_OBJ) $(COMMON_OBJ) $(SERVER_OBJ) $(CLIENT_OBJ) $(TERAUTIL_OBJ) \
            $(TEST_CLIENT_OBJ) $(TERA_C_OBJ) $(MONITOR_OBJ) $(MARK_OBJ) \
            $(SERVER_WRAPPER_OBJ) $(TIMEORACLE_OBJ) $(ROWLOCK_OBJ) $(ROWLOCK_PROXY_OBJ)  $(OBSERVER_OBJ) $(OBSERVER_DEMO_OBJ)
@@ -157,11 +164,12 @@ tera_main: src/tera_main_wrapper.o src/version.o src/tera_flags.o
 	$(CXX) -o $@ $^ $(LDFLAGS)
 
 tera_master: $(SERVER_OBJ) $(MASTER_OBJ) $(IO_OBJ) $(SDK_OBJ) \
-             $(PROTO_OBJ) $(OTHER_OBJ) $(COMMON_OBJ) $(LEVELDB_LIB)
+             $(PROTO_OBJ) $(OTHER_OBJ) $(COMMON_OBJ) $(LEVELDB_LIB) $(ACCESS_OBJ) $(QUOTA_OBJ)
 	$(CXX) -o $@ $^ $(LDFLAGS)
 
-tabletserver: $(SERVER_OBJ) $(TABLETNODE_OBJ) $(IO_OBJ) $(SDK_OBJ) \
-              $(PROTO_OBJ) $(OTHER_OBJ) $(COMMON_OBJ) $(LEVELDB_LIB)
+MASTER_ENTRY_OBJ=src/master/master_entry.o
+tabletserver: $(SERVER_OBJ) $(TABLETNODE_OBJ) $(IO_OBJ) $(SDK_OBJ) $(filter-out $(MASTER_ENTRY_OBJ),$(MASTER_OBJ)) \
+              $(PROTO_OBJ) $(OTHER_OBJ) $(COMMON_OBJ) $(LEVELDB_LIB) $(ACCESS_OBJ) $(QUOTA_OBJ)
 	$(CXX) -o $@ $^ $(LDFLAGS)
 
 libtera.a: $(SDK_OBJ) $(PROTO_OBJ) $(OTHER_OBJ) $(COMMON_OBJ) $(LEVELDB_UTIL)
@@ -180,31 +188,31 @@ libtera.so: $(SDK_OBJ) $(PROTO_OBJ) $(OTHER_OBJ) $(COMMON_OBJ) $(LEVELDB_UTIL) $
 libtera_c.so: $(TERA_C_OBJ) $(LIBRARY)
 	$(CXX) -o $@ $^ $(SO_LDFLAGS)
 
-teracli: $(CLIENT_OBJ) $(IO_OBJ) $(LEVELDB_LIB) $(LIBRARY)
+teracli: $(CLIENT_OBJ) $(LIBRARY) $(LEVELDB_LIB) $(ACCESS_OBJ)
 	$(CXX) -o $@ $^ $(LDFLAGS)
 
-terautil: $(TERAUTIL_OBJ) $(LIBRARY)
+terautil: $(TERAUTIL_OBJ) $(LEVELDB_LIB) $(LIBRARY) $(ACCESS_OBJ)
 	$(CXX) -o $@ $^ $(LDFLAGS)
 
-gtxn_test_tool: $(GTXN_TEST_OBJ) $(LIBRARY)
+gtxn_test_tool: $(GTXN_TEST_OBJ) $(LIBRARY) $(ACCESS_OBJ)
 	$(CXX) -o $@ $^ $(LDFLAGS)
 
 #teramo: $(MONITOR_OBJ) $(LIBRARY)
 #	$(CXX) -o $@ $^ $(LDFLAGS)
 
-tera_mark: $(MARK_OBJ) $(LIBRARY) $(LEVELDB_LIB)
+tera_mark: $(MARK_OBJ) $(LIBRARY) $(LEVELDB_LIB) $(ACCESS_OBJ)
 	$(CXX) -o $@ $^ $(LDFLAGS)
 
-tera_test: $(TEST_CLIENT_OBJ) $(LIBRARY)
-	$(CXX) -o $@ $(TEST_CLIENT_OBJ) $(LIBRARY) $(LDFLAGS)
+tera_test: $(TEST_CLIENT_OBJ) $(LIBRARY) $(ACCESS_OBJ)
+	$(CXX) -o $@ $(TEST_CLIENT_OBJ) $(ACCESS_OBJ) $(LIBRARY) $(LDFLAGS)
 
-timeoracle: $(TIMEORACLE_OBJ) $(PROTO_OBJ) $(COMMON_OBJ) $(OTHER_OBJ) $(SDK_OBJ) $(LEVELDB_LIB)
+timeoracle: $(TIMEORACLE_OBJ) $(PROTO_OBJ) $(COMMON_OBJ) $(OTHER_OBJ) $(SDK_OBJ) $(LEVELDB_LIB) $(ACCESS_OBJ)
 	$(CXX) -o $@ $^ $(LDFLAGS)
 
 timeoracle_bench : $(TIMEORACLE_BENCH_OBJ) $(LIBRARY)
 	$(CXX) -o $@ $^ $(LDFLAGS)
 
-rowlock : $(SERVER_OBJ) $(ROWLOCK_OBJ) $(PROTO_OBJ) $(OTHER_OBJ) $(COMMON_OBJ) $(SDK_OBJ) $(LEVELDB_LIB)
+rowlock : $(SERVER_OBJ) $(ROWLOCK_OBJ) $(PROTO_OBJ) $(OTHER_OBJ) $(COMMON_OBJ) $(SDK_OBJ) $(LEVELDB_LIB) $(ACCESS_OBJ)
 	$(CXX) -o $@ $^ $(LDFLAGS)
 
 rowlock_proxy : $(SERVER_OBJ) $(ROWLOCK_PROXY_OBJ) $(PROTO_OBJ) $(COMMON_OBJ) $(OBSERVER_LIBRARY) $(LEVELDB_LIB)
@@ -217,7 +225,7 @@ libjni_tera.so: $(JNI_TERA_OBJ) $(LIBRARY)
 	$(CXX) -o $@ $^ $(SO_LDFLAGS)
 
 src/leveldb/libleveldb.a: FORCE
-	CXXFLAGS=$(LEVELDB_INCPATH) CC=$(CC) CXX=$(CXX) $(MAKE) -C src/leveldb
+	CXXFLAGS=$(LEVELDB_INCPATH) LDFLAGS="$(LDFLAGS)" CC=$(CC) CXX=$(CXX) $(MAKE) -C src/leveldb
 
 tera_bench:
 
@@ -234,11 +242,11 @@ tprinter_test: src/utils/test/tprinter_test.o $(LIBRARY)
 string_util_test: src/utils/test/string_util_test.o $(LIBRARY)
 	$(CXX) -o $@ $^ $(LDFLAGS)
 
-tablet_io_test: src/sdk/tera.o src/io/test/tablet_io_test.o src/tabletnode/tabletnode_sysinfo.o src/tera_entry.cc\
+tablet_io_test: src/sdk/tera.o src/io/test/tablet_io_test.o src/tabletnode/tabletnode_sysinfo.o src/common/tera_entry.cc\
                 $(IO_OBJ) $(PROTO_OBJ) $(OTHER_OBJ) $(COMMON_OBJ) $(LEVELDB_LIB) $(TABLETNODE_OBJ) $(SDK_OBJ)
 	$(CXX) $(TEST_CXXFLAGS) -o $@ $^ $(LDFLAGS)
 
-load_test: src/sdk/tera.o src/io/test/load_test.o src/tabletnode/tabletnode_sysinfo.o  src/tera_entry.cc\
+load_test: src/sdk/tera.o src/io/test/load_test.o src/tabletnode/tabletnode_sysinfo.o  src/common/tera_entry.cc\
 			$(IO_OBJ) $(PROTO_OBJ) $(OTHER_OBJ) $(COMMON_OBJ) $(LEVELDB_LIB) $(TABLETNODE_OBJ) $(SDK_OBJ)
 	$(CXX) $(TEST_CXXFLAGS) -o $@ $^ $(LDFLAGS)
 
@@ -248,11 +256,11 @@ fragment_test: src/utils/test/fragment_test.o src/utils/fragment.o
 progress_bar_test: src/common/console/progress_bar_test.o src/common/console/progress_bar.o
 	$(CXX) -o $@ $^ $(LDFLAGS)
 
-tablet_scanner_test: src/sdk/tera.o src/io/test/tablet_scanner_test.o src/tabletnode/tabletnode_sysinfo.o src/tera_entry.cc\
+tablet_scanner_test: src/sdk/tera.o src/io/test/tablet_scanner_test.o src/tabletnode/tabletnode_sysinfo.o src/common/tera_entry.cc\
 					 $(IO_OBJ) $(PROTO_OBJ) $(OTHER_OBJ) $(COMMON_OBJ) $(LEVELDB_LIB) $(TABLETNODE_OBJ) $(SDK_OBJ)
 	$(CXX) $(TEST_CXXFLAGS) -o $@ $^ $(LDFLAGS)
 
-master_test: src/master/test/master_test.o src/master/test/trackable_gc_test.o src/tera_entry.cc $(MASTER_OBJ) $(IO_OBJ) $(SDK_OBJ) \
+master_test: src/master/test/master_test.o src/master/test/trackable_gc_test.o src/common/tera_entry.cc $(MASTER_OBJ) $(IO_OBJ) $(SDK_OBJ) \
              $(PROTO_OBJ) $(OTHER_OBJ) $(COMMON_OBJ) $(LEVELDB_LIB)
 	$(CXX) -o $@ $^ $(LDFLAGS) $(TEST_CXXFLAGS)
 

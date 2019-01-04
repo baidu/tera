@@ -18,20 +18,15 @@
 namespace leveldb {
 
 // A utility routine: write "data" to the named file and Sync() it.
-extern Status WriteStringToFileSync(Env* env, const Slice& data,
-                                    const std::string& fname);
+extern Status WriteStringToFileSync(Env* env, const Slice& data, const std::string& fname);
 
-static std::string MakeFileName(const std::string& name, uint64_t number,
-                                const char* suffix) {
+static std::string MakeFileName(const std::string& name, uint64_t number, const char* suffix) {
   char buf[100];
-  snprintf(buf, sizeof(buf), "/%08llu.%s",
-           static_cast<unsigned long long>(number),
-           suffix);
+  snprintf(buf, sizeof(buf), "/%08llu.%s", static_cast<unsigned long long>(number), suffix);
   return name + buf;
 }
 
-bool ParseDbName(const std::string& dbname, std::string* prefix,
-                 uint64_t* tablet, uint64_t* lg) {
+bool ParseDbName(const std::string& dbname, std::string* prefix, uint64_t* tablet, uint64_t* lg) {
   std::string::size_type pos1, pos2;
 
   assert(dbname[dbname.size() - 1] != '/');
@@ -87,33 +82,23 @@ std::string TableFileName(const std::string& name, uint64_t number) {
 std::string DescriptorFileName(const std::string& dbname, uint64_t number) {
   assert(number > 0);
   char buf[100];
-  snprintf(buf, sizeof(buf), "/MANIFEST-%06llu",
-           static_cast<unsigned long long>(number));
+  snprintf(buf, sizeof(buf), "/MANIFEST-%06llu", static_cast<unsigned long long>(number));
   return dbname + buf;
 }
 
-std::string CurrentFileName(const std::string& dbname) {
-  return dbname + "/CURRENT";
-}
+std::string CurrentFileName(const std::string& dbname) { return dbname + "/CURRENT"; }
 
-std::string LockFileName(const std::string& dbname) {
-  return dbname + "/LOCK";
-}
+std::string LockFileName(const std::string& dbname) { return dbname + "/LOCK"; }
 
 std::string TempFileName(const std::string& dbname, uint64_t number) {
   assert(number > 0);
   return MakeFileName(dbname, number, "dbtmp");
 }
 
-std::string InfoLogFileName(const std::string& dbname) {
-  return dbname + "/LOG";
-}
+std::string InfoLogFileName(const std::string& dbname) { return dbname + "/LOG"; }
 
 // Return the name of the old info log file for "dbname".
-std::string OldInfoLogFileName(const std::string& dbname) {
-  return dbname + "/LOG.old";
-}
-
+std::string OldInfoLogFileName(const std::string& dbname) { return dbname + "/LOG.old"; }
 
 // Owned filenames have the form:
 //    dbname/CURRENT
@@ -122,9 +107,7 @@ std::string OldInfoLogFileName(const std::string& dbname) {
 //    dbname/LOG.old
 //    dbname/MANIFEST-[0-9]+
 //    dbname/[0-9]+.(log|sst)
-bool ParseFileName(const std::string& fname,
-                   uint64_t* number,
-                   FileType* type) {
+bool ParseFileName(const std::string& fname, uint64_t* number, FileType* type) {
   Slice rest(fname);
   if (rest == "CURRENT") {
     *number = 0;
@@ -168,8 +151,7 @@ bool ParseFileName(const std::string& fname,
   return true;
 }
 
-Status SetCurrentFile(Env* env, const std::string& dbname,
-                      uint64_t descriptor_number) {
+Status SetCurrentFile(Env* env, const std::string& dbname, uint64_t descriptor_number) {
   // Remove leading "dbname/" and add newline to manifest file name
   std::string manifest = DescriptorFileName(dbname, descriptor_number);
   Slice contents = manifest;
@@ -180,12 +162,12 @@ Status SetCurrentFile(Env* env, const std::string& dbname,
   if (s.ok()) {
     s = env->RenameFile(tmp, CurrentFileName(dbname));
   } else {
-    Log("[%s][dfs error] open dbtmp[%s] error, status[%s].\n",
-        dbname.c_str(), tmp.c_str(), s.ToString().c_str());
+    LEVELDB_LOG("[%s][dfs error] open dbtmp[%s] error, status[%s].\n", dbname.c_str(), tmp.c_str(),
+                s.ToString().c_str());
   }
   if (!s.ok()) {
-    Log("[%s][dfs error] rename CURRENT[%s] error, status[%s].\n",
-        dbname.c_str(), tmp.c_str(), s.ToString().c_str());
+    LEVELDB_LOG("[%s][dfs error] rename CURRENT[%s] error, status[%s].\n", dbname.c_str(),
+                tmp.c_str(), s.ToString().c_str());
     env->DeleteFile(tmp);
   }
   return s;
@@ -193,21 +175,22 @@ Status SetCurrentFile(Env* env, const std::string& dbname,
 
 const char* FileTypeToString(FileType type) {
   switch (type) {
-  case kLogFile:
-    return "kLogFile";
-  case kDBLockFile:
-    return "kDBLockFile";
-  case kTableFile:
-    return "kTableFile";
-  case kDescriptorFile:
-    return "kDescriptorFile";
-  case kCurrentFile:
-    return "kCurrentFile";
-  case kTempFile:
-    return "kTempFile";
-  case kInfoLogFile:
-    return "kInfoLogFile";
-  default:;
+    case kLogFile:
+      return "kLogFile";
+    case kDBLockFile:
+      return "kDBLockFile";
+    case kTableFile:
+      return "kTableFile";
+    case kDescriptorFile:
+      return "kDescriptorFile";
+    case kCurrentFile:
+      return "kCurrentFile";
+    case kTempFile:
+      return "kTempFile";
+    case kInfoLogFile:
+      return "kInfoLogFile";
+    default:
+      ;
   }
   return "kUnknown";
 }
@@ -244,50 +227,45 @@ std::string BuildTabletPath(const std::string& prefix, uint64_t tablet) {
 
 std::string BuildTabletLgPath(const std::string& prefix, uint64_t tablet, uint64_t lg) {
   char buf[100];
-  snprintf(buf, sizeof(buf), "/tablet%08llu/%llu",
-           static_cast<unsigned long long>(tablet),
+  snprintf(buf, sizeof(buf), "/tablet%08llu/%llu", static_cast<unsigned long long>(tablet),
            static_cast<unsigned long long>(lg));
   std::string lg_path = prefix + buf;
   return lg_path;
 }
 
-std::string BuildTableFilePath(const std::string& prefix, uint64_t tablet,
-                               uint64_t lg, uint64_t number) {
+std::string BuildTableFilePath(const std::string& prefix, uint64_t tablet, uint64_t lg,
+                               uint64_t number) {
   char buf[100];
-  snprintf(buf, sizeof(buf), "/tablet%08llu/%llu",
-           static_cast<unsigned long long>(tablet),
+  snprintf(buf, sizeof(buf), "/tablet%08llu/%llu", static_cast<unsigned long long>(tablet),
            static_cast<unsigned long long>(lg));
   std::string dbname = prefix + buf;
   return MakeFileName(dbname, number & 0xffffffff, "sst");
 }
 
-std::string BuildTrashTableFilePath(const std::string& prefix, uint64_t tablet,
-                                    uint32_t lg_id, uint64_t number,
-                                    const std::string& time) {
-    char buf[100];
-    snprintf(buf, sizeof(buf), "/tablet%08llu/%lu/%08llu.sst.%s",
-            static_cast<unsigned long long>(tablet),
-            static_cast<unsigned long>(lg_id),
-            static_cast<unsigned long long>(number),
-            time.c_str());
+std::string BuildTrashTableFilePath(const std::string& prefix, uint64_t tablet, uint32_t lg_id,
+                                    uint64_t number, const std::string& time) {
+  char buf[100];
+  snprintf(buf, sizeof(buf), "/tablet%08llu/%lu/%08llu.sst.%s",
+           static_cast<unsigned long long>(tablet), static_cast<unsigned long>(lg_id),
+           static_cast<unsigned long long>(number), time.c_str());
 
-    return prefix + buf;
+  return prefix + buf;
 }
 
 std::string GetTimeStrFromTrashFile(const std::string& path) {
-    size_t dir_pos = path.rfind("/");
-    if (dir_pos == std::string::npos || dir_pos == path.length() - 1) {
-        return "";
-    }
-    std::string file = path.substr(dir_pos + 1, path.length() - dir_pos - 1);
+  size_t dir_pos = path.rfind("/");
+  if (dir_pos == std::string::npos || dir_pos == path.length() - 1) {
+    return "";
+  }
+  std::string file = path.substr(dir_pos + 1, path.length() - dir_pos - 1);
 
-    size_t time_pos = file.rfind(".");
-    if (time_pos == std::string::npos) {
-        return "";
-    }
-    std::string time_str = file.substr(time_pos + 1, file.length() - time_pos - 1);
+  size_t time_pos = file.rfind(".");
+  if (time_pos == std::string::npos) {
+    return "";
+  }
+  std::string time_str = file.substr(time_pos + 1, file.length() - time_pos - 1);
 
-    return time_str;
+  return time_str;
 }
 
 std::string BuildTableFilePath(const std::string& prefix, uint64_t lg, uint64_t full_number) {
@@ -304,8 +282,7 @@ std::string RealDbName(const std::string& dbname, uint64_t tablet) {
     return dbname;
   }
   char buf[100];
-  snprintf(buf, sizeof(buf), "/tablet%08llu/%llu",
-           static_cast<unsigned long long>(tablet),
+  snprintf(buf, sizeof(buf), "/tablet%08llu/%llu", static_cast<unsigned long long>(tablet),
            static_cast<unsigned long long>(lg));
   return prefix + buf;
 }
@@ -313,16 +290,14 @@ std::string RealDbName(const std::string& dbname, uint64_t tablet) {
 std::string GetTabletPathFromNum(const std::string& tablename, uint64_t tablet) {
   assert(tablet > 0);
   char buf[32];
-  snprintf(buf, sizeof(buf), "/tablet%08llu",
-           static_cast<unsigned long long>(tablet));
+  snprintf(buf, sizeof(buf), "/tablet%08llu", static_cast<unsigned long long>(tablet));
   return tablename + buf;
 }
 
 std::string GetChildTabletPath(const std::string& parent_path, uint64_t tablet) {
   assert(tablet > 0);
   char buf[32];
-  snprintf(buf, sizeof(buf), "%08llu",
-           static_cast<unsigned long long>(tablet));
+  snprintf(buf, sizeof(buf), "%08llu", static_cast<unsigned long long>(tablet));
   return parent_path.substr(0, parent_path.size() - 8) + buf;
 }
 
@@ -351,8 +326,7 @@ std::string FileNumberDebugString(uint64_t full_number) {
   uint64_t tablet = (full_number >> 32 & 0x7FFFFFFF);
   uint64_t file = full_number & 0xffffffff;
   char buf[32];
-  snprintf(buf, sizeof(buf), "[%08llu %08llu.sst]",
-           static_cast<unsigned long long>(tablet),
+  snprintf(buf, sizeof(buf), "[%08llu %08llu.sst]", static_cast<unsigned long long>(tablet),
            static_cast<unsigned long long>(file));
   return std::string(buf, 23);
 }

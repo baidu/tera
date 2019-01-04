@@ -38,21 +38,17 @@ namespace {
 // combines multiple entries for the same userkey found in the DB
 // representation into a single entry while accounting for sequence
 // numbers, deletion markers, overwrites, etc.
-class DBIter: public Iterator {
+class DBIter : public Iterator {
  public:
   // Which direction is the iterator currently moving?
   // (1) When moving forward, the internal iterator is positioned at
   //     the exact entry that yields this->key(), this->value()
   // (2) When moving backwards, the internal iterator is positioned
   //     just before all entries whose user key == this->key().
-  enum Direction {
-    kForward,
-    kReverse
-  };
+  enum Direction { kForward, kReverse };
 
-  DBIter(const std::string* dbname, Env* env,
-         const Comparator* cmp, Iterator* iter, SequenceNumber s,
-         const std::map<uint64_t, uint64_t>& rollbacks)
+  DBIter(const std::string* dbname, Env* env, const Comparator* cmp, Iterator* iter,
+         SequenceNumber s, const std::map<uint64_t, uint64_t>& rollbacks)
       : dbname_(dbname),
         env_(env),
         user_comparator_(cmp),
@@ -60,11 +56,8 @@ class DBIter: public Iterator {
         sequence_(s),
         rollbacks_(rollbacks),
         direction_(kForward),
-        valid_(false) {
-  }
-  virtual ~DBIter() {
-    delete iter_;
-  }
+        valid_(false) {}
+  virtual ~DBIter() { delete iter_; }
   virtual bool Valid() const { return valid_; }
   virtual Slice key() const {
     assert(valid_);
@@ -93,9 +86,7 @@ class DBIter: public Iterator {
   void FindPrevUserEntry();
   bool ParseKey(ParsedInternalKey* key);
 
-  inline void SaveKey(const Slice& k, std::string* dst) {
-    dst->assign(k.data(), k.size());
-  }
+  inline void SaveKey(const Slice& k, std::string* dst) { dst->assign(k.data(), k.size()); }
 
   inline void ClearSavedValue() {
     if (saved_value_.capacity() > 1048576) {
@@ -114,8 +105,8 @@ class DBIter: public Iterator {
   const std::map<uint64_t, uint64_t> rollbacks_;
 
   Status status_;
-  std::string saved_key_;     // == current key when direction_==kReverse
-  std::string saved_value_;   // == current raw value when direction_==kReverse
+  std::string saved_key_;    // == current key when direction_==kReverse
+  std::string saved_value_;  // == current raw value when direction_==kReverse
   Direction direction_;
   bool valid_;
 
@@ -174,8 +165,7 @@ void DBIter::FindNextUserEntry(bool skipping, std::string* skip) {
           skipping = true;
           break;
         case kTypeValue:
-          if (skipping &&
-              user_comparator_->Compare(ikey.user_key, *skip) <= 0) {
+          if (skipping && user_comparator_->Compare(ikey.user_key, *skip) <= 0) {
             // Entry hidden
           } else {
             valid_ = true;
@@ -207,8 +197,7 @@ void DBIter::Prev() {
         ClearSavedValue();
         return;
       }
-      if (user_comparator_->Compare(ExtractUserKey(iter_->key()),
-                                    saved_key_) < 0) {
+      if (user_comparator_->Compare(ExtractUserKey(iter_->key()), saved_key_) < 0) {
         break;
       }
     }
@@ -264,8 +253,7 @@ void DBIter::Seek(const Slice& target) {
   direction_ = kForward;
   ClearSavedValue();
   saved_key_.clear();
-  AppendInternalKey(
-      &saved_key_, ParsedInternalKey(target, sequence_, kValueTypeForSeek));
+  AppendInternalKey(&saved_key_, ParsedInternalKey(target, sequence_, kValueTypeForSeek));
   iter_->Seek(saved_key_);
   if (iter_->Valid()) {
     FindNextUserEntry(false, &saved_key_ /* temporary storage */);
@@ -294,13 +282,9 @@ void DBIter::SeekToLast() {
 
 }  // anonymous namespace
 
-Iterator* NewDBIterator(
-    const std::string* dbname,
-    Env* env,
-    const Comparator* user_key_comparator,
-    Iterator* internal_iter,
-    const SequenceNumber& sequence,
-    const std::map<uint64_t, uint64_t>& rollbacks) {
+Iterator* NewDBIterator(const std::string* dbname, Env* env, const Comparator* user_key_comparator,
+                        Iterator* internal_iter, const SequenceNumber& sequence,
+                        const std::map<uint64_t, uint64_t>& rollbacks) {
   return new DBIter(dbname, env, user_key_comparator, internal_iter, sequence, rollbacks);
 }
 

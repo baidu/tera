@@ -12,33 +12,22 @@
 
 namespace leveldb {
 
-void SplitString(const std::string& full,
-                 const std::string& delim,
+void SplitString(const std::string& full, const std::string& delim,
                  std::vector<std::string>* result);
 
-void SplitStringEnd(const std::string& full,
-                    std::string* begin_part,
-                    std::string* end_part,
+void SplitStringEnd(const std::string& full, std::string* begin_part, std::string* end_part,
                     std::string delim = ".");
 
-void SplitStringStart(const std::string& full,
-                      std::string* begin_part,
-                      std::string* end_part,
+void SplitStringStart(const std::string& full, std::string* begin_part, std::string* end_part,
                       std::string delim = ".");
 
-std::string ReplaceString(const std::string& str,
-                          const std::string& src,
-                          const std::string& dest);
+std::string ReplaceString(const std::string& str, const std::string& src, const std::string& dest);
 
+std::string TrimString(const std::string& str, const std::string& trim = " ");
 
-std::string TrimString(const std::string& str,
-                       const std::string& trim = " ");
+bool StringEndsWith(const std::string& str, const std::string& sub_str);
 
-bool StringEndsWith(const std::string& str,
-                    const std::string& sub_str);
-
-bool StringStartWith(const std::string& str,
-                    const std::string& sub_str);
+bool StringStartWith(const std::string& str, const std::string& sub_str);
 
 char* StringAsArray(std::string* str);
 
@@ -48,12 +37,10 @@ uint64_t StringToUint64(const std::string& int_str, int base = 10);
 
 // file path
 
-void SplitStringPath(const std::string& full_path,
-                     std::string* dir_part,
-                     std::string* file_part);
+void SplitStringPath(const std::string& full_path, std::string* dir_part, std::string* file_part);
 
 bool IsExist(const std::string& file_path);
 
-} // namespace leveldb
+}  // namespace leveldb
 
-#endif // TERA_LEVELDB_STRING_EXT_H
+#endif  // TERA_LEVELDB_STRING_EXT_H

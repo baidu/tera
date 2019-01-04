@@ -11,6 +11,7 @@
 
 #include <deque>
 #include <set>
+#include <common/metric/metric_counter.h>
 #include "db/db_table.h"
 #include "db/dbformat.h"
 #include "db/log_writer.h"
@@ -41,18 +42,18 @@ class DBImpl : public DB {
   virtual Status Put(const WriteOptions&, const Slice& key, const Slice& value);
   virtual Status Delete(const WriteOptions&, const Slice& key);
   virtual Status Write(const WriteOptions& options, WriteBatch* updates);
-  virtual Status Get(const ReadOptions& options,
-                     const Slice& key,
-                     std::string* value);
+  virtual Status Get(const ReadOptions& options, const Slice& key, std::string* value);
   virtual Iterator* NewIterator(const ReadOptions&);
   virtual const uint64_t GetSnapshot(uint64_t last_sequence = kMaxSequenceNumber);
   virtual void ReleaseSnapshot(uint64_t sequence_number);
-  virtual const uint64_t Rollback(uint64_t snapshot_seq, uint64_t rollback_point = kMaxSequenceNumber);
+  virtual const uint64_t Rollback(uint64_t snapshot_seq,
+                                  uint64_t rollback_point = kMaxSequenceNumber);
   virtual bool GetProperty(const Slice& property, std::string* value);
   virtual void GetApproximateSizes(const Range* range, int n, uint64_t* sizes);
-  virtual void GetCurrentLevelSize(std::vector<int64_t> *);
+  virtual void GetCurrentLevelSize(std::vector<int64_t>*);
   // lgsize not used in db_impl, just for interface compatable
-  virtual void GetApproximateSizes(uint64_t* size, std::vector<uint64_t>* lgsize = NULL);
+  virtual void GetApproximateSizes(uint64_t* size, std::vector<uint64_t>* lgsize = NULL,
+                                   uint64_t* mem_table_size = NULL);
   virtual void CompactRange(const Slice* begin, const Slice* end, int lg_no = -1);
 
   virtual bool ShouldForceUnloadOnError();
@@ -92,8 +93,8 @@ class DBImpl : public DB {
   int64_t TEST_MaxNextLevelOverlappingBytes();
 
   // Recover the descriptor from persistent storage.  May do a significant
-    // amount of work to recover recently logged updates.  Any changes to
-    // be made to the descriptor are added to *edit.
+  // amount of work to recover recently logged updates.  Any changes to
+  // be made to the descriptor are added to *edit.
   Status Recover(VersionEdit* edit) EXCLUSIVE_LOCKS_REQUIRED(mutex_);
 
  private:
@@ -102,14 +103,13 @@ class DBImpl : public DB {
   struct CompactionState;
   struct Writer;
   struct CompactionTask {
-    int64_t id; // compaction thread id
-    double score; // compaction score
-    uint64_t timeout; // compaction task delay time
+    int64_t id;        // compaction thread id
+    double score;      // compaction score
+    uint64_t timeout;  // compaction task delay time
     DBImpl* db;
   };
 
-  Iterator* NewInternalIterator(const ReadOptions&,
-                                SequenceNumber* latest_snapshot);
+  Iterator* NewInternalIterator(const ReadOptions&, SequenceNumber* latest_snapshot);
 
   Status NewDB();
   Status DbExists(bool* exists);
@@ -121,16 +121,14 @@ class DBImpl : public DB {
 
   CompactStrategy* NewCompactStrategy(CompactionState* compact);
 
-  void HandleCompactionWork(CompactionState* compact,
-                            CompactStrategy* compact_strategy);
+  void HandleCompactionWork(CompactionState* compact, CompactStrategy* compact_strategy);
 
   // Delete any unneeded files and stale in-memory entries.
   void DeleteObsoleteFiles();
 
   // Compact the in-memory write buffer to disk.  Switches to a new
   // log-file/memtable and writes a new descriptor iff successful.
-  Status CompactMemTable(bool* sched_idle = NULL)
-      EXCLUSIVE_LOCKS_REQUIRED(mutex_);
+  Status CompactMemTable(bool* sched_idle = NULL) EXCLUSIVE_LOCKS_REQUIRED(mutex_);
 
   Status WriteLevel0Table(MemTable* mem, VersionEdit* edit, Version* base, uint64_t* number = NULL)
       EXCLUSIVE_LOCKS_REQUIRED(mutex_);
@@ -142,13 +140,11 @@ class DBImpl : public DB {
   static void BGWork(void* db);
   void BackgroundCall(CompactionTask* task);
   Status BackgroundCompaction(bool* sched_idle) EXCLUSIVE_LOCKS_REQUIRED(mutex_);
-  void CleanupCompaction(CompactionState* compact)
-      EXCLUSIVE_LOCKS_REQUIRED(mutex_);
+  void CleanupCompaction(CompactionState* compact) EXCLUSIVE_LOCKS_REQUIRED(mutex_);
 
   Status OpenCompactionOutputFile(CompactionState* compact);
   Status FinishCompactionOutputFile(CompactionState* compact, Iterator* input);
-  Status InstallCompactionResults(CompactionState* compact)
-      EXCLUSIVE_LOCKS_REQUIRED(mutex_);
+  Status InstallCompactionResults(CompactionState* compact) EXCLUSIVE_LOCKS_REQUIRED(mutex_);
 
   // Returns:
   //   Status OK: iff *exists == true  -> exists
@@ -193,13 +189,13 @@ class DBImpl : public DB {
   // State below is protected by mutex_
   port::Mutex mutex_;
   port::AtomicPointer shutting_down_;
-  port::CondVar bg_cv_;          // Signalled when background work finishes
-  port::CondVar writting_mem_cv_; // Writer is writting mem_
+  port::CondVar bg_cv_;            // Signalled when background work finishes
+  port::CondVar writting_mem_cv_;  // Writer is writting mem_
   bool is_writting_mem_;
   std::multiset<uint64_t> snapshots_;
   std::map<uint64_t, uint64_t> rollbacks_;
   MemTable* mem_;
-  MemTable* imm_;                // Memtable being compacted
+  MemTable* imm_;  // Memtable being compacted
   MemTable* recover_mem_;
   port::AtomicPointer has_imm_;  // So bg thread can detect non-NULL imm_
   WritableFile* logfile_;
@@ -223,17 +219,17 @@ class DBImpl : public DB {
 
   // Information for a manual compaction
   enum ManualCompactState {
-    kManualCompactIdle,         // manual compact inited
-    kManualCompactConflict,     // manual compact run simultaneously
+    kManualCompactIdle,      // manual compact inited
+    kManualCompactConflict,  // manual compact run simultaneously
   };
   struct ManualCompaction {
     int level;
     bool done;
     bool being_sched;
-    const InternalKey* begin;   // NULL means beginning of key range
-    const InternalKey* end;     // NULL means end of key range
-    InternalKey tmp_storage;    // Used to keep track of compaction progress
-    ManualCompactState compaction_conflict; // 0 == idle, 1 == conflict, 2 == wake
+    const InternalKey* begin;                // NULL means beginning of key range
+    const InternalKey* end;                  // NULL means end of key range
+    InternalKey tmp_storage;                 // Used to keep track of compaction progress
+    ManualCompactState compaction_conflict;  // 0 == idle, 1 == conflict, 2 == wake
   };
   ManualCompaction* manual_compaction_;
 
@@ -248,7 +244,7 @@ class DBImpl : public DB {
 
   // true if disable WAL
   bool flush_on_destroy_;
-  
+
   // true , if first create dbname DIR, or last time load DB failed with txn
   bool need_newdb_txn_;
 
@@ -259,7 +255,7 @@ class DBImpl : public DB {
     int64_t bytes_read;
     int64_t bytes_written;
 
-    CompactionStats() : micros(0), bytes_read(0), bytes_written(0) { }
+    CompactionStats() : micros(0), bytes_read(0), bytes_written(0) {}
 
     void Add(const CompactionStats& c) {
       this->micros += c.micros;
@@ -273,17 +269,13 @@ class DBImpl : public DB {
   DBImpl(const DBImpl&);
   void operator=(const DBImpl&);
 
-  const Comparator* user_comparator() const {
-    return internal_comparator_.user_comparator();
-  }
+  const Comparator* user_comparator() const { return internal_comparator_.user_comparator(); }
 };
 
 // Sanitize db options.  The caller should delete result.info_log if
 // it is not equal to src.info_log.
-extern Options SanitizeOptions(const std::string& db,
-                               const InternalKeyComparator* icmp,
-                               const InternalFilterPolicy* ipolicy,
-                               const Options& src);
+extern Options SanitizeOptions(const std::string& db, const InternalKeyComparator* icmp,
+                               const InternalFilterPolicy* ipolicy, const Options& src);
 
 }  // namespace leveldb
 
