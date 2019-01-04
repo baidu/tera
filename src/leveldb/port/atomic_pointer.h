@@ -74,9 +74,7 @@ inline void MemoryBarrier() {
 
 // Mac OS
 #elif defined(OS_MACOSX)
-inline void MemoryBarrier() {
-  OSMemoryBarrier();
-}
+inline void MemoryBarrier() { OSMemoryBarrier(); }
 #define LEVELDB_HAVE_MEMORY_BARRIER
 
 // ARM Linux
@@ -92,9 +90,7 @@ typedef void (*LinuxKernelMemoryBarrierFunc)(void);
 // shows that the extra function call cost is completely negligible on
 // multi-core devices.
 //
-inline void MemoryBarrier() {
-  (*(LinuxKernelMemoryBarrierFunc)0xffff0fa0)();
-}
+inline void MemoryBarrier() { (*(LinuxKernelMemoryBarrierFunc)0xffff0fa0)(); }
 #define LEVELDB_HAVE_MEMORY_BARRIER
 
 // PPC
@@ -113,8 +109,9 @@ inline void MemoryBarrier() {
 class AtomicPointer {
  private:
   void* rep_;
+
  public:
-  AtomicPointer() { }
+  AtomicPointer() {}
   explicit AtomicPointer(void* p) : rep_(p) {}
   inline void* NoBarrier_Load() const { return rep_; }
   inline void NoBarrier_Store(void* v) { rep_ = v; }
@@ -134,21 +131,14 @@ class AtomicPointer {
 class AtomicPointer {
  private:
   std::atomic<void*> rep_;
+
  public:
-  AtomicPointer() { }
-  explicit AtomicPointer(void* v) : rep_(v) { }
-  inline void* Acquire_Load() const {
-    return rep_.load(std::memory_order_acquire);
-  }
-  inline void Release_Store(void* v) {
-    rep_.store(v, std::memory_order_release);
-  }
-  inline void* NoBarrier_Load() const {
-    return rep_.load(std::memory_order_relaxed);
-  }
-  inline void NoBarrier_Store(void* v) {
-    rep_.store(v, std::memory_order_relaxed);
-  }
+  AtomicPointer() {}
+  explicit AtomicPointer(void* v) : rep_(v) {}
+  inline void* Acquire_Load() const { return rep_.load(std::memory_order_acquire); }
+  inline void Release_Store(void* v) { rep_.store(v, std::memory_order_release); }
+  inline void* NoBarrier_Load() const { return rep_.load(std::memory_order_relaxed); }
+  inline void NoBarrier_Store(void* v) { rep_.store(v, std::memory_order_relaxed); }
 };
 
 // Atomic pointer based on sparc memory barriers
@@ -156,25 +146,26 @@ class AtomicPointer {
 class AtomicPointer {
  private:
   void* rep_;
+
  public:
-  AtomicPointer() { }
-  explicit AtomicPointer(void* v) : rep_(v) { }
+  AtomicPointer() {}
+  explicit AtomicPointer(void* v) : rep_(v) {}
   inline void* Acquire_Load() const {
     void* val;
-    __asm__ __volatile__ (
+    __asm__ __volatile__(
         "ldx [%[rep_]], %[val] \n\t"
-         "membar #LoadLoad|#LoadStore \n\t"
-        : [val] "=r" (val)
-        : [rep_] "r" (&rep_)
+        "membar #LoadLoad|#LoadStore \n\t"
+        : [val] "=r"(val)
+        : [rep_] "r"(&rep_)
         : "memory");
     return val;
   }
   inline void Release_Store(void* v) {
-    __asm__ __volatile__ (
+    __asm__ __volatile__(
         "membar #LoadStore|#StoreStore \n\t"
         "stx %[v], [%[rep_]] \n\t"
         :
-        : [rep_] "r" (&rep_), [v] "r" (v)
+        : [rep_] "r"(&rep_), [v] "r"(v)
         : "memory");
   }
   inline void* NoBarrier_Load() const { return rep_; }
@@ -186,26 +177,23 @@ class AtomicPointer {
 class AtomicPointer {
  private:
   void* rep_;
+
  public:
-  AtomicPointer() { }
-  explicit AtomicPointer(void* v) : rep_(v) { }
+  AtomicPointer() {}
+  explicit AtomicPointer(void* v) : rep_(v) {}
   inline void* Acquire_Load() const {
-    void* val    ;
-    __asm__ __volatile__ (
-        "ld8.acq %[val] = [%[rep_]] \n\t"
-        : [val] "=r" (val)
-        : [rep_] "r" (&rep_)
-        : "memory"
-        );
+    void* val;
+    __asm__ __volatile__("ld8.acq %[val] = [%[rep_]] \n\t"
+                         : [val] "=r"(val)
+                         : [rep_] "r"(&rep_)
+                         : "memory");
     return val;
   }
   inline void Release_Store(void* v) {
-    __asm__ __volatile__ (
-        "st8.rel [%[rep_]] = %[v]  \n\t"
-        :
-        : [rep_] "r" (&rep_), [v] "r" (v)
-        : "memory"
-        );
+    __asm__ __volatile__("st8.rel [%[rep_]] = %[v]  \n\t"
+                         :
+                         : [rep_] "r"(&rep_), [v] "r"(v)
+                         : "memory");
   }
   inline void* NoBarrier_Load() const { return rep_; }
   inline void NoBarrier_Store(void* v) { rep_ = v; }

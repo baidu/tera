@@ -14,7 +14,8 @@
 
 namespace tera {
 
-// return 0: all is ok, result(hash number) stored at the location given by @result;
+// return 0: all is ok, result(hash number) stored at the location given by
+// @result;
 // otherwise: invalid arguments.
 int32_t GetHashNumber(const std::string& str, uint32_t seed, uint32_t* result);
 
@@ -22,4 +23,4 @@ int32_t GetHashString(const std::string& str, uint32_t seed, std::string* result
 
 }  // namespace tera
 
-#endif // TERA_UTILS_CRYPT_H
+#endif  // TERA_UTILS_CRYPT_H

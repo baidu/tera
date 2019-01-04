@@ -5,6 +5,10 @@
 #ifndef TERA_IO_IO_UTILS_H_
 #define TERA_IO_IO_UTILS_H_
 
+#include <memory>
+
+#include "common/semaphore.h"
+#include "common/rwmutex.h"
 #include "leveldb/raw_key_operator.h"
 #include "leveldb/status.h"
 #include "io/tablet_io.h"
@@ -20,7 +24,6 @@ void SetStatusCode(const leveldb::Status& db_status, StatusCode* tera_status);
 void SetStatusCode(const io::TabletIO::TabletStatus& tablet_status, StatusCode* tera_status);
 
 const leveldb::RawKeyOperator* GetRawKeyOperatorFromSchema(TableSchema& schema);
+}  // namespace tera
 
-} // namespace tera
-
-#endif // TERA_IO_IO_UTILS_H_
+#endif  // TERA_IO_IO_UTILS_H_

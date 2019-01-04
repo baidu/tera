@@ -11,11 +11,11 @@ namespace tera {
 namespace observer {
 
 class RowlockNodeZkAdapterBase : public tera::zk::ZooKeeperAdapter {
-public:
-    virtual ~RowlockNodeZkAdapterBase() {}
-    virtual void Init() = 0;
+ public:
+  virtual ~RowlockNodeZkAdapterBase() {}
+  virtual void Init() = 0;
 };
 
-} // namespace observer
-} // namespace tera
+}  // namespace observer
+}  // namespace tera
 #endif  // TERA_OBSERVER_ROWLOCKNODE_ROWLOCKNODE_ZK_ADAPTER_BASE_H_

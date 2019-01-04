@@ -35,30 +35,19 @@ class TableCache {
   // the returned iterator.  The returned "*tableptr" object is owned by
   // the cache and should not be deleted, and is valid for as long as the
   // returned iterator is live.
-  Iterator* NewIterator(const ReadOptions& options,
-                        const std::string& dbname,
-                        uint64_t file_number,
-                        uint64_t file_size,
-                        Table** tableptr = NULL);
+  Iterator* NewIterator(const ReadOptions& options, const std::string& dbname, uint64_t file_number,
+                        uint64_t file_size, Table** tableptr = NULL);
 
   // Specify key range of iterator [smallest, largest]. There are some
   // out-of-range keys in table file after tablet merging and splitting.
-  Iterator* NewIterator(const ReadOptions& options,
-                        const std::string& dbname,
-                        uint64_t file_number,
-                        uint64_t file_size,
-                        const Slice& smallest,
-                        const Slice& largest,
+  Iterator* NewIterator(const ReadOptions& options, const std::string& dbname, uint64_t file_number,
+                        uint64_t file_size, const Slice& smallest, const Slice& largest,
                         Table** tableptr = NULL);
 
   // If a seek to internal key "k" in specified file finds an entry,
   // call (*handle_result)(arg, found_key, found_value).
-  Status Get(const ReadOptions& options,
-             const std::string& dbname,
-             uint64_t file_number,
-             uint64_t file_size,
-             const Slice& k,
-             void* arg,
+  Status Get(const ReadOptions& options, const std::string& dbname, uint64_t file_number,
+             uint64_t file_size, const Slice& k, void* arg,
              void (*handle_result)(void*, const Slice&, const Slice&));
 
   // Evict any entry for the specified file number
@@ -74,20 +63,24 @@ class TableCache {
   size_t ByteSize() { return cache_->TotalCharge(); }
 
  private:
+  static constexpr int shard_lock_cnt_ = 512;
+  size_t GetIndex(uint64_t file_number) {
+    return std::hash<uint64_t>()(file_number) % shard_lock_cnt_;
+  }
   Cache* cache_;
 
-  port::Mutex mu_;
   struct Waiter {
     port::CondVar cv;
     int wait_num;
     Status status;
     bool done;
-    Waiter(port::Mutex* mu):cv(mu), wait_num(0), done(false) {}
+    Waiter(port::Mutex* mu) : cv(mu), wait_num(0), done(false) {}
   };
   typedef std::map<std::string, Waiter*> WaitFileList;
-  WaitFileList wait_files_;
-  Status FindTable(const std::string& dbname, const Options* options,
-                   uint64_t file_number, uint64_t file_size, Cache::Handle**);
+  port::Mutex mu_[shard_lock_cnt_];
+  WaitFileList wait_files_[shard_lock_cnt_];
+  Status FindTable(const std::string& dbname, const Options* options, uint64_t file_number,
+                   uint64_t file_size, Cache::Handle**);
 };
 
 }  // namespace leveldb

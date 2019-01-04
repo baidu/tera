@@ -9,7 +9,7 @@
 #include "include/hdfs2.h"
 #include "hdfs_util.h"
 #include "util/hash.h"
-#include "../common/counter.h"
+#include "common/counter.h"
 
 namespace leveldb {
 
@@ -17,27 +17,22 @@ static hdfsFS (*hdfsConnect)(const char* nn, tPort port);
 static int (*hdfsDisconnect)(hdfsFS fs);
 
 static int (*hdfsCreateDirectory)(hdfsFS fs, const char* path);
-static hdfsFileInfo* (*hdfsListDirectory)(hdfsFS fs, const char* path,
-                                          int *numEntries);
+static hdfsFileInfo* (*hdfsListDirectory)(hdfsFS fs, const char* path, int* numEntries);
 static hdfsFileInfo* (*hdfsGetPathInfo)(hdfsFS fs, const char* path);
-static void (*hdfsFreeFileInfo)(hdfsFileInfo *hdfsFileInfo, int numEntries);
+static void (*hdfsFreeFileInfo)(hdfsFileInfo* hdfsFileInfo, int numEntries);
 
 static int (*hdfsDelete)(hdfsFS fs, const char* path, int recursive);
-static int (*hdfsExists)(hdfsFS fs, const char *path);
+static int (*hdfsExists)(hdfsFS fs, const char* path);
 static int (*hdfsRename)(hdfsFS fs, const char* oldPath, const char* newPath);
-static int (*hdfsCopy)(hdfsFS srcFS, const char* src,
-                        hdfsFS dstFS, const char* dst);
+static int (*hdfsCopy)(hdfsFS srcFS, const char* src, hdfsFS dstFS, const char* dst);
 
-static hdfsFile (*hdfsOpenFile)(hdfsFS fs, const char* path, int flags,
-                                 int bufferSize, short replication,
-                                 tSize blocksize);
+static hdfsFile (*hdfsOpenFile)(hdfsFS fs, const char* path, int flags, int bufferSize,
+                                short replication, tSize blocksize);
 static int (*hdfsCloseFile)(hdfsFS fs, hdfsFile file);
 
 static tSize (*hdfsRead)(hdfsFS fs, hdfsFile file, void* buffer, tSize length);
-static tSize (*hdfsPread)(hdfsFS fs, hdfsFile file, tOffset position,
-                           void* buffer, tSize length);
-static tSize (*hdfsWrite)(hdfsFS fs, hdfsFile file, const void* buffer,
-                           tSize length);
+static tSize (*hdfsPread)(hdfsFS fs, hdfsFile file, tOffset position, void* buffer, tSize length);
+static tSize (*hdfsWrite)(hdfsFS fs, hdfsFile file, const void* buffer, tSize length);
 static int (*hdfsFlush)(hdfsFS fs, hdfsFile file);
 static int (*hdfsHSync)(hdfsFS fs, hdfsFile file);
 static tOffset (*hdfsTell)(hdfsFS fs, hdfsFile file);
@@ -82,9 +77,7 @@ bool Hdfs2::LoadSymbol() {
   return true;
 }
 
-H2File::H2File(void* fs, void* file, const std::string& name)
-  : fs_(fs), file_(file), name_(name) {
-}
+H2File::H2File(void* fs, void* file, const std::string& name) : fs_(fs), file_(file), name_(name) {}
 H2File::~H2File() {
   if (file_) {
     CloseFile();
@@ -94,12 +87,8 @@ H2File::~H2File() {
 int32_t H2File::Write(const char* buf, int32_t len) {
   return (*hdfsWrite)((hdfsFS)fs_, (hdfsFile)file_, buf, len);
 }
-int32_t H2File::Flush() {
-  return (*hdfsFlush)((hdfsFS)fs_, (hdfsFile)file_);
-}
-int32_t H2File::Sync() {
-  return (*hdfsHSync)((hdfsFS)fs_, (hdfsFile)file_);
-}
+int32_t H2File::Flush() { return (*hdfsFlush)((hdfsFS)fs_, (hdfsFile)file_); }
+int32_t H2File::Sync() { return (*hdfsHSync)((hdfsFS)fs_, (hdfsFile)file_); }
 int32_t H2File::Read(char* buf, int32_t len) {
   return (*hdfsRead)((hdfsFS)fs_, (hdfsFile)file_, buf, len);
 }
@@ -110,9 +99,7 @@ int64_t H2File::Tell() {
   int64_t retval = (*hdfsTell)((hdfsFS)fs_, (hdfsFile)file_);
   return retval;
 }
-int32_t H2File::Seek(int64_t offset) {
-  return (*hdfsSeek)((hdfsFS)fs_, (hdfsFile)file_, offset);
-}
+int32_t H2File::Seek(int64_t offset) { return (*hdfsSeek)((hdfsFS)fs_, (hdfsFile)file_, offset); }
 
 int32_t H2File::CloseFile() {
   int32_t retval = 0;
@@ -198,9 +185,9 @@ int32_t Hdfs2::Rename(const std::string& from, const std::string& to) {
 }
 
 DfsFile* Hdfs2::OpenFile(const std::string& filename, int32_t flags) {
-  //fprintf(stderr, "OpenFile %s %d\n", filename.c_str(), flags);
+  // fprintf(stderr, "OpenFile %s %d\n", filename.c_str(), flags);
   int32_t hflags = (flags == RDONLY ? O_RDONLY : O_WRONLY);
-  hdfsFile file = (*hdfsOpenFile)((hdfsFS)GetFSHandle(filename), filename.c_str(), hflags, 0 ,0 ,0);
+  hdfsFile file = (*hdfsOpenFile)((hdfsFS)GetFSHandle(filename), filename.c_str(), hflags, 0, 0, 0);
   if (!file) {
     return NULL;
   } else {
@@ -212,8 +199,7 @@ int32_t Hdfs2::Copy(const std::string& from, const std::string& to) {
   return (*hdfsCopy)((hdfsFS)GetFSHandle(from), from.c_str(), (hdfsFS)GetFSHandle(to), to.c_str());
 }
 
-int32_t Hdfs2::ListDirectory(const std::string& path,
-                             std::vector<std::string>* result) {
+int32_t Hdfs2::ListDirectory(const std::string& path, std::vector<std::string>* result) {
   int numEntries = 0;
   hdfsFileInfo* pHdfsFileInfo = 0;
   pHdfsFileInfo = (*hdfsListDirectory)((hdfsFS)GetFSHandle(path), path.c_str(), &numEntries);
@@ -270,10 +256,8 @@ int32_t Hdfs2::Stat(const std::string& filepath, struct stat* st) {
     return 0;
   }
   return -1;
-
 }
 
-
-} // namespace leveldb
+}  // namespace leveldb
 
 /* vim: set expandtab ts=2 sw=2 sts=2 tw=100: */

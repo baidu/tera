@@ -22,31 +22,31 @@ namespace tera {
 namespace observer {
 
 class RowlockNodeImpl {
-public:
-    RowlockNodeImpl();
-    ~RowlockNodeImpl();
+ public:
+  RowlockNodeImpl();
+  ~RowlockNodeImpl();
 
-    bool Init();
+  bool Init();
 
-    bool Exit();
+  bool Exit();
 
-    void TryLock(const RowlockRequest* request,
-            RowlockResponse* response,
-            google::protobuf::Closure* done);
+  void TryLock(const RowlockRequest* request, RowlockResponse* response,
+               google::protobuf::Closure* done);
 
-    void UnLock(const RowlockRequest* request,
-            RowlockResponse* response,
-            google::protobuf::Closure* done);
+  void UnLock(const RowlockRequest* request, RowlockResponse* response,
+              google::protobuf::Closure* done);
 
-    void PrintQPS();
-private:
-    uint64_t GetRowlockKey(const std::string& table_name, const std::string& row) const;
-private:
-    ShardedRowlockDB rowlock_db_;
-    std::unique_ptr<RowlockNodeZkAdapterBase> zk_adapter_;
+  void PrintQPS();
+
+ private:
+  uint64_t GetRowlockKey(const std::string& table_name, const std::string& row) const;
+
+ private:
+  ShardedRowlockDB rowlock_db_;
+  std::unique_ptr<RowlockNodeZkAdapterBase> zk_adapter_;
 };
 
-} // namespace observer
-} // namespace tera
+}  // namespace observer
+}  // namespace tera
 
 #endif  // TERA_OBSERVER_ROWLOCKNODE_ROWLOCKNODE_IMPL_H_

@@ -45,119 +45,111 @@
 #include "snappy-stubs-public.h"
 
 namespace snappy {
-  class Source;
-  class Sink;
+class Source;
+class Sink;
 
-  // ------------------------------------------------------------------------
-  // Generic compression/decompression routines.
-  // ------------------------------------------------------------------------
+// ------------------------------------------------------------------------
+// Generic compression/decompression routines.
+// ------------------------------------------------------------------------
 
-  // Compress the bytes read from "*source" and append to "*sink". Return the
-  // number of bytes written.
-  size_t Compress(Source* source, Sink* sink);
+// Compress the bytes read from "*source" and append to "*sink". Return the
+// number of bytes written.
+size_t Compress(Source* source, Sink* sink);
 
-  // Find the uncompressed length of the given stream, as given by the header.
-  // Note that the true length could deviate from this; the stream could e.g.
-  // be truncated.
-  //
-  // Also note that this leaves "*source" in a state that is unsuitable for
-  // further operations, such as RawUncompress(). You will need to rewind
-  // or recreate the source yourself before attempting any further calls.
-  bool GetUncompressedLength(Source* source, uint32* result);
+// Find the uncompressed length of the given stream, as given by the header.
+// Note that the true length could deviate from this; the stream could e.g.
+// be truncated.
+//
+// Also note that this leaves "*source" in a state that is unsuitable for
+// further operations, such as RawUncompress(). You will need to rewind
+// or recreate the source yourself before attempting any further calls.
+bool GetUncompressedLength(Source* source, uint32* result);
 
-  // ------------------------------------------------------------------------
-  // Higher-level string based routines (should be sufficient for most users)
-  // ------------------------------------------------------------------------
+// ------------------------------------------------------------------------
+// Higher-level string based routines (should be sufficient for most users)
+// ------------------------------------------------------------------------
 
-  // Sets "*output" to the compressed version of "input[0,input_length-1]".
-  // Original contents of *output are lost.
-  //
-  // REQUIRES: "input[]" is not an alias of "*output".
-  size_t Compress(const char* input, size_t input_length, string* output);
+// Sets "*output" to the compressed version of "input[0,input_length-1]".
+// Original contents of *output are lost.
+//
+// REQUIRES: "input[]" is not an alias of "*output".
+size_t Compress(const char* input, size_t input_length, string* output);
 
-  // Decompresses "compressed[0,compressed_length-1]" to "*uncompressed".
-  // Original contents of "*uncompressed" are lost.
-  //
-  // REQUIRES: "compressed[]" is not an alias of "*uncompressed".
-  //
-  // returns false if the message is corrupted and could not be decompressed
-  bool Uncompress(const char* compressed, size_t compressed_length,
-                  string* uncompressed);
+// Decompresses "compressed[0,compressed_length-1]" to "*uncompressed".
+// Original contents of "*uncompressed" are lost.
+//
+// REQUIRES: "compressed[]" is not an alias of "*uncompressed".
+//
+// returns false if the message is corrupted and could not be decompressed
+bool Uncompress(const char* compressed, size_t compressed_length, string* uncompressed);
 
+// ------------------------------------------------------------------------
+// Lower-level character array based routines.  May be useful for
+// efficiency reasons in certain circumstances.
+// ------------------------------------------------------------------------
 
-  // ------------------------------------------------------------------------
-  // Lower-level character array based routines.  May be useful for
-  // efficiency reasons in certain circumstances.
-  // ------------------------------------------------------------------------
+// REQUIRES: "compressed" must point to an area of memory that is at
+// least "MaxCompressedLength(input_length)" bytes in length.
+//
+// Takes the data stored in "input[0..input_length]" and stores
+// it in the array pointed to by "compressed".
+//
+// "*compressed_length" is set to the length of the compressed output.
+//
+// Example:
+//    char* output = new char[snappy::MaxCompressedLength(input_length)];
+//    size_t output_length;
+//    RawCompress(input, input_length, output, &output_length);
+//    ... Process(output, output_length) ...
+//    delete [] output;
+void RawCompress(const char* input, size_t input_length, char* compressed,
+                 size_t* compressed_length);
 
-  // REQUIRES: "compressed" must point to an area of memory that is at
-  // least "MaxCompressedLength(input_length)" bytes in length.
-  //
-  // Takes the data stored in "input[0..input_length]" and stores
-  // it in the array pointed to by "compressed".
-  //
-  // "*compressed_length" is set to the length of the compressed output.
-  //
-  // Example:
-  //    char* output = new char[snappy::MaxCompressedLength(input_length)];
-  //    size_t output_length;
-  //    RawCompress(input, input_length, output, &output_length);
-  //    ... Process(output, output_length) ...
-  //    delete [] output;
-  void RawCompress(const char* input,
-                   size_t input_length,
-                   char* compressed,
-                   size_t* compressed_length);
+// Given data in "compressed[0..compressed_length-1]" generated by
+// calling the Snappy::Compress routine, this routine
+// stores the uncompressed data to
+//    uncompressed[0..GetUncompressedLength(compressed)-1]
+// returns false if the message is corrupted and could not be decrypted
+bool RawUncompress(const char* compressed, size_t compressed_length, char* uncompressed);
 
-  // Given data in "compressed[0..compressed_length-1]" generated by
-  // calling the Snappy::Compress routine, this routine
-  // stores the uncompressed data to
-  //    uncompressed[0..GetUncompressedLength(compressed)-1]
-  // returns false if the message is corrupted and could not be decrypted
-  bool RawUncompress(const char* compressed, size_t compressed_length,
-                     char* uncompressed);
+// Given data from the byte source 'compressed' generated by calling
+// the Snappy::Compress routine, this routine stores the uncompressed
+// data to
+//    uncompressed[0..GetUncompressedLength(compressed,compressed_length)-1]
+// returns false if the message is corrupted and could not be decrypted
+bool RawUncompress(Source* compressed, char* uncompressed);
 
-  // Given data from the byte source 'compressed' generated by calling
-  // the Snappy::Compress routine, this routine stores the uncompressed
-  // data to
-  //    uncompressed[0..GetUncompressedLength(compressed,compressed_length)-1]
-  // returns false if the message is corrupted and could not be decrypted
-  bool RawUncompress(Source* compressed, char* uncompressed);
+// Returns the maximal size of the compressed representation of
+// input data that is "source_bytes" bytes in length;
+size_t MaxCompressedLength(size_t source_bytes);
 
-  // Returns the maximal size of the compressed representation of
-  // input data that is "source_bytes" bytes in length;
-  size_t MaxCompressedLength(size_t source_bytes);
+// REQUIRES: "compressed[]" was produced by RawCompress() or Compress()
+// Returns true and stores the length of the uncompressed data in
+// *result normally.  Returns false on parsing error.
+// This operation takes O(1) time.
+bool GetUncompressedLength(const char* compressed, size_t compressed_length, size_t* result);
 
-  // REQUIRES: "compressed[]" was produced by RawCompress() or Compress()
-  // Returns true and stores the length of the uncompressed data in
-  // *result normally.  Returns false on parsing error.
-  // This operation takes O(1) time.
-  bool GetUncompressedLength(const char* compressed, size_t compressed_length,
-                             size_t* result);
+// Returns true iff the contents of "compressed[]" can be uncompressed
+// successfully.  Does not return the uncompressed data.  Takes
+// time proportional to compressed_length, but is usually at least
+// a factor of four faster than actual decompression.
+bool IsValidCompressedBuffer(const char* compressed, size_t compressed_length);
 
-  // Returns true iff the contents of "compressed[]" can be uncompressed
-  // successfully.  Does not return the uncompressed data.  Takes
-  // time proportional to compressed_length, but is usually at least
-  // a factor of four faster than actual decompression.
-  bool IsValidCompressedBuffer(const char* compressed,
-                               size_t compressed_length);
+// The size of a compression block. Note that many parts of the compression
+// code assumes that kBlockSize <= 65536; in particular, the hash table
+// can only store 16-bit offsets, and EmitCopy() also assumes the offset
+// is 65535 bytes or less. Note also that if you change this, it will
+// affect the framing format (see framing_format.txt).
+//
+// Note that there might be older data around that is compressed with larger
+// block sizes, so the decompression code should not rely on the
+// non-existence of long backreferences.
+static const int kBlockLog = 16;
+static const size_t kBlockSize = 1 << kBlockLog;
 
-  // The size of a compression block. Note that many parts of the compression
-  // code assumes that kBlockSize <= 65536; in particular, the hash table
-  // can only store 16-bit offsets, and EmitCopy() also assumes the offset
-  // is 65535 bytes or less. Note also that if you change this, it will
-  // affect the framing format (see framing_format.txt).
-  //
-  // Note that there might be older data around that is compressed with larger
-  // block sizes, so the decompression code should not rely on the
-  // non-existence of long backreferences.
-  static const int kBlockLog = 16;
-  static const size_t kBlockSize = 1 << kBlockLog;
-
-  static const int kMaxHashTableBits = 14;
-  static const size_t kMaxHashTableSize = 1 << kMaxHashTableBits;
+static const int kMaxHashTableBits = 14;
+static const size_t kMaxHashTableSize = 1 << kMaxHashTableBits;
 
 }  // end namespace snappy
-
 
 #endif  // UTIL_SNAPPY_SNAPPY_H__

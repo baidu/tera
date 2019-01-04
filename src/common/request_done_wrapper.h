@@ -3,27 +3,22 @@
 
 namespace tera {
 class RequestDoneWrapper : public google::protobuf::Closure {
-public:
-    static google::protobuf::Closure* NewInstance(google::protobuf::Closure* done) {
-        return new RequestDoneWrapper(done);
-    }
+ public:
+  static google::protobuf::Closure* NewInstance(google::protobuf::Closure* done) {
+    return new RequestDoneWrapper(done);
+  }
 
-    //Self-Deleted, never access it after Run();
-    //Default do nothing;
-    virtual void Run() override {
-        delete this;
-    }
+  // Self-Deleted, never access it after Run();
+  // Default do nothing;
+  virtual void Run() override { delete this; }
 
-    virtual ~RequestDoneWrapper() {
-        done_->Run();
-    }
+  virtual ~RequestDoneWrapper() { done_->Run(); }
 
-protected:
-    //Can Only Create on Heap;
-    RequestDoneWrapper(google::protobuf::Closure* done):
-        done_(done) { }
+ protected:
+  // Can Only Create on Heap;
+  RequestDoneWrapper(google::protobuf::Closure* done) : done_(done) {}
 
-private:
-    google::protobuf::Closure* done_;
+ private:
+  google::protobuf::Closure* done_;
 };
 }

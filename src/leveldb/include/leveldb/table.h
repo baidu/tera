@@ -39,9 +39,7 @@ class Table {
   // for the duration of the returned table's lifetime.
   //
   // *file must remain live while this Table is in use.
-  static Status Open(const Options& options,
-                     RandomAccessFile* file,
-                     uint64_t file_size,
+  static Status Open(const Options& options, RandomAccessFile* file, uint64_t file_size,
                      Table** table);
 
   ~Table();
@@ -52,8 +50,7 @@ class Table {
   Iterator* NewIterator(const ReadOptions&) const;
 
   // Specify the range of iterator
-  Iterator* NewIterator(const ReadOptions&, const Slice& smallest,
-                        const Slice& largest) const;
+  Iterator* NewIterator(const ReadOptions&, const Slice& smallest, const Slice& largest) const;
 
   // Given a key, return an approximate byte offset in the file where
   // the data for that key begins (or would begin if the key were
@@ -77,11 +74,8 @@ class Table {
   // to Seek(key).  May not make such a call if filter policy says
   // that key is not present.
   friend class TableCache;
-  Status InternalGet(
-      const ReadOptions&, const Slice& key,
-      void* arg,
-      void (*handle_result)(void* arg, const Slice& k, const Slice& v));
-
+  Status InternalGet(const ReadOptions&, const Slice& key, void* arg,
+                     void (*handle_result)(void* arg, const Slice& k, const Slice& v));
 
   void ReadMeta(const Footer& footer);
   void ReadFilter(const Slice& filter_handle_value);

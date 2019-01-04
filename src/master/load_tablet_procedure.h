@@ -14,89 +14,95 @@
 namespace tera {
 namespace master {
 
-class LoadTabletProcedure : public Procedure, public std::enable_shared_from_this<LoadTabletProcedure> {
-public:
-    LoadTabletProcedure(TabletPtr tablet, ThreadPool* thread_pool);
-    
-    LoadTabletProcedure(TabletPtr tablet, TabletNodePtr dest_node,
-                        ThreadPool* thread_pool);
+class LoadTabletProcedure : public Procedure,
+                            public std::enable_shared_from_this<LoadTabletProcedure> {
+ public:
+  LoadTabletProcedure(TabletPtr tablet, ThreadPool* thread_pool);
 
-    virtual std::string ProcId() const {
-        //std::string id = std::string("LoadTablet:") + tablet_->GetPath();
-        return id_;
+  LoadTabletProcedure(TabletPtr tablet, TabletNodePtr dest_node, ThreadPool* thread_pool);
+
+  LoadTabletProcedure(TabletPtr tablet, TabletNodePtr dest_node, ThreadPool* thread_pool,
+                      bool is_sub_proc);
+
+  virtual std::string ProcId() const {
+    // std::string id = std::string("LoadTablet:") + tablet_->GetPath();
+    return id_;
+  }
+  virtual void RunNextStage();
+
+  virtual ~LoadTabletProcedure() {}
+
+  virtual bool Done() { return done_.load(); }
+
+  virtual ProcedureLimiter::LockType GetLockType() override {
+    if (is_sub_proc_) {
+      return ProcedureLimiter::LockType::kNoLimit;
+    } else {
+      return ProcedureLimiter::LockType::kLoad;
     }
-    virtual void RunNextStage();
-        
-    virtual ~LoadTabletProcedure() {}
+  }
 
-    virtual bool Done() {
-        return done_.load();
-    }
+ private:
+  typedef std::function<void(LoadTabletProcedure*, const TabletEvent&)> TabletLoadEventHandler;
 
-private:
-    typedef std::function<void (LoadTabletProcedure*, const TabletEvent&)> TabletLoadEventHandler;
-    
-    typedef std::function<void (LoadTabletRequest*, LoadTabletResponse*, bool, int)> LoadClosure;
-    
-    TabletEvent GenerateEvent();
-    
-    TabletEvent GenerateTabletOffLineEvent();
+  typedef std::function<void(LoadTabletRequest*, LoadTabletResponse*, bool, int)> LoadClosure;
 
-    TabletEvent GenerateTabletOnLoadEvent();
+  TabletEvent GenerateEvent();
 
-    TabletEvent GenerateTsDownEvent();
+  TabletEvent GenerateTabletOfflineEvent();
 
-    // unique events we need to process
-    bool IsNewEvent(TabletEvent event);
+  TabletEvent GenerateTabletOnLoadEvent();
 
-    void UpdateMetaDone(bool);
-    
-    static void LoadTabletAsyncWrapper(std::weak_ptr<LoadTabletProcedure> weak_proc, TabletNodePtr dest_node);
- 
-    static void LoadTabletCallbackWrapper(std::weak_ptr<LoadTabletProcedure> weak_proc, 
-                        TabletNodePtr node, 
-                        LoadTabletRequest* request, 
-                        LoadTabletResponse* response, 
-                        bool failed, 
-                        int error_code);
-    
-    void LoadTabletAsync(TabletNodePtr dest_node);
+  TabletEvent GenerateTsDownEvent();
 
-    void LoadTabletCallback(TabletNodePtr node, 
-                        LoadTabletRequest* request, 
-                        LoadTabletResponse* response, 
-                        bool failed, 
-                        int error_code);
-    
-    // EventHandlers
-    void TabletNodeOffLineHandler(const TabletEvent& event);
-    void TabletNodeRestartHandler(const TabletEvent& event);
-    void TabletNodeBusyHandler(const TabletEvent& event);
-    void TabletPendOffLineHandler(const TabletEvent& event);
-    void UpdateMetaHandler(const TabletEvent& event);
-    void LoadTabletHandler(const TabletEvent& event);
-    void WaitRpcResponseHandler(const TabletEvent& event);
-    void TabletNodeLoadSuccHandler(const TabletEvent& event);
-    void TabletNodeLoadFailHandler(const TabletEvent& event);
-    void TabletLoadFailHandler(const TabletEvent& event);
-    void EOFHandler(const TabletEvent& event);
+  // unique events we need to process
+  bool IsNewEvent(TabletEvent event);
 
-private: 
-    const std::string id_;
-    TabletPtr tablet_;
-    TabletNodePtr dest_node_;
-    // following counters or flags way be accessed from different threads concurrently, 
-    // so std::atomic is used to ensure ordered access to those variables from different threads
-    std::atomic<bool> done_;
-    std::atomic<bool> load_request_dispatching_;
-    std::atomic<int32_t> load_retrys_;
-    std::atomic<int32_t> slow_load_retrys_;
-    std::atomic<bool> update_meta_done_;
-    std::vector<TabletEvent> events_;
-    TabletNodePtr restarted_dest_node_;
-    static std::map<TabletEvent, TabletLoadEventHandler> event_handlers_;
-    ThreadPool* thread_pool_;
+  void UpdateMetaDone(bool);
+
+  static void LoadTabletAsyncWrapper(std::weak_ptr<LoadTabletProcedure> weak_proc,
+                                     TabletNodePtr dest_node);
+
+  static void LoadTabletCallbackWrapper(std::weak_ptr<LoadTabletProcedure> weak_proc,
+                                        TabletNodePtr node, LoadTabletRequest* request,
+                                        LoadTabletResponse* response, bool failed, int error_code);
+
+  void LoadTabletAsync(TabletNodePtr dest_node);
+
+  void LoadTabletCallback(TabletNodePtr node, LoadTabletRequest* request,
+                          LoadTabletResponse* response, bool failed, int error_code);
+
+  // EventHandlers
+  void TabletNodeOfflineHandler(const TabletEvent& event);
+  void TabletNodeRestartHandler(const TabletEvent& event);
+  void TabletNodeBusyHandler(const TabletEvent& event);
+  void TabletPendOfflineHandler(const TabletEvent& event);
+  void UpdateMetaHandler(const TabletEvent& event);
+  void LoadTabletHandler(const TabletEvent& event);
+  void WaitRpcResponseHandler(const TabletEvent& event);
+  void TabletNodeLoadSuccHandler(const TabletEvent& event);
+  void TabletNodeLoadFailHandler(const TabletEvent& event);
+  void TabletLoadFailHandler(const TabletEvent& event);
+  void EOFHandler(const TabletEvent& event);
+
+ private:
+  const std::string id_;
+  TabletPtr tablet_;
+  TabletNodePtr dest_node_;
+  // following counters or flags way be accessed from different threads
+  // concurrently,
+  // so std::atomic is used to ensure ordered access to those variables from
+  // different threads
+  std::atomic<bool> done_;
+  std::atomic<bool> load_request_dispatching_;
+  std::atomic<int32_t> load_retrys_;
+  std::atomic<int32_t> slow_load_retrys_;
+  std::atomic<bool> update_meta_done_;
+  std::vector<TabletEvent> events_;
+  TabletNodePtr restarted_dest_node_;
+  bool is_sub_proc_;
+  static std::map<TabletEvent, TabletLoadEventHandler> event_handlers_;
+  ThreadPool* thread_pool_;
 };
-
 }
 }

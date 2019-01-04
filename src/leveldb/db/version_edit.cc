@@ -16,22 +16,24 @@ namespace leveldb {
 // Tag numbers for serialized VersionEdit.  These numbers are written to
 // disk and should not be changed. max tag number = 1<<20, min tag number = 1
 enum Tag {
-  kComparator           = 1,
-  kLogNumber            = 2,
-  kNextFileNumber       = 3,
-  kLastSequence         = 4,
-  kCompactPointer       = 5,
+  kComparator = 1,
+  kLogNumber = 2,
+  kNextFileNumber = 3,
+  kLastSequence = 4,
+  kCompactPointer = 5,
   kDeletedFileForCompat = 6,
-  kNewFileForCompat     = 7,
+  kNewFileForCompat = 7,
   // 8 was used for large value refs
-  kPrevLogNumber        = 9,
-  kNewFile              = 10,
-  kDeletedFile          = 11,
-  kNewFileInfo          = 12,
-  kSstFileDataSize      = 13,
+  kPrevLogNumber = 9,
+  kNewFile = 10,
+  kDeletedFile = 11,
+  kNewFileInfo = 12,
+  kSstFileDataSize = 13,
+  kStartKey = 14,
+  kEndKey = 15,
 
   // no more than 1<<20
-  kMaxTag               = 1 << 20,
+  kMaxTag = 1 << 20,
 };
 
 void VersionEdit::Clear() {
@@ -45,6 +47,8 @@ void VersionEdit::Clear() {
   has_prev_log_number_ = false;
   has_next_file_number_ = false;
   has_last_sequence_ = false;
+  has_start_key_ = false;
+  has_end_key_ = false;
   deleted_files_.clear();
   new_files_.clear();
 }
@@ -88,6 +92,22 @@ void VersionEdit::EncodeTo(std::string* dst) const {
 
     PutVarint32(dst, str.size() + kMaxTag);
     PutVarint32(dst, kLastSequence);
+    dst->append(str.data(), str.size());
+  }
+  if (has_start_key_) {
+    std::string str;
+    PutLengthPrefixedSlice(&str, start_key_);
+
+    PutVarint32(dst, str.size() + kMaxTag);
+    PutVarint32(dst, kStartKey);
+    dst->append(str.data(), str.size());
+  }
+  if (has_end_key_) {
+    std::string str;
+    PutLengthPrefixedSlice(&str, end_key_);
+
+    PutVarint32(dst, str.size() + kMaxTag);
+    PutVarint32(dst, kEndKey);
     dst->append(str.data(), str.size());
   }
 
@@ -169,8 +189,7 @@ static bool GetInternalKey(Slice* input, InternalKey* dst) {
 
 static bool GetLevel(Slice* input, int* level) {
   uint32_t v;
-  if (GetVarint32(input, &v) &&
-      v < static_cast<uint32_t>(config::kNumLevels)) {
+  if (GetVarint32(input, &v) && v < static_cast<uint32_t>(config::kNumLevels)) {
     *level = v;
     return true;
   } else {
@@ -193,8 +212,8 @@ Status VersionEdit::DecodeNewFileInfo(Slice* input, FileMetaData* f) {
     GetVarint32(&file_input, &tag);
     switch (tag) {
       case kNewFileInfo:
-        GetVarint32(input, &len);// ignore len
-        GetVarint32(input, &tag);// ignore tag
+        GetVarint32(input, &len);  // ignore len
+        GetVarint32(input, &tag);  // ignore tag
         GetVarint64(input, &f->del_percentage);
         GetVarint64(input, &f->ttl_percentage);
         GetVarint64(input, &f->check_ttl_ts);
@@ -204,9 +223,11 @@ Status VersionEdit::DecodeNewFileInfo(Slice* input, FileMetaData* f) {
         GetVarint32(input, &tag);
         GetVarint64(input, &f->data_size);
         break;
+      case kNewFile:
+        decode_continue = false;
+        break;
       default:
-        fprintf(stderr, "NewFile %lu without info, skip tag %d, len %d\n",
-                f->number & 0xffffffff,
+        fprintf(stderr, "NewFile %lu without info, skip tag %u, len %u\n", f->number & 0xffffffff,
                 tag, len);
         decode_continue = false;
         break;
@@ -231,10 +252,10 @@ Status VersionEdit::DecodeFrom(const Slice& src) {
   while (msg == NULL && GetVarint32(&input, &tag)) {
     uint32_t len = 0;
     if (tag > kMaxTag) {
-        len = tag - kMaxTag;
-        if (!GetVarint32(&input, &tag)) {
-          break;
-        }
+      len = tag - kMaxTag;
+      if (!GetVarint32(&input, &tag)) {
+        break;
+      }
     }
     switch (tag) {
       case kComparator:
@@ -279,8 +300,7 @@ Status VersionEdit::DecodeFrom(const Slice& src) {
         break;
 
       case kCompactPointer:
-        if (GetLevel(&input, &level) &&
-            GetInternalKey(&input, &key)) {
+        if (GetLevel(&input, &level) && GetInternalKey(&input, &key)) {
           compact_pointers_.push_back(std::make_pair(level, key));
         } else {
           msg = "compaction pointer";
@@ -288,8 +308,7 @@ Status VersionEdit::DecodeFrom(const Slice& src) {
         break;
 
       case kDeletedFileForCompat:
-        if (GetLevel(&input, &level) &&
-            GetVarint64(&input, &number)) {
+        if (GetLevel(&input, &level) && GetVarint64(&input, &number)) {
           DeleteFile(level, number);
         } else {
           msg = "deleted file";
@@ -297,10 +316,8 @@ Status VersionEdit::DecodeFrom(const Slice& src) {
         break;
 
       case kNewFileForCompat:
-        if (GetLevel(&input, &level) &&
-            GetVarint64(&input, &f.number) &&
-            GetVarint64(&input, &f.file_size) &&
-            GetInternalKey(&input, &f.smallest) &&
+        if (GetLevel(&input, &level) && GetVarint64(&input, &f.number) &&
+            GetVarint64(&input, &f.file_size) && GetInternalKey(&input, &f.smallest) &&
             GetInternalKey(&input, &f.largest)) {
           new_files_.push_back(std::make_pair(level, f));
         } else {
@@ -309,15 +326,12 @@ Status VersionEdit::DecodeFrom(const Slice& src) {
         break;
 
       case kNewFile:
-        if (GetLevel(&input, &level) &&
-            GetVarint64(&input, &f.number) &&
-            GetVarint64(&input, &f.file_size) &&
-            GetInternalKey(&input, &f.smallest) &&
+        if (GetLevel(&input, &level) && GetVarint64(&input, &f.number) &&
+            GetVarint64(&input, &f.file_size) && GetInternalKey(&input, &f.smallest) &&
             GetInternalKey(&input, &f.largest)) {
           uint32_t smallest_fake = 0;
           uint32_t largest_fake = 0;
-          if (GetVarint32(&input, &smallest_fake) &&
-              GetVarint32(&input, &largest_fake)) {
+          if (GetVarint32(&input, &smallest_fake) && GetVarint32(&input, &largest_fake)) {
             if (smallest_fake == 0) {
               f.smallest_fake = false;
             } else {
@@ -340,10 +354,8 @@ Status VersionEdit::DecodeFrom(const Slice& src) {
         break;
 
       case kDeletedFile:
-        if (GetLevel(&input, &level) &&
-            GetVarint64(&input, &f.number) &&
-            GetVarint64(&input, &f.file_size) &&
-            GetInternalKey(&input, &f.smallest) &&
+        if (GetLevel(&input, &level) && GetVarint64(&input, &f.number) &&
+            GetVarint64(&input, &f.file_size) && GetInternalKey(&input, &f.smallest) &&
             GetInternalKey(&input, &f.largest)) {
           deleted_files_.push_back(std::make_pair(level, f));
         } else {
@@ -351,9 +363,27 @@ Status VersionEdit::DecodeFrom(const Slice& src) {
         }
         break;
 
-      default: // tag not know, skip it.
+      case kStartKey:
+        if (GetLengthPrefixedSlice(&input, &str)) {
+          start_key_ = str.ToString();
+          has_start_key_ = true;
+        } else {
+          msg = "start key name";
+        }
+        break;
+
+      case kEndKey:
+        if (GetLengthPrefixedSlice(&input, &str)) {
+          end_key_ = str.ToString();
+          has_end_key_ = true;
+        } else {
+          msg = "end key name";
+        }
+        break;
+
+      default:  // tag not know, skip it.
         input.remove_prefix(len);
-        fprintf(stderr, "VersionEdit, skip unknow tag %d, len %d\n", tag, len);
+        fprintf(stderr, "VersionEdit, skip unknow tag %u, len %u\n", tag, len);
         break;
     }
   }
@@ -392,6 +422,14 @@ std::string VersionEdit::DebugString() const {
     r.append("\n  LastSeq: ");
     AppendNumberTo(&r, last_sequence_);
   }
+  if (has_start_key_) {
+    r.append("\n  StartKey: ");
+    r.append(start_key_.c_str());
+  }
+  if (has_end_key_) {
+    r.append("\n  EndKey: ");
+    r.append(end_key_.c_str());
+  }
   for (size_t i = 0; i < compact_pointers_.size(); i++) {
     r.append("\n  CompactPointer: ");
     AppendNumberTo(&r, compact_pointers_[i].first);
@@ -400,8 +438,7 @@ std::string VersionEdit::DebugString() const {
   }
   uint64_t tablet_number = 0;
   uint64_t file_number = 0;
-  for (FileMetaSet::const_iterator iter = deleted_files_.begin();
-       iter != deleted_files_.end();
+  for (FileMetaSet::const_iterator iter = deleted_files_.begin(); iter != deleted_files_.end();
        ++iter) {
     ParseFullFileNumber(iter->second.number, &tablet_number, &file_number);
     r.append("\n  DeleteFile: level ");

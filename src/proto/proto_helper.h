@@ -14,8 +14,8 @@
 
 namespace tera {
 
-typedef ::google::protobuf::RepeatedPtrField< RowMutationSequence> RowMutationList;
-typedef ::google::protobuf::RepeatedPtrField< KeyValuePair> KeyValueList;
+typedef ::google::protobuf::RepeatedPtrField<RowMutationSequence> RowMutationList;
+typedef ::google::protobuf::RepeatedPtrField<KeyValuePair> KeyValueList;
 typedef ::google::protobuf::RepeatedPtrField< ::std::string> KeyList;
 typedef ::google::protobuf::RepeatedPtrField< ::tera::RowResult> RowResultList;
 typedef ::google::protobuf::RepeatedPtrField< ::tera::RowReaderInfo> RowReaderList;
@@ -30,5 +30,5 @@ void SetStatusCode(const TabletMeta::TabletStatus& tablet_status, StatusCode* te
 void SetStatusCode(const TableStatus& table_status, StatusCode* tera_status);
 void SetStatusCode(const CompactStatus& code, StatusCode* tera_status);
 
-} // namespace tera
-#endif // TERA_PROTO_PROTO_HELPER_H_
+}  // namespace tera
+#endif  // TERA_PROTO_PROTO_HELPER_H_

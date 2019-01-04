@@ -5,10 +5,9 @@ This document outlines some of the conventions on commit message formatting,
 bug reporting and other resources to make getting your contribution 
 into Tera easier.
 
-## Email and chat
+## Email
 
-- Email: tera_dev at baidu.com
-- IRC: QQ group 340418305
+- tera-user at baidu.com
 
 ## Getting started
 

@@ -22,24 +22,21 @@ static Slice GetLengthPrefixedSlice(const char* data) {
   return Slice(p, len);
 }
 
-MemTable::MemTable(const InternalKeyComparator& cmp, CompactStrategyFactory* compact_strategy_factory)
+BaseMemTable::BaseMemTable(const InternalKeyComparator& cmp,
+                           CompactStrategyFactory* compact_strategy_factory)
     : last_seq_(0),
       comparator_(cmp),
       refs_(0),
       being_flushed_(false),
       table_(comparator_, &arena_),
       empty_(true),
-      compact_strategy_factory_(compact_strategy_factory) {
-}
+      compact_strategy_factory_(compact_strategy_factory) {}
 
-MemTable::~MemTable() {
-  assert(refs_ == 0);
-}
+BaseMemTable::~BaseMemTable() { assert(refs_ == 0); }
 
-size_t MemTable::ApproximateMemoryUsage() { return arena_.MemoryUsage(); }
+size_t BaseMemTable::ApproximateMemoryUsage() { return arena_.MemoryUsage(); }
 
-int MemTable::KeyComparator::operator()(const char* aptr, const char* bptr)
-    const {
+int BaseMemTable::KeyComparator::operator()(const char* aptr, const char* bptr) const {
   // Internal keys are encoded as length-prefixed strings.
   Slice a = GetLengthPrefixedSlice(aptr);
   Slice b = GetLengthPrefixedSlice(bptr);
@@ -56,9 +53,9 @@ static const char* EncodeKey(std::string* scratch, const Slice& target) {
   return scratch->data();
 }
 
-class MemTableIterator: public Iterator {
+class BaseMemTableIterator : public Iterator {
  public:
-  explicit MemTableIterator(MemTable::Table* table) : iter_(table) { }
+  explicit BaseMemTableIterator(BaseMemTable::Table* table) : iter_(table) {}
 
   virtual bool Valid() const { return iter_.Valid(); }
   virtual void Seek(const Slice& k) { iter_.Seek(EncodeKey(&tmp_, k)); }
@@ -75,21 +72,17 @@ class MemTableIterator: public Iterator {
   virtual Status status() const { return Status::OK(); }
 
  private:
-  MemTable::Table::Iterator iter_;
-  std::string tmp_;       // For passing to EncodeKey
+  BaseMemTable::Table::Iterator iter_;
+  std::string tmp_;  // For passing to EncodeKey
 
   // No copying allowed
-  MemTableIterator(const MemTableIterator&);
-  void operator=(const MemTableIterator&);
+  BaseMemTableIterator(const BaseMemTableIterator&);
+  void operator=(const BaseMemTableIterator&);
 };
 
-Iterator* MemTable::NewIterator() {
-  return new MemTableIterator(&table_);
-}
+Iterator* BaseMemTable::NewIterator() { return new BaseMemTableIterator(&table_); }
 
-void MemTable::Add(SequenceNumber s, ValueType type,
-                   const Slice& key,
-                   const Slice& value) {
+void BaseMemTable::Add(SequenceNumber s, ValueType type, const Slice& key, const Slice& value) {
   // Format of an entry is concatenation of:
   //  key_size     : varint32 of internal_key.size()
   //  key bytes    : char[internal_key.size()]
@@ -99,8 +92,7 @@ void MemTable::Add(SequenceNumber s, ValueType type,
   size_t val_size = value.size();
   size_t internal_key_size = key_size + 8;
   const size_t encoded_len =
-      VarintLength(internal_key_size) + internal_key_size +
-      VarintLength(val_size) + val_size;
+      VarintLength(internal_key_size) + internal_key_size + VarintLength(val_size) + val_size;
   char* buf = arena_.Allocate(encoded_len);
   char* p = EncodeVarint32(buf, internal_key_size);
   memcpy(p, key.data(), key_size);
@@ -115,7 +107,8 @@ void MemTable::Add(SequenceNumber s, ValueType type,
   last_seq_ = s;
 }
 
-bool MemTable::Get(const LookupKey& key, std::string* value, const std::map<uint64_t, uint64_t>& rollbacks, Status* s) {
+bool BaseMemTable::Get(const LookupKey& key, std::string* value,
+                       const std::map<uint64_t, uint64_t>& rollbacks, Status* s) {
   Slice memkey = key.memtable_key();
   Table::Iterator iter(&table_);
   iter.Seek(memkey.data());
@@ -132,26 +125,25 @@ bool MemTable::Get(const LookupKey& key, std::string* value, const std::map<uint
     const char* entry = iter.key();
 
     uint32_t key_length;
-    const char* key_ptr = GetVarint32Ptr(entry, entry+5, &key_length);
+    const char* key_ptr = GetVarint32Ptr(entry, entry + 5, &key_length);
     ParsedInternalKey ikey;
     ParseInternalKey(Slice(key_ptr, key_length), &ikey);
     if (RollbackDrop(ikey.sequence, rollbacks)) {
       return false;
     }
-    if (comparator_.comparator.user_comparator()->Compare(
-            Slice(key_ptr, key_length - 8),
-            key.user_key()) == 0) {
+    if (comparator_.comparator.user_comparator()->Compare(Slice(key_ptr, key_length - 8),
+                                                          key.user_key()) == 0) {
       // Correct user key
       const uint64_t tag = DecodeFixed64(key_ptr + key_length - 8);
       switch (static_cast<ValueType>(tag & 0xff)) {
         case kTypeValue: {
           Slice v = GetLengthPrefixedSlice(key_ptr + key_length);
-          CompactStrategy* strategy = compact_strategy_factory_ ?
-                  compact_strategy_factory_->NewInstance() : NULL;
+          CompactStrategy* strategy =
+              compact_strategy_factory_ ? compact_strategy_factory_->NewInstance() : NULL;
           if (!strategy || !strategy->Drop(Slice(key_ptr, key_length - 8), 0)) {
-              value->assign(v.data(), v.size());
+            value->assign(v.data(), v.size());
           } else {
-              *s = Status::NotFound(Slice());
+            *s = Status::NotFound(Slice());
           }
           delete strategy;
           return true;

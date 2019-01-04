@@ -16,41 +16,43 @@ namespace tera {
 namespace tabletnode {
 
 struct RpcTask {
-    uint8_t rpc_type;
-    RpcTask(uint8_t type) : rpc_type(type) {}
+  uint8_t rpc_type;
+  RpcTask(uint8_t type) : rpc_type(type) {}
 };
 
 class RpcSchedule {
-public:
-    RpcSchedule(SchedulePolicy* policy);
-    ~RpcSchedule();
+ public:
+  RpcSchedule(SchedulePolicy* policy);
+  ~RpcSchedule();
 
-    void EnqueueRpc(const std::string& table_name, RpcTask* rpc);
+  void EnqueueRpc(const std::string& table_name, RpcTask* rpc);
 
-    bool DequeueRpc(RpcTask** rpc);
+  bool DequeueRpc(RpcTask** rpc);
 
-    bool FinishRpc(const std::string& table_name);
+  bool FinishRpc(const std::string& table_name);
 
-private:
-    mutable Mutex mutex_;
-    SchedulePolicy* policy_;
+  uint64_t GetPendingTaskCount() { return pending_task_count_; }
 
-    typedef std::string TableName;
-    struct TaskQueue : public std::queue<RpcTask*> {
-        uint64_t pending_count;
-        uint64_t running_count;
+ private:
+  mutable Mutex mutex_;
+  SchedulePolicy* policy_;
 
-        TaskQueue() : pending_count(0), running_count(0) {}
-    };
+  typedef std::string TableName;
+  struct TaskQueue : public std::queue<RpcTask*> {
+    uint64_t pending_count;
+    uint64_t running_count;
 
-    typedef std::map<TableName, ScheduleEntity*> TableList;
+    TaskQueue() : pending_count(0), running_count(0) {}
+  };
 
-    TableList table_list_;
-    uint64_t pending_task_count_;
-    uint64_t running_task_count_;
+  typedef std::map<TableName, ScheduleEntity*> TableList;
+
+  TableList table_list_;
+  uint64_t pending_task_count_;
+  uint64_t running_task_count_;
 };
 
-} // namespace tabletnode
-} // namespace tera
+}  // namespace tabletnode
+}  // namespace tera
 
 #endif  // TERA_TABLETNODE_RPC_SCHEDULE_H_

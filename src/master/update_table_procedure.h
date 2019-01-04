@@ -11,84 +11,104 @@
 #include "master/procedure.h"
 #include "proto/master_rpc.pb.h"
 
+#include <google/protobuf/stubs/common.h>
+
 namespace tera {
 namespace master {
 
-enum class UpdateTablePhase{
-    kPrepare,
-    kUpdateMeta,
-    kTabletsSchemaSyncing,
-    kEofPhase,
+enum class UpdateTablePhase {
+  kPrepare,
+  kUpdateMeta,
+  kTabletsSchemaSyncing,
+  kEofPhase,
 };
 
-std::ostream& operator<< (std::ostream& o, const UpdateTablePhase& phase);
+std::ostream& operator<<(std::ostream& o, const UpdateTablePhase& phase);
 
 class UpdateTableProcedure : public Procedure {
-public:
-    UpdateTableProcedure(TablePtr table, 
-            const UpdateTableRequest* request, 
-            UpdateTableResponse* response, 
-            google::protobuf::Closure* closure,
-            ThreadPool* thread_pool);
+ public:
+  UpdateTableProcedure(TablePtr table, const UpdateTableRequest* request,
+                       UpdateTableResponse* response, google::protobuf::Closure* closure,
+                       ThreadPool* thread_pool);
 
-    virtual std::string ProcId() const;
-    
-    virtual void RunNextStage();
+  virtual std::string ProcId() const;
 
-    virtual bool Done() {return done_.load();}
+  virtual void RunNextStage();
 
-    virtual ~UpdateTableProcedure() {}
-private:
-typedef std::function<void (UpdateRequest*, UpdateResponse*, bool, int)> UpdateClosure;
+  virtual bool Done() { return done_.load(); }
 
-    typedef std::function<void (UpdateTableProcedure*, const UpdateTablePhase&)> UpdateTablePhaseHandler;
+  virtual ~UpdateTableProcedure() {}
 
-    void SetNextPhase(const UpdateTablePhase& phase) {phases_.emplace_back(phase);}
+ private:
+  typedef std::function<void(UpdateRequest*, UpdateResponse*, bool, int)> UpdateClosure;
 
-    void EnterPhaseWithResponseStatus(StatusCode code, UpdateTablePhase phase) {
-        response_->set_status(code);
-        SetNextPhase(phase);
-    }
+  typedef std::function<void(UpdateTableProcedure*, const UpdateTablePhase&)>
+      UpdateTablePhaseHandler;
 
-    UpdateTablePhase GetCurrentPhase() {return phases_.back();}
+  void SetNextPhase(const UpdateTablePhase& phase) { phases_.emplace_back(phase); }
 
-    void PrepareHandler(const UpdateTablePhase& phase);
+  void EnterPhaseWithResponseStatus(StatusCode code, UpdateTablePhase phase) {
+    response_->set_status(code);
+    SetNextPhase(phase);
+  }
 
-    void UpdateMetaHandler(const UpdateTablePhase& phase);
+  UpdateTablePhase GetCurrentPhase() { return phases_.back(); }
 
-    void UpdateMetaDone(bool succ);
-    
-    void SyncTabletsSchemaHandler(const UpdateTablePhase& phase);
+  void PrepareHandler(const UpdateTablePhase& phase);
 
-    void EofPhaseHandler(const UpdateTablePhase&);
+  void UpdateMetaHandler(const UpdateTablePhase& phase);
 
-    void NoticeTabletSchemaUpdate(TabletPtr tablet, UpdateClosure done);
+  void UpdateMetaDone(bool succ);
 
-    void UpdateTabletSchemaCallback(TabletPtr tablet, 
-            int32_t retry_times,
-            UpdateRequest* request, 
-            UpdateResponse* response, 
-            bool fail, 
-            int status_code);
-    
-    void RecoverOfflineTablets();
+  void SyncTabletsSchemaHandler(const UpdateTablePhase& phase);
 
-private:
-    TablePtr table_;
-    const UpdateTableRequest* request_;
-    UpdateTableResponse* response_;
-    google::protobuf::Closure* rpc_closure_;
-    std::atomic<bool> update_meta_;
-    std::atomic<bool> sync_tablets_schema_;
-    std::atomic<bool> done_;
-    std::vector<UpdateTablePhase> phases_;
-    std::vector<TabletPtr> tablet_list_;
-    std::vector<TabletPtr> offline_tablets_;
-    std::atomic<uint32_t> tablet_sync_cnt_;
-    static std::map<UpdateTablePhase, UpdateTablePhaseHandler> phase_handlers_;
-    ThreadPool* thread_pool_;
+  void EofPhaseHandler(const UpdateTablePhase&);
+
+  void NoticeTabletSchemaUpdate(TabletPtr tablet, UpdateClosure done);
+
+  void UpdateTabletSchemaCallback(TabletPtr tablet, int32_t retry_times, UpdateRequest* request,
+                                  UpdateResponse* response, bool fail, int status_code);
+
+  void RecoverOfflineTablets();
+
+ private:
+  TablePtr table_;
+  const UpdateTableRequest* request_;
+  UpdateTableResponse* response_;
+  google::protobuf::Closure* rpc_closure_;
+  std::atomic<bool> update_meta_;
+  std::atomic<bool> sync_tablets_schema_;
+  std::atomic<bool> done_;
+  std::vector<UpdateTablePhase> phases_;
+  std::vector<TabletPtr> tablet_list_;
+  std::vector<TabletPtr> offline_tablets_;
+  std::atomic<uint32_t> tablet_sync_cnt_;
+  static std::map<UpdateTablePhase, UpdateTablePhaseHandler> phase_handlers_;
+  ThreadPool* thread_pool_;
 };
 
-}
-}
+class UpdateDoneClosure : public google::protobuf::Closure {
+ public:
+  static google::protobuf::Closure* NewInstance(UpdateTableRequest* request,
+                                                UpdateTableResponse* response) {
+    return new UpdateDoneClosure(request, response);
+  }
 
+  virtual void Run() override {
+    delete request_;
+    delete response_;
+    delete this;
+  }
+
+  virtual ~UpdateDoneClosure() {}
+
+ protected:
+  UpdateDoneClosure(UpdateTableRequest* request, UpdateTableResponse* response)
+      : request_(request), response_(response) {}
+
+ private:
+  UpdateTableRequest* request_;
+  UpdateTableResponse* response_;
+};
+}
+}

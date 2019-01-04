@@ -240,7 +240,9 @@ desc.AddColumn("family22", "qualifier22");          // Get the column from colum
 tera::ResultStream* result_stream = table->Scan(desc, &error_code);
 while (!result_stream->Done()) {
     /* process the returned cell */
+    ...
     result_stream->Next();
+    if (...) result_stream->Cancel();              // scan will exit from while circle 
 }
 
 // cleanup

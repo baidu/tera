@@ -1,0 +1,99 @@
+import "sofa/pbrpc/rpc_option.proto";
+import "status_code.proto";
+
+package tera;
+
+option cc_generic_services = true;
+
+enum AuthPolicyType {
+    kNoneAuthPolicy = 1;
+    kUgiAuthPolicy = 2;
+    kGianoAuthPolicy = 3;
+}
+
+message TableAuthPolicyInfo {
+    required string table_name = 1;
+    required AuthPolicyType auth_policy_type = 2;
+}
+
+// User----Group----Role----Permission，一个用户属于若干产品线，且可以拥有很多Role（Role是权限的集合）
+message IdentityInfo {
+    required AuthPolicyType auth_policy_type = 1;     // policy : Giano 或者 Ugi 或者 null
+    required string name = 2;                          // name是group_name或者user_name
+    required bytes token = 3;                         // token是cred或者passwd
+    required string ip_addr = 4;
+}
+
+enum UpdateAuthType {
+    kUpdateUgi = 1;
+    kDelUgi = 2;
+    kAddRole = 3;    
+    kDelRole = 4;    
+    kGrantRole = 5;    
+    kRevokeRole = 6;   
+}
+
+message UgiInfo {
+    required string user_name = 1;
+    required string passwd = 2;
+}
+
+message UpdateAuthInfo {
+    required UpdateAuthType update_type = 1;
+    optional UgiInfo ugi_info = 2;
+    optional RoleInfo role_info = 3;
+    optional AuthorityInfo authority_info = 4;
+}
+
+message RoleInfo {    
+    required string role = 1;
+    repeated Permission permission = 2;    
+}
+
+message AuthorityInfo {
+    required string user_name = 1;
+    required string role = 2;
+}
+
+// Only for master meta
+// Key:user_name, Value:passwd,[role1, role2, ...]
+message UgiMetaInfo {
+    required string passwd = 1;
+    repeated string roles = 2;
+    required string user_name = 3;
+}
+
+message Permission {
+    enum Action {
+        kRead = 1;
+        kWrite = 2;
+        kAdmin = 3;
+    }
+    enum Type {
+        kGlobal = 1;
+        kNamespace = 2;
+        kTable = 3;
+    }
+    required Type type = 1;
+    optional GlobalPermission global_permission = 2;
+    optional NamespacePermission namespace_permission = 3;
+    optional TablePermission table_permission = 4;
+}
+
+message TablePermission {
+    required string namespace_name = 1;
+    required string table_name = 2;
+    // 可扩展作用到cell级别
+    optional string family = 3;
+    optional bytes qualifier = 4;
+    required Permission.Action action = 5;
+}
+
+message NamespacePermission {
+    required string namespace_name = 1;
+    required Permission.Action action = 2;
+}
+
+message GlobalPermission {
+    required Permission.Action action = 1;
+}

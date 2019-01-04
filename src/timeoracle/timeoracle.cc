@@ -7,7 +7,7 @@
 namespace tera {
 namespace timeoracle {
 
-std::atomic<int64_t>    Timeoracle::s_last_timestamp_ms;
+std::atomic<int64_t> Timeoracle::s_last_timestamp_ms;
 
-} // namespace timeoracle
-} // namespace tera
+}  // namespace timeoracle
+}  // namespace tera

@@ -16,68 +16,68 @@ namespace tera {
 namespace tabletnode {
 
 struct ScheduleEntity {
-    void* user_ptr;
+  void* user_ptr;
 
-    ScheduleEntity(void* user_ptr) : user_ptr(user_ptr) {}
-    virtual ~ScheduleEntity() {}
+  ScheduleEntity(void* user_ptr) : user_ptr(user_ptr) {}
+  virtual ~ScheduleEntity() {}
 };
 
 class SchedulePolicy {
-public:
-    typedef std::string TableName;
-    typedef std::map<TableName, ScheduleEntity*> ScheduleEntityList;
+ public:
+  typedef std::string TableName;
+  typedef std::map<TableName, ScheduleEntity*> ScheduleEntityList;
 
-    SchedulePolicy() {}
-    virtual ~SchedulePolicy() {}
+  SchedulePolicy() {}
+  virtual ~SchedulePolicy() {}
 
-    virtual ScheduleEntity* NewScheEntity(void* user_ptr = NULL) = 0;
+  virtual ScheduleEntity* NewScheEntity(void* user_ptr = NULL) = 0;
 
-    virtual ScheduleEntityList::iterator Pick(ScheduleEntityList* entity_list) = 0;
+  virtual ScheduleEntityList::iterator Pick(ScheduleEntityList* entity_list) = 0;
 
-    virtual void Done(ScheduleEntity* entity) = 0;
+  virtual void Done(ScheduleEntity* entity) = 0;
 
-    virtual void Enable(ScheduleEntity* entity) = 0;
+  virtual void Enable(ScheduleEntity* entity) = 0;
 
-    virtual void Disable(ScheduleEntity* entity) = 0;
+  virtual void Disable(ScheduleEntity* entity) = 0;
 };
 
 struct FairScheduleEntity : public ScheduleEntity {
-    bool pickable;
-    int64_t last_update_time;
-    int64_t elapse_time;
-    int64_t running_count;
+  bool pickable;
+  int64_t last_update_time;
+  int64_t elapse_time;
+  int64_t running_count;
 
-    FairScheduleEntity(void* user_ptr)
-        : ScheduleEntity(user_ptr),
-          pickable(false),
-          last_update_time(0),
-          elapse_time(0),
-          running_count(0) {}
+  FairScheduleEntity(void* user_ptr)
+      : ScheduleEntity(user_ptr),
+        pickable(false),
+        last_update_time(0),
+        elapse_time(0),
+        running_count(0) {}
 };
 
 class FairSchedulePolicy : public SchedulePolicy {
-public:
-    FairSchedulePolicy();
+ public:
+  FairSchedulePolicy();
 
-    ~FairSchedulePolicy();
+  ~FairSchedulePolicy();
 
-    ScheduleEntity* NewScheEntity(void* user_ptr = NULL);
+  ScheduleEntity* NewScheEntity(void* user_ptr = NULL);
 
-    ScheduleEntityList::iterator Pick(ScheduleEntityList* entity_list);
+  ScheduleEntityList::iterator Pick(ScheduleEntityList* entity_list);
 
-    void Done(ScheduleEntity* entity);
+  void Done(ScheduleEntity* entity);
 
-    void Enable(ScheduleEntity* entity);
+  void Enable(ScheduleEntity* entity);
 
-    void Disable(ScheduleEntity* entity);
+  void Disable(ScheduleEntity* entity);
 
-private:
-    void UpdateEntity(FairScheduleEntity* entity);
+ private:
+  void UpdateEntity(FairScheduleEntity* entity);
 
-    int64_t min_elapse_time_;
+  int64_t min_elapse_time_;
 };
 
-} // namespace tabletnode
-} // namespace tera
+}  // namespace tabletnode
+}  // namespace tera
 
 #endif  // TERA_TABLETNODE_RPC_SCHEDULE_POLICY_H_

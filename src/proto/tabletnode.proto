@@ -3,71 +3,74 @@ import "status_code.proto";
 package tera;
 
 message ExtraTsInfo {
-    optional string name = 1;
-    optional uint64 value = 2;
+  optional string name = 1;
+  optional uint64 value = 2;
 }
 
 message TabletNodeInfo {
-    required string addr = 1;
-    optional StatusCode status_t = 2;
-    optional uint64 load = 3;
-    optional uint64 timestamp = 4;
-    optional uint32 tablet_total = 5;
-    optional uint32 tablet_onbusy = 6;
-    optional uint32 tablet_corruption = 7;
+  required string addr = 1;
+  optional StatusCode status_t = 2;
+  optional uint64 load = 3;
+  optional uint64 timestamp = 4;
+  optional uint32 tablet_total = 5;
+  optional uint32 tablet_onbusy = 6;
+  optional uint32 tablet_corruption = 7;
 
-    optional uint32 low_read_cell = 11;
-    optional uint32 scan_rows = 12;
-    optional uint32 scan_kvs = 13;
-    optional uint32 scan_size = 14;
-    optional uint32 read_rows = 15;
-    optional uint32 read_kvs = 16;
-    optional uint32 read_size = 17;
-    optional uint32 write_rows = 18;
-    optional uint32 write_kvs = 19;
-    optional uint32 write_size = 20;
+  optional uint32 low_read_cell = 11;
+  optional uint32 scan_rows = 12;
+  optional uint32 scan_kvs = 13;
+  optional uint32 scan_size = 14;
+  optional uint32 read_rows = 15;
+  optional uint32 read_kvs = 16;
+  optional uint32 read_size = 17;
+  optional uint32 write_rows = 18;
+  optional uint32 write_kvs = 19;
+  optional uint32 write_size = 20;
 
-    optional uint64 mem_used = 21;
-    optional uint32 net_tx = 22;
-    optional uint32 net_rx = 23;
-    optional uint32 dfs_io_r = 24;
-    optional uint32 dfs_io_w = 25;
-    optional uint32 local_io_r = 26;
-    optional uint32 local_io_w = 27;
+  optional uint64 mem_used = 21;
+  optional uint32 net_tx = 22;
+  optional uint32 net_rx = 23;
+  optional uint32 dfs_io_r = 24 [default = 0];
+  optional uint32 dfs_io_w = 25 [default = 0];
+  optional uint32 local_io_r = 26;
+  optional uint32 local_io_w = 27;
+  optional uint32 dfs_master_qps = 28 [default = 0]; // Operations through dfs's master, including close, open, delete
 
-    optional string status_m = 31;
-    optional uint32 tablet_onload = 32;
-    optional uint32 tablet_onsplit = 33;
-    optional uint32 tablet_unloading = 34;
+  optional string status_m = 31;
+  optional uint32 tablet_onload = 32;
+  optional uint32 tablet_onsplit = 33;
+  optional uint32 tablet_unloading = 34;
 
-    repeated ExtraTsInfo extra_info = 40;
+  repeated ExtraTsInfo extra_info = 40;
 
-    optional uint32 read_pending = 41;
-    optional uint32 write_pending = 42;
-    optional uint32 scan_pending = 43;
+  optional uint32 read_pending = 41;
+  optional uint32 write_pending = 42;
+  optional uint32 scan_pending = 43;
 
-    optional float cpu_usage = 44;
-    optional int64 process_start_time = 45;  // Unix time in us
+  optional float cpu_usage = 44;
+  optional int64 process_start_time = 45;  // Unix time in us
+
+  optional uint64 persistent_cache_size = 46;
 }
 
 message LgInheritedLiveFiles {
-    required uint32 lg_no = 1;
-    repeated uint64 file_number = 2; // full file number, include tablet number
+  required uint32 lg_no = 1;
+  repeated uint64 file_number = 2;  // full file number, include tablet number
 }
 
 message InheritedLiveFiles {
-    required string table_name = 1;
-    repeated LgInheritedLiveFiles lg_live_files = 2;
+  required string table_name = 1;
+  repeated LgInheritedLiveFiles lg_live_files = 2;
 }
 
 message TabletInheritedFileInfo {
-    optional string table_name = 1;
-    optional bytes key_start = 2;
-    optional bytes key_end = 3;
-    repeated LgInheritedLiveFiles lg_inh_files = 4;
+  optional string table_name = 1;
+  optional bytes key_start = 2;
+  optional bytes key_end = 3;
+  repeated LgInheritedLiveFiles lg_inh_files = 4;
 }
 
 message TabletBackgroundErrorInfo {
-    required string tablet_name = 1;
-    required bytes detail_info = 2;
+  required string tablet_name = 1;
+  required bytes detail_info = 2;
 }

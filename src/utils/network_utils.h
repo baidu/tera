@@ -14,8 +14,7 @@ namespace utils {
 
 std::string GetRemoteAddress(google::protobuf::RpcController* controller);
 
-} // namespace utils
-} // namespace tera
+}  // namespace utils
+}  // namespace tera
 
-
-#endif // TERA_UTILS_NETWORK_UTILS_H_
+#endif  // TERA_UTILS_NETWORK_UTILS_H_

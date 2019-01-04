@@ -61,15 +61,12 @@ bool GuessType(const std::string& fname, FileType* type) {
 class CorruptionReporter : public log::Reader::Reporter {
  public:
   virtual void Corruption(size_t bytes, const Status& status) {
-    printf("corruption: %d bytes; %s\n",
-            static_cast<int>(bytes),
-            status.ToString().c_str());
+    printf("corruption: %d bytes; %s\n", static_cast<int>(bytes), status.ToString().c_str());
   }
 };
 
 // Print contents of a log file. (*func)() is called on every record.
-bool PrintLogContents(Env* env, const std::string& fname,
-                      void (*func)(Slice)) {
+bool PrintLogContents(Env* env, const std::string& fname, void (*func)(Slice)) {
   SequentialFile* file;
   Status s = env->NewSequentialFile(fname, &file);
   if (!s.ok()) {
@@ -81,8 +78,7 @@ bool PrintLogContents(Env* env, const std::string& fname,
   Slice record;
   std::string scratch;
   while (reader.ReadRecord(&record, &scratch)) {
-    printf("--- offset %llu; ",
-           static_cast<unsigned long long>(reader.LastRecordOffset()));
+    printf("--- offset %llu; ", static_cast<unsigned long long>(reader.LastRecordOffset()));
     (*func)(record);
   }
   delete file;
@@ -96,29 +92,21 @@ class WriteBatchItemPrinter : public WriteBatch::Handler {
   uint64_t sequence_;
 
   virtual void Put(const Slice& key, const Slice& value) {
-    printf("  put '%s' '%s'\n",
-           EscapeString(key).c_str(),
-           EscapeString(value).c_str());
+    printf("  put '%s' '%s'\n", EscapeString(key).c_str(), EscapeString(value).c_str());
   }
-  virtual void Delete(const Slice& key) {
-    printf("  del '%s'\n",
-           EscapeString(key).c_str());
-  }
+  virtual void Delete(const Slice& key) { printf("  del '%s'\n", EscapeString(key).c_str()); }
 };
-
 
 // Called on every log record (each one of which is a WriteBatch)
 // found in a kLogFile.
 static void WriteBatchPrinter(Slice record) {
   if (record.size() < 12) {
-    printf("log record length %d is too small\n",
-           static_cast<int>(record.size()));
+    printf("log record length %d is too small\n", static_cast<int>(record.size()));
     return;
   }
   WriteBatch batch;
   WriteBatchInternal::SetContents(&batch, record);
-  printf("sequence %llu\n",
-         static_cast<unsigned long long>(WriteBatchInternal::Sequence(&batch)));
+  printf("sequence %llu\n", static_cast<unsigned long long>(WriteBatchInternal::Sequence(&batch)));
   WriteBatchItemPrinter batch_item_printer;
   Status s = batch.Iterate(&batch_item_printer);
   if (!s.ok()) {
@@ -176,8 +164,7 @@ bool DumpTable(Env* env, const std::string& fname) {
   for (iter->SeekToFirst(); iter->Valid(); iter->Next()) {
     ParsedInternalKey key;
     if (!ParseInternalKey(iter->key(), &key)) {
-      printf("badkey '%s' => '%s'\n",
-             EscapeString(iter->key()).c_str(),
+      printf("badkey '%s' => '%s'\n", EscapeString(iter->key()).c_str(),
              EscapeString(iter->value()).c_str());
     } else {
       char kbuf[20];
@@ -190,10 +177,8 @@ bool DumpTable(Env* env, const std::string& fname) {
         snprintf(kbuf, sizeof(kbuf), "%d", static_cast<int>(key.type));
         type = kbuf;
       }
-      printf("'%s' @ %8llu : %s => '%s'\n",
-             EscapeString(key.user_key).c_str(),
-             static_cast<unsigned long long>(key.sequence),
-             type,
+      printf("'%s' @ %8llu : %s => '%s'\n", EscapeString(key.user_key).c_str(),
+             static_cast<unsigned long long>(key.sequence), type,
              EscapeString(iter->value()).c_str());
     }
   }
@@ -215,9 +200,12 @@ bool DumpFile(Env* env, const std::string& fname) {
     return false;
   }
   switch (ftype) {
-    case kLogFile:         return DumpLog(env, fname);
-    case kDescriptorFile:  return DumpDescriptor(env, fname);
-    case kTableFile:       return DumpTable(env, fname);
+    case kLogFile:
+      return DumpLog(env, fname);
+    case kDescriptorFile:
+      return DumpDescriptor(env, fname);
+    case kTableFile:
+      return DumpTable(env, fname);
 
     default: {
       fprintf(stderr, "%s: not a dump-able file type\n", fname.c_str());

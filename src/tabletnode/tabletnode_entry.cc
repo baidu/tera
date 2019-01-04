@@ -41,13 +41,9 @@ DECLARE_int32(tera_metric_http_server_listen_port);
 
 DECLARE_bool(tera_tabletnode_dump_level_size_info_enabled);
 
-std::string GetTeraEntryName() {
-    return "tabletnode";
-}
+std::string GetTeraEntryName() { return "tabletnode"; }
 
-tera::TeraEntry* GetTeraEntry() {
-    return new tera::tabletnode::TabletNodeEntry();
-}
+tera::TeraEntry* GetTeraEntry() { return new tera::tabletnode::TabletNodeEntry(); }
 
 namespace tera {
 namespace tabletnode {
@@ -56,124 +52,119 @@ TabletNodeEntry::TabletNodeEntry()
     : tabletnode_impl_(NULL),
       remote_tabletnode_(NULL),
       metric_http_server_(new tera::MetricHttpServer()) {
-    sofa::pbrpc::RpcServerOptions rpc_options;
-    rpc_options.max_throughput_in = FLAGS_tera_tabletnode_rpc_server_max_inflow;
-    rpc_options.max_throughput_out = FLAGS_tera_tabletnode_rpc_server_max_outflow;
-    rpc_options.keep_alive_time = 7200;
-    rpc_server_.reset(new sofa::pbrpc::RpcServer(rpc_options));
+  sofa::pbrpc::RpcServerOptions rpc_options;
+  rpc_options.max_throughput_in = FLAGS_tera_tabletnode_rpc_server_max_inflow;
+  rpc_options.max_throughput_out = FLAGS_tera_tabletnode_rpc_server_max_outflow;
+  rpc_options.keep_alive_time = 7200;
+  rpc_server_.reset(new sofa::pbrpc::RpcServer(rpc_options));
 }
 
 TabletNodeEntry::~TabletNodeEntry() {}
 
 bool TabletNodeEntry::StartServer() {
-    // set which core could work on this TS
-    SetProcessorAffinity();
-    //
-    // start metric http server
-    if (FLAGS_tera_metric_http_server_enable) {
-        if(!metric_http_server_->Start(FLAGS_tera_metric_http_server_listen_port)) {
-            LOG(ERROR) << "Start metric http server failed.";
-            return false;
-        }
-    } else {
-        LOG(INFO) << "Metric http server is disabled.";
+  // set which core could work on this TS
+  SetProcessorAffinity();
+  //
+  // start metric http server
+  if (FLAGS_tera_metric_http_server_enable) {
+    if (!metric_http_server_->Start(FLAGS_tera_metric_http_server_listen_port)) {
+      LOG(ERROR) << "Start metric http server failed.";
+      return false;
     }
+  } else {
+    LOG(INFO) << "Metric http server is disabled.";
+  }
 
-    IpAddress tabletnode_addr("0.0.0.0", FLAGS_tera_tabletnode_port);
-    LOG(INFO) << "Start RPC server at: " << tabletnode_addr.ToString();
+  IpAddress tabletnode_addr("0.0.0.0", FLAGS_tera_tabletnode_port);
+  LOG(INFO) << "Start RPC server at: " << tabletnode_addr.ToString();
 
-    tabletnode_impl_.reset(new TabletNodeImpl());
-    remote_tabletnode_ = new RemoteTabletNode(tabletnode_impl_.get());
+  tabletnode_impl_.reset(new TabletNodeImpl());
+  remote_tabletnode_ = new RemoteTabletNode(tabletnode_impl_.get());
 
-    // 注册给rpcserver, rpcserver会负责delete
-    rpc_server_->RegisterService(remote_tabletnode_);
-    if (!rpc_server_->Start(tabletnode_addr.ToString())) {
-        LOG(ERROR) << "start RPC server error";
-        return false;
-    }
+  // 注册给rpcserver, rpcserver会负责delete
+  rpc_server_->RegisterService(remote_tabletnode_);
+  if (!rpc_server_->Start(tabletnode_addr.ToString())) {
+    LOG(ERROR) << "start RPC server error";
+    return false;
+  }
 
-    if (!tabletnode_impl_->Init()) { //register on ZK
-        LOG(ERROR) << "fail to init tabletnode_impl";
-        return false;
-    }
-    LOG(INFO) << "finish starting RPC server";
-    return true;
+  if (!tabletnode_impl_->Init()) {  // register on ZK
+    LOG(ERROR) << "fail to init tabletnode_impl";
+    return false;
+  }
+  LOG(INFO) << "finish starting RPC server";
+  return true;
 }
 
 void TabletNodeEntry::ShutdownServer() {
-    metric_http_server_->Stop();
-    tabletnode_impl_->Exit();
-    LOG(INFO) << "TabletNodeEntry stop done!";
-    _exit(0);
+  tabletnode_impl_->Exit();
+  LOG(INFO) << "TabletNodeEntry stop done!";
+  _exit(0);
 }
 
 bool TabletNodeEntry::Run() {
-    static int64_t timer_ticks = 0;
-    ++timer_ticks;
+  static int64_t timer_ticks = 0;
+  ++timer_ticks;
 
-    // Run garbage collect, in secondes.
-    const int garbage_collect_period = (FLAGS_tera_garbage_collect_period)?
-                                        FLAGS_tera_garbage_collect_period : 60;
-    if (timer_ticks % garbage_collect_period == 0) {
-        tabletnode_impl_->GarbageCollect();
-    }
+  // Run garbage collect, in secondes.
+  const int garbage_collect_period =
+      (FLAGS_tera_garbage_collect_period) ? FLAGS_tera_garbage_collect_period : 60;
+  if (timer_ticks % garbage_collect_period == 0) {
+    tabletnode_impl_->GarbageCollect();
+  }
 
-    if (FLAGS_tera_tabletnode_dump_level_size_info_enabled) {
-        tabletnode_impl_->RefreshLevelSize();
-    }
+  if (FLAGS_tera_tabletnode_dump_level_size_info_enabled) {
+    tabletnode_impl_->RefreshLevelSize();
+  }
 
-    CollectorReportPublisher::GetInstance().Refresh();
-    tabletnode_impl_->RefreshSysInfo();
-    tabletnode_impl_->GetSysInfo().DumpLog();
-    LOG(INFO) << "[ThreadPool schd/task/cnt] "
-        << remote_tabletnode_->ProfilingLog();
+  CollectorReportPublisher::GetInstance().Refresh();
+  tabletnode_impl_->RefreshAndDumpSysInfo();
 
-    int64_t now_time = get_micros();
-    int64_t earliest_rpc_time = now_time;
-    RpcTimerList::Instance()->TopTime(&earliest_rpc_time);
-    double max_delay = (now_time - earliest_rpc_time) / 1000.0;
-    LOG(INFO) << "pending rpc max delay: "
-            << std::fixed<< std::setprecision(2) << max_delay;
-    if (FLAGS_tera_tabletnode_hang_detect_enabled &&
-        max_delay > FLAGS_tera_tabletnode_hang_detect_threshold) {
-        LOG(FATAL) << "hang detected: "
-                   << std::fixed<< std::setprecision(2) << max_delay;
-    }
+  LOG(INFO) << "[ThreadPool schd/task/cnt] " << remote_tabletnode_->ProfilingLog();
 
-    ThisThread::Sleep(1000);
-    return true;
+  int64_t now_time = get_micros();
+  int64_t earliest_rpc_time = now_time;
+  RpcTimerList::Instance()->TopTime(&earliest_rpc_time);
+  double max_delay = (now_time - earliest_rpc_time) / 1000.0;
+  LOG(INFO) << "pending rpc max delay: " << std::fixed << std::setprecision(2) << max_delay;
+  if (FLAGS_tera_tabletnode_hang_detect_enabled &&
+      max_delay > FLAGS_tera_tabletnode_hang_detect_threshold) {
+    LOG(FATAL) << "hang detected: " << std::fixed << std::setprecision(2) << max_delay;
+  }
+
+  ThisThread::Sleep(1000);
+  return true;
 }
 
 void TabletNodeEntry::SetProcessorAffinity() {
-    if (!FLAGS_tera_tabletnode_cpu_affinity_enabled) {
-        return;
+  if (!FLAGS_tera_tabletnode_cpu_affinity_enabled) {
+    return;
+  }
+
+  ThreadAttributes thread_attr;
+  thread_attr.MarkCurMask();
+  thread_attr.ResetCpuMask();
+  std::vector<std::string> cpu_set;
+
+  SplitString(FLAGS_tera_tabletnode_cpu_affinity_set, ",", &cpu_set);
+  for (uint32_t i = 0; i < cpu_set.size(); ++i) {
+    int32_t cpu_id;
+    if (StringToNumber(cpu_set[i], &cpu_id)) {
+      thread_attr.SetCpuMask(cpu_id);
+    } else {
+      LOG(ERROR) << "invalid cpu affinity id: " << cpu_set[i];
     }
+  }
 
-    ThreadAttributes thread_attr;
-    thread_attr.MarkCurMask();
-    thread_attr.ResetCpuMask();
-    std::vector<std::string> cpu_set;
-
-    SplitString(FLAGS_tera_tabletnode_cpu_affinity_set, ",", &cpu_set);
-    for (uint32_t i = 0; i < cpu_set.size(); ++i) {
-        int32_t cpu_id;
-        if (StringToNumber(cpu_set[i], &cpu_id)) {
-            thread_attr.SetCpuMask(cpu_id);
-        } else {
-            LOG(ERROR) << "invalid cpu affinity id: " << cpu_set[i];
-        }
+  if (!thread_attr.SetCpuAffinity()) {
+    LOG(ERROR) << "fail to set affinity, revert back";
+    if (!thread_attr.RevertCpuAffinity()) {
+      LOG(ERROR) << "fail to revert previous affinity";
     }
+    return;
+  }
 
-    if (!thread_attr.SetCpuAffinity()) {
-        LOG(ERROR) << "fail to set affinity, revert back";
-        if (!thread_attr.RevertCpuAffinity()) {
-            LOG(ERROR) << "fail to revert previous affinity";
-        }
-        return;
-    }
-
-    LOG(INFO) << "Set processor affinity to CPU: "
-        << FLAGS_tera_tabletnode_cpu_affinity_set;
+  LOG(INFO) << "Set processor affinity to CPU: " << FLAGS_tera_tabletnode_cpu_affinity_set;
 }
-}// namespace tabletnode
-} // namespace tera
+}  // namespace tabletnode
+}  // namespace tera

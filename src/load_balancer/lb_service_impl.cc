@@ -17,33 +17,27 @@ DECLARE_int32(tera_lb_server_thread_num);
 namespace tera {
 namespace load_balancer {
 
-LBServiceImpl::LBServiceImpl(const std::shared_ptr<LBImpl>& lb_impl) :
-    lb_impl_(lb_impl),
-    thread_pool_(new ThreadPool(FLAGS_tera_lb_server_thread_num)) {
-}
+LBServiceImpl::LBServiceImpl(const std::shared_ptr<LBImpl>& lb_impl)
+    : lb_impl_(lb_impl), thread_pool_(new ThreadPool(FLAGS_tera_lb_server_thread_num)) {}
 
-LBServiceImpl::~LBServiceImpl() {
-}
+LBServiceImpl::~LBServiceImpl() {}
 
 void LBServiceImpl::CmdCtrl(google::protobuf::RpcController* controller,
-                            const CmdCtrlRequest* request,
-                            CmdCtrlResponse* response,
+                            const CmdCtrlRequest* request, CmdCtrlResponse* response,
                             google::protobuf::Closure* done) {
-    VLOG(20) << "accept RPC (CmdCtrl) from: " << tera::utils::GetRemoteAddress(controller);
-    ThreadPool::Task task =
-        std::bind(&LBServiceImpl::DoCmdCtrl, this, controller, request, response, done);
-    thread_pool_->AddTask(task);
+  VLOG(20) << "accept RPC (CmdCtrl) from: " << tera::utils::GetRemoteAddress(controller);
+  ThreadPool::Task task =
+      std::bind(&LBServiceImpl::DoCmdCtrl, this, controller, request, response, done);
+  thread_pool_->AddTask(task);
 }
 
 void LBServiceImpl::DoCmdCtrl(google::protobuf::RpcController* controller,
-                              const CmdCtrlRequest* request,
-                              CmdCtrlResponse* response,
+                              const CmdCtrlRequest* request, CmdCtrlResponse* response,
                               google::protobuf::Closure* done) {
-    VLOG(20) << "run RPC (CmdCtrl)";
-    lb_impl_->CmdCtrl(request, response, done);
-    VLOG(20) << "finish RPC (CmdCtrl)";
+  VLOG(20) << "run RPC (CmdCtrl)";
+  lb_impl_->CmdCtrl(request, response, done);
+  VLOG(20) << "finish RPC (CmdCtrl)";
 }
 
-} // namespace load_balancer
-} // namespace tera
-
+}  // namespace load_balancer
+}  // namespace tera

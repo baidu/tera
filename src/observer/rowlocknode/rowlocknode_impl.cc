@@ -21,64 +21,54 @@ RowlockNodeImpl::RowlockNodeImpl() {}
 RowlockNodeImpl::~RowlockNodeImpl() {}
 
 bool RowlockNodeImpl::Init() {
-    std::string local_addr = tera::utils::GetLocalHostName() + ":" + FLAGS_rowlock_server_port;
-    if (FLAGS_tera_coord_type == "zk") {
-        zk_adapter_.reset(new RowlockNodeZkAdapter(this, local_addr));
-    } else if (FLAGS_tera_coord_type == "ins") {
-        zk_adapter_.reset(new InsRowlockNodeZkAdapter(this, local_addr));
-    } else {
-        zk_adapter_.reset(new FakeRowlockNodeZkAdapter(this, local_addr));
-    }
+  std::string local_addr = tera::utils::GetLocalHostName() + ":" + FLAGS_rowlock_server_port;
+  if (FLAGS_tera_coord_type == "zk") {
+    zk_adapter_.reset(new RowlockNodeZkAdapter(this, local_addr));
+  } else if (FLAGS_tera_coord_type == "ins") {
+    zk_adapter_.reset(new InsRowlockNodeZkAdapter(this, local_addr));
+  } else {
+    zk_adapter_.reset(new FakeRowlockNodeZkAdapter(this, local_addr));
+  }
 
-    zk_adapter_->Init();
+  zk_adapter_->Init();
 
-    LOG(INFO) << "Rowlock node init finish";
-    return true;
+  LOG(INFO) << "Rowlock node init finish";
+  return true;
 }
 
-bool RowlockNodeImpl::Exit() {
-    return true;
-}
+bool RowlockNodeImpl::Exit() { return true; }
 
-void RowlockNodeImpl::TryLock(const RowlockRequest* request,
-        RowlockResponse* response,
-        google::protobuf::Closure* done) {
-    uint64_t rowlock_key = GetRowlockKey(request->table_name(), request->row());
-    if (rowlock_db_.TryLock(rowlock_key)) {
-        response->set_lock_status(kLockSucc);
-        VLOG(12) << "Lock success: " << request->row();
-    } else {
-        response->set_lock_status(kLockFail);
-        LOG(WARNING) << " table name: " << request->table_name()
-                     << " row :" << request->row();
-    }
-
-    done->Run();
-}
-
-void RowlockNodeImpl::UnLock(const RowlockRequest* request,
-        RowlockResponse* response,
-        google::protobuf::Closure* done) {
-    uint64_t rowlock_key = GetRowlockKey(request->table_name(), request->row());
-    rowlock_db_.UnLock(rowlock_key);
+void RowlockNodeImpl::TryLock(const RowlockRequest* request, RowlockResponse* response,
+                              google::protobuf::Closure* done) {
+  uint64_t rowlock_key = GetRowlockKey(request->table_name(), request->row());
+  if (rowlock_db_.TryLock(rowlock_key)) {
     response->set_lock_status(kLockSucc);
-    VLOG(12) << "Unlock success: " << request->row();
-    done->Run();
+    VLOG(12) << "Lock success: " << request->row();
+  } else {
+    response->set_lock_status(kLockFail);
+    LOG(WARNING) << " table name: " << request->table_name() << " row :" << request->row();
+  }
+
+  done->Run();
 }
 
-void RowlockNodeImpl::PrintQPS() {
-    return;
+void RowlockNodeImpl::UnLock(const RowlockRequest* request, RowlockResponse* response,
+                             google::protobuf::Closure* done) {
+  uint64_t rowlock_key = GetRowlockKey(request->table_name(), request->row());
+  rowlock_db_.UnLock(rowlock_key);
+  response->set_lock_status(kLockSucc);
+  VLOG(12) << "Unlock success: " << request->row();
+  done->Run();
 }
 
-uint64_t RowlockNodeImpl::GetRowlockKey(const std::string& table_name, 
+void RowlockNodeImpl::PrintQPS() { return; }
+
+uint64_t RowlockNodeImpl::GetRowlockKey(const std::string& table_name,
                                         const std::string& row) const {
-    // RowlockKey : TableName + Row
-    std::string rowlock_key_str = table_name + row;
-    return std::hash<std::string>()(rowlock_key_str);
-
+  // RowlockKey : TableName + Row
+  std::string rowlock_key_str = table_name + row;
+  return std::hash<std::string>()(rowlock_key_str);
 }
 
-
-} // namespace observer
-} // namespace tera
-
+}  // namespace observer
+}  // namespace tera

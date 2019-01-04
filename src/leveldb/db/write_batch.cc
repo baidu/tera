@@ -33,22 +33,18 @@ namespace leveldb {
 // WriteBatch header has an 8-byte sequence number followed by a 4-byte count.
 static const size_t kHeader = 12;
 
-WriteBatch::WriteBatch() {
-  Clear();
-}
+WriteBatch::WriteBatch() { Clear(); }
 
-WriteBatch::~WriteBatch() { }
+WriteBatch::~WriteBatch() {}
 
-WriteBatch::Handler::~Handler() { }
+WriteBatch::Handler::~Handler() {}
 
 void WriteBatch::Clear() {
   rep_.clear();
   rep_.resize(kHeader);
 }
 
-size_t WriteBatch::DataSize() {
-    return rep_.size();
-}
+size_t WriteBatch::DataSize() { return rep_.size(); }
 
 Status WriteBatch::Iterate(Handler* handler) const {
   Slice input(rep_);
@@ -65,8 +61,7 @@ Status WriteBatch::Iterate(Handler* handler) const {
     input.remove_prefix(1);
     switch (tag) {
       case kTypeValue:
-        if (GetLengthPrefixedSlice(&input, &key) &&
-            GetLengthPrefixedSlice(&input, &value)) {
+        if (GetLengthPrefixedSlice(&input, &key) && GetLengthPrefixedSlice(&input, &value)) {
           handler->Put(key, value);
         } else {
           return Status::Corruption("bad WriteBatch Put");
@@ -109,9 +104,9 @@ Status WriteBatch::SeperateLocalityGroup(std::vector<WriteBatch*>* lg_bw) const 
     } else {
       Slice tmp_key = key;
       if (!GetFixed32LGId(&tmp_key, &lg_id)) {
-          lg_id = 0;
+        lg_id = 0;
       } else {
-          key = tmp_key;
+        key = tmp_key;
       }
       assert(lg_id < lg_bw->size());
       if ((*lg_bw)[lg_id] == NULL) {
@@ -136,8 +131,7 @@ Status WriteBatch::SeperateLocalityGroup(std::vector<WriteBatch*>* lg_bw) const 
     }
   }
 
-  uint64_t last_sequence = WriteBatchInternal::Sequence(this)
-                           + WriteBatchInternal::Count(this) - 1;
+  uint64_t last_sequence = WriteBatchInternal::Sequence(this) + WriteBatchInternal::Count(this) - 1;
   for (uint32_t i = 0; i < lg_bw->size(); ++i) {
     if ((*lg_bw)[i] == NULL) {
       (*lg_bw)[i] = new WriteBatch();
@@ -153,13 +147,9 @@ Status WriteBatch::SeperateLocalityGroup(std::vector<WriteBatch*>* lg_bw) const 
   }
 }
 
-int WriteBatchInternal::Count(const WriteBatch* b) {
-  return DecodeFixed32(b->rep_.data() + 8);
-}
+int WriteBatchInternal::Count(const WriteBatch* b) { return DecodeFixed32(b->rep_.data() + 8); }
 
-void WriteBatchInternal::SetCount(WriteBatch* b, int n) {
-  EncodeFixed32(&b->rep_[8], n);
-}
+void WriteBatchInternal::SetCount(WriteBatch* b, int n) { EncodeFixed32(&b->rep_[8], n); }
 
 SequenceNumber WriteBatchInternal::Sequence(const WriteBatch* b) {
   return SequenceNumber(DecodeFixed64(b->rep_.data()));
@@ -199,8 +189,7 @@ class MemTableInserter : public WriteBatch::Handler {
 };
 }  // namespace
 
-Status WriteBatchInternal::InsertInto(const WriteBatch* b,
-                                      MemTable* memtable) {
+Status WriteBatchInternal::InsertInto(const WriteBatch* b, MemTable* memtable) {
   MemTableInserter inserter;
   inserter.sequence_ = WriteBatchInternal::Sequence(b);
   inserter.mem_ = memtable;

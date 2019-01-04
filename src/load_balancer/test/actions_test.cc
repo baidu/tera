@@ -11,19 +11,18 @@
 namespace tera {
 namespace load_balancer {
 
-class ActionsTest : public ::testing::Test {
-};
+class ActionsTest : public ::testing::Test {};
 
 TEST_F(ActionsTest, MoveActionTest) {
-    MoveAction move_action(0, 0, 1, "");
-    std::shared_ptr<MoveAction> undo_action(dynamic_cast<MoveAction*>(move_action.UndoAction()));
+  MoveAction move_action(0, 0, 1, "");
+  std::shared_ptr<MoveAction> undo_action(dynamic_cast<MoveAction*>(move_action.UndoAction()));
 
-    ASSERT_EQ(move_action.tablet_index_, undo_action->tablet_index_);
-    ASSERT_EQ(move_action.source_node_index_, undo_action->dest_node_index_);
-    ASSERT_EQ(move_action.dest_node_index_, undo_action->source_node_index_);
+  ASSERT_EQ(move_action.tablet_index_, undo_action->tablet_index_);
+  ASSERT_EQ(move_action.source_node_index_, undo_action->dest_node_index_);
+  ASSERT_EQ(move_action.dest_node_index_, undo_action->source_node_index_);
 }
 
-} // namespace load_balancer
-} // namespace tera
+}  // namespace load_balancer
+}  // namespace tera
 
 /* vim: set expandtab ts=4 sw=4 sts=4 tw=100: */

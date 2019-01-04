@@ -14,16 +14,18 @@ namespace tera {
 namespace observer {
 
 class KeySelector {
-public:
-	virtual ~KeySelector() {}
+ public:
+  virtual ~KeySelector() {}
 
-	// output: selected table name, selected start key
-	virtual bool SelectStart(std::string* table_name,
-							 std::string* start_key) = 0;
-	virtual ErrorCode Observe(const std::string& table_name) = 0;
+  // output: selected table name, selected start key, end_key
+  // the range of [start_key, end_key)
+  virtual bool SelectRange(std::string* table_name, std::string* start_key,
+                           std::string* end_key) = 0;
+
+  virtual ErrorCode Observe(const std::string& table_name) = 0;
 };
 
-} // namespace observer
-} // namespace tera
+}  // namespace observer
+}  // namespace tera
 
 #endif  // TERA_OBSERVER_EXECUTOR_KEY_SELECTOR_H_

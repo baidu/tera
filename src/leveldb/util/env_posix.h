@@ -17,7 +17,7 @@ size_t GetLogicalBufferSize(int fd);
 }
 
 class PosixWritableFile : public WritableFile {
-private:
+ private:
   // buf_[0, pos_-1] contains data to be written to fd_.
   std::string filename_;
   int fd_;
@@ -27,10 +27,8 @@ private:
   size_t align_size_;
   char* buf_ = NULL;
 
-public:
-  PosixWritableFile(const std::string& fname,
-                    int fd,
-                    const EnvOptions& options);
+ public:
+  PosixWritableFile(const std::string& fname, int fd, const EnvOptions& options);
 
   virtual ~PosixWritableFile();
 
@@ -46,9 +44,11 @@ public:
 
   Status LeaveDio();
 
-private:
+ private:
   Status FlushBuffered();
 
   Status WriteRaw(const char* p, size_t n);
+
+  std::string GetFileName() const override { return filename_; }
 };
 }
