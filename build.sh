@@ -81,7 +81,8 @@ if [ ${SOFA_PBRPC_VERSION} == "DISABLE" ]; then
 elif [ ! -f "${FLAG_DIR}/sofa-pbrpc_${SOFA_PBRPC_VERSION}" ] \
     || [ ! -f "${DEPS_PREFIX}/lib/libsofa-pbrpc.a" ] \
     || [ ! -d "${DEPS_PREFIX}/include/sofa/pbrpc" ]; then
-    wget --no-check-certificate -O sofa-pbrpc-${SOFA_PBRPC_VERSION}.tar.gz ${SOFA_PBRPC_URL}
+    #wget --no-check-certificate -O sofa-pbrpc-${SOFA_PBRPC_VERSION}.tar.gz ${SOFA_PBRPC_URL}
+    curl -k -L ${SOFA_PBRPC_URL} -o sofa-pbrpc-${SOFA_PBRPC_VERSION}.tar.gz
     tar zxf sofa-pbrpc-${SOFA_PBRPC_VERSION}.tar.gz --recursive-unlink
     cd sofa-pbrpc-${SOFA_PBRPC_VERSION}
     sed -i '/BOOST_HEADER_DIR=/ d' depends.mk
@@ -119,7 +120,8 @@ if [ ${GFLAGS_VERSION} == "DISABLE" ]; then
 elif [ ! -f "${FLAG_DIR}/gflags_${GFLAGS_VERSION}" ] \
     || [ ! -f "${DEPS_PREFIX}/lib/libgflags.a" ] \
     || [ ! -d "${DEPS_PREFIX}/include/gflags" ]; then
-    wget --no-check-certificate -O gflags-${GFLAGS_VERSION}.tar.gz ${GFLAGS_URL}
+    #wget --no-check-certificate -O gflags-${GFLAGS_VERSION}.tar.gz ${GFLAGS_URL}
+    curl -k -L ${GFLAGS_URL} -o gflags-${GFLAGS_VERSION}.tar.gz
     tar zxf gflags-${GFLAGS_VERSION}.tar.gz --recursive-unlink
     cd gflags-${GFLAGS_VERSION}
     cmake -DCMAKE_INSTALL_PREFIX=${DEPS_PREFIX} -DGFLAGS_NAMESPACE=google -DCMAKE_CXX_FLAGS=-fPIC
@@ -135,7 +137,8 @@ if [ ${GLOG_VERSION} == "DISABLE" ]; then
 elif [ ! -f "${FLAG_DIR}/glog_${GLOG_VERSION}" ] \
     || [ ! -f "${DEPS_PREFIX}/lib/libglog.a" ] \
     || [ ! -d "${DEPS_PREFIX}/include/glog" ]; then
-    wget --no-check-certificate -O glog-${GLOG_VERSION}.tar.gz ${GLOG_URL}
+    #wget --no-check-certificate -O glog-${GLOG_VERSION}.tar.gz ${GLOG_URL}
+    curl -k -L ${GLOG_URL} -o glog-${GLOG_VERSION}.tar.gz
     tar zxf glog-${GLOG_VERSION}.tar.gz --recursive-unlink
     cd glog-${GLOG_VERSION}
     ./configure ${DEPS_CONFIG} CPPFLAGS=-I${DEPS_PREFIX}/include LDFLAGS=-L${DEPS_PREFIX}/lib
@@ -151,7 +154,8 @@ if [ ${GTEST_VERSION} == "DISABLE" ]; then
 elif [ ! -f "${FLAG_DIR}/gtest_${GTEST_VERSION}" ] \
     || [ ! -f "${DEPS_PREFIX}/lib/libgtest.a" ] \
     || [ ! -d "${DEPS_PREFIX}/include/gtest" ]; then
-    wget --no-check-certificate -O googletest-release-${GTEST_VERSION}.tar.gz ${GTEST_URL}
+    #wget --no-check-certificate -O googletest-release-${GTEST_VERSION}.tar.gz ${GTEST_URL}
+    curl -k -L ${GTEST_URL} -o googletest-release-${GTEST_VERSION}.tar.gz
     tar zxf googletest-release-${GTEST_VERSION}.tar.gz --recursive-unlink
     cd googletest-release-${GTEST_VERSION}/googletest
 
@@ -191,7 +195,8 @@ if [ ${GPERFTOOLS_VERSION} == "DISABLE" ]; then
     echo "Disable gperftools."
 elif [ ! -f "${FLAG_DIR}/gperftools_${GPERFTOOLS_VERSION}" ] \
     || [ ! -f "${DEPS_PREFIX}/lib/libtcmalloc_minimal.a" ]; then
-    wget --no-check-certificate -O gperftools-${GPERFTOOLS_VERSION}.tar.gz ${GPERFTOOLS_URL}
+    #wget --no-check-certificate -O gperftools-${GPERFTOOLS_VERSION}.tar.gz ${GPERFTOOLS_URL}
+    curl -k -L ${GPERFTOOLS_URL} -o gperftools-${GPERFTOOLS_VERSION}.tar.gz
     tar zxf gperftools-${GPERFTOOLS_VERSION}.tar.gz --recursive-unlink
     cd gperftools-${GPERFTOOLS_VERSION}
     ./configure ${DEPS_CONFIG} CPPFLAGS=-I${DEPS_PREFIX}/include LDFLAGS=-L${DEPS_PREFIX}/lib
@@ -207,7 +212,8 @@ if [ ${INS_VERSION} == "DISABLE" ]; then
 elif [ ! -f "${FLAG_DIR}/ins_${INS_VERSION}" ] \
     || [ ! -f "${DEPS_PREFIX}/lib/libins_sdk.a" ] \
     || [ ! -f "${DEPS_PREFIX}/include/ins_sdk.h" ]; then
-    wget --no-check-certificate -O ins-${INS_VERSION}.tar.gz ${INS_URL}
+    #wget --no-check-certificate -O ins-${INS_VERSION}.tar.gz ${INS_URL}
+    curl -k -L ${INS_URL} -o ins-${INS_VERSION}.tar.gz
     tar zxf ins-${INS_VERSION}.tar.gz --recursive-unlink
     cd ins-${INS_VERSION}
     sed -i "s|^PREFIX=.*|PREFIX=${DEPS_PREFIX}|" Makefile
@@ -245,7 +251,8 @@ if [ ${MONGOOSE_VERSION} == "DISABLE" ]; then
 elif [ ! -f "${FLAG_DIR}/mongoose_${MONGOOSE_VERSION}" ] \
     || [ ! -f "${DEPS_PREFIX}/include/mongoose.h" ] \
     || [ ! -f "${DEPS_PREFIX}/lib/libmongoose.a" ]; then
-    wget --no-check-certificate -O mongoose-${MONGOOSE_VERSION}.tar.gz ${MONGOOSE_URL}
+    #wget --no-check-certificate -O mongoose-${MONGOOSE_VERSION}.tar.gz ${MONGOOSE_URL}
+    curl -k -L ${MONGOOSE_URL} -o mongoose-${MONGOOSE_VERSION}.tar.gz
     tar zxf mongoose-${MONGOOSE_VERSION}.tar.gz --recursive-unlink
     cd mongoose-${MONGOOSE_VERSION}
     gcc -c -D_GNU_SOURCE -D__STDC_LIMIT_MACROS -g2 -pipe -Wall -Werror -fPIC mongoose.c
@@ -277,4 +284,4 @@ sed -i "s:^INS_PREFIX=.*:INS_PREFIX=$DEPS_PREFIX:" depends.mk
 ########################################
 
 make clean
-make -j8
+make

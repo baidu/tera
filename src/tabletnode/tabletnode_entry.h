@@ -11,7 +11,7 @@
 
 #include "common/base/scoped_ptr.h"
 #include "common/metric/metric_http_server.h"
-#include "tera_entry.h"
+#include "tera/tera_entry.h"
 
 namespace tera {
 
@@ -25,23 +25,24 @@ class TabletNodeImpl;
 class RemoteTabletNode;
 
 class TabletNodeEntry : public TeraEntry {
-public:
-    TabletNodeEntry();
-    ~TabletNodeEntry();
+ public:
+  TabletNodeEntry();
+  ~TabletNodeEntry();
 
-    bool StartServer();
-    bool Run();
-    void ShutdownServer();
+  bool StartServer();
+  bool Run();
+  void ShutdownServer();
 
-    void SetProcessorAffinity();
-private:
-    scoped_ptr<TabletNodeImpl> tabletnode_impl_;
-    RemoteTabletNode* remote_tabletnode_;
-    scoped_ptr<sofa::pbrpc::RpcServer> rpc_server_;
-    scoped_ptr<tera::MetricHttpServer> metric_http_server_;
+  void SetProcessorAffinity();
+
+ private:
+  scoped_ptr<TabletNodeImpl> tabletnode_impl_;
+  RemoteTabletNode* remote_tabletnode_;
+  scoped_ptr<sofa::pbrpc::RpcServer> rpc_server_;
+  scoped_ptr<tera::MetricHttpServer> metric_http_server_;
 };
 
-} // namespace tabletnode
-} // namespace tera
+}  // namespace tabletnode
+}  // namespace tera
 
-#endif // TERA_TABLETNODE_TABLETNODE_ENTRY_H_
+#endif  // TERA_TABLETNODE_TABLETNODE_ENTRY_H_

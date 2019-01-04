@@ -14,5 +14,5 @@ namespace tpcc {
 
 MockTpccDb::MockTpccDb() : flag_(true) {}
 
-} // namespace tpcc
-} // namespace tera
+}  // namespace tpcc
+}  // namespace tera

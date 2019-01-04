@@ -20,66 +20,68 @@ namespace tera {
 namespace sdk {
 
 enum class StatTableCustomer {
-    kMaster = 0,
-    kTabletNode = 1,
-    kClient = 2,
+  kMaster = 0,
+  kTabletNode = 1,
+  kClient = 2,
 };
 
 enum class CorruptPhase {
-    kLoading = 0,
-    kCompacting = 1,
+  kLoading = 0,
+  kCompacting = 1,
+  kUnknown = 10,
 };
 
 class StatTable {
-public:
-    enum class CorruptType {
-        kUnknown = 0,
-        kSst = 1,
-        kCurrent = 2,
-        kManifest = 3,
-        kLoadlock = 4,
-    };
-    // master and ts need set custmer explicit
-    StatTable(ThreadPool* thread_pool,
-              const StatTableCustomer& c = StatTableCustomer::kClient,
-              const std::string& local_addr = "");
-    // default select all fail msg 
-    // set args to limit ts/tablet/timerange
-    void SelectTabletsFailMessages(const std::string& ts_addr = "", 
-                                   const std::string& tablet = "",
-                                   int64_t start_ts = kOldestTs, 
-                                   int64_t end_ts = kLatestTs);
-    // record by tabletserver
-    void RecordTabletCorrupt(const std::string& tablet,
-                             const std::string& fail_msg);
-    
-    void ErasureTabletCorrupt(const std::string& tablet);
-     
-    static std::string SerializeLoadContext(const LoadTabletRequest& request,
-                                            const std::string& tabletnode_session_id);
+ public:
+  enum class CorruptType {
+    kUnknown = 0,
+    kSst = 1,
+    kCurrent = 2,
+    kManifest = 3,
+    kLoadlock = 4,
+  };
+  // master and ts need set custmer explicit
+  StatTable(ThreadPool* thread_pool, std::shared_ptr<auth::AccessBuilder> access_builder,
+            const StatTableCustomer& c = StatTableCustomer::kClient,
+            const std::string& local_addr = "");
 
-    static std::string SerializeCorrupt(CorruptPhase phase,
-                                        const std::string& tabletnode,
-                                        const std::string& tablet,
-                                        const std::string& context_str, 
-                                        const std::string& msg);
+  void SelectTabletsFailMessages(const std::vector<std::string>& filters, bool is_detail);
 
-    void DeserializeCorrupt(const string& corrupt_str,
-                            tera::TabletCorruptMessage* corrupt_msg);
-   
-    bool OpenStatTable();
-    
-private:
-    bool CreateStatTable();
-    static void RecordStatTableCallBack(RowMutation* mutation);
-private:
-    std::shared_ptr<TableImpl> stat_table_;
-    std::atomic<bool> created_;
-    std::atomic<bool> opened_;
-    std::string local_addr_; 
-    StatTableCustomer customer_type_;
-    mutable Mutex mutex_;
-    ThreadPool* thread_pool_;
+  // default select all fail msg
+  // set args to limit ts/tablet/timerange
+  void SelectTabletsFailMessages(const CorruptPhase& phase = CorruptPhase::kUnknown,
+                                 const std::string& ts_addr = "", const std::string& tablename = "",
+                                 const std::string& tablet = "", int64_t start_ts = kOldestTs,
+                                 int64_t end_ts = kLatestTs, bool is_detail = false);
+  // record by tabletserver
+  void RecordTabletCorrupt(const std::string& tablet, const std::string& fail_msg);
+
+  void ErasureTabletCorrupt(const std::string& tablet);
+
+  static std::string SerializeLoadContext(const LoadTabletRequest& request,
+                                          const std::string& tabletnode_session_id);
+
+  static std::string SerializeCorrupt(CorruptPhase phase, const std::string& tabletnode,
+                                      const std::string& tablet, const std::string& context_str,
+                                      const std::string& msg);
+
+  void DeserializeCorrupt(const string& corrupt_str, tera::TabletCorruptMessage* corrupt_msg);
+
+  bool OpenStatTable();
+
+ private:
+  bool CreateStatTable();
+  static void RecordStatTableCallBack(RowMutation* mutation);
+
+ private:
+  std::shared_ptr<TableImpl> stat_table_;
+  std::atomic<bool> created_;
+  std::atomic<bool> opened_;
+  std::string local_addr_;
+  StatTableCustomer customer_type_;
+  mutable Mutex mutex_;
+  ThreadPool* thread_pool_;
+  std::shared_ptr<auth::AccessBuilder> access_builder_;
 };
 }  // namespace sdk
 }  // namespace tera

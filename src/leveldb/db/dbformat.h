@@ -25,10 +25,7 @@ class InternalKey;
 // Value types encoded as the last component of internal keys.
 // DO NOT CHANGE THESE ENUM VALUES: they are embedded in the on-disk
 // data structures.
-enum ValueType {
-  kTypeDeletion = 0x0,
-  kTypeValue = 0x1
-};
+enum ValueType { kTypeDeletion = 0x0, kTypeValue = 0x1 };
 // kValueTypeForSeek defines the ValueType that should be passed when
 // constructing a ParsedInternalKey object for seeking to a particular
 // sequence number (since we sort sequence numbers in decreasing order
@@ -44,10 +41,9 @@ struct ParsedInternalKey {
   SequenceNumber sequence;
   ValueType type;
 
-  ParsedInternalKey()
-      : sequence(kMaxSequenceNumber), type(kValueTypeForSeek) { }
+  ParsedInternalKey() : sequence(kMaxSequenceNumber), type(kValueTypeForSeek) {}
   ParsedInternalKey(const Slice& u, const SequenceNumber& seq, ValueType t)
-      : user_key(u), sequence(seq), type(t) { }
+      : user_key(u), sequence(seq), type(t) {}
   std::string DebugString() const;
 };
 
@@ -57,15 +53,13 @@ inline size_t InternalKeyEncodingLength(const ParsedInternalKey& key) {
 }
 
 // Append the serialization of "key" to *result.
-extern void AppendInternalKey(std::string* result,
-                              const ParsedInternalKey& key);
+extern void AppendInternalKey(std::string* result, const ParsedInternalKey& key);
 
 // Attempt to parse an internal key from "internal_key".  On success,
 // stores the parsed data in "*result", and returns true.
 //
 // On error, returns false, leaves "*result" in an undefined state.
-extern bool ParseInternalKey(const Slice& internal_key,
-                             ParsedInternalKey* result);
+extern bool ParseInternalKey(const Slice& internal_key, ParsedInternalKey* result);
 
 extern bool RollbackDrop(uint64_t seq, const std::map<uint64_t, uint64_t>& rollbacks);
 
@@ -88,13 +82,12 @@ inline ValueType ExtractValueType(const Slice& internal_key) {
 class InternalKeyComparator : public Comparator {
  private:
   const Comparator* user_comparator_;
+
  public:
-  explicit InternalKeyComparator(const Comparator* c) : user_comparator_(c) { }
+  explicit InternalKeyComparator(const Comparator* c) : user_comparator_(c) {}
   virtual const char* Name() const;
   virtual int Compare(const Slice& a, const Slice& b) const;
-  virtual void FindShortestSeparator(
-      std::string* start,
-      const Slice& limit) const;
+  virtual void FindShortestSeparator(std::string* start, const Slice& limit) const;
   virtual void FindShortSuccessor(std::string* key) const;
 
   const Comparator* user_comparator() const { return user_comparator_; }
@@ -106,8 +99,9 @@ class InternalKeyComparator : public Comparator {
 class InternalFilterPolicy : public FilterPolicy {
  private:
   const FilterPolicy* const user_policy_;
+
  public:
-  explicit InternalFilterPolicy(const FilterPolicy* p) : user_policy_(p) { }
+  explicit InternalFilterPolicy(const FilterPolicy* p) : user_policy_(p) {}
   virtual const char* Name() const;
   virtual void CreateFilter(const Slice* keys, int n, std::string* dst) const;
   virtual bool KeyMayMatch(const Slice& key, const Slice& filter) const;
@@ -119,8 +113,9 @@ class InternalFilterPolicy : public FilterPolicy {
 class InternalKey {
  private:
   std::string rep_;
+
  public:
-  InternalKey() { }   // Leave rep_ as empty to indicate it is invalid
+  InternalKey() {}  // Leave rep_ as empty to indicate it is invalid
   InternalKey(const Slice& user_key, SequenceNumber s, ValueType t) {
     AppendInternalKey(&rep_, ParsedInternalKey(user_key, s, t));
   }
@@ -143,13 +138,11 @@ class InternalKey {
   std::string DebugString() const;
 };
 
-inline int InternalKeyComparator::Compare(
-    const InternalKey& a, const InternalKey& b) const {
+inline int InternalKeyComparator::Compare(const InternalKey& a, const InternalKey& b) const {
   return Compare(a.Encode(), b.Encode());
 }
 
-inline bool ParseInternalKey(const Slice& internal_key,
-                             ParsedInternalKey* result) {
+inline bool ParseInternalKey(const Slice& internal_key, ParsedInternalKey* result) {
   const size_t n = internal_key.size();
   if (n < 8) return false;
   uint64_t num = DecodeFixed64(internal_key.data() + n - 8);
@@ -179,7 +172,7 @@ class LookupKey {
 
   ~LookupKey();
 
-  // Return a key suitable for lookup in a MemTable.
+  // Return a key suitable for lookup in a BaseMemTable.
   Slice memtable_key() const { return Slice(start_, end_ - start_); }
 
   // Return an internal key (suitable for passing to an internal iterator)
@@ -194,12 +187,12 @@ class LookupKey {
   //    userkey  char[klength]          <-- kstart_
   //    tag      uint64
   //                                    <-- end_
-  // The array is a suitable MemTable key.
+  // The array is a suitable BaseMemTable key.
   // The suffix starting with "userkey" can be used as an InternalKey.
   const char* start_;
   const char* kstart_;
   const char* end_;
-  char space_[200];      // Avoid allocation for short keys
+  char space_[200];  // Avoid allocation for short keys
 
   // No copying allowed
   LookupKey(const LookupKey&);

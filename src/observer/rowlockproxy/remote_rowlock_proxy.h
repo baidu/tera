@@ -15,24 +15,20 @@ namespace tera {
 namespace observer {
 
 class RemoteRowlockProxy : public RowlockService {
-public:
-    explicit RemoteRowlockProxy(RowlockProxyImpl* rowlock_proxy_impl);
-    ~RemoteRowlockProxy();
+ public:
+  explicit RemoteRowlockProxy(RowlockProxyImpl* rowlock_proxy_impl);
+  ~RemoteRowlockProxy();
 
-    void Lock(google::protobuf::RpcController* controller,
-            const RowlockRequest* request,
-            RowlockResponse* response,
-            google::protobuf::Closure* done);
+  void Lock(google::protobuf::RpcController* controller, const RowlockRequest* request,
+            RowlockResponse* response, google::protobuf::Closure* done);
 
-    void UnLock(google::protobuf::RpcController* controller,
-            const RowlockRequest* request,
-            RowlockResponse* response,
-            google::protobuf::Closure* done);
+  void UnLock(google::protobuf::RpcController* controller, const RowlockRequest* request,
+              RowlockResponse* response, google::protobuf::Closure* done);
 
-private:
-    RowlockProxyImpl* rowlock_proxy_impl_;
+ private:
+  RowlockProxyImpl* rowlock_proxy_impl_;
 };
 
-} // namespace observer
-} // namespace tera
+}  // namespace observer
+}  // namespace tera
 #endif  // TERA_OBSERVER_ROWLOCKPROXY_REMOTE_ROWLOCK_PROXY_H_

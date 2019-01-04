@@ -18,8 +18,7 @@
 //   random    -- output N values in random key order
 static const char* FLAGS_benchmarks =
     "seq,"
-    "random,"
-    ;
+    "random,";
 
 // Number of key/values to place in database
 static int FLAGS_num = 1000000;
@@ -105,7 +104,7 @@ class Benchmark {
 
   // State kept for progress messages
   int done_;
-  int next_report_;     // When to report next
+  int next_report_;  // When to report next
 
   void Start() {
     start_ = Env::Default()->NowMicros() * 1e-6;
@@ -124,38 +123,31 @@ class Benchmark {
 
     if (bytes_ > 0) {
       char rate[100];
-      snprintf(rate, sizeof(rate), "%6.1f MB/s",
-               (bytes_ / 1048576.0) / (finish - start_));
+      snprintf(rate, sizeof(rate), "%6.1f MB/s", (bytes_ / 1048576.0) / (finish - start_));
       if (!message_.empty()) {
-        message_  = std::string(rate) + " " + message_;
+        message_ = std::string(rate) + " " + message_;
       } else {
         message_ = rate;
       }
     }
 
-    fprintf(stderr, "%-12s : %11.3f micros/op;%s%s\n",
-            name.ToString().c_str(),
-            (finish - start_) * 1e6 / done_,
-            (message_.empty() ? "" : " "),
-            message_.c_str());
+    fprintf(stderr, "%-12s : %11.3f micros/op;%s%s\n", name.ToString().c_str(),
+            (finish - start_) * 1e6 / done_, (message_.empty() ? "" : " "), message_.c_str());
     fflush(stderr);
   }
 
  public:
-  enum Order {
-    SEQUENTIAL,
-    RANDOM
-  };
+  enum Order { SEQUENTIAL, RANDOM };
 
   Benchmark()
-  : num_(FLAGS_num),
-    reads_(FLAGS_reads < 0 ? FLAGS_num : FLAGS_reads),
-    start_(0.0),
-    bytes_(0),
-    rand_(FLAGS_key_seed),
-    done_(0),
-    next_report_(0) {
-    tablet_rand_vector_ = new Random*[FLAGS_tablet_num];
+      : num_(FLAGS_num),
+        reads_(FLAGS_reads < 0 ? FLAGS_num : FLAGS_reads),
+        start_(0.0),
+        bytes_(0),
+        rand_(FLAGS_key_seed),
+        done_(0),
+        next_report_(0) {
+    tablet_rand_vector_ = new Random* [FLAGS_tablet_num];
     for (int i = 0; i < FLAGS_tablet_num; i++) {
       tablet_rand_vector_[i] = new Random(FLAGS_key_seed);
     }
@@ -215,7 +207,6 @@ class Benchmark {
   }
 
  private:
-
   void Output(Order order, int num_entries, int value_size, std::vector<std::string>& cfs) {
     if (num_entries != num_) {
       char msg[100];
@@ -228,8 +219,7 @@ class Benchmark {
     // Write to database
     int i = FLAGS_start_key;
     int end_key = i + num_entries * FLAGS_key_step;
-    for (; i < end_key; i += FLAGS_key_step)
-    {
+    for (; i < end_key; i += FLAGS_key_step) {
       const int t = rand_.Next() % FLAGS_tablet_num;
       const int k = (order == SEQUENTIAL) ? i : (tablet_rand_vector_[t]->Next());
       char key[10000];
@@ -239,7 +229,8 @@ class Benchmark {
         fprintf(stdout, "%s\t%s\n", key, gen_.Generate(value_size).ToString().c_str());
       } else {
         for (size_t j = 0; j < cfs.size(); ++j) {
-          fprintf(stdout, "%s\t%s\t%s\t%s\n", key, gen_.Generate(value_size).ToString().c_str(), cfs[j].c_str(), ts);
+          fprintf(stdout, "%s\t%s\t%s\t%s\n", key, gen_.Generate(value_size).ToString().c_str(),
+                  cfs[j].c_str(), ts);
         }
       }
     }

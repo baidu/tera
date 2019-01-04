@@ -14,7 +14,7 @@
 
 #include "tera.h"
 
-void SendErrorJ(JNIEnv *env, jobject jobj, std::string msg);
+void SendErrorJ(JNIEnv* env, jobject jobj, std::string msg);
 
 void InitFlags(std::string confpath);
 
@@ -22,8 +22,8 @@ void InitGlog(std::string prefix);
 
 std::string ConvertDescToString(tera::TableDescriptor* desc);
 
-void JByteArrayToString(JNIEnv *env, jbyteArray& jbarray, std::string* str);
+void JByteArrayToString(JNIEnv* env, jbyteArray& jbarray, std::string* str);
 
-void StringToJByteArray(JNIEnv *env, const std::string& str, jbyteArray* jbarray);
+void StringToJByteArray(JNIEnv* env, const std::string& str, jbyteArray* jbarray);
 
-#endif // _JAVATERA_NATIVE_SRC_JNI_TERA_COMMON_H_
+#endif  // _JAVATERA_NATIVE_SRC_JNI_TERA_COMMON_H_

@@ -10,32 +10,30 @@
 #include <stdint.h>
 
 class IpAddress {
-public:
-    IpAddress();
-    IpAddress(const std::string& ip_port);
-    IpAddress(const std::string& ip, const std::string& port);
-    IpAddress(const std::string& ip, uint16_t port);
+ public:
+  IpAddress();
+  IpAddress(const std::string& ip_port);
+  IpAddress(const std::string& ip, const std::string& port);
+  IpAddress(const std::string& ip, uint16_t port);
 
-    ~IpAddress() {}
+  ~IpAddress() {}
 
-    std::string ToString() const;
-    std::string GetIp() const;
-    uint16_t GetPort() const;
-    std::string GetPortString() const;
+  std::string ToString() const;
+  std::string GetIp() const;
+  uint16_t GetPort() const;
+  std::string GetPortString() const;
 
-    bool IsValid() const {
-        return valid_address_;
-    }
+  bool IsValid() const { return valid_address_; }
 
-    bool Assign(const std::string& ip_port);
-    bool Assign(const std::string& ip, const std::string& port);
-    bool Assign(const std::string& ip, uint16_t port);
+  bool Assign(const std::string& ip_port);
+  bool Assign(const std::string& ip, const std::string& port);
+  bool Assign(const std::string& ip, uint16_t port);
 
-private:
-    std::string ip_;
-    uint16_t port_;
+ private:
+  std::string ip_;
+  uint16_t port_;
 
-    bool valid_address_;
+  bool valid_address_;
 };
 
-#endif // TERA_COMMON_NET_IP_ADDRESS_H_
+#endif  // TERA_COMMON_NET_IP_ADDRESS_H_

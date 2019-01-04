@@ -12,21 +12,21 @@ namespace tera {
 namespace tabletnode {
 
 class TabletNodeSysInfoTest : public ::testing::Test, public TabletNodeSysInfo {
-public:
-    TabletNodeSysInfoTest() {}
-    ~TabletNodeSysInfoTest() {}
+ public:
+  TabletNodeSysInfoTest() {}
+  ~TabletNodeSysInfoTest() {}
 };
 
 TEST_F(TabletNodeSysInfoTest, CollectHardwareInfo) {
-    int64_t ts = get_micros();
-    CollectHardwareInfo();
-    ts = get_micros() - ts;
-    LOG(ERROR) << "cost: " << ts << " ms.";
+  int64_t ts = get_micros();
+  CollectHardwareInfo();
+  ts = get_micros() - ts;
+  LOG(ERROR) << "cost: " << ts << " ms.";
 }
 
 TEST_F(TabletNodeSysInfoTest, ToString) {
-    SetCurrentTime();
-    AddExtraInfo("read", 100);
+  SetCurrentTime();
+  AddExtraInfo("read", 100);
 }
-} // namespace tabletnode
-} // namespace tera
+}  // namespace tabletnode
+}  // namespace tera

@@ -8,6 +8,7 @@
 #define TERA_TABLETNODE_TABLETNODE_SYSINFO_H_
 
 #include <map>
+#include <memory>
 #include <string>
 
 #include "common/mutex.h"
@@ -17,45 +18,74 @@
 namespace tera {
 namespace tabletnode {
 
+class TabletNodeSysInfoDumper;
+
 class TabletNodeSysInfo {
-public:
-    TabletNodeSysInfo();
-    TabletNodeSysInfo(const TabletNodeInfo& info);
+ public:
+  TabletNodeSysInfo();
 
-    ~TabletNodeSysInfo();
+  ~TabletNodeSysInfo();
 
-    void CollectTabletNodeInfo(TabletManager* tablet_manager,
-                               const std::string& server_addr);
+  void CollectTabletNodeInfo(TabletManager* tablet_manager, const std::string& server_addr);
 
-    void CollectHardwareInfo();
+  void CollectHardwareInfo();
 
-    void AddExtraInfo(const std::string& name, int64_t value);
+  void AddExtraInfo(const std::string& name, int64_t value);
 
-    void Reset();
+  void SetTimeStamp(int64_t ts);
 
-    void SetTimeStamp(int64_t ts);
+  void SetServerAddr(const std::string& addr);
 
-    void SetServerAddr(const std::string& addr);
+  void SetPersistentCacheSize(uint64_t size);
 
-    void SetStatus(StatusCode status);
+  void SetStatus(StatusCode status);
 
-    void GetTabletNodeInfo(TabletNodeInfo* info);
+  void GetTabletNodeInfo(TabletNodeInfo* info);
 
-    void GetTabletMetaList(TabletMetaList* meta_list);
+  void GetTabletMetaList(TabletMetaList* meta_list);
 
-    void DumpLog();
+  void DumpLog();
 
-    void SetProcessStartTime(int64_t ts);
+  void SetProcessStartTime(int64_t ts);
 
-    void RefreshTabletsStatus(TabletManager* tablet_manager);
+  void RefreshTabletsStatus(TabletManager* tablet_manager);
 
-private:
-    TabletNodeInfo info_;
-    TabletMetaList tablet_list_;
+  void UpdateWriteFlowController();
 
-    mutable Mutex mutex_;
+ private:
+  void SwitchInfo() {
+    auto new_info = new TabletNodeInfo{*info_};
+    info_.reset(new_info);
+  }
+
+  using DumpInfoFunction = void(const std::shared_ptr<TabletNodeInfo>& info_ptr,
+                                const std::shared_ptr<CollectorReport>& latest_report,
+                                const TabletNodeSysInfoDumper& dumper);
+  DumpInfoFunction DumpSysInfo;
+  DumpInfoFunction DumpHardWareInfo;
+  DumpInfoFunction DumpIoInfo;
+  DumpInfoFunction DumpCacheInfo;
+  DumpInfoFunction DumpRequestInfo;
+  DumpInfoFunction DumpDfsInfo;
+  DumpInfoFunction DumpPosixInfo;
+  DumpInfoFunction DumpLevelSizeInfo;
+  DumpInfoFunction DumpPersistentCacheInfo;
+  DumpInfoFunction DumpOtherInfo;
+
+  void RegisterDumpInfoFunction(DumpInfoFunction TabletNodeSysInfo::*f) {
+    dump_info_functions_.emplace_back(
+        std::bind(f, this, std::placeholders::_1, std::placeholders::_2, std::placeholders::_3));
+  }
+
+  std::vector<std::function<DumpInfoFunction>> dump_info_functions_;
+
+ private:
+  std::shared_ptr<TabletNodeInfo> info_;
+  std::unique_ptr<TabletMetaList> tablet_list_;
+
+  mutable Mutex mutex_;
 };
-} // namespace tabletnode
-} // namespace tera
+}  // namespace tabletnode
+}  // namespace tera
 
-#endif // TERA_TABLETNODE_TABLETNODE_SYSINFO_H_
+#endif  // TERA_TABLETNODE_TABLETNODE_SYSINFO_H_

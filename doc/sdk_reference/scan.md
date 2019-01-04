@@ -39,6 +39,26 @@ std::string Value() const = 0;
 int64_t ValueInt64() const = 0;
 ```
 
+##### (8) 返回scan已扫描data size的值（含drop数据）
+```
+uint64_t GetDataSize() const = 0;
+```
+
+##### (9) 返回scan已扫描row行数的值（含drop数据）
+```
+uint64_t GetRowCount() const = 0;
+```
+
+##### (10) 返回scan已扫描最新的key
+```
+std::string GetLastKey() const = 0;
+```
+
+##### (11) 取消scan
+```
+void Cancel() = 0;
+```
+
 ### 2. ScanDescriptor
  
 ##### (1) 设置扫描的结束key
@@ -66,32 +86,22 @@ void SetMaxVersions(int32_t versions);
 void SetTimeRange(int64_t ts_end, int64_t ts_start);
 ```
  
-##### (6) 设置批量扫描模式
-```
-void SetAsync(bool async);
-```
- 
-##### (7) 检查扫描是否为批量扫描模式
-```
-bool IsAsync() const;
-```
- 
-##### (8) 设置扫描的超时时间
+##### (6) 设置扫描的超时时间
 ```
 void SetPackInterval(int64_t timeout);
 ```
  
-##### (9) 设置扫描的buffersize
+##### (7) 设置扫描的buffersize
 ```
 void SetBufferSize(int64_t buf_size);//默认为64K
 ```
  
-##### (10) 设置每次扫描的cell数
+##### (8) 设置每次扫描的cell数
 ```
 void SetNumberLimit(int64_t number_limit);
 ```
  
-##### (11) 获取每次扫描的cell数
+##### (9) 获取每次扫描的cell数
 ```
 int64_t GetNumberLimit();
 ```

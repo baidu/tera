@@ -21,12 +21,8 @@ class MemEnvTest {
  public:
   Env* env_;
 
-  MemEnvTest()
-      : env_(NewMemEnv(Env::Default())) {
-  }
-  ~MemEnvTest() {
-    delete env_;
-  }
+  MemEnvTest() : env_(NewMemEnv(Env::Default())) {}
+  ~MemEnvTest() { delete env_; }
 };
 
 TEST(MemEnvTest, Basics) {
@@ -104,25 +100,25 @@ TEST(MemEnvTest, ReadWrite) {
 
   // Read sequentially.
   ASSERT_OK(env_->NewSequentialFile("/dir/f", &seq_file));
-  ASSERT_OK(seq_file->Read(5, &result, scratch)); // Read "hello".
+  ASSERT_OK(seq_file->Read(5, &result, scratch));  // Read "hello".
   ASSERT_EQ(0, result.compare("hello"));
   ASSERT_OK(seq_file->Skip(1));
-  ASSERT_OK(seq_file->Read(1000, &result, scratch)); // Read "world".
+  ASSERT_OK(seq_file->Read(1000, &result, scratch));  // Read "world".
   ASSERT_EQ(0, result.compare("world"));
-  ASSERT_OK(seq_file->Read(1000, &result, scratch)); // Try reading past EOF.
+  ASSERT_OK(seq_file->Read(1000, &result, scratch));  // Try reading past EOF.
   ASSERT_EQ(0u, result.size());
-  ASSERT_OK(seq_file->Skip(100)); // Try to skip past end of file.
+  ASSERT_OK(seq_file->Skip(100));  // Try to skip past end of file.
   ASSERT_OK(seq_file->Read(1000, &result, scratch));
   ASSERT_EQ(0u, result.size());
   delete seq_file;
 
   // Random reads.
   ASSERT_OK(env_->NewRandomAccessFile("/dir/f", &rand_file, EnvOptions()));
-  ASSERT_OK(rand_file->Read(6, 5, &result, scratch)); // Read "world".
+  ASSERT_OK(rand_file->Read(6, 5, &result, scratch));  // Read "world".
   ASSERT_EQ(0, result.compare("world"));
-  ASSERT_OK(rand_file->Read(0, 5, &result, scratch)); // Read "hello".
+  ASSERT_OK(rand_file->Read(0, 5, &result, scratch));  // Read "hello".
   ASSERT_EQ(0, result.compare("hello"));
-  ASSERT_OK(rand_file->Read(10, 100, &result, scratch)); // Read "d".
+  ASSERT_OK(rand_file->Read(10, 100, &result, scratch));  // Read "d".
   ASSERT_EQ(0, result.compare("d"));
 
   // Too high offset.
@@ -171,7 +167,7 @@ TEST(MemEnvTest, LargeWrite) {
   SequentialFile* seq_file;
   Slice result;
   ASSERT_OK(env_->NewSequentialFile("/dir/f", &seq_file));
-  ASSERT_OK(seq_file->Read(3, &result, scratch)); // Read "foo".
+  ASSERT_OK(seq_file->Read(3, &result, scratch));  // Read "foo".
   ASSERT_EQ(0, result.compare("foo"));
 
   size_t read = 0;
@@ -183,7 +179,7 @@ TEST(MemEnvTest, LargeWrite) {
   }
   ASSERT_TRUE(write_data == read_data);
   delete seq_file;
-  delete [] scratch;
+  delete[] scratch;
 }
 
 TEST(MemEnvTest, DBTest) {
@@ -230,6 +226,4 @@ TEST(MemEnvTest, DBTest) {
 
 }  // namespace leveldb
 
-int main(int argc, char** argv) {
-  return leveldb::test::RunAllTests();
-}
+int main(int argc, char** argv) { return leveldb::test::RunAllTests(); }

@@ -7,7 +7,7 @@
 
 #include <sofa/pbrpc/pbrpc.h>
 
-#include "tera_entry.h"
+#include "tera/tera_entry.h"
 #include <thread>
 #include <atomic>
 #include <memory>
@@ -19,31 +19,30 @@ class RemoteTimeoracle;
 class TimeoracleZkAdapterBase;
 
 class TimeoracleEntry : public TeraEntry {
-public:
-    TimeoracleEntry();
-    ~TimeoracleEntry();
+ public:
+  TimeoracleEntry();
+  ~TimeoracleEntry();
 
+  virtual bool Start() override;
+  virtual bool Run() override;
+  virtual void ShutdownServer() override;
 
-    virtual bool Start() override;
-    virtual bool Run() override;
-    virtual void ShutdownServer() override;
+ private:
+  bool InitZKAdaptor();
+  bool StartServer();
+  void LeaseThread();
 
-private:
-    bool InitZKAdaptor();
-    bool StartServer();
-    void LeaseThread();
-
-private:
-    std::string                                 local_addr_;
-    RemoteTimeoracle*                           remote_timeoracle_;
-    std::unique_ptr<sofa::pbrpc::RpcServer>     sofa_pbrpc_server_;
-    int64_t                                     startup_timestamp_;
-    std::unique_ptr<TimeoracleZkAdapterBase>    zk_adapter_;
-    std::thread                                 lease_thread_;
-    std::atomic<bool>                           need_quit_;
+ private:
+  std::string local_addr_;
+  RemoteTimeoracle* remote_timeoracle_;
+  std::unique_ptr<sofa::pbrpc::RpcServer> sofa_pbrpc_server_;
+  int64_t startup_timestamp_;
+  std::unique_ptr<TimeoracleZkAdapterBase> zk_adapter_;
+  std::thread lease_thread_;
+  std::atomic<bool> need_quit_;
 };
 
-} // namespace timeoracle
-} // namespace tera
+}  // namespace timeoracle
+}  // namespace tera
 
-#endif // TERA_TIMEORACLE_TIMEORACLE_ENTRY_H_
+#endif  // TERA_TIMEORACLE_TIMEORACLE_ENTRY_H_

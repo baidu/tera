@@ -13,35 +13,33 @@ namespace tera {
 namespace load_balancer {
 
 class EmptyAction : public Action {
-public:
-    EmptyAction();
-    virtual ~EmptyAction();
+ public:
+  EmptyAction();
+  virtual ~EmptyAction();
 
-    virtual Action* UndoAction() override;
+  virtual Action* UndoAction() override;
 
-    virtual std::string ToString() const override;
+  virtual std::string ToString() const override;
 };
 
 class MoveAction : public Action {
-public:
-    MoveAction(uint32_t tablet_index,
-               uint32_t source_node_index,
-               uint32_t dest_node_index,
-               const std::string& generator);
+ public:
+  MoveAction(uint32_t tablet_index, uint32_t source_node_index, uint32_t dest_node_index,
+             const std::string& generator);
 
-    virtual ~MoveAction();
+  virtual ~MoveAction();
 
-    virtual Action* UndoAction() override;
+  virtual Action* UndoAction() override;
 
-    virtual std::string ToString() const override;
+  virtual std::string ToString() const override;
 
-public:
-    uint32_t tablet_index_;
-    uint32_t source_node_index_;
-    uint32_t dest_node_index_;
+ public:
+  uint32_t tablet_index_;
+  uint32_t source_node_index_;
+  uint32_t dest_node_index_;
 };
 
-} // namespace load_balancer
-} // namespace tera
+}  // namespace load_balancer
+}  // namespace tera
 
-#endif // TERA_LOAD_BALANCER_ACTIONS_H_
+#endif  // TERA_LOAD_BALANCER_ACTIONS_H_

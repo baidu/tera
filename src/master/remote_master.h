@@ -5,9 +5,9 @@
 #ifndef TERA_MASTER_REMOTE_MASTER_H_
 #define TERA_MASTER_REMOTE_MASTER_H_
 
+#include <memory>
 #include "common/base/scoped_ptr.h"
 #include "common/thread_pool.h"
-
 #include "proto/master_rpc.pb.h"
 
 namespace tera {
@@ -16,127 +16,86 @@ namespace master {
 class MasterImpl;
 
 class RemoteMaster : public MasterServer {
-public:
-    explicit RemoteMaster(MasterImpl* master_impl);
-    ~RemoteMaster();
+ public:
+  explicit RemoteMaster(MasterImpl* master_impl, std::shared_ptr<ThreadPool> thread_pool);
+  ~RemoteMaster();
 
-    void CreateTable(google::protobuf::RpcController* controller,
-                     const CreateTableRequest* request,
-                     CreateTableResponse* response,
-                     google::protobuf::Closure* done);
+  void CreateTable(google::protobuf::RpcController* controller, const CreateTableRequest* request,
+                   CreateTableResponse* response, google::protobuf::Closure* done);
 
-    void DeleteTable(google::protobuf::RpcController* controller,
-                     const DeleteTableRequest* request,
-                     DeleteTableResponse* response,
-                     google::protobuf::Closure* done);
+  void DeleteTable(google::protobuf::RpcController* controller, const DeleteTableRequest* request,
+                   DeleteTableResponse* response, google::protobuf::Closure* done);
 
-    void DisableTable(google::protobuf::RpcController* controller,
-                     const DisableTableRequest* request,
-                     DisableTableResponse* response,
-                     google::protobuf::Closure* done);
+  void DisableTable(google::protobuf::RpcController* controller, const DisableTableRequest* request,
+                    DisableTableResponse* response, google::protobuf::Closure* done);
 
-    void EnableTable(google::protobuf::RpcController* controller,
-                     const EnableTableRequest* request,
-                     EnableTableResponse* response,
-                     google::protobuf::Closure* done);
+  void EnableTable(google::protobuf::RpcController* controller, const EnableTableRequest* request,
+                   EnableTableResponse* response, google::protobuf::Closure* done);
 
-    void UpdateTable(google::protobuf::RpcController* controller,
-                     const UpdateTableRequest* request,
-                     UpdateTableResponse* response,
-                     google::protobuf::Closure* done);
+  void UpdateTable(google::protobuf::RpcController* controller, const UpdateTableRequest* request,
+                   UpdateTableResponse* response, google::protobuf::Closure* done);
 
-    void UpdateCheck(google::protobuf::RpcController* controller,
-                     const UpdateCheckRequest* request,
-                     UpdateCheckResponse* response,
-                     google::protobuf::Closure* done);
+  void UpdateCheck(google::protobuf::RpcController* controller, const UpdateCheckRequest* request,
+                   UpdateCheckResponse* response, google::protobuf::Closure* done);
 
-    void SearchTable(google::protobuf::RpcController* controller,
-                     const SearchTableRequest* request,
-                     SearchTableResponse* response,
-                     google::protobuf::Closure* done);
+  void SearchTable(google::protobuf::RpcController* controller, const SearchTableRequest* request,
+                   SearchTableResponse* response, google::protobuf::Closure* done);
 
-    void ShowTables(google::protobuf::RpcController* controller,
-                    const ShowTablesRequest* request,
-                    ShowTablesResponse* response,
-                    google::protobuf::Closure* done);
+  void ShowTables(google::protobuf::RpcController* controller, const ShowTablesRequest* request,
+                  ShowTablesResponse* response, google::protobuf::Closure* done);
 
-    void ShowTabletNodes(google::protobuf::RpcController* controller,
-                         const ShowTabletNodesRequest* request,
-                         ShowTabletNodesResponse* response,
-                         google::protobuf::Closure* done);
-
-    void CmdCtrl(google::protobuf::RpcController* controller,
-                 const CmdCtrlRequest* request,
-                 CmdCtrlResponse* response,
-                 google::protobuf::Closure* done);
-
-    void OperateUser(google::protobuf::RpcController* controller,
-                     const OperateUserRequest* request,
-                     OperateUserResponse* response,
-                     google::protobuf::Closure* done);
-
-private:
-    void DoCreateTable(google::protobuf::RpcController* controller,
-                       const CreateTableRequest* request,
-                       CreateTableResponse* response,
+  void ShowTabletNodes(google::protobuf::RpcController* controller,
+                       const ShowTabletNodesRequest* request, ShowTabletNodesResponse* response,
                        google::protobuf::Closure* done);
 
-    void DoDeleteTable(google::protobuf::RpcController* controller,
-                       const DeleteTableRequest* request,
-                       DeleteTableResponse* response,
-                       google::protobuf::Closure* done);
+  void CmdCtrl(google::protobuf::RpcController* controller, const CmdCtrlRequest* request,
+               CmdCtrlResponse* response, google::protobuf::Closure* done);
 
-    void DoDisableTable(google::protobuf::RpcController* controller,
-                        const DisableTableRequest* request,
-                        DisableTableResponse* response,
-                        google::protobuf::Closure* done);
+  void OperateUser(google::protobuf::RpcController* controller, const OperateUserRequest* request,
+                   OperateUserResponse* response, google::protobuf::Closure* done);
 
-    void DoEnableTable(google::protobuf::RpcController* controller,
-                       const EnableTableRequest* request,
-                       EnableTableResponse* response,
-                       google::protobuf::Closure* done);
+ private:
+  void DoCreateTable(google::protobuf::RpcController* controller, const CreateTableRequest* request,
+                     CreateTableResponse* response, google::protobuf::Closure* done);
 
-    void DoUpdateTable(google::protobuf::RpcController* controller,
-                       const UpdateTableRequest* request,
-                       UpdateTableResponse* response,
-                       google::protobuf::Closure* done);
+  void DoDeleteTable(google::protobuf::RpcController* controller, const DeleteTableRequest* request,
+                     DeleteTableResponse* response, google::protobuf::Closure* done);
 
-    void DoUpdateCheck(google::protobuf::RpcController* controller,
-                       const UpdateCheckRequest* request,
-                       UpdateCheckResponse* response,
-                       google::protobuf::Closure* done);
-
-    void DoSearchTable(google::protobuf::RpcController* controller,
-                       const SearchTableRequest* request,
-                       SearchTableResponse* response,
-                       google::protobuf::Closure* done);
-
-    void DoShowTables(google::protobuf::RpcController* controller,
-                      const ShowTablesRequest* request,
-                      ShowTablesResponse* response,
+  void DoDisableTable(google::protobuf::RpcController* controller,
+                      const DisableTableRequest* request, DisableTableResponse* response,
                       google::protobuf::Closure* done);
 
-    void DoShowTabletNodes(google::protobuf::RpcController* controller,
-                           const ShowTabletNodesRequest* request,
-                           ShowTabletNodesResponse* response,
-                           google::protobuf::Closure* done);
+  void DoEnableTable(google::protobuf::RpcController* controller, const EnableTableRequest* request,
+                     EnableTableResponse* response, google::protobuf::Closure* done);
 
-    void DoCmdCtrl(google::protobuf::RpcController* controller,
-                   const CmdCtrlRequest* request,
-                   CmdCtrlResponse* response,
-                   google::protobuf::Closure* done);
+  void DoUpdateTable(google::protobuf::RpcController* controller, const UpdateTableRequest* request,
+                     UpdateTableResponse* response, google::protobuf::Closure* done);
 
-    void DoOperateUser(google::protobuf::RpcController* controller,
-                       const OperateUserRequest* request,
-                       OperateUserResponse* response,
-                       google::protobuf::Closure* done);
-private:
-    MasterImpl* master_impl_;
-    scoped_ptr<ThreadPool> thread_pool_;
+  void DoUpdateCheck(google::protobuf::RpcController* controller, const UpdateCheckRequest* request,
+                     UpdateCheckResponse* response, google::protobuf::Closure* done);
+
+  void DoSearchTable(google::protobuf::RpcController* controller, const SearchTableRequest* request,
+                     SearchTableResponse* response, google::protobuf::Closure* done);
+
+  void DoShowTables(google::protobuf::RpcController* controller, const ShowTablesRequest* request,
+                    ShowTablesResponse* response, google::protobuf::Closure* done);
+
+  void DoShowTabletNodes(google::protobuf::RpcController* controller,
+                         const ShowTabletNodesRequest* request, ShowTabletNodesResponse* response,
+                         google::protobuf::Closure* done);
+
+  void DoCmdCtrl(google::protobuf::RpcController* controller, const CmdCtrlRequest* request,
+                 CmdCtrlResponse* response, google::protobuf::Closure* done);
+
+  void DoOperateUser(google::protobuf::RpcController* controller, const OperateUserRequest* request,
+                     OperateUserResponse* response, google::protobuf::Closure* done);
+
+ private:
+  MasterImpl* master_impl_;
+  std::shared_ptr<ThreadPool> thread_pool_;
 };
 
+}  // namespace master
+}  // namespace tera
 
-} // namespace master
-} // namespace tera
-
-#endif // TERA_MASTER_REMOTE_MASTER_H_
+#endif  // TERA_MASTER_REMOTE_MASTER_H_

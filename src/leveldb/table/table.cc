@@ -6,55 +6,64 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file. See the AUTHORS file for names of contributors.
 
+#include <algorithm>
 #include <malloc.h>
-#include "leveldb/table.h"
 
+#include "db/dbformat.h"
+#include "format.h"
 #include "leveldb/cache.h"
 #include "leveldb/comparator.h"
 #include "leveldb/env.h"
 #include "leveldb/filter_policy.h"
 #include "leveldb/options.h"
-#include "db/dbformat.h"
+#include "leveldb/persistent_cache.h"
+#include "leveldb/table.h"
+#include "persistent_cache/persistent_cache_file.h"
+#include "persistent_cache_helper.h"
 #include "table/block.h"
 #include "table/filter_block.h"
-#include "table/format.h"
 #include "table/two_level_iterator.h"
 #include "util/coding.h"
+#include "common/metric/metric_counter.h"
 
 namespace leveldb {
 
 struct Table::Rep {
   ~Rep() {
     delete filter;
-    delete [] filter_data;
+    delete[] filter_data;
     delete index_block;
+    filter_block_size_total.Sub(filter_data_size);
   }
+
+  Rep() : filter_data_size(0) {}
 
   Options options;
   Status status;
   RandomAccessFile* file;
+  size_t fsize;
   uint64_t cache_id;
   FilterBlockReader* filter;
   const char* filter_data;
+  uint64_t filter_data_size;
 
   BlockHandle metaindex_handle;  // Handle to metaindex_block: saved from footer
   Block* index_block;
+  static tera::MetricCounter filter_block_size_total;
 };
+tera::MetricCounter Table::Rep::filter_block_size_total{
+    "tera_filter_block_size", {tera::Subscriber::SubscriberType::LATEST}, false};
 
 class TableIter : public Iterator {
  public:
-  TableIter(Iterator* iter,
-            const Comparator* comparator,
-            const Slice& smallest,
+  TableIter(Iterator* iter, const Comparator* comparator, const Slice& smallest,
             const Slice& largest)
       : iter_(iter),
         comparator_(comparator),
         smallest_(smallest.ToString()),
-        largest_(largest.ToString()) { }
+        largest_(largest.ToString()) {}
 
-  virtual ~TableIter() {
-    delete iter_;
-  }
+  virtual ~TableIter() { delete iter_; }
 
   virtual void Seek(const Slice& target) {
     if (smallest_.empty() && largest_.empty()) {
@@ -101,12 +110,8 @@ class TableIter : public Iterator {
       iter_->Seek(largest_);
     }
   }
-  virtual void Next() {
-    iter_->Next();
-  }
-  virtual void Prev() {
-    iter_->Prev();
-  }
+  virtual void Next() { iter_->Next(); }
+  virtual void Prev() { iter_->Prev(); }
   virtual bool Valid() const {
     if (!iter_->Valid()) {
       return false;
@@ -127,9 +132,7 @@ class TableIter : public Iterator {
     assert(Valid());
     return iter_->value();
   }
-  virtual Status status() const {
-    return iter_->status();
-  }
+  virtual Status status() const { return iter_->status(); }
 
  private:
   Iterator* iter_;
@@ -140,20 +143,15 @@ class TableIter : public Iterator {
 
 class IndexBlockIter : public Iterator {
  public:
-    IndexBlockIter(const ReadOptions& opts,
-                   Block* index_block,
-                   FilterBlockReader* filter)
+  IndexBlockIter(const ReadOptions& opts, Block* index_block, FilterBlockReader* filter)
       : valid_(false),
         iter_(index_block->NewIterator(opts.db_opt->comparator)),
         comparator_(opts.db_opt->comparator),
         filter_(filter),
         read_single_row_(opts.read_single_row),
         row_start_key_(opts.row_start_key, kMaxSequenceNumber, kValueTypeForSeek),
-        row_end_key_(opts.row_end_key, kMaxSequenceNumber, kValueTypeForSeek) {
-  }
-  virtual ~IndexBlockIter() {
-    delete iter_;
-  }
+        row_end_key_(opts.row_end_key, kMaxSequenceNumber, kValueTypeForSeek) {}
+  virtual ~IndexBlockIter() { delete iter_; }
   virtual void Seek(const Slice& target) {
     iter_->Seek(target);
     SkipUnmatchedBlocksForward();
@@ -174,9 +172,7 @@ class IndexBlockIter : public Iterator {
     iter_->Prev();
     SkipUnmatchedBlocksBackward();
   }
-  virtual bool Valid() const {
-    return valid_;
-  }
+  virtual bool Valid() const { return valid_; }
   virtual Slice key() const {
     assert(Valid());
     return iter_->key();
@@ -185,9 +181,7 @@ class IndexBlockIter : public Iterator {
     assert(Valid());
     return iter_->value();
   }
-  virtual Status status() const {
-    return iter_->status();
-  }
+  virtual Status status() const { return iter_->status(); }
 
  private:
   void SkipUnmatchedBlocksForward() {
@@ -198,7 +192,7 @@ class IndexBlockIter : public Iterator {
         break;
       }
       if (!valid_index_key_.empty() && comparator_->Compare(iter_->key(), valid_index_key_) > 0) {
-        //Log("bloomfilter: skip block by range");
+        // LEVELDB_LOG("bloomfilter: skip block by range");
         break;
       }
       if (comparator_->Compare(iter_->key(), row_end_key_.Encode()) >= 0 &&
@@ -207,10 +201,10 @@ class IndexBlockIter : public Iterator {
       }
       if (CheckFilter()) {
         valid_ = true;
-        //Log("bloomfilter: valid block");
+        // LEVELDB_LOG("bloomfilter: valid block");
         break;
       }
-      //Log("bloomfilter: skip block by bloom");
+      // LEVELDB_LOG("bloomfilter: skip block by bloom");
       iter_->Next();
     }
   }
@@ -222,7 +216,7 @@ class IndexBlockIter : public Iterator {
         break;
       }
       if (comparator_->Compare(iter_->key(), row_start_key_.Encode()) < 0) {
-        //Log("bloomfilter: skip block by range");
+        // LEVELDB_LOG("bloomfilter: skip block by range");
         break;
       }
       if (comparator_->Compare(iter_->key(), row_end_key_.Encode()) >= 0 &&
@@ -231,10 +225,10 @@ class IndexBlockIter : public Iterator {
       }
       if (CheckFilter()) {
         valid_ = true;
-        //Log("bloomfilter: valid block");
+        // LEVELDB_LOG("bloomfilter: valid block");
         break;
       }
-      //Log("bloomfilter: skip block by bloom");
+      // LEVELDB_LOG("bloomfilter: skip block by bloom");
       iter_->Prev();
     }
   }
@@ -242,9 +236,7 @@ class IndexBlockIter : public Iterator {
     assert(iter_->Valid());
     Slice handle_value = iter_->value();
     BlockHandle handle;
-    if (!read_single_row_ ||
-        filter_ == NULL ||
-        !handle.DecodeFrom(&handle_value).ok() ||
+    if (!read_single_row_ || filter_ == NULL || !handle.DecodeFrom(&handle_value).ok() ||
         filter_->KeyMayMatch(handle.offset(), row_start_key_.Encode())) {
       return true;
     }
@@ -264,223 +256,211 @@ class IndexBlockIter : public Iterator {
   std::string valid_index_key_;
 };
 
-static void DeleteBlock(void* arg, void* ignored) {
-  delete reinterpret_cast<Block*>(arg);
-}
+static void DeleteBlock(void* arg, void* ignored) { delete reinterpret_cast<Block*>(arg); }
 
-
-// This iterator is just used in long-scan cases, like compact and batch scan.
-// It'll prefetch some continuous data blocks from SSD or dfs in a single read-operation
-// for reducing iops and maximizing throughput.
-class PrefetchScanIterator : public Iterator {
+class PrefetchBlockReader {
  public:
-    PrefetchScanIterator(RandomAccessFile* file,
-                         const ReadOptions& opt,
-                         Iterator* index_block_iterator)
-      : file_(file),
-        index_block_iterator_(index_block_iterator),
-        block_iterator_(NULL),
-        handles_iterator_(handles_.end()),
-        option_(opt) {
-  }
-  virtual ~PrefetchScanIterator() {
-    delete index_block_iterator_;
-    delete block_iterator_;
-  }
-  virtual void Seek(const Slice& target) {
-    index_block_iterator_->Seek(target);
-    if (index_block_iterator_->Valid()) {
-      PrefetchBlockContent();
-    }
-    if (block_iterator_) {
-      block_iterator_->Seek(target);
-    }
-  }
-  virtual void SeekToFirst() {
-    index_block_iterator_->SeekToFirst();
-    if (index_block_iterator_->Valid()) {
-      PrefetchBlockContent();
-    }
-  }
-  virtual void SeekToLast() {
-    index_block_iterator_->SeekToLast();
-    if (index_block_iterator_->Valid()) {
-      PrefetchBlockContent();
-    }
-    if (block_iterator_) {
-      block_iterator_->SeekToLast();
-    }
-  }
-  virtual void Next() {
-    assert(Valid());
-    /*
-     * block_content_ is the file data we prefetched.
-     * handles_ is a vector of block handles that record [offset, size] of each block in block_content_.
-     * handles_iterator_ points to one block handle in handels_.
-     * block_iterator_ is the iterator of the block currently in use.
-     *
-     * So when Next() is called, we first tried to call block_iterator_'s Next().
-     * If it is valid, we don't need to do other things.
-     * Otherwise, it means that we reach the end of current block.
-     * Then, we try to load next block by moving handles_iterator_ to the next block handle,
-     * and load this block from prefetched data (block_content_).
-     * If handles_iterator_ points to the last block handle in handles_,
-     * it means that we reach the end of prefetched blocks, so PrefetchBlockContent() is called to read new
-     * blocks from file.
-    */
-    block_iterator_->Next();
-    if (!block_iterator_->Valid()) {
-      if (++handles_iterator_ != handles_.end()) {
-        LoadBlockIterator();
-      } else {
-        PrefetchBlockContent();
-      }
-    }
-  }
+  PrefetchBlockReader(RandomAccessFile* file, size_t fsize) : file_(file), fsize_(fsize) {}
 
-  virtual void Prev() {
-    //This iterator should just be used in scan,
-    //so prev() should never be called.
-    assert(Valid());
-    abort();
-  }
-  virtual bool Valid() const {
-    return block_iterator_ && block_iterator_->Valid();
-  }
-  virtual Slice key() const {
-    assert(Valid());
-    return block_iterator_->key();
-  }
+  Iterator* operator()(void* arg, const ReadOptions& options, const Slice& index_value) {
+    assert(!arg);
+    Block* block = NULL;
+    BlockHandle handle;
+    Slice input = index_value;
+    Status s = handle.DecodeFrom(&input);
 
-  virtual Slice value() const {
-    assert(Valid());
-    return block_iterator_->value();
-  }
+    if (s.ok()) {
+      s = ReadBlock(handle, options, &block);
+    }
 
-  virtual Status status() const {
-    if (!index_block_iterator_->status().ok()) {
-      return index_block_iterator_->status();
-    } else if (block_iterator_ && !block_iterator_->status().ok()) {
-      return block_iterator_->status();
+    Iterator* iter;
+    if (block != nullptr) {
+      iter = block->NewIterator(options.db_opt->comparator);
+      iter->RegisterCleanup(&DeleteBlock, block, nullptr);
     } else {
-      return status_;
+      iter = NewErrorIterator(s);
     }
+    return iter;
   }
 
  private:
-  // Load the iterator of the block that handles_iterator_ currently points to.
-  void LoadBlockIterator() {
-    assert(handles_iterator_ != handles_.end());
-    
-    delete block_iterator_;
-    block_iterator_ = NULL;
-    //Caculate current block's offset in block_content_.
-    uint64_t offset = handles_iterator_->offset() - handles_[0].offset();
-    uint64_t size = handles_iterator_->size() + kBlockTrailerSize;
+  Status ReadBlock(const BlockHandle& handle, const ReadOptions& options, Block** block) {
+    assert(!*block);
+    Slice block_slice;
+    Status s;
+    // Read file content, if missed, it will prefetch data from cache/dfs.
+    if ((s = ReadFileContent(handle, options, &block_slice)).ok()) {
+      BlockContents contents;
+      s = ParseBlock(handle.size(), handle.offset(), options, block_slice, &contents);
+      if (s.ok()) {
+        *block = new Block(contents);
+      } else if (prefetched_from_persistent_cache_) {
+        // Parse Block failed and it's read from persistent cache.
+        // May be an invalid cache file, try read directly from dfs.
+        assert(options.db_opt->persistent_cache);
+        SstDataScratch scratch;
+        auto dfs_status = ReadDfsContent(handle, options, &scratch, &block_slice);
+        if (dfs_status.ok()) {
+          s = ParseBlock(handle.size(), handle.offset(), options, block_slice, &contents);
+          if (s.ok()) {
+            // Parse from dfs content successfully, so force evict the cache file.
+            auto fname = file_->GetFileName();
+            LEVELDB_LOG("Invalid cache data for %s, force evict it.", fname.c_str());
+            Slice key{fname};
+            key.remove_specified_prefix(options.db_opt->dfs_storage_path_prefix);
+            options.db_opt->persistent_cache->ForceEvict(key);
 
-    assert(offset + size <= block_content_.size());
-    Slice block_with_trailer(&block_content_[0] + offset, size);
-
-    BlockContents contents;
-    Block* block = NULL;
-    //Parse block from block_with_trailer slice.
-    Status s = ParseBlock(handles_iterator_->size(),
-                          handles_iterator_->offset(),
-                          option_,
-                          block_with_trailer,
-                          &contents);
-    if (s.ok()) {
-      block = new Block(contents);
+            *block = new Block(contents);
+          }
+        } else {
+          // Read from dfs failed, keep the last error.
+          s = dfs_status;
+        }
+      }
     }
-
-    if (block != NULL) {
-      //Get current block's iterator.
-      block_iterator_ = block->NewIterator(option_.db_opt->comparator);
-      block_iterator_->RegisterCleanup(&DeleteBlock, block, NULL);
-      block_iterator_->SeekToFirst();
-    } else {
-      block_iterator_ = NewErrorIterator(s);
-    }
+    return s;
   }
 
-  // Prefetch some continuous data blocks for reducing iops.
-  // Their total size is less than tera_tabletnode_prefetch_scan_size.
-  void PrefetchBlockContent() {
-    handles_.clear();
-    uint64_t current_size(0);
-    while(index_block_iterator_->Valid() &&
-          current_size < option_.prefetch_scan_size) {
-      BlockHandle handle;
-      Slice input = index_block_iterator_->value();
-      status_ = handle.DecodeFrom(&input);
-      if (!status_.ok()) {
-        break;
-      }
-      current_size += handle.size() + kBlockTrailerSize;
-      handles_.push_back(handle);
-      index_block_iterator_->Next();
-    }
-    handles_iterator_ = handles_.end();
-
-    if (status_.ok() && !handles_.empty()) {
-      Options db_opt = *(option_.db_opt);
-      uint64_t offset = handles_[0].offset();
-      uint64_t blocks_size = handles_.back().offset() - offset;
-      blocks_size += handles_.back().size() + kBlockTrailerSize;
-      Slice contents;
-      char* buf = NULL;
-      status_ = ReadSstFile(file_, db_opt.use_direct_io_read, offset, blocks_size, &contents, &buf);
-      if (!status_.ok()) {
-        return;
-      }
-      block_content_.assign(contents.data(), contents.size());
-      FreeBuf(buf, db_opt.use_direct_io_read);
-
-      if (block_content_.size() != blocks_size) {
-        status_ = Status::Corruption("truncated block read");
-        return;
-      }
-      handles_iterator_ = handles_.begin();
-      LoadBlockIterator();
-    }
+  Status ReadDfsContent(const BlockHandle& handle, const ReadOptions& options,
+                        SstDataScratch* scratch, Slice* slice) {
+    assert(slice);
+    auto size = handle.size() + kBlockTrailerSize;
+    auto offset = handle.offset();
+    Status s;
+    return ReadSstFile(file_, false, offset, size, slice, scratch);
   }
 
-private:
+  Status ReadFileContent(const BlockHandle& handle, const ReadOptions& options, Slice* data) {
+    assert(data);
+    Status s;
+    if (handle.offset() < prefetched_offset_) {
+      s = PrefetchFileContents(handle, options);
+    }
+    if (!s.ok()) {
+      return s;
+    }
 
-  Status status_;
-  std::string block_content_;
-  std::vector<BlockHandle> handles_;
+    auto relative_offset = handle.offset() - prefetched_offset_;
+    auto size = handle.size() + kBlockTrailerSize;
+    if (relative_offset + size > prefetched_data_.size()) {
+      s = PrefetchFileContents(handle, options);
+      if (s.ok()) {
+        assert(handle.offset() == prefetched_offset_);
+        relative_offset = 0;
+      } else {
+        return s;
+      }
+    }
 
+    // No more check needed, because we successfully prefetch file contents.
+    *data = Slice{prefetched_data_};
+    data->remove_prefix(relative_offset);
+    data->remove_suffix(prefetched_data_.size() - (relative_offset + size));
+    assert(data->size() == handle.size() + kBlockTrailerSize);
+    return Status::OK();
+  }
+
+  Status PrefetchFileContents(const BlockHandle& handle, const ReadOptions& options) {
+    prefetched_offset_ = 0;
+    prefetched_data_.clear();
+    prefetched_from_persistent_cache_ = false;
+
+    auto block_offset = handle.offset();
+    if (fsize_ < block_offset) {
+      prefetched_data_.clear();
+      return Status::Corruption("truncated block read");
+    }
+
+    Slice contents;
+    SstDataScratch val;
+    auto block_size = handle.size() + kBlockTrailerSize;
+    auto prefetch_size = std::max(block_size, options.prefetch_scan_size);
+    prefetch_size = std::min(prefetch_size, fsize_ - block_offset);
+
+    auto& p_cache = options.db_opt->persistent_cache;
+
+    if (p_cache) {
+      auto fname = file_->GetFileName();
+      Slice key{fname};
+      key.remove_specified_prefix(options.db_opt->dfs_storage_path_prefix);
+      if (PersistentCacheHelper::TryReadFromPersistentCache(p_cache, key, block_offset,
+                                                            prefetch_size, &contents, &val).ok()) {
+        prefetched_data_.assign(contents.data(), contents.size());
+        prefetched_from_persistent_cache_ = true;
+      } else if (options.fill_persistent_cache) {
+        PersistentCacheHelper::ScheduleCopyToLocal(options.db_opt->env, file_->GetFileName(),
+                                                   fsize_, key.ToString(), p_cache);
+      }
+    }
+
+    if (!prefetched_from_persistent_cache_) {
+      auto s = ReadSstFile(file_, options.db_opt->use_direct_io_read, block_offset, prefetch_size,
+                           &contents, &val);
+      if (!s.ok()) {
+        return s;
+      }
+      prefetched_data_.assign(contents.data(), contents.size());
+    }
+
+    if (prefetched_data_.size() < block_size) {
+      prefetched_data_.clear();
+      return Status::Corruption("truncated block read");
+    }
+
+    prefetched_offset_ = block_offset;
+    return Status::OK();
+  }
+
+ private:
   RandomAccessFile* file_;
-  Iterator* index_block_iterator_;
-  Iterator* block_iterator_;
-  std::vector<BlockHandle>::iterator handles_iterator_;
-  ReadOptions option_;
+  size_t fsize_;
+  std::string prefetched_data_;
+  uint64_t prefetched_offset_ = 0;
+  bool prefetched_from_persistent_cache_ = false;
 };
 
-
-Status Table::Open(const Options& options,
-                   RandomAccessFile* file,
-                   uint64_t size,
-                   Table** table) {
+Status Table::Open(const Options& options, RandomAccessFile* file, uint64_t size, Table** table) {
   *table = NULL;
   if (size < Footer::kEncodedLength) {
     return Status::InvalidArgument("file is too short to be an sstable");
   }
 
-  size_t len = Footer::kEncodedLength;;
+  size_t len = Footer::kEncodedLength;
   uint64_t offset = size - Footer::kEncodedLength;
   Slice footer_input;
-  char* buf = NULL;
-  Status s = ReadSstFile(file, options.use_direct_io_read, offset, len, &footer_input, &buf);
-  if (!s.ok()) {
-    return s;
-  }
+  SstDataScratch scratch;
+  Status s;
   Footer footer;
-  s = footer.DecodeFrom(&footer_input);
-  FreeBuf(buf, options.use_direct_io_read);
-  if (!s.ok()) {
+  auto& p_cache = options.persistent_cache;
+
+  if (p_cache) {
+    Slice key{file->GetFileName()};
+    key.remove_specified_prefix(options.dfs_storage_path_prefix);
+    // Try Read From Persistent Cache
+    s = PersistentCacheHelper::TryReadFromPersistentCache(p_cache, key, offset, len, &footer_input,
+                                                          &scratch);
+    if (s.ok()) {
+      // Read Success
+      s = footer.DecodeFrom(&footer_input);
+      if (!s.ok()) {
+        // Parse footer failed means this sst file is invalid, remove it.
+        options.persistent_cache->ForceEvict(key);
+      }
+    }
+  }
+
+  if (!p_cache || !s.ok()) {
+    // Disable Persistent Cache or
+    // parse footer failed or
+    // read file failed, just read from dfs.
+    s = ReadSstFile(file, options.use_direct_io_read, offset, len, &footer_input, &scratch);
+    if (!s.ok()) {
       return s;
+    }
+    s = footer.DecodeFrom(&footer_input);
+    if (!s.ok()) {
+      return s;
+    }
   }
 
   // Read the index block
@@ -499,6 +479,7 @@ Status Table::Open(const Options& options,
     // We've successfully read the footer and the index block: we're
     // ready to serve requests.
     Rep* rep = new Table::Rep;
+    rep->fsize = size;
     rep->options = options;
     rep->file = file;
     rep->metaindex_handle = footer.metaindex_handle();
@@ -558,14 +539,14 @@ void Table::ReadFilter(const Slice& filter_handle_value) {
     return;
   }
   if (block.heap_allocated) {
-    rep_->filter_data = block.data.data();     // Will need to delete later
+    rep_->filter_data = block.data.data();  // Will need to delete later
+    rep_->filter_data_size = block.data.size();
+    rep_->filter_block_size_total.Add(rep_->filter_data_size);
   }
   rep_->filter = new FilterBlockReader(rep_->options.filter_policy, block.data);
 }
 
-Table::~Table() {
-  delete rep_;
-}
+Table::~Table() { delete rep_; }
 
 static void DeleteCachedBlock(const Slice& key, void* value) {
   Block* block = reinterpret_cast<Block*>(value);
@@ -580,9 +561,7 @@ static void ReleaseBlock(void* arg, void* h) {
 
 // Convert an index iterator value (i.e., an encoded BlockHandle)
 // into an iterator over the contents of the corresponding block.
-Iterator* Table::BlockReader(void* arg,
-                             const ReadOptions& options,
-                             const Slice& index_value) {
+Iterator* Table::BlockReader(void* arg, const ReadOptions& options, const Slice& index_value) {
   Table* table = reinterpret_cast<Table*>(arg);
   Cache* block_cache = table->rep_->options.block_cache;
   Block* block = NULL;
@@ -599,7 +578,7 @@ Iterator* Table::BlockReader(void* arg,
     if (block_cache != NULL) {
       char cache_key_buffer[16];
       EncodeFixed64(cache_key_buffer, table->rep_->cache_id);
-      EncodeFixed64(cache_key_buffer+8, handle.offset());
+      EncodeFixed64(cache_key_buffer + 8, handle.offset());
       Slice key(cache_key_buffer, sizeof(cache_key_buffer));
       cache_handle = block_cache->Lookup(key);
       if (cache_handle != NULL) {
@@ -609,8 +588,17 @@ Iterator* Table::BlockReader(void* arg,
         if (s.ok()) {
           block = new Block(contents);
           if (contents.cachable && options.fill_cache) {
-            cache_handle = block_cache->Insert(
-                key, block, block->size(), &DeleteCachedBlock);
+            cache_handle = block_cache->Insert(key, block, block->size(), &DeleteCachedBlock);
+          }
+
+          if (table->rep_->options.persistent_cache && options.fill_persistent_cache &&
+              !contents.read_from_persistent_cache) {
+            std::string fname = table->rep_->file->GetFileName();
+            Slice persistent_cache_key{fname};
+            persistent_cache_key.remove_specified_prefix(options.db_opt->dfs_storage_path_prefix);
+            PersistentCacheHelper::ScheduleCopyToLocal(
+                table->rep_->options.env, table->rep_->file->GetFileName(), table->rep_->fsize,
+                persistent_cache_key.ToString(), table->rep_->options.persistent_cache);
           }
         }
       }
@@ -640,24 +628,29 @@ Iterator* Table::NewIterator(const ReadOptions& options) const {
   return NewIterator(options, Slice(), Slice());
 }
 
-Iterator* Table::NewIterator(const ReadOptions& options,
-                             const Slice& smallest,
+void DeletePrefetchBlockReader(void* arg1, void*) {
+  delete reinterpret_cast<PrefetchBlockReader*>(arg1);
+}
+
+Iterator* Table::NewIterator(const ReadOptions& options, const Slice& smallest,
                              const Slice& largest) const {
   if (options.prefetch_scan) {
-    return new TableIter(
-            new PrefetchScanIterator(rep_->file, options, rep_->index_block->NewIterator(options.db_opt->comparator)),
-            options.db_opt->comparator, smallest, largest);
+    auto prefetch_block_reader = new PrefetchBlockReader(rep_->file, rep_->fsize);
+    auto iter = new TableIter(
+        NewTwoLevelIterator(new IndexBlockIter(options, rep_->index_block, rep_->filter),
+                            *prefetch_block_reader, nullptr, options),
+        options.db_opt->comparator, smallest, largest);
+    iter->RegisterCleanup(&DeletePrefetchBlockReader, prefetch_block_reader, nullptr);
+    return iter;
   } else {
     return new TableIter(
-        NewTwoLevelIterator(
-            new IndexBlockIter(options, rep_->index_block, rep_->filter),
-            &Table::BlockReader, const_cast<Table*>(this), options),
-            options.db_opt->comparator, smallest, largest);
+        NewTwoLevelIterator(new IndexBlockIter(options, rep_->index_block, rep_->filter),
+                            Table::BlockReader, const_cast<Table*>(this), options),
+        options.db_opt->comparator, smallest, largest);
   }
 }
 
-Status Table::InternalGet(const ReadOptions& options, const Slice& k,
-                          void* arg,
+Status Table::InternalGet(const ReadOptions& options, const Slice& k, void* arg,
                           void (*saver)(void*, const Slice&, const Slice&)) {
   Status s;
   Iterator* iiter = rep_->index_block->NewIterator(options.db_opt->comparator);
@@ -666,8 +659,7 @@ Status Table::InternalGet(const ReadOptions& options, const Slice& k,
     Slice handle_value = iiter->value();
     FilterBlockReader* filter = rep_->filter;
     BlockHandle handle;
-    if (filter != NULL &&
-        handle.DecodeFrom(&handle_value).ok() &&
+    if (filter != NULL && handle.DecodeFrom(&handle_value).ok() &&
         !filter->KeyMayMatch(handle.offset(), k)) {
       // Not found
     } else {
@@ -691,10 +683,8 @@ Status Table::InternalGet(const ReadOptions& options, const Slice& k,
   return s;
 }
 
-
 uint64_t Table::ApproximateOffsetOf(const Slice& key) const {
-  Iterator* index_iter =
-      rep_->index_block->NewIterator(rep_->options.comparator);
+  Iterator* index_iter = rep_->index_block->NewIterator(rep_->options.comparator);
   index_iter->Seek(key);
   uint64_t result;
   if (index_iter->Valid()) {
@@ -719,8 +709,6 @@ uint64_t Table::ApproximateOffsetOf(const Slice& key) const {
   return result;
 }
 
-uint64_t Table::IndexBlockSize() const {
-    return rep_->index_block->size();
-}
+uint64_t Table::IndexBlockSize() const { return rep_->index_block->size(); }
 
 }  // namespace leveldb

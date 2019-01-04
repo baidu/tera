@@ -2,8 +2,8 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#ifndef  TERA_LEVELDB_NFS_H_
-#define  TERA_LEVELDB_NFS_H_
+#ifndef TERA_LEVELDB_NFS_H_
+#define TERA_LEVELDB_NFS_H_
 
 #include <string>
 #include <vector>
@@ -11,14 +11,14 @@
 #include "port/port_posix.h"
 
 namespace nfs {
-  struct NFSFILE;
-  typedef int (*AssignNamespaceIdFunc)(const char* path, int max_namespaces);
+struct NFSFILE;
+typedef int (*AssignNamespaceIdFunc)(const char* path, int max_namespaces);
 }
 
 namespace leveldb {
 
 class NFile : public DfsFile {
-public:
+ public:
   NFile(nfs::NFSFILE* file, const std::string& name);
   ~NFile();
   int32_t Write(const char* buf, int32_t len);
@@ -29,13 +29,14 @@ public:
   int64_t Tell();
   int32_t Seek(int64_t offset);
   int32_t CloseFile();
-private:
+
+ private:
   nfs::NFSFILE* file_;
   std::string name_;
 };
 
 class Nfs : public Dfs {
-public:
+ public:
   static void Init(const std::string& mountpoint, const std::string& conf_path);
   static int CalcNamespaceId(const char* c_path, int max_namespaces);
   static Nfs* GetInstance();
@@ -54,15 +55,15 @@ public:
 
   DfsFile* OpenFile(const std::string& filename, int32_t flags);
   int32_t Stat(const std::string& filename, struct stat* fstat);
-private:
+
+ private:
   Nfs();
   static port::Mutex mu_;
   static void LoadSymbol();
   static bool dl_init_;
 };
-
 }
 
-#endif  //TERA_LEVELDB_NFS_H_
+#endif  // TERA_LEVELDB_NFS_H_
 
 /* vim: set expandtab ts=2 sw=2 sts=2 tw=100: */

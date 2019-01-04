@@ -9,8 +9,8 @@ DECLARE_bool(tera_sdk_tso_client_enabled);
 DECLARE_bool(tera_sdk_client_for_gtxn);
 
 int main(int argc, char* argv[]) {
-    FLAGS_tera_sdk_client_for_gtxn = true;
-    FLAGS_tera_sdk_tso_client_enabled = false;
-    ::testing::InitGoogleTest(&argc, argv);
-    return RUN_ALL_TESTS();
+  FLAGS_tera_sdk_client_for_gtxn = true;
+  FLAGS_tera_sdk_tso_client_enabled = false;
+  ::testing::InitGoogleTest(&argc, argv);
+  return RUN_ALL_TESTS();
 }

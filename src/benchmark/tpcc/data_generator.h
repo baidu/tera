@@ -19,43 +19,43 @@
 namespace tera {
 namespace tpcc {
 
-
 class DataGenerator {
-public:
-    DataGenerator(RandomGenerator* random_gen, TpccDb* db);
-    ~DataGenerator(){}
-    void GenWarehouses();
-    void GenItems();
-    void Join();
+ public:
+  DataGenerator(RandomGenerator* random_gen, TpccDb* db);
+  ~DataGenerator() {}
+  void GenWarehouses();
+  void GenItems();
+  void Join();
 
-private:
-    void PrintJoinTimeoutInfo(int need_cnt, int table_enum_num);
+ private:
+  void PrintJoinTimeoutInfo(int need_cnt, int table_enum_num);
 
-    // for generate data
-    void GenStocks(int32_t warehouse_id);
-    void GenCustomers(int32_t district_id, int32_t warehouse_id);
-    void GenHistorys(int32_t district_id, int32_t warehouse_id);
-    void GenOrderLines(int cnt, int32_t order_id, int32_t district_id, 
-                       int32_t warehouse_id, bool new_order);
-    void GenOrders(int32_t district_id, int32_t warehouse_id);
-    void GenDistricts(int32_t warehouse_id);
-    
-    void GenItem(int32_t item_id, bool is_original);
-    void GenStock(int32_t id, int32_t warehouse_id, bool is_original);
+  // for generate data
+  void GenStocks(int32_t warehouse_id);
+  void GenCustomers(int32_t district_id, int32_t warehouse_id);
+  void GenHistorys(int32_t district_id, int32_t warehouse_id);
+  void GenOrderLines(int cnt, int32_t order_id, int32_t district_id, int32_t warehouse_id,
+                     bool new_order);
+  void GenOrders(int32_t district_id, int32_t warehouse_id);
+  void GenDistricts(int32_t warehouse_id);
 
-    // for async insert
-    void PushToInsertQueue(const ThreadPool::Task& task);
-private:
-    typedef std::vector<std::pair<Counter, Counter>> InsertStates; 
-    CompletedEvent event_;
-    RandomGenerator* rand_gen_;
-    TpccDb* db_;
-    InsertStates states_;
-    std::string now_datatime_;
-    common::ThreadPool thread_pool_;
+  void GenItem(int32_t item_id, bool is_original);
+  void GenStock(int32_t id, int32_t warehouse_id, bool is_original);
+
+  // for async insert
+  void PushToInsertQueue(const ThreadPool::Task& task);
+
+ private:
+  typedef std::vector<std::pair<Counter, Counter>> InsertStates;
+  CompletedEvent event_;
+  RandomGenerator* rand_gen_;
+  TpccDb* db_;
+  InsertStates states_;
+  std::string now_datatime_;
+  common::ThreadPool thread_pool_;
 };
 
-} // namespace tpcc
-} // namespace tera
+}  // namespace tpcc
+}  // namespace tera
 
 #endif /* TERA_BENCHMARK_TPCC_DATA_GENERATOR_H */

@@ -21,10 +21,8 @@ namespace {
 
 class IterWrapper {
  public:
-  IterWrapper(): iter_(NULL), valid_(false) { }
-  explicit IterWrapper(Iterator* iter): iter_(NULL) {
-    Set(iter);
-  }
+  IterWrapper() : iter_(NULL), valid_(false) {}
+  explicit IterWrapper(Iterator* iter) : iter_(NULL) { Set(iter); }
   ~IterWrapper() {}
   Iterator* iter() const { return iter_; }
 
@@ -39,16 +37,45 @@ class IterWrapper {
   }
 
   // Iterator interface methods
-  bool Valid() const        { return valid_; }
-  Slice key() const         { assert(Valid()); return key_; }
-  Slice value() const       { assert(Valid()); return iter_->value(); }
+  bool Valid() const { return valid_; }
+  Slice key() const {
+    assert(Valid());
+    return key_;
+  }
+  Slice value() const {
+    assert(Valid());
+    return iter_->value();
+  }
   // Methods below require iter() != NULL
-  Status status() const     { assert(iter_); return iter_->status(); }
-  void Next()               { assert(iter_); iter_->Next();        Update(); }
-  void Prev()               { assert(iter_); iter_->Prev();        Update(); }
-  void Seek(const Slice& k) { assert(iter_); iter_->Seek(k);       Update(); }
-  void SeekToFirst()        { assert(iter_); iter_->SeekToFirst(); Update(); }
-  void SeekToLast()         { assert(iter_); iter_->SeekToLast();  Update(); }
+  Status status() const {
+    assert(iter_);
+    return iter_->status();
+  }
+  void Next() {
+    assert(iter_);
+    iter_->Next();
+    Update();
+  }
+  void Prev() {
+    assert(iter_);
+    iter_->Prev();
+    Update();
+  }
+  void Seek(const Slice& k) {
+    assert(iter_);
+    iter_->Seek(k);
+    Update();
+  }
+  void SeekToFirst() {
+    assert(iter_);
+    iter_->SeekToFirst();
+    Update();
+  }
+  void SeekToLast() {
+    assert(iter_);
+    iter_->SeekToLast();
+    Update();
+  }
 
  private:
   void Update() {
@@ -63,7 +90,7 @@ class IterWrapper {
   Slice key_;
 };
 struct Greater {
-  bool operator() (IterWrapper& it1, IterWrapper& it2) {
+  bool operator()(IterWrapper& it1, IterWrapper& it2) {
     if (!it1.Valid()) {
       // iterator 1 is not valid, regard it as the bigger one
       return true;
@@ -75,14 +102,13 @@ struct Greater {
     return (comp->Compare(it1.key(), it2.key()) > 0);
   }
 
-  Greater(const Comparator* comparator)
-      : comp(comparator) {}
+  Greater(const Comparator* comparator) : comp(comparator) {}
 
   const Comparator* comp;
 };
 
 struct Lesser {
-  bool operator() (IterWrapper& it1, IterWrapper& it2) {
+  bool operator()(IterWrapper& it1, IterWrapper& it2) {
     if (!it1.Valid()) {
       // always regard it as the lesser one
       return true;
@@ -94,8 +120,7 @@ struct Lesser {
     return (comp->Compare(it1.key(), it2.key()) < 0);
   }
 
-  Lesser (const Comparator* comparator)
-      : comp(comparator) {}
+  Lesser(const Comparator* comparator) : comp(comparator) {}
 
   const Comparator* comp;
 };
@@ -120,13 +145,15 @@ class MergingIterator : public Iterator {
     }
   }
 
-  virtual bool Valid() const {
-    return (current_ != NULL);
-  }
+  virtual bool Valid() const { return (current_ != NULL); }
 
   virtual void SeekToFirst() {
     for (size_t i = 0; i < children_.size(); i++) {
       children_[i].SeekToFirst();
+      if (!CheckIterStatus(children_[i])) {
+        current_ = NULL;
+        return;
+      }
     }
     // make children as a min-heap
     make_heap(children_.begin(), children_.end(), greater_);
@@ -137,6 +164,10 @@ class MergingIterator : public Iterator {
   virtual void SeekToLast() {
     for (size_t i = 0; i < children_.size(); i++) {
       children_[i].SeekToLast();
+      if (!CheckIterStatus(children_[i])) {
+        current_ = NULL;
+        return;
+      }
     }
     // make children as a max-heap
     make_heap(children_.begin(), children_.end(), lesser_);
@@ -147,6 +178,10 @@ class MergingIterator : public Iterator {
   virtual void Seek(const Slice& target) {
     for (size_t i = 0; i < children_.size(); i++) {
       children_[i].Seek(target);
+      if (!CheckIterStatus(children_[i])) {
+        current_ = NULL;
+        return;
+      }
     }
     // make children as a min-heap
     make_heap(children_.begin(), children_.end(), greater_);
@@ -167,9 +202,12 @@ class MergingIterator : public Iterator {
         IterWrapper* child = &children_[i];
         if (child != current_) {
           child->Seek(key());
-          if (child->Valid() &&
-              comparator_->Compare(key(), child->key()) == 0) {
+          if (child->Valid() && comparator_->Compare(key(), child->key()) == 0) {
             child->Next();
+          }
+          if (!CheckIterStatus(*child)) {
+            current_ = NULL;
+            return;
           }
         }
       }
@@ -182,6 +220,10 @@ class MergingIterator : public Iterator {
     }
 
     current_->Next();
+    if (!CheckIterStatus(*current_)) {
+      current_ = NULL;
+      return;
+    }
     std::push_heap(children_.begin(), children_.end(), greater_);
     FindSmallest();
   }
@@ -206,6 +248,10 @@ class MergingIterator : public Iterator {
             // Child has no entries >= key().  Position at last entry.
             child->SeekToLast();
           }
+          if (!CheckIterStatus(*child)) {
+            current_ = NULL;
+            return;
+          }
         }
       }
 
@@ -218,6 +264,10 @@ class MergingIterator : public Iterator {
 
     current_->Prev();
     std::push_heap(children_.begin(), children_.end(), lesser_);
+    if (!CheckIterStatus(*current_)) {
+      current_ = NULL;
+      return;
+    }
     FindLargest();
   }
 
@@ -246,6 +296,8 @@ class MergingIterator : public Iterator {
   void FindSmallest();
   void FindLargest();
 
+  bool CheckIterStatus(const IterWrapper& iter) { return iter.Valid() || iter.status().ok(); }
+
   // We might want to use a heap in case there are lots of children.
   // For now we use a simple array since we expect a very small number
   // of children in leveldb.
@@ -256,10 +308,7 @@ class MergingIterator : public Iterator {
   const Lesser lesser_;
 
   // Which direction is the iterator moving?
-  enum Direction {
-    kForward,
-    kReverse
-  };
+  enum Direction { kForward, kReverse };
   Direction direction_;
 };
 

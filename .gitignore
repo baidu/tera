@@ -15,3 +15,8 @@ src/leveldb/tera_bench
 
 depends.mk
 build.conf
+
+.build/
+build/
+thirdsrc/
+thirdparty/

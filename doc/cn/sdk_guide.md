@@ -226,6 +226,7 @@ tera::ResultStream* result_stream = table->Scan(desc, &error_code);
 while (!result_stream->Done()) {
         ...
         result_stream->Next();
+        if(...) result_stream->Cancel();                 // 调用Cancel()接口后，会从while循环中退出
 }
 delete result_stream;                                    // 注意回收内存
 ```

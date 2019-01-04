@@ -19,11 +19,9 @@ const int kTpccTableCnt = 12;
 
 // t_customer_last_index is the index of t_customer
 //
-const char* const kTpccTables[] = {"t_item", "t_warehouse", "t_district", 
-                                   "t_customer", "t_history", "t_stock", 
-                                   "t_order", "t_orderline", "t_neworder", 
-                                   "t_customer_last_index", "t_order_index",
-                                   "t_history_index"};
+const char* const kTpccTables[] = {"t_item", "t_warehouse", "t_district", "t_customer", "t_history",
+                                   "t_stock", "t_order", "t_orderline", "t_neworder",
+                                   "t_customer_last_index", "t_order_index", "t_history_index"};
 
 // StockLevel  4%   4
 // OrderStatus 4%   8
@@ -33,7 +31,7 @@ const char* const kTpccTables[] = {"t_item", "t_warehouse", "t_district",
 const int kTpccTransactionRatios[] = {4, 8, 12, 55, 100};
 
 // http://www.man7.org/linux/man-pages/man3/initstate.3.html
-// Current "optimal" values for the size of the state array n 
+// Current "optimal" values for the size of the state array n
 // are 8, 32, 64, 128, and 256 bytes;
 const int kRandomStateSize = 64;
 
@@ -58,7 +56,7 @@ const int kMaxWarehouseId = 100;
 const int kWareHouseNameLowerLen = 6;
 const int kWareHouseNameUpperLen = 10;
 
-// stock 
+// stock
 const int kMaxQuantity = 100;
 const int kMinQuantity = 10;
 const int kDistLen = 24;
@@ -133,7 +131,7 @@ const float kRuntimeMaxAmount = 5000.00f;
 const float kRuntimeMinAmount = 1.00f;
 const int kRuntimeAmountDigits = 2;
 
-} // namespace tpcc
-} // namepsace tera
+}  // namespace tpcc
+}  // namepsace tera
 
 #endif /* TERA_BENCHMARK_TPCC_TPCC_TYPES_H */

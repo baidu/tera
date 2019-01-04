@@ -14,4 +14,4 @@ extern const char kCompiler[];
 void PrintSystemVersion();
 std::string SystemVersionInfo();
 
-#endif // TERA_VERSION_H_
+#endif  // TERA_VERSION_H_

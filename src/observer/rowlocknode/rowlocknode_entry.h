@@ -10,30 +10,30 @@
 #include "common/base/scoped_ptr.h"
 #include "observer/rowlocknode/remote_rowlocknode.h"
 #include "observer/rowlocknode/rowlocknode_impl.h"
-#include "tera_entry.h"
+#include "tera/tera_entry.h"
 
 namespace tera {
 namespace observer {
 
 class RowlockNodeEntry : public tera::TeraEntry {
-public:
-    RowlockNodeEntry();
-    virtual ~RowlockNodeEntry();
+ public:
+  RowlockNodeEntry();
+  virtual ~RowlockNodeEntry();
 
-    virtual bool StartServer();
-    virtual bool Run();
-    virtual void ShutdownServer();
-    void SetProcessorAffinity();
+  virtual bool StartServer();
+  virtual bool Run();
+  virtual void ShutdownServer();
+  void SetProcessorAffinity();
 
-private:
-    common::Mutex mutex_;
+ private:
+  common::Mutex mutex_;
 
-    scoped_ptr<RowlockNodeImpl> rowlocknode_impl_;
-    RemoteRowlockNode* remote_rowlocknode_;
-    scoped_ptr<sofa::pbrpc::RpcServer> rpc_server_;
+  scoped_ptr<RowlockNodeImpl> rowlocknode_impl_;
+  RemoteRowlockNode* remote_rowlocknode_;
+  scoped_ptr<sofa::pbrpc::RpcServer> rpc_server_;
 };
 
-} // namespace observer
-} // namespace tera
+}  // namespace observer
+}  // namespace tera
 
 #endif  // TERA_OBSERVER_ROWLOCKNODE_ROWLOCKNODE_ENTRY_H_

@@ -12,56 +12,56 @@ extern "C" {
  * Method:    nativeReaderDone
  * Signature: (J)Z
  */
-JNIEXPORT jboolean JNICALL Java_com_baidu_tera_client_TeraResultImpl_nativeReaderDone
-  (JNIEnv *, jobject, jlong);
+JNIEXPORT jboolean JNICALL
+Java_com_baidu_tera_client_TeraResultImpl_nativeReaderDone(JNIEnv *, jobject, jlong);
 
 /*
  * Class:     com_baidu_tera_client_TeraResultImpl
  * Method:    nativeReaderNext
  * Signature: (J)V
  */
-JNIEXPORT void JNICALL Java_com_baidu_tera_client_TeraResultImpl_nativeReaderNext
-  (JNIEnv *, jobject, jlong);
+JNIEXPORT void JNICALL
+Java_com_baidu_tera_client_TeraResultImpl_nativeReaderNext(JNIEnv *, jobject, jlong);
 
 /*
  * Class:     com_baidu_tera_client_TeraResultImpl
  * Method:    nativeGetRow
  * Signature: (J)[B
  */
-JNIEXPORT jbyteArray JNICALL Java_com_baidu_tera_client_TeraResultImpl_nativeGetRow
-  (JNIEnv *, jobject, jlong);
+JNIEXPORT jbyteArray JNICALL
+Java_com_baidu_tera_client_TeraResultImpl_nativeGetRow(JNIEnv *, jobject, jlong);
 
 /*
  * Class:     com_baidu_tera_client_TeraResultImpl
  * Method:    nativeGetFamily
  * Signature: (J)[B
  */
-JNIEXPORT jbyteArray JNICALL Java_com_baidu_tera_client_TeraResultImpl_nativeGetFamily
-  (JNIEnv *, jobject, jlong);
+JNIEXPORT jbyteArray JNICALL
+Java_com_baidu_tera_client_TeraResultImpl_nativeGetFamily(JNIEnv *, jobject, jlong);
 
 /*
  * Class:     com_baidu_tera_client_TeraResultImpl
  * Method:    nativeGetColumn
  * Signature: (J)[B
  */
-JNIEXPORT jbyteArray JNICALL Java_com_baidu_tera_client_TeraResultImpl_nativeGetColumn
-  (JNIEnv *, jobject, jlong);
+JNIEXPORT jbyteArray JNICALL
+Java_com_baidu_tera_client_TeraResultImpl_nativeGetColumn(JNIEnv *, jobject, jlong);
 
 /*
  * Class:     com_baidu_tera_client_TeraResultImpl
  * Method:    nativeGetTimeStamp
  * Signature: (J)J
  */
-JNIEXPORT jlong JNICALL Java_com_baidu_tera_client_TeraResultImpl_nativeGetTimeStamp
-  (JNIEnv *, jobject, jlong);
+JNIEXPORT jlong JNICALL
+Java_com_baidu_tera_client_TeraResultImpl_nativeGetTimeStamp(JNIEnv *, jobject, jlong);
 
 /*
  * Class:     com_baidu_tera_client_TeraResultImpl
  * Method:    nativeGetValue
  * Signature: (J)[B
  */
-JNIEXPORT jbyteArray JNICALL Java_com_baidu_tera_client_TeraResultImpl_nativeGetValue
-  (JNIEnv *, jobject, jlong);
+JNIEXPORT jbyteArray JNICALL
+Java_com_baidu_tera_client_TeraResultImpl_nativeGetValue(JNIEnv *, jobject, jlong);
 
 #ifdef __cplusplus
 }

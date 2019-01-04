@@ -9,6 +9,7 @@
 #include <string>
 
 #include "leveldb/env.h"
+#include "leveldb/persistent_cache.h"
 
 namespace tera {
 namespace io {
@@ -37,15 +38,12 @@ std::string GetTrackableGcTrashDir();
 
 bool MoveEnvDirToTrash(const std::string& subdir);
 
-leveldb::Status MoveSstToTrackableGcTrash(const std::string& table_name,
-                                          uint64_t tablet_id,
-                                          uint32_t lg_id,
-                                          uint64_t file_id);
+leveldb::Status MoveSstToTrackableGcTrash(const std::string& table_name, uint64_t tablet_id,
+                                          uint32_t lg_id, uint64_t file_id);
 
 void CleanTrashDir();
 
-bool TryDeleteEmptyDir(const std::string& dir_path,
-                       size_t total_children_size,
+bool TryDeleteEmptyDir(const std::string& dir_path, size_t total_children_size,
                        size_t deleted_children_size);
 
 leveldb::Status DeleteTrashFileIfExpired(const std::string& file_path);
@@ -54,9 +52,11 @@ void CleanTrackableGcTrash();
 
 leveldb::Status DeleteEnvDir(const std::string& subdir);
 
-leveldb::Status DeleteOldFlashCache(const std::vector<std::string>& path_list);
+const std::vector<std::string>& GetCachePaths();
+const std::vector<std::string>& GetPersistentCachePaths();
 
-} // namespace io
-} // namespace tera
+leveldb::Status GetPersistentCache(std::shared_ptr<leveldb::PersistentCache>* cache);
+}  // namespace io
+}  // namespace tera
 
-#endif // TERA_IO_UTILS_LEVELDB_H
+#endif  // TERA_IO_UTILS_LEVELDB_H

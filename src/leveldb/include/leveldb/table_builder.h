@@ -86,6 +86,7 @@ class TableBuilder {
   void WriteBlock(BlockBuilder* block, BlockHandle* handle);
   void WriteRawBlock(const Slice& data, CompressionType, BlockHandle* handle);
   void AppendToFile(const Slice& slice);
+  void AppendToCacheFile(const Slice& slice);
   void FlushBatchBuffer();
 
   struct Rep;

@@ -8,7 +8,7 @@
 #ifndef _JAVASOFT_JNI_MD_H_
 #define _JAVASOFT_JNI_MD_H_
 
-#define JNIEXPORT __attribute__ ((visibility ("default")))
+#define JNIEXPORT __attribute__((visibility("default")))
 #define JNIIMPORT
 #define JNICALL
 

@@ -16,54 +16,54 @@ namespace tera {
 namespace io {
 
 class KvCompactStrategy : public leveldb::CompactStrategy {
-public:
-    KvCompactStrategy(const TableSchema& schema);
-    virtual ~KvCompactStrategy();
+ public:
+  KvCompactStrategy(const TableSchema& schema);
+  virtual ~KvCompactStrategy();
 
-    virtual const leveldb::Comparator* RowKeyComparator();
-    virtual bool CheckTag(const leveldb::Slice& tera_key, bool* del_tag, int64_t* ttl_tag);
-    virtual bool Drop(const leveldb::Slice& k, uint64_t n,
-                      const std::string& lower_bound);
+  virtual const leveldb::Comparator* RowKeyComparator();
 
-    // tera-specific, based on all-level iterators.
-    // used in LowLevelScan
-    virtual bool ScanDrop(const leveldb::Slice& k, uint64_t n);
+  virtual void ExtractRowKey(const leveldb::Slice& tera_key, std::string* row_key);
 
-    virtual bool ScanMergedValue(leveldb::Iterator* it, std::string* merged_value,
-                                 int64_t* merged_num);
+  virtual bool CheckTag(const leveldb::Slice& tera_key, bool* del_tag, int64_t* ttl_tag);
+  virtual bool Drop(const leveldb::Slice& k, uint64_t n, const std::string& lower_bound);
 
-    virtual bool MergeAtomicOPs(leveldb::Iterator* it, std::string* merged_value,
-                                std::string* merged_key);
+  // tera-specific, based on all-level iterators.
+  // used in LowLevelScan
+  virtual bool ScanDrop(const leveldb::Slice& k, uint64_t n);
 
-    virtual const char* Name() const;
-    
-    virtual void SetSnapshot(uint64_t snapshot);
+  virtual bool ScanMergedValue(leveldb::Iterator* it, std::string* merged_value,
+                               int64_t* merged_num);
 
-private:
-    TableSchema schema_;
-    const leveldb::RawKeyOperator* raw_key_operator_;
-    leveldb::Comparator* cmp_;
-    uint64_t snapshot_;
+  virtual bool MergeAtomicOPs(leveldb::Iterator* it, std::string* merged_value,
+                              std::string* merged_key);
+
+  virtual const char* Name() const;
+
+  virtual void SetSnapshot(uint64_t snapshot);
+
+ private:
+  TableSchema schema_;
+  const leveldb::RawKeyOperator* raw_key_operator_;
+  leveldb::Comparator* cmp_;
+  uint64_t snapshot_;
 };
 
 class KvCompactStrategyFactory : public leveldb::CompactStrategyFactory {
-public:
-    KvCompactStrategyFactory(const TableSchema& schema);
-    virtual KvCompactStrategy* NewInstance();
-    virtual const char* Name() const {
-        return "tera.TTLKvCompactStrategyFactory";
-    }
-    virtual void SetArg(const void* arg) {
-        MutexLock lock(&mutex_);
-        schema_.CopyFrom(*(TableSchema*)arg);
-    }
+ public:
+  KvCompactStrategyFactory(const TableSchema& schema);
+  virtual KvCompactStrategy* NewInstance();
+  virtual const char* Name() const { return "tera.TTLKvCompactStrategyFactory"; }
+  virtual void SetArg(const void* arg) {
+    MutexLock lock(&mutex_);
+    schema_.CopyFrom(*(TableSchema*)arg);
+  }
 
-private:
-    TableSchema schema_;
-    mutable Mutex mutex_;
+ private:
+  TableSchema schema_;
+  mutable Mutex mutex_;
 };
 
-} // namespace io
-} // namespace tera
+}  // namespace io
+}  // namespace tera
 
-#endif // TERA_IO_TTLKV_COMPACT_STRATEGY_H_
+#endif  // TERA_IO_TTLKV_COMPACT_STRATEGY_H_

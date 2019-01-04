@@ -8,10 +8,10 @@ namespace tera {
 namespace utils {
 
 std::string GetRemoteAddress(google::protobuf::RpcController* controller) {
-    assert(controller != NULL);
-    sofa::pbrpc::RpcController* cntl = static_cast<sofa::pbrpc::RpcController*>(controller);
-    return cntl->RemoteAddress();
+  assert(controller != NULL);
+  sofa::pbrpc::RpcController* cntl = static_cast<sofa::pbrpc::RpcController*>(controller);
+  return cntl->RemoteAddress();
 }
 
-} // namespace utils
-} // namepsace tera
+}  // namespace utils
+}  // namepsace tera

@@ -8,44 +8,38 @@
 
 namespace tera {
 
-std::string StatusCodeToString(StatusCode status) {
-    return StatusCode_Name(status);
-}
+std::string StatusCodeToString(StatusCode status) { return StatusCode_Name(status); }
 
 std::string StatusCodeToString(TabletMeta::TabletStatus status) {
-    return TabletMeta::TabletStatus_Name(status);
+  return TabletMeta::TabletStatus_Name(status);
 }
 
-std::string StatusCodeToString(TableStatus status) {
-    return TableStatus_Name(status);
-}
+std::string StatusCodeToString(TableStatus status) { return TableStatus_Name(status); }
 
-std::string StatusCodeToString(CompactStatus status) {
-    return CompactStatus_Name(status);
-}
+std::string StatusCodeToString(CompactStatus status) { return CompactStatus_Name(status); }
 
 void SetStatusCode(const StatusCode& code, StatusCode* tera_status) {
-    if (tera_status) {
-        *tera_status = code;
-    }
+  if (tera_status) {
+    *tera_status = code;
+  }
 }
 
 void SetStatusCode(const TabletMeta::TabletStatus& tablet_status, StatusCode* tera_status) {
-    if (tera_status) {
-        *tera_status = static_cast<StatusCode>(tablet_status);
-    }
+  if (tera_status) {
+    *tera_status = static_cast<StatusCode>(tablet_status);
+  }
 }
 
 void SetStatusCode(const TableStatus& table_status, StatusCode* tera_status) {
-    if (tera_status) {
-        *tera_status = static_cast<StatusCode>(table_status);
-    }
+  if (tera_status) {
+    *tera_status = static_cast<StatusCode>(table_status);
+  }
 }
 
 void SetStatusCode(const CompactStatus& compact_status, StatusCode* tera_status) {
-    if (tera_status) {
-        *tera_status = static_cast<StatusCode>(compact_status);
-    }
+  if (tera_status) {
+    *tera_status = static_cast<StatusCode>(compact_status);
+  }
 }
 
-} // namespace tera
+}  // namespace tera

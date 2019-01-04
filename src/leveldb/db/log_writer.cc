@@ -16,17 +16,14 @@
 namespace leveldb {
 namespace log {
 
-Writer::Writer(WritableFile* dest)
-    : dest_(dest),
-      block_offset_(0) {
+Writer::Writer(WritableFile* dest) : dest_(dest), block_offset_(0) {
   for (int i = 0; i <= kMaxRecordType; i++) {
     char t = static_cast<char>(i);
     type_crc_[i] = crc32c::Value(&t, 1);
   }
 }
 
-Writer::~Writer() {
-}
+Writer::~Writer() {}
 
 Status Writer::AddRecord(const Slice& slice) {
   const char* ptr = slice.data();
@@ -88,7 +85,7 @@ Status Writer::EmitPhysicalRecord(RecordType t, const char* ptr, size_t n) {
 
   // Compute the crc of the record type and the payload.
   uint32_t crc = crc32c::Extend(type_crc_[t], ptr, n);
-  crc = crc32c::Mask(crc);                 // Adjust for storage
+  crc = crc32c::Mask(crc);  // Adjust for storage
   EncodeFixed32(buf, crc);
 
   // Write the header and the payload

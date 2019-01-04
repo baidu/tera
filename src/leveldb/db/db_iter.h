@@ -18,13 +18,10 @@ namespace leveldb {
 // Return a new iterator that converts internal keys (yielded by
 // "*internal_iter") that were live at the specified "sequence" number
 // into appropriate user keys.
-extern Iterator* NewDBIterator(
-    const std::string* dbname,
-    Env* env,
-    const Comparator* user_key_comparator,
-    Iterator* internal_iter,
-    const SequenceNumber& sequence,
-    const std::map<uint64_t, uint64_t>& rollbacks);
+extern Iterator* NewDBIterator(const std::string* dbname, Env* env,
+                               const Comparator* user_key_comparator, Iterator* internal_iter,
+                               const SequenceNumber& sequence,
+                               const std::map<uint64_t, uint64_t>& rollbacks);
 
 }  // namespace leveldb
 
