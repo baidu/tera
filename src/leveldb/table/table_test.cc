@@ -10,8 +10,17 @@
 
 #include <map>
 #include <string>
+#include <sstream>
+#include <unordered_map>
+#include <iomanip>
+#include <atomic>
+#include <thread>
+#include <chrono>
+
 #include "db/dbformat.h"
 #include "db/memtable.h"
+#include "db/memtable_on_leveldb.h"
+#include "db/sharded_memtable.h"
 #include "db/write_batch_internal.h"
 #include "leveldb/db.h"
 #include "leveldb/env.h"
@@ -19,10 +28,13 @@
 #include "leveldb/table_builder.h"
 #include "table/block.h"
 #include "table/block_builder.h"
-#include "table/format.h"
+#include "format.h"
 #include "util/random.h"
 #include "util/testharness.h"
 #include "util/testutil.h"
+#include "leveldb/persistent_cache.h"
+#include "common/event.h"
+#include "util/dfs_read_thread_limiter.h"
 
 namespace leveldb {
 
@@ -31,8 +43,7 @@ namespace leveldb {
 static std::string Reverse(const Slice& key) {
   std::string str(key.ToString());
   std::string rev("");
-  for (std::string::reverse_iterator rit = str.rbegin();
-       rit != str.rend(); ++rit) {
+  for (std::string::reverse_iterator rit = str.rbegin(); rit != str.rend(); ++rit) {
     rev.push_back(*rit);
   }
   return rev;
@@ -41,17 +52,13 @@ static std::string Reverse(const Slice& key) {
 namespace {
 class ReverseKeyComparator : public Comparator {
  public:
-  virtual const char* Name() const {
-    return "leveldb.ReverseBytewiseComparator";
-  }
+  virtual const char* Name() const { return "leveldb.ReverseBytewiseComparator"; }
 
   virtual int Compare(const Slice& a, const Slice& b) const {
     return BytewiseComparator()->Compare(Reverse(a), Reverse(b));
   }
 
-  virtual void FindShortestSeparator(
-      std::string* start,
-      const Slice& limit) const {
+  virtual void FindShortestSeparator(std::string* start, const Slice& limit) const {
     std::string s = Reverse(*start);
     std::string l = Reverse(limit);
     BytewiseComparator()->FindShortestSeparator(&s, l);
@@ -83,17 +90,17 @@ namespace {
 struct STLLessThan {
   const Comparator* cmp;
 
-  STLLessThan() : cmp(BytewiseComparator()) { }
-  STLLessThan(const Comparator* c) : cmp(c) { }
+  STLLessThan() : cmp(BytewiseComparator()) {}
+  STLLessThan(const Comparator* c) : cmp(c) {}
   bool operator()(const std::string& a, const std::string& b) const {
     return cmp->Compare(Slice(a), Slice(b)) < 0;
   }
 };
 }  // namespace
 
-class StringSink: public WritableFile {
+class StringSink : public WritableFile {
  public:
-  ~StringSink() { }
+  ~StringSink() {}
 
   const std::string& contents() const { return contents_; }
 
@@ -110,19 +117,15 @@ class StringSink: public WritableFile {
   std::string contents_;
 };
 
-
-class StringSource: public RandomAccessFile {
+class StringSource : public RandomAccessFile {
  public:
-  StringSource(const Slice& contents)
-      : contents_(contents.data(), contents.size()) {
-  }
+  StringSource(const Slice& contents) : contents_(contents.data(), contents.size()) {}
 
-  virtual ~StringSource() { }
+  virtual ~StringSource() {}
 
   uint64_t Size() const { return contents_.size(); }
 
-  virtual Status Read(uint64_t offset, size_t n, Slice* result,
-                       char* scratch) const {
+  virtual Status Read(uint64_t offset, size_t n, Slice* result, char* scratch) const {
     if (offset > contents_.size()) {
       return Status::InvalidArgument("invalid Read offset");
     }
@@ -144,24 +147,18 @@ typedef std::map<std::string, std::string, STLLessThan> KVMap;
 // BlockBuilder/TableBuilder and Block/Table.
 class Constructor {
  public:
-  explicit Constructor(const Comparator* cmp) : data_(STLLessThan(cmp)) { }
-  virtual ~Constructor() { }
+  explicit Constructor(const Comparator* cmp) : data_(STLLessThan(cmp)) {}
+  virtual ~Constructor() {}
 
-  void Add(const std::string& key, const Slice& value) {
-    data_[key] = value.ToString();
-  }
+  void Add(const std::string& key, const Slice& value) { data_[key] = value.ToString(); }
 
   // Finish constructing the data structure with all the keys that have
   // been added so far.  Returns the keys in sorted order in "*keys"
   // and stores the key/value pairs in "*kvmap"
-  void Finish(const Options& options,
-              std::vector<std::string>* keys,
-              KVMap* kvmap) {
+  void Finish(const Options& options, std::vector<std::string>* keys, KVMap* kvmap) {
     *kvmap = data_;
     keys->clear();
-    for (KVMap::const_iterator it = data_.begin();
-         it != data_.end();
-         ++it) {
+    for (KVMap::const_iterator it = data_.begin(); it != data_.end(); ++it) {
       keys->push_back(it->first);
     }
     data_.clear();
@@ -182,23 +179,17 @@ class Constructor {
   KVMap data_;
 };
 
-class BlockConstructor: public Constructor {
+class BlockConstructor : public Constructor {
  public:
   explicit BlockConstructor(const Comparator* cmp)
-      : Constructor(cmp),
-        comparator_(cmp),
-        block_(NULL) { }
-  ~BlockConstructor() {
-    delete block_;
-  }
+      : Constructor(cmp), comparator_(cmp), block_(NULL) {}
+  ~BlockConstructor() { delete block_; }
   virtual Status FinishImpl(const Options& options, const KVMap& data) {
     delete block_;
     block_ = NULL;
     BlockBuilder builder(&options);
 
-    for (KVMap::const_iterator it = data.begin();
-         it != data.end();
-         ++it) {
+    for (KVMap::const_iterator it = data.begin(); it != data.end(); ++it) {
       builder.Add(it->first, it->second);
     }
     // Open the block
@@ -210,9 +201,7 @@ class BlockConstructor: public Constructor {
     block_ = new Block(contents);
     return Status::OK();
   }
-  virtual Iterator* NewIterator() const {
-    return block_->NewIterator(comparator_);
-  }
+  virtual Iterator* NewIterator() const { return block_->NewIterator(comparator_); }
 
  private:
   const Comparator* comparator_;
@@ -222,27 +211,25 @@ class BlockConstructor: public Constructor {
   BlockConstructor();
 };
 
-class TableConstructor: public Constructor {
+template <bool enable_prefetch_scan>
+class TableConstructor : public Constructor {
  public:
   TableConstructor(const Comparator* cmp)
-      : Constructor(cmp),
-        db_opt_(new Options()),
-        source_(NULL), table_(NULL) {
-        db_opt_->comparator = cmp;
+      : Constructor(cmp), db_opt_(new Options()), source_(NULL), table_(NULL) {
+    db_opt_->comparator = cmp;
   }
   ~TableConstructor() {
     Reset();
-    delete db_opt_; // cannot delete db_opt_ in `Reset()',
-    db_opt_ = NULL; // not only ~Tableconstructor() but also FinishImpl() will call Reset()
+    delete db_opt_;  // cannot delete db_opt_ in `Reset()',
+    db_opt_ = NULL;  // not only ~Tableconstructor() but also FinishImpl() will
+                     // call Reset()
   }
   virtual Status FinishImpl(const Options& options, const KVMap& data) {
     Reset();
     StringSink sink;
     TableBuilder builder(options, &sink);
 
-    for (KVMap::const_iterator it = data.begin();
-         it != data.end();
-         ++it) {
+    for (KVMap::const_iterator it = data.begin(); it != data.end(); ++it) {
       builder.Add(it->first, it->second);
       ASSERT_TRUE(builder.status().ok());
     }
@@ -259,14 +246,14 @@ class TableConstructor: public Constructor {
   }
 
   virtual Iterator* NewIterator() const {
-    return table_->NewIterator(ReadOptions(db_opt_));
+    ReadOptions opt(db_opt_);
+    opt.prefetch_scan = enable_prefetch_scan;
+    return table_->NewIterator(opt);
   }
 
-  uint64_t ApproximateOffsetOf(const Slice& key) const {
-    return table_->ApproximateOffsetOf(key);
-  }
+  uint64_t ApproximateOffsetOf(const Slice& key) const { return table_->ApproximateOffsetOf(key); }
 
- private:
+ protected:
   void Reset() {
     delete table_;
     delete source_;
@@ -282,9 +269,9 @@ class TableConstructor: public Constructor {
 };
 
 // A helper class that converts internal format keys into user keys
-class KeyConvertingIterator: public Iterator {
+class KeyConvertingIterator : public Iterator {
  public:
-  explicit KeyConvertingIterator(Iterator* iter) : iter_(iter) { }
+  explicit KeyConvertingIterator(Iterator* iter) : iter_(iter) {}
   virtual ~KeyConvertingIterator() { delete iter_; }
   virtual bool Valid() const { return iter_->Valid(); }
   virtual void Seek(const Slice& target) {
@@ -309,9 +296,7 @@ class KeyConvertingIterator: public Iterator {
   }
 
   virtual Slice value() const { return iter_->value(); }
-  virtual Status status() const {
-    return status_.ok() ? iter_->status() : status_;
-  }
+  virtual Status status() const { return status_.ok() ? iter_->status() : status_; }
 
  private:
   mutable Status status_;
@@ -322,25 +307,26 @@ class KeyConvertingIterator: public Iterator {
   void operator=(const KeyConvertingIterator&);
 };
 
-class MemTableConstructor: public Constructor {
+template <class MemTableType, class... InitArgs>
+static MemTable* NewMemTable(InitArgs... args) {
+  return new MemTableType(std::forward<InitArgs>(args)...);
+};
+
+class MemTableConstructor : public Constructor {
  public:
-  explicit MemTableConstructor(const Comparator* cmp)
-      : Constructor(cmp),
-        internal_comparator_(cmp) {
-    memtable_ = new MemTable(internal_comparator_);
+  explicit MemTableConstructor(const Comparator* cmp,
+                               std::function<MemTable*(InternalKeyComparator)> new_mem)
+      : Constructor(cmp), internal_comparator_(cmp), new_mem_(new_mem) {
+    memtable_ = new_mem_(internal_comparator_);
     memtable_->Ref();
   }
-  ~MemTableConstructor() {
-    memtable_->Unref();
-  }
+  ~MemTableConstructor() { memtable_->Unref(); }
   virtual Status FinishImpl(const Options& options, const KVMap& data) {
     memtable_->Unref();
-    memtable_ = new MemTable(internal_comparator_);
+    memtable_ = new_mem_(internal_comparator_);
     memtable_->Ref();
     int seq = 1;
-    for (KVMap::const_iterator it = data.begin();
-         it != data.end();
-         ++it) {
+    for (KVMap::const_iterator it = data.begin(); it != data.end(); ++it) {
       memtable_->Add(seq, kTypeValue, it->first, it->second);
       seq++;
     }
@@ -353,35 +339,28 @@ class MemTableConstructor: public Constructor {
  private:
   InternalKeyComparator internal_comparator_;
   MemTable* memtable_;
+  std::function<MemTable*(InternalKeyComparator)> new_mem_;
 };
 
-class DBConstructor: public Constructor {
+class DBConstructor : public Constructor {
  public:
-  explicit DBConstructor(const Comparator* cmp)
-      : Constructor(cmp),
-        comparator_(cmp) {
+  explicit DBConstructor(const Comparator* cmp) : Constructor(cmp), comparator_(cmp) {
     db_ = NULL;
     NewDB();
   }
-  ~DBConstructor() {
-    delete db_;
-  }
+  ~DBConstructor() { delete db_; }
   virtual Status FinishImpl(const Options& options, const KVMap& data) {
     delete db_;
     db_ = NULL;
     NewDB();
-    for (KVMap::const_iterator it = data.begin();
-         it != data.end();
-         ++it) {
+    for (KVMap::const_iterator it = data.begin(); it != data.end(); ++it) {
       WriteBatch batch;
       batch.Put(it->first, it->second);
       ASSERT_TRUE(db_->Write(WriteOptions(), &batch).ok());
     }
     return Status::OK();
   }
-  virtual Iterator* NewIterator() const {
-    return db_->NewIterator(ReadOptions());
-  }
+  virtual Iterator* NewIterator() const { return db_->NewIterator(ReadOptions()); }
 
   virtual DB* db() const { return db_; }
 
@@ -408,7 +387,11 @@ enum TestType {
   TABLE_TEST,
   BLOCK_TEST,
   MEMTABLE_TEST,
-  DB_TEST
+  DB_TEST,
+  MEMTABLE_ON_LEVELDB_TEST,
+  SHARD_MEMTABLE_TEST,
+  SHARD_MEMTABLE_ON_LEVELDB_TEST,
+  PREFETCHED_TABLE_TEST,
 };
 
 struct TestArgs {
@@ -418,33 +401,45 @@ struct TestArgs {
 };
 
 static const TestArgs kTestArgList[] = {
-  { TABLE_TEST, false, 16 },
-  { TABLE_TEST, false, 1 },
-  { TABLE_TEST, false, 1024 },
-  { TABLE_TEST, true, 16 },
-  { TABLE_TEST, true, 1 },
-  { TABLE_TEST, true, 1024 },
+    {TABLE_TEST, false, 16},
+    {TABLE_TEST, false, 1},
+    {TABLE_TEST, false, 1024},
+    {TABLE_TEST, true, 16},
+    {TABLE_TEST, true, 1},
+    {TABLE_TEST, true, 1024},
+    {PREFETCHED_TABLE_TEST, false, 16},
+    {PREFETCHED_TABLE_TEST, false, 1},
+    {PREFETCHED_TABLE_TEST, false, 1024},
+    {PREFETCHED_TABLE_TEST, true, 16},
+    {PREFETCHED_TABLE_TEST, true, 1},
+    {PREFETCHED_TABLE_TEST, true, 1024},
 
-  { BLOCK_TEST, false, 16 },
-  { BLOCK_TEST, false, 1 },
-  { BLOCK_TEST, false, 1024 },
-  { BLOCK_TEST, true, 16 },
-  { BLOCK_TEST, true, 1 },
-  { BLOCK_TEST, true, 1024 },
+    {BLOCK_TEST, false, 16},
+    {BLOCK_TEST, false, 1},
+    {BLOCK_TEST, false, 1024},
+    {BLOCK_TEST, true, 16},
+    {BLOCK_TEST, true, 1},
+    {BLOCK_TEST, true, 1024},
 
-  // Restart interval does not matter for memtables
-  { MEMTABLE_TEST, false, 16 },
-  { MEMTABLE_TEST, true, 16 },
+    // Restart interval does not matter for memtables
+    {MEMTABLE_TEST, false, 16},
+    {MEMTABLE_TEST, true, 16},
+    {MEMTABLE_ON_LEVELDB_TEST, false, 16},
+    {MEMTABLE_ON_LEVELDB_TEST, true, 16},
+    {SHARD_MEMTABLE_TEST, false, 16},
+    {SHARD_MEMTABLE_TEST, true, 16},
+    {SHARD_MEMTABLE_ON_LEVELDB_TEST, false, 16},
+    {SHARD_MEMTABLE_ON_LEVELDB_TEST, true, 16},
 
-  // Do not bother with restart interval variations for DB
-  { DB_TEST, false, 16 },
-  { DB_TEST, true, 16 },
+    // Do not bother with restart interval variations for DB
+    {DB_TEST, false, 16},
+    {DB_TEST, true, 16},
 };
 static const int kNumTestArgs = sizeof(kTestArgList) / sizeof(kTestArgList[0]);
 
 class Harness {
  public:
-  Harness() : constructor_(NULL) { }
+  Harness() : constructor_(NULL) {}
 
   void Init(const TestArgs& args) {
     delete constructor_;
@@ -460,27 +455,51 @@ class Harness {
     }
     switch (args.type) {
       case TABLE_TEST:
-        constructor_ = new TableConstructor(options_.comparator);
+        constructor_ = new TableConstructor<false>(options_.comparator);
         break;
       case BLOCK_TEST:
         constructor_ = new BlockConstructor(options_.comparator);
         break;
       case MEMTABLE_TEST:
-        constructor_ = new MemTableConstructor(options_.comparator);
+        constructor_ = new MemTableConstructor(
+            options_.comparator,
+            std::bind(
+                NewMemTable<BaseMemTable, const InternalKeyComparator&, CompactStrategyFactory*>,
+                std::placeholders::_1, nullptr));
         break;
       case DB_TEST:
         constructor_ = new DBConstructor(options_.comparator);
         break;
+      case MEMTABLE_ON_LEVELDB_TEST:
+        constructor_ = new MemTableConstructor(
+            options_.comparator,
+            std::bind(NewMemTable<MemTableOnLevelDB, std::string, const InternalKeyComparator&,
+                                  CompactStrategyFactory*, size_t, size_t, Logger*>,
+                      "MemTableTest", std::placeholders::_1, nullptr, 1024, 1024, nullptr));
+        break;
+      case SHARD_MEMTABLE_TEST:
+        constructor_ = new MemTableConstructor(
+            options_.comparator,
+            std::bind(NewMemTable<ShardedMemTable, const InternalKeyComparator&,
+                                  CompactStrategyFactory*, int32_t>,
+                      std::placeholders::_1, nullptr, 16));
+        break;
+      case SHARD_MEMTABLE_ON_LEVELDB_TEST:
+        constructor_ = new MemTableConstructor(
+            options_.comparator,
+            std::bind(NewMemTable<ShardedMemTable, std::string, InternalKeyComparator,
+                                  CompactStrategyFactory*, size_t, size_t, Logger*, int32_t>,
+                      "MemTableTest", std::placeholders::_1, nullptr, 1024, 1024, nullptr, 16));
+        break;
+      case PREFETCHED_TABLE_TEST:
+        constructor_ = new TableConstructor<true>(options_.comparator);
+        break;
     }
   }
 
-  ~Harness() {
-    delete constructor_;
-  }
+  ~Harness() { delete constructor_; }
 
-  void Add(const std::string& key, const std::string& value) {
-    constructor_->Add(key, value);
-  }
+  void Add(const std::string& key, const std::string& value) { constructor_->Add(key, value); }
 
   void Test(Random* rnd) {
     std::vector<std::string> keys;
@@ -492,28 +511,24 @@ class Harness {
     TestRandomAccess(rnd, keys, data);
   }
 
-  void TestForwardScan(const std::vector<std::string>& keys,
-                       const KVMap& data) {
+  void TestForwardScan(const std::vector<std::string>& keys, const KVMap& data) {
     Iterator* iter = constructor_->NewIterator();
     ASSERT_TRUE(!iter->Valid());
     iter->SeekToFirst();
-    for (KVMap::const_iterator model_iter = data.begin();
-         model_iter != data.end();
-         ++model_iter) {
-      ASSERT_EQ(ToString(data, model_iter), ToString(iter));
+    for (KVMap::const_iterator model_iter = data.begin(); model_iter != data.end(); ++model_iter) {
+      ASSERT_EQ(ToString(data, model_iter), ToString(iter)) << ToString(iter)
+                                                            << ToString(data, model_iter);
       iter->Next();
     }
     ASSERT_TRUE(!iter->Valid());
     delete iter;
   }
 
-  void TestBackwardScan(const std::vector<std::string>& keys,
-                        const KVMap& data) {
+  void TestBackwardScan(const std::vector<std::string>& keys, const KVMap& data) {
     Iterator* iter = constructor_->NewIterator();
     ASSERT_TRUE(!iter->Valid());
     iter->SeekToLast();
-    for (KVMap::const_reverse_iterator model_iter = data.rbegin();
-         model_iter != data.rend();
+    for (KVMap::const_reverse_iterator model_iter = data.rbegin(); model_iter != data.rend();
          ++model_iter) {
       ASSERT_EQ(ToString(data, model_iter), ToString(iter));
       iter->Prev();
@@ -522,9 +537,7 @@ class Harness {
     delete iter;
   }
 
-  void TestRandomAccess(Random* rnd,
-                        const std::vector<std::string>& keys,
-                        const KVMap& data) {
+  void TestRandomAccess(Random* rnd, const std::vector<std::string>& keys, const KVMap& data) {
     static const bool kVerbose = false;
     Iterator* iter = constructor_->NewIterator();
     ASSERT_TRUE(!iter->Valid());
@@ -554,8 +567,7 @@ class Harness {
         case 2: {
           std::string key = PickRandomKey(rnd, keys);
           model_iter = data.lower_bound(key);
-          if (kVerbose) fprintf(stderr, "Seek '%s'\n",
-                                EscapeString(key).c_str());
+          if (kVerbose) fprintf(stderr, "Seek '%s'\n", EscapeString(key).c_str());
           iter->Seek(Slice(key));
           ASSERT_EQ(ToString(data, model_iter), ToString(iter));
           break;
@@ -566,7 +578,7 @@ class Harness {
             if (kVerbose) fprintf(stderr, "Prev\n");
             iter->Prev();
             if (model_iter == data.begin()) {
-              model_iter = data.end();   // Wrap around to invalid value
+              model_iter = data.end();  // Wrap around to invalid value
             } else {
               --model_iter;
             }
@@ -600,8 +612,7 @@ class Harness {
     }
   }
 
-  std::string ToString(const KVMap& data,
-                       const KVMap::const_reverse_iterator& it) {
+  std::string ToString(const KVMap& data, const KVMap::const_reverse_iterator& it) {
     if (it == data.rend()) {
       return "END";
     } else {
@@ -629,8 +640,8 @@ class Harness {
           break;
         case 1: {
           // Attempt to return something smaller than an existing key
-          if (result.size() > 0 && result[result.size()-1] > '\0') {
-            result[result.size()-1]--;
+          if (result.size() > 0 && result[result.size() - 1] > '\0') {
+            result[result.size() - 1]--;
           }
           break;
         }
@@ -725,11 +736,10 @@ TEST(Harness, Randomized) {
   for (int i = 0; i < kNumTestArgs; i++) {
     Init(kTestArgList[i]);
     Random rnd(test::RandomSeed() + 5);
-    for (int num_entries = 0; num_entries < 2000;
-         num_entries += (num_entries < 50 ? 1 : 200)) {
+    for (int num_entries = 0; num_entries < 2000; num_entries += (num_entries < 50 ? 1 : 200)) {
       if ((num_entries % 10) == 0) {
-        fprintf(stderr, "case %d of %d: num_entries = %d\n",
-                (i + 1), int(kNumTestArgs), num_entries);
+        fprintf(stderr, "case %d of %d: num_entries = %d\n", (i + 1), int(kNumTestArgs),
+                num_entries);
       }
       for (int e = 0; e < num_entries; e++) {
         std::string v;
@@ -743,7 +753,7 @@ TEST(Harness, Randomized) {
 
 TEST(Harness, RandomizedLongDB) {
   Random rnd(test::RandomSeed());
-  TestArgs args = { DB_TEST, false, 16 };
+  TestArgs args = {DB_TEST, false, 16};
   Init(args);
   int num_entries = 100000;
   for (int e = 0; e < num_entries; e++) {
@@ -765,11 +775,11 @@ TEST(Harness, RandomizedLongDB) {
   ASSERT_GT(files, 0);
 }
 
-class MemTableTest { };
+class MemTableTest {};
 
 TEST(MemTableTest, Simple) {
   InternalKeyComparator cmp(BytewiseComparator());
-  MemTable* memtable = new MemTable(cmp);
+  MemTable* memtable = new BaseMemTable(cmp, nullptr);
   memtable->Ref();
   WriteBatch batch;
   WriteBatchInternal::SetSequence(&batch, 100);
@@ -782,8 +792,7 @@ TEST(MemTableTest, Simple) {
   Iterator* iter = memtable->NewIterator();
   iter->SeekToFirst();
   while (iter->Valid()) {
-    fprintf(stderr, "key: '%s' -> '%s'\n",
-            iter->key().ToString().c_str(),
+    fprintf(stderr, "key: '%s' -> '%s'\n", iter->key().ToString().c_str(),
             iter->value().ToString().c_str());
     iter->Next();
   }
@@ -792,21 +801,46 @@ TEST(MemTableTest, Simple) {
   memtable->Unref();
 }
 
+TEST(MemTableTest, ShardedMemTableTest) {
+  InternalKeyComparator cmp(BytewiseComparator());
+  MemTable* memtable = new ShardedMemTable(cmp, nullptr, 16);
+  memtable->Ref();
+  WriteBatch batch;
+  WriteBatchInternal::SetSequence(&batch, 100);
+  for (int i = 0; i != 1000; ++i) {
+    std::stringstream ss;
+    ss << std::setw(4) << std::setfill('0') << i;
+    batch.Put(ss.str(), ss.str());
+  }
+  ASSERT_TRUE(WriteBatchInternal::InsertInto(&batch, memtable).ok());
+
+  Iterator* iter = memtable->NewIterator();
+  iter->SeekToFirst();
+  for (int i = 0; i != 1000; ++i) {
+    ASSERT_TRUE(iter->Valid());
+    std::stringstream ss;
+    ss << std::setw(4) << std::setfill('0') << i;
+    ASSERT_EQ(ss.str(), iter->value().ToString());
+    iter->Next();
+  }
+  ASSERT_TRUE(!iter->Valid());
+  memtable->Unref();
+}
+
 static bool Between(uint64_t val, uint64_t low, uint64_t high) {
   bool result = (val >= low) && (val <= high);
   if (!result) {
-    fprintf(stderr, "Value %llu is not in range [%llu, %llu]\n",
-            (unsigned long long)(val),
-            (unsigned long long)(low),
-            (unsigned long long)(high));
+    fprintf(stderr, "Value %llu is not in range [%llu, %llu]\n", (unsigned long long)(val),
+            (unsigned long long)(low), (unsigned long long)(high));
   }
   return result;
 }
 
-class TableTest { };
+class TableTest {};
 
-TEST(TableTest, ApproximateOffsetOfPlain) {
-  TableConstructor c(BytewiseComparator());
+template <bool enable_prefetch_scan>
+void ApproximateOffsetOfPlainImpl() {
+  TableConstructor<enable_prefetch_scan> c(BytewiseComparator());
   c.Add("k01", "hello");
   c.Add("k02", "hello2");
   c.Add("k03", std::string(10000, 'x'));
@@ -821,18 +855,22 @@ TEST(TableTest, ApproximateOffsetOfPlain) {
   options.compression = kNoCompression;
   c.Finish(options, &keys, &kvmap);
 
-  ASSERT_TRUE(Between(c.ApproximateOffsetOf("abc"),       0,      0));
-  ASSERT_TRUE(Between(c.ApproximateOffsetOf("k01"),       0,      0));
-  ASSERT_TRUE(Between(c.ApproximateOffsetOf("k01a"),      0,      0));
-  ASSERT_TRUE(Between(c.ApproximateOffsetOf("k02"),       0,      0));
-  ASSERT_TRUE(Between(c.ApproximateOffsetOf("k03"),       0,      0));
-  ASSERT_TRUE(Between(c.ApproximateOffsetOf("k04"),   10000,  11000));
+  ASSERT_TRUE(Between(c.ApproximateOffsetOf("abc"), 0, 0));
+  ASSERT_TRUE(Between(c.ApproximateOffsetOf("k01"), 0, 0));
+  ASSERT_TRUE(Between(c.ApproximateOffsetOf("k01a"), 0, 0));
+  ASSERT_TRUE(Between(c.ApproximateOffsetOf("k02"), 0, 0));
+  ASSERT_TRUE(Between(c.ApproximateOffsetOf("k03"), 0, 0));
+  ASSERT_TRUE(Between(c.ApproximateOffsetOf("k04"), 10000, 11000));
   ASSERT_TRUE(Between(c.ApproximateOffsetOf("k04a"), 210000, 211000));
-  ASSERT_TRUE(Between(c.ApproximateOffsetOf("k05"),  210000, 211000));
-  ASSERT_TRUE(Between(c.ApproximateOffsetOf("k06"),  510000, 511000));
-  ASSERT_TRUE(Between(c.ApproximateOffsetOf("k07"),  510000, 511000));
-  ASSERT_TRUE(Between(c.ApproximateOffsetOf("xyz"),  610000, 612000));
+  ASSERT_TRUE(Between(c.ApproximateOffsetOf("k05"), 210000, 211000));
+  ASSERT_TRUE(Between(c.ApproximateOffsetOf("k06"), 510000, 511000));
+  ASSERT_TRUE(Between(c.ApproximateOffsetOf("k07"), 510000, 511000));
+  ASSERT_TRUE(Between(c.ApproximateOffsetOf("xyz"), 610000, 612000));
+}
 
+TEST(TableTest, ApproximateOffsetOfPlain) {
+  ApproximateOffsetOfPlainImpl<true>();
+  ApproximateOffsetOfPlainImpl<false>();
 }
 
 static bool SnappyCompressionSupported() {
@@ -841,14 +879,15 @@ static bool SnappyCompressionSupported() {
   return port::Snappy_Compress(in.data(), in.size(), &out);
 }
 
-TEST(TableTest, ApproximateOffsetOfCompressed) {
+template <bool enable_prefetch_scan>
+void ApproximateOffsetOfCompressed() {
   if (!SnappyCompressionSupported()) {
     fprintf(stderr, "skipping compression tests\n");
     return;
   }
 
   Random rnd(301);
-  TableConstructor c(BytewiseComparator());
+  TableConstructor<enable_prefetch_scan> c(BytewiseComparator());
   std::string tmp;
   c.Add("k01", "hello");
   c.Add("k02", test::CompressibleString(&rnd, 0.25, 10000, &tmp));
@@ -861,69 +900,202 @@ TEST(TableTest, ApproximateOffsetOfCompressed) {
   options.compression = kSnappyCompression;
   c.Finish(options, &keys, &kvmap);
 
-  ASSERT_TRUE(Between(c.ApproximateOffsetOf("abc"),       0,      0));
-  ASSERT_TRUE(Between(c.ApproximateOffsetOf("k01"),       0,      0));
-  ASSERT_TRUE(Between(c.ApproximateOffsetOf("k02"),       0,      0));
-  ASSERT_TRUE(Between(c.ApproximateOffsetOf("k03"),    2000,   3000));
-  ASSERT_TRUE(Between(c.ApproximateOffsetOf("k04"),    2000,   3000));
-  ASSERT_TRUE(Between(c.ApproximateOffsetOf("xyz"),    4000,   6000));
+  ASSERT_TRUE(Between(c.ApproximateOffsetOf("abc"), 0, 0));
+  ASSERT_TRUE(Between(c.ApproximateOffsetOf("k01"), 0, 0));
+  ASSERT_TRUE(Between(c.ApproximateOffsetOf("k02"), 0, 0));
+  ASSERT_TRUE(Between(c.ApproximateOffsetOf("k03"), 2000, 3000));
+  ASSERT_TRUE(Between(c.ApproximateOffsetOf("k04"), 2000, 3000));
+  ASSERT_TRUE(Between(c.ApproximateOffsetOf("xyz"), 4000, 6000));
+}
+
+TEST(TableTest, ApproximateOffsetOfCompressed) {
+  ApproximateOffsetOfCompressed<false>();
+  ApproximateOffsetOfCompressed<true>();
 }
 
 class FormatTest {};
 
 static void CheckAlign(RandomAccessFile* file, size_t alignment, uint64_t offset, size_t len) {
-    DirectIOArgs args;
-    char* buf = DirectIOAlign(file, offset, len, &args);
-    if (buf != NULL) {
-        free(buf);
-    }
-    ASSERT_TRUE(args.aligned_offset % alignment == 0);
-    ASSERT_TRUE(args.aligned_len % alignment == 0);
-    ASSERT_TRUE(args.aligned_offset >= 0 && args.aligned_offset <= offset);
-    ASSERT_TRUE(args.aligned_len >= 0 && args.aligned_len >= len);
-    ASSERT_TRUE(args.aligned_offset + args.aligned_len >= offset + len);
+  DirectIOArgs args;
+  char* buf = DirectIOAlign(file, offset, len, &args);
+  if (buf != NULL) {
+    free(buf);
+  }
+  ASSERT_TRUE(args.aligned_offset % alignment == 0);
+  ASSERT_TRUE(args.aligned_len % alignment == 0);
+  ASSERT_TRUE(args.aligned_offset >= 0 && args.aligned_offset <= offset);
+  ASSERT_TRUE(args.aligned_len >= 0 && args.aligned_len >= len);
+  ASSERT_TRUE(args.aligned_offset + args.aligned_len >= offset + len);
 }
 
 TEST(FormatTest, DirectIOAlign) {
-    WritableFile* write_file;
-    RandomAccessFile* file;
-    std::string filename = "/tmp/direct_io_align";
-    ASSERT_OK(Env::Default()->NewWritableFile(filename, &write_file, EnvOptions()));
-    ASSERT_OK(write_file->Append("test"));
-    ASSERT_OK(write_file->Close());
-    ASSERT_OK(Env::Default()->NewRandomAccessFile(filename, &file, EnvOptions()));
-    size_t alignment = file->GetRequiredBufferAlignment();
+  WritableFile* write_file;
+  RandomAccessFile* file;
+  std::string filename = "/tmp/direct_io_align";
+  ASSERT_OK(Env::Default()->NewWritableFile(filename, &write_file, EnvOptions()));
+  ASSERT_OK(write_file->Append("test"));
+  ASSERT_OK(write_file->Close());
+  ASSERT_OK(Env::Default()->NewRandomAccessFile(filename, &file, EnvOptions()));
+  size_t alignment = file->GetRequiredBufferAlignment();
 
-    uint64_t offset = 0;
-    size_t len = 0;
-    uint64_t offset_before = 1;
-    size_t len_before = 1;
-    for (int i = 0; i < 10; ++i) {
-        for (int j = 0; j < 10; ++j) {
-            offset = alignment * j;
-            len = alignment * i;
-            // same to align
-            CheckAlign(file, alignment, offset, len);
-            // offset = align * j + 1
-            // len = align * i + 1
-            CheckAlign(file, alignment, offset + offset_before, len + len_before);
-            // offset = align * j - 1 && offset >= 0
-            // len = align * i - 1 && len >= 0
-            uint64_t tmp_offset = offset == 0 ? 0 : offset - offset_before;
-            size_t tmp_len = len == 0 ? 0 : len - len_before;
-            CheckAlign(file, alignment, tmp_offset, tmp_len);
-            // offset = align * j + 1
-            // len = align * i - 1 && len >= 0
-            CheckAlign(file, alignment, offset + offset_before, tmp_len); 
-            // offset = align * j - 1 && offset >= 0
-            // len = align * i + 1
-            CheckAlign(file, alignment, tmp_offset, len + len_before);
-        }
+  uint64_t offset = 0;
+  size_t len = 0;
+  uint64_t offset_before = 1;
+  size_t len_before = 1;
+  for (int i = 0; i < 10; ++i) {
+    for (int j = 0; j < 10; ++j) {
+      offset = alignment * j;
+      len = alignment * i;
+      // same to align
+      CheckAlign(file, alignment, offset, len);
+      // offset = align * j + 1
+      // len = align * i + 1
+      CheckAlign(file, alignment, offset + offset_before, len + len_before);
+      // offset = align * j - 1 && offset >= 0
+      // len = align * i - 1 && len >= 0
+      uint64_t tmp_offset = offset == 0 ? 0 : offset - offset_before;
+      size_t tmp_len = len == 0 ? 0 : len - len_before;
+      CheckAlign(file, alignment, tmp_offset, tmp_len);
+      // offset = align * j + 1
+      // len = align * i - 1 && len >= 0
+      CheckAlign(file, alignment, offset + offset_before, tmp_len);
+      // offset = align * j - 1 && offset >= 0
+      // len = align * i + 1
+      CheckAlign(file, alignment, tmp_offset, len + len_before);
     }
+  }
 }
 
+class MockRandomAccessFile : public RandomAccessFile {
+ public:
+  MockRandomAccessFile(std::atomic<int>* r) : reader{r} {};
+
+  ~MockRandomAccessFile() override = default;
+
+  Status Read(uint64_t offset, size_t n, Slice* result, char* scratch) const override {
+    ++*reader;
+    event_.Wait();
+    return Status::NotFound("Mock random access file");
+  }
+
+  std::string GetFileName() const override { return "abc"; }
+
+  void Set() { event_.Set(); }
+
+ private:
+  mutable common::AutoResetEvent event_;
+  std::atomic<int>* reader;
+};
+
+class MockPersistentCache : public PersistentCache {
+ public:
+  ~MockPersistentCache() override = default;
+
+  Status Read(const Slice& key, size_t offset, size_t length, Slice* content,
+              SstDataScratch* scratch) override {
+    return Status::NotFound("not-found");
+  }
+
+  void ForceEvict(const Slice& key) override { return; }
+
+  Status NewWriteableCacheFile(const std::string& path, WriteableCacheFile** pFile) override {
+    return Status::InvalidArgument("Mock Persistent Cache");
+  }
+
+  size_t GetCapacity() const override { return 0; }
+
+  size_t GetUsage() const override { return 0; }
+
+  Status Open() override { return Status::InvalidArgument("Mock Persistent Cache"); }
+
+  std::vector<std::string> GetAllKeys() override { return {}; }
+
+  void GarbageCollect() override { return; }
+};
+
+class DfsLimiterTest {};
+static void ReadFileWithCheck(RandomAccessFile* file, ReadOptions* opt,
+                              std::function<bool(Status* s)> checker) {
+  // handle is not important
+  BlockHandle handle;
+  handle.set_offset(1000);
+  handle.set_size(100);
+  BlockContents bc;
+  auto s = ReadBlock(file, *opt, handle, &bc);
+  fprintf(stderr, "status %s\n", s.ToString().c_str());
+  ASSERT_TRUE(checker(&s));
+}
+TEST(DfsLimiterTest, RejectTest) {
+  for (auto limit_val : {0, 10, 50}) {
+    leveldb::DfsReadThreadLimiter::Instance().SetLimit(limit_val);
+    Options opt;
+    opt.persistent_cache.reset(new MockPersistentCache);
+    ReadOptions read_opt;
+    read_opt.db_opt = &opt;
+    read_opt.enable_dfs_read_thread_limiter = true;
+    std::vector<std::unique_ptr<MockRandomAccessFile>> files;
+    std::atomic<int> reader{0};
+    for (auto i = 0; i != limit_val + 20; ++i) {
+      files.emplace_back(new MockRandomAccessFile{&reader});
+    }
+    std::vector<std::thread> threads;
+    std::atomic<int> reject_count{0};
+    for (auto i = 0; i != limit_val; ++i) {
+      threads.emplace_back(ReadFileWithCheck, (RandomAccessFile*)files[i].get(), &read_opt,
+                           &Status::IsNotFound);
+    }
+    while (reader.load() != limit_val) {
+      fprintf(stderr, "Waiting for reader == %d, current %d.\n", limit_val, reader.load());
+      std::this_thread::sleep_for(std::chrono::seconds(1));
+    }
+    for (auto i = 0; i != 20; ++i) {
+      threads.emplace_back(ReadFileWithCheck, (RandomAccessFile*)files[i].get(), &read_opt,
+                           [&reject_count](Status* s) {
+                             if (s->IsReject()) {
+                               ++reject_count;
+                               return true;
+                             } else {
+                               return false;
+                             }
+                           });
+    }
+    while (reject_count.load() != 20) {
+      fprintf(stderr, "Waiting for reject_count == %d, current %d.\n", 20, reject_count.load());
+      std::this_thread::sleep_for(std::chrono::seconds(1));
+    }
+    for (auto& file : files) {
+      file->Set();
+    }
+    for (auto& thread : threads) {
+      thread.join();
+    }
+  }
+}
+
+TEST(TableTest, SeekToKeyGapTest) {
+  StringSink sink;
+  Options options;
+  TableBuilder builder(options, &sink);
+  builder.Add("ab", "abb");
+  builder.Flush();
+  builder.Add("ad", "add");
+  Status s = builder.Finish();
+  ASSERT_TRUE(s.ok()) << s.ToString();
+  ASSERT_EQ(sink.contents().size(), builder.FileSize());
+  // Open the table
+  auto source = new StringSource(sink.contents());
+  Table* table;
+  s = Table::Open(options, source, sink.contents().size(), &table);
+  ASSERT_TRUE(s.ok()) << s.ToString();
+  ReadOptions r_options(&options);
+  r_options.prefetch_scan = true;
+  auto iter = table->NewIterator(r_options);
+  iter->Seek("abb");
+  ASSERT_TRUE(iter->Valid());
+  ASSERT_EQ(iter->key().ToString(), "ad");
+  ASSERT_EQ(iter->value().ToString(), "add");
+  delete iter;
+}
 }  // namespace leveldb
 
-int main(int argc, char** argv) {
-  return leveldb::test::RunAllTests();
-}
+int main(int argc, char** argv) { return leveldb::test::RunAllTests(); }

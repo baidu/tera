@@ -16,61 +16,67 @@ namespace tera {
 namespace master {
 
 enum class DeleteTablePhase {
-    kPrepare,
-    kDeleteTable,
-    kUpdateMeta,
-    kEofPhase,
+  kPrepare,
+  kDeleteTable,
+  kUpdateMeta,
+  kEofPhase,
 };
 
-std::ostream& operator<< (std::ostream& o, const DeleteTablePhase& phase);
+std::ostream& operator<<(std::ostream& o, const DeleteTablePhase& phase);
 
 class DeleteTableProcedure : public Procedure {
-public:
-    DeleteTableProcedure(TablePtr table, 
-            const DeleteTableRequest* request, 
-            DeleteTableResponse* response, 
-            google::protobuf::Closure* closure,
-            ThreadPool* thread_pool);
+ public:
+  DeleteTableProcedure(TablePtr table, const DeleteTableRequest* request,
+                       DeleteTableResponse* response, google::protobuf::Closure* closure,
+                       ThreadPool* thread_pool);
 
-    virtual ~DeleteTableProcedure() {}
+  virtual ~DeleteTableProcedure() {}
 
-    virtual std::string ProcId() const;
+  virtual std::string ProcId() const;
 
-    virtual void RunNextStage();
+  virtual void RunNextStage();
 
-    virtual bool Done() {return done_.load();}
+  virtual bool Done() { return done_.load(); }
 
-private:
-    typedef std::function<void (DeleteTableProcedure*, const DeleteTablePhase&)> DeleteTablePhaseHandler;
+ private:
+  typedef std::function<void(DeleteTableProcedure*, const DeleteTablePhase&)>
+      DeleteTablePhaseHandler;
 
-    void SetNextPhase(const DeleteTablePhase& phase) {phases_.push_back(phase);}
-    DeleteTablePhase GetCurrentPhase() {return phases_.back();}
+  void SetNextPhase(const DeleteTablePhase& phase) {
+    std::lock_guard<std::mutex> lock_guard(phase_mutex_);
+    phases_.push_back(phase);
+  }
 
-    void EnterPhaseWithResponseStatus(StatusCode status, DeleteTablePhase phase) {
-        response_->set_status(status);
-        SetNextPhase(phase);
-    }
+  DeleteTablePhase GetCurrentPhase() {
+    std::lock_guard<std::mutex> lock_guard(phase_mutex_);
+    return phases_.back();
+  }
 
-    void PrepareHandler(const DeleteTablePhase& phase);
-    void DeleteTableHandler(const DeleteTablePhase& phase);
-    void UpdateMetaHandler(const DeleteTablePhase& phase);
-    void EofPhaseHandler(const DeleteTablePhase& phase);
+  void EnterPhaseWithResponseStatus(StatusCode status, DeleteTablePhase phase) {
+    response_->set_status(status);
+    SetNextPhase(phase);
+  }
 
-    void UpdateMetaDone(bool succ);
+  void PrepareHandler(const DeleteTablePhase& phase);
+  void DeleteTableHandler(const DeleteTablePhase& phase);
+  void UpdateMetaHandler(const DeleteTablePhase& phase);
+  void EofPhaseHandler(const DeleteTablePhase& phase);
 
-private:
-    TablePtr table_;
-    const DeleteTableRequest* request_;
-    DeleteTableResponse* response_;
-    google::protobuf::Closure* rpc_closure_;
-    std::string table_name_;
-    std::atomic<bool> update_meta_;
-    std::atomic<bool> done_;
-    std::vector<MetaWriteRecord> meta_records_;
-    std::vector<DeleteTablePhase> phases_;
-    static std::map<DeleteTablePhase, DeleteTablePhaseHandler> phase_handlers_;
-    ThreadPool* thread_pool_;
+  void UpdateMetaDone(bool succ);
+
+ private:
+  TablePtr table_;
+  const DeleteTableRequest* request_;
+  DeleteTableResponse* response_;
+  google::protobuf::Closure* rpc_closure_;
+  std::string table_name_;
+  std::atomic<bool> update_meta_;
+  std::atomic<bool> done_;
+  std::vector<MetaWriteRecord> meta_records_;
+  std::mutex phase_mutex_;
+  std::vector<DeleteTablePhase> phases_;
+  static std::map<DeleteTablePhase, DeleteTablePhaseHandler> phase_handlers_;
+  ThreadPool* thread_pool_;
 };
-
 }
 }

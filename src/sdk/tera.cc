@@ -9,111 +9,109 @@
 namespace tera {
 
 static const char* strerr(ErrorCode::ErrorCodeType type) {
-    const char* ret = "Unknown error";
-    switch (type) {
+  const char* ret = "Unknown error";
+  switch (type) {
     case ErrorCode::kOK:
-        ret = "OK";
-        break;
+      ret = "OK";
+      break;
     case ErrorCode::kNotFound:
-        ret = "Not Found";
-        break;
+      ret = "Not Found";
+      break;
     case ErrorCode::kBadParam:
-        ret = "Bad Parameter";
-        break;
+      ret = "Bad Parameter";
+      break;
     case ErrorCode::kSystem:
-        ret = "SystemError";
-        break;
+      ret = "SystemError";
+      break;
     case ErrorCode::kTimeout:
-        ret = "Timeout";
-        break;
+      ret = "Timeout";
+      break;
     case ErrorCode::kBusy:
-        ret = "SystemBusy";
-        break;
+      ret = "SystemBusy";
+      break;
     case ErrorCode::kNoQuota:
-        ret = "UserNoQuota";
-        break;
+      ret = "UserNoQuota";
+      break;
     case ErrorCode::kNoAuth:
-        ret = "UserUnauthorized";
-        break;
+      ret = "UserUnauthorized";
+      break;
     case ErrorCode::kNotImpl:
-        ret = "Not Implement";
-        break;
+      ret = "Not Implement";
+      break;
     case ErrorCode::kTxnFail:
-        ret = "TransactionFail";
-        break;
+      ret = "TransactionFail";
+      break;
+    case ErrorCode::kAuthBadParam:
+      ret = "Auth Bad Parameter";
+      break;
+    case ErrorCode::kAuthLoginFailed:
+      ret = "Auth login failed";
+      break;
     case ErrorCode::kGTxnDataTooLarge:
-        ret = "GlobalTransactionDataTooLarge";
-        break;
+      ret = "GlobalTransactionDataTooLarge";
+      break;
     case ErrorCode::kGTxnNotSupport:
-        ret = "GlobalTransactionNotSupport";
-        break;
+      ret = "GlobalTransactionNotSupport";
+      break;
     case ErrorCode::kGTxnSchemaError:
-        ret = "GlobalTransactionSchemaError";
-        break;
+      ret = "GlobalTransactionSchemaError";
+      break;
     case ErrorCode::kGTxnOpAfterCommit:
-        ret = "GlobalTransactionOpAfterCommit";
-        break;
+      ret = "GlobalTransactionOpAfterCommit";
+      break;
     case ErrorCode::kGTxnPrimaryLost:
-        ret = "GlobalTransactionPrimaryLost";
-        break;
+      ret = "GlobalTransactionPrimaryLost";
+      break;
     case ErrorCode::kGTxnWriteConflict:
-        ret = "GlobalTransactionWriteConflict";
-        break;
+      ret = "GlobalTransactionWriteConflict";
+      break;
     case ErrorCode::kGTxnLockConflict:
-        ret = "GlobalTransactionLockConflict";
-        break;
+      ret = "GlobalTransactionLockConflict";
+      break;
     case ErrorCode::kGTxnOKButAckFailed:
-        ret = "GlobalTransactionOkButAckFailed";
-        break;
+      ret = "GlobalTransactionOkButAckFailed";
+      break;
     case ErrorCode::kGTxnOKButNotifyFailed:
-        ret = "GlobalTransactionOKButNotifyFailed";
-        break;
+      ret = "GlobalTransactionOKButNotifyFailed";
+      break;
     case ErrorCode::kGTxnPrewriteTimeout:
-        ret = "GlobalTransactionPrewriteTimeout";
-        break;
+      ret = "GlobalTransactionPrewriteTimeout";
+      break;
     case ErrorCode::kGTxnPrimaryCommitTimeout:
-        ret = "GlobalTransactionPrimaryCommitTimeout";
-        break;
+      ret = "GlobalTransactionPrimaryCommitTimeout";
+      break;
     case ErrorCode::kGTxnTimestampLost:
-        ret = "GlobalTransactionTimestampLost";
-        break;
+      ret = "GlobalTransactionTimestampLost";
+      break;
     default:
-        ret = "UnkownError";
-    }
-    return ret;
+      ret = "UnkownError";
+  }
+  return ret;
 }
 
-ErrorCode::ErrorCode() : err_(kOK) {
-}
+ErrorCode::ErrorCode() : err_(kOK) {}
 
 void ErrorCode::SetFailed(ErrorCodeType err, const std::string& reason) {
-    err_ = err;
-    reason_ = reason;
+  err_ = err;
+  reason_ = reason;
 }
 
 std::string ErrorCode::ToString() const {
-    std::string ret;
-    ret.append("type [");
-    ret.append(strerr(err_));
-    ret.append("], reason [");
-    ret.append(reason_);
-    ret.append("].");
-    return ret;
+  std::string ret;
+  ret.append("type [");
+  ret.append(strerr(err_));
+  ret.append("], reason [");
+  ret.append(reason_);
+  ret.append("].");
+  return ret;
 }
 
-std::string ErrorCode::GetReason() const {
-    return reason_;
-}
+std::string ErrorCode::GetReason() const { return reason_; }
 
-ErrorCode::ErrorCodeType ErrorCode::GetType() const {
-    return err_;
-}
+ErrorCode::ErrorCodeType ErrorCode::GetType() const { return err_; }
 
-const char* strerr(ErrorCode error_code) {
-    return strerr(error_code.GetType());
-}
+const char* strerr(ErrorCode error_code) { return strerr(error_code.GetType()); }
 
 const int64_t kLatestTimestamp = std::numeric_limits<long int>::max();
 const int64_t kOldestTimestamp = std::numeric_limits<long int>::min();
-
 }

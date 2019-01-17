@@ -39,8 +39,8 @@ extern bool GetLengthPrefixedSlice(Slice* input, Slice* result);
 // in *v and return a pointer just past the parsed value, or return
 // NULL on error.  These routines only look at bytes in the range
 // [p..limit-1]
-extern const char* GetVarint32Ptr(const char* p,const char* limit, uint32_t* v);
-extern const char* GetVarint64Ptr(const char* p,const char* limit, uint64_t* v);
+extern const char* GetVarint32Ptr(const char* p, const char* limit, uint32_t* v);
+extern const char* GetVarint64Ptr(const char* p, const char* limit, uint64_t* v);
 
 // Returns the length of the varint32 or varint64 encoding of "v"
 extern int VarintLength(uint64_t v);
@@ -66,10 +66,10 @@ inline uint32_t DecodeFixed32(const char* ptr) {
     memcpy(&result, ptr, sizeof(result));  // gcc optimizes this to a plain load
     return result;
   } else {
-    return ((static_cast<uint32_t>(static_cast<unsigned char>(ptr[0])))
-        | (static_cast<uint32_t>(static_cast<unsigned char>(ptr[1])) << 8)
-        | (static_cast<uint32_t>(static_cast<unsigned char>(ptr[2])) << 16)
-        | (static_cast<uint32_t>(static_cast<unsigned char>(ptr[3])) << 24));
+    return ((static_cast<uint32_t>(static_cast<unsigned char>(ptr[0]))) |
+            (static_cast<uint32_t>(static_cast<unsigned char>(ptr[1])) << 8) |
+            (static_cast<uint32_t>(static_cast<unsigned char>(ptr[2])) << 16) |
+            (static_cast<uint32_t>(static_cast<unsigned char>(ptr[3])) << 24));
   }
 }
 
@@ -87,12 +87,8 @@ inline uint64_t DecodeFixed64(const char* ptr) {
 }
 
 // Internal routine for use by fallback path of GetVarint32Ptr
-extern const char* GetVarint32PtrFallback(const char* p,
-                                          const char* limit,
-                                          uint32_t* value);
-inline const char* GetVarint32Ptr(const char* p,
-                                  const char* limit,
-                                  uint32_t* value) {
+extern const char* GetVarint32PtrFallback(const char* p, const char* limit, uint32_t* value);
+inline const char* GetVarint32Ptr(const char* p, const char* limit, uint32_t* value) {
   if (p < limit) {
     uint32_t result = *(reinterpret_cast<const unsigned char*>(p));
     if ((result & 128) == 0) {
@@ -104,34 +100,34 @@ inline const char* GetVarint32Ptr(const char* p,
 }
 
 inline void EncodeBigEndian32(char* buf, uint32_t value) {
-    buf[0] = (value >> 24) & 0xff;
-    buf[1] = (value >> 16) & 0xff;
-    buf[2] = (value >> 8) & 0xff;
-    buf[3] = value & 0xff;
+  buf[0] = (value >> 24) & 0xff;
+  buf[1] = (value >> 16) & 0xff;
+  buf[2] = (value >> 8) & 0xff;
+  buf[3] = value & 0xff;
 }
 
 inline uint32_t DecodeBigEndain32(const char* ptr) {
-    return ((static_cast<uint32_t>(static_cast<unsigned char>(ptr[3])))
-        | (static_cast<uint32_t>(static_cast<unsigned char>(ptr[2])) << 8)
-        | (static_cast<uint32_t>(static_cast<unsigned char>(ptr[1])) << 16)
-        | (static_cast<uint32_t>(static_cast<unsigned char>(ptr[0])) << 24));
+  return ((static_cast<uint32_t>(static_cast<unsigned char>(ptr[3]))) |
+          (static_cast<uint32_t>(static_cast<unsigned char>(ptr[2])) << 8) |
+          (static_cast<uint32_t>(static_cast<unsigned char>(ptr[1])) << 16) |
+          (static_cast<uint32_t>(static_cast<unsigned char>(ptr[0])) << 24));
 }
 
 inline void EncodeBigEndian(char* buf, uint64_t value) {
-    buf[0] = (value >> 56) & 0xff;
-    buf[1] = (value >> 48) & 0xff;
-    buf[2] = (value >> 40) & 0xff;
-    buf[3] = (value >> 32) & 0xff;
-    buf[4] = (value >> 24) & 0xff;
-    buf[5] = (value >> 16) & 0xff;
-    buf[6] = (value >> 8) & 0xff;
-    buf[7] = value & 0xff;
+  buf[0] = (value >> 56) & 0xff;
+  buf[1] = (value >> 48) & 0xff;
+  buf[2] = (value >> 40) & 0xff;
+  buf[3] = (value >> 32) & 0xff;
+  buf[4] = (value >> 24) & 0xff;
+  buf[5] = (value >> 16) & 0xff;
+  buf[6] = (value >> 8) & 0xff;
+  buf[7] = value & 0xff;
 }
 
 inline uint64_t DecodeBigEndain(const char* ptr) {
-    uint64_t lo = DecodeBigEndain32(ptr + 4);
-    uint64_t hi = DecodeBigEndain32(ptr);
-    return (hi << 32) | lo;
+  uint64_t lo = DecodeBigEndain32(ptr + 4);
+  uint64_t hi = DecodeBigEndain32(ptr);
+  return (hi << 32) | lo;
 }
 
 }  // namespace leveldb

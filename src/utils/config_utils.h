@@ -13,7 +13,7 @@ namespace utils {
 // `file' should be path/to/file, like "../conf/tera.flag"
 bool LoadFlagFile(const std::string& file);
 
-} // namespace utils
-} // namespace tera
+}  // namespace utils
+}  // namespace tera
 
-#endif // TERA_UTILS_CONFIG_UTILS_H_
+#endif  // TERA_UTILS_CONFIG_UTILS_H_

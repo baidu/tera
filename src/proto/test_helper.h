@@ -11,11 +11,10 @@ namespace tera {
 
 TableSchema DefaultTableSchema();
 
-ColumnFamilySchema DefaultCFSchema(const std::string& lg_name,
-                                   uint32_t id);
+ColumnFamilySchema DefaultCFSchema(const std::string& lg_name, uint32_t id);
 
 LocalityGroupSchema DefaultLGSchema(uint32_t id);
 
-} // namespace tera
+}  // namespace tera
 
-#endif // TERA_PROTO_TEST_HELPER_H_
+#endif  // TERA_PROTO_TEST_HELPER_H_

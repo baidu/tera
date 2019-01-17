@@ -7,21 +7,17 @@
 
 #include <stdint.h>
 
-enum FileOpenMode {
-    FILE_READ = 0x01,
-    FILE_WRITE = 0x02,
-    FILE_APPEND = 0x04
-};
+enum FileOpenMode { FILE_READ = 0x01, FILE_WRITE = 0x02, FILE_APPEND = 0x04 };
 
 enum FileErrorCode {
-    kFileSuccess,
-    kFileErrParameter,
-    kFileErrOpenFail,
-    kFileErrNotOpen,
-    kFileErrWrite,
-    kFileErrRead,
-    kFileErrClose,
-    kFileErrNotExit
+  kFileSuccess,
+  kFileErrParameter,
+  kFileErrOpenFail,
+  kFileErrNotOpen,
+  kFileErrWrite,
+  kFileErrRead,
+  kFileErrClose,
+  kFileErrNotExit
 };
 
-#endif // TERA_COMMON_FILE_FILE_DEF_H_
+#endif  // TERA_COMMON_FILE_FILE_DEF_H_

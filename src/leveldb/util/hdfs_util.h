@@ -14,9 +14,10 @@ namespace leveldb {
 
 static void HdfsFileInfo2PosixFileStat(hdfsFileInfo* info, struct stat* st) {
   memset(st, 0, sizeof(struct stat));
-  //by default: set to 0 to indicate not support for directory because we can not get this info
+  // by default: set to 0 to indicate not support for directory because we can
+  // not get this info
   st->st_nlink = (info->mKind == kObjectKindDirectory) ? 0 : 1;
-  uid_t owner_id = 99; // no body, magic number in linux
+  uid_t owner_id = 99;  // no body, magic number in linux
   if (info->mOwner != NULL) {
     struct passwd passwd_info;
     struct passwd* result = NULL;
@@ -28,9 +29,9 @@ static void HdfsFileInfo2PosixFileStat(hdfsFileInfo* info, struct stat* st) {
         owner_id = passwd_info.pw_uid;
       }
     }
-    delete [] pwbuf;
+    delete[] pwbuf;
   }
-  gid_t group_id = 99; // no body, magic number in posix
+  gid_t group_id = 99;  // no body, magic number in posix
   if (info->mGroup != NULL) {
     struct group result;
     struct group* resultp;
@@ -42,16 +43,16 @@ static void HdfsFileInfo2PosixFileStat(hdfsFileInfo* info, struct stat* st) {
         group_id = result.gr_gid;
       }
     }
-    delete [] group_buf;
+    delete[] group_buf;
   }
-  short file_mode = (info->mKind == kObjectKindDirectory) ? (S_IFDIR | 0777) :  (S_IFREG | 0666);
+  short file_mode = (info->mKind == kObjectKindDirectory) ? (S_IFDIR | 0777) : (S_IFREG | 0666);
   if (info->mPermissions > 0) {
-    file_mode = (info->mKind == kObjectKindDirectory) ? S_IFDIR:  S_IFREG;
+    file_mode = (info->mKind == kObjectKindDirectory) ? S_IFDIR : S_IFREG;
     file_mode |= info->mPermissions;
   }
   st->st_size = (info->mKind == kObjectKindDirectory) ? 4096 : info->mSize;
-  st->st_blksize = 512; // posix default block size
-  st->st_blocks = (st->st_size + st->st_blksize - 1)/st->st_blksize;
+  st->st_blksize = 512;  // posix default block size
+  st->st_blocks = (st->st_size + st->st_blksize - 1) / st->st_blksize;
   st->st_mode = file_mode;
   st->st_uid = owner_id;
   st->st_gid = group_id;

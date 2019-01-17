@@ -18,44 +18,44 @@
 namespace tera {
 
 class HeapProfiler {
-public:
+ public:
+  /**
+   * @brief Init HeapProfiler and the detect thread will start
+  **/
+  explicit HeapProfiler(const std::string& profiler_file = "HEAP");
+  /**
+   * @brief: the heap profiler will stop after descontrucor called
+   *
+  **/
+  ~HeapProfiler();
+  HeapProfiler& SetEnable(bool enable);
 
-    /**
-     * @brief Init HeapProfiler and the detect thread will start
-    **/
-    explicit HeapProfiler(const std::string& profiler_file="HEAP");
-    /**
-     * @brief: the heap profiler will stop after descontrucor called
-     *
-    **/
-    ~HeapProfiler();
-    HeapProfiler& SetEnable(bool enable);
-
-    HeapProfiler& SetInterval(int second) {
-        {
-            std::unique_lock<std::mutex> lock(lock_);
-            interval_ = std::chrono::seconds(second);
-        }
-
-        cv_.notify_one();
-        return *this;
+  HeapProfiler& SetInterval(int second) {
+    {
+      std::unique_lock<std::mutex> lock(lock_);
+      interval_ = std::chrono::seconds(second);
     }
 
-private:
-    void run();
-private:
-    std::atomic<bool> exit_;
-    bool enable_{false};
-    std::chrono::seconds interval_{10};
-    //Never Changed, So we can use profiler_file_.c_str() in safe.
-    const std::string profiler_file_;
-    std::mutex lock_;
-    std::condition_variable cv_;
-    std::thread thread_;
+    cv_.notify_one();
+    return *this;
+  }
+
+ private:
+  void run();
+
+ private:
+  std::atomic<bool> exit_;
+  bool enable_{false};
+  std::chrono::seconds interval_{10};
+  // Never Changed, So we can use profiler_file_.c_str() in safe.
+  const std::string profiler_file_;
+  std::mutex lock_;
+  std::condition_variable cv_;
+  std::thread thread_;
 };
 
-} // namespace tera
+}  // namespace tera
 
-#endif  //TERA_HEAP_PROFILER
+#endif  // TERA_HEAP_PROFILER
 
 /* vim: set ts=4 sw=4 sts=4 tw=100 */

@@ -3,6 +3,9 @@ import "status_code.proto";
 import "table_schema.proto";
 import "table_meta.proto";
 import "tabletnode.proto";
+import "access_control.proto";
+import "quota.proto";
+import "filter.proto";
 
 package tera;
 
@@ -11,6 +14,16 @@ package tera;
 message QueryRequest {
     required uint64 sequence_id = 1;
     optional bool is_gc_query = 2;
+
+    repeated UgiMetaInfo ugi_meta_infos = 3;
+    optional uint64 version = 4;
+    repeated RoleInfo role_infos = 5;
+
+    repeated TableQuota table_quotas = 7;
+    optional uint64 quota_version = 8;
+    optional double slowdown_write_ratio = 9;
+    optional uint64 dfs_write_throughput_hard_limit = 10;
+    optional uint64 dfs_read_throughput_hard_limit = 11;
 }
 
 message QueryResponse {
@@ -21,6 +34,8 @@ message QueryResponse {
     repeated InheritedLiveFiles inh_live_files = 5;
     repeated TabletInheritedFileInfo tablet_inh_file_infos = 6;
     repeated TabletBackgroundErrorInfo tablet_background_errors = 7;
+    optional uint64 version = 8;
+    optional uint64 quota_version = 10;
 }
 
 enum UpdateType {
@@ -51,7 +66,9 @@ message LoadTabletRequest {
     repeated uint64 snapshots_id = 9;
     repeated uint64 snapshots_sequence = 10;
     repeated uint64 parent_tablets = 11;
+    optional int64 create_time = 12;
     repeated string ignore_err_lgs = 13; 
+    optional uint64 version = 14;
 }
 
 message LoadTabletResponse {
@@ -65,6 +82,7 @@ message UnloadTabletRequest {
     required string tablet_name = 2;
     required KeyRange key_range = 3;
     optional string session_id = 4;
+    optional string path = 5;
 }
 
 message UnloadTabletResponse {
@@ -138,6 +156,8 @@ message WriteTabletRequest {
     repeated RowMutationSequence row_list = 6;
     //optional uint64 session_id = 7 [default = 0];
     optional int64 timestamp = 8 [default = 0];
+    optional IdentityInfo identity_info = 9;
+    optional int64 client_timeout_ms = 10 [default = 0];
 }
 
 message WriteTabletResponse {
@@ -228,6 +248,8 @@ message ScanTabletRequest {
     optional int64 timeout = 19;
     optional int64 number_limit = 21;
     optional uint64 max_qualifiers = 22;
+    optional IdentityInfo identity_info = 23;
+    optional filter.FilterDesc filter = 24;
 }
 
 message ScanTabletResponse {
@@ -239,6 +261,9 @@ message ScanTabletResponse {
     optional bytes end = 7;
     optional uint64 results_id = 8;
     optional KeyValuePair next_start_point = 9;
+    optional uint32 data_size = 10;
+    optional uint32 row_count = 11;
+    optional uint32 cell_count = 12;
 }
 
 message RowReaderInfo {
@@ -248,6 +273,7 @@ message RowReaderInfo {
     optional FilterList filter_list = 4;
     optional uint32 max_version = 5;
     optional uint64 max_qualifiers = 6;
+    optional filter.FilterDesc filter = 7;
 }
 
 message ReadTabletRequest {
@@ -259,6 +285,7 @@ message ReadTabletRequest {
     optional uint64 snapshot_id = 6;
     optional int64 timestamp = 7 [default = 0];
     optional int64 client_timeout_ms = 8 [default = 0];
+    optional IdentityInfo identity_info = 9;
 }
 
 message ReadTabletResponse {
@@ -331,7 +358,6 @@ service TabletNodeServer {
         //option (sofa.pbrpc.response_compress_type) = CompressTypeGzip;
     }
 
-    rpc SplitTablet(SplitTabletRequest) returns(SplitTabletResponse);
     rpc ComputeSplitKey(SplitTabletRequest) returns (SplitTabletResponse);
 
     rpc CmdCtrl(TsCmdCtrlRequest) returns(TsCmdCtrlResponse);

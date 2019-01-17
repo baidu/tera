@@ -16,57 +16,56 @@
 namespace tera {
 
 class ProfilerTest : public ::testing::Test {
-public:
-    virtual void SetUp() {}
+ public:
+  virtual void SetUp() {}
 
-    virtual void TearDown() {}
+  virtual void TearDown() {}
 
-private:
-    CpuProfiler cpu_profiler_;
-    HeapProfiler heap_profiler_;
+ private:
+  CpuProfiler cpu_profiler_;
+  HeapProfiler heap_profiler_;
 };
 
 TEST_F(ProfilerTest, SetEnableTest) {
-    ProfilerState ps;
-    EXPECT_FALSE(cpu_profiler_.enable_);
-    EXPECT_FALSE(heap_profiler_.enable_);
-    ProfilerGetCurrentState(&ps);
-    EXPECT_FALSE(ps.enabled);
-    EXPECT_FALSE(IsHeapProfilerRunning());
+  ProfilerState ps;
+  EXPECT_FALSE(cpu_profiler_.enable_);
+  EXPECT_FALSE(heap_profiler_.enable_);
+  ProfilerGetCurrentState(&ps);
+  EXPECT_FALSE(ps.enabled);
+  EXPECT_FALSE(IsHeapProfilerRunning());
 
-    cpu_profiler_.SetEnable(true);
+  cpu_profiler_.SetEnable(true);
 
-    heap_profiler_.SetEnable(true);
+  heap_profiler_.SetEnable(true);
 
-    EXPECT_TRUE(cpu_profiler_.enable_);
-    EXPECT_TRUE(heap_profiler_.enable_);
+  EXPECT_TRUE(cpu_profiler_.enable_);
+  EXPECT_TRUE(heap_profiler_.enable_);
 
-    ThisThread::Sleep(2000);
-    ProfilerGetCurrentState(&ps);
-    EXPECT_TRUE(ps.enabled);
-    EXPECT_TRUE(IsHeapProfilerRunning());
+  ThisThread::Sleep(2000);
+  ProfilerGetCurrentState(&ps);
+  EXPECT_TRUE(ps.enabled);
+  EXPECT_TRUE(IsHeapProfilerRunning());
 
-    cpu_profiler_.SetEnable(false);
-    heap_profiler_.SetEnable(false);
+  cpu_profiler_.SetEnable(false);
+  heap_profiler_.SetEnable(false);
 
-    EXPECT_FALSE(cpu_profiler_.enable_);
-    EXPECT_FALSE(heap_profiler_.enable_);
+  EXPECT_FALSE(cpu_profiler_.enable_);
+  EXPECT_FALSE(heap_profiler_.enable_);
 
-    ThisThread::Sleep(2000);
-    ProfilerGetCurrentState(&ps);
-    EXPECT_FALSE(ps.enabled);
-    EXPECT_FALSE(IsHeapProfilerRunning());
+  ThisThread::Sleep(2000);
+  ProfilerGetCurrentState(&ps);
+  EXPECT_FALSE(ps.enabled);
+  EXPECT_FALSE(IsHeapProfilerRunning());
 }
 
 TEST_F(ProfilerTest, SetInvervalTest) {
-    EXPECT_EQ(cpu_profiler_.interval_, std::chrono::seconds(10));
-    EXPECT_EQ(heap_profiler_.interval_, std::chrono::seconds(10));
-    cpu_profiler_.SetInterval(1);
-    heap_profiler_.SetInterval(2);
-    EXPECT_EQ(cpu_profiler_.interval_, std::chrono::seconds(1));
-    EXPECT_EQ(heap_profiler_.interval_, std::chrono::seconds(2));
+  EXPECT_EQ(cpu_profiler_.interval_, std::chrono::seconds(10));
+  EXPECT_EQ(heap_profiler_.interval_, std::chrono::seconds(10));
+  cpu_profiler_.SetInterval(1);
+  heap_profiler_.SetInterval(2);
+  EXPECT_EQ(cpu_profiler_.interval_, std::chrono::seconds(1));
+  EXPECT_EQ(heap_profiler_.interval_, std::chrono::seconds(2));
 }
-} // end namespace tera
+}  // end namespace tera
 
 /* vim: set expandtab ts=4 sw=4 sts=4 tw=100: */
-

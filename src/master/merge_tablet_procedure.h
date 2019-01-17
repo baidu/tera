@@ -13,76 +13,74 @@
 
 namespace tera {
 namespace master {
-    
-enum class MergeTabletPhase{
-    kUnLoadTablets,
-    kPostUnLoadTablets,
-    kUpdateMeta,
-    kLoadMergedTablet,
-    kFaultRecover,
-    kEofPhase,
+
+enum class MergeTabletPhase {
+  kUnLoadTablets,
+  kPostUnLoadTablets,
+  kUpdateMeta,
+  kLoadMergedTablet,
+  kFaultRecover,
+  kEofPhase,
 };
 
-std::ostream& operator<< (std::ostream& o, const MergeTabletPhase& phase);
+std::ostream& operator<<(std::ostream& o, const MergeTabletPhase& phase);
 
 class MergeTabletProcedure : public Procedure {
-public:
-    
-    MergeTabletProcedure(TabletPtr left, TabletPtr right, ThreadPool* thread_pool);
+ public:
+  MergeTabletProcedure(TabletPtr left, TabletPtr right, ThreadPool* thread_pool);
 
-    virtual ~MergeTabletProcedure() {}
+  virtual ~MergeTabletProcedure() {}
 
-    virtual std::string ProcId() const;
+  virtual std::string ProcId() const;
 
-    virtual void RunNextStage();
+  virtual void RunNextStage();
 
-    virtual bool Done() {return done_;}
+  virtual bool Done() { return done_; }
 
-private: 
-    typedef std::function<void (MergeTabletProcedure*, const MergeTabletPhase&)> MergeTabletPhaseHandler;
+ private:
+  typedef std::function<void(MergeTabletProcedure*, const MergeTabletPhase&)>
+      MergeTabletPhaseHandler;
 
-    MergeTabletPhase GetCurrentPhase() {
-        std::lock_guard<std::mutex> lock(mutex_);
-        return phases_.back();
-    }
+  MergeTabletPhase GetCurrentPhase() {
+    std::lock_guard<std::mutex> lock(mutex_);
+    return phases_.back();
+  }
 
-    void SetNextPhase(MergeTabletPhase phase) {
-        std::lock_guard<std::mutex> lock(mutex_);
-        phases_.emplace_back(phase);
-    }
+  void SetNextPhase(MergeTabletPhase phase) {
+    std::lock_guard<std::mutex> lock(mutex_);
+    phases_.emplace_back(phase);
+  }
 
-    bool TabletStateCheck();
-    
-    void UpdateMetaTable();
+  bool TabletStateCheck();
 
-    void UpdateMeta();
+  void UpdateMetaTable();
 
-    void MergeUpdateMetaDone(bool);
-    
-    void UnloadTabletsPhaseHandler(const MergeTabletPhase&);
-    void PostUnloadTabletsPhaseHandler(const MergeTabletPhase&);
-    void UpdateMetaPhaseHandler(const MergeTabletPhase&);
-    void LoadMergedTabletPhaseHandler(const MergeTabletPhase&);
-    void FaultRecoverPhaseHandler(const MergeTabletPhase&);
-    void EOFPhaseHandler(const MergeTabletPhase&);
+  void UpdateMeta();
 
-private:
-    const std::string id_;
-    std::mutex mutex_;
-    bool done_ = false;
-    TabletPtr tablets_[2];
-    TabletPtr merged_;
-    TabletNodePtr dest_node_;
+  void MergeUpdateMetaDone(bool);
 
-    std::shared_ptr<Procedure> unload_procs_[2];
-    std::shared_ptr<Procedure> load_proc_;
+  void UnloadTabletsPhaseHandler(const MergeTabletPhase&);
+  void PostUnloadTabletsPhaseHandler(const MergeTabletPhase&);
+  void UpdateMetaPhaseHandler(const MergeTabletPhase&);
+  void LoadMergedTabletPhaseHandler(const MergeTabletPhase&);
+  void FaultRecoverPhaseHandler(const MergeTabletPhase&);
+  void EOFPhaseHandler(const MergeTabletPhase&);
 
-    std::vector<MergeTabletPhase> phases_;
-    std::shared_ptr<Procedure> recover_procs_[2];
-    static std::map<MergeTabletPhase, MergeTabletPhaseHandler> phase_handlers_;
-    ThreadPool* thread_pool_;
+ private:
+  const std::string id_;
+  std::mutex mutex_;
+  bool done_ = false;
+  TabletPtr tablets_[2];
+  TabletPtr merged_;
+  TabletNodePtr dest_node_;
+
+  std::shared_ptr<Procedure> unload_procs_[2];
+  std::shared_ptr<Procedure> load_proc_;
+
+  std::vector<MergeTabletPhase> phases_;
+  std::shared_ptr<Procedure> recover_procs_[2];
+  static std::map<MergeTabletPhase, MergeTabletPhaseHandler> phase_handlers_;
+  ThreadPool* thread_pool_;
 };
-
 }
 }
-

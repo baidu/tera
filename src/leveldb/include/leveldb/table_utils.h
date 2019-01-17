@@ -18,6 +18,6 @@ void ArchiveFile(Env* env, const std::string& fname);
 bool HandleDumpCommand(Env* env, char** files, int num);
 
 bool DumpFile(Env* env, const std::string& fname);
-} // namespace leveldb
+}  // namespace leveldb
 
-#endif // STORAGE_LEVELDB_DB_TABLE_UTILS_H
+#endif  // STORAGE_LEVELDB_DB_TABLE_UTILS_H

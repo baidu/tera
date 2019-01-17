@@ -8,34 +8,41 @@
 namespace common {
 
 class Semaphore {
-public:
-    Semaphore(const Semaphore&) = delete;
-    Semaphore& operator=(const Semaphore&) = delete;
-    Semaphore(Semaphore&&) = delete;
-    Semaphore& operator=(Semaphore&&) = delete;
+ public:
+  Semaphore(const Semaphore&) = delete;
+  Semaphore& operator=(const Semaphore&) = delete;
+  Semaphore(Semaphore&&) = delete;
+  Semaphore& operator=(Semaphore&&) = delete;
 
-    explicit Semaphore(int64_t counter)
-      : cv_(&mutex_), counter_(counter) {
-    }
-    ~Semaphore() {}
+  explicit Semaphore(int64_t counter) : cv_(&mutex_), counter_(counter) {}
+  ~Semaphore() {}
 
-    void Acquire() {
-        MutexLock lock(&mutex_);
-        while (counter_ <= 0) {
-            cv_.Wait();
-        }
-        --counter_;
+  bool TryAcquire() {
+    MutexLock lock(&mutex_);
+    if (counter_ <= 0) {
+      return false;
     }
-    void Release() {
-        MutexLock lock(&mutex_);
-        ++counter_;
-        cv_.Signal();
-    }
+    --counter_;
+    return true;
+  }
 
-private:
-    Mutex mutex_;
-    CondVar cv_;
-    int64_t counter_;
+  void Acquire() {
+    MutexLock lock(&mutex_);
+    while (counter_ <= 0) {
+      cv_.Wait();
+    }
+    --counter_;
+  }
+  void Release() {
+    MutexLock lock(&mutex_);
+    ++counter_;
+    cv_.Signal();
+  }
+
+ private:
+  Mutex mutex_;
+  CondVar cv_;
+  int64_t counter_;
 };
 
-} // namespace common
+}  // namespace common

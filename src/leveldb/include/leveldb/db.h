@@ -28,11 +28,11 @@ class WriteBatch;
 
 // A range of keys
 struct Range {
-  Slice start;          // Included in the range
-  Slice limit;          // Not included in the range
+  Slice start;  // Included in the range
+  Slice limit;  // Not included in the range
 
-  Range() { }
-  Range(const Slice& s, const Slice& l) : start(s), limit(l) { }
+  Range() {}
+  Range(const Slice& s, const Slice& l) : start(s), limit(l) {}
 };
 
 // A DB is a persistent ordered map from keys to values.
@@ -40,23 +40,16 @@ struct Range {
 // any external synchronization.
 class DB {
  public:
-  enum State {
-    kNotOpen = 0,
-    kOpened = 1,
-    kShutdown1 = 2,
-    kShutdown2 = 3
-  };
+  enum State { kNotOpen = 0, kOpened = 1, kShutdown1 = 2, kShutdown2 = 3 };
 
   // Open the database with the specified "name".
   // Stores a pointer to a heap-allocated database in *dbptr and returns
   // OK on success.
   // Stores NULL in *dbptr and returns a non-OK status on error.
   // Caller should delete *dbptr when it is no longer needed.
-  static Status Open(const Options& options,
-                     const std::string& name,
-                     DB** dbptr);
+  static Status Open(const Options& options, const std::string& name, DB** dbptr);
 
-  DB() { }
+  DB() {}
   virtual ~DB();
 
   // Abort all background work and do some clean work. DB is free to
@@ -69,9 +62,7 @@ class DB {
   // Set the database entry for "key" to "value".  Returns OK on success,
   // and a non-OK status on error.
   // Note: consider setting options.sync = true.
-  virtual Status Put(const WriteOptions& options,
-                     const Slice& key,
-                     const Slice& value) = 0;
+  virtual Status Put(const WriteOptions& options, const Slice& key, const Slice& value) = 0;
 
   // Remove the database entry (if any) for "key".  Returns OK on
   // success, and a non-OK status on error.  It is not an error if "key"
@@ -91,8 +82,7 @@ class DB {
   // a status for which Status::IsNotFound() returns true.
   //
   // May return some other Status on an error.
-  virtual Status Get(const ReadOptions& options,
-                     const Slice& key, std::string* value) = 0;
+  virtual Status Get(const ReadOptions& options, const Slice& key, std::string* value) = 0;
 
   // Return a heap-allocated iterator over the contents of the database.
   // The result of NewIterator() is initially invalid (caller must
@@ -113,7 +103,8 @@ class DB {
   virtual void ReleaseSnapshot(uint64_t sequence_number) = 0;
 
   // Rollback to a spcific snapshot
-  virtual const uint64_t Rollback(uint64_t snapshot_seq, uint64_t rollback_point = kMaxSequenceNumber) = 0;
+  virtual const uint64_t Rollback(uint64_t snapshot_seq,
+                                  uint64_t rollback_point = kMaxSequenceNumber) = 0;
 
   // DB implementations can export properties about their state
   // via this method.  If "property" is a valid property understood by this
@@ -139,13 +130,13 @@ class DB {
   // sizes will be one-tenth the size of the corresponding user data size.
   //
   // The results may not include the sizes of recently written data.
-  virtual void GetApproximateSizes(const Range* range, int n,
-                                   uint64_t* sizes) = 0;
+  virtual void GetApproximateSizes(const Range* range, int n, uint64_t* sizes) = 0;
   // tera-specific
   // size: db size, include mem, imm, all sst files
   // lgsize: each lg size, include all storage
-  virtual void GetApproximateSizes(uint64_t* size,
-                                   std::vector<uint64_t>* lgsize = NULL) = 0;
+  // mem_table_size: memtable's size, for analyzing memory usage.
+  virtual void GetApproximateSizes(uint64_t* size, std::vector<uint64_t>* lgsize = NULL,
+                                   uint64_t* mem_table_size = NULL) = 0;
 
   // tera-specific
   // result: each level's total file size
@@ -170,8 +161,7 @@ class DB {
   virtual void Workload(double* write_workload) = 0;
 
   virtual bool FindSplitKey(double ratio, std::string* split_key) = 0;
-  virtual bool FindKeyRange(std::string* smallest_key = NULL,
-                            std::string* largest_key = NULL) = 0;
+  virtual bool FindKeyRange(std::string* smallest_key = NULL, std::string* largest_key = NULL) = 0;
 
   virtual bool MinorCompact() = 0;
 
@@ -180,7 +170,7 @@ class DB {
 
   virtual bool ShouldForceUnloadOnError() { return false; }
 
-  // Default : False, 
+  // Default : False,
   // Only activate the strategy for speeding up the process of shutdown DB.
   // Strategy : Always return True begin shutdown1 finished.
   virtual bool IsShutdown1Finished() const { return false; }

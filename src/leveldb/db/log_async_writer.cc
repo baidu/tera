@@ -113,7 +113,6 @@ void AsyncWriter::BlockLogNumInc() {
   ++block_log_number;
 }
 
-
 void* AsyncWriter::ThreadFunc(void* arg) {
   static_cast<AsyncWriter*>(arg)->ThreadFuncCall();
   return NULL;

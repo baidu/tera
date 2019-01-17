@@ -14,58 +14,57 @@ namespace tera {
 namespace load_balancer {
 
 class Plan {
-public:
-    Plan() {}
+ public:
+  Plan() {}
 
-    Plan(const tera::master::TabletPtr& tablet,
-         const tera::master::TabletNodePtr& source,
-         const tera::master::TabletNodePtr& dest) {
-        tablet_ = tablet;
-        source_ = source;
-        dest_ = dest;
+  Plan(const tera::master::TabletPtr& tablet, const tera::master::TabletNodePtr& source,
+       const tera::master::TabletNodePtr& dest) {
+    tablet_ = tablet;
+    source_ = source;
+    dest_ = dest;
+  }
+
+  virtual ~Plan() {}
+
+  virtual std::string TabletPath() const {
+    if (tablet_) {
+      return tablet_->GetPath();
+    } else {
+      return "";
     }
+  }
 
-    virtual ~Plan() {}
-
-    virtual std::string TabletPath() const {
-        if (tablet_) {
-            return tablet_->GetPath();
-        } else {
-            return "";
-        }
+  virtual std::string SourceAddr() const {
+    if (source_) {
+      return source_->GetAddr();
+    } else {
+      return "";
     }
+  }
 
-    virtual std::string SourceAddr() const {
-        if (source_) {
-            return source_->GetAddr();
-        } else {
-            return "";
-        }
+  virtual std::string DestAddr() const {
+    if (dest_) {
+      return dest_->GetAddr();
+    } else {
+      return "";
     }
+  }
 
-    virtual std::string DestAddr() const {
-        if (dest_) {
-            return dest_->GetAddr();
-        } else {
-            return "";
-        }
-    }
+  virtual std::string ToString() const {
+    std::string str = "tablet:" + (tablet_ ? tablet_->GetPath() : "") + " source:" +
+                      (source_ ? source_->GetAddr() : "") + " dest:" +
+                      (dest_ ? dest_->GetAddr() : "");
 
-    virtual std::string ToString() const {
-        std::string str = "tablet:" + (tablet_ ? tablet_->GetPath() : "")
-                + " source:" + (source_ ? source_->GetAddr() : "")
-                + " dest:" + (dest_ ? dest_->GetAddr() : "");
+    return str;
+  }
 
-        return str;
-    }
-
-private:
-    tera::master::TabletPtr tablet_;
-    tera::master::TabletNodePtr source_;
-    tera::master::TabletNodePtr dest_;
+ private:
+  tera::master::TabletPtr tablet_;
+  tera::master::TabletNodePtr source_;
+  tera::master::TabletNodePtr dest_;
 };
 
-} // namespace load_balancer
-} // namespace tera
+}  // namespace load_balancer
+}  // namespace tera
 
-#endif // TERA_LOAD_BALANCER_PLAN_H_
+#endif  // TERA_LOAD_BALANCER_PLAN_H_

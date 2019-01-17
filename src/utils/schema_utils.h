@@ -13,6 +13,6 @@ bool IsSchemaCfDiff(const TableSchema& a, const TableSchema& b);
 
 bool IsSchemaLgDiff(const TableSchema& a, const TableSchema& b);
 
-} // namespace tera
+}  // namespace tera
 
-#endif // TERA_SCHEMA_UTILS_H_
+#endif  // TERA_SCHEMA_UTILS_H_

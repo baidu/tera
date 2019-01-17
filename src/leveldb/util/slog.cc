@@ -14,31 +14,24 @@ namespace leveldb {
 
 static LogLevel s_log_level = ::leveldb::LOG_LEVEL_ERROR;
 
-LogLevel GetLogLevel() {
-    return s_log_level;
+LogLevel GetLogLevel() { return s_log_level; }
+
+void SetLogLevel(LogLevel level) { s_log_level = level; }
+
+void LogHandler(LogLevel level, const char* filename, int line, const char* fmt, ...) {
+  static const char* level_names[] = {"FATAL", "ERROR", "WARNNING", "INFO", "TRACE", "DEBUG"};
+  char buf[1024];
+  va_list ap;
+  va_start(ap, fmt);
+  vsnprintf(buf, 1024, fmt, ap);
+  va_end(ap);
+
+  fprintf(stderr, "[LevelDB %s %s:%d] %s\n", level_names[level], filename, line, buf);
+  fflush(stderr);
+
+  if (level == ::leveldb::LOG_LEVEL_FATAL) {
+    abort();
+  }
 }
 
-void SetLogLevel(LogLevel level) {
-    s_log_level = level;
-}
-
-void LogHandler(LogLevel level, const char* filename, int line, const char *fmt, ...) {
-    static const char* level_names[] = { "FATAL", "ERROR", "WARNNING",
-                                         "INFO", "TRACE", "DEBUG" };
-    char buf[1024];
-    va_list ap;
-    va_start(ap, fmt);
-    vsnprintf(buf, 1024, fmt, ap);
-    va_end(ap);
-
-    fprintf(stderr, "[LevelDB %s %s:%d] %s\n",
-            level_names[level],
-            filename, line, buf);
-    fflush(stderr);
-
-    if (level == ::leveldb::LOG_LEVEL_FATAL) {
-        abort();
-    }
-}
-
-} // namespace leveldb
+}  // namespace leveldb

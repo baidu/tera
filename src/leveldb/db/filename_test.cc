@@ -15,7 +15,7 @@
 
 namespace leveldb {
 
-class FileNameTest { };
+class FileNameTest {};
 
 TEST(FileNameTest, Parse) {
   Slice db;
@@ -28,16 +28,16 @@ TEST(FileNameTest, Parse) {
     uint64_t number;
     FileType type;
   } cases[] = {
-    { "100.log",            100,   kLogFile },
-    { "0.log",              0,     kLogFile },
-    { "0.sst",              0,     kTableFile },
-    { "CURRENT",            0,     kCurrentFile },
-    { "LOCK",               0,     kDBLockFile },
-    { "MANIFEST-2",         2,     kDescriptorFile },
-    { "MANIFEST-7",         7,     kDescriptorFile },
-    { "LOG",                0,     kInfoLogFile },
-    { "LOG.old",            0,     kInfoLogFile },
-    { "18446744073709551615.log", 18446744073709551615ull, kLogFile },
+      {"100.log", 100, kLogFile},
+      {"0.log", 0, kLogFile},
+      {"0.sst", 0, kTableFile},
+      {"CURRENT", 0, kCurrentFile},
+      {"LOCK", 0, kDBLockFile},
+      {"MANIFEST-2", 2, kDescriptorFile},
+      {"MANIFEST-7", 7, kDescriptorFile},
+      {"LOG", 0, kInfoLogFile},
+      {"LOG.old", 0, kInfoLogFile},
+      {"18446744073709551615.log", 18446744073709551615ull, kLogFile},
   };
   for (uint32_t i = 0; i < sizeof(cases) / sizeof(cases[0]); i++) {
     std::string f = cases[i].fname;
@@ -48,29 +48,9 @@ TEST(FileNameTest, Parse) {
 
   // Errors
   static const char* errors[] = {
-    "",
-    "foo",
-    "foo-dx-100.log",
-    ".log",
-    "",
-    "manifest",
-    "CURREN",
-    "CURRENTX",
-    "MANIFES",
-    "MANIFEST",
-    "MANIFEST-",
-    "XMANIFEST-3",
-    "MANIFEST-3x",
-    "LOC",
-    "LOCKx",
-    "LO",
-    "LOGx",
-    "18446744073709551616.log",
-    "184467440737095516150.log",
-    "100",
-    "100.",
-    "100.lop"
-  };
+      "", "foo", "foo-dx-100.log", ".log", "", "manifest", "CURREN", "CURRENTX", "MANIFES",
+      "MANIFEST", "MANIFEST-", "XMANIFEST-3", "MANIFEST-3x", "LOC", "LOCKx", "LO", "LOGx",
+      "18446744073709551616.log", "184467440737095516150.log", "100", "100.", "100.lop"};
   for (uint32_t i = 0; i < sizeof(errors) / sizeof(errors[0]); i++) {
     std::string f = errors[i];
     ASSERT_TRUE(!ParseFileName(f, &number, &type)) << f;
@@ -284,6 +264,4 @@ TEST(FileNameTest, FileNumberDebugString) {
 }
 }  // namespace leveldb
 
-int main(int argc, char** argv) {
-  return leveldb::test::RunAllTests();
-}
+int main(int argc, char** argv) { return leveldb::test::RunAllTests(); }

@@ -11,60 +11,49 @@
 namespace leveldb {
 
 EnvOptions::EnvOptions(const Options& options) {
-    use_direct_io_read = options.use_direct_io_read;
-    use_direct_io_write = options.use_direct_io_write;
-    posix_write_buffer_size = options.posix_write_buffer_size;
+  use_direct_io_read = options.use_direct_io_read;
+  use_direct_io_write = options.use_direct_io_write;
+  posix_write_buffer_size = options.posix_write_buffer_size;
 }
 
-Env::~Env() {
-}
+Env::~Env() {}
 
-SequentialFile::~SequentialFile() {
-}
+SequentialFile::~SequentialFile() {}
 
-RandomAccessFile::~RandomAccessFile() {
-}
+RandomAccessFile::~RandomAccessFile() {}
 
-WritableFile::~WritableFile() {
-}
+WritableFile::~WritableFile() {}
 
-Logger::~Logger() {
-}
+Logger::~Logger() {}
 
 Logger* Logger::default_logger_ = NULL;
 
-void Logger::SetDefaultLogger(Logger* logger) {
-  default_logger_ = logger;
-}
+void Logger::SetDefaultLogger(Logger* logger) { default_logger_ = logger; }
 
-Logger* Logger::DefaultLogger() {
-  return default_logger_;
-}
+Logger* Logger::DefaultLogger() { return default_logger_; }
 
-FileLock::~FileLock() {
-}
+FileLock::~FileLock() {}
 
-void Log(Logger* info_log, const char* format, ...) {
+void LogImpl(const char* file, int64_t line, Logger* info_log, const char* format, ...) {
   if (info_log != NULL) {
     va_list ap;
     va_start(ap, format);
-    info_log->Logv(format, ap);
+    info_log->Logv(file, line, format, ap);
     va_end(ap);
   }
 }
 
-void Log(const char* format, ...) {
+void LogImpl(const char* file, int64_t line, const char* format, ...) {
   Logger* l = Logger::DefaultLogger();
   if (l != NULL) {
     va_list ap;
     va_start(ap, format);
-    l->Logv(format, ap);
+    l->Logv(file, line, format, ap);
     va_end(ap);
   }
 }
 
-static Status DoWriteStringToFile(Env* env, const Slice& data,
-                                  const std::string& fname,
+static Status DoWriteStringToFile(Env* env, const Slice& data, const std::string& fname,
                                   bool should_sync) {
   WritableFile* file;
   Status s = env->NewWritableFile(fname, &file, EnvOptions());
@@ -85,13 +74,11 @@ static Status DoWriteStringToFile(Env* env, const Slice& data,
   return s;
 }
 
-Status WriteStringToFile(Env* env, const Slice& data,
-                         const std::string& fname) {
+Status WriteStringToFile(Env* env, const Slice& data, const std::string& fname) {
   return DoWriteStringToFile(env, data, fname, false);
 }
 
-Status WriteStringToFileSync(Env* env, const Slice& data,
-                             const std::string& fname) {
+Status WriteStringToFileSync(Env* env, const Slice& data, const std::string& fname) {
   return DoWriteStringToFile(env, data, fname, true);
 }
 
@@ -120,7 +107,6 @@ Status ReadFileToString(Env* env, const std::string& fname, std::string* data) {
   return s;
 }
 
-EnvWrapper::~EnvWrapper() {
-}
+EnvWrapper::~EnvWrapper() {}
 
 }  // namespace leveldb

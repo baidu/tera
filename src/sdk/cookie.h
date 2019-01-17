@@ -12,18 +12,16 @@
 namespace tera {
 namespace sdk {
 
-void DumpCookie(const std::string& cookie_file,
-                const std::string& cookie_lock_file,
+void DumpCookie(const std::string& cookie_file, const std::string& cookie_lock_file,
                 const SdkCookie& cookie);
-bool RestoreCookie(const std::string cookie_file,
-                   bool delete_broken_cookie_file,
-                   SdkCookie *cookie);
+bool RestoreCookie(const std::string& cookie_file, bool delete_broken_cookie_file,
+                   SdkCookie* cookie);
 
 // helper
 bool DumpCookieFile(const std::string& cookie_file);
 bool FindKeyInCookieFile(const std::string& cookie_file, const std::string& key);
 
-} // namespace sdk
-} // namespace tera
+}  // namespace sdk
+}  // namespace tera
 
-#endif // TERA_SDK_COOKIE_H_
+#endif  // TERA_SDK_COOKIE_H_

@@ -5,26 +5,45 @@
 #ifndef TERA_OBSERVER_OBSERVER_DEMO_DEMO_ENTRY_H_
 #define TERA_OBSERVER_OBSERVER_DEMO_DEMO_ENTRY_H_
 
+#include <iostream>
 #include <memory>
 #include <string>
 
-#include "observer/executor/scanner_entry.h"
 #include "tera.h"
 
 namespace tera {
 namespace observer {
 
-class DemoEntry : public ScannerEntry {
-public:
-	DemoEntry();
-	virtual ~DemoEntry() {}
+class DemoScanHook : public ScanHook {
+  virtual void Before(const std::string& table_name, const ScanHook::Columns& columns) {
+    std::cout << "demo scan filter before scan : " << table_name << std::endl;
+    for (const auto& col : columns) {
+      std::cout << col.first << "\t" << col.second << std::endl;
+    }
+  }
 
-    virtual ErrorCode Observe();
+  virtual void After(const std::string& table_name, const ScanHook::Columns& columns,
+                     bool scan_ret) {
+    std::cout << "demo scan filter before scan : " << table_name << " scan_ret :" << scan_ret
+              << std::endl;
+    for (const auto& col : columns) {
+      std::cout << col.first << "\t" << col.second << std::endl;
+    }
+  }
 };
 
+class DemoEntry : public ScannerEntry {
+ public:
+  DemoEntry();
+  virtual ~DemoEntry();
 
-} // namespace observer
-} // namespace tera
+  virtual ErrorCode Observe();
+
+ private:
+  std::shared_ptr<DemoScanHook> hook_;
+};
+
+}  // namespace observer
+}  // namespace tera
 
 #endif  // TERA_OBSERVER_OBSERVER_DEMO_DEMO_ENTRY_H_
-

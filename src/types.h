@@ -35,6 +35,7 @@ const std::string kSms = "[SMS] ";
 const std::string kMail = "[MAIL] ";
 const int64_t kLatestTs = INT64_MAX;
 const int64_t kOldestTs = INT64_MIN;
+const uint64_t kMaxMetaWriteSize = (4 << 20);  // 4MB
 const uint64_t kMaxRpcSize = (16 << 20);       // 16MB
 const uint64_t kRowkeySize = (64 << 10);       // 64KB
 const uint64_t kQualifierSize = (64 << 10);    // 64KB
@@ -47,7 +48,6 @@ const std::string kRowlockNodeIdListPath = "/id_lock";
 const std::string kRowlockNodeHostListPath = "/host_lock";
 const std::string kRowlockNodeNumPath = "/node_num";
 const std::string kRowlockProxyPath = "/proxy";
-const uint64_t kObserverWaitTimeMs = 10;
 
 // global transaction
 const char* const kNotifyColumnFamily = "_N_";
@@ -55,6 +55,6 @@ const char* const kNotifyColumnFamily = "_N_";
 // stat table
 const char* const kStatTableName = "stat_table";
 
-} // namespace tera
+}  // namespace tera
 
-#endif // TERA_TYPES_H_
+#endif  // TERA_TYPES_H_

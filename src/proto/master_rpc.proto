@@ -3,6 +3,8 @@ import "status_code.proto";
 import "tabletnode.proto";
 import "table_schema.proto";
 import "table_meta.proto";
+import "access_control.proto";
+import "quota.proto";
 
 package tera;
 
@@ -14,6 +16,7 @@ message CreateTableRequest {
     optional TableSchema schema = 3;
     repeated bytes delimiters = 6;
     optional bytes user_token = 7;
+    optional IdentityInfo identity_info = 8;
 }
 
 message CreateTableResponse {
@@ -26,6 +29,7 @@ message DeleteTableRequest {
     required uint64 sequence_id = 1;
     required string table_name = 2;
     optional bytes user_token = 3;
+    optional IdentityInfo identity_info = 4;
 }
 
 message DeleteTableResponse {
@@ -37,6 +41,7 @@ message DisableTableRequest {
     required uint64 sequence_id = 1;
     required string table_name = 2;
     optional bytes user_token = 3;
+    optional IdentityInfo identity_info = 4;
 }
 
 message DisableTableResponse {
@@ -48,6 +53,7 @@ message EnableTableRequest {
     required uint64 sequence_id = 1;
     required string table_name = 2;
     optional bytes user_token = 3;
+    optional IdentityInfo identity_info = 4;
 }
 
 message EnableTableResponse {
@@ -60,6 +66,7 @@ message UpdateTableRequest {
     required string table_name = 2;
     optional TableSchema schema = 3;
     optional bytes user_token = 4;
+    optional IdentityInfo identity_info = 5;
 }
 
 message UpdateTableResponse {
@@ -214,4 +221,104 @@ service MasterServer {
     rpc CmdCtrl(CmdCtrlRequest) returns(CmdCtrlResponse);
     rpc OperateUser(OperateUserRequest) returns(OperateUserResponse);
 }
+
+// Multi-Tenancy
+message UpdateUgiRequest {
+    required uint64 sequence_id = 1;
+    required UpdateAuthInfo update_info = 2;
+    optional IdentityInfo identity_info = 3;
+}
+
+message UpdateUgiResponse {
+    required uint64 sequence_id = 1;
+    required StatusCode status = 2;
+}
+
+message ShowUgiRequest {
+    required uint64 sequence_id = 1;
+    optional IdentityInfo identity_info = 2;
+}
+
+message ShowUgiResponse {
+    required uint64 sequence_id = 1;
+    required StatusCode status = 2;
+    repeated UgiMetaInfo ugi_meta_infos = 3;
+}
+
+message UpdateAuthRequest {
+    required uint64 sequence_id = 1;
+    required UpdateAuthInfo update_info = 2;
+    optional IdentityInfo identity_info = 3;
+}
+
+message UpdateAuthResponse {
+    required uint64 sequence_id = 1;
+    required StatusCode status = 2;
+}
+
+message ShowAuthRequest {
+    required uint64 sequence_id = 1;
+    optional IdentityInfo identity_info = 2;
+}
+
+message ShowAuthResponse {
+    required uint64 sequence_id = 1;
+    required StatusCode status = 2;
+    repeated RoleInfo role_infos = 3;
+}
+
+message SetAuthPolicyRequest {
+    required TableAuthPolicyInfo table_auth_policy_info = 1;
+    optional IdentityInfo identity_info = 2;
+}
+
+message SetAuthPolicyResponse {
+    required StatusCode status = 1;
+}
+
+message ShowAuthPolicyRequest {
+    optional IdentityInfo identity_info = 1;
+}
+
+message ShowAuthPolicyResponse {
+    required StatusCode status = 1;
+    repeated TableAuthPolicyInfo table_auth_policy_infos = 2;
+}
+
+message SetQuotaRequest {
+    required uint64 sequence_id = 1;
+    required TableQuota table_quota = 2;
+}
+
+message SetQuotaResponse {
+    required uint64 sequence_id = 1;
+    required StatusCode status = 2;
+}
+
+message ShowQuotaRequest {
+    required uint64 sequence_id = 1;
+    required bool brief_show = 10 [default = true];
+}
+
+message ShowQuotaResponse {
+    required uint64 sequence_id = 1;
+    required StatusCode status = 2;
+    repeated TableQuota table_quota_list = 3;
+    repeated TsQuota ts_quota_list = 4;
+}
+
+service MasterMultiTenancyService {
+    rpc UpdateUgi(UpdateUgiRequest) returns (UpdateUgiResponse);
+    rpc ShowUgi(ShowUgiRequest) returns (ShowUgiResponse);
+
+    rpc UpdateAuth(UpdateAuthRequest) returns (UpdateAuthResponse);
+    rpc ShowAuth(ShowAuthRequest) returns (ShowAuthResponse);
+
+    rpc SetAuthPolicy(SetAuthPolicyRequest) returns(SetAuthPolicyResponse);
+    rpc ShowAuthPolicy(ShowAuthPolicyRequest) returns (ShowAuthPolicyResponse);
+
+    rpc SetQuota(SetQuotaRequest) returns(SetQuotaResponse);
+    rpc ShowQuota(ShowQuotaRequest) returns(ShowQuotaResponse);
+}
+
 option cc_generic_services = true;
